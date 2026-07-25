@@ -15,6 +15,7 @@ import { cx } from '../ui/cx.js';
 import au from '../styles/automation.module.css';
 import inlineEmptyCss from '../styles/inlineEmpty.module.css';
 import { AutomationEditorConnectorsPicker } from './AutomationEditorConnectorsPicker.js';
+import { AutomationEditorAgentPicker } from './AutomationEditorAgentPicker.js';
 import styles from './AutomationEditorScreen.module.css';
 
 // Automation editor — shared create/edit form (Automations UI revamp, see
@@ -24,7 +25,7 @@ import styles from './AutomationEditorScreen.module.css';
 // Notifications / Plan tabs. Connector OAuth + API-key attach reuses the
 // same gateway flows as Settings → Connectors.
 
-type TriggerKind = 'cron' | 'webhook' | 'condition' | 'data';
+type TriggerKind = 'cron' | 'webhook' | 'condition' | 'data' | 'event';
 /** One row of a condition trigger's `where` builder. `value` is the raw text
  *  the user typed; it is coerced per-op into the manifest clause shape at save
  *  time (see `whereClauseOf`). */
@@ -37,6 +38,9 @@ type TriggerDraft = {
   whereRows: WhereRowDraft[];
   every: string;
   entities: string;
+  connectorKind: string;
+  event: string;
+  filterRepo: string;
 };
 type TabId = 'notifications' | 'plan';
 
@@ -67,17 +71,26 @@ type ConditionOp = (typeof CONDITION_OPS)[number];
  *  remain editable when already present on a loaded automation, but new
  *  authoring matches the Grok-style surface: schedule (cron) and vault data
  *  changes only. */
-const ADDABLE_TRIGGER_KINDS = ['cron', 'data'] as const satisfies readonly TriggerKind[];
-const TRIGGER_ADD_LABEL: Record<(typeof ADDABLE_TRIGGER_KINDS)[number], string> = {
+const BASE_ADDABLE_TRIGGER_KINDS = ['cron', 'data'] as const satisfies readonly TriggerKind[];
+const TRIGGER_ADD_LABEL: Record<'cron' | 'data' | 'event', string> = {
   cron: 'Schedule',
   data: 'Data change',
+  event: 'Connector event',
 };
 const TRIGGER_KIND_LABEL: Record<TriggerKind, string> = {
   cron: 'Schedule',
   webhook: 'Webhook',
   data: 'Data change',
   condition: 'Condition',
+  event: 'Connector event',
 };
+const EVENTS_BY_CONNECTOR = {
+  'pull.gmail': [{ id: 'new-message', label: 'New email' }],
+  'pull.github': [
+    { id: 'pull-request', label: 'Pull request event' },
+    { id: 'issue', label: 'Issue event' },
+  ],
+} as const;
 /** Run-outcome notifications. Centraid surfaces failures on Home under needs
  *  attention today — only App / Off are real. (Email options were removed so
  *  the control doesn't promise a channel that isn't wired yet.) */
@@ -145,6 +158,9 @@ function draftTrigger(kind: TriggerKind): TriggerDraft {
     whereRows: [],
     every: '',
     entities: '',
+    connectorKind: '',
+    event: '',
+    filterRepo: '',
   };
 }
 
@@ -159,6 +175,12 @@ function loadedTrigger(t: AutomationEditorData['triggers'][number]): TriggerDraf
   if (t.kind === 'data') {
     draft.entities = t.entities.join(', ');
     draft.every = t.every ?? '';
+  }
+  if (t.kind === 'event') {
+    draft.connectorKind = t.connectorKind;
+    draft.event = t.event;
+    draft.every = t.every ?? '';
+    draft.filterRepo = typeof t.filter?.repo === 'string' ? t.filter.repo : '';
   }
   return draft;
 }
@@ -459,6 +481,8 @@ export default function AutomationEditorScreen({
   const [state, setState] = useState<AutomationEditorData | 'loading' | 'error'>('loading');
   const [name, setName] = useState('');
   const [instructions, setInstructions] = useState('');
+  const [runner, setRunner] = useState<string | null | undefined>(undefined);
+  const [model, setModel] = useState<string | null | undefined>(undefined);
   const [triggers, setTriggers] = useState<TriggerDraft[]>([]);
   const [entityTypes, setEntityTypes] = useState<string[]>([]);
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
@@ -487,6 +511,14 @@ export default function AutomationEditorScreen({
     Map<string, { connectionId: string; kind: string; label: string }>
   >(() => new Map());
 
+  // Mirrors `selectedConnectors` so `refreshCatalog` — an async event-handler
+  // continuation — can read the current selection without nesting a setState
+  // inside another state updater (updaters must stay pure).
+  const selectedConnectorsRef = useRef(selectedConnectors);
+  useEffect(() => {
+    selectedConnectorsRef.current = selectedConnectors;
+  }, [selectedConnectors]);
+
   const baselineInstructionsRef = useRef('');
   const instructionsRef = useRef<HTMLTextAreaElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
@@ -506,6 +538,8 @@ export default function AutomationEditorScreen({
     if (!resetForm) return;
     setName(d.name);
     setInstructions(d.instructions);
+    setRunner(d.runner);
+    setModel(d.model);
     baselineInstructionsRef.current = d.instructions;
     setTriggers(d.triggers.map(loadedTrigger));
     const bound = d.connectors?.connections ?? [];
@@ -616,20 +650,32 @@ export default function AutomationEditorScreen({
       setCatalog(next);
       // Rehydrate durable bindings for any selected kinds that now have a
       // live vault connection (covers select-then-connect + post-refresh).
-      setSelectedConnectors((selected) => {
-        setConnectionBindings((prev) => {
-          const copy = new Map(prev);
-          for (const cat of next) {
-            if (!selected.has(cat.kind) || !cat.connection) continue;
-            copy.set(cat.kind, {
-              connectionId: cat.connection.connectionId,
-              kind: cat.kind,
-              label: cat.connection.label,
-            });
-          }
-          return copy;
-        });
-        return selected;
+      // Read `selectedConnectors` off a ref, never from inside another
+      // updater: React requires updaters to be pure and StrictMode
+      // double-invokes them.
+      const selected = selectedConnectorsRef.current;
+      setConnectionBindings((prev) => {
+        let copy: typeof prev | undefined;
+        for (const cat of next) {
+          if (!selected.has(cat.kind) || !cat.connection) continue;
+          // A catalog refresh may make a formerly unique kind ambiguous.
+          // Preserve the owner's explicit account choice; only hydrate a
+          // binding when the form does not already carry one.
+          //
+          // A binding whose connection has VANISHED from the catalog (the
+          // account was revoked) is deliberately left alone too — silently
+          // re-pointing it at whatever account survives would change the
+          // principal the automation acts as without the owner ever seeing
+          // it. `danglingConnectorKinds` surfaces it instead (#541).
+          if (prev.has(cat.kind)) continue;
+          copy ??= new Map(prev);
+          copy.set(cat.kind, {
+            connectionId: cat.connection.connectionId,
+            kind: cat.kind,
+            label: cat.connection.label,
+          });
+        }
+        return copy ?? prev;
       });
     } catch {
       setCatalog([]);
@@ -710,6 +756,18 @@ export default function AutomationEditorScreen({
             ]
           : [];
       }
+      if (trigger.kind === 'event') {
+        if (!trigger.connectorKind || !trigger.event) return [];
+        return [
+          {
+            connectorKind: trigger.connectorKind,
+            event: trigger.event,
+            filter: trigger.filterRepo.trim() ? { repo: trigger.filterRepo.trim() } : undefined,
+            kind: 'event',
+            ...(trigger.every.trim() ? { every: trigger.every.trim() } : {}),
+          },
+        ];
+      }
       // condition — skip when no entity is named.
       if (!trigger.entity.trim()) return [];
       const where = trigger.whereRows
@@ -740,6 +798,8 @@ export default function AutomationEditorScreen({
         name: name.trim(),
         triggers: builtTriggers,
         connections,
+        ...(runner !== undefined ? { runner } : {}),
+        ...(model !== undefined ? { model } : {}),
       });
       if (ok) {
         baselineInstructionsRef.current = instructions;
@@ -817,6 +877,34 @@ export default function AutomationEditorScreen({
 
   const connectorCount = selectedConnectors.size;
   const isCreate = d.mode === 'create';
+  /**
+   * Bound connections that no longer exist in the live catalog — the owner
+   * revoked the account after this automation was saved. The binding is kept
+   * (never silently swapped for a surviving account), but it is a dead
+   * principal: it must not keep offering connector-event triggers, and the
+   * owner is told about it (#541).
+   */
+  const danglingConnectorKinds = new Set(
+    [...connectionBindings.values()]
+      .filter((binding) => {
+        const entry = catalog.find((candidate) => candidate.kind === binding.kind);
+        return (
+          entry !== undefined &&
+          !entry.connections.some((c) => c.connectionId === binding.connectionId)
+        );
+      })
+      .map((binding) => binding.kind),
+  );
+  const eventConnectorKinds = [...connectionBindings.keys()].filter(
+    (kind): kind is keyof typeof EVENTS_BY_CONNECTOR =>
+      selectedConnectors.has(kind) &&
+      !danglingConnectorKinds.has(kind) &&
+      kind in EVENTS_BY_CONNECTOR,
+  );
+  const addableTriggerKinds: Array<'cron' | 'data' | 'event'> =
+    eventConnectorKinds.length > 0
+      ? [...BASE_ADDABLE_TRIGGER_KINDS, 'event']
+      : [...BASE_ADDABLE_TRIGGER_KINDS];
 
   const addTriggerMenu = (
     <div className={styles.addTriggerWrap}>
@@ -831,14 +919,22 @@ export default function AutomationEditorScreen({
       </button>
       {addTriggerOpen ? (
         <div className={styles.addTriggerMenu} role="menu" aria-label="Trigger kinds">
-          {ADDABLE_TRIGGER_KINDS.map((kind) => (
+          {addableTriggerKinds.map((kind) => (
             <button
               key={kind}
               type="button"
               role="menuitem"
               className={styles.addTriggerItem}
               onClick={() => {
-                setTriggers((current) => [...current, draftTrigger(kind)]);
+                const draft = draftTrigger(kind);
+                if (kind === 'event') {
+                  draft.connectorKind = eventConnectorKinds[0] ?? '';
+                  draft.event =
+                    EVENTS_BY_CONNECTOR[
+                      draft.connectorKind as keyof typeof EVENTS_BY_CONNECTOR
+                    ]?.[0]?.id ?? '';
+                }
+                setTriggers((current) => [...current, draft]);
                 setAddTriggerOpen(false);
               }}
             >
@@ -862,14 +958,17 @@ export default function AutomationEditorScreen({
             ? cronNextRuns(trigger.expr.trim(), 3).map(relativeRunLabel)
             : [];
         const everyPreview =
-          (trigger.kind === 'data' || trigger.kind === 'condition') && trigger.every.trim()
+          (trigger.kind === 'data' || trigger.kind === 'condition' || trigger.kind === 'event') &&
+          trigger.every.trim()
             ? cronNextRuns(trigger.every.trim(), 3).map(relativeRunLabel)
             : [];
         // New authoring only offers cron + data; keep legacy kinds when loaded.
         const kindOptions: TriggerKind[] =
           trigger.kind === 'webhook' || trigger.kind === 'condition'
-            ? [trigger.kind, ...ADDABLE_TRIGGER_KINDS]
-            : [...ADDABLE_TRIGGER_KINDS];
+            ? [trigger.kind, ...addableTriggerKinds]
+            : trigger.kind === 'event' && !addableTriggerKinds.includes('event')
+              ? ['event', ...addableTriggerKinds]
+              : [...addableTriggerKinds];
         return (
           <div key={trigger.key} className={styles.triggerRow} data-trigger-kind={trigger.kind}>
             <div className={styles.triggerRowHead}>
@@ -1075,6 +1174,98 @@ export default function AutomationEditorScreen({
                 ) : null}
               </div>
             ) : null}
+            {trigger.kind === 'event' ? (
+              <div className={styles.trigFields}>
+                <label className={styles.subField}>
+                  <span className={styles.microLabel}>Bound account</span>
+                  <select
+                    className={styles.triggerSelect}
+                    value={trigger.connectorKind}
+                    aria-label="Event connector account kind"
+                    onChange={(event) => {
+                      const connectorKind = event.target.value;
+                      const options =
+                        EVENTS_BY_CONNECTOR[connectorKind as keyof typeof EVENTS_BY_CONNECTOR] ??
+                        [];
+                      update({
+                        connectorKind,
+                        event: options[0]?.id ?? '',
+                        filterRepo: connectorKind === 'pull.github' ? trigger.filterRepo : '',
+                      });
+                    }}
+                  >
+                    {(trigger.connectorKind &&
+                    !eventConnectorKinds.includes(
+                      trigger.connectorKind as keyof typeof EVENTS_BY_CONNECTOR,
+                    )
+                      ? [trigger.connectorKind, ...eventConnectorKinds]
+                      : eventConnectorKinds
+                    ).map((kind) => (
+                      <option key={kind} value={kind}>
+                        {connectionBindings.get(kind)?.label ?? kind}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.trigHint}>
+                    Events use this exact configured account and its existing read scopes.
+                  </span>
+                </label>
+                <label className={styles.subField}>
+                  <span className={styles.microLabel}>Event</span>
+                  <select
+                    className={styles.triggerSelect}
+                    value={trigger.event}
+                    aria-label="Provider event"
+                    onChange={(event) => update({ event: event.target.value })}
+                  >
+                    {(
+                      EVENTS_BY_CONNECTOR[
+                        trigger.connectorKind as keyof typeof EVENTS_BY_CONNECTOR
+                      ] ?? []
+                    ).map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {trigger.connectorKind === 'pull.github' ? (
+                  <label className={styles.subField}>
+                    <span className={styles.microLabel}>Repository</span>
+                    <input
+                      className={cx(styles.input, styles.mono)}
+                      value={trigger.filterRepo}
+                      onChange={(event) => update({ filterRepo: event.target.value })}
+                      placeholder="owner/repository"
+                      spellCheck={false}
+                    />
+                  </label>
+                ) : null}
+                <label className={styles.subField}>
+                  <span className={styles.microLabel}>Poll every (optional)</span>
+                  <input
+                    className={cx(styles.input, styles.mono)}
+                    value={trigger.every}
+                    onChange={(event) => update({ every: event.target.value })}
+                    placeholder="*/5 * * * *"
+                    spellCheck={false}
+                  />
+                  <span className={styles.trigHint}>
+                    Polling works behind NAT; provider cursors prevent duplicate fires.
+                  </span>
+                </label>
+                {everyPreview.length > 0 ? (
+                  <div className={styles.cronPreview}>
+                    <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
+                    {everyPreview.map((label) => (
+                      <span key={label} className={styles.cronPreviewPill}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {trigger.kind === 'webhook' ? (
               <div className={styles.trigFields}>
                 {d.webhook && !d.webhook.pending && d.webhook.url ? (
@@ -1109,10 +1300,11 @@ export default function AutomationEditorScreen({
     </div>
   );
 
-  const toggleConnector = (kind: string): void => {
+  const toggleConnector = (kind: string, connectionId?: string): void => {
     setSelectedConnectors((prev) => {
       const next = new Set(prev);
-      if (next.has(kind)) {
+      const existing = connectionBindings.get(kind);
+      if (next.has(kind) && (!connectionId || existing?.connectionId === connectionId)) {
         next.delete(kind);
         setConnectionBindings((m) => {
           const copy = new Map(m);
@@ -1122,13 +1314,16 @@ export default function AutomationEditorScreen({
       } else {
         next.add(kind);
         const cat = catalog.find((c) => c.kind === kind);
-        if (cat?.connection) {
+        const connection = connectionId
+          ? cat?.connections.find((candidate) => candidate.connectionId === connectionId)
+          : cat?.connection;
+        if (connection) {
           setConnectionBindings((m) => {
             const copy = new Map(m);
             copy.set(kind, {
-              connectionId: cat.connection!.connectionId,
-              kind: cat.kind,
-              label: cat.connection!.label,
+              connectionId: connection.connectionId,
+              kind,
+              label: connection.label,
             });
             return copy;
           });
@@ -1166,8 +1361,14 @@ export default function AutomationEditorScreen({
         <div className={styles.entityTokens} aria-label="Tagged data">
           {Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g), (match) => (
             <span key={match[0]} className={styles.entityToken}>
-              <code>@{match[1]}</code>
-              <span>{match[2] === '*' ? 'type' : match[2]}</span>
+              <code>@{match[1] === 'core.link_anchor' ? 'anchor' : match[1]}</code>
+              <span>
+                {match[1] === 'core.link_anchor'
+                  ? 'row · field · span'
+                  : match[2] === '*'
+                    ? 'type'
+                    : match[2]}
+              </span>
             </span>
           ))}
         </div>
@@ -1225,6 +1426,17 @@ export default function AutomationEditorScreen({
         </div>
       ) : null}
       <div className={styles.instrToolbar} ref={connectorsWrapRef}>
+        <AutomationEditorAgentPicker
+          runners={d.agentRunners ?? []}
+          runner={runner}
+          model={model}
+          defaultRunnerKind={d.defaultRunnerKind}
+          defaultModel={d.defaultModel}
+          onChange={(next) => {
+            setRunner(next.runner);
+            setModel(next.model);
+          }}
+        />
         <button
           type="button"
           className={styles.instrChip}
@@ -1244,11 +1456,22 @@ export default function AutomationEditorScreen({
             ? 'Optional — attach Gmail, GitHub, …'
             : `${connectorCount} selected`}
         </span>
+        {danglingConnectorKinds.size > 0 ? (
+          <span
+            className={styles.connDanglingNote}
+            role="status"
+            data-testid="connector-binding-dangling"
+          >
+            {[...danglingConnectorKinds].join(', ')} — the bound account is no longer configured.
+            Open Connectors and choose a replacement.
+          </span>
+        ) : null}
         <AutomationEditorConnectorsPicker
           open={connectorsOpen}
           catalog={catalog}
           loading={catalogLoading}
           selected={selectedConnectors}
+          bindings={connectionBindings}
           onToggleSelect={toggleConnector}
           onBoundConnection={bindConnection}
           onClose={() => setConnectorsOpen(false)}

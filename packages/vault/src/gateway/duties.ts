@@ -18,7 +18,7 @@ import { retainExtBand } from './ext.js';
 import { writeScopeTombstones } from '../install-memory.js';
 import { writeProvenance, writeReceipt } from './evidence.js';
 import { tableColumns } from './filters.js';
-import type { Identity } from './types.js';
+import type { FilterClause, Identity } from './types.js';
 
 export interface RevocationResult {
   grantId: string;
@@ -63,8 +63,17 @@ export function revokeGrantCascade(
   // re-mint it on the next mount/sync/publish. Uninstall clears these — a
   // reinstall is a fresh consent.
   const revokedScopes = db.vault
-    .prepare(`SELECT schema_name, table_name, verbs FROM consent_grant_scope WHERE grant_id = ?`)
-    .all(grantId) as { schema_name: string; table_name: string | null; verbs: string }[];
+    .prepare(
+      `SELECT schema_name, table_name, verbs, row_filter_json, field_mask_json
+         FROM consent_grant_scope WHERE grant_id = ?`,
+    )
+    .all(grantId) as {
+    schema_name: string;
+    table_name: string | null;
+    verbs: string;
+    row_filter_json: string | null;
+    field_mask_json: string | null;
+  }[];
   const tombstoned =
     grant.app_id !== null || grant.grantee_party_id !== null
       ? writeScopeTombstones(
@@ -74,8 +83,12 @@ export function revokeGrantCascade(
             : { granteePartyId: grant.grantee_party_id as string },
           revokedScopes.map((s) => ({
             schema: s.schema_name,
-            table: s.table_name,
-            verbs: s.verbs,
+            ...(s.table_name !== null ? { table: s.table_name } : {}),
+            verbs: s.verbs as 'read' | 'read+act' | 'act' | 'reveal',
+            ...(s.row_filter_json
+              ? { rowFilter: JSON.parse(s.row_filter_json) as FilterClause[] }
+              : {}),
+            ...(s.field_mask_json ? { fieldMask: JSON.parse(s.field_mask_json) as string[] } : {}),
           })),
         )
       : 0;

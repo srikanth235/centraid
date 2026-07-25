@@ -303,14 +303,17 @@ async function handlePostTurn(
   // mode toggle to read.
   let prevAdapterSessionId: string | undefined;
   let prevAdapterKind: string | undefined;
+  let prevAdapterUsageSnapshot: import('../conversation/turn.js').AdapterUsageSnapshot | undefined;
   if (ctx.conversationStore) {
     const session = ctx.conversationStore.getSessionMeta(entry.id, conversationId);
     if (!session) {
       sendError(res, 404, 'not_found', 'No such chat session.');
       return;
     }
-    prevAdapterSessionId = session.adapterSessionId ?? undefined;
-    prevAdapterKind = session.adapterKind ?? undefined;
+    const resume = ctx.conversationStore.getAdapterResumeState(entry.id, conversationId);
+    prevAdapterSessionId = resume?.sessionId;
+    prevAdapterKind = resume?.kind;
+    prevAdapterUsageSnapshot = resume?.usageSnapshot;
   }
 
   // Attachments uploaded ahead of the turn (issue #190): the bytes already
@@ -350,6 +353,7 @@ async function handlePostTurn(
     ...(ctx.turnLimiter ? { limiter: ctx.turnLimiter() } : {}),
     prevAdapterSessionId,
     prevAdapterKind,
+    prevAdapterUsageSnapshot,
     ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),
     ...(turnAttachments.length > 0 ? { turnAttachments } : {}),
   });

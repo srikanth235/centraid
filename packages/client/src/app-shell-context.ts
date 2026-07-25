@@ -134,7 +134,13 @@ export interface TemplateEntry {
 export interface TemplateVaultBlock {
   purpose?: string;
   why?: string;
-  scopes: Array<{ schema: string; table?: string; verbs: string }>;
+  scopes: Array<{
+    schema: string;
+    table?: string;
+    verbs: string;
+    rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
+    fieldMask?: string[];
+  }>;
 }
 
 // Per-automation run state, keyed by `${appId}:${name}`.

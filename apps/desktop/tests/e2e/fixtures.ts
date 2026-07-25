@@ -24,7 +24,7 @@ const __dirname = path.dirname(__filename);
  *     `<userData>/gateways/<id>/`. So to point the app at our mock we seed a
  *     *remote* gateway profile whose `url` is the mock, set it active, and
  *     mark onboarding complete.
- *   - Apps/automations/runs/templates all come from the gateway over HTTP,
+ *   - Apps/automations/turns/templates all come from the gateway over HTTP,
  *     so the mock is the single source of fixture data — `gateway.state` is
  *     mutable and every test shapes it before (or during) the run.
  *
@@ -64,12 +64,12 @@ export interface MockState {
   templates: Array<Record<string, unknown>>;
   /** GET /centraid/_automations → { rows } */
   automations: Array<Record<string, unknown>>;
-  /** GET /centraid/_automations/runs → { runs } (also per-ref) */
-  runs: Array<Record<string, unknown>>;
-  /** GET /centraid/_automations/run?runId= → { run } */
-  runsById: Record<string, Record<string, unknown>>;
-  /** GET /centraid/_automations/run/nodes?runId= → { nodes } */
-  nodesByRun: Record<string, Array<Record<string, unknown>>>;
+  /** GET /centraid/_automations/turns → { turns } (also per-ref) */
+  automationTurns: Array<Record<string, unknown>>;
+  /** GET /centraid/_automations/turn?turnId= → { turn } */
+  automationTurnsById: Record<string, Record<string, unknown>>;
+  /** Native items returned by expanded turn reads. */
+  automationItemsByTurn: Record<string, Array<Record<string, unknown>>>;
   /** GET /centraid/_apps/:id/git-versions (undefined → 404 = never published) */
   versions: Record<string, GitVersion[]>;
   /** GET /centraid/_apps/:id/logs → { entries } */
@@ -96,13 +96,13 @@ export interface MockState {
   automationsStatus: number; // GET /centraid/_automations (drives the list error card)
   deleteStatus: number; // DELETE /centraid/_apps/:id
   publishStatus: number; // POST /centraid/_apps/:id/publish
-  runNowStatus: number; // POST /centraid/_automations/run-now
+  runNowStatus: number; // POST /centraid/_automations/turn-now
   setEnabledStatus: number; // POST /centraid/_automations/set-enabled
   /** When set, EVERY route returns this status (e.g. 401 to drive auth_required). */
   forceStatus?: number;
 
-  /** runId minted by run-now + reported on create. */
-  nextRunId: string;
+  /** turnId minted by turn-now + reported on create. */
+  nextAutomationTurnId: string;
   /** Result body for clone. */
   cloneResult?: Record<string, unknown>;
   /** Result body for create-app. */
@@ -112,8 +112,8 @@ export interface MockState {
 
   /** SSE frames for POST /centraid/:appId/_turn */
   turnFrames: SseFrame[];
-  /** SSE frames for GET /centraid/_automations/run/events */
-  runFrames: SseFrame[];
+  /** SSE frames for GET /centraid/_automations/turn/events */
+  automationTurnFrames: SseFrame[];
 }
 
 export interface MockGateway {
@@ -137,9 +137,9 @@ function defaultState(): MockState {
     apps: [],
     templates: [],
     automations: [],
-    runs: [],
-    runsById: {},
-    nodesByRun: {},
+    automationTurns: [],
+    automationTurnsById: {},
+    automationItemsByTurn: {},
     versions: {},
     logsById: {},
     filesById: {},
@@ -155,9 +155,9 @@ function defaultState(): MockState {
     publishStatus: 200,
     runNowStatus: 200,
     setEnabledStatus: 200,
-    nextRunId: 'run-1',
+    nextAutomationTurnId: 'turn-1',
     turnFrames: [],
-    runFrames: [],
+    automationTurnFrames: [],
   };
 }
 
@@ -404,34 +404,51 @@ async function route(
     const row = s.automations.find((a) => a.ref === ref) ?? null;
     return json(res, 200, { row });
   }
-  if (p === '/centraid/_automations/run-now' && method === 'POST') {
+  if (p === '/centraid/_automations/turn-now' && method === 'POST') {
     if (s.runNowStatus !== 200) return json(res, s.runNowStatus, { error: 'run_failed' });
-    // Mirror the gateway: firing a run materialises its ledger row, so the
-    // automation thread's run feed shows the new run on its next poll. The
-    // thread is the only route to the run viewer now (Run now no longer
+    // Mirror the gateway: firing a turn materialises its ledger row, so the
+    // automation thread feed shows it on the authoritative reload. The
+    // thread is the only route to the forensic viewer now (Run now no longer
     // navigates there itself), so without this the feed stays empty.
-    const fired = s.runsById[s.nextRunId];
-    if (fired && !s.runs.some((r) => r['runId'] === s.nextRunId)) s.runs = [fired, ...s.runs];
-    return json(res, 200, { runId: s.nextRunId });
+    const fired = s.automationTurnsById[s.nextAutomationTurnId];
+    if (fired && !s.automationTurns.some((turn) => turn['turnId'] === s.nextAutomationTurnId)) {
+      s.automationTurns = [fired, ...s.automationTurns];
+    }
+    return json(res, 202, { turnId: s.nextAutomationTurnId });
   }
-  if (p === '/centraid/_automations/runs' && method === 'GET') {
+  if (p === '/centraid/_automations/turns' && method === 'GET') {
     const ref = url.searchParams.get('ref');
-    const runs = ref ? s.runs.filter((r) => r.automationId === ref) : s.runs;
-    return json(res, 200, { runs });
+    const turns = ref
+      ? s.automationTurns.filter((turn) => turn.automationId === ref)
+      : s.automationTurns;
+    return json(res, 200, { turns });
   }
-  if (p === '/centraid/_automations/run' && method === 'GET') {
-    const runId = url.searchParams.get('runId') ?? '';
-    return json(res, 200, { run: s.runsById[runId] ?? null });
+  if (p === '/centraid/_automations/turn' && method === 'GET') {
+    const turnId = url.searchParams.get('turnId') ?? '';
+    const ref = url.searchParams.get('ref');
+    const turn =
+      s.automationTurnsById[turnId] ??
+      (ref ? s.automationTurns.find((candidate) => candidate.automationId === ref) : undefined) ??
+      null;
+    return json(res, 200, {
+      turn,
+      ...(url.searchParams.get('expand') === 'items' && turn
+        ? {
+            items:
+              s.automationItemsByTurn[typeof turn.turnId === 'string' ? turn.turnId : turnId] ?? [],
+          }
+        : {}),
+    });
   }
-  if (p === '/centraid/_automations/run/nodes' && method === 'GET') {
-    const runId = url.searchParams.get('runId') ?? '';
-    return json(res, 200, { nodes: s.nodesByRun[runId] ?? [] });
+  if (p === '/centraid/_automations/turn/items' && method === 'GET') {
+    const turnId = url.searchParams.get('turnId') ?? '';
+    return json(res, 200, { items: s.automationItemsByTurn[turnId] ?? [] });
   }
-  if (p === '/centraid/_automations/run/events' && method === 'GET') {
-    void writeSse(res, s.runFrames);
+  if (p === '/centraid/_automations/turn/events' && method === 'GET') {
+    void writeSse(res, s.automationTurnFrames);
     return;
   }
-  if (p === '/centraid/_automations/run/pin' && method === 'POST')
+  if (p === '/centraid/_automations/turn/pin' && method === 'POST')
     return json(res, 200, { ok: true });
   if (p === '/centraid/_automations/set-enabled' && method === 'POST') {
     if (s.setEnabledStatus !== 200) return json(res, s.setEnabledStatus, { error: 'failed' });
@@ -440,7 +457,22 @@ async function route(
     // `ref` travels in the query string; `enabled` in the body.
     const ref = url.searchParams.get('ref');
     const next = safeJson(body)['enabled'];
-    s.automations = s.automations.map((a) => (a['ref'] === ref ? { ...a, enabled: next } : a));
+    s.automations = s.automations.map((a) =>
+      a['ref'] === ref
+        ? {
+            ...a,
+            enabled: next,
+            ...(a['manifest'] && typeof a['manifest'] === 'object'
+              ? {
+                  manifest: {
+                    ...(a['manifest'] as Record<string, unknown>),
+                    enabled: next,
+                  },
+                }
+              : {}),
+          }
+        : a,
+    );
     return json(res, 200, { ok: true });
   }
 
@@ -840,9 +872,9 @@ export function automationRow(over: {
   };
 }
 
-/** Build a CentraidAutomationRunRecord. */
-export function runRecord(over: {
-  runId: string;
+/** Build a native CentraidAutomationTurnRecord. */
+export function automationTurnRecord(over: {
+  turnId: string;
   automationId: string;
   ok?: boolean;
   summary?: string;
@@ -851,8 +883,9 @@ export function runRecord(over: {
   triggerOrigin?: string;
 }): Record<string, unknown> {
   return {
-    runId: over.runId,
-    kind: 'automation',
+    turnId: over.turnId,
+    conversationId: `${over.automationId}::runner:codex`,
+    seq: 0,
     automationId: over.automationId,
     triggerKind: over.triggerKind ?? 'manual',
     triggerOrigin: over.triggerOrigin ?? 'manual',
@@ -870,9 +903,9 @@ export function runRecord(over: {
   };
 }
 
-/** Build a CentraidAutomationRunNode. */
-export function runNode(over: {
-  runId: string;
+/** Build a native CentraidAutomationItem. */
+export function automationTurnItem(over: {
+  turnId: string;
   ordinal: number;
   kind?: string;
   name?: string;
@@ -882,8 +915,8 @@ export function runNode(over: {
   error?: string;
 }): Record<string, unknown> {
   return {
-    nodeId: `${over.runId}-n${over.ordinal}`,
-    runId: over.runId,
+    itemId: `${over.turnId}-i${over.ordinal}`,
+    turnId: over.turnId,
     ordinal: over.ordinal,
     kind: over.kind ?? 'tool',
     name: over.name ?? 'do_thing',

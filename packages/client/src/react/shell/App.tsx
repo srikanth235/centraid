@@ -639,7 +639,14 @@ export default function App(): JSX.Element {
         case 'atlas':
           return <AtlasRoute />;
         case 'automation-view':
-          return <AutomationViewRoute automationId={nav.route.automationId} />;
+          // Keyed so an in-place automation change remounts: traces, watched
+          // turn ids, and any open SSE all belong to one automation (#541).
+          return (
+            <AutomationViewRoute
+              key={nav.route.automationId}
+              automationId={nav.route.automationId}
+            />
+          );
         case 'automation-editor':
           return (
             <AutomationEditorRoute

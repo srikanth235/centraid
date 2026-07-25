@@ -13,8 +13,8 @@
  *
  *   conversations    — the first-class durable record. `kind` (chat |
  *                      automation | build), `app_id`, `automation_id` live
- *                      here. Each automation has one stable conversation
- *                      (`id=automation_id=<ref>`); fires and compiles append turns.
+ *                      here. Each automation+harness pair has one stable
+ *                      conversation; history joins them by `automation_id`.
  *   turns            — one execution under a conversation (chat turn /
  *                      automation fire / builder iteration). NOT NULL,
  *                      FK-backed `conversation_id`. Carries the token/cost
@@ -40,6 +40,7 @@
 import { randomUUID } from 'node:crypto';
 import { type DatabaseSync } from 'node:sqlite';
 import type { DatabaseProvider } from '../stores/gateway-db.js';
+import type { AdapterUsageSnapshot } from './turn.js';
 import type {
   Conversation,
   Turn,
@@ -75,6 +76,8 @@ export interface CreateConversationInput {
   readonly appId?: string;
   readonly automationId?: string;
   readonly title?: string;
+  /** Runner ownership fixed when an automation conversation is created. */
+  readonly adapterKind?: string;
 }
 
 export interface InsertTurnInput {
@@ -112,6 +115,7 @@ export interface InsertItemInput {
   readonly itemId: string;
   readonly turnId: string;
   readonly ordinal: number;
+  readonly callId?: string;
   readonly batchId?: number;
   readonly kind: ItemKind;
   readonly role?: 'user' | 'assistant';
@@ -119,6 +123,7 @@ export interface InsertItemInput {
   readonly name?: string;
   readonly argsJson?: string;
   readonly outputJson?: string;
+  readonly rawJson?: string;
   readonly childTurnId?: string;
   readonly ok: boolean;
   readonly error?: string;
@@ -142,10 +147,12 @@ export interface OpenItemInput {
   readonly itemId: string;
   readonly turnId: string;
   readonly ordinal: number;
+  readonly callId?: string;
   readonly batchId?: number;
   readonly kind: ItemKind;
   readonly name?: string;
   readonly argsJson?: string;
+  readonly rawJson?: string;
   readonly appId?: string;
   readonly startedAt: number;
 }
@@ -154,6 +161,7 @@ export interface CloseItemInput {
   readonly itemId: string;
   readonly ok: boolean;
   readonly outputJson?: string;
+  readonly rawJson?: string;
   readonly error?: string;
   readonly childTurnId?: string;
   readonly endedAt: number;
@@ -209,6 +217,60 @@ export function conversationMatchExpression(query: string): string | null {
   return tokens.map((t) => `"${t}"*`).join(' ');
 }
 
+/**
+ * Ledger cap for a runner's raw envelope. `args_json` / `output_json` arrive
+ * already capped, but `raw_json` carries the SAME payload inside the runner's
+ * envelope (an entire file read, a full tool result) and is written TWICE per
+ * tool call — once at `openItem`, once at `closeItem`. Uncapped that is
+ * megabytes per call into `journal.db`, straight through #544's disk budget
+ * and #438's bounded ledger. Enforced here, at the write boundary, so no
+ * producer can forget; producers capping their own output is defense in depth,
+ * not a substitute.
+ */
+const RAW_JSON_MAX_BYTES = 64 * 1024;
+
+/** A value this short is an identifier, not a payload — worth keeping. */
+const RAW_JSON_KEPT_FIELD_MAX_CHARS = 256;
+
+/**
+ * The parts of an oversized envelope worth keeping: every top-level scalar
+ * short enough to be an identifier (`stopReason`, `callId` / `toolCallId`,
+ * `status`, `kind`, …). Nested content — the file bodies and result arrays
+ * that blew the cap — is exactly what we drop. Returns `{}` for anything that
+ * isn't a JSON object; a non-JSON envelope has no structure to preserve, and
+ * the truncation marker alone is then the honest record.
+ */
+function rawJsonForensics(raw: string): Record<string, unknown> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const kept: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value === 'string') {
+      if (value.length <= RAW_JSON_KEPT_FIELD_MAX_CHARS) kept[key] = value;
+    } else if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+      kept[key] = value;
+    }
+  }
+  return kept;
+}
+
+/** `raw_json` as it may be written: verbatim under the cap, else forensics + marker. */
+function cappedRawJson(raw: string | undefined): string | null {
+  if (raw === undefined) return null;
+  const originalBytes = Buffer.byteLength(raw, 'utf8');
+  if (originalBytes <= RAW_JSON_MAX_BYTES) return raw;
+  const marker = { rawTruncated: true, rawOriginalBytes: originalBytes };
+  const kept = JSON.stringify({ ...rawJsonForensics(raw), ...marker });
+  // A pathological envelope (thousands of short scalar keys) can still exceed
+  // the cap; the marker on its own always fits.
+  return Buffer.byteLength(kept, 'utf8') <= RAW_JSON_MAX_BYTES ? kept : JSON.stringify(marker);
+}
+
 export class ConversationStore {
   private readonly provider: DatabaseProvider;
   private db: DatabaseSync | undefined;
@@ -261,6 +323,7 @@ export class ConversationStore {
       input.appId ?? null,
       input.automationId ?? null,
       input.title ?? '',
+      input.adapterKind ?? null,
       now,
       now,
     );
@@ -271,6 +334,7 @@ export class ConversationStore {
       ...(input.appId !== undefined ? { appId: input.appId } : {}),
       ...(input.automationId !== undefined ? { automationId: input.automationId } : {}),
       title: input.title ?? '',
+      ...(input.adapterKind !== undefined ? { adapterKind: input.adapterKind } : {}),
       turnCount: 0,
       pinned: false,
       archived: false,
@@ -279,32 +343,61 @@ export class ConversationStore {
     };
   }
 
-  /** Ensure the one long-lived conversation for an automation and refresh its title. */
-  ensureAutomationConversation(automationRef: string, appId?: string, name?: string): string {
-    const existing = this.getConversation(automationRef);
+  /**
+   * Ensure one long-lived conversation for this automation+harness pair.
+   * A harness switch deliberately chooses another conversation; ACP resume
+   * handles never cross runner ownership.
+   */
+  ensureAutomationConversation(
+    automationRef: string,
+    appId?: string,
+    name?: string,
+    runnerKind?: string,
+  ): string {
+    const conversationId =
+      runnerKind === undefined
+        ? automationRef
+        : `${automationRef}::runner:${encodeURIComponent(runnerKind)}`;
+    const existing = this.getConversation(conversationId);
     if (!existing) {
       this.createConversation({
-        id: automationRef,
+        id: conversationId,
         kind: 'automation',
         userId: '',
         automationId: automationRef,
         ...(appId !== undefined ? { appId } : {}),
         ...(name !== undefined ? { title: name } : {}),
+        ...(runnerKind !== undefined ? { adapterKind: runnerKind } : {}),
       });
-      return automationRef;
+      return conversationId;
     }
     if (existing.kind !== 'automation' || existing.automationId !== automationRef) {
-      throw new Error(`conversation id collision for automation "${automationRef}"`);
+      throw new Error(`conversation id collision for automation "${conversationId}"`);
+    }
+    // Unreachable through this method — the id above encodes `runnerKind`, so
+    // a row found under it was created for that kind. It stays as a corruption
+    // guard for the rows that DON'T come from here: a hand-edited ledger, or
+    // the deprecated `createAutomationRun` path where a caller's own ref can
+    // collide with the `::runner:` encoding. Failing loudly beats handing an
+    // ACP resume handle to the wrong harness.
+    if (
+      runnerKind !== undefined &&
+      existing.adapterKind !== undefined &&
+      existing.adapterKind !== runnerKind
+    ) {
+      throw new Error(
+        `automation conversation "${conversationId}" belongs to ${existing.adapterKind}, not ${runnerKind}`,
+      );
     }
     const { stmts } = this.ensureReady();
     stmts.updateAutomationConversation.run(
       appId ?? null,
       name ?? null,
       Date.now(),
-      automationRef,
+      conversationId,
       automationRef,
     );
-    return automationRef;
+    return conversationId;
   }
 
   /** @deprecated Use ensureAutomationConversation. */
@@ -435,12 +528,23 @@ export class ConversationStore {
   }
 
   /** Bump turn_count + updated_at; optionally persist the runner-resume handle. */
-  noteTurn(id: string, userId: string, adapter?: { kind: string; sessionId?: string }): boolean {
+  noteTurn(
+    id: string,
+    userId: string,
+    adapter?: { kind: string; sessionId?: string; usageSnapshot?: AdapterUsageSnapshot },
+  ): boolean {
     const { stmts } = this.ensureReady();
     const now = Date.now();
     let res;
     if (adapter && adapter.sessionId !== undefined) {
-      res = stmts.noteTurnWithAdapter.run(now, adapter.kind, adapter.sessionId, id, userId);
+      res = stmts.noteTurnWithAdapter.run(
+        now,
+        adapter.kind,
+        adapter.sessionId,
+        adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
+        id,
+        userId,
+      );
     } else if (adapter) {
       res = stmts.noteTurnKindOnly.run(now, adapter.kind, id, userId);
     } else {
@@ -497,6 +601,23 @@ export class ConversationStore {
     const { stmts } = this.ensureReady();
     const raw = stmts.getTurn.get(turnId) as RawTurn | undefined;
     return raw ? turnFromRaw(raw) : undefined;
+  }
+
+  /**
+   * Delete ONE unfinished turn; items/attachments cascade with it. This is the
+   * retry-under-the-original-id path, not a general eraser.
+   *
+   * A finished turn is refused on purpose. `insertTurn` derives `seq` from
+   * `MAX(seq)+1` (below), so deleting the newest turn hands its `seq` to the
+   * next one — and `conversation_archive`'s `seq_from`/`seq_to` ranges assume
+   * `seq` is monotonic within a conversation. An unfinished turn is never
+   * inside an archived range, so recycling ITS seq is the retry; recycling a
+   * finished turn's seq would alias an archived range. `userId`, when the
+   * caller has one, additionally confines the delete to that owner's threads.
+   */
+  deleteTurn(turnId: string, userId?: string): boolean {
+    const { stmts } = this.ensureReady();
+    return Number(stmts.deleteTurn.run(turnId, userId ?? null, userId ?? null).changes) > 0;
   }
 
   /** Every turn of a conversation, oldest-first (seq ASC) — the thread's turns. */
@@ -604,6 +725,7 @@ export class ConversationStore {
       input.itemId,
       input.turnId,
       input.ordinal,
+      input.callId ?? null,
       input.batchId ?? null,
       input.kind,
       input.role ?? null,
@@ -620,6 +742,7 @@ export class ConversationStore {
       input.name ?? null,
       input.argsJson ?? null,
       input.outputJson ?? null,
+      cappedRawJson(input.rawJson),
       input.childTurnId ?? null,
       input.ok ? 1 : 0,
       input.error ?? null,
@@ -635,11 +758,13 @@ export class ConversationStore {
       input.itemId,
       input.turnId,
       input.ordinal,
+      input.callId ?? null,
       input.batchId ?? null,
       input.kind,
       input.appId ?? null,
       input.name ?? null,
       input.argsJson ?? null,
+      cappedRawJson(input.rawJson),
       input.startedAt,
     );
   }
@@ -649,6 +774,7 @@ export class ConversationStore {
     stmts.closeItem.run({
       ok: input.ok ? 1 : 0,
       outputJson: input.outputJson ?? null,
+      rawJson: cappedRawJson(input.rawJson),
       error: input.error ?? null,
       childTurnId: input.childTurnId ?? null,
       inputTokens: input.inputTokens ?? null,

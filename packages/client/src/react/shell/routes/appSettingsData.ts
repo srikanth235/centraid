@@ -4,7 +4,7 @@ import {
   appSettingWrite,
   approveVaultGrant,
   confirmVaultParked,
-  readAutomationRun,
+  readAutomationTurn,
   revokeVaultGrant,
   vaultApps,
   vaultDemoLoad,
@@ -137,10 +137,10 @@ export function reloadAppFrame(): void {
 }
 
 /** Poll a just-started automation run to completion (6-minute ceiling). */
-export async function waitForAutomationRun(runId: string): Promise<CentraidAutomationRunRecord> {
+export async function waitForAutomationRun(runId: string): Promise<CentraidAutomationTurnRecord> {
   const deadline = Date.now() + 6 * 60 * 1000;
   while (Date.now() < deadline) {
-    const rec = await readAutomationRun({ runId });
+    const rec = await readAutomationTurn({ turnId: runId });
     if (rec && rec.endedAt !== undefined) return rec;
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }

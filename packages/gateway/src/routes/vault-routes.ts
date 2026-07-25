@@ -33,6 +33,7 @@
  *   POST   /centraid/_vault/scope-requests/<requestId> — {approve: boolean} → decided request
  *   GET    /centraid/_vault/review?limit=              — salience-ranked receipt feed
  *   GET    /centraid/_vault/picker?term=&kinds=&limit= — shell entity picker (issue #272)
+ *   GET    /centraid/_vault/anchors?term=&limit=        — live anchor picker for automation @ references
  *   POST   /centraid/_vault/links                      — assert a link as the owner (pick-is-consent),
  *                                                        optionally carrying an inline anchor selector (issue #282)
  *   DELETE /centraid/_vault/links/<linkId>             — end a link (temporal, never deletes)
@@ -840,6 +841,19 @@ export function makeVaultRouteHandler(
         );
       }
 
+      if (method === 'GET' && segments[0] === 'anchors' && segments.length === 1) {
+        const term = url.searchParams.get('term') ?? undefined;
+        const limitParam = Number(url.searchParams.get('limit'));
+        return sendJson(
+          res,
+          200,
+          plane.pickAnchors({
+            ...(term !== undefined ? { term } : {}),
+            ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
+          }),
+        );
+      }
+
       if (method === 'POST' && segments[0] === 'links' && segments.length === 1) {
         const body = await readJson(req);
         const fields = ['from_type', 'from_id', 'to_type', 'to_id'] as const;
@@ -1060,6 +1074,19 @@ function parseSelector(raw: unknown): AnchorSelector | undefined {
 }
 
 const VERBS = new Set(['read', 'read+act', 'act', 'reveal']);
+const FILTER_OPS = new Set([
+  'eq',
+  'ne',
+  'lt',
+  'lte',
+  'gt',
+  'gte',
+  'in',
+  'is-null',
+  'not-null',
+  'within-days',
+  'within-next-days',
+]);
 
 function parseGrantRequest(body: Record<string, unknown>): GrantRequest | undefined {
   if (typeof body.purpose !== 'string' || body.purpose.length === 0) return undefined;
@@ -1071,10 +1098,53 @@ function parseGrantRequest(body: Record<string, unknown>): GrantRequest | undefi
     if (typeof s.schema !== 'string' || s.schema.length === 0) return undefined;
     if (typeof s.verbs !== 'string' || !VERBS.has(s.verbs)) return undefined;
     if (s.table !== undefined && typeof s.table !== 'string') return undefined;
+    if (
+      (s.rowFilter !== undefined || s.fieldMask !== undefined) &&
+      (typeof s.table !== 'string' || s.table === '')
+    ) {
+      return undefined;
+    }
+    let rowFilter: GrantRequest['scopes'][number]['rowFilter'];
+    if (s.rowFilter !== undefined) {
+      if (!Array.isArray(s.rowFilter) || s.rowFilter.length === 0) return undefined;
+      rowFilter = [];
+      for (const rawClause of s.rowFilter) {
+        if (rawClause === null || typeof rawClause !== 'object' || Array.isArray(rawClause)) {
+          return undefined;
+        }
+        const clause = rawClause as Record<string, unknown>;
+        if (
+          typeof clause.column !== 'string' ||
+          clause.column === '' ||
+          typeof clause.op !== 'string' ||
+          !FILTER_OPS.has(clause.op)
+        ) {
+          return undefined;
+        }
+        rowFilter.push({
+          column: clause.column,
+          op: clause.op as NonNullable<GrantRequest['scopes'][number]['rowFilter']>[number]['op'],
+          ...(Object.hasOwn(clause, 'value') ? { value: clause.value } : {}),
+        });
+      }
+    }
+    let fieldMask: string[] | undefined;
+    if (s.fieldMask !== undefined) {
+      if (
+        !Array.isArray(s.fieldMask) ||
+        s.fieldMask.length === 0 ||
+        !s.fieldMask.every((field) => typeof field === 'string' && field !== '')
+      ) {
+        return undefined;
+      }
+      fieldMask = [...s.fieldMask] as string[];
+    }
     scopes.push({
       schema: s.schema,
       verbs: s.verbs as 'read' | 'read+act' | 'act' | 'reveal',
       ...(typeof s.table === 'string' ? { table: s.table } : {}),
+      ...(rowFilter ? { rowFilter } : {}),
+      ...(fieldMask ? { fieldMask } : {}),
     });
   }
   return {

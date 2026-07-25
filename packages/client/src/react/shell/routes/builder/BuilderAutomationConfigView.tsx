@@ -1,7 +1,7 @@
 import { type JSX, useEffect, useState } from 'react';
 import { cronNextRuns, describeCron } from '../../../../cron.js';
 import {
-  listAutomationRuns,
+  listAutomationTurns,
   publish,
   readAutomation,
   writeAppFile,
@@ -75,12 +75,12 @@ function ActivityCard({
   automationRef: string;
   triggers: CentraidAutomationManifest['triggers'];
 }): JSX.Element {
-  const [lastRun, setLastRun] = useState<CentraidAutomationRunRecord[] | null | 'error'>(null);
+  const [lastRun, setLastRun] = useState<CentraidAutomationTurnRecord[] | null | 'error'>(null);
 
   useEffect(() => {
     let alive = true;
     setLastRun(null);
-    listAutomationRuns({ automationId: automationRef, limit: 1 })
+    listAutomationTurns({ automationId: automationRef, limit: 1 })
       .then((r) => {
         if (alive) setLastRun(r);
       })
@@ -324,6 +324,19 @@ export default function ConfigView({
         </div>
       );
     }
+    if (t.kind === 'event') {
+      const repo = t.filter && typeof t.filter.repo === 'string' ? ` · ${t.filter.repo}` : '';
+      return (
+        <div className={styles.trigger} key={i}>
+          <div className={styles.triggerMain}>
+            <Glyph svg={svgHistory14} className={styles.triggerIcon} />
+            <span className={styles.triggerDesc}>{`${t.connectorKind} · ${t.event}${repo}`}</span>
+            {t.every ? <code className={styles.triggerExpr}>{t.every}</code> : null}
+            {triggerActions(i, false)}
+          </div>
+        </div>
+      );
+    }
     // Webhook trigger — provisioned (has a minted route id) or pending.
     const pending = t.id === undefined;
     return (
@@ -420,6 +433,8 @@ export default function ConfigView({
           <span className={styles.tag} key={i}>
             {s.table ? `${s.schema}.${s.table}` : s.schema}
             <span className={styles.vaultVerb}>{s.verbs}</span>
+            {s.rowFilter ? <span>{s.rowFilter.length} row rule</span> : null}
+            {s.fieldMask ? <span>{s.fieldMask.length} fields</span> : null}
           </span>
         ))}
       </div>

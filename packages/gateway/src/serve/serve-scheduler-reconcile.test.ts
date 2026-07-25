@@ -197,8 +197,8 @@ test('a committed watched entity fires a data automation in well under a second'
   const plane = handle.vaults.current();
   const cursor = plane.db.journal
     .prepare(
-      `SELECT value_json FROM automation_state
-        WHERE automation_id = 'brief/brief' AND key = '__trigger:0:cursor'`,
+      `SELECT position_json FROM automation_trigger_cursor
+        WHERE automation_id = 'brief/brief' AND trigger_index = 0`,
     )
     .get();
   expect(cursor).toBeTruthy();
@@ -215,18 +215,18 @@ test('a committed watched entity fires a data automation in well under a second'
       .get(),
   ).toMatchObject({ n: 1 });
 
-  let runs: Array<{ runId: string; endedAt?: number; ok: boolean }> = [];
+  let runs: Array<{ turnId: string; endedAt?: number; ok: boolean }> = [];
   const refreshRuns = async (): Promise<boolean> => {
     const response = await fetch(
-      `${handle.url}/centraid/_automations/runs?ref=${encodeURIComponent('brief/brief')}`,
+      `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent('brief/brief')}`,
       { headers: auth() },
     );
     expect(response.status).toBe(200);
     runs = (
       (await response.json()) as {
-        runs: Array<{ runId: string; endedAt?: number; ok: boolean }>;
+        turns: Array<{ turnId: string; endedAt?: number; ok: boolean }>;
       }
-    ).runs;
+    ).turns;
     return runs.length > 0;
   };
   await waitFor(async () => {
@@ -242,7 +242,8 @@ test('a committed watched entity fires a data automation in well under a second'
   expect(runs[0]?.ok).toBe(true);
 
   // A real burst of committed writes through the live gateway shares one
-  // fixed nudge window and therefore one cursor-evaluation/fire pass.
+  // fixed nudge window and therefore one cursor evaluation, while preserving
+  // one distinct native turn per source element.
   for (let i = 0; i < 8; i++) {
     const burst = plane.gateway.invoke(plane.ownerCredential, {
       command: 'core.add_party',
@@ -253,9 +254,9 @@ test('a committed watched entity fires a data automation in well under a second'
   }
   await waitFor(async () => {
     await refreshRuns();
-    return runs.length === 2 && runs.every((run) => run.endedAt !== undefined);
+    return runs.length === 9 && runs.every((run) => run.endedAt !== undefined);
   });
-  expect(runs).toHaveLength(2);
+  expect(runs).toHaveLength(9);
 
   // Simulate a kill in the only recoverable mid-write window: journal
   // provenance is durable, but the process dies before the best-effort ring.
@@ -283,15 +284,15 @@ test('a committed watched entity fires a data automation in well under a second'
   handle = await serve({ paths: pathsUnder(dataDir) });
   await waitFor(async () => {
     await refreshRuns();
-    return runs.length === 3 && runs.every((run) => run.endedAt !== undefined);
+    return runs.length === 10 && runs.every((run) => run.endedAt !== undefined);
   });
-  expect(runs).toHaveLength(3);
+  expect(runs).toHaveLength(10);
   const recoveredCursor = handle.vaults
     .current()
     .db.journal.prepare(
-      `SELECT value_json FROM automation_state
-        WHERE automation_id = 'brief/brief' AND key = '__trigger:0:cursor'`,
+      `SELECT position_json FROM automation_trigger_cursor
+        WHERE automation_id = 'brief/brief' AND trigger_index = 0`,
     )
-    .get() as { value_json: string };
-  expect(JSON.parse(recoveredCursor.value_json)).toBe(missedProv.prov_id);
+    .get() as { position_json: string };
+  expect(JSON.parse(recoveredCursor.position_json)).toBe(missedProv.prov_id);
 });

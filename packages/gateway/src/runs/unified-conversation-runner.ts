@@ -49,6 +49,7 @@ import {
   type TurnStreamEvent,
   type Dispatcher,
   type ModelSubsystem,
+  type RunnerKind,
   type RunnerPrefs,
   type RunTurnFn,
   type VaultInvokeRunner,
@@ -70,7 +71,10 @@ export interface UnifiedConversationRunnerOptions {
    *  changes apply without a restart — mirrors `makeConversationRunner`.
    *  Receives `subsystem` so a host that pins a runner per subsystem
    *  answers with THIS register's kind. */
-  prefsLoader: (subsystem?: ModelSubsystem) => Promise<RunnerPrefs | undefined>;
+  prefsLoader: (
+    subsystem?: ModelSubsystem,
+    runnerKind?: RunnerKind,
+  ) => Promise<RunnerPrefs | undefined>;
   /** Which subsystem's runner/model prefs builder turns ride. The gateway
    *  passes `'builder'`; unset → the host's default agent. */
   subsystem?: ModelSubsystem;

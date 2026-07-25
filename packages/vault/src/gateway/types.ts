@@ -3,10 +3,30 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 
+/** A host-owned, execution-local attenuation of a durable consent scope. */
+export interface ExecutionScopeSpec {
+  schema: string;
+  table?: string;
+  verbs: 'read' | 'read+act' | 'act' | 'reveal';
+  rowFilter?: FilterClause[];
+  fieldMask?: string[];
+}
+
 /** How a caller proves who it is (S1). Every caller authenticates as a row. */
 export type Credential =
   | { kind: 'app'; appId: string; signingKey: string }
-  | { kind: 'agent'; agentId: string; deviceId: string; deviceKey: string }
+  | {
+      kind: 'agent';
+      agentId: string;
+      deviceId: string;
+      deviceKey: string;
+      /**
+       * Host-owned, per-execution attenuation. The enrolled agent's durable
+       * grants remain the owner's upper bound; this narrower manifest block
+       * is intersected with them for every consent decision.
+       */
+      scopeClamp?: readonly ExecutionScopeSpec[];
+    }
   | { kind: 'device'; deviceId: string; deviceKey: string };
 
 export type Risk = 'low' | 'medium' | 'high';
@@ -30,6 +50,8 @@ export interface Identity {
   partyId: string | null;
   /** readonly devices may read but never act. */
   mayAct: boolean;
+  /** Authenticated per-execution attenuation, never caller-supplied data. */
+  scopeClamp?: readonly ExecutionScopeSpec[];
 }
 
 /** One predicate of a row filter (ODRL-constraint shaped, compiled to SQL). */

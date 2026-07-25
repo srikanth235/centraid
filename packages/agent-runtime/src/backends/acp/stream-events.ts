@@ -147,6 +147,7 @@ export function createSessionUpdateMapper(
       toolName: toolTitles.get(id) ?? 'tool',
       ok,
       result,
+      rawJson: JSON.stringify(update),
       ...(errorText ? { errorText } : {}),
       ...(diffs.length ? { diffs } : {}),
     });
@@ -190,6 +191,7 @@ export function createSessionUpdateMapper(
         type: 'tool.start',
         toolCallId: id,
         toolName: title,
+        rawJson: JSON.stringify(update),
         ...(update.rawInput !== undefined ? { args: update.rawInput } : {}),
         ...(typeof update.kind === 'string' ? { kind: update.kind } : {}),
       });

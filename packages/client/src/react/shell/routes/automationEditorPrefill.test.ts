@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildCreateAutomationEditorData } from './AutomationEditorRoute.js';
+import { buildAutomationAgentEditorData } from './automationEditorAgentData.js';
+import { buildCreateAutomationEditorData } from './automationEditorCreateData.js';
 
 // The route module transitively imports the whole gateway-client surface; we
 // only exercise the pure create-mode DTO builder, so stub the client so
@@ -57,5 +58,44 @@ describe('buildCreateAutomationEditorData', () => {
       name: 'x',
     });
     expect(data.triggers).toEqual([{ entities: ['business.invoice'], kind: 'data' }]);
+  });
+});
+
+describe('buildAutomationAgentEditorData', () => {
+  it('derives effective automations pins and runner-scoped model defaults', () => {
+    const data = buildAutomationAgentEditorData({
+      anyLoading: false,
+      cards: [
+        {
+          accent: '#111',
+          connected: true,
+          kind: 'codex',
+          models: [{ default: true, id: 'gpt-catalog' }],
+          modelsLoading: false,
+          subtitle: 'ready',
+          title: 'Codex',
+        },
+        {
+          accent: '#222',
+          connected: true,
+          kind: 'acp',
+          models: [{ default: true, id: 'acp-catalog' }],
+          modelsLoading: false,
+          subtitle: 'ready',
+          title: 'Work ACP',
+        },
+      ],
+      savedModelByKind: { acp: 'acp-saved' },
+      selectedKind: 'codex',
+      subsystemModelByKind: { acp: { automations: 'acp-automations' } },
+      subsystemRunnerByKey: { automations: 'acp' },
+    });
+
+    expect(data.defaultRunnerKind).toBe('acp');
+    expect(data.defaultModel).toBe('acp-automations');
+    expect(data.agentRunners?.find((runner) => runner.kind === 'acp')).toMatchObject({
+      defaultModel: 'acp-automations',
+      label: 'Work ACP',
+    });
   });
 });

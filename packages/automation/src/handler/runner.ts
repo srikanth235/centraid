@@ -28,7 +28,7 @@ import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type TurnStreamEvent,
-  type RunStreamEvent,
+  type AutomationTurnStreamEvent,
   type VaultBridge,
   type VaultOp,
   WorkerPool,
@@ -100,8 +100,8 @@ export interface AgentCall {
   /**
    * Token-stream sink (issue #158, Phase 2). When a runner routes
    * `ctx.agent` through its streaming chat adapter, each `TurnStreamEvent`
-   * is forwarded here; the runner wraps it as a `node.delta` on the owning
-   * agent node. Absent for runners still on the collect-on-exit path.
+   * is forwarded here; the runner wraps it as an `item.delta` on the owning
+   * agent item. Absent for runners still on the collect-on-exit path.
    */
   readonly onEvent?: (ev: TurnStreamEvent) => void;
 }
@@ -133,6 +133,10 @@ export interface RunHandlerOptions {
   agentDispatcher: AgentDispatcher;
   /** Per-app conversation-ledger store for audit + ctx.state + ctx.runs. */
   runsStore: ConversationStore;
+  /** Fixed harness owner for this automation conversation. */
+  runnerKind?: string;
+  /** Effective model when a usage event omits its model id. */
+  model?: string;
   /**
    * Host-injected `ctx.vault` executor, bound to this automation's enrolled
    * `agent.agent` credential (duaility §12). Absent → every `ctx.vault` call
@@ -140,15 +144,17 @@ export interface RunHandlerOptions {
    */
   vault?: VaultBridge;
   /**
-   * Live run-stream sink (issue #158). Receives `run.start` / `node.start` /
-   * `node.end` / `run.end` as the run unfolds, alongside `onLog`. Wired by
+   * Live turn-stream sink. Receives `turn.start` / `item.start` /
+   * `item.end` / `turn.end` as the turn unfolds, alongside `onLog`. Wired by
    * the host to its `runId`-keyed bus; omit for a non-streamed fire (the
    * durable ledger still records everything).
    */
-  onRunEvent?: (ev: RunStreamEvent) => void;
+  onRunEvent?: (ev: AutomationTurnStreamEvent) => void;
   triggerKind?: AutomationTriggerKind;
   /** Source that fired the run (`cron` / `webhook` / `manual`). */
   triggerOrigin?: AutomationTriggerOrigin;
+  /** Human-readable trigger-gap/cursor note stored on the turn. */
+  note?: string;
   input?: unknown;
   parentRunId?: string;
   outputSchema?: OutputSchema;
@@ -594,14 +600,16 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     emit,
   };
 
-  // Every fire appends to the automation's one stable conversation. The
-  // `<appId>/<id>` ref is both its durable identity and conversation id.
+  // Every fire appends to the automation's harness-owned conversation.
+  // Switching harness selects a new conversation; history still joins all
+  // of them through the stable `<appId>/<id>` automation ref.
   const slash = audit.automationId.indexOf('/');
   const appId = slash > 0 ? audit.automationId.slice(0, slash) : undefined;
   const execConversationId = audit.store.ensureAutomationConversation(
     audit.automationId,
     appId,
     opts.automationName,
+    opts.runnerKind,
   );
   const startedAt = opts.now === undefined ? Date.now() : Date.parse(opts.now);
   if (!Number.isFinite(startedAt))
@@ -611,6 +619,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     conversationId: execConversationId,
     triggerKind: opts.triggerKind ?? 'scheduled',
     ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
+    ...(opts.note ? { note: opts.note } : {}),
     ...(opts.parentRunId ? { parentTurnId: opts.parentRunId } : {}),
     startedAt,
   });
@@ -626,10 +635,10 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     });
     audit.ordinal = 1;
   }
-  // `run.start` opens the live stream; a viewer that joins later replays it
+  // `turn.start` opens the live stream; a viewer that joins later replays it
   // from the ledger instead. Guarded — a wedged sink must not fail the run.
   try {
-    emit({ type: 'run.start', runId: audit.runId });
+    emit({ type: 'turn.start', turnId: audit.runId });
   } catch {
     /* swallow */
   }
@@ -794,7 +803,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       });
       try {
         emit({
-          type: 'run.end',
+          type: 'turn.end',
+          turnId: audit.runId,
           ok: outcome.ok,
           ...(outcome.error ? { error: outcome.error } : {}),
         });

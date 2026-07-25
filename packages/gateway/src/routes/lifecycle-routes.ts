@@ -71,6 +71,7 @@ import {
   handleAutomationCompile,
   handleAutomationDelete,
   handleAutomationRotateWebhook,
+  handleAutomationRevise,
   handleAutomationSetEnabled,
   handleAutomationUpdate,
   handleEnrichmentToggle,
@@ -122,6 +123,9 @@ export function makeLifecycleRouteHandler(
       }
       if (pathname === '/centraid/_automations/compile' && method === 'POST') {
         return await handleAutomationCompile(opts, req, res, url);
+      }
+      if (pathname === '/centraid/_automations/revise' && method === 'POST') {
+        return await handleAutomationRevise(opts, req, res, url);
       }
       if (pathname === '/centraid/_automations/set-enabled' && method === 'POST') {
         return await handleAutomationSetEnabled(opts, req, res, url);

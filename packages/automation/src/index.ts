@@ -31,9 +31,13 @@ export {
   parseManifest,
   validateManifest,
   webhookTriggerOf,
+  isDeniedTriggerCursorEntity,
+  EVENT_DEFAULT_EVERY,
+  EVENT_TRIGGER_CATALOG,
   type Manifest,
   type ManifestRequires,
   type ManifestVault,
+  type ManifestVaultFilterClause,
   type ManifestVaultScope,
   type ConnectorSpec,
   type ConnectionBinding,
@@ -46,20 +50,22 @@ export {
   type ConditionWhereClause,
   type ConditionOp,
   type DataTrigger,
+  type EventTrigger,
   type OutputSchema,
   type HistoryConfig,
   type HistoryKeep,
 } from './manifest/manifest.js';
 
-// Condition-trigger evaluation — the host runs one consented read per gate
-// tick and fires on unseen rows (duaility: time semantics live in the data).
+// Condition/data cursor sources — the engine reads one consented query per
+// gate tick and delivers unseen rows (duaility: time semantics live in the
+// data). These are the only trigger evaluators; the pre-cursor `evaluate*`
+// pair is retired, so no caller can advance a watermark past rows it never
+// delivered.
 export {
-  evaluateConditionTrigger,
-  evaluateDataTrigger,
-  type ConditionEvaluation,
-  type EvaluateConditionOptions,
-  type DataEvaluation,
-  type EvaluateDataOptions,
+  readConditionCursor,
+  readDataCursor,
+  type ReadConditionCursorOptions,
+  type ReadDataCursorOptions,
 } from './fire/condition.js';
 
 // Automation identity — the `<appId>/<id>` handle that scheduler labels,
@@ -91,6 +97,20 @@ export {
   type InProcessSchedulerOptions,
   type LocalScheduler,
 } from './fire/in-process-scheduler.js';
+export {
+  VaultCursorEngine,
+  isDeniedCursorEntity,
+  assertTriggerCursorAllowed,
+  eventSourceKey,
+  DEFAULT_TRIGGER_CATCH_UP_CAP,
+  type VaultCursorEngineOptions,
+  type TriggerCursorReadInput,
+  type TriggerCursorFireInput,
+  type CursorReadResult,
+  type CursorElement,
+  type CursorStore,
+} from './fire/cursor-engine.js';
+export { dueInstants } from './fire/cron-cursor.js';
 
 // Missed-automation-run ledger (issue #351 tier 2): the honest record a
 // downtime leaves behind now that the scheduler's "no backfill" silence is
@@ -129,8 +149,8 @@ export {
   type ProvisionedWebhookInFiles,
   type RotatedWebhookInFiles,
   type WebhookFileMapEntry,
-  type WebhookFireFn,
-  type WebhookFireResult,
+  type WebhookIngressFn,
+  type WebhookIngressResult,
   type WebhookRouteOptions,
 } from './scaffold/webhook.js';
 

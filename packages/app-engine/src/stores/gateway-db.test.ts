@@ -79,10 +79,12 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
     expect(ledgerTables).toEqual([
       'attachments',
       'automation_state',
+      'automation_trigger_cursor',
       'conversation_archive',
       'conversation_digest',
       'conversations',
       'items',
+      'trigger_ingress',
       'turns',
     ]);
     // The search virtual table + its sync triggers exist.

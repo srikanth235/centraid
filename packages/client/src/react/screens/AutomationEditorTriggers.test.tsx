@@ -97,7 +97,10 @@ function button(el: HTMLElement, label: string): HTMLButtonElement {
   ) as HTMLButtonElement;
 }
 
-async function addTrigger(el: HTMLElement, kind: 'Schedule' | 'Data change'): Promise<void> {
+async function addTrigger(
+  el: HTMLElement,
+  kind: 'Schedule' | 'Data change' | 'Connector event',
+): Promise<void> {
   await act(async () => {
     button(el, '+ Add Trigger').dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
@@ -151,6 +154,72 @@ describe('AutomationEditorScreen — authoring data triggers', () => {
       instructions: '',
       name: 'A',
       triggers: [],
+    });
+  });
+
+  it('offers connector events only for a bound account and serializes the exact binding kind', async () => {
+    const unbound = await mount(makeProps());
+    await act(async () => {
+      button(unbound, '+ Add Trigger').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(
+      [...unbound.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
+    ).not.toContain('Connector event');
+    act(() => root?.unmount());
+    root = null;
+    unbound.remove();
+    container = null;
+
+    const props = makeProps({
+      loadData: vi.fn().mockResolvedValue(
+        makeData({
+          automationId: 'a/x',
+          mode: 'edit',
+          name: 'A',
+          connectors: {
+            connector: null,
+            mcps: [],
+            secrets: [],
+            vaultPurpose: null,
+            vaultScopes: [],
+            connections: [
+              {
+                connectionId: 'github-account-1',
+                kind: 'pull.github',
+                label: 'Work GitHub',
+              },
+            ],
+          },
+        }),
+      ),
+    });
+    const el = await mount(props);
+    await addTrigger(el, 'Connector event');
+    setValue(
+      el.querySelector('input[placeholder="owner/repository"]') as HTMLInputElement,
+      'acme/app',
+    );
+    await act(async () =>
+      button(el, 'Save changes').dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+    expect(props.onSave).toHaveBeenCalledWith({
+      connections: [
+        {
+          connectionId: 'github-account-1',
+          kind: 'pull.github',
+          label: 'Work GitHub',
+        },
+      ],
+      instructions: '',
+      name: 'A',
+      triggers: [
+        {
+          connectorKind: 'pull.github',
+          event: 'pull-request',
+          filter: { repo: 'acme/app' },
+          kind: 'event',
+        },
+      ],
     });
   });
 

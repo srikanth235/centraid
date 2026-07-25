@@ -47,13 +47,51 @@ export async function handleAutomationCompile(
       message: `Automation "${rawRef}" does not exist.`,
     });
   }
-  const runId = `${rawRef}:compile:${crypto.randomUUID().slice(0, 8)}`;
+  const compileTurnId = `${rawRef}:compile:${crypto.randomUUID().slice(0, 8)}`;
   opts.compileAutomation({
     automationRef: rawRef,
-    runId,
+    runId: compileTurnId,
     enableOnSuccess: body.enableOnSuccess === true,
   });
-  return sendJson(res, 202, { runId });
+  return sendJson(res, 202, { compileTurnId });
+}
+
+// ---- POST /centraid/_automations/revise?ref= (rewrite + existing compile) ----
+
+export async function handleAutomationRevise(
+  opts: LifecycleRouteOptions,
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  const rawRef = url.searchParams.get('ref') ?? '';
+  const ref = automation.parseRef(rawRef);
+  if (!ref) return sendJson(res, 400, { error: 'bad_request', message: 'revise needs ?ref=' });
+  if (!opts.reviseAutomation) {
+    return sendJson(res, 503, { error: 'unavailable', message: 'revision runner unavailable' });
+  }
+  const body = await readJson(req);
+  const steering = typeof body.message === 'string' ? body.message.trim() : '';
+  if (!steering) {
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'revise body needs a non-empty {message}',
+    });
+  }
+  const row = await automation
+    .readAppOwned(opts.codeAppsDir(), ref.appId, ref.automationId)
+    .catch(() => undefined);
+  if (!row) {
+    return sendJson(res, 404, {
+      error: 'not_found',
+      message: `Automation "${rawRef}" does not exist.`,
+    });
+  }
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const revisionTurnId = `${row.ref}:revise:${suffix}`;
+  const compileTurnId = `${row.ref}:compile:${suffix}`;
+  opts.reviseAutomation({ row, steering, revisionTurnId, compileTurnId });
+  return sendJson(res, 202, { compileTurnId });
 }
 
 // ---- POST /centraid/_automations (scaffold an automation app) ----
@@ -79,14 +117,14 @@ export async function handleAutomationCreate(
 
   // Mint webhook secrets gateway-side: plaintext returned once, manifest
   // persists only the hash. A `webhook` trigger entry carries no secret in.
-  // `cron`/`webhook`/`condition`/`data` are the only trigger kinds the
+  // `cron`/`webhook`/`condition`/`data`/`event` are the trigger kinds the
   // manifest schema knows — anything else is rejected loudly instead of
   // being silently coerced. `condition`/`data` specs are passed through to
   // the real validator below (`validateManifest`, via `scaffoldAppFiles`)
   // rather than re-implemented here, so a malformed one (missing entity,
   // non-array `where`/`entities`, bad cron gate, …) 400s with the
   // validator's own field-scoped message.
-  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data']);
+  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data', 'event']);
   let webhook: { id: string; secret: string; url: string } | undefined;
   const triggerInput = Array.isArray(body.triggers)
     ? (body.triggers as Array<Record<string, unknown>>)
@@ -97,7 +135,7 @@ export async function handleAutomationCreate(
   if (badKind) {
     return sendJson(res, 400, {
       error: 'bad_request',
-      message: `Unsupported trigger kind "${String(badKind.kind)}" — create accepts cron, webhook, condition and data triggers.`,
+      message: `Unsupported trigger kind "${String(badKind.kind)}" — create accepts cron, webhook, condition, data and event triggers.`,
     });
   }
   const triggers: automation.Trigger[] | undefined = triggerInput?.map((t) => {
@@ -119,6 +157,15 @@ export async function handleAutomationCreate(
       return {
         kind: 'data',
         entities: t.entities,
+        ...(t.every !== undefined ? { every: t.every } : {}),
+      } as automation.Trigger;
+    }
+    if (t.kind === 'event') {
+      return {
+        kind: 'event',
+        connectorKind: t.connectorKind,
+        event: t.event,
+        ...(t.filter !== undefined ? { filter: t.filter } : {}),
         ...(t.every !== undefined ? { every: t.every } : {}),
       } as automation.Trigger;
     }
@@ -148,6 +195,7 @@ export async function handleAutomationCreate(
     ...(typeof body.prompt === 'string' && body.prompt ? { prompt: body.prompt } : {}),
     ...(triggers !== undefined ? { triggers } : {}),
     ...(Array.isArray(body.apps) ? { apps: body.apps.filter((a) => typeof a === 'string') } : {}),
+    ...(typeof body.runner === 'string' && body.runner ? { runner: body.runner } : {}),
     ...(typeof body.model === 'string' && body.model ? { model: body.model } : {}),
     ...(parseHistoryKeep(body.historyKeep) !== undefined
       ? { historyKeep: parseHistoryKeep(body.historyKeep) }
@@ -280,17 +328,22 @@ export async function handleAutomationUpdate(
       ? (body.connections as automation.ConnectionBinding[])
       : undefined
     : undefined;
+  const hasRunnerKey = Object.hasOwn(body, 'runner');
+  const hasModelKey = Object.hasOwn(body, 'model');
   if (
     nameInput === undefined &&
     promptInput === undefined &&
     triggersInput === undefined &&
     vaultInput === undefined &&
     !hasConnectorKey &&
-    !hasConnectionsKey
+    !hasConnectionsKey &&
+    !hasRunnerKey &&
+    !hasModelKey
   ) {
     return sendJson(res, 400, {
       error: 'bad_request',
-      message: 'update needs at least one of { name, prompt, triggers, connections, connector }',
+      message:
+        'update needs at least one of { name, prompt, triggers, connections, connector, runner, model }',
     });
   }
 
@@ -323,7 +376,7 @@ export async function handleAutomationUpdate(
   // (see the comment above `ALLOWED_TRIGGER_KINDS` there): reject an unknown
   // kind loudly instead of coercing it, let `validateManifest` below reject a
   // malformed condition/data spec with its own field-scoped message.
-  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data']);
+  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data', 'event']);
   let webhook: { id: string; secret: string; url: string } | undefined;
   let triggers: automation.Trigger[] | undefined;
   if (triggersInput) {
@@ -334,7 +387,7 @@ export async function handleAutomationUpdate(
       if (ephemeralSession) await opts.store.closeSession(sessionId);
       return sendJson(res, 400, {
         error: 'bad_request',
-        message: `Unsupported trigger kind "${String(badKind.kind)}" — update accepts cron, webhook, condition and data triggers.`,
+        message: `Unsupported trigger kind "${String(badKind.kind)}" — update accepts cron, webhook, condition, data and event triggers.`,
       });
     }
     const existingWebhook = automation.webhookTriggerOf(existing.triggers);
@@ -361,6 +414,15 @@ export async function handleAutomationUpdate(
         return {
           kind: 'data',
           entities: t.entities,
+          ...(t.every !== undefined ? { every: t.every } : {}),
+        } as automation.Trigger;
+      }
+      if (t.kind === 'event') {
+        return {
+          kind: 'event',
+          connectorKind: t.connectorKind,
+          event: t.event,
+          ...(t.filter !== undefined ? { filter: t.filter } : {}),
           ...(t.every !== undefined ? { every: t.every } : {}),
         } as automation.Trigger;
       }
@@ -391,6 +453,18 @@ export async function handleAutomationUpdate(
   if (hasConnectorKey) {
     if (connectorInput === null) delete patched.connector;
     else if (connectorInput !== undefined) patched.connector = connectorInput;
+  }
+  if (hasRunnerKey || hasModelKey) {
+    const requires = { ...existing.requires } as Record<string, unknown>;
+    if (hasRunnerKey) {
+      if (body.runner === null) delete requires.runner;
+      else requires.runner = body.runner;
+    }
+    if (hasModelKey) {
+      if (body.model === null) delete requires.model;
+      else requires.model = body.model;
+    }
+    patched.requires = requires;
   }
   const manifest = automation.validateManifest(patched);
   const changedFile: ScaffoldFile = {

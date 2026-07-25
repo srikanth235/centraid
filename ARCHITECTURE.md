@@ -46,11 +46,13 @@ Centraid's first principle is that **everything is agentic chat** — automation
 
 | Layer            | What it is                                                                 | Chat                   | Automation                       |
 | ---------------- | ------------------------------------------------------------------------- | ---------------------- | -------------------------------- |
-| **conversation** | the durable thread. `kind` ∈ `{chat, build, automation}` lives here.       | the chat session       | one long-lived conversation per automation ref |
+| **conversation** | the durable thread. `kind` ∈ `{chat, build, automation}` lives here.       | the chat session       | one long-lived conversation per automation ref + fixed harness |
 | **turn**         | one execution under it — `conversation_id` is a NOT-NULL, FK'd, CASCADE spine | one reply round | one headless compile or fire / `ctx.agent` round |
 | **item**         | the ordered trace. `kind` ∈ `{message_in, step, tool, agent}`             | inbound message + steps + tool calls | inbound trigger + steps + tool/agent calls |
 
 `kind` lives on the **conversation**, not re-stamped per turn — a thread is single-kind. The inbound message (a person typing, a webhook firing, a cron tick) is a first-class `item` (`kind='message_in'`, ordinal 0); `step` is one primary model-inference call (per-call token + cost accounting); `tool`/`agent` are per-call audit rows. Attachments ride the `message_in` item, content-addressed on disk. The tables are `conversations`, `turns`, `items`, `attachments`, `automation_state`, `run_summary` (see `TRANSCRIPTS_MIGRATIONS` in `gateway-db.ts`). There is no `run` layer and no `run_nodes` table — those were collapsed in issue #190.
+
+Automation instructions use `@[schema.table/id]` for stable entity references. The anchor-grade form is `@[core.link_anchor/<anchor_id>]`: the token carries no trusted row or field metadata. Before a compile turn reaches the model, the gateway resolves that id through a live `core_link_anchor` + `core_link`, re-matches its text selector against the source row, and derives the manifest's row filter and field mask from the vault-owned result. Missing, ended, or stale anchors fail the compile before the runner starts. Same-table anchors collapse into one bounded `in` filter only when they form a rectangular scope (the same referenced field set on every selected row); their rows are unioned and that shared field set is retained. Non-rectangular row/field combinations fail closed because the current conjunctive scope algebra cannot express them without granting a Cartesian-product widening. An unanchored type/row token retains the deliberately broader table-read behavior.
 
 ## Tool surface: declared handlers + the vault register
 

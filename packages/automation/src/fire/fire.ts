@@ -26,7 +26,7 @@ import {
   makeJournalDbProvider,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-  type RunStreamEvent,
+  type AutomationTurnStreamEvent,
   type VaultBridge,
 } from '@centraid/app-engine';
 import { parseRef } from '../manifest/ref.js';
@@ -66,6 +66,8 @@ export interface OpenDispatchArgs {
   /** `<appId>/<automationId>` handle being fired. */
   automationRef: string;
   runId: string;
+  /** Harness fixed to this automation conversation. */
+  runnerKind?: string;
   /**
    * Manifest `requires.model` — the capability tier `ctx.agent` should route
    * to (issue #166). The host's `agentDispatcher` picks the matching provider
@@ -77,6 +79,11 @@ export interface OpenDispatchArgs {
 
 /** The injected seam: open a live dispatch surface for one fire. */
 export type OpenDispatch = (args: OpenDispatchArgs) => Promise<DispatchSurface>;
+
+export interface NestedAutomationRuntime {
+  runnerKind?: string;
+  model?: string;
+}
 
 export interface RunFireOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
@@ -112,18 +119,27 @@ export interface RunFireOptions {
    * vault-free — the gateway builds this off its vault plane. Absent (or
    * returning undefined) → `ctx.vault` fails closed with `VAULT_UNAVAILABLE`.
    */
-  vaultFor?: (appId: string) => VaultBridge | undefined;
+  vaultFor?: (
+    appId: string,
+    automationRef: string,
+  ) => VaultBridge | undefined | Promise<VaultBridge | undefined>;
   /** Hard timeout. Defaults to the handler runner's default. */
   timeoutMs?: number;
   /** Optional logger. */
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
+  /** Harness that owns the durable automation conversation. */
+  runnerKind?: string;
+  /** Host-resolved model fallback used for dispatch and honest cost estimation. */
+  model?: string;
+  /** Resolve an onFailure target's own harness/model instead of inheriting its parent. */
+  resolveNestedRuntime?: (automationRef: string) => Promise<NestedAutomationRuntime>;
   /**
    * Live run-stream sink (issue #158) for THIS fire's run. Not propagated
    * into `onFailure` cascades — those are separate runs with their own ids
    * and ledgers, so streaming them onto this run's channel would mislabel
    * their events. A late viewer can open the child run by its own id.
    */
-  onRunEvent?: (ev: RunStreamEvent) => void;
+  onRunEvent?: (ev: AutomationTurnStreamEvent) => void;
   /**
    * Trigger that caused this fire. Defaults to `'scheduled'`. The onFailure
    * dispatch loop uses `'on_failure'`.
@@ -134,6 +150,8 @@ export interface RunFireOptions {
    * `'cron'` — the scheduler is the usual local caller.
    */
   triggerOrigin?: AutomationTriggerOrigin;
+  /** Human-readable trigger-gap/cursor note stored on the turn. */
+  note?: string;
   /** Optional input payload (e.g. for on_failure dispatch). */
   input?: unknown;
   /** Optional parent run id for the onFailure sub-run DAG link. */
@@ -199,13 +217,15 @@ export async function runFire(
   const runId = opts.runId ?? `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;
-  const vaultBridge = opts.vaultFor?.(parsed.appId);
+  const vaultBridge = await opts.vaultFor?.(parsed.appId, opts.automationRef);
 
+  const effectiveModel = row.manifest.requires.model ?? opts.model;
   const dispatch = await deps.openDispatch({
     workdir: row.dir,
     automationRef: opts.automationRef,
     runId,
-    ...(row.manifest.requires.model ? { model: row.manifest.requires.model } : {}),
+    ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
+    ...(effectiveModel ? { model: effectiveModel } : {}),
     onLog,
   });
 
@@ -327,10 +347,13 @@ export async function runFire(
       now: new Date(startedAt).toISOString(),
       agentDispatcher: dispatch.agentDispatcher,
       runsStore,
+      ...(opts.runnerKind ? { runnerKind: opts.runnerKind } : {}),
+      ...(effectiveModel ? { model: effectiveModel } : {}),
       ...(vaultBridge ? { vault: vaultBridge } : {}),
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
       triggerKind: opts.triggerKind ?? 'scheduled',
       triggerOrigin: opts.triggerOrigin ?? 'cron',
+      ...(opts.note ? { note: opts.note } : {}),
       ...(opts.input !== undefined ? { input: opts.input } : {}),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
       ...(row.manifest.outputSchema ? { outputSchema: row.manifest.outputSchema } : {}),
@@ -380,6 +403,7 @@ export async function runFire(
         onLog('warn', `onFailure target "${row.manifest.onFailure}" not found for ${row.name}`);
       } else {
         try {
+          const nestedRuntime = await opts.resolveNestedRuntime?.(next.ref);
           await runFire(
             {
               automationRef: next.ref,
@@ -387,6 +411,15 @@ export async function runFire(
               journalDbFile: opts.journalDbFile,
               ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
               ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
+              ...((nestedRuntime?.runnerKind ?? opts.runnerKind)
+                ? { runnerKind: nestedRuntime?.runnerKind ?? opts.runnerKind }
+                : {}),
+              ...((nestedRuntime?.model ?? opts.model)
+                ? { model: nestedRuntime?.model ?? opts.model }
+                : {}),
+              ...(opts.resolveNestedRuntime
+                ? { resolveNestedRuntime: opts.resolveNestedRuntime }
+                : {}),
               ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
               onLog,
               triggerKind: 'on_failure',

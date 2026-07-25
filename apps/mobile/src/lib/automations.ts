@@ -7,7 +7,7 @@
 // wire shapes are mirrored here as lean local interfaces, exactly as
 // `lib/gateway.ts` mirrors the apps listing with its own `AppRegistryRow`.
 // The gateway routes are in packages/gateway/src/routes/automations-routes.ts
-// (list, run-now) and lifecycle-automation-routes.ts (set-enabled).
+// (list, turn-now) and lifecycle-automation-routes.ts (set-enabled).
 
 import { authHeader, fetchJson, requireGatewayBase } from './gateway';
 
@@ -40,7 +40,7 @@ interface ListResult {
 
 /**
  * The lean UI shape one automation card renders from. `ref` (`<ownerApp>/<id>`)
- * is the handle every op (run-now, set-enabled) addresses the automation by.
+ * is the handle every op (turn-now, set-enabled) addresses the automation by.
  */
 export interface AutomationRow {
   id: string;
@@ -134,14 +134,14 @@ export async function listAutomations(): Promise<AutomationRow[]> {
   return (body.rows ?? []).map(toRow);
 }
 
-/** Fire an automation now (fire-and-forget). Returns the minted run id. */
+/** Fire an automation now (fire-and-forget). Returns the minted native turn id. */
 export async function runAutomation(ref: string): Promise<string> {
   const base = await requireGatewayBase();
-  const body = await fetchJson<{ runId: string }>(
-    `${base}/centraid/_automations/run-now?ref=${encodeURIComponent(ref)}`,
+  const body = await fetchJson<{ turnId: string }>(
+    `${base}/centraid/_automations/turn-now?ref=${encodeURIComponent(ref)}`,
     { headers: authHeader(), method: 'POST' },
   );
-  return body.runId;
+  return body.turnId;
 }
 
 /**

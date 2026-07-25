@@ -40,6 +40,8 @@ import {
   COMPANION_GRANTS_HEADER,
   ConversationHistoryStore,
   ConversationStore,
+  AutomationTriggerStore,
+  Dispatcher,
   InsightsStore,
   PrefsStore,
   RUNNER_KINDS,
@@ -47,13 +49,12 @@ import {
   changesSubscriberCount,
   cleanupDeregisteredApp,
   deriveTitle,
-  isRunnerKind,
   generateConversationTitle,
   makeConversationRouteHandler,
+  makeConversationRunnerCore,
   makeJournalDbProvider,
   makeUserStoreRouteHandler,
   resolveSubsystemModel,
-  resolveSubsystemRunner,
   TurnLimiter,
   prewarmAppAssets,
   workerAdmissionStats,
@@ -71,6 +72,7 @@ import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/bluep
 import * as automation from '@centraid/automation';
 import { ROUTES } from '@centraid/protocol';
 import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
+import { closeJournalConversationStores, journalConversationStore } from '../journal-stores.js';
 import {
   runAutomation,
   runPreflight,
@@ -90,6 +92,7 @@ import {
   readBlobStoreSettings,
   custodyStateCounts,
   jitterDelayMs,
+  type FilterClause,
   type PreviewCodec,
 } from '@centraid/vault';
 import { createImagePreviewCodec } from '../preview/codec.js';
@@ -106,6 +109,13 @@ import { createStorageQuotaHealthProbe } from './storage-quota-health.js';
 import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
 import { GatewayInstanceLease } from './gateway-instance-lease.js';
 import { ConnectionBroker } from './connection-broker.js';
+import { pollProviderEventSource } from './automation-event-sources.js';
+import { reviseAutomationInstructions } from '../lifecycle/automation-revision.js';
+import {
+  ingressElement,
+  ingressRetentionGap,
+  readIngressCursor,
+} from './trigger-ingress-cursor.js';
 import type { AssistOAuthConfig } from './assist-oauth.js';
 import { OutboxExecutor } from './outbox-executor.js';
 import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
@@ -133,7 +143,7 @@ import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
 import { makeDraftCodeDirResolver, type ExtBandOps } from '../lifecycle/ext-band.js';
 import {
   makeAutomationsRouteHandler,
-  runEventsSubscriberCount,
+  turnEventsSubscriberCount,
 } from '../routes/automations-routes.js';
 import { RunEventBus } from '../runs/run-event-bus.js';
 import { defaultLogger } from './default-logger.js';
@@ -142,11 +152,27 @@ import { buildDiagnosticsBundle } from './gateway-diagnostics.js';
 import { makeDiagnosticsRouteHandler } from '../routes/diagnostics-routes.js';
 import { makeBackupRouteHandler } from '../routes/backup-routes.js';
 import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
-import { publishAndReconcile, type LifecycleRouteOptions } from '../lifecycle/lifecycle-shared.js';
+import {
+  prepareLifecycleSession,
+  publishAndReconcile,
+  stageAndMaybePublish,
+  type LifecycleRouteOptions,
+} from '../lifecycle/lifecycle-shared.js';
 import {
   finalizeCompiledManifest,
+  recordFailedAutomationCompile,
   runHeadlessAutomationCompile,
 } from '../lifecycle/headless-automation-compile.js';
+import {
+  resolveAutomationAnchors,
+  scopesForAutomationAnchors,
+} from '../lifecycle/automation-anchor-scopes.js';
+import {
+  resolveAutomationAgentSelection,
+  resolveAutomationRewriteModel,
+} from '../lifecycle/automation-agent-selection.js';
+import { runInteractiveAutomationTurn } from '../lifecycle/interactive-automation-turn.js';
+import { rewriteAutomationInstructions } from '../lifecycle/rewrite-automation-instructions.js';
 import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
 import {
   assistantCwd,
@@ -164,6 +190,7 @@ import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
 import { HealthRegistry } from './health-registry.js';
 import { PowerContextMonitor } from './power-context.js';
 import { ResourceAccounting } from './resource-accounting.js';
+import { resolveGatewayRunnerPrefs } from './runner-prefs.js';
 import { GatewayPerformanceMonitor } from './gateway-performance.js';
 import { measureStorageLatency } from './storage-latency.js';
 import {
@@ -304,7 +331,7 @@ export interface BuildGatewayOptions {
   backup?: BackupConfig;
 }
 
-/** Fires one automation. Shared by the cron scheduler + the run-now route. */
+/** Fires one automation. Shared by the cron scheduler + the turn-now route. */
 export type FireAutomation = (
   automationRef: string,
   opts: {
@@ -313,8 +340,14 @@ export type FireAutomation = (
     triggerOrigin: AutomationTriggerOrigin;
     /** Trigger payload surfaced to the handler as `ctx.input` (condition/data fires). */
     input?: unknown;
+    /** Human-readable trigger-gap/cursor note stored on the turn. */
+    note?: string;
+    /** Reuse a source-stable run id and replay an interrupted ledger turn. */
+    idempotent?: boolean;
+    /** Let the cursor engine retain its pending receipt on infrastructure failure. */
+    propagateError?: boolean;
   },
-) => void;
+) => Promise<void>;
 
 /** A route handler in the gateway chain: `true` when it owned the response. */
 export type RouteHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
@@ -563,9 +596,9 @@ export interface BuiltGateway {
    * ahead of the bearer check (issue #304's `publicPathPrefixes`) — the
    * shared secret in the request IS the auth. Resolves the slug to its
    * OWNING vault across every mounted vault (webhook ids are globally
-   * unique), then blocks until the fire completes and answers with its
-   * outcome. Returns `false` for any non-matching URL so the host can
-   * fall through to `composedHandler`.
+   * unique), durably accepts authenticated ingress, and nudges that vault's
+   * cursor engine before answering 202. Returns `false` for any non-matching
+   * URL so the host can fall through to `composedHandler`.
    */
   webhookHandler: RouteHandler;
   /**
@@ -1002,23 +1035,25 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }),
   );
 
-  // Scheduler ledger (issue #351 tier 2): one shared `ConversationStore` per
-  // mounted vault, bound to that vault's `journal.db` via the SAME
-  // `makeJournalDbProvider` path `fire.ts` and the analytics stores use —
-  // guarantees the conversation-ledger band (`automation_state` included)
-  // exists before this reads/writes it, regardless of tick timing. Memoized
-  // so a health poll or a scheduler tick never reopens the file. Written
-  // from each vault's scheduler `onTick` hook below; read by the
-  // `scheduler` liveness probe and by `automations`'s reconcile push.
+  // The one journal handle per vault (`journal-stores.ts`) — the same
+  // `makeJournalDbProvider` binding `fire.ts` and the analytics stores use,
+  // so the conversation-ledger band (`automation_state` included) exists
+  // before anything reads/writes it, regardless of tick timing.
+  const journalStoreFor = (vaultId: string): ConversationStore => {
+    const plane = vaultRegistry.get(vaultId);
+    if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
+    return journalConversationStore(plane.workspace.journalDbFile);
+  };
+
+  // Scheduler ledger (issue #351 tier 2): written from each vault's scheduler
+  // `onTick` hook below; read by the `scheduler` liveness probe and by
+  // `automations`'s reconcile push. Memoized so a health poll or a scheduler
+  // tick never reconstructs it.
   const schedulerLedgers = new Map<string, automation.SchedulerLedgerStore>();
   const schedulerLedgerFor = (vaultId: string): automation.SchedulerLedgerStore => {
     const existing = schedulerLedgers.get(vaultId);
     if (existing) return existing;
-    const plane = vaultRegistry.get(vaultId);
-    if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
-    const ledger = new automation.SchedulerLedgerStore(
-      new ConversationStore(makeJournalDbProvider(plane.workspace.journalDbFile)),
-    );
+    const ledger = new automation.SchedulerLedgerStore(journalStoreFor(vaultId));
     schedulerLedgers.set(vaultId, ledger);
     return ledger;
   };
@@ -1038,19 +1073,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   // Enricher run health (issue #351 wave 4) — see enrichment-health.ts for
   // why this is narrower than `automations`/`automation-runs`. Run history
-  // rides its own memoized `ConversationStore` (same journalDbFile binding
-  // `schedulerLedgerFor` uses, kept separate so this probe never reaches
-  // into scheduler-ledger.ts's private state).
-  const enrichmentConversationStores = new Map<string, ConversationStore>();
-  const enrichmentConversationStoreFor = (vaultId: string): ConversationStore => {
-    const existing = enrichmentConversationStores.get(vaultId);
-    if (existing) return existing;
-    const plane = vaultRegistry.get(vaultId);
-    if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
-    const store = new ConversationStore(makeJournalDbProvider(plane.workspace.journalDbFile));
-    enrichmentConversationStores.set(vaultId, store);
-    return store;
-  };
+  // reads the shared per-vault journal store; it never reaches into
+  // scheduler-ledger.ts's private state.
   health.registerProbe(
     'enrichment',
     createEnrichmentHealthProbe({
@@ -1062,7 +1086,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             return rows.map((r) => ({ id: r.id, enabled: r.enabled, ref: r.ref }));
           },
           recentRuns: (automationRef, limit) =>
-            enrichmentConversationStoreFor(p.boot.vaultId)
+            journalStoreFor(p.boot.vaultId)
               .listAutomationTurns(automationRef, { limit })
               .map((t) => ({
                 ok: t.ok,
@@ -1127,7 +1151,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // `connections` probe above. `rssBytes`/`uptimeMs` need no wiring (see
   // `HealthRegistry.snapshot`). `sseClients` sums three production SSE
   // surfaces' live subscriber counts — `logsEventsSubscriberCount` /
-  // `runEventsSubscriberCount` (issue #351's SSE subscriber-cap change,
+  // `turnEventsSubscriberCount` (issue #351's SSE subscriber-cap change,
   // `sse-cap.ts`), each backed by the SAME `SseSubscriberCap` instance
   // `makeLogsRouteHandler`/`makeAutomationsRouteHandler` admit through below,
   // plus `@centraid/app-engine`'s `changesSubscriberCount()` — the per-appId
@@ -1149,7 +1173,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return {
       outboxPending,
       sseClients:
-        logsEventsSubscriberCount() + runEventsSubscriberCount() + changesSubscriberCount(),
+        logsEventsSubscriberCount() + turnEventsSubscriberCount() + changesSubscriberCount(),
       hardwareProfileClass: hardwareProfile.class,
       resourceMode: hardwareProfile.resourceMode,
       resourceProfile: toStructuredResourceProfile(hardwareProfile),
@@ -1244,29 +1268,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // subsystem get the default agent — byte-identical to the old behavior,
   // which is what keeps a prefs file with no `runner.*` keys working
   // exactly as it did.
-  const prefsLoader = async (subsystem?: ModelSubsystem): Promise<RunnerPrefs | undefined> => {
-    const allPrefs = prefs.getAllPrefs();
-    const kindRaw = subsystem
-      ? resolveSubsystemRunner(allPrefs, subsystem)
-      : allPrefs['agent.runner.kind'];
-    // Codex is the default when the user hasn't picked (or persisted junk /
-    // a kind this build no longer registers). Validated against the runner
-    // registry rather than a literal pair, so a newly registered kind is
-    // honoured here the moment it exists.
-    const kind: RunnerPrefs['kind'] = isRunnerKind(kindRaw) ? kindRaw : 'codex';
-    const binPath =
-      typeof allPrefs['agent.runner.binPath'] === 'string'
-        ? (allPrefs['agent.runner.binPath'] as string)
-        : undefined;
-    const extraArgsRaw = allPrefs['agent.runner.extraArgs'];
-    const extraArgs = Array.isArray(extraArgsRaw)
-      ? (extraArgsRaw.filter((v) => typeof v === 'string') as string[])
-      : undefined;
-    return {
-      kind,
-      ...(binPath ? { binPath } : {}),
-      ...(extraArgs ? { extraArgs } : {}),
-    };
+  const prefsLoader = async (
+    subsystem?: ModelSubsystem,
+    requestedRunner?: RunnerKind,
+  ): Promise<RunnerPrefs | undefined> => {
+    return resolveGatewayRunnerPrefs(prefs.getAllPrefs(), subsystem, requestedRunner);
   };
 
   // Per-subsystem model resolution (shared prefs contract): explicit
@@ -1286,6 +1292,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const runnerPrefs = await prefsLoader(subsystem);
     if (!runnerPrefs) return explicit;
     return resolveSubsystemModel(prefs.getAllPrefs(), runnerPrefs.kind, subsystem, explicit);
+  };
+
+  const resolveAutomationAgent = async (
+    requires: automation.ManifestRequires,
+  ): Promise<{ runner: RunnerKind; model?: string }> => {
+    const fallbackRunner = (await prefsLoader('automations'))?.kind ?? 'codex';
+    return resolveAutomationAgentSelection(requires, prefs.getAllPrefs(), fallbackRunner);
+  };
+
+  const resolveAutomationAgentForRef = async (
+    automationRef: string,
+    codeAppsDir: string,
+  ): Promise<{ runner: RunnerKind; model?: string }> => {
+    const parsed = automation.parseRef(automationRef);
+    const row = parsed
+      ? await automation.readAppOwned(codeAppsDir, parsed.appId, parsed.automationId)
+      : undefined;
+    return resolveAutomationAgent(row?.manifest.requires ?? {});
   };
 
   // One warmer owns host-capability enumeration — the model list, for every
@@ -1411,6 +1435,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // In-process bus for live run streaming (issue #158): a fire publishes via
   // `onRunEvent`; the `run/events` SSE endpoint subscribes by runId.
   const runEventBus = new RunEventBus();
+  const automationConversationLocks = new Map<string, Promise<void>>();
+  // Detached automation lifecycle work started behind a 202 (compile,
+  // revision). `stop()` drains this before the vault registry closes its
+  // databases, so shutdown cannot land mid-`closeItem` or orphan an ACP
+  // child (issue #541 review).
+  const detachedAutomationTasks = new Set<Promise<void>>();
+  const trackDetachedAutomationTask = (task: Promise<void>, label: string): void => {
+    const tracked = task
+      .catch((error: unknown) => {
+        logger.warn?.(
+          `automation task "${label}" failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      })
+      .finally(() => {
+        detachedAutomationTasks.delete(tracked);
+      });
+    detachedAutomationTasks.add(tracked);
+  };
 
   // The connection broker (issue #304): resolves a connector's broker-carried
   // credential (oauth2/api_key sealed on the connection row) per fire —
@@ -1421,6 +1463,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     () => vaultRegistry.current(),
     undefined,
     options.assistOAuth,
+    undefined,
+    undefined,
+    health.loggerFor('connections', logger),
   );
 
   // The outbox executor (issue #306): the only writer on the broker's
@@ -1541,16 +1586,34 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // each run over the event bus. Scheduled fires enter their vault's scope
   // via `runWithVaultContext` (see schedulerFor); manual fires inherit the
   // request's scope.
-  const fireAutomation: FireAutomation = (automationRef, opts): void => {
+  const fireAutomation: FireAutomation = async (automationRef, opts): Promise<void> => {
     // Mint the runId here so every fire (cron included) has a bus channel.
     const runId = opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
-    void (async () => {
-      const runnerPrefs = await prefsLoader('automations');
-      const host = await currentVaultHost();
+    try {
+      // Cursor bootstrap runs while `hostFor()` is still awaiting scheduler
+      // reconciliation. The host is already mounted in `settledHosts` at that
+      // point; awaiting the outer host promise here would wait on ourselves
+      // and deadlock restart catch-up.
+      const host = currentSettledHost();
       const ws = currentWorkspace();
-      // Prefs fallback for `ctx.agent` calls — the automation's own
-      // `requires.model` (read inside `runFire`) still wins over this.
-      const automationsModel = await resolveModel('automations');
+      if (opts.idempotent && opts.runId) {
+        // The MEMOIZED per-journal store: a webhook/event/data-triggered
+        // automation can fire every few seconds, and a fresh
+        // `makeJournalDbProvider` per fire would leak an unclosed
+        // `DatabaseSync` (plus its 64 MiB mapping and an fd) each time —
+        // `ConversationStore.close()` cannot release a handle it does not own.
+        const ledger = journalConversationStore(ws.journalDbFile);
+        const prior = ledger.getTurn(opts.runId);
+        // A terminal turn is the durable acknowledgement. If the gateway
+        // died after it finished but before the source cursor committed,
+        // replaying this source element is a no-op.
+        if (prior?.endedAt !== undefined) return;
+        // An interrupted turn can be retried under the exact same run id.
+        // Cascading removes its partial items; deterministic vault
+        // invocation ids then replay already-applied effects.
+        if (prior) ledger.deleteTurn(opts.runId);
+      }
+      const agent = await resolveAutomationAgentForRef(automationRef, host.codeAppsDir());
       await runAutomation({
         automationRef,
         runId,
@@ -1559,26 +1622,42 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         codeAppsDir: host.codeAppsDir(),
         // Each fire's ctx.vault rides the automation's enrolled
         // agent.agent credential, resolved per app id (duaility §12).
-        vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId),
+        vaultFor: async (appId: string, ref: string) => {
+          const parsed = automation.parseRef(ref);
+          const row = parsed
+            ? await automation.readAppOwned(host.codeAppsDir(), parsed.appId, parsed.automationId)
+            : undefined;
+          if (!row) throw new Error(`automation ${ref}: cannot resolve execution scope`);
+          return vaultRegistry.agentBridgeFor(appId, executionScopeBlock(row.manifest.vault));
+        },
         resolveConnection: connectionBroker.resolveForFire,
-        runner: runnerPrefs?.kind ?? 'codex',
+        resolveNestedRuntime: async (nestedRef) => {
+          const nested = await resolveAutomationAgentForRef(nestedRef, host.codeAppsDir());
+          return {
+            runnerKind: nested.runner,
+            ...(nested.model ? { model: nested.model } : {}),
+          };
+        },
+        runner: agent.runner,
         triggerKind: opts.triggerKind,
         triggerOrigin: opts.triggerOrigin,
         ...(opts.input !== undefined ? { input: opts.input } : {}),
-        ...(automationsModel ? { model: automationsModel } : {}),
+        ...(opts.note ? { note: opts.note } : {}),
+        ...(agent.model ? { model: agent.model } : {}),
         onRunEvent: (ev) => runEventBus.publish(runId, ev),
       });
       // Grant-matched outbox items the fire just staged drain now, not
       // on the next clock tick (issue #306 phase 3).
       drainOutbox(vaultRegistry.current());
       health.reportOk('automation-runs');
-    })().catch((err) => {
+    } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // Failed before the ledger opened: close off the bus or the viewer hangs.
-      runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
+      runEventBus.publish(runId, { type: 'turn.end', turnId: runId, ok: false, error: message });
       health.reportError('automation-runs', `${opts.triggerKind} ${automationRef}: ${message}`);
       logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
-    });
+      if (opts.propagateError) throw err;
+    }
   };
 
   const settledHostFor = (vaultId: string): VaultHost => {
@@ -1708,6 +1787,144 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // Either way the driver is wrapped for resource accounting (#528 Phase C).
       runTurn: accountRunTurn(options.runTurn ?? runTurn),
     });
+    // Interactive automation turns run in a scratch cwd (the route passes it
+    // as `dataDir`) and through an agent-plane dispatcher. This preserves the
+    // automation's enrolled `agent.agent` grant boundary while keeping native
+    // file tools away from the live automation source tree.
+    const automationConversationRunnerFor = (block: InstallScopeBlock): ConversationRunner => {
+      const automationDispatcher = new Dispatcher({
+        registry: () => requireRuntime().registry,
+        codeDirOverride: (appId) => store.resolveActiveAppDir(appId),
+        vaultFor: (appId) => vaultRegistry.agentBridgeFor(appId, block),
+      });
+      return makeConversationRunnerCore({
+        prefsLoader,
+        subsystem: 'automations',
+        getDispatcher: () => automationDispatcher,
+        resolveCwd: (input) => input.dataDir,
+        runTurn: accountRunTurn(options.runTurn ?? runTurn),
+      });
+    };
+    // The headless compile, as an AWAITABLE task. Two callers need it: the
+    // fire-and-forget `compileAutomation` route seam, and `reviseAutomation`,
+    // which cannot know whether the compiled handler still matches the
+    // published prompt unless it sees the outcome (issue #541 review).
+    const runAutomationCompileTask = async (input: {
+      automationRef: string;
+      runId: string;
+      enableOnSuccess: boolean;
+    }): Promise<{ ok: boolean; error?: string }> => {
+      const { automationRef, runId, enableOnSuccess } = input;
+      const parsed = automation.parseRef(automationRef);
+      if (!parsed) return { ok: false, error: `invalid automation ref "${automationRef}"` };
+      const row = await automation.readAppOwned(codeAppsDir(), parsed.appId, parsed.automationId);
+      if (!row) return { ok: false, error: `automation "${automationRef}" does not exist` };
+      let failure: string | undefined;
+      const agent = await resolveAutomationAgent(row.manifest.requires);
+      const enabledBeforeCompile = row.enabled;
+      // Resolve core_link_anchor tokens before the model runs. The token
+      // contains only an opaque anchor id; row and field scopes come from
+      // the addressed vault's live link + selector.
+      const anchorResolution = (() => {
+        try {
+          const anchors = resolveAutomationAnchors(
+            { gateway: plane.gateway, credential: plane.ownerCredential },
+            row.manifest.prompt,
+          );
+          return { anchors, scopes: scopesForAutomationAnchors(anchors) };
+        } catch (error) {
+          return {
+            anchors: [],
+            scopes: [],
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      })();
+      // Compiles are one-shot drafts. Reusing the interactive chat/edit
+      // worktree lets a failed publish leave a rebase in progress, which
+      // then poisons a later retry (and can conflict with UI edits).
+      // The compile run id is already unique; its final UUID segment is
+      // safe for WorktreeStore session ids.
+      const runSuffix = runId.split(':').at(-1) ?? crypto.randomUUID().slice(0, 8);
+      const sessionId = `compile-${parsed.appId}-${runSuffix}`;
+      // The compile reports its outcome through `failure` rather than by
+      // rejecting: callers (the 202 route seam AND `reviseAutomation`, which
+      // must know whether the handler still matches the published prompt)
+      // both need an outcome, and the old fire-and-forget shape turned a
+      // throw here into an unhandled rejection.
+      await runHeadlessAutomationCompile({
+        runner,
+        journalDbFile: workspace.journalDbFile,
+        runnerSessionDir: workspace.runnerSessionDir,
+        dataDir: workspace.appsDir,
+        appId: parsed.appId,
+        draftSessionId: sessionId,
+        automationRef,
+        automationName: row.name,
+        instructions: row.manifest.prompt,
+        runnerKind: agent.runner,
+        ...(agent.model ? { model: agent.model } : {}),
+        anchors: anchorResolution.anchors,
+        ...(anchorResolution.error ? { preflightError: anchorResolution.error } : {}),
+        runId,
+        onSuccess: async () => {
+          const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
+          const manifestFile = path.join(
+            appDir,
+            'automations',
+            parsed.automationId,
+            automation.MANIFEST_FILE,
+          );
+          const manifest = automation.parseManifest(await fs.readFile(manifestFile, 'utf8'));
+          const compiled = finalizeCompiledManifest(manifest, {
+            enabledBeforeCompile,
+            enableOnSuccess,
+            anchoredScopes: anchorResolution.scopes,
+          });
+          await fs.writeFile(manifestFile, `${JSON.stringify(compiled, null, 2)}\n`);
+          await publishAndReconcile(lifecycleOpts, {
+            appId: parsed.appId,
+            sessionId,
+            appDir,
+            message: `compile ${parsed.automationId}`,
+            ephemeralSession: true,
+          });
+          health.reportOk('automation-runs', `Plan ready for ${row.name}`);
+        },
+        onFailure: async (error) => {
+          failure = error;
+          health.reportError(
+            'automation-runs',
+            `Compile failed for ${row.name}: ${error}. Retry from the automation thread.`,
+          );
+          logger.warn?.(`Headless compile failed for ${automationRef}: ${error}`);
+          // Discard a failed compile's isolated branch. This also
+          // clears any interrupted rebase before the user retries.
+          await store.closeSession(sessionId).catch(() => undefined);
+          if (row.manifest.onFailure) {
+            const target = automation.parseRef(row.manifest.onFailure, parsed.appId);
+            if (target) {
+              await fireAutomation(`${target.appId}/${target.automationId}`, {
+                triggerKind: 'on_failure',
+                triggerOrigin: 'manual',
+                input: {
+                  automationRef,
+                  compileRunId: runId,
+                  error,
+                  phase: 'compile',
+                },
+              });
+            }
+          }
+        },
+      }).catch((error: unknown) => {
+        failure = error instanceof Error ? error.message : String(error);
+        health.reportError('automation-runs', `Compile failed for ${row.name}: ${failure}`);
+        logger.warn?.(`Headless compile threw for ${automationRef}: ${failure}`);
+      });
+      return failure === undefined ? { ok: true } : { ok: false, error: failure };
+    };
+
     const lifecycleOpts: LifecycleRouteOptions = {
       store,
       codeAppsDir,
@@ -1761,85 +1978,119 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         return true;
       },
       ext,
-      compileAutomation: ({ automationRef, runId, enableOnSuccess }) => {
-        const parsed = automation.parseRef(automationRef);
+      compileAutomation: (input) => {
+        // Fire-and-forget for the route seam; `stop()` still drains it, and a
+        // throw out of the body lands on `automation-runs` health instead of
+        // becoming an unhandled rejection.
+        trackDetachedAutomationTask(
+          runAutomationCompileTask(input).then(() => undefined),
+          `compile ${input.automationRef}`,
+        );
+      },
+      reviseAutomation: ({ row, steering, revisionTurnId, compileTurnId }) => {
+        const parsed = automation.parseRef(row.ref);
         if (!parsed) return;
-        void (async () => {
-          const row = await automation.readAppOwned(
-            codeAppsDir(),
-            parsed.appId,
-            parsed.automationId,
-          );
-          if (!row) return;
-          const enabledBeforeCompile = row.enabled;
-          // Compiles are one-shot drafts. Reusing the interactive chat/edit
-          // worktree lets a failed publish leave a rebase in progress, which
-          // then poisons a later retry (and can conflict with UI edits).
-          // The compile run id is already unique; its final UUID segment is
-          // safe for WorktreeStore session ids.
-          const runSuffix = runId.split(':').at(-1) ?? crypto.randomUUID().slice(0, 8);
-          const sessionId = `compile-${parsed.appId}-${runSuffix}`;
-          await runHeadlessAutomationCompile({
-            runner,
+        let revisionRunner: RunnerKind | undefined;
+        const reportCompileTurn = (error: string, labels?: { note: string }): void => {
+          recordFailedAutomationCompile({
             journalDbFile: workspace.journalDbFile,
-            runnerSessionDir: workspace.runnerSessionDir,
-            dataDir: workspace.appsDir,
-            appId: parsed.appId,
-            draftSessionId: sessionId,
-            automationRef,
+            automationRef: row.ref,
+            appId: row.ownerApp,
             automationName: row.name,
-            instructions: row.manifest.prompt,
-            runId,
-            onSuccess: async () => {
-              const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
-              const manifestFile = path.join(
-                appDir,
-                'automations',
-                parsed.automationId,
-                automation.MANIFEST_FILE,
-              );
-              const manifest = automation.parseManifest(await fs.readFile(manifestFile, 'utf8'));
-              const compiled = finalizeCompiledManifest(manifest, {
-                enabledBeforeCompile,
-                enableOnSuccess,
-              });
-              await fs.writeFile(manifestFile, `${JSON.stringify(compiled, null, 2)}\n`);
-              await publishAndReconcile(lifecycleOpts, {
-                appId: parsed.appId,
-                sessionId,
-                appDir,
-                message: `compile ${parsed.automationId}`,
-                ephemeralSession: true,
-              });
-              health.reportOk('automation-runs', `Plan ready for ${row.name}`);
-            },
-            onFailure: async (error) => {
-              health.reportError(
-                'automation-runs',
-                `Compile failed for ${row.name}: ${error}. Retry from the automation thread.`,
-              );
-              logger.warn?.(`Headless compile failed for ${automationRef}: ${error}`);
-              // Discard a failed compile's isolated branch. This also
-              // clears any interrupted rebase before the user retries.
-              await store.closeSession(sessionId).catch(() => undefined);
-              if (row.manifest.onFailure) {
-                const target = automation.parseRef(row.manifest.onFailure, parsed.appId);
-                if (target) {
-                  fireAutomation(`${target.appId}/${target.automationId}`, {
-                    triggerKind: 'on_failure',
-                    triggerOrigin: 'manual',
-                    input: {
-                      automationRef,
-                      compileRunId: runId,
-                      error,
-                      phase: 'compile',
-                    },
-                  });
-                }
-              }
-            },
+            runId: labels ? `${row.ref}:revert:${crypto.randomUUID().slice(0, 8)}` : compileTurnId,
+            error,
+            ...(labels ? { note: labels.note, summary: labels.note } : {}),
+            ...(revisionRunner ? { runnerKind: revisionRunner } : {}),
           });
-        })();
+        };
+        const task = reviseAutomationInstructions({
+          row,
+          conversationLocks: automationConversationLocks,
+          // One publish of the standing instructions through the ordinary
+          // lifecycle seam — used for the revision AND for the roll-back, so
+          // both take the same validate + publish + reconcile path.
+          publishPrompt: async (prompt, message) => {
+            const sessionId = `revise-${parsed.appId}-${crypto.randomUUID().slice(0, 8)}`;
+            await prepareLifecycleSession(store, sessionId, true);
+            const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
+            const manifestPath = path.join(
+              appDir,
+              'automations',
+              parsed.automationId,
+              automation.MANIFEST_FILE,
+            );
+            const existing = automation.parseManifest(await fs.readFile(manifestPath, 'utf8'));
+            const revised = automation.validateManifest({ ...existing, prompt });
+            await stageAndMaybePublish(lifecycleOpts, {
+              appId: parsed.appId,
+              sessionId,
+              files: [
+                {
+                  path: `automations/${parsed.automationId}/${automation.MANIFEST_FILE}`,
+                  content: `${JSON.stringify(revised, null, 2)}\n`,
+                },
+              ],
+              publish: true,
+              message: `${message} ${parsed.automationId}`,
+              ephemeralSession: true,
+            });
+          },
+          rewrite: async (persistPrompt) => {
+            const agent = await resolveAutomationAgent(row.manifest.requires);
+            revisionRunner = agent.runner;
+            const runnerPrefs = await prefsLoader('automations', agent.runner);
+            if (!runnerPrefs) throw new Error('No automation agent is configured.');
+            const configuredRewrite = prefs.getAllPrefs()[`model.${agent.runner}.rewrite`];
+            const catalog = resolveCatalogModels
+              ? await resolveCatalogModels(agent.runner, false)
+              : { list: [] };
+            const fastModel = catalog.list.find((model) => model.tier === 'fast')?.id;
+            const rewriteModel = resolveAutomationRewriteModel(
+              row.manifest.requires,
+              agent,
+              configuredRewrite,
+              fastModel,
+            );
+            await rewriteAutomationInstructions({
+              row,
+              steering,
+              revisionTurnId,
+              journalDbFile: workspace.journalDbFile,
+              runnerSessionDir: workspace.runnerSessionDir,
+              runTurn: accountRunTurn(options.runTurn ?? runTurn),
+              runnerPrefs,
+              ...(rewriteModel ? { model: rewriteModel } : {}),
+              persistPrompt,
+            });
+          },
+          compile: () =>
+            runAutomationCompileTask({
+              automationRef: row.ref,
+              runId: compileTurnId,
+              enableOnSuccess: false,
+            }),
+          onRolledBack: (detail) => {
+            reportCompileTurn(detail, { note: 'Instructions rolled back' });
+            health.reportError(
+              'automation-runs',
+              `Revision rolled back for ${row.name}: ${detail}`,
+            );
+            logger.warn?.(`Instruction revision rolled back for ${row.ref}: ${detail}`);
+          },
+          onFailed: (message) => {
+            reportCompileTurn(`Instruction revision failed: ${message}`);
+            runEventBus.publish(compileTurnId, { type: 'turn.start', turnId: compileTurnId });
+            runEventBus.publish(compileTurnId, {
+              type: 'turn.end',
+              turnId: compileTurnId,
+              ok: false,
+              error: `Instruction revision failed: ${message}`,
+            });
+            health.reportError('automation-runs', `Revision failed for ${row.name}: ${message}`);
+            logger.warn?.(`Instruction revision failed for ${row.ref}: ${message}`);
+          },
+        });
+        trackDetachedAutomationTask(task, `revise ${row.ref}`);
       },
     };
 
@@ -1880,7 +2131,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // App lifecycle over HTTP (issue #141, Phase 2): the gateway owns
       // scaffold / clone / update-meta / automation create+toggle+delete.
       makeLifecycleRouteHandler(lifecycleOpts),
-      // Automation runtime ops over HTTP (issue #141): list/read/run-now,
+      // Automation runtime ops over HTTP (issue #141): list/read/turn-now,
       // the run feed + per-run detail, and insights — all over THIS
       // vault's conversation ledger (the journal.db ledger band).
       makeAutomationsRouteHandler({
@@ -1888,13 +2139,31 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         journalDbFile: workspace.journalDbFile,
         analytics: analyticsStore,
         insights: insightsStore,
-        runAutomation: ({ automationRef, runId }) =>
-          fireAutomation(automationRef, {
-            runId,
+        runAutomation: ({ automationRef, turnId }) => {
+          void fireAutomation(automationRef, {
+            runId: turnId,
             triggerKind: 'manual',
             triggerOrigin: 'manual',
-          }),
-        subscribeRunEvents: (runId, listener) => runEventBus.subscribe(runId, listener),
+          });
+        },
+        subscribeTurnEvents: (turnId, listener) => runEventBus.subscribe(turnId, listener),
+        runInteractiveTurn: async ({ row, turnId, message, abortSignal, onEvent }) => {
+          const selected = await resolveAutomationAgent(row.manifest.requires);
+          await runInteractiveAutomationTurn({
+            row,
+            turnId,
+            message,
+            journalDbFile: workspace.journalDbFile,
+            runnerSessionDir: workspace.runnerSessionDir,
+            runner: automationConversationRunnerFor(executionScopeBlock(row.manifest.vault)),
+            runnerKind: selected.runner,
+            ...(selected.model ? { model: selected.model } : {}),
+            abortSignal,
+            conversationLocks: automationConversationLocks,
+            onEvent,
+            onTurnEvent: (event) => runEventBus.publish(turnId, event),
+          });
+        },
       }),
     ];
 
@@ -1916,8 +2185,250 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // their vault's ambient scope, so `ctx.vault`, transcripts, and code all
   // ride the vault the automation lives in.
   const schedulers = new Map<string, automation.LocalScheduler>();
+  const triggerStores = new Map<string, AutomationTriggerStore>();
   const reconcileStates = new Map<string, { inFlight?: Promise<void>; dirty: boolean }>();
   let schedulersStarted = false;
+
+  const triggerStoreFor = (vaultId: string): AutomationTriggerStore => {
+    const existing = triggerStores.get(vaultId);
+    if (existing) return existing;
+    const plane = vaultRegistry.get(vaultId);
+    if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
+    const store = new AutomationTriggerStore(makeJournalDbProvider(plane.workspace.journalDbFile));
+    triggerStores.set(vaultId, store);
+    return store;
+  };
+
+  const parseEventCursor = (
+    positionJson: string | undefined,
+  ): { provider?: unknown; ingressId: number } => {
+    if (!positionJson) return { ingressId: 0 };
+    try {
+      const parsed = JSON.parse(positionJson) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { ingressId: 0 };
+      }
+      const row = parsed as Record<string, unknown>;
+      const ingressId = Number(row.ingressId);
+      return {
+        ...(row.provider !== undefined ? { provider: row.provider } : {}),
+        ingressId: Number.isSafeInteger(ingressId) && ingressId >= 0 ? ingressId : 0,
+      };
+    } catch {
+      return { ingressId: 0 };
+    }
+  };
+
+  const gmailConnectBaseline = (vaultId: string, connectionId: string): unknown => {
+    const plane = vaultRegistry.get(vaultId);
+    const row = plane?.db.vault
+      .prepare(
+        `SELECT value_json
+           FROM sync_connection_cursor
+          WHERE connection_id = ? AND key = 'gmail_history_id'`,
+      )
+      .get(connectionId) as { value_json: string } | undefined;
+    if (!row) return undefined;
+    try {
+      const value = JSON.parse(row.value_json) as { id?: unknown };
+      return typeof value.id === 'string' ? { provider: 'gmail', historyId: value.id } : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  /**
+   * The ingress STORAGE key for a polled event source. It extends the
+   * engine's own `eventSourceKey` (`event:<connectorKind>:<event>`) with the
+   * bound connection id and a filter digest, because two automations on the
+   * same connector kind must not share one `trigger_ingress` lane — a
+   * multi-account connector would otherwise deliver account A's events to
+   * account B's automation. Deriving it from the engine helper keeps the
+   * shared prefix from drifting.
+   */
+  const eventIngressKey = (
+    connectionId: string,
+    trigger: Extract<automation.Trigger, { kind: 'event' }>,
+  ): string => {
+    const filterHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(trigger.filter ?? {}))
+      .digest('hex')
+      .slice(0, 16);
+    return `${automation.eventSourceKey(trigger)}:${connectionId}:${filterHash}`;
+  };
+
+  const readTriggerCursor = async (
+    vaultId: string,
+    input: automation.TriggerCursorReadInput,
+  ): Promise<automation.CursorReadResult> => {
+    const parsed = automation.parseRef(input.automationRef);
+    if (!parsed) throw new Error(`invalid automation ref "${input.automationRef}"`);
+    const row = await automation.readAppOwned(
+      settledHostFor(vaultId).codeAppsDir(),
+      parsed.appId,
+      parsed.automationId,
+    );
+    if (!row || !row.enabled) {
+      return {
+        elements: [],
+        ...(input.cursor?.positionJson ? { positionJson: input.cursor.positionJson } : {}),
+      };
+    }
+    const trigger = row.manifest.triggers[input.triggerIndex];
+    if (!trigger || trigger.kind !== input.trigger.kind) {
+      return { elements: [] };
+    }
+    if (trigger.kind === 'webhook') {
+      if (!('secretHash' in trigger)) return { elements: [] };
+      return readIngressCursor(
+        triggerStoreFor(vaultId),
+        trigger.id,
+        input.cursor?.positionJson,
+        input.limit,
+        input.now.getTime(),
+      );
+    }
+    if (trigger.kind === 'event') {
+      const connection = row.manifest.connections?.find(
+        (binding) => binding.kind === trigger.connectorKind,
+      );
+      if (!connection) {
+        throw new Error(
+          `event trigger ${input.automationRef}[${input.triggerIndex}] has no bound ${trigger.connectorKind} connection`,
+        );
+      }
+      const position = parseEventCursor(input.cursor?.positionJson);
+      const initialProvider =
+        position.provider ??
+        (trigger.connectorKind === 'pull.gmail'
+          ? gmailConnectBaseline(vaultId, connection.connectionId)
+          : undefined);
+      const polled = await pollProviderEventSource({
+        trigger,
+        connection,
+        ...(initialProvider !== undefined ? { cursor: initialProvider } : {}),
+        now: input.now,
+        limit: input.limit + 1,
+        pollJson: (binding, url, headers) => connectionBroker.pollJson(binding, url, headers),
+      });
+      const store = triggerStoreFor(vaultId);
+      const sourceKey = eventIngressKey(connection.connectionId, trigger);
+      for (const event of polled.events) {
+        store.appendIngress({
+          source: 'poll',
+          sourceKey,
+          deliveryId: event.id,
+          receivedAt: event.occurredAt,
+          payloadJson: JSON.stringify(event.payload),
+          expiresAt: input.now.getTime() + 72 * 60 * 60 * 1000,
+        });
+      }
+      const retention = ingressRetentionGap(
+        store.pruneIngress(input.now.getTime()),
+        sourceKey,
+        position.ingressId,
+      );
+      const records = store.listIngressAfter(sourceKey, position.ingressId, input.limit);
+      // Same invariant `readIngressCursor` holds (trigger-ingress-cursor.ts):
+      // the ingress half of this position only ever advances to the last row
+      // actually handed back. Rows past the cap are still in
+      // `trigger_ingress` and ride the next tick — surplus, not a gap.
+      // `polled.skipped` stays: a provider page limit or an expired Gmail
+      // history IS unrecoverable, because the source no longer holds them.
+      const deliveredId = records.at(-1)?.id ?? position.ingressId;
+      // A provider gap and a retention gap are both unrecoverable, so they sum;
+      // the provider reason leads because it names the upstream cause.
+      const skipped = (polled.skipped ?? 0) + (retention?.skipped ?? 0);
+      const gapReason = polled.gapReason ?? retention?.gapReason;
+      return {
+        elements: records.map(ingressElement),
+        positionJson: JSON.stringify({
+          provider: polled.cursor,
+          ingressId: deliveredId,
+        }),
+        ...(skipped ? { skipped } : {}),
+        ...(gapReason ? { gapReason } : {}),
+      };
+    }
+    if (!row.manifest.vault) {
+      return {
+        elements: [],
+        ...(input.cursor?.positionJson ? { positionJson: input.cursor.positionJson } : {}),
+      };
+    }
+    const common = {
+      automationRef: input.automationRef,
+      purpose: row.manifest.vault.purpose,
+      vault: vaultRegistry.agentBridgeFor(parsed.appId, executionScopeBlock(row.manifest.vault)),
+      ...(input.cursor?.positionJson ? { positionJson: input.cursor.positionJson } : {}),
+      limit: input.limit,
+      now: input.now,
+    };
+    if (trigger.kind === 'condition') {
+      return automation.readConditionCursor({ ...common, trigger });
+    }
+    if (trigger.kind === 'data') {
+      return automation.readDataCursor({ ...common, trigger });
+    }
+    return { elements: [] };
+  };
+
+  const gapNote = (input: automation.TriggerCursorFireInput): string | undefined => {
+    if (input.skipped <= 0) return undefined;
+    const window =
+      input.windowFrom !== undefined && input.windowTo !== undefined
+        ? ` in ${new Date(input.windowFrom).toISOString()}–${new Date(input.windowTo).toISOString()}`
+        : '';
+    return `Trigger cursor skipped ${input.skipped} source element${input.skipped === 1 ? '' : 's'}${window} (${input.gapReason ?? 'catch-up cap'}).`;
+  };
+
+  const fireTriggerCursor = async (input: automation.TriggerCursorFireInput): Promise<void> => {
+    const trigger = input.trigger;
+    let payload: unknown;
+    if (trigger.kind === 'condition') {
+      payload = {
+        trigger: { kind: 'condition', index: input.triggerIndex, entity: trigger.entity },
+        rows: [input.element.payload],
+      };
+    } else if (trigger.kind === 'data') {
+      payload = {
+        trigger: { kind: 'data', index: input.triggerIndex, entities: trigger.entities },
+        changes: [input.element.payload],
+      };
+    } else if (trigger.kind === 'webhook') {
+      // Preserve the established webhook handler contract: ctx.input is the
+      // authenticated request body, while gap metadata remains visible on
+      // the native turn itself.
+      payload = input.element.payload;
+    } else if (trigger.kind === 'event') {
+      payload = {
+        trigger: {
+          kind: 'event',
+          index: input.triggerIndex,
+          connectorKind: trigger.connectorKind,
+          event: trigger.event,
+        },
+        event: input.element.payload,
+      };
+    }
+    const sourceTurnId = crypto
+      .createHash('sha256')
+      .update(
+        `${input.automationRef}\u0000${input.triggerIndex}\u0000${input.sourceKind}\u0000${input.element.position}`,
+      )
+      .digest('hex')
+      .slice(0, 24);
+    await fireAutomation(input.automationRef, {
+      runId: `${input.automationRef}:trigger:${sourceTurnId}`,
+      triggerKind: 'scheduled',
+      triggerOrigin: input.sourceKind,
+      idempotent: true,
+      propagateError: true,
+      ...(payload !== undefined ? { input: payload } : {}),
+      ...(gapNote(input) ? { note: gapNote(input) } : {}),
+    });
+  };
 
   const schedulerFor = (vaultId: string): automation.LocalScheduler => {
     const existing = schedulers.get(vaultId);
@@ -1930,48 +2441,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               runWithVaultContext({ vaultId }, () =>
                 fireAutomation(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
               ),
-            evaluate: (ref, triggerIndex) =>
-              runWithVaultContext({ vaultId }, () => evaluateCondition(ref, triggerIndex)),
+            store: triggerStoreFor(vaultId),
+            readCursor: (input) =>
+              runWithVaultContext({ vaultId }, () => readTriggerCursor(vaultId, input)),
+            fireCursor: (input) => runWithVaultContext({ vaultId }, () => fireTriggerCursor(input)),
             onError: (err, ref) => {
               const message =
                 `scheduled ${ref} failed: ` + (err instanceof Error ? err.message : String(err));
               health.reportError('automation-runs', message);
               logger.warn(message);
             },
-            // Missed-run ledger (issue #351 tier 2): every processed minute,
-            // before any fire, compare the persisted `lastTickAt` against
-            // `at` — a gap wide enough to be a real outage gets ONE recorded
-            // entry per enabled cron automation (earliest missed fire),
-            // never a retro-execution (see scheduler-ledger.ts). Runs inside
-            // this vault's scope so `automation.list` resolves its `main`.
-            onTick: (at) => {
-              void runWithVaultContext({ vaultId }, async () => {
-                const { rows } = await automation.list(settledHostFor(vaultId).codeAppsDir());
-                const missed = automation.recordSchedulerTick({
-                  ledger: schedulerLedgerFor(vaultId),
-                  now: at,
-                  automations: rows,
-                });
-                if (missed.length > 0) {
-                  const latest = missed[missed.length - 1]!;
-                  health.reportDegraded(
-                    'automation-runs',
-                    `${missed.length} automation${missed.length === 1 ? '' : 's'} missed a ` +
-                      `scheduled fire during downtime (vault ${vaultId}) — latest ` +
-                      `${latest.automationRef} scheduled for ${latest.scheduledFor}`,
-                  );
-                  logger.warn(
-                    `scheduler (vault ${vaultId}): recorded ${missed.length} missed window(s) ` +
-                      'after a gap — recorded, not retro-executed',
-                  );
-                }
-              }).catch((err) => {
-                logger.warn(
-                  `scheduler ledger tick (vault ${vaultId}) failed: ` +
-                    (err instanceof Error ? err.message : String(err)),
-                );
-              });
-            },
+            // This legacy ledger now carries liveness only. Missed/source
+            // position and gap truth live solely in automation_trigger_cursor.
+            onTick: (at) => schedulerLedgerFor(vaultId).recordTick(at),
             onDormancyChange: (dormant, at) =>
               runWithVaultContext({ vaultId }, () => {
                 schedulerLedgerFor(vaultId).setDormant(dormant, at);
@@ -2059,81 +2541,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return settled.inFlight;
   };
 
-  // Condition-trigger evaluation (duaility: time semantics live in the
-  // data). On the trigger's `every` gate, run its consented read under the
-  // automation's agent grant; unseen rows fire the automation with the
-  // rows as `ctx.input`. A receipted deny or bridge error logs and skips —
-  // failure never widens access and never stalls the tick. Runs inside the
-  // vault scope its scheduler established.
-  const evaluateCondition = async (ref: string, triggerIndex: number): Promise<void> => {
-    const parsed = automation.parseRef(ref);
-    if (!parsed) return;
-    const row = await automation.readAppOwned(
-      currentSettledHost().codeAppsDir(),
-      parsed.appId,
-      parsed.automationId,
-    );
-    if (!row || !row.enabled || !row.manifest.vault) return;
-    const trigger = row.manifest.triggers[triggerIndex];
-    if (!trigger) return;
-    const purpose = row.manifest.vault.purpose;
-    const vault = vaultRegistry.agentBridgeFor(parsed.appId);
-    const journalDbFile = currentWorkspace().journalDbFile;
-    if (trigger.kind === 'condition') {
-      const evaluation = await automation.evaluateConditionTrigger({
-        automationRef: ref,
-        trigger,
-        triggerIndex,
-        purpose,
-        journalDbFile,
-        vault,
-      });
-      if (evaluation.reason) {
-        logger.warn(`condition trigger ${ref}[${triggerIndex}] skipped: ${evaluation.reason}`);
-        return;
-      }
-      if (!evaluation.fire) return;
-      fireAutomation(ref, {
-        triggerKind: 'scheduled',
-        triggerOrigin: 'condition',
-        input: {
-          trigger: { kind: 'condition', index: triggerIndex, entity: trigger.entity },
-          rows: evaluation.rows,
-          matched: evaluation.matched,
-        },
-      });
-      return;
-    }
-    if (trigger.kind === 'data') {
-      const evaluation = await automation.evaluateDataTrigger({
-        automationRef: ref,
-        trigger,
-        triggerIndex,
-        purpose,
-        journalDbFile,
-        vault,
-      });
-      if (evaluation.reason) {
-        // Reconcile uses this same evaluator to establish a fresh watcher's
-        // no-history cursor. A soft "skip" there would let publish report
-        // ready without a cursor and make the first real write become the
-        // bootstrap (and therefore not fire). Reject instead: reconcile
-        // propagates readiness failure, while minute/nudge callers route it
-        // through the scheduler's fire-and-forget onError path.
-        throw new Error(`data trigger ${ref}[${triggerIndex}] failed: ${evaluation.reason}`);
-      }
-      if (!evaluation.fire) return;
-      fireAutomation(ref, {
-        triggerKind: 'scheduled',
-        triggerOrigin: 'data',
-        input: {
-          trigger: { kind: 'data', index: triggerIndex, entities: trigger.entities },
-          changes: evaluation.changes,
-        },
-      });
-    }
-  };
-
   // ── Webhook trigger route (issue #96) ─────────────────────────────────
   // The desktop/daemon gateway IS the always-on host, so it answers webhook
   // POSTs directly. `makeWebhookRouteHandler`
@@ -2143,69 +2550,35 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // minted from 24 random bytes — cross-vault collision is not a realistic
   // concern) resolves which vault owns the slug and delegates the WHOLE
   // request to that vault's instance, so nothing `makeWebhookRouteHandler`
-  // already does (auth, rate limit, in-flight guard, body cap, response
-  // shape) is reimplemented here.
+  // already does (auth, rate limit, body cap, response shape) is
+  // reimplemented here. Accepted requests enter the durable ingress table;
+  // the same cursor engine that handles cron/data/condition drains them.
   const webhookHandlers = new Map<string, RouteHandler>();
 
-  /**
-   * Blocking automation fire for the webhook route — unlike the
-   * fire-and-forget `fireAutomation` the scheduler/manual-run routes use
-   * (which streams progress over the SSE bus and returns immediately), a
-   * webhook POST awaits the run to completion and answers with its outcome,
-   * matching the contract `makeWebhookRouteHandler` expects from its `fire`
-   * callback.
-   */
-  const webhookFire = async (
+  const webhookIngress = async (
     vaultId: string,
-    automationRef: string,
-    body: unknown,
-  ): Promise<automation.WebhookFireResult> => {
+    input: Parameters<automation.WebhookIngressFn>[0],
+  ): Promise<automation.WebhookIngressResult> => {
     const plane = vaultRegistry.get(vaultId);
-    if (!plane) return { ok: false, error: `unknown vault "${vaultId}"` };
-    const host = settledHostFor(vaultId);
-    const runId = `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
-    const runnerPrefs = await prefsLoader('automations');
-    // Prefs fallback for `ctx.agent` calls — the automation's own
-    // `requires.model` (read inside `runFire`) still wins over this.
-    const automationsModel = await resolveModel('automations');
+    if (!plane) return { accepted: false, error: `unknown vault "${vaultId}"` };
     try {
-      const { outcome } = await runWithVaultContext({ vaultId }, () =>
-        runAutomation({
-          automationRef,
-          runId,
-          appsDir: plane.workspace.appsDir,
-          journalDbFile: plane.workspace.journalDbFile,
-          codeAppsDir: host.codeAppsDir(),
-          // Each fire's ctx.vault rides the automation's enrolled
-          // agent.agent credential, resolved per app id (duaility §12) —
-          // same as the default local fire path above.
-          vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId),
-          resolveConnection: connectionBroker.resolveForFire,
-          runner: runnerPrefs?.kind ?? 'codex',
-          triggerKind: 'scheduled',
-          triggerOrigin: 'webhook',
-          ...(body !== undefined ? { input: body } : {}),
-          ...(automationsModel ? { model: automationsModel } : {}),
-          onRunEvent: (ev) => runEventBus.publish(runId, ev),
-        }),
-      );
-      // Grant-matched outbox items the fire just staged drain now (issue
-      // #306 phase 3), same as the default local fire path.
-      drainOutbox(plane);
-      // Health parity with `fireAutomation` (issue #351 tier 2): a
-      // webhook-triggered fire used to bypass `automation-runs` entirely —
-      // a connector wired to a broken webhook could fail silently forever.
-      // This mirrors `fireAutomation`'s semantics exactly: `reportOk` means
-      // the FIRE PIPELINE ran (not that the automation's own outcome was
-      // ok — a failing handler still reports pipeline-ok here); only an
-      // exception firing the run at all (caught below) flips it to error.
-      health.reportOk('automation-runs');
-      return { ok: outcome.ok, runId, ...(outcome.error ? { error: outcome.error } : {}) };
+      const bodyJson = JSON.stringify(input.body ?? null);
+      const result = triggerStoreFor(vaultId).appendIngress({
+        source: 'webhook',
+        sourceKey: input.webhookId,
+        deliveryId: input.deliveryId,
+        receivedAt: input.receivedAt,
+        payloadJson: bodyJson,
+        expiresAt: input.receivedAt + 72 * 60 * 60 * 1000,
+      });
+      triggerStoreFor(vaultId).pruneIngress(Date.now());
+      const scheduler = schedulerFor(vaultId);
+      scheduler.nudgeIngress?.(input.webhookId);
+      return { accepted: true, ...(!result.inserted ? { duplicate: true } : {}) };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      health.reportError('automation-runs', `webhook ${automationRef}: ${message}`);
-      runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
-      return { ok: false, runId, error: message };
+      health.reportError('automation-runs', `webhook ingress ${input.automationRef}: ${message}`);
+      return { accepted: false, error: message };
     }
   };
 
@@ -2214,7 +2587,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     if (existing) return existing;
     const handler = automation.makeWebhookRouteHandler({
       appsDir: settledHostFor(vaultId).codeAppsDir(),
-      fire: ({ automationRef, body }) => webhookFire(vaultId, automationRef, body),
+      ingress: (input) => webhookIngress(vaultId, input),
     });
     webhookHandlers.set(vaultId, handler);
     return handler;
@@ -2482,6 +2855,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           tunnel: Boolean(options.dataPlaneControl),
           backupWal: options.backup?.enabled === true,
           assistOAuth: Boolean(options.assistOAuth),
+          automationTurns: true,
         },
       }),
     ),
@@ -2972,8 +3346,22 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Release the lease so a fresh start (or another instance) sees an
     // absent file instead of waiting out LEASE_FRESH_WINDOW_MS.
     instanceLease.stop();
+    // Drain detached automation lifecycle work (compiles, revisions) and any
+    // in-flight interactive/steering turn before the vault databases close —
+    // otherwise shutdown can land mid-`store.closeItem` or orphan an ACP
+    // child (issue #541 review).
+    // Snapshotted before awaiting: each task's `finally` removes itself from
+    // the live set, and a queued lock tail can still append behind us.
+    const detached = Array.from(detachedAutomationTasks);
+    const lockTails = Array.from(automationConversationLocks.values());
+    await Promise.all(detached);
+    await Promise.all(lockTails);
+    const journalFiles = vaultRegistry.planesList().map((plane) => plane.workspace.journalDbFile);
     // Sweep clock down, WAL checkpoint, files closed. Idempotent.
     vaultRegistry.stop();
+    // Release THIS gateway's memoized `journal.db` handles (another gateway in
+    // the same process keeps its own).
+    closeJournalConversationStores(journalFiles);
     performanceMonitor.close();
   };
 
@@ -3048,16 +3436,81 @@ function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
   const block = raw as { purpose?: unknown; scopes?: unknown };
   if (!Array.isArray(block.scopes)) return undefined;
   const verbs = new Set(['read', 'read+act', 'act', 'reveal']);
+  const filterOps = new Set([
+    'eq',
+    'ne',
+    'lt',
+    'lte',
+    'gt',
+    'gte',
+    'in',
+    'is-null',
+    'not-null',
+    'within-days',
+    'within-next-days',
+  ]);
   const scopes = block.scopes.flatMap((s: unknown) => {
     if (s === null || typeof s !== 'object') return [];
-    const scope = s as { schema?: unknown; table?: unknown; verbs?: unknown };
+    const scope = s as {
+      schema?: unknown;
+      table?: unknown;
+      verbs?: unknown;
+      rowFilter?: unknown;
+      fieldMask?: unknown;
+    };
     if (typeof scope.schema !== 'string' || scope.schema === '') return [];
     if (typeof scope.verbs !== 'string' || !verbs.has(scope.verbs)) return [];
+    if (scope.table !== undefined && (typeof scope.table !== 'string' || scope.table === '')) {
+      return [];
+    }
+    if (
+      (scope.rowFilter !== undefined || scope.fieldMask !== undefined) &&
+      typeof scope.table !== 'string'
+    ) {
+      return [];
+    }
+    let rowFilter: FilterClause[] | undefined;
+    if (scope.rowFilter !== undefined) {
+      if (!Array.isArray(scope.rowFilter) || scope.rowFilter.length === 0) return [];
+      rowFilter = [];
+      for (const rawClause of scope.rowFilter) {
+        if (rawClause === null || typeof rawClause !== 'object' || Array.isArray(rawClause)) {
+          return [];
+        }
+        const clause = rawClause as Record<string, unknown>;
+        if (
+          typeof clause.column !== 'string' ||
+          clause.column === '' ||
+          typeof clause.op !== 'string' ||
+          !filterOps.has(clause.op)
+        ) {
+          return [];
+        }
+        rowFilter.push({
+          column: clause.column,
+          op: clause.op as FilterClause['op'],
+          ...(Object.hasOwn(clause, 'value') ? { value: clause.value } : {}),
+        });
+      }
+    }
+    let fieldMask: string[] | undefined;
+    if (scope.fieldMask !== undefined) {
+      if (
+        !Array.isArray(scope.fieldMask) ||
+        scope.fieldMask.length === 0 ||
+        !scope.fieldMask.every((field) => typeof field === 'string' && field !== '')
+      ) {
+        return [];
+      }
+      fieldMask = [...scope.fieldMask] as string[];
+    }
     return [
       {
         schema: scope.schema,
         ...(typeof scope.table === 'string' && scope.table !== '' ? { table: scope.table } : {}),
         verbs: scope.verbs as 'read' | 'read+act' | 'act' | 'reveal',
+        ...(rowFilter ? { rowFilter } : {}),
+        ...(fieldMask ? { fieldMask } : {}),
       },
     ];
   });
@@ -3068,4 +3521,9 @@ function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
       : {}),
     scopes,
   };
+}
+
+/** Every automation execution is attenuated, including manifests declaring no vault access. */
+function executionScopeBlock(raw: unknown): InstallScopeBlock {
+  return manifestScopeBlock(raw) ?? { scopes: [] };
 }

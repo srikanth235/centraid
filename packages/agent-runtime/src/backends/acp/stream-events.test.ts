@@ -67,6 +67,10 @@ test('tool_call emits tool.start with title fallback and passes rawInput through
   const start = events.find((e) => e.type === 'tool.start');
   expect(start && start.type === 'tool.start' && start.toolName).toBe('read_file');
   expect(start && start.type === 'tool.start' && start.args).toEqual({ path: 'a.txt' });
+  expect(start && start.type === 'tool.start' && JSON.parse(start.rawJson ?? '{}')).toMatchObject({
+    sessionUpdate: 'tool_call',
+    toolCallId: 't1',
+  });
 });
 
 test('tool_call falls back to kind, then "tool", for its title', () => {
@@ -93,6 +97,9 @@ test('a tool_call that arrives already completed emits both start and result', (
   const result = events.find((e) => e.type === 'tool.result');
   expect(result && result.type === 'tool.result' && result.ok).toBe(true);
   expect(result && result.type === 'tool.result' && result.result).toEqual({ hits: 2 });
+  expect(
+    result && result.type === 'tool.result' && JSON.parse(result.rawJson ?? '{}'),
+  ).toMatchObject({ toolCallId: 'done', status: 'completed' });
 });
 
 test('tool_call_update maps failed → ok:false with an error message, and dedupes', () => {

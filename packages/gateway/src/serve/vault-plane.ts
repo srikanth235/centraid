@@ -113,6 +113,7 @@ import {
   WalShipper,
   jitterDelayMs,
   type WalShipperOptions,
+  scopeCovers,
 } from '@centraid/vault';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -127,7 +128,9 @@ import {
   type VaultWorkspace,
 } from '@centraid/app-engine';
 import {
+  pickAnchors,
   pickEntities,
+  type AnchorPickerHit,
   type AnchorSelector,
   type LinkInput,
   type PickerHit,
@@ -279,7 +282,13 @@ export interface GrantRequest {
 /** A manifest's declared vault block, as install-time consent (issue #306). */
 export interface InstallScopeBlock {
   purpose?: string;
-  scopes: readonly { schema: string; table?: string; verbs: ScopeSpec['verbs'] }[];
+  scopes: readonly {
+    schema: string;
+    table?: string;
+    verbs: ScopeSpec['verbs'];
+    rowFilter?: ScopeSpec['rowFilter'];
+    fieldMask?: ScopeSpec['fieldMask'];
+  }[];
 }
 
 /** One outbox item as the owner surface lists it (issue #306). */
@@ -339,26 +348,35 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
 }
 
 /**
- * Declared scopes not yet covered by any active grant — exact-triple diff.
- * Tombstoned triples (issue #308 A4) are the owner's standing "no": they are
+ * Declared scopes not yet covered by any active grant. A broad grant covers
+ * a narrower row/field request; a narrow grant never covers a broad request.
+ * Tombstoned scopes (issue #308 A4) are the owner's standing "no": they are
  * neither re-granted nor re-requested, only an explicit owner approval
  * (which clears the tombstone) brings one back.
  */
+// `scopeCovers` is the vault package's canonical extent comparison
+// (`@centraid/vault` → `scope-extent.ts`). It used to be duplicated here with
+// slightly different null handling, which let consent memory and install-grant
+// reconciliation disagree about the same scope; one definition keeps them in
+// lockstep (issue #541 review).
+
 function missingScopes(
   grants: GrantSummary[],
   declared: InstallScopeBlock['scopes'],
   tombstoned: readonly ScopeTriple[] = [],
 ): ScopeSpec[] {
-  const key = (s: { schema: string; table?: string | null; verbs: string }): string =>
-    `${s.schema}|${s.table ?? ''}|${s.verbs}`;
-  const covered = new Set(grants.flatMap((g) => g.scopes.map(key)));
-  for (const t of tombstoned) covered.add(key(t));
   return declared
-    .filter((s) => !covered.has(key(s)))
+    .filter(
+      (scope) =>
+        !grants.some((grant) => grant.scopes.some((existing) => scopeCovers(existing, scope))) &&
+        !tombstoned.some((existing) => scopeCovers(existing, scope)),
+    )
     .map((s) => ({
       schema: s.schema,
       ...(s.table !== undefined ? { table: s.table } : {}),
       verbs: s.verbs,
+      ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
+      ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
     }));
 }
 
@@ -927,6 +945,8 @@ export class VaultPlane {
         schema: s.schema,
         ...(s.table !== undefined ? { table: s.table } : {}),
         verbs: s.verbs,
+        ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
+        ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
       })),
     });
     this.logger.info(
@@ -957,6 +977,8 @@ export class VaultPlane {
           schema: s.schema,
           ...(s.table !== undefined ? { table: s.table } : {}),
           verbs: s.verbs,
+          ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
+          ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
         })),
       };
       if (request.plane === 'app') this.approveGrant(request.appId, grantRequest);
@@ -1019,6 +1041,13 @@ export class VaultPlane {
    */
   pickEntities(request: PickerRequest): { cards: PickerHit[] } {
     return pickEntities(this.gateway, this.ownerCredential, this.logger, request);
+  }
+
+  /** Live standoff anchors for anchor-grade automation @ references. */
+  pickAnchors(request: Pick<PickerRequest, 'term' | 'limit'>): {
+    anchors: AnchorPickerHit[];
+  } {
+    return pickAnchors(this.gateway, this.ownerCredential, this.logger, request);
   }
 
   /**
@@ -1330,6 +1359,8 @@ export class VaultPlane {
       schema: string;
       table: string | null;
       verbs: string;
+      rowFilter?: ScopeSpec['rowFilter'];
+      fieldMask?: ScopeSpec['fieldMask'];
     }>;
     highlights: Array<{ command: string; schema: string; risk: string; confirm: boolean }>;
   } {
@@ -1338,12 +1369,21 @@ export class VaultPlane {
       schema: string;
       table: string | null;
       verbs: string;
+      rowFilter?: ScopeSpec['rowFilter'];
+      fieldMask?: ScopeSpec['fieldMask'];
     }> = [];
     const app = lookupAppByName(this.db, appId);
     if (app) {
       for (const grant of listActiveGrants(this.db, app.appId)) {
         for (const s of grant.scopes) {
-          scopes.push({ plane: 'app', schema: s.schema, table: s.table, verbs: s.verbs });
+          scopes.push({
+            plane: 'app',
+            schema: s.schema,
+            table: s.table,
+            verbs: s.verbs,
+            ...(s.rowFilter ? { rowFilter: s.rowFilter } : {}),
+            ...(s.fieldMask ? { fieldMask: s.fieldMask } : {}),
+          });
         }
       }
     }
@@ -1351,7 +1391,14 @@ export class VaultPlane {
     if (agent) {
       for (const grant of listActiveAgentGrants(this.db, agent.partyId)) {
         for (const s of grant.scopes) {
-          scopes.push({ plane: 'agent', schema: s.schema, table: s.table, verbs: s.verbs });
+          scopes.push({
+            plane: 'agent',
+            schema: s.schema,
+            table: s.table,
+            verbs: s.verbs,
+            ...(s.rowFilter ? { rowFilter: s.rowFilter } : {}),
+            ...(s.fieldMask ? { fieldMask: s.fieldMask } : {}),
+          });
         }
       }
     }
@@ -1733,7 +1780,7 @@ export class VaultPlane {
    * confirmation. Credential resolution happens per call so a revocation
    * lands immediately.
    */
-  agentBridgeFor(appId: string): VaultBridge {
+  agentBridgeFor(appId: string, block?: InstallScopeBlock): VaultBridge {
     return async (call): Promise<VaultCallResult> => {
       const agent = lookupAgentByName(this.db, appId);
       if (!agent) {
@@ -1748,6 +1795,17 @@ export class VaultPlane {
         agentId: agent.agentId,
         deviceId: this.boot.deviceId,
         deviceKey: this.boot.deviceKey,
+        ...(block
+          ? {
+              scopeClamp: block.scopes.map((scope) => ({
+                schema: scope.schema,
+                ...(scope.table !== undefined ? { table: scope.table } : {}),
+                verbs: scope.verbs,
+                ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
+                ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
+              })),
+            }
+          : {}),
       };
       if (call.op === 'content') {
         // The enricher's byte primitive (issue #299 §2): thumb/preview/text

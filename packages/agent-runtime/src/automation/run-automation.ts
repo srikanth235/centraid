@@ -19,9 +19,10 @@
  */
 
 import {
+  isRunnerKind,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
-  type RunStreamEvent,
+  type AutomationTurnStreamEvent,
   type VaultBridge,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
@@ -56,7 +57,10 @@ export interface RunAutomationOptions {
    * Host-injected `ctx.vault` executor factory keyed by app id (duaility
    * §12) — forwarded to the fire spine. Absent → `ctx.vault` fails closed.
    */
-  vaultFor?: (appId: string) => VaultBridge | undefined;
+  vaultFor?: (
+    appId: string,
+    automationRef: string,
+  ) => VaultBridge | undefined | Promise<VaultBridge | undefined>;
   /** Which CLI to drive. Defaults to codex. */
   runner?: RunnerKind;
   /**
@@ -73,7 +77,7 @@ export interface RunAutomationOptions {
   /** Optional logger. */
   onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
   /** Live run-stream sink (issue #158); forwarded to the fire spine. */
-  onRunEvent?: (ev: RunStreamEvent) => void;
+  onRunEvent?: (ev: AutomationTurnStreamEvent) => void;
   /**
    * Trigger that caused this fire. Defaults to `'scheduled'`. The onFailure
    * dispatch loop uses `'on_failure'`.
@@ -84,6 +88,8 @@ export interface RunAutomationOptions {
    * `'cron'` — the scheduler is the usual local caller.
    */
   triggerOrigin?: AutomationTriggerOrigin;
+  /** Human-readable trigger-gap/cursor note stored on the turn. */
+  note?: string;
   /** Optional input payload (e.g. for on_failure dispatch). */
   input?: unknown;
   /** Optional parent run id for the onFailure sub-run DAG link. */
@@ -98,6 +104,10 @@ export interface RunAutomationOptions {
    * connector's connection credential resolves and injects per fire.
    */
   resolveConnection?: automation.ResolveConnection;
+  /** Resolve each onFailure target's own automation pin. */
+  resolveNestedRuntime?: (
+    automationRef: string,
+  ) => Promise<{ runnerKind?: RunnerKind; model?: string }>;
 }
 
 /**
@@ -118,7 +128,7 @@ export async function runAutomation(
     startLiveDispatch({
       workdir: args.workdir,
       runId: args.runId,
-      runner,
+      runner: isRunnerKind(args.runnerKind) ? args.runnerKind : runner,
       // The manifest's `requires.model` (already folded into `args.model` by
       // `runFire`) always wins; `opts.model` is the caller's prefs-resolved
       // fallback for when the manifest doesn't specify one.
@@ -136,13 +146,17 @@ export async function runAutomation(
       ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
       ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
       ...(opts.onLog ? { onLog: opts.onLog } : {}),
+      runnerKind: runner,
+      ...(opts.model ? { model: opts.model } : {}),
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
       ...(opts.triggerKind ? { triggerKind: opts.triggerKind } : {}),
       ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
+      ...(opts.note ? { note: opts.note } : {}),
       ...(opts.input !== undefined ? { input: opts.input } : {}),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
       ...(opts.failureDepth !== undefined ? { failureDepth: opts.failureDepth } : {}),
       ...(opts.resolveConnection ? { resolveConnection: opts.resolveConnection } : {}),
+      ...(opts.resolveNestedRuntime ? { resolveNestedRuntime: opts.resolveNestedRuntime } : {}),
     },
     { openDispatch },
   );

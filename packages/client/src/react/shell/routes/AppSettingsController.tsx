@@ -194,8 +194,8 @@ export default function AppSettingsController({
     runState.current.set(ref, { kind: 'running' });
     push();
     try {
-      const { runId } = await runAutomationNow({ automationId: ref });
-      const rec = await waitForAutomationRun(runId);
+      const { turnId } = await runAutomationNow({ automationId: ref });
+      const rec = await waitForAutomationRun(turnId);
       runState.current.set(ref, {
         kind: 'done',
         ok: rec.ok,

@@ -12,7 +12,15 @@ export type TurnStreamEvent =
   | { type: 'assistant.start' }
   | { type: 'assistant.delta'; delta: string }
   | { type: 'reasoning.delta'; delta: string }
-  | { type: 'tool.start'; toolCallId: string; toolName: string; args?: unknown; sql?: string }
+  | {
+      type: 'tool.start';
+      toolCallId: string;
+      toolName: string;
+      args?: unknown;
+      sql?: string;
+      kind?: string;
+      rawJson?: string;
+    }
   | {
       type: 'tool.result';
       toolCallId: string;
@@ -20,10 +28,17 @@ export type TurnStreamEvent =
       ok: boolean;
       result?: unknown;
       errorText?: string;
+      diffs?: Array<{ path?: string; oldText?: string; newText?: string }>;
+      rawJson?: string;
     }
-  | { type: 'phase'; phase: string; detail?: unknown }
-  | { type: 'final'; text: string }
-  | { type: 'error'; message: string }
+  | {
+      type: 'phase';
+      phase: string;
+      detail?: unknown;
+      plan?: Array<{ content: string; status?: string; priority?: string }>;
+    }
+  | { type: 'final'; text: string; stopReason?: string; rawJson?: string }
+  | { type: 'error'; message: string; stopReason?: string; rawJson?: string }
   | { type: 'aborted' }
   /** Non-fatal, human-readable notice (issue #420) — e.g. a runner that can't
    *  read PDF attachments. Rendered in the transcript, never persisted. */

@@ -1,153 +1,21 @@
+// The automation thread screen: header + collapsed overflow menu, trigger
+// chips, consent cards, the run-as-turn timeline, the steering composer, and
+// the empty / not-found states. Live-stream rejoin and cold-trace retry live in
+// AutomationThreadScreenTurnWatch.test.tsx; shared fixtures in
+// AutomationThreadScreen.test-fixtures.tsx.
+
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AutomationThreadBridgeProps } from '../screen-contracts.js';
-import AutomationThreadScreen, { type AutomationThreadDataEx } from './AutomationThreadScreen.js';
+import { describe, expect, it } from 'vitest';
+import {
+  byText,
+  installThreadHarness,
+  makeData,
+  makeProps,
+  mount,
+  NOW,
+} from './AutomationThreadScreen.test-fixtures.js';
 
-const NOW = new Date('2026-07-12T18:00:00Z').getTime();
-const YESTERDAY = NOW - 24 * 60 * 60 * 1000;
-
-function makeData(over: Partial<AutomationThreadDataEx> = {}): AutomationThreadDataEx {
-  return {
-    consent: {
-      grants: [
-        {
-          createdAt: new Date(YESTERDAY).toISOString(),
-          grantId: 'g1',
-          revokedAt: null,
-          target: 'gmail:*',
-          verb: 'send',
-        },
-      ],
-      outbox: [
-        {
-          artifact: { to: 'x@y.com' },
-          canEdit: true,
-          connectionKind: 'gmail',
-          connectionLabel: 'Gmail',
-          itemId: 'o1',
-          note: null,
-          stagedAt: new Date(NOW).toISOString(),
-          status: 'pending',
-          target: 'x@y.com',
-          verb: 'send',
-        },
-      ],
-      parked: [
-        {
-          command: 'locker.set_secret',
-          input: {},
-          invocationId: 'p1',
-          parkedAt: new Date(NOW).toISOString(),
-        },
-      ],
-    },
-    header: {
-      description: 'Summarize the inbox',
-      entityTags: [],
-      enabled: true,
-      glyphIcon: 'Bolt',
-      heroIcon: 'Clock',
-      hue: 'indigo',
-      id: 'a',
-      kindEyebrow: 'Cron schedule',
-      name: 'Daily Digest',
-      nextRuns: ['Tomorrow, 8:00 AM'],
-      ref: 'a@1',
-      statusKind: 'active',
-      statusLabel: 'Active',
-      triggerSummary: 'Every day at 8am',
-      webhook: null,
-    },
-    runs: [
-      {
-        costUsd: 0.012,
-        dateGroup: 'Yesterday',
-        durationMs: 3200,
-        endedAt: YESTERDAY + 3200,
-        originLabel: 'Cron',
-        runId: 'r1',
-        startedAt: YESTERDAY,
-        status: 'ok',
-        summary: 'ok run',
-      },
-      {
-        costUsd: null,
-        dateGroup: 'Today',
-        durationMs: 800,
-        endedAt: NOW - 60_000 + 800,
-        originLabel: 'Manual',
-        runId: 'r2',
-        startedAt: NOW - 60_000,
-        status: 'fail',
-        summary: 'failed run',
-      },
-      {
-        costUsd: null,
-        dateGroup: 'Today',
-        durationMs: null,
-        endedAt: null,
-        originLabel: 'Webhook',
-        runId: 'r3',
-        startedAt: NOW,
-        status: 'running',
-        summary: 'in progress',
-      },
-    ],
-    runTokens: { r1: 1234 },
-    triggerDetail: {
-      conditionDetail: null,
-      cronExprs: ['0 8 * * *'],
-      dataDetail: null,
-    },
-    ...over,
-  };
-}
-
-function makeProps(
-  over: Partial<AutomationThreadBridgeProps> = {},
-  data: AutomationThreadDataEx | null = makeData(),
-): AutomationThreadBridgeProps {
-  return {
-    loadData: vi.fn().mockResolvedValue(data),
-    onBack: vi.fn(),
-    onCopyWebhook: vi.fn(),
-    onDecideConsent: vi.fn().mockResolvedValue(true),
-    onDelete: vi.fn().mockResolvedValue(false),
-    onEdit: vi.fn(),
-    onOpenRun: vi.fn(),
-    onRotateWebhook: vi.fn().mockResolvedValue(true),
-    onRetryCompile: vi.fn().mockResolvedValue(true),
-    onRunNow: vi.fn().mockResolvedValue(true),
-    onSendMessage: vi.fn(),
-    onToggleEnabled: vi.fn().mockResolvedValue(true),
-    ...over,
-  };
-}
-
-let root: Root | null = null;
-let container: HTMLDivElement | null = null;
-afterEach(() => {
-  act(() => root?.unmount());
-  root = null;
-  container?.remove();
-  container = null;
-  vi.clearAllMocks();
-});
-async function mount(props: AutomationThreadBridgeProps): Promise<HTMLDivElement> {
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  await act(async () => {
-    root = createRoot(container as HTMLDivElement);
-    root.render(<AutomationThreadScreen {...props} />);
-  });
-  return container;
-}
-function byText(el: HTMLElement, tag: string, text: string): HTMLElement | undefined {
-  return [...el.querySelectorAll(tag)].find((n) => n.textContent?.trim() === text) as
-    | HTMLElement
-    | undefined;
-}
+installThreadHarness();
 
 describe('AutomationThreadScreen', () => {
   it('renders the header — name, status, primary Run now, collapsed overflow menu', async () => {
@@ -323,7 +191,19 @@ describe('AutomationThreadScreen', () => {
     await act(async () =>
       form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
     );
-    expect(props.onSendMessage).toHaveBeenCalledWith('only flag movers over 5%');
+    expect(props.onSendMessage).toHaveBeenCalledWith(
+      'only flag movers over 5%',
+      true,
+      expect.any(Function),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('hides the composer for gateways without the automationTurns capability', async () => {
+    const el = await mount(makeProps({}, makeData({ automationTurns: false })));
+    expect(
+      el.querySelector<HTMLInputElement>('input[aria-label="Message this automation"]'),
+    ).toBeNull();
   });
 
   it('reframes a reply as one-off when "Apply to future runs" is toggled off', async () => {
@@ -346,7 +226,10 @@ describe('AutomationThreadScreen', () => {
       form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
     );
     expect(props.onSendMessage).toHaveBeenCalledWith(
-      "For this thread only (don't change the schedule): what changed since yesterday?",
+      'what changed since yesterday?',
+      false,
+      expect.any(Function),
+      expect.any(AbortSignal),
     );
   });
 

@@ -210,7 +210,9 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       if (pick === 'open') navigate({ kind: 'automation-view', automationId: row.ref });
       else if (pick === 'run')
         void runAutomationNow({ automationId: row.ref })
-          .then(({ runId }) => navigate({ kind: 'run-view', automationId: row.ref, runId }))
+          .then(({ turnId }) =>
+            navigate({ kind: 'run-view', automationId: row.ref, runId: turnId }),
+          )
           .catch((err: unknown) =>
             showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`),
           );

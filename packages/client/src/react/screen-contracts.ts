@@ -164,6 +164,8 @@ export interface VaultScopeDTO {
   schema: string;
   table?: string | null;
   verbs: string;
+  rowFilter?: Array<{ column: string; op: string; value?: unknown }> | null;
+  fieldMask?: string[] | null;
 }
 export interface VaultGrantDTO {
   grantId: string;
@@ -486,12 +488,26 @@ export type AuEditorTriggerDTO =
   | { kind: 'cron'; expr: string }
   | { kind: 'webhook'; id: string | null; pending: boolean }
   | { kind: 'condition'; entity: string; where?: unknown; every?: string }
-  | { kind: 'data'; entities: string[]; every?: string };
+  | { kind: 'data'; entities: string[]; every?: string }
+  | {
+      kind: 'event';
+      connectorKind: string;
+      event: string;
+      filter?: Record<string, unknown>;
+      every?: string;
+    };
 export type AuEditorTriggerInput =
   | { kind: 'cron'; expr: string }
   | { kind: 'webhook' }
   | { kind: 'condition'; entity: string; where?: unknown; every?: string }
-  | { kind: 'data'; entities: string[]; every?: string };
+  | { kind: 'data'; entities: string[]; every?: string }
+  | {
+      kind: 'event';
+      connectorKind: string;
+      event: string;
+      filter?: Record<string, unknown>;
+      every?: string;
+    };
 /** Compiled-plan connector summary (read-only chips from the manifest).
  *  Owner-picked catalog connectors live separately on the Instructions
  *  toolbar picker — see `loadConnectorCatalog` on the bridge. */
@@ -530,11 +546,17 @@ export interface AuEditorCatalogConnectorDTO {
   connection: {
     connectionId: string;
     label: string;
+    principal: string | null;
     health: 'ok' | 'needs-auth' | 'paused' | 'failing';
   } | null;
-  /** More than one exact provider+kind account exists. Never guess which
-   *  credential an automation should receive. */
-  connectionAmbiguous?: boolean;
+  /** Every configured account for this exact provider + connector kind.
+   *  The editor renders an account chooser when more than one exists. */
+  connections: Array<{
+    connectionId: string;
+    label: string;
+    principal: string | null;
+    health: 'ok' | 'needs-auth' | 'paused' | 'failing';
+  }>;
 }
 export interface AutomationEditorData {
   mode: 'create' | 'edit';
@@ -567,9 +589,24 @@ export interface AutomationEditorData {
    *  this one hands off to when a run fails. Optional/additive. */
   onFailure?: string | null;
   /** Notifications tab: manifest `requires.model` (falling back to
-   *  `costEstimate.model`) — the model the compiled plan runs on.
-   *  Optional/additive. */
+   *  the selected runner's effective default) — the model the compiled plan
+   *  runs on. `null` means "Use default". Optional/additive. */
   model?: string | null;
+  /** Manifest `requires.runner`; `null` means the automations subsystem runner. */
+  runner?: AgentRunnerKind | null;
+  /** Effective automations subsystem runner inherited when `runner` is null. */
+  defaultRunnerKind?: AgentRunnerKind;
+  /** Effective model inherited for `defaultRunnerKind` when `model` is null. */
+  defaultModel?: string | null;
+  /** Dynamic gateway runner/model catalog used by the editor Agent control. */
+  agentRunners?: Array<{
+    kind: AgentRunnerKind;
+    label: string;
+    accent: string;
+    connected: boolean;
+    models: AgentModelDTO[];
+    defaultModel: string | null;
+  }>;
 }
 export interface AutomationEditorSaveFields {
   name: string;
@@ -580,6 +617,10 @@ export interface AutomationEditorSaveFields {
    * Soft bindings only (agent automations) — connection id + kind + label.
    */
   connections?: Array<{ connectionId: string; kind: string; label: string }>;
+  /** Explicit harness pin; `null` clears back to the automations default. */
+  runner?: AgentRunnerKind | null;
+  /** Explicit model pin; `null` clears back to the selected runner's default. */
+  model?: string | null;
 }
 /** Credential payload when attaching a catalog connector from the editor. */
 export interface AuEditorConnectFormInput {
@@ -686,6 +727,8 @@ export interface AutomationThreadData {
   header: AutomationThreadHeaderDTO;
   consent: AuConsentDTO;
   runs: ThreadRunDTO[];
+  /** Native interactive automation-turn endpoint advertised by the gateway. */
+  automationTurns?: boolean;
 }
 export interface AutomationThreadBridgeProps {
   /** Load the automation + its runs + its consent surface. `null` = not found. */
@@ -696,7 +739,23 @@ export interface AutomationThreadBridgeProps {
   /** Retry the hidden compiler after a failed compile turn. */
   onRetryCompile: () => Promise<boolean>;
   onOpenRun: (runId: string) => void;
-  onRunNow: () => Promise<boolean>;
+  /** Read one cold turn as the shared Message DTO. */
+  loadTurnTrace: (turnId: string) => Promise<AsstMsgDTO[]>;
+  /**
+   * Join a native turn SSE stream and push shared Message snapshots. Resolves
+   * `true` once the ledger shows the turn settled, `false` when the stream
+   * closed with the turn still open (subscriber cap, gateway restart, proxy
+   * idle timeout) — the screen rejoins on `false` instead of leaving a running
+   * turn spinning forever. Implementations perform the one authoritative
+   * post-stream ledger re-read themselves.
+   */
+  watchTurn: (
+    turnId: string,
+    onMessages: (messages: AsstMsgDTO[]) => void,
+    signal: AbortSignal,
+  ) => Promise<boolean>;
+  /** Start a manual fire and return its native turn id. */
+  onRunNow: () => Promise<string | null>;
   onToggleEnabled: (next: boolean) => Promise<boolean>;
   onDecideConsent: (
     kind: ConsentKind,
@@ -704,8 +763,17 @@ export interface AutomationThreadBridgeProps {
     decision: ConsentDecision,
     alwaysAllow?: boolean,
   ) => Promise<boolean>;
-  /** Internal-only conversational revision callback retained but hidden in v0. */
-  onSendMessage: (text: string) => void;
+  /**
+   * Execute a one-off conversation turn, or revise the standing instructions
+   * and compile when `applyFuture` is true. Returns the native turn id whose
+   * trace was streamed.
+   */
+  onSendMessage: (
+    text: string,
+    applyFuture: boolean,
+    onMessages: (messages: AsstMsgDTO[]) => void,
+    signal: AbortSignal,
+  ) => Promise<string | null>;
   onCopyWebhook: (url: string) => void;
   onRotateWebhook: () => Promise<boolean>;
   /** Confirm + delete; resolves true when deleted (thread is navigating away). */
@@ -886,20 +954,6 @@ export interface HomeBridgeProps {
 // The vanilla side owns the SSE stream + node model and derives a fully-display
 // snapshot on each event; React renders it (timeline / log). React never sees
 // the stream — same split as every other screen.
-export interface RunNodeDTO {
-  ordinal: number;
-  status: 'running' | 'ok' | 'fail';
-  typeIcon: string;
-  name: string;
-  kind: string;
-  meta: string;
-  error?: string;
-  response?: string;
-  input?: string;
-  output?: string;
-  liveText?: string;
-  streaming: boolean;
-}
 export interface RunLogRowDTO {
   time: string;
   tone: string;
@@ -929,7 +983,8 @@ export interface RunViewSnapshot {
   triggersSummary: string;
   triggerHeroIcon: string;
   promptInstr: string;
-  nodes: RunNodeDTO[];
+  /** Native automation items rendered by the shared conversation Message. */
+  messages: AsstMsgDTO[];
   final: {
     kind: 'pending' | 'ok' | 'fail';
     model: string;
@@ -1009,16 +1064,30 @@ export interface AsstUsageDTO {
   estimated?: boolean;
   model?: string;
 }
+/**
+ * `msgId` is a stable identity for list keying (issue #541). A projected
+ * transcript both grows and re-orders while a turn streams — a tool row is
+ * inserted ahead of the answer bubble it belongs to on flush — so an array
+ * index is not an identity, and keying by it remounts `Message` (which does
+ * imperative DOM work on mount). Projections that know their source item
+ * derive it from the ledger item id; hand-built optimistic bubbles omit it.
+ */
 export type AsstMsgDTO =
-  | { kind: 'user'; text: string; attachments?: AsstAttachmentDTO[]; createdAt?: number }
-  | { kind: 'tools'; label: string; calls: AsstToolCallDTO[] }
+  | {
+      kind: 'user';
+      text: string;
+      attachments?: AsstAttachmentDTO[];
+      createdAt?: number;
+      msgId?: string;
+    }
+  | { kind: 'tools'; label: string; calls: AsstToolCallDTO[]; msgId?: string }
   /** A live streaming reasoning/thinking row (issue #420, Wave 2). Live-only —
    *  reasoning is not persisted in the ledger, so it never comes back on reload. */
-  | { kind: 'thinking'; text: string; streaming: boolean }
+  | { kind: 'thinking'; text: string; streaming: boolean; msgId?: string }
   /** A non-fatal runner notice (issue #420) — e.g. "this model can't read PDF
    *  attachments". Live-only; not persisted, so it never replays on reload. */
-  | { kind: 'notice'; level: 'warn' | 'info'; text: string }
-  | { kind: 'ai'; streaming: true; text: string; catchingUp?: boolean }
+  | { kind: 'notice'; level: 'warn' | 'info'; text: string; msgId?: string }
+  | { kind: 'ai'; streaming: true; text: string; catchingUp?: boolean; msgId?: string }
   | {
       kind: 'ai';
       streaming: false;
@@ -1043,6 +1112,7 @@ export type AsstMsgDTO =
       canRetry?: boolean;
       /** The failed send happened while the browser was offline (issue #420). */
       offline?: boolean;
+      msgId?: string;
     };
 /** A file the composer has uploaded (or is uploading) ahead of the next send. */
 export interface AsstPendingAttachmentDTO {

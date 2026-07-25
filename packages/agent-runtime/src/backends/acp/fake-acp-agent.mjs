@@ -437,7 +437,12 @@ function handle(msg) {
   if (method === 'session/cancel') {
     if (cancelMarker) writeFileSync(cancelMarker, 'cancelled');
     if (promptReqId !== undefined) {
-      respond(promptReqId, { stopReason: 'cancelled' });
+      // A cancelled prompt still reports what it burned — real agents settle
+      // the request with their cumulative usage, and the client must book it.
+      respond(promptReqId, {
+        stopReason: 'cancelled',
+        usage: { totalTokens: 150, inputTokens: 100, outputTokens: 50 },
+      });
       promptReqId = undefined;
     }
   }

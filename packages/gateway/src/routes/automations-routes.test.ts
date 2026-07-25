@@ -2,11 +2,11 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Automation/insights HTTP routes (issue #141). Drives
  * `makeAutomationsRouteHandler` with mock req/res, real (empty) stores
- * over a tempdir, and a stub `runAutomation` so run-now is observable
+ * over a tempdir, and a stub `runAutomation` so turn-now is observable
  * without spawning a CLI.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -24,7 +24,7 @@ import { SseSubscriberCap } from './sse-cap.ts';
 let dir: string;
 let analytics: AnalyticsStore;
 let insights: InsightsStore;
-let fired: Array<{ automationRef: string; runId: string }>;
+let fired: Array<{ automationRef: string; turnId: string }>;
 let handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 
 beforeEach(async () => {
@@ -91,30 +91,42 @@ test('GET /centraid/_automations/read?ref= returns null when absent', async () =
   expect(r.body).toEqual({ row: null });
 });
 
-test('POST run-now mints a runId and invokes the injected runAutomation', async () => {
-  const r = await call('POST', '/centraid/_automations/run-now?ref=brief/brief');
+test('POST turn-now mints a turnId and invokes the injected runAutomation', async () => {
+  const r = await call('POST', '/centraid/_automations/turn-now?ref=brief/brief');
   expect(r.status).toBe(202);
-  const { runId } = r.body as { runId: string };
-  expect(runId).toMatch(/^brief\/brief:\d+:[0-9a-f]{8}$/);
-  expect(fired).toEqual([{ automationRef: 'brief/brief', runId }]);
+  const { turnId } = r.body as { turnId: string };
+  expect(turnId).toMatch(/^brief\/brief:\d+:[0-9a-f]{8}$/);
+  expect(fired).toEqual([{ automationRef: 'brief/brief', turnId }]);
 });
 
-test('POST run-now without ?ref= is a 400', async () => {
-  const r = await call('POST', '/centraid/_automations/run-now');
+test('POST turn-now without ?ref= is a 400', async () => {
+  const r = await call('POST', '/centraid/_automations/turn-now');
   expect(r.status).toBe(400);
   expect(fired.length).toBe(0);
 });
 
-test('GET /centraid/_automations/runs returns an empty feed', async () => {
-  const r = await call('GET', '/centraid/_automations/runs?limit=10');
+test('POST turn validates its ref and is capability-guarded when no executor is wired', async () => {
+  const missingRef = await call('POST', '/centraid/_automations/turn', {
+    message: 'What changed?',
+  });
+  expect(missingRef.status).toBe(400);
+  const unsupported = await call('POST', '/centraid/_automations/turn?ref=brief/brief', {
+    message: 'What changed?',
+  });
+  expect(unsupported.status).toBe(501);
+  expect(unsupported.body).toMatchObject({ error: 'not_supported' });
+});
+
+test('GET /centraid/_automations/turns returns an empty feed', async () => {
+  const r = await call('GET', '/centraid/_automations/turns?limit=10');
   expect(r.status).toBe(200);
-  expect(r.body).toEqual({ runs: [] });
+  expect(r.body).toEqual({ turns: [] });
 });
 
 // The `run_summary` view only covers finished turns; the thread screen stays
 // put on "Run now", so the ref-scoped feed must surface an IN-FLIGHT fire
 // (started, not ended) as a running record or a slow run is invisible.
-test('GET runs includes an in-flight fire in both thread and global feeds', async () => {
+test('GET turns includes an in-flight fire in both thread and global feeds', async () => {
   const store = new ConversationStore(makeJournalDbProvider(path.join(dir, 'journal.db')));
   const ref = 'brief/brief';
   const conversationId = store.ensureAutomationConversation(ref, 'brief', 'Brief');
@@ -134,22 +146,73 @@ test('GET runs includes an in-flight fire in both thread and global feeds', asyn
   });
   store.finishTurn({ turnId: `${ref}:50:bbbbbbbb`, endedAt: 60, ok: true });
 
-  const r = await call('GET', `/centraid/_automations/runs?ref=${encodeURIComponent(ref)}`);
+  const r = await call('GET', `/centraid/_automations/turns?ref=${encodeURIComponent(ref)}`);
   expect(r.status).toBe(200);
-  const runs = (r.body as { runs: Array<{ runId: string; endedAt?: number; ok: boolean }> }).runs;
-  expect(runs.map((x) => x.runId)).toEqual([`${ref}:100:aaaaaaaa`, `${ref}:50:bbbbbbbb`]);
-  expect(runs[0]?.endedAt).toBeUndefined(); // in-flight → renders as "running"
-  expect(runs[1]?.endedAt).toBe(60);
+  const turns = (r.body as { turns: Array<{ turnId: string; endedAt?: number; ok: boolean }> })
+    .turns;
+  expect(turns.map((x) => x.turnId)).toEqual([`${ref}:100:aaaaaaaa`, `${ref}:50:bbbbbbbb`]);
+  expect(turns[0]?.endedAt).toBeUndefined(); // in-flight → renders as "running"
+  expect(turns[1]?.endedAt).toBe(60);
   // No ref filter → the fleet activity feed also sees the in-flight turn.
-  const all = await call('GET', '/centraid/_automations/runs?limit=10');
-  const allRuns = (all.body as { runs: Array<{ runId: string }> }).runs;
-  expect(allRuns.map((x) => x.runId)).toEqual([`${ref}:100:aaaaaaaa`, `${ref}:50:bbbbbbbb`]);
+  const all = await call('GET', '/centraid/_automations/turns?limit=10');
+  const allRuns = (all.body as { turns: Array<{ turnId: string }> }).turns;
+  expect(allRuns.map((x) => x.turnId)).toEqual([`${ref}:100:aaaaaaaa`, `${ref}:50:bbbbbbbb`]);
 });
 
-test('GET /centraid/_automations/run?runId= returns null for an unknown run', async () => {
-  const r = await call('GET', '/centraid/_automations/run?runId=appx/x:1:deadbeef');
+test('GET /centraid/_automations/turn?turnId= returns null for an unknown run', async () => {
+  const r = await call('GET', '/centraid/_automations/turn?turnId=appx/x:1:deadbeef');
   expect(r.status).toBe(200);
-  expect(r.body).toEqual({ run: null });
+  expect(r.body).toEqual({ turn: null });
+});
+
+test('turn/items returns native item fields and legacy run/node routes are gone', async () => {
+  const store = new ConversationStore(makeJournalDbProvider(path.join(dir, 'journal.db')));
+  const conversationId = store.ensureAutomationConversation('brief/native', 'brief', 'Native');
+  store.insertTurn({
+    turnId: 'turn-native',
+    conversationId,
+    triggerKind: 'manual',
+    startedAt: 1,
+  });
+  store.openItem({
+    itemId: 'item-native',
+    turnId: 'turn-native',
+    ordinal: 0,
+    callId: 'call-native',
+    kind: 'tool',
+    name: 'read_file',
+    rawJson: '{"status":"pending"}',
+    startedAt: 2,
+  });
+  const native = await call('GET', '/centraid/_automations/turn/items?turnId=turn-native');
+  expect(native.body).toEqual({
+    items: [
+      expect.objectContaining({
+        itemId: 'item-native',
+        turnId: 'turn-native',
+        callId: 'call-native',
+        rawJson: '{"status":"pending"}',
+      }),
+    ],
+  });
+  const latestExpanded = await call(
+    'GET',
+    '/centraid/_automations/turn?ref=brief/native&expand=items',
+  );
+  expect(latestExpanded.body).toMatchObject({
+    turn: { turnId: 'turn-native', automationId: 'brief/native' },
+    items: [{ itemId: 'item-native', callId: 'call-native' }],
+  });
+  expect(await call('GET', '/centraid/_automations/runs')).toMatchObject({ owned: false });
+  expect(await call('POST', '/centraid/_automations/run-now?ref=brief/brief')).toMatchObject({
+    owned: false,
+  });
+  expect(await call('GET', '/centraid/_automations/run?runId=turn-native')).toMatchObject({
+    owned: false,
+  });
+  expect(await call('GET', '/centraid/_automations/run/nodes?runId=turn-native')).toMatchObject({
+    owned: false,
+  });
 });
 
 test('GET /centraid/_insights/summary returns a payload object', async () => {
@@ -161,8 +224,8 @@ test('GET /centraid/_insights/summary returns a payload object', async () => {
 });
 
 // Issue #351: run/events SSE was unbounded — a small cap (2) makes the
-// "cap+1" scenario cheap to exercise. `subscribeRunEvents` is wired to a
-// no-op unsub (never fires `run.end`) so the stream stays open under test,
+// "cap+1" scenario cheap to exercise. `subscribeTurnEvents` is wired to a
+// no-op unsub (never fires `turn.end`) so the stream stays open under test,
 // same as a real live run being watched.
 interface SseMockClient {
   req: IncomingMessage;
@@ -172,6 +235,22 @@ interface SseMockClient {
   body: () => string;
   ended: () => boolean;
   close: () => void;
+}
+
+/** The same mock client as a POST with a JSON steering body. */
+function turnPost(client: SseMockClient, message = 'What changed?'): IncomingMessage {
+  const body = JSON.stringify({ message });
+  return {
+    ...(client.req as unknown as Record<string, unknown>),
+    method: 'POST',
+    async *[Symbol.asyncIterator]() {
+      yield Buffer.from(body);
+    },
+    on: (client.req as unknown as { on: (e: string, fn: () => void) => unknown }).on.bind(
+      client.req,
+    ),
+    off: () => undefined,
+  } as unknown as IncomingMessage;
 }
 
 function sseClient(url: string): SseMockClient {
@@ -221,6 +300,60 @@ function sseClient(url: string): SseMockClient {
   };
 }
 
+/** Put one publishable automation where `codeAppsDir()` will find it. */
+async function seedAutomation(store: WorktreeStore, appId: string): Promise<void> {
+  const automationDir = path.join(store.getActiveMainLink(), 'apps', appId, 'automations', appId);
+  await fs.mkdir(automationDir, { recursive: true });
+  await fs.writeFile(
+    path.join(automationDir, 'automation.json'),
+    JSON.stringify({
+      name: 'Daily brief',
+      version: '0.1.0',
+      enabled: true,
+      prompt: 'Summarize.',
+      triggers: [],
+      history: { keep: { count: 10 } },
+      generated: { by: 'test', at: '2026-07-25T00:00:00.000Z' },
+    }),
+  );
+}
+
+test('interactive turn subscribers past the cap get 503 + Retry-After instead of a dropped stream', async () => {
+  const store = new WorktreeStore({ root: path.join(dir, 'code') });
+  await seedAutomation(store, 'brief');
+  const cap = new SseSubscriberCap(1);
+  let released: (() => void) | undefined;
+  const capped = makeAutomationsRouteHandler({
+    store,
+    journalDbFile: path.join(dir, 'journal.db'),
+    analytics,
+    insights,
+    runAutomation: (input) => fired.push(input),
+    // Holds the turn open (like a real ACP child) so the slot stays taken.
+    runInteractiveTurn: () =>
+      new Promise((resolve) => {
+        released = () => resolve();
+      }),
+    subscriberCap: cap,
+  });
+
+  const first = sseClient('/centraid/_automations/turn?ref=brief/brief');
+  const firstDone = capped(turnPost(first), first.res);
+  await vi.waitFor(() => expect(cap.current()).toBe(1));
+
+  const second = sseClient('/centraid/_automations/turn?ref=brief/brief');
+  expect(await capped(turnPost(second), second.res)).toBe(true);
+  expect(second.status()).toBe(503);
+  expect(second.header('Retry-After')).toBeDefined();
+  expect((JSON.parse(second.body()) as { error: string }).error).toBe('sse_capacity');
+  // A refusal is a complete, distinguishable response — not a half-open stream.
+  expect(second.ended()).toBe(true);
+
+  released?.();
+  expect(await firstDone).toBe(true);
+  expect(cap.current()).toBe(0);
+});
+
 test('run/events subscribers past the cap get 503 + Retry-After; the count decrements on disconnect', async () => {
   const cap = new SseSubscriberCap(2);
   const capped = makeAutomationsRouteHandler({
@@ -229,19 +362,19 @@ test('run/events subscribers past the cap get 503 + Retry-After; the count decre
     analytics,
     insights,
     runAutomation: (input) => fired.push(input),
-    subscribeRunEvents: () => () => undefined, // keeps the stream open, like a real live run
+    subscribeTurnEvents: () => () => undefined, // keeps the stream open, like a real live run
     subscriberCap: cap,
   });
 
-  const a = sseClient('/centraid/_automations/run/events?runId=r1');
-  const b = sseClient('/centraid/_automations/run/events?runId=r2');
+  const a = sseClient('/centraid/_automations/turn/events?turnId=r1');
+  const b = sseClient('/centraid/_automations/turn/events?turnId=r2');
   expect(await capped(a.req, a.res)).toBe(true);
   expect(await capped(b.req, b.res)).toBe(true);
   expect(a.status()).toBe(200);
   expect(b.status()).toBe(200);
   expect(cap.current()).toBe(2);
 
-  const c = sseClient('/centraid/_automations/run/events?runId=r3');
+  const c = sseClient('/centraid/_automations/turn/events?turnId=r3');
   expect(await capped(c.req, c.res)).toBe(true);
   expect(c.status()).toBe(503);
   expect(c.header('Retry-After')).toBeDefined();
@@ -252,7 +385,7 @@ test('run/events subscribers past the cap get 503 + Retry-After; the count decre
 
   a.close();
   expect(cap.current()).toBe(1);
-  const d = sseClient('/centraid/_automations/run/events?runId=r4');
+  const d = sseClient('/centraid/_automations/turn/events?turnId=r4');
   expect(await capped(d.req, d.res)).toBe(true);
   expect(d.status()).toBe(200);
   expect(cap.current()).toBe(2);

@@ -36,6 +36,13 @@ export interface ManifestRequires {
   /** MCP server ids the handler requires (`["github", "linear"]`). */
   readonly mcps?: readonly string[];
   /**
+   * Coding-agent harness used by compile, interactive turns, and `ctx.agent`.
+   * This is an open registry key: manifests validate only that it is non-empty;
+   * the executing gateway decides whether the key is registered and otherwise
+   * falls back to the automations subsystem preference.
+   */
+  readonly runner?: string;
+  /**
    * Model the `ctx.agent` calls should route through. Format: `provider/model-id`
    * (`"anthropic/claude-3-5-sonnet"`, `"openai/gpt-4o"`). Must not target the
    * mock provider (`centraid-mock/*`) — that would recurse into the mock
@@ -58,15 +65,37 @@ export interface CostEstimate {
   readonly tokensPerFire: number;
 }
 
+/** One consent row predicate carried from a manifest into a vault grant. */
+export interface ManifestVaultFilterClause {
+  readonly column: string;
+  readonly op:
+    | 'eq'
+    | 'ne'
+    | 'lt'
+    | 'lte'
+    | 'gt'
+    | 'gte'
+    | 'in'
+    | 'is-null'
+    | 'not-null'
+    | 'within-days'
+    | 'within-next-days';
+  readonly value?: unknown;
+}
+
 /**
  * One requested vault scope — the same grammar an app's `app.json` vault
  * block uses. `schema` alone covers the whole domain; `table` narrows to a
- * single entity or command name.
+ * single entity or command name. `rowFilter` and `fieldMask` are the
+ * minimization boundary for anchored automation references: the compiler
+ * derives them from the trusted `core_link_anchor`, never from token text.
  */
 export interface ManifestVaultScope {
   readonly schema: string;
   readonly table?: string;
   readonly verbs: 'read' | 'read+act' | 'act' | 'reveal';
+  readonly rowFilter?: readonly ManifestVaultFilterClause[];
+  readonly fieldMask?: readonly string[];
 }
 
 /**
@@ -185,12 +214,69 @@ export type DataTrigger = {
   readonly every?: string;
 };
 
+export const EVENT_DEFAULT_EVERY = '*/5 * * * *';
+export const EVENT_TRIGGER_CATALOG = {
+  'pull.gmail': ['new-message'],
+  'pull.github': ['pull-request', 'issue'],
+} as const;
+
+/**
+ * A provider change-feed cursor over one explicitly bound connection.
+ * Provider adapters interpret `event` + `filter`; the engine sees only an
+ * ordered cursor source and normalized ingress elements.
+ */
+export type EventTrigger = {
+  readonly kind: 'event';
+  readonly connectorKind: string;
+  readonly event: string;
+  readonly filter?: Readonly<Record<string, unknown>>;
+  readonly every?: string;
+};
+
 export type Trigger =
   | CronTrigger
   | WebhookTrigger
   | PendingWebhookTrigger
   | ConditionTrigger
-  | DataTrigger;
+  | DataTrigger
+  | EventTrigger;
+
+const TRIGGER_CURSOR_DENIED_TABLES = new Set([
+  'trigger_ingress',
+  'automation_trigger_cursor',
+  'automation_state',
+  'scheduler_ledger',
+  'conversations',
+  'turns',
+  'items',
+  'attachments',
+  'run_summary',
+  'conversation_archive',
+  'conversation_digest',
+]);
+
+/**
+ * Shared authoring/runtime loop guard for cursor-targeted vault entities.
+ *
+ * The denied names are runtime ledger tables — they live in `journal.db` and
+ * are only ever referenced bare. A QUALIFIED entity is a user's own vault
+ * table: `inventory.items`, `shop.attachments`, and `crm.conversations` are
+ * ordinary data and must stay watchable.
+ */
+export function isDeniedTriggerCursorEntity(entity: string): boolean {
+  const [schema = '', table] = entity.split('.', 2);
+  if (schema === 'outbox') return true;
+  return table === undefined && TRIGGER_CURSOR_DENIED_TABLES.has(schema);
+}
+
+function rejectDeniedTriggerEntity(entity: string, field: string): void {
+  if (!isDeniedTriggerCursorEntity(entity)) return;
+  throw new ManifestError(
+    'invalid_trigger',
+    `manifest.${field} must not watch "${entity}" — cursor machinery, outbox, ingress, and conversation-ledger entities are excluded to prevent trigger loops`,
+    field,
+  );
+}
 
 /** The cron triggers from a trigger list, in declaration order. */
 export function cronTriggersOf(triggers: readonly Trigger[]): readonly CronTrigger[] {
@@ -216,26 +302,6 @@ export function pendingWebhookTriggerOf(
   triggers: readonly Trigger[],
 ): PendingWebhookTrigger | undefined {
   return triggers.find(isPendingWebhookTrigger);
-}
-
-/**
- * The host-evaluated "watch" triggers (condition + data) with their gate
- * cadence and their positions in the ORIGINAL trigger list — the index is
- * a trigger's stable identity for evaluation cursors, so it must survive
- * cron/webhook entries sitting between them.
- */
-export function watchTriggersOf(
-  triggers: readonly Trigger[],
-): readonly { trigger: ConditionTrigger | DataTrigger; expr: string; index: number }[] {
-  const watches: { trigger: ConditionTrigger | DataTrigger; expr: string; index: number }[] = [];
-  triggers.forEach((t, index) => {
-    if (t.kind === 'condition') {
-      watches.push({ trigger: t, expr: t.every ?? CONDITION_DEFAULT_EVERY, index });
-    } else if (t.kind === 'data') {
-      watches.push({ trigger: t, expr: t.every ?? DATA_DEFAULT_EVERY, index });
-    }
-  });
-  return watches;
 }
 
 /**
@@ -428,6 +494,7 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
         `${field}.entity`,
       );
     }
+    rejectDeniedTriggerEntity(entity, `${field}.entity`);
     let every: string | undefined;
     if (t.every !== undefined) {
       every = requireString(t.every, `${field}.every`);
@@ -494,18 +561,7 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
           ef,
         );
       }
-      // Loop guard (issue #308 A8): outbox drains write receipted results
-      // that would re-enter the change feed — a data trigger watching
-      // outbox.* could re-stage on its own drain and cycle forever. The
-      // outbox is the CONSENT surface, not a data source; refused here so
-      // the manifest fails loudly at author time.
-      if (entity.startsWith('outbox.')) {
-        throw new ManifestError(
-          'invalid_trigger',
-          `manifest.${ef} must not watch "${entity}" — outbox entities are excluded from data triggers (a drain's own receipts would re-fire the automation, issue #308)`,
-          ef,
-        );
-      }
+      rejectDeniedTriggerEntity(entity, ef);
       return entity;
     });
     let every: string | undefined;
@@ -521,9 +577,50 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
     }
     return { kind: 'data', entities, ...(every !== undefined ? { every } : {}) };
   }
+  if (t.kind === 'event') {
+    const connectorKind = requireString(t.connectorKind, `${field}.connectorKind`);
+    const event = requireString(t.event, `${field}.event`);
+    const supported = EVENT_TRIGGER_CATALOG[connectorKind as keyof typeof EVENT_TRIGGER_CATALOG];
+    if (!supported || !(supported as readonly string[]).includes(event)) {
+      throw new ManifestError(
+        'invalid_trigger',
+        `manifest.${field} has unsupported provider event "${connectorKind}:${event}"`,
+        `${field}.event`,
+      );
+    }
+    let every: string | undefined;
+    if (t.every !== undefined) {
+      every = requireString(t.every, `${field}.every`);
+      if (!isValidCronExpression(every)) {
+        throw new ManifestError(
+          'invalid_trigger',
+          `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
+          `${field}.every`,
+        );
+      }
+    }
+    let filter: Readonly<Record<string, unknown>> | undefined;
+    if (t.filter !== undefined) {
+      if (t.filter === null || typeof t.filter !== 'object' || Array.isArray(t.filter)) {
+        throw new ManifestError(
+          'invalid_trigger',
+          `manifest.${field}.filter must be an object`,
+          `${field}.filter`,
+        );
+      }
+      filter = t.filter as Readonly<Record<string, unknown>>;
+    }
+    return {
+      kind: 'event',
+      connectorKind,
+      event,
+      ...(filter ? { filter } : {}),
+      ...(every ? { every } : {}),
+    };
+  }
   throw new ManifestError(
     'invalid_trigger',
-    `manifest.${field}.kind "${String(t.kind)}" is not supported — expected "cron", "webhook", "condition" or "data"`,
+    `manifest.${field}.kind "${String(t.kind)}" is not supported — expected "cron", "webhook", "condition", "data" or "event"`,
     `${field}.kind`,
   );
 }
@@ -591,6 +688,17 @@ function validateRequires(raw: unknown): ManifestRequires {
   }
   const req = (raw ?? {}) as Record<string, unknown>;
   const mcps = optionalStringArray(req.mcps, 'requires.mcps');
+  let runner: string | undefined;
+  if (req.runner !== undefined) {
+    if (typeof req.runner !== 'string' || req.runner.length === 0) {
+      throw new ManifestError(
+        'invalid_field',
+        'manifest.requires.runner must be a non-empty string',
+        'requires.runner',
+      );
+    }
+    runner = req.runner;
+  }
   let model: string | undefined;
   if (req.model !== undefined) {
     if (typeof req.model !== 'string' || req.model.length === 0) {
@@ -626,6 +734,7 @@ function validateRequires(raw: unknown): ManifestRequires {
   }
   const requires: ManifestRequires = {};
   if (mcps) (requires as { mcps: readonly string[] }).mcps = mcps;
+  if (runner !== undefined) (requires as { runner: string }).runner = runner;
   if (model !== undefined) (requires as { model: string }).model = model;
   if (secrets) (requires as { secrets: readonly string[] }).secrets = secrets;
   return requires;
@@ -683,6 +792,19 @@ function validateConnectionBindings(value: unknown): readonly ConnectionBinding[
 }
 
 const VAULT_VERBS = new Set(['read', 'read+act', 'act', 'reveal']);
+const VAULT_FILTER_OPS = new Set([
+  'eq',
+  'ne',
+  'lt',
+  'lte',
+  'gt',
+  'gte',
+  'in',
+  'is-null',
+  'not-null',
+  'within-days',
+  'within-next-days',
+]);
 
 function validateVault(raw: unknown): ManifestVault | undefined {
   if (raw === undefined) return undefined;
@@ -721,10 +843,73 @@ function validateVault(raw: unknown): ManifestVault | undefined {
     }
     let table: string | undefined;
     if (s.table !== undefined) table = requireString(s.table, `${field}.table`);
+    let rowFilter: ManifestVaultFilterClause[] | undefined;
+    if (s.rowFilter !== undefined) {
+      if (!Array.isArray(s.rowFilter) || s.rowFilter.length === 0) {
+        throw new ManifestError(
+          'invalid_field',
+          `manifest.${field}.rowFilter must be a non-empty array`,
+          `${field}.rowFilter`,
+        );
+      }
+      rowFilter = s.rowFilter.map((rawClause, clauseIndex) => {
+        const clauseField = `${field}.rowFilter[${clauseIndex}]`;
+        if (rawClause === null || typeof rawClause !== 'object' || Array.isArray(rawClause)) {
+          throw new ManifestError(
+            'invalid_field',
+            `manifest.${clauseField} must be an object`,
+            clauseField,
+          );
+        }
+        const clause = rawClause as Record<string, unknown>;
+        const column = requireString(clause.column, `${clauseField}.column`);
+        if (typeof clause.op !== 'string' || !VAULT_FILTER_OPS.has(clause.op)) {
+          throw new ManifestError(
+            'invalid_field',
+            `manifest.${clauseField}.op is not a supported vault filter operator`,
+            `${clauseField}.op`,
+          );
+        }
+        return {
+          column,
+          op: clause.op as ManifestVaultFilterClause['op'],
+          ...(Object.hasOwn(clause, 'value') ? { value: clause.value } : {}),
+        };
+      });
+    }
+    let fieldMask: string[] | undefined;
+    if (s.fieldMask !== undefined) {
+      if (!Array.isArray(s.fieldMask) || s.fieldMask.length === 0) {
+        throw new ManifestError(
+          'invalid_field',
+          `manifest.${field}.fieldMask must be a non-empty array`,
+          `${field}.fieldMask`,
+        );
+      }
+      fieldMask = s.fieldMask.map((value, maskIndex) =>
+        requireString(value, `${field}.fieldMask[${maskIndex}]`),
+      );
+      if (new Set(fieldMask).size !== fieldMask.length) {
+        throw new ManifestError(
+          'invalid_field',
+          `manifest.${field}.fieldMask must not contain duplicates`,
+          `${field}.fieldMask`,
+        );
+      }
+    }
+    if ((rowFilter || fieldMask) && table === undefined) {
+      throw new ManifestError(
+        'invalid_field',
+        `manifest.${field}.table is required for rowFilter or fieldMask`,
+        `${field}.table`,
+      );
+    }
     return {
       schema,
       ...(table !== undefined ? { table } : {}),
       verbs: s.verbs as ManifestVaultScope['verbs'],
+      ...(rowFilter ? { rowFilter } : {}),
+      ...(fieldMask ? { fieldMask } : {}),
     } satisfies ManifestVaultScope;
   });
   return { purpose, ...(why !== undefined ? { why } : {}), scopes };
@@ -841,6 +1026,16 @@ export function validateManifest(raw: unknown): Manifest {
       'manifest.triggers contains a condition/data trigger but no manifest.vault block declares the access it reads under',
       'vault',
     );
+  }
+  for (const trigger of triggers) {
+    if (trigger.kind !== 'event') continue;
+    if (!connections?.some((binding) => binding.kind === trigger.connectorKind)) {
+      throw new ManifestError(
+        'invalid_trigger',
+        `manifest event trigger "${trigger.event}" requires a bound "${trigger.connectorKind}" connection`,
+        'connections',
+      );
+    }
   }
   const apps = optionalStringArray(r.apps, 'apps');
   const costEstimate = validateCostEstimate(r.costEstimate);

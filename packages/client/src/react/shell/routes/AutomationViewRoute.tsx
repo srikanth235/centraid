@@ -1,13 +1,21 @@
 import { type JSX, useRef } from 'react';
+import type { TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
 import {
   auth,
   compileAutomation,
   deleteAutomation,
-  listAutomationRuns,
+  listAutomationTurns,
+  readAutomationTurnExpanded,
+  readGatewayCapabilities,
+  reviseAutomation,
   rotateAutomationWebhookSecret,
   runAutomationNow,
   setAutomationEnabled,
+  streamAutomationConversationTurn,
+  streamAutomationTurn,
+  type AutomationTurnStreamEvent,
 } from '../../../gateway-client.js';
+import type { AsstMsgDTO } from '../../screen-contracts.js';
 import AutomationThreadScreen, {
   type AutomationThreadDataEx,
 } from '../../screens/AutomationThreadScreen.js';
@@ -16,6 +24,88 @@ import PageScroll from '../PageScroll.js';
 import { openWebhookReveal } from '../webhookReveal.js';
 import { deriveAutomationHero } from './automationsData.js';
 import { decideConsentItem, loadAutomationThreadData } from './automationThreadData.js';
+import { automationTurnInboundText, automationTurnMessages } from './automationTurnMessages.js';
+import {
+  automationLiveMessages,
+  createAutomationLiveTrace,
+  createAutomationLiveTraceFromItems,
+  finishAutomationLiveItem,
+  finishAutomationLiveTrace,
+  reduceAutomationItemEvent,
+  reduceAutomationTurnEvent,
+  startAutomationLiveItem,
+} from './automationLiveMessages.js';
+
+async function loadTrace(turnId: string): Promise<AsstMsgDTO[]> {
+  const expanded = await readAutomationTurnExpanded({ turnId });
+  return expanded.turn ? automationTurnMessages(expanded.turn, expanded.items) : [];
+}
+
+/**
+ * Result of one live watch. `settled` is what the *ledger* says: `false`
+ * means the stream closed (or the gateway refused the join) while the turn is
+ * still open, so the caller must rejoin rather than leave a turn spinning
+ * forever. `ok` is the turn's outcome once settled.
+ */
+interface WatchOutcome {
+  settled: boolean;
+  ok: boolean;
+}
+
+async function watchNativeTrace(
+  turnId: string,
+  onMessages: (messages: AsstMsgDTO[]) => void,
+  signal: AbortSignal,
+): Promise<WatchOutcome> {
+  const initial = await readAutomationTurnExpanded({ turnId }).catch(() => ({
+    turn: null,
+    items: [] as CentraidAutomationItem[],
+  }));
+  if (initial.turn) onMessages(automationTurnMessages(initial.turn, initial.items));
+  const inbound = automationTurnInboundText(initial.turn, initial.items);
+  let live = createAutomationLiveTraceFromItems(inbound, initial.items);
+  let ended = false;
+  let terminalOk: boolean | undefined;
+  const apply = (event: AutomationTurnStreamEvent): void => {
+    if (event.type === 'item.start') {
+      live = startAutomationLiveItem(live, {
+        itemId: event.itemId,
+        ordinal: event.ordinal,
+        kind: event.kind,
+        ...(event.name ? { name: event.name } : {}),
+        ...(event.callId ? { callId: event.callId } : {}),
+      });
+      onMessages(automationLiveMessages(live));
+    } else if (event.type === 'item.delta') {
+      live = reduceAutomationItemEvent(live, {
+        itemId: event.itemId,
+        ordinal: event.ordinal,
+        event: event.event as TurnStreamEvent,
+      });
+      onMessages(automationLiveMessages(live));
+    } else if (event.type === 'item.end') {
+      live = finishAutomationLiveItem(live, event);
+      onMessages(automationLiveMessages(live));
+    } else if (event.type === 'turn.end') {
+      ended = true;
+      terminalOk = event.ok;
+      live = finishAutomationLiveTrace(live, event.ok ? undefined : event.error);
+    }
+  };
+  await streamAutomationTurn(turnId, apply, signal);
+  if (signal.aborted) return { settled: false, ok: false };
+  // The ledger is authoritative for completion, usage, errors, and cold/live
+  // parity. Re-read once after turn.end (or an unexpectedly closed stream) —
+  // this is the ONLY authoritative re-read of the watch, so callers must not
+  // issue a second one.
+  const final = await readAutomationTurnExpanded({ turnId });
+  if (final.turn) {
+    onMessages(automationTurnMessages(final.turn, final.items));
+    return { settled: final.turn.endedAt !== undefined, ok: final.turn.ok };
+  }
+  if (ended) onMessages(automationLiveMessages(live));
+  return { settled: ended, ok: terminalOk ?? false };
+}
 
 // React-owned automation thread — replaces the old single-view
 // (AutomationViewScreen, now deleted) at the `automation-view` route
@@ -26,7 +116,7 @@ import { decideConsentItem, loadAutomationThreadData } from './automationThreadD
 // comment in the screen file: a `triggerDetail` block (raw cron expr /
 // data-condition entity+cadence, derived via the already-exported
 // `deriveAutomationHero` — no new endpoint) and a `runTokens` map (per-run
-// token counts, from a `listAutomationRuns` call the data layer already
+// token counts, from a `listAutomationTurns` call the data layer already
 // makes internally). The row is held in a ref, same shape as the old
 // wrapper, so delete/run/toggle/rotate/edit/send actions can read its
 // ref/name without re-fetching.
@@ -43,9 +133,10 @@ export default function AutomationViewRoute({
       <AutomationThreadScreen
         loadData={async (): Promise<AutomationThreadDataEx | null> => {
           const { baseUrl } = await auth();
-          const [result, runs] = await Promise.all([
+          const [result, runs, capabilities] = await Promise.all([
             loadAutomationThreadData({ automationId, gatewayOrigin: baseUrl }),
-            listAutomationRuns({ automationId, limit: 100 }),
+            listAutomationTurns({ automationId, limit: 100 }),
+            readGatewayCapabilities().catch(() => undefined),
           ]);
           if (!result) {
             rowRef.current = null;
@@ -56,10 +147,11 @@ export default function AutomationViewRoute({
           const runTokens: Record<string, number> = {};
           for (const r of runs) {
             const tokens = (r.totalInputTokens ?? 0) + (r.totalOutputTokens ?? 0);
-            if (tokens > 0) runTokens[r.runId] = tokens;
+            if (tokens > 0) runTokens[r.turnId] = tokens;
           }
           return {
             ...result.data,
+            automationTurns: capabilities?.automationTurns === true,
             runTokens,
             triggerDetail: {
               conditionDetail: hero.conditionDetail,
@@ -89,6 +181,10 @@ export default function AutomationViewRoute({
           const row = rowRef.current;
           if (row) navigate({ automationId: row.ref, kind: 'run-view', runId });
         }}
+        loadTurnTrace={loadTrace}
+        watchTurn={async (turnId, onMessages, signal) =>
+          (await watchNativeTrace(turnId, onMessages, signal)).settled
+        }
         onCopyWebhook={(url) =>
           void navigator.clipboard
             .writeText(url)
@@ -119,14 +215,14 @@ export default function AutomationViewRoute({
         }}
         onRunNow={async () => {
           const row = rowRef.current;
-          if (!row) return false;
+          if (!row) return null;
           try {
-            await runAutomationNow({ automationId: row.ref });
+            const { turnId } = await runAutomationNow({ automationId: row.ref });
             showToast('Run started');
-            return true;
+            return turnId;
           } catch (err) {
             showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
-            return false;
+            return null;
           }
         }}
         onToggleEnabled={async (next) => {
@@ -155,12 +251,56 @@ export default function AutomationViewRoute({
             return false;
           }
         }}
-        onSendMessage={(text) => {
+        onSendMessage={async (text, applyFuture, onMessages, signal) => {
           const row = rowRef.current;
-          if (!row) return;
-          // Builder route keys on the BARE app id — a compound ref's `/`
-          // breaks useBuilder's ownerApp match and 500s the session route.
-          navigate({ automationId: row.id, kind: 'automation-builder', seedMessage: text });
+          if (!row) return null;
+          try {
+            if (applyFuture) {
+              onMessages([
+                { kind: 'user', text },
+                { kind: 'ai', streaming: true, text: 'Revising standing instructions…' },
+              ]);
+              const { compileTurnId } = await reviseAutomation({
+                automationId: row.ref,
+                message: text,
+              });
+              const { ok } = await watchNativeTrace(compileTurnId, onMessages, signal);
+              showToast(ok ? 'Standing instructions updated' : 'Could not revise instructions');
+              return compileTurnId;
+            }
+            let live = createAutomationLiveTrace(text);
+            onMessages(automationLiveMessages(live));
+            const result = await streamAutomationConversationTurn(
+              row.ref,
+              text,
+              (event) => {
+                live = reduceAutomationTurnEvent(live, event);
+                onMessages(automationLiveMessages(live));
+              },
+              signal,
+            );
+            if (result.turnId && !signal.aborted) {
+              onMessages(await loadTrace(result.turnId));
+            }
+            return result.turnId ?? null;
+          } catch (err) {
+            if (!signal.aborted) {
+              const message = err instanceof Error ? err.message : String(err);
+              onMessages([
+                { kind: 'user', text },
+                {
+                  kind: 'ai',
+                  streaming: false,
+                  html: message,
+                  error: true,
+                  copyText: message,
+                  feedback: null,
+                },
+              ]);
+              showToast(`Could not update: ${message}`);
+            }
+            return null;
+          }
         }}
         onRotateWebhook={async () => {
           const row = rowRef.current;

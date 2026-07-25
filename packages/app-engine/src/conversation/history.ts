@@ -25,6 +25,7 @@
 import { randomUUID } from 'node:crypto';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
 import { ConversationStore, type ConversationMeta } from './store.js';
+import type { AdapterUsageSnapshot } from './turn.js';
 import type { Item, RunKind, Turn } from './schema.js';
 import { ASSISTANT_APP_ID, isValidAppOrAssistantId } from '../registry/app-paths.js';
 import { resolveItemCost } from '../model-pricing.js';
@@ -569,12 +570,32 @@ export class ConversationHistoryStore {
   noteTurn(
     appId: string,
     sessionId: string,
-    adapter?: { kind: string; sessionId?: string },
+    adapter?: { kind: string; sessionId?: string; usageSnapshot?: AdapterUsageSnapshot },
   ): ConversationSummary | undefined {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, sessionId)) return undefined;
     if (!store.noteTurn(sessionId, this.currentUserId(), adapter)) return undefined;
     return this.getSessionMeta(appId, sessionId);
+  }
+
+  /** Internal ACP resume state; unlike `ConversationSummary`, never crosses the client wire. */
+  getAdapterResumeState(
+    appId: string,
+    sessionId: string,
+  ):
+    | {
+        kind?: string;
+        sessionId?: string;
+        usageSnapshot?: AdapterUsageSnapshot;
+      }
+    | undefined {
+    const meta = this.ownedMeta(appId, sessionId);
+    if (!meta) return undefined;
+    return {
+      ...(meta.adapterKind ? { kind: meta.adapterKind } : {}),
+      ...(meta.adapterSessionId ? { sessionId: meta.adapterSessionId } : {}),
+      ...(meta.adapterUsageSnapshot ? { usageSnapshot: meta.adapterUsageSnapshot } : {}),
+    };
   }
 }
 

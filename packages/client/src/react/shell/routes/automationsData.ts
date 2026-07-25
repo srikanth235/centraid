@@ -13,7 +13,7 @@ import {
   triggersSummary,
 } from '../../../app-format.js';
 import { cronNextRuns } from '../../../cron.js';
-import { listAutomationRuns, listAutomations } from '../../../gateway-client.js';
+import { listAutomationTurns, listAutomations } from '../../../gateway-client.js';
 import type {
   AuOverviewData,
   AuStatusKind,
@@ -24,7 +24,7 @@ import type {
 export interface AutomationFeedEntry {
   automationId: string;
   automationName: string;
-  run: CentraidAutomationRunRecord;
+  run: CentraidAutomationTurnRecord;
 }
 
 export const AU_STATUS_LABEL: Record<AuStatusKind, string> = {
@@ -40,7 +40,7 @@ export const AU_STATUS_LABEL: Record<AuStatusKind, string> = {
  *  overview feed's `metaLabel`, the single-view's run rows, and the thread's
  *  run entries (automationThreadData.ts), so a run never surfaces the raw
  *  lowercase `triggerOrigin`/`triggerKind` enum ("data" · 1.2s) to a user. */
-export function triggerOriginLabel(run: CentraidAutomationRunRecord): {
+export function triggerOriginLabel(run: CentraidAutomationTurnRecord): {
   icon: string;
   label: string;
 } {
@@ -76,9 +76,9 @@ function formatWhereClause(where: unknown): string {
 /** Fetch the automation rows + their recent run feed (vanilla collectAutomationRuns). */
 export async function collectAutomationRuns(): Promise<AutomationFeedEntry[]> {
   let autos: CentraidAutomationRow[] = [];
-  let runs: CentraidAutomationRunRecord[] = [];
+  let runs: CentraidAutomationTurnRecord[] = [];
   try {
-    [autos, runs] = await Promise.all([listAutomations(), listAutomationRuns({ limit: 100 })]);
+    [autos, runs] = await Promise.all([listAutomations(), listAutomationTurns({ limit: 100 })]);
   } catch {
     return [];
   }
@@ -191,7 +191,7 @@ export function buildOverviewData(
         metaLabel: `${triggerOriginLabel(run).label} · ${dur} · ${fmtTokens(tokens)}`,
         name: automationName,
         ok: run.ok,
-        runId: run.runId,
+        runId: run.turnId,
         startedAt: run.startedAt,
         summary: run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
         whenLabel: relativeTime(new Date(run.startedAt).toISOString()),

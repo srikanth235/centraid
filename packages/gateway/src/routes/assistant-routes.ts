@@ -135,6 +135,10 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           ? await opts.resolveModel('assistant', explicitModel)
           : explicitModel;
 
+        const resume = opts.conversationStore.getAdapterResumeState(
+          ASSISTANT_APP_ID,
+          conversationId,
+        );
         await driveTurnOverSse({
           req,
           res,
@@ -153,8 +157,9 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           model,
           thinking: typeof body.thinking === 'string' ? body.thinking : undefined,
           ...(typeof body.retryOf === 'string' && body.retryOf ? { retryOf: body.retryOf } : {}),
-          prevAdapterSessionId: session.adapterSessionId ?? undefined,
-          prevAdapterKind: session.adapterKind ?? undefined,
+          prevAdapterSessionId: resume?.sessionId,
+          prevAdapterKind: resume?.kind,
+          prevAdapterUsageSnapshot: resume?.usageSnapshot,
           ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),
           ...(turnAttachments.length > 0 ? { turnAttachments } : {}),
           ...(opts.generateTitle ? { generateTitle: opts.generateTitle } : {}),

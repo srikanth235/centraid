@@ -165,6 +165,55 @@
   font-size: 12px;
   color: var(--ink-4);
 }
+.agentPickerWrap {
+  position: relative;
+}
+.agentChipValue {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+.agentPicker {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 31;
+  width: min(340px, calc(100vw - 48px));
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+}
+.agentPickerTitle {
+  font-size: 14px;
+  color: var(--ink);
+}
+.agentPickerHint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.agentPickerField {
+  display: grid;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ink-3);
+}
+.agentPickerField select {
+  width: 100%;
+  border: 0.5px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 30px 8px 9px;
+}
 .connPicker {
   position: absolute;
   left: 0;
@@ -297,6 +346,85 @@
   justify-content: flex-end;
   gap: 6px;
   padding: 0 6px 4px;
+}
+.connAccountList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 6px 4px 48px;
+  padding-left: 10px;
+  border-left: 0.5px solid var(--line);
+}
+.connAccount {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 22px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+.connAccount:hover,
+.connAccount[data-chosen='true'] {
+  background: var(--bg-sunken);
+}
+.connAccountCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.connAccountLabel {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connAccountPrincipal {
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connAccountHealth {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.connAccountHealth[data-health='ok'] {
+  color: var(--success);
+}
+.connAccountHealth[data-health='failing'],
+.connAccountHealth[data-health='needs-auth'] {
+  color: var(--danger);
+}
+/* The saved binding names a connection the vault no longer lists (#541). */
+.connAccountWarn {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-2);
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
+}
+.connDanglingNote {
+  flex-basis: 100%;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--danger);
+}
+.connAccountCheck {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
 }
 .connForm {
   display: flex;

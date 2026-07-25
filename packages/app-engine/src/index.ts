@@ -70,6 +70,7 @@ export type {
   TurnConfig,
   TurnResult,
   TurnAttachment,
+  AdapterUsageSnapshot,
   RunTurnFn,
   VaultInvokeRunner,
   VaultContentRunner,
@@ -368,7 +369,17 @@ export {
   type InsertAttachmentInput,
   type ListTurnsOptions,
 } from './conversation/store.js';
-export type { RunStreamEvent } from './conversation/run-stream-event.js';
+export {
+  AutomationTriggerStore,
+  type AutomationTriggerCursor,
+  type PutAutomationTriggerCursor,
+  type TriggerIngressRecord,
+  type AppendTriggerIngress,
+  type TriggerIngressBounds,
+  type TriggerIngressGap,
+  type PruneIngressResult,
+} from './conversation/trigger-store.js';
+export type { AutomationTurnStreamEvent } from './conversation/automation-turn-stream-event.js';
 export type {
   Conversation,
   Turn,

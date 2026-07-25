@@ -13,7 +13,7 @@ import { cloneAutomationTemplate, surfaceMintedWebhook } from './templatesData.j
 
 vi.mock('../../../gateway-client.js', () => ({
   listAutomations: vi.fn(),
-  listAutomationRuns: vi.fn(),
+  listAutomationTurns: vi.fn(),
   getBlocking: vi.fn(),
   listOutboxGrants: vi.fn(),
   listAgents: vi.fn(),

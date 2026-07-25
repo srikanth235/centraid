@@ -134,6 +134,11 @@ test('max_tokens stopReason warns then still emits final', async () => {
   const { events } = await runFake({ extraArgs: ['--mode=max_tokens'] });
   expect(notices(events)).toContain('stop_truncated');
   expect(types(events).at(-1)).toBe('final');
+  const final = events.find((event) => event.type === 'final');
+  expect(final && final.type === 'final' && final.stopReason).toBe('max_tokens');
+  expect(final && final.type === 'final' && JSON.parse(final.rawJson ?? '{}')).toMatchObject({
+    stopReason: 'max_tokens',
+  });
 });
 
 test('system policy is prepended on every turn including resumed sessions', async () => {
@@ -173,4 +178,22 @@ test('permission auto-allow emits an audit notice', async () => {
   expect(toolResult && toolResult.type === 'tool.result' && toolResult.diffs?.[0]?.path).toBe(
     'notes.txt',
   );
+});
+
+test('confined turns structurally deny ACP permission requests', async () => {
+  const dir = await tempDir('acp-perm-deny-');
+  const permMarker = path.join(dir, 'perm');
+  const { events } = await runFake({
+    extraArgs: ['--mode=normal', `--perm-marker=${permMarker}`],
+    permissionPolicy: 'deny',
+  });
+  expect(notices(events)).toContain('permission_denied');
+  expect(notices(events)).not.toContain('permission_auto_allowed');
+  // The refusal names the agent's own reject option — NOT `cancelled`, which
+  // means "the prompt turn was cancelled" and would unwind the whole turn.
+  expect(await fs.readFile(permMarker, 'utf8')).toBe('reject');
+  // …so the turn keeps running on its pre-granted tools and still finishes,
+  // exactly as the `permission_denied` notice promises.
+  expect(types(events).at(-1)).toBe('final');
+  expect(deltas(events)).toBe('Hello world');
 });

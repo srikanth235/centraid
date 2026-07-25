@@ -1,6 +1,16 @@
 import { expect, test } from 'vitest';
 import { mergePhotoAssets, sectionPhotoAssets, type PhotoAsset } from './timeline-model';
 
+function measureCpuMs<T>(run: () => T): { value: T; elapsedMs: number } {
+  // This package runs alongside several other affected packages in PR checks.
+  // CPU time preserves the checked algorithm budget without counting time the
+  // OS deschedules this worker under concurrent CI load.
+  const started = process.cpuUsage();
+  const value = run();
+  const elapsed = process.cpuUsage(started);
+  return { value, elapsedMs: (elapsed.user + elapsed.system) / 1_000 };
+}
+
 test('50k seeded assets group inside the one-second cold-grid budget', () => {
   const rows = Array.from(
     { length: 50_000 },
@@ -18,9 +28,8 @@ test('50k seeded assets group inside the one-second cold-grid budget', () => {
       source: 'replica',
     }),
   );
-  const started = performance.now();
-  const sections = sectionPhotoAssets(rows);
-  expect(performance.now() - started).toBeLessThan(1_000);
+  const { value: sections, elapsedMs } = measureCpuMs(() => sectionPhotoAssets(rows));
+  expect(elapsedMs).toBeLessThan(1_000);
   expect(sections.reduce((total, section) => total + section.assets.length, 0)).toBe(50_000);
 });
 
@@ -45,11 +54,10 @@ test('merging 50k device copies against 50k backed-up remotes stays linear', () 
     });
   const device = make('device');
   const remote = make('replica');
-  const started = performance.now();
-  const merged = mergePhotoAssets(device, remote);
+  const { value: merged, elapsedMs } = measureCpuMs(() => mergePhotoAssets(device, remote));
   // The old indexOf(same) scan was O(n·m); at 50k that is ~2.5B comparisons.
   // A Map keeps every device copy folded onto its remote in well under budget.
-  expect(performance.now() - started).toBeLessThan(2_000);
+  expect(elapsedMs).toBeLessThan(2_000);
   expect(merged).toHaveLength(50_000);
   expect(merged.every((asset) => asset.source === 'merged')).toBe(true);
 });

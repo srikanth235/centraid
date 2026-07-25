@@ -30,7 +30,7 @@ import {
   type PreviewCodec,
 } from '@centraid/vault';
 import type { RuntimeLogger, VaultBridge, VaultWorkspace } from '@centraid/app-engine';
-import { openVaultPlane, VaultPlane } from './vault-plane.js';
+import { openVaultPlane, VaultPlane, type InstallScopeBlock } from './vault-plane.js';
 import { vaultContext } from './vault-context.js';
 
 /**
@@ -567,11 +567,11 @@ export class VaultRegistry {
   }
 
   /** The agent-plane mirror of `bridgeFor` for automation fires. */
-  agentBridgeFor(appId: string): VaultBridge {
+  agentBridgeFor(appId: string, block?: InstallScopeBlock): VaultBridge {
     return async (call) => {
       const plane = this.current();
       plane.enrollAutomationAgent(appId);
-      return plane.agentBridgeFor(appId)(call);
+      return plane.agentBridgeFor(appId, block)(call);
     };
   }
 

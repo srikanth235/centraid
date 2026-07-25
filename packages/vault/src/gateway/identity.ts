@@ -76,6 +76,7 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
       provAgentKind: 'ai_agent',
       partyId: row.party_id,
       mayAct: device.trust === 'full',
+      ...(cred.scopeClamp ? { scopeClamp: cred.scopeClamp } : {}),
     };
   }
   // Owner-direct: an enrolled device belonging to the vault owner.
