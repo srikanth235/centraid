@@ -143,8 +143,17 @@ export default function AtlasScreen({
         )
       ) : null}
 
+      {/* The Map reads the CENSUS for its hierarchy and its row counts — the
+          same payload Kinds already fetched — and treats the graph as an
+          enhancement (curated names + FK neighbours). A graph that never lands
+          costs the neighbour list, never the map. */}
       {tab === 'relations' ? (
-        <AtlasRelationsTab graph={graph} fetchSampleRows={fetchSampleRows} />
+        <AtlasRelationsTab
+          stats={stats}
+          graph={graph}
+          fetchSampleRows={fetchSampleRows}
+          onOpenBrowse={openBrowse}
+        />
       ) : null}
       {tab === 'browse' ? <AtlasBrowseTab initialTable={browseTable} /> : null}
     </div>
