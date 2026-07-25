@@ -143,11 +143,13 @@ test('8.5 — toggling the lifecycle menu posts set-enabled; a failed toggle toa
     // state, and the toast is asserted on the path that actually raises one.
     await page.getByTestId('automation-menu-trigger').click();
     await page.getByTestId('automation-menu-toggle').click();
-    expect(
-      gateway.calls.some(
-        (c) => c.method === 'POST' && c.pathname === '/centraid/_automations/set-enabled',
-      ),
-    ).toBe(true);
+    await expect
+      .poll(() =>
+        gateway.calls.some(
+          (c) => c.method === 'POST' && c.pathname === '/centraid/_automations/set-enabled',
+        ),
+      )
+      .toBe(true);
 
     // Fault-inject the failure path — the one that does toast.
     gateway.state.setEnabledStatus = 500;
