@@ -39,8 +39,6 @@ import {
   makeJournalDbProvider,
   type Item,
   type Turn,
-  type AutomationTriggerKind,
-  type AutomationTriggerOrigin,
   type AutomationTurnStreamEvent,
   type TurnStreamEvent,
 } from '@centraid/app-engine';

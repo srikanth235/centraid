@@ -18,8 +18,13 @@ import {
   type Credential,
   type Gateway as VaultGateway,
   type RefCard,
+  type VaultDb,
 } from '@centraid/vault';
 import type { RuntimeLogger } from '@centraid/app-engine';
+import {
+  AUTOMATION_ANCHOR_ENTITY,
+  resolveAutomationAnchors,
+} from '../lifecycle/automation-anchor-scopes.js';
 
 /** What the shell's entity picker asks for. */
 export interface PickerRequest {
@@ -34,6 +39,68 @@ export interface PickerRequest {
 /** One pickable entity: its card plus the FTS snippet when a term matched. */
 export interface PickerHit extends RefCard {
   snippet?: string;
+}
+
+/** A live, text-resolvable core_link_anchor exposed to the owner editor. */
+export interface AnchorPickerHit {
+  type: typeof AUTOMATION_ANCHOR_ENTITY;
+  id: string;
+  status: 'live';
+  title: string;
+  subtitle: string;
+  thumbnail_content_id: null;
+  sourceType: string;
+  sourceId: string;
+  sourceField: string;
+}
+
+/** Search live anchors by their exact text quote, newest first. */
+export function pickAnchors(
+  db: VaultDb,
+  logger: RuntimeLogger,
+  request: Pick<PickerRequest, 'term' | 'limit'>,
+): { anchors: AnchorPickerHit[] } {
+  const term = request.term?.trim() ?? '';
+  const limit = Math.min(Math.max(request.limit ?? 8, 1), 25);
+  const rows = db.vault
+    .prepare(
+      `SELECT a.anchor_id
+         FROM core_link_anchor a
+         JOIN core_link l ON l.link_id = a.link_id
+        WHERE l.valid_to IS NULL
+          AND (? = '' OR instr(lower(json_extract(a.selector_json, '$.exact')), lower(?)) > 0)
+        ORDER BY a.created_at DESC
+        LIMIT ?`,
+    )
+    .all(term, term, limit) as { anchor_id: string }[];
+  const anchors: AnchorPickerHit[] = [];
+  for (const row of rows) {
+    try {
+      const resolved = resolveAutomationAnchors(
+        db,
+        `@[${AUTOMATION_ANCHOR_ENTITY}/${row.anchor_id}]`,
+      )[0];
+      if (!resolved) continue;
+      anchors.push({
+        type: AUTOMATION_ANCHOR_ENTITY,
+        id: resolved.anchorId,
+        status: 'live',
+        title: resolved.selector.exact,
+        subtitle: `${resolved.sourceType} · ${resolved.sourceField} · anchored span`,
+        thumbnail_content_id: null,
+        sourceType: resolved.sourceType,
+        sourceId: resolved.sourceId,
+        sourceField: resolved.sourceField,
+      });
+    } catch (error) {
+      logger.warn(
+        `vault plane: anchor picker skipped ${row.anchor_id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  return { anchors };
 }
 
 /**

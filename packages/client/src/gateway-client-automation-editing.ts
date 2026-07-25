@@ -58,7 +58,13 @@ export async function createAutomation(input: {
   vault?: {
     purpose: string;
     why?: string;
-    scopes: Array<{ schema: string; table?: string; verbs: string }>;
+    scopes: Array<{
+      schema: string;
+      table?: string;
+      verbs: string;
+      rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
+      fieldMask?: string[];
+    }>;
   };
   /** Soft credential bindings from the editor connectors picker. */
   connections?: CentraidConnectionBinding[];
@@ -109,7 +115,13 @@ export async function updateAutomation(input: {
   vault?: {
     purpose: string;
     why?: string;
-    scopes: Array<{ schema: string; table?: string; verbs: string }>;
+    scopes: Array<{
+      schema: string;
+      table?: string;
+      verbs: string;
+      rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
+      fieldMask?: string[];
+    }>;
   };
   connections?: CentraidConnectionBinding[];
   connector?: CentraidConnectorSpec | null;

@@ -7,7 +7,11 @@ import {
   type RunnerKind,
   type TurnStreamEvent,
 } from '@centraid/app-engine';
-import { validateManifest, type Manifest } from '@centraid/automation';
+import { validateManifest, type Manifest, type ManifestVaultScope } from '@centraid/automation';
+import {
+  AUTOMATION_ANCHOR_ENTITY,
+  type ResolvedAutomationAnchor,
+} from './automation-anchor-scopes.js';
 
 export interface HeadlessCompileOptions {
   runner: ConversationRunner;
@@ -24,13 +28,23 @@ export interface HeadlessCompileOptions {
   runnerKind?: RunnerKind;
   /** Explicit manifest/prefs-resolved model for this compile. */
   model?: string;
+  /** Anchor tokens resolved against the addressed vault before the model runs. */
+  anchors?: readonly ResolvedAutomationAnchor[];
+  /** Fail-closed anchor resolution error, recorded as this compile turn. */
+  preflightError?: string;
   onSuccess: () => Promise<void>;
   onFailure?: (error: string) => Promise<void> | void;
   runId?: string;
 }
 
-export const HEADLESS_COMPILE_WORK_ORDER = (instructions: string): string => {
-  const entities = Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g));
+export const HEADLESS_COMPILE_WORK_ORDER = (
+  instructions: string,
+  anchors: readonly ResolvedAutomationAnchor[] = [],
+): string => {
+  const anchorTokens = new Set(anchors.map((anchor) => anchor.token));
+  const entities = Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g)).filter(
+    (match) => !anchorTokens.has(match[0]) && match[1] !== AUTOMATION_ANCHOR_ENTITY,
+  );
   return [
     'Compile this automation headlessly. This is a work order, not a conversation.',
     'Update automation.json only when derived requirements or vault scopes need to change.',
@@ -42,6 +56,16 @@ export const HEADLESS_COMPILE_WORK_ORDER = (instructions: string): string => {
     '',
     'Instructions:',
     instructions,
+    ...(anchors.length > 0
+      ? [
+          '',
+          'Trusted anchor resolutions (use only these resolved source rows and fields; never broaden their declared scopes):',
+          ...anchors.map(
+            (anchor) =>
+              `- ${anchor.token} => ${anchor.sourceType}/${anchor.sourceId} field ${anchor.sourceField}, exact span ${JSON.stringify(anchor.selector.exact)}, linked to ${anchor.targetType}/${anchor.targetId}; read only through the manifest rowFilter + fieldMask supplied by the gateway`,
+          ),
+        ]
+      : []),
     ...(entities.length > 0
       ? [
           '',
@@ -59,20 +83,27 @@ export const HEADLESS_COMPILE_WORK_ORDER = (instructions: string): string => {
 /** Apply gateway-owned lifecycle/provenance after the agent has written its draft. */
 export function finalizeCompiledManifest(
   manifest: Manifest,
-  options: { enabledBeforeCompile: boolean; enableOnSuccess: boolean; compiledAt?: Date },
+  options: {
+    enabledBeforeCompile: boolean;
+    enableOnSuccess: boolean;
+    compiledAt?: Date;
+    anchoredScopes?: readonly ManifestVaultScope[];
+  },
 ): Manifest {
-  const taggedScopes = Array.from(
+  const taggedScopes: ManifestVaultScope[] = Array.from(
     manifest.prompt.matchAll(/@\[([^/.\]]+)\.([^/\]]+)\/[^\]]+\]/g),
     (match) => ({ schema: match[1]!, table: match[2]!, verbs: 'read' as const }),
-  );
+  ).filter((scope) => !(scope.schema === 'core' && scope.table === 'link_anchor'));
   const scopes = [...(manifest.vault?.scopes ?? [])];
-  for (const scope of taggedScopes) {
+  for (const scope of [...taggedScopes, ...(options.anchoredScopes ?? [])]) {
     if (
       !scopes.some(
         (existing) =>
           existing.schema === scope.schema &&
           existing.table === scope.table &&
-          existing.verbs === scope.verbs,
+          existing.verbs === scope.verbs &&
+          JSON.stringify(existing.rowFilter ?? null) === JSON.stringify(scope.rowFilter ?? null) &&
+          JSON.stringify(existing.fieldMask ?? null) === JSON.stringify(scope.fieldMask ?? null),
       )
     ) {
       scopes.push(scope);
@@ -107,7 +138,7 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
     opts.automationName,
   );
   const startedAt = Date.now();
-  const message = HEADLESS_COMPILE_WORK_ORDER(opts.instructions);
+  const message = HEADLESS_COMPILE_WORK_ORDER(opts.instructions, opts.anchors);
   store.insertTurn({
     turnId: runId,
     conversationId,
@@ -128,6 +159,7 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
   };
 
   try {
+    if (opts.preflightError) throw new Error(opts.preflightError);
     // The injected unified gateway runner is intrinsically headless: its
     // Claude adapter pins bypassPermissions and its Codex adapter pins
     // approvalPolicy=never + workspace-write. There is deliberately no

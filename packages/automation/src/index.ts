@@ -37,6 +37,7 @@ export {
   type Manifest,
   type ManifestRequires,
   type ManifestVault,
+  type ManifestVaultFilterClause,
   type ManifestVaultScope,
   type ConnectorSpec,
   type ConnectionBinding,

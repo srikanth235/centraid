@@ -14,6 +14,7 @@ import {
   runAutomationNow,
   setAutomationEnabled,
   listVaultEntityTypes,
+  searchVaultAnchors,
   searchVaultEntities,
   updateAutomation,
 } from '../../../gateway-client.js';
@@ -302,9 +303,10 @@ export default function AutomationEditorRoute({
           }
         }}
         onSearchEntities={async (term) => {
-          // Two kinds of tag: canonical entity TYPES (the domain model, e.g.
-          // `core.event` — grant read scope on the kind) and specific
-          // INSTANCES (a row found by full-text search). Types come first.
+          // Anchor-grade references come first: the opaque token resolves
+          // through core_link_anchor and compiles to a row + field mask.
+          // Legacy type/instance tags remain available for deliberately
+          // broad queries and non-anchored rows.
           if (entityTypeCache === null) {
             entityTypeCache = await listVaultEntityTypes().catch(() => []);
           }
@@ -313,8 +315,11 @@ export default function AutomationEditorRoute({
             .filter((name) => name.toLowerCase().includes(q))
             .slice(0, 6)
             .map((name) => ({ id: '*', subtitle: 'Domain model', title: name, type: name }));
-          const instanceHits = await searchVaultEntities(term).catch(() => []);
-          return [...typeHits, ...instanceHits];
+          const [anchorHits, instanceHits] = await Promise.all([
+            searchVaultAnchors(term).catch(() => []),
+            searchVaultEntities(term).catch(() => []),
+          ]);
+          return [...anchorHits, ...typeHits, ...instanceHits];
         }}
         loadEntityTypes={async () => {
           // Same cached gateway read the @-mention type search uses — the

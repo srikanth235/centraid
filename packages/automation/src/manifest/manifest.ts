@@ -65,15 +65,37 @@ export interface CostEstimate {
   readonly tokensPerFire: number;
 }
 
+/** One consent row predicate carried from a manifest into a vault grant. */
+export interface ManifestVaultFilterClause {
+  readonly column: string;
+  readonly op:
+    | 'eq'
+    | 'ne'
+    | 'lt'
+    | 'lte'
+    | 'gt'
+    | 'gte'
+    | 'in'
+    | 'is-null'
+    | 'not-null'
+    | 'within-days'
+    | 'within-next-days';
+  readonly value?: unknown;
+}
+
 /**
  * One requested vault scope — the same grammar an app's `app.json` vault
  * block uses. `schema` alone covers the whole domain; `table` narrows to a
- * single entity or command name.
+ * single entity or command name. `rowFilter` and `fieldMask` are the
+ * minimization boundary for anchored automation references: the compiler
+ * derives them from the trusted `core_link_anchor`, never from token text.
  */
 export interface ManifestVaultScope {
   readonly schema: string;
   readonly table?: string;
   readonly verbs: 'read' | 'read+act' | 'act' | 'reveal';
+  readonly rowFilter?: readonly ManifestVaultFilterClause[];
+  readonly fieldMask?: readonly string[];
 }
 
 /**
@@ -782,6 +804,19 @@ function validateConnectionBindings(value: unknown): readonly ConnectionBinding[
 }
 
 const VAULT_VERBS = new Set(['read', 'read+act', 'act', 'reveal']);
+const VAULT_FILTER_OPS = new Set([
+  'eq',
+  'ne',
+  'lt',
+  'lte',
+  'gt',
+  'gte',
+  'in',
+  'is-null',
+  'not-null',
+  'within-days',
+  'within-next-days',
+]);
 
 function validateVault(raw: unknown): ManifestVault | undefined {
   if (raw === undefined) return undefined;
@@ -820,10 +855,73 @@ function validateVault(raw: unknown): ManifestVault | undefined {
     }
     let table: string | undefined;
     if (s.table !== undefined) table = requireString(s.table, `${field}.table`);
+    let rowFilter: ManifestVaultFilterClause[] | undefined;
+    if (s.rowFilter !== undefined) {
+      if (!Array.isArray(s.rowFilter) || s.rowFilter.length === 0) {
+        throw new ManifestError(
+          'invalid_field',
+          `manifest.${field}.rowFilter must be a non-empty array`,
+          `${field}.rowFilter`,
+        );
+      }
+      rowFilter = s.rowFilter.map((rawClause, clauseIndex) => {
+        const clauseField = `${field}.rowFilter[${clauseIndex}]`;
+        if (rawClause === null || typeof rawClause !== 'object' || Array.isArray(rawClause)) {
+          throw new ManifestError(
+            'invalid_field',
+            `manifest.${clauseField} must be an object`,
+            clauseField,
+          );
+        }
+        const clause = rawClause as Record<string, unknown>;
+        const column = requireString(clause.column, `${clauseField}.column`);
+        if (typeof clause.op !== 'string' || !VAULT_FILTER_OPS.has(clause.op)) {
+          throw new ManifestError(
+            'invalid_field',
+            `manifest.${clauseField}.op is not a supported vault filter operator`,
+            `${clauseField}.op`,
+          );
+        }
+        return {
+          column,
+          op: clause.op as ManifestVaultFilterClause['op'],
+          ...(Object.hasOwn(clause, 'value') ? { value: clause.value } : {}),
+        };
+      });
+    }
+    let fieldMask: string[] | undefined;
+    if (s.fieldMask !== undefined) {
+      if (!Array.isArray(s.fieldMask) || s.fieldMask.length === 0) {
+        throw new ManifestError(
+          'invalid_field',
+          `manifest.${field}.fieldMask must be a non-empty array`,
+          `${field}.fieldMask`,
+        );
+      }
+      fieldMask = s.fieldMask.map((value, maskIndex) =>
+        requireString(value, `${field}.fieldMask[${maskIndex}]`),
+      );
+      if (new Set(fieldMask).size !== fieldMask.length) {
+        throw new ManifestError(
+          'invalid_field',
+          `manifest.${field}.fieldMask must not contain duplicates`,
+          `${field}.fieldMask`,
+        );
+      }
+    }
+    if ((rowFilter || fieldMask) && table === undefined) {
+      throw new ManifestError(
+        'invalid_field',
+        `manifest.${field}.table is required for rowFilter or fieldMask`,
+        `${field}.table`,
+      );
+    }
     return {
       schema,
       ...(table !== undefined ? { table } : {}),
       verbs: s.verbs as ManifestVaultScope['verbs'],
+      ...(rowFilter ? { rowFilter } : {}),
+      ...(fieldMask ? { fieldMask } : {}),
     } satisfies ManifestVaultScope;
   });
   return { purpose, ...(why !== undefined ? { why } : {}), scopes };

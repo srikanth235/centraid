@@ -57,7 +57,13 @@ interface ManifestConnectorExtra {
   vault?: {
     purpose: string;
     why?: string;
-    scopes: readonly { schema: string; table?: string; verbs: string }[];
+    scopes: readonly {
+      schema: string;
+      table?: string;
+      verbs: string;
+      rowFilter?: readonly { column: string; op: string; value?: unknown }[];
+      fieldMask?: readonly string[];
+    }[];
   };
 }
 
@@ -65,8 +71,20 @@ interface ManifestConnectorExtra {
  *  the schema[.table] + verbs convention `approvalsData.ts`'s
  *  `scopeSummary`/`VaultScreen.tsx`'s `scopeLabel` already use for the same
  *  `{schema, table?, verbs}` shape elsewhere in the app. */
-function vaultScopeLabel(s: { schema: string; table?: string; verbs: string }): string {
-  return `${s.schema}${s.table ? `.${s.table}` : ''} ${s.verbs}`;
+function vaultScopeLabel(s: {
+  schema: string;
+  table?: string;
+  verbs: string;
+  rowFilter?: readonly unknown[];
+  fieldMask?: readonly string[];
+}): string {
+  const extent = [
+    s.rowFilter ? `${s.rowFilter.length} row rule` : '',
+    s.fieldMask ? `${s.fieldMask.length} fields` : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
+  return `${s.schema}${s.table ? `.${s.table}` : ''} ${s.verbs}${extent ? ` · ${extent}` : ''}`;
 }
 
 function deriveConnectors(row: CentraidAutomationRow): AuEditorConnectorsDTO {

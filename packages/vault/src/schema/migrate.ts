@@ -115,10 +115,44 @@ export function repairSyncCredentialOauthMode(db: DatabaseSync): void {
   );
 }
 
+// COMPAT(anchor-scope-memory-v0): added 2026-07-25, drop when the supported vault floor postdates #541.
+/** Preserve narrow revocation memory in dev vaults that already stamped v0. */
+export function repairConsentScopeTombstoneShape(db: DatabaseSync): void {
+  const table = db
+    .prepare(
+      `SELECT 1 AS present FROM sqlite_master
+        WHERE type = 'table' AND name = 'consent_scope_tombstone'`,
+    )
+    .get();
+  if (!table) return;
+  const columns = new Set(
+    (
+      db.prepare(`PRAGMA table_info('consent_scope_tombstone')`).all() as {
+        name: string;
+      }[]
+    ).map((column) => column.name),
+  );
+  if (!columns.has('row_filter_json')) {
+    db.exec(
+      `ALTER TABLE consent_scope_tombstone
+         ADD COLUMN row_filter_json TEXT
+         CHECK (row_filter_json IS NULL OR json_valid(row_filter_json))`,
+    );
+  }
+  if (!columns.has('field_mask_json')) {
+    db.exec(
+      `ALTER TABLE consent_scope_tombstone
+         ADD COLUMN field_mask_json TEXT
+         CHECK (field_mask_json IS NULL OR json_valid(field_mask_json))`,
+    );
+  }
+}
+
 /** Apply the vault schema and its replay-safe compatibility repairs together. */
 export function migrateVault(db: DatabaseSync): void {
   migrate(db, VAULT_MIGRATIONS);
   repairSyncCredentialOauthMode(db);
+  repairConsentScopeTombstoneShape(db);
 }
 
 function currentVersion(db: DatabaseSync): number {

@@ -10,13 +10,16 @@
 //     top-up must not be steerable by the actor it contains.
 
 import type { VaultDb } from './db.js';
+import type { FilterClause } from './gateway/types.js';
 import { nowIso, uuidv7 } from './ids.js';
 
-/** One scope triple as the memory tables store it. */
+/** One scope extent as the consent-memory tables store it. */
 export interface ScopeTriple {
   schema: string;
   table?: string | undefined;
   verbs: 'read' | 'read+act' | 'act' | 'reveal';
+  rowFilter?: FilterClause[];
+  fieldMask?: string[];
 }
 
 /** The grantee key mirrors consent_access_grant's two planes. */
@@ -37,8 +40,38 @@ export interface ScopeRequestSummary {
   requestedAt: string;
 }
 
-const tripleKey = (s: { schema: string; table?: string | null; verbs: string }): string =>
-  `${s.schema}|${s.table ?? ''}|${s.verbs}`;
+const tripleKey = (s: {
+  schema: string;
+  table?: string | null;
+  verbs: string;
+  rowFilter?: readonly FilterClause[] | null;
+  fieldMask?: readonly string[] | null;
+}): string =>
+  `${s.schema}|${s.table ?? ''}|${s.verbs}|${JSON.stringify(s.rowFilter ?? null)}|${JSON.stringify(
+    s.fieldMask ?? null,
+  )}`;
+
+function scopeCovers(existing: ScopeTriple, requested: ScopeTriple): boolean {
+  if (
+    existing.schema !== requested.schema ||
+    existing.verbs !== requested.verbs ||
+    (existing.table !== undefined && existing.table !== requested.table)
+  ) {
+    return false;
+  }
+  if (
+    existing.rowFilter !== undefined &&
+    JSON.stringify(existing.rowFilter) !== JSON.stringify(requested.rowFilter)
+  ) {
+    return false;
+  }
+  if (existing.fieldMask !== undefined) {
+    if (requested.fieldMask === undefined) return false;
+    const allowed = new Set(existing.fieldMask);
+    if (!requested.fieldMask.every((field) => allowed.has(field))) return false;
+  }
+  return true;
+}
 
 function granteeClause(grantee: GranteeKey): { where: string; param: string } {
   if (grantee.appId) return { where: 'app_id = ?', param: grantee.appId };
@@ -52,13 +85,14 @@ function granteeClause(grantee: GranteeKey): { where: string; param: string } {
 export function writeScopeTombstones(
   db: VaultDb,
   grantee: GranteeKey,
-  scopes: readonly { schema: string; table?: string | null; verbs: string }[],
+  scopes: readonly ScopeTriple[],
 ): number {
   const existing = new Set(listScopeTombstones(db, grantee).map(tripleKey));
   const insert = db.vault.prepare(
     `INSERT INTO consent_scope_tombstone
-       (tombstone_id, app_id, grantee_party_id, schema_name, table_name, verbs, revoked_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       (tombstone_id, app_id, grantee_party_id, schema_name, table_name, verbs,
+        row_filter_json, field_mask_json, revoked_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const now = nowIso();
   let written = 0;
@@ -72,6 +106,8 @@ export function writeScopeTombstones(
       scope.schema,
       scope.table ?? null,
       scope.verbs,
+      scope.rowFilter ? JSON.stringify(scope.rowFilter) : null,
+      scope.fieldMask ? JSON.stringify(scope.fieldMask) : null,
       now,
     );
     written += 1;
@@ -82,12 +118,23 @@ export function writeScopeTombstones(
 export function listScopeTombstones(db: VaultDb, grantee: GranteeKey): ScopeTriple[] {
   const { where, param } = granteeClause(grantee);
   const rows = db.vault
-    .prepare(`SELECT schema_name, table_name, verbs FROM consent_scope_tombstone WHERE ${where}`)
-    .all(param) as { schema_name: string; table_name: string | null; verbs: string }[];
+    .prepare(
+      `SELECT schema_name, table_name, verbs, row_filter_json, field_mask_json
+         FROM consent_scope_tombstone WHERE ${where}`,
+    )
+    .all(param) as {
+    schema_name: string;
+    table_name: string | null;
+    verbs: string;
+    row_filter_json: string | null;
+    field_mask_json: string | null;
+  }[];
   return rows.map((r) => ({
     schema: r.schema_name,
     ...(r.table_name !== null ? { table: r.table_name } : {}),
     verbs: r.verbs as ScopeTriple['verbs'],
+    ...(r.row_filter_json ? { rowFilter: JSON.parse(r.row_filter_json) as FilterClause[] } : {}),
+    ...(r.field_mask_json ? { fieldMask: JSON.parse(r.field_mask_json) as string[] } : {}),
   }));
 }
 
@@ -95,14 +142,35 @@ export function listScopeTombstones(db: VaultDb, grantee: GranteeKey): ScopeTrip
 export function clearScopeTombstones(
   db: VaultDb,
   grantee: GranteeKey,
-  scopes: readonly { schema: string; table?: string | null; verbs: string }[],
+  scopes: readonly ScopeTriple[],
 ): void {
   const { where, param } = granteeClause(grantee);
-  const del = db.vault.prepare(
-    `DELETE FROM consent_scope_tombstone
-      WHERE ${where} AND schema_name = ? AND coalesce(table_name, '') = ? AND verbs = ?`,
-  );
-  for (const scope of scopes) del.run(param, scope.schema, scope.table ?? '', scope.verbs);
+  const rows = db.vault
+    .prepare(
+      `SELECT tombstone_id, schema_name, table_name, verbs, row_filter_json, field_mask_json
+         FROM consent_scope_tombstone WHERE ${where}`,
+    )
+    .all(param) as {
+    tombstone_id: string;
+    schema_name: string;
+    table_name: string | null;
+    verbs: ScopeTriple['verbs'];
+    row_filter_json: string | null;
+    field_mask_json: string | null;
+  }[];
+  const del = db.vault.prepare('DELETE FROM consent_scope_tombstone WHERE tombstone_id = ?');
+  for (const row of rows) {
+    const tombstone: ScopeTriple = {
+      schema: row.schema_name,
+      ...(row.table_name !== null ? { table: row.table_name } : {}),
+      verbs: row.verbs,
+      ...(row.row_filter_json
+        ? { rowFilter: JSON.parse(row.row_filter_json) as FilterClause[] }
+        : {}),
+      ...(row.field_mask_json ? { fieldMask: JSON.parse(row.field_mask_json) as string[] } : {}),
+    };
+    if (scopes.some((scope) => scopeCovers(tombstone, scope))) del.run(row.tombstone_id);
+  }
 }
 
 /** Uninstall wipes the memory: a reinstall is a fresh consent. */

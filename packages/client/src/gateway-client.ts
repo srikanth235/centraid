@@ -151,6 +151,8 @@ export interface TemplateVaultScope {
   schema: string;
   table?: string;
   verbs: string;
+  rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
+  fieldMask?: string[];
 }
 
 /** A template's requested vault access, for the Discover install/consent sheet

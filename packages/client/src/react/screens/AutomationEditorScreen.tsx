@@ -1325,8 +1325,14 @@ export default function AutomationEditorScreen({
         <div className={styles.entityTokens} aria-label="Tagged data">
           {Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g), (match) => (
             <span key={match[0]} className={styles.entityToken}>
-              <code>@{match[1]}</code>
-              <span>{match[2] === '*' ? 'type' : match[2]}</span>
+              <code>@{match[1] === 'core.link_anchor' ? 'anchor' : match[1]}</code>
+              <span>
+                {match[1] === 'core.link_anchor'
+                  ? 'row · field · span'
+                  : match[2] === '*'
+                    ? 'type'
+                    : match[2]}
+              </span>
             </span>
           ))}
         </div>

@@ -58,7 +58,8 @@ function activeGrants(
         WHERE ${selector.column} = ?
           AND g.status = 'active'
           AND g.revoked_at IS NULL
-          AND (g.expires_at IS NULL OR g.expires_at > ?)`,
+          AND (g.expires_at IS NULL OR g.expires_at > ?)
+        ORDER BY g.granted_at DESC, g.grant_id DESC`,
     )
     .all(selector.value, evaluatedAt) as unknown as GrantRow[];
   return rows.filter((g) => g.purpose_notation === purpose);

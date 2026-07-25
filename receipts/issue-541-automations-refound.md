@@ -14,7 +14,7 @@ Issue: https://github.com/srikanth235/centraid/issues/541
 - [x] Standing replies rewrite instructions and enter the existing compile seam
 - [x] Cron, vault data/condition, webhook, and provider events share one durable bounded cursor engine
 - [x] Gmail new-message and GitHub pull-request/issue sources use exact bound accounts without exposing credentials
-- [ ] Anchored references and compiler-derived field/row-grain scopes are in progress
+- [x] Anchored references resolve through live `core_link_anchor` rows and compile to enforced field/row-grain scopes
 
 ## What changed
 
@@ -88,14 +88,26 @@ First-party provider events use the same cursor and ingress machinery:
 - The automation editor only offers event triggers when an exact Gmail/GitHub pull connection is bound, displays the selected account, and persists the provider event, repository filter, and cadence.
 - Lifecycle routes validate and round-trip the same event shape rather than maintaining a route-local trigger dialect.
 
+Anchored references are row/field/span-grade instead of whole-table hints:
+
+- The automation editor searches live `core_link_anchor` rows before legacy entity/type matches and writes opaque `@[core.link_anchor/<anchor_id>]` tokens; chips label their row/field/span extent.
+- `automation-anchor-scopes.ts` resolves the opaque id through a live `core_link`, re-matches the W3C-style text selector against the source row, identifies the exact source field (including decoded canonical content), and fails closed when the link, row, or span is stale.
+- Same-table anchors compile to one bounded row union and the union of referenced fields, while ordinary unanchored entity tokens retain their deliberately broader behavior.
+- `headless-automation-compile.ts` gives the model only trusted anchor facts and gateway-derived scopes; a resolution failure is recorded as a failed compile turn before the runner starts.
+- Automation manifest validation, install-grant top-up, widening requests, active-grant summaries, revocation tombstones, owner approval routes, and client consent views now preserve `rowFilter` and `fieldMask`.
+- The existing vault consent engine enforces the derived scope: tests prove only the anchored row and selected fields are returned, while other rows and unselected fields remain hidden.
+- `ARCHITECTURE.md` records the anchored token grammar, fail-closed compiler boundary, and same-table scope aggregation contract.
+
 ## Out of scope
 
-- None for issue #541. Wave 10 is still in progress and will be recorded here before the PR is opened.
+- None.
 
 ## Decisions
 
 - The account chooser stays inside the existing Connectors popover so account identity is visible at the point of binding without adding another editor dialog.
 - Preserve both immutable #498 narratives and waive only the later follow-up from the one-receipt index; this repairs a pre-existing governance contradiction without deleting history.
+- Anchor tokens carry only an opaque `core.link_anchor` id. Source type, row key, field mask, and exact span are always recovered from the addressed vault so authored instruction text cannot widen its own consent.
+- Multiple anchors on one table use a bounded `in` row filter plus a field union because vault filter clauses are conjunctive; the newest combined grant supersedes an older narrower grant during consent evaluation.
 
 ## Verification
 
@@ -121,6 +133,15 @@ bun run --filter @centraid/automation test -- src/fire/cursor-engine.test.ts src
 bun run --filter @centraid/client test -- src/react/screens/AutomationEditorTriggers.test.tsx
 bun run --filter @centraid/gateway test -- src/serve/automation-event-sources.test.ts src/serve/connection-broker.test.ts src/routes/lifecycle-automation-routes.test.ts
 bun run --filter @centraid/gateway test -- src/lifecycle/webhook-route-over-http.test.ts
+bun run --filter @centraid/automation test -- src/manifest/manifest.test.ts src/manifest/manifest-vault.test.ts
+bun run --filter @centraid/vault test -- src/host.test.ts src/schema/migrate.test.ts src/gateway/duties.test.ts
+bun run --filter @centraid/gateway test -- src/lifecycle/automation-anchor-scopes.test.ts src/lifecycle/headless-automation-compile.test.ts
+bun run --filter @centraid/gateway test -- src/serve/vault-plane.test.ts
+bun run --filter @centraid/client test -- src/react/screens/AutomationEditorScreen.test.tsx src/react/screens/AutomationEditorAnchorMention.test.tsx src/react/shell/routes/approvalsData.test.ts
+bun run --filter @centraid/automation typecheck
+bun run --filter @centraid/vault typecheck
+bun run --filter @centraid/gateway typecheck
+bun run --filter @centraid/client typecheck
 ```
 
 ## Audit
@@ -147,6 +168,8 @@ PASS — the final fresh-context Waves 1–2 auditor verified exact account bind
 | codex-019f9495-7c0-1784943378-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 4157 | 0 | 787200 | 592 | 4749 | 0.2161 | 1705093 | 0 | 57974784 | 165701 | feat(automations): stream native turn conversations (#541) -m governance: allow- |
 | codex-019f9495-7c0-1784947056-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 569461 | 0 | 35412992 | 88205 | 657666 | 11.6000 | 2274554 | 0 | 93387776 | 253906 | feat(automations): unify trigger cursors and provider events (#541) -m governanc |
 | codex-019f9495-7c0-1784947218-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 17426 | 0 | 1662208 | 2957 | 20383 | 0.5035 | 2291980 | 0 | 95049984 | 256863 | feat(automations): unify trigger cursors and provider events (#541) -m governanc |
+| codex-019f9495-7c0-1784949655-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 402429 | 0 | 25121280 | 54112 | 456541 | 8.0981 | 2694409 | 0 | 120171264 | 310975 | feat(automations): resolve anchored references narrowly (#541) -m governance: al |
+| codex-019f9495-7c0-1784949877-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 22803 | 0 | 2663168 | 4556 | 27359 | 0.7911 | 2717212 | 0 | 122834432 | 315531 | feat(automations): resolve anchored references narrowly (#541) -m governance: al |
 
 ## Steering
 

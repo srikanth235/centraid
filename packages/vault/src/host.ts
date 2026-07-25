@@ -13,7 +13,7 @@ import {
   type BootstrapVaultOptions,
 } from './bootstrap.js';
 import { nowIso } from './ids.js';
-import type { Risk } from './gateway/types.js';
+import type { FilterClause, Risk } from './gateway/types.js';
 
 export interface HostBootstrap extends BootstrapResult {
   /** true when this call created the vault; false when it recovered one. */
@@ -324,7 +324,13 @@ export interface GrantSummary {
   purposeConceptId: string;
   purpose: string | null;
   expiresAt: string | null;
-  scopes: { schema: string; table: string | null; verbs: string }[];
+  scopes: {
+    schema: string;
+    table: string | null;
+    verbs: string;
+    rowFilter?: FilterClause[];
+    fieldMask?: string[];
+  }[];
 }
 
 /** One query, two grantee planes: apps match on app_id, agents on their party. */
@@ -347,7 +353,8 @@ function grantSummariesBy(
     notation: string | null;
   }[];
   const scopeStmt = db.vault.prepare(
-    `SELECT schema_name, table_name, verbs FROM consent_grant_scope WHERE grant_id = ?`,
+    `SELECT schema_name, table_name, verbs, row_filter_json, field_mask_json
+       FROM consent_grant_scope WHERE grant_id = ?`,
   );
   return grants.map((g) => ({
     grantId: g.grant_id,
@@ -359,8 +366,16 @@ function grantSummariesBy(
         schema_name: string;
         table_name: string | null;
         verbs: string;
+        row_filter_json: string | null;
+        field_mask_json: string | null;
       }[]
-    ).map((s) => ({ schema: s.schema_name, table: s.table_name, verbs: s.verbs })),
+    ).map((s) => ({
+      schema: s.schema_name,
+      table: s.table_name,
+      verbs: s.verbs,
+      ...(s.row_filter_json ? { rowFilter: JSON.parse(s.row_filter_json) as FilterClause[] } : {}),
+      ...(s.field_mask_json ? { fieldMask: JSON.parse(s.field_mask_json) as string[] } : {}),
+    })),
   }));
 }
 

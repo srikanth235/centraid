@@ -69,6 +69,12 @@ export interface ManifestVaultScope {
   readonly schema: string;
   readonly table?: string;
   readonly verbs: 'read' | 'read+act' | 'act' | 'reveal';
+  readonly rowFilter?: readonly {
+    column: string;
+    op: string;
+    value?: unknown;
+  }[];
+  readonly fieldMask?: readonly string[];
 }
 
 /** The automation's requested vault access (`ManifestVault`) — see `manifestHasVault`'s note on why this reads structurally. */

@@ -13,6 +13,26 @@ import {
   runHeadlessAutomationCompile,
 } from './headless-automation-compile.js';
 import { validateManifest } from '@centraid/automation';
+import type { ResolvedAutomationAnchor } from './automation-anchor-scopes.js';
+
+const ANCHOR: ResolvedAutomationAnchor = {
+  token: '@[core.link_anchor/anchor-1]',
+  anchorId: 'anchor-1',
+  linkId: 'link-1',
+  sourceType: 'schedule.task',
+  sourceId: 'task-1',
+  sourceField: 'title',
+  targetType: 'core.party',
+  targetId: 'party-1',
+  selector: { exact: 'quarterly report', prefix: '', suffix: '', start: 8 },
+  scope: {
+    schema: 'schedule',
+    table: 'task',
+    verbs: 'read',
+    rowFilter: [{ column: 'task_id', op: 'eq', value: 'task-1' }],
+    fieldMask: ['task_id', 'title'],
+  },
+};
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -21,7 +41,7 @@ afterEach(async () => {
 
 async function harness(
   runner: ConversationRunner,
-  agent: { runnerKind?: 'claude-code'; model?: string } = {},
+  agent: { runnerKind?: 'claude-code'; model?: string; preflightError?: string } = {},
 ) {
   const dir = await tempDir('centraid-headless-compile-');
   dirs.push(dir);
@@ -104,6 +124,21 @@ describe('runHeadlessAutomationCompile', () => {
     store.close();
   });
 
+  it('records an anchor preflight failure without starting the runner', async () => {
+    const runner: ConversationRunner = { run: vi.fn() };
+    const { store, onSuccess, onFailure } = await harness(runner, {
+      preflightError: 'anchor anchor-1 is missing or no longer live',
+    });
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(onFailure).toHaveBeenCalledWith('anchor anchor-1 is missing or no longer live');
+    expect(store.getTurn('compile-1')).toMatchObject({
+      ok: false,
+      error: 'anchor anchor-1 is missing or no longer live',
+    });
+    store.close();
+  });
+
   it('frames the model turn as a work order and expands stable entity tokens', () => {
     const prompt = HEADLESS_COMPILE_WORK_ORDER('Notify @[core.event/e-1].');
     expect(prompt).toContain('work order, not a conversation');
@@ -111,6 +146,18 @@ describe('runHeadlessAutomationCompile', () => {
       "@[core.event/e-1] => await ctx.vault.resolve({ refs: [{ type: 'core.event', id: 'e-1' }]",
     );
     expect(prompt).toContain("generated.by = 'centraid-compiler'");
+  });
+
+  it('grounds anchor tokens in the trusted row, field, and exact span', () => {
+    const prompt = HEADLESS_COMPILE_WORK_ORDER('Notify about @[core.link_anchor/anchor-1].', [
+      ANCHOR,
+    ]);
+    expect(prompt).toContain('Trusted anchor resolutions');
+    expect(prompt).toContain(
+      '@[core.link_anchor/anchor-1] => schedule.task/task-1 field title, exact span "quarterly report"',
+    );
+    expect(prompt).toContain('never broaden their declared scopes');
+    expect(prompt).not.toContain('core.link_anchor entity kind');
   });
 
   it('instructs the compiler to pick data/condition triggers over cron polling', () => {
@@ -161,5 +208,23 @@ describe('finalizeCompiledManifest', () => {
         enableOnSuccess: true,
       }).enabled,
     ).toBe(true);
+  });
+
+  it('derives row/field scope from an anchored token without granting the anchor table', () => {
+    const anchored = validateManifest({
+      ...manifest(),
+      prompt: 'Notify about @[core.link_anchor/anchor-1].',
+    });
+    const compiled = finalizeCompiledManifest(anchored, {
+      enabledBeforeCompile: false,
+      enableOnSuccess: false,
+      anchoredScopes: [ANCHOR.scope],
+    });
+    expect(compiled.vault?.scopes).toEqual([ANCHOR.scope]);
+    expect(compiled.vault?.scopes).not.toContainEqual({
+      schema: 'core',
+      table: 'link_anchor',
+      verbs: 'read',
+    });
   });
 });

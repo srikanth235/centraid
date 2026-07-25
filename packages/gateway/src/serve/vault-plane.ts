@@ -127,7 +127,9 @@ import {
   type VaultWorkspace,
 } from '@centraid/app-engine';
 import {
+  pickAnchors,
   pickEntities,
+  type AnchorPickerHit,
   type AnchorSelector,
   type LinkInput,
   type PickerHit,
@@ -279,7 +281,13 @@ export interface GrantRequest {
 /** A manifest's declared vault block, as install-time consent (issue #306). */
 export interface InstallScopeBlock {
   purpose?: string;
-  scopes: readonly { schema: string; table?: string; verbs: ScopeSpec['verbs'] }[];
+  scopes: readonly {
+    schema: string;
+    table?: string;
+    verbs: ScopeSpec['verbs'];
+    rowFilter?: ScopeSpec['rowFilter'];
+    fieldMask?: ScopeSpec['fieldMask'];
+  }[];
 }
 
 /** One outbox item as the owner surface lists it (issue #306). */
@@ -339,26 +347,66 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
 }
 
 /**
- * Declared scopes not yet covered by any active grant — exact-triple diff.
- * Tombstoned triples (issue #308 A4) are the owner's standing "no": they are
+ * Declared scopes not yet covered by any active grant. A broad grant covers
+ * a narrower row/field request; a narrow grant never covers a broad request.
+ * Tombstoned scopes (issue #308 A4) are the owner's standing "no": they are
  * neither re-granted nor re-requested, only an explicit owner approval
  * (which clears the tombstone) brings one back.
  */
+function filtersEqual(
+  left: readonly { column: string; op: string; value?: unknown }[] | null | undefined,
+  right: readonly { column: string; op: string; value?: unknown }[] | null | undefined,
+): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
+}
+
+function scopeCovers(
+  existing: {
+    schema: string;
+    table?: string | null;
+    verbs: string;
+    rowFilter?: readonly { column: string; op: string; value?: unknown }[] | null;
+    fieldMask?: readonly string[] | null;
+  },
+  requested: InstallScopeBlock['scopes'][number],
+): boolean {
+  if (
+    existing.schema !== requested.schema ||
+    existing.verbs !== requested.verbs ||
+    (existing.table !== null && existing.table !== undefined && existing.table !== requested.table)
+  ) {
+    return false;
+  }
+  const existingRows = existing.rowFilter ?? null;
+  const requestedRows = requested.rowFilter ?? null;
+  if (existingRows !== null && !filtersEqual(existingRows, requestedRows)) return false;
+  const existingFields = existing.fieldMask ?? null;
+  const requestedFields = requested.fieldMask ?? null;
+  if (existingFields !== null) {
+    if (requestedFields === null) return false;
+    const allowed = new Set(existingFields);
+    if (!requestedFields.every((field) => allowed.has(field))) return false;
+  }
+  return true;
+}
+
 function missingScopes(
   grants: GrantSummary[],
   declared: InstallScopeBlock['scopes'],
   tombstoned: readonly ScopeTriple[] = [],
 ): ScopeSpec[] {
-  const key = (s: { schema: string; table?: string | null; verbs: string }): string =>
-    `${s.schema}|${s.table ?? ''}|${s.verbs}`;
-  const covered = new Set(grants.flatMap((g) => g.scopes.map(key)));
-  for (const t of tombstoned) covered.add(key(t));
   return declared
-    .filter((s) => !covered.has(key(s)))
+    .filter(
+      (scope) =>
+        !grants.some((grant) => grant.scopes.some((existing) => scopeCovers(existing, scope))) &&
+        !tombstoned.some((existing) => scopeCovers(existing, scope)),
+    )
     .map((s) => ({
       schema: s.schema,
       ...(s.table !== undefined ? { table: s.table } : {}),
       verbs: s.verbs,
+      ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
+      ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
     }));
 }
 
@@ -927,6 +975,8 @@ export class VaultPlane {
         schema: s.schema,
         ...(s.table !== undefined ? { table: s.table } : {}),
         verbs: s.verbs,
+        ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
+        ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
       })),
     });
     this.logger.info(
@@ -957,6 +1007,8 @@ export class VaultPlane {
           schema: s.schema,
           ...(s.table !== undefined ? { table: s.table } : {}),
           verbs: s.verbs,
+          ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
+          ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
         })),
       };
       if (request.plane === 'app') this.approveGrant(request.appId, grantRequest);
@@ -1019,6 +1071,13 @@ export class VaultPlane {
    */
   pickEntities(request: PickerRequest): { cards: PickerHit[] } {
     return pickEntities(this.gateway, this.ownerCredential, this.logger, request);
+  }
+
+  /** Live standoff anchors for anchor-grade automation @ references. */
+  pickAnchors(request: Pick<PickerRequest, 'term' | 'limit'>): {
+    anchors: AnchorPickerHit[];
+  } {
+    return pickAnchors(this.db, this.logger, request);
   }
 
   /**
@@ -1330,6 +1389,8 @@ export class VaultPlane {
       schema: string;
       table: string | null;
       verbs: string;
+      rowFilter?: ScopeSpec['rowFilter'];
+      fieldMask?: ScopeSpec['fieldMask'];
     }>;
     highlights: Array<{ command: string; schema: string; risk: string; confirm: boolean }>;
   } {
@@ -1338,12 +1399,21 @@ export class VaultPlane {
       schema: string;
       table: string | null;
       verbs: string;
+      rowFilter?: ScopeSpec['rowFilter'];
+      fieldMask?: ScopeSpec['fieldMask'];
     }> = [];
     const app = lookupAppByName(this.db, appId);
     if (app) {
       for (const grant of listActiveGrants(this.db, app.appId)) {
         for (const s of grant.scopes) {
-          scopes.push({ plane: 'app', schema: s.schema, table: s.table, verbs: s.verbs });
+          scopes.push({
+            plane: 'app',
+            schema: s.schema,
+            table: s.table,
+            verbs: s.verbs,
+            ...(s.rowFilter ? { rowFilter: s.rowFilter } : {}),
+            ...(s.fieldMask ? { fieldMask: s.fieldMask } : {}),
+          });
         }
       }
     }
@@ -1351,7 +1421,14 @@ export class VaultPlane {
     if (agent) {
       for (const grant of listActiveAgentGrants(this.db, agent.partyId)) {
         for (const s of grant.scopes) {
-          scopes.push({ plane: 'agent', schema: s.schema, table: s.table, verbs: s.verbs });
+          scopes.push({
+            plane: 'agent',
+            schema: s.schema,
+            table: s.table,
+            verbs: s.verbs,
+            ...(s.rowFilter ? { rowFilter: s.rowFilter } : {}),
+            ...(s.fieldMask ? { fieldMask: s.fieldMask } : {}),
+          });
         }
       }
     }

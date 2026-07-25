@@ -248,7 +248,7 @@ async function githubPoll(input: PollProviderEventSourceInput): Promise<Provider
       object(entry) ? githubPayload(object(entry)!, repo, input.trigger.event) : undefined,
     )
     .filter((event): event is NormalizedProviderEvent => event !== undefined)
-    .reverse();
+    .toReversed();
   return { events, cursor: { ...cursor, ...next } };
 }
 

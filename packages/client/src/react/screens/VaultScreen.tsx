@@ -12,7 +12,16 @@ import vault from '../styles/vault.module.css';
 import au from '../styles/automation.module.css';
 import appSettingsCss from '../styles/appSettings.module.css';
 
-const scopeLabel = (s: VaultScopeDTO): string => (s.table ? `${s.schema}.${s.table}` : s.schema);
+const scopeLabel = (s: VaultScopeDTO): string => {
+  const target = s.table ? `${s.schema}.${s.table}` : s.schema;
+  const extent = [
+    s.rowFilter ? `${s.rowFilter.length} row rule` : '',
+    s.fieldMask ? `${s.fieldMask.length} fields` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return extent ? `${target} · ${extent}` : target;
+};
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {
   return <div className={appSettingsCss.appSettingsNote}>{children}</div>;

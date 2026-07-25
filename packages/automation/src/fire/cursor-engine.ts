@@ -14,6 +14,7 @@ import type { Row } from '../scaffold/app.js';
 import { isDeniedTriggerCursorEntity, type Trigger } from '../manifest/manifest.js';
 import { floorMinute, readCronCursor } from './cron-cursor.js';
 import { cronMatches } from './cron-match.js';
+import { MemoryCursorStore } from './memory-cursor-store.js';
 
 export const DEFAULT_TRIGGER_CATCH_UP_CAP = 50;
 
@@ -98,39 +99,6 @@ interface CursorRegistration {
   ref: string;
   triggerIndex: number;
   trigger: Trigger;
-}
-
-class MemoryCursorStore implements CursorStore {
-  private readonly rows = new Map<string, AutomationTriggerCursor>();
-
-  getCursor(automationId: string, triggerIndex: number): AutomationTriggerCursor | undefined {
-    return this.rows.get(`${automationId}\u0000${triggerIndex}`);
-  }
-
-  putCursor(input: Parameters<CursorStore['putCursor']>[0]): void {
-    this.rows.set(`${input.automationId}\u0000${input.triggerIndex}`, {
-      automationId: input.automationId,
-      triggerIndex: input.triggerIndex,
-      sourceKind: input.sourceKind,
-      ...(input.positionJson !== undefined ? { positionJson: input.positionJson } : {}),
-      ...(input.windowFrom !== undefined ? { windowFrom: input.windowFrom } : {}),
-      ...(input.windowTo !== undefined ? { windowTo: input.windowTo } : {}),
-      skipped: input.skipped ?? 0,
-      ...(input.gapReason !== undefined ? { gapReason: input.gapReason } : {}),
-      updatedAt: input.updatedAt,
-    });
-  }
-
-  deleteCursorsNotIn(automationIds: readonly string[]): number {
-    const keep = new Set(automationIds);
-    let deleted = 0;
-    for (const [key, row] of this.rows) {
-      if (keep.has(row.automationId)) continue;
-      this.rows.delete(key);
-      deleted++;
-    }
-    return deleted;
-  }
 }
 
 export function isDeniedCursorEntity(entity: string): boolean {

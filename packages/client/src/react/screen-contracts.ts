@@ -164,6 +164,8 @@ export interface VaultScopeDTO {
   schema: string;
   table?: string | null;
   verbs: string;
+  rowFilter?: Array<{ column: string; op: string; value?: unknown }> | null;
+  fieldMask?: string[] | null;
 }
 export interface VaultGrantDTO {
   grantId: string;

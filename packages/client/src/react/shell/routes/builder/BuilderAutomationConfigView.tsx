@@ -433,6 +433,8 @@ export default function ConfigView({
           <span className={styles.tag} key={i}>
             {s.table ? `${s.schema}.${s.table}` : s.schema}
             <span className={styles.vaultVerb}>{s.verbs}</span>
+            {s.rowFilter ? <span>{s.rowFilter.length} row rule</span> : null}
+            {s.fieldMask ? <span>{s.fieldMask.length} fields</span> : null}
           </span>
         ))}
       </div>

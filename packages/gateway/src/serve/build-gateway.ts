@@ -91,6 +91,7 @@ import {
   readBlobStoreSettings,
   custodyStateCounts,
   jitterDelayMs,
+  type FilterClause,
   type PreviewCodec,
 } from '@centraid/vault';
 import { createImagePreviewCodec } from '../preview/codec.js';
@@ -154,6 +155,10 @@ import {
   finalizeCompiledManifest,
   runHeadlessAutomationCompile,
 } from '../lifecycle/headless-automation-compile.js';
+import {
+  resolveAutomationAnchors,
+  scopesForAutomationAnchors,
+} from '../lifecycle/automation-anchor-scopes.js';
 import { resolveAutomationAgentSelection } from '../lifecycle/automation-agent-selection.js';
 import { runInteractiveAutomationTurn } from '../lifecycle/interactive-automation-turn.js';
 import { rewriteAutomationInstructions } from '../lifecycle/rewrite-automation-instructions.js';
@@ -1801,6 +1806,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           if (!row) return;
           const agent = await resolveAutomationAgent(row.manifest.requires);
           const enabledBeforeCompile = row.enabled;
+          // Resolve core_link_anchor tokens before the model runs. The token
+          // contains only an opaque anchor id; row and field scopes come from
+          // the addressed vault's live link + selector.
+          const anchorResolution = (() => {
+            try {
+              const anchors = resolveAutomationAnchors(plane.db, row.manifest.prompt);
+              return { anchors, scopes: scopesForAutomationAnchors(anchors) };
+            } catch (error) {
+              return {
+                anchors: [],
+                scopes: [],
+                error: error instanceof Error ? error.message : String(error),
+              };
+            }
+          })();
           // Compiles are one-shot drafts. Reusing the interactive chat/edit
           // worktree lets a failed publish leave a rebase in progress, which
           // then poisons a later retry (and can conflict with UI edits).
@@ -1820,6 +1840,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             instructions: row.manifest.prompt,
             runnerKind: agent.runner,
             ...(agent.model ? { model: agent.model } : {}),
+            anchors: anchorResolution.anchors,
+            ...(anchorResolution.error ? { preflightError: anchorResolution.error } : {}),
             runId,
             onSuccess: async () => {
               const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
@@ -1833,6 +1855,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               const compiled = finalizeCompiledManifest(manifest, {
                 enabledBeforeCompile,
                 enableOnSuccess,
+                anchoredScopes: anchorResolution.scopes,
               });
               await fs.writeFile(manifestFile, `${JSON.stringify(compiled, null, 2)}\n`);
               await publishAndReconcile(lifecycleOpts, {
@@ -3295,16 +3318,81 @@ function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
   const block = raw as { purpose?: unknown; scopes?: unknown };
   if (!Array.isArray(block.scopes)) return undefined;
   const verbs = new Set(['read', 'read+act', 'act', 'reveal']);
+  const filterOps = new Set([
+    'eq',
+    'ne',
+    'lt',
+    'lte',
+    'gt',
+    'gte',
+    'in',
+    'is-null',
+    'not-null',
+    'within-days',
+    'within-next-days',
+  ]);
   const scopes = block.scopes.flatMap((s: unknown) => {
     if (s === null || typeof s !== 'object') return [];
-    const scope = s as { schema?: unknown; table?: unknown; verbs?: unknown };
+    const scope = s as {
+      schema?: unknown;
+      table?: unknown;
+      verbs?: unknown;
+      rowFilter?: unknown;
+      fieldMask?: unknown;
+    };
     if (typeof scope.schema !== 'string' || scope.schema === '') return [];
     if (typeof scope.verbs !== 'string' || !verbs.has(scope.verbs)) return [];
+    if (scope.table !== undefined && (typeof scope.table !== 'string' || scope.table === '')) {
+      return [];
+    }
+    if (
+      (scope.rowFilter !== undefined || scope.fieldMask !== undefined) &&
+      typeof scope.table !== 'string'
+    ) {
+      return [];
+    }
+    let rowFilter: FilterClause[] | undefined;
+    if (scope.rowFilter !== undefined) {
+      if (!Array.isArray(scope.rowFilter) || scope.rowFilter.length === 0) return [];
+      rowFilter = [];
+      for (const rawClause of scope.rowFilter) {
+        if (rawClause === null || typeof rawClause !== 'object' || Array.isArray(rawClause)) {
+          return [];
+        }
+        const clause = rawClause as Record<string, unknown>;
+        if (
+          typeof clause.column !== 'string' ||
+          clause.column === '' ||
+          typeof clause.op !== 'string' ||
+          !filterOps.has(clause.op)
+        ) {
+          return [];
+        }
+        rowFilter.push({
+          column: clause.column,
+          op: clause.op as FilterClause['op'],
+          ...(Object.hasOwn(clause, 'value') ? { value: clause.value } : {}),
+        });
+      }
+    }
+    let fieldMask: string[] | undefined;
+    if (scope.fieldMask !== undefined) {
+      if (
+        !Array.isArray(scope.fieldMask) ||
+        scope.fieldMask.length === 0 ||
+        !scope.fieldMask.every((field) => typeof field === 'string' && field !== '')
+      ) {
+        return [];
+      }
+      fieldMask = [...scope.fieldMask] as string[];
+    }
     return [
       {
         schema: scope.schema,
         ...(typeof scope.table === 'string' && scope.table !== '' ? { table: scope.table } : {}),
         verbs: scope.verbs as 'read' | 'read+act' | 'act' | 'reveal',
+        ...(rowFilter ? { rowFilter } : {}),
+        ...(fieldMask ? { fieldMask } : {}),
       },
     ];
   });

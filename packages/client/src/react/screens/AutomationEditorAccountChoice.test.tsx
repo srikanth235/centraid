@@ -120,7 +120,9 @@ it('chooses among configured accounts inline and preserves the explicit binding 
     candidate.textContent?.includes('Connectors'),
   ) as HTMLButtonElement;
   await act(async () => connectorsButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-  await act(async () => Promise.resolve());
+  await act(async () => {
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+  });
 
   const picker = el.querySelector('[data-testid="automation-connectors-picker"]');
   expect(picker?.textContent).toContain('2 configured accounts');
@@ -131,7 +133,9 @@ it('chooses among configured accounts inline and preserves the explicit binding 
 
   await act(async () => connectorsButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
   await act(async () => connectorsButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-  await act(async () => Promise.resolve());
+  await act(async () => {
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+  });
 
   await act(async () =>
     button(el, 'Create automation').dispatchEvent(new MouseEvent('click', { bubbles: true })),

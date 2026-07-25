@@ -227,7 +227,7 @@ describe('RunViewScreen', () => {
         ],
       }),
     );
-    expect(el.querySelector('.msgAi')?.getAttribute('data-error')).toBe('true');
+    expect((el.querySelector('.msgAi') as HTMLElement).dataset.error).toBe('true');
     expect(el.textContent).toContain('boom');
   });
 
