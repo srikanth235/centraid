@@ -243,14 +243,14 @@ describe('makeWebhookRouteHandler', () => {
   it('returns false for non-webhook URLs', async () => {
     const handler = makeWebhookRouteHandler({
       appsDir,
-      fire: vi.fn(),
+      ingress: vi.fn(),
     });
     const res = mockRes();
     expect(await handler(mockReq({ url: '/other' }), res)).toBe(false);
   });
 
   it('rejects non-POST and unknown slugs', async () => {
-    const handler = makeWebhookRouteHandler({ appsDir, fire: vi.fn() });
+    const handler = makeWebhookRouteHandler({ appsDir, ingress: vi.fn() });
     const getRes = mockRes();
     expect(await handler(mockReq({ method: 'GET' }), getRes)).toBe(true);
     expect(getRes.status).toBe(405);
@@ -260,9 +260,9 @@ describe('makeWebhookRouteHandler', () => {
     expect(badRes.status).toBe(404);
   });
 
-  it('rejects missing secret, unknown id, and accepts a valid fire', async () => {
-    const fire = vi.fn().mockResolvedValue({ ok: true, runId: 'r1' });
-    const handler = makeWebhookRouteHandler({ appsDir, fire });
+  it('rejects missing secret, unknown id, and accepts valid durable ingress', async () => {
+    const ingress = vi.fn().mockResolvedValue({ accepted: true });
+    const handler = makeWebhookRouteHandler({ appsDir, ingress });
 
     const unauth = mockRes();
     expect(await handler(mockReq({ headers: {} }), unauth)).toBe(true);
@@ -284,17 +284,25 @@ describe('makeWebhookRouteHandler', () => {
         okRes,
       ),
     ).toBe(true);
-    expect(okRes.status).toBe(200);
-    expect(fire).toHaveBeenCalledWith({
-      automationRef: 'auto.hook/hook',
-      body: { hello: 1 },
+    expect(okRes.status).toBe(202);
+    expect(ingress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automationRef: 'auto.hook/hook',
+        webhookId,
+        body: { hello: 1 },
+        deliveryId: expect.any(String),
+        receivedAt: expect.any(Number),
+      }),
+    );
+    expect(JSON.parse(okRes.bodyText ?? '{}')).toMatchObject({
+      accepted: true,
+      deliveryId: expect.any(String),
     });
-    expect(JSON.parse(okRes.bodyText ?? '{}')).toMatchObject({ ok: true, runId: 'r1' });
   });
 
   it('accepts the x-openclaw-webhook-secret header and non-JSON bodies', async () => {
-    const fire = vi.fn().mockResolvedValue({ ok: true });
-    const handler = makeWebhookRouteHandler({ appsDir, fire });
+    const ingress = vi.fn().mockResolvedValue({ accepted: true });
+    const handler = makeWebhookRouteHandler({ appsDir, ingress });
     const res = mockRes();
     expect(
       await handler(
@@ -305,14 +313,17 @@ describe('makeWebhookRouteHandler', () => {
         res,
       ),
     ).toBe(true);
-    expect(res.status).toBe(200);
-    expect(fire).toHaveBeenCalledWith({
-      automationRef: 'auto.hook/hook',
-      body: 'plain-text',
-    });
+    expect(res.status).toBe(202);
+    expect(ingress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        automationRef: 'auto.hook/hook',
+        webhookId,
+        body: 'plain-text',
+      }),
+    );
   });
 
-  it('skips disabled automations and reports fire failures', async () => {
+  it('skips disabled automations and reports ingress failures', async () => {
     const dir = path.join(appsDir, 'auto.hook', 'automations', 'hook');
     const raw = JSON.parse(await fs.readFile(path.join(dir, 'automation.json'), 'utf8')) as {
       enabled: boolean;
@@ -322,7 +333,7 @@ describe('makeWebhookRouteHandler', () => {
 
     const handler = makeWebhookRouteHandler({
       appsDir,
-      fire: vi.fn().mockResolvedValue({ ok: false, error: 'boom' }),
+      ingress: vi.fn().mockResolvedValue({ accepted: false, error: 'boom' }),
     });
     const skipped = mockRes();
     expect(await handler(mockReq({}), skipped)).toBe(true);
@@ -333,18 +344,18 @@ describe('makeWebhookRouteHandler', () => {
     await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(raw));
     const failHandler = makeWebhookRouteHandler({
       appsDir,
-      fire: vi.fn().mockResolvedValue({ ok: false, error: 'boom' }),
+      ingress: vi.fn().mockResolvedValue({ accepted: false, error: 'boom' }),
     });
     const failed = mockRes();
     expect(await handler(mockReq({}), failed)).toBe(true);
-    // Re-use failHandler for the actual fire path.
+    // Re-use failHandler for the actual ingress path.
     const failed2 = mockRes();
     expect(await failHandler(mockReq({}), failed2)).toBe(true);
     expect(failed2.status).toBe(500);
   });
 
   it('returns 413 when the body exceeds the cap', async () => {
-    const handler = makeWebhookRouteHandler({ appsDir, fire: vi.fn() });
+    const handler = makeWebhookRouteHandler({ appsDir, ingress: vi.fn() });
     const huge = Buffer.alloc(65 * 1024, 0x61);
     const res = mockRes();
     expect(await handler(mockReq({ body: huge }), res)).toBe(true);

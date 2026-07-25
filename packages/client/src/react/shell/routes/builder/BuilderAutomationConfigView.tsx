@@ -324,6 +324,19 @@ export default function ConfigView({
         </div>
       );
     }
+    if (t.kind === 'event') {
+      const repo = t.filter && typeof t.filter.repo === 'string' ? ` · ${t.filter.repo}` : '';
+      return (
+        <div className={styles.trigger} key={i}>
+          <div className={styles.triggerMain}>
+            <Glyph svg={svgHistory14} className={styles.triggerIcon} />
+            <span className={styles.triggerDesc}>{`${t.connectorKind} · ${t.event}${repo}`}</span>
+            {t.every ? <code className={styles.triggerExpr}>{t.every}</code> : null}
+            {triggerActions(i, false)}
+          </div>
+        </div>
+      );
+    }
     // Webhook trigger — provisioned (has a minted route id) or pending.
     const pending = t.id === undefined;
     return (

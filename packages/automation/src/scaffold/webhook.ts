@@ -13,10 +13,9 @@
  * server-side and shown once at creation — `automation.json` stores
  * only a SHA-256 hash, since the manifest file is user-visible.
  *
- * The handler also enforces a body-size cap, a fixed-window rate limit,
- * and a single-in-flight guard per webhook id. Running the resolved
- * automation is delegated to the caller-supplied `fire` callback so this
- * module stays free of any host dependency.
+ * The handler also enforces a body-size cap and fixed-window rate limit.
+ * After auth it writes a durable ingress element; the shared cursor engine
+ * fires it later. A concurrent/restarted fire can never drop the delivery.
  */
 
 import crypto from 'node:crypto';
@@ -279,28 +278,31 @@ export function rotateWebhookInFiles(
   };
 }
 
-/** Result of the caller-supplied automation fire. */
-export interface WebhookFireResult {
-  ok: boolean;
-  runId?: string;
+/** Result of the caller-supplied durable ingress write. */
+export interface WebhookIngressResult {
+  accepted: boolean;
+  duplicate?: boolean;
   error?: string;
 }
 
 /**
- * Runs the resolved automation. Supplied by the gateway host so this
- * module carries no host dependency.
+ * Persists the authenticated delivery. Supplied by the gateway host so this
+ * module carries no database dependency.
  */
-export type WebhookFireFn = (input: {
+export type WebhookIngressFn = (input: {
   /** `<appId>/<automationId>` handle of the resolved automation. */
   automationRef: string;
+  webhookId: string;
+  deliveryId: string;
+  receivedAt: number;
   body: unknown;
-}) => Promise<WebhookFireResult>;
+}) => Promise<WebhookIngressResult>;
 
 export interface WebhookRouteOptions {
   /** Directory holding the app folders that own the automations. */
   appsDir: string;
-  /** Runs the automation once auth + resolution succeed. */
-  fire: WebhookFireFn;
+  /** Durably ingresses the delivery once auth + resolution succeed. */
+  ingress: WebhookIngressFn;
 }
 
 function extractSecret(req: IncomingMessage): string | undefined {
@@ -311,6 +313,14 @@ function extractSecret(req: IncomingMessage): string | undefined {
   const header = req.headers['x-openclaw-webhook-secret'];
   if (typeof header === 'string' && header.trim()) return header.trim();
   return undefined;
+}
+
+function deliveryId(req: IncomingMessage): string {
+  for (const name of ['x-centraid-delivery-id', 'x-github-delivery', 'x-request-id']) {
+    const value = req.headers[name];
+    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 256);
+  }
+  return crypto.randomUUID();
 }
 
 async function readBodyCapped(
@@ -350,10 +360,9 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
  * when the URL is not a webhook path.
  */
 export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
-  // Per-webhook fixed-window rate-limit + single-in-flight guards.
-  // Module-scoped to the closure so each mounted route keeps its own.
+  // Per-webhook fixed-window rate-limit. Module-scoped to the closure so each
+  // mounted route keeps its own.
   const windows = new Map<string, { start: number; count: number }>();
-  const inFlight = new Set<string>();
 
   const overRateLimit = (webhookId: string): boolean => {
     const now = Date.now();
@@ -384,11 +393,6 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
       sendJson(res, 429, { error: 'rate limit exceeded' });
       return true;
     }
-    if (inFlight.has(slug)) {
-      sendJson(res, 409, { error: 'a run for this webhook is already in flight' });
-      return true;
-    }
-
     try {
       // Resolve the webhook id to its automation. Webhook slugs are
       // globally unique, so the first active-version match wins.
@@ -416,16 +420,17 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
         return true;
       }
 
-      inFlight.add(slug);
-      try {
-        const result = await opts.fire({ automationRef: target.ref, body: body.body });
-        sendJson(res, result.ok ? 200 : 500, result);
-      } finally {
-        inFlight.delete(slug);
-      }
+      const id = deliveryId(req);
+      const result = await opts.ingress({
+        automationRef: target.ref,
+        webhookId: slug,
+        deliveryId: id,
+        receivedAt: Date.now(),
+        body: body.body,
+      });
+      sendJson(res, result.accepted ? 202 : 500, { ...result, deliveryId: id });
       return true;
     } catch (err) {
-      inFlight.delete(slug);
       sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
       return true;
     }

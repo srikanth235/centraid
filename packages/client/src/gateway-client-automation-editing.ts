@@ -23,7 +23,14 @@ export type CentraidCreateTrigger =
   | { kind: 'cron'; expr: string }
   | { kind: 'webhook' }
   | { kind: 'condition'; entity: string; where?: unknown; every?: string }
-  | { kind: 'data'; entities: string[]; every?: string };
+  | { kind: 'data'; entities: string[]; every?: string }
+  | {
+      kind: 'event';
+      connectorKind: string;
+      event: string;
+      filter?: Record<string, unknown>;
+      every?: string;
+    };
 
 /** Scaffold a new automation app; mints a webhook secret when requested. */
 /** Soft connection binding (agent automations) — ids only, no secrets. */

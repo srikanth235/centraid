@@ -84,6 +84,8 @@ export interface RunAutomationOptions {
    * `'cron'` — the scheduler is the usual local caller.
    */
   triggerOrigin?: AutomationTriggerOrigin;
+  /** Human-readable trigger-gap/cursor note stored on the turn. */
+  note?: string;
   /** Optional input payload (e.g. for on_failure dispatch). */
   input?: unknown;
   /** Optional parent run id for the onFailure sub-run DAG link. */
@@ -139,6 +141,7 @@ export async function runAutomation(
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
       ...(opts.triggerKind ? { triggerKind: opts.triggerKind } : {}),
       ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
+      ...(opts.note ? { note: opts.note } : {}),
       ...(opts.input !== undefined ? { input: opts.input } : {}),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
       ...(opts.failureDepth !== undefined ? { failureDepth: opts.failureDepth } : {}),

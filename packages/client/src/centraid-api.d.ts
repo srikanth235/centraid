@@ -1229,6 +1229,13 @@ export interface CentraidAutomationManifest {
     | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
     | { kind: 'data'; entities: readonly string[]; every?: string }
     | { kind: 'condition'; entity: string; where?: unknown; every?: string }
+    | {
+        kind: 'event';
+        connectorKind: string;
+        event: string;
+        filter?: Record<string, unknown>;
+        every?: string;
+      }
   >;
   requires: { mcps?: readonly string[]; runner?: string; model?: string };
   /** App ids this automation is associated with. */
@@ -1251,6 +1258,13 @@ export interface CentraidAutomationRow {
     | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
     | { kind: 'data'; entities: readonly string[]; every?: string }
     | { kind: 'condition'; entity: string; where?: unknown; every?: string }
+    | {
+        kind: 'event';
+        connectorKind: string;
+        event: string;
+        filter?: Record<string, unknown>;
+        every?: string;
+      }
   >;
   enabled: boolean;
   /** Id of the app folder this automation belongs to. */
@@ -1582,6 +1596,13 @@ declare global {
       | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
       | { kind: 'data'; entities: readonly string[]; every?: string }
       | { kind: 'condition'; entity: string; where?: unknown; every?: string }
+      | {
+          kind: 'event';
+          connectorKind: string;
+          event: string;
+          filter?: Record<string, unknown>;
+          every?: string;
+        }
     >;
     requires: { mcps?: readonly string[]; runner?: string; model?: string };
     apps?: readonly string[];
@@ -1599,6 +1620,13 @@ declare global {
       | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
       | { kind: 'data'; entities: readonly string[]; every?: string }
       | { kind: 'condition'; entity: string; where?: unknown; every?: string }
+      | {
+          kind: 'event';
+          connectorKind: string;
+          event: string;
+          filter?: Record<string, unknown>;
+          every?: string;
+        }
     >;
     enabled: boolean;
     ownerApp: string;

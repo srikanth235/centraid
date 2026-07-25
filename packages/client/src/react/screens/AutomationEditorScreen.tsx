@@ -25,7 +25,7 @@ import styles from './AutomationEditorScreen.module.css';
 // Notifications / Plan tabs. Connector OAuth + API-key attach reuses the
 // same gateway flows as Settings → Connectors.
 
-type TriggerKind = 'cron' | 'webhook' | 'condition' | 'data';
+type TriggerKind = 'cron' | 'webhook' | 'condition' | 'data' | 'event';
 /** One row of a condition trigger's `where` builder. `value` is the raw text
  *  the user typed; it is coerced per-op into the manifest clause shape at save
  *  time (see `whereClauseOf`). */
@@ -38,6 +38,9 @@ type TriggerDraft = {
   whereRows: WhereRowDraft[];
   every: string;
   entities: string;
+  connectorKind: string;
+  event: string;
+  filterRepo: string;
 };
 type TabId = 'notifications' | 'plan';
 
@@ -68,17 +71,26 @@ type ConditionOp = (typeof CONDITION_OPS)[number];
  *  remain editable when already present on a loaded automation, but new
  *  authoring matches the Grok-style surface: schedule (cron) and vault data
  *  changes only. */
-const ADDABLE_TRIGGER_KINDS = ['cron', 'data'] as const satisfies readonly TriggerKind[];
-const TRIGGER_ADD_LABEL: Record<(typeof ADDABLE_TRIGGER_KINDS)[number], string> = {
+const BASE_ADDABLE_TRIGGER_KINDS = ['cron', 'data'] as const satisfies readonly TriggerKind[];
+const TRIGGER_ADD_LABEL: Record<'cron' | 'data' | 'event', string> = {
   cron: 'Schedule',
   data: 'Data change',
+  event: 'Connector event',
 };
 const TRIGGER_KIND_LABEL: Record<TriggerKind, string> = {
   cron: 'Schedule',
   webhook: 'Webhook',
   data: 'Data change',
   condition: 'Condition',
+  event: 'Connector event',
 };
+const EVENTS_BY_CONNECTOR = {
+  'pull.gmail': [{ id: 'new-message', label: 'New email' }],
+  'pull.github': [
+    { id: 'pull-request', label: 'Pull request event' },
+    { id: 'issue', label: 'Issue event' },
+  ],
+} as const;
 /** Run-outcome notifications. Centraid surfaces failures on Home under needs
  *  attention today — only App / Off are real. (Email options were removed so
  *  the control doesn't promise a channel that isn't wired yet.) */
@@ -146,6 +158,9 @@ function draftTrigger(kind: TriggerKind): TriggerDraft {
     whereRows: [],
     every: '',
     entities: '',
+    connectorKind: '',
+    event: '',
+    filterRepo: '',
   };
 }
 
@@ -160,6 +175,12 @@ function loadedTrigger(t: AutomationEditorData['triggers'][number]): TriggerDraf
   if (t.kind === 'data') {
     draft.entities = t.entities.join(', ');
     draft.every = t.every ?? '';
+  }
+  if (t.kind === 'event') {
+    draft.connectorKind = t.connectorKind;
+    draft.event = t.event;
+    draft.every = t.every ?? '';
+    draft.filterRepo = typeof t.filter?.repo === 'string' ? t.filter.repo : '';
   }
   return draft;
 }
@@ -719,6 +740,18 @@ export default function AutomationEditorScreen({
             ]
           : [];
       }
+      if (trigger.kind === 'event') {
+        if (!trigger.connectorKind || !trigger.event) return [];
+        return [
+          {
+            connectorKind: trigger.connectorKind,
+            event: trigger.event,
+            filter: trigger.filterRepo.trim() ? { repo: trigger.filterRepo.trim() } : undefined,
+            kind: 'event',
+            ...(trigger.every.trim() ? { every: trigger.every.trim() } : {}),
+          },
+        ];
+      }
       // condition — skip when no entity is named.
       if (!trigger.entity.trim()) return [];
       const where = trigger.whereRows
@@ -828,6 +861,14 @@ export default function AutomationEditorScreen({
 
   const connectorCount = selectedConnectors.size;
   const isCreate = d.mode === 'create';
+  const eventConnectorKinds = [...connectionBindings.keys()].filter(
+    (kind): kind is keyof typeof EVENTS_BY_CONNECTOR =>
+      selectedConnectors.has(kind) && kind in EVENTS_BY_CONNECTOR,
+  );
+  const addableTriggerKinds: Array<'cron' | 'data' | 'event'> =
+    eventConnectorKinds.length > 0
+      ? [...BASE_ADDABLE_TRIGGER_KINDS, 'event']
+      : [...BASE_ADDABLE_TRIGGER_KINDS];
 
   const addTriggerMenu = (
     <div className={styles.addTriggerWrap}>
@@ -842,14 +883,22 @@ export default function AutomationEditorScreen({
       </button>
       {addTriggerOpen ? (
         <div className={styles.addTriggerMenu} role="menu" aria-label="Trigger kinds">
-          {ADDABLE_TRIGGER_KINDS.map((kind) => (
+          {addableTriggerKinds.map((kind) => (
             <button
               key={kind}
               type="button"
               role="menuitem"
               className={styles.addTriggerItem}
               onClick={() => {
-                setTriggers((current) => [...current, draftTrigger(kind)]);
+                const draft = draftTrigger(kind);
+                if (kind === 'event') {
+                  draft.connectorKind = eventConnectorKinds[0] ?? '';
+                  draft.event =
+                    EVENTS_BY_CONNECTOR[
+                      draft.connectorKind as keyof typeof EVENTS_BY_CONNECTOR
+                    ]?.[0]?.id ?? '';
+                }
+                setTriggers((current) => [...current, draft]);
                 setAddTriggerOpen(false);
               }}
             >
@@ -873,14 +922,17 @@ export default function AutomationEditorScreen({
             ? cronNextRuns(trigger.expr.trim(), 3).map(relativeRunLabel)
             : [];
         const everyPreview =
-          (trigger.kind === 'data' || trigger.kind === 'condition') && trigger.every.trim()
+          (trigger.kind === 'data' || trigger.kind === 'condition' || trigger.kind === 'event') &&
+          trigger.every.trim()
             ? cronNextRuns(trigger.every.trim(), 3).map(relativeRunLabel)
             : [];
         // New authoring only offers cron + data; keep legacy kinds when loaded.
         const kindOptions: TriggerKind[] =
           trigger.kind === 'webhook' || trigger.kind === 'condition'
-            ? [trigger.kind, ...ADDABLE_TRIGGER_KINDS]
-            : [...ADDABLE_TRIGGER_KINDS];
+            ? [trigger.kind, ...addableTriggerKinds]
+            : trigger.kind === 'event' && !addableTriggerKinds.includes('event')
+              ? ['event', ...addableTriggerKinds]
+              : [...addableTriggerKinds];
         return (
           <div key={trigger.key} className={styles.triggerRow} data-trigger-kind={trigger.kind}>
             <div className={styles.triggerRowHead}>
@@ -1072,6 +1124,98 @@ export default function AutomationEditorScreen({
                   />
                   <span className={styles.trigHint}>
                     5-field cron gate. Defaults to every 5 minutes.
+                  </span>
+                </label>
+                {everyPreview.length > 0 ? (
+                  <div className={styles.cronPreview}>
+                    <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
+                    {everyPreview.map((label) => (
+                      <span key={label} className={styles.cronPreviewPill}>
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {trigger.kind === 'event' ? (
+              <div className={styles.trigFields}>
+                <label className={styles.subField}>
+                  <span className={styles.microLabel}>Bound account</span>
+                  <select
+                    className={styles.triggerSelect}
+                    value={trigger.connectorKind}
+                    aria-label="Event connector account kind"
+                    onChange={(event) => {
+                      const connectorKind = event.target.value;
+                      const options =
+                        EVENTS_BY_CONNECTOR[connectorKind as keyof typeof EVENTS_BY_CONNECTOR] ??
+                        [];
+                      update({
+                        connectorKind,
+                        event: options[0]?.id ?? '',
+                        filterRepo: connectorKind === 'pull.github' ? trigger.filterRepo : '',
+                      });
+                    }}
+                  >
+                    {(trigger.connectorKind &&
+                    !eventConnectorKinds.includes(
+                      trigger.connectorKind as keyof typeof EVENTS_BY_CONNECTOR,
+                    )
+                      ? [trigger.connectorKind, ...eventConnectorKinds]
+                      : eventConnectorKinds
+                    ).map((kind) => (
+                      <option key={kind} value={kind}>
+                        {connectionBindings.get(kind)?.label ?? kind}
+                      </option>
+                    ))}
+                  </select>
+                  <span className={styles.trigHint}>
+                    Events use this exact configured account and its existing read scopes.
+                  </span>
+                </label>
+                <label className={styles.subField}>
+                  <span className={styles.microLabel}>Event</span>
+                  <select
+                    className={styles.triggerSelect}
+                    value={trigger.event}
+                    aria-label="Provider event"
+                    onChange={(event) => update({ event: event.target.value })}
+                  >
+                    {(
+                      EVENTS_BY_CONNECTOR[
+                        trigger.connectorKind as keyof typeof EVENTS_BY_CONNECTOR
+                      ] ?? []
+                    ).map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {trigger.connectorKind === 'pull.github' ? (
+                  <label className={styles.subField}>
+                    <span className={styles.microLabel}>Repository</span>
+                    <input
+                      className={cx(styles.input, styles.mono)}
+                      value={trigger.filterRepo}
+                      onChange={(event) => update({ filterRepo: event.target.value })}
+                      placeholder="owner/repository"
+                      spellCheck={false}
+                    />
+                  </label>
+                ) : null}
+                <label className={styles.subField}>
+                  <span className={styles.microLabel}>Poll every (optional)</span>
+                  <input
+                    className={cx(styles.input, styles.mono)}
+                    value={trigger.every}
+                    onChange={(event) => update({ every: event.target.value })}
+                    placeholder="*/5 * * * *"
+                    spellCheck={false}
+                  />
+                  <span className={styles.trigHint}>
+                    Polling works behind NAT; provider cursors prevent duplicate fires.
                   </span>
                 </label>
                 {everyPreview.length > 0 ? (

@@ -12,7 +12,9 @@ Issue: https://github.com/srikanth235/centraid/issues/541
 - [x] The thread renders cold and live shared-Message traces without polling
 - [x] Interactive automation replies use the same per-automation runner/model override and structurally deny runtime permission requests
 - [x] Standing replies rewrite instructions and enter the existing compile seam
-- [ ] Unified cursor triggers, connector event sources, and anchor-grain scopes are in progress
+- [x] Cron, vault data/condition, webhook, and provider events share one durable bounded cursor engine
+- [x] Gmail new-message and GitHub pull-request/issue sources use exact bound accounts without exposing credentials
+- [ ] Anchored references and compiler-derived field/row-grain scopes are in progress
 
 ## What changed
 
@@ -68,9 +70,27 @@ Interactive steering and standing revision use the automation's existing identit
 - `rewrite-automation-instructions.ts` performs a tool-less cheap-tier rewrite, records the visible revision turn, persists through the existing manifest path, and invokes the existing compile seam.
 - `POST /centraid/_automations/turn?ref=` streams the standard grammar; `POST /centraid/_automations/revise?ref=` returns the reserved `compileTurnId`.
 
+Every trigger source now advances through one durable bounded cursor engine:
+
+- `packages/app-engine/src/conversation/trigger-store.ts` and the gateway journal schema add per-trigger cursor state plus deduplicated, retained `trigger_ingress` rows.
+- `packages/automation/src/fire/cursor-engine.ts` replaces the parallel cron/data/condition/webhook paths with one ordered source contract, a uniform catch-up cap, persist-before-fire semantics, explicit gap/skipped metadata, per-trigger serialization, restart bootstrap, and immediate ingress nudges.
+- `packages/automation/src/fire/condition.ts` exposes condition/data reads as cursor sources, while manifest validation and runtime registration share one denylist for outbox, trigger bookkeeping, and conversation-ledger entities.
+- Authenticated webhook POSTs append bounded durable ingress and return 202; the source reader—not the HTTP handler—owns firing. The real HTTP integration proves ingress, cursor advance, native turn completion, and bearer-free shared-secret authentication.
+- The shared fire callback now represents the full run promise, so scheduler shutdown and per-trigger single-flight semantics bracket the actual automation rather than a detached task.
+- Trigger gap notes are persisted on native turns, and the legacy scheduler ledger is retained only for liveness because source positions now have one authoritative store.
+
+First-party provider events use the same cursor and ingress machinery:
+
+- `packages/automation/src/manifest/manifest.ts` defines validated `event` triggers for Gmail new-message and GitHub pull-request/issue sources, including cadence and GitHub repository filters.
+- `packages/gateway/src/serve/automation-event-sources.ts` implements bounded Gmail History and GitHub repository-event adapters with Gmail re-baselining, GitHub conditional requests/poll intervals, safe normalized payloads, and no credential material.
+- `packages/gateway/src/serve/connection-broker.ts` performs read-only provider polling through the exact durable connection binding, host pinning, refresh, rate limiting, and a 1 MiB response cap; Gmail connect time captures its history baseline.
+- Provider events enter `trigger_ingress` with stable delivery ids before firing, so restart, deduplication, catch-up gaps, and native turn provenance match webhook/data/cron behavior.
+- The automation editor only offers event triggers when an exact Gmail/GitHub pull connection is bound, displays the selected account, and persists the provider event, repository filter, and cadence.
+- Lifecycle routes validate and round-trip the same event shape rather than maintaining a route-local trigger dialect.
+
 ## Out of scope
 
-- None for issue #541. Waves 8–10 are still in progress and will be recorded here before the PR is opened.
+- None for issue #541. Wave 10 is still in progress and will be recorded here before the PR is opened.
 
 ## Decisions
 
@@ -96,6 +116,11 @@ bun run --filter @centraid/agent-runtime test -- src/backends/acp/backend.test.t
 bun run --filter @centraid/gateway test -- src/routes/automations-routes.test.ts src/routes/lifecycle-automation-routes.test.ts src/lifecycle/interactive-automation-turn.test.ts src/lifecycle/rewrite-automation-instructions.test.ts
 bun run --filter @centraid/gateway typecheck
 bun run --filter @centraid/protocol typecheck
+bun run --filter @centraid/app-engine test -- src/conversation/trigger-store.test.ts src/stores/gateway-db.test.ts
+bun run --filter @centraid/automation test -- src/fire/cursor-engine.test.ts src/fire/in-process-scheduler.test.ts src/manifest/manifest.test.ts src/scaffold/webhook.test.ts
+bun run --filter @centraid/client test -- src/react/screens/AutomationEditorTriggers.test.tsx
+bun run --filter @centraid/gateway test -- src/serve/automation-event-sources.test.ts src/serve/connection-broker.test.ts src/routes/lifecycle-automation-routes.test.ts
+bun run --filter @centraid/gateway test -- src/lifecycle/webhook-route-over-http.test.ts
 ```
 
 ## Audit
@@ -120,6 +145,8 @@ PASS — the final fresh-context Waves 1–2 auditor verified exact account bind
 | codex-019f9495-7c0-1784911338-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 3047 | 0 | 440832 | 163 | 3210 | 0.1203 | 678691 | 0 | 28140032 | 67620 | feat(automations): pin runner and model per automation (#541) -m governance: all |
 | codex-019f9495-7c0-1784943285-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 1022245 | 0 | 29047552 | 97489 | 1119734 | 11.2798 | 1700936 | 0 | 57187584 | 165109 | feat(automations): stream native turn conversations (#541) -m governance: allow- |
 | codex-019f9495-7c0-1784943378-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 4157 | 0 | 787200 | 592 | 4749 | 0.2161 | 1705093 | 0 | 57974784 | 165701 | feat(automations): stream native turn conversations (#541) -m governance: allow- |
+| codex-019f9495-7c0-1784947056-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 569461 | 0 | 35412992 | 88205 | 657666 | 11.6000 | 2274554 | 0 | 93387776 | 253906 | feat(automations): unify trigger cursors and provider events (#541) -m governanc |
+| codex-019f9495-7c0-1784947218-1 | codex | 019f9495-7c00-7b70-a588-ca83afb8dcab | #541 | gpt-5.6-sol | 17426 | 0 | 1662208 | 2957 | 20383 | 0.5035 | 2291980 | 0 | 95049984 | 256863 | feat(automations): unify trigger cursors and provider events (#541) -m governanc |
 
 ## Steering
 

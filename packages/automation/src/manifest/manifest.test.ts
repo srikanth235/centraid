@@ -356,3 +356,90 @@ describe('data triggers', () => {
     ).toThrow(/outbox/);
   });
 });
+
+describe('provider event triggers and cursor loop guard', () => {
+  const base = {
+    name: 'Inbox watcher',
+    prompt: 'summarize new activity',
+    generated: { by: 'test', at: '2026-07-25' },
+    connections: [
+      {
+        connectionId: 'connection-1',
+        kind: 'pull.gmail',
+        label: 'Personal Gmail',
+      },
+    ],
+  };
+
+  it('accepts a supported event only when that connector kind is bound', () => {
+    expect(
+      validateManifest({
+        ...base,
+        triggers: [
+          {
+            kind: 'event',
+            connectorKind: 'pull.gmail',
+            event: 'new-message',
+            every: '*/2 * * * *',
+          },
+        ],
+      }).triggers[0],
+    ).toEqual({
+      kind: 'event',
+      connectorKind: 'pull.gmail',
+      event: 'new-message',
+      every: '*/2 * * * *',
+    });
+    expect(() =>
+      validateManifest({
+        ...base,
+        connections: [],
+        triggers: [{ kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' }],
+      }),
+    ).toThrow(/bound.*pull\.gmail/i);
+    expect(() =>
+      validateManifest({
+        ...base,
+        triggers: [{ kind: 'event', connectorKind: 'pull.gmail', event: 'mail-deleted' }],
+      }),
+    ).toThrow(/unsupported provider event/);
+  });
+
+  it.each([
+    'outbox.item',
+    'infra.trigger_ingress',
+    'infra.automation_trigger_cursor',
+    'infra.automation_state',
+    'infra.scheduler_ledger',
+    'infra.conversations',
+    'infra.turns',
+    'infra.items',
+    'infra.attachments',
+    'infra.run_summary',
+    'infra.conversation_archive',
+    'infra.conversation_digest',
+  ])('rejects loop-sensitive condition/data cursor entity %s', (entity) => {
+    const vault = {
+      purpose: 'dpv:ServiceProvision',
+      scopes: [{ schema: 'core', table: 'event', verbs: 'read' }],
+    };
+    expect(() =>
+      validateManifest({
+        name: 'Loop',
+        prompt: 'never loop',
+        generated: { by: 'test', at: '2026-07-25' },
+        vault,
+        triggers: [{ kind: 'condition', entity }],
+      }),
+    ).toThrow(/prevent trigger loops/);
+    expect(() =>
+      validateManifest({
+        name: 'Loop',
+        prompt: 'never loop',
+        generated: { by: 'test', at: '2026-07-25' },
+        vault,
+        triggers: [{ kind: 'data', entities: [entity] }],
+      }),
+    ).toThrow(/prevent trigger loops/);
+  });
+});

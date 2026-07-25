@@ -37,7 +37,13 @@ export type AutomationTriggerKind =
  * `webhook` an inbound HTTP POST, `manual` an explicit "Run now". Distinct
  * from `AutomationTriggerKind`, which records intent rather than transport.
  */
-export type AutomationTriggerOrigin = 'cron' | 'webhook' | 'manual' | 'condition' | 'data';
+export type AutomationTriggerOrigin =
+  | 'cron'
+  | 'webhook'
+  | 'manual'
+  | 'condition'
+  | 'data'
+  | 'event';
 
 /**
  * Item discriminator. `message_in` is the inbound message — a person typing,

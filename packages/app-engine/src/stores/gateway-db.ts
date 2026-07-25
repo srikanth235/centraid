@@ -48,6 +48,11 @@
  *                        the sync spine's cursor sidecars in vault.db, and
  *                        it can promote there if backup asymmetry ever
  *                        makes the placement matter.
+ *     automation_trigger_cursor
+ *                      — one durable position per automation trigger source,
+ *                        including bounded-gap metadata (`skipped` + window).
+ *     trigger_ingress  — short-lived authenticated webhook/provider events;
+ *                        gateway plumbing, never user ontology.
  *     run_summary      — a VIEW over turns ⋈ conversations (+ dominant
  *                        model from items): one row per finished run, every
  *                        kind — the Insights source. The ledger tables ARE
@@ -247,6 +252,39 @@ export const CONVERSATION_LEDGER_DDL = `
       updated_at    INTEGER NOT NULL,
       PRIMARY KEY (automation_id, key)
     ) STRICT;
+
+    CREATE TABLE IF NOT EXISTS automation_trigger_cursor (
+      automation_id TEXT NOT NULL,
+      trigger_index INTEGER NOT NULL,
+      source_kind   TEXT NOT NULL,
+      position_json TEXT,
+      window_from  INTEGER,
+      window_to    INTEGER,
+      skipped      INTEGER NOT NULL DEFAULT 0,
+      gap_reason   TEXT,
+      updated_at   INTEGER NOT NULL,
+      PRIMARY KEY (automation_id, trigger_index)
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS idx_automation_trigger_cursor_updated
+      ON automation_trigger_cursor(updated_at);
+
+    CREATE TABLE IF NOT EXISTS trigger_ingress (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      source        TEXT NOT NULL,
+      source_key    TEXT NOT NULL,
+      delivery_id   TEXT NOT NULL,
+      received_at   INTEGER NOT NULL,
+      payload_json  TEXT,
+      payload_ref   TEXT,
+      expires_at    INTEGER NOT NULL,
+      UNIQUE (source, source_key, delivery_id),
+      CHECK (source IN ('webhook','poll')),
+      CHECK (payload_json IS NOT NULL OR payload_ref IS NOT NULL)
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS idx_trigger_ingress_source_position
+      ON trigger_ingress(source_key, id);
+    CREATE INDEX IF NOT EXISTS idx_trigger_ingress_expiry
+      ON trigger_ingress(expires_at);
 
     -- #438 ledger-band archival index. journal.db grows at machine speed; these
     -- two cold-state tables let it converge to the recent working set. A

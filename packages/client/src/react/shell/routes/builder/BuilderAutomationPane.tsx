@@ -135,6 +135,11 @@ function FlowView({ automationRow }: { automationRow: CentraidAutomationRow }): 
           {whereText ? <pre className={styles.whereBlock}>{whereText}</pre> : null}
         </>
       );
+    } else if (t0.kind === 'event') {
+      trigSvg = iconSvg('Clock', 16);
+      trigTitle = 'Connector event';
+      const repo = t0.filter && typeof t0.filter.repo === 'string' ? ` · ${t0.filter.repo}` : '';
+      trigSub = `${t0.connectorKind} · ${t0.event}${repo}`;
     } else {
       trigSvg = iconSvg('Webhook', 16);
       trigTitle = t0.id ? 'Webhook' : 'Webhook — provisioning…';

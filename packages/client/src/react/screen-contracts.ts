@@ -486,12 +486,26 @@ export type AuEditorTriggerDTO =
   | { kind: 'cron'; expr: string }
   | { kind: 'webhook'; id: string | null; pending: boolean }
   | { kind: 'condition'; entity: string; where?: unknown; every?: string }
-  | { kind: 'data'; entities: string[]; every?: string };
+  | { kind: 'data'; entities: string[]; every?: string }
+  | {
+      kind: 'event';
+      connectorKind: string;
+      event: string;
+      filter?: Record<string, unknown>;
+      every?: string;
+    };
 export type AuEditorTriggerInput =
   | { kind: 'cron'; expr: string }
   | { kind: 'webhook' }
   | { kind: 'condition'; entity: string; where?: unknown; every?: string }
-  | { kind: 'data'; entities: string[]; every?: string };
+  | { kind: 'data'; entities: string[]; every?: string }
+  | {
+      kind: 'event';
+      connectorKind: string;
+      event: string;
+      filter?: Record<string, unknown>;
+      every?: string;
+    };
 /** Compiled-plan connector summary (read-only chips from the manifest).
  *  Owner-picked catalog connectors live separately on the Instructions
  *  toolbar picker — see `loadConnectorCatalog` on the bridge. */

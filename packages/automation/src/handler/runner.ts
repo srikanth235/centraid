@@ -149,6 +149,8 @@ export interface RunHandlerOptions {
   triggerKind?: AutomationTriggerKind;
   /** Source that fired the run (`cron` / `webhook` / `manual`). */
   triggerOrigin?: AutomationTriggerOrigin;
+  /** Human-readable trigger-gap/cursor note stored on the turn. */
+  note?: string;
   input?: unknown;
   parentRunId?: string;
   outputSchema?: OutputSchema;
@@ -611,6 +613,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     conversationId: execConversationId,
     triggerKind: opts.triggerKind ?? 'scheduled',
     ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
+    ...(opts.note ? { note: opts.note } : {}),
     ...(opts.parentRunId ? { parentTurnId: opts.parentRunId } : {}),
     startedAt,
   });

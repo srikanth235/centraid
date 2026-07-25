@@ -117,14 +117,14 @@ export async function handleAutomationCreate(
 
   // Mint webhook secrets gateway-side: plaintext returned once, manifest
   // persists only the hash. A `webhook` trigger entry carries no secret in.
-  // `cron`/`webhook`/`condition`/`data` are the only trigger kinds the
+  // `cron`/`webhook`/`condition`/`data`/`event` are the trigger kinds the
   // manifest schema knows — anything else is rejected loudly instead of
   // being silently coerced. `condition`/`data` specs are passed through to
   // the real validator below (`validateManifest`, via `scaffoldAppFiles`)
   // rather than re-implemented here, so a malformed one (missing entity,
   // non-array `where`/`entities`, bad cron gate, …) 400s with the
   // validator's own field-scoped message.
-  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data']);
+  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data', 'event']);
   let webhook: { id: string; secret: string; url: string } | undefined;
   const triggerInput = Array.isArray(body.triggers)
     ? (body.triggers as Array<Record<string, unknown>>)
@@ -135,7 +135,7 @@ export async function handleAutomationCreate(
   if (badKind) {
     return sendJson(res, 400, {
       error: 'bad_request',
-      message: `Unsupported trigger kind "${String(badKind.kind)}" — create accepts cron, webhook, condition and data triggers.`,
+      message: `Unsupported trigger kind "${String(badKind.kind)}" — create accepts cron, webhook, condition, data and event triggers.`,
     });
   }
   const triggers: automation.Trigger[] | undefined = triggerInput?.map((t) => {
@@ -157,6 +157,15 @@ export async function handleAutomationCreate(
       return {
         kind: 'data',
         entities: t.entities,
+        ...(t.every !== undefined ? { every: t.every } : {}),
+      } as automation.Trigger;
+    }
+    if (t.kind === 'event') {
+      return {
+        kind: 'event',
+        connectorKind: t.connectorKind,
+        event: t.event,
+        ...(t.filter !== undefined ? { filter: t.filter } : {}),
         ...(t.every !== undefined ? { every: t.every } : {}),
       } as automation.Trigger;
     }
@@ -367,7 +376,7 @@ export async function handleAutomationUpdate(
   // (see the comment above `ALLOWED_TRIGGER_KINDS` there): reject an unknown
   // kind loudly instead of coercing it, let `validateManifest` below reject a
   // malformed condition/data spec with its own field-scoped message.
-  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data']);
+  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data', 'event']);
   let webhook: { id: string; secret: string; url: string } | undefined;
   let triggers: automation.Trigger[] | undefined;
   if (triggersInput) {
@@ -378,7 +387,7 @@ export async function handleAutomationUpdate(
       if (ephemeralSession) await opts.store.closeSession(sessionId);
       return sendJson(res, 400, {
         error: 'bad_request',
-        message: `Unsupported trigger kind "${String(badKind.kind)}" — update accepts cron, webhook, condition and data triggers.`,
+        message: `Unsupported trigger kind "${String(badKind.kind)}" — update accepts cron, webhook, condition, data and event triggers.`,
       });
     }
     const existingWebhook = automation.webhookTriggerOf(existing.triggers);
@@ -405,6 +414,15 @@ export async function handleAutomationUpdate(
         return {
           kind: 'data',
           entities: t.entities,
+          ...(t.every !== undefined ? { every: t.every } : {}),
+        } as automation.Trigger;
+      }
+      if (t.kind === 'event') {
+        return {
+          kind: 'event',
+          connectorKind: t.connectorKind,
+          event: t.event,
+          ...(t.filter !== undefined ? { filter: t.filter } : {}),
           ...(t.every !== undefined ? { every: t.every } : {}),
         } as automation.Trigger;
       }

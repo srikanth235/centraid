@@ -61,6 +61,14 @@ function triggerToDto(t: CentraidAutomationRow['triggers'][number]): AuEditorTri
         ...(t.where !== undefined ? { where: t.where } : {}),
         ...(t.every ? { every: t.every } : {}),
       };
+    case 'event':
+      return {
+        connectorKind: t.connectorKind,
+        event: t.event,
+        filter: t.filter ? { ...t.filter } : undefined,
+        kind: 'event',
+        ...(t.every ? { every: t.every } : {}),
+      };
   }
 }
 

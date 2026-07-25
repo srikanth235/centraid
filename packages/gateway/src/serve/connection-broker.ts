@@ -34,7 +34,8 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { sealAad, unsealValue, type InvokeOutcome } from '@centraid/vault';
-import type { ConnectionAuth, ResolveConnection } from '@centraid/automation';
+import type { ConnectionAuth, ConnectionBinding, ResolveConnection } from '@centraid/automation';
+import type { PollJsonResponse } from './automation-event-sources.js';
 import type { VaultPlane } from './vault-plane.js';
 import { authDeadError, ConnectionLimiter, delay } from './connection-limiter.js';
 import { timeoutSignal } from './fetch-timeout.js';
@@ -134,6 +135,7 @@ interface PendingCeremony {
 /** A ceremony the owner walked away from is dead after ten minutes. */
 const CEREMONY_TTL_MS = 10 * 60 * 1000;
 const MAX_TOKEN_RESPONSE_BYTES = 64 * 1024;
+const MAX_PROVIDER_RESPONSE_BYTES = 1024 * 1024;
 
 type TokenResponse =
   | { ok: true; accessToken: string; refreshToken?: string; expiresAt?: string }
@@ -308,6 +310,7 @@ export class ConnectionBroker {
       throw new Error(`authorization code exchange failed: ${response.detail}`);
     }
     await this.persistTokens(plane, connectionId, response, 'tokens did not persist');
+    await this.captureGmailBaseline(plane, row, response.accessToken).catch(() => undefined);
     return { connectionId };
   }
 
@@ -370,6 +373,9 @@ export class ConnectionBroker {
       ceremony.connectionId,
       response,
       'tokens did not persist',
+    );
+    await this.captureGmailBaseline(ceremony.plane, row, response.accessToken).catch(
+      () => undefined,
     );
     return { connectionId: ceremony.connectionId };
   }
@@ -449,6 +455,80 @@ export class ConnectionBroker {
       };
     }
   };
+
+  /**
+   * Bounded read-only JSON request for first-party event cursor adapters.
+   * The adapter never receives a token: the broker validates the connection
+   * host pin, injects here, retries one OAuth 401 after refresh, and returns
+   * only status/selected response headers/parsed provider data.
+   */
+  async pollJson(
+    connection: ConnectionBinding,
+    rawUrl: string,
+    requestHeaders: Readonly<Record<string, string>> = {},
+  ): Promise<PollJsonResponse> {
+    if (!connection.connectionId) {
+      throw new Error('event polling requires a durable connectionId binding');
+    }
+    const url = new URL(rawUrl);
+    if (url.protocol !== 'https:') throw new Error('provider event polling requires https');
+    const resolved = await this.resolveForFire(connection);
+    if (!resolved) throw new Error(`connection "${connection.label}" carries no broker credential`);
+    if ('refused' in resolved) throw new Error(resolved.refused);
+    if (!hostAllowed(url.hostname, resolved.allowedHosts)) {
+      throw new Error(
+        `provider host "${url.hostname}" is outside connection "${connection.label}" allowed_hosts`,
+      );
+    }
+    const safeHeaders = Object.fromEntries(
+      Object.entries(requestHeaders).filter(
+        ([name]) =>
+          !['authorization', 'cookie', 'proxy-authorization'].includes(name.toLowerCase()),
+      ),
+    );
+    const perform = async (values: Readonly<Record<string, string>>): Promise<Response> => {
+      const token = values.access_token ?? values.api_key;
+      if (!token) throw new Error(`connection "${connection.label}" has no injectable token`);
+      return (resolved.limit ?? ((fn) => fn()))(() =>
+        this.fetchImpl(url, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            'user-agent': 'centraid-automation-events',
+            ...safeHeaders,
+            authorization: `Bearer ${token}`,
+          },
+          redirect: 'error',
+          signal: timeoutSignal(this.tokenTimeoutMs),
+        }),
+      );
+    };
+    let response = await perform(resolved.values);
+    if (response.status === 401 && resolved.refresh) {
+      response = await perform(await resolved.refresh());
+    }
+    if (response.status === 401) {
+      await resolved.onAuthDead?.('provider event poll returned 401 — reconnect the account');
+    }
+    const bodyText =
+      response.status === 304
+        ? ''
+        : await readBoundedResponseText(response, MAX_PROVIDER_RESPONSE_BYTES, 'provider response');
+    let body: unknown;
+    if (bodyText) {
+      try {
+        body = JSON.parse(bodyText) as unknown;
+      } catch {
+        throw new Error(`provider event poll returned non-JSON (${response.status})`);
+      }
+    }
+    const headers: Record<string, string> = {};
+    for (const name of ['etag', 'last-modified', 'x-poll-interval']) {
+      const value = response.headers.get(name);
+      if (value) headers[name] = value;
+    }
+    return { status: response.status, headers, ...(body !== undefined ? { body } : {}) };
+  }
 
   /**
    * The outbox executor's seam (issue #306): resolve one connection to
@@ -775,6 +855,43 @@ export class ConnectionBroker {
     }
   }
 
+  private async captureGmailBaseline(
+    plane: VaultPlane,
+    row: ConnectionCredRow,
+    accessToken: string,
+  ): Promise<void> {
+    if (row.provider !== 'google' || row.kind !== 'pull.gmail') return;
+    const response = await this.fetchImpl(
+      'https://gmail.googleapis.com/gmail/v1/users/me/profile',
+      {
+        method: 'GET',
+        headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
+        redirect: 'error',
+        signal: timeoutSignal(this.tokenTimeoutMs),
+      },
+    );
+    if (!response.ok) return;
+    const text = await readBoundedResponseText(
+      response,
+      MAX_TOKEN_RESPONSE_BYTES,
+      'Gmail profile response',
+    );
+    const historyId = stringField(JSON.parse(text) as unknown, 'historyId');
+    if (!historyId) return;
+    const outcome = await plane.invoke(plane.ownerCredential, {
+      command: 'sync.set_cursor',
+      input: {
+        connection_id: row.connection_id,
+        key: 'gmail_history_id',
+        value: { id: historyId },
+      },
+      purpose: BROKER_PURPOSE,
+    });
+    if (outcome.status !== 'executed') {
+      throw new Error('Gmail profile historyId did not persist');
+    }
+  }
+
   private pruneCeremonies(now = this.now()): void {
     for (const [key, entry] of this.pending) {
       if (entry.expiresAt < now) this.pending.delete(key);
@@ -860,15 +977,33 @@ function parseHosts(json: string | null): readonly string[] {
   }
 }
 
+function hostAllowed(hostname: string, allowedHosts: readonly string[]): boolean {
+  return allowedHosts.some((entry) =>
+    entry.startsWith('*.')
+      ? hostname.endsWith(entry.slice(1)) && hostname.length > entry.length - 1
+      : hostname === entry,
+  );
+}
+
+function stringField(value: unknown, field: string): string | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const candidate = (value as Record<string, unknown>)[field];
+  return typeof candidate === 'string' && candidate ? candidate : undefined;
+}
+
 function expiringSoon(expiresAt: string | null): boolean {
   if (!expiresAt) return false; // no recorded expiry — trust it until a 401 forces a refresh
   return Date.parse(expiresAt) - Date.now() < EXPIRY_SLACK_MS;
 }
 
-async function readBoundedResponseText(response: Response, limit: number): Promise<string> {
+async function readBoundedResponseText(
+  response: Response,
+  limit: number,
+  label = 'token endpoint response',
+): Promise<string> {
   const declared = Number(response.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > limit) {
-    throw new Error('token endpoint response exceeded safety limit');
+    throw new Error(`${label} exceeded safety limit`);
   }
   if (!response.body) return '';
   const reader = response.body.getReader();
@@ -880,7 +1015,7 @@ async function readBoundedResponseText(response: Response, limit: number): Promi
       const chunk = await reader.read();
       if (chunk.done) break;
       total += chunk.value.byteLength;
-      if (total > limit) throw new Error('token endpoint response exceeded safety limit');
+      if (total > limit) throw new Error(`${label} exceeded safety limit`);
       text += decoder.decode(chunk.value, { stream: true });
     }
     return text + decoder.decode();

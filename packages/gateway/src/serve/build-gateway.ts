@@ -40,6 +40,7 @@ import {
   COMPANION_GRANTS_HEADER,
   ConversationHistoryStore,
   ConversationStore,
+  AutomationTriggerStore,
   Dispatcher,
   InsightsStore,
   PrefsStore,
@@ -106,6 +107,7 @@ import { createStorageQuotaHealthProbe } from './storage-quota-health.js';
 import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
 import { GatewayInstanceLease } from './gateway-instance-lease.js';
 import { ConnectionBroker } from './connection-broker.js';
+import { pollProviderEventSource } from './automation-event-sources.js';
 import type { AssistOAuthConfig } from './assist-oauth.js';
 import { OutboxExecutor } from './outbox-executor.js';
 import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
@@ -322,8 +324,10 @@ export type FireAutomation = (
     triggerOrigin: AutomationTriggerOrigin;
     /** Trigger payload surfaced to the handler as `ctx.input` (condition/data fires). */
     input?: unknown;
+    /** Human-readable trigger-gap/cursor note stored on the turn. */
+    note?: string;
   },
-) => void;
+) => Promise<void>;
 
 /** A route handler in the gateway chain: `true` when it owned the response. */
 export type RouteHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
@@ -572,9 +576,9 @@ export interface BuiltGateway {
    * ahead of the bearer check (issue #304's `publicPathPrefixes`) — the
    * shared secret in the request IS the auth. Resolves the slug to its
    * OWNING vault across every mounted vault (webhook ids are globally
-   * unique), then blocks until the fire completes and answers with its
-   * outcome. Returns `false` for any non-matching URL so the host can
-   * fall through to `composedHandler`.
+   * unique), durably accepts authenticated ingress, and nudges that vault's
+   * cursor engine before answering 202. Returns `false` for any non-matching
+   * URL so the host can fall through to `composedHandler`.
    */
   webhookHandler: RouteHandler;
   /**
@@ -1551,10 +1555,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // each run over the event bus. Scheduled fires enter their vault's scope
   // via `runWithVaultContext` (see schedulerFor); manual fires inherit the
   // request's scope.
-  const fireAutomation: FireAutomation = (automationRef, opts): void => {
+  const fireAutomation: FireAutomation = async (automationRef, opts): Promise<void> => {
     // Mint the runId here so every fire (cron included) has a bus channel.
     const runId = opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
-    void (async () => {
+    try {
       const host = await currentVaultHost();
       const ws = currentWorkspace();
       const agent = await resolveAutomationAgentForRef(automationRef, host.codeAppsDir());
@@ -1572,6 +1576,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         triggerKind: opts.triggerKind,
         triggerOrigin: opts.triggerOrigin,
         ...(opts.input !== undefined ? { input: opts.input } : {}),
+        ...(opts.note ? { note: opts.note } : {}),
         ...(agent.model ? { model: agent.model } : {}),
         onRunEvent: (ev) => runEventBus.publish(runId, ev),
       });
@@ -1579,13 +1584,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // on the next clock tick (issue #306 phase 3).
       drainOutbox(vaultRegistry.current());
       health.reportOk('automation-runs');
-    })().catch((err) => {
+    } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       // Failed before the ledger opened: close off the bus or the viewer hangs.
       runEventBus.publish(runId, { type: 'turn.end', turnId: runId, ok: false, error: message });
       health.reportError('automation-runs', `${opts.triggerKind} ${automationRef}: ${message}`);
       logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
-    });
+    }
   };
 
   const settledHostFor = (vaultId: string): VaultHost => {
@@ -1851,7 +1856,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               if (row.manifest.onFailure) {
                 const target = automation.parseRef(row.manifest.onFailure, parsed.appId);
                 if (target) {
-                  fireAutomation(`${target.appId}/${target.automationId}`, {
+                  await fireAutomation(`${target.appId}/${target.automationId}`, {
                     triggerKind: 'on_failure',
                     triggerOrigin: 'manual',
                     input: {
@@ -1980,12 +1985,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         journalDbFile: workspace.journalDbFile,
         analytics: analyticsStore,
         insights: insightsStore,
-        runAutomation: ({ automationRef, turnId }) =>
-          fireAutomation(automationRef, {
+        runAutomation: ({ automationRef, turnId }) => {
+          void fireAutomation(automationRef, {
             runId: turnId,
             triggerKind: 'manual',
             triggerOrigin: 'manual',
-          }),
+          });
+        },
         subscribeTurnEvents: (turnId, listener) => runEventBus.subscribe(turnId, listener),
         runInteractiveTurn: async ({ row, turnId, message, abortSignal, onEvent }) => {
           const selected = await resolveAutomationAgent(row.manifest.requires);
@@ -2025,8 +2031,277 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // their vault's ambient scope, so `ctx.vault`, transcripts, and code all
   // ride the vault the automation lives in.
   const schedulers = new Map<string, automation.LocalScheduler>();
+  const triggerStores = new Map<string, AutomationTriggerStore>();
   const reconcileStates = new Map<string, { inFlight?: Promise<void>; dirty: boolean }>();
   let schedulersStarted = false;
+
+  const triggerStoreFor = (vaultId: string): AutomationTriggerStore => {
+    const existing = triggerStores.get(vaultId);
+    if (existing) return existing;
+    const plane = vaultRegistry.get(vaultId);
+    if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
+    const store = new AutomationTriggerStore(makeJournalDbProvider(plane.workspace.journalDbFile));
+    triggerStores.set(vaultId, store);
+    return store;
+  };
+
+  const parseIngressPosition = (positionJson: string | undefined): number => {
+    if (!positionJson) return 0;
+    try {
+      const value = Number(JSON.parse(positionJson));
+      return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const parseIngressPayload = (payloadJson: string | undefined): unknown => {
+    if (payloadJson === undefined) return undefined;
+    try {
+      return JSON.parse(payloadJson) as unknown;
+    } catch {
+      return payloadJson;
+    }
+  };
+
+  const parseEventCursor = (
+    positionJson: string | undefined,
+  ): { provider?: unknown; ingressId: number } => {
+    if (!positionJson) return { ingressId: 0 };
+    try {
+      const parsed = JSON.parse(positionJson) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { ingressId: 0 };
+      }
+      const row = parsed as Record<string, unknown>;
+      const ingressId = Number(row.ingressId);
+      return {
+        ...(row.provider !== undefined ? { provider: row.provider } : {}),
+        ingressId: Number.isSafeInteger(ingressId) && ingressId >= 0 ? ingressId : 0,
+      };
+    } catch {
+      return { ingressId: 0 };
+    }
+  };
+
+  const gmailConnectBaseline = (vaultId: string, connectionId: string): unknown => {
+    const plane = vaultRegistry.get(vaultId);
+    const row = plane?.db.vault
+      .prepare(
+        `SELECT value_json
+           FROM sync_connection_cursor
+          WHERE connection_id = ? AND key = 'gmail_history_id'`,
+      )
+      .get(connectionId) as { value_json: string } | undefined;
+    if (!row) return undefined;
+    try {
+      const value = JSON.parse(row.value_json) as { id?: unknown };
+      return typeof value.id === 'string' ? { provider: 'gmail', historyId: value.id } : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const eventIngressKey = (
+    connectionId: string,
+    trigger: Extract<automation.Trigger, { kind: 'event' }>,
+  ): string => {
+    const filterHash = crypto
+      .createHash('sha256')
+      .update(JSON.stringify(trigger.filter ?? {}))
+      .digest('hex')
+      .slice(0, 16);
+    return `event:${connectionId}:${trigger.event}:${filterHash}`;
+  };
+
+  const readIngressCursor = (
+    store: AutomationTriggerStore,
+    sourceKey: string,
+    positionJson: string | undefined,
+    limit: number,
+  ): automation.CursorReadResult => {
+    const afterId = parseIngressPosition(positionJson);
+    const bounds = store.ingressBoundsAfter(sourceKey, afterId);
+    if (bounds.count === 0 || bounds.latestId === undefined) {
+      return { elements: [], positionJson: JSON.stringify(afterId) };
+    }
+    const records = store.listIngressAfter(sourceKey, afterId, limit);
+    return {
+      elements: records.map((record) => ({
+        position: String(record.id),
+        occurredAt: record.receivedAt,
+        payload:
+          record.payloadJson !== undefined
+            ? parseIngressPayload(record.payloadJson)
+            : { payloadRef: record.payloadRef },
+      })),
+      // Deliberately advance to the source's latest durable id. Anything
+      // beyond the catch-up cap is an explicit gap, not a retry storm.
+      positionJson: JSON.stringify(bounds.latestId),
+      skipped: Math.max(0, bounds.count - records.length),
+      ...(bounds.count > records.length ? { gapReason: 'ingress_catch_up_cap' } : {}),
+    };
+  };
+
+  const readTriggerCursor = async (
+    vaultId: string,
+    input: automation.TriggerCursorReadInput,
+  ): Promise<automation.CursorReadResult> => {
+    const parsed = automation.parseRef(input.automationRef);
+    if (!parsed) throw new Error(`invalid automation ref "${input.automationRef}"`);
+    const row = await automation.readAppOwned(
+      settledHostFor(vaultId).codeAppsDir(),
+      parsed.appId,
+      parsed.automationId,
+    );
+    if (!row || !row.enabled) {
+      return {
+        elements: [],
+        ...(input.cursor?.positionJson ? { positionJson: input.cursor.positionJson } : {}),
+      };
+    }
+    const trigger = row.manifest.triggers[input.triggerIndex];
+    if (!trigger || trigger.kind !== input.trigger.kind) {
+      return { elements: [] };
+    }
+    if (trigger.kind === 'webhook') {
+      if (!('secretHash' in trigger)) return { elements: [] };
+      return readIngressCursor(
+        triggerStoreFor(vaultId),
+        trigger.id,
+        input.cursor?.positionJson,
+        input.limit,
+      );
+    }
+    if (trigger.kind === 'event') {
+      const connection = row.manifest.connections?.find(
+        (binding) => binding.kind === trigger.connectorKind,
+      );
+      if (!connection) {
+        throw new Error(
+          `event trigger ${input.automationRef}[${input.triggerIndex}] has no bound ${trigger.connectorKind} connection`,
+        );
+      }
+      const position = parseEventCursor(input.cursor?.positionJson);
+      const initialProvider =
+        position.provider ??
+        (trigger.connectorKind === 'pull.gmail'
+          ? gmailConnectBaseline(vaultId, connection.connectionId)
+          : undefined);
+      const polled = await pollProviderEventSource({
+        trigger,
+        connection,
+        ...(initialProvider !== undefined ? { cursor: initialProvider } : {}),
+        now: input.now,
+        limit: input.limit + 1,
+        pollJson: (binding, url, headers) => connectionBroker.pollJson(binding, url, headers),
+      });
+      const store = triggerStoreFor(vaultId);
+      const sourceKey = eventIngressKey(connection.connectionId, trigger);
+      for (const event of polled.events) {
+        store.appendIngress({
+          source: 'poll',
+          sourceKey,
+          deliveryId: event.id,
+          receivedAt: event.occurredAt,
+          payloadJson: JSON.stringify(event.payload),
+          expiresAt: input.now.getTime() + 72 * 60 * 60 * 1000,
+        });
+      }
+      store.pruneIngress(input.now.getTime());
+      const bounds = store.ingressBoundsAfter(sourceKey, position.ingressId);
+      const records = store.listIngressAfter(sourceKey, position.ingressId, input.limit);
+      const ingressSkipped = Math.max(0, bounds.count - records.length);
+      const skipped = ingressSkipped + (polled.skipped ?? 0);
+      const reasons = [
+        ...(ingressSkipped > 0 ? ['provider_event_catch_up_cap'] : []),
+        ...(polled.gapReason ? [polled.gapReason] : []),
+      ];
+      return {
+        elements: records.map((record) => ({
+          position: String(record.id),
+          occurredAt: record.receivedAt,
+          payload:
+            record.payloadJson !== undefined
+              ? parseIngressPayload(record.payloadJson)
+              : { payloadRef: record.payloadRef },
+        })),
+        positionJson: JSON.stringify({
+          provider: polled.cursor,
+          ingressId: bounds.latestId ?? position.ingressId,
+        }),
+        skipped,
+        ...(reasons.length > 0 ? { gapReason: reasons.join('+') } : {}),
+      };
+    }
+    if (!row.manifest.vault) {
+      return {
+        elements: [],
+        ...(input.cursor?.positionJson ? { positionJson: input.cursor.positionJson } : {}),
+      };
+    }
+    const common = {
+      automationRef: input.automationRef,
+      purpose: row.manifest.vault.purpose,
+      vault: vaultRegistry.agentBridgeFor(parsed.appId),
+      ...(input.cursor?.positionJson ? { positionJson: input.cursor.positionJson } : {}),
+      limit: input.limit,
+      now: input.now,
+    };
+    if (trigger.kind === 'condition') {
+      return automation.readConditionCursor({ ...common, trigger });
+    }
+    if (trigger.kind === 'data') {
+      return automation.readDataCursor({ ...common, trigger });
+    }
+    return { elements: [] };
+  };
+
+  const gapNote = (input: automation.TriggerCursorFireInput): string | undefined => {
+    if (input.skipped <= 0) return undefined;
+    const window =
+      input.windowFrom !== undefined && input.windowTo !== undefined
+        ? ` in ${new Date(input.windowFrom).toISOString()}–${new Date(input.windowTo).toISOString()}`
+        : '';
+    return `Trigger cursor skipped ${input.skipped} source element${input.skipped === 1 ? '' : 's'}${window} (${input.gapReason ?? 'catch-up cap'}).`;
+  };
+
+  const fireTriggerCursor = async (input: automation.TriggerCursorFireInput): Promise<void> => {
+    const trigger = input.trigger;
+    let payload: unknown;
+    if (trigger.kind === 'condition') {
+      payload = {
+        trigger: { kind: 'condition', index: input.triggerIndex, entity: trigger.entity },
+        rows: [input.element.payload],
+      };
+    } else if (trigger.kind === 'data') {
+      payload = {
+        trigger: { kind: 'data', index: input.triggerIndex, entities: trigger.entities },
+        changes: [input.element.payload],
+      };
+    } else if (trigger.kind === 'webhook') {
+      // Preserve the established webhook handler contract: ctx.input is the
+      // authenticated request body, while gap metadata remains visible on
+      // the native turn itself.
+      payload = input.element.payload;
+    } else if (trigger.kind === 'event') {
+      payload = {
+        trigger: {
+          kind: 'event',
+          index: input.triggerIndex,
+          connectorKind: trigger.connectorKind,
+          event: trigger.event,
+        },
+        event: input.element.payload,
+      };
+    }
+    await fireAutomation(input.automationRef, {
+      triggerKind: 'scheduled',
+      triggerOrigin: input.sourceKind,
+      ...(payload !== undefined ? { input: payload } : {}),
+      ...(gapNote(input) ? { note: gapNote(input) } : {}),
+    });
+  };
 
   const schedulerFor = (vaultId: string): automation.LocalScheduler => {
     const existing = schedulers.get(vaultId);
@@ -2039,48 +2314,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               runWithVaultContext({ vaultId }, () =>
                 fireAutomation(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
               ),
-            evaluate: (ref, triggerIndex) =>
-              runWithVaultContext({ vaultId }, () => evaluateCondition(ref, triggerIndex)),
+            store: triggerStoreFor(vaultId),
+            readCursor: (input) =>
+              runWithVaultContext({ vaultId }, () => readTriggerCursor(vaultId, input)),
+            fireCursor: (input) => runWithVaultContext({ vaultId }, () => fireTriggerCursor(input)),
             onError: (err, ref) => {
               const message =
                 `scheduled ${ref} failed: ` + (err instanceof Error ? err.message : String(err));
               health.reportError('automation-runs', message);
               logger.warn(message);
             },
-            // Missed-run ledger (issue #351 tier 2): every processed minute,
-            // before any fire, compare the persisted `lastTickAt` against
-            // `at` — a gap wide enough to be a real outage gets ONE recorded
-            // entry per enabled cron automation (earliest missed fire),
-            // never a retro-execution (see scheduler-ledger.ts). Runs inside
-            // this vault's scope so `automation.list` resolves its `main`.
-            onTick: (at) => {
-              void runWithVaultContext({ vaultId }, async () => {
-                const { rows } = await automation.list(settledHostFor(vaultId).codeAppsDir());
-                const missed = automation.recordSchedulerTick({
-                  ledger: schedulerLedgerFor(vaultId),
-                  now: at,
-                  automations: rows,
-                });
-                if (missed.length > 0) {
-                  const latest = missed[missed.length - 1]!;
-                  health.reportDegraded(
-                    'automation-runs',
-                    `${missed.length} automation${missed.length === 1 ? '' : 's'} missed a ` +
-                      `scheduled fire during downtime (vault ${vaultId}) — latest ` +
-                      `${latest.automationRef} scheduled for ${latest.scheduledFor}`,
-                  );
-                  logger.warn(
-                    `scheduler (vault ${vaultId}): recorded ${missed.length} missed window(s) ` +
-                      'after a gap — recorded, not retro-executed',
-                  );
-                }
-              }).catch((err) => {
-                logger.warn(
-                  `scheduler ledger tick (vault ${vaultId}) failed: ` +
-                    (err instanceof Error ? err.message : String(err)),
-                );
-              });
-            },
+            // This legacy ledger now carries liveness only. Missed/source
+            // position and gap truth live solely in automation_trigger_cursor.
+            onTick: (at) => schedulerLedgerFor(vaultId).recordTick(at),
             onDormancyChange: (dormant, at) =>
               runWithVaultContext({ vaultId }, () => {
                 schedulerLedgerFor(vaultId).setDormant(dormant, at);
@@ -2168,81 +2414,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return settled.inFlight;
   };
 
-  // Condition-trigger evaluation (duaility: time semantics live in the
-  // data). On the trigger's `every` gate, run its consented read under the
-  // automation's agent grant; unseen rows fire the automation with the
-  // rows as `ctx.input`. A receipted deny or bridge error logs and skips —
-  // failure never widens access and never stalls the tick. Runs inside the
-  // vault scope its scheduler established.
-  const evaluateCondition = async (ref: string, triggerIndex: number): Promise<void> => {
-    const parsed = automation.parseRef(ref);
-    if (!parsed) return;
-    const row = await automation.readAppOwned(
-      currentSettledHost().codeAppsDir(),
-      parsed.appId,
-      parsed.automationId,
-    );
-    if (!row || !row.enabled || !row.manifest.vault) return;
-    const trigger = row.manifest.triggers[triggerIndex];
-    if (!trigger) return;
-    const purpose = row.manifest.vault.purpose;
-    const vault = vaultRegistry.agentBridgeFor(parsed.appId);
-    const journalDbFile = currentWorkspace().journalDbFile;
-    if (trigger.kind === 'condition') {
-      const evaluation = await automation.evaluateConditionTrigger({
-        automationRef: ref,
-        trigger,
-        triggerIndex,
-        purpose,
-        journalDbFile,
-        vault,
-      });
-      if (evaluation.reason) {
-        logger.warn(`condition trigger ${ref}[${triggerIndex}] skipped: ${evaluation.reason}`);
-        return;
-      }
-      if (!evaluation.fire) return;
-      fireAutomation(ref, {
-        triggerKind: 'scheduled',
-        triggerOrigin: 'condition',
-        input: {
-          trigger: { kind: 'condition', index: triggerIndex, entity: trigger.entity },
-          rows: evaluation.rows,
-          matched: evaluation.matched,
-        },
-      });
-      return;
-    }
-    if (trigger.kind === 'data') {
-      const evaluation = await automation.evaluateDataTrigger({
-        automationRef: ref,
-        trigger,
-        triggerIndex,
-        purpose,
-        journalDbFile,
-        vault,
-      });
-      if (evaluation.reason) {
-        // Reconcile uses this same evaluator to establish a fresh watcher's
-        // no-history cursor. A soft "skip" there would let publish report
-        // ready without a cursor and make the first real write become the
-        // bootstrap (and therefore not fire). Reject instead: reconcile
-        // propagates readiness failure, while minute/nudge callers route it
-        // through the scheduler's fire-and-forget onError path.
-        throw new Error(`data trigger ${ref}[${triggerIndex}] failed: ${evaluation.reason}`);
-      }
-      if (!evaluation.fire) return;
-      fireAutomation(ref, {
-        triggerKind: 'scheduled',
-        triggerOrigin: 'data',
-        input: {
-          trigger: { kind: 'data', index: triggerIndex, entities: trigger.entities },
-          changes: evaluation.changes,
-        },
-      });
-    }
-  };
-
   // ── Webhook trigger route (issue #96) ─────────────────────────────────
   // The desktop/daemon gateway IS the always-on host, so it answers webhook
   // POSTs directly. `makeWebhookRouteHandler`
@@ -2252,66 +2423,35 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // minted from 24 random bytes — cross-vault collision is not a realistic
   // concern) resolves which vault owns the slug and delegates the WHOLE
   // request to that vault's instance, so nothing `makeWebhookRouteHandler`
-  // already does (auth, rate limit, in-flight guard, body cap, response
-  // shape) is reimplemented here.
+  // already does (auth, rate limit, body cap, response shape) is
+  // reimplemented here. Accepted requests enter the durable ingress table;
+  // the same cursor engine that handles cron/data/condition drains them.
   const webhookHandlers = new Map<string, RouteHandler>();
 
-  /**
-   * Blocking automation fire for the webhook route — unlike the
-   * fire-and-forget `fireAutomation` the scheduler/manual-run routes use
-   * (which streams progress over the SSE bus and returns immediately), a
-   * webhook POST awaits the run to completion and answers with its outcome,
-   * matching the contract `makeWebhookRouteHandler` expects from its `fire`
-   * callback.
-   */
-  const webhookFire = async (
+  const webhookIngress = async (
     vaultId: string,
-    automationRef: string,
-    body: unknown,
-  ): Promise<automation.WebhookFireResult> => {
+    input: Parameters<automation.WebhookIngressFn>[0],
+  ): Promise<automation.WebhookIngressResult> => {
     const plane = vaultRegistry.get(vaultId);
-    if (!plane) return { ok: false, error: `unknown vault "${vaultId}"` };
-    const host = settledHostFor(vaultId);
-    const runId = `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
-    const agent = await resolveAutomationAgentForRef(automationRef, host.codeAppsDir());
+    if (!plane) return { accepted: false, error: `unknown vault "${vaultId}"` };
     try {
-      const { outcome } = await runWithVaultContext({ vaultId }, () =>
-        runAutomation({
-          automationRef,
-          runId,
-          appsDir: plane.workspace.appsDir,
-          journalDbFile: plane.workspace.journalDbFile,
-          codeAppsDir: host.codeAppsDir(),
-          // Each fire's ctx.vault rides the automation's enrolled
-          // agent.agent credential, resolved per app id (duaility §12) —
-          // same as the default local fire path above.
-          vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId),
-          resolveConnection: connectionBroker.resolveForFire,
-          runner: agent.runner,
-          triggerKind: 'scheduled',
-          triggerOrigin: 'webhook',
-          ...(body !== undefined ? { input: body } : {}),
-          ...(agent.model ? { model: agent.model } : {}),
-          onRunEvent: (ev) => runEventBus.publish(runId, ev),
-        }),
-      );
-      // Grant-matched outbox items the fire just staged drain now (issue
-      // #306 phase 3), same as the default local fire path.
-      drainOutbox(plane);
-      // Health parity with `fireAutomation` (issue #351 tier 2): a
-      // webhook-triggered fire used to bypass `automation-runs` entirely —
-      // a connector wired to a broken webhook could fail silently forever.
-      // This mirrors `fireAutomation`'s semantics exactly: `reportOk` means
-      // the FIRE PIPELINE ran (not that the automation's own outcome was
-      // ok — a failing handler still reports pipeline-ok here); only an
-      // exception firing the run at all (caught below) flips it to error.
-      health.reportOk('automation-runs');
-      return { ok: outcome.ok, runId, ...(outcome.error ? { error: outcome.error } : {}) };
+      const bodyJson = JSON.stringify(input.body ?? null);
+      const result = triggerStoreFor(vaultId).appendIngress({
+        source: 'webhook',
+        sourceKey: input.webhookId,
+        deliveryId: input.deliveryId,
+        receivedAt: input.receivedAt,
+        payloadJson: bodyJson,
+        expiresAt: input.receivedAt + 72 * 60 * 60 * 1000,
+      });
+      triggerStoreFor(vaultId).pruneIngress(Date.now());
+      const scheduler = schedulerFor(vaultId);
+      scheduler.nudgeIngress?.(input.webhookId);
+      return { accepted: true, ...(!result.inserted ? { duplicate: true } : {}) };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      health.reportError('automation-runs', `webhook ${automationRef}: ${message}`);
-      runEventBus.publish(runId, { type: 'turn.end', turnId: runId, ok: false, error: message });
-      return { ok: false, runId, error: message };
+      health.reportError('automation-runs', `webhook ingress ${input.automationRef}: ${message}`);
+      return { accepted: false, error: message };
     }
   };
 
@@ -2320,7 +2460,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     if (existing) return existing;
     const handler = automation.makeWebhookRouteHandler({
       appsDir: settledHostFor(vaultId).codeAppsDir(),
-      fire: ({ automationRef, body }) => webhookFire(vaultId, automationRef, body),
+      ingress: (input) => webhookIngress(vaultId, input),
     });
     webhookHandlers.set(vaultId, handler);
     return handler;

@@ -10,10 +10,11 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * a wrong secret 401s, and an unknown id 404s.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
 
@@ -29,6 +30,13 @@ function pathsUnder(dir: string): GatewayPaths {
 
 function auth(extra: Record<string, string> = {}): Record<string, string> {
   return { Authorization: `Bearer ${handle.token}`, ...extra };
+}
+
+async function journalDbPath(): Promise<string> {
+  const entries = await fs.readdir(dataDir, { recursive: true });
+  const relative = entries.find((entry) => entry.endsWith('journal.db'));
+  if (!relative) throw new Error('gateway journal.db was not created');
+  return path.join(dataDir, relative);
 }
 
 async function openSession(sessionId: string): Promise<void> {
@@ -77,11 +85,13 @@ async function publish(appId: string, sessionId: string, message: string): Promi
  * The scaffolded DEFAULT_HANDLER calls ctx.agent, which would make this test's
  * outcome depend on whatever codex/claude CLI happens to be on the test
  * runner's PATH (or hang). Swapping in a handler with no `ctx.agent` keeps the
- * fire hermetic while still exercising the REAL webhook auth + cross-vault
- * resolution + blocking-fire path end to end — only the handler body is a
- * stand-in.
+ * fire hermetic while still exercising the REAL webhook auth, cross-vault
+ * resolution, durable ingress, cursor advance, and asynchronous fire path
+ * end to end — only the handler body is a stand-in.
  */
-async function createWebhookAutomation(appId: string): Promise<{ id: string; secret: string }> {
+async function createWebhookAutomation(
+  appId: string,
+): Promise<{ id: string; secret: string; ref: string }> {
   const res = await fetch(`${handle.url}/centraid/_automations`, {
     method: 'POST',
     headers: auth({ 'Content-Type': 'application/json' }),
@@ -94,8 +104,12 @@ async function createWebhookAutomation(appId: string): Promise<{ id: string; sec
     }),
   });
   expect(res.status).toBe(201);
-  const body = (await res.json()) as { webhook?: { id: string; secret: string; url: string } };
+  const body = (await res.json()) as {
+    row?: { ref: string };
+    webhook?: { id: string; secret: string; url: string };
+  };
   expect(body.webhook).toBeTruthy();
+  expect(body.row?.ref).toBeTruthy();
   expect(body.webhook!.url).toMatch(/\/_centraid-hook\//);
 
   const sessionId = `edit-${appId}`;
@@ -108,7 +122,7 @@ async function createWebhookAutomation(appId: string): Promise<{ id: string; sec
   );
   await publish(appId, sessionId, 'swap in a no-dispatch handler for the test');
 
-  return { id: body.webhook!.id, secret: body.webhook!.secret };
+  return { id: body.webhook!.id, secret: body.webhook!.secret, ref: body.row!.ref };
 }
 
 beforeEach(async () => {
@@ -121,8 +135,8 @@ afterEach(async () => {
   await fs.rm(dataDir, { recursive: true, force: true });
 });
 
-test('the correct secret fires the automation WITHOUT the gateway owner bearer token', async () => {
-  const { id, secret } = await createWebhookAutomation('hookapp');
+test('the correct secret durably ingresses then fires WITHOUT the gateway owner bearer token', async () => {
+  const { id, secret, ref } = await createWebhookAutomation('hookapp');
 
   // Deliberately no `auth()` header — the gateway owner's bearer is
   // intentionally absent. The shared webhook secret is the only auth here.
@@ -131,11 +145,79 @@ test('the correct secret fires the automation WITHOUT the gateway owner bearer t
     headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ hello: 'world' }),
   });
-  expect(res.status).toBe(200);
-  const body = (await res.json()) as { ok: boolean; runId?: string; error?: string };
-  expect(body.ok).toBe(true);
-  expect(body.runId).toBeTruthy();
+  expect(res.status).toBe(202);
+  const body = (await res.json()) as {
+    accepted: boolean;
+    deliveryId?: string;
+    error?: string;
+  };
+  expect(body.accepted).toBe(true);
+  expect(body.deliveryId).toBeTruthy();
   expect(body.error).toBeUndefined();
+
+  await vi.waitFor(async () => {
+    const db = new DatabaseSync(await journalDbPath(), { readOnly: true });
+    try {
+      expect(
+        (db.prepare('SELECT COUNT(*) AS n FROM trigger_ingress').get() as { n: number }).n,
+      ).toBe(1);
+      const cursor = db
+        .prepare(
+          `SELECT position_json FROM automation_trigger_cursor
+            WHERE automation_id = ? AND source_kind = 'webhook'`,
+        )
+        .get(ref) as { position_json: string | null } | undefined;
+      expect(cursor?.position_json).toEqual(expect.any(String));
+      expect(Number(JSON.parse(cursor!.position_json!))).toBeGreaterThan(0);
+    } finally {
+      db.close();
+    }
+  });
+
+  await vi.waitFor(
+    async () => {
+      const db = new DatabaseSync(await journalDbPath(), { readOnly: true });
+      try {
+        const direct = db
+          .prepare(
+            `SELECT t.id AS turn_id, t.trigger_origin, t.ended_at, t.ok, c.automation_id
+               FROM turns t JOIN conversations c ON c.id = t.conversation_id`,
+          )
+          .all() as Array<{
+          turn_id: string;
+          trigger_origin: string;
+          ended_at: number | null;
+          ok: number | null;
+          automation_id: string;
+        }>;
+        expect(direct).toContainEqual(
+          expect.objectContaining({
+            automation_id: ref,
+            trigger_origin: 'webhook',
+            ended_at: expect.any(Number),
+            ok: 1,
+          }),
+        );
+      } finally {
+        db.close();
+      }
+      const feed = await fetch(
+        `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent(ref)}`,
+        { headers: auth() },
+      );
+      const payload = (await feed.json()) as {
+        turns: Array<{ triggerOrigin?: string; endedAt?: number; ok?: boolean }>;
+      };
+      expect(payload.turns).toContainEqual(
+        expect.objectContaining({
+          triggerOrigin: 'webhook',
+          endedAt: expect.any(Number),
+          ok: true,
+        }),
+      );
+    },
+    { timeout: 10_000 },
+  );
 });
 
 test('a wrong secret is rejected with 401, still without the gateway owner bearer token', async () => {

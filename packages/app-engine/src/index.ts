@@ -368,6 +368,14 @@ export {
   type InsertAttachmentInput,
   type ListTurnsOptions,
 } from './conversation/store.js';
+export {
+  AutomationTriggerStore,
+  type AutomationTriggerCursor,
+  type PutAutomationTriggerCursor,
+  type TriggerIngressRecord,
+  type AppendTriggerIngress,
+  type TriggerIngressBounds,
+} from './conversation/trigger-store.js';
 export type { AutomationTurnStreamEvent } from './conversation/automation-turn-stream-event.js';
 export type {
   Conversation,

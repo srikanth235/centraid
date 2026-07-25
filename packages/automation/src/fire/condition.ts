@@ -24,6 +24,7 @@ import { createHash } from 'node:crypto';
 import { ConversationStore, makeJournalDbProvider, type VaultBridge } from '@centraid/app-engine';
 import type { ConditionTrigger, DataTrigger } from '../manifest/manifest.js';
 import { parseRef } from '../manifest/ref.js';
+import type { CursorReadResult } from './cursor-engine.js';
 
 /**
  * Reserved `automation_state` key prefix for trigger cursors. Handlers share
@@ -226,4 +227,129 @@ export async function evaluateDataTrigger(opts: EvaluateDataOptions): Promise<Da
   }
   // The bootstrap pull (cursor was null) intentionally never fires.
   return { fire: cursor !== null && changes.length > 0, changes };
+}
+
+export interface ReadConditionCursorOptions {
+  automationRef: string;
+  trigger: ConditionTrigger;
+  purpose: string;
+  vault: VaultBridge;
+  positionJson?: string;
+  limit: number;
+  now: Date;
+}
+
+function stringArrayPosition(positionJson: string | undefined): string[] {
+  if (!positionJson) return [];
+  try {
+    const parsed = JSON.parse(positionJson) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Derived-query cursor source: content hashes are its ordered position set. */
+export async function readConditionCursor(
+  options: ReadConditionCursorOptions,
+): Promise<CursorReadResult> {
+  if (!parseRef(options.automationRef)) {
+    throw new Error(`invalid ref ${options.automationRef}`);
+  }
+  const result = await options.vault({
+    op: 'read',
+    payload: {
+      entity: options.trigger.entity,
+      ...(options.trigger.where ? { where: options.trigger.where } : {}),
+      purpose: options.purpose,
+      limit: 1000,
+    },
+  });
+  if (!result.ok) {
+    throw new Error(`${result.code ?? 'VAULT_ERROR'}: ${result.error ?? 'vault read failed'}`);
+  }
+  const rows = ((result.result as { rows?: Record<string, unknown>[] })?.rows ?? []).slice();
+  const seen = new Set(stringArrayPosition(options.positionJson));
+  const current = rows.map(rowHash);
+  const fresh = rows
+    .map((row, index) => ({ row, hash: current[index]! }))
+    .filter(({ hash }) => !seen.has(hash));
+  return {
+    elements: fresh.slice(0, options.limit).map(({ row, hash }) => ({
+      position: hash,
+      occurredAt: options.now.getTime(),
+      payload: row,
+    })),
+    positionJson: JSON.stringify(current.slice(0, MAX_SEEN_HASHES)),
+    skipped: Math.max(0, fresh.length - options.limit),
+    ...(fresh.length > options.limit ? { gapReason: 'condition_catch_up_cap' } : {}),
+  };
+}
+
+export interface ReadDataCursorOptions {
+  automationRef: string;
+  trigger: DataTrigger;
+  purpose: string;
+  vault: VaultBridge;
+  positionJson?: string;
+  limit: number;
+  now: Date;
+}
+
+function scalarPosition(positionJson: string | undefined): string | null {
+  if (!positionJson) return null;
+  try {
+    const parsed = JSON.parse(positionJson) as unknown;
+    return typeof parsed === 'string' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function changePosition(change: Record<string, unknown>, index: number): string {
+  for (const key of ['id', 'provId', 'provenanceId', 'cursor']) {
+    const value = change[key];
+    if (typeof value === 'string' && value) return value;
+  }
+  return `${rowHash(change)}:${index}`;
+}
+
+/** Vault provenance cursor source. Missing position bootstraps from now. */
+export async function readDataCursor(options: ReadDataCursorOptions): Promise<CursorReadResult> {
+  if (!parseRef(options.automationRef)) {
+    throw new Error(`invalid ref ${options.automationRef}`);
+  }
+  const cursor = scalarPosition(options.positionJson);
+  const result = await options.vault({
+    op: 'changes',
+    payload: {
+      entities: [...options.trigger.entities],
+      purpose: options.purpose,
+      cursor,
+      limit: Math.max(200, options.limit + 1),
+    },
+  });
+  if (!result.ok) {
+    throw new Error(`${result.code ?? 'VAULT_ERROR'}: ${result.error ?? 'vault changes failed'}`);
+  }
+  const feed = result.result as {
+    changes?: Record<string, unknown>[];
+    cursor?: string;
+  };
+  const changes = feed.changes ?? [];
+  const visible = cursor === null ? [] : changes.slice(0, options.limit);
+  return {
+    elements: visible.map((change, index) => ({
+      position: changePosition(change, index),
+      occurredAt: options.now.getTime(),
+      payload: change,
+    })),
+    ...(typeof feed.cursor === 'string' ? { positionJson: JSON.stringify(feed.cursor) } : {}),
+    skipped: cursor === null ? 0 : Math.max(0, changes.length - options.limit),
+    ...(cursor !== null && changes.length > options.limit
+      ? { gapReason: 'data_catch_up_cap' }
+      : {}),
+  };
 }

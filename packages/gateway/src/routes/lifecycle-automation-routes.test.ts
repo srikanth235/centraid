@@ -148,6 +148,58 @@ test('update replaces a cron trigger with a different cron expression', async ()
   expect(row.manifest.triggers).toEqual([{ kind: 'cron', expr: '0 * * * *' }]);
 });
 
+test('create/update round-trip declarative connector event triggers', async () => {
+  const connections = [
+    {
+      connectionId: 'github-account-1',
+      kind: 'pull.github',
+      label: 'Work GitHub',
+    },
+  ];
+  const created = await createAutomation('provider-events', {
+    connections,
+    triggers: [
+      {
+        kind: 'event',
+        connectorKind: 'pull.github',
+        event: 'pull-request',
+        filter: { repo: 'acme/app' },
+      },
+    ],
+  });
+  expect(created.row.manifest.triggers).toEqual([
+    {
+      kind: 'event',
+      connectorKind: 'pull.github',
+      event: 'pull-request',
+      filter: { repo: 'acme/app' },
+    },
+  ]);
+
+  const changed = await update(created.row.ref, {
+    connections,
+    triggers: [
+      {
+        kind: 'event',
+        connectorKind: 'pull.github',
+        event: 'issue',
+        filter: { repo: 'acme/app' },
+        every: '*/2 * * * *',
+      },
+    ],
+  });
+  expect(changed.status).toBe(200);
+  expect((changed.json.row as { manifest: { triggers: unknown[] } }).manifest.triggers).toEqual([
+    {
+      kind: 'event',
+      connectorKind: 'pull.github',
+      event: 'issue',
+      filter: { repo: 'acme/app' },
+      every: '*/2 * * * *',
+    },
+  ]);
+});
+
 test('update mints a fresh webhook when the automation had none before', async () => {
   const created = await createAutomation('gains-a-hook', {
     triggers: [{ kind: 'cron', expr: '0 9 * * *' }],

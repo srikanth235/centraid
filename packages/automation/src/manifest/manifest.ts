@@ -192,12 +192,61 @@ export type DataTrigger = {
   readonly every?: string;
 };
 
+export const EVENT_DEFAULT_EVERY = '*/5 * * * *';
+export const EVENT_TRIGGER_CATALOG = {
+  'pull.gmail': ['new-message'],
+  'pull.github': ['pull-request', 'issue'],
+} as const;
+
+/**
+ * A provider change-feed cursor over one explicitly bound connection.
+ * Provider adapters interpret `event` + `filter`; the engine sees only an
+ * ordered cursor source and normalized ingress elements.
+ */
+export type EventTrigger = {
+  readonly kind: 'event';
+  readonly connectorKind: string;
+  readonly event: string;
+  readonly filter?: Readonly<Record<string, unknown>>;
+  readonly every?: string;
+};
+
 export type Trigger =
   | CronTrigger
   | WebhookTrigger
   | PendingWebhookTrigger
   | ConditionTrigger
-  | DataTrigger;
+  | DataTrigger
+  | EventTrigger;
+
+const TRIGGER_CURSOR_DENIED_TABLES = new Set([
+  'trigger_ingress',
+  'automation_trigger_cursor',
+  'automation_state',
+  'scheduler_ledger',
+  'conversations',
+  'turns',
+  'items',
+  'attachments',
+  'run_summary',
+  'conversation_archive',
+  'conversation_digest',
+]);
+
+/** Shared authoring/runtime loop guard for cursor-targeted vault entities. */
+export function isDeniedTriggerCursorEntity(entity: string): boolean {
+  const [schema = '', table = ''] = entity.split('.', 2);
+  return schema === 'outbox' || TRIGGER_CURSOR_DENIED_TABLES.has(table || schema);
+}
+
+function rejectDeniedTriggerEntity(entity: string, field: string): void {
+  if (!isDeniedTriggerCursorEntity(entity)) return;
+  throw new ManifestError(
+    'invalid_trigger',
+    `manifest.${field} must not watch "${entity}" — cursor machinery, outbox, ingress, and conversation-ledger entities are excluded to prevent trigger loops`,
+    field,
+  );
+}
 
 /** The cron triggers from a trigger list, in declaration order. */
 export function cronTriggersOf(triggers: readonly Trigger[]): readonly CronTrigger[] {
@@ -435,6 +484,7 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
         `${field}.entity`,
       );
     }
+    rejectDeniedTriggerEntity(entity, `${field}.entity`);
     let every: string | undefined;
     if (t.every !== undefined) {
       every = requireString(t.every, `${field}.every`);
@@ -501,18 +551,7 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
           ef,
         );
       }
-      // Loop guard (issue #308 A8): outbox drains write receipted results
-      // that would re-enter the change feed — a data trigger watching
-      // outbox.* could re-stage on its own drain and cycle forever. The
-      // outbox is the CONSENT surface, not a data source; refused here so
-      // the manifest fails loudly at author time.
-      if (entity.startsWith('outbox.')) {
-        throw new ManifestError(
-          'invalid_trigger',
-          `manifest.${ef} must not watch "${entity}" — outbox entities are excluded from data triggers (a drain's own receipts would re-fire the automation, issue #308)`,
-          ef,
-        );
-      }
+      rejectDeniedTriggerEntity(entity, ef);
       return entity;
     });
     let every: string | undefined;
@@ -528,9 +567,50 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
     }
     return { kind: 'data', entities, ...(every !== undefined ? { every } : {}) };
   }
+  if (t.kind === 'event') {
+    const connectorKind = requireString(t.connectorKind, `${field}.connectorKind`);
+    const event = requireString(t.event, `${field}.event`);
+    const supported = EVENT_TRIGGER_CATALOG[connectorKind as keyof typeof EVENT_TRIGGER_CATALOG];
+    if (!supported || !(supported as readonly string[]).includes(event)) {
+      throw new ManifestError(
+        'invalid_trigger',
+        `manifest.${field} has unsupported provider event "${connectorKind}:${event}"`,
+        `${field}.event`,
+      );
+    }
+    let every: string | undefined;
+    if (t.every !== undefined) {
+      every = requireString(t.every, `${field}.every`);
+      if (!isValidCronExpression(every)) {
+        throw new ManifestError(
+          'invalid_trigger',
+          `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
+          `${field}.every`,
+        );
+      }
+    }
+    let filter: Readonly<Record<string, unknown>> | undefined;
+    if (t.filter !== undefined) {
+      if (t.filter === null || typeof t.filter !== 'object' || Array.isArray(t.filter)) {
+        throw new ManifestError(
+          'invalid_trigger',
+          `manifest.${field}.filter must be an object`,
+          `${field}.filter`,
+        );
+      }
+      filter = t.filter as Readonly<Record<string, unknown>>;
+    }
+    return {
+      kind: 'event',
+      connectorKind,
+      event,
+      ...(filter ? { filter } : {}),
+      ...(every ? { every } : {}),
+    };
+  }
   throw new ManifestError(
     'invalid_trigger',
-    `manifest.${field}.kind "${String(t.kind)}" is not supported — expected "cron", "webhook", "condition" or "data"`,
+    `manifest.${field}.kind "${String(t.kind)}" is not supported — expected "cron", "webhook", "condition", "data" or "event"`,
     `${field}.kind`,
   );
 }
@@ -860,6 +940,16 @@ export function validateManifest(raw: unknown): Manifest {
       'manifest.triggers contains a condition/data trigger but no manifest.vault block declares the access it reads under',
       'vault',
     );
+  }
+  for (const trigger of triggers) {
+    if (trigger.kind !== 'event') continue;
+    if (!connections?.some((binding) => binding.kind === trigger.connectorKind)) {
+      throw new ManifestError(
+        'invalid_trigger',
+        `manifest event trigger "${trigger.event}" requires a bound "${trigger.connectorKind}" connection`,
+        'connections',
+      );
+    }
   }
   const apps = optionalStringArray(r.apps, 'apps');
   const costEstimate = validateCostEstimate(r.costEstimate);

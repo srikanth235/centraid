@@ -31,6 +31,9 @@ export {
   parseManifest,
   validateManifest,
   webhookTriggerOf,
+  isDeniedTriggerCursorEntity,
+  EVENT_DEFAULT_EVERY,
+  EVENT_TRIGGER_CATALOG,
   type Manifest,
   type ManifestRequires,
   type ManifestVault,
@@ -46,6 +49,7 @@ export {
   type ConditionWhereClause,
   type ConditionOp,
   type DataTrigger,
+  type EventTrigger,
   type OutputSchema,
   type HistoryConfig,
   type HistoryKeep,
@@ -56,10 +60,14 @@ export {
 export {
   evaluateConditionTrigger,
   evaluateDataTrigger,
+  readConditionCursor,
+  readDataCursor,
   type ConditionEvaluation,
   type EvaluateConditionOptions,
   type DataEvaluation,
   type EvaluateDataOptions,
+  type ReadConditionCursorOptions,
+  type ReadDataCursorOptions,
 } from './fire/condition.js';
 
 // Automation identity — the `<appId>/<id>` handle that scheduler labels,
@@ -91,6 +99,20 @@ export {
   type InProcessSchedulerOptions,
   type LocalScheduler,
 } from './fire/in-process-scheduler.js';
+export {
+  VaultCursorEngine,
+  isDeniedCursorEntity,
+  assertTriggerCursorAllowed,
+  eventSourceKey,
+  DEFAULT_TRIGGER_CATCH_UP_CAP,
+  type VaultCursorEngineOptions,
+  type TriggerCursorReadInput,
+  type TriggerCursorFireInput,
+  type CursorReadResult,
+  type CursorElement,
+  type CursorStore,
+} from './fire/cursor-engine.js';
+export { dueInstants } from './fire/cron-cursor.js';
 
 // Missed-automation-run ledger (issue #351 tier 2): the honest record a
 // downtime leaves behind now that the scheduler's "no backfill" silence is
@@ -129,8 +151,8 @@ export {
   type ProvisionedWebhookInFiles,
   type RotatedWebhookInFiles,
   type WebhookFileMapEntry,
-  type WebhookFireFn,
-  type WebhookFireResult,
+  type WebhookIngressFn,
+  type WebhookIngressResult,
   type WebhookRouteOptions,
 } from './scaffold/webhook.js';
 
