@@ -106,9 +106,13 @@ const PAGES: readonly PageDef[] = [
       'Bring your existing data into the vault — everything stages for review before it lands.',
   },
   // Connections / Connectors moved to a primary sidebar page (ConnectorsRoute).
+  // "Storage provider", not "Storage": the Operations sidebar owns a page
+  // called Storage now (issue #544 — local footprint, budget, and backups),
+  // and two destinations under the same word is a coin toss for the owner.
+  // This one is narrower and always was: the provider CONNECTION.
   {
     id: 'storage',
-    label: 'Storage',
+    label: 'Storage provider',
     section: 'Account',
     icon: 'Webhook',
     subtitle:

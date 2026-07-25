@@ -137,6 +137,7 @@ import { applyRestoreQuarantine, type QuarantineStatus } from './vault-quarantin
 import { replicaIntentContext } from './replica-intent-context.js';
 import { vaultContext } from './vault-context.js';
 import { GroupCommitQueue } from './group-commit-queue.js';
+import { decideJournalArchive } from './journal-limit.js';
 
 /** Blob-sweep failure backoff (issue #367 §C5) — one step per consecutive failure, flat-capped. */
 const BLOB_SWEEP_BACKOFF_STEP_MS = 60_000;
@@ -258,6 +259,14 @@ export interface VaultPlaneOptions {
    * `durationMs` the wall-clock of the detached reconcile. Accounting only.
    */
   onReplicationPass?: (info: { bytesReplicated: number; durationMs: number }) => void;
+  /**
+   * The owner's `journal.db` size limit in bytes (issue #544), or `null` when
+   * unset. Read fresh on every sweep so a limit change takes effect without a
+   * remount. Over the limit, the sweep bypasses its once-a-day archival gate
+   * and narrows the archival window down a fixed ladder — see
+   * `journal-limit.ts` for the whole policy. Omit for today's time-only cadence.
+   */
+  journalLimitBytes?: () => number | null;
 }
 
 /** A grant request the owner approves — scopes as the manifest declares them. */
@@ -421,6 +430,11 @@ export class VaultPlane {
   private walTimer: NodeJS.Timeout | undefined;
   private firstWalTick: NodeJS.Immediate | undefined;
   private lastJournalArchivalAt = 0;
+  /** The owner's `journal.db` size limit (#544), read fresh each sweep. */
+  private readonly journalLimitBytes: () => number | null;
+  /** Ladder position for the size-triggered archive (#544, journal-limit.ts) —
+   *  in-memory by design: a restart re-derives it from the file size. */
+  private journalArchiveRung = 0;
   // Resume point for the bounded repricing pass (#445); wraps to 0 at the tail.
   private repriceCursor = 0;
   private closed = false;
@@ -465,6 +479,7 @@ export class VaultPlane {
     this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork ?? (() => false);
     this.onSweepPass = options.onSweepPass;
     this.onReplicationPass = options.onReplicationPass;
+    this.journalLimitBytes = options.journalLimitBytes ?? (() => null);
     this.dir = options.dir;
     // Runner scratch lives in a disposable cache OUTSIDE the vault tree; fall
     // back to the vault dir only for callers that don't supply one (tests).
@@ -1794,6 +1809,26 @@ export class VaultPlane {
   static readonly FALLBACK_CHECKPOINT_WAL_BYTES = 64 * 1024 * 1024;
 
   /**
+   * `journal.db` + its `-wal` on disk, in bytes (issue #544) — the input to
+   * the size-triggered archive decision. The WAL counts: pages sitting there
+   * are the file's real occupancy until a checkpoint folds them in, and the
+   * archival pass ships them first anyway. Missing files count zero (a
+   * memory-backed test vault has none), so an unmeasurable journal reads as
+   * "under any limit" rather than triggering an archive on a guess.
+   */
+  private journalFileBytes(): number {
+    let total = 0;
+    for (const name of ['journal.db', 'journal.db-wal']) {
+      try {
+        total += statSync(path.join(this.dir, name)).size;
+      } catch {
+        // Absent file — zero bytes, not an error.
+      }
+    }
+    return total;
+  }
+
+  /**
    * One WAL capture tick (issue #408). Public so the BackupService's drain
    * loop and tests can force a capture at a known instant; the plane's own
    * `walTimer` is just this on a 60 s clock.
@@ -1996,8 +2031,30 @@ export class VaultPlane {
       // once per day per plane; the 90-day window makes it a no-op on young
       // vaults, and the segments it writes join the blob CAS, so the sweep
       // above replicates them remotely on the next pass.
-      if (Date.now() - this.lastJournalArchivalAt >= JOURNAL_ARCHIVAL_MIN_INTERVAL_MS) {
+      //
+      // Size-triggered override (issue #544): when the owner has set a
+      // `journal.db` limit and the file is over it, the daily gate is
+      // bypassed and the window narrows one rung per sweep down a fixed
+      // ladder with a 7-day floor. The whole policy is `decideJournalArchive`
+      // — pure, so this block only measures, calls, and logs.
+      const archiveDecision = decideJournalArchive({
+        journalBytes: this.journalFileBytes(),
+        limitBytes: this.journalLimitBytes(),
+        rung: this.journalArchiveRung,
+        dailyGateElapsed:
+          Date.now() - this.lastJournalArchivalAt >= JOURNAL_ARCHIVAL_MIN_INTERVAL_MS,
+      });
+      this.journalArchiveRung = archiveDecision.nextRung;
+      if (archiveDecision.run) {
         this.lastJournalArchivalAt = Date.now();
+        if (archiveDecision.overLimit) {
+          this.logger.info(
+            `vault plane: journal over its ${this.journalLimitBytes()}-byte limit — ` +
+              `archiving early at a ${archiveDecision.windowDays}-day window` +
+              (archiveDecision.atFloor ? ' (window floor reached)' : ''),
+          );
+        }
+        const archiveWindow = { windowDays: archiveDecision.windowDays };
         try {
           // Ship the journal's pending WAL bytes BEFORE archival: the
           // archival VACUUM rewrites the whole file through the WAL, and a
@@ -2006,7 +2063,7 @@ export class VaultPlane {
           // burst (issue #408 — journal archival is the one sanctioned bulk
           // rewrite of a shipped database).
           this.walTick();
-          const archived = runJournalArchival(this.db);
+          const archived = runJournalArchival(this.db, archiveWindow);
           if (archived.rowsArchived > 0) {
             this.logger.info(
               `vault plane: journal archival rowsArchived=${archived.rowsArchived} ` +
@@ -2035,14 +2092,17 @@ export class VaultPlane {
                 `turns=${repriced.turnsRederived} scanned=${repriced.scanned}`,
             );
           }
-          const convArchival = runConversationArchival({
-            journal: this.db.journal,
-            blobSink: {
-              ingestSync: (bytes) => this.db.blobs.ingestSync(bytes),
-              has: (sha) => this.db.blobs.hasSync(sha),
+          const convArchival = runConversationArchival(
+            {
+              journal: this.db.journal,
+              blobSink: {
+                ingestSync: (bytes) => this.db.blobs.ingestSync(bytes),
+                has: (sha) => this.db.blobs.hasSync(sha),
+              },
+              custodyProven: (sha) => blobCustodyProven(this.db, sha),
             },
-            custodyProven: (sha) => blobCustodyProven(this.db, sha),
-          });
+            archiveWindow,
+          );
           if (convArchival.segmentsWritten > 0 || convArchival.segmentsPruned > 0) {
             this.logger.info(
               `vault plane: conversation archival segmentsWritten=${convArchival.segmentsWritten} ` +

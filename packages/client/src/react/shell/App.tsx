@@ -55,7 +55,7 @@ import AssistantRoute from './routes/AssistantRoute.js';
 import AutomationEditorRoute from './routes/AutomationEditorRoute.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
 import AutomationViewRoute from './routes/AutomationViewRoute.js';
-import BackupsRoute from './routes/BackupsRoute.js';
+import StorageRoute from './routes/StorageRoute.js';
 import BuilderRoute from './routes/BuilderRoute.js';
 import ConnectFlowModal from './routes/ConnectFlowModal.js';
 import ConnectorsRoute from './routes/ConnectorsRoute.js';
@@ -115,7 +115,7 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
     case 'connectors':
     case 'approvals':
     case 'gateway':
-    case 'backups':
+    case 'storage':
     case 'atlas':
       return route.kind;
     case 'settings':
@@ -570,7 +570,7 @@ export default function App(): JSX.Element {
           approvalsCount={blockingCount}
           onGateway={go({ kind: 'gateway' })}
           gatewayStatus={gatewayStatus}
-          onBackups={go({ kind: 'backups' })}
+          onStorage={go({ kind: 'storage' })}
           onAtlas={go({ kind: 'atlas' })}
           onSettings={go({ kind: 'settings' })}
           {...(builderEnabled ? { onNewApp: () => nav.navigate({ kind: 'builder' }) } : {})}
@@ -634,8 +634,8 @@ export default function App(): JSX.Element {
           return <ApprovalsRoute />;
         case 'gateway':
           return <GatewayRoute />;
-        case 'backups':
-          return <BackupsRoute />;
+        case 'storage':
+          return <StorageRoute />;
         case 'atlas':
           return <AtlasRoute />;
         case 'automation-view':
