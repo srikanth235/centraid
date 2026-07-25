@@ -14,7 +14,8 @@ import path from 'node:path';
 import {
   ConversationStore,
   makeJournalDbProvider,
-  type RunStreamEvent,
+  setPricingCatalog,
+  type AutomationTurnStreamEvent,
 } from '@centraid/app-engine';
 import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
 import type { Manifest } from '../manifest/manifest.js';
@@ -113,7 +114,7 @@ describe('runFire', () => {
     expect(outcome.output).toEqual({ now: new Date(record.startedAt).toISOString() });
   });
 
-  it('emits a live run-stream: run.start → node lifecycle per ctx call → run.end', async () => {
+  it('emits a live turn stream: turn.start → item lifecycle per ctx call → turn.end', async () => {
     // A handler that drives one ctx.agent. The stub dispatch returns a fixed
     // answer so the node lifecycle is deterministic.
     await writeAutomation(
@@ -126,7 +127,7 @@ describe('runFire', () => {
          return { ok: true };
        };`,
     );
-    const events: RunStreamEvent[] = [];
+    const events: AutomationTurnStreamEvent[] = [];
     const dispatch = (args: OpenDispatchArgs): Promise<DispatchSurface> => {
       void args;
       return Promise.resolve({
@@ -146,14 +147,14 @@ describe('runFire', () => {
     );
     expect(outcome.ok).toBe(true);
 
-    // run.start first, run.end last.
-    expect(events.at(0)?.type).toBe('run.start');
-    expect(events.at(-1)?.type).toBe('run.end');
-    const end = events.at(-1) as Extract<RunStreamEvent, { type: 'run.end' }>;
+    // turn.start first, turn.end last.
+    expect(events.at(0)?.type).toBe('turn.start');
+    expect(events.at(-1)?.type).toBe('turn.end');
+    const end = events.at(-1) as Extract<AutomationTurnStreamEvent, { type: 'turn.end' }>;
     expect(end.ok).toBe(true);
 
-    // The agent node opened (start) before it closed (end), at ordinal 0.
-    const lifecycle = events.filter((e) => e.type === 'node.start' || e.type === 'node.end');
+    // The agent item opened (start) before it closed (end), at ordinal 0.
+    const lifecycle = events.filter((e) => e.type === 'item.start' || e.type === 'item.end');
     expect(
       lifecycle.map((e) => [
         e.type,
@@ -161,15 +162,15 @@ describe('runFire', () => {
         (e as { kind?: string }).kind,
       ]),
     ).toEqual([
-      ['node.start', 0, 'agent'],
-      ['node.end', 0, undefined],
+      ['item.start', 0, 'agent'],
+      ['item.end', 0, undefined],
     ]);
-    const agentStart = lifecycle[0] as Extract<RunStreamEvent, { type: 'node.start' }>;
+    const agentStart = lifecycle[0] as Extract<AutomationTurnStreamEvent, { type: 'item.start' }>;
     expect(agentStart.name).toBe('agent');
     expect(agentStart.args).toEqual({ prompt: 'summarize' });
   });
 
-  it('streams ctx.agent token deltas as node.delta and persists the usage rollup', async () => {
+  it('streams ctx.agent token deltas as item.delta and persists the usage rollup', async () => {
     await writeAutomation(
       appsDir,
       'notes',
@@ -180,7 +181,7 @@ describe('runFire', () => {
          return { output: answer };
        };`,
     );
-    const events: RunStreamEvent[] = [];
+    const events: AutomationTurnStreamEvent[] = [];
     // A stub agent dispatcher that behaves like a streaming chat adapter:
     // forward token deltas + a usage event through `call.onEvent`, then
     // return the final answer.
@@ -191,10 +192,12 @@ describe('runFire', () => {
           call.onEvent?.({ type: 'assistant.delta', delta: 'lo' });
           call.onEvent?.({
             type: 'usage',
-            model: 'a-capable-model',
             provider: 'prov',
+            model: 'a-capable-model',
             inputTokens: 12,
             outputTokens: 3,
+            costUsd: 0.005,
+            costSource: 'agent',
           });
           call.onEvent?.({ type: 'final', text: 'hello' });
           return 'hello';
@@ -207,14 +210,16 @@ describe('runFire', () => {
         automationRef: 'notes/ask',
         appsDir,
         journalDbFile,
+        runnerKind: 'codex',
+        model: 'a-capable-model',
         onRunEvent: (ev) => events.push(ev),
       },
       { openDispatch: dispatch },
     );
     expect(outcome.ok).toBe(true);
 
-    // Token deltas surfaced as node.delta on the agent node (ordinal 0).
-    const deltas = events.filter((e) => e.type === 'node.delta');
+    // Token deltas surfaced as item.delta on the agent item (ordinal 0).
+    const deltas = events.filter((e) => e.type === 'item.delta');
     expect(deltas.length >= 3).toBeTruthy();
     expect(deltas.every((d) => (d as { ordinal: number }).ordinal === 0)).toBeTruthy();
     const deltaTypes = deltas.map((d) => ((d as { event: { type: string } }).event ?? {}).type);
@@ -229,13 +234,216 @@ describe('runFire', () => {
     expect(agentNode!.model).toBe('a-capable-model');
     expect(agentNode!.inputTokens).toBe(12);
     expect(agentNode!.outputTokens).toBe(3);
+    expect(agentNode!.costUsd).toBe(0.005);
+    expect(agentNode!.costSource).toBe('agent');
     const run = store.getTurn(record.runId);
+    expect(run?.conversationId).toBe('notes/ask::runner:codex');
     expect(run?.totalInputTokens).toBe(12);
     expect(run?.totalOutputTokens).toBe(3);
     store.close();
   });
 
-  it('cascades onFailure through the SAME injected dispatch surface', async () => {
+  it('persists overlapping ACP tool calls as distinct callId-keyed items', async () => {
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'parallel',
+      manifest({ name: 'Parallel' }),
+      `export default async ({ ctx }) => {
+         return { output: await ctx.agent({ prompt: 'compare both files' }) };
+       };`,
+    );
+    const dispatch = (): Promise<DispatchSurface> =>
+      Promise.resolve({
+        agentDispatcher: async (call) => {
+          call.onEvent?.({
+            type: 'tool.start',
+            toolCallId: 'call-a',
+            toolName: 'read_file',
+            args: { path: 'a.txt' },
+            rawJson: '{"toolCallId":"call-a","status":"pending"}',
+          });
+          call.onEvent?.({
+            type: 'tool.start',
+            toolCallId: 'call-b',
+            toolName: 'read_file',
+            args: { path: 'b.txt' },
+            rawJson: '{"toolCallId":"call-b","status":"pending"}',
+          });
+          // Finish out of start order: name/ordinal correlation would cross
+          // these results; callId correlation must not.
+          call.onEvent?.({
+            type: 'tool.result',
+            toolCallId: 'call-b',
+            toolName: 'read_file',
+            ok: true,
+            result: 'B',
+            rawJson: '{"toolCallId":"call-b","status":"completed","rawOutput":"B"}',
+          });
+          call.onEvent?.({
+            type: 'tool.result',
+            toolCallId: 'call-a',
+            toolName: 'read_file',
+            ok: true,
+            result: 'A',
+            rawJson: '{"toolCallId":"call-a","status":"completed","rawOutput":"A"}',
+          });
+          call.onEvent?.({
+            type: 'final',
+            text: 'done',
+            stopReason: 'end_turn',
+            rawJson: '{"stopReason":"end_turn"}',
+          });
+          return 'done';
+        },
+        async close() {},
+      });
+
+    const { record } = await runFire(
+      { automationRef: 'notes/parallel', appsDir, journalDbFile },
+      { openDispatch: dispatch },
+    );
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const tools = store
+      .listItems(record.runId)
+      .filter((item) => item.kind === 'tool')
+      .sort((a, b) => (a.callId ?? '').localeCompare(b.callId ?? ''));
+    expect(tools.map((item) => [item.callId, item.outputJson])).toEqual([
+      ['call-a', '"A"'],
+      ['call-b', '"B"'],
+    ]);
+    expect(tools.map((item) => JSON.parse(item.rawJson ?? '{}').toolCallId)).toEqual([
+      'call-a',
+      'call-b',
+    ]);
+    expect(store.listItems(record.runId).find((item) => item.kind === 'agent')?.rawJson).toBe(
+      '{"stopReason":"end_turn"}',
+    );
+    store.close();
+  });
+
+  it('keeps the final runner envelope when a later error carries none', async () => {
+    const handler = `export default async ({ ctx }) => ({ output: await ctx.agent({ prompt: 'go' }) });`;
+    await writeAutomation(appsDir, 'notes', 'late-error', manifest({ name: 'LateError' }), handler);
+    const dispatch = (): Promise<DispatchSurface> =>
+      Promise.resolve({
+        agentDispatcher: async (call) => {
+          call.onEvent?.({ type: 'final', text: 'done', rawJson: '{"stopReason":"end_turn"}' });
+          // A trailing error with no envelope of its own must not blank the
+          // one the final already captured.
+          call.onEvent?.({ type: 'error', message: 'stream closed late' });
+          return 'done';
+        },
+        async close() {},
+      });
+
+    const { record } = await runFire(
+      { automationRef: 'notes/late-error', appsDir, journalDbFile },
+      { openDispatch: dispatch },
+    );
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    expect(store.listItems(record.runId).find((item) => item.kind === 'agent')?.rawJson).toBe(
+      '{"stopReason":"end_turn"}',
+    );
+    store.close();
+  });
+
+  it('does not attribute an unconfirmed configured model when estimating usage', async () => {
+    setPricingCatalog({
+      'priced-fixture-model': {
+        input_cost_per_token: 0.001,
+        output_cost_per_token: 0.002,
+      },
+    });
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'priced',
+      manifest({ name: 'Priced' }),
+      `export default async ({ ctx }) => ({
+         output: await ctx.agent({ prompt: 'price this' }),
+       });`,
+    );
+    const dispatch = (): Promise<DispatchSurface> =>
+      Promise.resolve({
+        agentDispatcher: async (call) => {
+          call.onEvent?.({ type: 'usage', inputTokens: 2, outputTokens: 3 });
+          call.onEvent?.({ type: 'final', text: 'done' });
+          return 'done';
+        },
+        async close() {},
+      });
+
+    const { record } = await runFire(
+      {
+        automationRef: 'notes/priced',
+        appsDir,
+        journalDbFile,
+        runnerKind: 'codex',
+        model: 'priced-fixture-model',
+      },
+      { openDispatch: dispatch },
+    );
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const item = store.listItems(record.runId).find((entry) => entry.kind === 'agent');
+    // The harness confirmed neither a model nor a cost, so the run books
+    // "unknown" — not the configured model, and not an invented number.
+    expect(item?.model).toBeUndefined();
+    expect(item?.costUsd).toBeUndefined();
+    expect(item?.costSource).toBeUndefined();
+    store.close();
+  });
+
+  it('books an unpriceable harness report as unknown rather than inventing a rate', async () => {
+    setPricingCatalog({
+      'catalog-low': {
+        input_cost_per_token: 0.001,
+        output_cost_per_token: 0.002,
+      },
+      'catalog-ceiling': {
+        input_cost_per_token: 0.003,
+        output_cost_per_token: 0.004,
+      },
+    });
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'unmodelled',
+      manifest({ name: 'Unmodelled' }),
+      `export default async ({ ctx }) => ({
+         output: await ctx.agent({ prompt: 'price this too' }),
+       });`,
+    );
+    const dispatch = (): Promise<DispatchSurface> =>
+      Promise.resolve({
+        agentDispatcher: async (call) => {
+          call.onEvent?.({ type: 'usage', inputTokens: 2, outputTokens: 3 });
+          call.onEvent?.({ type: 'final', text: 'done' });
+          return 'done';
+        },
+        async close() {},
+      });
+
+    const { record } = await runFire(
+      {
+        automationRef: 'notes/unmodelled',
+        appsDir,
+        journalDbFile,
+        runnerKind: 'acp',
+      },
+      { openDispatch: dispatch },
+    );
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const agentItem = store.listItems(record.runId).find((item) => item.kind === 'agent');
+    // Tokens without a priceable model are unknown, and unknown is NULL: a
+    // catalog-wide ceiling would be indistinguishable from a real estimate.
+    expect(agentItem?.costSource).toBeUndefined();
+    expect(agentItem?.costUsd).toBeUndefined();
+    expect(agentItem?.model).toBeUndefined();
+    store.close();
+  });
+
+  it('cascades onFailure through the injected surface with the target automation harness', async () => {
     // `main` throws → its onFailure target `recover` fires, both via the one
     // injected `openDispatch`. Proves the cascade stayed in the spine and did
     // not leak back into the host.
@@ -252,13 +460,30 @@ describe('runFire', () => {
     const closes = { n: 0 };
 
     const { outcome } = await runFire(
-      { automationRef: 'notes/main', appsDir, journalDbFile },
+      {
+        automationRef: 'notes/main',
+        appsDir,
+        journalDbFile,
+        runnerKind: 'codex',
+        resolveNestedRuntime: async (ref) =>
+          ref === 'notes/recover'
+            ? { runnerKind: 'claude-code', model: 'recovery-model' }
+            : { runnerKind: 'codex' },
+      },
       { openDispatch: stubDispatch(opened, closes) },
     );
 
     expect(outcome.ok).toBe(false);
-    const refs = opened.map((o) => o.automationRef);
-    expect(refs).toEqual(['notes/main', 'notes/recover']);
+    expect(opened.map((entry) => [entry.automationRef, entry.runnerKind, entry.model])).toEqual([
+      ['notes/main', 'codex', undefined],
+      ['notes/recover', 'claude-code', 'recovery-model'],
+    ]);
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    expect(store.getConversation('notes/main::runner:codex')?.adapterKind).toBe('codex');
+    expect(store.getConversation('notes/recover::runner:claude-code')?.adapterKind).toBe(
+      'claude-code',
+    );
+    store.close();
     expect(closes.n).toBe(2);
   });
 });

@@ -180,6 +180,55 @@ test('api_key connections resolve to injectable values without any network', asy
   expect(auth && 'allowedHosts' in auth ? auth.allowedHosts : []).toEqual(['api.github.com']);
 });
 
+test('provider polling keeps credentials broker-side and enforces the durable account host pin', async () => {
+  const plane = openPlane(await tempDir());
+  const configured = plane.gateway.invoke(plane.ownerCredential, {
+    command: 'sync.configure_credential',
+    input: {
+      kind: 'pull.github',
+      label: 'work',
+      cred_kind: 'api_key',
+      provider: 'github',
+      api_key: 'github-secret-token',
+      allowed_hosts: ['api.github.com'],
+    },
+    purpose: 'dpv:ServiceProvision',
+  });
+  const connectionId = (configured as { output: { connection_id: string } }).output.connection_id;
+  const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+    expect(new Headers(init?.headers).get('authorization')).toBe('Bearer github-secret-token');
+    expect(new Headers(init?.headers).get('if-none-match')).toBe('"v1"');
+    return Response.json([{ id: 'event-1' }], {
+      headers: {
+        etag: '"v2"',
+        link: '<https://api.github.com/repos/acme/app/events?page=2>; rel="next"',
+        'x-poll-interval': '60',
+      },
+    });
+  });
+  const broker = new ConnectionBroker(() => plane, 500, undefined, fetchImpl as typeof fetch);
+  const binding = { connectionId, kind: 'pull.github', label: 'work' };
+
+  const result = await broker.pollJson(binding, 'https://api.github.com/repos/acme/app/events', {
+    'if-none-match': '"v1"',
+    authorization: 'attacker-supplied',
+  });
+  expect(result).toEqual({
+    status: 200,
+    headers: {
+      etag: '"v2"',
+      link: '<https://api.github.com/repos/acme/app/events?page=2>; rel="next"',
+      'x-poll-interval': '60',
+    },
+    body: [{ id: 'event-1' }],
+  });
+  expect(JSON.stringify(result)).not.toContain('github-secret-token');
+  await expect(
+    broker.pollJson(binding, 'https://evil.example/repos/acme/app/events'),
+  ).rejects.toThrow(/outside.*allowed_hosts/);
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+});
+
 test('a connection without a broker credential resolves to undefined (harness-ambient lane)', async () => {
   const plane = openPlane(await tempDir());
   const broker = new ConnectionBroker(() => plane);
@@ -627,6 +676,86 @@ test('BYO token posts refuse redirects before credentials can be forwarded', asy
   await expect(
     broker.completeAuthorization(authorize.searchParams.get('state')!, 'authorization-code'),
   ).resolves.toEqual({ connectionId });
+});
+
+test('Gmail authorization captures the connect-time profile historyId baseline', async () => {
+  const plane = openPlane(await tempDir());
+  const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    expect(init?.redirect).toBe('error');
+    const url = String(input);
+    if (url.includes('/gmail/v1/users/me/profile')) {
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer fresh-gmail-token');
+      return Response.json({ emailAddress: 'owner@example.com', historyId: '42017' });
+    }
+    return Response.json({
+      access_token: 'fresh-gmail-token',
+      refresh_token: 'refresh-gmail-token',
+      expires_in: 3600,
+    });
+  });
+  const connectionId = configureOauth(plane, 'https://oauth2.googleapis.com/token');
+  const broker = new ConnectionBroker(() => plane, 500, undefined, fetchImpl as typeof fetch);
+  const ceremony = broker.beginAuthorization(
+    plane,
+    connectionId,
+    'http://127.0.0.1/oauth/callback',
+  );
+  await broker.completeAuthorization(ceremony.state, 'authorization-code');
+
+  const cursor = plane.db.vault
+    .prepare(
+      `SELECT value_json FROM sync_connection_cursor
+        WHERE connection_id = ? AND key = 'gmail_history_id'`,
+    )
+    .get(connectionId) as { value_json: string };
+  expect(JSON.parse(cursor.value_json)).toEqual({ id: '42017' });
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+});
+
+test('a failed Gmail baseline degrades safely but is logged, never silently swallowed', async () => {
+  const plane = openPlane(await tempDir());
+  const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+    if (String(input).includes('gmail.googleapis.com')) {
+      // The profile call blows up: the connection still works (the first poll
+      // re-baselines), but a swallowed fallible action must at least warn
+      // (docs/coding-standards.md).
+      throw new Error('gmail profile unreachable');
+    }
+    return Response.json({
+      access_token: 'fresh-gmail-token',
+      refresh_token: 'refresh-gmail-token',
+      expires_in: 3600,
+    });
+  });
+  const warnings: string[] = [];
+  const connectionId = configureOauth(plane, 'https://oauth2.googleapis.com/token');
+  const broker = new ConnectionBroker(
+    () => plane,
+    500,
+    undefined,
+    fetchImpl as typeof fetch,
+    undefined,
+    { ...silentLogger, warn: (message: string) => warnings.push(message) },
+  );
+  const ceremony = broker.beginAuthorization(
+    plane,
+    connectionId,
+    'http://127.0.0.1/oauth/callback',
+  );
+  // The ceremony still completes — the baseline is best-effort.
+  await expect(broker.completeAuthorization(ceremony.state, 'authorization-code')).resolves.toEqual(
+    { connectionId },
+  );
+  expect(warnings).toEqual([expect.stringContaining('Gmail history baseline failed')]);
+  expect(warnings[0]).toContain('gmail profile unreachable');
+  // No baseline cursor landed, so the first poll re-baselines.
+  const cursor = plane.db.vault
+    .prepare(
+      `SELECT value_json FROM sync_connection_cursor
+        WHERE connection_id = ? AND key = 'gmail_history_id'`,
+    )
+    .get(connectionId);
+  expect(cursor).toBeUndefined();
 });
 
 test('Assist refresh uses only the Worker and persists a rotated pair before use', async () => {

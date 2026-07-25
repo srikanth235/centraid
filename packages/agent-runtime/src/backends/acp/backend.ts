@@ -29,7 +29,9 @@ import {
 import { planLaunch } from './launch.js';
 import {
   permissionAutoAllowNotice,
+  permissionDeniedNotice,
   pickPermissionOption,
+  pickRejectPermissionOption,
   readPermissionOptions,
   readPermissionToolTitle,
 } from './permissions.js';
@@ -48,7 +50,7 @@ import { putWarmSlot, takeWarmSlot } from './session-warm.js';
 import { createSessionUpdateMapper } from './stream-events.js';
 import { outcomeForStopReason } from './stop-reason.js';
 import { startTurnVaultTools } from './turn-vault-tools.js';
-import { buildUsageEvent } from './usage.js';
+import { buildUsageEvent, deltaCumulativeUsage } from './usage.js';
 import type { AcpTurnConfig, AcpTurnInput, AcpTurnResult } from './types.js';
 
 export type { AcpAdapterSpec, AcpTurnConfig, AcpTurnInput, AcpTurnResult } from './types.js';
@@ -89,6 +91,7 @@ export async function runAcpTurn(
   let reusedWarm = false;
   let configOptions: SessionConfigOption[] = [];
   let modes: SessionModes | undefined;
+  let usageSnapshot: AcpTurnResult['usageSnapshot'];
 
   const emit = (event: TurnStreamEvent): void => {
     if (input.abortSignal.aborted) return;
@@ -104,9 +107,25 @@ export async function runAcpTurn(
           conn.respond(id, { outcome: { outcome: 'cancelled' } });
           return;
         }
-        const options = readPermissionOptions(params);
-        const optionId = pickPermissionOption(options);
         const toolTitle = readPermissionToolTitle(params);
+        const options = readPermissionOptions(params);
+        if (input.permissionPolicy === 'deny') {
+          emit(permissionDeniedNotice(toolTitle));
+          // Refuse THIS request, not the turn: `cancelled` is the wire's
+          // "the prompt turn was cancelled before an answer", and an agent
+          // that honours it unwinds everything — contradicting the notice
+          // above ("this turn may use only its pre-granted tools"). Only an
+          // agent offering no reject option leaves us with `cancelled`.
+          const rejectId = pickRejectPermissionOption(options);
+          conn.respond(
+            id,
+            rejectId
+              ? { outcome: { outcome: 'selected', optionId: rejectId } }
+              : { outcome: { outcome: 'cancelled' } },
+          );
+          return;
+        }
+        const optionId = pickPermissionOption(options);
         if (optionId) {
           emit(permissionAutoAllowNotice(optionId, options, toolTitle));
           conn.respond(id, { outcome: { outcome: 'selected', optionId } });
@@ -347,6 +366,20 @@ export async function runAcpTurn(
       }
     }
 
+    // The persisted cumulative counters only apply when this turn really
+    // continues the session they were recorded against.
+    const resumeBaseline =
+      continuity !== 'fresh' &&
+      input.prevSessionId !== undefined &&
+      sessionId === input.prevSessionId
+        ? input.prevUsageSnapshot
+        : undefined;
+    // Keep that baseline if the prompt never reports a total (killed child,
+    // transport failure). Returning NO snapshot would CLEAR the stored
+    // counters, so the next turn on this session would book the whole session
+    // total a second time.
+    usageSnapshot = resumeBaseline;
+
     promptStarted = true;
     const promptResult = await conn.request<{ usage?: unknown; stopReason?: unknown }>(
       'session/prompt',
@@ -355,14 +388,40 @@ export async function runAcpTurn(
 
     if (isObject(promptResult?.usage)) stream.foldTokenUsage(promptResult.usage);
     const folded = stream.usage();
-    const usageEvent = buildUsageEvent(config.kind, activeModel, folded.tokens, folded.cost);
-    if (usageEvent) emit(usageEvent);
+    const delta = deltaCumulativeUsage(folded.tokens, folded.cost, resumeBaseline);
+    // Only the session's live config option / confirmed pin is authoritative.
+    // A requested model may be ignored or refused and must never be stamped.
+    const usageEvent = buildUsageEvent(config.kind, activeModel, delta.tokens, delta.cost);
+    // Accounting is NOT cancellable. ACP session usage is cumulative, so the
+    // booked delta and the persisted snapshot have to advance together or not
+    // at all: dropping the event on an aborted turn while still advancing the
+    // snapshot would book the cancelled turn's tokens to nobody, and every
+    // later turn would subtract a baseline it was never charged for. Bypass
+    // `emit`'s abort gate — the consumer folds post-abort events (it still
+    // receives the `aborted` event below through the same channel).
+    if (usageEvent) input.onEvent(usageEvent);
+    usageSnapshot = delta.snapshot;
 
     if (!input.abortSignal.aborted) {
       const stop = outcomeForStopReason(promptResult?.stopReason);
+      const rawJson = JSON.stringify(promptResult ?? {});
+      const stopReason =
+        typeof promptResult?.stopReason === 'string' ? promptResult.stopReason : undefined;
       if (stop.notice) emit(stop.notice);
-      if (stop.error) emit(stop.error);
-      else if (stop.emitFinal) emit({ type: 'final', text: stream.finalText() });
+      if (stop.error) {
+        emit({
+          ...stop.error,
+          ...(stopReason !== undefined ? { stopReason } : {}),
+          rawJson,
+        });
+      } else if (stop.emitFinal) {
+        emit({
+          type: 'final',
+          text: stream.finalText(),
+          ...(stopReason !== undefined ? { stopReason } : {}),
+          rawJson,
+        });
+      }
       parkWarm =
         Boolean(sessionId) &&
         (canResume || canLoad) &&
@@ -420,5 +479,10 @@ export async function runAcpTurn(
   if (input.abortSignal.aborted) input.onEvent({ type: 'aborted' });
   else if (spawnError) input.onEvent({ type: 'error', message: spawnError.message });
 
-  return sessionId ? { sessionId } : {};
+  return sessionId
+    ? {
+        sessionId,
+        ...(usageSnapshot ? { usageSnapshot } : {}),
+      }
+    : {};
 }

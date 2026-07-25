@@ -109,7 +109,10 @@ const COMPONENT_LABEL: Record<string, string> = {
   'load-shed': 'Background load',
   disk: 'Disk space',
   'storage-latency': 'Storage latency',
+  // The health-component namespace is the GATEWAY's, not the shell's — this
+  // stays `backups` even though the page that shows it is now called Storage.
   backups: 'Backups',
+  'storage-limit': 'Disk budget',
   enrichment: 'Media enrichment',
   'blob-sweep': 'Blob sweep',
   scheduler: 'Scheduler',

@@ -3,7 +3,11 @@
 // headless policy picks.
 
 import { expect, test } from 'vitest';
-import { pickPermissionOption, readPermissionOptions } from './permissions.ts';
+import {
+  pickPermissionOption,
+  pickRejectPermissionOption,
+  readPermissionOptions,
+} from './permissions.ts';
 
 test('readPermissionOptions returns [] for non-array / missing options', () => {
   expect(readPermissionOptions(undefined)).toEqual([]);
@@ -76,4 +80,31 @@ test('pickPermissionOption falls back to the first option when only rejects rema
     { optionId: 'reject-b', kind: 'reject_always' },
   ]);
   expect(picked).toBe('reject-a');
+});
+
+test('pickRejectPermissionOption prefers reject_once over the sticky reject_always', () => {
+  const picked = pickRejectPermissionOption([
+    { optionId: 'always', kind: 'allow_always' },
+    { optionId: 'no-forever', kind: 'reject_always' },
+    { optionId: 'no-now', kind: 'reject_once' },
+  ]);
+  expect(picked).toBe('no-now');
+});
+
+test('pickRejectPermissionOption uses reject_always when that is the only refusal', () => {
+  expect(
+    pickRejectPermissionOption([
+      { optionId: 'ok', kind: 'allow_once' },
+      { optionId: 'no-forever', kind: 'reject_always' },
+    ]),
+  ).toBe('no-forever');
+});
+
+test('pickRejectPermissionOption never repurposes an allow (or kind-less) option as a refusal', () => {
+  // No reject option means the caller has to answer `cancelled` — picking an
+  // allow here would grant exactly what the policy denies.
+  expect(pickRejectPermissionOption([])).toBeUndefined();
+  expect(
+    pickRejectPermissionOption([{ optionId: 'ok', kind: 'allow_once' }, { optionId: 'plain' }]),
+  ).toBeUndefined();
 });

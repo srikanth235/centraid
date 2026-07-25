@@ -3,7 +3,7 @@
  * (`/centraid/_logs`): a one-shot JSON tail and the replay-then-live
  * SSE stream the Settings → Logs screen renders. Fetch-based SSE (not
  * EventSource) so the Bearer header rides along — same transport as
- * `streamAutomationRun`.
+ * `streamAutomationTurn`.
  */
 
 import { auth, authHeaders, doFetch, readJson } from './gateway-client-core.js';

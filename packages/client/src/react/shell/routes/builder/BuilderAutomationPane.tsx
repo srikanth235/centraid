@@ -1,8 +1,8 @@
 import { type JSX, type ReactNode, useEffect, useState } from 'react';
 import { cronNextRuns, describeCron } from '../../../../cron.js';
 import {
-  listAutomationRuns,
-  readAutomationRun,
+  listAutomationTurns,
+  readAutomationTurn,
   runAutomationNow,
 } from '../../../../gateway-client.js';
 import { iconSvg } from '../../iconSvg.js';
@@ -135,6 +135,11 @@ function FlowView({ automationRow }: { automationRow: CentraidAutomationRow }): 
           {whereText ? <pre className={styles.whereBlock}>{whereText}</pre> : null}
         </>
       );
+    } else if (t0.kind === 'event') {
+      trigSvg = iconSvg('Clock', 16);
+      trigTitle = 'Connector event';
+      const repo = t0.filter && typeof t0.filter.repo === 'string' ? ` · ${t0.filter.repo}` : '';
+      trigSub = `${t0.connectorKind} · ${t0.event}${repo}`;
     } else {
       trigSvg = iconSvg('Webhook', 16);
       trigTitle = t0.id ? 'Webhook' : 'Webhook — provisioning…';
@@ -183,7 +188,7 @@ function FlowView({ automationRow }: { automationRow: CentraidAutomationRow }): 
 // ---------- Runs view ----------
 
 function RunsView({ appId }: { appId: string }): JSX.Element {
-  const [runs, setRuns] = useState<CentraidAutomationRunRecord[] | null>(null);
+  const [runs, setRuns] = useState<CentraidAutomationTurnRecord[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [nonce, setNonce] = useState(0);
@@ -193,7 +198,7 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
     let alive = true;
     setRuns(null);
     setFailed(false);
-    listAutomationRuns({ automationId: appId, limit: 20 })
+    listAutomationTurns({ automationId: appId, limit: 20 })
       .then((r) => {
         if (alive) setRuns(r);
       })
@@ -212,11 +217,11 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
     if (!appId || busy) return;
     setBusy(true);
     try {
-      const { runId } = await runAutomationNow({ automationId: appId });
+      const { turnId } = await runAutomationNow({ automationId: appId });
       const deadline = Date.now() + 6 * 60 * 1000;
-      let rec: CentraidAutomationRunRecord | null = null;
+      let rec: CentraidAutomationTurnRecord | null = null;
       while (Date.now() < deadline) {
-        rec = await readAutomationRun({ runId });
+        rec = await readAutomationTurn({ turnId });
         if (rec && rec.endedAt !== undefined) break;
         await new Promise((resolve) => setTimeout(resolve, 1500));
       }
@@ -263,7 +268,7 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
               const dur =
                 r.endedAt !== undefined ? `${((r.endedAt - r.startedAt) / 1000).toFixed(1)}s` : '—';
               return (
-                <div className={styles.runrow} data-ok={String(r.ok)} key={r.runId}>
+                <div className={styles.runrow} data-ok={String(r.ok)} key={r.turnId}>
                   <span className={styles.runDot} data-ok={String(r.ok)} />
                   <span className={styles.runSummary}>
                     {r.summary || r.error || (r.ok ? 'Completed' : 'Failed')}

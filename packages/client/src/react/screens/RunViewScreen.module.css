@@ -520,6 +520,15 @@
   position: sticky;
   top: 8px;
 }
+.turnTranscript {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+}
 .rsideCard {
   border: 0.5px solid var(--line);
   border-radius: 12px;

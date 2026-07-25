@@ -113,6 +113,7 @@ import {
   WalShipper,
   jitterDelayMs,
   type WalShipperOptions,
+  scopeCovers,
 } from '@centraid/vault';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -127,7 +128,9 @@ import {
   type VaultWorkspace,
 } from '@centraid/app-engine';
 import {
+  pickAnchors,
   pickEntities,
+  type AnchorPickerHit,
   type AnchorSelector,
   type LinkInput,
   type PickerHit,
@@ -137,6 +140,7 @@ import { applyRestoreQuarantine, type QuarantineStatus } from './vault-quarantin
 import { replicaIntentContext } from './replica-intent-context.js';
 import { vaultContext } from './vault-context.js';
 import { GroupCommitQueue } from './group-commit-queue.js';
+import { decideJournalArchive } from './journal-limit.js';
 
 /** Blob-sweep failure backoff (issue #367 §C5) — one step per consecutive failure, flat-capped. */
 const BLOB_SWEEP_BACKOFF_STEP_MS = 60_000;
@@ -258,6 +262,14 @@ export interface VaultPlaneOptions {
    * `durationMs` the wall-clock of the detached reconcile. Accounting only.
    */
   onReplicationPass?: (info: { bytesReplicated: number; durationMs: number }) => void;
+  /**
+   * The owner's `journal.db` size limit in bytes (issue #544), or `null` when
+   * unset. Read fresh on every sweep so a limit change takes effect without a
+   * remount. Over the limit, the sweep bypasses its once-a-day archival gate
+   * and narrows the archival window down a fixed ladder — see
+   * `journal-limit.ts` for the whole policy. Omit for today's time-only cadence.
+   */
+  journalLimitBytes?: () => number | null;
 }
 
 /** A grant request the owner approves — scopes as the manifest declares them. */
@@ -270,7 +282,13 @@ export interface GrantRequest {
 /** A manifest's declared vault block, as install-time consent (issue #306). */
 export interface InstallScopeBlock {
   purpose?: string;
-  scopes: readonly { schema: string; table?: string; verbs: ScopeSpec['verbs'] }[];
+  scopes: readonly {
+    schema: string;
+    table?: string;
+    verbs: ScopeSpec['verbs'];
+    rowFilter?: ScopeSpec['rowFilter'];
+    fieldMask?: ScopeSpec['fieldMask'];
+  }[];
 }
 
 /** One outbox item as the owner surface lists it (issue #306). */
@@ -330,26 +348,35 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
 }
 
 /**
- * Declared scopes not yet covered by any active grant — exact-triple diff.
- * Tombstoned triples (issue #308 A4) are the owner's standing "no": they are
+ * Declared scopes not yet covered by any active grant. A broad grant covers
+ * a narrower row/field request; a narrow grant never covers a broad request.
+ * Tombstoned scopes (issue #308 A4) are the owner's standing "no": they are
  * neither re-granted nor re-requested, only an explicit owner approval
  * (which clears the tombstone) brings one back.
  */
+// `scopeCovers` is the vault package's canonical extent comparison
+// (`@centraid/vault` → `scope-extent.ts`). It used to be duplicated here with
+// slightly different null handling, which let consent memory and install-grant
+// reconciliation disagree about the same scope; one definition keeps them in
+// lockstep (issue #541 review).
+
 function missingScopes(
   grants: GrantSummary[],
   declared: InstallScopeBlock['scopes'],
   tombstoned: readonly ScopeTriple[] = [],
 ): ScopeSpec[] {
-  const key = (s: { schema: string; table?: string | null; verbs: string }): string =>
-    `${s.schema}|${s.table ?? ''}|${s.verbs}`;
-  const covered = new Set(grants.flatMap((g) => g.scopes.map(key)));
-  for (const t of tombstoned) covered.add(key(t));
   return declared
-    .filter((s) => !covered.has(key(s)))
+    .filter(
+      (scope) =>
+        !grants.some((grant) => grant.scopes.some((existing) => scopeCovers(existing, scope))) &&
+        !tombstoned.some((existing) => scopeCovers(existing, scope)),
+    )
     .map((s) => ({
       schema: s.schema,
       ...(s.table !== undefined ? { table: s.table } : {}),
       verbs: s.verbs,
+      ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
+      ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
     }));
 }
 
@@ -421,6 +448,11 @@ export class VaultPlane {
   private walTimer: NodeJS.Timeout | undefined;
   private firstWalTick: NodeJS.Immediate | undefined;
   private lastJournalArchivalAt = 0;
+  /** The owner's `journal.db` size limit (#544), read fresh each sweep. */
+  private readonly journalLimitBytes: () => number | null;
+  /** Ladder position for the size-triggered archive (#544, journal-limit.ts) —
+   *  in-memory by design: a restart re-derives it from the file size. */
+  private journalArchiveRung = 0;
   // Resume point for the bounded repricing pass (#445); wraps to 0 at the tail.
   private repriceCursor = 0;
   private closed = false;
@@ -465,6 +497,7 @@ export class VaultPlane {
     this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork ?? (() => false);
     this.onSweepPass = options.onSweepPass;
     this.onReplicationPass = options.onReplicationPass;
+    this.journalLimitBytes = options.journalLimitBytes ?? (() => null);
     this.dir = options.dir;
     // Runner scratch lives in a disposable cache OUTSIDE the vault tree; fall
     // back to the vault dir only for callers that don't supply one (tests).
@@ -912,6 +945,8 @@ export class VaultPlane {
         schema: s.schema,
         ...(s.table !== undefined ? { table: s.table } : {}),
         verbs: s.verbs,
+        ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
+        ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
       })),
     });
     this.logger.info(
@@ -942,6 +977,8 @@ export class VaultPlane {
           schema: s.schema,
           ...(s.table !== undefined ? { table: s.table } : {}),
           verbs: s.verbs,
+          ...(s.rowFilter ? { rowFilter: [...s.rowFilter] } : {}),
+          ...(s.fieldMask ? { fieldMask: [...s.fieldMask] } : {}),
         })),
       };
       if (request.plane === 'app') this.approveGrant(request.appId, grantRequest);
@@ -1004,6 +1041,13 @@ export class VaultPlane {
    */
   pickEntities(request: PickerRequest): { cards: PickerHit[] } {
     return pickEntities(this.gateway, this.ownerCredential, this.logger, request);
+  }
+
+  /** Live standoff anchors for anchor-grade automation @ references. */
+  pickAnchors(request: Pick<PickerRequest, 'term' | 'limit'>): {
+    anchors: AnchorPickerHit[];
+  } {
+    return pickAnchors(this.gateway, this.ownerCredential, this.logger, request);
   }
 
   /**
@@ -1315,6 +1359,8 @@ export class VaultPlane {
       schema: string;
       table: string | null;
       verbs: string;
+      rowFilter?: ScopeSpec['rowFilter'];
+      fieldMask?: ScopeSpec['fieldMask'];
     }>;
     highlights: Array<{ command: string; schema: string; risk: string; confirm: boolean }>;
   } {
@@ -1323,12 +1369,21 @@ export class VaultPlane {
       schema: string;
       table: string | null;
       verbs: string;
+      rowFilter?: ScopeSpec['rowFilter'];
+      fieldMask?: ScopeSpec['fieldMask'];
     }> = [];
     const app = lookupAppByName(this.db, appId);
     if (app) {
       for (const grant of listActiveGrants(this.db, app.appId)) {
         for (const s of grant.scopes) {
-          scopes.push({ plane: 'app', schema: s.schema, table: s.table, verbs: s.verbs });
+          scopes.push({
+            plane: 'app',
+            schema: s.schema,
+            table: s.table,
+            verbs: s.verbs,
+            ...(s.rowFilter ? { rowFilter: s.rowFilter } : {}),
+            ...(s.fieldMask ? { fieldMask: s.fieldMask } : {}),
+          });
         }
       }
     }
@@ -1336,7 +1391,14 @@ export class VaultPlane {
     if (agent) {
       for (const grant of listActiveAgentGrants(this.db, agent.partyId)) {
         for (const s of grant.scopes) {
-          scopes.push({ plane: 'agent', schema: s.schema, table: s.table, verbs: s.verbs });
+          scopes.push({
+            plane: 'agent',
+            schema: s.schema,
+            table: s.table,
+            verbs: s.verbs,
+            ...(s.rowFilter ? { rowFilter: s.rowFilter } : {}),
+            ...(s.fieldMask ? { fieldMask: s.fieldMask } : {}),
+          });
         }
       }
     }
@@ -1718,7 +1780,7 @@ export class VaultPlane {
    * confirmation. Credential resolution happens per call so a revocation
    * lands immediately.
    */
-  agentBridgeFor(appId: string): VaultBridge {
+  agentBridgeFor(appId: string, block?: InstallScopeBlock): VaultBridge {
     return async (call): Promise<VaultCallResult> => {
       const agent = lookupAgentByName(this.db, appId);
       if (!agent) {
@@ -1733,6 +1795,17 @@ export class VaultPlane {
         agentId: agent.agentId,
         deviceId: this.boot.deviceId,
         deviceKey: this.boot.deviceKey,
+        ...(block
+          ? {
+              scopeClamp: block.scopes.map((scope) => ({
+                schema: scope.schema,
+                ...(scope.table !== undefined ? { table: scope.table } : {}),
+                verbs: scope.verbs,
+                ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
+                ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
+              })),
+            }
+          : {}),
       };
       if (call.op === 'content') {
         // The enricher's byte primitive (issue #299 §2): thumb/preview/text
@@ -1792,6 +1865,26 @@ export class VaultPlane {
   // The no-shipper fallback checkpoints at 4x the shipper's default group
   // threshold — late enough never to fire while a healthy shipper exists.
   static readonly FALLBACK_CHECKPOINT_WAL_BYTES = 64 * 1024 * 1024;
+
+  /**
+   * `journal.db` + its `-wal` on disk, in bytes (issue #544) — the input to
+   * the size-triggered archive decision. The WAL counts: pages sitting there
+   * are the file's real occupancy until a checkpoint folds them in, and the
+   * archival pass ships them first anyway. Missing files count zero (a
+   * memory-backed test vault has none), so an unmeasurable journal reads as
+   * "under any limit" rather than triggering an archive on a guess.
+   */
+  private journalFileBytes(): number {
+    let total = 0;
+    for (const name of ['journal.db', 'journal.db-wal']) {
+      try {
+        total += statSync(path.join(this.dir, name)).size;
+      } catch {
+        // Absent file — zero bytes, not an error.
+      }
+    }
+    return total;
+  }
 
   /**
    * One WAL capture tick (issue #408). Public so the BackupService's drain
@@ -1996,8 +2089,30 @@ export class VaultPlane {
       // once per day per plane; the 90-day window makes it a no-op on young
       // vaults, and the segments it writes join the blob CAS, so the sweep
       // above replicates them remotely on the next pass.
-      if (Date.now() - this.lastJournalArchivalAt >= JOURNAL_ARCHIVAL_MIN_INTERVAL_MS) {
+      //
+      // Size-triggered override (issue #544): when the owner has set a
+      // `journal.db` limit and the file is over it, the daily gate is
+      // bypassed and the window narrows one rung per sweep down a fixed
+      // ladder with a 7-day floor. The whole policy is `decideJournalArchive`
+      // — pure, so this block only measures, calls, and logs.
+      const archiveDecision = decideJournalArchive({
+        journalBytes: this.journalFileBytes(),
+        limitBytes: this.journalLimitBytes(),
+        rung: this.journalArchiveRung,
+        dailyGateElapsed:
+          Date.now() - this.lastJournalArchivalAt >= JOURNAL_ARCHIVAL_MIN_INTERVAL_MS,
+      });
+      this.journalArchiveRung = archiveDecision.nextRung;
+      if (archiveDecision.run) {
         this.lastJournalArchivalAt = Date.now();
+        if (archiveDecision.overLimit) {
+          this.logger.info(
+            `vault plane: journal over its ${this.journalLimitBytes()}-byte limit — ` +
+              `archiving early at a ${archiveDecision.windowDays}-day window` +
+              (archiveDecision.atFloor ? ' (window floor reached)' : ''),
+          );
+        }
+        const archiveWindow = { windowDays: archiveDecision.windowDays };
         try {
           // Ship the journal's pending WAL bytes BEFORE archival: the
           // archival VACUUM rewrites the whole file through the WAL, and a
@@ -2006,7 +2121,7 @@ export class VaultPlane {
           // burst (issue #408 — journal archival is the one sanctioned bulk
           // rewrite of a shipped database).
           this.walTick();
-          const archived = runJournalArchival(this.db);
+          const archived = runJournalArchival(this.db, archiveWindow);
           if (archived.rowsArchived > 0) {
             this.logger.info(
               `vault plane: journal archival rowsArchived=${archived.rowsArchived} ` +
@@ -2035,14 +2150,17 @@ export class VaultPlane {
                 `turns=${repriced.turnsRederived} scanned=${repriced.scanned}`,
             );
           }
-          const convArchival = runConversationArchival({
-            journal: this.db.journal,
-            blobSink: {
-              ingestSync: (bytes) => this.db.blobs.ingestSync(bytes),
-              has: (sha) => this.db.blobs.hasSync(sha),
+          const convArchival = runConversationArchival(
+            {
+              journal: this.db.journal,
+              blobSink: {
+                ingestSync: (bytes) => this.db.blobs.ingestSync(bytes),
+                has: (sha) => this.db.blobs.hasSync(sha),
+              },
+              custodyProven: (sha) => blobCustodyProven(this.db, sha),
             },
-            custodyProven: (sha) => blobCustodyProven(this.db, sha),
-          });
+            archiveWindow,
+          );
           if (convArchival.segmentsWritten > 0 || convArchival.segmentsPruned > 0) {
             this.logger.info(
               `vault plane: conversation archival segmentsWritten=${convArchival.segmentsWritten} ` +

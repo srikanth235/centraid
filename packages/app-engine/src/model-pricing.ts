@@ -12,6 +12,13 @@
  * zero-cost call. Callers that sum cost must treat NULL as "unknown",
  * not "free".
  *
+ * Unknown is NULL, never a number. A local/self-hosted model, or one newer
+ * than the LiteLLM snapshot, has no honest price here: substituting a
+ * catalog-wide rate ceiling would stamp `cost_source = 'estimated'` on a figure
+ * that can be orders of magnitude off and is indistinguishable downstream from
+ * a real catalog estimate. Surfaces render NULL as "unknown"; that is the
+ * honest answer, and inventing a maximal number inverts the rule above.
+ *
  * Internally this delegates to an injectable in-memory catalog seeded from a
  * committed LiteLLM snapshot and overlaid by the gateway warmer's live fetch
  * (`./pricing/*`). The public shape below is unchanged: the two call sites
@@ -75,6 +82,11 @@ export interface ResolvedItemCost {
 /**
  * Prefer agent/ACP-reported USD; fall back to the catalog estimate. Marks
  * provenance so Insights can be honest and reprice never clobbers agent costs.
+ *
+ * Returns `{}` — cost AND provenance NULL — when the model is unpriceable.
+ * Every reported+priceable usage still books a real non-zero cost; an
+ * unpriceable one books "unknown", which is a different claim from "free" and
+ * from "estimated at some number".
  */
 export function resolveItemCost(opts: {
   agentCostUsd?: number;

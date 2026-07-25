@@ -10,7 +10,7 @@ import {
   decideOutboxItem,
   getBlocking,
   listAgents,
-  listAutomationRuns,
+  listAutomationTurns,
   listOutboxGrants,
   readAutomation,
   revokeOutboxGrant,
@@ -25,7 +25,7 @@ vi.mock('../../../gateway-client.js', () => ({
   decideOutboxItem: vi.fn(),
   getBlocking: vi.fn(),
   listAgents: vi.fn(),
-  listAutomationRuns: vi.fn(),
+  listAutomationTurns: vi.fn(),
   listOutboxGrants: vi.fn(),
   readAutomation: vi.fn(),
   revokeOutboxGrant: vi.fn(),
@@ -157,7 +157,7 @@ describe('filterConsentForAutomation', () => {
 describe('loadAutomationThreadData', () => {
   it('returns null when the automation does not resolve', async () => {
     vi.mocked(readAutomation).mockResolvedValue(null);
-    vi.mocked(listAutomationRuns).mockResolvedValue([]);
+    vi.mocked(listAutomationTurns).mockResolvedValue([]);
     vi.mocked(getBlocking).mockResolvedValue(blocking());
     vi.mocked(listOutboxGrants).mockResolvedValue([]);
     vi.mocked(listAgents).mockResolvedValue([]);
@@ -172,13 +172,13 @@ describe('loadAutomationThreadData', () => {
   it('derives the header + sorts runs newest-first + tags date groups', async () => {
     vi.mocked(readAutomation).mockResolvedValue(row());
     const now = Date.now();
-    vi.mocked(listAutomationRuns).mockResolvedValue([
+    vi.mocked(listAutomationTurns).mockResolvedValue([
       {
         automationId: 'digest/main',
         endedAt: now - 1000,
         ok: true,
         pinned: false,
-        runId: 'r-older',
+        turnId: 'r-older',
         startedAt: now - 5000,
         summary: 'ok',
         triggerKind: 'scheduled',
@@ -189,11 +189,11 @@ describe('loadAutomationThreadData', () => {
         ok: false,
         error: 'boom',
         pinned: false,
-        runId: 'r-newer',
+        turnId: 'r-newer',
         startedAt: now - 500,
         triggerKind: 'scheduled',
       },
-    ] as unknown as CentraidAutomationRunRecord[]);
+    ] as unknown as CentraidAutomationTurnRecord[]);
     vi.mocked(getBlocking).mockResolvedValue(blocking());
     vi.mocked(listOutboxGrants).mockResolvedValue([]);
     vi.mocked(listAgents).mockResolvedValue([

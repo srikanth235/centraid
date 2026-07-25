@@ -182,6 +182,7 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
           extraSystemPrompt: input.extraSystemPrompt,
           ...(input.model ? { model: input.model } : {}),
           ...(input.prevSessionId ? { prevSessionId: input.prevSessionId } : {}),
+          ...(input.prevUsageSnapshot ? { prevUsageSnapshot: input.prevUsageSnapshot } : {}),
           ...(input.additionalDirectories?.length
             ? { additionalDirectories: input.additionalDirectories }
             : {}),
@@ -194,6 +195,7 @@ function makeAcpBackend(spec: AcpBackendSpec): RunnerBackend {
       return {
         adapterKind: spec.kind,
         ...(result.sessionId ? { sessionId: result.sessionId } : {}),
+        ...(result.usageSnapshot ? { usageSnapshot: result.usageSnapshot } : {}),
       };
     },
     // Models are an ACP *session* concern (the agent advertises its own

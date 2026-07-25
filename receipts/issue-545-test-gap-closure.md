@@ -233,6 +233,7 @@ web/extension/oauth-worker, `docs/plans/test-gap-closure-2026-07.md`, QUALITY.md
 - Desktop e2e automations realigned to current thread chrome; global coverage floors green with generated/fake excludes.
 - Automations e2e 8.5 polls for async set-enabled; 9.7 re-runs from the thread card (Run again removed from run-view). Local + CI desktop-e2e green.
 - PR review gaps closed: Node symlink isMain, vault closes, perf resource-timing settle, backupMetrics real asserts, tautology/smoke cleanup, docs/matrix/e2e nits.
+- Merged `origin/main` (#541 automations re-found, #544 storage, #498 governance): resolved conflicts in desktop automations e2e (helpers + turn-now), handler-runner (gate + causal busy assert), ACP usage tests (kept main's delta suite); rebased #545 fixtures onto turn/item stream + `adapter_usage_json`/`call_id` schema.
 - `bun run check:pr` green; PR opened for #545.
 
 ```sh

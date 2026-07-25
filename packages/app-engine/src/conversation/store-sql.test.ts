@@ -32,6 +32,7 @@ function rawConversation(over: Partial<RawConversation> = {}): RawConversation {
     title: 'Hello',
     adapter_kind: null,
     adapter_session_id: null,
+    adapter_usage_json: null,
     turn_count: 2,
     pinned: 0,
     archived: 0,
@@ -76,6 +77,7 @@ function rawItem(over: Partial<RawItem> = {}): RawItem {
     id: 'i1',
     turn_id: 't1',
     ordinal: 0,
+    call_id: null,
     batch_id: null,
     kind: 'message_in',
     role: 'user',
@@ -83,6 +85,7 @@ function rawItem(over: Partial<RawItem> = {}): RawItem {
     name: null,
     args_json: null,
     output_json: null,
+    raw_json: null,
     child_turn_id: null,
     model: null,
     provider: null,
@@ -231,7 +234,10 @@ describe('store-sql prepare()', () => {
     expect(typeof stmts.insertItem.run).toBe('function');
     expect(typeof stmts.upsertState.run).toBe('function');
 
-    stmts.insertConversation.run('c-sql', 'chat', 'u1', 'app', null, 'T', 1, 1);
+    // (id, kind, user_id, app_id, automation_id, title, adapter_kind,
+    //  created_at, updated_at) — adapter_session_id / adapter_usage_json /
+    //  turn_count / pinned are fixed in SQL.
+    stmts.insertConversation.run('c-sql', 'chat', 'u1', 'app', null, 'T', null, 1, 1);
     const row = stmts.getConversation.get('c-sql') as RawConversation | undefined;
     expect(row?.id).toBe('c-sql');
     expect(row?.title).toBe('T');

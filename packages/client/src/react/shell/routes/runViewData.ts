@@ -11,34 +11,24 @@ import {
   triggersSummary,
 } from '../../../app-format.js';
 import { glyphForId, hueForId } from '../../../automation-identity.js';
-import type {
-  AuStatusKind,
-  RunLogRowDTO,
-  RunNodeDTO,
-  RunViewSnapshot,
-} from '../../screen-contracts.js';
+import type { AuStatusKind, RunLogRowDTO, RunViewSnapshot } from '../../screen-contracts.js';
+import { automationTurnMessages } from './automationTurnMessages.js';
 
-const NODE_TYPE_ICON: Record<string, string> = {
-  trigger: 'Bolt',
-  step: 'Activity',
-  tool: 'Plug',
-  agent: 'Sparkle',
-  invoke: 'Cpu',
-};
+export { automationTurnMessages } from './automationTurnMessages.js';
 
 export function buildRunSnapshot(
   // `null` when the run's parent automation was deleted — the Automations
   // overview deliberately keeps those runs visible (raw-ref fallback name),
   // so this must degrade gracefully instead of requiring a live row.
   row: CentraidAutomationRow | null,
-  run: CentraidAutomationRunRecord,
-  nodes: readonly CentraidAutomationRunNode[],
+  run: CentraidAutomationTurnRecord,
+  nodes: readonly CentraidAutomationItem[],
   liveText: Map<number, string>,
 ): RunViewSnapshot {
   const deleted = row === null;
   // Matches the Automations overview's orphan-run label (InsightsRoute does
   // the same fallback for the same reason).
-  const fallbackRef = run.automationId ?? run.runId;
+  const fallbackRef = run.automationId ?? run.turnId;
   const identityId = row === null ? fallbackRef : row.id;
   const inFlight = run.endedAt === undefined;
   // `requires.model` is `provider/model-id`; show the readable model id (the
@@ -81,33 +71,6 @@ export function buildRunSnapshot(
           : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
     return `${day}, ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' })}`;
   })();
-
-  const runNodes: RunNodeDTO[] = nodes.map((node) => {
-    const status = nodeRunStatus(node) as 'running' | 'ok' | 'fail';
-    const t = (node.inputTokens ?? 0) + (node.outputTokens ?? 0);
-    const metaParts: string[] = [];
-    if (node.durationMs !== undefined) metaParts.push(formatDuration(node.durationMs));
-    else if (status === 'running') metaParts.push('running…');
-    if (t > 0) metaParts.push(`${fmtTokens(t)} tok`);
-    const live = liveText.get(node.ordinal);
-    const isAgent = node.kind === 'agent';
-    return {
-      error: node.error,
-      input: !isAgent && node.argsJson ? prettyJson(node.argsJson) : undefined,
-      kind: node.kind,
-      liveText: live,
-      meta: metaParts.join('  ·  '),
-      name: node.name ?? node.model ?? node.kind,
-      ordinal: node.ordinal,
-      output: !isAgent && node.outputJson ? prettyJson(node.outputJson) : undefined,
-      response: isAgent
-        ? (live ?? (node.outputJson ? prettyJson(node.outputJson) : undefined))
-        : undefined,
-      status,
-      streaming: !!live && node.endedAt === undefined,
-      typeIcon: NODE_TYPE_ICON[node.kind] ?? 'Activity',
-    };
-  });
 
   const origin = run.triggerOrigin ?? (run.triggerKind === 'manual' ? 'manual' : 'cron');
   const trig =
@@ -199,7 +162,7 @@ export function buildRunSnapshot(
     },
     logRows,
     model,
-    nodes: runNodes,
+    messages: automationTurnMessages(run, nodes, liveText),
     promptInstr,
     side: {
       cost: run.totalCostUsd ? `$${run.totalCostUsd.toFixed(2)}` : '—',
@@ -208,7 +171,7 @@ export function buildRunSnapshot(
       model,
       outcomeKind: statusKind,
       outcomeLabel: statusLabel,
-      runId: run.runId,
+      runId: run.turnId,
       started: new Date(run.startedAt).toLocaleString(),
       steps: String(run.stepCount ?? nodes.length),
       tokens: fmtTokens(tokens),

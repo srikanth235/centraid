@@ -38,6 +38,34 @@ describe('resolveItemCost (#514)', () => {
     expect(r.costUsd).toBeUndefined();
     expect(r.costSource).toBeUndefined();
   });
+
+  it('leaves an unpriceable model NULL instead of inventing a rate for it', () => {
+    // A local / self-hosted model, or one newer than the snapshot. Pricing a
+    // 2M-token run at any invented rate — least of all the catalog-wide
+    // maximum — would stamp `estimated` on a figure that is indistinguishable
+    // from a real catalog estimate and can be orders of magnitude high.
+    const r = resolveItemCost({
+      model: 'llama-on-my-laptop',
+      usage: { inputTokens: 2_000_000, outputTokens: 500_000 },
+    });
+    expect(r.costUsd).toBeUndefined();
+    expect(r.costSource).toBeUndefined();
+  });
+
+  it('books a real non-zero cost whenever usage is reported AND priceable', () => {
+    // The automation acceptance criterion: a fire on any harness that reports
+    // usage for a catalog model shows honest money, never 0 and never NULL.
+    const r = resolveItemCost({
+      model: 'claude-haiku-4-5',
+      usage: { inputTokens: 12_000, outputTokens: 3_000 },
+    });
+    expect(r.costUsd).toBeGreaterThan(0);
+    expect(r.costSource).toBe('estimated');
+  });
+
+  it('reports nothing when the model is unknown even with tokens in hand', () => {
+    expect(resolveItemCost({ usage: { inputTokens: 2, outputTokens: 3 } })).toEqual({});
+  });
 });
 
 describe('costForUsage — Anthropic price anchors (live LiteLLM catalog)', () => {
@@ -195,6 +223,14 @@ describe('setPricingCatalog overlay', () => {
     // The overlay replaced the bundled snapshot outright.
     expect(priceForModel('claude-opus-4-8')).toBeUndefined();
     expect(costForUsage('model-x', { inputTokens: 1_000_000 })).toBeCloseTo(1, 9);
+    // A model absent from the overlay stays unpriced — the overlay's most
+    // expensive entry is never borrowed to stand in for it.
+    expect(
+      resolveItemCost({
+        model: 'not-in-this-overlay',
+        usage: { inputTokens: 1_000_000, outputTokens: 1_000_000 },
+      }),
+    ).toEqual({});
   });
 
   it('an empty overlay never clobbers the current table', () => {

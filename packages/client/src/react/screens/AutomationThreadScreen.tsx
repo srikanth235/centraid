@@ -5,7 +5,9 @@ import { Icon } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
 import au from '../styles/automation.module.css';
 import styles from './AutomationThreadScreen.module.css';
+import Message, { type MessageCallbacks } from './AssistantMessage.js';
 import type {
+  AsstMsgDTO,
   AuStatusKind,
   AutomationThreadBridgeProps,
   AutomationThreadData,
@@ -45,7 +47,7 @@ import type {
  *   / "watches `<entity>` · every `<cadence>`" text the brief calls for.
  * - `runTokens`: `ThreadRunDTO` carries `costUsd`/`durationMs` but no
  *   per-run token count. The route derives a `runId → tokens` map from the
- *   same `listAutomationRuns` call `automationThreadData.ts` already makes
+ *   same `listAutomationTurns` call `automationThreadData.ts` already makes
  *   internally, so the run meta can show a token count when present.
  *
  * Both are optional so a bare `AutomationThreadData` — the documented
@@ -75,9 +77,20 @@ const STATUS_ICON: Record<AuStatusKind, IconName> = {
   failed: 'AlertTriangle',
 };
 
-// Poll lightly for the full lifetime of an in-flight run. Component cleanup
-// stops the interval when the user leaves; long compiles must not freeze.
-const POLL_INTERVAL_MS = 2000;
+/**
+ * Backoff between rejoin attempts for a dropped/refused turn stream. Bounded
+ * on purpose: four quick tries cover a gateway restart or a momentarily full
+ * subscriber cap, and anything longer is a real outage the reader should be
+ * told about rather than a spinner that never resolves.
+ */
+const WATCH_REJOIN_DELAYS_MS = [500, 1500, 4000, 10_000];
+
+function withoutId(current: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  if (!current.has(id)) return current;
+  const next = new Set(current);
+  next.delete(id);
+  return next;
+}
 
 function fmtDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -392,12 +405,26 @@ function nodeIconFor(run: ThreadRunDTO): IconName {
 function RunTurn({
   run,
   tokens,
+  messages,
+  traceLoading,
+  traceFailed,
+  watchLost,
+  onLoadTrace,
+  onRetryWatch,
   onOpen,
   onRerun,
   rerunBusy,
 }: {
   run: ThreadRunDTO;
   tokens?: number;
+  messages?: readonly AsstMsgDTO[];
+  traceLoading: boolean;
+  /** The cold trace read failed — the turn offers a retry instead of lying. */
+  traceFailed: boolean;
+  /** The live stream is gone after bounded rejoins — offer Reconnect. */
+  watchLost: boolean;
+  onLoadTrace: () => void;
+  onRetryWatch: () => void;
   onOpen: () => void;
   onRerun: () => void;
   rerunBusy: boolean;
@@ -408,6 +435,17 @@ function RunTurn({
   });
   const running = run.status === 'running';
   const failed = run.status === 'fail';
+  const hasTrace = messages !== undefined;
+  const messageCallbacks: MessageCallbacks = {
+    hydrateRefs: () => undefined,
+    wireCodeCopy: () => undefined,
+    loadAttachmentImage: () => Promise.reject(new Error('automation attachments unavailable')),
+    onCopyMessage: (text) => void navigator.clipboard?.writeText(text),
+    onFeedback: () => undefined,
+    onRegenerate: () => undefined,
+    onRetryError: () => undefined,
+    onPagerNav: () => undefined,
+  };
   return (
     <article className={styles.turn} data-run-status={run.status} data-testid="run-entry">
       <span
@@ -430,7 +468,25 @@ function RunTurn({
         ) : null}
       </div>
 
-      {running ? (
+      {hasTrace ? (
+        <div className={styles.turnTrace} data-testid="automation-turn-trace">
+          {messages.length > 0 ? (
+            messages.map((message, index) => (
+              <Message
+                key={message.msgId ?? `${message.kind}:${index}`}
+                m={message}
+                index={index}
+                cb={messageCallbacks}
+              />
+            ))
+          ) : (
+            <div className={styles.turnGenerating}>
+              <span className={styles.turnSpinner} aria-hidden="true" />
+              <span>Working through your instructions…</span>
+            </div>
+          )}
+        </div>
+      ) : running ? (
         <div className={styles.turnGenerating}>
           <span className={styles.turnSpinner} aria-hidden="true" />
           <span>Working through your instructions…</span>
@@ -474,6 +530,15 @@ function RunTurn({
             <button
               type="button"
               className={styles.turnDetails}
+              data-testid="show-trace"
+              disabled={traceLoading}
+              onClick={onLoadTrace}
+            >
+              <span>{traceLoading ? 'Loading…' : 'Show trace'}</span>
+            </button>
+            <button
+              type="button"
+              className={styles.turnDetails}
               data-testid="run-details"
               onClick={onOpen}
             >
@@ -483,6 +548,62 @@ function RunTurn({
           </div>
         </>
       )}
+      {!hasTrace && traceFailed ? (
+        <div className={styles.turnNotice} data-testid="turn-trace-error">
+          <div className={styles.turnErrorBody}>Couldn’t load this turn’s transcript.</div>
+          <div className={styles.turnErrorActions}>
+            <button
+              type="button"
+              className={cx(au.auBtn, au.auBtnGhost, styles.turnErrorBtn)}
+              data-testid="retry-trace"
+              disabled={traceLoading}
+              onClick={onLoadTrace}
+            >
+              {traceLoading ? 'Retrying…' : 'Try again'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {watchLost && running ? (
+        <div className={styles.turnNotice} data-testid="turn-watch-lost">
+          <div className={styles.turnErrorBody}>
+            Lost the live connection to this run. It may still be working.
+          </div>
+          <div className={styles.turnErrorActions}>
+            <button
+              type="button"
+              className={cx(au.auBtn, au.auBtnGhost, styles.turnErrorBtn)}
+              data-testid="rejoin-turn"
+              onClick={onRetryWatch}
+            >
+              Reconnect
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {hasTrace && !running ? (
+        <div className={styles.turnFoot}>
+          <span className={styles.turnOutcome} data-ok={failed ? undefined : 'true'}>
+            <Icon name={failed ? 'AlertTriangle' : 'CheckCircle'} size={13} />
+            <span>{failed ? 'Failed' : 'Done'}</span>
+          </span>
+          <span className={styles.turnTelem}>
+            {run.durationMs !== null ? <span>{fmtDuration(run.durationMs)}</span> : null}
+            {run.costUsd ? <span>{fmtCost(run.costUsd)}</span> : null}
+            {tokens ? <span>{fmtTokens(tokens)}</span> : null}
+          </span>
+          <span className={styles.turnHeadSpacer} />
+          <button
+            type="button"
+            className={styles.turnDetails}
+            data-testid="run-details"
+            onClick={onOpen}
+          >
+            <span>Details</span>
+            <Icon name="ArrowRight" size={12} />
+          </button>
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -491,14 +612,20 @@ function RunTurn({
 // "Apply to future runs" on, the message is a standing instruction the
 // schedule keeps; off, it's a one-off note framed for this thread only. Both
 // route through the existing conversational-revision path (`onSendMessage`).
-function Composer({ onSend }: { onSend: (text: string) => void }): JSX.Element {
+function Composer({
+  busy,
+  onSend,
+}: {
+  busy: boolean;
+  onSend: (text: string, applyFuture: boolean) => void;
+}): JSX.Element {
   const [draft, setDraft] = useState('');
   const [applyFuture, setApplyFuture] = useState(true);
   const trimmed = draft.trim();
   const submit = (e: FormEvent): void => {
     e.preventDefault();
     if (!trimmed) return;
-    onSend(applyFuture ? trimmed : `For this thread only (don't change the schedule): ${trimmed}`);
+    onSend(trimmed, applyFuture);
     setDraft('');
   };
   return (
@@ -508,6 +635,7 @@ function Composer({ onSend }: { onSend: (text: string) => void }): JSX.Element {
           type="button"
           className={cx(styles.steerToggle, applyFuture && styles.steerToggleOn)}
           aria-pressed={applyFuture}
+          disabled={busy}
           onClick={() => setApplyFuture((v) => !v)}
         >
           <span className={styles.steerSwitch} aria-hidden="true" />
@@ -526,8 +654,14 @@ function Composer({ onSend }: { onSend: (text: string) => void }): JSX.Element {
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Steer this automation, or ask a follow-up…"
           aria-label="Message this automation"
+          disabled={busy}
         />
-        <button type="submit" className={styles.composerSend} aria-label="Send" disabled={!trimmed}>
+        <button
+          type="submit"
+          className={styles.composerSend}
+          aria-label="Send"
+          disabled={!trimmed || busy}
+        >
           <Icon name="Send" size={15} />
         </button>
       </div>
@@ -537,6 +671,8 @@ function Composer({ onSend }: { onSend: (text: string) => void }): JSX.Element {
 
 export default function AutomationThreadScreen({
   loadData,
+  loadTurnTrace,
+  watchTurn,
   onBack,
   onEdit,
   onRetryCompile,
@@ -554,11 +690,16 @@ export default function AutomationThreadScreen({
   );
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
-  // Set after a successful "Run now" whose ledger row hasn't shown up in the
-  // feed yet — the fire is async server-side (202), so the first reload can
-  // race the run record. Keeps the poll loop alive until the run appears.
-  const [awaitingRun, setAwaitingRun] = useState(false);
-  const runCountAtFire = useRef(0);
+  const [sending, setSending] = useState(false);
+  const [traces, setTraces] = useState<Record<string, AsstMsgDTO[]>>({});
+  const [loadingTraces, setLoadingTraces] = useState<ReadonlySet<string>>(new Set());
+  /** Turns whose cold trace read failed — distinct from "no messages yet". */
+  const [traceErrors, setTraceErrors] = useState<ReadonlySet<string>>(new Set());
+  /** Running turns whose live stream is gone and stayed gone after rejoins. */
+  const [lostWatches, setLostWatches] = useState<ReadonlySet<string>>(new Set());
+  const [pendingTrace, setPendingTrace] = useState<AsstMsgDTO[] | null>(null);
+  const watchedTurnsRef = useRef(new Set<string>());
+  const streamControllersRef = useRef(new Map<string, AbortController>());
   const [regenBusy, setRegenBusy] = useState(false);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   // The header's overflow menu (Edit / Pause-Resume / Delete). Closes on
@@ -580,26 +721,127 @@ export default function AutomationThreadScreen({
     void reload();
   }, [reload]);
 
-  // Light, bounded polling while the latest run hasn't ended yet — a run
-  // fired from "Run now" (or by its trigger) shows up mid-flight and this
-  // keeps the thread live without a persistent connection. `awaitingRun`
-  // covers the window between the 202 and the run record existing at all.
+  const loadTrace = useCallback(
+    async (turnId: string): Promise<void> => {
+      setLoadingTraces((current) => new Set(current).add(turnId));
+      try {
+        const messages = await loadTurnTrace(turnId);
+        setTraces((current) => ({ ...current, [turnId]: messages }));
+        setTraceErrors((current) => withoutId(current, turnId));
+      } catch {
+        // A failed cold read is NOT an empty turn. Writing `[]` here would be
+        // indistinguishable from "no messages yet" — the turn would show the
+        // spinner and the Done/Failed footer at once and lose "Show trace".
+        // Leave `traces` untouched and flag the turn so it offers a retry.
+        setTraceErrors((current) => new Set(current).add(turnId));
+      } finally {
+        setLoadingTraces((current) => withoutId(current, turnId));
+      }
+    },
+    [loadTurnTrace],
+  );
+
+  /**
+   * Join a running turn's live stream, rejoining with backoff when the join is
+   * refused or the stream drops with the turn still open (the gateway's
+   * subscriber cap answers 503; a restart or proxy idle timeout just closes
+   * the socket). The old 2s poll this replaced is gone, so without a rejoin a
+   * still-running turn would spin "Working through your instructions…" until
+   * the reader navigated away and back. Bounded: after the last delay the turn
+   * is marked lost and the reader gets an explicit Reconnect.
+   */
+  const watchNativeTurn = useCallback(
+    (turnId: string): void => {
+      if (watchedTurnsRef.current.has(turnId)) return;
+      watchedTurnsRef.current.add(turnId);
+      setLostWatches((current) => withoutId(current, turnId));
+      const controller = new AbortController();
+      streamControllersRef.current.set(turnId, controller);
+      const pause = (ms: number): Promise<void> =>
+        new Promise((resolve) => {
+          const timer = window.setTimeout(resolve, ms);
+          controller.signal.addEventListener(
+            'abort',
+            () => {
+              window.clearTimeout(timer);
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      void (async () => {
+        for (let attempt = 0; !controller.signal.aborted; attempt++) {
+          let settled = false;
+          try {
+            settled = await watchTurn(
+              turnId,
+              (messages) => setTraces((current) => ({ ...current, [turnId]: messages })),
+              controller.signal,
+            );
+          } catch {
+            settled = false;
+          }
+          if (controller.signal.aborted) return;
+          if (settled) {
+            // `watchTurn` already performed the authoritative ledger re-read
+            // and pushed its messages — only the header/run row needs a reload.
+            await reload();
+            return;
+          }
+          const delay = WATCH_REJOIN_DELAYS_MS[attempt];
+          if (delay === undefined) {
+            // Keep the id in `watchedTurnsRef` so the auto-watch effect does
+            // not immediately restart the loop; `retryWatch` clears it.
+            setLostWatches((current) => new Set(current).add(turnId));
+            return;
+          }
+          await pause(delay);
+        }
+      })().finally(() => {
+        // Only retire our own registration: `retryWatch` aborts this loop and
+        // registers a replacement under the same turn id, and this `finally`
+        // runs after that — deleting blindly would orphan the live stream.
+        if (streamControllersRef.current.get(turnId) === controller) {
+          streamControllersRef.current.delete(turnId);
+        }
+      });
+    },
+    [reload, watchTurn],
+  );
+
+  const retryWatch = useCallback(
+    (turnId: string): void => {
+      streamControllersRef.current.get(turnId)?.abort();
+      watchedTurnsRef.current.delete(turnId);
+      watchNativeTurn(turnId);
+    },
+    [watchNativeTurn],
+  );
+
+  // Latest history is warm; older turns stay collapsed until the reader asks
+  // for their trace. If the latest turn is still open (including one fired by
+  // an external trigger), join its event stream instead of polling.
   useEffect(() => {
     if (state === 'loading' || state === 'error' || state === 'missing') return;
-    if (awaitingRun && state.runs.length > runCountAtFire.current) {
-      // The fired run has landed; the latest-run-running branch below owns
-      // polling from here.
-      setAwaitingRun(false);
-      return;
-    }
     const latest = state.runs[0];
-    const live = (latest !== undefined && latest.status === 'running') || awaitingRun;
-    if (!live) return;
-    const id = setInterval(() => {
-      void reload();
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [state, reload, awaitingRun]);
+    if (!latest) return;
+    if (
+      traces[latest.runId] === undefined &&
+      !loadingTraces.has(latest.runId) &&
+      !traceErrors.has(latest.runId)
+    ) {
+      void loadTrace(latest.runId);
+    }
+    if (latest.status === 'running') watchNativeTurn(latest.runId);
+  }, [loadTrace, loadingTraces, state, traceErrors, traces, watchNativeTurn]);
+
+  useEffect(
+    () => () => {
+      for (const controller of streamControllersRef.current.values()) controller.abort();
+      streamControllersRef.current.clear();
+    },
+    [],
+  );
 
   // Dismiss the overflow menu on Escape or an outside click. Listeners live
   // only for the menu's open lifetime.
@@ -655,14 +897,35 @@ export default function AutomationThreadScreen({
   };
   const doRun = (): void => {
     setRunning(true);
-    runCountAtFire.current = typeof state === 'object' ? state.runs.length : 0;
-    void onRunNow().then((started) => {
-      setRunning(false);
-      if (started) {
-        setAwaitingRun(true);
-        void reload();
-      }
-    });
+    void onRunNow()
+      .then((turnId) => {
+        if (!turnId) return;
+        const startedAt = Date.now();
+        setState((current) => {
+          if (current === 'loading' || current === 'error' || current === 'missing') return current;
+          if (current.runs.some((run) => run.runId === turnId)) return current;
+          return {
+            ...current,
+            runs: [
+              {
+                runId: turnId,
+                status: 'running',
+                originLabel: 'Manual',
+                startedAt,
+                endedAt: null,
+                durationMs: null,
+                summary: 'Working through your instructions…',
+                costUsd: null,
+                dateGroup: 'Today',
+              },
+              ...current.runs,
+            ],
+          };
+        });
+        setTraces((current) => ({ ...current, [turnId]: [] }));
+        watchNativeTurn(turnId);
+      })
+      .finally(() => setRunning(false));
   };
   const doToggle = (next: boolean): void => {
     void onToggleEnabled(next).then((ok) => {
@@ -684,6 +947,27 @@ export default function AutomationThreadScreen({
       setDecidingId(null);
       if (ok) void reload();
     });
+  };
+  const doSend = (text: string, applyFuture: boolean): void => {
+    setSending(true);
+    setPendingTrace([
+      { kind: 'user', text },
+      { kind: 'ai', streaming: true, text: '' },
+    ]);
+    const controller = new AbortController();
+    streamControllersRef.current.set('composer', controller);
+    void onSendMessage(text, applyFuture, setPendingTrace, controller.signal)
+      .then(async (turnId) => {
+        if (!turnId || controller.signal.aborted) return;
+        await reload();
+        await loadTrace(turnId);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        streamControllersRef.current.delete('composer');
+        setPendingTrace(null);
+        setSending(false);
+      });
   };
 
   const activeGrants = consent.grants.filter((g) => !g.revokedAt);
@@ -876,6 +1160,12 @@ export default function AutomationThreadScreen({
                   key={run.runId}
                   run={run}
                   tokens={d.runTokens?.[run.runId]}
+                  messages={traces[run.runId]}
+                  traceLoading={loadingTraces.has(run.runId)}
+                  traceFailed={traceErrors.has(run.runId)}
+                  watchLost={lostWatches.has(run.runId)}
+                  onLoadTrace={() => void loadTrace(run.runId)}
+                  onRetryWatch={() => retryWatch(run.runId)}
                   rerunBusy={busy || running}
                   onOpen={() => onOpenRun(run.runId)}
                   onRerun={doRun}
@@ -884,9 +1174,31 @@ export default function AutomationThreadScreen({
             </div>
           ))
         )}
+        {pendingTrace ? (
+          <div className={styles.pendingConversation} data-testid="automation-pending-turn">
+            {pendingTrace.map((message, index) => (
+              <Message
+                key={message.msgId ?? `${message.kind}:${index}`}
+                m={message}
+                index={index}
+                cb={{
+                  hydrateRefs: () => undefined,
+                  wireCodeCopy: () => undefined,
+                  loadAttachmentImage: () =>
+                    Promise.reject(new Error('automation attachments unavailable')),
+                  onCopyMessage: (text) => void navigator.clipboard?.writeText(text),
+                  onFeedback: () => undefined,
+                  onRegenerate: () => undefined,
+                  onRetryError: () => undefined,
+                  onPagerNav: () => undefined,
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
 
-      <Composer onSend={onSendMessage} />
+      {d.automationTurns ? <Composer busy={sending} onSend={doSend} /> : null}
     </div>
   );
 }

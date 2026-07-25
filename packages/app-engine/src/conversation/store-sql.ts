@@ -16,6 +16,7 @@
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
+import type { AdapterUsageSnapshot } from './turn.js';
 import type {
   Conversation,
   Turn,
@@ -37,6 +38,7 @@ export interface RawConversation {
   title: string;
   adapter_kind: string | null;
   adapter_session_id: string | null;
+  adapter_usage_json: string | null;
   turn_count: number;
   pinned: number;
   archived: number;
@@ -75,6 +77,7 @@ export interface RawItem {
   id: string;
   turn_id: string;
   ordinal: number;
+  call_id: string | null;
   batch_id: number | null;
   kind: string;
   role: string | null;
@@ -82,6 +85,7 @@ export interface RawItem {
   name: string | null;
   args_json: string | null;
   output_json: string | null;
+  raw_json: string | null;
   child_turn_id: string | null;
   model: string | null;
   provider: string | null;
@@ -118,6 +122,14 @@ export interface RawState {
 }
 
 export function conversationFromRaw(raw: RawConversation): Conversation {
+  let adapterUsageSnapshot: AdapterUsageSnapshot | undefined;
+  if (raw.adapter_usage_json !== null) {
+    try {
+      adapterUsageSnapshot = JSON.parse(raw.adapter_usage_json) as AdapterUsageSnapshot;
+    } catch {
+      // A corrupt optional accounting snapshot must not hide the conversation.
+    }
+  }
   return {
     id: raw.id,
     kind: raw.kind as RunKind,
@@ -127,6 +139,7 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
     title: raw.title,
     ...(raw.adapter_kind !== null ? { adapterKind: raw.adapter_kind } : {}),
     ...(raw.adapter_session_id !== null ? { adapterSessionId: raw.adapter_session_id } : {}),
+    ...(adapterUsageSnapshot ? { adapterUsageSnapshot } : {}),
     turnCount: Number(raw.turn_count),
     pinned: raw.pinned !== 0,
     archived: raw.archived !== 0,
@@ -175,6 +188,7 @@ export function itemFromRaw(raw: RawItem): Item {
     itemId: raw.id,
     turnId: raw.turn_id,
     ordinal: raw.ordinal,
+    ...(raw.call_id !== null ? { callId: raw.call_id } : {}),
     ...(raw.batch_id !== null ? { batchId: raw.batch_id } : {}),
     kind: raw.kind as ItemKind,
     ...(raw.role !== null ? { role: raw.role as 'user' | 'assistant' } : {}),
@@ -182,6 +196,7 @@ export function itemFromRaw(raw: RawItem): Item {
     ...(raw.name !== null ? { name: raw.name } : {}),
     ...(raw.args_json !== null ? { argsJson: raw.args_json } : {}),
     ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
+    ...(raw.raw_json !== null ? { rawJson: raw.raw_json } : {}),
     ok: raw.ok !== 0,
     ...(raw.error !== null ? { error: raw.error } : {}),
     startedAt: raw.started_at,
@@ -248,6 +263,7 @@ export interface PreparedStatements {
   insertTurn: StatementSync;
   finishTurn: StatementSync;
   getTurn: StatementSync;
+  deleteTurn: StatementSync;
   getTurnByIdempotency: StatementSync;
   listTurnsAsc: StatementSync;
   listTurnsFiltered: StatementSync;
@@ -278,7 +294,8 @@ export interface PreparedStatements {
 // Reconstructed transcript length = total items across the conversation's
 // turns (one `message_in` per turn + each step/tool item).
 const CONV_COLS = `c.id, c.kind, c.user_id, c.app_id, c.automation_id, c.title,
-        c.adapter_kind, c.adapter_session_id, c.turn_count, c.pinned, c.archived,
+        c.adapter_kind, c.adapter_session_id, c.adapter_usage_json,
+        c.turn_count, c.pinned, c.archived,
         c.created_at, c.updated_at`;
 
 export function prepare(db: DatabaseSync): PreparedStatements {
@@ -286,8 +303,9 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     insertConversation: db.prepare(`
       INSERT INTO conversations
         (id, kind, user_id, app_id, automation_id, title,
-         adapter_kind, adapter_session_id, turn_count, pinned, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 0, 0, ?, ?)
+         adapter_kind, adapter_session_id, adapter_usage_json,
+         turn_count, pinned, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, 0, ?, ?)
     `),
     updateAutomationConversation: db.prepare(`
       UPDATE conversations
@@ -350,7 +368,8 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     ),
     noteTurnWithAdapter: db.prepare(`
       UPDATE conversations
-      SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?, adapter_session_id = ?
+      SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?,
+          adapter_session_id = ?, adapter_usage_json = ?
       WHERE id = ? AND user_id = ?
     `),
     noteTurnKindOnly: db.prepare(`
@@ -396,6 +415,17 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       WHERE id = $tid
     `),
     getTurn: db.prepare(`SELECT * FROM turns WHERE id = ?`),
+    // Scoped + guarded (see `ConversationStore.deleteTurn`): only an UNFINISHED
+    // turn, and only within the caller's user scope when one is supplied
+    // (`NULL` = no owner filter, for callers that hold just a run id).
+    deleteTurn: db.prepare(`
+      DELETE FROM turns
+      WHERE id = ? AND ended_at IS NULL
+        AND EXISTS (
+          SELECT 1 FROM conversations c
+          WHERE c.id = turns.conversation_id AND (? IS NULL OR c.user_id = ?)
+        )
+    `),
     // Idempotency lookup (issue #420): the most recent recorded turn on a
     // conversation carrying the given key. A key is written once per user send;
     // newest-first is defensive against any accidental reuse.
@@ -457,12 +487,12 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     `),
     insertItem: db.prepare(`
       INSERT INTO items (
-        id, turn_id, ordinal, batch_id, kind, role, text, model, provider,
+        id, turn_id, ordinal, call_id, batch_id, kind, role, text, model, provider,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd,
         cost_source,
-        app_id, name, args_json, output_json, child_turn_id,
+        app_id, name, args_json, output_json, raw_json, child_turn_id,
         ok, error, started_at, ended_at, duration_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     // The inbound message (issue #190) — ordinal 0 of the turn. Attachments
     // hang off the returned item id.
@@ -473,12 +503,14 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     // Ledger-tail hybrid (issue #158): durable "running" row, ended_at NULL.
     openItem: db.prepare(`
       INSERT INTO items (
-        id, turn_id, ordinal, batch_id, kind, app_id, name, args_json, ok, started_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        id, turn_id, ordinal, call_id, batch_id, kind, app_id, name, args_json, raw_json,
+        ok, started_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
     `),
     closeItem: db.prepare(`
       UPDATE items SET
-        ok = $ok, output_json = $outputJson, error = $error,
+        ok = $ok, output_json = $outputJson, raw_json = COALESCE($rawJson, raw_json),
+        error = $error,
         child_turn_id = $childTurnId,
         input_tokens = $inputTokens, output_tokens = $outputTokens,
         cache_read_tokens = $cacheReadTokens, cache_write_tokens = $cacheWriteTokens,

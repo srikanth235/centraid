@@ -146,6 +146,8 @@ CREATE TABLE IF NOT EXISTS consent_scope_tombstone (
   schema_name      TEXT NOT NULL,
   table_name       TEXT,
   verbs            TEXT NOT NULL CHECK (verbs IN ('read','read+act','act','reveal')),
+  row_filter_json  TEXT CHECK (row_filter_json IS NULL OR json_valid(row_filter_json)),
+  field_mask_json  TEXT CHECK (field_mask_json IS NULL OR json_valid(field_mask_json)),
   revoked_at       TEXT NOT NULL,
   CHECK (app_id IS NOT NULL OR grantee_party_id IS NOT NULL)
 ) STRICT;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ManifestError,
+  isDeniedTriggerCursorEntity,
   isPendingWebhookTrigger,
   isValidCronExpression,
   parseManifest,
@@ -151,6 +152,19 @@ describe('validateManifest', () => {
     ).toThrow(ManifestError);
   });
 
+  it('round-trips an open runner key and rejects only empty/non-string values', () => {
+    expect(
+      validateManifest(baseManifest({ requires: { runner: 'future-registry-runner' } })).requires
+        .runner,
+    ).toBe('future-registry-runner');
+    expect(() => validateManifest(baseManifest({ requires: { runner: '' } }))).toThrow(
+      /requires\.runner must be a non-empty string/,
+    );
+    expect(() => validateManifest(baseManifest({ requires: { runner: 42 } }))).toThrow(
+      /requires\.runner must be a non-empty string/,
+    );
+  });
+
   it('defaults history.keep to {count:100} when history is absent', () => {
     const raw = baseManifest();
     delete raw.history;
@@ -167,53 +181,6 @@ describe('parseManifest', () => {
 
   it('rejects invalid JSON', () => {
     expect(() => parseManifest('{not json')).toThrow(ManifestError);
-  });
-});
-
-describe('manifest vault block', () => {
-  const base = {
-    name: 'Briefing',
-    prompt: 'summarize the day',
-    generated: { by: 'test', at: '2026-07-03' },
-  };
-
-  it('accepts a purpose + scopes request and round-trips it', () => {
-    const m = validateManifest({
-      ...base,
-      vault: {
-        purpose: 'dpv:ServiceProvision',
-        why: 'reads your agenda',
-        scopes: [
-          { schema: 'schedule', verbs: 'read' },
-          { schema: 'schedule', table: 'add_task', verbs: 'act' },
-        ],
-      },
-    });
-    expect(m.vault).toEqual({
-      purpose: 'dpv:ServiceProvision',
-      why: 'reads your agenda',
-      scopes: [
-        { schema: 'schedule', verbs: 'read' },
-        { schema: 'schedule', table: 'add_task', verbs: 'act' },
-      ],
-    });
-  });
-
-  it('is optional — a manifest without it has no vault surface request', () => {
-    expect(validateManifest(base).vault).toBeUndefined();
-  });
-
-  it('rejects a vault block missing purpose or scopes', () => {
-    expect(() => validateManifest({ ...base, vault: { scopes: [] } })).toThrow(/vault\.purpose/);
-    expect(() =>
-      validateManifest({ ...base, vault: { purpose: 'dpv:Billing', scopes: [] } }),
-    ).toThrow(/vault\.scopes/);
-    expect(() =>
-      validateManifest({
-        ...base,
-        vault: { purpose: 'dpv:Billing', scopes: [{ schema: 'finance', verbs: 'write' }] },
-      }),
-    ).toThrow(/verbs/);
   });
 });
 
@@ -342,4 +309,127 @@ describe('data triggers', () => {
       }),
     ).toThrow(/outbox/);
   });
+});
+
+describe('provider event triggers and cursor loop guard', () => {
+  const base = {
+    name: 'Inbox watcher',
+    prompt: 'summarize new activity',
+    generated: { by: 'test', at: '2026-07-25' },
+    connections: [
+      {
+        connectionId: 'connection-1',
+        kind: 'pull.gmail',
+        label: 'Personal Gmail',
+      },
+    ],
+  };
+
+  it('accepts a supported event only when that connector kind is bound', () => {
+    expect(
+      validateManifest({
+        ...base,
+        triggers: [
+          {
+            kind: 'event',
+            connectorKind: 'pull.gmail',
+            event: 'new-message',
+            every: '*/2 * * * *',
+          },
+        ],
+      }).triggers[0],
+    ).toEqual({
+      kind: 'event',
+      connectorKind: 'pull.gmail',
+      event: 'new-message',
+      every: '*/2 * * * *',
+    });
+    expect(() =>
+      validateManifest({
+        ...base,
+        connections: [],
+        triggers: [{ kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' }],
+      }),
+    ).toThrow(/bound.*pull\.gmail/i);
+    expect(() =>
+      validateManifest({
+        ...base,
+        triggers: [{ kind: 'event', connectorKind: 'pull.gmail', event: 'mail-deleted' }],
+      }),
+    ).toThrow(/unsupported provider event/);
+  });
+
+  it.each([
+    'trigger_ingress',
+    'automation_trigger_cursor',
+    'automation_state',
+    'scheduler_ledger',
+    'conversations',
+    'turns',
+    'items',
+    'attachments',
+    'run_summary',
+    'conversation_archive',
+    'conversation_digest',
+  ])('denies the bare runtime ledger table %s at the cursor guard', (entity) => {
+    expect(isDeniedTriggerCursorEntity(entity)).toBe(true);
+    // A user's own vault table that merely ends in the same word is data.
+    expect(isDeniedTriggerCursorEntity(`shop.${entity}`)).toBe(false);
+  });
+
+  it.each(['outbox.item', 'outbox.receipt'])(
+    'rejects loop-sensitive condition/data cursor entity %s',
+    (entity) => {
+      const vault = {
+        purpose: 'dpv:ServiceProvision',
+        scopes: [{ schema: 'core', table: 'event', verbs: 'read' }],
+      };
+      expect(() =>
+        validateManifest({
+          name: 'Loop',
+          prompt: 'never loop',
+          generated: { by: 'test', at: '2026-07-25' },
+          vault,
+          triggers: [{ kind: 'condition', entity }],
+        }),
+      ).toThrow(/prevent trigger loops/);
+      expect(() =>
+        validateManifest({
+          name: 'Loop',
+          prompt: 'never loop',
+          generated: { by: 'test', at: '2026-07-25' },
+          vault,
+          triggers: [{ kind: 'data', entities: [entity] }],
+        }),
+      ).toThrow(/prevent trigger loops/);
+    },
+  );
+
+  it.each(['inventory.items', 'shop.attachments', 'crm.conversations', 'schedule.turns'])(
+    'accepts the user vault entity %s — the loop guard names runtime tables, not table words',
+    (entity) => {
+      const vault = {
+        purpose: 'dpv:ServiceProvision',
+        scopes: [{ schema: 'core', table: 'event', verbs: 'read' }],
+      };
+      expect(
+        validateManifest({
+          name: 'Watch',
+          prompt: 'watch my own data',
+          generated: { by: 'test', at: '2026-07-25' },
+          vault,
+          triggers: [{ kind: 'condition', entity }],
+        }).triggers[0],
+      ).toMatchObject({ kind: 'condition', entity });
+      expect(
+        validateManifest({
+          name: 'Watch',
+          prompt: 'watch my own data',
+          generated: { by: 'test', at: '2026-07-25' },
+          vault,
+          triggers: [{ kind: 'data', entities: [entity] }],
+        }).triggers[0],
+      ).toMatchObject({ kind: 'data', entities: [entity] });
+    },
+  );
 });

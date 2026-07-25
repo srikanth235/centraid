@@ -43,6 +43,8 @@ export interface VaultScope {
   schema: string;
   table?: string | null;
   verbs: string;
+  rowFilter?: Array<{ column: string; op: string; value?: unknown }> | null;
+  fieldMask?: string[] | null;
 }
 
 /** An active grant an enrolled app holds. */
@@ -97,6 +99,13 @@ export interface VaultEntityHit {
   snippet?: string;
 }
 
+export interface VaultAnchorHit extends VaultEntityHit {
+  type: 'core.link_anchor';
+  sourceType: string;
+  sourceId: string;
+  sourceField: string;
+}
+
 /** Owner-trust entity search used by stable @-tokens in automation instructions. */
 export async function listVaultEntityTypes(): Promise<string[]> {
   const { baseUrl, token } = await auth();
@@ -116,6 +125,17 @@ export async function searchVaultEntities(term: string): Promise<VaultEntityHit[
   });
   const body = await readJson<{ cards: VaultEntityHit[] }>(res, 'search vault entities');
   return body.cards;
+}
+
+/** Owner-trust live anchors used for row/field/span-grade automation tags. */
+export async function searchVaultAnchors(term: string): Promise<VaultAnchorHit[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/anchors?term=${enc(term)}&limit=8`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ anchors: VaultAnchorHit[] }>(res, 'search vault anchors');
+  return body.anchors;
 }
 
 /**

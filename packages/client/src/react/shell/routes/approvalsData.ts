@@ -86,7 +86,19 @@ export function buildParkedRow(row: VaultParkedEntry): ApprovalsParkedRowDTO {
 }
 
 function scopeSummary(scopes: OutboxScopeRequest['scopes']): string {
-  return scopes.map((s) => `${s.schema}${s.table ? `.${s.table}` : ''} (${s.verbs})`).join(', ');
+  return scopes
+    .map((s) => {
+      const extent = [
+        s.rowFilter ? `${s.rowFilter.length} row rule` : '',
+        s.fieldMask ? `${s.fieldMask.length} fields` : '',
+      ]
+        .filter(Boolean)
+        .join(', ');
+      return `${s.schema}${s.table ? `.${s.table}` : ''} (${s.verbs}${
+        extent ? ` · ${extent}` : ''
+      })`;
+    })
+    .join(', ');
 }
 
 export function buildScopeRequestRow(row: OutboxScopeRequest): ApprovalsScopeRequestRowDTO {

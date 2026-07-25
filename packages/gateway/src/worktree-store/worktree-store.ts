@@ -121,7 +121,7 @@ export class WorktreeStore {
    * repointed atomically at the live main worktree on every publish /
    * rollback / delete. Unlike `getActiveMainDir()` — which rotates per
    * sha — this path never changes, so callers that resolve a path once
-   * (e.g. the gateway's cron scheduler + run-now, which resolve automation
+   * (e.g. the gateway's cron scheduler + turn-now, which resolve automation
    * code under `<this>/apps/<id>/`) stay correct across version swaps. The
    * symlink exists after `init()`.
    */

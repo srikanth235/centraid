@@ -82,6 +82,8 @@ export interface OutboxScopeTriple {
   schema: string;
   table?: string | null;
   verbs: string;
+  rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
+  fieldMask?: string[];
 }
 
 /** A manifest asking beyond its last owner consent (issue #308 A3). */

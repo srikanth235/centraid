@@ -14,7 +14,7 @@ import type {
   Turn,
   AutomationTriggerKind,
   TurnStreamEvent,
-  RunStreamEvent,
+  AutomationTurnStreamEvent,
 } from '@centraid/app-engine';
 import { resolveItemCost } from '@centraid/app-engine';
 import type { HistoryConfig } from '../manifest/manifest.js';
@@ -25,7 +25,7 @@ import type { HistoryConfig } from '../manifest/manifest.js';
  * records every node). A wedged sink must never fail the handler — every
  * emit is guarded.
  */
-export type RunEventSink = (ev: RunStreamEvent) => void;
+export type RunEventSink = (ev: AutomationTurnStreamEvent) => void;
 export const noopRunEventSink: RunEventSink = () => undefined;
 
 const AUDIT_FIELD_BYTE_CAP = 64 * 1024; // 64 KB hard cap on args_json / output_json per node.
@@ -147,17 +147,21 @@ export interface OpenRunNodeArgs {
   /** The turn this item belongs to. */
   runId: string;
   ordinal: number;
+  /** Stable runner-native correlation key for overlapping tool calls. */
+  callId?: string;
   batchId?: number;
   kind: ItemKind;
   /** Tool name or `'agent'`. */
   name?: string;
   args?: unknown;
+  /** Lossless runner event envelope, when one exists. */
+  rawJson?: string;
   started: number;
 }
 
 /**
  * Open a durable "running" run node (issue #158, ledger-tail hybrid) AND
- * publish `node.start` to the live bus. Returns the node id for the
+ * publish `item.start` to the live bus. Returns the item id for the
  * matching `closeRunNode`. Store + sink failures are swallowed — a broken
  * ledger or wedged subscriber must never fail the handler.
  */
@@ -169,10 +173,12 @@ export function openRunNode(args: OpenRunNodeArgs): string {
       itemId: nodeId,
       turnId: args.runId,
       ordinal: args.ordinal,
+      ...(args.callId !== undefined ? { callId: args.callId } : {}),
       ...(args.batchId !== undefined ? { batchId: args.batchId } : {}),
       kind: args.kind,
       ...(args.name !== undefined ? { name: args.name } : {}),
       ...(argsJson !== undefined ? { argsJson } : {}),
+      ...(args.rawJson !== undefined ? { rawJson: args.rawJson } : {}),
       startedAt: args.started,
     });
   } catch {
@@ -180,12 +186,15 @@ export function openRunNode(args: OpenRunNodeArgs): string {
   }
   try {
     args.emit({
-      type: 'node.start',
+      type: 'item.start',
+      itemId: nodeId,
       ordinal: args.ordinal,
+      ...(args.callId !== undefined ? { callId: args.callId } : {}),
       ...(args.batchId !== undefined ? { batchId: args.batchId } : {}),
       kind: args.kind,
       ...(args.name !== undefined ? { name: args.name } : {}),
       ...(args.args !== undefined ? { args: args.args } : {}),
+      ...(args.rawJson !== undefined ? { rawJson: args.rawJson } : {}),
     });
   } catch {
     /* swallow */
@@ -223,8 +232,11 @@ export interface CloseRunNodeArgs {
   emit: RunEventSink;
   nodeId: string;
   ordinal: number;
+  callId?: string;
   ok: boolean;
   result?: unknown;
+  /** Lossless runner completion envelope, when one exists. */
+  rawJson?: string;
   error?: string;
   /** Child turn id for an item that spawned a sub-agent. Dormant — no current producer. */
   childTurnId?: string;
@@ -246,9 +258,9 @@ export interface CloseRunNodeArgs {
 
 /**
  * Settle a node opened by `openRunNode`: write the outcome to the ledger
- * AND publish `node.end`. The `node.end` `result` carries the untruncated
- * value (it's ephemeral on the bus); the ledger row keeps the 64 KB-capped
- * copy.
+ * AND publish `item.end`. The `item.end` `result` and `rawJson` carry the
+ * untruncated values (they're ephemeral on the bus); the ledger row keeps the
+ * 64 KB-capped copies.
  */
 export function closeRunNode(args: CloseRunNodeArgs): void {
   const durationMs = args.ended - args.started;
@@ -275,6 +287,7 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
       itemId: args.nodeId,
       ok: args.ok,
       ...(outputJson !== undefined ? { outputJson } : {}),
+      ...(args.rawJson !== undefined ? { rawJson: args.rawJson } : {}),
       ...(args.error !== undefined ? { error: args.error } : {}),
       ...(args.childTurnId !== undefined ? { childTurnId: args.childTurnId } : {}),
       endedAt: args.ended,
@@ -293,12 +306,15 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
   }
   try {
     args.emit({
-      type: 'node.end',
+      type: 'item.end',
+      itemId: args.nodeId,
       ordinal: args.ordinal,
+      ...(args.callId !== undefined ? { callId: args.callId } : {}),
       ok: args.ok,
       ...(args.result !== undefined ? { result: args.result } : {}),
       ...(args.error !== undefined ? { error: args.error } : {}),
       durationMs,
+      ...(args.rawJson !== undefined ? { rawJson: args.rawJson } : {}),
     });
   } catch {
     /* swallow */

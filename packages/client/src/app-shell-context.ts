@@ -65,9 +65,11 @@ export type ShellRoute =
   | { kind: 'connectors' }
   | { kind: 'approvals' }
   | { kind: 'gateway' }
-  // Snapshot custody + remote bytes — split out of the Gateway page's
-  // Overview tab; both sit under the sidebar's Operations section.
-  | { kind: 'backups' }
+  // Local disk footprint by component, the owner's disk budget, and the
+  // offsite snapshot custody that used to be the whole page (issue #544 —
+  // this was `backups`). Sits under the sidebar's Operations section beside
+  // Gateway; Settings → Storage provider owns the connection itself.
+  | { kind: 'storage' }
   // Ontology-at-a-glance — the Kinds/Relations/Browse census over the vault
   // schema (issue #441 Part B). Sits under the sidebar's Operations section.
   | { kind: 'atlas' }
@@ -132,7 +134,13 @@ export interface TemplateEntry {
 export interface TemplateVaultBlock {
   purpose?: string;
   why?: string;
-  scopes: Array<{ schema: string; table?: string; verbs: string }>;
+  scopes: Array<{
+    schema: string;
+    table?: string;
+    verbs: string;
+    rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
+    fieldMask?: string[];
+  }>;
 }
 
 // Per-automation run state, keyed by `${appId}:${name}`.

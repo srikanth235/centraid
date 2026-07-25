@@ -7,10 +7,11 @@ import {
   runOriginLabel,
 } from './BuilderAutomationPaneShared.js';
 
-function run(patch: Partial<CentraidAutomationRunRecord>): CentraidAutomationRunRecord {
+function run(patch: Partial<CentraidAutomationTurnRecord>): CentraidAutomationTurnRecord {
   return {
-    runId: 'r1',
-    kind: 'automation',
+    turnId: 'r1',
+    conversationId: 'app/automation',
+    seq: 0,
     triggerKind: 'scheduled',
     startedAt: Date.now(),
     ok: true,

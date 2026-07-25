@@ -23,6 +23,12 @@ export interface GatewayCapabilities {
    */
   // COMPAT(assist-oauth-capability): added 2026-07-23; drop optionality when the protocol floor requires #526.
   assistOAuth?: boolean;
+  /**
+   * Native interactive automation turns and conversational revision.
+   * Optional so clients connected to a pre-#541 gateway hide the composer.
+   */
+  // COMPAT(automation-turns-capability): added 2026-07-24; drop optionality when the protocol floor requires #541.
+  automationTurns?: boolean;
 }
 
 /** Default capability surface for a modern loopback/daemon gateway. */
@@ -32,6 +38,7 @@ export const DEFAULT_GATEWAY_CAPABILITIES: GatewayCapabilities = Object.freeze({
   tunnel: true,
   backupWal: true,
   assistOAuth: false,
+  automationTurns: true,
 });
 
 export function isGatewayCapabilities(value: unknown): value is GatewayCapabilities {
@@ -42,6 +49,7 @@ export function isGatewayCapabilities(value: unknown): value is GatewayCapabilit
     typeof c.devicePairing === 'boolean' &&
     typeof c.tunnel === 'boolean' &&
     typeof c.backupWal === 'boolean' &&
-    (c.assistOAuth === undefined || typeof c.assistOAuth === 'boolean')
+    (c.assistOAuth === undefined || typeof c.assistOAuth === 'boolean') &&
+    (c.automationTurns === undefined || typeof c.automationTurns === 'boolean')
   );
 }

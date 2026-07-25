@@ -7,7 +7,7 @@ vi.mock('../../gateway-client.js', () => ({
   saveUserPrefs: () => Promise.resolve(undefined),
   listApps: () => Promise.resolve([{ id: 'todos', name: 'Todos', kind: 'app' }]),
   listAutomations: () => Promise.resolve([]),
-  listAutomationRuns: () => Promise.resolve([]),
+  listAutomationTurns: () => Promise.resolve([]),
   getInsightsSummary: () =>
     Promise.resolve({
       kpis: {

@@ -23,7 +23,14 @@ export type CentraidCreateTrigger =
   | { kind: 'cron'; expr: string }
   | { kind: 'webhook' }
   | { kind: 'condition'; entity: string; where?: unknown; every?: string }
-  | { kind: 'data'; entities: string[]; every?: string };
+  | { kind: 'data'; entities: string[]; every?: string }
+  | {
+      kind: 'event';
+      connectorKind: string;
+      event: string;
+      filter?: Record<string, unknown>;
+      every?: string;
+    };
 
 /** Scaffold a new automation app; mints a webhook secret when requested. */
 /** Soft connection binding (agent automations) — ids only, no secrets. */
@@ -51,13 +58,20 @@ export async function createAutomation(input: {
   vault?: {
     purpose: string;
     why?: string;
-    scopes: Array<{ schema: string; table?: string; verbs: string }>;
+    scopes: Array<{
+      schema: string;
+      table?: string;
+      verbs: string;
+      rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
+      fieldMask?: string[];
+    }>;
   };
   /** Soft credential bindings from the editor connectors picker. */
   connections?: CentraidConnectionBinding[];
   /** Published connector declaration (pull/send automations). */
   connector?: CentraidConnectorSpec;
   apps?: string[];
+  runner?: string;
   model?: string;
   historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
   onFailure?: string;
@@ -101,10 +115,20 @@ export async function updateAutomation(input: {
   vault?: {
     purpose: string;
     why?: string;
-    scopes: Array<{ schema: string; table?: string; verbs: string }>;
+    scopes: Array<{
+      schema: string;
+      table?: string;
+      verbs: string;
+      rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
+      fieldMask?: string[];
+    }>;
   };
   connections?: CentraidConnectionBinding[];
   connector?: CentraidConnectorSpec | null;
+  /** `null` clears the manifest pin and restores the subsystem default. */
+  runner?: string | null;
+  /** `null` clears the manifest pin and restores the selected runner's default. */
+  model?: string | null;
 }): Promise<{
   row: CentraidAutomationRow | null;
   webhook?: { id: string; secret: string; url: string };
@@ -125,6 +149,8 @@ export async function updateAutomation(input: {
         ...(input.vault !== undefined ? { vault: input.vault } : {}),
         ...(input.connections !== undefined ? { connections: input.connections } : {}),
         ...(input.connector !== undefined ? { connector: input.connector } : {}),
+        ...(input.runner !== undefined ? { runner: input.runner } : {}),
+        ...(input.model !== undefined ? { model: input.model } : {}),
         sessionId,
         publish: true,
       }),

@@ -14,7 +14,7 @@ import {
   confirmVaultParked,
   decideOutboxItem,
   getBlocking,
-  listAutomationRuns,
+  listAutomationTurns,
   listAgents,
   listOutboxGrants,
   readAutomation,
@@ -146,7 +146,7 @@ function dateGroupLabel(startedAt: number): string {
   return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-function buildThreadRun(run: CentraidAutomationRunRecord): ThreadRunDTO {
+function buildThreadRun(run: CentraidAutomationTurnRecord): ThreadRunDTO {
   const status: ThreadRunStatus = run.endedAt === undefined ? 'running' : run.ok ? 'ok' : 'fail';
   return {
     costUsd: run.totalCostUsd ?? null,
@@ -154,7 +154,7 @@ function buildThreadRun(run: CentraidAutomationRunRecord): ThreadRunDTO {
     durationMs: run.endedAt !== undefined ? run.endedAt - run.startedAt : null,
     endedAt: run.endedAt ?? null,
     originLabel: triggerOriginLabel(run).label,
-    runId: run.runId,
+    runId: run.turnId,
     startedAt: run.startedAt,
     status,
     summary: run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
@@ -172,7 +172,7 @@ export async function loadAutomationThreadData(input: {
 }): Promise<AutomationThreadLoadResult | null> {
   const [row, runs, blocking, grants, agents] = await Promise.all([
     readAutomation({ automationId: input.automationId }),
-    listAutomationRuns({ automationId: input.automationId, limit: 100 }),
+    listAutomationTurns({ automationId: input.automationId, limit: 100 }),
     getBlocking(),
     listOutboxGrants(),
     listAgents(),

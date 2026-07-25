@@ -165,6 +165,25 @@ export interface TurnAttachment {
   filename?: string;
 }
 
+/**
+ * Last cumulative counters reported by one resumable ACP session.
+ *
+ * ACP reports session totals, not per-prompt deltas. Hosts persist this
+ * snapshot beside the opaque session id and feed it back only when the same
+ * runner resumes that session, so the backend can book each turn exactly
+ * once even after a process restart.
+ */
+export interface AdapterUsageSnapshot {
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly cacheReadTokens?: number;
+  readonly cacheWriteTokens?: number;
+  readonly cost?: {
+    readonly amount: number;
+    readonly currency: string;
+  };
+}
+
 export interface TurnInput {
   /** Working directory the agent operates in (chat: app data dir; builder: app dir). */
   cwd: string;
@@ -178,8 +197,16 @@ export interface TurnInput {
   /** Backend-specific append point: codex `developerInstructions` / claude `systemPrompt.append`. */
   extraSystemPrompt: string;
   model?: string;
+  /**
+   * How ACP `session/request_permission` calls are answered. `deny` is a
+   * structural boundary used by automation conversations: the agent keeps
+   * its pre-granted surface and every request to expand it is cancelled.
+   */
+  permissionPolicy?: 'auto-allow' | 'deny';
   /** Resume id from a prior turn (codex thread id / claude session id). */
   prevSessionId?: string;
+  /** Cumulative usage stored with `prevSessionId`; ignored for a fresh session. */
+  prevUsageSnapshot?: AdapterUsageSnapshot;
   /**
    * Extra absolute workspace roots for ACP agents that advertise
    * `sessionCapabilities.additionalDirectories` (monorepo / skills dirs).
@@ -213,6 +240,8 @@ export interface TurnResult {
   sessionId?: string;
   /** Echoes the runner kind that produced `sessionId`. */
   adapterKind: RunnerPrefs['kind'];
+  /** Cumulative usage to persist beside `sessionId` for the next delta. */
+  usageSnapshot?: AdapterUsageSnapshot;
 }
 
 /**

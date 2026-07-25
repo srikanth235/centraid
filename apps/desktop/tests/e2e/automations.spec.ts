@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import {
   automationRow,
+  automationTurnItem,
+  automationTurnRecord,
   cleanupEnv,
   closeApp,
   confirmDelete,
@@ -8,8 +10,6 @@ import {
   gotoNav,
   launchApp,
   makeEnv,
-  runNode,
-  runRecord,
   seedRemoteGateway,
   startMockGateway,
   waitForHome,
@@ -139,7 +139,7 @@ test('8.4 — clicking an automation row opens its viewer', async () => {
   }
 });
 
-test('8.5 — toggling enable from the overflow menu posts set-enabled; a failed toggle toasts', async () => {
+test('8.5 — toggling the lifecycle menu posts set-enabled; a failed toggle toasts', async () => {
   gateway.state.automations = [
     automationRow({ id: 'digest', name: 'Inbox Digest', enabled: true }),
   ];
@@ -235,35 +235,53 @@ test('8.8 — Edit opens the automation builder', async () => {
 
 // ─────────────────────────── §9 runs & monitoring ───────────────────────────
 
-function seedSuccessfulRun(g: MockGateway, automationRef: string, runId: string): void {
-  g.state.nextRunId = runId;
-  g.state.runsById[runId] = runRecord({
-    runId,
+function seedSuccessfulTurn(g: MockGateway, automationRef: string, turnId: string): void {
+  g.state.nextAutomationTurnId = turnId;
+  g.state.automationTurnsById[turnId] = automationTurnRecord({
+    turnId,
     automationId: automationRef,
     ok: true,
     summary: 'All done.',
   });
-  g.state.nodesByRun[runId] = [
-    runNode({ runId, ordinal: 1, kind: 'tool', name: 'fetch_inbox', ok: true }),
+  g.state.automationItemsByTurn[turnId] = [
+    automationTurnItem({ turnId, ordinal: 1, kind: 'tool', name: 'fetch_inbox', ok: true }),
   ];
-  g.state.runFrames = [
-    { data: { type: 'run.start', runId }, delayMs: 20 },
-    { data: { type: 'node.start', ordinal: 1, kind: 'tool', name: 'fetch_inbox' }, delayMs: 20 },
-    { data: { type: 'node.end', ordinal: 1, ok: true, durationMs: 1000 }, delayMs: 20 },
-    { data: { type: 'run.end', ok: true }, delayMs: 20 },
+  g.state.automationTurnFrames = [
+    { data: { type: 'turn.start', turnId }, delayMs: 20 },
+    {
+      data: {
+        type: 'item.start',
+        itemId: `${turnId}-i1`,
+        ordinal: 1,
+        kind: 'tool',
+        name: 'fetch_inbox',
+      },
+      delayMs: 20,
+    },
+    {
+      data: {
+        type: 'item.end',
+        itemId: `${turnId}-i1`,
+        ordinal: 1,
+        ok: true,
+        durationMs: 1000,
+      },
+      delayMs: 20,
+    },
+    { data: { type: 'turn.end', turnId, ok: true }, delayMs: 20 },
   ];
 }
 
-test('9.1 + 9.2 — Run now opens the run viewer and the timeline resolves to success', async () => {
+test('9.1 + 9.2 — Run now opens the forensic viewer and the timeline resolves to success', async () => {
   const row = automationRow({ id: 'digest', name: 'Inbox Digest' });
   gateway.state.automations = [row];
-  seedSuccessfulRun(gateway, row.ref as string, 'run-ok');
+  seedSuccessfulTurn(gateway, row.ref as string, 'turn-ok');
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
     await page.getByTestId('automation-row').filter({ hasText: 'Inbox Digest' }).click();
     await page.getByRole('button', { name: 'Run now' }).click();
-    // The fired run lands in the thread's run feed; Details opens the run
+    // The fired turn lands in the thread feed; Details opens the forensic
     // viewer, whose timeline resolves to a successful final node.
     await openRunDetails(page);
     await expect(page.getByTestId('run-view')).toBeVisible();
@@ -272,7 +290,7 @@ test('9.1 + 9.2 — Run now opens the run viewer and the timeline resolves to su
     });
     expect(
       gateway.calls.some(
-        (c) => c.method === 'POST' && c.pathname === '/centraid/_automations/run-now',
+        (c) => c.method === 'POST' && c.pathname === '/centraid/_automations/turn-now',
       ),
     ).toBe(true);
   } finally {
@@ -280,27 +298,43 @@ test('9.1 + 9.2 — Run now opens the run viewer and the timeline resolves to su
   }
 });
 
-test('9.3 — a failed run surfaces the failure outcome', async () => {
+test('9.3 — a failed turn surfaces the failure outcome', async () => {
   const row = automationRow({ id: 'digest', name: 'Inbox Digest' });
   gateway.state.automations = [row];
-  gateway.state.nextRunId = 'run-fail';
-  gateway.state.runsById['run-fail'] = runRecord({
-    runId: 'run-fail',
+  gateway.state.nextAutomationTurnId = 'turn-fail';
+  gateway.state.automationTurnsById['turn-fail'] = automationTurnRecord({
+    turnId: 'turn-fail',
     automationId: row.ref as string,
     ok: false,
     error: 'Boom.',
   });
-  gateway.state.nodesByRun['run-fail'] = [
-    runNode({ runId: 'run-fail', ordinal: 1, ok: false, error: 'Boom.' }),
+  gateway.state.automationItemsByTurn['turn-fail'] = [
+    automationTurnItem({ turnId: 'turn-fail', ordinal: 1, ok: false, error: 'Boom.' }),
   ];
-  gateway.state.runFrames = [
-    { data: { type: 'run.start', runId: 'run-fail' }, delayMs: 20 },
-    { data: { type: 'node.start', ordinal: 1, kind: 'tool', name: 'fetch_inbox' }, delayMs: 20 },
+  gateway.state.automationTurnFrames = [
+    { data: { type: 'turn.start', turnId: 'turn-fail' }, delayMs: 20 },
     {
-      data: { type: 'node.end', ordinal: 1, ok: false, error: 'Boom.', durationMs: 500 },
+      data: {
+        type: 'item.start',
+        itemId: 'turn-fail-i1',
+        ordinal: 1,
+        kind: 'tool',
+        name: 'fetch_inbox',
+      },
       delayMs: 20,
     },
-    { data: { type: 'run.end', ok: false, error: 'Boom.' }, delayMs: 20 },
+    {
+      data: {
+        type: 'item.end',
+        itemId: 'turn-fail-i1',
+        ordinal: 1,
+        ok: false,
+        error: 'Boom.',
+        durationMs: 500,
+      },
+      delayMs: 20,
+    },
+    { data: { type: 'turn.end', turnId: 'turn-fail', ok: false, error: 'Boom.' }, delayMs: 20 },
   ];
   const { app, page } = await launchApp(env);
   try {
@@ -316,10 +350,10 @@ test('9.3 — a failed run surfaces the failure outcome', async () => {
   }
 });
 
-test('9.4 + 9.9 — a timeline node expands to show payloads and Escape collapses it', async () => {
+test('9.4 + 9.9 — the forensic timeline uses the shared tool-and-answer transcript', async () => {
   const row = automationRow({ id: 'digest', name: 'Inbox Digest' });
   gateway.state.automations = [row];
-  seedSuccessfulRun(gateway, row.ref as string, 'run-ok');
+  seedSuccessfulTurn(gateway, row.ref as string, 'turn-ok');
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
@@ -330,19 +364,18 @@ test('9.4 + 9.9 — a timeline node expands to show payloads and Escape collapse
       timeout: 10_000,
     });
 
-    const head = page.locator('[aria-expanded]').first();
-    await head.click();
-    await expect(head).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.getByTestId('run-step-payload').first()).toBeVisible();
+    const transcript = page.getByTestId('automation-turn-messages');
+    await expect(transcript).toContainText('1 tool');
+    await expect(transcript).toContainText('All done.');
   } finally {
     await closeApp(app);
   }
 });
 
-test('9.7 — Run again on a finished thread card fires another run', async () => {
+test('9.7 — Run again fires another turn from the automation thread', async () => {
   const row = automationRow({ id: 'digest', name: 'Inbox Digest' });
   gateway.state.automations = [row];
-  seedSuccessfulRun(gateway, row.ref as string, 'run-ok');
+  seedSuccessfulTurn(gateway, row.ref as string, 'turn-ok');
   const { app, page } = await launchApp(env);
   try {
     await openAutomations(page);
@@ -352,10 +385,10 @@ test('9.7 — Run again on a finished thread card fires another run', async () =
     // run-view detail (those in-view controls were removed as noise).
     await page.getByTestId('run-entry').first().waitFor({ timeout: 15_000 });
     await expect(page.getByTestId('run-details').first()).toBeVisible({ timeout: 15_000 });
-    const before = gateway.countCalls('POST', (p) => p === '/centraid/_automations/run-now');
+    const before = gateway.countCalls('POST', (p) => p === '/centraid/_automations/turn-now');
     await page.getByRole('button', { name: 'Run again' }).first().click();
     await expect
-      .poll(() => gateway.countCalls('POST', (p) => p === '/centraid/_automations/run-now'))
+      .poll(() => gateway.countCalls('POST', (p) => p === '/centraid/_automations/turn-now'))
       .toBeGreaterThan(before);
   } finally {
     await closeApp(app);

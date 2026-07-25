@@ -16,6 +16,7 @@
  */
 
 import type {
+  AdapterUsageSnapshot,
   RunnerKind,
   ToolContext,
   TurnAttachment,
@@ -45,8 +46,12 @@ export interface AcpTurnInput {
    */
   extraSystemPrompt: string;
   model?: string;
+  /** Host decision for ACP permission requests; automation chat always denies. */
+  permissionPolicy?: 'auto-allow' | 'deny';
   /** Session id from a prior turn; triggers resume/load when supported. */
   prevSessionId?: string;
+  /** Persisted cumulative counters paired with `prevSessionId`. */
+  prevUsageSnapshot?: AdapterUsageSnapshot;
   /**
    * Extra absolute workspace roots for agents that advertise
    * `sessionCapabilities.additionalDirectories`. Omitted when empty.
@@ -139,4 +144,6 @@ export interface AcpTurnConfig {
 
 export interface AcpTurnResult {
   sessionId?: string;
+  /** Current cumulative counters to persist beside `sessionId`. */
+  usageSnapshot?: AdapterUsageSnapshot;
 }

@@ -20,6 +20,11 @@ import {
   type RefCard,
 } from '@centraid/vault';
 import type { RuntimeLogger } from '@centraid/app-engine';
+import {
+  AUTOMATION_ANCHOR_ENTITY,
+  AUTOMATION_ANCHOR_PURPOSE,
+  resolveAutomationAnchors,
+} from '../lifecycle/automation-anchor-scopes.js';
 
 /** What the shell's entity picker asks for. */
 export interface PickerRequest {
@@ -34,6 +39,87 @@ export interface PickerRequest {
 /** One pickable entity: its card plus the FTS snippet when a term matched. */
 export interface PickerHit extends RefCard {
   snippet?: string;
+}
+
+/** A live, text-resolvable core_link_anchor exposed to the owner editor. */
+export interface AnchorPickerHit {
+  type: typeof AUTOMATION_ANCHOR_ENTITY;
+  id: string;
+  status: 'live';
+  title: string;
+  subtitle: string;
+  thumbnail_content_id: null;
+  sourceType: string;
+  sourceId: string;
+  sourceField: string;
+}
+
+/**
+ * Newest anchors this owner can still resolve, bounded by one gateway read.
+ * A term filters on the anchor's own quote text.
+ */
+const ANCHOR_SCAN_LIMIT = 500;
+
+/** The `$.exact` quote of a `core_link_anchor.selector_json` cell, or ''. */
+function anchorQuote(selectorJson: unknown): string {
+  if (typeof selectorJson !== 'string') return '';
+  try {
+    const parsed = JSON.parse(selectorJson) as { exact?: unknown };
+    return typeof parsed.exact === 'string' ? parsed.exact : '';
+  } catch {
+    // A malformed selector cannot match a term; `resolveAutomationAnchors`
+    // reports it properly when the anchor is actually picked.
+    return '';
+  }
+}
+
+/** Search live anchors by their exact text quote, newest first. */
+export function pickAnchors(
+  gateway: VaultGateway,
+  cred: Credential,
+  logger: RuntimeLogger,
+  request: Pick<PickerRequest, 'term' | 'limit'>,
+): { anchors: AnchorPickerHit[] } {
+  const term = request.term?.trim().toLowerCase() ?? '';
+  const limit = Math.min(Math.max(request.limit ?? 8, 1), 25);
+  // Receipted owner read, like every other door this picker drives — the old
+  // raw `db.vault` JOIN was a second, unaudited read path (issue #541 review).
+  const rows = gateway.read(cred, {
+    entity: AUTOMATION_ANCHOR_ENTITY,
+    orderBy: { column: 'created_at', dir: 'desc' },
+    limit: ANCHOR_SCAN_LIMIT,
+    purpose: AUTOMATION_ANCHOR_PURPOSE,
+  }).rows;
+  const anchors: AnchorPickerHit[] = [];
+  for (const row of rows) {
+    if (anchors.length >= limit) break;
+    if (term !== '' && !anchorQuote(row.selector_json).toLowerCase().includes(term)) continue;
+    try {
+      const resolved = resolveAutomationAnchors(
+        { gateway, credential: cred },
+        `@[${AUTOMATION_ANCHOR_ENTITY}/${String(row.anchor_id)}]`,
+      )[0];
+      if (!resolved) continue;
+      anchors.push({
+        type: AUTOMATION_ANCHOR_ENTITY,
+        id: resolved.anchorId,
+        status: 'live',
+        title: resolved.selector.exact,
+        subtitle: `${resolved.sourceType} · ${resolved.sourceField} · anchored span`,
+        thumbnail_content_id: null,
+        sourceType: resolved.sourceType,
+        sourceId: resolved.sourceId,
+        sourceField: resolved.sourceField,
+      });
+    } catch (error) {
+      logger.warn(
+        `vault plane: anchor picker skipped ${row.anchor_id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  return { anchors };
 }
 
 /**

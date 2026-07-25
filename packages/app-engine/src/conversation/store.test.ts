@@ -1,38 +1,10 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+// Conversation rows, turn rows, and the search / pin / archive surface. Item,
+// message_in, and attachment rows live in store-items.test.ts; retention
+// pruning in store-prune.test.ts. Shared fixtures in store-test-fixtures.ts.
+
 import { describe, expect, it } from 'vitest';
-import path from 'node:path';
-import { makeJournalDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
 import { ConversationStore } from './store.js';
-
-function newProvider(): DatabaseProvider {
-  const dir = tempDirSync('centraid-conv-store-');
-  return makeJournalDbProvider(path.join(dir, 'journal.db'));
-}
-
-function newStore(): ConversationStore {
-  return new ConversationStore(newProvider());
-}
-
-/** Seed one automation turn in its stable conversation. */
-function seedAutomationTurn(
-  store: ConversationStore,
-  automationRef: string,
-  turnId: string,
-  startedAt: number,
-  ok = true,
-): void {
-  const conversationId = store.ensureAutomationConversation(
-    automationRef,
-    automationRef.split('/')[0],
-  );
-  store.insertTurn({
-    turnId,
-    conversationId,
-    triggerKind: 'scheduled',
-    startedAt,
-  });
-  store.finishTurn({ turnId, endedAt: startedAt + 1, ok });
-}
+import { newProvider, newStore } from './store-test-fixtures.js';
 
 describe('ConversationStore — conversations', () => {
   it('creates + round-trips a conversation (kind/app/automation/title)', () => {
@@ -52,6 +24,32 @@ describe('ConversationStore — conversations', () => {
     store.close();
   });
 
+  it('persists cumulative ACP usage beside the resume handle', () => {
+    const store = newStore();
+    const conv = store.createConversation({ kind: 'chat', userId: 'u1', appId: 'app' });
+    expect(
+      store.noteTurn(conv.id, 'u1', {
+        kind: 'codex',
+        sessionId: 'session-1',
+        usageSnapshot: {
+          inputTokens: 120,
+          outputTokens: 30,
+          cost: { amount: 0.4, currency: 'USD' },
+        },
+      }),
+    ).toBe(true);
+    expect(store.getConversation(conv.id)).toMatchObject({
+      adapterKind: 'codex',
+      adapterSessionId: 'session-1',
+      adapterUsageSnapshot: {
+        inputTokens: 120,
+        outputTokens: 30,
+        cost: { amount: 0.4, currency: 'USD' },
+      },
+    });
+    store.close();
+  });
+
   it('ensureAutomationConversation reuses one conversation and refreshes its name', () => {
     const store = newStore();
     const first = store.ensureAutomationConversation('app/digest', 'app', 'Digest');
@@ -63,6 +61,41 @@ describe('ConversationStore — conversations', () => {
     expect(a?.title).toBe('Morning digest');
     expect(first).toBe('app/digest');
     expect(second).toBe(first);
+    store.close();
+  });
+
+  it('uses a different durable conversation when an automation switches harness', () => {
+    const store = newStore();
+    const codex = store.ensureAutomationConversation('app/digest', 'app', 'Digest', 'codex');
+    const claude = store.ensureAutomationConversation('app/digest', 'app', 'Digest', 'claude-code');
+    expect(codex).not.toBe(claude);
+    expect(store.getConversation(codex)).toMatchObject({
+      automationId: 'app/digest',
+      adapterKind: 'codex',
+    });
+    expect(store.getConversation(claude)).toMatchObject({
+      automationId: 'app/digest',
+      adapterKind: 'claude-code',
+    });
+    store.close();
+  });
+
+  it('refuses to reuse an automation conversation whose row names another harness', () => {
+    const store = newStore();
+    // A row that could only come from a hand-edited ledger or the deprecated
+    // `createAutomationRun` path: the `::runner:` id says codex, the column
+    // says claude-code. Handing a claude-code ACP resume handle to codex would
+    // corrupt the session, so this fails loudly.
+    store.createConversation({
+      id: 'app/digest::runner:codex',
+      kind: 'automation',
+      userId: '',
+      automationId: 'app/digest',
+      adapterKind: 'claude-code',
+    });
+    expect(() =>
+      store.ensureAutomationConversation('app/digest', 'app', 'Digest', 'codex'),
+    ).toThrow(/belongs to claude-code/);
     store.close();
   });
 
@@ -210,6 +243,51 @@ describe('ConversationStore — turns', () => {
     store.close();
   });
 
+  it('deleteTurn removes an unfinished turn but refuses a finished one', () => {
+    const store = newStore();
+    const c = store.createConversation({ kind: 'automation', userId: '', automationId: 'app/a' });
+    store.insertTurn({ turnId: 'r0', conversationId: c.id, triggerKind: 'manual', startedAt: 1 });
+    store.finishTurn({ turnId: 'r0', endedAt: 2, ok: true });
+    store.insertTurn({ turnId: 'r1', conversationId: c.id, triggerKind: 'manual', startedAt: 3 });
+
+    // A finished turn is durable history: deleting it would hand its `seq` to
+    // the next insert and alias the archive's seq_from/seq_to ranges.
+    expect(store.deleteTurn('r0')).toBe(false);
+    expect(store.getTurn('r0')).toBeDefined();
+
+    // The interrupted newest turn is the retry path — its seq is recycled on
+    // purpose, and nothing archived can be covering it.
+    expect(store.deleteTurn('r1')).toBe(true);
+    expect(store.getTurn('r1')).toBeUndefined();
+    store.insertTurn({ turnId: 'r1', conversationId: c.id, triggerKind: 'manual', startedAt: 4 });
+    expect(store.getTurn('r1')?.seq).toBe(1);
+    store.close();
+  });
+
+  it('deleteTurn confines itself to the given owner when one is supplied', () => {
+    const store = newStore();
+    const mine = store.createConversation({ kind: 'chat', userId: 'u1' });
+    const theirs = store.createConversation({ kind: 'chat', userId: 'u2' });
+    store.insertTurn({
+      turnId: 'a',
+      conversationId: mine.id,
+      triggerKind: 'interactive',
+      startedAt: 1,
+    });
+    store.insertTurn({
+      turnId: 'b',
+      conversationId: theirs.id,
+      triggerKind: 'interactive',
+      startedAt: 1,
+    });
+
+    // A stray id must not reach across users.
+    expect(store.deleteTurn('b', 'u1')).toBe(false);
+    expect(store.getTurn('b')).toBeDefined();
+    expect(store.deleteTurn('a', 'u1')).toBe(true);
+    store.close();
+  });
+
   it('finishTurn rolls up step/agent tokens + step/tool counts', () => {
     const store = newStore();
     const c = store.createConversation({ kind: 'automation', userId: '', automationId: 'app/a' });
@@ -273,110 +351,6 @@ describe('ConversationStore — turns', () => {
   });
 });
 
-describe('ConversationStore — items + message_in', () => {
-  it('insertMessageIn lands ordinal 0; listItems is ordinal-ordered', () => {
-    const store = newStore();
-    const c = store.createConversation({ kind: 'chat', userId: 'u1' });
-    store.insertTurn({
-      turnId: 't',
-      conversationId: c.id,
-      triggerKind: 'interactive',
-      startedAt: 1,
-    });
-    store.insertMessageIn({ turnId: 't', role: 'user', text: 'hi there', startedAt: 1 });
-    store.insertItem({
-      itemId: 's1',
-      turnId: 't',
-      ordinal: 1,
-      kind: 'step',
-      outputJson: JSON.stringify({ text: 'reply' }),
-      ok: true,
-      startedAt: 2,
-      endedAt: 3,
-      durationMs: 1,
-    });
-    const items = store.listItems('t');
-    expect(items.map((i) => [i.kind, i.ordinal])).toEqual([
-      ['message_in', 0],
-      ['step', 1],
-    ]);
-    expect(items[0]?.text).toBe('hi there');
-    expect(items[0]?.role).toBe('user');
-    expect(store.messageInText('t')).toBe('hi there');
-    store.close();
-  });
-
-  it('openItem lands an in-flight row; closeItem settles outcome + duration', () => {
-    const store = newStore();
-    const c = store.createConversation({ kind: 'chat', userId: 'u1' });
-    store.insertTurn({
-      turnId: 't',
-      conversationId: c.id,
-      triggerKind: 'interactive',
-      startedAt: 0,
-    });
-    store.openItem({
-      turnId: 't',
-      itemId: 'n1',
-      ordinal: 0,
-      kind: 'tool',
-      name: 'x',
-      argsJson: '{"q":1}',
-      startedAt: 10,
-    });
-    let [n] = store.listItems('t');
-    expect(n?.endedAt).toBe(undefined);
-    expect(n?.ok).toBe(true);
-    store.closeItem({
-      itemId: 'n1',
-      ok: false,
-      error: 'rate limited',
-      endedAt: 35,
-      durationMs: 25,
-    });
-    [n] = store.listItems('t');
-    expect(store.listItems('t').length).toBe(1);
-    expect(n?.ok).toBe(false);
-    expect(n?.error).toBe('rate limited');
-    expect(n?.argsJson).toBe('{"q":1}');
-    store.close();
-  });
-});
-
-describe('ConversationStore — attachments', () => {
-  it('insertAttachment FKs to a message_in item; lists by item + turn; referencedHashes', () => {
-    const store = newStore();
-    const c = store.createConversation({ kind: 'chat', userId: 'u1' });
-    store.insertTurn({
-      turnId: 't',
-      conversationId: c.id,
-      triggerKind: 'interactive',
-      startedAt: 1,
-    });
-    const itemId = store.insertMessageIn({
-      turnId: 't',
-      role: 'user',
-      text: 'see file',
-      startedAt: 1,
-    });
-    store.insertAttachment({
-      itemId,
-      hash: 'a'.repeat(64),
-      mime: 'image/png',
-      sizeBytes: 12,
-      source: 'upload',
-      filename: 'pic.png',
-    });
-    const byItem = store.listAttachmentsForItem(itemId);
-    expect(byItem.length).toBe(1);
-    expect(byItem[0]?.mime).toBe('image/png');
-    expect(byItem[0]?.filename).toBe('pic.png');
-    expect(store.listAttachmentsForTurn('t').length).toBe(1);
-    expect([...store.referencedHashes()]).toEqual(['a'.repeat(64)]);
-    store.close();
-  });
-});
-
 describe('ConversationStore — automation state', () => {
   it('get/set round-trips across reopens and is scoped per automation', () => {
     const provider = newProvider();
@@ -390,92 +364,5 @@ describe('ConversationStore — automation state', () => {
     s2.stateDelete('auto-foo', 'cursor');
     expect(s2.stateGet('auto-foo', 'cursor')).toBe(undefined);
     s2.close();
-  });
-});
-
-describe('ConversationStore — prune + delete', () => {
-  /** Seed one fire turn + a tool item in the stable conversation. */
-  function seedFire(store: ConversationStore, i: number, ok = true): void {
-    const id = `r${i}`;
-    const conversationId = store.ensureAutomationConversation('app/foo', 'app');
-    store.insertTurn({
-      turnId: id,
-      conversationId,
-      triggerKind: 'scheduled',
-      startedAt: 100 + i,
-    });
-    store.finishTurn({ turnId: id, endedAt: 200 + i, ok });
-    store.insertItem({
-      itemId: `n-${i}`,
-      turnId: id,
-      ordinal: 0,
-      kind: 'tool',
-      name: 'a',
-      ok: true,
-      startedAt: 150 + i,
-      endedAt: 151 + i,
-      durationMs: 1,
-    });
-  }
-
-  it('pruneAutomation by count keeps newest N fires and cascades; pinned survives', () => {
-    const store = newStore();
-    for (let i = 0; i < 6; i++) seedFire(store, i);
-    store.setTurnPinned('r0', true);
-    store.pruneAutomation('app/foo', { count: 2 });
-    const remaining = store
-      .listAutomationTurns('app/foo', { limit: 100 })
-      .map((t) => t.turnId)
-      .sort();
-    expect(remaining).toEqual(['r0', 'r4', 'r5']);
-    expect(store.listItems('r1').length).toBe(0);
-    expect(store.listItems('r5').length).toBe(1);
-    store.close();
-  });
-
-  it('pruneAutomation errorsOnly drops successful fires; all=true is a no-op', () => {
-    const store = newStore();
-    for (let i = 0; i < 4; i++) seedFire(store, i, i % 2 === 0);
-    store.pruneAutomation('app/foo', { errorsOnly: true });
-    const remaining = store.listAutomationTurns('app/foo', { limit: 100 });
-    expect(remaining.length).toBe(2);
-    for (const t of remaining) expect(t.ok).toBe(false);
-    store.pruneAutomation('app/foo', { all: true });
-    expect(store.listAutomationTurns('app/foo', { limit: 100 }).length).toBe(2);
-    store.close();
-  });
-
-  it('deleteAutomationData drops the stable conversation (cascade) + state, leaving others', () => {
-    const store = newStore();
-    seedAutomationTurn(store, 'app/a', 'a1', 1);
-    seedAutomationTurn(store, 'app/b', 'b1', 1);
-    store.insertMessageIn({ turnId: 'a1', role: 'user', text: 'x', startedAt: 1 });
-    store.stateSet('app/a', 'k', JSON.stringify('v'), 1);
-    store.stateSet('app/b', 'k', JSON.stringify('v'), 1);
-    store.deleteAutomationData('app/a');
-    expect(store.listAutomationTurns('app/a').length).toBe(0);
-    expect(store.listItems('a1').length).toBe(0);
-    expect(store.stateGet('app/a', 'k')).toBe(undefined);
-    expect(store.listAutomationTurns('app/b').length).toBe(1);
-    expect(store.stateGet('app/b', 'k')).toBeTruthy();
-    store.close();
-  });
-
-  it('deleteConversation (chat) is user-scoped and cascades items + attachments', () => {
-    const store = newStore();
-    const c = store.createConversation({ kind: 'chat', userId: 'u1' });
-    store.insertTurn({
-      turnId: 't',
-      conversationId: c.id,
-      triggerKind: 'interactive',
-      startedAt: 1,
-    });
-    const itemId = store.insertMessageIn({ turnId: 't', role: 'user', text: 'hi', startedAt: 1 });
-    store.insertAttachment({ itemId, hash: 'b'.repeat(64), mime: 'image/png', sizeBytes: 1 });
-    expect(store.deleteConversation(c.id, 'other-user')).toBe(false);
-    expect(store.deleteConversation(c.id, 'u1')).toBe(true);
-    expect(store.listItems('t').length).toBe(0);
-    expect(store.referencedHashes().size).toBe(0);
-    store.close();
   });
 });

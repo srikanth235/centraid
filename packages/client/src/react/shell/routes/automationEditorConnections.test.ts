@@ -27,7 +27,7 @@ describe('matchEditorConnection', () => {
       'github',
       'pull.github',
     );
-    expect(result).toEqual({ match: null, ambiguous: false });
+    expect(result).toEqual({ match: null, matches: [] });
   });
 
   it('refuses to guess between multiple accounts', () => {
@@ -39,6 +39,7 @@ describe('matchEditorConnection', () => {
       'github',
       'pull.github',
     );
-    expect(result).toEqual({ match: null, ambiguous: true });
+    expect(result.match).toBeNull();
+    expect(result.matches.map((candidate) => candidate.connectionId)).toEqual(['personal', 'work']);
   });
 });

@@ -1,5 +1,7 @@
 # issue-498 (follow-up) — Mobile springboard v0: Spaces, Insights, app covers
 
+<!-- governance: allow-receipt-per-issue — #498 shipped in two waves: the design import (PR #499, receipts/issue-498-mobile-design-import.md) and this springboard v0 slice (PR #542). Each wave ships its own receipt; this waiver marks that coexistence as deliberate. No recorded fact in this receipt is altered — annotation only. -->
+
 GitHub issue: [#498](https://github.com/srikanth235/centraid/issues/498)
 
 A second wave of `apps/mobile`-only work continuing the Centraid Mobile design

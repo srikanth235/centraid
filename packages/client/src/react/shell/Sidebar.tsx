@@ -35,7 +35,7 @@ export type SidebarPage =
   | 'connectors'
   | 'approvals'
   | 'gateway'
-  | 'backups'
+  | 'storage'
   | 'atlas'
   | 'settings';
 
@@ -104,7 +104,7 @@ export interface SidebarProps {
   onGateway?: () => void;
   /** Live heartbeat status pill next to "Gateway" — omitted shows no pill. */
   gatewayStatus?: 'up' | 'down' | 'unknown';
-  onBackups?: () => void;
+  onStorage?: () => void;
   onAtlas?: () => void;
   /** @deprecated Apps list is no longer shown in the sidebar. */
   onAppClick?: (id: string) => void;
@@ -416,10 +416,10 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       />
       <SbItem
         icon={<Icon name="Save" size={15} />}
-        label="Backups"
-        active={props.activePage === 'backups'}
-        disabled={!props.onBackups}
-        onClick={props.onBackups}
+        label="Storage"
+        active={props.activePage === 'storage'}
+        disabled={!props.onStorage}
+        onClick={props.onStorage}
       />
       <SbItem
         icon={<Icon name="Globe" size={15} />}

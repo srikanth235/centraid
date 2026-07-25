@@ -167,7 +167,7 @@ describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
     expect(store.openItem).toHaveBeenCalled();
     expect(store.closeItem).toHaveBeenCalled();
 
-    // Happy path still emits node.start / node.end when store+emit succeed.
+    // Happy path still emits item.start / item.end when store+emit succeed.
     const goodStore = { openItem: vi.fn(), closeItem: vi.fn() };
     const events: unknown[] = [];
     const id = openRunNode({
@@ -189,12 +189,21 @@ describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
       ended: 20,
     });
     expect(events).toEqual([
-      { type: 'node.start', ordinal: 1, kind: 'step' },
-      { type: 'node.end', ordinal: 1, ok: false, error: 'nope', durationMs: 10 },
+      { type: 'item.start', itemId: id, ordinal: 1, kind: 'step' },
+      {
+        type: 'item.end',
+        itemId: id,
+        ordinal: 1,
+        ok: false,
+        error: 'nope',
+        durationMs: 10,
+      },
     ]);
   });
 
   it('noopRunEventSink is callable', () => {
-    expect(() => noopRunEventSink({ type: 'node.start', ordinal: 0, kind: 'step' })).not.toThrow();
+    expect(() =>
+      noopRunEventSink({ type: 'item.start', itemId: 'i0', ordinal: 0, kind: 'step' }),
+    ).not.toThrow();
   });
 });

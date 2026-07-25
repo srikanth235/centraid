@@ -29,7 +29,7 @@ vi.mock('../../gateway-client.js', () => ({
       { id: 'todos', name: 'Todos', kind: 'app' },
     ]),
   listAutomations: () => Promise.resolve([]),
-  listAutomationRuns: () => Promise.resolve([]),
+  listAutomationTurns: () => Promise.resolve([]),
   getBlocking: () => Promise.resolve({ outbox: [], needsAuth: [], parked: [], scopeRequests: [] }),
 }));
 

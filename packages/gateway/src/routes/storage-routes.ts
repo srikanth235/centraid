@@ -39,6 +39,17 @@
  *                                                              count (custody's own ground truth) — visible
  *                                                              drift between the two is an integrity signal,
  *                                                              not noise.
+ *   GET    /centraid/_gateway/storage/local                  — LOCAL disk footprint by component (issue
+ *                                                              #544): per-vault ledger / vault-db /
+ *                                                              attachments / apps / code plus the
+ *                                                              gateway-level backup, logs, templates and
+ *                                                              storage dirs, the volume's free/total, and
+ *                                                              the current limit evaluation. Served from
+ *                                                              `LocalUsageScanner`'s TTL cache; `?refresh=1`
+ *                                                              re-walks inline.
+ *   GET|PUT /centraid/_gateway/storage/limits                — the owner's disk budget (warn-only) and
+ *                                                              ledger archive limit (issue #544). PUT takes
+ *                                                              a partial patch; `null` clears either limit.
  *
  * Every response mirrors `StorageConnectionRecord` — `id, kind, name,
  * createdAt, updatedAt`, plus `baseUrl/targetId`. NEVER a credential field,
@@ -69,13 +80,14 @@ import {
 import type { StorageUsagePoller } from '../backup/storage-usage.js';
 import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { readJson, sendError, sendJson } from './route-helpers.js';
+import { tryStorageLocalRoutes, type StorageLocalRouteDeps } from './storage-local-routes.js';
 
 const CONNECTIONS_PATH = '/centraid/_gateway/storage/connections';
 const STATUS_PATH = '/centraid/_gateway/storage/status';
 const STATUS_EVENTS_PATH = '/centraid/_gateway/storage/status/events';
 const USAGE_PATH = '/centraid/_gateway/storage/usage';
 
-export interface StorageRouteDeps {
+export interface StorageRouteDeps extends StorageLocalRouteDeps {
   storageConnections: StorageConnectionStore;
   recoveryKit: RecoveryKitStateStore;
   vaults: VaultRegistry;
@@ -309,6 +321,11 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
         return sendError(res, err);
       }
     }
+
+    // Local footprint + the owner's limits (issue #544) — same prefix, but a
+    // different question (this machine's disk, not the provider's), so they
+    // live in their own module.
+    if (await tryStorageLocalRoutes(url, req, res, deps)) return true;
 
     if (url.pathname === CONNECTIONS_PATH) {
       if ((req.method ?? 'GET') === 'GET') {

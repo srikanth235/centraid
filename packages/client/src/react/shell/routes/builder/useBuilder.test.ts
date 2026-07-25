@@ -25,6 +25,11 @@ describe('useBuilder module', () => {
     expect(useBuilder.name).toBe('useBuilder');
     // Without AppContext / React dispatcher the hook fails closed — not a
     // typeof-only smoke. Message varies by React version and input shape.
-    expect(() => useBuilder()).toThrow();
+    expect(() =>
+      useBuilder({
+        appKind: 'app',
+        showToast: () => undefined,
+      }),
+    ).toThrow();
   });
 });

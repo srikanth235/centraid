@@ -37,6 +37,7 @@ import type {
   ConversationTurnResult,
 } from './runner.js';
 import type {
+  RunnerKind,
   RunnerPrefs,
   RunTurnFn,
   ToolContext,
@@ -68,7 +69,10 @@ export interface ConversationRunnerCoreOptions {
    * it, and a runner built without `subsystem` calls the loader bare — which
    * is exactly the pre-existing behavior.
    */
-  prefsLoader: (subsystem?: ModelSubsystem) => Promise<RunnerPrefs | undefined>;
+  prefsLoader: (
+    subsystem?: ModelSubsystem,
+    runnerKind?: RunnerKind,
+  ) => Promise<RunnerPrefs | undefined>;
   /**
    * Which subsystem's prefs this runner rides — passed to `prefsLoader` on
    * every turn. Left unset by registers with no per-subsystem identity
@@ -150,8 +154,10 @@ export function makeConversationRunnerCore(
   return {
     ...(opts.runKind ? { runKind: opts.runKind } : {}),
     async run(input: ConversationTurnInput): Promise<ConversationTurnResult> {
-      const prefs = await opts.prefsLoader(opts.subsystem);
-      if (!prefs) {
+      const loadedPrefs = input.runnerKind
+        ? await opts.prefsLoader(opts.subsystem, input.runnerKind)
+        : await opts.prefsLoader(opts.subsystem);
+      if (!loadedPrefs) {
         input.onEvent({
           type: 'error',
           message:
@@ -159,6 +165,14 @@ export function makeConversationRunnerCore(
         });
         throw new Error('no coding agent configured');
       }
+      // A host that predates the runnerKind loader argument may still return
+      // another runner's launch settings. Keep the requested kind but discard
+      // that mismatched binary/args; registry defaults are safer than launching
+      // runner A through runner B's executable.
+      const prefs: RunnerPrefs =
+        input.runnerKind && loadedPrefs.kind !== input.runnerKind
+          ? { kind: input.runnerKind }
+          : loadedPrefs;
 
       const cwd = await opts.resolveCwd(input);
       const turnCtx: TurnContext = { input, prefs, cwd };
@@ -175,6 +189,10 @@ export function makeConversationRunnerCore(
       // is the OTHER backend's and would be meaningless to resume against.
       const resumeId =
         input.prevAdapterKind === prefs.kind ? input.prevAdapterSessionId : undefined;
+      const resumeUsage =
+        resumeId && input.prevAdapterKind === prefs.kind
+          ? input.prevAdapterUsageSnapshot
+          : undefined;
 
       const toolContext: ToolContext = {
         appId: input.appId,
@@ -196,7 +214,9 @@ export function makeConversationRunnerCore(
         onEvent: input.onEvent,
         ...(opts.extraPath ? { extraPath: opts.extraPath } : {}),
         ...(input.model ? { model: input.model } : {}),
+        ...(input.permissionPolicy ? { permissionPolicy: input.permissionPolicy } : {}),
         ...(resumeId ? { prevSessionId: resumeId } : {}),
+        ...(resumeUsage ? { prevUsageSnapshot: resumeUsage } : {}),
       };
 
       const result = await runTurn(turnInput, { prefs });
@@ -212,6 +232,7 @@ export function makeConversationRunnerCore(
       return {
         adapterKind: result.adapterKind,
         ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
+        ...(result.usageSnapshot ? { adapterUsageSnapshot: result.usageSnapshot } : {}),
       };
     },
   };

@@ -24,9 +24,26 @@
  */
 
 import { appSessionUrl, auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
+import { consumeSse, type TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
+import {
+  isGatewayCapabilities,
+  type GatewayCapabilities,
+  type GatewayInfo,
+} from '@centraid/protocol';
 
 export * from './gateway-client-core.js';
 export * from './gateway-client-automation-compile.js';
+
+/** Feature flags advertised by the active gateway, or undefined if malformed. */
+export async function readGatewayCapabilities(): Promise<GatewayCapabilities | undefined> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_gateway/info', {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const info = await readJson<GatewayInfo>(res, 'read gateway capabilities');
+  return isGatewayCapabilities(info.capabilities) ? info.capabilities : undefined;
+}
 
 /** URL the renderer loads in an app iframe. */
 export async function appLiveUrl(input: { id: string }): Promise<{ url: string }> {
@@ -134,6 +151,8 @@ export interface TemplateVaultScope {
   schema: string;
   table?: string;
   verbs: string;
+  rowFilter?: Array<{ column: string; op: string; value?: unknown }>;
+  fieldMask?: string[];
 }
 
 /** A template's requested vault access, for the Discover install/consent sheet
@@ -306,7 +325,7 @@ export async function saveUserPrefs(
 // ---- Automations + insights (`/centraid/_automations`, `/centraid/_insights`) ----
 // Read/run/analytics proxies. Code (manifests) resolves gateway-side from
 // the materialized `main`; run ledgers + analytics from the gateway's data
-// dir. A run-now fires on the gateway host with ITS runner + provider key.
+// dir. A turn-now fires on the gateway host with ITS runner + provider key.
 
 /** Every automation on `main`, sorted by name. */
 export async function listAutomations(): Promise<CentraidAutomationRow[]> {
@@ -337,104 +356,154 @@ export async function readAutomation(input: {
   return out.row ?? null;
 }
 
-/** Fire an automation now on the gateway host; returns the minted run id. */
+/** Fire an automation now on the gateway host; returns the minted turn id. */
 export async function runAutomationNow(input: {
   automationId: string;
-}): Promise<CentraidAutomationRunResult> {
+}): Promise<CentraidAutomationTurnResult> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
-    `/centraid/_automations/run-now?ref=${enc(input.automationId)}`,
+    `/centraid/_automations/turn-now?ref=${enc(input.automationId)}`,
     { method: 'POST', headers: authHeaders(token) },
   );
-  return readJson<CentraidAutomationRunResult>(res, 'run automation');
+  return readJson<CentraidAutomationTurnResult>(res, 'run automation');
 }
 
-/** Central run-summary feed, newest-first. Omit `automationId` for the global feed. */
-export async function listAutomationRuns(input: {
+/** Native automation turns, newest-first. Omit `automationId` for the global feed. */
+export async function listAutomationTurns(input: {
   automationId?: string;
   limit?: number;
-}): Promise<CentraidAutomationRunRecord[]> {
+}): Promise<CentraidAutomationTurnRecord[]> {
   const { baseUrl, token } = await auth();
   const params = new URLSearchParams();
   if (input.automationId) params.set('ref', input.automationId);
   params.set('limit', String(input.limit ?? 50));
-  const res = await doFetch(baseUrl, `/centraid/_automations/runs?${params.toString()}`, {
+  const res = await doFetch(baseUrl, `/centraid/_automations/turns?${params.toString()}`, {
     method: 'GET',
     headers: authHeaders(token),
   });
-  const out = await readJson<{ runs: CentraidAutomationRunRecord[] }>(res, 'list runs');
-  return out.runs ?? [];
+  const out = await readJson<{ turns: CentraidAutomationTurnRecord[] }>(res, 'list turns');
+  return out.turns ?? [];
 }
 
-/** One run's full record from its app's ledger, or `null` when unknown. */
-export async function readAutomationRun(input: {
-  runId: string;
-}): Promise<CentraidAutomationRunRecord | null> {
+/** One native turn from the shared ledger, or `null` when unknown. */
+export async function readAutomationTurn(input: {
+  turnId: string;
+}): Promise<CentraidAutomationTurnRecord | null> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_automations/run?runId=${enc(input.runId)}`, {
+  const res = await doFetch(baseUrl, `/centraid/_automations/turn?turnId=${enc(input.turnId)}`, {
     method: 'GET',
     headers: authHeaders(token),
   });
-  const out = await readJson<{ run: CentraidAutomationRunRecord | null }>(res, 'read run');
-  return out.run ?? null;
+  const out = await readJson<{ turn: CentraidAutomationTurnRecord | null }>(res, 'read turn');
+  return out.turn ?? null;
 }
 
-/** The run's node timeline from its app's ledger. */
-export async function listAutomationRunNodes(input: {
-  runId: string;
-}): Promise<CentraidAutomationRunNode[]> {
+/** One turn and its items in one authoritative ledger snapshot. */
+export async function readAutomationTurnExpanded(input: { turnId: string }): Promise<{
+  turn: CentraidAutomationTurnRecord | null;
+  items: CentraidAutomationItem[];
+}> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_automations/run/nodes?runId=${enc(input.runId)}`, {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  const out = await readJson<{ nodes: CentraidAutomationRunNode[] }>(res, 'run nodes');
-  return out.nodes ?? [];
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_automations/turn?turnId=${enc(input.turnId)}&expand=items`,
+    { method: 'GET', headers: authHeaders(token) },
+  );
+  const out = await readJson<{
+    turn: CentraidAutomationTurnRecord | null;
+    items?: CentraidAutomationItem[];
+  }>(res, 'read expanded turn');
+  return { turn: out.turn ?? null, items: out.items ?? [] };
+}
+
+/** Latest turn for an automation, expanded with its native items. */
+export async function readLatestAutomationTurnExpanded(input: { automationId: string }): Promise<{
+  turn: CentraidAutomationTurnRecord | null;
+  items: CentraidAutomationItem[];
+}> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_automations/turn?ref=${enc(input.automationId)}&expand=items`,
+    { method: 'GET', headers: authHeaders(token) },
+  );
+  const out = await readJson<{
+    turn: CentraidAutomationTurnRecord | null;
+    items?: CentraidAutomationItem[];
+  }>(res, 'read latest expanded turn');
+  return { turn: out.turn ?? null, items: out.items ?? [] };
+}
+
+/** The turn's native item timeline from the shared ledger. */
+export async function listAutomationItems(input: {
+  turnId: string;
+}): Promise<CentraidAutomationItem[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_automations/turn/items?turnId=${enc(input.turnId)}`,
+    {
+      method: 'GET',
+      headers: authHeaders(token),
+    },
+  );
+  const out = await readJson<{ items: CentraidAutomationItem[] }>(res, 'turn items');
+  return out.items ?? [];
 }
 
 /**
- * Live run-stream event (issue #158), mirroring `@centraid/app-engine`'s
- * `RunStreamEvent`. `node.delta` carries chat-parity token events (Phase 2);
- * Phase 1 only emits the durable lifecycle events.
+ * Live native automation-turn event. `item.delta` nests the same
+ * `TurnStreamEvent` grammar used by interactive conversations.
  */
-export type RunStreamEvent =
-  | { type: 'run.start'; runId: string }
+export type AutomationTurnStreamEvent =
+  | { type: 'turn.start'; turnId: string }
   | {
-      type: 'node.start';
+      type: 'item.start';
+      itemId: string;
       ordinal: number;
+      callId?: string;
       batchId?: number;
-      kind: CentraidAutomationRunNode['kind'];
+      kind: CentraidAutomationItem['kind'];
       name?: string;
       args?: unknown;
+      rawJson?: string;
     }
-  | { type: 'node.delta'; ordinal: number; event: unknown }
   | {
-      type: 'node.end';
+      type: 'item.delta';
+      itemId: string;
       ordinal: number;
+      callId?: string;
+      event: unknown;
+    }
+  | {
+      type: 'item.end';
+      itemId: string;
+      ordinal: number;
+      callId?: string;
       ok: boolean;
       result?: unknown;
       error?: string;
       durationMs: number;
+      rawJson?: string;
     }
-  | { type: 'run.end'; ok: boolean; error?: string };
+  | { type: 'turn.end'; turnId: string; ok: boolean; error?: string };
 
 /**
- * Subscribe to a run's live events over SSE
- * (`GET /centraid/_automations/run/events?runId=`). The gateway replays the
- * durable ledger snapshot, then streams live until `run.end`. `onEvent` fires
+ * Subscribe to a turn's live events over SSE. The gateway replays the
+ * durable ledger snapshot, then streams live until `turn.end`. `onEvent` fires
  * per parsed event; the promise resolves when the stream closes. Pass an
  * `AbortSignal` to detach (panel teardown). An abort resolves quietly; other
  * transport failures reject so the caller can fall back to a one-shot read.
  */
-export async function streamAutomationRun(
-  runId: string,
-  onEvent: (ev: RunStreamEvent) => void,
+export async function streamAutomationTurn(
+  turnId: string,
+  onEvent: (ev: AutomationTurnStreamEvent) => void,
   signal: AbortSignal,
 ): Promise<void> {
   const { baseUrl, token } = await auth();
   try {
-    const res = await doFetch(baseUrl, `/centraid/_automations/run/events?runId=${enc(runId)}`, {
+    const res = await doFetch(baseUrl, `/centraid/_automations/turn/events?turnId=${enc(turnId)}`, {
       method: 'GET',
       headers: authHeaders(token),
       signal,
@@ -461,7 +530,7 @@ export async function streamAutomationRun(
         if (!data) continue;
         try {
           const evt = JSON.parse(data) as { type?: string };
-          if (evt && typeof evt.type === 'string') onEvent(evt as RunStreamEvent);
+          if (evt && typeof evt.type === 'string') onEvent(evt as AutomationTurnStreamEvent);
         } catch {
           /* skip a malformed frame rather than abort the stream */
         }
@@ -474,18 +543,52 @@ export async function streamAutomationRun(
   }
 }
 
+/**
+ * Execute a one-off interactive turn in an automation's durable
+ * conversation. The stream is the exact shared `TurnStreamEvent` grammar;
+ * the gateway exposes the new native turn id in a response header so the
+ * caller can perform one authoritative expanded re-read on completion.
+ */
+export async function streamAutomationConversationTurn(
+  automationId: string,
+  message: string,
+  onEvent: (event: TurnStreamEvent) => void,
+  signal: AbortSignal,
+): Promise<{ turnId?: string; ended: boolean }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_automations/turn?ref=${enc(automationId)}`, {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ message }),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(
+      `interactive automation turn failed (HTTP ${res.status})${detail ? `: ${detail}` : ''}`,
+    );
+  }
+  const turnId = res.headers.get('x-centraid-turn-id') ?? undefined;
+  const result = await consumeSse(res.body, onEvent, { signal });
+  return { ...result, ...(turnId ? { turnId } : {}) };
+}
+
 /** Pin / unpin a run as a replay fixture (ledger + central summary). */
-export async function pinAutomationRun(input: {
-  runId: string;
+export async function pinAutomationTurn(input: {
+  turnId: string;
   pinned: boolean;
 }): Promise<{ ok: true }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_automations/run/pin?runId=${enc(input.runId)}`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ pinned: input.pinned }),
-  });
-  await readJson(res, 'pin run');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_automations/turn/pin?turnId=${enc(input.turnId)}`,
+    {
+      method: 'POST',
+      headers: authHeaders(token, 'application/json'),
+      body: JSON.stringify({ pinned: input.pinned }),
+    },
+  );
+  await readJson(res, 'pin turn');
   return { ok: true };
 }
 
@@ -590,6 +693,10 @@ export * from './gateway-client-backup.js';
 // Storage card and the Settings → Storage screen import it from the same
 // barrel.
 export * from './gateway-client-storage.js';
+
+// The LOCAL disk surface (issue #544) — footprint by component + the owner's
+// two limits. Same route prefix, different question; see the module header.
+export * from './gateway-client-local-storage.js';
 
 // The paired-device roster + revoke surface (issue #376) lives in
 // `gateway-client-devices.ts`. Re-exported here so the Gateway page's

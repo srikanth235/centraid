@@ -17,7 +17,7 @@
  */
 
 import type { RunKind } from './schema.js';
-import type { TurnAttachment } from './turn.js';
+import type { AdapterUsageSnapshot, RunnerKind, TurnAttachment } from './turn.js';
 
 /**
  * Normalized stream events both adapters emit. The route handler translates
@@ -39,6 +39,8 @@ export type TurnStreamEvent =
       sql?: string;
       /** ACP tool kind when the agent supplied one (read/edit/delete/move/…​). */
       kind?: string;
+      /** Lossless runner event envelope when the adapter exposes one. */
+      rawJson?: string;
     }
   | {
       type: 'tool.result';
@@ -53,6 +55,8 @@ export type TurnStreamEvent =
        * (`type: "diff"`), when the agent reported them.
        */
       diffs?: Array<{ path?: string; oldText?: string; newText?: string }>;
+      /** Lossless runner event envelope when the adapter exposes one. */
+      rawJson?: string;
     }
   | {
       type: 'phase';
@@ -61,8 +65,22 @@ export type TurnStreamEvent =
       /** Normalized plan entries when `phase === 'plan'`. */
       plan?: Array<{ content: string; status?: string; priority?: string }>;
     }
-  | { type: 'final'; text: string }
-  | { type: 'error'; message: string }
+  | {
+      type: 'final';
+      text: string;
+      /** Runner-native completion reason, preserved verbatim. */
+      stopReason?: string;
+      /** Lossless runner completion envelope. */
+      rawJson?: string;
+    }
+  | {
+      type: 'error';
+      message: string;
+      /** Runner-native completion reason, preserved verbatim. */
+      stopReason?: string;
+      /** Lossless runner completion envelope. */
+      rawJson?: string;
+    }
   | { type: 'aborted' }
   /**
    * A non-fatal, human-readable notice about the turn — surfaced in the
@@ -166,8 +184,17 @@ export interface ConversationTurnInput {
    * live schema). Adapters splice this into their own system-prompt flag.
    */
   extraSystemPrompt: string;
+  /** Optional validated per-turn harness override (for automation manifests). */
+  runnerKind?: RunnerKind;
   model?: string;
   thinking?: string;
+  /**
+   * ACP permission-request policy for this turn. Interactive automation
+   * conversations set `deny`: an enrolled automation may use only the tools
+   * and vault grants the host already exposed, and can never widen that set
+   * through an agent-rendered permission prompt.
+   */
+  permissionPolicy?: 'auto-allow' | 'deny';
   abortSignal: AbortSignal;
   /**
    * Idempotency key supplied by the harness — same turn re-tried with the
@@ -183,6 +210,8 @@ export interface ConversationTurnInput {
    */
   prevAdapterSessionId?: string;
   prevAdapterKind?: string;
+  /** Cumulative counters stored with the prior ACP session id. */
+  prevAdapterUsageSnapshot?: AdapterUsageSnapshot;
   onEvent: (event: TurnStreamEvent) => void;
 }
 
@@ -196,6 +225,8 @@ export interface ConversationTurnResult {
   adapterSessionId?: string;
   /** Adapter kind that wrote `adapterSessionId`. */
   adapterKind?: string;
+  /** Cumulative counters to persist with the resume handle. */
+  adapterUsageSnapshot?: AdapterUsageSnapshot;
 }
 
 export interface ConversationRunner {

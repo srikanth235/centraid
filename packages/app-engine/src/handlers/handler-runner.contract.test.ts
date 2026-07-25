@@ -56,17 +56,24 @@ test('a burst beyond cap+queue fails fast with a busy outcome; admitted calls st
   const [c1, c2, c3, c4, c5] = [1, 2, 3, 4, 5].map((seq) => run(admission, seq));
 
   // The 5th call is refused immediately — it must not sit behind the
-  // parked handlers waiting for a slot that will never come.
-  const start = Date.now();
+  // admitted handlers waiting for a slot that will never come. Assert the
+  // causal ordering instead of a wall-clock threshold that flakes when the
+  // package suite saturates the host. Handlers park on a file gate (not a
+  // fixed sleep) so they stay in-flight until we release them.
+  const admittedPromise = Promise.all([c1!, c2!, c3!, c4!]);
+  let admittedSettled = false;
+  void admittedPromise.finally(() => {
+    admittedSettled = true;
+  });
   const fifth = await c5!;
-  expect(Date.now() - start).toBeLessThan(100);
+  expect(admittedSettled).toBe(false);
   expect(fifth.ok).toBe(false);
   expect(fifth.busy).toBe(true);
   expect(fifth.error).toMatch(/busy/i);
 
   // Release the gate once the busy refusal is proven so the admitted four finish.
   await writeFile(path.join(appDir, 'release.gate'), 'go');
-  const admitted = await Promise.all([c1!, c2!, c3!, c4!]);
+  const admitted = await admittedPromise;
   for (const outcome of admitted) expect(outcome.ok).toBe(true);
   const seqs = admitted.map((o) => (o.value as { seq: number }).seq).toSorted((a, b) => a - b);
   expect(seqs).toEqual([1, 2, 3, 4]);

@@ -1,0 +1,245 @@
+/*
+ * The Storage page's presentation derivation (issue #544) — every decision
+ * about what the footprint READS AS, kept pure and framework-free so the
+ * numbers can be asserted in a unit test instead of a rendered DOM.
+ *
+ * The gateway reports per-vault components and gateway-level components
+ * separately (`serve/local-usage.ts`), because that is the shape it can
+ * measure honestly. The owner does not think in that split — they think
+ * "what is using my disk", and only THEN "which vault". So this rolls the two
+ * into one ordered legend, and keeps the per-vault rows available underneath.
+ *
+ * Colour is assigned per component id, not per rank: a component keeps its
+ * hue as the numbers move, so the bar does not reshuffle its palette between
+ * two polls. Hues come from the icon palette (`--icon-*`), which is the one
+ * ramp in this codebase already designed to be told apart at a glance.
+ */
+
+import type {
+  LocalComponentId,
+  LocalComponentUsageDTO,
+  LocalUsageReportDTO,
+  StorageLimitsDTO,
+} from '../../gateway-client-local-storage.js';
+
+export interface ComponentPresentation {
+  label: string;
+  /** A CSS colour token — the segment's hue and its legend chip. */
+  color: string;
+  /** One line of plain language: what this actually is. */
+  blurb: string;
+}
+
+/** Fixed per-component presentation. Order of the keys is the tiebreak order
+ *  used when two components report the same byte count. */
+export const COMPONENT_PRESENTATION: Readonly<Record<LocalComponentId, ComponentPresentation>> =
+  Object.freeze({
+    attachments: {
+      label: 'Attachments',
+      color: 'var(--icon-indigo)',
+      blurb: 'Files, photos, and the previews and archive segments derived from them.',
+    },
+    ledger: {
+      label: 'Ledger',
+      color: 'var(--icon-teal)',
+      blurb: 'Conversations, runs, and the audit trail — the file the ledger limit governs.',
+    },
+    'vault-db': {
+      label: 'Vault database',
+      color: 'var(--icon-violet)',
+      blurb: 'The ontology itself: every entity, link, and setting.',
+    },
+    code: {
+      label: 'App code',
+      color: 'var(--icon-forest)',
+      blurb: 'The code store behind your apps — every version you have built.',
+    },
+    apps: {
+      label: 'App data',
+      color: 'var(--icon-ochre)',
+      blurb: 'Per-app working directories.',
+    },
+    backup: {
+      label: 'Backup staging',
+      color: 'var(--icon-amber)',
+      blurb: 'Snapshot keyring, engine state, and bytes waiting to go offsite.',
+    },
+    cache: {
+      label: 'Runner cache',
+      color: 'var(--icon-slate)',
+      blurb: 'Coding-agent scratch space. Derived — safe to delete at any time.',
+    },
+    logs: {
+      label: 'Logs',
+      color: 'var(--icon-rose)',
+      blurb: 'Rotated gateway logs.',
+    },
+    templates: {
+      label: 'Templates',
+      color: 'var(--icon-slate)',
+      blurb: 'Cached app templates pulled from the remote manifest.',
+    },
+    storage: {
+      label: 'Gateway state',
+      color: 'var(--icon-slate)',
+      blurb: 'Storage-connection records and the recovery-kit flag.',
+    },
+  });
+
+const COMPONENT_ORDER = Object.keys(COMPONENT_PRESENTATION) as LocalComponentId[];
+
+export interface FootprintSlice {
+  component: LocalComponentId;
+  label: string;
+  color: string;
+  blurb: string;
+  bytes: number;
+  /** Share of the total footprint in [0, 1]; 0 when the total is 0. */
+  fraction: number;
+  /** Any read failure encountered under this component, verbatim. */
+  unreadable?: string;
+}
+
+/** Roll per-vault and gateway-level components into ONE ordered legend,
+ *  largest first. Zero-byte components are dropped — a legend row that always
+ *  reads "0 B" is noise, and the per-vault detail still lists them. */
+export function footprintSlices(report: LocalUsageReportDTO): FootprintSlice[] {
+  const totals = new Map<LocalComponentId, { bytes: number; unreadable?: string }>();
+  const add = (entry: LocalComponentUsageDTO): void => {
+    const prior = totals.get(entry.component);
+    totals.set(entry.component, {
+      bytes: (prior?.bytes ?? 0) + entry.bytes,
+      ...((prior?.unreadable ?? entry.unreadable)
+        ? { unreadable: prior?.unreadable ?? entry.unreadable }
+        : {}),
+    });
+  };
+  for (const entry of report.components) add(entry);
+  for (const vault of report.vaults) for (const entry of vault.components) add(entry);
+
+  const total = report.totalBytes;
+  return [...totals.entries()]
+    .filter(([, value]) => value.bytes > 0)
+    .map(([component, value]) => {
+      const presentation = COMPONENT_PRESENTATION[component];
+      return {
+        component,
+        label: presentation.label,
+        color: presentation.color,
+        blurb: presentation.blurb,
+        bytes: value.bytes,
+        fraction: total > 0 ? value.bytes / total : 0,
+        ...(value.unreadable ? { unreadable: value.unreadable } : {}),
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.bytes - a.bytes ||
+        COMPONENT_ORDER.indexOf(a.component) - COMPONENT_ORDER.indexOf(b.component),
+    );
+}
+
+export type FootprintScaleKind = 'budget' | 'disk' | 'none';
+
+export interface FootprintScale {
+  /** What the rail is drawn against. */
+  kind: FootprintScaleKind;
+  /** Denominator in bytes; `null` when there is nothing to scale against. */
+  againstBytes: number | null;
+  /** Fill fraction, clamped to [0, 1] so an over-budget bar stays in its box. */
+  fillFraction: number;
+  /** `true` once used bytes exceed `againstBytes` — the rail shows overflow. */
+  over: boolean;
+  /** Where the warn threshold sits along the rail, in [0, 1]; `null` off-budget. */
+  warnFraction: number | null;
+}
+
+/**
+ * What the occupancy rail measures against, in priority order:
+ *
+ *   1. the owner's budget, when they set one — that is the number they care
+ *      about, and the only one they chose;
+ *   2. otherwise the physical disk, which at least gives the figure a sense
+ *      of scale;
+ *   3. otherwise nothing — a bare total, no bar. Inventing a denominator
+ *      ("assume 100 GB") would make the fill fraction a fiction.
+ */
+export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
+  const budget = report.limits.totalLimitBytes;
+  if (budget !== null && budget > 0) {
+    const raw = report.totalBytes / budget;
+    return {
+      kind: 'budget',
+      againstBytes: budget,
+      fillFraction: Math.min(1, raw),
+      over: raw > 1,
+      warnFraction: Math.min(1, report.limits.warnAtPercent / 100),
+    };
+  }
+  // Disk total, not free space: "3 GB of 500 GB" is a stable statement, while
+  // "3 GB of 142 GB free" moves whenever anything else on the machine writes.
+  const diskTotal = report.disk?.totalBytes ?? 0;
+  if (diskTotal > 0) {
+    return {
+      kind: 'disk',
+      againstBytes: diskTotal,
+      fillFraction: Math.min(1, report.totalBytes / diskTotal),
+      over: false,
+      warnFraction: null,
+    };
+  }
+  return { kind: 'none', againstBytes: null, fillFraction: 0, over: false, warnFraction: null };
+}
+
+/** Bytes for humans. Binary units, one decimal above KB — the same shape the
+ *  gateway's own `formatBytes` produces, so a health detail and this page
+ *  never disagree by a rounding step. */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(1)} ${units[unit]}`;
+}
+
+/** Parses "12", "12 GB", "500mb" into bytes. `null` for anything unparseable
+ *  — the limit inputs refuse rather than guess at a unit. */
+export function parseBytes(input: string, defaultUnit: 'MB' | 'GB' = 'GB'): number | null {
+  const match = /^\s*([0-9]+(?:\.[0-9]+)?)\s*(b|kb|mb|gb|tb)?\s*$/i.exec(input);
+  if (!match) return null;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const unit = (match[2] ?? defaultUnit).toUpperCase();
+  const scale: Record<string, number> = {
+    B: 1,
+    KB: 1024,
+    MB: 1024 ** 2,
+    GB: 1024 ** 3,
+    TB: 1024 ** 4,
+  };
+  return Math.round(value * (scale[unit] ?? 1));
+}
+
+/** One sentence naming the state of the budget. Deliberately says what is NOT
+ *  happening when over-budget: nothing is blocked, and a user staring at a red
+ *  bar deserves to know that before they start deleting things in a panic. */
+export function budgetSummary(report: LocalUsageReportDTO, limits: StorageLimitsDTO): string {
+  if (limits.totalLimitBytes === null) {
+    const free = report.disk ? ` ${formatBytes(report.disk.freeBytes)} free on this disk.` : '';
+    return `No budget set — Centraid will use whatever the disk allows.${free}`;
+  }
+  const used = formatBytes(report.totalBytes);
+  const of = formatBytes(limits.totalLimitBytes);
+  if (report.limit.status === 'error') {
+    return `${used} of your ${of} budget — over. Nothing is being blocked; this is a warning so you can decide what to clear.`;
+  }
+  if (report.limit.status === 'degraded') {
+    return `${used} of your ${of} budget — past the ${limits.warnAtPercent}% mark.`;
+  }
+  return `${used} of your ${of} budget.`;
+}

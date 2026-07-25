@@ -30,7 +30,7 @@ import {
   type PreviewCodec,
 } from '@centraid/vault';
 import type { RuntimeLogger, VaultBridge, VaultWorkspace } from '@centraid/app-engine';
-import { openVaultPlane, VaultPlane } from './vault-plane.js';
+import { openVaultPlane, VaultPlane, type InstallScopeBlock } from './vault-plane.js';
 import { vaultContext } from './vault-context.js';
 
 /**
@@ -104,6 +104,8 @@ export interface VaultRegistryOptions {
   onSweepPass?: (info: { durationMs: number }) => void;
   /** Resource-actuals replication hook (#528 Phase C), forwarded to every plane. */
   onReplicationPass?: (info: { bytesReplicated: number; durationMs: number }) => void;
+  /** Forwarded to every plane (issue #544) — see `VaultPlaneOptions.journalLimitBytes`. */
+  journalLimitBytes?: () => number | null;
 }
 
 /** One row of the vault list. */
@@ -152,6 +154,7 @@ export class VaultRegistry {
   private readonly onReplicationPass:
     | ((info: { bytesReplicated: number; durationMs: number }) => void)
     | undefined;
+  private readonly journalLimitBytes: (() => number | null) | undefined;
   private readonly planes = new Map<string, VaultPlane>();
   private readonly mountListeners = new Set<(plane: VaultPlane) => void>();
   /**
@@ -189,6 +192,7 @@ export class VaultRegistry {
     this.replicationConcurrency = options.replicationConcurrency;
     this.onSweepPass = options.onSweepPass;
     this.onReplicationPass = options.onReplicationPass;
+    this.journalLimitBytes = options.journalLimitBytes;
     mkdirSync(this.rootDir, { recursive: true });
     if (existsSync(path.join(this.rootDir, 'vault.db'))) {
       // Pre-multi-vault layout (v0: no data migrations) — the files stay put
@@ -384,6 +388,7 @@ export class VaultRegistry {
         : {}),
       ...(this.onSweepPass ? { onSweepPass: this.onSweepPass } : {}),
       ...(this.onReplicationPass ? { onReplicationPass: this.onReplicationPass } : {}),
+      ...(this.journalLimitBytes ? { journalLimitBytes: this.journalLimitBytes } : {}),
       ...boot,
     });
   }
@@ -562,11 +567,11 @@ export class VaultRegistry {
   }
 
   /** The agent-plane mirror of `bridgeFor` for automation fires. */
-  agentBridgeFor(appId: string): VaultBridge {
+  agentBridgeFor(appId: string, block?: InstallScopeBlock): VaultBridge {
     return async (call) => {
       const plane = this.current();
       plane.enrollAutomationAgent(appId);
-      return plane.agentBridgeFor(appId)(call);
+      return plane.agentBridgeFor(appId, block)(call);
     };
   }
 
