@@ -72,6 +72,7 @@ import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/bluep
 import * as automation from '@centraid/automation';
 import { ROUTES } from '@centraid/protocol';
 import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
+import { closeJournalConversationStores, journalConversationStore } from '../journal-stores.js';
 import {
   runAutomation,
   runPreflight,
@@ -109,6 +110,12 @@ import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
 import { GatewayInstanceLease } from './gateway-instance-lease.js';
 import { ConnectionBroker } from './connection-broker.js';
 import { pollProviderEventSource } from './automation-event-sources.js';
+import { reviseAutomationInstructions } from '../lifecycle/automation-revision.js';
+import {
+  ingressElement,
+  ingressRetentionGap,
+  readIngressCursor,
+} from './trigger-ingress-cursor.js';
 import type { AssistOAuthConfig } from './assist-oauth.js';
 import { OutboxExecutor } from './outbox-executor.js';
 import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
@@ -1028,23 +1035,25 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }),
   );
 
-  // Scheduler ledger (issue #351 tier 2): one shared `ConversationStore` per
-  // mounted vault, bound to that vault's `journal.db` via the SAME
-  // `makeJournalDbProvider` path `fire.ts` and the analytics stores use —
-  // guarantees the conversation-ledger band (`automation_state` included)
-  // exists before this reads/writes it, regardless of tick timing. Memoized
-  // so a health poll or a scheduler tick never reopens the file. Written
-  // from each vault's scheduler `onTick` hook below; read by the
-  // `scheduler` liveness probe and by `automations`'s reconcile push.
+  // The one journal handle per vault (`journal-stores.ts`) — the same
+  // `makeJournalDbProvider` binding `fire.ts` and the analytics stores use,
+  // so the conversation-ledger band (`automation_state` included) exists
+  // before anything reads/writes it, regardless of tick timing.
+  const journalStoreFor = (vaultId: string): ConversationStore => {
+    const plane = vaultRegistry.get(vaultId);
+    if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
+    return journalConversationStore(plane.workspace.journalDbFile);
+  };
+
+  // Scheduler ledger (issue #351 tier 2): written from each vault's scheduler
+  // `onTick` hook below; read by the `scheduler` liveness probe and by
+  // `automations`'s reconcile push. Memoized so a health poll or a scheduler
+  // tick never reconstructs it.
   const schedulerLedgers = new Map<string, automation.SchedulerLedgerStore>();
   const schedulerLedgerFor = (vaultId: string): automation.SchedulerLedgerStore => {
     const existing = schedulerLedgers.get(vaultId);
     if (existing) return existing;
-    const plane = vaultRegistry.get(vaultId);
-    if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
-    const ledger = new automation.SchedulerLedgerStore(
-      new ConversationStore(makeJournalDbProvider(plane.workspace.journalDbFile)),
-    );
+    const ledger = new automation.SchedulerLedgerStore(journalStoreFor(vaultId));
     schedulerLedgers.set(vaultId, ledger);
     return ledger;
   };
@@ -1064,19 +1073,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   // Enricher run health (issue #351 wave 4) — see enrichment-health.ts for
   // why this is narrower than `automations`/`automation-runs`. Run history
-  // rides its own memoized `ConversationStore` (same journalDbFile binding
-  // `schedulerLedgerFor` uses, kept separate so this probe never reaches
-  // into scheduler-ledger.ts's private state).
-  const enrichmentConversationStores = new Map<string, ConversationStore>();
-  const enrichmentConversationStoreFor = (vaultId: string): ConversationStore => {
-    const existing = enrichmentConversationStores.get(vaultId);
-    if (existing) return existing;
-    const plane = vaultRegistry.get(vaultId);
-    if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
-    const store = new ConversationStore(makeJournalDbProvider(plane.workspace.journalDbFile));
-    enrichmentConversationStores.set(vaultId, store);
-    return store;
-  };
+  // reads the shared per-vault journal store; it never reaches into
+  // scheduler-ledger.ts's private state.
   health.registerProbe(
     'enrichment',
     createEnrichmentHealthProbe({
@@ -1088,7 +1086,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             return rows.map((r) => ({ id: r.id, enabled: r.enabled, ref: r.ref }));
           },
           recentRuns: (automationRef, limit) =>
-            enrichmentConversationStoreFor(p.boot.vaultId)
+            journalStoreFor(p.boot.vaultId)
               .listAutomationTurns(automationRef, { limit })
               .map((t) => ({
                 ok: t.ok,
@@ -1438,6 +1436,23 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // `onRunEvent`; the `run/events` SSE endpoint subscribes by runId.
   const runEventBus = new RunEventBus();
   const automationConversationLocks = new Map<string, Promise<void>>();
+  // Detached automation lifecycle work started behind a 202 (compile,
+  // revision). `stop()` drains this before the vault registry closes its
+  // databases, so shutdown cannot land mid-`closeItem` or orphan an ACP
+  // child (issue #541 review).
+  const detachedAutomationTasks = new Set<Promise<void>>();
+  const trackDetachedAutomationTask = (task: Promise<void>, label: string): void => {
+    const tracked = task
+      .catch((error: unknown) => {
+        logger.warn?.(
+          `automation task "${label}" failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      })
+      .finally(() => {
+        detachedAutomationTasks.delete(tracked);
+      });
+    detachedAutomationTasks.add(tracked);
+  };
 
   // The connection broker (issue #304): resolves a connector's broker-carried
   // credential (oauth2/api_key sealed on the connection row) per fire —
@@ -1448,6 +1463,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     () => vaultRegistry.current(),
     undefined,
     options.assistOAuth,
+    undefined,
+    undefined,
+    health.loggerFor('connections', logger),
   );
 
   // The outbox executor (issue #306): the only writer on the broker's
@@ -1579,20 +1597,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       const host = currentSettledHost();
       const ws = currentWorkspace();
       if (opts.idempotent && opts.runId) {
-        const ledger = new ConversationStore(makeJournalDbProvider(ws.journalDbFile));
-        try {
-          const prior = ledger.getTurn(opts.runId);
-          // A terminal turn is the durable acknowledgement. If the gateway
-          // died after it finished but before the source cursor committed,
-          // replaying this source element is a no-op.
-          if (prior?.endedAt !== undefined) return;
-          // An interrupted turn can be retried under the exact same run id.
-          // Cascading removes its partial items; deterministic vault
-          // invocation ids then replay already-applied effects.
-          if (prior) ledger.deleteTurn(opts.runId);
-        } finally {
-          ledger.close();
-        }
+        // The MEMOIZED per-journal store: a webhook/event/data-triggered
+        // automation can fire every few seconds, and a fresh
+        // `makeJournalDbProvider` per fire would leak an unclosed
+        // `DatabaseSync` (plus its 64 MiB mapping and an fd) each time —
+        // `ConversationStore.close()` cannot release a handle it does not own.
+        const ledger = journalConversationStore(ws.journalDbFile);
+        const prior = ledger.getTurn(opts.runId);
+        // A terminal turn is the durable acknowledgement. If the gateway
+        // died after it finished but before the source cursor committed,
+        // replaying this source element is a no-op.
+        if (prior?.endedAt !== undefined) return;
+        // An interrupted turn can be retried under the exact same run id.
+        // Cascading removes its partial items; deterministic vault
+        // invocation ids then replay already-applied effects.
+        if (prior) ledger.deleteTurn(opts.runId);
       }
       const agent = await resolveAutomationAgentForRef(automationRef, host.codeAppsDir());
       await runAutomation({
@@ -1786,6 +1805,126 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         runTurn: accountRunTurn(options.runTurn ?? runTurn),
       });
     };
+    // The headless compile, as an AWAITABLE task. Two callers need it: the
+    // fire-and-forget `compileAutomation` route seam, and `reviseAutomation`,
+    // which cannot know whether the compiled handler still matches the
+    // published prompt unless it sees the outcome (issue #541 review).
+    const runAutomationCompileTask = async (input: {
+      automationRef: string;
+      runId: string;
+      enableOnSuccess: boolean;
+    }): Promise<{ ok: boolean; error?: string }> => {
+      const { automationRef, runId, enableOnSuccess } = input;
+      const parsed = automation.parseRef(automationRef);
+      if (!parsed) return { ok: false, error: `invalid automation ref "${automationRef}"` };
+      const row = await automation.readAppOwned(codeAppsDir(), parsed.appId, parsed.automationId);
+      if (!row) return { ok: false, error: `automation "${automationRef}" does not exist` };
+      let failure: string | undefined;
+      const agent = await resolveAutomationAgent(row.manifest.requires);
+      const enabledBeforeCompile = row.enabled;
+      // Resolve core_link_anchor tokens before the model runs. The token
+      // contains only an opaque anchor id; row and field scopes come from
+      // the addressed vault's live link + selector.
+      const anchorResolution = (() => {
+        try {
+          const anchors = resolveAutomationAnchors(
+            { gateway: plane.gateway, credential: plane.ownerCredential },
+            row.manifest.prompt,
+          );
+          return { anchors, scopes: scopesForAutomationAnchors(anchors) };
+        } catch (error) {
+          return {
+            anchors: [],
+            scopes: [],
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+      })();
+      // Compiles are one-shot drafts. Reusing the interactive chat/edit
+      // worktree lets a failed publish leave a rebase in progress, which
+      // then poisons a later retry (and can conflict with UI edits).
+      // The compile run id is already unique; its final UUID segment is
+      // safe for WorktreeStore session ids.
+      const runSuffix = runId.split(':').at(-1) ?? crypto.randomUUID().slice(0, 8);
+      const sessionId = `compile-${parsed.appId}-${runSuffix}`;
+      // The compile reports its outcome through `failure` rather than by
+      // rejecting: callers (the 202 route seam AND `reviseAutomation`, which
+      // must know whether the handler still matches the published prompt)
+      // both need an outcome, and the old fire-and-forget shape turned a
+      // throw here into an unhandled rejection.
+      await runHeadlessAutomationCompile({
+        runner,
+        journalDbFile: workspace.journalDbFile,
+        runnerSessionDir: workspace.runnerSessionDir,
+        dataDir: workspace.appsDir,
+        appId: parsed.appId,
+        draftSessionId: sessionId,
+        automationRef,
+        automationName: row.name,
+        instructions: row.manifest.prompt,
+        runnerKind: agent.runner,
+        ...(agent.model ? { model: agent.model } : {}),
+        anchors: anchorResolution.anchors,
+        ...(anchorResolution.error ? { preflightError: anchorResolution.error } : {}),
+        runId,
+        onSuccess: async () => {
+          const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
+          const manifestFile = path.join(
+            appDir,
+            'automations',
+            parsed.automationId,
+            automation.MANIFEST_FILE,
+          );
+          const manifest = automation.parseManifest(await fs.readFile(manifestFile, 'utf8'));
+          const compiled = finalizeCompiledManifest(manifest, {
+            enabledBeforeCompile,
+            enableOnSuccess,
+            anchoredScopes: anchorResolution.scopes,
+          });
+          await fs.writeFile(manifestFile, `${JSON.stringify(compiled, null, 2)}\n`);
+          await publishAndReconcile(lifecycleOpts, {
+            appId: parsed.appId,
+            sessionId,
+            appDir,
+            message: `compile ${parsed.automationId}`,
+            ephemeralSession: true,
+          });
+          health.reportOk('automation-runs', `Plan ready for ${row.name}`);
+        },
+        onFailure: async (error) => {
+          failure = error;
+          health.reportError(
+            'automation-runs',
+            `Compile failed for ${row.name}: ${error}. Retry from the automation thread.`,
+          );
+          logger.warn?.(`Headless compile failed for ${automationRef}: ${error}`);
+          // Discard a failed compile's isolated branch. This also
+          // clears any interrupted rebase before the user retries.
+          await store.closeSession(sessionId).catch(() => undefined);
+          if (row.manifest.onFailure) {
+            const target = automation.parseRef(row.manifest.onFailure, parsed.appId);
+            if (target) {
+              await fireAutomation(`${target.appId}/${target.automationId}`, {
+                triggerKind: 'on_failure',
+                triggerOrigin: 'manual',
+                input: {
+                  automationRef,
+                  compileRunId: runId,
+                  error,
+                  phase: 'compile',
+                },
+              });
+            }
+          }
+        },
+      }).catch((error: unknown) => {
+        failure = error instanceof Error ? error.message : String(error);
+        health.reportError('automation-runs', `Compile failed for ${row.name}: ${failure}`);
+        logger.warn?.(`Headless compile threw for ${automationRef}: ${failure}`);
+      });
+      return failure === undefined ? { ok: true } : { ok: false, error: failure };
+    };
+
     const lifecycleOpts: LifecycleRouteOptions = {
       store,
       codeAppsDir,
@@ -1839,190 +1978,119 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         return true;
       },
       ext,
-      compileAutomation: ({ automationRef, runId, enableOnSuccess }) => {
-        const parsed = automation.parseRef(automationRef);
-        if (!parsed) return;
-        void (async () => {
-          const row = await automation.readAppOwned(
-            codeAppsDir(),
-            parsed.appId,
-            parsed.automationId,
-          );
-          if (!row) return;
-          const agent = await resolveAutomationAgent(row.manifest.requires);
-          const enabledBeforeCompile = row.enabled;
-          // Resolve core_link_anchor tokens before the model runs. The token
-          // contains only an opaque anchor id; row and field scopes come from
-          // the addressed vault's live link + selector.
-          const anchorResolution = (() => {
-            try {
-              const anchors = resolveAutomationAnchors(plane.db, row.manifest.prompt);
-              return { anchors, scopes: scopesForAutomationAnchors(anchors) };
-            } catch (error) {
-              return {
-                anchors: [],
-                scopes: [],
-                error: error instanceof Error ? error.message : String(error),
-              };
-            }
-          })();
-          // Compiles are one-shot drafts. Reusing the interactive chat/edit
-          // worktree lets a failed publish leave a rebase in progress, which
-          // then poisons a later retry (and can conflict with UI edits).
-          // The compile run id is already unique; its final UUID segment is
-          // safe for WorktreeStore session ids.
-          const runSuffix = runId.split(':').at(-1) ?? crypto.randomUUID().slice(0, 8);
-          const sessionId = `compile-${parsed.appId}-${runSuffix}`;
-          await runHeadlessAutomationCompile({
-            runner,
-            journalDbFile: workspace.journalDbFile,
-            runnerSessionDir: workspace.runnerSessionDir,
-            dataDir: workspace.appsDir,
-            appId: parsed.appId,
-            draftSessionId: sessionId,
-            automationRef,
-            automationName: row.name,
-            instructions: row.manifest.prompt,
-            runnerKind: agent.runner,
-            ...(agent.model ? { model: agent.model } : {}),
-            anchors: anchorResolution.anchors,
-            ...(anchorResolution.error ? { preflightError: anchorResolution.error } : {}),
-            runId,
-            onSuccess: async () => {
-              const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
-              const manifestFile = path.join(
-                appDir,
-                'automations',
-                parsed.automationId,
-                automation.MANIFEST_FILE,
-              );
-              const manifest = automation.parseManifest(await fs.readFile(manifestFile, 'utf8'));
-              const compiled = finalizeCompiledManifest(manifest, {
-                enabledBeforeCompile,
-                enableOnSuccess,
-                anchoredScopes: anchorResolution.scopes,
-              });
-              await fs.writeFile(manifestFile, `${JSON.stringify(compiled, null, 2)}\n`);
-              await publishAndReconcile(lifecycleOpts, {
-                appId: parsed.appId,
-                sessionId,
-                appDir,
-                message: `compile ${parsed.automationId}`,
-                ephemeralSession: true,
-              });
-              health.reportOk('automation-runs', `Plan ready for ${row.name}`);
-            },
-            onFailure: async (error) => {
-              health.reportError(
-                'automation-runs',
-                `Compile failed for ${row.name}: ${error}. Retry from the automation thread.`,
-              );
-              logger.warn?.(`Headless compile failed for ${automationRef}: ${error}`);
-              // Discard a failed compile's isolated branch. This also
-              // clears any interrupted rebase before the user retries.
-              await store.closeSession(sessionId).catch(() => undefined);
-              if (row.manifest.onFailure) {
-                const target = automation.parseRef(row.manifest.onFailure, parsed.appId);
-                if (target) {
-                  await fireAutomation(`${target.appId}/${target.automationId}`, {
-                    triggerKind: 'on_failure',
-                    triggerOrigin: 'manual',
-                    input: {
-                      automationRef,
-                      compileRunId: runId,
-                      error,
-                      phase: 'compile',
-                    },
-                  });
-                }
-              }
-            },
-          });
-        })();
+      compileAutomation: (input) => {
+        // Fire-and-forget for the route seam; `stop()` still drains it, and a
+        // throw out of the body lands on `automation-runs` health instead of
+        // becoming an unhandled rejection.
+        trackDetachedAutomationTask(
+          runAutomationCompileTask(input).then(() => undefined),
+          `compile ${input.automationRef}`,
+        );
       },
       reviseAutomation: ({ row, steering, revisionTurnId, compileTurnId }) => {
+        const parsed = automation.parseRef(row.ref);
+        if (!parsed) return;
         let revisionRunner: RunnerKind | undefined;
-        void (async () => {
-          const parsed = automation.parseRef(row.ref);
-          if (!parsed) return;
-          const agent = await resolveAutomationAgent(row.manifest.requires);
-          revisionRunner = agent.runner;
-          const runnerPrefs = await prefsLoader('automations', agent.runner);
-          if (!runnerPrefs) throw new Error('No automation agent is configured.');
-          const configuredRewrite = prefs.getAllPrefs()[`model.${agent.runner}.rewrite`];
-          const catalog = resolveCatalogModels
-            ? await resolveCatalogModels(agent.runner, false)
-            : { list: [] };
-          const fastModel = catalog.list.find((model) => model.tier === 'fast')?.id;
-          const rewriteModel = resolveAutomationRewriteModel(
-            row.manifest.requires,
-            agent,
-            configuredRewrite,
-            fastModel,
-          );
-          const suffix = revisionTurnId.split(':').at(-1) ?? crypto.randomUUID().slice(0, 8);
-          const sessionId = `revise-${parsed.appId}-${suffix}`;
-          await rewriteAutomationInstructions({
-            row,
-            steering,
-            revisionTurnId,
-            journalDbFile: workspace.journalDbFile,
-            runnerSessionDir: workspace.runnerSessionDir,
-            runTurn: accountRunTurn(options.runTurn ?? runTurn),
-            runnerPrefs,
-            ...(rewriteModel ? { model: rewriteModel } : {}),
-            persistPrompt: async (prompt) => {
-              await prepareLifecycleSession(store, sessionId, true);
-              const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
-              const manifestPath = path.join(
-                appDir,
-                'automations',
-                parsed.automationId,
-                automation.MANIFEST_FILE,
-              );
-              const existing = automation.parseManifest(await fs.readFile(manifestPath, 'utf8'));
-              const revised = automation.validateManifest({ ...existing, prompt });
-              await stageAndMaybePublish(lifecycleOpts, {
-                appId: parsed.appId,
-                sessionId,
-                files: [
-                  {
-                    path: `automations/${parsed.automationId}/${automation.MANIFEST_FILE}`,
-                    content: `${JSON.stringify(revised, null, 2)}\n`,
-                  },
-                ],
-                publish: true,
-                message: `revise ${parsed.automationId}`,
-                ephemeralSession: true,
-              });
-            },
-          });
-          lifecycleOpts.compileAutomation?.({
-            automationRef: row.ref,
-            runId: compileTurnId,
-            enableOnSuccess: false,
-          });
-        })().catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
+        const reportCompileTurn = (error: string, labels?: { note: string }): void => {
           recordFailedAutomationCompile({
             journalDbFile: workspace.journalDbFile,
             automationRef: row.ref,
             appId: row.ownerApp,
             automationName: row.name,
-            runId: compileTurnId,
-            error: `Instruction revision failed: ${message}`,
+            runId: labels ? `${row.ref}:revert:${crypto.randomUUID().slice(0, 8)}` : compileTurnId,
+            error,
+            ...(labels ? { note: labels.note, summary: labels.note } : {}),
             ...(revisionRunner ? { runnerKind: revisionRunner } : {}),
           });
-          runEventBus.publish(compileTurnId, { type: 'turn.start', turnId: compileTurnId });
-          runEventBus.publish(compileTurnId, {
-            type: 'turn.end',
-            turnId: compileTurnId,
-            ok: false,
-            error: `Instruction revision failed: ${message}`,
-          });
-          health.reportError('automation-runs', `Revision failed for ${row.name}: ${message}`);
-          logger.warn?.(`Instruction revision failed for ${row.ref}: ${message}`);
+        };
+        const task = reviseAutomationInstructions({
+          row,
+          conversationLocks: automationConversationLocks,
+          // One publish of the standing instructions through the ordinary
+          // lifecycle seam — used for the revision AND for the roll-back, so
+          // both take the same validate + publish + reconcile path.
+          publishPrompt: async (prompt, message) => {
+            const sessionId = `revise-${parsed.appId}-${crypto.randomUUID().slice(0, 8)}`;
+            await prepareLifecycleSession(store, sessionId, true);
+            const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
+            const manifestPath = path.join(
+              appDir,
+              'automations',
+              parsed.automationId,
+              automation.MANIFEST_FILE,
+            );
+            const existing = automation.parseManifest(await fs.readFile(manifestPath, 'utf8'));
+            const revised = automation.validateManifest({ ...existing, prompt });
+            await stageAndMaybePublish(lifecycleOpts, {
+              appId: parsed.appId,
+              sessionId,
+              files: [
+                {
+                  path: `automations/${parsed.automationId}/${automation.MANIFEST_FILE}`,
+                  content: `${JSON.stringify(revised, null, 2)}\n`,
+                },
+              ],
+              publish: true,
+              message: `${message} ${parsed.automationId}`,
+              ephemeralSession: true,
+            });
+          },
+          rewrite: async (persistPrompt) => {
+            const agent = await resolveAutomationAgent(row.manifest.requires);
+            revisionRunner = agent.runner;
+            const runnerPrefs = await prefsLoader('automations', agent.runner);
+            if (!runnerPrefs) throw new Error('No automation agent is configured.');
+            const configuredRewrite = prefs.getAllPrefs()[`model.${agent.runner}.rewrite`];
+            const catalog = resolveCatalogModels
+              ? await resolveCatalogModels(agent.runner, false)
+              : { list: [] };
+            const fastModel = catalog.list.find((model) => model.tier === 'fast')?.id;
+            const rewriteModel = resolveAutomationRewriteModel(
+              row.manifest.requires,
+              agent,
+              configuredRewrite,
+              fastModel,
+            );
+            await rewriteAutomationInstructions({
+              row,
+              steering,
+              revisionTurnId,
+              journalDbFile: workspace.journalDbFile,
+              runnerSessionDir: workspace.runnerSessionDir,
+              runTurn: accountRunTurn(options.runTurn ?? runTurn),
+              runnerPrefs,
+              ...(rewriteModel ? { model: rewriteModel } : {}),
+              persistPrompt,
+            });
+          },
+          compile: () =>
+            runAutomationCompileTask({
+              automationRef: row.ref,
+              runId: compileTurnId,
+              enableOnSuccess: false,
+            }),
+          onRolledBack: (detail) => {
+            reportCompileTurn(detail, { note: 'Instructions rolled back' });
+            health.reportError(
+              'automation-runs',
+              `Revision rolled back for ${row.name}: ${detail}`,
+            );
+            logger.warn?.(`Instruction revision rolled back for ${row.ref}: ${detail}`);
+          },
+          onFailed: (message) => {
+            reportCompileTurn(`Instruction revision failed: ${message}`);
+            runEventBus.publish(compileTurnId, { type: 'turn.start', turnId: compileTurnId });
+            runEventBus.publish(compileTurnId, {
+              type: 'turn.end',
+              turnId: compileTurnId,
+              ok: false,
+              error: `Instruction revision failed: ${message}`,
+            });
+            health.reportError('automation-runs', `Revision failed for ${row.name}: ${message}`);
+            logger.warn?.(`Instruction revision failed for ${row.ref}: ${message}`);
+          },
         });
+        trackDetachedAutomationTask(task, `revise ${row.ref}`);
       },
     };
 
@@ -2131,25 +2199,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return store;
   };
 
-  const parseIngressPosition = (positionJson: string | undefined): number => {
-    if (!positionJson) return 0;
-    try {
-      const value = Number(JSON.parse(positionJson));
-      return Number.isSafeInteger(value) && value >= 0 ? value : 0;
-    } catch {
-      return 0;
-    }
-  };
-
-  const parseIngressPayload = (payloadJson: string | undefined): unknown => {
-    if (payloadJson === undefined) return undefined;
-    try {
-      return JSON.parse(payloadJson) as unknown;
-    } catch {
-      return payloadJson;
-    }
-  };
-
   const parseEventCursor = (
     positionJson: string | undefined,
   ): { provider?: unknown; ingressId: number } => {
@@ -2188,6 +2237,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }
   };
 
+  /**
+   * The ingress STORAGE key for a polled event source. It extends the
+   * engine's own `eventSourceKey` (`event:<connectorKind>:<event>`) with the
+   * bound connection id and a filter digest, because two automations on the
+   * same connector kind must not share one `trigger_ingress` lane — a
+   * multi-account connector would otherwise deliver account A's events to
+   * account B's automation. Deriving it from the engine helper keeps the
+   * shared prefix from drifting.
+   */
   const eventIngressKey = (
     connectionId: string,
     trigger: Extract<automation.Trigger, { kind: 'event' }>,
@@ -2197,36 +2255,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       .update(JSON.stringify(trigger.filter ?? {}))
       .digest('hex')
       .slice(0, 16);
-    return `event:${connectionId}:${trigger.event}:${filterHash}`;
-  };
-
-  const readIngressCursor = (
-    store: AutomationTriggerStore,
-    sourceKey: string,
-    positionJson: string | undefined,
-    limit: number,
-  ): automation.CursorReadResult => {
-    const afterId = parseIngressPosition(positionJson);
-    const bounds = store.ingressBoundsAfter(sourceKey, afterId);
-    if (bounds.count === 0 || bounds.latestId === undefined) {
-      return { elements: [], positionJson: JSON.stringify(afterId) };
-    }
-    const records = store.listIngressAfter(sourceKey, afterId, limit);
-    return {
-      elements: records.map((record) => ({
-        position: String(record.id),
-        occurredAt: record.receivedAt,
-        payload:
-          record.payloadJson !== undefined
-            ? parseIngressPayload(record.payloadJson)
-            : { payloadRef: record.payloadRef },
-      })),
-      // Deliberately advance to the source's latest durable id. Anything
-      // beyond the catch-up cap is an explicit gap, not a retry storm.
-      positionJson: JSON.stringify(bounds.latestId),
-      skipped: Math.max(0, bounds.count - records.length),
-      ...(bounds.count > records.length ? { gapReason: 'ingress_catch_up_cap' } : {}),
-    };
+    return `${automation.eventSourceKey(trigger)}:${connectionId}:${filterHash}`;
   };
 
   const readTriggerCursor = async (
@@ -2257,6 +2286,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         trigger.id,
         input.cursor?.positionJson,
         input.limit,
+        input.now.getTime(),
       );
     }
     if (trigger.kind === 'event') {
@@ -2294,30 +2324,31 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           expiresAt: input.now.getTime() + 72 * 60 * 60 * 1000,
         });
       }
-      store.pruneIngress(input.now.getTime());
-      const bounds = store.ingressBoundsAfter(sourceKey, position.ingressId);
+      const retention = ingressRetentionGap(
+        store.pruneIngress(input.now.getTime()),
+        sourceKey,
+        position.ingressId,
+      );
       const records = store.listIngressAfter(sourceKey, position.ingressId, input.limit);
-      const ingressSkipped = Math.max(0, bounds.count - records.length);
-      const skipped = ingressSkipped + (polled.skipped ?? 0);
-      const reasons = [
-        ...(ingressSkipped > 0 ? ['provider_event_catch_up_cap'] : []),
-        ...(polled.gapReason ? [polled.gapReason] : []),
-      ];
+      // Same invariant `readIngressCursor` holds (trigger-ingress-cursor.ts):
+      // the ingress half of this position only ever advances to the last row
+      // actually handed back. Rows past the cap are still in
+      // `trigger_ingress` and ride the next tick — surplus, not a gap.
+      // `polled.skipped` stays: a provider page limit or an expired Gmail
+      // history IS unrecoverable, because the source no longer holds them.
+      const deliveredId = records.at(-1)?.id ?? position.ingressId;
+      // A provider gap and a retention gap are both unrecoverable, so they sum;
+      // the provider reason leads because it names the upstream cause.
+      const skipped = (polled.skipped ?? 0) + (retention?.skipped ?? 0);
+      const gapReason = polled.gapReason ?? retention?.gapReason;
       return {
-        elements: records.map((record) => ({
-          position: String(record.id),
-          occurredAt: record.receivedAt,
-          payload:
-            record.payloadJson !== undefined
-              ? parseIngressPayload(record.payloadJson)
-              : { payloadRef: record.payloadRef },
-        })),
+        elements: records.map(ingressElement),
         positionJson: JSON.stringify({
           provider: polled.cursor,
-          ingressId: bounds.latestId ?? position.ingressId,
+          ingressId: deliveredId,
         }),
-        skipped,
-        ...(reasons.length > 0 ? { gapReason: reasons.join('+') } : {}),
+        ...(skipped ? { skipped } : {}),
+        ...(gapReason ? { gapReason } : {}),
       };
     }
     if (!row.manifest.vault) {
@@ -3315,8 +3346,22 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Release the lease so a fresh start (or another instance) sees an
     // absent file instead of waiting out LEASE_FRESH_WINDOW_MS.
     instanceLease.stop();
+    // Drain detached automation lifecycle work (compiles, revisions) and any
+    // in-flight interactive/steering turn before the vault databases close —
+    // otherwise shutdown can land mid-`store.closeItem` or orphan an ACP
+    // child (issue #541 review).
+    // Snapshotted before awaiting: each task's `finally` removes itself from
+    // the live set, and a queued lock tail can still append behind us.
+    const detached = Array.from(detachedAutomationTasks);
+    const lockTails = Array.from(automationConversationLocks.values());
+    await Promise.all(detached);
+    await Promise.all(lockTails);
+    const journalFiles = vaultRegistry.planesList().map((plane) => plane.workspace.journalDbFile);
     // Sweep clock down, WAL checkpoint, files closed. Idempotent.
     vaultRegistry.stop();
+    // Release THIS gateway's memoized `journal.db` handles (another gateway in
+    // the same process keeps its own).
+    closeJournalConversationStores(journalFiles);
     performanceMonitor.close();
   };
 

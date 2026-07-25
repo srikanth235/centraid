@@ -34,6 +34,7 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { sealAad, unsealValue, type InvokeOutcome } from '@centraid/vault';
+import type { RuntimeLogger } from '@centraid/app-engine';
 import type { ConnectionAuth, ConnectionBinding, ResolveConnection } from '@centraid/automation';
 import type { PollJsonResponse } from './automation-event-sources.js';
 import type { VaultPlane } from './vault-plane.js';
@@ -156,6 +157,7 @@ export class ConnectionBroker {
     assistOAuth?: AssistOAuthConfig,
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
+    private readonly logger?: RuntimeLogger,
   ) {
     // Defense in depth: every caller, including embedders that bypass the
     // environment parser, gets the same fixed-origin validation before a
@@ -310,7 +312,7 @@ export class ConnectionBroker {
       throw new Error(`authorization code exchange failed: ${response.detail}`);
     }
     await this.persistTokens(plane, connectionId, response, 'tokens did not persist');
-    await this.captureGmailBaseline(plane, row, response.accessToken).catch(() => undefined);
+    await this.warnOnBaselineFailure(this.captureGmailBaseline(plane, row, response.accessToken));
     return { connectionId };
   }
 
@@ -374,8 +376,8 @@ export class ConnectionBroker {
       response,
       'tokens did not persist',
     );
-    await this.captureGmailBaseline(ceremony.plane, row, response.accessToken).catch(
-      () => undefined,
+    await this.warnOnBaselineFailure(
+      this.captureGmailBaseline(ceremony.plane, row, response.accessToken),
     );
     return { connectionId: ceremony.connectionId };
   }
@@ -856,6 +858,21 @@ export class ConnectionBroker {
         `${prefix} (${outcome.status}: ${'reason' in outcome ? outcome.reason : 'unknown'})${suffix}`,
       );
     }
+  }
+
+  /**
+   * A missing Gmail baseline degrades safely — the first poll re-baselines —
+   * but a silently swallowed fallible action is a debugging dead end
+   * (docs/coding-standards.md), so the failure is at least logged.
+   */
+  private async warnOnBaselineFailure(work: Promise<void>): Promise<void> {
+    await work.catch((error: unknown) => {
+      this.logger?.warn(
+        `connection broker: Gmail history baseline failed (the first poll will re-baseline): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
   }
 
   private async captureGmailBaseline(

@@ -6,7 +6,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * without spawning a CLI.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -237,6 +237,22 @@ interface SseMockClient {
   close: () => void;
 }
 
+/** The same mock client as a POST with a JSON steering body. */
+function turnPost(client: SseMockClient, message = 'What changed?'): IncomingMessage {
+  const body = JSON.stringify({ message });
+  return {
+    ...(client.req as unknown as Record<string, unknown>),
+    method: 'POST',
+    async *[Symbol.asyncIterator]() {
+      yield Buffer.from(body);
+    },
+    on: (client.req as unknown as { on: (e: string, fn: () => void) => unknown }).on.bind(
+      client.req,
+    ),
+    off: () => undefined,
+  } as unknown as IncomingMessage;
+}
+
 function sseClient(url: string): SseMockClient {
   const chunks: string[] = [];
   const headers = new Map<string, string>();
@@ -283,6 +299,60 @@ function sseClient(url: string): SseMockClient {
     close: () => closeListener?.(),
   };
 }
+
+/** Put one publishable automation where `codeAppsDir()` will find it. */
+async function seedAutomation(store: WorktreeStore, appId: string): Promise<void> {
+  const automationDir = path.join(store.getActiveMainLink(), 'apps', appId, 'automations', appId);
+  await fs.mkdir(automationDir, { recursive: true });
+  await fs.writeFile(
+    path.join(automationDir, 'automation.json'),
+    JSON.stringify({
+      name: 'Daily brief',
+      version: '0.1.0',
+      enabled: true,
+      prompt: 'Summarize.',
+      triggers: [],
+      history: { keep: { count: 10 } },
+      generated: { by: 'test', at: '2026-07-25T00:00:00.000Z' },
+    }),
+  );
+}
+
+test('interactive turn subscribers past the cap get 503 + Retry-After instead of a dropped stream', async () => {
+  const store = new WorktreeStore({ root: path.join(dir, 'code') });
+  await seedAutomation(store, 'brief');
+  const cap = new SseSubscriberCap(1);
+  let released: (() => void) | undefined;
+  const capped = makeAutomationsRouteHandler({
+    store,
+    journalDbFile: path.join(dir, 'journal.db'),
+    analytics,
+    insights,
+    runAutomation: (input) => fired.push(input),
+    // Holds the turn open (like a real ACP child) so the slot stays taken.
+    runInteractiveTurn: () =>
+      new Promise((resolve) => {
+        released = () => resolve();
+      }),
+    subscriberCap: cap,
+  });
+
+  const first = sseClient('/centraid/_automations/turn?ref=brief/brief');
+  const firstDone = capped(turnPost(first), first.res);
+  await vi.waitFor(() => expect(cap.current()).toBe(1));
+
+  const second = sseClient('/centraid/_automations/turn?ref=brief/brief');
+  expect(await capped(turnPost(second), second.res)).toBe(true);
+  expect(second.status()).toBe(503);
+  expect(second.header('Retry-After')).toBeDefined();
+  expect((JSON.parse(second.body()) as { error: string }).error).toBe('sse_capacity');
+  // A refusal is a complete, distinguishable response — not a half-open stream.
+  expect(second.ended()).toBe(true);
+
+  released?.();
+  expect(await firstDone).toBe(true);
+  expect(cap.current()).toBe(0);
+});
 
 test('run/events subscribers past the cap get 503 + Retry-After; the count decrements on disconnect', async () => {
   const cap = new SseSubscriberCap(2);

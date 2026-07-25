@@ -33,16 +33,16 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
-  ConversationStore,
   AnalyticsStore,
   InsightsStore,
-  makeJournalDbProvider,
+  type ConversationStore,
   type Item,
   type Turn,
   type AutomationTurnStreamEvent,
   type TurnStreamEvent,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
+import { journalConversationStore } from '../journal-stores.js';
 import type { WorktreeStore } from '../worktree-store/index.js';
 import { readJson, sendError, sendJson } from './route-helpers.js';
 import { SseSubscriberCap } from './sse-cap.js';
@@ -178,7 +178,7 @@ export function makeAutomationsRouteHandler(
   // Turn-ledger store — every automation turn's full ledger is the vault's
   // single `journal.db` (#280), so per-execution file resolution is gone. A
   // ledger file that doesn't exist yet just means no turn ever landed here.
-  const turnsStore = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
+  const turnsStore = journalConversationStore(opts.journalDbFile);
   const turnsStoreForTurnId = (_turnId: string): ConversationStore | undefined => {
     if (!existsSync(opts.journalDbFile)) return undefined;
     return turnsStore;
@@ -415,6 +415,14 @@ export function makeAutomationsRouteHandler(
             message: 'turn body needs a non-empty {message}',
           });
         }
+        // Same fd-exhaustion guard as `turn/events` (sse-cap.ts): every
+        // accepted request holds an open response, a 30s heartbeat, and —
+        // once the per-automation lock clears — an ACP child. A client
+        // reconnect loop across N automations must not open N unbounded
+        // streams. A refusal is a clean `503` + `Retry-After` JSON body,
+        // distinguishable from a dropped stream.
+        const releaseSlot = subscriberCap.admit(res);
+        if (!releaseSlot) return true; // 503 + Retry-After already written
         const turnId = `${row.ref}:interactive:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
         const abort = new AbortController();
         const onClose = (): void => abort.abort();
@@ -454,6 +462,7 @@ export function makeAutomationsRouteHandler(
           clearInterval(heartbeat);
           req.off('close', onClose);
           req.off('error', onClose);
+          releaseSlot();
           if (!res.writableEnded) {
             res.write('event: end\ndata: {}\n\n');
             res.end();

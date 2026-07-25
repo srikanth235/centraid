@@ -11,14 +11,13 @@
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
-  ConversationStore,
-  makeJournalDbProvider,
   resolveItemCost,
   type RunnerPrefs,
   type RunTurnFn,
   type TurnStreamEvent,
 } from '@centraid/app-engine';
 import type { Row as AutomationRow } from '@centraid/automation';
+import { journalConversationStore } from '../journal-stores.js';
 
 const REWRITE_SYSTEM = [
   'Rewrite one automation instruction document.',
@@ -54,7 +53,6 @@ function rewriteUsageFields(usage: UsageEvent | undefined): {
             cacheReadTokens: usage.cacheReadTokens,
             cacheWriteTokens: usage.cacheWriteTokens,
           },
-          estimateUnknownModel: true,
         });
   return {
     ...(usage.model !== undefined ? { model: usage.model } : {}),
@@ -108,7 +106,7 @@ export interface RewriteAutomationInstructionsResult {
 export async function rewriteAutomationInstructions(
   opts: RewriteAutomationInstructionsOptions,
 ): Promise<RewriteAutomationInstructionsResult> {
-  const store = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
+  const store = journalConversationStore(opts.journalDbFile);
   const conversationId = store.ensureAutomationConversation(
     opts.row.ref,
     opts.row.ownerApp,
@@ -236,7 +234,5 @@ export async function rewriteAutomationInstructions(
         : {}),
     });
     throw caught;
-  } finally {
-    store.close();
   }
 }

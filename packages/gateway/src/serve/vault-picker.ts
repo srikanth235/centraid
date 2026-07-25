@@ -18,11 +18,11 @@ import {
   type Credential,
   type Gateway as VaultGateway,
   type RefCard,
-  type VaultDb,
 } from '@centraid/vault';
 import type { RuntimeLogger } from '@centraid/app-engine';
 import {
   AUTOMATION_ANCHOR_ENTITY,
+  AUTOMATION_ANCHOR_PURPOSE,
   resolveAutomationAnchors,
 } from '../lifecycle/automation-anchor-scopes.js';
 
@@ -54,31 +54,50 @@ export interface AnchorPickerHit {
   sourceField: string;
 }
 
+/**
+ * Newest anchors this owner can still resolve, bounded by one gateway read.
+ * A term filters on the anchor's own quote text.
+ */
+const ANCHOR_SCAN_LIMIT = 500;
+
+/** The `$.exact` quote of a `core_link_anchor.selector_json` cell, or ''. */
+function anchorQuote(selectorJson: unknown): string {
+  if (typeof selectorJson !== 'string') return '';
+  try {
+    const parsed = JSON.parse(selectorJson) as { exact?: unknown };
+    return typeof parsed.exact === 'string' ? parsed.exact : '';
+  } catch {
+    // A malformed selector cannot match a term; `resolveAutomationAnchors`
+    // reports it properly when the anchor is actually picked.
+    return '';
+  }
+}
+
 /** Search live anchors by their exact text quote, newest first. */
 export function pickAnchors(
-  db: VaultDb,
+  gateway: VaultGateway,
+  cred: Credential,
   logger: RuntimeLogger,
   request: Pick<PickerRequest, 'term' | 'limit'>,
 ): { anchors: AnchorPickerHit[] } {
-  const term = request.term?.trim() ?? '';
+  const term = request.term?.trim().toLowerCase() ?? '';
   const limit = Math.min(Math.max(request.limit ?? 8, 1), 25);
-  const rows = db.vault
-    .prepare(
-      `SELECT a.anchor_id
-         FROM core_link_anchor a
-         JOIN core_link l ON l.link_id = a.link_id
-        WHERE l.valid_to IS NULL
-          AND (? = '' OR instr(lower(json_extract(a.selector_json, '$.exact')), lower(?)) > 0)
-        ORDER BY a.created_at DESC
-        LIMIT ?`,
-    )
-    .all(term, term, limit) as { anchor_id: string }[];
+  // Receipted owner read, like every other door this picker drives — the old
+  // raw `db.vault` JOIN was a second, unaudited read path (issue #541 review).
+  const rows = gateway.read(cred, {
+    entity: AUTOMATION_ANCHOR_ENTITY,
+    orderBy: { column: 'created_at', dir: 'desc' },
+    limit: ANCHOR_SCAN_LIMIT,
+    purpose: AUTOMATION_ANCHOR_PURPOSE,
+  }).rows;
   const anchors: AnchorPickerHit[] = [];
   for (const row of rows) {
+    if (anchors.length >= limit) break;
+    if (term !== '' && !anchorQuote(row.selector_json).toLowerCase().includes(term)) continue;
     try {
       const resolved = resolveAutomationAnchors(
-        db,
-        `@[${AUTOMATION_ANCHOR_ENTITY}/${row.anchor_id}]`,
+        { gateway, credential: cred },
+        `@[${AUTOMATION_ANCHOR_ENTITY}/${String(row.anchor_id)}]`,
       )[0];
       if (!resolved) continue;
       anchors.push({

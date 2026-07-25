@@ -712,6 +712,52 @@ test('Gmail authorization captures the connect-time profile historyId baseline',
   expect(fetchImpl).toHaveBeenCalledTimes(2);
 });
 
+test('a failed Gmail baseline degrades safely but is logged, never silently swallowed', async () => {
+  const plane = openPlane(await tempDir());
+  const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+    if (String(input).includes('gmail.googleapis.com')) {
+      // The profile call blows up: the connection still works (the first poll
+      // re-baselines), but a swallowed fallible action must at least warn
+      // (docs/coding-standards.md).
+      throw new Error('gmail profile unreachable');
+    }
+    return Response.json({
+      access_token: 'fresh-gmail-token',
+      refresh_token: 'refresh-gmail-token',
+      expires_in: 3600,
+    });
+  });
+  const warnings: string[] = [];
+  const connectionId = configureOauth(plane, 'https://oauth2.googleapis.com/token');
+  const broker = new ConnectionBroker(
+    () => plane,
+    500,
+    undefined,
+    fetchImpl as typeof fetch,
+    undefined,
+    { ...silentLogger, warn: (message: string) => warnings.push(message) },
+  );
+  const ceremony = broker.beginAuthorization(
+    plane,
+    connectionId,
+    'http://127.0.0.1/oauth/callback',
+  );
+  // The ceremony still completes — the baseline is best-effort.
+  await expect(broker.completeAuthorization(ceremony.state, 'authorization-code')).resolves.toEqual(
+    { connectionId },
+  );
+  expect(warnings).toEqual([expect.stringContaining('Gmail history baseline failed')]);
+  expect(warnings[0]).toContain('gmail profile unreachable');
+  // No baseline cursor landed, so the first poll re-baselines.
+  const cursor = plane.db.vault
+    .prepare(
+      `SELECT value_json FROM sync_connection_cursor
+        WHERE connection_id = ? AND key = 'gmail_history_id'`,
+    )
+    .get(connectionId);
+  expect(cursor).toBeUndefined();
+});
+
 test('Assist refresh uses only the Worker and persists a rotated pair before use', async () => {
   const plane = openPlane(await tempDir());
   const connectionId = configureAssist(plane);

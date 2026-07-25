@@ -87,9 +87,21 @@ function githubCursor(value: unknown): GitHubCursor | undefined {
   };
 }
 
+/** Default provider poll spacing when the response carries no hint. */
+const DEFAULT_POLL_INTERVAL_SECONDS = 60;
+/**
+ * Upper bound on a PROVIDER-controlled `x-poll-interval`. GitHub's real
+ * values are seconds-to-minutes; an unbounded one (from a hostile response or
+ * a misbehaving proxy inside `allowed_hosts`) would park the trigger for
+ * years with no health signal.
+ */
+const MAX_POLL_INTERVAL_SECONDS = 15 * 60;
+
 function pollDelay(headers: Readonly<Record<string, string>>, now: number): number {
   const seconds = Number(headers['x-poll-interval']);
-  return now + (Number.isFinite(seconds) && seconds > 0 ? seconds : 60) * 1000;
+  const requested =
+    Number.isFinite(seconds) && seconds > 0 ? seconds : DEFAULT_POLL_INTERVAL_SECONDS;
+  return now + Math.min(requested, MAX_POLL_INTERVAL_SECONDS) * 1000;
 }
 
 async function gmailPoll(input: PollProviderEventSourceInput): Promise<ProviderPollResult> {

@@ -1,6 +1,47 @@
-import { CARD_PK, SEARCHABLE, type ScopeSpec, type VaultDb } from '@centraid/vault';
+/*
+ * Anchor resolution for automation instructions (issue #541).
+ *
+ * Every read here goes through the vault's consent gateway with the OWNER
+ * credential, a declared purpose, and therefore a receipt — the same door
+ * `vault-picker.ts` drives. Reading `core_link_anchor` / the physical source
+ * table / `core_content_item` straight off the `VaultDb` handle would open a
+ * second, unreceipted read path around consent policy (minimization included),
+ * which is exactly what the gateway exists to prevent.
+ */
+
+import {
+  CARD_PK,
+  SEARCHABLE,
+  type Credential,
+  type FilterClause,
+  type Gateway as VaultGateway,
+  type ScopeSpec,
+} from '@centraid/vault';
 
 export const AUTOMATION_ANCHOR_ENTITY = 'core.link_anchor';
+/** DPV purpose every anchor read is receipted under. */
+export const AUTOMATION_ANCHOR_PURPOSE = 'dpv:ServiceProvision';
+
+/** The consent-gateway door anchor resolution reads through. */
+export interface AnchorVaultReads {
+  gateway: VaultGateway;
+  credential: Credential;
+}
+
+function readRows(
+  vault: AnchorVaultReads,
+  entity: string,
+  where: FilterClause[],
+  limit?: number,
+): Record<string, unknown>[] {
+  return vault.gateway.read(vault.credential, {
+    entity,
+    where,
+    ...(limit !== undefined ? { limit } : {}),
+    purpose: AUTOMATION_ANCHOR_PURPOSE,
+  }).rows;
+}
+
 const ANCHOR_TOKEN_RE = /@\[core\.link_anchor\/([^\]]+)\]/g;
 
 export interface AutomationAnchorSelector {
@@ -152,12 +193,15 @@ function decodeTextDataUri(mediaType: unknown, uri: unknown): string | undefined
   }
 }
 
-function textForField(db: VaultDb, field: string, value: unknown): string | undefined {
+function textForField(vault: AnchorVaultReads, field: string, value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   if (!field.endsWith('_content_id')) return value;
-  const content = db.vault
-    .prepare('SELECT media_type, content_uri FROM core_content_item WHERE content_id = ?')
-    .get(value) as { media_type: string; content_uri: string } | undefined;
+  const content = readRows(
+    vault,
+    'core.content_item',
+    [{ column: 'content_id', op: 'eq', value }],
+    1,
+  )[0];
   return content ? decodeTextDataUri(content.media_type, content.content_uri) : undefined;
 }
 
@@ -177,35 +221,29 @@ function selectorMatches(text: string, selector: AutomationAnchorSelector): bool
 }
 
 function sourceFieldFor(
-  db: VaultDb,
+  vault: AnchorVaultReads,
   sourceType: string,
   sourceId: string,
   selector: AutomationAnchorSelector,
 ): { idColumn: string; field: string } {
-  const searchable = SEARCHABLE[sourceType];
-  const idColumn = searchable?.idColumn ?? CARD_PK[sourceType];
+  // Own-property lookups only: a `sourceType` of `constructor`/`toString`
+  // would otherwise reach an inherited `Object` member, pass the guard below,
+  // and blow up as a `TypeError` when spread instead of raising an
+  // `AutomationAnchorError`.
+  const searchable = Object.hasOwn(SEARCHABLE, sourceType) ? SEARCHABLE[sourceType] : undefined;
+  const idColumn =
+    searchable?.idColumn ?? (Object.hasOwn(CARD_PK, sourceType) ? CARD_PK[sourceType] : undefined);
   if (!searchable || !idColumn) {
     throw new AutomationAnchorError(
       `anchor source ${sourceType}/${sourceId} has no anchor-grade text surface`,
     );
   }
-  const physical = sourceType.replace('.', '_');
-  const columns = [idColumn, ...searchable.maskColumns];
-  if (
-    !/^[a-z][a-z0-9_]*$/.test(physical) ||
-    columns.some((column) => !/^[a-z][a-z0-9_]*$/.test(column))
-  ) {
-    throw new AutomationAnchorError(`anchor source ${sourceType}/${sourceId} is not addressable`);
-  }
-  const selected = columns.map((column) => `"${column}"`).join(', ');
-  const row = db.vault
-    .prepare(`SELECT ${selected} FROM "${physical}" WHERE "${idColumn}" = ?`)
-    .get(sourceId) as Record<string, unknown> | undefined;
+  const row = readRows(vault, sourceType, [{ column: idColumn, op: 'eq', value: sourceId }], 1)[0];
   if (!row) {
     throw new AutomationAnchorError(`anchor source ${sourceType}/${sourceId} no longer exists`);
   }
   const matches = searchable.maskColumns.filter((field) => {
-    const text = textForField(db, field, row[field]);
+    const text = textForField(vault, field, row[field]);
     return text !== undefined && selectorMatches(text, selector);
   });
   if (matches.length !== 1) {
@@ -219,37 +257,64 @@ function sourceFieldFor(
   return { idColumn, field };
 }
 
+/**
+ * The anchor row plus its still-live link, read through the consent gateway
+ * as two receipted reads (the gateway's `read` is single-entity, so the old
+ * hand-written JOIN becomes an anchor read + a link read).
+ */
+function liveAnchorRows(
+  vault: AnchorVaultReads,
+  anchorIds: readonly string[],
+): Map<string, { linkId: string; selectorJson: string; link: Record<string, unknown> }> {
+  const out = new Map<
+    string,
+    { linkId: string; selectorJson: string; link: Record<string, unknown> }
+  >();
+  if (anchorIds.length === 0) return out;
+  const anchors = readRows(vault, AUTOMATION_ANCHOR_ENTITY, [
+    { column: 'anchor_id', op: 'in', value: [...anchorIds] },
+  ]);
+  const linkIds = [...new Set(anchors.map((row) => String(row.link_id)))];
+  if (linkIds.length === 0) return out;
+  const links = new Map(
+    readRows(vault, 'core.link', [
+      { column: 'link_id', op: 'in', value: linkIds },
+      { column: 'valid_to', op: 'is-null' },
+    ]).map((row) => [String(row.link_id), row]),
+  );
+  for (const row of anchors) {
+    const link = links.get(String(row.link_id));
+    if (!link || typeof row.selector_json !== 'string') continue;
+    out.set(String(row.anchor_id), {
+      linkId: String(row.link_id),
+      selectorJson: row.selector_json,
+      link,
+    });
+  }
+  return out;
+}
+
 /** Resolve every anchored @ token against live core_link rows in the addressed vault. */
 export function resolveAutomationAnchors(
-  db: VaultDb,
+  vault: AnchorVaultReads,
   instructions: string,
 ): ResolvedAutomationAnchor[] {
   const ids = [
     ...new Set(Array.from(instructions.matchAll(ANCHOR_TOKEN_RE), (match) => match[1]!)),
   ];
+  const live = liveAnchorRows(vault, ids);
   return ids.map((anchorId) => {
-    const row = db.vault
-      .prepare(
-        `SELECT a.anchor_id, a.link_id, a.selector_json,
-                l.from_type, l.from_id, l.to_type, l.to_id
-           FROM core_link_anchor a
-           JOIN core_link l ON l.link_id = a.link_id
-          WHERE a.anchor_id = ? AND l.valid_to IS NULL`,
-      )
-      .get(anchorId) as
-      | {
-          anchor_id: string;
-          link_id: string;
-          selector_json: string;
-          from_type: string;
-          from_id: string;
-          to_type: string;
-          to_id: string;
-        }
-      | undefined;
-    if (!row) throw new AutomationAnchorError(`anchor ${anchorId} is missing or no longer live`);
-    const selector = parseSelector(row.selector_json, anchorId);
-    const { idColumn, field } = sourceFieldFor(db, row.from_type, row.from_id, selector);
+    const found = live.get(anchorId);
+    if (!found) throw new AutomationAnchorError(`anchor ${anchorId} is missing or no longer live`);
+    const row = {
+      link_id: found.linkId,
+      from_type: String(found.link.from_type),
+      from_id: String(found.link.from_id),
+      to_type: String(found.link.to_type),
+      to_id: String(found.link.to_id),
+    };
+    const selector = parseSelector(found.selectorJson, anchorId);
+    const { idColumn, field } = sourceFieldFor(vault, row.from_type, row.from_id, selector);
     const split = row.from_type.split('.');
     if (split.length !== 2 || !split[0] || !split[1]) {
       throw new AutomationAnchorError(`anchor ${anchorId} has an invalid source type`);

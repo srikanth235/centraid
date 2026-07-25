@@ -1,13 +1,12 @@
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
-  ConversationStore,
-  makeJournalDbProvider,
   resolveItemCost,
   type ConversationRunner,
   type RunnerKind,
   type TurnStreamEvent,
 } from '@centraid/app-engine';
+import { journalConversationStore } from '../journal-stores.js';
 import { validateManifest, type Manifest, type ManifestVaultScope } from '@centraid/automation';
 import {
   AUTOMATION_ANCHOR_ENTITY,
@@ -46,6 +45,10 @@ export interface RecordFailedAutomationCompileOptions {
   runId: string;
   error: string;
   runnerKind?: RunnerKind;
+  /** Turn note. Defaults to the "reserved id never started" wording. */
+  note?: string;
+  /** Turn summary shown in the thread. Defaults to `Compile failed`. */
+  summary?: string;
 }
 
 type UsageEvent = Extract<TurnStreamEvent, { type: 'usage' }>;
@@ -75,7 +78,6 @@ function compileUsageFields(usage: UsageEvent | undefined): {
             cacheReadTokens: usage.cacheReadTokens,
             cacheWriteTokens: usage.cacheWriteTokens,
           },
-          estimateUnknownModel: true,
         });
   return {
     ...(usage.model !== undefined ? { model: usage.model } : {}),
@@ -91,36 +93,32 @@ function compileUsageFields(usage: UsageEvent | undefined): {
 
 /** Settle a compile id reserved before a prerequisite rewrite could start. */
 export function recordFailedAutomationCompile(opts: RecordFailedAutomationCompileOptions): void {
-  const store = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
-  try {
-    const existing = store.getTurn(opts.runId);
-    if (existing?.endedAt !== undefined) return;
-    if (!existing) {
-      const conversationId = store.ensureAutomationConversation(
-        opts.automationRef,
-        opts.appId,
-        opts.automationName,
-        opts.runnerKind,
-      );
-      store.insertTurn({
-        turnId: opts.runId,
-        conversationId,
-        triggerKind: 'compile',
-        triggerOrigin: 'manual',
-        note: 'Compile blocked before start',
-        startedAt: Date.now(),
-      });
-    }
-    store.finishTurn({
+  const store = journalConversationStore(opts.journalDbFile);
+  const existing = store.getTurn(opts.runId);
+  if (existing?.endedAt !== undefined) return;
+  if (!existing) {
+    const conversationId = store.ensureAutomationConversation(
+      opts.automationRef,
+      opts.appId,
+      opts.automationName,
+      opts.runnerKind,
+    );
+    store.insertTurn({
       turnId: opts.runId,
-      endedAt: Date.now(),
-      ok: false,
-      error: opts.error,
-      summary: 'Compile failed',
+      conversationId,
+      triggerKind: 'compile',
+      triggerOrigin: 'manual',
+      note: opts.note ?? 'Compile blocked before start',
+      startedAt: Date.now(),
     });
-  } finally {
-    store.close();
   }
+  store.finishTurn({
+    turnId: opts.runId,
+    endedAt: Date.now(),
+    ok: false,
+    error: opts.error,
+    summary: opts.summary ?? 'Compile failed',
+  });
 }
 
 export const HEADLESS_COMPILE_WORK_ORDER = (
@@ -235,7 +233,7 @@ export function finalizeCompiledManifest(
 
 /** Drive the existing unified builder runner without exposing a builder conversation UI. */
 export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions): Promise<void> {
-  const store = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
+  const store = journalConversationStore(opts.journalDbFile);
   const runId = opts.runId ?? `${opts.automationRef}:compile:${randomUUID().slice(0, 8)}`;
   const conversationId = store.ensureAutomationConversation(
     opts.automationRef,
@@ -359,7 +357,5 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
         : {}),
     });
     await opts.onFailure?.(message);
-  } finally {
-    store.close();
   }
 }

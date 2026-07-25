@@ -14,89 +14,21 @@ import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import {
-  ConversationStore,
-  makeJournalDbProvider,
   resolveItemCost,
   withConversationLock,
   type AutomationTurnStreamEvent,
   type ConversationRunner,
   type RunnerKind,
-  type Turn,
   type TurnStreamEvent,
 } from '@centraid/app-engine';
 import type { Row as AutomationRow } from '@centraid/automation';
-
-const PREAMBLE_CHAR_BUDGET = 12_000;
-const RECENT_TURN_LIMIT = 6;
-const AUDIT_CHAR_BUDGET = 64 * 1024;
-
-function safeJson(value: unknown): string {
-  try {
-    const json = JSON.stringify(value);
-    if (json.length <= AUDIT_CHAR_BUDGET) return json;
-    return JSON.stringify({
-      _truncated: true,
-      chars: json.length,
-      head: json.slice(0, 512),
-    });
-  } catch {
-    return JSON.stringify({ _truncated: true, reason: 'unserializable' });
-  }
-}
-
-function contextTurnLine(turn: Turn): string | undefined {
-  const result = turn.summary ?? turn.outputJson ?? turn.error;
-  if (!result) return undefined;
-  const status = turn.endedAt === undefined ? 'running' : turn.ok ? 'ok' : 'error';
-  return `- ${turn.triggerKind} (${status}): ${result.slice(0, 1_500)}`;
-}
-
-/**
- * Deterministic, ledger-sufficient context. Native ACP resume may improve
- * quality, but correctness never depends on it.
- */
-export function automationContextPreamble(
-  row: AutomationRow,
-  recentTurns: readonly Turn[],
-  steeringMessage: string,
-  budget = PREAMBLE_CHAR_BUDGET,
-): string {
-  const history = [...recentTurns]
-    .sort((a, b) => a.startedAt - b.startedAt)
-    .map(contextTurnLine)
-    .filter((line): line is string => line !== undefined)
-    .slice(-RECENT_TURN_LIMIT);
-  const connections = row.manifest.connections?.map((binding) => ({
-    connectionId: binding.connectionId,
-    kind: binding.kind,
-    label: binding.label,
-  }));
-  const scope = row.manifest.vault
-    ? {
-        purpose: row.manifest.vault.purpose,
-        scopes: row.manifest.vault.scopes,
-      }
-    : undefined;
-  const sections = [
-    'You are the interactive register for one Centraid automation.',
-    'Use only the host-provided tools and already-granted vault access. Never ask to widen permissions. Do not edit automation source files; standing-instruction changes use the separate revision flow.',
-    `Automation: ${row.name} (${row.ref})`,
-    `Standing instructions:\n${row.manifest.prompt}`,
-    connections?.length ? `Bound connector accounts:\n${safeJson(connections)}` : '',
-    scope
-      ? `Declared vault access (the host still enforces the actual grant):\n${safeJson(scope)}`
-      : '',
-    history.length ? `Recent durable turn outcomes:\n${history.join('\n')}` : '',
-    `Current steering message:\n${steeringMessage}`,
-  ].filter(Boolean);
-  const full = sections.join('\n\n');
-  if (full.length <= budget) return full;
-  // Standing instructions and the current message are load-bearing. Trim only
-  // from the middle history/context area by retaining both ends.
-  const head = Math.max(0, Math.floor(budget * 0.68));
-  const tail = Math.max(0, budget - head - 40);
-  return `${full.slice(0, head)}\n\n[context truncated]\n\n${full.slice(-tail)}`;
-}
+import { journalConversationStore } from '../journal-stores.js';
+import {
+  automationContextPreamble,
+  boundedRawJson,
+  RECENT_TURN_LIMIT,
+  safeJson,
+} from './automation-turn-context.js';
 
 type UsageEvent = Extract<TurnStreamEvent, { type: 'usage' }>;
 
@@ -112,7 +44,6 @@ function pricedUsage(event: UsageEvent): UsageEvent {
       cacheReadTokens: event.cacheReadTokens,
       cacheWriteTokens: event.cacheWriteTokens,
     },
-    estimateUnknownModel: true,
   });
   return priced.costUsd === undefined
     ? event
@@ -181,7 +112,7 @@ export interface InteractiveAutomationTurnResult {
 export async function runInteractiveAutomationTurn(
   opts: InteractiveAutomationTurnOptions,
 ): Promise<InteractiveAutomationTurnResult> {
-  const store = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
+  const store = journalConversationStore(opts.journalDbFile);
   const ref = opts.row.ref;
   const conversationId = store.ensureAutomationConversation(
     ref,
@@ -262,7 +193,7 @@ export async function runInteractiveAutomationTurn(
     ): void => {
       const endedAt = Date.now();
       const result = 'result' in event ? event.result : undefined;
-      const rawJson = 'rawJson' in event ? event.rawJson : undefined;
+      const rawJson = boundedRawJson('rawJson' in event ? event.rawJson : undefined);
       const error = event.ok ? undefined : event.errorText || 'Tool failed.';
       store.closeItem({
         itemId: open.itemId,
@@ -293,12 +224,12 @@ export async function runInteractiveAutomationTurn(
       if (event.type === 'usage') usage = event;
       if (event.type === 'final') {
         finalText = text || event.text;
-        finalRawJson = event.rawJson;
+        finalRawJson = boundedRawJson(event.rawJson);
         stopReason = event.stopReason;
       }
       if (event.type === 'error') {
         failure = event.message;
-        finalRawJson = event.rawJson;
+        finalRawJson = boundedRawJson(event.rawJson);
         stopReason = event.stopReason;
       }
 
@@ -306,6 +237,7 @@ export async function runInteractiveAutomationTurn(
         const ordinal = nextOrdinal++;
         const openedAt = Date.now();
         const id = itemId(opts.turnId, ordinal);
+        const rawStartJson = boundedRawJson(event.rawJson);
         store.openItem({
           itemId: id,
           turnId: opts.turnId,
@@ -314,7 +246,7 @@ export async function runInteractiveAutomationTurn(
           kind: 'tool',
           name: event.toolName,
           ...(event.args !== undefined ? { argsJson: safeJson(event.args) } : {}),
-          ...(event.rawJson !== undefined ? { rawJson: event.rawJson } : {}),
+          ...(rawStartJson !== undefined ? { rawJson: rawStartJson } : {}),
           startedAt: openedAt,
         });
         toolItems.set(event.toolCallId, {
@@ -331,7 +263,7 @@ export async function runInteractiveAutomationTurn(
           kind: 'tool',
           name: event.toolName,
           ...(event.args !== undefined ? { args: event.args } : {}),
-          ...(event.rawJson !== undefined ? { rawJson: event.rawJson } : {}),
+          ...(rawStartJson !== undefined ? { rawJson: rawStartJson } : {}),
         });
         emitTurn({
           type: 'item.delta',

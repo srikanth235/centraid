@@ -5,12 +5,14 @@ import {
   ensureVaultBootstrapped,
   openVaultDb,
   purposeConceptId,
+  type Credential,
 } from '@centraid/vault';
 import { afterEach, expect, test } from 'vitest';
 import {
   AutomationAnchorError,
   resolveAutomationAnchors,
   scopesForAutomationAnchors,
+  type AnchorVaultReads,
 } from './automation-anchor-scopes.js';
 
 const cleanups: Array<() => void> = [];
@@ -64,12 +66,18 @@ function anchoredTaskFixture() {
         start: 8,
       }),
     );
-  return { boot, db };
+  const credential: Credential = {
+    kind: 'device',
+    deviceId: boot.deviceId,
+    deviceKey: boot.deviceKey,
+  };
+  const vault: AnchorVaultReads = { gateway: createGateway(db), credential };
+  return { boot, db, vault };
 }
 
 test('anchor token resolves to its trusted row, field, and span', () => {
-  const { db } = anchoredTaskFixture();
-  expect(resolveAutomationAnchors(db, 'Notify about @[core.link_anchor/anchor-1].')).toEqual([
+  const { vault } = anchoredTaskFixture();
+  expect(resolveAutomationAnchors(vault, 'Notify about @[core.link_anchor/anchor-1].')).toEqual([
     expect.objectContaining({
       anchorId: 'anchor-1',
       linkId: 'link-1',
@@ -90,8 +98,8 @@ test('anchor token resolves to its trusted row, field, and span', () => {
 });
 
 test('derived anchor scope is enforced as one row and two fields', () => {
-  const { boot, db } = anchoredTaskFixture();
-  const [anchor] = resolveAutomationAnchors(db, '@[core.link_anchor/anchor-1]');
+  const { boot, db, vault } = anchoredTaskFixture();
+  const [anchor] = resolveAutomationAnchors(vault, '@[core.link_anchor/anchor-1]');
   const app = ensureAppEnrolled(db, 'anchored-automation');
   createGrant(db, {
     appId: app.appId,
@@ -109,30 +117,30 @@ test('derived anchor scope is enforced as one row and two fields', () => {
 });
 
 test('ended or stale anchors fail closed', () => {
-  const { db } = anchoredTaskFixture();
+  const { db, vault } = anchoredTaskFixture();
   db.vault
     .prepare(`UPDATE core_link SET valid_to = '2026-07-25T01:00:00.000Z' WHERE link_id = 'link-1'`)
     .run();
-  expect(() => resolveAutomationAnchors(db, '@[core.link_anchor/anchor-1]')).toThrow(
+  expect(() => resolveAutomationAnchors(vault, '@[core.link_anchor/anchor-1]')).toThrow(
     AutomationAnchorError,
   );
 });
 
 test('moved or context-stale anchor text fails closed instead of rebinding', () => {
-  const { db } = anchoredTaskFixture();
+  const { db, vault } = anchoredTaskFixture();
   db.vault
     .prepare(
       `UPDATE schedule_task SET title = 'Later: Prepare quarterly report today' WHERE task_id = 'task-anchored'`,
     )
     .run();
-  expect(() => resolveAutomationAnchors(db, '@[core.link_anchor/anchor-1]')).toThrow(
+  expect(() => resolveAutomationAnchors(vault, '@[core.link_anchor/anchor-1]')).toThrow(
     AutomationAnchorError,
   );
 });
 
 test('same-table anchors compile only when their row/field union is exact', () => {
-  const { boot, db } = anchoredTaskFixture();
-  const [first] = resolveAutomationAnchors(db, '@[core.link_anchor/anchor-1]');
+  const { boot, db, vault } = anchoredTaskFixture();
+  const [first] = resolveAutomationAnchors(vault, '@[core.link_anchor/anchor-1]');
   const second = {
     ...first!,
     anchorId: 'anchor-2',
@@ -181,9 +189,47 @@ test('same-table anchors compile only when their row/field union is exact', () =
   );
 });
 
+test('every anchor read is receipted through the consent gateway', () => {
+  const { db, vault } = anchoredTaskFixture();
+  const before = (
+    db.journal.prepare('SELECT count(*) AS n FROM consent_receipt').get() as { n: number }
+  ).n;
+  resolveAutomationAnchors(vault, '@[core.link_anchor/anchor-1]');
+  const rows = db.journal
+    .prepare(
+      `SELECT object_type, action, purpose_concept_id AS purpose, decision FROM consent_receipt
+        ORDER BY rowid DESC LIMIT ?`,
+    )
+    .all(4) as { object_type: string; action: string; purpose: string; decision: string }[];
+  const after = (
+    db.journal.prepare('SELECT count(*) AS n FROM consent_receipt').get() as { n: number }
+  ).n;
+  // Previously these three reads went straight at `db.vault` — no credential,
+  // no purpose, no audit trail (issue #541 review).
+  expect(after).toBeGreaterThan(before);
+  expect(rows.map((r) => r.object_type)).toEqual(
+    expect.arrayContaining(['core.link_anchor', 'core.link', 'schedule.task']),
+  );
+  for (const receipt of rows) {
+    expect(receipt.action).toBe('read');
+    expect(receipt.decision).toBe('allow');
+    expect(receipt.purpose).toBe('dpv:ServiceProvision');
+  }
+});
+
+test('an anchor source type that only names an Object member fails closed', () => {
+  const { db, vault } = anchoredTaskFixture();
+  db.vault.prepare(`UPDATE core_link SET from_type = 'constructor' WHERE link_id = 'link-1'`).run();
+  // `SEARCHABLE['constructor']` inherits an `Object` member: the old lookup
+  // passed the guard and then threw a bare `TypeError` when spread.
+  expect(() => resolveAutomationAnchors(vault, '@[core.link_anchor/anchor-1]')).toThrow(
+    AutomationAnchorError,
+  );
+});
+
 test('non-rectangular same-table anchors fail closed instead of granting cross-pairs', () => {
-  const { db } = anchoredTaskFixture();
-  const [first] = resolveAutomationAnchors(db, '@[core.link_anchor/anchor-1]');
+  const { vault } = anchoredTaskFixture();
+  const [first] = resolveAutomationAnchors(vault, '@[core.link_anchor/anchor-1]');
   const second = {
     ...first!,
     anchorId: 'anchor-2',

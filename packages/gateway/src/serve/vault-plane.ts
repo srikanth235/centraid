@@ -113,6 +113,7 @@ import {
   WalShipper,
   jitterDelayMs,
   type WalShipperOptions,
+  scopeCovers,
 } from '@centraid/vault';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -353,42 +354,11 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
  * neither re-granted nor re-requested, only an explicit owner approval
  * (which clears the tombstone) brings one back.
  */
-function filtersEqual(
-  left: readonly { column: string; op: string; value?: unknown }[] | null | undefined,
-  right: readonly { column: string; op: string; value?: unknown }[] | null | undefined,
-): boolean {
-  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
-}
-
-function scopeCovers(
-  existing: {
-    schema: string;
-    table?: string | null;
-    verbs: string;
-    rowFilter?: readonly { column: string; op: string; value?: unknown }[] | null;
-    fieldMask?: readonly string[] | null;
-  },
-  requested: InstallScopeBlock['scopes'][number],
-): boolean {
-  if (
-    existing.schema !== requested.schema ||
-    existing.verbs !== requested.verbs ||
-    (existing.table !== null && existing.table !== undefined && existing.table !== requested.table)
-  ) {
-    return false;
-  }
-  const existingRows = existing.rowFilter ?? null;
-  const requestedRows = requested.rowFilter ?? null;
-  if (existingRows !== null && !filtersEqual(existingRows, requestedRows)) return false;
-  const existingFields = existing.fieldMask ?? null;
-  const requestedFields = requested.fieldMask ?? null;
-  if (existingFields !== null) {
-    if (requestedFields === null) return false;
-    const allowed = new Set(existingFields);
-    if (!requestedFields.every((field) => allowed.has(field))) return false;
-  }
-  return true;
-}
+// `scopeCovers` is the vault package's canonical extent comparison
+// (`@centraid/vault` → `scope-extent.ts`). It used to be duplicated here with
+// slightly different null handling, which let consent memory and install-grant
+// reconciliation disagree about the same scope; one definition keeps them in
+// lockstep (issue #541 review).
 
 function missingScopes(
   grants: GrantSummary[],
@@ -1077,7 +1047,7 @@ export class VaultPlane {
   pickAnchors(request: Pick<PickerRequest, 'term' | 'limit'>): {
     anchors: AnchorPickerHit[];
   } {
-    return pickAnchors(this.db, this.logger, request);
+    return pickAnchors(this.gateway, this.ownerCredential, this.logger, request);
   }
 
   /**

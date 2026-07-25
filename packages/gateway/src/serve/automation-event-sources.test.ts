@@ -1,28 +1,13 @@
+// Gmail history cursors (bootstrap, expiry re-baseline, page exhaustion, the
+// over-budget tail gap) plus the cross-provider fail-closed and malformed-row
+// contracts. GitHub conditional cursors / pagination / backoff live in
+// automation-event-sources-github.test.ts; provider failures in
+// automation-event-sources-errors.test.ts. Shared fixtures in
+// automation-event-sources.test-fixtures.ts.
+
 import { describe, expect, it, vi } from 'vitest';
-import {
-  pollProviderEventSource,
-  type PollJson,
-  type PollJsonResponse,
-} from './automation-event-sources.js';
-
-const gmail = {
-  connectionId: 'gmail-account-1',
-  kind: 'pull.gmail',
-  label: 'Personal Gmail',
-};
-const github = {
-  connectionId: 'github-account-1',
-  kind: 'pull.github',
-  label: 'Work GitHub',
-};
-
-function replies(...responses: PollJsonResponse[]): PollJson {
-  return vi.fn(async () => {
-    const response = responses.shift();
-    if (!response) throw new Error('unexpected provider request');
-    return response;
-  });
-}
+import { pollProviderEventSource, type PollJson } from './automation-event-sources.js';
+import { github, gmail, replies } from './automation-event-sources.test-fixtures.js';
 
 describe('pollProviderEventSource', () => {
   it('bootstraps Gmail at the profile historyId, then normalizes new messages', async () => {
@@ -196,137 +181,6 @@ describe('pollProviderEventSource', () => {
     });
   });
 
-  it('uses GitHub conditional cursors, honors poll interval, and treats 304 as no-op', async () => {
-    const firstFetch = replies({
-      status: 200,
-      headers: {
-        etag: '"events-v2"',
-        'last-modified': 'Sat, 25 Jul 2026 00:00:00 GMT',
-        'x-poll-interval': '90',
-      },
-      body: [
-        {
-          id: '2',
-          type: 'PullRequestEvent',
-          created_at: '2026-07-25T00:00:02Z',
-          payload: {
-            action: 'opened',
-            pull_request: {
-              number: 42,
-              title: 'Cursor engine',
-              state: 'open',
-              html_url: 'https://github.com/acme/app/pull/42',
-              created_at: '2026-07-25T00:00:02Z',
-              updated_at: '2026-07-25T00:00:02Z',
-              user: { login: 'octo' },
-            },
-          },
-        },
-      ],
-    });
-    const first = await pollProviderEventSource({
-      trigger: {
-        kind: 'event',
-        connectorKind: 'pull.github',
-        event: 'pull-request',
-        filter: { repo: 'acme/app' },
-      },
-      connection: github,
-      cursor: { provider: 'github' },
-      now: new Date('2026-07-25T00:00:00Z'),
-      limit: 50,
-      pollJson: firstFetch,
-    });
-    expect(first.events[0]).toMatchObject({
-      id: 'github:event:2',
-      payload: { repo: 'acme/app', number: 42, action: 'opened' },
-    });
-    expect(first.cursor).toMatchObject({
-      provider: 'github',
-      etag: '"events-v2"',
-      notBefore: Date.parse('2026-07-25T00:01:30Z'),
-    });
-
-    const secondFetch = vi.fn(async (_connection, _url, headers) => {
-      expect(headers).toEqual({
-        'if-none-match': '"events-v2"',
-        'if-modified-since': 'Sat, 25 Jul 2026 00:00:00 GMT',
-      });
-      return { status: 304, headers: { 'x-poll-interval': '60' } };
-    }) satisfies PollJson;
-    const second = await pollProviderEventSource({
-      trigger: {
-        kind: 'event',
-        connectorKind: 'pull.github',
-        event: 'pull-request',
-        filter: { repo: 'acme/app' },
-      },
-      connection: github,
-      cursor: first.cursor,
-      now: new Date('2026-07-25T00:01:31Z'),
-      limit: 50,
-      pollJson: secondFetch,
-    });
-    expect(second.events).toEqual([]);
-    expect(second.cursor).toMatchObject({
-      provider: 'github',
-      etag: '"events-v2"',
-      notBefore: Date.parse('2026-07-25T00:02:31Z'),
-    });
-  });
-
-  it('follows every safe GitHub events page and emits the complete oldest-first window', async () => {
-    const issueEvent = (id: string, second: number) => ({
-      id,
-      type: 'IssuesEvent',
-      created_at: `2026-07-25T00:00:0${second}Z`,
-      payload: {
-        action: 'opened',
-        issue: {
-          number: second,
-          title: `Issue ${second}`,
-          state: 'open',
-          html_url: `https://github.com/acme/app/issues/${second}`,
-          created_at: `2026-07-25T00:00:0${second}Z`,
-          user: { login: 'octo' },
-        },
-      },
-    });
-    const poll = replies(
-      {
-        status: 200,
-        headers: {
-          etag: '"events-all"',
-          link: '<https://api.github.com/repos/acme/app/events?per_page=1&page=2>; rel="next"',
-        },
-        body: [issueEvent('2', 2)],
-      },
-      {
-        status: 200,
-        headers: {},
-        body: [issueEvent('1', 1)],
-      },
-    );
-    const next = await pollProviderEventSource({
-      trigger: {
-        kind: 'event',
-        connectorKind: 'pull.github',
-        event: 'issue',
-        filter: { repo: 'acme/app' },
-      },
-      connection: github,
-      cursor: { provider: 'github', etag: '"events-old"' },
-      now: new Date('2026-07-25T00:01:00Z'),
-      limit: 1,
-      pollJson: poll,
-    });
-    expect(poll).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(poll).mock.calls[1]![1]).toContain('page=2');
-    expect(vi.mocked(poll).mock.calls[1]![2]).toBeUndefined();
-    expect(next.events.map((event) => event.id)).toEqual(['github:event:1', 'github:event:2']);
-    expect(next.cursor).toMatchObject({ provider: 'github', etag: '"events-all"' });
-  });
-
   it('fails closed for unsupported adapters, events, and malformed repository filters', async () => {
     const base = {
       connection: github,
@@ -371,48 +225,6 @@ describe('pollProviderEventSource', () => {
         }),
       ).rejects.toThrow('filter.repo');
     }
-  });
-
-  it('honors GitHub backoff and baselines a newly authored watcher without replay', async () => {
-    const trigger = {
-      kind: 'event' as const,
-      connectorKind: 'pull.github',
-      event: 'issue',
-      filter: { repo: 'acme/app' },
-    };
-    const waitingFetch = vi.fn() satisfies PollJson;
-    const waiting = await pollProviderEventSource({
-      trigger,
-      connection: github,
-      cursor: {
-        provider: 'github',
-        etag: '"old"',
-        notBefore: Date.parse('2026-07-25T00:01:00Z'),
-      },
-      now: new Date('2026-07-25T00:00:00Z'),
-      limit: 50,
-      pollJson: waitingFetch,
-    });
-    expect(waiting.events).toEqual([]);
-    expect(waitingFetch).not.toHaveBeenCalled();
-
-    const baseline = await pollProviderEventSource({
-      trigger,
-      connection: github,
-      now: new Date('2026-07-25T00:00:00Z'),
-      limit: 0,
-      pollJson: replies({
-        status: 200,
-        headers: { etag: '"current"', 'x-poll-interval': 'invalid' },
-        body: [{ id: 'historical', type: 'IssuesEvent', payload: { issue: {} } }],
-      }),
-    });
-    expect(baseline.events).toEqual([]);
-    expect(baseline.cursor).toMatchObject({
-      provider: 'github',
-      etag: '"current"',
-      notBefore: Date.parse('2026-07-25T00:01:00Z'),
-    });
   });
 
   it('skips malformed provider rows while preserving minimal valid events', async () => {
