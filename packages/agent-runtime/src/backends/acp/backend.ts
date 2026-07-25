@@ -49,7 +49,7 @@ import { putWarmSlot, takeWarmSlot } from './session-warm.js';
 import { createSessionUpdateMapper } from './stream-events.js';
 import { outcomeForStopReason } from './stop-reason.js';
 import { startTurnVaultTools } from './turn-vault-tools.js';
-import { buildUsageEvent } from './usage.js';
+import { buildUsageEvent, deltaCumulativeUsage } from './usage.js';
 import type { AcpTurnConfig, AcpTurnInput, AcpTurnResult } from './types.js';
 
 export type { AcpAdapterSpec, AcpTurnConfig, AcpTurnInput, AcpTurnResult } from './types.js';
@@ -90,6 +90,7 @@ export async function runAcpTurn(
   let reusedWarm = false;
   let configOptions: SessionConfigOption[] = [];
   let modes: SessionModes | undefined;
+  let usageSnapshot: AcpTurnResult['usageSnapshot'];
 
   const emit = (event: TurnStreamEvent): void => {
     if (input.abortSignal.aborted) return;
@@ -361,7 +362,19 @@ export async function runAcpTurn(
 
     if (isObject(promptResult?.usage)) stream.foldTokenUsage(promptResult.usage);
     const folded = stream.usage();
-    const usageEvent = buildUsageEvent(config.kind, activeModel, folded.tokens, folded.cost);
+    const sameResumedSession =
+      continuity !== 'fresh' &&
+      input.prevSessionId !== undefined &&
+      sessionId === input.prevSessionId;
+    const delta = deltaCumulativeUsage(
+      folded.tokens,
+      folded.cost,
+      sameResumedSession ? input.prevUsageSnapshot : undefined,
+    );
+    usageSnapshot = delta.snapshot;
+    // Only the session's live config option / confirmed pin is authoritative.
+    // A requested model may be ignored or refused and must never be stamped.
+    const usageEvent = buildUsageEvent(config.kind, activeModel, delta.tokens, delta.cost);
     if (usageEvent) emit(usageEvent);
 
     if (!input.abortSignal.aborted) {
@@ -441,5 +454,10 @@ export async function runAcpTurn(
   if (input.abortSignal.aborted) input.onEvent({ type: 'aborted' });
   else if (spawnError) input.onEvent({ type: 'error', message: spawnError.message });
 
-  return sessionId ? { sessionId } : {};
+  return sessionId
+    ? {
+        sessionId,
+        ...(usageSnapshot ? { usageSnapshot } : {}),
+      }
+    : {};
 }

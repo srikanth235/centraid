@@ -47,6 +47,7 @@ export function scopesForAutomationAnchors(
       idColumn: string;
       ids: Set<string>;
       fields: Set<string>;
+      fieldsById: Map<string, Set<string>>;
     }
   >();
   for (const anchor of anchors) {
@@ -62,16 +63,35 @@ export function scopesForAutomationAnchors(
       idColumn,
       ids: new Set<string>(),
       fields: new Set<string>(),
+      fieldsById: new Map<string, Set<string>>(),
     };
     if (group.idColumn !== idColumn) {
       throw new AutomationAnchorError(`anchors for ${key} disagree on their row key`);
     }
     group.ids.add(anchor.sourceId);
-    for (const field of fieldMask) group.fields.add(field);
+    const rowFields = group.fieldsById.get(anchor.sourceId) ?? new Set<string>();
+    for (const field of fieldMask) {
+      group.fields.add(field);
+      if (field !== idColumn) rowFields.add(field);
+    }
+    group.fieldsById.set(anchor.sourceId, rowFields);
     groups.set(key, group);
   }
   return [...groups.values()].map((group) => {
     const ids = [...group.ids];
+    const valueFields = [...group.fields].filter((field) => field !== group.idColumn);
+    // The current vault scope algebra applies one field mask to every row in
+    // a filter. A non-rectangular set such as row A/title + row B/description
+    // cannot be represented without exposing the two cross-pairs, so reject
+    // it instead of silently broadening consent.
+    for (const id of ids) {
+      const rowFields = group.fieldsById.get(id) ?? new Set<string>();
+      if (valueFields.some((field) => !rowFields.has(field))) {
+        throw new AutomationAnchorError(
+          `anchors for ${group.schema}.${group.table} cannot be combined without widening row/field access`,
+        );
+      }
+    }
     return {
       schema: group.schema,
       table: group.table,
@@ -141,24 +161,19 @@ function textForField(db: VaultDb, field: string, value: unknown): string | unde
   return content ? decodeTextDataUri(content.media_type, content.content_uri) : undefined;
 }
 
-function selectorScore(text: string, selector: AutomationAnchorSelector): number | undefined {
-  let at = text.indexOf(selector.exact);
-  let best: number | undefined;
-  while (at >= 0) {
-    const prefixStart = Math.max(0, at - selector.prefix.length);
-    const prefix = text.slice(prefixStart, at);
-    const suffix = text.slice(
-      at + selector.exact.length,
-      at + selector.exact.length + selector.suffix.length,
-    );
-    const contextPenalty =
-      (selector.prefix !== '' && !prefix.endsWith(selector.prefix) ? 1_000_000 : 0) +
-      (selector.suffix !== '' && !suffix.startsWith(selector.suffix) ? 1_000_000 : 0);
-    const score = contextPenalty + Math.abs(at - selector.start);
-    best = best === undefined ? score : Math.min(best, score);
-    at = text.indexOf(selector.exact, at + 1);
-  }
-  return best;
+function selectorMatches(text: string, selector: AutomationAnchorSelector): boolean {
+  const at = selector.start;
+  if (text.slice(at, at + selector.exact.length) !== selector.exact) return false;
+  const prefixStart = Math.max(0, at - selector.prefix.length);
+  const prefix = text.slice(prefixStart, at);
+  const suffix = text.slice(
+    at + selector.exact.length,
+    at + selector.exact.length + selector.suffix.length,
+  );
+  return (
+    (selector.prefix === '' || prefix.endsWith(selector.prefix)) &&
+    (selector.suffix === '' || suffix.startsWith(selector.suffix))
+  );
 }
 
 function sourceFieldFor(
@@ -189,19 +204,18 @@ function sourceFieldFor(
   if (!row) {
     throw new AutomationAnchorError(`anchor source ${sourceType}/${sourceId} no longer exists`);
   }
-  const matches = searchable.maskColumns.flatMap((field) => {
+  const matches = searchable.maskColumns.filter((field) => {
     const text = textForField(db, field, row[field]);
-    if (text === undefined) return [];
-    const score = selectorScore(text, selector);
-    return score === undefined ? [] : [{ field, score }];
+    return text !== undefined && selectorMatches(text, selector);
   });
-  matches.sort((left, right) => left.score - right.score || left.field.localeCompare(right.field));
-  const field = matches[0]?.field;
-  if (!field) {
+  if (matches.length !== 1) {
     throw new AutomationAnchorError(
-      `anchor ${sourceType}/${sourceId} no longer matches its source text`,
+      matches.length === 0
+        ? `anchor ${sourceType}/${sourceId} no longer matches its source text`
+        : `anchor ${sourceType}/${sourceId} matches more than one source field`,
     );
   }
+  const field = matches[0]!;
   return { idColumn, field };
 }
 

@@ -199,7 +199,11 @@ test('provider polling keeps credentials broker-side and enforces the durable ac
     expect(new Headers(init?.headers).get('authorization')).toBe('Bearer github-secret-token');
     expect(new Headers(init?.headers).get('if-none-match')).toBe('"v1"');
     return Response.json([{ id: 'event-1' }], {
-      headers: { etag: '"v2"', 'x-poll-interval': '60' },
+      headers: {
+        etag: '"v2"',
+        link: '<https://api.github.com/repos/acme/app/events?page=2>; rel="next"',
+        'x-poll-interval': '60',
+      },
     });
   });
   const broker = new ConnectionBroker(() => plane, 500, undefined, fetchImpl as typeof fetch);
@@ -211,7 +215,11 @@ test('provider polling keeps credentials broker-side and enforces the durable ac
   });
   expect(result).toEqual({
     status: 200,
-    headers: { etag: '"v2"', 'x-poll-interval': '60' },
+    headers: {
+      etag: '"v2"',
+      link: '<https://api.github.com/repos/acme/app/events?page=2>; rel="next"',
+      'x-poll-interval': '60',
+    },
     body: [{ id: 'event-1' }],
   });
   expect(JSON.stringify(result)).not.toContain('github-secret-token');

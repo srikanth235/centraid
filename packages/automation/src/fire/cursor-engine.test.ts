@@ -45,7 +45,7 @@ async function settle(): Promise<void> {
 }
 
 describe('VaultCursorEngine', () => {
-  it('collapses a cron restart gap to the latest instant and persists before fire', async () => {
+  it('collapses a cron restart gap to the latest instant with write-ahead intent', async () => {
     const cursors = store();
     cursors.putCursor({
       automationId: 'clock/minutely',
@@ -61,9 +61,9 @@ describe('VaultCursorEngine', () => {
       now: () => at,
       fire: vi.fn(),
       fireCursor: (input) => {
-        expect(cursors.getCursor(input.automationRef, input.triggerIndex)?.positionJson).toBe(
-          JSON.stringify(at.getTime()),
-        );
+        const during = cursors.getCursor(input.automationRef, input.triggerIndex);
+        expect(during?.positionJson).toBe(JSON.stringify(Date.UTC(2026, 0, 1, 8, 0)));
+        expect(during?.pendingJson).toContain(JSON.stringify(at.getTime()));
         fired.push(input);
       },
     });
@@ -79,6 +79,39 @@ describe('VaultCursorEngine', () => {
       gapReason: 'scheduler_gap',
       element: { occurredAt: at.getTime() },
     });
+    expect(cursors.getCursor('clock/minutely', 0)).toMatchObject({
+      positionJson: JSON.stringify(at.getTime()),
+    });
+    expect(cursors.getCursor('clock/minutely', 0)?.pendingJson).toBeUndefined();
+  });
+
+  it('fires the latest missed cron instant even when the wake minute is not due', async () => {
+    const cursors = store();
+    const from = new Date(2026, 0, 1, 8, 0).getTime();
+    cursors.putCursor({
+      automationId: 'clock/daily',
+      triggerIndex: 0,
+      sourceKind: 'cron',
+      positionJson: JSON.stringify(from),
+      updatedAt: from,
+    });
+    const fired: TriggerCursorFireInput[] = [];
+    const at = new Date(2026, 0, 1, 10, 0);
+    const engine = new VaultCursorEngine({
+      store: cursors,
+      now: () => at,
+      fire: vi.fn(),
+      fireCursor: (input) => void fired.push(input),
+    });
+
+    await engine.reconcile([row('clock/daily', [{ kind: 'cron', expr: '0 9 * * *' }])]);
+
+    expect(fired).toEqual([
+      expect.objectContaining({
+        element: expect.objectContaining({ occurredAt: new Date(2026, 0, 1, 9, 0).getTime() }),
+      }),
+    ]);
+    expect(cursors.getCursor('clock/daily', 0)?.positionJson).toBe(JSON.stringify(at.getTime()));
   });
 
   it('caps every source uniformly and records the skipped gap once', async () => {
@@ -113,6 +146,29 @@ describe('VaultCursorEngine', () => {
     });
   });
 
+  it('keeps the declared one-minute data and five-minute condition defaults', async () => {
+    const readRefs: string[] = [];
+    const at = new Date(Date.UTC(2026, 0, 1, 8, 1));
+    const engine = new VaultCursorEngine({
+      fire: vi.fn(),
+      now: () => at,
+      readCursor: async ({ automationRef }) => {
+        readRefs.push(automationRef);
+        return { elements: [], positionJson: JSON.stringify(at.getTime()) };
+      },
+    });
+    await engine.reconcile([
+      row('watch/data', [{ kind: 'data', entities: ['core.party'] }]),
+      row('watch/condition', [{ kind: 'condition', entity: 'schedule.task' }]),
+    ]);
+    readRefs.length = 0;
+
+    engine.tick();
+    await settle();
+
+    expect(readRefs).toEqual(['watch/data']);
+  });
+
   it('drains durable webhook ingress on restart bootstrap', async () => {
     const cursors = store();
     const fired: string[] = [];
@@ -135,6 +191,103 @@ describe('VaultCursorEngine', () => {
 
     expect(fired).toEqual(['9']);
     expect(cursors.getCursor('hooks/receive', 0)?.positionJson).toBe('9');
+  });
+
+  it('reads past a committed data cursor during restart bootstrap', async () => {
+    const cursors = store();
+    let latest = 0;
+    const readCursor = async ({
+      cursor,
+    }: {
+      cursor?: { positionJson?: string };
+    }): Promise<{
+      elements: Array<{ position: string; occurredAt: number }>;
+      positionJson: string;
+    }> => {
+      const position = Number(cursor?.positionJson ?? 0);
+      return {
+        elements: latest > position ? [{ position: String(latest), occurredAt: latest }] : [],
+        positionJson: String(latest),
+      };
+    };
+    const trigger = { kind: 'data' as const, entities: ['core.party'] };
+    const first = new VaultCursorEngine({
+      store: cursors,
+      fire: vi.fn(),
+      readCursor,
+      fireCursor: vi.fn(),
+    });
+    await first.reconcile([row('watch/restart', [trigger])]);
+    expect(cursors.getCursor('watch/restart', 0)?.positionJson).toBe('0');
+
+    latest = 1;
+    const fired: string[] = [];
+    const restarted = new VaultCursorEngine({
+      store: cursors,
+      fire: vi.fn(),
+      readCursor,
+      fireCursor: ({ element }) => void fired.push(element.position),
+    });
+    await restarted.reconcile([row('watch/restart', [trigger])]);
+
+    expect(fired).toEqual(['1']);
+    expect(cursors.getCursor('watch/restart', 0)?.positionJson).toBe('1');
+  });
+
+  it('retries only the unacknowledged ingress after a mid-batch fire interruption', async () => {
+    const cursors = store();
+    const elements = [
+      { position: '9', occurredAt: 9 },
+      { position: '10', occurredAt: 10 },
+    ];
+    const attempted: string[] = [];
+    const first = new VaultCursorEngine({
+      store: cursors,
+      fire: vi.fn(),
+      readCursor: async () => ({ elements, positionJson: '10' }),
+      fireCursor: ({ element }) => {
+        attempted.push(element.position);
+        if (element.position === '10') throw new Error('gateway stopped');
+      },
+    });
+    const trigger = {
+      kind: 'webhook' as const,
+      id: 'hook-id',
+      secretHash: 'a'.repeat(64),
+    };
+
+    await expect(first.reconcile([row('hooks/restart', [trigger])])).rejects.toThrow(
+      'gateway stopped',
+    );
+    expect(cursors.getCursor('hooks/restart', 0)).toMatchObject({
+      pendingJson: expect.stringContaining('"9"'),
+    });
+    expect(cursors.getCursor('hooks/restart', 0)?.positionJson).toBeUndefined();
+
+    const second = new VaultCursorEngine({
+      store: cursors,
+      fire: vi.fn(),
+      readCursor: async ({ cursor }) => ({
+        elements:
+          cursor?.positionJson === '10'
+            ? [{ position: '11', occurredAt: 11 }]
+            : [...elements, { position: '11', occurredAt: 11 }],
+        positionJson: '11',
+      }),
+      fireCursor: ({ element }) => void attempted.push(element.position),
+    });
+    await second.reconcile([row('hooks/restart', [trigger])]);
+
+    expect(attempted).toEqual(['9', '10', '10']);
+    expect(cursors.getCursor('hooks/restart', 0)).toMatchObject({
+      positionJson: '10',
+    });
+    expect(cursors.getCursor('hooks/restart', 0)?.pendingJson).toBeUndefined();
+
+    second.nudgeIngress('hook-id');
+    await settle();
+    expect(attempted).toEqual(['9', '10', '10', '11']);
+    expect(cursors.getCursor('hooks/restart', 0)?.positionJson).toBe('11');
   });
 
   it('drains a webhook delivery that arrives after the initial cursor bootstrap', async () => {

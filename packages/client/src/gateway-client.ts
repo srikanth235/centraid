@@ -325,7 +325,7 @@ export async function saveUserPrefs(
 // ---- Automations + insights (`/centraid/_automations`, `/centraid/_insights`) ----
 // Read/run/analytics proxies. Code (manifests) resolves gateway-side from
 // the materialized `main`; run ledgers + analytics from the gateway's data
-// dir. A run-now fires on the gateway host with ITS runner + provider key.
+// dir. A turn-now fires on the gateway host with ITS runner + provider key.
 
 /** Every automation on `main`, sorted by name. */
 export async function listAutomations(): Promise<CentraidAutomationRow[]> {
@@ -363,7 +363,7 @@ export async function runAutomationNow(input: {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
-    `/centraid/_automations/run-now?ref=${enc(input.automationId)}`,
+    `/centraid/_automations/turn-now?ref=${enc(input.automationId)}`,
     { method: 'POST', headers: authHeaders(token) },
   );
   return readJson<CentraidAutomationTurnResult>(res, 'run automation');

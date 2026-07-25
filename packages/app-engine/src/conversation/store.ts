@@ -13,8 +13,8 @@
  *
  *   conversations    — the first-class durable record. `kind` (chat |
  *                      automation | build), `app_id`, `automation_id` live
- *                      here. Each automation has one stable conversation
- *                      (`id=automation_id=<ref>`); fires and compiles append turns.
+ *                      here. Each automation+harness pair has one stable
+ *                      conversation; history joins them by `automation_id`.
  *   turns            — one execution under a conversation (chat turn /
  *                      automation fire / builder iteration). NOT NULL,
  *                      FK-backed `conversation_id`. Carries the token/cost
@@ -40,6 +40,7 @@
 import { randomUUID } from 'node:crypto';
 import { type DatabaseSync } from 'node:sqlite';
 import type { DatabaseProvider } from '../stores/gateway-db.js';
+import type { AdapterUsageSnapshot } from './turn.js';
 import type {
   Conversation,
   Turn,
@@ -75,6 +76,8 @@ export interface CreateConversationInput {
   readonly appId?: string;
   readonly automationId?: string;
   readonly title?: string;
+  /** Runner ownership fixed when an automation conversation is created. */
+  readonly adapterKind?: string;
 }
 
 export interface InsertTurnInput {
@@ -266,6 +269,7 @@ export class ConversationStore {
       input.appId ?? null,
       input.automationId ?? null,
       input.title ?? '',
+      input.adapterKind ?? null,
       now,
       now,
     );
@@ -276,6 +280,7 @@ export class ConversationStore {
       ...(input.appId !== undefined ? { appId: input.appId } : {}),
       ...(input.automationId !== undefined ? { automationId: input.automationId } : {}),
       title: input.title ?? '',
+      ...(input.adapterKind !== undefined ? { adapterKind: input.adapterKind } : {}),
       turnCount: 0,
       pinned: false,
       archived: false,
@@ -284,32 +289,55 @@ export class ConversationStore {
     };
   }
 
-  /** Ensure the one long-lived conversation for an automation and refresh its title. */
-  ensureAutomationConversation(automationRef: string, appId?: string, name?: string): string {
-    const existing = this.getConversation(automationRef);
+  /**
+   * Ensure one long-lived conversation for this automation+harness pair.
+   * A harness switch deliberately chooses another conversation; ACP resume
+   * handles never cross runner ownership.
+   */
+  ensureAutomationConversation(
+    automationRef: string,
+    appId?: string,
+    name?: string,
+    runnerKind?: string,
+  ): string {
+    const conversationId =
+      runnerKind === undefined
+        ? automationRef
+        : `${automationRef}::runner:${encodeURIComponent(runnerKind)}`;
+    const existing = this.getConversation(conversationId);
     if (!existing) {
       this.createConversation({
-        id: automationRef,
+        id: conversationId,
         kind: 'automation',
         userId: '',
         automationId: automationRef,
         ...(appId !== undefined ? { appId } : {}),
         ...(name !== undefined ? { title: name } : {}),
+        ...(runnerKind !== undefined ? { adapterKind: runnerKind } : {}),
       });
-      return automationRef;
+      return conversationId;
     }
     if (existing.kind !== 'automation' || existing.automationId !== automationRef) {
-      throw new Error(`conversation id collision for automation "${automationRef}"`);
+      throw new Error(`conversation id collision for automation "${conversationId}"`);
+    }
+    if (
+      runnerKind !== undefined &&
+      existing.adapterKind !== undefined &&
+      existing.adapterKind !== runnerKind
+    ) {
+      throw new Error(
+        `automation conversation "${conversationId}" belongs to ${existing.adapterKind}, not ${runnerKind}`,
+      );
     }
     const { stmts } = this.ensureReady();
     stmts.updateAutomationConversation.run(
       appId ?? null,
       name ?? null,
       Date.now(),
-      automationRef,
+      conversationId,
       automationRef,
     );
-    return automationRef;
+    return conversationId;
   }
 
   /** @deprecated Use ensureAutomationConversation. */
@@ -440,12 +468,23 @@ export class ConversationStore {
   }
 
   /** Bump turn_count + updated_at; optionally persist the runner-resume handle. */
-  noteTurn(id: string, userId: string, adapter?: { kind: string; sessionId?: string }): boolean {
+  noteTurn(
+    id: string,
+    userId: string,
+    adapter?: { kind: string; sessionId?: string; usageSnapshot?: AdapterUsageSnapshot },
+  ): boolean {
     const { stmts } = this.ensureReady();
     const now = Date.now();
     let res;
     if (adapter && adapter.sessionId !== undefined) {
-      res = stmts.noteTurnWithAdapter.run(now, adapter.kind, adapter.sessionId, id, userId);
+      res = stmts.noteTurnWithAdapter.run(
+        now,
+        adapter.kind,
+        adapter.sessionId,
+        adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
+        id,
+        userId,
+      );
     } else if (adapter) {
       res = stmts.noteTurnKindOnly.run(now, adapter.kind, id, userId);
     } else {
@@ -502,6 +541,12 @@ export class ConversationStore {
     const { stmts } = this.ensureReady();
     const raw = stmts.getTurn.get(turnId) as RawTurn | undefined;
     return raw ? turnFromRaw(raw) : undefined;
+  }
+
+  /** Delete one interrupted turn; items/attachments cascade with it. */
+  deleteTurn(turnId: string): boolean {
+    const { stmts } = this.ensureReady();
+    return Number(stmts.deleteTurn.run(turnId).changes) > 0;
   }
 
   /** Every turn of a conversation, oldest-first (seq ASC) — the thread's turns. */

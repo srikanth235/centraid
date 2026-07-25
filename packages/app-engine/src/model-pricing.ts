@@ -12,6 +12,12 @@
  * zero-cost call. Callers that sum cost must treat NULL as "unknown",
  * not "free".
  *
+ * Automation accounting may opt into an explicit unknown-model policy when a
+ * harness reports tokens without USD or a confirmed model identity. That path
+ * uses per-bucket maxima from the loaded catalog, falling back to a conspicuous
+ * non-zero policy rate for a missing bucket. It is an estimate relative to the
+ * loaded catalog, not a provider-price claim or proven universal ceiling.
+ *
  * Internally this delegates to an injectable in-memory catalog seeded from a
  * committed LiteLLM snapshot and overlaid by the gateway warmer's live fetch
  * (`./pricing/*`). The public shape below is unchanged: the two call sites
@@ -20,7 +26,7 @@
  * though it no longer holds any literal ids itself.
  */
 
-import { lookupEntry } from './pricing/catalog.js';
+import { catalogRateCeiling, lookupEntry } from './pricing/catalog.js';
 import { costFromEntry, entryToModelPrice } from './pricing/cost.js';
 
 export { setPricingCatalog } from './pricing/catalog.js';
@@ -80,6 +86,12 @@ export function resolveItemCost(opts: {
   agentCostUsd?: number;
   model?: string;
   usage: TokenUsage;
+  /**
+   * Automation-only safety net: when a harness reports tokens but neither
+   * cost nor a priceable model, record a conservative catalog-rate ceiling
+   * rather than silently presenting the call as free.
+   */
+  estimateUnknownModel?: boolean;
 }): ResolvedItemCost {
   if (opts.agentCostUsd !== undefined && Number.isFinite(opts.agentCostUsd)) {
     return { costUsd: opts.agentCostUsd, costSource: 'agent' };
@@ -87,6 +99,13 @@ export function resolveItemCost(opts: {
   const estimated = costForUsage(opts.model, opts.usage);
   if (estimated !== undefined) {
     return { costUsd: estimated, costSource: 'estimated' };
+  }
+  if (opts.estimateUnknownModel) {
+    const ceiling = catalogRateCeiling();
+    const conservative = costFromEntry(ceiling, opts.usage);
+    if (conservative > 0) {
+      return { costUsd: conservative, costSource: 'estimated' };
+    }
   }
   return {};
 }

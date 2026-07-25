@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   ConversationStore,
   makeJournalDbProvider,
+  resolveItemCost,
   type ConversationRunner,
   type RunnerKind,
   type TurnStreamEvent,
@@ -35,6 +36,91 @@ export interface HeadlessCompileOptions {
   onSuccess: () => Promise<void>;
   onFailure?: (error: string) => Promise<void> | void;
   runId?: string;
+}
+
+export interface RecordFailedAutomationCompileOptions {
+  journalDbFile: string;
+  automationRef: string;
+  appId: string;
+  automationName: string;
+  runId: string;
+  error: string;
+  runnerKind?: RunnerKind;
+}
+
+type UsageEvent = Extract<TurnStreamEvent, { type: 'usage' }>;
+
+function compileUsageFields(usage: UsageEvent | undefined): {
+  model?: string;
+  provider?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  costUsd?: number;
+  costSource?: 'agent' | 'estimated';
+} {
+  if (!usage) return {};
+  const cost =
+    usage.costUsd !== undefined
+      ? {
+          costUsd: usage.costUsd,
+          costSource: usage.costSource ?? ('agent' as const),
+        }
+      : resolveItemCost({
+          model: usage.model,
+          usage: {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            cacheReadTokens: usage.cacheReadTokens,
+            cacheWriteTokens: usage.cacheWriteTokens,
+          },
+          estimateUnknownModel: true,
+        });
+  return {
+    ...(usage.model !== undefined ? { model: usage.model } : {}),
+    ...(usage.provider !== undefined ? { provider: usage.provider } : {}),
+    ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
+    ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
+    ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
+    ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
+    ...(cost.costUsd !== undefined ? { costUsd: cost.costUsd } : {}),
+    ...(cost.costSource !== undefined ? { costSource: cost.costSource } : {}),
+  };
+}
+
+/** Settle a compile id reserved before a prerequisite rewrite could start. */
+export function recordFailedAutomationCompile(opts: RecordFailedAutomationCompileOptions): void {
+  const store = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
+  try {
+    const existing = store.getTurn(opts.runId);
+    if (existing?.endedAt !== undefined) return;
+    if (!existing) {
+      const conversationId = store.ensureAutomationConversation(
+        opts.automationRef,
+        opts.appId,
+        opts.automationName,
+        opts.runnerKind,
+      );
+      store.insertTurn({
+        turnId: opts.runId,
+        conversationId,
+        triggerKind: 'compile',
+        triggerOrigin: 'manual',
+        note: 'Compile blocked before start',
+        startedAt: Date.now(),
+      });
+    }
+    store.finishTurn({
+      turnId: opts.runId,
+      endedAt: Date.now(),
+      ok: false,
+      error: opts.error,
+      summary: 'Compile failed',
+    });
+  } finally {
+    store.close();
+  }
 }
 
 export const HEADLESS_COMPILE_WORK_ORDER = (
@@ -94,8 +180,27 @@ export function finalizeCompiledManifest(
     manifest.prompt.matchAll(/@\[([^/.\]]+)\.([^/\]]+)\/[^\]]+\]/g),
     (match) => ({ schema: match[1]!, table: match[2]!, verbs: 'read' as const }),
   ).filter((scope) => !(scope.schema === 'core' && scope.table === 'link_anchor'));
-  const scopes = [...(manifest.vault?.scopes ?? [])];
-  for (const scope of [...taggedScopes, ...(options.anchoredScopes ?? [])]) {
+  const anchoredScopes = [...(options.anchoredScopes ?? [])];
+  const anchoredTables = new Set(anchoredScopes.map((scope) => `${scope.schema}.${scope.table}`));
+  const scopes: ManifestVaultScope[] = [...anchoredScopes];
+  for (const existing of manifest.vault?.scopes ?? []) {
+    // A model-authored broad read on an anchored table must not coexist with
+    // the gateway's exact row/field attenuation. Preserve an act capability
+    // from read+act, but strip the broad read half.
+    if (
+      existing.table &&
+      anchoredTables.has(`${existing.schema}.${existing.table}`) &&
+      (existing.verbs === 'read' || existing.verbs === 'read+act') &&
+      !existing.rowFilter &&
+      !existing.fieldMask
+    ) {
+      if (existing.verbs === 'read+act') scopes.push({ ...existing, verbs: 'act' });
+      continue;
+    }
+    scopes.push(existing);
+  }
+  for (const scope of taggedScopes) {
+    if (scope.table && anchoredTables.has(`${scope.schema}.${scope.table}`)) continue;
     if (
       !scopes.some(
         (existing) =>
@@ -136,6 +241,7 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
     opts.automationRef,
     opts.appId,
     opts.automationName,
+    opts.runnerKind,
   );
   const startedAt = Date.now();
   const message = HEADLESS_COMPILE_WORK_ORDER(opts.instructions, opts.anchors);
@@ -150,11 +256,24 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
 
   let finalText = '';
   let errorMessage: string | undefined;
-  let usage: Extract<TurnStreamEvent, { type: 'usage' }> | undefined;
+  let rawJson: string | undefined;
+  let stopReason: string | undefined;
+  let usage: UsageEvent | undefined;
   const onEvent = (event: TurnStreamEvent): void => {
-    if (event.type === 'final') finalText = event.text;
-    if (event.type === 'error') errorMessage = event.message;
-    if (event.type === 'aborted') errorMessage = 'Compile aborted';
+    if (event.type === 'final') {
+      finalText = event.text;
+      rawJson = event.rawJson;
+      stopReason = event.stopReason;
+    }
+    if (event.type === 'error') {
+      errorMessage = event.message;
+      rawJson = event.rawJson;
+      stopReason = event.stopReason;
+    }
+    if (event.type === 'aborted') {
+      errorMessage = 'Compile aborted';
+      stopReason = 'cancelled';
+    }
     if (event.type === 'usage') usage = event;
   };
 
@@ -181,36 +300,63 @@ export async function runHeadlessAutomationCompile(opts: HeadlessCompileOptions)
     if (errorMessage) throw new Error(errorMessage);
     await opts.onSuccess();
     const endedAt = Date.now();
-    if (finalText || usage) {
+    if (finalText || usage || rawJson || stopReason) {
       store.insertItem({
         itemId: randomUUID(),
         turnId: runId,
         ordinal: 1,
         kind: 'step',
-        outputJson: JSON.stringify({ text: finalText || 'Plan ready' }),
+        outputJson: JSON.stringify({
+          text: finalText || 'Plan ready',
+          ...(stopReason !== undefined ? { stopReason } : {}),
+        }),
+        ...(rawJson !== undefined ? { rawJson } : {}),
         ok: true,
         startedAt,
         endedAt,
         durationMs: endedAt - startedAt,
-        ...(usage?.model ? { model: usage.model } : {}),
-        ...(usage?.provider ? { provider: usage.provider } : {}),
-        ...(usage?.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
-        ...(usage?.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
-        ...(usage?.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
-        ...(usage?.cacheWriteTokens !== undefined
-          ? { cacheWriteTokens: usage.cacheWriteTokens }
-          : {}),
+        ...compileUsageFields(usage),
       });
     }
-    store.finishTurn({ turnId: runId, endedAt, ok: true, summary: 'Plan ready' });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     store.finishTurn({
       turnId: runId,
-      endedAt: Date.now(),
+      endedAt,
+      ok: true,
+      summary: 'Plan ready',
+      ...(stopReason !== undefined
+        ? { outputJson: JSON.stringify({ stopReason, text: finalText || 'Plan ready' }) }
+        : {}),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const endedAt = Date.now();
+    store.insertItem({
+      itemId: randomUUID(),
+      turnId: runId,
+      ordinal: 1,
+      kind: 'step',
+      outputJson: JSON.stringify({
+        error: message,
+        ...(finalText ? { text: finalText } : {}),
+        ...(stopReason !== undefined ? { stopReason } : {}),
+      }),
+      ...(rawJson !== undefined ? { rawJson } : {}),
+      ok: false,
+      error: message,
+      startedAt,
+      endedAt,
+      durationMs: endedAt - startedAt,
+      ...compileUsageFields(usage),
+    });
+    store.finishTurn({
+      turnId: runId,
+      endedAt,
       ok: false,
       error: message,
       summary: 'Compile failed',
+      ...(stopReason !== undefined
+        ? { outputJson: JSON.stringify({ stopReason, error: message }) }
+        : {}),
     });
     await opts.onFailure?.(message);
   } finally {

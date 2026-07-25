@@ -14,6 +14,7 @@ import path from 'node:path';
 import {
   ConversationStore,
   makeJournalDbProvider,
+  setPricingCatalog,
   type AutomationTurnStreamEvent,
 } from '@centraid/app-engine';
 import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
@@ -113,7 +114,7 @@ describe('runFire', () => {
     expect(outcome.output).toEqual({ now: new Date(record.startedAt).toISOString() });
   });
 
-  it('emits a live run-stream: run.start → node lifecycle per ctx call → run.end', async () => {
+  it('emits a live turn stream: turn.start → item lifecycle per ctx call → turn.end', async () => {
     // A handler that drives one ctx.agent. The stub dispatch returns a fixed
     // answer so the node lifecycle is deterministic.
     await writeAutomation(
@@ -152,7 +153,7 @@ describe('runFire', () => {
     const end = events.at(-1) as Extract<AutomationTurnStreamEvent, { type: 'turn.end' }>;
     expect(end.ok).toBe(true);
 
-    // The agent node opened (start) before it closed (end), at ordinal 0.
+    // The agent item opened (start) before it closed (end), at ordinal 0.
     const lifecycle = events.filter((e) => e.type === 'item.start' || e.type === 'item.end');
     expect(
       lifecycle.map((e) => [
@@ -169,7 +170,7 @@ describe('runFire', () => {
     expect(agentStart.args).toEqual({ prompt: 'summarize' });
   });
 
-  it('streams ctx.agent token deltas as node.delta and persists the usage rollup', async () => {
+  it('streams ctx.agent token deltas as item.delta and persists the usage rollup', async () => {
     await writeAutomation(
       appsDir,
       'notes',
@@ -191,10 +192,12 @@ describe('runFire', () => {
           call.onEvent?.({ type: 'assistant.delta', delta: 'lo' });
           call.onEvent?.({
             type: 'usage',
-            model: 'a-capable-model',
             provider: 'prov',
+            model: 'a-capable-model',
             inputTokens: 12,
             outputTokens: 3,
+            costUsd: 0.005,
+            costSource: 'agent',
           });
           call.onEvent?.({ type: 'final', text: 'hello' });
           return 'hello';
@@ -207,6 +210,8 @@ describe('runFire', () => {
         automationRef: 'notes/ask',
         appsDir,
         journalDbFile,
+        runnerKind: 'codex',
+        model: 'a-capable-model',
         onRunEvent: (ev) => events.push(ev),
       },
       { openDispatch: dispatch },
@@ -229,7 +234,10 @@ describe('runFire', () => {
     expect(agentNode!.model).toBe('a-capable-model');
     expect(agentNode!.inputTokens).toBe(12);
     expect(agentNode!.outputTokens).toBe(3);
+    expect(agentNode!.costUsd).toBe(0.005);
+    expect(agentNode!.costSource).toBe('agent');
     const run = store.getTurn(record.runId);
+    expect(run?.conversationId).toBe('notes/ask::runner:codex');
     expect(run?.totalInputTokens).toBe(12);
     expect(run?.totalOutputTokens).toBe(3);
     store.close();
@@ -314,7 +322,103 @@ describe('runFire', () => {
     store.close();
   });
 
-  it('cascades onFailure through the SAME injected dispatch surface', async () => {
+  it('does not attribute an unconfirmed configured model when estimating usage', async () => {
+    setPricingCatalog({
+      'priced-fixture-model': {
+        input_cost_per_token: 0.001,
+        output_cost_per_token: 0.002,
+      },
+    });
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'priced',
+      manifest({ name: 'Priced' }),
+      `export default async ({ ctx }) => ({
+         output: await ctx.agent({ prompt: 'price this' }),
+       });`,
+    );
+    const dispatch = (): Promise<DispatchSurface> =>
+      Promise.resolve({
+        agentDispatcher: async (call) => {
+          call.onEvent?.({ type: 'usage', inputTokens: 2, outputTokens: 3 });
+          call.onEvent?.({ type: 'final', text: 'done' });
+          return 'done';
+        },
+        async close() {},
+      });
+
+    const { record } = await runFire(
+      {
+        automationRef: 'notes/priced',
+        appsDir,
+        journalDbFile,
+        runnerKind: 'codex',
+        model: 'priced-fixture-model',
+      },
+      { openDispatch: dispatch },
+    );
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    expect(store.listItems(record.runId).find((item) => item.kind === 'agent')).toMatchObject({
+      costUsd: 0.008,
+      costSource: 'estimated',
+    });
+    expect(
+      store.listItems(record.runId).find((item) => item.kind === 'agent')?.model,
+    ).toBeUndefined();
+    expect(store.getTurn(record.runId)?.totalCostUsd).toBe(0.008);
+    store.close();
+  });
+
+  it('records a conservative non-zero estimate when a harness reports tokens without a model', async () => {
+    setPricingCatalog({
+      'catalog-low': {
+        input_cost_per_token: 0.001,
+        output_cost_per_token: 0.002,
+      },
+      'catalog-ceiling': {
+        input_cost_per_token: 0.003,
+        output_cost_per_token: 0.004,
+      },
+    });
+    await writeAutomation(
+      appsDir,
+      'notes',
+      'unmodelled',
+      manifest({ name: 'Unmodelled' }),
+      `export default async ({ ctx }) => ({
+         output: await ctx.agent({ prompt: 'price this too' }),
+       });`,
+    );
+    const dispatch = (): Promise<DispatchSurface> =>
+      Promise.resolve({
+        agentDispatcher: async (call) => {
+          call.onEvent?.({ type: 'usage', inputTokens: 2, outputTokens: 3 });
+          call.onEvent?.({ type: 'final', text: 'done' });
+          return 'done';
+        },
+        async close() {},
+      });
+
+    const { record } = await runFire(
+      {
+        automationRef: 'notes/unmodelled',
+        appsDir,
+        journalDbFile,
+        runnerKind: 'acp',
+      },
+      { openDispatch: dispatch },
+    );
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const agentItem = store.listItems(record.runId).find((item) => item.kind === 'agent');
+    expect(agentItem?.costSource).toBe('estimated');
+    expect(agentItem?.costUsd).toBeCloseTo(0.018, 9);
+    expect(agentItem?.model).toBeUndefined();
+    expect(store.getTurn(record.runId)?.totalCostUsd).toBeCloseTo(0.018, 9);
+    store.close();
+  });
+
+  it('cascades onFailure through the injected surface with the target automation harness', async () => {
     // `main` throws → its onFailure target `recover` fires, both via the one
     // injected `openDispatch`. Proves the cascade stayed in the spine and did
     // not leak back into the host.
@@ -331,13 +435,30 @@ describe('runFire', () => {
     const closes = { n: 0 };
 
     const { outcome } = await runFire(
-      { automationRef: 'notes/main', appsDir, journalDbFile },
+      {
+        automationRef: 'notes/main',
+        appsDir,
+        journalDbFile,
+        runnerKind: 'codex',
+        resolveNestedRuntime: async (ref) =>
+          ref === 'notes/recover'
+            ? { runnerKind: 'claude-code', model: 'recovery-model' }
+            : { runnerKind: 'codex' },
+      },
       { openDispatch: stubDispatch(opened, closes) },
     );
 
     expect(outcome.ok).toBe(false);
-    const refs = opened.map((o) => o.automationRef);
-    expect(refs).toEqual(['notes/main', 'notes/recover']);
+    expect(opened.map((entry) => [entry.automationRef, entry.runnerKind, entry.model])).toEqual([
+      ['notes/main', 'codex', undefined],
+      ['notes/recover', 'claude-code', 'recovery-model'],
+    ]);
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    expect(store.getConversation('notes/main::runner:codex')?.adapterKind).toBe('codex');
+    expect(store.getConversation('notes/recover::runner:claude-code')?.adapterKind).toBe(
+      'claude-code',
+    );
+    store.close();
     expect(closes.n).toBe(2);
   });
 });

@@ -189,6 +189,10 @@ export function makeConversationRunnerCore(
       // is the OTHER backend's and would be meaningless to resume against.
       const resumeId =
         input.prevAdapterKind === prefs.kind ? input.prevAdapterSessionId : undefined;
+      const resumeUsage =
+        resumeId && input.prevAdapterKind === prefs.kind
+          ? input.prevAdapterUsageSnapshot
+          : undefined;
 
       const toolContext: ToolContext = {
         appId: input.appId,
@@ -212,6 +216,7 @@ export function makeConversationRunnerCore(
         ...(input.model ? { model: input.model } : {}),
         ...(input.permissionPolicy ? { permissionPolicy: input.permissionPolicy } : {}),
         ...(resumeId ? { prevSessionId: resumeId } : {}),
+        ...(resumeUsage ? { prevUsageSnapshot: resumeUsage } : {}),
       };
 
       const result = await runTurn(turnInput, { prefs });
@@ -227,6 +232,7 @@ export function makeConversationRunnerCore(
       return {
         adapterKind: result.adapterKind,
         ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
+        ...(result.usageSnapshot ? { adapterUsageSnapshot: result.usageSnapshot } : {}),
       };
     },
   };

@@ -19,6 +19,7 @@
  */
 
 import {
+  isRunnerKind,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type AutomationTurnStreamEvent,
@@ -56,7 +57,10 @@ export interface RunAutomationOptions {
    * Host-injected `ctx.vault` executor factory keyed by app id (duaility
    * §12) — forwarded to the fire spine. Absent → `ctx.vault` fails closed.
    */
-  vaultFor?: (appId: string) => VaultBridge | undefined;
+  vaultFor?: (
+    appId: string,
+    automationRef: string,
+  ) => VaultBridge | undefined | Promise<VaultBridge | undefined>;
   /** Which CLI to drive. Defaults to codex. */
   runner?: RunnerKind;
   /**
@@ -100,6 +104,10 @@ export interface RunAutomationOptions {
    * connector's connection credential resolves and injects per fire.
    */
   resolveConnection?: automation.ResolveConnection;
+  /** Resolve each onFailure target's own automation pin. */
+  resolveNestedRuntime?: (
+    automationRef: string,
+  ) => Promise<{ runnerKind?: RunnerKind; model?: string }>;
 }
 
 /**
@@ -120,7 +128,7 @@ export async function runAutomation(
     startLiveDispatch({
       workdir: args.workdir,
       runId: args.runId,
-      runner,
+      runner: isRunnerKind(args.runnerKind) ? args.runnerKind : runner,
       // The manifest's `requires.model` (already folded into `args.model` by
       // `runFire`) always wins; `opts.model` is the caller's prefs-resolved
       // fallback for when the manifest doesn't specify one.
@@ -138,6 +146,8 @@ export async function runAutomation(
       ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
       ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
       ...(opts.onLog ? { onLog: opts.onLog } : {}),
+      runnerKind: runner,
+      ...(opts.model ? { model: opts.model } : {}),
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
       ...(opts.triggerKind ? { triggerKind: opts.triggerKind } : {}),
       ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
@@ -146,6 +156,7 @@ export async function runAutomation(
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
       ...(opts.failureDepth !== undefined ? { failureDepth: opts.failureDepth } : {}),
       ...(opts.resolveConnection ? { resolveConnection: opts.resolveConnection } : {}),
+      ...(opts.resolveNestedRuntime ? { resolveNestedRuntime: opts.resolveNestedRuntime } : {}),
     },
     { openDispatch },
   );

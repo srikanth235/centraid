@@ -447,7 +447,7 @@ test('install-time scopes: enrolling grants the declared block, idempotently (is
   expect(surface.highlights.some((h) => h.schema === 'schedule')).toBe(true);
 });
 
-test('install-time grants preserve anchor-derived row and field minimization', async () => {
+test('execution scope clamps preserve anchor minimization over an older broad grant', async () => {
   const dir = await tempDir();
   const plane = openPlane(dir);
   const insert = plane.db.vault.prepare(
@@ -466,9 +466,18 @@ test('install-time grants preserve anchor-derived row and field minimization', a
   };
   plane.ensureAgentInstallGrant('anchored-automation', {
     purpose: 'dpv:ServiceProvision',
+    scopes: [{ schema: 'schedule', table: 'task', verbs: 'read' }],
+  });
+  // Recompiling with an anchor cannot make an older, broader owner grant
+  // disappear. The execution credential must still attenuate it.
+  plane.ensureAgentInstallGrant('anchored-automation', {
+    purpose: 'dpv:ServiceProvision',
     scopes: [scope],
   });
-  const read = await plane.agentBridgeFor('anchored-automation')({
+  const read = await plane.agentBridgeFor('anchored-automation', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [scope],
+  })({
     op: 'read',
     payload: { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' },
   });
@@ -479,7 +488,7 @@ test('install-time grants preserve anchor-derived row and field minimization', a
   expect(
     plane.listAgents().find((agent) => agent.hostKey === 'anchored-automation')?.grants[0]
       ?.scopes[0],
-  ).toMatchObject(scope);
+  ).toMatchObject({ schema: 'schedule', table: 'task', verbs: 'read' });
   const grantId = plane.listAgents().find((agent) => agent.hostKey === 'anchored-automation')!
     .grants[0]!.grantId;
   plane.revokeGrant(grantId);
@@ -490,6 +499,23 @@ test('install-time grants preserve anchor-derived row and field minimization', a
   expect(
     plane.listAgents().find((agent) => agent.hostKey === 'anchored-automation')?.grants,
   ).toHaveLength(0);
+});
+
+test('an execution with no declared vault scopes cannot ride historical agent consent', async () => {
+  const dir = await tempDir();
+  const plane = openPlane(dir);
+  plane.ensureAgentInstallGrant('scope-less-automation', {
+    scopes: [{ schema: 'schedule', table: 'task', verbs: 'read' }],
+  });
+  const read = await plane.agentBridgeFor('scope-less-automation', { scopes: [] })({
+    op: 'read',
+    payload: { entity: 'schedule.task' },
+  });
+  expect(read).toMatchObject({
+    ok: false,
+    code: 'VAULT_CONSENT',
+    error: expect.stringContaining('execution manifest does not declare schedule.task'),
+  });
 });
 
 test('owner narrowing is durable: a revoked grant is not re-minted by the top-up (issue #308 A4)', async () => {

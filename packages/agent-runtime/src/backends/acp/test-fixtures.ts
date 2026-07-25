@@ -6,7 +6,7 @@
 
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { fileURLToPath } from 'node:url';
-import type { ToolContext, TurnStreamEvent } from '@centraid/app-engine';
+import type { AdapterUsageSnapshot, ToolContext, TurnStreamEvent } from '@centraid/app-engine';
 import { runAcpTurn, type AcpTurnConfig } from './backend.js';
 
 export const FAKE_AGENT = fileURLToPath(new URL('fake-acp-agent.mjs', import.meta.url));
@@ -14,6 +14,7 @@ export const FAKE_AGENT = fileURLToPath(new URL('fake-acp-agent.mjs', import.met
 export interface RunOptions {
   extraArgs: string[];
   prevSessionId?: string;
+  prevUsageSnapshot?: AdapterUsageSnapshot;
   model?: string;
   attachments?: { path: string; mime: string; filename?: string }[];
   resolveModel?: (model: string) => string;
@@ -27,7 +28,7 @@ export interface RunOptions {
 
 export async function runFake(opts: RunOptions): Promise<{
   events: TurnStreamEvent[];
-  result: { sessionId?: string };
+  result: { sessionId?: string; usageSnapshot?: AdapterUsageSnapshot };
 }> {
   const cwd = await tempDir('acp-backend-');
   const events: TurnStreamEvent[] = [];
@@ -47,6 +48,7 @@ export async function runFake(opts: RunOptions): Promise<{
       message: 'hello agent',
       extraSystemPrompt: 'SYSTEM_CONTEXT',
       ...(opts.prevSessionId ? { prevSessionId: opts.prevSessionId } : {}),
+      ...(opts.prevUsageSnapshot ? { prevUsageSnapshot: opts.prevUsageSnapshot } : {}),
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.attachments ? { attachments: opts.attachments } : {}),
       ...(opts.toolContext ? { toolContext: opts.toolContext } : {}),

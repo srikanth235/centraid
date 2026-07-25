@@ -133,6 +133,10 @@ export interface RunHandlerOptions {
   agentDispatcher: AgentDispatcher;
   /** Per-app conversation-ledger store for audit + ctx.state + ctx.runs. */
   runsStore: ConversationStore;
+  /** Fixed harness owner for this automation conversation. */
+  runnerKind?: string;
+  /** Effective model when a usage event omits its model id. */
+  model?: string;
   /**
    * Host-injected `ctx.vault` executor, bound to this automation's enrolled
    * `agent.agent` credential (duaility §12). Absent → every `ctx.vault` call
@@ -596,14 +600,16 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     emit,
   };
 
-  // Every fire appends to the automation's one stable conversation. The
-  // `<appId>/<id>` ref is both its durable identity and conversation id.
+  // Every fire appends to the automation's harness-owned conversation.
+  // Switching harness selects a new conversation; history still joins all
+  // of them through the stable `<appId>/<id>` automation ref.
   const slash = audit.automationId.indexOf('/');
   const appId = slash > 0 ? audit.automationId.slice(0, slash) : undefined;
   const execConversationId = audit.store.ensureAutomationConversation(
     audit.automationId,
     appId,
     opts.automationName,
+    opts.runnerKind,
   );
   const startedAt = opts.now === undefined ? Date.now() : Date.parse(opts.now);
   if (!Number.isFinite(startedAt))

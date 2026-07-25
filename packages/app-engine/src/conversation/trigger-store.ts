@@ -5,6 +5,8 @@ export interface AutomationTriggerCursor {
   triggerIndex: number;
   sourceKind: string;
   positionJson?: string;
+  /** Engine-owned write-ahead fire receipt; never handed to a source reader. */
+  pendingJson?: string;
   windowFrom?: number;
   windowTo?: number;
   skipped: number;
@@ -17,6 +19,7 @@ export interface PutAutomationTriggerCursor {
   triggerIndex: number;
   sourceKind: string;
   positionJson?: string;
+  pendingJson?: string;
   windowFrom?: number;
   windowTo?: number;
   skipped?: number;
@@ -55,6 +58,7 @@ interface CursorRow {
   trigger_index: number;
   source_kind: string;
   position_json: string | null;
+  pending_json: string | null;
   window_from: number | null;
   window_to: number | null;
   skipped: number;
@@ -79,6 +83,7 @@ function mapCursor(row: CursorRow): AutomationTriggerCursor {
     triggerIndex: row.trigger_index,
     sourceKind: row.source_kind,
     ...(row.position_json !== null ? { positionJson: row.position_json } : {}),
+    ...(row.pending_json !== null ? { pendingJson: row.pending_json } : {}),
     ...(row.window_from !== null ? { windowFrom: row.window_from } : {}),
     ...(row.window_to !== null ? { windowTo: row.window_to } : {}),
     skipped: row.skipped,
@@ -107,7 +112,7 @@ export class AutomationTriggerStore {
   getCursor(automationId: string, triggerIndex: number): AutomationTriggerCursor | undefined {
     const row = this.dbProvider()
       .prepare(
-        `SELECT automation_id, trigger_index, source_kind, position_json,
+        `SELECT automation_id, trigger_index, source_kind, position_json, pending_json,
                 window_from, window_to, skipped, gap_reason, updated_at
            FROM automation_trigger_cursor
           WHERE automation_id = ? AND trigger_index = ?`,
@@ -120,12 +125,13 @@ export class AutomationTriggerStore {
     this.dbProvider()
       .prepare(
         `INSERT INTO automation_trigger_cursor
-           (automation_id, trigger_index, source_kind, position_json,
+           (automation_id, trigger_index, source_kind, position_json, pending_json,
             window_from, window_to, skipped, gap_reason, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(automation_id, trigger_index) DO UPDATE SET
            source_kind = excluded.source_kind,
            position_json = excluded.position_json,
+           pending_json = excluded.pending_json,
            window_from = excluded.window_from,
            window_to = excluded.window_to,
            skipped = excluded.skipped,
@@ -137,6 +143,7 @@ export class AutomationTriggerStore {
         input.triggerIndex,
         input.sourceKind,
         input.positionJson ?? null,
+        input.pendingJson ?? null,
         input.windowFrom ?? null,
         input.windowTo ?? null,
         input.skipped ?? 0,

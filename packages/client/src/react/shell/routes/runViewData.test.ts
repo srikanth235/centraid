@@ -4,7 +4,7 @@ import {
   automationLiveMessages,
   createAutomationLiveTrace,
   reduceAutomationTurnEvent,
-} from './automationTurnMessages.js';
+} from './automationLiveMessages.js';
 
 // `vi.mock` is hoisted above the import by vitest, so the gateway stub lands
 // before runViewData.js pulls gateway-client-core's load-time side-effect.

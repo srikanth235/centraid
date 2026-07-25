@@ -16,6 +16,7 @@
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
+import type { AdapterUsageSnapshot } from './turn.js';
 import type {
   Conversation,
   Turn,
@@ -37,6 +38,7 @@ export interface RawConversation {
   title: string;
   adapter_kind: string | null;
   adapter_session_id: string | null;
+  adapter_usage_json: string | null;
   turn_count: number;
   pinned: number;
   archived: number;
@@ -120,6 +122,14 @@ export interface RawState {
 }
 
 export function conversationFromRaw(raw: RawConversation): Conversation {
+  let adapterUsageSnapshot: AdapterUsageSnapshot | undefined;
+  if (raw.adapter_usage_json !== null) {
+    try {
+      adapterUsageSnapshot = JSON.parse(raw.adapter_usage_json) as AdapterUsageSnapshot;
+    } catch {
+      // A corrupt optional accounting snapshot must not hide the conversation.
+    }
+  }
   return {
     id: raw.id,
     kind: raw.kind as RunKind,
@@ -129,6 +139,7 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
     title: raw.title,
     ...(raw.adapter_kind !== null ? { adapterKind: raw.adapter_kind } : {}),
     ...(raw.adapter_session_id !== null ? { adapterSessionId: raw.adapter_session_id } : {}),
+    ...(adapterUsageSnapshot ? { adapterUsageSnapshot } : {}),
     turnCount: Number(raw.turn_count),
     pinned: raw.pinned !== 0,
     archived: raw.archived !== 0,
@@ -252,6 +263,7 @@ export interface PreparedStatements {
   insertTurn: StatementSync;
   finishTurn: StatementSync;
   getTurn: StatementSync;
+  deleteTurn: StatementSync;
   getTurnByIdempotency: StatementSync;
   listTurnsAsc: StatementSync;
   listTurnsFiltered: StatementSync;
@@ -282,7 +294,8 @@ export interface PreparedStatements {
 // Reconstructed transcript length = total items across the conversation's
 // turns (one `message_in` per turn + each step/tool item).
 const CONV_COLS = `c.id, c.kind, c.user_id, c.app_id, c.automation_id, c.title,
-        c.adapter_kind, c.adapter_session_id, c.turn_count, c.pinned, c.archived,
+        c.adapter_kind, c.adapter_session_id, c.adapter_usage_json,
+        c.turn_count, c.pinned, c.archived,
         c.created_at, c.updated_at`;
 
 export function prepare(db: DatabaseSync): PreparedStatements {
@@ -290,8 +303,9 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     insertConversation: db.prepare(`
       INSERT INTO conversations
         (id, kind, user_id, app_id, automation_id, title,
-         adapter_kind, adapter_session_id, turn_count, pinned, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 0, 0, ?, ?)
+         adapter_kind, adapter_session_id, adapter_usage_json,
+         turn_count, pinned, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, 0, ?, ?)
     `),
     updateAutomationConversation: db.prepare(`
       UPDATE conversations
@@ -354,7 +368,8 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     ),
     noteTurnWithAdapter: db.prepare(`
       UPDATE conversations
-      SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?, adapter_session_id = ?
+      SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?,
+          adapter_session_id = ?, adapter_usage_json = ?
       WHERE id = ? AND user_id = ?
     `),
     noteTurnKindOnly: db.prepare(`
@@ -400,6 +415,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       WHERE id = $tid
     `),
     getTurn: db.prepare(`SELECT * FROM turns WHERE id = ?`),
+    deleteTurn: db.prepare(`DELETE FROM turns WHERE id = ?`),
     // Idempotency lookup (issue #420): the most recent recorded turn on a
     // conversation carrying the given key. A key is written once per user send;
     // newest-first is defensive against any accidental reuse.

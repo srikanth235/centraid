@@ -2,7 +2,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Automation/insights HTTP routes (issue #141). Drives
  * `makeAutomationsRouteHandler` with mock req/res, real (empty) stores
- * over a tempdir, and a stub `runAutomation` so run-now is observable
+ * over a tempdir, and a stub `runAutomation` so turn-now is observable
  * without spawning a CLI.
  */
 
@@ -91,16 +91,16 @@ test('GET /centraid/_automations/read?ref= returns null when absent', async () =
   expect(r.body).toEqual({ row: null });
 });
 
-test('POST run-now mints a turnId and invokes the injected runAutomation', async () => {
-  const r = await call('POST', '/centraid/_automations/run-now?ref=brief/brief');
+test('POST turn-now mints a turnId and invokes the injected runAutomation', async () => {
+  const r = await call('POST', '/centraid/_automations/turn-now?ref=brief/brief');
   expect(r.status).toBe(202);
   const { turnId } = r.body as { turnId: string };
   expect(turnId).toMatch(/^brief\/brief:\d+:[0-9a-f]{8}$/);
   expect(fired).toEqual([{ automationRef: 'brief/brief', turnId }]);
 });
 
-test('POST run-now without ?ref= is a 400', async () => {
-  const r = await call('POST', '/centraid/_automations/run-now');
+test('POST turn-now without ?ref= is a 400', async () => {
+  const r = await call('POST', '/centraid/_automations/turn-now');
   expect(r.status).toBe(400);
   expect(fired.length).toBe(0);
 });
@@ -204,6 +204,9 @@ test('turn/items returns native item fields and legacy run/node routes are gone'
     items: [{ itemId: 'item-native', callId: 'call-native' }],
   });
   expect(await call('GET', '/centraid/_automations/runs')).toMatchObject({ owned: false });
+  expect(await call('POST', '/centraid/_automations/run-now?ref=brief/brief')).toMatchObject({
+    owned: false,
+  });
   expect(await call('GET', '/centraid/_automations/run?runId=turn-native')).toMatchObject({
     owned: false,
   });
@@ -222,7 +225,7 @@ test('GET /centraid/_insights/summary returns a payload object', async () => {
 
 // Issue #351: run/events SSE was unbounded — a small cap (2) makes the
 // "cap+1" scenario cheap to exercise. `subscribeTurnEvents` is wired to a
-// no-op unsub (never fires `run.end`) so the stream stays open under test,
+// no-op unsub (never fires `turn.end`) so the stream stays open under test,
 // same as a real live run being watched.
 interface SseMockClient {
   req: IncomingMessage;

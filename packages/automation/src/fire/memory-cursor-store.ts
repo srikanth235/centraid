@@ -14,6 +14,7 @@ export class MemoryCursorStore {
       triggerIndex: input.triggerIndex,
       sourceKind: input.sourceKind,
       ...(input.positionJson !== undefined ? { positionJson: input.positionJson } : {}),
+      ...(input.pendingJson !== undefined ? { pendingJson: input.pendingJson } : {}),
       ...(input.windowFrom !== undefined ? { windowFrom: input.windowFrom } : {}),
       ...(input.windowTo !== undefined ? { windowTo: input.windowTo } : {}),
       skipped: input.skipped ?? 0,

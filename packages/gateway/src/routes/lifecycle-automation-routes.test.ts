@@ -368,12 +368,18 @@ test('headless revision validates steering and returns the compile turn id immed
       );
       const turns = (
         (await feed.json()) as {
-          turns: Array<{ turnId: string; ok: boolean; endedAt?: number }>;
+          turns: Array<{ turnId: string; ok: boolean; endedAt?: number; error?: string }>;
         }
       ).turns;
       const revision = turns.find((turn) => turn.turnId === revisionTurnId);
+      const compile = turns.find((turn) => turn.turnId === body.compileTurnId);
       expect(revision?.ok).toBe(false);
       expect(typeof revision?.endedAt).toBe('number');
+      expect(compile).toMatchObject({
+        ok: false,
+        error: expect.stringContaining('Instruction revision failed'),
+      });
+      expect(typeof compile?.endedAt).toBe('number');
     },
     { timeout: 10_000, interval: 50 },
   );

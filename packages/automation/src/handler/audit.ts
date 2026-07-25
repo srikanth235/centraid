@@ -281,6 +281,7 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
             ...(args.costUsd !== undefined ? { agentCostUsd: args.costUsd } : {}),
             model: args.model,
             usage,
+            estimateUnknownModel: true,
           });
   try {
     args.store.closeItem({

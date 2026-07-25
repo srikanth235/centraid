@@ -134,7 +134,10 @@ runner-wide default, then the backend default. The same resolution feeds
 headless compile plus manual, scheduled, and webhook fires. Any
 automation-specific conversational route must reuse this resolver rather than
 reading subsystem prefs directly, so authoring and execution cannot silently
-use different harnesses.
+use different harnesses. The durable ledger fixes runner ownership at the
+automation-conversation boundary: changing the runner starts a new
+conversation (history still joins both by automation ref), and an ACP resume
+handle is never carried across that switch.
 
 `agent.runner.binPath` and `agent.runner.extraArgs` belong only to the
 configured default runner. A manifest pin to another registered kind uses that
@@ -143,9 +146,9 @@ across a per-turn override.
 
 ### Usage
 
-`usage_update` carries only context-window `used`/`size` plus a **cumulative** `cost { amount, currency }`; the token breakdown rides on the `session/prompt` result as `PromptResponse.usage`. Both are cumulative per session, which equals per turn here because every turn spawns a fresh agent process whose counters start at zero.
+`usage_update` carries only context-window `used`/`size` plus a **cumulative** `cost { amount, currency }`; the token breakdown rides on the `session/prompt` result as `PromptResponse.usage`. Both are cumulative per ACP session. Centraid persists the last cumulative snapshot beside the resumable session id and books only the monotonic delta on a later load, warm resume, or process restart. A fresh session, counter regression, or currency change resets that baseline and books the current total in full.
 
-The backend folds these into **one** `usage` event at the end of the turn, stamped with `model` and `provider`. Stamping the model is load-bearing: the repricing pipeline can only revisit ledger rows whose `items.model` is non-NULL. A cost is mapped to `costUsd` only when its ISO 4217 currency is `USD`; otherwise it is withheld rather than mislabelled.
+The backend folds these into **one** `usage` event at the end of the turn, stamped with `provider` and with `model` only when the live ACP session confirms it through the model selector's `currentValue` or a successful pin. A requested/configured model is not accounting evidence: an agent may ignore it, so Centraid neither stamps nor prices that identity when ACP does not confirm it. Agent-reported USD is authoritative; a non-USD amount is withheld rather than mislabelled. When ACP reports tokens without USD or a confirmed model, automation accounting records an explicitly estimated unknown-model charge using the maximum positive rate for each token bucket in the loaded catalog. If a consumed bucket has no positive catalog rate, the conspicuous `$100 / MTok` unknown-model policy rate is used. That estimate is conservative relative to the loaded catalog only; it is neither a claim about the provider's actual charge nor a proven global upper bound.
 
 ### Vault tools
 
@@ -237,3 +240,5 @@ An automation fire now has exactly two cost profiles:
 
 - **Deterministic rails** — `ctx.vault` (SQL + invoke + content), `ctx.state`, `ctx.runs`, `ctx.fetch`, `ctx.input` — run **parent-side, in-process** in the gateway. Zero model tokens, zero child processes, zero HTTP servers, on every runner kind. A fire whose handler never calls `ctx.agent` cannot spawn anything or bill anything.
 - **Billed rail** — `ctx.agent(prompt, { json, model })` — a bounded one-shot turn against the user's real provider, routed through the **same single ACP backend as chat** (`getRunnerBackend(kind).runTurn`), so it works on all runner kinds like everything else.
+
+Primary fires, interactive automation turns, headless compilation, standing-instruction rewrites, and `onFailure` cascades all use that same registry-backed harness selection. There is no warmed catalog choice injected as a hidden automation default: selecting “Gateway default” leaves the model unset and lets the live backend choose. Only the live ACP confirmation described above becomes accounting identity.

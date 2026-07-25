@@ -27,6 +27,47 @@ const REWRITE_SYSTEM = [
   'Do not invent permissions or credentials.',
 ].join(' ');
 
+type UsageEvent = Extract<TurnStreamEvent, { type: 'usage' }>;
+
+function rewriteUsageFields(usage: UsageEvent | undefined): {
+  model?: string;
+  provider?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  costUsd?: number;
+  costSource?: 'agent' | 'estimated';
+} {
+  if (!usage) return {};
+  const cost =
+    usage.costUsd !== undefined
+      ? {
+          costUsd: usage.costUsd,
+          costSource: usage.costSource ?? ('agent' as const),
+        }
+      : resolveItemCost({
+          model: usage.model,
+          usage: {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            cacheReadTokens: usage.cacheReadTokens,
+            cacheWriteTokens: usage.cacheWriteTokens,
+          },
+          estimateUnknownModel: true,
+        });
+  return {
+    ...(usage.model !== undefined ? { model: usage.model } : {}),
+    ...(usage.provider !== undefined ? { provider: usage.provider } : {}),
+    ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
+    ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
+    ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
+    ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
+    ...(cost.costUsd !== undefined ? { costUsd: cost.costUsd } : {}),
+    ...(cost.costSource !== undefined ? { costSource: cost.costSource } : {}),
+  };
+}
+
 export function rewriteWorkOrder(current: string, steering: string): string {
   return [
     'Current standing instructions:',
@@ -72,6 +113,7 @@ export async function rewriteAutomationInstructions(
     opts.row.ref,
     opts.row.ownerApp,
     opts.row.name,
+    opts.runnerPrefs.kind,
   );
   const revisionTurnId =
     opts.revisionTurnId ?? `${opts.row.ref}:revise:${randomUUID().slice(0, 8)}`;
@@ -94,18 +136,24 @@ export async function rewriteAutomationInstructions(
   let text = '';
   let error: string | undefined;
   let rawJson: string | undefined;
-  let usage: Extract<TurnStreamEvent, { type: 'usage' }> | undefined;
+  let stopReason: string | undefined;
+  let usage: UsageEvent | undefined;
   const onEvent = (event: TurnStreamEvent): void => {
     if (event.type === 'assistant.delta') text += event.delta;
     if (event.type === 'final') {
       text = text || event.text;
       rawJson = event.rawJson;
+      stopReason = event.stopReason;
     }
     if (event.type === 'error') {
       error = event.message;
       rawJson = event.rawJson;
+      stopReason = event.stopReason;
     }
-    if (event.type === 'aborted') error = 'Instruction rewrite aborted.';
+    if (event.type === 'aborted') {
+      error = 'Instruction rewrite aborted.';
+      stopReason = 'cancelled';
+    }
     if (event.type === 'usage') usage = event;
   };
 
@@ -129,59 +177,63 @@ export async function rewriteAutomationInstructions(
     await opts.persistPrompt(prompt);
 
     const endedAt = Date.now();
-    const cost =
-      usage?.costUsd !== undefined
-        ? {
-            costUsd: usage.costUsd,
-            costSource: usage.costSource ?? ('agent' as const),
-          }
-        : resolveItemCost({
-            model: usage?.model ?? opts.model,
-            usage: {
-              inputTokens: usage?.inputTokens,
-              outputTokens: usage?.outputTokens,
-              cacheReadTokens: usage?.cacheReadTokens,
-              cacheWriteTokens: usage?.cacheWriteTokens,
-            },
-          });
     store.insertItem({
       itemId: randomUUID(),
       turnId: revisionTurnId,
       ordinal: 1,
       kind: 'step',
-      outputJson: JSON.stringify({ text: 'Revised instructions' }),
+      outputJson: JSON.stringify({
+        text: 'Revised instructions',
+        ...(stopReason !== undefined ? { stopReason } : {}),
+      }),
       ...(rawJson !== undefined ? { rawJson } : {}),
       ok: true,
       startedAt,
       endedAt,
       durationMs: endedAt - startedAt,
-      ...(usage?.model !== undefined ? { model: usage.model } : {}),
-      ...(usage?.provider !== undefined ? { provider: usage.provider } : {}),
-      ...(usage?.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
-      ...(usage?.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
-      ...(usage?.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
-      ...(usage?.cacheWriteTokens !== undefined
-        ? { cacheWriteTokens: usage.cacheWriteTokens }
-        : {}),
-      ...(cost.costUsd !== undefined ? { costUsd: cost.costUsd } : {}),
-      ...(cost.costSource !== undefined ? { costSource: cost.costSource } : {}),
+      ...rewriteUsageFields(usage),
     });
     store.finishTurn({
       turnId: revisionTurnId,
       endedAt,
       ok: true,
       summary: 'Revised instructions',
-      outputJson: JSON.stringify({ prompt }),
+      outputJson: JSON.stringify({
+        prompt,
+        ...(stopReason !== undefined ? { stopReason } : {}),
+      }),
     });
     return { revisionTurnId, prompt };
   } catch (caught) {
     const message = caught instanceof Error ? caught.message : String(caught);
+    const endedAt = Date.now();
+    store.insertItem({
+      itemId: randomUUID(),
+      turnId: revisionTurnId,
+      ordinal: 1,
+      kind: 'step',
+      outputJson: JSON.stringify({
+        error: message,
+        ...(text ? { text } : {}),
+        ...(stopReason !== undefined ? { stopReason } : {}),
+      }),
+      ...(rawJson !== undefined ? { rawJson } : {}),
+      ok: false,
+      error: message,
+      startedAt,
+      endedAt,
+      durationMs: endedAt - startedAt,
+      ...rewriteUsageFields(usage),
+    });
     store.finishTurn({
       turnId: revisionTurnId,
-      endedAt: Date.now(),
+      endedAt,
       ok: false,
       error: message,
       summary: 'Instruction revision failed',
+      ...(stopReason !== undefined
+        ? { outputJson: JSON.stringify({ stopReason, error: message }) }
+        : {}),
     });
     throw caught;
   } finally {

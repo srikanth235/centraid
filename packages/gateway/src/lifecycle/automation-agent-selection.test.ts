@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolveAutomationAgentSelection } from './automation-agent-selection.js';
+import {
+  resolveAutomationAgentSelection,
+  resolveAutomationRewriteModel,
+} from './automation-agent-selection.js';
 
 describe('resolveAutomationAgentSelection', () => {
   const prefs = {
@@ -30,5 +33,27 @@ describe('resolveAutomationAgentSelection', () => {
       runner: 'claude-code',
       model: 'claude-auto',
     });
+  });
+
+  it('keeps an explicit automation model ahead of rewrite and catalog defaults', () => {
+    expect(
+      resolveAutomationRewriteModel(
+        { runner: 'claude-code', model: 'claude-explicit' },
+        { runner: 'claude-code', model: 'claude-explicit' },
+        'claude-rewrite',
+        'claude-fast',
+      ),
+    ).toBe('claude-explicit');
+  });
+
+  it('uses the rewrite tier only when the automation has no explicit model', () => {
+    expect(
+      resolveAutomationRewriteModel(
+        { runner: 'claude-code' },
+        { runner: 'claude-code', model: 'claude-automation-default' },
+        'claude-rewrite',
+        'claude-fast',
+      ),
+    ).toBe('claude-rewrite');
   });
 });

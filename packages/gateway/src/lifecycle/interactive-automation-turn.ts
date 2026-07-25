@@ -112,10 +112,15 @@ function pricedUsage(event: UsageEvent): UsageEvent {
       cacheReadTokens: event.cacheReadTokens,
       cacheWriteTokens: event.cacheWriteTokens,
     },
+    estimateUnknownModel: true,
   });
   return priced.costUsd === undefined
     ? event
-    : { ...event, costUsd: priced.costUsd, costSource: priced.costSource };
+    : {
+        ...event,
+        costUsd: priced.costUsd,
+        costSource: priced.costSource,
+      };
 }
 
 function usageFields(usage: UsageEvent | undefined): {
@@ -178,18 +183,25 @@ export async function runInteractiveAutomationTurn(
 ): Promise<InteractiveAutomationTurnResult> {
   const store = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
   const ref = opts.row.ref;
-  store.ensureAutomationConversation(ref, opts.row.ownerApp, opts.row.name);
+  const conversationId = store.ensureAutomationConversation(
+    ref,
+    opts.row.ownerApp,
+    opts.row.name,
+    opts.runnerKind,
+  );
 
   return withConversationLock(opts.conversationLocks, opts.row.ownerApp, ref, async () => {
-    const conversation = store.getConversation(ref);
-    if (!conversation) throw new Error(`automation conversation "${ref}" was not created`);
+    const conversation = store.getConversation(conversationId);
+    if (!conversation) {
+      throw new Error(`automation conversation "${conversationId}" was not created`);
+    }
 
-    const recentTurns = store.listAutomationTurns(ref, { limit: RECENT_TURN_LIMIT });
+    const recentTurns = store.listTurns(conversationId).toReversed().slice(0, RECENT_TURN_LIMIT);
     const preamble = automationContextPreamble(opts.row, recentTurns, opts.message);
     const startedAt = Date.now();
     store.insertTurn({
       turnId: opts.turnId,
-      conversationId: ref,
+      conversationId,
       triggerKind: 'interactive',
       triggerOrigin: 'manual',
       note: 'Interactive steering turn',
@@ -352,17 +364,23 @@ export async function runInteractiveAutomationTurn(
       }
     };
 
-    const digest = createHash('sha256').update(ref).digest('hex').slice(0, 24);
+    const digest = createHash('sha256').update(conversationId).digest('hex').slice(0, 24);
     const scratchDir = path.join(opts.runnerSessionDir, 'automation-turns', digest);
     await fs.mkdir(scratchDir, { recursive: true });
     const sessionFile = path.join(scratchDir, 'session.jsonl');
 
-    let adapter: { adapterSessionId?: string; adapterKind?: string } | undefined;
+    let adapter:
+      | {
+          adapterSessionId?: string;
+          adapterKind?: string;
+          adapterUsageSnapshot?: import('@centraid/app-engine').AdapterUsageSnapshot;
+        }
+      | undefined;
     try {
       const result = await opts.runner.run({
         appId: opts.row.ownerApp,
         dataDir: scratchDir,
-        conversationId: ref,
+        conversationId,
         sessionFile,
         message: opts.message,
         extraSystemPrompt: preamble,
@@ -374,6 +392,9 @@ export async function runInteractiveAutomationTurn(
           ? { prevAdapterSessionId: conversation.adapterSessionId }
           : {}),
         ...(conversation.adapterKind ? { prevAdapterKind: conversation.adapterKind } : {}),
+        ...(conversation.adapterUsageSnapshot
+          ? { prevAdapterUsageSnapshot: conversation.adapterUsageSnapshot }
+          : {}),
         onEvent,
       });
       adapter = result ?? undefined;
@@ -429,12 +450,15 @@ export async function runInteractiveAutomationTurn(
       ...(Object.keys(output).length > 0 ? { outputJson: safeJson(output) } : {}),
     });
     store.noteTurn(
-      ref,
+      conversationId,
       '',
       adapter?.adapterKind
         ? {
             kind: adapter.adapterKind,
             ...(adapter.adapterSessionId ? { sessionId: adapter.adapterSessionId } : {}),
+            ...(adapter.adapterUsageSnapshot
+              ? { usageSnapshot: adapter.adapterUsageSnapshot }
+              : {}),
           }
         : undefined,
     );

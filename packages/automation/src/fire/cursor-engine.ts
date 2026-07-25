@@ -2,148 +2,50 @@
  * One durable cursor engine for every automation trigger (issue #541).
  *
  * A source answers "which ordered elements exist after this position?".
- * The engine advances the position before firing, bounds catch-up, and stores
- * gap metadata uniformly. Cron is a virtual source computed on read; vault
- * data/condition, authenticated ingress, and provider feeds are injected
- * readers over the same contract.
+ * The engine writes a pending receipt before firing, acknowledges each
+ * element after its terminal turn, and advances the source position only
+ * after the whole bounded batch settles. Cron is a virtual source computed
+ * on read; vault data/condition, authenticated ingress, and provider feeds
+ * are injected readers over the same contract.
  */
 
-import type { AutomationTriggerCursor, AutomationTriggerStore } from '@centraid/app-engine';
-import type { Host, ReconcileResult } from './host.js';
+import type { ReconcileResult } from './host.js';
 import type { Row } from '../scaffold/app.js';
-import { isDeniedTriggerCursorEntity, type Trigger } from '../manifest/manifest.js';
+import type { Trigger } from '../manifest/manifest.js';
 import { floorMinute, readCronCursor } from './cron-cursor.js';
 import { cronMatches } from './cron-match.js';
 import { MemoryCursorStore } from './memory-cursor-store.js';
+import {
+  DEFAULT_TRIGGER_CATCH_UP_CAP,
+  assertTriggerCursorAllowed,
+  cursorIdentity,
+  cursorSourceKind,
+  readPendingBatch,
+  scheduleExpr,
+  type CursorReadResult,
+  type CursorRegistration,
+  type CursorStore,
+  type LocalCursorScheduler,
+  type PendingFireBatch,
+  type TriggerCursorFireInput,
+  type VaultCursorEngineOptions,
+} from './cursor-engine-support.js';
 
-export const DEFAULT_TRIGGER_CATCH_UP_CAP = 50;
-
-export type CursorSourceKind = Trigger['kind'];
-
-export interface CursorElement {
-  /** Stable source-native position/id for this element. */
-  position: string;
-  occurredAt: number;
-  payload?: unknown;
-}
-
-export interface CursorReadResult {
-  elements: CursorElement[];
-  /** Serialized next source position. Undefined preserves the current one. */
-  positionJson?: string;
-  skipped?: number;
-  windowFrom?: number;
-  windowTo?: number;
-  gapReason?: string;
-}
-
-export interface TriggerCursorReadInput {
-  automationRef: string;
-  trigger: Trigger;
-  triggerIndex: number;
-  cursor?: AutomationTriggerCursor;
-  now: Date;
-  limit: number;
-}
-
-export interface TriggerCursorFireInput {
-  automationRef: string;
-  trigger: Trigger;
-  triggerIndex: number;
-  sourceKind: CursorSourceKind;
-  element: CursorElement;
-  skipped: number;
-  windowFrom?: number;
-  windowTo?: number;
-  gapReason?: string;
-}
-
-export interface CursorStore {
-  getCursor(automationId: string, triggerIndex: number): AutomationTriggerCursor | undefined;
-  putCursor(input: {
-    automationId: string;
-    triggerIndex: number;
-    sourceKind: string;
-    positionJson?: string;
-    windowFrom?: number;
-    windowTo?: number;
-    skipped?: number;
-    gapReason?: string;
-    updatedAt: number;
-  }): void;
-  deleteCursorsNotIn?(automationIds: readonly string[]): number;
-}
-
-export interface VaultCursorEngineOptions {
-  /** Compatibility fire seam for cron-only callers. */
-  fire: (ref: string) => void | Promise<void>;
-  /** Fire one source element. Production hosts use this for every kind. */
-  fireCursor?: (input: TriggerCursorFireInput) => void | Promise<void>;
-  /** Read non-cron sources. */
-  readCursor?: (input: TriggerCursorReadInput) => Promise<CursorReadResult>;
-  /**
-   * Legacy condition/data callback. Retained only for injected schedulers;
-   * production uses readCursor + fireCursor.
-   */
-  evaluate?: (ref: string, triggerIndex: number) => void | Promise<void>;
-  store?: CursorStore | AutomationTriggerStore;
-  now?: () => Date;
-  onError?: (err: unknown, ref: string) => void;
-  nudgeDelayMs?: number;
-  onTick?: (at: Date) => void;
-  onDormancyChange?: (dormant: boolean, at: Date) => void | Promise<void>;
-  catchUpCap?: number;
-}
-
-interface CursorRegistration {
-  ref: string;
-  triggerIndex: number;
-  trigger: Trigger;
-}
-
-export function isDeniedCursorEntity(entity: string): boolean {
-  return isDeniedTriggerCursorEntity(entity);
-}
-
-export function assertTriggerCursorAllowed(trigger: Trigger): void {
-  const entities =
-    trigger.kind === 'condition'
-      ? [trigger.entity]
-      : trigger.kind === 'data'
-        ? [...trigger.entities]
-        : [];
-  const denied = entities.find(isDeniedCursorEntity);
-  if (denied) {
-    throw new Error(
-      `automation trigger cursor may not target "${denied}" (loop-sensitive runtime table)`,
-    );
-  }
-}
-
-function scheduleExpr(trigger: Trigger): string | undefined {
-  if (trigger.kind === 'cron') return trigger.expr;
-  if (trigger.kind === 'condition' || trigger.kind === 'data') {
-    return trigger.every ?? '*/5 * * * *';
-  }
-  if (trigger.kind === 'event') return trigger.every ?? '*/5 * * * *';
-  return undefined;
-}
-
-function cursorSourceKind(trigger: Trigger): CursorSourceKind {
-  return trigger.kind;
-}
-
-function cursorIdentity(trigger: Trigger): string {
-  if (trigger.kind !== 'event') return trigger.kind;
-  return `event:${trigger.connectorKind}:${trigger.event}:${JSON.stringify(trigger.filter ?? {})}`;
-}
-
-export interface LocalCursorScheduler extends Host {
-  nudge(entityTypes?: readonly string[]): void;
-  nudgeIngress?(sourceKey: string): void;
-  start(): void;
-  stop(): Promise<void>;
-}
+export {
+  DEFAULT_TRIGGER_CATCH_UP_CAP,
+  assertTriggerCursorAllowed,
+  isDeniedCursorEntity,
+} from './cursor-engine-support.js';
+export type {
+  CursorElement,
+  CursorReadResult,
+  CursorSourceKind,
+  CursorStore,
+  LocalCursorScheduler,
+  TriggerCursorFireInput,
+  TriggerCursorReadInput,
+  VaultCursorEngineOptions,
+} from './cursor-engine-support.js';
 
 export class VaultCursorEngine implements LocalCursorScheduler {
   private readonly registrations = new Map<string, CursorRegistration>();
@@ -252,7 +154,12 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     }
     for (const registration of this.registrations.values()) {
       const expr = scheduleExpr(registration.trigger);
-      if (expr && cronMatches(expr, at)) this.processSafely(registration, at);
+      // A cron reader owns its whole (cursor, now] window. Processing it on
+      // every wake-minute is what catches a 09:00 due instant when the host
+      // resumes at 10:00; current-minute matching would defer it for a day.
+      if (registration.trigger.kind === 'cron' || (expr !== undefined && cronMatches(expr, at))) {
+        this.processSafely(registration, at);
+      }
     }
   }
 
@@ -352,8 +259,23 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     // source position is meaningless to its replacement.
     const cursor =
       storedCursor?.sourceKind === cursorIdentity(registration.trigger) ? storedCursor : undefined;
+    const priorPending = readPendingBatch(cursor?.pendingJson);
     let result: CursorReadResult;
-    if (registration.trigger.kind === 'cron') {
+    if (priorPending) {
+      // A write-ahead batch is authoritative until it settles. Re-reading at
+      // a later `now` could collapse cron to a newer due instant or let source
+      // retention remove ingress payloads before restart delivery.
+      result = {
+        elements: priorPending.elements,
+        ...(priorPending.targetPositionJson !== undefined
+          ? { positionJson: priorPending.targetPositionJson }
+          : {}),
+        skipped: priorPending.skipped,
+        ...(priorPending.windowFrom !== undefined ? { windowFrom: priorPending.windowFrom } : {}),
+        ...(priorPending.windowTo !== undefined ? { windowTo: priorPending.windowTo } : {}),
+        ...(priorPending.gapReason !== undefined ? { gapReason: priorPending.gapReason } : {}),
+      };
+    } else if (registration.trigger.kind === 'cron') {
       result = readCronCursor(registration.trigger.expr, cursor, at);
     } else if (this.readCursor) {
       result = await this.readCursor({
@@ -372,22 +294,47 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       };
     }
     const skipped = Math.max(0, result.skipped ?? 0);
-    this.store.putCursor({
-      automationId: registration.ref,
-      triggerIndex: registration.triggerIndex,
-      sourceKind: cursorIdentity(registration.trigger),
-      ...(result.positionJson !== undefined
-        ? { positionJson: result.positionJson }
-        : cursor?.positionJson !== undefined
-          ? { positionJson: cursor.positionJson }
-          : {}),
+    const targetPositionJson = result.positionJson ?? cursor?.positionJson;
+    const acknowledged = new Set(priorPending?.acknowledged);
+    const put = (pending?: PendingFireBatch): void => {
+      this.store.putCursor({
+        automationId: registration.ref,
+        triggerIndex: registration.triggerIndex,
+        sourceKind: cursorIdentity(registration.trigger),
+        ...(pending
+          ? cursor?.positionJson !== undefined
+            ? { positionJson: cursor.positionJson }
+            : {}
+          : targetPositionJson !== undefined
+            ? { positionJson: targetPositionJson }
+            : {}),
+        ...(pending ? { pendingJson: JSON.stringify(pending) } : {}),
+        ...(result.windowFrom !== undefined ? { windowFrom: result.windowFrom } : {}),
+        ...(result.windowTo !== undefined ? { windowTo: result.windowTo } : {}),
+        skipped,
+        ...(result.gapReason !== undefined ? { gapReason: result.gapReason } : {}),
+        updatedAt: at.getTime(),
+      });
+    };
+    const elements = result.elements.slice(0, this.catchUpCap);
+    if (elements.length === 0) {
+      put();
+      return;
+    }
+    const pending = (): PendingFireBatch => ({
+      ...(targetPositionJson !== undefined ? { targetPositionJson } : {}),
+      elements,
+      acknowledged: [...acknowledged],
+      skipped,
       ...(result.windowFrom !== undefined ? { windowFrom: result.windowFrom } : {}),
       ...(result.windowTo !== undefined ? { windowTo: result.windowTo } : {}),
-      skipped,
       ...(result.gapReason !== undefined ? { gapReason: result.gapReason } : {}),
-      updatedAt: at.getTime(),
     });
-    for (const element of result.elements.slice(0, this.catchUpCap)) {
+    // Durable intent precedes any side effect. The committed source position
+    // deliberately stays unchanged until all terminal turns are receipted.
+    put(pending());
+    for (const element of elements) {
+      if (acknowledged.has(element.position)) continue;
       const fireInput: TriggerCursorFireInput = {
         automationRef: registration.ref,
         trigger: registration.trigger,
@@ -401,22 +348,27 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       };
       if (this.fireCursor) await this.fireCursor(fireInput);
       else if (registration.trigger.kind === 'cron') await this.fire(registration.ref);
+      acknowledged.add(element.position);
+      put(pending());
     }
+    put();
   }
 
   private async bootstrapTriggers(ref: string, allowLegacyEvaluate: boolean): Promise<void> {
-    if (!this.readCursor && (!allowLegacyEvaluate || !this.evaluate)) return;
+    const canReadExternal =
+      this.readCursor !== undefined || (allowLegacyEvaluate && this.evaluate !== undefined);
     const at = this.now();
     for (const registration of this.registrations.values()) {
       if (
         registration.ref !== ref ||
-        (registration.trigger.kind !== 'data' &&
+        (registration.trigger.kind !== 'cron' &&
+          registration.trigger.kind !== 'data' &&
           registration.trigger.kind !== 'webhook' &&
           registration.trigger.kind !== 'event')
       ) {
         continue;
       }
-      if (this.store.getCursor(ref, registration.triggerIndex)) continue;
+      if (registration.trigger.kind !== 'cron' && !canReadExternal) continue;
       try {
         await this.process(registration, at);
       } catch (error) {

@@ -523,7 +523,10 @@ export class ConnectionBroker {
       }
     }
     const headers: Record<string, string> = {};
-    for (const name of ['etag', 'last-modified', 'x-poll-interval']) {
+    // Link is provider pagination state, not credential material. Preserve it
+    // so adapters exercise the same page walk through this production broker
+    // that they do through their direct PollJson test seam.
+    for (const name of ['etag', 'last-modified', 'link', 'x-poll-interval']) {
       const value = response.headers.get(name);
       if (value) headers[name] = value;
     }

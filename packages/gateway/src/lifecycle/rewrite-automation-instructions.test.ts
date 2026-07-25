@@ -106,7 +106,7 @@ describe('rewriteAutomationInstructions', () => {
       expect.objectContaining({ kind: 'message_in', text: 'Only urgent mail.' }),
       expect.objectContaining({
         kind: 'step',
-        outputJson: '{"text":"Revised instructions"}',
+        outputJson: '{"text":"Revised instructions","stopReason":"end_turn"}',
         rawJson: '{"stopReason":"end_turn"}',
       }),
     ]);
@@ -136,6 +136,58 @@ describe('rewriteAutomationInstructions', () => {
       ok: false,
       summary: 'Instruction revision failed',
     });
+    store.close();
+  });
+
+  it('preserves a failed rewrite terminal, raw envelope, and usage for cold replay', async () => {
+    const dir = await tempDir('automation-rewrite-terminal-fail-');
+    dirs.push(dir);
+    const journalDbFile = path.join(dir, 'journal.db');
+    const persistPrompt = vi.fn();
+    await expect(
+      rewriteAutomationInstructions({
+        row: row(dir),
+        steering: 'Change it.',
+        revisionTurnId: 'revision-terminal-fail',
+        journalDbFile,
+        runnerSessionDir: path.join(dir, 'sessions'),
+        runTurn: async (input) => {
+          input.onEvent({
+            type: 'error',
+            message: 'The rewriter refused.',
+            stopReason: 'refusal',
+            rawJson: '{"stopReason":"refusal","detail":"policy"}',
+          });
+          input.onEvent({
+            type: 'usage',
+            model: 'fast-model',
+            inputTokens: 8,
+            outputTokens: 0,
+            costUsd: 0.001,
+          });
+          return { adapterKind: 'codex' };
+        },
+        runnerPrefs: { kind: 'codex' },
+        persistPrompt,
+      }),
+    ).rejects.toThrow('The rewriter refused.');
+    expect(persistPrompt).not.toHaveBeenCalled();
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    expect(store.getTurn('revision-terminal-fail')).toMatchObject({
+      ok: false,
+      outputJson: '{"stopReason":"refusal","error":"The rewriter refused."}',
+    });
+    expect(store.listItems('revision-terminal-fail')).toContainEqual(
+      expect.objectContaining({
+        kind: 'step',
+        ok: false,
+        error: 'The rewriter refused.',
+        rawJson: '{"stopReason":"refusal","detail":"policy"}',
+        outputJson: '{"error":"The rewriter refused.","stopReason":"refusal"}',
+        model: 'fast-model',
+        costUsd: 0.001,
+      }),
+    );
     store.close();
   });
 });

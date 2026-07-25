@@ -95,3 +95,37 @@ test('a non-USD cost is dropped rather than mislabelled as USD', async () => {
   expect(usage?.inputTokens).toBe(100);
   expect(usage?.costUsd).toBeUndefined();
 });
+
+test('a refused model request never stamps the unconfirmed requested model', async () => {
+  const { events } = await runFake({
+    extraArgs: ['--mode=normal', '--no-model-option'],
+    model: 'unconfirmed-model',
+  });
+  expect(usageOf(events)?.model).toBeUndefined();
+});
+
+test('resumed cumulative token and USD totals are booked as deltas', async () => {
+  const resumed = await runFake({
+    extraArgs: ['--mode=resume-cap', '--cost=0.42'],
+    prevSessionId: 'existing-session',
+    prevUsageSnapshot: {
+      inputTokens: 40,
+      outputTokens: 20,
+      cacheReadTokens: 8,
+      cacheWriteTokens: 2,
+      cost: { amount: 0.12, currency: 'USD' },
+    },
+  });
+  expect(usageOf(resumed.events)).toMatchObject({
+    inputTokens: 60,
+    outputTokens: 30,
+    cacheReadTokens: 12,
+    cacheWriteTokens: 3,
+    costUsd: 0.3,
+  });
+  expect(resumed.result.usageSnapshot).toMatchObject({
+    inputTokens: 100,
+    outputTokens: 50,
+    cost: { amount: 0.42, currency: 'USD' },
+  });
+});

@@ -118,18 +118,28 @@ test('ended or stale anchors fail closed', () => {
   );
 });
 
-test('same-table anchors compile to one bounded row union', () => {
+test('moved or context-stale anchor text fails closed instead of rebinding', () => {
+  const { db } = anchoredTaskFixture();
+  db.vault
+    .prepare(
+      `UPDATE schedule_task SET title = 'Later: Prepare quarterly report today' WHERE task_id = 'task-anchored'`,
+    )
+    .run();
+  expect(() => resolveAutomationAnchors(db, '@[core.link_anchor/anchor-1]')).toThrow(
+    AutomationAnchorError,
+  );
+});
+
+test('same-table anchors compile only when their row/field union is exact', () => {
   const { boot, db } = anchoredTaskFixture();
   const [first] = resolveAutomationAnchors(db, '@[core.link_anchor/anchor-1]');
   const second = {
     ...first!,
     anchorId: 'anchor-2',
     sourceId: 'task-other',
-    sourceField: 'description',
     scope: {
       ...first!.scope,
       rowFilter: [{ column: 'task_id', op: 'eq' as const, value: 'task-other' }],
-      fieldMask: ['task_id', 'description'],
     },
   };
   const combined = scopesForAutomationAnchors([first!, second]);
@@ -145,7 +155,7 @@ test('same-table anchors compile to one bounded row union', () => {
           value: ['task-anchored', 'task-other'],
         },
       ],
-      fieldMask: ['task_id', 'title', 'description'],
+      fieldMask: ['task_id', 'title'],
     },
   ]);
   const app = ensureAppEnrolled(db, 'multi-anchor-automation');
@@ -157,7 +167,6 @@ test('same-table anchors compile to one bounded row union', () => {
       scopes,
     });
   };
-  grant([first!.scope]);
   grant(combined);
   const rows = createGateway(db).read(
     { kind: 'app', appId: app.appId, signingKey: app.signingKey },
@@ -170,4 +179,22 @@ test('same-table anchors compile to one bounded row union', () => {
       expect.objectContaining({ task_id: 'task-other' }),
     ]),
   );
+});
+
+test('non-rectangular same-table anchors fail closed instead of granting cross-pairs', () => {
+  const { db } = anchoredTaskFixture();
+  const [first] = resolveAutomationAnchors(db, '@[core.link_anchor/anchor-1]');
+  const second = {
+    ...first!,
+    anchorId: 'anchor-2',
+    sourceId: 'task-other',
+    sourceField: 'description',
+    scope: {
+      ...first!.scope,
+      rowFilter: [{ column: 'task_id', op: 'eq' as const, value: 'task-other' }],
+      fieldMask: ['task_id', 'description'],
+    },
+  };
+
+  expect(() => scopesForAutomationAnchors([first!, second])).toThrow(/without widening/);
 });

@@ -17,6 +17,8 @@
  * the response. **Attachments** ride that inbound message.
  */
 
+import type { AdapterUsageSnapshot } from './turn.js';
+
 /** What kind of thread this conversation is. Insights groups `automation` by automation. */
 export type RunKind = 'automation' | 'chat' | 'build';
 
@@ -57,8 +59,9 @@ export type ItemKind = 'message_in' | 'step' | 'tool' | 'agent';
 /**
  * The durable record holding the turns of one execution. Was `chat_sessions`,
  * generalized: `kind` / `app_id` / `automation_id` moved UP here off the
- * per-turn row. For `kind='automation'`, one stable conversation is tagged
- * with the automation ref and every compile/fire appends a turn.
+ * per-turn row. For `kind='automation'`, each harness-owned conversation is
+ * tagged with the automation ref; changing harness starts another durable
+ * conversation while automation history still queries across that ref.
  */
 export interface Conversation {
   readonly id: string;
@@ -74,6 +77,8 @@ export interface Conversation {
   readonly adapterKind?: string;
   /** Opaque per-runner resume handle; absent until the first turn lands. */
   readonly adapterSessionId?: string;
+  /** Last cumulative ACP counters paired with `adapterSessionId`. */
+  readonly adapterUsageSnapshot?: AdapterUsageSnapshot;
   /** Number of completed turns on this conversation. */
   readonly turnCount: number;
   /**
@@ -95,7 +100,7 @@ export interface Turn {
   readonly turnId: string;
   /**
    * The conversation this turn belongs to — NOT NULL, FK-backed, CASCADE
-   * (issue #190). For an automation, this equals the automation id.
+   * (issue #190). Automation conversation ids include their fixed harness.
    */
   readonly conversationId: string;
   /** Ordinal within the thread (0-based). */

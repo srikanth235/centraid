@@ -18,6 +18,7 @@ describe('AutomationTriggerStore', () => {
       triggerIndex: 0,
       sourceKind: 'cron',
       positionJson: '100',
+      pendingJson: '{"targetPositionJson":"200","acknowledged":[]}',
       skipped: 3,
       gapReason: 'scheduler_gap',
       updatedAt: 200,
@@ -39,6 +40,7 @@ describe('AutomationTriggerStore', () => {
     expect(subject.getCursor('mail/digest', 0)).toMatchObject({
       sourceKind: 'cron',
       positionJson: '100',
+      pendingJson: '{"targetPositionJson":"200","acknowledged":[]}',
       skipped: 3,
       gapReason: 'scheduler_gap',
     });

@@ -1810,7 +1810,7 @@ export class VaultPlane {
    * confirmation. Credential resolution happens per call so a revocation
    * lands immediately.
    */
-  agentBridgeFor(appId: string): VaultBridge {
+  agentBridgeFor(appId: string, block?: InstallScopeBlock): VaultBridge {
     return async (call): Promise<VaultCallResult> => {
       const agent = lookupAgentByName(this.db, appId);
       if (!agent) {
@@ -1825,6 +1825,17 @@ export class VaultPlane {
         agentId: agent.agentId,
         deviceId: this.boot.deviceId,
         deviceKey: this.boot.deviceKey,
+        ...(block
+          ? {
+              scopeClamp: block.scopes.map((scope) => ({
+                schema: scope.schema,
+                ...(scope.table !== undefined ? { table: scope.table } : {}),
+                verbs: scope.verbs,
+                ...(scope.rowFilter ? { rowFilter: [...scope.rowFilter] } : {}),
+                ...(scope.fieldMask ? { fieldMask: [...scope.fieldMask] } : {}),
+              })),
+            }
+          : {}),
       };
       if (call.op === 'content') {
         // The enricher's byte primitive (issue #299 §2): thumb/preview/text

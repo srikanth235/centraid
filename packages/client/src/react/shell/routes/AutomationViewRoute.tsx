@@ -24,12 +24,17 @@ import PageScroll from '../PageScroll.js';
 import { openWebhookReveal } from '../webhookReveal.js';
 import { deriveAutomationHero } from './automationsData.js';
 import { decideConsentItem, loadAutomationThreadData } from './automationThreadData.js';
+import { automationTurnMessages } from './automationTurnMessages.js';
 import {
   automationLiveMessages,
-  automationTurnMessages,
   createAutomationLiveTrace,
+  createAutomationLiveTraceFromItems,
+  finishAutomationLiveItem,
+  finishAutomationLiveTrace,
+  reduceAutomationItemEvent,
   reduceAutomationTurnEvent,
-} from './automationTurnMessages.js';
+  startAutomationLiveItem,
+} from './automationLiveMessages.js';
 
 async function loadTrace(turnId: string): Promise<AsstMsgDTO[]> {
   const expanded = await readAutomationTurnExpanded({ turnId });
@@ -40,7 +45,7 @@ async function watchNativeTrace(
   turnId: string,
   onMessages: (messages: AsstMsgDTO[]) => void,
   signal: AbortSignal,
-): Promise<void> {
+): Promise<boolean> {
   const initial = await readAutomationTurnExpanded({ turnId }).catch(() => ({
     turn: null,
     items: [] as CentraidAutomationItem[],
@@ -49,23 +54,46 @@ async function watchNativeTrace(
   const inbound =
     initial.items.find((item) => item.kind === 'message_in')?.text ??
     (initial.turn?.triggerKind === 'compile' ? 'Apply the revised standing instructions.' : '');
-  let live = createAutomationLiveTrace(inbound);
+  let live = createAutomationLiveTraceFromItems(inbound, initial.items);
   let ended = false;
+  let terminalOk: boolean | undefined;
   const apply = (event: AutomationTurnStreamEvent): void => {
-    if (event.type === 'item.delta') {
-      live = reduceAutomationTurnEvent(live, event.event as TurnStreamEvent);
+    if (event.type === 'item.start') {
+      live = startAutomationLiveItem(live, {
+        itemId: event.itemId,
+        ordinal: event.ordinal,
+        kind: event.kind,
+        ...(event.name ? { name: event.name } : {}),
+        ...(event.callId ? { callId: event.callId } : {}),
+      });
+      onMessages(automationLiveMessages(live));
+    } else if (event.type === 'item.delta') {
+      live = reduceAutomationItemEvent(live, {
+        itemId: event.itemId,
+        ordinal: event.ordinal,
+        event: event.event as TurnStreamEvent,
+      });
+      onMessages(automationLiveMessages(live));
+    } else if (event.type === 'item.end') {
+      live = finishAutomationLiveItem(live, event);
       onMessages(automationLiveMessages(live));
     } else if (event.type === 'turn.end') {
       ended = true;
+      terminalOk = event.ok;
+      live = finishAutomationLiveTrace(live, event.ok ? undefined : event.error);
     }
   };
   await streamAutomationTurn(turnId, apply, signal);
-  if (signal.aborted) return;
+  if (signal.aborted) return false;
   // The ledger is authoritative for completion, usage, errors, and cold/live
   // parity. Re-read once after turn.end (or an unexpectedly closed stream).
   const final = await readAutomationTurnExpanded({ turnId });
-  if (final.turn) onMessages(automationTurnMessages(final.turn, final.items));
-  else if (ended) onMessages(automationLiveMessages({ ...live, done: true }));
+  if (final.turn) {
+    onMessages(automationTurnMessages(final.turn, final.items));
+    return final.turn.ok;
+  }
+  if (ended) onMessages(automationLiveMessages(live));
+  return terminalOk ?? false;
 }
 
 // React-owned automation thread — replaces the old single-view
@@ -143,7 +171,9 @@ export default function AutomationViewRoute({
           if (row) navigate({ automationId: row.ref, kind: 'run-view', runId });
         }}
         loadTurnTrace={loadTrace}
-        watchTurn={watchNativeTrace}
+        watchTurn={async (turnId, onMessages, signal) => {
+          await watchNativeTrace(turnId, onMessages, signal);
+        }}
         onCopyWebhook={(url) =>
           void navigator.clipboard
             .writeText(url)
@@ -223,8 +253,8 @@ export default function AutomationViewRoute({
                 automationId: row.ref,
                 message: text,
               });
-              await watchNativeTrace(compileTurnId, onMessages, signal);
-              showToast('Standing instructions updated');
+              const ok = await watchNativeTrace(compileTurnId, onMessages, signal);
+              showToast(ok ? 'Standing instructions updated' : 'Could not revise instructions');
               return compileTurnId;
             }
             let live = createAutomationLiveTrace(text);

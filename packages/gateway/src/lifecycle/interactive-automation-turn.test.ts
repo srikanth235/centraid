@@ -51,10 +51,15 @@ function row(dir: string): AutomationRow {
 
 function seed(journalDbFile: string, withHandle: boolean): void {
   const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
-  store.ensureAutomationConversation('brief/main', 'brief', 'Daily brief');
+  const conversationId = store.ensureAutomationConversation(
+    'brief/main',
+    'brief',
+    'Daily brief',
+    'codex',
+  );
   store.insertTurn({
     turnId: 'prior',
-    conversationId: 'brief/main',
+    conversationId,
     triggerKind: 'manual',
     triggerOrigin: 'manual',
     startedAt: 10,
@@ -73,7 +78,7 @@ function seed(journalDbFile: string, withHandle: boolean): void {
     summary: 'Found two important changes.',
     outputJson: '{"count":2}',
   });
-  if (withHandle) store.noteTurn('brief/main', '', { kind: 'codex', sessionId: 'cached-1' });
+  if (withHandle) store.noteTurn(conversationId, '', { kind: 'codex', sessionId: 'cached-1' });
   store.close();
 }
 
@@ -159,7 +164,7 @@ describe('runInteractiveAutomationTurn', () => {
     expect(resumed.received.permissionPolicy).toBe('deny');
     expect(resumed.received.runnerKind).toBe('codex');
     expect(resumed.received.model).toBe('gpt-test');
-    expect(resumed.store.getConversation('brief/main')).toMatchObject({
+    expect(resumed.store.getConversation('brief/main::runner:codex')).toMatchObject({
       adapterKind: 'codex',
       adapterSessionId: 'cached-2',
     });

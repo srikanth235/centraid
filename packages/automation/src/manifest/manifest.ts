@@ -297,26 +297,6 @@ export function pendingWebhookTriggerOf(
 }
 
 /**
- * The host-evaluated "watch" triggers (condition + data) with their gate
- * cadence and their positions in the ORIGINAL trigger list — the index is
- * a trigger's stable identity for evaluation cursors, so it must survive
- * cron/webhook entries sitting between them.
- */
-export function watchTriggersOf(
-  triggers: readonly Trigger[],
-): readonly { trigger: ConditionTrigger | DataTrigger; expr: string; index: number }[] {
-  const watches: { trigger: ConditionTrigger | DataTrigger; expr: string; index: number }[] = [];
-  triggers.forEach((t, index) => {
-    if (t.kind === 'condition') {
-      watches.push({ trigger: t, expr: t.every ?? CONDITION_DEFAULT_EVERY, index });
-    } else if (t.kind === 'data') {
-      watches.push({ trigger: t, expr: t.every ?? DATA_DEFAULT_EVERY, index });
-    }
-  });
-  return watches;
-}
-
-/**
  * Retention policy applied at end-of-run to `runs` (and via CASCADE,
  * `run_nodes`). One of: `{count: N}` keep newest N, `{days: N}` drop
  * older than N days, `"all"` keep everything (no-op), `"errors"` keep

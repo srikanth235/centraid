@@ -153,6 +153,24 @@ describe('makeConversationRunnerCore — session resume gating', () => {
     expect(seen[0]!.prevSessionId).toBe('thread-abc');
   });
 
+  it('forwards the persisted usage baseline only with its matching session', async () => {
+    const { runner, seen } = build({
+      prefsLoader: async () => ({ kind: 'codex' }),
+      subsystem: 'assistant',
+    });
+    const snapshot = { inputTokens: 90, cost: { amount: 0.2, currency: 'USD' } };
+
+    await runner.run(
+      turnInput({
+        prevAdapterKind: 'codex',
+        prevAdapterSessionId: 'thread-abc',
+        prevAdapterUsageSnapshot: snapshot,
+      }),
+    );
+
+    expect(seen[0]!.prevUsageSnapshot).toEqual(snapshot);
+  });
+
   it("invalidates the session when the subsystem's runner has changed", async () => {
     // The prior turn ran on codex and left a codex thread id; the owner has
     // since pinned `runner.assistant` to claude-code. Resuming a codex thread
@@ -165,6 +183,7 @@ describe('makeConversationRunnerCore — session resume gating', () => {
     await runner.run(turnInput({ prevAdapterKind: 'codex', prevAdapterSessionId: 'thread-abc' }));
 
     expect(seen[0]!.prevSessionId).toBeUndefined();
+    expect(seen[0]!.prevUsageSnapshot).toBeUndefined();
   });
 
   it('invalidates independently per subsystem', async () => {

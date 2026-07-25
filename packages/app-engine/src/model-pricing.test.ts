@@ -6,6 +6,7 @@ import {
   setPricingCatalog,
   filterLiteLLM,
 } from './model-pricing.js';
+import { catalogRateCeilingFor, UNKNOWN_MODEL_POLICY_RATE_PER_TOKEN } from './pricing/catalog.js';
 
 // costForUsage prices PER TOKEN, so a call of 1,000,000 tokens costs exactly the
 // per-MTok anchor. Expected USD are hand-computed from the Anthropic anchors in
@@ -37,6 +38,29 @@ describe('resolveItemCost (#514)', () => {
     });
     expect(r.costUsd).toBeUndefined();
     expect(r.costSource).toBeUndefined();
+  });
+
+  it('uses an explicit non-zero policy when an automation has no catalog rates', () => {
+    const ceiling = catalogRateCeilingFor({});
+    expect(ceiling.input_cost_per_token).toBe(UNKNOWN_MODEL_POLICY_RATE_PER_TOKEN);
+    expect(ceiling.output_cost_per_token).toBe(UNKNOWN_MODEL_POLICY_RATE_PER_TOKEN);
+    expect(
+      resolveItemCost({
+        usage: { inputTokens: 2, outputTokens: 3 },
+        estimateUnknownModel: true,
+      }).costUsd,
+    ).toBeGreaterThan(0);
+  });
+
+  it('takes the cache-write ceiling across both published duration buckets', () => {
+    expect(
+      catalogRateCeilingFor({
+        split: {
+          cache_creation_input_token_cost: 2e-6,
+          cache_creation_input_token_cost_above_1hr: 9e-6,
+        },
+      }).cache_creation_input_token_cost,
+    ).toBe(9e-6);
   });
 });
 
@@ -195,6 +219,12 @@ describe('setPricingCatalog overlay', () => {
     // The overlay replaced the bundled snapshot outright.
     expect(priceForModel('claude-opus-4-8')).toBeUndefined();
     expect(costForUsage('model-x', { inputTokens: 1_000_000 })).toBeCloseTo(1, 9);
+    expect(
+      resolveItemCost({
+        usage: { inputTokens: 1_000_000, outputTokens: 1_000_000 },
+        estimateUnknownModel: true,
+      }),
+    ).toEqual({ costUsd: 24, costSource: 'estimated' });
   });
 
   it('an empty overlay never clobbers the current table', () => {

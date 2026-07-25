@@ -70,6 +70,7 @@ export type {
   TurnConfig,
   TurnResult,
   TurnAttachment,
+  AdapterUsageSnapshot,
   RunTurnFn,
   VaultInvokeRunner,
   VaultContentRunner,

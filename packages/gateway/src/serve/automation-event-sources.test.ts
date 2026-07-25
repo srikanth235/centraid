@@ -111,6 +111,91 @@ describe('pollProviderEventSource', () => {
     });
   });
 
+  it('exhausts every Gmail history page before advancing the history cursor', async () => {
+    const poll = vi.fn(async (_connection, url) => {
+      const pageToken = new URL(url).searchParams.get('pageToken');
+      return pageToken
+        ? {
+            status: 200,
+            headers: {},
+            body: {
+              historyId: '110',
+              history: [
+                {
+                  id: '109',
+                  messagesAdded: [{ message: { id: 'message-2', threadId: 'thread-2' } }],
+                },
+              ],
+            },
+          }
+        : {
+            status: 200,
+            headers: {},
+            body: {
+              historyId: '110',
+              nextPageToken: 'page-2',
+              history: [
+                {
+                  id: '108',
+                  messagesAdded: [{ message: { id: 'message-1', threadId: 'thread-1' } }],
+                },
+              ],
+            },
+          };
+    }) satisfies PollJson;
+    const next = await pollProviderEventSource({
+      trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+      connection: gmail,
+      cursor: { provider: 'gmail', historyId: '100' },
+      now: new Date('2026-07-25T00:05:00Z'),
+      limit: 1,
+      pollJson: poll,
+    });
+    expect(poll).toHaveBeenCalledTimes(2);
+    expect(new URL(vi.mocked(poll).mock.calls[1]![1]).searchParams.get('pageToken')).toBe('page-2');
+    expect(next.cursor).toEqual({ provider: 'gmail', historyId: '110' });
+    // The adapter returns the complete provider window. The durable ingress
+    // layer applies the fire cap and can therefore record the exact overflow.
+    expect(next.events.map((event) => event.id)).toEqual([
+      'gmail:message:message-1',
+      'gmail:message:message-2',
+    ]);
+    expect(next.skipped).toBeUndefined();
+  });
+
+  it('re-baselines an over-budget Gmail window and records the unknown tail gap', async () => {
+    let historyRequests = 0;
+    let profileRequests = 0;
+    const poll = vi.fn(async (_connection, url) => {
+      if (url.endsWith('/profile')) {
+        profileRequests++;
+        return { status: 200, headers: {}, body: { historyId: '999' } };
+      }
+      historyRequests++;
+      return {
+        status: 200,
+        headers: {},
+        body: { historyId: '900', nextPageToken: `page-${historyRequests + 1}`, history: [] },
+      };
+    }) satisfies PollJson;
+    const next = await pollProviderEventSource({
+      trigger: { kind: 'event', connectorKind: 'pull.gmail', event: 'new-message' },
+      connection: gmail,
+      cursor: { provider: 'gmail', historyId: '100' },
+      now: new Date('2026-07-25T00:05:00Z'),
+      limit: 50,
+      pollJson: poll,
+    });
+    expect(historyRequests).toBe(100);
+    expect(profileRequests).toBe(1);
+    expect(next).toEqual({
+      events: [],
+      cursor: { provider: 'gmail', historyId: '999' },
+      skipped: 1,
+      gapReason: 'gmail_history_page_limit',
+    });
+  });
+
   it('uses GitHub conditional cursors, honors poll interval, and treats 304 as no-op', async () => {
     const firstFetch = replies({
       status: 200,
@@ -188,5 +273,57 @@ describe('pollProviderEventSource', () => {
       etag: '"events-v2"',
       notBefore: Date.parse('2026-07-25T00:02:31Z'),
     });
+  });
+
+  it('follows every safe GitHub events page and emits the complete oldest-first window', async () => {
+    const issueEvent = (id: string, second: number) => ({
+      id,
+      type: 'IssuesEvent',
+      created_at: `2026-07-25T00:00:0${second}Z`,
+      payload: {
+        action: 'opened',
+        issue: {
+          number: second,
+          title: `Issue ${second}`,
+          state: 'open',
+          html_url: `https://github.com/acme/app/issues/${second}`,
+          created_at: `2026-07-25T00:00:0${second}Z`,
+          user: { login: 'octo' },
+        },
+      },
+    });
+    const poll = replies(
+      {
+        status: 200,
+        headers: {
+          etag: '"events-all"',
+          link: '<https://api.github.com/repos/acme/app/events?per_page=1&page=2>; rel="next"',
+        },
+        body: [issueEvent('2', 2)],
+      },
+      {
+        status: 200,
+        headers: {},
+        body: [issueEvent('1', 1)],
+      },
+    );
+    const next = await pollProviderEventSource({
+      trigger: {
+        kind: 'event',
+        connectorKind: 'pull.github',
+        event: 'issue',
+        filter: { repo: 'acme/app' },
+      },
+      connection: github,
+      cursor: { provider: 'github', etag: '"events-old"' },
+      now: new Date('2026-07-25T00:01:00Z'),
+      limit: 1,
+      pollJson: poll,
+    });
+    expect(poll).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(poll).mock.calls[1]![1]).toContain('page=2');
+    expect(vi.mocked(poll).mock.calls[1]![2]).toBeUndefined();
+    expect(next.events.map((event) => event.id)).toEqual(['github:event:1', 'github:event:2']);
+    expect(next.cursor).toMatchObject({ provider: 'github', etag: '"events-all"' });
   });
 });

@@ -17,7 +17,7 @@
  */
 
 import type { RunKind } from './schema.js';
-import type { RunnerKind, TurnAttachment } from './turn.js';
+import type { AdapterUsageSnapshot, RunnerKind, TurnAttachment } from './turn.js';
 
 /**
  * Normalized stream events both adapters emit. The route handler translates
@@ -210,6 +210,8 @@ export interface ConversationTurnInput {
    */
   prevAdapterSessionId?: string;
   prevAdapterKind?: string;
+  /** Cumulative counters stored with the prior ACP session id. */
+  prevAdapterUsageSnapshot?: AdapterUsageSnapshot;
   onEvent: (event: TurnStreamEvent) => void;
 }
 
@@ -223,6 +225,8 @@ export interface ConversationTurnResult {
   adapterSessionId?: string;
   /** Adapter kind that wrote `adapterSessionId`. */
   adapterKind?: string;
+  /** Cumulative counters to persist with the resume handle. */
+  adapterUsageSnapshot?: AdapterUsageSnapshot;
 }
 
 export interface ConversationRunner {

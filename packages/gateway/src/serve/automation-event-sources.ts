@@ -53,6 +53,8 @@ interface GitHubCursor {
   notBefore?: number;
 }
 
+const MAX_PROVIDER_PAGES_PER_POLL = 100;
+
 function object(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -94,7 +96,7 @@ async function gmailPoll(input: PollProviderEventSourceInput): Promise<ProviderP
   if (input.trigger.event !== 'new-message') {
     throw new Error(`unsupported Gmail event "${input.trigger.event}"`);
   }
-  let cursor = gmailCursor(input.cursor);
+  const cursor = gmailCursor(input.cursor);
   const profileUrl = 'https://gmail.googleapis.com/gmail/v1/users/me/profile';
   if (!cursor) {
     const profile = await input.pollJson(input.connection, profileUrl);
@@ -105,62 +107,85 @@ async function gmailPoll(input: PollProviderEventSourceInput): Promise<ProviderP
     return { events: [], cursor: { provider: 'gmail', historyId } satisfies GmailCursor };
   }
 
-  const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/history');
-  url.searchParams.set('startHistoryId', cursor.historyId);
-  url.searchParams.set('historyTypes', 'messageAdded');
-  url.searchParams.set('maxResults', String(Math.max(1, input.limit)));
-  const response = await input.pollJson(input.connection, url.toString());
-  if (response.status === 404) {
-    // Gmail history cursors expire. Re-baseline from profile ("now") and
-    // record one explicit unknown-size gap; never enumerate the mailbox.
-    const profile = await input.pollJson(input.connection, profileUrl);
-    const historyId = string(object(profile.body)?.historyId);
-    if (profile.status !== 200 || !historyId) {
-      throw new Error(`Gmail expired-cursor rebaseline failed (${profile.status})`);
+  const events = new Map<string, NormalizedProviderEvent>();
+  let pageToken: string | undefined;
+  let nextHistoryId = cursor.historyId;
+  let pages = 0;
+  do {
+    if (pages++ >= MAX_PROVIDER_PAGES_PER_POLL) {
+      // The provider window is larger than this poll's safety budget. Move
+      // explicitly to "now", retain the bounded prefix already collected,
+      // and record an unknown-size gap. Throwing here would preserve the old
+      // cursor and retry the same 100 pages forever.
+      const profile = await input.pollJson(input.connection, profileUrl);
+      const historyId = string(object(profile.body)?.historyId);
+      if (profile.status !== 200 || !historyId) {
+        throw new Error(`Gmail page-limit rebaseline failed (${profile.status})`);
+      }
+      return {
+        events: [...events.values()],
+        cursor: { provider: 'gmail', historyId } satisfies GmailCursor,
+        skipped: 1,
+        gapReason: 'gmail_history_page_limit',
+      };
     }
-    return {
-      events: [],
-      cursor: { provider: 'gmail', historyId } satisfies GmailCursor,
-      skipped: 1,
-      gapReason: 'gmail_history_expired',
-    };
-  }
-  if (response.status !== 200) throw new Error(`Gmail history poll failed (${response.status})`);
-  const body = object(response.body) ?? {};
-  const nextHistoryId = string(body.historyId) ?? cursor.historyId;
-  const history = Array.isArray(body.history) ? body.history : [];
-  const events: NormalizedProviderEvent[] = [];
-  for (const rawEntry of history) {
-    const entry = object(rawEntry);
-    if (!entry) continue;
-    const historyId = string(entry.id);
-    const added = Array.isArray(entry.messagesAdded) ? entry.messagesAdded : [];
-    for (const rawAdded of added) {
-      const message = object(object(rawAdded)?.message);
-      const messageId = string(message?.id);
-      if (!messageId) continue;
-      const labels = Array.isArray(message?.labelIds)
-        ? message.labelIds.filter((label): label is string => typeof label === 'string')
-        : [];
-      events.push({
-        id: `gmail:message:${messageId}`,
-        occurredAt: input.now.getTime(),
-        payload: {
-          provider: 'gmail',
-          event: 'new-message',
-          messageId,
-          ...(string(message?.threadId) ? { threadId: string(message?.threadId) } : {}),
-          ...(historyId ? { historyId } : {}),
-          ...(labels.length > 0 ? { labelIds: labels } : {}),
-        },
-      });
+    const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/history');
+    url.searchParams.set('startHistoryId', cursor.historyId);
+    url.searchParams.set('historyTypes', 'messageAdded');
+    url.searchParams.set('maxResults', String(Math.min(500, Math.max(1, input.limit))));
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+    const response = await input.pollJson(input.connection, url.toString());
+    if (response.status === 404) {
+      // Gmail history cursors expire. Re-baseline from profile ("now") and
+      // record one explicit unknown-size gap; never enumerate the mailbox.
+      const profile = await input.pollJson(input.connection, profileUrl);
+      const historyId = string(object(profile.body)?.historyId);
+      if (profile.status !== 200 || !historyId) {
+        throw new Error(`Gmail expired-cursor rebaseline failed (${profile.status})`);
+      }
+      return {
+        events: [],
+        cursor: { provider: 'gmail', historyId } satisfies GmailCursor,
+        skipped: 1,
+        gapReason: 'gmail_history_expired',
+      };
     }
-  }
-  const skipped = body.nextPageToken ? 1 : 0;
+    if (response.status !== 200) throw new Error(`Gmail history poll failed (${response.status})`);
+    const body = object(response.body) ?? {};
+    nextHistoryId = string(body.historyId) ?? nextHistoryId;
+    const history = Array.isArray(body.history) ? body.history : [];
+    for (const rawEntry of history) {
+      const entry = object(rawEntry);
+      if (!entry) continue;
+      const historyId = string(entry.id);
+      const added = Array.isArray(entry.messagesAdded) ? entry.messagesAdded : [];
+      for (const rawAdded of added) {
+        const message = object(object(rawAdded)?.message);
+        const messageId = string(message?.id);
+        if (!messageId) continue;
+        const labels = Array.isArray(message?.labelIds)
+          ? message.labelIds.filter((label): label is string => typeof label === 'string')
+          : [];
+        const event: NormalizedProviderEvent = {
+          id: `gmail:message:${messageId}`,
+          occurredAt: input.now.getTime(),
+          payload: {
+            provider: 'gmail',
+            event: 'new-message',
+            messageId,
+            ...(string(message?.threadId) ? { threadId: string(message?.threadId) } : {}),
+            ...(historyId ? { historyId } : {}),
+            ...(labels.length > 0 ? { labelIds: labels } : {}),
+          },
+        };
+        events.set(event.id, event);
+      }
+    }
+    pageToken = string(body.nextPageToken);
+  } while (pageToken);
   return {
-    events,
+    events: [...events.values()],
     cursor: { provider: 'gmail', historyId: nextHistoryId } satisfies GmailCursor,
-    ...(skipped ? { skipped, gapReason: 'gmail_history_page_cap' } : {}),
   };
 }
 
@@ -211,6 +236,21 @@ function githubPayload(
   };
 }
 
+function githubNextPage(headers: Readonly<Record<string, string>>): string | undefined {
+  const link = headers.link;
+  if (!link) return undefined;
+  for (const part of link.split(',')) {
+    const match = part.match(/<([^>]+)>\s*;\s*rel="?next"?/);
+    if (!match?.[1]) continue;
+    const url = new URL(match[1]);
+    if (url.protocol !== 'https:' || url.hostname !== 'api.github.com') {
+      throw new Error('GitHub events pagination returned an unsafe next URL');
+    }
+    return url.toString();
+  }
+  return undefined;
+}
+
 async function githubPoll(input: PollProviderEventSourceInput): Promise<ProviderPollResult> {
   if (input.trigger.event !== 'pull-request' && input.trigger.event !== 'issue') {
     throw new Error(`unsupported GitHub event "${input.trigger.event}"`);
@@ -224,7 +264,7 @@ async function githubPoll(input: PollProviderEventSourceInput): Promise<Provider
   const [owner, name] = repo.split('/') as [string, string];
   const url =
     `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}` +
-    `/events?per_page=${Math.max(1, input.limit)}`;
+    `/events?per_page=${Math.min(100, Math.max(1, input.limit))}`;
   const conditionalHeaders: Record<string, string> = {};
   if (cursor.etag) conditionalHeaders['if-none-match'] = cursor.etag;
   if (cursor.lastModified) conditionalHeaders['if-modified-since'] = cursor.lastModified;
@@ -242,14 +282,39 @@ async function githubPoll(input: PollProviderEventSourceInput): Promise<Provider
   // A newly-authored watcher starts at the provider's current conditional
   // token. Existing repository history is not an automation event.
   if (!storedCursor) return { events: [], cursor: { ...cursor, ...next } };
-  const rows = Array.isArray(response.body) ? response.body : [];
+  const rows = Array.isArray(response.body) ? [...response.body] : [];
+  let nextPage = githubNextPage(response.headers);
+  let pages = 1;
+  let skipped: number | undefined;
+  let gapReason: string | undefined;
+  while (nextPage) {
+    if (pages++ >= MAX_PROVIDER_PAGES_PER_POLL) {
+      // The first-page ETag is the new durable provider position. Commit the
+      // bounded newest prefix and mark the unknown older tail as skipped
+      // instead of retrying the same page window indefinitely.
+      skipped = 1;
+      gapReason = 'github_events_page_limit';
+      break;
+    }
+    const page = await input.pollJson(input.connection, nextPage);
+    if (page.status !== 200) {
+      throw new Error(`GitHub events pagination failed (${page.status})`);
+    }
+    if (Array.isArray(page.body)) rows.push(...page.body);
+    nextPage = githubNextPage(page.headers);
+  }
   const events = rows
     .map((entry) =>
       object(entry) ? githubPayload(object(entry)!, repo, input.trigger.event) : undefined,
     )
     .filter((event): event is NormalizedProviderEvent => event !== undefined)
     .toReversed();
-  return { events, cursor: { ...cursor, ...next } };
+  return {
+    events,
+    cursor: { ...cursor, ...next },
+    ...(skipped !== undefined ? { skipped } : {}),
+    ...(gapReason !== undefined ? { gapReason } : {}),
+  };
 }
 
 /** Route a declarative event trigger to one first-party provider adapter. */

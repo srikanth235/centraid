@@ -1,19 +1,19 @@
-// governance: allow-repo-hygiene file-size-limit (#387) single dispatch surface for the automation read/run/runs/SSE wire (one switch over one HTTP contract); splitting scatters the route table without a seam
+// governance: allow-repo-hygiene file-size-limit (#387) single dispatch surface for the automation read/turn/item/SSE wire (one switch over one HTTP contract); splitting scatters the route table without a seam
 // HTTP surface for automation runtime ops (issue #141).
 //
 // The desktop used to read automation manifests off the local
-// materialized `main` and read/write run ledgers + analytics from local
+// materialized `main` and read/write turn ledgers + analytics from local
 // SQLite directly — so these operations threw for a remote gateway.
 // These routes move them onto HTTP so the desktop is a thin client for
 // local AND remote gateways alike. Mounted via `serve()`'s
 // `extraHandlers`, after the bearer check.
 //
-// Refs and run ids carry `/` and `:`, so they ride query params rather
+// Refs and turn ids carry `/` and `:`, so they ride query params rather
 // than path segments to keep parsing trivial:
 //
 //   GET  /centraid/_automations                       list → {rows, errors}
 //   GET  /centraid/_automations/read?ref=             one automation → {row}
-//   POST /centraid/_automations/run-now?ref=          fire now → {turnId}
+//   POST /centraid/_automations/turn-now?ref=         fire now → {turnId}
 //   GET  /centraid/_automations/turns?ref=&limit=     turn feed → {turns}
 //   GET  /centraid/_automations/turn?turnId=          one turn → {turn}
 //   POST /centraid/_automations/turn?ref=             interactive turn → TurnStreamEvent SSE
@@ -23,7 +23,7 @@
 //
 // Code (manifests) resolves from the git-store materialized `main`
 // (`<active-main>/apps`); data (run ledgers, analytics) from the
-// gateway's stable `appsDir`. Run-now executes on THIS host with the
+// gateway's stable `appsDir`. Turn-now executes on THIS host with the
 // gateway's own runner config — the desktop's provider key is not used
 // for a remote fire.
 
@@ -55,7 +55,7 @@ import { SseSubscriberCap } from './sse-cap.js';
  */
 const defaultSubscriberCap = new SseSubscriberCap();
 
-/** Live subscriber count on the automation run-events SSE stream. */
+/** Live subscriber count on the automation turn-events SSE stream. */
 export function turnEventsSubscriberCount(): number {
   return defaultSubscriberCap.current();
 }
@@ -63,15 +63,15 @@ export function turnEventsSubscriberCount(): number {
 export interface AutomationsRouteOptions {
   /** Git store — code (manifests) resolve from `<getActiveMainLink()>/apps`. */
   store: WorktreeStore;
-  /** The vault's `journal.db` — every run's full ledger lives here (#280). */
+  /** The vault's `journal.db` — every turn's full ledger lives here (#280). */
   journalDbFile: string;
   /** The vault's run-summary rollup (same file as the ledger, #280). */
   analytics: AnalyticsStore;
   /** Insights aggregator over the same rollup. */
   insights: InsightsStore;
   /**
-   * Fire an automation now (fire-and-forget). Injected so `serve()` wires
-   * `runAutomation` with the gateway's dirs + runner, and tests can
+   * Fire an automation now (fire-and-forget). Injected so `serve()` wires the
+   * automation handler with the gateway's dirs + runner, and tests can
    * stub it. The turnId is minted by the route and passed in.
    */
   runAutomation: (input: { automationRef: string; turnId: string }) => void;
@@ -175,9 +175,9 @@ export function makeAutomationsRouteHandler(
   const codeAppsDir = (): string => path.join(opts.store.getActiveMainLink(), 'apps');
   const subscriberCap = opts.subscriberCap ?? defaultSubscriberCap;
 
-  // Run-ledger store — every run's full ledger is the vault's single
-  // `journal.db` (#280), so run-id → file resolution is gone. A ledger
-  // file that doesn't exist yet just means no run ever landed here.
+  // Turn-ledger store — every automation turn's full ledger is the vault's
+  // single `journal.db` (#280), so per-execution file resolution is gone. A
+  // ledger file that doesn't exist yet just means no turn ever landed here.
   const turnsStore = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
   const turnsStoreForTurnId = (_turnId: string): ConversationStore | undefined => {
     if (!existsSync(opts.journalDbFile)) return undefined;
@@ -328,10 +328,10 @@ export function makeAutomationsRouteHandler(
         return sendJson(res, 200, { manifest, handler });
       }
 
-      if (sub === 'run-now' && method === 'POST') {
+      if (sub === 'turn-now' && method === 'POST') {
         const ref = url.searchParams.get('ref') ?? '';
         if (!automation.parseRef(ref)) {
-          return sendJson(res, 400, { error: 'bad_request', message: 'run-now needs ?ref=' });
+          return sendJson(res, 400, { error: 'bad_request', message: 'turn-now needs ?ref=' });
         }
         const turnId = `${ref}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
         opts.runAutomation({ automationRef: ref, turnId });

@@ -5,7 +5,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 import { nowIso } from '../ids.js';
-import type { FilterClause, Identity } from './types.js';
+import type { ExecutionScopeSpec, FilterClause, Identity } from './types.js';
 import { DEFAULT_PURPOSE } from './types.js';
 
 export interface GrantRow {
@@ -39,6 +39,58 @@ export interface ConsentDeny {
 }
 export type ConsentDecision = ConsentAllow | ConsentDeny;
 
+function verbAllowed(scopeVerb: ScopeRow['verbs'], requested: 'read' | 'act' | 'reveal'): boolean {
+  return requested === 'reveal'
+    ? scopeVerb === 'reveal'
+    : requested === 'read'
+      ? scopeVerb === 'read' || scopeVerb === 'read+act'
+      : scopeVerb === 'act' || scopeVerb === 'read+act';
+}
+
+function intersectFieldMasks(
+  granted: readonly string[] | null,
+  clamped: readonly string[] | null,
+): string[] | null {
+  if (granted === null) return clamped === null ? null : [...clamped];
+  if (clamped === null) return [...granted];
+  const clamp = new Set(clamped);
+  return granted.filter((field) => clamp.has(field));
+}
+
+/**
+ * Pick the most-specific manifest scope that covers this entity. Explicit
+ * row/field anchors therefore attenuate a schema-wide declaration for the
+ * anchored table while that declaration can still cover unrelated tables.
+ */
+function executionClamp(
+  identity: Identity,
+  schema: string,
+  table: string,
+  verb: 'read' | 'act' | 'reveal',
+): { rowFilter: FilterClause[]; fieldMask: string[] | null } | undefined {
+  if (!identity.scopeClamp) return { rowFilter: [], fieldMask: null };
+  const candidates = identity.scopeClamp
+    .filter(
+      (scope) =>
+        scope.schema === schema &&
+        (scope.table === undefined || scope.table === table) &&
+        verbAllowed(scope.verbs, verb),
+    )
+    .toSorted((left, right) => {
+      const specificity = (scope: ExecutionScopeSpec): number =>
+        (scope.table === table ? 4 : 0) +
+        (scope.rowFilter && scope.rowFilter.length > 0 ? 2 : 0) +
+        (scope.fieldMask && scope.fieldMask.length > 0 ? 1 : 0);
+      return specificity(right) - specificity(left);
+    });
+  const scope = candidates[0];
+  if (!scope) return undefined;
+  return {
+    rowFilter: scope.rowFilter ? [...scope.rowFilter] : [],
+    fieldMask: scope.fieldMask ? [...scope.fieldMask] : null,
+  };
+}
+
 function activeGrants(
   vault: DatabaseSync,
   identity: Identity,
@@ -50,6 +102,8 @@ function activeGrants(
       ? { column: 'g.app_id', value: identity.callerId }
       : { column: 'g.grantee_party_id', value: identity.partyId };
   if (selector.value === null) return [];
+  // Consent is first-match: preserve the owner's earliest still-active grant.
+  // rowid makes grants approved in the same clock tick deterministic.
   const rows = vault
     .prepare(
       `SELECT g.grant_id, c.notation AS purpose_notation, g.expires_at
@@ -59,7 +113,7 @@ function activeGrants(
           AND g.status = 'active'
           AND g.revoked_at IS NULL
           AND (g.expires_at IS NULL OR g.expires_at > ?)
-        ORDER BY g.granted_at DESC, g.grant_id DESC`,
+        ORDER BY g.granted_at ASC, g.rowid ASC`,
     )
     .all(selector.value, evaluatedAt) as unknown as GrantRow[];
   return rows.filter((g) => g.purpose_notation === purpose);
@@ -159,6 +213,14 @@ export function evaluateConsent(
   if (identity.kind === 'owner-device') {
     return { decision: 'allow', grantId: null, rowFilter: [], fieldMask: null };
   }
+  const clamp = executionClamp(identity, schema, table, verb);
+  if (!clamp) {
+    return {
+      decision: 'deny',
+      failing: `execution manifest does not declare ${schema}.${table} for verb ${verb}`,
+      grantId: null,
+    };
+  }
   const grants = activeGrants(vault, identity, purpose, evaluatedAt);
   if (grants.length === 0) {
     return { decision: 'deny', failing: `no active grant for purpose ${purpose}`, grantId: null };
@@ -168,22 +230,20 @@ export function evaluateConsent(
     for (const scope of scopesFor(vault, grant.grant_id, schema, table)) {
       // Reveal never rides read or act (issue #293): only an explicit
       // 'reveal' scope covers it, and a 'reveal' scope covers nothing else.
-      const verbOk =
-        verb === 'reveal'
-          ? scope.verbs === 'reveal'
-          : verb === 'read'
-            ? scope.verbs === 'read' || scope.verbs === 'read+act'
-            : scope.verbs === 'act' || scope.verbs === 'read+act';
-      if (!verbOk) continue;
+      if (!verbAllowed(scope.verbs, verb)) continue;
       // High-sensitivity tables never ride a whole-schema scope.
       if (explicitOnly && scope.table_name === null) continue;
       return {
         decision: 'allow',
         grantId: grant.grant_id,
-        rowFilter: scope.row_filter_json
-          ? (JSON.parse(scope.row_filter_json) as FilterClause[])
-          : [],
-        fieldMask: scope.field_mask_json ? (JSON.parse(scope.field_mask_json) as string[]) : null,
+        rowFilter: [
+          ...(scope.row_filter_json ? (JSON.parse(scope.row_filter_json) as FilterClause[]) : []),
+          ...clamp.rowFilter,
+        ],
+        fieldMask: intersectFieldMasks(
+          scope.field_mask_json ? (JSON.parse(scope.field_mask_json) as string[]) : null,
+          clamp.fieldMask,
+        ),
       };
     }
   }

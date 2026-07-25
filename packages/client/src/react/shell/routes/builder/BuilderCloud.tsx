@@ -24,7 +24,7 @@ import toastCss from '../../../styles/toast.module.css';
 //
 // Faithful to the vanilla behaviour: rail section switching, the overview
 // hero + status tiles + recent-activity feed (from `listVersions`), the
-// automations list with enable/disable/run-now/delete + run-result readback,
+// automations list with enable/disable/turn-now/delete + turn-result readback,
 // and the live logs tail with a 3s poll while the Logs section is active.
 // Storage / Users / Secrets / Edge-functions stay disabled "Coming soon"
 // rail rows exactly as the vanilla renders them (no SQL browser).
@@ -116,7 +116,7 @@ function showToast(text: string): void {
   setTimeout(() => toast.remove(), 2400);
 }
 
-// Poll the run ledger until a run finishes — run-now fires in the background,
+// Poll the turn ledger until a turn finishes — turn-now fires in the background,
 // so a caller reporting an outcome must wait for it (vanilla
 // `waitForAutomationRun`).
 async function waitForAutomationRun(runId: string): Promise<CentraidAutomationTurnRecord> {
@@ -261,7 +261,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
       if (!appId) return;
       setRunStates((s) => ({ ...s, [row.name]: { kind: 'running' } }));
       try {
-        // run-now fires in the background and returns the run id; poll the
+        // turn-now fires in the background and returns the turn id; poll the
         // ledger for the finished record to report the outcome.
         const { turnId } = await runAutomationNow({ automationId: row.ref });
         const rec = await waitForAutomationRun(turnId);
@@ -717,7 +717,7 @@ function Logs({
 }
 
 // ---------------------------------------------------------------------------
-// Automations — the per-app cron/webhook automation list with toggle, run-now,
+// Automations — the per-app cron/webhook automation list with toggle, turn-now,
 // delete, and per-row run-result readback.
 function Automations({
   appId,
