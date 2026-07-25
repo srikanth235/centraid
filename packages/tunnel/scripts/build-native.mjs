@@ -54,4 +54,25 @@ const destination = path.join(
   `centraid-tunnel-native.${process.platform}-${process.arch}.node`,
 );
 copyFileSync(source, destination);
+
+// macOS: cargo emits a *linker-signed* Mach-O, a lightweight signature that
+// does not survive being re-materialized by a generic copy (our copyFileSync
+// above, a turbo cache restore, an npm tarball extract). The file still passes
+// `codesign --verify`, but the kernel rejects its pages at fault-in time and
+// SIGKILLs the host process the moment Node dlopen()s it:
+//   EXC_BAD_ACCESS · SIGKILL (Code Signature Invalid) · CODESIGNING/Invalid Page
+// A full ad-hoc signature is self-contained and survives any copy, so sign here
+// — before the artifact enters the turbo cache or a publish tarball.
+if (process.platform === 'darwin') {
+  const signed = spawnSync('codesign', ['--force', '--sign', '-', destination], {
+    stdio: 'inherit',
+  });
+  if (signed.error || signed.status !== 0) {
+    process.stderr.write(
+      `centraid-tunnel: codesign failed for ${destination}; the addon would be SIGKILLed on load\n`,
+    );
+    process.exit(signed.status ?? 1);
+  }
+}
+
 process.stdout.write(`${destination}\n`);
