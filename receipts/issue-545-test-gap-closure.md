@@ -267,3 +267,5 @@ Independent attestation (fresh-context auditor). Evidence: branch `feat/issue-54
 3. **## Checklist mirrors issue #545 A–E acceptance — PASS.** Issue #545 acceptance bullets are exactly A (nightly quality/mutation red + reachability + oauth-worker + mutation missing-score + smoke/scripts/linters + validators + skipIf), B (every B-module named by a direct test; protocol/cli floors up), C (desktop cores; mobile Onboarding/Spaces/Insights/Photos owners; vitest tsx; extension; oauth-worker availability), D (extension/oauth-worker surfaces; partial notes; minimumTests; client/react floor; gateway+agent-runtime mutation seeds; shellcheck/scripts coverage), E (named assertion/sleep hygiene + QUALITY/COVERAGE_REPORT). Receipt checklist is the rolled-up A–E form of that acceptance; `## Out of scope` matches the issue Out list (agent-runtime line-floor campaign, second RN toolchain / 100%, builder-publish e2e un-skip, desktop copilot e2e #470).
 
 - Knip: single flushMacrotasks export (no flushMicrotasks alias).
+
+- Protocol DEFAULT_GATEWAY_CAPABILITIES pin includes automationTurns (#541).

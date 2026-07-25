@@ -14,12 +14,13 @@ describe('DEFAULT_GATEWAY_CAPABILITIES', () => {
       tunnel: true,
       backupWal: true,
       assistOAuth: false,
+      automationTurns: true,
     });
   });
 });
 
 describe('isGatewayCapabilities', () => {
-  it('accepts the required booleans and optional assistOAuth', () => {
+  it('accepts the required booleans and optional assistOAuth / automationTurns', () => {
     expect(isGatewayCapabilities(null)).toBe(false);
     expect(isGatewayCapabilities('x')).toBe(false);
     expect(isGatewayCapabilities({})).toBe(false);
@@ -38,6 +39,7 @@ describe('isGatewayCapabilities', () => {
         tunnel: true,
         backupWal: true,
         assistOAuth: true,
+        automationTurns: true,
       }),
     ).toBe(true);
     expect(
@@ -47,6 +49,15 @@ describe('isGatewayCapabilities', () => {
         tunnel: true,
         backupWal: true,
         assistOAuth: 'yes',
+      }),
+    ).toBe(false);
+    expect(
+      isGatewayCapabilities({
+        webSessions: true,
+        devicePairing: true,
+        tunnel: true,
+        backupWal: true,
+        automationTurns: 'yes',
       }),
     ).toBe(false);
     expect(
