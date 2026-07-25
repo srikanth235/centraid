@@ -10,6 +10,3 @@ export function flushMacrotasks(): Promise<void> {
     setTimeout(resolve, 0);
   });
 }
-
-/** @deprecated Prefer {@link flushMacrotasks}; kept for call-site clarity during rename. */
-export const flushMicrotasks = flushMacrotasks;
