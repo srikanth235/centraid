@@ -8,7 +8,7 @@
 # Tunneling is required: this image builds the native iroh napi relay
 # (packages/tunnel/native) so remote devices can dial the gateway over QUIC.
 
-FROM oven/bun:1.3.13-slim AS build
+FROM oven/bun:1.3.14-slim AS build
 WORKDIR /src
 
 # Native tunnel (napi + data-plane): rustc 1.91 matches packages/tunnel/*/Cargo.toml.
@@ -41,7 +41,7 @@ RUN bunx turbo run build --filter=@centraid/gateway \
 RUN node scripts/gateway-package/assemble-runtime.mjs --root=/src --out=/runtime --packages-only
 
 # Fresh production install against the lean workspace (resolves esbuild, ajv, sharp, …).
-FROM oven/bun:1.3.13-slim AS deps
+FROM oven/bun:1.3.14-slim AS deps
 WORKDIR /app
 COPY --from=build /runtime/ /app/
 # Gateway-only workspace + stripped devDependencies — monorepo bun.lock is not
