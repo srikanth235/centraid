@@ -580,6 +580,14 @@ jobs:
         run: |
           set -euo pipefail
           echo "results: $RESULTS"
+          # Fail closed. `join(needs.*.result)` over a non-empty `needs:` list
+          # cannot be empty today, but an aggregator that returns 0 when it has
+          # nothing to say is the exact shape of #556 — a gate reporting green
+          # because it never looked. Cheap to make impossible.
+          if [ -z "${RESULTS//,/}" ]; then
+            echo "::error::aggregator received no lane results — refusing to pass"
+            exit 1
+          fi
           bad=0
           IFS=',' read -ra each <<< "$RESULTS"
           for result in "${each[@]}"; do

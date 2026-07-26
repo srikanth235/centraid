@@ -235,6 +235,11 @@ jobs:
         run: |
           set -euo pipefail
           echo "release $TAG lane results: $RESULTS"
+          # Fail closed — see the same guard in ci.yml's `check`.
+          if [ -z "${RESULTS//,/}" ]; then
+            echo "::error::aggregator received no lane results — refusing to pass"
+            exit 1
+          fi
           bad=0
           IFS=',' read -ra each <<< "$RESULTS"
           for result in "${each[@]}"; do
