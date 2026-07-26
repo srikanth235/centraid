@@ -18,16 +18,15 @@ before claiming any pairing change "works".
 
 ```sh
 node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs   # happy path + restart + revoke
-node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs     # burn / expiry / refusal
+node tests/agent-e2e-pairing/flows/vps-phone-founding.mjs         # empty VPS → first phone owner + kit
+node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs     # non-burning wrong secret / expiry / refusal
 node tests/agent-e2e-pairing/flows/cross-network-relay.mjs        # real relay transport, needs Docker
 ```
 
 Verdict at `runs/<runId>/verdict.md`; daemon output at `runs/<runId>/gateway.log`.
-On FAIL the workspace is kept — `devices.json`, `pairing-tickets.json`, and
-`endpoint.json` under `runs/<runId>/workspace/gateway/` are the ground truth
-to inspect (for `cross-network-relay`, the equivalent files land under
-`runs/<runId>/workspace/` directly, dumped via `docker exec` before the
-gateway container is torn down).
+On FAIL the workspace is kept — `gateway.db`, `keys/`, `vaults/`, and
+`gateway.log` are the ground truth to inspect. The Docker flow copies
+`gateway.db` into its run workspace before tearing down the container.
 
 `cross-network-relay` is a different tool for a different job: the other two
 flows prove ceremony/hygiene semantics over a loopback transport (device
@@ -54,8 +53,9 @@ running any part of the ceremony, rather than trusting the driver.
   try/catch that swallows — let the harness write the FAIL verdict.
 - **`ctx.note(msg)` for observations the verdict should keep** ("replay
   refused (invalid_ticket)").
-- **Assert on-disk state, not just wire responses.** Enrollment truth is
-  `devices.json`; read it via `ctx.readJson('devices.json')`.
+- **Assert durable state through its supported reader.** Enrollment truth is
+  `gateway.db`; read the device roster through the paired-device route and
+  prove it again after restart.
 - **Every negative check needs a positive control nearby.** "Tunnel refused"
   only means something in a flow where an enrolled device tunneled
   successfully (or would — `expectTunnelRefused` throws if admission
@@ -67,27 +67,25 @@ running any part of the ceremony, rather than trusting the driver.
 - **Expired-ticket checks: mint with `ttlMinutes: 0.001` and sleep ≥ 500ms.**
   Don't shave the sleep to make the flow faster; the mint→redeem roundtrip
   must land clearly past expiry.
-- **Fresh device per trust boundary.** A device that failed to pair must stay
-  unenrolled through the whole flow — reusing it for a later happy path
-  invalidates both assertions.
+- **Fresh device per trust boundary.** If a flow intentionally proves a wrong
+  secret does not burn a ticket, the same identity is its positive control;
+  use a different identity for unrelated attacker checks.
 
 ## Gotchas
 
-- The daemon publishes `endpoint.json` only after its iroh endpoint binds;
-  `pair` fails before that. The harness already waits for the
-  `endpoint: <id>` log line — don't add sleeps.
+- The live `/centraid/_gateway/info` response publishes the refreshable
+  EndpointTicket only after iroh binds. The harness waits for that response;
+  do not add sleeps or read retired cache files.
 - The gateway's iroh endpoint binds with the production n0 relay/discovery
   config — there's no daemon-side knob to disable it. Only the device side
   disables relays and dials the ticket's direct loopback addresses, so the
   requests themselves stay loopback-local; the daemon's `endpoint:`
   readiness line can still be slow or fail on a fully airgapped machine.
 - `--ttl-minutes` accepts fractions; that's what hygiene relies on.
-- The daemon and CLI coordinate through file mtimes (reload-on-change). If
-  you write a flow that edits those files directly, `fs.utimes` a future
-  timestamp like `device-plane.test.ts` does — coarse fs timestamps can hide
-  a same-millisecond write.
-- Vault ids are minted per run; never hard-code them. Parse them from
-  `vault create` / pair-response JSON.
+- The daemon and CLI coordinate through authenticated live routes and
+  `gateway.db`; flows must not edit control-plane state directly.
+- Vault ids are minted per run; never hard-code them. Parse them from the
+  founding or pairing response.
 
 ## Where to look
 

@@ -39,10 +39,6 @@ export function localGatewayDataDir(): string {
   return platformDefaultDataDir();
 }
 
-export function gatewayPrefsFile(_id: string): string {
-  return path.join(localGatewayDataDir(), 'gateway.db');
-}
-
 export function gatewayTemplatesCacheDir(_id: string): string {
   return path.join(localGatewayDataDir(), 'cache', 'templates');
 }

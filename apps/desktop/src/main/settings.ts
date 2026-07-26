@@ -113,7 +113,6 @@ export interface DesktopSettings {
    * `x-centraid-vault` header on every request.
    */
   activeVaultId?: string;
-  /** Derived — `<userData>/gateways/<active>/apps/` (per-app data storage). */
   /**
    * Derived — kind of the active gateway. `'local'` means the
    * desktop runtime owns the loopback listener; `'remote'` means the
@@ -384,9 +383,8 @@ export async function setActiveVaultId(vaultId: string | undefined): Promise<Des
 
 /**
  * Where remote-fetched template copies are cached for a given gateway.
- * Per-gateway (issue #109) so the gateway directory is the complete
- * record of that gateway's local state — `rm -rf gateways/<id>/` wipes
- * everything including downloaded templates. Today the
+ * The cache is gateway-data disposable state, outside Electron userData.
+ * Today the
  * `remoteTemplatesUrl` setting is single-valued (one feed per machine),
  * so the cache content will usually be identical across gateways —
  * the per-gateway slot future-proofs per-gateway template feeds at

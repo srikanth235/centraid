@@ -24,6 +24,10 @@ interface LockStatus {
   detail: string;
 }
 
+export interface LockStatusDependencies {
+  holderPid?: (file: string) => number | undefined;
+}
+
 function holderPid(file: string): number | undefined {
   const result = spawnSync('lsof', ['-t', file], { encoding: 'utf8', timeout: 2_000 });
   if (result.status !== 0) return undefined;
@@ -35,7 +39,9 @@ export async function commandLockStatus(
   args: string[],
   fail: (message: string, code?: number) => never,
   fetchImpl: typeof fetch = fetch,
+  dependencies: LockStatusDependencies = {},
 ): Promise<void> {
+  const findHolderPid = dependencies.holderPid ?? holderPid;
   let dataDir: string | undefined;
   let configPath: string | undefined;
   let json = false;
@@ -57,14 +63,14 @@ export async function commandLockStatus(
     config.port !== undefined && config.port !== 0
       ? await handshakeGateway(`http://127.0.0.1:${config.port}`, undefined, fetchImpl)
       : { ok: false as const };
-  const endpointSecret = daemonKeyStore(layout.keysDir).load('endpoint.key');
+  const endpointSecret = daemonKeyStore(layout.keysDir).load('endpoint-key.bin');
   const expectedEndpointId = endpointSecret ? endpointIdForSecret(endpointSecret) : undefined;
   const answeringTarget =
     live.ok && expectedEndpointId !== undefined && live.info.endpointId === expectedEndpointId;
 
   let status: LockStatus;
   if (answeringTarget) {
-    const pid = holderPid(layout.gatewayDbFile);
+    const pid = findHolderPid(layout.gatewayDbFile);
     status = {
       dataDir: config.dataDir,
       held: true,
@@ -90,7 +96,7 @@ export async function commandLockStatus(
       };
     } catch (error) {
       if (!(error instanceof GatewayLockError)) throw error;
-      const pid = holderPid(layout.gatewayDbFile);
+      const pid = findHolderPid(layout.gatewayDbFile);
       status = {
         dataDir: config.dataDir,
         held: true,

@@ -255,7 +255,7 @@ test('publicPaths serve without the bearer; everything else still 401s (issue #3
   }
 });
 
-test('authorizeBearer (issue #376): admin plane, device plane, and refusal', async () => {
+test('authorizeBearer (issue #376): bearer-only access, device access, and refusal', async () => {
   const runtime = new Runtime({ appsDir: workspace });
   const pluggableServer = await startRuntimeHttpServer({
     runtime,
@@ -280,7 +280,7 @@ test('authorizeBearer (issue #376): admin plane, device plane, and refusal', asy
     });
     expect(bad.status).toBe(401);
 
-    // The admin plane authenticates but stamps no device header.
+    // Bearer-only access authenticates but stamps no device header.
     const admin = await fetch(`${pluggableServer.url}/centraid/_echo-device`, {
       headers: { Authorization: 'Bearer admin-secret' },
     });

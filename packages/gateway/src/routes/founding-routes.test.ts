@@ -39,6 +39,7 @@ test('founding ticket is single-outstanding and initialize enrolls one verified 
     tickets,
     keys: new KeyStore(layout.keysDir),
     recoveryKit,
+    canMintFoundingTicket: () => true,
     deviceAccess: {
       deviceKeyFor: (req) =>
         typeof req.headers['x-test-endpoint'] === 'string'
@@ -54,7 +55,13 @@ test('founding ticket is single-outstanding and initialize enrolls one verified 
     },
   });
   const server = http.createServer((req, res) => void handler(req, res));
-  cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  cleanups.push(
+    () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
+  );
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
@@ -85,6 +92,7 @@ test('founding ticket is single-outstanding and initialize enrolls one verified 
   expect(crashedResponse.status).toBe(500);
   expect(registry.isFresh()).toBe(true);
   expect(tickets.hasActiveFounding()).toBe(true);
+  expect(tickets.pendingFoundingVaults()).toEqual([]);
   expect(enrollments.list()).toEqual([]);
 
   const initializedResponse = await fetch(`${base}/centraid/_vault/vaults:initialize`, {
@@ -106,6 +114,7 @@ test('founding ticket is single-outstanding and initialize enrolls one verified 
   };
   expect(registry.list()).toEqual([initialized.vault]);
   expect(enrollments.get('founder-device', initialized.vault.vaultId)?.trust).toBe('owner');
+  expect(tickets.pendingFoundingVaults()).toEqual([]);
   expect(parseRecoveryKit(initialized.kit, 'correct horse battery staple').targets).toEqual([]);
   expect(JSON.stringify(initialized.kit)).not.toContain(
     new KeyStore(layout.keysDir).export('keyring.key')!.toString('utf8'),

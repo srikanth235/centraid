@@ -13,8 +13,8 @@ const handle = await serve({
   token: 'centraid-web-e2e-token',
   paths: {
     vaultDir: path.join(dataDir, 'vault'),
-    prefsFile: path.join(dataDir, 'prefs.json'),
   },
+  initVaultName: 'Web E2E',
   web: {
     rootDir: path.resolve('dist'),
     host: '127.0.0.1',

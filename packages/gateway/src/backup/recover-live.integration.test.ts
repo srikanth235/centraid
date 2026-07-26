@@ -3,13 +3,17 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * The LIVE-gateway recovery e2e (issue #555): a zero-vault gateway consumes a
  * founding ticket plus recovery kit through the single founding restore route.
  * The recovered vault is mounted, quarantined, and owned by the proved first
- * device; no temporary default vault or separate recovery admin plane exists.
+ * device; no temporary default vault or separate recovery authority exists.
  */
 
 import { afterEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import crypto, { randomBytes } from 'node:crypto';
-import { openRemoteBackupProvider, type RecoveryKitDocument } from '@centraid/backup';
+import {
+  openRemoteBackupProvider,
+  wrapRecoveryKit,
+  type RecoveryKitDocument,
+} from '@centraid/backup';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
 import { KeyStore, ReplicaIndex } from '@centraid/vault';
 import { openVaultRegistry } from '../serve/vault-registry.js';
@@ -135,7 +139,7 @@ async function seedMachineA(
       enabled: true,
       provider: { kind: 'remote', endpoint: server.url, apiKey: server.apiKey },
     },
-    backupDir: await tempDir('recover-live-a-backup'),
+    cacheDir: await tempDir('recover-live-a-backup'),
     vaults: registry,
     health: new HealthRegistry(),
     logger: silentLogger,
@@ -231,7 +235,7 @@ test('a zero-vault gateway restores through one founding capability and enrolls 
     exp: minted.expiresAt,
   });
   const handle: GatewayServeHandle = await serve({
-    paths: { vaultDir: path.join(dataDir, 'vault'), prefsFile: path.join(dataDir, 'prefs.json') },
+    paths: { vaultDir: path.join(dataDir, 'vault') },
     deviceAccess: {
       deviceKeyFor: (req) =>
         typeof req.headers['x-test-endpoint'] === 'string'
@@ -246,6 +250,7 @@ test('a zero-vault gateway restores through one founding capability and enrolls 
   const restored = await fetch(`${handle.url}/centraid/_vault/vaults:restore`, {
     method: 'POST',
     headers: {
+      authorization: `Bearer ${handle.token}`,
       'content-type': 'application/json',
       'x-test-endpoint': 'founder-device',
     },
@@ -288,6 +293,7 @@ test('a zero-vault gateway restores through one founding capability and enrolls 
   const again = await fetch(`${handle.url}/centraid/_vault/vaults:restore`, {
     method: 'POST',
     headers: {
+      authorization: `Bearer ${handle.token}`,
       'content-type': 'application/json',
       'x-test-endpoint': 'founder-device',
     },
@@ -321,7 +327,7 @@ test('one founding restore adopts every backed-up vault and enrolls the owner in
     exp: minted.expiresAt,
   });
   const handle = await serve({
-    paths: { vaultDir: path.join(dataDir, 'vault'), prefsFile: path.join(dataDir, 'prefs.json') },
+    paths: { vaultDir: path.join(dataDir, 'vault') },
     deviceAccess: {
       deviceKeyFor: (req) =>
         typeof req.headers['x-test-endpoint'] === 'string'
@@ -335,6 +341,7 @@ test('one founding restore adopts every backed-up vault and enrolls the owner in
   const restored = await fetch(`${handle.url}/centraid/_vault/vaults:restore`, {
     method: 'POST',
     headers: {
+      authorization: `Bearer ${handle.token}`,
       'content-type': 'application/json',
       'x-test-endpoint': 'multi-founder',
     },
@@ -378,7 +385,6 @@ test('erase then restore on the same box preserves gateway identity and drops pr
   const dataDir = await tempDir('erase-restore-same-box-');
   const paths = {
     vaultDir: path.join(dataDir, 'vault'),
-    prefsFile: path.join(dataDir, 'gateway.db'),
   };
   const backup = {
     enabled: true as const,
@@ -388,14 +394,24 @@ test('erase then restore on the same box preserves gateway identity and drops pr
       apiKey: provider.apiKey,
     },
   };
-  let handle = await serve({ paths, backup, initVaultName: 'Family' });
+  const hostEndpointId = 'a'.repeat(64);
+  let handle = await serve({
+    paths,
+    backup,
+    initVaultName: 'Family',
+    hostDeviceEndpointId: hostEndpointId,
+  });
   const vaultId = handle.vaults.defaultVaultId();
   seedSealedOutbox(handle.vaults.get(vaultId)!);
   await handle.backup!.runBackup(vaultId);
   const kit = await handle.backup!.recoveryKitDocument();
-  await handle.backup!.confirmRecoveryKit();
+  await handle.backup!.verifyRecoveryKit({
+    kit: wrapRecoveryKit(kit, 'test-password'),
+    password: 'test-password',
+    lossConsent: true,
+  });
   const keys = new KeyStore(path.join(dataDir, 'keys'));
-  const endpointBefore = keys.export('endpoint.key');
+  const endpointBefore = keys.export('endpoint-key.bin');
 
   const erased = await fetch(`${handle.url}/centraid/_vault/vaults:erase`, {
     method: 'POST',
@@ -422,7 +438,7 @@ test('erase then restore on the same box preserves gateway identity and drops pr
     exp: minted.expiresAt,
   });
 
-  handle = await serve({ paths, backup });
+  handle = await serve({ paths, backup, hostDeviceEndpointId: hostEndpointId });
   cleanups.push(() => handle.close());
   const rePair = await fetch(`${handle.url}/centraid/_gateway/devices/ticket`, {
     method: 'POST',
@@ -437,7 +453,10 @@ test('erase then restore on the same box preserves gateway identity and drops pr
 
   const restored = await fetch(`${handle.url}/centraid/_vault/vaults:restore`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      authorization: `Bearer ${handle.token}`,
+      'content-type': 'application/json',
+    },
     body: JSON.stringify({
       ticket,
       kit,
@@ -450,5 +469,5 @@ test('erase then restore on the same box preserves gateway identity and drops pr
   const restoredBody = (await restored.json()) as Record<string, unknown>;
   expect(restored.status, JSON.stringify(restoredBody)).toBe(201);
   expect(handle.vaults.get(vaultId)).toBeTruthy();
-  expect(keys.export('endpoint.key')).toEqual(endpointBefore);
+  expect(keys.export('endpoint-key.bin')).toEqual(endpointBefore);
 }, 90_000);

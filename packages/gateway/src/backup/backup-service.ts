@@ -16,8 +16,10 @@ import {
   openLocalBackupProvider,
   openManifest,
   openRemoteBackupProvider,
+  parseRecoveryKit,
   restoreSnapshot,
   recoveryKitFingerprint,
+  wrapRecoveryKit,
   verifySnapshot,
   validateKeyring,
   type BackupProvider,
@@ -65,7 +67,7 @@ import type { StorageConnectionStore } from './storage-connections.js';
 import { GATEWAY_VERSION } from '../version.js';
 import { resolveBackupBackend } from './backup-backend.js';
 import { evaluateBackupHealth } from './backup-health.js';
-import { recoveryKitDocument, writeBackupRecoveryKit } from './backup-recovery-kit.js';
+import { recoveryKitDocument } from './backup-recovery-kit.js';
 import {
   inspectProviderPolicy,
   providerPolicyFor,
@@ -138,7 +140,7 @@ export interface BackupServiceOptions {
   /** Static daemon/CLI configuration. When omitted, the active provider storage connection is resolved live. */
   config?: BackupConfig;
   /** Disposable backup working/cache directory (bundles and restore scratch). */
-  backupDir: string;
+  cacheDir: string;
   gatewayDatabase?: GatewayDatabase;
   keyStore?: KeyStore;
   sourceInstanceId?: string;
@@ -275,7 +277,7 @@ const HOME_DISCOVERY_TTL_MS = 5 * 60 * 1000;
 export class BackupService {
   private homeDiscoveryCache: { at: number; value: HomeDiscovery } | undefined;
   private readonly config: BackupConfig | undefined;
-  private readonly backupDir: string;
+  private readonly cacheDir: string;
   private readonly vaults: VaultRegistry;
   private readonly health: HealthRegistry;
   private readonly logger: RuntimeLogger;
@@ -313,7 +315,7 @@ export class BackupService {
 
   constructor(opts: BackupServiceOptions) {
     this.config = opts.config;
-    this.backupDir = opts.backupDir;
+    this.cacheDir = opts.cacheDir;
     this.vaults = opts.vaults;
     this.health = opts.health;
     this.logger = opts.logger;
@@ -321,18 +323,18 @@ export class BackupService {
     this.provider =
       opts.provider ?? (this.config ? buildBackupProvider(this.config.provider) : undefined);
     this.storageConnections = opts.storageConnections;
-    this.gatewayDatabase = opts.gatewayDatabase ?? GatewayDatabase.open(this.backupDir);
+    this.gatewayDatabase = opts.gatewayDatabase ?? GatewayDatabase.open(this.cacheDir);
     const firstPlane = this.vaults.planesList()[0];
     this.keyStore =
       opts.keyStore ??
       new KeyStore(
         firstPlane
           ? path.dirname(sealKeyFileFor(firstPlane.dir))
-          : path.join(this.backupDir, 'keys'),
+          : path.join(this.cacheDir, 'keys'),
       );
     this.sourceInstanceId =
       opts.sourceInstanceId ??
-      deriveBackupSourceInstanceId(this.keyStore.loadOrCreate('endpoint.key'));
+      deriveBackupSourceInstanceId(this.keyStore.loadOrCreate('endpoint-key.bin'));
     this.assembleEntries = opts.assembleEntries ?? assembleSourceEntries;
     this.snapshot = opts.snapshot ?? createSnapshot;
     this.casReconcile = opts.casReconcile ?? runCasOnlyReconciliation;
@@ -751,7 +753,7 @@ export class BackupService {
     // in a PERSISTENT per-vault dir (never wiped) so it survives between ticks
     // and only re-bundles when the store's refs move. Everything else is read in
     // place — there is no ephemeral staging dir.
-    const bundleDir = path.join(this.backupDir, 'code-bundle', vaultId);
+    const bundleDir = path.join(this.cacheDir, 'code-bundle', vaultId);
     try {
       const entries = await this.assembleEntries({
         plane,
@@ -1176,7 +1178,7 @@ export class BackupService {
     }
     this.assertTargetBackend(target, backend);
     const keyring = await this.ensureKeyring();
-    const destDir = path.join(this.backupDir, 'restore-verify', `${vaultId}-${this.now()}`);
+    const destDir = path.join(this.cacheDir, 'restore-verify', `${vaultId}-${this.now()}`);
     try {
       const result = await restoreSnapshot({
         provider: backend.provider,
@@ -1714,17 +1716,21 @@ export class BackupService {
     return status.kitFingerprint === fingerprint ? status : this.recoveryKit.begin(fingerprint);
   }
 
-  /** Set the recovery-kit confirmation to now (epoch seconds). One-way —
-   *  confirming again just refreshes the timestamp. */
-  async confirmRecoveryKit(): Promise<RecoveryKitState> {
-    const backend = await this.backend();
-    if (backend) {
-      const document = await this.currentRecoveryKitDocument(backend.label);
-      const fingerprint = recoveryKitFingerprint(document);
-      const status = await this.recoveryKit.status();
-      if (status.kitFingerprint !== fingerprint) await this.recoveryKit.begin(fingerprint);
-    }
-    return this.recoveryKit.confirm();
+  /**
+   * Confirm only a wrapped kit that the operator re-selected and decrypted.
+   * There is deliberately no no-argument acknowledgement path.
+   */
+  async verifyRecoveryKit(input: {
+    kit: unknown;
+    password: string;
+    lossConsent: true;
+  }): Promise<RecoveryKitState> {
+    if (input.lossConsent !== true) throw new Error('recovery-kit loss consent is required');
+    const document = parseRecoveryKit(input.kit, input.password);
+    const fingerprint = recoveryKitFingerprint(document);
+    const state = await this.recoveryKit.verify(fingerprint);
+    if (!state) throw new Error('selected recovery kit is stale or belongs to another gateway');
+    return state;
   }
 
   /** Rotate the backup epoch in KeyStore custody and invalidate the exported kit once. */
@@ -1770,7 +1776,7 @@ export class BackupService {
     }
     const targetInfo = await backend.provider.getTarget(target.targetId);
     const generation = Math.max(target.generation, targetInfo.currentGeneration) + 1;
-    const bundleDir = path.join(this.backupDir, 'code-bundle', vaultId);
+    const bundleDir = path.join(this.cacheDir, 'code-bundle', vaultId);
     const walTipTickMs = this.confirmedMarkerTip(shipper, target);
     const entries = await this.assembleEntries({
       plane,
@@ -1934,19 +1940,15 @@ export class BackupService {
     };
   }
 
-  async writeKit(destFile: string): Promise<void> {
+  async writeKit(destFile: string, password: string): Promise<void> {
     const backend = await this.backend();
     if (!backend) throw new Error('backup is not configured — add a provider backup connection');
-    const keyring = await this.ensureKeyring();
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
-    await writeBackupRecoveryKit({
-      keyring,
-      state,
-      provider: backend.label,
-      destFile,
-      keyStore: this.keyStore,
-    });
     const document = await this.currentRecoveryKitDocument(backend.label);
+    const wrapped = wrapRecoveryKit(document, password);
+    await fs.writeFile(destFile, `${JSON.stringify(wrapped, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
     const fingerprint = recoveryKitFingerprint(document);
     const status = await this.recoveryKit.status();
     if (status.kitFingerprint !== fingerprint) await this.recoveryKit.begin(fingerprint);

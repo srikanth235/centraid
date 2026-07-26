@@ -171,3 +171,78 @@ test('revocation cascades web sessions and closes the iroh transport', async () 
   expect(f.sessions.find(tokenHash)).toBeUndefined();
   expect(f.onEndpointRevoked).toHaveBeenCalledWith('member-key');
 });
+
+test('revoking the last owner requires typing the vault name exactly', async () => {
+  const f = await harness();
+  const owner = f.enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-a',
+    label: 'Owner',
+    trust: 'owner',
+  });
+  const url = `${f.base}/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}`;
+
+  const missing = await fetch(url, {
+    method: 'DELETE',
+    headers: deviceHeaders(owner.endpointId),
+  });
+  expect(missing.status).toBe(409);
+  expect(await missing.json()).toMatchObject({ error: 'last_owner_confirmation_required' });
+
+  const wrong = await fetch(url, {
+    method: 'DELETE',
+    headers: deviceHeaders(owner.endpointId),
+    body: JSON.stringify({ confirmLastOwner: 'personal' }),
+  });
+  expect(wrong.status).toBe(409);
+
+  const confirmed = await fetch(url, {
+    method: 'DELETE',
+    headers: deviceHeaders(owner.endpointId),
+    body: JSON.stringify({ confirmLastOwner: 'Personal' }),
+  });
+  expect(confirmed.status).toBe(200);
+  expect(f.enrollments.listByVault('vault-a')).toEqual([]);
+});
+
+test('compute profile validates every capability and persists a valid update', async () => {
+  const f = await harness();
+  const device = f.enrollments.enroll({
+    endpointId: 'device-key',
+    vaultId: 'vault-a',
+    label: 'Phone',
+    trust: 'full',
+  });
+  const url = `${f.base}/centraid/_gateway/devices/${encodeURIComponent(device.enrollmentId)}/compute`;
+
+  const invalid = await fetch(url, {
+    method: 'PUT',
+    headers: deviceHeaders(device.endpointId),
+    body: JSON.stringify({ contributeWhileCharging: true, capabilities: { previews: true } }),
+  });
+  expect(invalid.status).toBe(400);
+
+  const capabilities = {
+    previews: true,
+    poster: false,
+    pdfText: true,
+    ocr: false,
+    embedding: true,
+    transcript: false,
+    edgeSeal: true,
+    backgroundTransfer: false,
+  };
+  const updated = await fetch(url, {
+    method: 'PUT',
+    headers: deviceHeaders(device.endpointId),
+    body: JSON.stringify({ contributeWhileCharging: true, capabilities }),
+  });
+  expect(updated.status).toBe(200);
+  expect(await updated.json()).toMatchObject({
+    device: { compute: { contributeWhileCharging: true, capabilities } },
+  });
+  expect(f.enrollments.get(device.endpointId, device.vaultId)?.compute).toMatchObject({
+    contributeWhileCharging: true,
+    capabilities,
+  });
+});

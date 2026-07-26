@@ -9,7 +9,7 @@ import { currentReplicaLogState, recordReplicaIntentOutcome } from '@centraid/va
 import { afterEach, expect, test, vi } from 'vitest';
 import { EnrollmentStore } from '../serve/enrollment-store.js';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
-import { runWithVaultContext } from '../serve/vault-context.js';
+import { runWithVaultContext, vaultContext } from '../serve/vault-context.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import { makeReplicaRouteHandler } from './replica-routes.js';
 
@@ -26,25 +26,39 @@ async function fixture(
   plane: VaultPlane;
   enrollments: EnrollmentStore;
   handler: ReturnType<typeof makeReplicaRouteHandler>;
+  unscopedHandler: ReturnType<typeof makeReplicaRouteHandler>;
 }> {
   const dir = await tempDir(`replica-routes-${crypto.randomUUID()}-`);
   const plane = openVaultPlane({ bootstrap: true, dir, logger, enableWalShipper: false });
-  const enrollments = EnrollmentStore.open(path.join(dir, 'devices.json'));
+  const enrollments = EnrollmentStore.open(path.join(dir, 'gateway.db'));
   const vaults = { current: () => plane } as unknown as VaultRegistry;
-  const handler = makeReplicaRouteHandler(vaults, {
+  const unscopedHandler = makeReplicaRouteHandler(vaults, {
     enrollments,
     dispatchIntent: vi.fn().mockResolvedValue({ status: 'executed' }),
     pollIntervalMs: 1,
     heartbeatMs: 5,
     ...options,
   });
+  const fixtureDevice = 'fixture-device';
+  enrollments.enroll({
+    endpointId: fixtureDevice,
+    vaultId: plane.boot.vaultId,
+    label: 'Fixture device',
+    rememberDevice: true,
+  });
+  const handler: typeof unscopedHandler = (req, res) =>
+    vaultContext()?.deviceKey
+      ? unscopedHandler(req, res)
+      : runWithVaultContext({ vaultId: plane.boot.vaultId, deviceKey: fixtureDevice }, () =>
+          unscopedHandler(req, res),
+        );
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   cleanups.push(() => plane.stop());
   plane.approveGrant('agenda', {
     purpose: 'dpv:ServiceProvision',
     scopes: [{ schema: 'schedule', table: 'task', verbs: 'read+act' }],
   });
-  return { plane, enrollments, handler };
+  return { plane, enrollments, handler, unscopedHandler };
 }
 
 function task(plane: VaultPlane, id: string, title: string): void {
@@ -108,6 +122,19 @@ class MockResponse extends EventTarget {
     return JSON.parse(this.body) as T;
   }
 }
+
+test('replica routes fail closed without an authenticated device identity', async () => {
+  const { unscopedHandler } = await fixture();
+  const res = new MockResponse();
+
+  await unscopedHandler(
+    request('/centraid/_vault/replica/bootstrap'),
+    res as unknown as ServerResponse,
+  );
+
+  expect(res.statusCode).toBe(403);
+  expect(res.json()).toMatchObject({ error: 'replica_device_identity_required' });
+});
 
 test('bootstrap at N, filtered pull, checkpoint, and the single resumable SSE tail agree', async () => {
   const { plane, enrollments, handler } = await fixture();

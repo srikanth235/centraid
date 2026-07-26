@@ -6,7 +6,8 @@
 //    redeemed over `centraid/pair/1` (pairWithDesktop).
 // 2. Headless VPS ticket — base64url JSON `{v:1, kind:'centraid-gw-pair', gw, t, s, …}`
 //    from `centraid-gateway pair` / `pair --qr`, redeemed over `centraid/gw-pair/1`
-//    (pairWithGateway). The stored tunnel ticket is `gw` (gateway EndpointTicket).
+//    (pairWithGateway). Only `gw`, a refreshable EndpointTicket address hint,
+//    is stored; one-time `t`/`s` capabilities are discarded.
 //
 // The phone never holds a gateway bearer. From then on `ensureTunnelStarted()`
 // runs a localhost HTTP proxy — everything (documents, module imports, SSE)
@@ -36,7 +37,7 @@ import {
   LINK_DESKTOP_NAME_KEY,
   LINK_DEVICE_ID_KEY,
   LINK_SECRET_KEY,
-  LINK_TICKET_KEY,
+  LINK_ENDPOINT_HINT_KEY,
   addSpace,
   getActiveSpace,
   hydrateSpaces,
@@ -48,7 +49,12 @@ import { Store } from '../storage';
 import { parsePairingInput } from './phone-link-parse';
 
 export { parsePairingInput, parsePairQr } from './phone-link-parse';
-export type { DesktopPairPayload, GatewayPairPayload, PairingInput } from './phone-link-parse';
+export type {
+  DesktopPairPayload,
+  GatewayFoundingPayload,
+  GatewayPairPayload,
+  PairingInput,
+} from './phone-link-parse';
 
 // The active-slot keys now live in their new owner, lib/spaces (the Spaces
 // registry projects the active (gateway, vault) tuple into them); imported above
@@ -70,7 +76,7 @@ export async function hydratePhoneLink(): Promise<void> {
   // and projects the active Space into the LINK_* slot keys read below.
   await hydrateSpaces();
   await Promise.all([
-    hydrateSecure(LINK_TICKET_KEY, ''),
+    hydrateSecure(LINK_ENDPOINT_HINT_KEY, ''),
     Store.hydrate<string>(LINK_DESKTOP_NAME_KEY, ''),
     Store.hydrate<string>(LINK_DEVICE_ID_KEY, ''),
     hydrateSecure(LINK_SECRET_KEY, ''),
@@ -78,7 +84,7 @@ export async function hydratePhoneLink(): Promise<void> {
 }
 
 export function isPaired(): boolean {
-  return Boolean(getSecure(LINK_TICKET_KEY, '') && getSecure(LINK_SECRET_KEY, ''));
+  return Boolean(getSecure(LINK_ENDPOINT_HINT_KEY, '') && getSecure(LINK_SECRET_KEY, ''));
 }
 
 export function getDesktopName(): string {
@@ -94,7 +100,7 @@ export async function pair(
   deviceName: string,
 ): Promise<{ desktopName: string; deviceId: string }> {
   const parsed = parsePairingInput(qrPayloadString);
-  if (!parsed) {
+  if (!parsed || parsed.kind === 'centraid-gw-found') {
     throw new PhoneLinkError(
       'invalid_qr',
       'That is not a Centraid pairing code. Scan the desktop QR, or paste a ticket from `centraid-gateway pair`.',
@@ -127,10 +133,10 @@ export async function pair(
       secretKeyB64,
       ticket: parsed.ticket,
     });
-    if (!result.ok || !result.deviceId) {
+    if (!result.ok || !result.deviceId || !result.gatewayId) {
       throw new PhoneLinkError(
         'pair_failed',
-        result.error ?? 'Pairing was refused by the desktop.',
+        result.error ?? 'Desktop did not return its durable gateway EndpointId.',
       );
     }
     const desktopName = result.desktopName ?? '';
@@ -142,14 +148,14 @@ export async function pair(
       /* not running */
     });
     // Record this desktop as the active Space; addSpace projects the active
-    // LINK_* slot (ticket + names). vaultId starts empty and is filled by
+    // LINK_* slot (endpoint hint + names). vaultId starts empty and is filled by
     // ReplicaProvider's bootstrap probe.
     await addSpace({
-      gatewayId: desktopName || deviceId,
+      gatewayId: result.gatewayId,
       desktopName,
       deviceId,
       vaultId: '',
-      ticket: parsed.ticket,
+      endpointHint: parsed.ticket,
     });
     return { desktopName, deviceId };
   }
@@ -173,19 +179,21 @@ export async function pair(
   await stopTunnel().catch(() => {
     /* not running */
   });
+  const gatewayId = result.gatewayId;
+  if (!gatewayId) {
+    throw new PhoneLinkError('pair_failed', 'Gateway did not return its EndpointId.');
+  }
   const desktopName = result.vaultName || result.gatewayName || parsed.vaultName || 'Gateway';
   const deviceId = result.enrollmentId || result.gatewayId || result.deviceId || 'gateway';
-  // Record this gateway as the active Space (ticket = the gateway EndpointTicket).
-  // gatewayId mirrors the value ReplicaProvider keys the replica on
-  // (`getDesktopName()` → the desktop/vault name); vaultId starts empty and is
-  // filled by the bootstrap probe. addSpace projects the active LINK_* slot.
+  // EndpointId is durable identity. `gw` is only a refreshable dial hint; a
+  // relay change updates it in-place because addSpace keys on EndpointId.
   await addSpace({
-    gatewayId: desktopName || deviceId,
+    gatewayId,
     desktopName,
     deviceId,
-    vaultId: '',
+    vaultId: result.vaultId ?? '',
     vaultName: parsed.vaultName,
-    ticket: parsed.gw,
+    endpointHint: parsed.gw,
   });
   return { desktopName, deviceId };
 }
@@ -266,7 +274,7 @@ export async function ensureTunnelStarted(): Promise<{ baseUrl: string } | undef
     try {
       const { port } = await startTunnel({
         secretKeyB64: getSecure(LINK_SECRET_KEY, ''),
-        ticket: getSecure(LINK_TICKET_KEY, ''),
+        ticket: getSecure(LINK_ENDPOINT_HINT_KEY, ''),
       });
       return { baseUrl: `http://127.0.0.1:${port}` };
     } catch (err) {

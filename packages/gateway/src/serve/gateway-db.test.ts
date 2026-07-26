@@ -6,6 +6,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { StorageConnectionStore } from '../backup/storage-connections.js';
 import { GatewayDatabase, GatewayLockError } from './gateway-db.js';
+import { openVaultRegistry } from './vault-registry.js';
 
 const opened: GatewayDatabase[] = [];
 afterEach(() => {
@@ -26,6 +27,8 @@ test('installs the full vaultless schema without a vault catalog or shm sidecar'
     'backup_targets',
     'cas_reconciliations',
     'devices',
+    'erase_intents',
+    'founding_ticket_reservations',
     'gateway_meta',
     'prefs',
     'recovery_kit',
@@ -35,7 +38,32 @@ test('installs the full vaultless schema without a vault catalog or shm sidecar'
     'web_sessions',
   ]);
   expect(tables).not.toContain('vaults');
+  expect(
+    (
+      gateway.db.prepare('PRAGMA table_info(founding_ticket_reservations)').all() as Array<{
+        name: string;
+      }>
+    ).map((column) => column.name),
+  ).toContain('pending_vault_ids_json');
   expect(existsSync(path.join(dir, 'gateway.db-shm'))).toBe(false);
+  for (const retired of [
+    'prefs.json',
+    'devices.json',
+    'tickets.json',
+    'recovery-kit.json',
+    'backup.json',
+    'endpoint.json',
+    'gateway.lease',
+    'gateway.lock.db',
+    'profile.json',
+    'gateway.status.json',
+    'gateway.ownership.json',
+    'token.bin',
+    'storage',
+    'backup',
+  ]) {
+    expect(existsSync(path.join(dir, retired)), retired).toBe(false);
+  }
 });
 
 test('the gateway database itself is the exclusive lifetime lock', async () => {
@@ -104,16 +132,37 @@ test('the real gateway tree and every database table contain no raw or base64 ke
   const keyStore = new KeyStore(path.join(dir, 'keys'), {
     protector: aesGcmKeyProtector(Buffer.alloc(32, 0xa5)),
   });
-  const secrets = [
-    Buffer.alloc(32, 0x11),
-    Buffer.alloc(32, 0x22),
-    Buffer.alloc(32, 0x33),
-    Buffer.alloc(32, 0x44),
-  ];
-  keyStore.store('endpoint.key', secrets[0]!);
-  keyStore.store('vault-a.sealkey', secrets[1]!);
-  keyStore.store('connections.sealkey', secrets[2]!);
-  keyStore.store('keyring.key', secrets[3]!);
+  const endpointSecret = Buffer.alloc(32, 0x11);
+  const connectionsSecret = Buffer.alloc(32, 0x33);
+  const keyringSecret = Buffer.alloc(32, 0x44);
+  keyStore.store('endpoint-key.bin', endpointSecret);
+  keyStore.store('connections.sealkey', connectionsSecret);
+  keyStore.store('keyring.key', keyringSecret);
+  const registry = openVaultRegistry({
+    rootDir: path.join(dir, 'vault'),
+    cacheRootDir: path.join(dir, 'cache'),
+    keyStore,
+    logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+    ownerName: 'Priya',
+  });
+  const vault = registry.create('Protected vault');
+  const plane = registry.get(vault.vaultId)!;
+  expect(
+    plane.gateway.invoke(plane.ownerCredential, {
+      command: 'locker.add_item',
+      input: {
+        type: 'login',
+        title: 'example.com',
+        username: 'priya',
+        password: 'real-sealed-row',
+      },
+      purpose: 'dpv:ServiceProvision',
+    }).status,
+  ).toBe('executed');
+  const vaultSecret = keyStore.export(`${vault.vaultId}.sealkey`);
+  expect(vaultSecret).toHaveLength(32);
+  registry.stop();
+  const secrets = [endpointSecret, vaultSecret!, connectionsSecret, keyringSecret];
   const connections = await StorageConnectionStore.open({ database: gateway, keyStore });
   await connections.create({
     kind: 'provider',

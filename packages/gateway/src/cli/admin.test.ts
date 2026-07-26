@@ -85,7 +85,7 @@ function lastJson(text: string): Record<string, unknown> {
 async function fakePairDaemon(): Promise<typeof fetch> {
   const layout = daemonLayoutFor(dataDir);
   const secret = Buffer.alloc(32, 7);
-  new KeyStore(layout.keysDir).store('endpoint.key', secret);
+  new KeyStore(layout.keysDir).store('endpoint-key.bin', secret);
   const endpointId = endpointIdForSecret(secret);
   return (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(
@@ -201,6 +201,40 @@ test('devices add / list / revoke, scoped by vault', async () => {
   await expect(
     capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'ep-gone'], fail)),
   ).rejects.toThrow(/no enrollment/);
+});
+
+test('last-owner revoke requires the vault name and SSH can restore an owner', async () => {
+  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+  const owner = lastJson(
+    await capture(() =>
+      commandDevices(
+        ['add', '--data-dir', dataDir, 'ep-owner', '--vault', 'Family', '--trust', 'owner'],
+        fail,
+      ),
+    ),
+  );
+  const enrollmentId = owner.enrollmentId as string;
+
+  await expect(
+    capture(() => commandDevices(['revoke', '--data-dir', dataDir, enrollmentId], fail)),
+  ).rejects.toThrow(/last owner.*--confirm-last-owner "Family"/i);
+
+  await capture(() =>
+    commandDevices(
+      ['revoke', '--data-dir', dataDir, enrollmentId, '--confirm-last-owner', 'Family'],
+      fail,
+    ),
+  );
+
+  const recovered = lastJson(
+    await capture(() =>
+      commandDevices(
+        ['add', '--data-dir', dataDir, 'ep-recovery', '--vault', 'Family', '--trust', 'owner'],
+        fail,
+      ),
+    ),
+  );
+  expect(recovered).toMatchObject({ endpointId: 'ep-recovery', trust: 'owner' });
 });
 
 test('devices admin rejects bad usage + unknown vault', async () => {
@@ -408,12 +442,15 @@ test('device plane: an unenrolled endpoint derives identity from the custody key
     logger: silentLogger,
     relays: 'disabled',
   });
+  plane.pairing.tickets.mintFounding();
+  expect(registry.isFresh()).toBe(true);
+  expect(plane.dataPlaneControl.authorize('first-device')).toMatchObject({ allowed: true });
   // Relays disabled keeps the endpoint offline; identity remains derivable
   // from the custody key without a stale address cache.
   const handle = await plane.startEndpoint({ baseUrl: 'http://127.0.0.1:1', token: 't' });
   try {
     expect(handle?.endpointId).toBeTruthy();
-    const secret = new KeyStore(layout.keysDir).load('endpoint.key');
+    const secret = new KeyStore(layout.keysDir).load('endpoint-key.bin');
     expect(secret).not.toBeNull();
     expect(endpointIdForSecret(secret!)).toBe(handle!.endpointId);
     expect(handle!.ticket()).toBeTruthy();

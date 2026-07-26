@@ -9,7 +9,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  */
 
 import { afterEach, expect, test } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
 import { openVaultRegistry } from '../serve/vault-registry.js';
@@ -63,7 +63,7 @@ async function capture(fn: () => Promise<void> | void): Promise<{ out: string; e
  *  recovery kit exported to `kitFile`. Returns the kit file + api-key + vaultId. */
 async function seedAndExportKit(
   server: Awaited<ReturnType<typeof startFakeProviderServer>>,
-): Promise<{ kitFile: string; apiKey: string; vaultId: string }> {
+): Promise<{ kitFile: string; passwordFile: string; apiKey: string; vaultId: string }> {
   const vaultRoot = await tempDir('recover-cli-a');
   const backupDir = await tempDir('recover-cli-a-backup');
   const registry = openVaultRegistry({
@@ -79,7 +79,7 @@ async function seedAndExportKit(
       enabled: true,
       provider: { kind: 'remote', endpoint: server.url, apiKey: server.apiKey },
     },
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health: new HealthRegistry(),
     logger: silentLogger,
@@ -87,21 +87,35 @@ async function seedAndExportKit(
   cleanups.push(() => service.stop());
   await service.runBackup(vaultId);
   const kitFile = path.join(await tempDir('recover-cli-kit'), 'kit.json');
-  await service.writeKit(kitFile);
-  return { kitFile, apiKey: server.apiKey, vaultId };
+  await service.writeKit(kitFile, 'correct horse battery staple');
+  const passwordFile = path.join(await tempDir('recover-cli-password'), 'password.txt');
+  writeFileSync(passwordFile, 'correct horse battery staple\n', { mode: 0o600 });
+  return { kitFile, passwordFile, apiKey: server.apiKey, vaultId };
 }
 
 test('recover prints the found-your-vault facts, then a metered home gates without --yes and proceeds with it', async () => {
   const server = await startFakeProviderServer();
   cleanups.push(() => server.close());
-  const { kitFile, apiKey, vaultId } = await seedAndExportKit(server);
+  const { kitFile, passwordFile, apiKey, vaultId } = await seedAndExportKit(server);
   const dataDir = await tempDir('recover-cli-blank');
 
   // Without --yes: the fake home is metered-egress, so the gate refuses after
   // printing the facts, and nothing is written.
   const refused = await capture(() =>
     expect(
-      commandRecover(['--kit', kitFile, '--api-key', apiKey, '--data-dir', dataDir], fail),
+      commandRecover(
+        [
+          '--kit',
+          kitFile,
+          '--password-file',
+          passwordFile,
+          '--api-key',
+          apiKey,
+          '--data-dir',
+          dataDir,
+        ],
+        fail,
+      ),
     ).rejects.toThrow(/metered-egress/),
   );
   expect(refused.err).toMatch(/found your vault/);
@@ -110,7 +124,20 @@ test('recover prints the found-your-vault facts, then a metered home gates witho
   // With --yes: the recovery runs to completion; the JSON report lands on
   // stdout and the phase progress + fence reminder on stderr.
   const done = await capture(() =>
-    commandRecover(['--kit', kitFile, '--api-key', apiKey, '--data-dir', dataDir, '--yes'], fail),
+    commandRecover(
+      [
+        '--kit',
+        kitFile,
+        '--password-file',
+        passwordFile,
+        '--api-key',
+        apiKey,
+        '--data-dir',
+        dataDir,
+        '--yes',
+      ],
+      fail,
+    ),
   );
   const report = JSON.parse(done.out.trim()) as {
     vaultId: string;

@@ -11,6 +11,11 @@ When backup, restore, or blank-machine `recover` strands mid-flight. Product pat
 | **Fencing** | Successful recover adopts with generation bump so the old machine's next register fails (no split-brain) |
 | Keys | Sealing keys / recovery kit are outside casual vault copy — need the kit + provider credentials |
 
+The recovery-kit passphrase wrap is **load-bearing key custody**, not a
+convenience. The kit contains the backup keyring and backed-up vault DEKs;
+without its password those keys remain unavailable even when the wrapped file
+and provider objects are both present.
+
 ## Symptoms
 
 - Founding restore stuck in `fetching` / `replaying`

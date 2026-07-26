@@ -53,7 +53,6 @@ test('revocation removes web sessions and closes the admitted iroh endpoint', as
     paths: {
       dataDir,
       vaultDir: path.join(dataDir, 'vault'),
-      prefsFile: path.join(dataDir, 'prefs.json'),
     },
     gatewayDatabase: database,
     token: LOOPBACK_SECRET,

@@ -91,16 +91,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     // reason: its own one-time ticket secret IS the auth, checked by
     // `makePairRouteHandler` itself. Only present when the daemon wired
     // `devicePairing` — the desktop embed never adds this path.
-    publicPaths: [
-      OAUTH_CALLBACK_PATH,
-      WEB_SESSION_REDEEM_PATH,
-      ROUTES.gatewayInfo,
-      ROUTES.gatewayFoundingTicket,
-      ROUTES.vaultInitialize,
-      ROUTES.vaultInitializeVerify,
-      ROUTES.vaultRestore,
-      '/centraid/_gateway/devices/ticket',
-    ],
+    publicPaths: [OAUTH_CALLBACK_PATH, WEB_SESSION_REDEEM_PATH, ROUTES.gatewayInfo],
     publicPathPrefixes: [WEBHOOK_ROUTE_PREFIX],
   };
   if (options.host !== undefined) serverOptions.host = options.host;

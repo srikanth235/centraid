@@ -556,6 +556,39 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  pairing-founding:
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.suite == 'all' ||
+      github.event.inputs.suite == 'pairing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+        with:
+          bun-version: 1.3.13
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+      - run: bun install --frozen-lockfile
+      - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: node scripts/test-report/prepare.mjs
+      - run: node tests/agent-e2e-pairing/flows/vps-phone-founding.mjs
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-evidence-pairing-founding
+          path: artifacts/
+          retention-days: 7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: always()
+        with:
+          name: nightly-debug-pairing-founding-runs
+          path: tests/agent-e2e-pairing/runs/
+          retention-days: 7
+          if-no-files-found: ignore
+
   pairing-ticket-hygiene:
     if: >
       github.event_name != 'workflow_dispatch' ||
@@ -658,6 +691,7 @@ jobs:
         mobile-e2e-ios,
         mobile-e2e-android,
         pairing-lifecycle,
+        pairing-founding,
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
         mutation-testing,
@@ -918,6 +952,7 @@ jobs:
         mobile-e2e-ios,
         mobile-e2e-android,
         pairing-lifecycle,
+        pairing-founding,
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
         mutation-testing,
@@ -981,6 +1016,7 @@ jobs:
           - mobile-e2e-ios: \`${{ needs.mobile-e2e-ios.result }}\`
           - mobile-e2e-android: \`${{ needs.mobile-e2e-android.result }}\`
           - pairing-lifecycle: \`${{ needs.pairing-lifecycle.result }}\`
+          - pairing-founding: \`${{ needs.pairing-founding.result }}\`
           - pairing-ticket-hygiene: \`${{ needs.pairing-ticket-hygiene.result }}\`
           - pairing-cross-network-relay: \`${{ needs.pairing-cross-network-relay.result }}\`
           - mutation-testing: \`${{ needs.mutation-testing.result }}\`

@@ -121,3 +121,69 @@ test('gateway status is additive and older payloads default to ready', () => {
     }),
   ).toMatchObject({ ok: true, info: { status: 'ready' } });
 });
+
+test('gateway endpoint identity and dial hints are preserved only when strings', () => {
+  const payload = buildGatewayInfoPayload({
+    instanceId: 'i1',
+    startedAt: 1,
+    uptimeMs: 2,
+    endpointId: 'endpoint-1',
+    endpointTicket: 'ticket-1',
+  });
+  expect(payload.endpointId).toBe('endpoint-1');
+  expect(payload.endpointTicket).toBe('ticket-1');
+  expect(judgeGatewayInfo(payload)).toMatchObject({
+    ok: true,
+    info: {
+      endpointId: 'endpoint-1',
+      endpointTicket: 'ticket-1',
+    },
+  });
+
+  const invalid = judgeGatewayInfo({
+    version: GATEWAY_VERSION,
+    protocolVersion: GATEWAY_PROTOCOL_VERSION,
+    minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+    endpointId: 42,
+    endpointTicket: null,
+  });
+  expect(invalid.ok).toBe(true);
+  if (!invalid.ok) return;
+  expect(invalid.info).not.toHaveProperty('endpointId');
+  expect(invalid.info).not.toHaveProperty('endpointTicket');
+});
+
+test('malformed handshake details distinguish shape, version, and protocol failures', () => {
+  expect(judgeGatewayInfo('not-an-object')).toEqual({
+    ok: false,
+    reason: 'malformed',
+    detail: 'gateway info was not an object',
+  });
+  expect(judgeGatewayInfo({ protocolVersion: GATEWAY_PROTOCOL_VERSION })).toEqual({
+    ok: false,
+    reason: 'malformed',
+    detail: 'gateway info missing version string',
+  });
+  expect(
+    judgeGatewayInfo({
+      version: GATEWAY_VERSION,
+      protocolVersion: 'not-a-number',
+      schemaEpoch: 'also-not-a-number',
+    }),
+  ).toEqual({
+    ok: false,
+    reason: 'malformed',
+    detail: 'gateway info missing protocolVersion (or schemaEpoch fallback)',
+  });
+});
+
+test('an invalid minimum protocol falls back to the peer protocol', () => {
+  const result = judgeGatewayInfo({
+    version: GATEWAY_VERSION,
+    protocolVersion: GATEWAY_PROTOCOL_VERSION,
+    minSupportedProtocol: 2.5,
+  });
+  expect(result.ok).toBe(true);
+  if (!result.ok) return;
+  expect(result.info.minSupportedProtocol).toBe(GATEWAY_PROTOCOL_VERSION);
+});

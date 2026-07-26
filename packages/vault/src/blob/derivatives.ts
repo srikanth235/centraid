@@ -1,6 +1,6 @@
 // Derivative contribution vocabulary (issue #414 D9/D13).
 //
-// This is the one registry shared by ingress validation, staging/promotion,
+// This is the one registry shared by ingress validation, ingest/promotion,
 // byte serving and future work-lease dispatch. Binary display rungs live in
 // the CAS; semantic contributions stay inline in the derivative row so text
 // can feed FTS in the same transaction and vectors/hashes never masquerade

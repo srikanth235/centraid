@@ -24,7 +24,6 @@ import {
 } from './settingsProvidersData.js';
 import {
   attachVaultConnection,
-  confirmStorageRecoveryKit,
   createStorageConnection,
   detachVaultConnection,
   loadVaultBlobStoreData,
@@ -313,7 +312,6 @@ export default function SettingsRoute({
                 createConnection={createStorageConnection}
                 deleteConnection={deleteStorageConnectionGated}
                 testConnection={testStorageConnection}
-                confirmRecoveryKit={confirmStorageRecoveryKit}
                 loadVaultBlobStore={loadVaultBlobStoreData}
                 attachVaultConnection={attachVaultConnection}
                 detachVaultConnection={detachVaultConnection}

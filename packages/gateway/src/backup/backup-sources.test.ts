@@ -1,6 +1,6 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
 // `assembleSourceEntries` (backup-sources.ts) against a REAL `VaultPlane`:
-// real blobs through the real staging/attach pipeline, a real bare git repo
+// real blobs through the real ingest/attach pipeline, a real bare git repo
 // through a real `WorktreeStore` publish, and a real sealed value through
 // `locker.add_item`. No hand-written files under blobs/sha256/ or apps.git —
 // everything here goes through the same product surface a real backup tick
@@ -336,7 +336,7 @@ test('assembly REFUSES an uncoordinated base pair rather than registering it', a
 
 test('the code-store bundle is REUSED untouched while refs are unchanged, and REGENERATED when they move', async () => {
   const plane = await openPlane();
-  // The PERSISTENT bundleDir (as the service passes `<backupDir>/code-bundle/<id>`)
+  // The PERSISTENT bundleDir (as the service passes `<cacheDir>/code-bundle/<id>`)
   // survives between assemblies — the standing bundle + its `apps.bundle.refs`
   // digest sidecar are what the reuse gate keys on.
   const bundleDir = await tempDir('backup-sources-bundle');

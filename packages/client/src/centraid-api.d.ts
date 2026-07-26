@@ -40,8 +40,8 @@ export interface CentraidPublishResult {
 
 export interface CentraidSettings {
   /**
-   * Active gateway id — `'local'` (always present) or a UUID for a
-   * remote gateway. Switching this is the multi-gateway "log in to
+   * Active gateway id — `'local'` (always present) or the durable iroh
+   * EndpointId of a remote gateway. Switching this is the multi-gateway "log in to
    * another workspace" action (issue #109). Use `setActiveGateway`
    * on the API rather than patching this through `saveSettings`.
    */
@@ -63,8 +63,9 @@ export interface CentraidSettings {
    */
   activeProfileAvatarColor: string;
   /**
-   * Effective base URL for the active gateway. Local = the in-process
-   * runtime's URL; remote = the active gateway's `profile.url`. Read-only.
+   * Ephemeral loopback URL for the active gateway transport. Local points at
+   * the embedded/detached daemon; remote points at the device's iroh proxy.
+   * The durable profile is keyed by EndpointId and stores no URL. Read-only.
    */
   gatewayUrl: string;
   /** Effective bearer token; companion to `gatewayUrl`. Read-only. */
@@ -778,8 +779,7 @@ interface CentraidApi {
   }>;
   /**
    * Redeem a pairing ticket minted by `centraid-gateway pair --vault <name>`
-   * (issue #376). Default `mode: 'auto'` picks the `http` transport when
-   * `url` is set, else `iroh`. On success the paired gateway AND the vault
+   * over the iroh pairing plane (issue #376). On success the paired gateway AND the vault
    * it enrolled into are both active — treat the result like a combined
    * `setActiveGateway` + `setActiveVault` and drop gateway/vault-scoped
    * state; the same `onGatewayChanged` / `onVaultChanged` broadcasts fire.
@@ -846,10 +846,10 @@ interface CentraidApi {
   exportGatewayDiagnostics(): Promise<
     { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
   >;
-  /** Export the live backup keyring + target map through a native 0600 file save. */
-  exportGatewayRecoveryKit(): Promise<
-    { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
-  >;
+  /** Export a passphrase-wrapped recovery kit through a native 0600 file save. */
+  exportGatewayRecoveryKit(input: {
+    password: string;
+  }): Promise<{ ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }>;
   /**
    * Switch the vault this client addresses on the active gateway (issue
    * #289). A pure client-side pointer flip — no server call, no re-root:

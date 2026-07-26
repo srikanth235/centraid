@@ -71,7 +71,6 @@ import {
 import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
 import { ROUTES } from '@centraid/protocol';
-import { endpointIdForSecret } from '@centraid/tunnel';
 import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
 import { closeJournalConversationStores, journalConversationStore } from '../journal-stores.js';
 import {
@@ -209,7 +208,7 @@ import {
   type ResourceMode,
 } from './resource-mode.js';
 import { logsEventsSubscriberCount, makeLogsRouteHandler } from '../routes/logs-routes.js';
-import { sendJson } from '../routes/route-helpers.js';
+import { isLoopbackRequest, sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
 import { BackupService } from '../backup/backup-service.js';
 import type { BackupConfig } from '../backup/backup-config.js';
@@ -218,6 +217,9 @@ import { openStorageConnectionStore } from '../backup/storage-connections.js';
 import { StorageUsagePoller } from '../backup/storage-usage.js';
 import { PricingWarmer } from './pricing-warmer.js';
 import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import { recoverPendingVaultErases } from './erase-recovery.js';
+import { recoverPendingFoundingVaults } from './founding-recovery.js';
+import { kitlessHostIdentity } from './host-identity.js';
 import { makeStorageCredentialsResolver } from '../backup/storage-credentials.js';
 import { makeStorageRouteHandler } from '../routes/storage-routes.js';
 import { makeFoundingRouteHandler } from '../routes/founding-routes.js';
@@ -287,6 +289,11 @@ export interface BuildGatewayOptions {
    * owner enrollments; newly founded vaults enroll through their ceremony.
    */
   hostDeviceEndpointId?: string;
+  /**
+   * Host-authenticated founding-ticket mint check. The daemon rejects iroh
+   * forwarded requests here even though their upstream socket is loopback.
+   */
+  canMintFoundingTicket?: (req: IncomingMessage) => boolean;
   /** Optional Rust byte-plane X-Sendfile handoff (issue #456 N3). */
   dataPlaneHttp?: DataPlaneHttpOptions;
   /** Auth callback used only by the native iroh relay on loopback. */
@@ -336,7 +343,7 @@ export interface BuildGatewayOptions {
    * Offsite backup engine (PROTOCOL.md/FORMAT.md), off by default. When
    * `enabled`, `buildGateway` constructs a `BackupService` (component
    * `'backups'` on `health`), starts its hourly scheduler from `start()`,
-   * and stops it from `stop()`. State lives under `paths.backupDir`
+   * and stops it from `stop()`. Disposable work lives under `paths.cacheDir`
    * (defaults to a `backup` sibling of `paths.vaultDir`).
    */
   backup?: BackupConfig;
@@ -763,12 +770,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     new KeyStore(path.join(dataDir, 'keys'), {
       warn: (message) => logger.warn(message),
     });
+  recoverPendingVaultErases({
+    gatewayDatabase,
+    vaultRoot: paths.vaultDir,
+    cacheRoot: paths.cacheDir ?? path.join(dataDir, 'cache'),
+    keys: gatewayKeys,
+    logger,
+  });
+  recoverPendingFoundingVaults({
+    gatewayDatabase,
+    vaultRoot: paths.vaultDir,
+    cacheRoot: paths.cacheDir ?? path.join(dataDir, 'cache'),
+    keys: gatewayKeys,
+    logger,
+  });
   const storageConnections = await openStorageConnectionStore({
     database: gatewayDatabase,
     keyStore: gatewayKeys,
   });
-  let walCaptureConfigured =
-    options.backup?.enabled === true || (await storageConnections.list()).length > 0;
   const recoveryKit = new RecoveryKitStateStore(gatewayDatabase);
   // Provider usage cache (issue #367 §D1) — cache-with-TTL + stale-while-
   // refresh in front of a provider connection's optional `usage` capability
@@ -862,11 +881,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       health.shouldDeferBackgroundWork() ||
       health.shouldPauseBackgroundWork() ||
       powerContext.isDeferringBackgroundWork(),
-    walCaptureEnabled: () => walCaptureConfigured,
     // Disposable runner cache lives outside the vault tree (defaults to a
     // `-cache` sibling of `vaultDir` when the host doesn't pin one).
     cacheRootDir: paths.cacheDir ?? path.join(dataDir, 'cache'),
     logger: health.loggerFor('vaults', logger),
+    keyStore: gatewayKeys,
     // Network mounts may not honor the local SQLite lock cross-host. Serving
     // remains available, but destructive orphan GC fails safe.
     skipOrphanDelete: () => gatewayDatabase.networkFileSystem,
@@ -897,9 +916,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // a file read inside its synchronous block.
     journalLimitBytes: () => storageLimits.current().journalLimitBytes,
   });
-  if (options.initVaultName !== undefined && vaultRegistry.isFresh()) {
-    vaultRegistry.create(options.initVaultName);
-  }
+  const kitlessCreated =
+    options.initVaultName !== undefined && vaultRegistry.isFresh()
+      ? vaultRegistry.create(options.initVaultName)
+      : undefined;
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
   // plane silently fails to open, so the probe asks the registry directly.
@@ -1206,11 +1226,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // storage connection marked for backup on every operation. This makes a
   // connection created in the desktop immediately effective without a
   // process restart or a second, hidden configuration source.
-  const backupDir = paths.cacheDir ?? path.join(dataDir, 'cache');
-  const sourceInstanceId = deriveBackupSourceInstanceId(gatewayKeys.loadOrCreate('endpoint.key'));
+  const backupCacheDir = paths.cacheDir ?? path.join(dataDir, 'cache');
+  const sourceInstanceId = deriveBackupSourceInstanceId(
+    gatewayKeys.loadOrCreate('endpoint-key.bin'),
+  );
   const backupService = new BackupService({
     ...(options.backup?.enabled ? { config: options.backup } : {}),
-    backupDir,
+    cacheDir: backupCacheDir,
     gatewayDatabase,
     keyStore: gatewayKeys,
     sourceInstanceId,
@@ -1237,27 +1259,26 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     options.devicePairing?.tickets ?? PairingTicketStore.open(gatewayDatabase);
   const embeddedEndpointId = options.deviceAccess
     ? undefined
-    : endpointIdForSecret(gatewayKeys.loadOrCreate('endpoint.key'));
+    : (options.hostDeviceEndpointId ??
+      (options.initVaultName
+        ? kitlessHostIdentity(gatewayKeys.loadOrCreate('endpoint-key.bin'))
+        : undefined));
   const embeddedAccess: DeviceAccess | undefined = embeddedEndpointId
     ? {
-        deviceKeyFor: () => embeddedEndpointId,
+        deviceKeyFor: (req) => (isLoopbackRequest(req) ? embeddedEndpointId : undefined),
         vaultsFor: (endpointId) => foundingEnrollments.vaultsFor(endpointId),
       }
     : undefined;
   const effectiveDeviceAccess = options.deviceAccess ?? embeddedAccess;
-  const hostEndpointId = options.hostDeviceEndpointId ?? embeddedEndpointId;
-  if (hostEndpointId) {
-    const enrollHost = (vaultId: string): void => {
-      if (foundingEnrollments.get(hostEndpointId, vaultId)) return;
-      foundingEnrollments.enroll({
-        endpointId: hostEndpointId,
-        vaultId,
-        label: options.hostDeviceEndpointId ? 'desktop host' : 'gateway host',
-        platform: 'loopback',
-        trust: 'owner',
-      });
-    };
-    for (const vault of vaultRegistry.list()) enrollHost(vault.vaultId);
+  const kitlessHostEndpointId = options.hostDeviceEndpointId ?? embeddedEndpointId;
+  if (kitlessCreated && kitlessHostEndpointId) {
+    foundingEnrollments.enroll({
+      endpointId: kitlessHostEndpointId,
+      vaultId: kitlessCreated.vaultId,
+      label: options.hostDeviceEndpointId ? 'desktop host' : 'kitless gateway host',
+      platform: 'loopback',
+      trust: 'owner',
+    });
   }
   const foundingHandler = makeFoundingRouteHandler({
     vaults: vaultRegistry,
@@ -1266,6 +1287,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     keys: gatewayKeys,
     recoveryKit,
     sourceInstanceId,
+    ...(options.canMintFoundingTicket
+      ? { canMintFoundingTicket: options.canMintFoundingTicket }
+      : options.hostDeviceEndpointId
+        ? { canMintFoundingTicket: (req: IncomingMessage) => isLoopbackRequest(req) }
+        : {}),
     ...(effectiveDeviceAccess ? { deviceAccess: effectiveDeviceAccess } : {}),
     ...(options.devicePairing?.endpointTicket
       ? { endpointTicket: options.devicePairing.endpointTicket }
@@ -2923,6 +2949,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               tickets: options.devicePairing.tickets,
               endpointTicket: options.devicePairing.endpointTicket,
               isUninitialized: () => vaultRegistry.isFresh(),
+              ...(options.canMintFoundingTicket
+                ? { canMintPairingTicket: options.canMintFoundingTicket }
+                : {}),
+              vaultIds: () => vaultRegistry.list().map((vault) => vault.vaultId),
               onEndpointRevoked: options.devicePairing.onEndpointRevoked,
               vaultName: (id) => vaultRegistry.get(id)?.name,
               onRevoked: (rows) => {
@@ -2967,6 +2997,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       '/centraid/_gateway/backup',
       makeBackupRouteHandler({
         vaults: vaultRegistry,
+        enrollments: foundingEnrollments,
         recoveryKitStore: recoveryKit,
         backupService,
       }),
@@ -2984,9 +3015,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         localUsage,
         storageLimits,
         onConnectionsChanged: async () => {
-          walCaptureConfigured =
-            options.backup?.enabled === true || (await storageConnections.list()).length > 0;
-          for (const plane of vaultRegistry.planesList()) plane.rescheduleWalCapture();
           await backupService.refreshWalSchedule();
         },
       }),
@@ -3180,8 +3208,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   };
 
   const composedHandler: RouteHandler = async (req, res) => {
+    const url = new URL(req.url ?? '/', 'http://gateway.local');
+    // The Rust-owned iroh relay calls this metadata-only control surface
+    // before it can inject the remote EndpointId into an upstream request.
+    // Requiring that not-yet-injected identity here is circular. The route's
+    // per-boot control secret (plus the outer loopback bearer in production)
+    // authenticates it, so dispatch it at gateway scope in every vault state.
+    if (
+      (url.pathname === '/centraid/_gateway/info' ||
+        url.pathname.startsWith('/centraid/_gateway/tunnel/')) &&
+      (await prefixDispatch(req, res))
+    ) {
+      return true;
+    }
     if (vaultRegistry.isFresh()) {
-      const url = new URL(req.url ?? '/', 'http://gateway.local');
       const method = req.method ?? 'GET';
       if (method === 'GET' && url.pathname === '/centraid/_vault/vaults') {
         return sendJson(res, 200, { vaults: [] });
@@ -3193,7 +3233,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         return sendJson(res, 200, { rows: [], errors: [] });
       }
       const gatewayLevel =
-        url.pathname === '/centraid/_gateway/info' ||
         url.pathname.startsWith('/centraid/_gateway/health') ||
         url.pathname.startsWith('/centraid/_logs') ||
         url.pathname.startsWith('/centraid/_templates') ||
@@ -3202,19 +3241,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       return sendJson(res, 409, {
         error: 'uninitialized',
         message: 'this gateway has no vault; initialize or restore one first',
-      });
-    }
-    if (recoveryKit.ceremonyIncomplete()) {
-      const url = new URL(req.url ?? '/', 'http://gateway.local');
-      const recoveryKitVerification =
-        url.pathname === '/centraid/_gateway/backup/kit' ||
-        url.pathname === '/centraid/_gateway/backup/kit-confirmed';
-      // The vault stays fail-closed, but the owner must still be able to
-      // re-open and verify the exact kit that clears this gate.
-      if (recoveryKitVerification && (await prefixDispatch(req, res))) return true;
-      return sendJson(res, 409, {
-        error: 'founding_verification_required',
-        message: 're-open and verify the recovery kit before using this vault',
       });
     }
     // Resolve the request's vault (issue #289): a proved device enrollment

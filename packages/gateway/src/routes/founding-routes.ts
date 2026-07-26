@@ -5,6 +5,8 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   parseRecoveryKit,
@@ -15,7 +17,7 @@ import {
   type RecoveryKitDocument,
 } from '@centraid/backup';
 import { ROUTES } from '@centraid/protocol';
-import { KeyStore } from '@centraid/vault';
+import { KeyStore, uuidv7 } from '@centraid/vault';
 import { recover, type RecoverReport } from '../backup/recover.js';
 import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import type { DeviceAccess } from '../serve/vault-context.js';
@@ -28,7 +30,7 @@ import {
 } from '../serve/pairing-store.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import type { RouteHandler } from '../serve/build-gateway.js';
-import { isLoopbackRequest, readJson, sendJson } from './route-helpers.js';
+import { readJson, sendJson } from './route-helpers.js';
 
 export interface FoundingRouteDeps {
   vaults: VaultRegistry;
@@ -39,6 +41,8 @@ export interface FoundingRouteDeps {
   deviceAccess?: DeviceAccess;
   endpointTicket?: () => string | undefined;
   sourceInstanceId?: string;
+  /** True only for a bearer-authenticated direct request from the gateway host. */
+  canMintFoundingTicket?: (req: IncomingMessage) => boolean;
   /** Test seam for a process failure after ticket consumption but before enrollment. */
   beforeFoundingEnrollment?: () => void;
 }
@@ -61,17 +65,33 @@ function keyringFor(keys: KeyStore): Keyring {
   return keyring;
 }
 
-function deviceEndpoint(
-  req: IncomingMessage,
-  body: Record<string, unknown>,
+function deviceEndpoint(req: IncomingMessage, deps: FoundingRouteDeps): string | undefined {
+  return deps.deviceAccess?.deviceKeyFor(req);
+}
+
+function foundingVaultIdsAreSafe(root: string, vaultIds: readonly string[]): boolean {
+  const resolvedRoot = path.resolve(root);
+  return (
+    vaultIds.length > 0 &&
+    vaultIds.every((vaultId) => {
+      const candidate = path.resolve(resolvedRoot, vaultId);
+      return path.dirname(candidate) === resolvedRoot && !existsSync(candidate);
+    })
+  );
+}
+
+function rollbackFoundingVaults(
   deps: FoundingRouteDeps,
-): string | undefined {
-  const proved = deps.deviceAccess?.deviceKeyFor(req);
-  if (proved) return proved;
-  if (isLoopbackRequest(req) && typeof body.endpointId === 'string' && body.endpointId.length > 0) {
-    return body.endpointId;
+  reservation: string,
+  vaultIds: readonly string[],
+): void {
+  for (const vaultId of vaultIds) {
+    deps.vaults.discardPendingFoundingVault(vaultId);
+    deps.keys.destroy(`${vaultId}.sealkey`);
+    deps.tickets.gatewayDatabase.run('DELETE FROM backup_targets WHERE vault_id = ?', vaultId);
+    deps.tickets.gatewayDatabase.run('DELETE FROM cas_reconciliations WHERE vault_id = ?', vaultId);
   }
-  return undefined;
+  deps.tickets.clearReservedFoundingVaults(reservation, vaultIds);
 }
 
 export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler {
@@ -90,10 +110,11 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
     }
 
     if (url.pathname === ROUTES.gatewayFoundingTicket) {
-      if (!isLoopbackRequest(req)) {
+      if (!deps.canMintFoundingTicket?.(req)) {
         return sendJson(res, 403, {
           error: 'possession_required',
-          message: 'founding tickets can only be minted from the gateway host',
+          message:
+            'founding tickets require the gateway host credential and cannot be minted through the iroh forwarding plane',
         });
       }
       if (!deps.vaults.isFresh()) {
@@ -130,7 +151,7 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
     } catch {
       return sendJson(res, 400, { error: 'invalid_body' });
     }
-    const endpointId = deviceEndpoint(req, body, deps);
+    const endpointId = deviceEndpoint(req, deps);
     if (!endpointId) {
       return sendJson(res, 403, {
         error: 'device_identity_required',
@@ -192,7 +213,8 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
         });
       }
       const ticket = parseFoundingTicket(body.ticket);
-      if (!ticket || !deps.tickets.validatesFounding(ticket.t, ticket.s)) {
+      const reservation = ticket ? deps.tickets.reserveFounding(ticket.t, ticket.s) : undefined;
+      if (!ticket || !reservation) {
         return sendJson(res, 403, { error: 'invalid_or_expired_founding_ticket' });
       }
       let kit: RecoveryKitDocument;
@@ -206,6 +228,16 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
           error: 'restore_failed',
           message: error instanceof Error ? error.message : String(error),
         });
+      }
+      const pendingVaultIds = kit.targets.map((target) => target.vaultId);
+      if (!foundingVaultIdsAreSafe(deps.vaults.rootPath(), pendingVaultIds)) {
+        return sendJson(res, 409, {
+          error: 'restore_target_conflict',
+          message: 'one or more recovery-kit vault ids are invalid or already exist locally',
+        });
+      }
+      if (!deps.tickets.stageReservedFoundingVaults(reservation, pendingVaultIds)) {
+        return sendJson(res, 409, { error: 'founding_ticket_raced' });
       }
       const reports: RecoverReport[] = [];
       try {
@@ -227,30 +259,19 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
           );
         }
       } catch (error) {
-        for (const restored of reports.toReversed()) {
-          if (deps.vaults.get(restored.vaultId)) deps.vaults.delete(restored.vaultId);
-          deps.keys.destroy(`${restored.vaultId}.sealkey`);
-          deps.tickets.gatewayDatabase.run(
-            'DELETE FROM backup_targets WHERE vault_id = ?',
-            restored.vaultId,
-          );
-          deps.tickets.gatewayDatabase.run(
-            'DELETE FROM cas_reconciliations WHERE vault_id = ?',
-            restored.vaultId,
-          );
-        }
+        rollbackFoundingVaults(deps, reservation, pendingVaultIds);
         return sendJson(res, 400, {
           error: 'restore_failed',
           message: error instanceof Error ? error.message : String(error),
         });
       }
-      const enrollments = deps.tickets.redeemFoundingAndEnrollMany(
-        ticket.t,
-        ticket.s,
+      const restoredVaultIds = reports.map((report) => report.vaultId);
+      const enrollments = deps.tickets.redeemReservedFoundingAndEnrollMany(
+        reservation,
         deps.enrollments,
         {
           endpointId,
-          vaultIds: reports.map((report) => report.vaultId),
+          vaultIds: restoredVaultIds,
           label:
             typeof body.deviceName === 'string' && body.deviceName.trim()
               ? body.deviceName.trim()
@@ -260,18 +281,7 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
         deps.beforeFoundingEnrollment,
       );
       if (!enrollments) {
-        for (const report of reports.toReversed()) {
-          if (deps.vaults.get(report.vaultId)) deps.vaults.delete(report.vaultId);
-          deps.keys.destroy(`${report.vaultId}.sealkey`);
-          deps.tickets.gatewayDatabase.run(
-            'DELETE FROM backup_targets WHERE vault_id = ?',
-            report.vaultId,
-          );
-          deps.tickets.gatewayDatabase.run(
-            'DELETE FROM cas_reconciliations WHERE vault_id = ?',
-            report.vaultId,
-          );
-        }
+        rollbackFoundingVaults(deps, reservation, restoredVaultIds);
         return sendJson(res, 409, {
           error: 'founding_ticket_raced',
           message: 'the founding ticket was redeemed by another caller during restore',
@@ -298,32 +308,22 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
     }
     const ticket = parseFoundingTicket(body.ticket);
     if (!ticket) return sendJson(res, 403, { error: 'invalid_founding_ticket' });
+    const reservation = deps.tickets.reserveFounding(ticket.t, ticket.s);
+    if (!reservation) {
+      return sendJson(res, 403, { error: 'invalid_or_expired_founding_ticket' });
+    }
 
-    const created = deps.vaults.create(
-      typeof body.name === 'string' && body.name.trim() ? body.name : 'Personal',
-    );
+    const vaultId = uuidv7();
+    if (!deps.tickets.stageReservedFoundingVaults(reservation, [vaultId])) {
+      return sendJson(res, 409, { error: 'founding_ticket_raced' });
+    }
+    let created: ReturnType<VaultRegistry['create']> | undefined;
     let enrollment;
     try {
-      enrollment = deps.tickets.redeemFoundingAndEnroll(
-        ticket.t,
-        ticket.s,
-        deps.enrollments,
-        {
-          endpointId,
-          vaultId: created.vaultId,
-          label:
-            typeof body.deviceName === 'string' && body.deviceName.trim()
-              ? body.deviceName.trim()
-              : `founder ${endpointId.slice(0, 10)}…`,
-          ...(typeof body.platform === 'string' ? { platform: body.platform } : {}),
-        },
-        deps.beforeFoundingEnrollment,
+      created = deps.vaults.create(
+        typeof body.name === 'string' && body.name.trim() ? body.name : 'Personal',
+        vaultId,
       );
-      if (!enrollment) {
-        deps.vaults.delete(created.vaultId);
-        deps.keys.destroy(`${created.vaultId}.sealkey`);
-        return sendJson(res, 403, { error: 'invalid_or_expired_founding_ticket' });
-      }
       const document: RecoveryKitDocument = {
         version: 1,
         kind: 'centraid-recovery-kit',
@@ -334,7 +334,28 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
         targets: [],
       };
       const kit = wrapRecoveryKit(document, body.password);
-      await deps.recoveryKit.begin(kit.fingerprint);
+      enrollment = deps.tickets.redeemReservedFoundingAndEnrollMany(
+        reservation,
+        deps.enrollments,
+        {
+          endpointId,
+          vaultIds: [created.vaultId],
+          label:
+            typeof body.deviceName === 'string' && body.deviceName.trim()
+              ? body.deviceName.trim()
+              : `founder ${endpointId.slice(0, 10)}…`,
+          ...(typeof body.platform === 'string' ? { platform: body.platform } : {}),
+        },
+        deps.beforeFoundingEnrollment,
+        () =>
+          deps.recoveryKit.beginWithinTransaction(kit.fingerprint, {
+            founding: true,
+          }),
+      )?.[0];
+      if (!enrollment) {
+        rollbackFoundingVaults(deps, reservation, [created.vaultId]);
+        return sendJson(res, 403, { error: 'invalid_or_expired_founding_ticket' });
+      }
       return sendJson(res, 201, {
         ok: true,
         vault: created,
@@ -344,8 +365,7 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
         recoveryScope: 'future backed-up vaults',
       });
     } catch (error) {
-      if (deps.vaults.get(created.vaultId)) deps.vaults.delete(created.vaultId);
-      deps.keys.destroy(`${created.vaultId}.sealkey`);
+      rollbackFoundingVaults(deps, reservation, [created?.vaultId ?? vaultId]);
       return sendJson(res, 500, {
         error: 'founding_failed',
         message: error instanceof Error ? error.message : String(error),

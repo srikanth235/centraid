@@ -40,9 +40,14 @@ Once a vault exists:
 | Location | Role |
 | --- | --- |
 | `gateway.db` | Exclusive process lock; enrollments, one-time tickets, web sessions, preferences, backup/storage control state |
-| `keys/endpoint.key` | Wrapped gateway iroh identity; losing it changes EndpointId and requires every device to re-pair |
+| `keys/endpoint-key.bin` | Wrapped gateway iroh identity; losing it changes EndpointId and requires every device to re-pair |
 | Device secure storage | Per-connection private iroh key |
 | Desktop `connections.json` | Non-secret, device-local gateway registry keyed by EndpointId |
+
+Headless `keys/` files are encrypted with either OS/service custody or an
+external `0600` host credential under the platform configuration directory.
+That fallback credential is deliberately outside the gateway data dir, so a
+data-dir copy contains no parseable raw key material.
 
 Relay hints/tickets are refreshable address cache. They are not durable gateway
 identity and changing one must not create a second connection record.
@@ -75,7 +80,7 @@ recovery path.
 ### Gateway identity is corrupt or lost
 
 Stop the daemon before custody work. A corrupt non-32-byte endpoint key refuses
-with recovery instructions. Restore the original `keys/endpoint.key`; deleting
+with recovery instructions. Restore the original `keys/endpoint-key.bin`; deleting
 it deliberately mints a new identity and requires every device to re-pair.
 
 ## Do not

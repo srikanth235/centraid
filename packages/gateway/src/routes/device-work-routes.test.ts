@@ -43,7 +43,7 @@ async function fixture(options: { capability?: 'poster' | 'transcript' } = {}): 
   cleanups.push(() => plane.stop());
   const vaultId = plane.boot.vaultId;
   const deviceKey = 'http:worker-device';
-  const enrollments = EnrollmentStore.open(path.join(dir, 'devices.json'));
+  const enrollments = EnrollmentStore.open(path.join(dir, 'gateway.db'));
   const enrolled = enrollments.enroll({ endpointId: deviceKey, vaultId, label: 'Worker' });
   enrollments.setCompute(enrolled.enrollmentId, {
     contributeWhileCharging: true,

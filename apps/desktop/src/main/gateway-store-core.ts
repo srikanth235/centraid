@@ -72,11 +72,14 @@ export function isValidSshBlock(
   return true;
 }
 
-export const GATEWAY_ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/i;
+export const ENDPOINT_ID_RE = /^[0-9a-f]{64}$/;
 
-/** True when a gateway id is a well-formed slug (not the content of a path). */
+/**
+ * A connection identity is either the primordial local gateway or a real
+ * 32-byte iroh public key rendered as its 64-character EndpointId.
+ */
 export function isValidGatewayId(id: string): boolean {
-  return GATEWAY_ID_RE.test(id);
+  return id === 'local' || ENDPOINT_ID_RE.test(id);
 }
 
 /**
@@ -91,6 +94,7 @@ export function normalizeProfile(
   if (!parsed || typeof parsed !== 'object') return undefined;
   if (parsed.id !== id) return undefined;
   if (parsed.kind !== 'local' && parsed.kind !== 'remote') return undefined;
+  if (!isValidGatewayId(parsed.id)) return undefined;
   if (typeof parsed.label !== 'string' || parsed.label.length === 0) return undefined;
   if (typeof parsed.createdAt !== 'string') return undefined;
   const displayName =

@@ -13,6 +13,7 @@ import { GatewayDatabase } from '../serve/gateway-db.js';
 import { runWithVaultContext } from '../serve/vault-context.js';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import { WebControlSessionStore } from '../serve/web-session-store.js';
+import { recoverPendingVaultErases } from '../serve/erase-recovery.js';
 import { makeVaultRouteHandler } from './vault-routes.js';
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -32,6 +33,11 @@ async function treeShape(root: string, relative = ''): Promise<string[]> {
   return rows.sort();
 }
 
+async function markKitVerified(store: RecoveryKitStateStore): Promise<void> {
+  await store.begin('test-kit-fingerprint');
+  expect(await store.verify('test-kit-fingerprint')).toBeTruthy();
+}
+
 test('erasing the last vault cascades gateway state, destroys its DEK, and preserves gateway identity', async () => {
   const dataDir = await tempDir('vault-erase-');
   cleanups.push(() => fs.rm(dataDir, { recursive: true, force: true }));
@@ -39,8 +45,8 @@ test('erasing the last vault cascades gateway state, destroys its DEK, and prese
   const database = GatewayDatabase.open(dataDir);
   cleanups.push(() => database.close());
   const keys = new KeyStore(layout.keysDir);
-  keys.store('endpoint.key', randomBytes(32));
-  const endpointBefore = keys.export('endpoint.key');
+  keys.store('endpoint-key.bin', randomBytes(32));
+  const endpointBefore = keys.export('endpoint-key.bin');
   const vaultlessShape = await treeShape(dataDir);
 
   const registry = openVaultRegistry({
@@ -91,7 +97,7 @@ test('erasing the last vault cascades gateway state, destroys its DEK, and prese
     new Date(0).toISOString(),
   );
   const recoveryKit = new RecoveryKitStateStore(database);
-  await recoveryKit.confirm();
+  await markKitVerified(recoveryKit);
   const fenceVaultForErase = vi.fn(async (vaultId: string) => {
     expect(vaultId).toBe(vault.vaultId);
     expect(registry.get(vaultId)).toBeTruthy();
@@ -148,7 +154,85 @@ test('erasing the last vault cascades gateway state, destroys its DEK, and prese
   }
   expect(keys.export(`${vault.vaultId}.sealkey`)).toBeNull();
   expect(keys.export(`${vault.vaultId}.sealkey.next`)).toBeNull();
-  expect(keys.export('endpoint.key')).toEqual(endpointBefore);
+  expect(keys.export('endpoint-key.bin')).toEqual(endpointBefore);
   expect(await recoveryKit.status()).toMatchObject({ confirmedAt: expect.any(Number) });
   expect(await treeShape(dataDir)).toEqual(vaultlessShape);
+});
+
+test('a crash after erase state commit is completed before the next registry mount', async () => {
+  const dataDir = await tempDir('vault-erase-crash-');
+  cleanups.push(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const layout = daemonLayoutFor(dataDir);
+  const database = GatewayDatabase.open(dataDir);
+  cleanups.push(() => database.close());
+  const keys = new KeyStore(layout.keysDir);
+  const registry = openVaultRegistry({
+    rootDir: layout.vaultDir,
+    cacheRootDir: layout.cacheDir,
+    keyStore: keys,
+    logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+  });
+  const vault = registry.create('Crash test');
+  const enrollments = EnrollmentStore.open(database);
+  enrollments.enroll({
+    endpointId: 'owner-device',
+    vaultId: vault.vaultId,
+    label: 'Owner laptop',
+    trust: 'owner',
+  });
+  const recoveryKit = new RecoveryKitStateStore(database);
+  await markKitVerified(recoveryKit);
+  const handler = makeVaultRouteHandler(registry, {
+    enrollments,
+    gatewayDatabase: database,
+    keys,
+    recoveryKit,
+    afterEraseStateCommitted: () => {
+      throw new Error('injected crash after state commit');
+    },
+  });
+  const server = http.createServer((req, res) => {
+    void runWithVaultContext({ vaultId: vault.vaultId, deviceKey: 'owner-device' }, () =>
+      handler(req, res),
+    );
+  });
+  cleanups.push(
+    () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
+  );
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+  const response = await fetch(`${base}/centraid/_vault/vaults:erase`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'Crash test' }),
+  });
+  expect(response.status).toBe(500);
+  expect(enrollments.list()).toEqual([]);
+  expect(database.db.prepare('SELECT vault_id FROM erase_intents').all()).toEqual([
+    { vault_id: vault.vaultId },
+  ]);
+  await expect(
+    fs.access(path.join(layout.vaultDir, vault.vaultId, 'vault.db')),
+  ).resolves.toBeUndefined();
+
+  registry.stop();
+  expect(
+    recoverPendingVaultErases({
+      gatewayDatabase: database,
+      vaultRoot: layout.vaultDir,
+      cacheRoot: layout.cacheDir,
+      keys,
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+    }),
+  ).toEqual([vault.vaultId]);
+  expect(database.db.prepare('SELECT COUNT(*) AS count FROM erase_intents').get()).toEqual({
+    count: 0,
+  });
+  await expect(fs.access(path.join(layout.vaultDir, vault.vaultId))).rejects.toThrow();
+  expect(keys.export(`${vault.vaultId}.sealkey`)).toBeNull();
 });

@@ -39,9 +39,10 @@ Baseline inputs now describe the **granted share of the host, not the raw machin
 
 ### Gateway profile (multi-gateway) — runtime wins
 
-| Path | Owner |
-| --- | --- |
-| `<userData>/gateways/<id>/profile.json` | Gateway switcher / store |
+| Path | Owner | Notes |
+| --- | --- | --- |
+| `<userData>/connections.json` | Desktop main process / gateway switcher | One non-secret row per EndpointId; relay hints are refreshable cache. |
+| `<userData>/connection-secrets.bin` | Desktop main process / OS `safeStorage` | Per-connection device keys; never renderer storage. |
 
 ### Vault ontology settings — vault commands win
 

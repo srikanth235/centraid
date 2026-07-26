@@ -105,8 +105,8 @@ export interface RecoverInput {
   keyStore?: KeyStore;
   /** Stable HMAC-derived backup writer identity. */
   sourceInstanceId?: string;
-  /** @deprecated compatibility input; state no longer lives in this directory. */
-  backupDir?: string;
+  /** Gateway data root when it cannot be derived from `vaultRoot`. */
+  dataDir?: string;
   /** Point-in-time recovery (issue #408): newest snapshot at/before this instant + WAL replay to it. Epoch ms. */
   at?: number;
   /** Force a FULL restore — materialize every blob (the `--full` override); no inventory skip-set. */
@@ -262,13 +262,14 @@ export async function discoverRecovery(opts: {
 }
 
 export async function recover(input: RecoverInput): Promise<RecoverReport> {
-  const dataDir = input.backupDir
-    ? path.dirname(path.resolve(input.backupDir))
+  const dataDir = input.dataDir
+    ? path.resolve(input.dataDir)
     : path.dirname(path.resolve(input.vaultRoot));
   const gatewayDatabase = input.gatewayDatabase ?? GatewayDatabase.open(dataDir);
   const keyStore = input.keyStore ?? new KeyStore(path.join(dataDir, 'keys'));
   const sourceInstanceId =
-    input.sourceInstanceId ?? deriveBackupSourceInstanceId(keyStore.loadOrCreate('endpoint.key'));
+    input.sourceInstanceId ??
+    deriveBackupSourceInstanceId(keyStore.loadOrCreate('endpoint-key.bin'));
   const now = input.now ?? Date.now;
   const log: ReconcileLogger = {
     info: (m) => input.log?.info?.(m),
@@ -323,12 +324,12 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       `recover: "${finalDir}" already exists — refusing to recover over an existing vault directory`,
     );
   }
-  // Stage INSIDE the vault root (same filesystem ⇒ the adopt below is an atomic
+  // Restore INSIDE the vault root (same filesystem ⇒ the adopt below is an atomic
   // rename). The dot prefix keeps `VaultRegistry.scan()` from mounting the
   // half-written dir mid-restore (see vault-registry.ts).
-  const stagingDir = path.join(
+  const restoreWorkDir = path.join(
     input.vaultRoot,
-    `.recover-staging-${randomBytes(8).toString('hex')}`,
+    `.recover-work-${randomBytes(8).toString('hex')}`,
   );
   try {
     const restore = await restoreSnapshot({
@@ -337,7 +338,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       keyring: kit.keyring,
       vaultId: target.vaultId,
       ...(input.at !== undefined ? { pointInTimeMs: input.at } : {}),
-      destDir: stagingDir,
+      destDir: restoreWorkDir,
       current,
       // Defer any blob the remote CAS attests it holds; a blob the inventory
       // does NOT name is materialized (the snapshot is its only copy). A `--full`
@@ -347,7 +348,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
     });
     emit('replaying');
     // The restored replica index attests capture-time durability, not now.
-    invalidateRestoredReplica(stagingDir);
+    invalidateRestoredReplica(restoreWorkDir);
 
     // ── fencing ────────────────────────────────────────────────────────
     emit('fencing');
@@ -391,7 +392,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
 
     // ── adopting ───────────────────────────────────────────────────────
     emit('adopting');
-    await fs.rename(stagingDir, finalDir);
+    await fs.rename(restoreWorkDir, finalDir);
     // Turn the restored `apps.bundle` back into the live bare code store
     // (issue #517) — without this the vault mounts with data but no app code.
     await rehydrateCodeStore(finalDir, log);
@@ -449,9 +450,9 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       quarantine: ['outbox', 'automations', 'connections'],
     };
   } catch (err) {
-    // Never leave staging scratch behind (the final dir, if the rename
+    // Never leave restore scratch behind (the final dir, if the rename
     // already ran, is a real vault and is left in place).
-    await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+    await fs.rm(restoreWorkDir, { recursive: true, force: true }).catch(() => undefined);
     throw err;
   }
 }

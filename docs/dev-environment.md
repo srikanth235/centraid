@@ -89,14 +89,13 @@ desktop:
 
 4. In onboarding choose **Existing gateway → paste the ticket** (the ConnectFlow,
    `packages/client/src/react/shell/routes/ConnectFlow.tsx`). The ticket redeems
-   for a per-device HTTP token and connects to the existing vault — its
+   over iroh, records this device's EndpointId enrollment, and connects to the existing vault — its
    automations, runs, and data appear as in desktop.
 
-Alternatively pin the loopback bearer with `CENTRAID_GATEWAY_TOKEN=<hex>` on the
-`serve` (table above) and connect by URL + token; the pairing ticket is the less
-fiddly path for a browser session. Do not point a standalone gateway at a data
-dir the desktop app is **also** running against — two writers on one SQLite vault
-(see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
+There is no remote URL+token connection path. Browser clients use iroh-wasm and
+the same EndpointId pairing contract. Do not point a standalone gateway at a
+data dir the desktop app is **also** running against: `gateway.db` rejects the
+second writer immediately (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
 
 ## Worktrees
 

@@ -96,18 +96,16 @@ export async function listStorageConnections(): Promise<StorageConnectionDTO[]> 
 /**
  * Create a connection. Refused with `RecoveryKitNotConfirmedError` (HTTP
  * 409) when the connection is usable for `cas` and the operator hasn't
- * confirmed the recovery kit yet — pass `force: true` only from an explicit
- * "proceed anyway" action, never as a default retry.
+ * exported, re-selected, and verified the current recovery kit.
  */
 export async function createStorageConnection(
   input: CreateStorageConnectionInput,
-  opts?: { force?: boolean },
 ): Promise<StorageConnectionDTO> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, '/centraid/_gateway/storage/connections', {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ ...input, ...(opts?.force ? { force: true } : {}) }),
+    body: JSON.stringify(input),
   });
   if (res.status === 409) {
     const body = (await res.json().catch(() => ({}))) as { message?: string };
@@ -335,20 +333,16 @@ export async function getVaultBlobStore(): Promise<BlobStoreSettingsDTO> {
  * Attach a storage connection to the addressed vault's CAS remote tier
  * (`PUT /centraid/_vault/blob-store`, vault-routes.ts). Refused with
  * `RecoveryKitNotConfirmedError` (409) the same way `createStorageConnection`
- * is — pass `force: true` only from an explicit "proceed anyway" action.
+ * is; there is no bypass for exporting live remote custody.
  */
 export async function attachVaultStorageConnection(
   connectionId: string,
-  opts?: { force?: boolean },
 ): Promise<BlobStoreSettingsDTO> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, '/centraid/_vault/blob-store', {
     method: 'PUT',
     headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({
-      blob_store: { kind: 's3', connectionId },
-      ...(opts?.force ? { force: true } : {}),
-    }),
+    body: JSON.stringify({ blob_store: { kind: 's3', connectionId } }),
   });
   if (res.status === 409) {
     const body = (await res.json().catch(() => ({}))) as { message?: string };

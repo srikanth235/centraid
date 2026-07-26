@@ -47,9 +47,11 @@ describe('isValidSshBlock', () => {
 });
 
 describe('isValidGatewayId', () => {
-  it('accepts slug ids and rejects path-like junk', () => {
+  it('accepts local or a real EndpointId and rejects parallel slug identities', () => {
     expect(isValidGatewayId('local')).toBe(true);
-    expect(isValidGatewayId('a1b2c3d4-e5f6')).toBe(true);
+    expect(isValidGatewayId('a'.repeat(64))).toBe(true);
+    expect(isValidGatewayId('A'.repeat(64))).toBe(false);
+    expect(isValidGatewayId('a1b2c3d4-e5f6')).toBe(false);
     expect(isValidGatewayId('../etc')).toBe(false);
     expect(isValidGatewayId('')).toBe(false);
     expect(isValidGatewayId('has space')).toBe(false);
@@ -57,28 +59,29 @@ describe('isValidGatewayId', () => {
 });
 
 describe('normalizeProfile', () => {
+  const endpointId = 'a'.repeat(64);
   const base = {
-    id: 'gw-1',
+    id: endpointId,
     kind: 'remote' as const,
     label: 'Home',
-    endpointId: 'gw-1',
+    endpointId,
     createdAt: '2026-01-01T00:00:00.000Z',
   };
 
   it('fills displayName from label and avatarColor from palette when absent', () => {
-    const p = normalizeProfile('gw-1', base);
+    const p = normalizeProfile(endpointId, base);
     expect(p).toMatchObject({
-      id: 'gw-1',
+      id: endpointId,
       kind: 'remote',
       label: 'Home',
       displayName: 'Home',
       rememberDevice: false,
     });
-    expect(p?.avatarColor).toBe(defaultAvatarColor('gw-1'));
+    expect(p?.avatarColor).toBe(defaultAvatarColor(endpointId));
   });
 
   it('preserves valid optional fields and drops invalid ssh', () => {
-    const p = normalizeProfile('gw-1', {
+    const p = normalizeProfile(endpointId, {
       ...base,
       displayName: 'Family',
       avatarColor: '#E5734A',
@@ -89,27 +92,27 @@ describe('normalizeProfile', () => {
     expect(p).toMatchObject({
       displayName: 'Family',
       avatarColor: '#E5734A',
-      endpointId: 'gw-1',
+      endpointId,
       relayHint: 'https://relay.example',
       rememberDevice: true,
       ssh: { destination: 'box' },
     });
 
-    const bad = normalizeProfile('gw-1', {
+    const bad = normalizeProfile(endpointId, {
       ...base,
       ssh: { destination: '' },
       avatarColor: 'nope',
     });
     expect(bad?.ssh).toBeUndefined();
-    expect(bad?.avatarColor).toBe(defaultAvatarColor('gw-1'));
+    expect(bad?.avatarColor).toBe(defaultAvatarColor(endpointId));
   });
 
   it('rejects id mismatch, bad kind, empty label, missing createdAt', () => {
     expect(normalizeProfile('other', base)).toBeUndefined();
-    expect(normalizeProfile('gw-1', { ...base, kind: 'cloud' as never })).toBeUndefined();
-    expect(normalizeProfile('gw-1', { ...base, label: '' })).toBeUndefined();
-    expect(normalizeProfile('gw-1', { ...base, createdAt: undefined })).toBeUndefined();
-    expect(normalizeProfile('gw-1', null)).toBeUndefined();
+    expect(normalizeProfile(endpointId, { ...base, kind: 'cloud' as never })).toBeUndefined();
+    expect(normalizeProfile(endpointId, { ...base, label: '' })).toBeUndefined();
+    expect(normalizeProfile(endpointId, { ...base, createdAt: undefined })).toBeUndefined();
+    expect(normalizeProfile(endpointId, null)).toBeUndefined();
   });
 });
 
@@ -140,17 +143,18 @@ describe('validateAddGatewayFields', () => {
   });
 
   it('trims the stable identity, relay cache, and display name', () => {
+    const endpointId = 'a'.repeat(64);
     expect(
       validateAddGatewayFields({
         label: '  Home  ',
-        endpointId: '  abc123  ',
+        endpointId: `  ${endpointId}  `,
         relayHint: '  https://relay.example  ',
         displayName: '  Family  ',
       }),
     ).toEqual({
       ok: true,
       label: 'Home',
-      endpointId: 'abc123',
+      endpointId,
       relayHint: 'https://relay.example',
       displayName: 'Family',
     });

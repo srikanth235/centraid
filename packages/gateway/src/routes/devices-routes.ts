@@ -83,6 +83,10 @@ export interface DevicesRouteDeps {
   endpointTicket?: () => string | undefined;
   /** Founding must happen before an ordinary enrollment ticket can be minted. */
   isUninitialized?: () => boolean;
+  /** Direct host-custody request (authenticated bearer, never iroh-forwarded). */
+  canMintPairingTicket?: (req: IncomingMessage) => boolean;
+  /** Filesystem registry ids, used only by the direct host-custody mint lane. */
+  vaultIds?: () => string[];
   /** Purge vault-local protocol state owned by removed enrollment rows. */
   onRevoked?: (rows: DeviceEnrollment[]) => void | Promise<void>;
   /** Close Rust-owned live transports once a device loses its final enrollment. */
@@ -104,18 +108,18 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     }
 
     const callerKey = callerDeviceKey(req);
-    if (callerKey === undefined) {
-      return sendJson(res, 403, {
-        error: 'device_identity_required',
-        message: 'this route requires a proved iroh device identity',
-      });
-    }
-    const allowedVaults = new Set(deps.enrollments.vaultsFor(callerKey));
+    const allowedVaults = new Set(callerKey ? deps.enrollments.vaultsFor(callerKey) : []);
     const isAllowed = (vaultId: string): boolean => allowedVaults.has(vaultId);
 
     const method = req.method ?? 'GET';
 
     if (url.pathname === DEVICES_PATH) {
+      if (callerKey === undefined) {
+        return sendJson(res, 403, {
+          error: 'device_identity_required',
+          message: 'this route requires a proved iroh device identity',
+        });
+      }
       if (method !== 'GET') {
         return sendJson(res, 405, { error: 'method_not_allowed' });
       }
@@ -156,18 +160,37 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
           : typeof headerVault === 'string'
             ? headerVault
             : undefined;
-      const target = requested ?? [...allowedVaults][0];
+      const hostCustody = deps.canMintPairingTicket?.(req) === true;
+      if (!callerKey && !hostCustody) {
+        return sendJson(res, 403, {
+          error: 'device_identity_required',
+          message: 'pairing tickets require an enrolled owner or direct host custody',
+        });
+      }
+      const hostVaults = hostCustody ? (deps.vaultIds?.() ?? []) : [];
+      const target =
+        requested === undefined
+          ? ([...allowedVaults][0] ?? hostVaults[0])
+          : [...allowedVaults, ...hostVaults].find(
+              (vaultId) => vaultId === requested || deps.vaultName(vaultId) === requested,
+            );
       if (target === undefined) {
         return sendJson(res, 400, { error: 'vault_required' });
       }
       // Scope + existence guard (no existence leak — a device caller outside
       // the vault, or an unknown vault, both 404 the same way).
-      if (!isAllowed(target) || deps.vaultName(target) === undefined) {
+      if (
+        (!isAllowed(target) && !hostVaults.includes(target)) ||
+        deps.vaultName(target) === undefined
+      ) {
         return sendJson(res, 404, { error: 'not_found' });
       }
       // Minting a pairing ticket delegates enrollment, so only a proved owner
       // of this exact vault may do it. There is no keyless loopback wildcard.
-      if (deps.enrollments.get(callerKey, target)?.trust !== 'owner') {
+      if (
+        !hostCustody &&
+        (!callerKey || deps.enrollments.get(callerKey, target)?.trust !== 'owner')
+      ) {
         return sendJson(res, 403, {
           error: 'not_owner',
           message: 'only the owner device can mint pairing tickets',
@@ -208,6 +231,13 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
         vaultName: deps.vaultName(target),
         expiresAt: new Date(minted.expiresAt).toISOString(),
         trust,
+      });
+    }
+
+    if (callerKey === undefined) {
+      return sendJson(res, 403, {
+        error: 'device_identity_required',
+        message: 'this route requires a proved iroh device identity',
       });
     }
 

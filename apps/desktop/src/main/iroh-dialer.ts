@@ -26,6 +26,25 @@ interface IrohConnection {
 
 const connections = new Map<string, IrohConnection>();
 const starting = new Map<string, Promise<IrohConnection>>();
+let testProxyResolver:
+  | ((connectionId: string, endpointId: string, relayHint?: string) => Promise<string>)
+  | undefined;
+
+/**
+ * E2E transport seam. The Electron test entry installs this before importing
+ * main.js so a loopback mock can stand in for iroh without persisting a URL
+ * or token in the production connection registry. It is loaded dynamically
+ * by tests/e2e/electron-entry.mjs.
+ * @public
+ */
+export function setIrohProxyResolverForTests(
+  resolver: (connectionId: string, endpointId: string, relayHint?: string) => Promise<string>,
+): void {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('the iroh proxy test resolver is available only with NODE_ENV=test');
+  }
+  testProxyResolver = resolver;
+}
 
 export function ensureIrohDeviceKey(connectionId: string): Uint8Array {
   return loadEndpointSecret({
@@ -41,6 +60,7 @@ export async function ensureIrohProxy(
   endpointId: string,
   relayHint?: string,
 ): Promise<string> {
+  if (testProxyResolver) return testProxyResolver(connectionId, endpointId, relayHint);
   const ready = connections.get(connectionId);
   if (ready) return ready.baseUrl;
   const inFlight = starting.get(connectionId);

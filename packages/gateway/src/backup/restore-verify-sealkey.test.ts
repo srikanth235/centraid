@@ -57,7 +57,7 @@ async function makeSealedMachine(
       enabled: true,
       provider: { kind: 'remote', endpoint: server.url, apiKey: server.apiKey },
     },
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health: new HealthRegistry(),
     logger: silentLogger,

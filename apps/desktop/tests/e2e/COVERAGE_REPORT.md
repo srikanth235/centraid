@@ -28,8 +28,10 @@ bug**: the row-browser pager never advanced (see "Bug found" below).
   drives the real renderer.
 - **Pointing at the mock:** post-refactor, the renderer talks to the *active gateway*
   over HTTP and `settings.json` no longer stores a URL/token. The harness seeds a
-  **remote gateway profile** (`gateways/<id>/profile.json`) whose `url` is the mock,
-  marks it active, and sets `onboardingCompletedAt`. See [fixtures.ts](./fixtures.ts).
+  remote EndpointId row in the main-process-owned `connections.json`, maps that
+  EndpointId to the loopback mock through an in-memory E2E transport seam, marks it
+  active, and sets `onboardingCompletedAt`. No URL/token is persisted. See
+  [fixtures.ts](./fixtures.ts).
 - **Mock gateway:** one configurable HTTP server per test covering the full gateway
   surface + **SSE** for chat turns and automation run events, with CORS/OPTIONS and
   per-route error knobs. `gateway.state` is the single source of fixture data.

@@ -2,12 +2,11 @@
  * Named gateway/vault key custody (issue #555).
  *
  * A KeyStore file is never a bare secret. Every backend writes the same
- * self-describing envelope so custody can move between the 0600 headless
- * floor and an OS wrapper without changing callers or filenames. The file
- * backend is intentionally an at-rest permission boundary, not encryption:
- * it protects against accidental disclosure and leaves OS disk encryption
- * to the host. Desktop supplies a KeyProtector backed by Electron
- * safeStorage.
+ * self-describing envelope so custody can move between host and OS wrappers
+ * without changing callers or filenames. The unprotected file scheme remains
+ * only for legacy adoption and low-level compatibility; production gateway
+ * hosts supply a protector (OS/service custody or an external 0600 host
+ * credential).
  */
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
@@ -16,6 +15,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -43,6 +43,8 @@ export interface KeyProtector {
 export interface KeyStoreOptions {
   protector?: KeyProtector;
   warn?: (message: string) => void;
+  /** Fault-injection seam used to prove first-mint atomicity. */
+  beforeCommit?: (file: string, tempFile: string) => void;
 }
 
 /** AES-256-GCM envelope protector backed by a device-custodied wrapping key. */
@@ -102,11 +104,13 @@ export class KeyStore {
   readonly dir: string;
   private readonly protector: KeyProtector | undefined;
   private readonly warn: (message: string) => void;
+  private readonly beforeCommit: ((file: string, tempFile: string) => void) | undefined;
 
   constructor(dir: string, options: KeyStoreOptions = {}) {
     this.dir = path.resolve(dir);
     this.protector = options.protector;
     this.warn = options.warn ?? (() => undefined);
+    this.beforeCommit = options.beforeCommit;
   }
 
   file(name: string): string {
@@ -147,7 +151,7 @@ export class KeyStore {
       secret = decodePayload(file, envelope.payload);
       // Desktop adoption: once an OS-custodied protector is available, a
       // successfully-read headless/legacy envelope is immediately rewrapped.
-      if (this.protector) this.store(name, secret);
+      if (this.protector) this.write(name, secret);
     } else if (this.protector?.scheme === envelope.scheme) {
       secret = this.protector.unprotect(decodePayload(file, envelope.payload));
     } else {
@@ -180,7 +184,7 @@ export class KeyStore {
     const payload = this.protector?.protect(secret) ?? Buffer.from(secret);
     const envelope: KeyEnvelope = { scheme, payload: payload.toString('base64') };
     const bytes = Buffer.from(`${KEY_STORE_ENVELOPE_MAGIC}${JSON.stringify(envelope)}\n`, 'utf8');
-    atomicWrite(file, bytes);
+    atomicWrite(file, bytes, this.beforeCommit);
   }
 
   rotate(name: string): Buffer {
@@ -271,10 +275,21 @@ function decodePayload(file: string, payload: string): Buffer {
   return Buffer.from(payload, 'base64');
 }
 
-function atomicWrite(file: string, bytes: Buffer): void {
+function atomicWrite(
+  file: string,
+  bytes: Buffer,
+  beforeCommit?: (file: string, tempFile: string) => void,
+): void {
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const temp = `${file}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
   writeFileSync(temp, bytes, { mode: 0o600, flag: 'wx' });
-  renameSync(temp, file);
-  chmodSync(file, 0o600);
+  let committed = false;
+  try {
+    beforeCommit?.(file, temp);
+    renameSync(temp, file);
+    committed = true;
+    chmodSync(file, 0o600);
+  } finally {
+    if (!committed) rmSync(temp, { force: true });
+  }
 }

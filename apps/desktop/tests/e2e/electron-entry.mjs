@@ -12,6 +12,16 @@
 // use the native Keychain/DPAPI, so it needs no platform guard.
 import { app } from 'electron';
 
+const proxyMap = JSON.parse(process.env.CENTRAID_E2E_IROH_PROXY_MAP ?? '{}');
+const { setIrohProxyResolverForTests } = await import('../../dist/main/iroh-dialer.js');
+setIrohProxyResolverForTests(async (connectionId) => {
+  const url = proxyMap[connectionId];
+  if (typeof url !== 'string' || url.length === 0) {
+    throw new Error(`E2E has no iroh proxy target for ${connectionId}`);
+  }
+  return url;
+});
+
 app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
 
 // "Headless" for local runs without touching main.ts. Electron has no real

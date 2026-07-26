@@ -104,8 +104,13 @@ const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
   },
   {
     name: 'pairResponseOk',
-    note: 'centraid/pair/1 desktop→phone success.',
-    value: { ok: true, deviceId: 'dev_7f3a', desktopName: 'studio-mini' },
+    note: 'centraid/pair/1 desktop→phone success; gatewayId is the durable EndpointId.',
+    value: {
+      ok: true,
+      gatewayId: 'gw_endpoint_9c8d',
+      deviceId: 'dev_7f3a',
+      desktopName: 'studio-mini',
+    },
   },
   {
     name: 'pairResponseError',

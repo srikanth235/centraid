@@ -68,6 +68,8 @@ function companionGrantProfile(value: unknown): string[] | undefined | null {
 export interface DaemonDevicePlane {
   /** Wire into `serve()` so requests resolve their vault by enrollment. */
   deviceAccess: DeviceAccess;
+  /** Direct authenticated host request, never an iroh-forwarded request. */
+  canMintFoundingTicket(req: IncomingMessage): boolean;
   /** Bind the endpoint once the HTTP listener is up. */
   startEndpoint(upstream: {
     baseUrl: string;
@@ -144,6 +146,10 @@ export function makeDaemonDevicePlane(input: {
     },
     vaultsFor: (deviceKey: string): string[] => enrollments.vaultsFor(deviceKey),
   };
+  const canMintFoundingTicket = (req: IncomingMessage): boolean =>
+    isLoopbackRequest(req) &&
+    req.headers[DEVICE_HEADER] === undefined &&
+    req.headers[DEVICE_PROOF_HEADER] === undefined;
 
   const pairDevice = (candidate: unknown, endpointId: string): GatewayPairResponse => {
     const request = candidate as Partial<GatewayPairRequest> | null;
@@ -224,17 +230,22 @@ export function makeDaemonDevicePlane(input: {
     baseUrl: string;
     token: string;
   }): Promise<GatewayEndpointHandle | undefined> => {
+    // Custody corruption is not a transport outage. Resolve it before the
+    // best-effort network start so a short/refused identity key aborts boot
+    // with the loader's actionable repair message instead of silently serving
+    // a gateway whose paired devices can never reach it.
+    const secretKey = loadEndpointSecret({
+      persistence: {
+        load: () => keyStore.load('endpoint-key.bin'),
+        store: (secret) => keyStore.store('endpoint-key.bin', Buffer.from(secret)),
+      },
+      onCorrupt: 'refuse',
+      label: 'gateway endpoint key',
+    });
     let handle: GatewayEndpointHandle;
     try {
       handle = await startGatewayEndpoint({
-        secretKey: loadEndpointSecret({
-          persistence: {
-            load: () => keyStore.load('endpoint.key'),
-            store: (secret) => keyStore.store('endpoint.key', Buffer.from(secret)),
-          },
-          onCorrupt: 'refuse',
-          label: 'gateway endpoint key',
-        }),
+        secretKey,
         upstream: () => upstream,
         authorize: authorizeEndpoint,
         pair: pairDevice,
@@ -266,6 +277,7 @@ export function makeDaemonDevicePlane(input: {
 
   return {
     deviceAccess,
+    canMintFoundingTicket,
     startEndpoint,
     dataPlaneControl,
     pairing: { enrollments, tickets },

@@ -20,7 +20,8 @@ let handle: GatewayServeHandle;
 beforeEach(async () => {
   dataDir = await tempDir(`gw-scale-${crypto.randomUUID()}-`);
   handle = await serve({
-    paths: { vaultDir: path.join(dataDir, 'vault'), prefsFile: path.join(dataDir, 'prefs.json') },
+    paths: { vaultDir: path.join(dataDir, 'vault') },
+    initVaultName: 'Scale fixture',
     token: 'scale-admin-token',
   });
 });

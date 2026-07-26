@@ -1,6 +1,5 @@
 import {
   attachVaultStorageConnection,
-  confirmGatewayRecoveryKit,
   createStorageConnection as gwCreateStorageConnection,
   deleteStorageConnection as gwDeleteStorageConnection,
   detachVaultStorageConnection,
@@ -37,13 +36,14 @@ export async function loadStorageConnectionsData(): Promise<StorageConnectionRow
 
 export async function createStorageConnection(
   input: StorageConnectionFormInput,
-  opts?: { force?: boolean },
 ): Promise<StorageMutationResult<StorageConnectionRowDTO>> {
   try {
-    const connection = await gwCreateStorageConnection(
-      { kind: 'provider', name: input.name, baseUrl: input.baseUrl, apiKey: input.apiKey },
-      opts,
-    );
+    const connection = await gwCreateStorageConnection({
+      kind: 'provider',
+      name: input.name,
+      baseUrl: input.baseUrl,
+      apiKey: input.apiKey,
+    });
     return { ok: true, value: toRowDTO(connection) };
   } catch (err) {
     if (err instanceof RecoveryKitNotConfirmedError) {
@@ -95,10 +95,6 @@ export async function testStorageConnection(id: string): Promise<StorageTestResu
   return gwTestStorageConnection(id);
 }
 
-export async function confirmStorageRecoveryKit(): Promise<{ confirmedAt: number }> {
-  return confirmGatewayRecoveryKit();
-}
-
 export async function loadVaultBlobStoreData(): Promise<VaultBlobStoreDTO> {
   const settings = await getVaultBlobStore();
   return settings.kind === 's3'
@@ -108,10 +104,9 @@ export async function loadVaultBlobStoreData(): Promise<VaultBlobStoreDTO> {
 
 export async function attachVaultConnection(
   connectionId: string,
-  opts?: { force?: boolean },
 ): Promise<StorageMutationResult<VaultBlobStoreDTO>> {
   try {
-    const settings = await attachVaultStorageConnection(connectionId, opts);
+    const settings = await attachVaultStorageConnection(connectionId);
     return {
       ok: true,
       value:

@@ -48,9 +48,6 @@ export interface GatewayPaths {
    */
   cacheDir?: string;
 
-  /** Compatibility slot; preferences are rows in gateway.db. */
-  prefsFile: string;
-
   /**
    * Optional per-gateway template cache dir (issue #141). When set, the
    * `GET /centraid/_templates` route resolves bundle-or-cache, letting a
@@ -85,25 +82,13 @@ export interface GatewayPaths {
   modelPricingFile?: string;
 
   /**
-   * Compatibility name for backup-owned disposable cache. Keyring custody is
-   * `keys/keyring.key`; target/fencing state is in gateway.db.
-   */
-  backupDir?: string;
-
-  /**
    * Optional directory for rotated JSONL persistence of the gateway's
    * log ring (issue #351 — "logs don't survive restart, exactly when
-   * you want a post-mortem"). Unlike `backupDir`, this has NO implicit
+   * you want a post-mortem"). This has NO implicit
    * default sibling: omitting it keeps `GatewayLogStore` in-memory-only
    * (today's behavior), which is what tests and disposable embeds want.
    * A host opts in by pointing this at a real directory (e.g. a
    * `gateway-logs` sibling of `vaultDir`).
    */
   logsDir?: string;
-
-  /**
-   * Compatibility slot. Storage connections, limits, and recovery-kit state
-   * are rows in gateway.db.
-   */
-  storageDir?: string;
 }

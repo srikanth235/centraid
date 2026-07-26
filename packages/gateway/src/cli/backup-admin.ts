@@ -31,6 +31,7 @@
  */
 
 import path from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 import { openVaultRegistry, type VaultInfo, type VaultRegistry } from '../serve/vault-registry.js';
 import { HealthRegistry } from '../serve/health-registry.js';
 import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
@@ -38,32 +39,8 @@ import { BackupService } from '../backup/backup-service.js';
 import type { BackupProvider } from '@centraid/backup';
 import { daemonLayoutFor } from './paths.js';
 import { resolveDaemonConfig } from './resolve-config.js';
-
-/**
- * Refuse to touch a vault root a LIVE gateway holds (issue #408): mounting
- * planes here constructs WAL shippers over the daemon's OWN wal-ship state,
- * and a backup run checkpoints the live WALs — a second checkpointer is
- * exactly the I2 violation the shipper's detectors treat as foreign
- * (generation break + full base re-upload at best; interleaved state-file
- * writes at worst). The old `stageVaultDbs` CLI path was read-only, so this
- * gate is new WITH the shipper, not before it.
- */
-export function refuseIfDaemonHoldsRoot(
-  vaultRoot: string,
-  fail: (msg: string, code?: number) => never,
-): void {
-  try {
-    GatewayDatabase.open(path.dirname(vaultRoot), { lock: 'exclusive' }).close();
-  } catch (error) {
-    if (error instanceof GatewayLockError) {
-      fail(
-        'the running daemon holds gateway.db — run this operation through it, or stop it first',
-        2,
-      );
-    }
-    throw error;
-  }
-}
+import { daemonKeyStore } from './key-store.js';
+import { deriveBackupSourceInstanceId } from '../backup/backup-state.js';
 
 interface BackupArgs {
   configPath?: string;
@@ -72,6 +49,7 @@ interface BackupArgs {
   dest?: string;
   seq?: number;
   out?: string;
+  passwordFile?: string;
   /** Point-in-time restore target, epoch ms (parsed from `--at <iso>`). */
   atMs?: number;
   /** Force a full (non-lazy) restore — the `--full` override (issue #439 R2). */
@@ -95,6 +73,7 @@ function parseBackupArgs(args: string[], fail: (msg: string, code?: number) => n
     else if (flag === '--vault') out.vault = take();
     else if (flag === '--dest') out.dest = take();
     else if (flag === '--out') out.out = take();
+    else if (flag === '--password-file') out.passwordFile = take();
     else if (flag === '--seq') {
       const n = Number(take());
       if (!Number.isInteger(n)) fail('--seq must be an integer', 2);
@@ -171,12 +150,44 @@ export async function commandBackup(
     fail('backup is not configured — add a "backup" block to your config file', 2);
   }
   const layout = daemonLayoutFor(config.dataDir);
-  refuseIfDaemonHoldsRoot(layout.vaultDir, fail);
-  const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: quietLogger });
+  if (!existsSync(layout.gatewayDbFile)) {
+    fail('gateway.db does not exist — start the daemon once before inspecting backups', 2);
+  }
+  const readOnly = action === 'status' || action === 'list';
+  let gatewayDatabase: GatewayDatabase;
+  try {
+    gatewayDatabase = GatewayDatabase.open(config.dataDir, {
+      lock: readOnly ? 'read-only' : 'exclusive',
+    });
+  } catch (error) {
+    if (error instanceof GatewayLockError) {
+      fail(
+        'the running daemon holds gateway.db — run this operation through it, or stop it first',
+        2,
+      );
+    }
+    throw error;
+  }
+  const keyStore = daemonKeyStore(layout.keysDir);
+  const endpointSecret = keyStore.load('endpoint-key.bin');
+  if (!endpointSecret) {
+    gatewayDatabase.close();
+    fail('gateway endpoint custody is missing — refusing to mint state from a backup command', 2);
+  }
+  const registry = openVaultRegistry({
+    rootDir: layout.vaultDir,
+    cacheRootDir: layout.cacheDir,
+    keyStore,
+    logger: quietLogger,
+    enableWalShipper: !readOnly,
+  });
   const health = new HealthRegistry();
   const service = new BackupService({
     config: config.backup,
-    backupDir: layout.backupDir ?? path.join(config.dataDir, 'backup'),
+    cacheDir: layout.cacheDir,
+    gatewayDatabase,
+    keyStore,
+    sourceInstanceId: deriveBackupSourceInstanceId(endpointSecret),
     vaults: registry,
     health,
     logger: quietLogger,
@@ -296,8 +307,12 @@ export async function commandBackup(
         return;
       }
       case 'kit': {
-        if (!parsed.out) fail('usage: backup kit --out <file>', 2);
-        await service.writeKit(parsed.out);
+        if (!parsed.out || !parsed.passwordFile) {
+          fail('usage: backup kit --out <file> --password-file <file>', 2);
+        }
+        const password = readFileSync(parsed.passwordFile, 'utf8').replace(/\r?\n$/, '');
+        if (password.length === 0) fail('recovery-kit password file is empty', 2);
+        await service.writeKit(parsed.out, password);
         printJson({ kit: parsed.out });
         process.stderr.write(
           'centraid-gateway: the kit file contains the LIVE backup keyring — store it offline; ' +
@@ -309,6 +324,8 @@ export async function commandBackup(
         fail(`unhandled backup action ${action}`, 2);
     }
   } finally {
+    await service.stop();
     registry.stop();
+    gatewayDatabase.close();
   }
 }

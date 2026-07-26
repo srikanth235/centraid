@@ -246,11 +246,16 @@ export async function verifyGatewayBackupBucket(
  * (code `'conflict'`) if backup isn't configured — there's no keyring to
  * have exported a kit from.
  */
-export async function confirmGatewayRecoveryKit(): Promise<{ confirmedAt: number }> {
+export async function confirmGatewayRecoveryKit(input: {
+  kit: unknown;
+  password: string;
+  lossConsent: true;
+}): Promise<{ confirmedAt: number }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, '/centraid/_gateway/backup/kit-confirmed', {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify(input),
   });
   return readJson<{ ok: true; confirmedAt: number }>(res, 'confirm gateway recovery kit');
 }

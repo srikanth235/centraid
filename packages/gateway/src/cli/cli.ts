@@ -37,7 +37,6 @@
 
 import { promises as fs, realpathSync } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import type { GatewayEndpointHandle } from '@centraid/tunnel';
 import { serve } from '../serve/serve.js';
@@ -55,12 +54,14 @@ import { commandService } from './service-admin.js';
 import { commandStatus } from './status-admin.js';
 import { commandInitTicket } from './founding-admin.js';
 import { commandLockStatus } from './lock-admin.js';
+import { kitlessHostIdentity } from '../serve/host-identity.js';
 import { makeDaemonDevicePlane } from './endpoint-host.js';
 import { mergeAllowedHosts } from './allowed-hosts.js';
 import { parseServeArgsPure, type ParsedServe } from './cli-serve-args.js';
 import { GatewayDatabase } from '../serve/gateway-db.js';
 import { WebControlSessionStore } from '../serve/web-session-store.js';
 import { daemonKeyStore } from './key-store.js';
+import { landlordBearerForEndpointSecret } from './landlord-auth.js';
 
 const PKG_VERSION = '0.1.0';
 
@@ -99,8 +100,6 @@ function usage(): never {
       '  centraid-gateway devices add --data-dir <path> <endpoint-id> --vault <name-or-id> [--label <l>]',
       '  centraid-gateway devices revoke --data-dir <path> <enrollment-or-endpoint-id>',
       '  centraid-gateway key status  --data-dir <path> --vault <name-or-id>',
-      '  centraid-gateway key export  --data-dir <path> --vault <name-or-id> --out <file>',
-      '  centraid-gateway key restore --data-dir <path> --vault <name-or-id> --from <file>',
       '  centraid-gateway key rotate  --data-dir <path> --vault <name-or-id>',
       '  centraid-gateway backup status  [--config <path> | --data-dir <path>]',
       '  centraid-gateway backup run     [--config <path> | --data-dir <path>] [--vault <id>]',
@@ -108,7 +107,7 @@ function usage(): never {
       '  centraid-gateway backup verify  [--config <path> | --data-dir <path>] [--vault <id>]',
       '  centraid-gateway backup restore [--config <path> | --data-dir <path>] --vault <id> --dest <dir> [--seq <n>]',
       '  centraid-gateway backup kit     [--config <path> | --data-dir <path>] --out <file>',
-      '  centraid-gateway recover --kit <file> --api-key <key> --data-dir <path> [--at <iso>] [--full] [--vault <id>] [--yes]',
+      '  centraid-gateway recover --kit <file> --password-file <file> --api-key <key> --data-dir <path> [--at <iso>] [--full] [--vault <id>] [--yes]',
       '  centraid-gateway service install   [--data-dir <path> | --config <path>] [--host <h>] [--port <p>] [--dry-run] [--label <id>]',
       '  centraid-gateway service uninstall [--dry-run] [--label <id>]',
       '  centraid-gateway service status    [--dry-run] [--label <id>]',
@@ -119,9 +118,8 @@ function usage(): never {
       '',
       'vault/pair/devices/key are stopped-daemon maintenance commands:',
       "mutations take gateway.db's exclusive lock and refuse while the",
-      'daemon is running. key export/restore are the recovery story for sealed',
-      'secrets (issue #298): copying a vault directory carries ciphertext',
-      'only; the key travels ONLY through these receipted gestures.',
+      'daemon is running. Recovery uses only a password-wrapped recovery kit;',
+      'no command emits a raw vault key.',
       '',
       'There is no shared gateway-wide credential and no direct HTTP pairing.',
       'Owner capability is a per-device, revocable enrollment trust tier.',
@@ -134,7 +132,7 @@ function usage(): never {
       'swaps the live vault; kit emits live key material, store it offline.',
       '',
       'recover (issue #439) is the recovery VERB for a blank machine: with',
-      'nothing but the recovery kit (--kit) and the provider api-key',
+      'nothing but the recovery kit (--kit), its password file, and provider api-key',
       '(--api-key), it restores the vault into --data-dir, seeds a fenced',
       'backup state so the old machine is superseded, and adopts the result as',
       'a live vault (its quarantine fires on first mount). Lazy by default;',
@@ -198,11 +196,9 @@ async function commandServe(args: string[]): Promise<void> {
   // carry the per-boot device proof header, so the real per-device identity is
   // what `composedHandler` scopes on (this bearer only unlocks the loopback
   // door). It is MINTED FRESH each boot, never written to disk, never printed —
-  // the retired `token.bin` shared admin plane is gone. A parent that spawns
+  // the retired `token.bin` shared bearer plane is gone. A parent that spawns
   // this daemon (the desktop's detached gateway) may pin a known value via
   // `CENTRAID_GATEWAY_TOKEN` so it can reach the loopback listener itself.
-  const loopbackSecret =
-    process.env.CENTRAID_GATEWAY_TOKEN?.trim() || crypto.randomBytes(32).toString('hex');
   const dataPlaneSecret = process.env.CENTRAID_DATA_PLANE_SECRET;
   const dataPlaneHttpUrl = process.env.CENTRAID_DATA_PLANE_HTTP_URL;
   const desktopEndpointId = process.env.CENTRAID_DESKTOP_ENDPOINT_ID?.trim() || undefined;
@@ -219,6 +215,14 @@ async function commandServe(args: string[]): Promise<void> {
   const keyStore = daemonKeyStore(layout.keysDir, {
     warn: (message) => logger.warn(message),
   });
+  const loopbackSecret =
+    process.env.CENTRAID_GATEWAY_TOKEN?.trim() ||
+    landlordBearerForEndpointSecret(keyStore.loadOrCreate('endpoint-key.bin'));
+  const hostEndpointId =
+    desktopEndpointId ??
+    (parsed.initVaultName
+      ? kitlessHostIdentity(keyStore.loadOrCreate('endpoint-key.bin'))
+      : undefined);
   let vaultsRef: import('../serve/vault-registry.js').VaultRegistry | undefined;
   const devicePlane = makeDaemonDevicePlane({
     layout,
@@ -227,7 +231,7 @@ async function commandServe(args: string[]): Promise<void> {
     logger,
     keyStore,
     ...(dataPlaneSecret ? { controlSecret: dataPlaneSecret } : {}),
-    ...(desktopEndpointId ? { loopbackEndpointId: desktopEndpointId } : {}),
+    ...(hostEndpointId ? { loopbackEndpointId: hostEndpointId } : {}),
   });
 
   // The ephemeral secret opens only the process-local HTTP listener. Device
@@ -249,8 +253,9 @@ async function commandServe(args: string[]): Promise<void> {
     token: loopbackSecret,
     logTag: 'centraid-gateway',
     deviceAccess: devicePlane.deviceAccess,
+    canMintFoundingTicket: devicePlane.canMintFoundingTicket,
     keyStore,
-    ...(desktopEndpointId ? { hostDeviceEndpointId: desktopEndpointId } : {}),
+    ...(hostEndpointId ? { hostDeviceEndpointId: hostEndpointId } : {}),
     dataPlaneControl: devicePlane.dataPlaneControl,
     ...(dataPlaneSecret && dataPlaneHttpUrl
       ? {

@@ -13,7 +13,8 @@ const root = process.argv[2];
 if (!root) throw new Error('gateway idle fixture needs a root directory');
 
 const handle = await serve({
-  paths: { vaultDir: `${root}/vault`, prefsFile: `${root}/prefs.json` },
+  paths: { vaultDir: `${root}/vault` },
+  initVaultName: 'Perf fixture',
 });
 
 process.send?.({ type: 'ready', url: handle.url, token: handle.token });

@@ -164,7 +164,7 @@ async function seedMachineA(
       enabled: true,
       provider: { kind: 'remote', endpoint: server.url, apiKey: server.apiKey },
     },
-    backupDir,
+    cacheDir: backupDir,
     keyStore: new KeyStore(path.join(vaultRoot, 'keys')),
     vaults: registry,
     health: new HealthRegistry(),
@@ -263,7 +263,7 @@ test('a blank machine recovers a whole vault from nothing but the kit and the ap
     kitDocument: a.kitDocument,
     apiKey: a.apiKey,
     vaultRoot: layout.vaultDir,
-    backupDir: layout.backupDir!,
+    dataDir: layout.dataDir,
     log: silentLogger,
   });
 
@@ -421,7 +421,7 @@ test('recovery refuses a snapshot written by newer software BEFORE any byte is f
       kitDocument: a.kitDocument,
       apiKey: a.apiKey,
       vaultRoot: layout.vaultDir,
-      backupDir: layout.backupDir!,
+      dataDir: layout.dataDir,
       log: silentLogger,
     }),
   ).rejects.toThrow(/vaultUserVersion 9999 is newer/);
@@ -451,7 +451,7 @@ test('adopt-time reconcile re-pins a replicated blob the provider dropped, and u
     kitDocument: a.kitDocument,
     apiKey: a.apiKey,
     vaultRoot: layout.vaultDir,
-    backupDir: layout.backupDir!,
+    dataDir: layout.dataDir,
     log: silentLogger,
   });
 

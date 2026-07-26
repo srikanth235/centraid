@@ -70,14 +70,14 @@ async function codeRefsDigest(bareDir: string): Promise<string> {
 
 /**
  * The vault's app code store as a `git bundle --all`, written to a PERSISTENT
- * per-vault dir (`<backupDir>/code-bundle/<vaultId>/`, NOT the per-tick-wiped
- * `staging/`) so the file survives between backup ticks.
+ * per-vault cache dir (`<cacheDir>/code-bundle/<vaultId>/`) so the file
+ * survives between backup ticks.
  *
  * The upload path treats the bundle like any other snapshot entry: fixed-part
  * chunk, dedup, encrypt, upload-if-new (`engine.ts`). That path already has a
  * `(size, mtime)`-keyed fast path that reuses a prior entry's chunk refs without
  * re-reading — but only if the FILE is byte-stable across ticks. The old code
- * bundled into `staging/`, which is wiped and rewritten every tick, so the
+ * rebuilt in a disposable per-tick directory, so the
  * bundle looked new every time: a full-history `git pack-objects` repack (git's
  * default `pack.threads` is not even byte-deterministic on a grown repo) plus a
  * full re-read/re-chunk and, when the bytes drifted, a wholesale re-upload — all
@@ -138,14 +138,14 @@ export interface AssembleOptions {
   plane: VaultPlane;
   /**
    * PERSISTENT per-vault dir the code-store bundle lives in
-   * (`<backupDir>/code-bundle/<vaultId>/`). It is deliberately NOT wiped
+   * (`<cacheDir>/code-bundle/<vaultId>/`). It is deliberately NOT wiped
    * between ticks: the standing `apps.bundle` (+ its `apps.bundle.refs` digest
    * sidecar) is reused untouched while the code store's refs have not moved, so
    * the engine's `(size, mtime)` fast path skips it entirely (see
    * `bundleCodeStore`). Every other entry is read in place — db bases from the
    * shipper's pinned clones, blobs from the CAS, the seal key from custody — so
    * this is the only directory assembly writes to, and there is no ephemeral
-   * staging dir anymore. Secret keys are deliberately absent from this
+   * assembly directory anymore. Secret keys are deliberately absent from this
    * source list and travel only in the wrapped recovery kit.
    */
   bundleDir: string;

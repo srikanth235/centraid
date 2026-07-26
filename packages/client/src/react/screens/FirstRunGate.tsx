@@ -1,44 +1,39 @@
 import { useState, type JSX } from 'react';
 import OnboardingScreen, { type OnboardingCompleteInput } from './OnboardingScreen.js';
-import RecoverScreen, { type RecoverScreenBridge } from './RecoverScreen.js';
+import FoundingScreen, { type FoundingScreenBridge } from './FoundingScreen.js';
 import styles from './RecoverScreen.module.css';
 
 /**
- * The first-run gate (issue #439 §UI flow, step 1) — ONE binary decision before
- * anything else: "Start fresh" or "Recover my vault", the same discipline #436
- * applied to storage. It is a thin parent switcher (chosen over threading a
- * third mode through OnboardingScreen): the fresh path is the existing
- * `OnboardingScreen` untouched (identity → connect), the recover path is
- * `RecoverScreen`, and each completes into the same "onboarding done → boot the
- * app" state via its own callback. Rendered by boot.tsx in place of the bare
- * `OnboardingScreen` when `onboardingCompletedAt` is unset.
+ * First run branches on gateway state, not installation state. A founded
+ * gateway only accepts device onboarding; Create / Restore appears solely on
+ * a verified zero-vault gateway and both founding peers use the same screen.
  */
 export interface FirstRunGateProps {
   /** Fresh path completion (identity + connected gateway) — boot writes the
    *  profile + onboarding stamp and swaps in the app. */
   onOnboardingComplete: (input: OnboardingCompleteInput) => Promise<void> | void;
-  /** Recover path completion — the vault is already mounted; boot re-reads its
-   *  auth against the recovered vault, stamps onboarding, and swaps in the app. */
-  onRecoveryComplete: () => Promise<void> | void;
-  /** The recovery client bridge (the gateway-client-recover functions). */
-  recover: RecoverScreenBridge;
+  onFoundingComplete: () => Promise<void> | void;
+  founding: FoundingScreenBridge;
+  gatewayStatus: 'uninitialized' | 'ready' | 'unreachable';
 }
 
 export default function FirstRunGate({
   onOnboardingComplete,
-  onRecoveryComplete,
-  recover,
+  onFoundingComplete,
+  founding,
+  gatewayStatus,
 }: FirstRunGateProps): JSX.Element {
-  const [mode, setMode] = useState<'choice' | 'fresh' | 'recover'>('choice');
+  const [mode, setMode] = useState<'choice' | 'create' | 'restore'>('choice');
 
-  if (mode === 'fresh') {
+  if (gatewayStatus !== 'uninitialized') {
     return <OnboardingScreen onComplete={onOnboardingComplete} />;
   }
-  if (mode === 'recover') {
+  if (mode === 'create' || mode === 'restore') {
     return (
-      <RecoverScreen
-        {...recover}
-        onRecovered={onRecoveryComplete}
+      <FoundingScreen
+        {...founding}
+        mode={mode}
+        onComplete={onFoundingComplete}
         onBack={() => setMode('choice')}
       />
     );
@@ -58,12 +53,12 @@ export default function FirstRunGate({
         </h1>
         <p className={styles.sub}>Starting fresh, or bringing a vault back from a backup?</p>
         <div className={styles.choiceGrid}>
-          <button type="button" className={styles.choiceBtn} onClick={() => setMode('fresh')}>
-            <span className={styles.choiceBtnTitle}>Start fresh</span>
-            <span className={styles.choiceBtnSub}>Set up a brand-new vault on this computer.</span>
+          <button type="button" className={styles.choiceBtn} onClick={() => setMode('create')}>
+            <span className={styles.choiceBtnTitle}>Create vault</span>
+            <span className={styles.choiceBtnSub}>Found a brand-new vault on this gateway.</span>
           </button>
-          <button type="button" className={styles.choiceBtn} onClick={() => setMode('recover')}>
-            <span className={styles.choiceBtnTitle}>Recover my vault</span>
+          <button type="button" className={styles.choiceBtn} onClick={() => setMode('restore')}>
+            <span className={styles.choiceBtnTitle}>Restore vault</span>
             <span className={styles.choiceBtnSub}>
               Bring backed-up vaults back from your recovery kit.
             </span>

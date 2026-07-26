@@ -582,10 +582,13 @@ export function registerIpcHandlers(): void {
     const { exportActiveGatewayDiagnostics } = await import('./gateway-ops.js');
     return exportActiveGatewayDiagnostics();
   });
-  ipcMain.handle(Channel.GATEWAY_RECOVERY_KIT_EXPORT, async () => {
-    const { exportActiveGatewayRecoveryKit } = await import('./gateway-ops.js');
-    return exportActiveGatewayRecoveryKit();
-  });
+  ipcMain.handle(
+    Channel.GATEWAY_RECOVERY_KIT_EXPORT,
+    async (_event, input: { password: string }) => {
+      const { exportActiveGatewayRecoveryKit } = await import('./gateway-ops.js');
+      return exportActiveGatewayRecoveryKit(input);
+    },
+  );
 
   ipcMain.handle(
     Channel.GATEWAY_AUTH_GET,

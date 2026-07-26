@@ -56,7 +56,6 @@ export async function buildTestGateway(
   const rootDir = providedRoot ?? (await tempDir('centraid-gateway-test-'));
   const paths: GatewayPaths = {
     vaultDir: join(rootDir, 'vault'),
-    prefsFile: join(rootDir, 'prefs.json'),
     ...pathOverrides,
   };
   const gateway = await buildGateway({ ...gatewayOptions, paths });

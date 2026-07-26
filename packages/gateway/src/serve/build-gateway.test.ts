@@ -5,6 +5,7 @@ import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { buildGateway, type BuiltGateway } from './build-gateway.ts';
+import { GatewayDatabase } from './gateway-db.js';
 import type { GatewayPaths } from '../paths.ts';
 
 // `buildGateway()` is the host-agnostic core: it constructs the whole
@@ -18,7 +19,6 @@ let gateway: BuiltGateway;
 function pathsUnder(dir: string): GatewayPaths {
   return {
     vaultDir: path.join(dir, 'vault'),
-    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -72,7 +72,15 @@ test('vaultless boot is healthy, explicit, and creates no vault or cache tree (#
   await gateway.stop();
   await fs.rm(dataDir, { recursive: true, force: true });
   dataDir = await tempDir(`build-gateway-vaultless-${crypto.randomUUID()}-`);
-  gateway = await buildGateway({ paths: pathsUnder(dataDir) });
+  const dataPlaneSecret = 'vaultless-data-plane-secret';
+  gateway = await buildGateway({
+    paths: pathsUnder(dataDir),
+    dataPlaneControl: {
+      secret: dataPlaneSecret,
+      authorize: (endpointId) => ({ allowed: endpointId === 'founder-device' }),
+      pair: () => ({ ok: false }),
+    },
+  });
   expect(gateway.vaults.list()).toEqual([]);
   await expect(fs.access(path.join(dataDir, 'vault'))).rejects.toMatchObject({ code: 'ENOENT' });
   await expect(fs.access(path.join(dataDir, 'cache'))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -80,24 +88,77 @@ test('vaultless boot is healthy, explicit, and creates no vault or cache tree (#
 
   const mounted = await mountUnauthed(gateway.composedHandler);
   try {
-    const [info, vaults, apps, automations, health, refused] = await Promise.all([
-      fetch(`${mounted.url}/centraid/_gateway/info`),
-      fetch(`${mounted.url}/centraid/_vault/vaults`),
-      fetch(`${mounted.url}/centraid/_apps`),
-      fetch(`${mounted.url}/centraid/_automations`),
-      fetch(`${mounted.url}/centraid/_gateway/health`),
-      fetch(`${mounted.url}/centraid/_vault/status`),
-    ]);
+    const [info, vaults, apps, automations, health, tunnel, tunnelAttacker, refused] =
+      await Promise.all([
+        fetch(`${mounted.url}/centraid/_gateway/info`),
+        fetch(`${mounted.url}/centraid/_vault/vaults`),
+        fetch(`${mounted.url}/centraid/_apps`),
+        fetch(`${mounted.url}/centraid/_automations`),
+        fetch(`${mounted.url}/centraid/_gateway/health`),
+        fetch(`${mounted.url}/centraid/_gateway/tunnel/authorize?endpointId=founder-device`, {
+          headers: { 'x-centraid-data-plane-secret': dataPlaneSecret },
+        }),
+        fetch(`${mounted.url}/centraid/_gateway/tunnel/authorize?endpointId=founder-device`),
+        fetch(`${mounted.url}/centraid/_vault/status`),
+      ]);
     expect(await info.json()).toMatchObject({ status: 'uninitialized' });
     expect(await vaults.json()).toEqual({ vaults: [] });
     expect(await apps.json()).toEqual([]);
     expect(await automations.json()).toEqual({ rows: [], errors: [] });
     expect(health.status).toBe(200);
+    expect(tunnel.status).toBe(200);
+    expect(await tunnel.json()).toEqual({ allowed: true });
+    expect(tunnelAttacker.status).toBe(403);
     expect(refused.status).toBe(409);
     expect(await refused.json()).toMatchObject({ error: 'uninitialized' });
+
+    // Founding changes the registry from zero→one before the phone opens its
+    // next QUIC connection to verify the recovery kit. The relay control
+    // callback must remain gateway-scoped after that transition; it cannot
+    // require the device header it is itself responsible for injecting.
+    gateway.vaults.create('Phone founded');
+    const [infoAfterFounding, tunnelAfterFounding] = await Promise.all([
+      fetch(`${mounted.url}/centraid/_gateway/info`),
+      fetch(`${mounted.url}/centraid/_gateway/tunnel/authorize?endpointId=founder-device`, {
+        headers: { 'x-centraid-data-plane-secret': dataPlaneSecret },
+      }),
+    ]);
+    expect(infoAfterFounding.status).toBe(200);
+    expect(await infoAfterFounding.json()).toMatchObject({ status: 'ready' });
+    expect(tunnelAfterFounding.status).toBe(200);
+    expect(await tunnelAfterFounding.json()).toEqual({ allowed: true });
   } finally {
     await mounted.close();
   }
+});
+
+test('network filesystem detection warns without refusing and disables orphan deletion', async () => {
+  await gateway.stop();
+  await fs.rm(dataDir, { recursive: true, force: true });
+  dataDir = await tempDir(`build-gateway-network-fs-${crypto.randomUUID()}-`);
+  const database = GatewayDatabase.open(dataDir, {
+    lock: 'exclusive',
+    networkFileSystem: true,
+  });
+  gateway = await buildGateway({
+    initVaultName: 'Network vault',
+    paths: pathsUnder(dataDir),
+    gatewayDatabase: database,
+  });
+
+  const snapshot = await gateway.health.snapshot();
+  expect(snapshot.status).toBe('degraded');
+  expect(snapshot.components).toContainEqual(
+    expect.objectContaining({
+      component: 'filesystem',
+      status: 'degraded',
+      detail: expect.stringMatching(/network filesystem.*orphan blob deletion is disabled/i),
+    }),
+  );
+  const plane = gateway.vaults.current() as unknown as {
+    skipOrphanDelete: () => boolean;
+  };
+  expect(plane.skipOrphanDelete()).toBe(true);
 });
 
 test('mounts the vault registry and recovers it across rebuilds (#280)', async () => {
@@ -153,6 +214,8 @@ test('composedHandler dispatches runtime routes with NO bearer check', async () 
 
 test('production route table reaches both tunnel controls and the OAuth callback', async () => {
   await gateway.stop();
+  await fs.rm(dataDir, { recursive: true, force: true });
+  dataDir = await tempDir(`build-gateway-routes-${crypto.randomUUID()}-`);
   const secret = 'compiled-route-secret';
   gateway = await buildGateway({
     initVaultName: "Owner's vault",

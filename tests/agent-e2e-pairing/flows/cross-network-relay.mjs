@@ -6,25 +6,17 @@
 import { runFlow } from '../lib/docker-harness.mjs';
 
 await runFlow('cross-network-relay', async (ctx) => {
-  // 1. A named vault to pair into, created inside the gateway's own container.
-  const createOut = await ctx.gatewayExec(['vault', 'create', '--name', 'CrossNet']);
-  const created = JSON.parse(createOut.stdout.trim().split('\n').at(-1));
-  if (!created.vaultId)
-    throw new Error(`vault create returned no vaultId: ${JSON.stringify(created)}`);
-  ctx.note(
-    `created vault CrossNet (${created.vaultId}) inside ${ctx.gateway.endpointId.slice(0, 10)}…'s container`,
-  );
-
-  // 2. Mint the pasteable ticket — still minted inside the gateway container;
+  // 1. Mint for the vault explicitly initialized when the container booted;
+  // the ticket is still minted inside the gateway container.
   // only the redemption crosses the network boundary.
-  const { raw, payload } = await ctx.mintTicket({ vault: 'CrossNet' });
-  if (payload.vaultName !== 'CrossNet')
+  const { raw, payload } = await ctx.mintTicket({ vault: 'Pairing E2E' });
+  if (payload.vaultName !== 'Pairing E2E')
     throw new Error(`ticket names vault "${payload.vaultName}"`);
   if (payload.exp <= Date.now()) throw new Error('ticket minted already expired');
   if (!payload.gw || !payload.t || !payload.s) throw new Error('ticket missing gw/t/s');
   ctx.note(`minted ticket ${payload.t} (expires ${new Date(payload.exp).toISOString()})`);
 
-  // 3. Redeem it from a container on the OTHER network — no shared route to
+  // 2. Redeem it from a container on the OTHER network — no shared route to
   // the gateway's container, no relay override. Whatever createTunnelClient's
   // real default does (n0 production preset — confirmed by reading
   // packages/tunnel/src/client.ts, not assumed) is what runs here.
@@ -33,20 +25,20 @@ await runFlow('cross-network-relay', async (ctx) => {
     throw new Error(`device container reported a fatal error: ${device.error}`);
   }
   if (!device.paired) throw new Error(`redeem failed: ${JSON.stringify(device)}`);
-  if (device.vaultId !== created.vaultId || device.vaultName !== 'CrossNet') {
+  if (!device.vaultId || device.vaultName !== 'Pairing E2E') {
     throw new Error(`pair response names the wrong vault: ${JSON.stringify(device)}`);
   }
   ctx.note(
     `device ${device.endpointId.slice(0, 10)}… (container on ${ctx.netB}) enrolled across the network boundary`,
   );
 
-  // 4. The tunneled probe crossed the same boundary and got a real response.
+  // 3. The tunneled probe crossed the same boundary and got a real response.
   if (device.probeStatus !== 200) {
     throw new Error(`tunneled probe from the isolated device container → ${device.probeStatus}`);
   }
   ctx.note('cross-network tunneled probe: GET /centraid/_vault/vaults → 200');
 
-  // 5. The replay attempt (same container run, second pairGateway call)
+  // 4. The replay attempt (same container run, second pairGateway call)
   // must have been refused — the ticket burns on first success same as the
   // loopback flow.
   if (!device.replayRefused) {
@@ -56,25 +48,17 @@ await runFlow('cross-network-relay', async (ctx) => {
   }
   ctx.note(`replay refused (${device.replayError})`);
 
-  // 6. Visible to the admin CLI on the gateway side, same as the loopback flow.
-  const listOut = await ctx.gatewayExec(['devices', 'list', '--vault', 'CrossNet']);
-  const listed = listOut.stdout
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
-  if (!listed.some((row) => row.endpointId === device.endpointId)) {
-    throw new Error(`devices list does not show ${device.endpointId}`);
+  // 5. Visible through the durable gateway.db-backed admin CLI.
+  if (
+    !device.enrollment ||
+    device.enrollment.endpointId !== device.endpointId ||
+    device.enrollment.vaultId !== device.vaultId
+  ) {
+    throw new Error(`gateway.db-backed roster does not show device: ${JSON.stringify(device)}`);
   }
-  const onDisk = (await ctx.readGatewayFile('devices.json')).enrollments.find(
-    (row) => row.endpointId === device.endpointId,
-  );
-  if (!onDisk || onDisk.vaultId !== created.vaultId) {
-    throw new Error(`devices.json row wrong: ${JSON.stringify(onDisk)}`);
-  }
-  ctx.note('enrollment visible in devices list + devices.json from the gateway side');
+  ctx.note('gateway.db enrollment is visible through devices list on the gateway side');
 
-  // 7. Path confirmation — the ONE thing this expensive Docker-network-
+  // 6. Path confirmation — the ONE thing this expensive Docker-network-
   // isolation harness exists to prove, and now a hard gate rather than an
   // observation. The topology (real DOCKER-USER DROP rules + a
   // pre-ceremony TCP probe, see lib/docker-harness.mjs) guarantees the two

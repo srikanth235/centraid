@@ -4,7 +4,8 @@
  * installs recover this way, and it is the blank-machine e2e harness: a fresh
  * data dir plus NOTHING but the recovery kit and the provider api-key.
  *
- *   centraid-gateway recover --kit <file> --api-key <key> --data-dir <dir>
+ *   centraid-gateway recover --kit <file> --password-file <file>
+ *                            --api-key <key> --data-dir <dir>
  *                            [--at <iso-time>] [--full] [--vault <id>] [--yes]
  *
  * Unlike `backup …`, recover needs NO daemon config file: the provider
@@ -17,9 +18,10 @@
  * every blob the provider's attested inventory holds); `--full` materializes
  * every blob. `--at` is point-in-time recovery (issue #408).
  *
- * The recovered gateway's keyring + fenced backup state land under
- * `<data-dir>/backup/` and the vault under `<data-dir>/vault/<vaultId>/`; the
- * quarantine marker fires the first time the daemon mounts it. Resuming BACKUPS
+ * The recovered gateway's keyring lands under `<data-dir>/keys/`, fenced
+ * backup state lands in `gateway.db`, and the vault lands under
+ * `<data-dir>/vault/<vaultId>/`; the quarantine marker fires the first time
+ * the daemon mounts it. Resuming BACKUPS
  * (not restore) still needs a `backup` config block pointing at the same
  * provider + api-key — a separate operator step this command reminds them of.
  */
@@ -41,7 +43,7 @@ import { deriveBackupSourceInstanceId } from '../backup/backup-state.js';
 interface RecoverArgs {
   kit?: string;
   apiKey?: string;
-  password?: string;
+  passwordFile?: string;
   dataDir?: string;
   vault?: string;
   atMs?: number;
@@ -64,7 +66,7 @@ function parseRecoverArgs(
     };
     if (flag === '--kit') out.kit = take();
     else if (flag === '--api-key') out.apiKey = take();
-    else if (flag === '--password') out.password = take();
+    else if (flag === '--password-file') out.passwordFile = take();
     else if (flag === '--data-dir') out.dataDir = take();
     else if (flag === '--vault') out.vault = take();
     else if (flag === '--at') {
@@ -113,13 +115,25 @@ export async function commandRecover(
   fail: (msg: string, code?: number) => never,
 ): Promise<void> {
   const parsed = parseRecoverArgs(args, fail);
-  if (!parsed.kit || !parsed.apiKey || !parsed.dataDir) {
+  if (!parsed.kit || !parsed.passwordFile || !parsed.apiKey || !parsed.dataDir) {
     fail(
-      'usage: recover --kit <file> --password <password> --api-key <key> --data-dir <dir> ' +
+      'usage: recover --kit <file> --password-file <file> --api-key <key> --data-dir <dir> ' +
         '[--at <iso-time>] [--full] [--vault <id>] [--yes]',
       2,
     );
   }
+  let password: string;
+  try {
+    password = readFileSync(parsed.passwordFile, 'utf8').replace(/\r?\n$/, '');
+  } catch (error) {
+    fail(
+      `could not read recovery-kit password file "${parsed.passwordFile}": ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      2,
+    );
+  }
+  if (password.length === 0) fail('recovery-kit password file is empty', 2);
   const layout = daemonLayoutFor(parsed.dataDir);
   let gatewayDatabase: GatewayDatabase;
   try {
@@ -135,7 +149,9 @@ export async function commandRecover(
   }
   try {
     const keyStore = daemonKeyStore(layout.keysDir);
-    const sourceInstanceId = deriveBackupSourceInstanceId(keyStore.loadOrCreate('endpoint.key'));
+    const sourceInstanceId = deriveBackupSourceInstanceId(
+      keyStore.loadOrCreate('endpoint-key.bin'),
+    );
 
     let kitDocument: unknown;
     try {
@@ -153,7 +169,7 @@ export async function commandRecover(
     try {
       discovery = await discoverRecovery({
         kitDocument,
-        ...(parsed.password !== undefined ? { password: parsed.password } : {}),
+        password,
         apiKey: parsed.apiKey,
         ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
         ...(parsed.atMs !== undefined ? { at: parsed.atMs } : {}),
@@ -180,7 +196,7 @@ export async function commandRecover(
 
     const report = await recover({
       kitDocument,
-      ...(parsed.password !== undefined ? { password: parsed.password } : {}),
+      password,
       apiKey: parsed.apiKey,
       vaultRoot: layout.vaultDir,
       gatewayDatabase,

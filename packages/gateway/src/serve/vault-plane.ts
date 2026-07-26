@@ -109,6 +109,7 @@ import {
   type BlobStoreSettings,
   type S3Credentials,
   type PreviewCodec,
+  type KeyStore,
   runJournalArchival,
   blobCustodyProven,
   WalShipper,
@@ -204,6 +205,8 @@ export interface VaultPlaneOptions {
   ownerName?: string;
   /** Explicit creation gate. Recovery-only opens leave an empty database uninitialized. */
   bootstrap?: boolean;
+  /** Shared host custody store for this vault's sealing key. */
+  keyStore?: KeyStore;
   /** Pre-minted vault id used only on first boot (multi-vault hosts name the dir after it). */
   vaultId?: string;
   /** Owner-facing vault name used only on first boot. */
@@ -216,8 +219,6 @@ export interface VaultPlaneOptions {
   enableWalShipper?: boolean;
   /** WAL shipper overrides (tests: thresholds, clock). */
   walShipper?: Partial<Omit<WalShipperOptions, 'db' | 'log'>>;
-  /** Whether an offsite backup backend currently consumes the WAL stream. */
-  walCaptureEnabled?: () => boolean;
   /** Fail-safe blob-GC gate for network filesystems where cross-host locking is uncertain. */
   skipOrphanDelete?: () => boolean;
   /**
@@ -419,17 +420,15 @@ export class VaultPlane {
   readonly quarantine: QuarantineStatus | null;
   /**
    * The WAL segment shipper (issue #408) — always constructed for a
-   * file-backed vault as soon as this process owns the WAL lifecycle, so a
-   * backend configured later can begin without a remount. While backup is
-   * unconfigured, capture is dormant and a bounded SQLite autocheckpoint
-   * replaces it; when configured, capture follows the declared RPO and the
-   * BackupService drains the resulting stream.
+   * file-backed vault as soon as this process owns the WAL lifecycle.
+   * Capture is unconditional: gateway.db's lifetime lock guarantees there is
+   * one writer/checkpointer, while BackupService may begin draining the
+   * already-continuous stream whenever a backend is configured.
    */
   walShipper: WalShipper | undefined;
   private readonly logger: RuntimeLogger;
   private readonly sweepIntervalMs: number;
   private readonly walTickOverrideMs: number | undefined;
-  private readonly walCaptureEnabled: () => boolean;
   private readonly skipOrphanDelete: () => boolean;
   private readonly walLifecycleEnabled: boolean;
   private readonly walShipperOptions: NonNullable<VaultPlaneOptions['walShipper']>;
@@ -507,6 +506,7 @@ export class VaultPlane {
     // failing writes.
     this.db = openVaultDb({
       dir: options.dir,
+      ...(options.keyStore ? { keyStore: options.keyStore } : {}),
       s3Credentials: options.s3Credentials ?? defaultEnvS3Credentials,
       // Preview backstop codec (issue #405 §2) — forwarded only when the host
       // wired one; a codec-less open just never runs the backstop.
@@ -595,7 +595,6 @@ export class VaultPlane {
     // wal-ship state, so its first tick mints a fresh generation — which is
     // exactly the restore-takeover stream break FORMAT.md rule 6 requires.
     this.walTickOverrideMs = options.walTickMs;
-    this.walCaptureEnabled = options.walCaptureEnabled ?? (() => true);
     this.walLifecycleEnabled = options.enableWalShipper !== false;
     this.walShipperOptions = options.walShipper ?? {};
     this.walShipper = this.createWalShipperIfOwner();
@@ -1911,10 +1910,9 @@ export class VaultPlane {
    */
   walTick(): void {
     if (this.closed) return;
-    // Admin registries and a lease-conflicted second gateway may open the
-    // databases, but must never capture, checkpoint, or mutate shipper state.
+    // Read-only maintenance registries may open the databases, but must never
+    // capture, checkpoint, or mutate shipper state.
     if (!this.ownsWalLifecycle()) return;
-    if (!this.walCaptureEnabled()) return;
     this.ensureWalShipper();
     if (!this.walShipper) {
       // No shipper (its construction failed on a file-backed vault) — but
@@ -1971,16 +1969,8 @@ export class VaultPlane {
 
   private scheduleWalCapture(): void {
     if (this.closed || !this.walLifecycleEnabled) return;
-    if (!this.walCaptureEnabled()) {
-      if (this.ownsWalLifecycle()) this.setFallbackAutocheckpoint(true);
-      return;
-    }
     this.walTimer = setTimeout(() => {
       this.walTimer = undefined;
-      if (!this.walCaptureEnabled()) {
-        if (this.ownsWalLifecycle()) this.setFallbackAutocheckpoint(true);
-        return;
-      }
       this.walTick();
       this.scheduleWalCapture();
     }, jitterDelayMs(this.walCaptureDelayMs()));
@@ -2008,10 +1998,6 @@ export class VaultPlane {
 
   private armWalCapture(): void {
     if (this.closed || !this.walLifecycleEnabled) return;
-    if (!this.walCaptureEnabled()) {
-      if (this.ownsWalLifecycle()) this.setFallbackAutocheckpoint(true);
-      return;
-    }
     if (this.ownsWalLifecycle()) {
       this.ensureWalShipper();
       this.setFallbackAutocheckpoint(false);
@@ -2324,7 +2310,7 @@ export class VaultPlane {
     if (this.sweepTimer) clearTimeout(this.sweepTimer);
     if (this.walTimer) clearTimeout(this.walTimer);
     if (this.firstWalTick) clearImmediate(this.firstWalTick);
-    if (this.ownsWalLifecycle() && this.walShipper && this.walCaptureEnabled()) {
+    if (this.ownsWalLifecycle() && this.walShipper) {
       // Shipper-owned shutdown (issue #408): run optimize + a final ship +
       // TRUNCATE inside the shipper (invariant I2 — it is the only
       // checkpointer), then close the handles without a second optimize
@@ -2341,11 +2327,6 @@ export class VaultPlane {
       this.db.close({ skipOptimize: true });
       return;
     }
-    // An unconfigured plane still constructs the shipper so live backup can
-    // be enabled without a remount, but closing that dormant object would run
-    // `checkpointNow()` and manufacture a local backup stream during shutdown.
-    // With no consumer there is no stream to preserve: use the ordinary safe
-    // checkpoint/close path instead, leaving `wal-ship/` untouched.
     if (this.ownsWalLifecycle()) {
       try {
         this.gateway.checkpoint(this.ownerCredential);

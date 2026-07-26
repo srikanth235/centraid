@@ -59,7 +59,7 @@ async function harness(
   const realProvider = openLocalBackupProvider({ rootDir: providerDir });
   const service = new BackupService({
     config,
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health: new HealthRegistry(),
     logger: silentLogger,

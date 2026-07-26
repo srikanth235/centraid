@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { WAL_DB_FILES } from '@centraid/backup';
+import { WAL_DB_FILES, wrapRecoveryKit } from '@centraid/backup';
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, expect, test } from 'vitest';
 import { HealthRegistry } from '../serve/health-registry.js';
@@ -45,7 +45,7 @@ async function harness(): Promise<Harness> {
   };
   const service = new BackupService({
     config,
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health: new HealthRegistry(),
     logger: silentLogger,
@@ -67,29 +67,34 @@ async function harness(): Promise<Harness> {
   return { service, registry, vaultId: registry.defaultVaultId(), clock };
 }
 
+async function verifyExportedKit(h: Harness) {
+  const kit = wrapRecoveryKit(await h.service.recoveryKitDocument(), 'test-password');
+  return h.service.verifyRecoveryKit({ kit, password: 'test-password', lossConsent: true });
+}
+
 test('confirming again refreshes the timestamp rather than erroring', async () => {
   const h = await harness();
   h.clock.now = Date.UTC(2026, 6, 11, 12, 0, 0);
-  await h.service.confirmRecoveryKit();
+  await verifyExportedKit(h);
 
   h.clock.now += 60_000;
-  const second = await h.service.confirmRecoveryKit();
+  const second = await verifyExportedKit(h);
   expect(second.confirmedAt).toBe(Math.floor(h.clock.now / 1000));
 });
 
-test('confirmRecoveryKit does not disturb existing per-vault target state', async () => {
+test('verifying the exported kit does not disturb existing per-vault target state', async () => {
   const h = await harness();
   await h.service.runBackup(h.vaultId);
   const beforeTargets = await h.service.status();
 
-  await h.service.confirmRecoveryKit();
+  await verifyExportedKit(h);
 
   expect(await h.service.status()).toEqual(beforeTargets);
 });
 
 test('target and epoch changes stale the kit once; local-only vaults and unchanged exports do not', async () => {
   const h = await harness();
-  await h.service.confirmRecoveryKit();
+  await verifyExportedKit(h);
   const initial = await h.service.recoveryKitStatus();
   expect(initial.confirmedAt).not.toBeNull();
 
@@ -104,7 +109,7 @@ test('target and epoch changes stale the kit once; local-only vaults and unchang
   expect(oneTarget.targets.map((target) => target.vaultId)).toEqual([h.vaultId]);
   expect(await h.service.recoveryKitStatus()).toEqual(firstTargetStale);
 
-  await h.service.confirmRecoveryKit();
+  await verifyExportedKit(h);
   const confirmedOneTarget = await h.service.recoveryKitStatus();
   await h.service.recoveryKitDocument();
   expect(await h.service.recoveryKitStatus()).toEqual(confirmedOneTarget);
@@ -116,7 +121,7 @@ test('target and epoch changes stale the kit once; local-only vaults and unchang
   expect(secondTargetStale.kitFingerprint).not.toBe(confirmedOneTarget.kitFingerprint);
   expect((await h.service.recoveryKitDocument()).targets).toHaveLength(2);
 
-  await h.service.confirmRecoveryKit();
+  await verifyExportedKit(h);
   const beforeRotation = await h.service.recoveryKitStatus();
   const rotated = await h.service.rotateKeyEpoch();
   expect(rotated.active).toBe(2);

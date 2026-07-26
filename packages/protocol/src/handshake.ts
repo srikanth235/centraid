@@ -34,10 +34,7 @@ export interface GatewayInfo {
    * Still accepted as a fallback when protocolVersion is absent (older gateways).
    */
   schemaEpoch: number;
-  /**
-   * Per-process instance id (issue #351's `GatewayInstanceLease`).
-   * Optional — older gateways omit it.
-   */
+  /** Per-process diagnostic id. Optional — older gateways omit it. */
   instanceId?: string;
   /**
    * Feature capability map (C1). Optional on the wire for older gateways;

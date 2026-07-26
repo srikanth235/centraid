@@ -41,12 +41,11 @@ export function resolveReplicaAccess(
   const deviceKey = vaultContext()?.deviceKey;
   if (deviceKey === undefined) {
     return {
-      ok: true,
-      access: {
-        trust: 'full',
-        rememberDevice: true,
-        deviceId: `admin:${vaultId}`,
-        ...(appId ? { appId } : {}),
+      ok: false,
+      status: 403,
+      body: {
+        error: 'replica_device_identity_required',
+        message: 'replica access requires an authenticated enrolled device',
       },
     };
   }

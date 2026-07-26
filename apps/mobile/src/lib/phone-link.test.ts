@@ -13,6 +13,13 @@ function encodeGwPair(payload: {
   return Buffer.from(json, 'utf8').toString('base64url');
 }
 
+function encodeFounding(payload: { gw: string; t: string; s: string; exp: number }): string {
+  return Buffer.from(
+    JSON.stringify({ v: 1, kind: 'centraid-gw-found', ...payload }),
+    'utf8',
+  ).toString('base64url');
+}
+
 describe('parsePairingInput', () => {
   it('parses desktop centraid-pair JSON', () => {
     const raw = JSON.stringify({
@@ -57,6 +64,24 @@ describe('parsePairingInput', () => {
       'base64url',
     );
     expect(parsePairingInput(bad)).toBeUndefined();
+  });
+
+  it('parses a founding ticket without treating it as ordinary pairing', () => {
+    const exp = Date.now() + 60_000;
+    const token = encodeFounding({
+      gw: 'refreshable-endpoint-hint',
+      t: 'one-time-id',
+      s: 'one-time-secret',
+      exp,
+    });
+    expect(parsePairingInput(token)).toEqual({
+      kind: 'centraid-gw-found',
+      gw: 'refreshable-endpoint-hint',
+      t: 'one-time-id',
+      s: 'one-time-secret',
+      exp,
+    });
+    expect(parsePairQr(token)).toBeUndefined();
   });
 
   it('tolerates surrounding whitespace', () => {

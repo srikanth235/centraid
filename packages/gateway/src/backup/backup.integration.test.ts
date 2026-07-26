@@ -27,13 +27,7 @@ import {
   verifySnapshot,
   type BackupProvider,
 } from '@centraid/backup';
-import {
-  currentReplicaLogState,
-  KeyStore,
-  sealAad,
-  unsealValue,
-  updateBackupPolicy,
-} from '@centraid/vault';
+import { currentReplicaLogState, sealAad, unsealValue, updateBackupPolicy } from '@centraid/vault';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
 import { HealthRegistry } from '../serve/health-registry.js';
@@ -42,8 +36,10 @@ import type { BackupConfig } from './backup-config.js';
 import { WorktreeStore } from '../worktree-store/worktree-store.js';
 import { run } from '../worktree-store/git.js';
 import { commandBackup } from '../cli/backup-admin.js';
+import { daemonKeyStore } from '../cli/key-store.js';
 import { daemonLayoutFor } from '../cli/paths.js';
 import { loadBackupState, saveBackupState } from './backup-state.js';
+import { GatewayDatabase } from '../serve/gateway-db.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -196,6 +192,7 @@ interface Harness {
   registry: VaultRegistry;
   plane: VaultPlane;
   service: BackupService;
+  gatewayDatabase: GatewayDatabase;
   health: HealthRegistry;
   seeded: Seeded;
   /** Set once the CLI-restore test has run — reused by the non-empty-dest refusal test. */
@@ -205,13 +202,22 @@ interface Harness {
 let h: Harness;
 
 function harnessKeyring() {
-  const bytes = new KeyStore(path.join(h.dataDir, 'keys')).export('keyring.key');
+  const bytes = daemonKeyStore(path.join(h.dataDir, 'keys')).export('keyring.key');
   if (!bytes) throw new Error('fixture keyring missing');
   return validateKeyring(JSON.parse(bytes.toString('utf8')));
 }
 
 function reopen(): void {
-  h.registry = openVaultRegistry({ rootDir: h.vaultDir, logger: silentLogger, ownerName: 'Priya' });
+  h.gatewayDatabase = GatewayDatabase.open(h.dataDir);
+  const keyStore = daemonKeyStore(path.join(h.dataDir, 'keys'));
+  keyStore.loadOrCreate('endpoint-key.bin');
+  h.registry = openVaultRegistry({
+    rootDir: h.vaultDir,
+    cacheRootDir: h.backupDir,
+    keyStore,
+    logger: silentLogger,
+    ownerName: 'Priya',
+  });
   if (h.registry.isFresh()) h.registry.create('Personal');
   const vaultId = h.vaultId || h.registry.defaultVaultId();
   h.plane = h.registry.get(vaultId)!;
@@ -219,7 +225,9 @@ function reopen(): void {
   h.health = new HealthRegistry();
   h.service = new BackupService({
     config: h.config,
-    backupDir: h.backupDir,
+    cacheDir: h.backupDir,
+    gatewayDatabase: h.gatewayDatabase,
+    keyStore,
     vaults: h.registry,
     health: h.health,
     logger: silentLogger,
@@ -229,6 +237,16 @@ function reopen(): void {
 beforeAll(async () => {
   const dataDir = await tempDir('e2e-data');
   const providerDir = await tempDir('e2e-provider');
+  const credentialRoot = await tempDir('e2e-host-credentials');
+  const previousCredentialRoot = process.env['CENTRAID_KEYSTORE_CREDENTIAL_ROOT'];
+  process.env['CENTRAID_KEYSTORE_CREDENTIAL_ROOT'] = credentialRoot;
+  cleanups.push(() => {
+    if (previousCredentialRoot === undefined) {
+      delete process.env['CENTRAID_KEYSTORE_CREDENTIAL_ROOT'];
+    } else {
+      process.env['CENTRAID_KEYSTORE_CREDENTIAL_ROOT'] = previousCredentialRoot;
+    }
+  });
   const layout = daemonLayoutFor(dataDir);
   const config: BackupConfig = {
     enabled: true,
@@ -241,19 +259,24 @@ beforeAll(async () => {
     dataDir,
     configPath,
     providerDir,
-    backupDir: layout.backupDir ?? path.join(dataDir, 'backup'),
+    backupDir: layout.cacheDir,
     config,
     vaultDir: layout.vaultDir,
     vaultId: '',
     registry: undefined as unknown as VaultRegistry,
     plane: undefined as unknown as VaultPlane,
     service: undefined as unknown as BackupService,
+    gatewayDatabase: undefined as unknown as GatewayDatabase,
     health: undefined as unknown as HealthRegistry,
     seeded: undefined as unknown as Seeded,
   };
   reopen();
   updateBackupPolicy(h.plane.db.vault, { snapshotIntervalHours: 1, verifyEveryDays: 1 });
-  cleanups.push(() => h.registry.stop());
+  cleanups.push(async () => {
+    await h.service.stop();
+    h.registry.stop();
+    h.gatewayDatabase.close();
+  });
 
   // 1. Seed a REAL vault: several data rows, real blobs (one > 1MiB, so it
   // spans multiple FastCDC chunks), a real published app (code-store
@@ -370,7 +393,9 @@ test('CLI restore materializes a fresh dest, and adopting it as a live vault mou
   // Stop the shared registry before the CLI opens its own on the same
   // vaultDir (mirrors backup-admin.test.ts's pattern — avoid two live
   // connections to the same vault.db at once).
+  await h.service.stop();
   h.registry.stop();
+  h.gatewayDatabase.close();
 
   const destDir = path.join(h.dataDir, 'restored');
   const out = await capture(() =>
@@ -409,10 +434,11 @@ test('CLI restore materializes a fresh dest, and adopting it as a live vault mou
     path.join(destDir, 'RESTORE_QUARANTINE.json'),
     path.join(adoptedDir, 'RESTORE_QUARANTINE.json'),
   );
-  const sourceKeys = new KeyStore(path.join(h.dataDir, 'keys'));
+  const sourceKeys = daemonKeyStore(path.join(h.dataDir, 'keys'));
   const restoredSealKey = sourceKeys.export(`${h.vaultId}.sealkey`);
   if (!restoredSealKey) throw new Error('source seal key missing');
-  new KeyStore(path.join(freshRoot, 'keys')).import(`${h.vaultId}.sealkey`, restoredSealKey);
+  const adoptedKeyStore = daemonKeyStore(path.join(freshRoot, 'keys'));
+  adoptedKeyStore.import(`${h.vaultId}.sealkey`, restoredSealKey);
   await fs.mkdir(path.join(adoptedDir, 'code'), { recursive: true });
   await run(
     [
@@ -429,6 +455,7 @@ test('CLI restore materializes a fresh dest, and adopting it as a live vault mou
 
   const adoptedRegistry = openVaultRegistry({
     rootDir: freshRoot,
+    keyStore: adoptedKeyStore,
     logger: silentLogger,
     ownerName: 'Priya',
   });
@@ -510,19 +537,29 @@ test('fencing for real: a second BackupService registers gen+1; the first servic
   // "read currentGeneration from the target and register the next snapshot
   // with currentGeneration + 1" means in state-file terms.
   const backupDir2 = await tempDir('e2e-backupdir-takeover');
-  const state = await loadBackupState(h.backupDir);
+  const gatewayDatabase2 = GatewayDatabase.open(backupDir2);
+  const keyStore2 = daemonKeyStore(path.join(backupDir2, 'keys'));
+  keyStore2.import('endpoint-key.bin', Buffer.from('b'.repeat(64), 'hex'));
+  const liveKeyring = daemonKeyStore(path.join(h.dataDir, 'keys')).export('keyring.key');
+  if (!liveKeyring) throw new Error('fixture keyring missing');
+  keyStore2.import('keyring.key', liveKeyring);
+  const state = await loadBackupState(h.gatewayDatabase);
   state.targets[h.vaultId]!.generation = beforeGen + 1;
-  await saveBackupState(backupDir2, state);
+  await saveBackupState(gatewayDatabase2, state);
 
   const health2 = new HealthRegistry();
   const serviceB = new BackupService({
     config: h.config,
-    backupDir: backupDir2,
+    cacheDir: backupDir2,
+    gatewayDatabase: gatewayDatabase2,
+    keyStore: keyStore2,
     vaults: h.registry,
     health: health2,
     logger: silentLogger,
   });
   await serviceB.runBackup(h.vaultId);
+  await serviceB.stop();
+  gatewayDatabase2.close();
   const afterGen = (await provider.getTarget(targetId)).currentGeneration;
   expect(afterGen).toBe(beforeGen + 1); // the "other machine" won the target
 
@@ -606,7 +643,7 @@ test('restore refusal: a registered snapshot with a newer vaultUserVersion refus
   };
   const service = new BackupService({
     config,
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health,
     logger: silentLogger,
@@ -647,7 +684,9 @@ test('restore refusal: a registered snapshot with a newer vaultUserVersion refus
 });
 
 test('restore refusal: the CLI refuses a non-empty --dest', async () => {
+  await h.service.stop();
   h.registry.stop();
+  h.gatewayDatabase.close();
   const restoredDestDir = h.restoredDestDir;
   expect(restoredDestDir).toBeTruthy();
   await expect(

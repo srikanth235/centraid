@@ -24,7 +24,7 @@ import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { endpointIdForSecret, loadEndpointSecret } from '@centraid/tunnel';
+import { endpointIdForSecret } from '@centraid/tunnel';
 import {
   buildDetachedSpawnOptions,
   DEFAULT_GATEWAY_PORT,
@@ -33,12 +33,12 @@ import {
   type ControlDecision,
 } from './detached-gateway-core.js';
 import {
-  deviceIrohKeyPersistence,
   getOrCreateGatewayWrappingKey,
   readLocalLoopbackToken,
   storeLocalLoopbackToken,
 } from './gateway-secrets.js';
 import { LOCAL_GATEWAY_ID } from './gateway-paths.js';
+import { ensureIrohDeviceKey } from './iroh-dialer.js';
 
 const require = createRequire(import.meta.url);
 
@@ -85,13 +85,7 @@ export interface DetachedGatewayHandle {
  * This is an EndpointId, not a parallel UUID or a gateway-tree credential.
  */
 export async function getOrCreateDesktopOwnerId(): Promise<string> {
-  const secret = loadEndpointSecret({
-    persistence: deviceIrohKeyPersistence(LOCAL_GATEWAY_ID),
-    onCorrupt: 'remint',
-    label: 'local desktop iroh key',
-    warn: (message) => console.warn(`desktop identity: ${message}`),
-  });
-  return endpointIdForSecret(secret);
+  return endpointIdForSecret(ensureIrohDeviceKey(LOCAL_GATEWAY_ID));
 }
 
 /**
@@ -515,13 +509,15 @@ export function preferEmbeddedGateway(env: NodeJS.ProcessEnv = process.env): boo
  * (`centraid-gateway service install --data-dir …`, label `dev.centraid.gateway`).
  * Opt-in only; never call from a silent path.
  */
-export function installGatewayOsService(
+export async function installGatewayOsService(
   dataDir: string,
-): { ok: true } | { ok: false; error: string } {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const cliPath = resolveGatewayCliPath();
     const nodeBin = process.execPath;
     const port = resolveListenPort();
+    const ownerId = await getOrCreateDesktopOwnerId();
+    const gatewayWrappingKey = getOrCreateGatewayWrappingKey(LOCAL_GATEWAY_ID);
     const result = spawnSync(
       nodeBin,
       [
@@ -538,7 +534,16 @@ export function installGatewayOsService(
       // `nodeBin` here is `process.execPath` = the Electron binary. Run it in
       // node mode so this one-shot install doesn't flash the full desktop app
       // (and so the child's own `process.execPath`-derived unit stays sane).
-      { encoding: 'utf8', timeout: 30_000, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } },
+      {
+        encoding: 'utf8',
+        timeout: 30_000,
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+          CENTRAID_DESKTOP_ENDPOINT_ID: ownerId,
+          CENTRAID_KEYSTORE_MASTER_KEY: gatewayWrappingKey.toString('base64'),
+        },
+      },
     );
     if (result.status === 0) return { ok: true };
     const err = (result.stderr || result.stdout || `exit ${result.status}`).trim();

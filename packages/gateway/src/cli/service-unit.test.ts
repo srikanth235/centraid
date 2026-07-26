@@ -116,6 +116,19 @@ test('buildSystemdUnit emits Environment lines before ExecStart', () => {
   expect(envIdx).toBeLessThan(execIdx);
 });
 
+test('buildSystemdUnit loads the real encrypted KeyStore credential path', () => {
+  const unit = buildSystemdUnit({
+    ...spec,
+    encryptedCredential: {
+      id: 'centraid-keystore',
+      path: '/home/owner/.config/centraid/credentials/centraid-gateway.keystore.cred',
+    },
+  });
+  expect(unit).toContain(
+    'LoadCredentialEncrypted=centraid-keystore:/home/owner/.config/centraid/credentials/centraid-gateway.keystore.cred',
+  );
+});
+
 test('buildSystemdUnit carries Restart=on-failure, RestartSec, and WantedBy=default.target', () => {
   const unit = buildSystemdUnit(spec);
   expect(unit).toMatch(/^\[Unit\]/m);

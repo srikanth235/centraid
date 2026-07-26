@@ -91,7 +91,7 @@ test.skipIf(servicePlatform)(
     await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
     const layout = daemonLayoutFor(dataDir);
     const secret = Buffer.alloc(32, 11);
-    new KeyStore(layout.keysDir).store('endpoint.key', secret);
+    new KeyStore(layout.keysDir).store('endpoint-key.bin', secret);
     const endpointId = endpointIdForSecret(secret);
     const liveFetch = (async (): Promise<Response> =>
       Response.json(

@@ -8,6 +8,7 @@
  */
 
 import { chmodSync, mkdirSync, statfsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 
@@ -26,6 +27,8 @@ export class GatewayLockError extends Error {
 
 export interface OpenGatewayDatabaseOptions {
   lock?: GatewayDbLockMode;
+  /** Detection override for deterministic host-safety integration tests. */
+  networkFileSystem?: boolean;
 }
 
 /* eslint-disable max-classes-per-file -- the typed lock refusal and the database handle form one gateway.db boundary (#555) */
@@ -73,7 +76,12 @@ export class GatewayDatabase {
         chmodSync(file, 0o600);
       }
       if (lockMode === 'exclusive') acquireExclusiveLifetimeLock(db, file);
-      return new GatewayDatabase(file, db, lockMode, detectNetworkFileSystem(root));
+      return new GatewayDatabase(
+        file,
+        db,
+        lockMode,
+        options.networkFileSystem ?? detectNetworkFileSystem(root),
+      );
     } catch (error) {
       db.close();
       if (isBusy(error)) throw new GatewayLockError(file);
@@ -208,11 +216,25 @@ function installGatewaySchema(db: DatabaseSync): void {
     ) STRICT;
     CREATE UNIQUE INDEX IF NOT EXISTS one_founding_ticket
       ON tickets(kind) WHERE kind = 'found';
+    CREATE TABLE IF NOT EXISTS founding_ticket_reservations (
+      ticket_id TEXT PRIMARY KEY,
+      reservation_id TEXT NOT NULL UNIQUE,
+      secret_hash TEXT NOT NULL,
+      reserved_at INTEGER NOT NULL,
+      reserved_until INTEGER NOT NULL,
+      pending_vault_ids_json TEXT,
+      FOREIGN KEY (ticket_id) REFERENCES tickets(ticket_id) ON DELETE CASCADE
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS erase_intents (
+      vault_id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL
+    ) STRICT;
     CREATE TABLE IF NOT EXISTS recovery_kit (
       singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
       confirmed_at INTEGER,
       kit_fingerprint TEXT,
-      kit_confirmed INTEGER NOT NULL DEFAULT 0 CHECK (kit_confirmed IN (0, 1))
+      kit_confirmed INTEGER NOT NULL DEFAULT 0 CHECK (kit_confirmed IN (0, 1)),
+      founding_pending INTEGER NOT NULL DEFAULT 0 CHECK (founding_pending IN (0, 1))
     ) STRICT;
     CREATE TABLE IF NOT EXISTS backup_targets (
       target_id TEXT PRIMARY KEY,
@@ -242,6 +264,27 @@ function installGatewaySchema(db: DatabaseSync): void {
       journal_limit_bytes INTEGER
     ) STRICT;
   `);
+  const recoveryKitColumns = (
+    db.prepare('PRAGMA table_info(recovery_kit)').all() as Array<{ name: string }>
+  ).map((column) => column.name);
+  if (!recoveryKitColumns.includes('founding_pending')) {
+    db.exec(
+      `ALTER TABLE recovery_kit
+       ADD COLUMN founding_pending INTEGER NOT NULL DEFAULT 0
+      CHECK (founding_pending IN (0, 1));`,
+    );
+  }
+  const foundingReservationColumns = (
+    db.prepare('PRAGMA table_info(founding_ticket_reservations)').all() as Array<{
+      name: string;
+    }>
+  ).map((column) => column.name);
+  if (!foundingReservationColumns.includes('pending_vault_ids_json')) {
+    db.exec(
+      `ALTER TABLE founding_ticket_reservations
+       ADD COLUMN pending_vault_ids_json TEXT;`,
+    );
+  }
 }
 
 function isBusy(error: unknown): boolean {
@@ -252,10 +295,19 @@ function isBusy(error: unknown): boolean {
 
 function detectNetworkFileSystem(root: string): boolean {
   try {
+    if (process.platform === 'darwin') {
+      const result = spawnSync('/usr/bin/stat', ['-f', '%T', root], {
+        encoding: 'utf8',
+        timeout: 2_000,
+      });
+      if (result.status === 0) {
+        return /^(?:nfs|smbfs|afpfs|webdav)$/i.test(result.stdout.trim());
+      }
+    }
     const type = Number(statfsSync(root).type);
-    // Linux NFS, SMB/CIFS, and macOS SMBFS/NFS values. Unknown filesystems
-    // remain local by default; callers surface a warning when this is true.
-    return new Set([0x6969, 0x517b, 0xff534d42, 0x2fc12fc1]).has(type);
+    // Linux NFS, SMB/CIFS. ZFS is intentionally local: treating its magic as
+    // remote permanently disabled orphan collection on ordinary local pools.
+    return new Set([0x6969, 0x517b, 0xff534d42]).has(type);
   } catch {
     return false;
   }

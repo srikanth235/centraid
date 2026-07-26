@@ -12,24 +12,22 @@ surviving a daemon restart, and dying on revocation.
 
 ## Setup
 
-Fresh `--data-dir` (the daemon bootstraps its default vault); harness waits
+Fresh `--data-dir` with explicit `--init-vault "Pairing E2E"`; harness waits
 for the HTTP listener and the iroh endpoint identity.
 
 ## Steps
 
-1. `vault create --name Family` — a second, named vault to pair into.
-2. `pair --vault Family` — parse the pasteable base64url token; assert it
+1. `pair --vault "Pairing E2E"` — parse the pasteable base64url token; assert it
    carries the gateway EndpointTicket, ticket id/secret, vault name, expiry.
-3. Fresh device identity redeems over `centraid/gw-pair/1` → `ok: true` with
-   the Family vault id/name + version-handshake material.
-4. `devices list --vault Family` shows the device's EndpointId; the same row
-   is in `devices.json` on disk, with the platform the device reported.
-5. A tunneled `GET /centraid/_vault/vaults` from the enrolled device → 200.
-6. Replaying the same ticket → refused (burned on success).
-7. Restart the daemon on the same data dir: EndpointId is unchanged
-   (identity is `endpoint-key.bin`, not per-boot) and the SAME device tunnels
+2. Fresh device identity redeems over `centraid/gw-pair/1` → `ok: true` with
+   the vault id/name + version-handshake material.
+3. The paired-device roster shows the durable `gateway.db` row and platform.
+4. A tunneled `GET /centraid/_vault/vaults` from the enrolled device → 200.
+5. Replaying the same ticket → refused (burned on success).
+6. Restart the daemon on the same data dir: EndpointId is unchanged
+   (identity is protected host custody, not per-boot) and the SAME device tunnels
    again without re-pairing (enrollment persisted).
-8. `devices revoke <endpointId>` → the device's next tunnel attempt is
+7. The device revokes its own enrollment → its next tunnel attempt is
    refused at the QUIC layer.
 
 ## Verdict

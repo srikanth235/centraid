@@ -1,13 +1,8 @@
-import {
-  assistOAuthFromEnvironment,
-  createWasmImagePreviewCodec,
-  serve,
-  type GatewayServeHandle,
-} from '@centraid/gateway';
+import type { GatewayServeHandle } from '@centraid/gateway';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {
   gatewayModelCatalogFile,
-  gatewayPrefsFile,
   gatewayVaultDir,
   LOCAL_GATEWAY_ID,
   localGatewayDataDir,
@@ -29,6 +24,7 @@ import {
   preferEmbeddedGateway,
   type DetachedGatewayHandle,
 } from './detached-gateway.js';
+import { startDesktopEmbeddedGateway } from './embedded-gateway.js';
 
 /**
  * Electron-flavored local-gateway lifecycle (issue #351 / #468).
@@ -169,20 +165,22 @@ function wrapDetached(handle: DetachedGatewayHandle): LocalGatewayRuntime {
 async function startEmbedded(gatewayId: string): Promise<LocalGatewayRuntime> {
   const settings = await loadPersistedSettings();
   const dataDir = localGatewayDataDir();
-  const handle = await serve({
-    assistOAuth: assistOAuthFromEnvironment(process.env),
-    previewCodec: createWasmImagePreviewCodec(),
+  const ownerId = await getOrCreateDesktopOwnerId();
+  const token = crypto.randomBytes(32).toString('hex');
+  const handle = await startDesktopEmbeddedGateway({
+    dataDir,
     paths: {
       dataDir,
       vaultDir: gatewayVaultDir(gatewayId),
       cacheDir: path.join(dataDir, 'cache'),
-      prefsFile: gatewayPrefsFile(gatewayId),
       modelCatalogFile: gatewayModelCatalogFile(gatewayId),
       templatesCacheDir: templatesCacheDir(gatewayId),
       logsDir: path.join(dataDir, 'gateway-logs'),
-      ...(settings.remoteTemplatesUrl ? { remoteTemplatesUrl: settings.remoteTemplatesUrl } : {}),
     },
     keyStore: desktopGatewayKeyStore(dataDir, LOCAL_GATEWAY_ID),
+    token,
+    ownerEndpointId: ownerId,
+    ...(settings.remoteTemplatesUrl ? { remoteTemplatesUrl: settings.remoteTemplatesUrl } : {}),
     sessionIdFor: desktopSessionIdFor,
     logTag: `local-gateway:${gatewayId}`,
   });

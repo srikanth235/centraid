@@ -1,23 +1,25 @@
 # Agent-driven exploratory QA — device pairing
 
 The manual-QA verification loop for the device-pairing ceremony (issue #289),
-with three promoted journeys scheduled inside the nightly
+with four promoted journeys scheduled inside the nightly
 [`.github/workflows/e2e.yml`](../../.github/workflows/e2e.yml) product lane
-(parallel jobs: lifecycle, ticket-hygiene, cross-network-relay). It shares
+(parallel jobs: lifecycle, VPS-phone founding, ticket-hygiene,
+cross-network-relay). It shares
 run/verdict plumbing with [`tests/agent-e2e-mobile/`](../agent-e2e-mobile), but
 has no Electron or browser — each flow boots the REAL `centraid-gateway`
 daemon on a fresh data dir, drives the REAL admin CLI as separate processes,
 and plays the device role with `@centraid/tunnel` over real iroh QUIC.
 
-This is the tier the unit tests can't reach: cross-process seams (daemon
-publishes `endpoint.json` → `pair` CLI reads it → device redeems over
-`centraid/gw-pair/1` → daemon re-reads `pairing-tickets.json` the CLI wrote)
+This is the tier the unit tests can't reach: cross-process seams (the daemon
+persists host identity + grants in `gateway.db` → the live CLI mints a ticket
+→ a device proves its EndpointId over iroh → enrollment gates the tunnel)
 exercised the way an owner actually performs the ceremony.
 
 ## Running a flow
 
 ```sh
 node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
+node tests/agent-e2e-pairing/flows/vps-phone-founding.mjs
 node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
 node tests/agent-e2e-pairing/flows/cross-network-relay.mjs      # needs Docker — see below
 node tests/agent-e2e-pairing/flows/extension-companion.mjs      # needs Playwright Chromium + display
@@ -52,7 +54,7 @@ That's the whole loop for the first two flows. The harness:
 5. Writes `runs/<runId>/verdict.md` with PASS/FAIL and notes.
 6. Closes device endpoints and kills the daemon. On PASS the workspace is
    wiped (verdict + gateway.log stay); on FAIL it's kept so you can inspect
-   `devices.json`, `pairing-tickets.json`, `endpoint.json`.
+   `gateway.db`, `keys/`, and `vaults/`.
 
 Requirements: a `bun install`ed checkout and Node ≥ 22.5 (`@number0/iroh`
 native bindings). The device side runs with iroh relays disabled and dials
@@ -65,15 +67,15 @@ readiness line.
 ## ctx surface
 
 ```js
-ctx.gateway              // { url, token, endpointId, pid } of the live daemon
+ctx.gateway              // { url, token, endpointId, endpointTicket, pid }
 ctx.dataDir              // the daemon's --data-dir
 ctx.cli(args)            // admin CLI (vault/pair/devices/…); --data-dir appended
 ctx.mintTicket(opts)     // pair → { raw, payload }; opts: { vault, ttlMinutes }
 ctx.newDevice()          // fresh device identity (auto-closed at teardown)
 ctx.request(dev, path)   // one tunneled GET on a fresh connection
+ctx.requestJson(dev, method, path, body) // tunneled JSON request + parsed body
 ctx.expectTunnelRefused(dev) // assert the QUIC layer refuses this device
 ctx.restartGateway()     // SIGTERM + respawn on the same data dir
-ctx.readJson(rel)        // parse a JSON file under the data dir
 ctx.note(msg)            // observation preserved in verdict.md
 ```
 
@@ -90,7 +92,6 @@ ctx.gatewayExec(args)       // admin CLI, run via `docker exec` into the gateway
 ctx.mintTicket(opts)        // pair → { raw, payload }
 ctx.runDevice(opts)         // run lib/device-redeem.mjs in a container on netB;
                              // opts: { ticket, probeTarget } → parsed JSON result
-ctx.readGatewayFile(rel)    // parse a JSON file under the gateway container's data dir
 ctx.note(msg)               // observation preserved in verdict.md
 ```
 
@@ -113,10 +114,11 @@ tests/agent-e2e-pairing/
 
 | Layer | What it proves |
 |---|---|
-| `packages/gateway/src/serve/device-plane.test.ts` | store semantics (burn, TTL, reload-on-mtime) |
+| `packages/gateway/src/serve/device-plane.test.ts` | durable `gateway.db` grant/enrollment semantics |
 | `packages/gateway/src/cli/admin.test.ts` | CLI arg parsing + in-process command output |
 | `packages/tunnel/src/gateway-endpoint.test.ts` | iroh ALPN protocol against FAKE stores |
 | `device-pairing-lifecycle` / `pairing-ticket-hygiene` | the real ceremony across real processes, loopback transport |
+| `vps-phone-founding` | zero-vault VPS → first phone owner + exact wrapped-kit verification |
 | `cross-network-relay` | the same ceremony over the real n0 relay/hole-punch transport |
 | `extension-companion` | the real MV3 worker + browser WASM, explicit Locker fill, receipt, and remote revocation |
 

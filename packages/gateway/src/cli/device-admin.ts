@@ -25,6 +25,7 @@ import { EnrollmentStore, type GrantableTrust } from '../serve/enrollment-store.
 import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
 import { daemonLayoutFor } from './paths.js';
 import { daemonKeyStore } from './key-store.js';
+import { landlordBearerForEndpointSecret } from './landlord-auth.js';
 import { jsonFail, runJson, type Fail } from './json-cli.js';
 import { renderTerminalQr } from './pair-qr.js';
 import { resolveDaemonConfig } from './resolve-config.js';
@@ -43,6 +44,8 @@ interface DeviceArgs {
   label?: string;
   ttlMinutes?: number;
   trust?: GrantableTrust;
+  /** Exact vault name required when the requested revoke removes its last owner. */
+  confirmLastOwner?: string;
   /** Emit machine-readable JSON instead of human text (issue #382, `pair` only). */
   json?: boolean;
   /**
@@ -99,6 +102,9 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
         out.trust = trust;
         break;
       }
+      case '--confirm-last-owner':
+        out.confirmLastOwner = next();
+        break;
       case '--json':
         out.json = true;
         break;
@@ -162,7 +168,7 @@ export async function commandPair(
       );
     }
     const endpointSecret = daemonKeyStore(daemonLayoutFor(config.dataDir).keysDir).load(
-      'endpoint.key',
+      'endpoint-key.bin',
     );
     if (!endpointSecret) {
       localFail(
@@ -171,6 +177,7 @@ export async function commandPair(
       );
     }
     const endpointId = endpointIdForSecret(endpointSecret);
+    const landlordBearer = landlordBearerForEndpointSecret(endpointSecret);
     if (
       handshake.info.endpointId !== endpointId ||
       typeof handshake.info.endpointTicket !== 'string'
@@ -186,7 +193,10 @@ export async function commandPair(
     try {
       response = await fetchImpl(`${baseUrl}/centraid/_gateway/devices/ticket`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          authorization: `Bearer ${landlordBearer}`,
+          'content-type': 'application/json',
+        },
         body: JSON.stringify({
           ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
           ...(parsed.ttlMinutes !== undefined ? { ttlMinutes: parsed.ttlMinutes } : {}),
@@ -343,6 +353,7 @@ export async function commandDevices(
           endpointId,
           vaultId: vault.vaultId,
           label: parsed.label ?? `device ${endpointId.slice(0, 10)}…`,
+          ...(parsed.trust ? { trust: parsed.trust } : {}),
         });
         process.stdout.write(`${JSON.stringify(row)}\n`);
       } catch (err) {
@@ -357,8 +368,10 @@ export async function commandDevices(
     // revoke
     const [target] = parsed.positional;
     if (!target) fail('usage: devices revoke --data-dir <path> <enrollment-or-endpoint-id>', 2);
-    const removed = devices.revoke(target);
-    if (removed.length === 0) fail(`no enrollment matches "${target}"`, 1);
+    const candidates = devices
+      .list()
+      .filter((row) => row.enrollmentId === target || row.endpointId === target);
+    if (candidates.length === 0) fail(`no enrollment matches "${target}"`, 1);
     // Enrollment revocation is also a vault-local data erasure boundary: an
     // offline intent outcome is device-scoped and must not survive unpairing.
     const cleanupRegistry = openVaultRegistry({
@@ -367,13 +380,40 @@ export async function commandDevices(
       enableWalShipper: false,
     });
     try {
+      const lastOwners = candidates.filter(
+        (row) =>
+          row.trust === 'owner' &&
+          devices.listByVault(row.vaultId).filter((candidate) => candidate.trust === 'owner')
+            .length === 1,
+      );
+      if (lastOwners.length > 1) {
+        fail(
+          'this endpoint is the last owner of multiple vaults; revoke each enrollment id separately',
+          1,
+        );
+      }
+      const lastOwner = lastOwners[0];
+      if (lastOwner) {
+        const vaultName =
+          cleanupRegistry.get(lastOwner.vaultId)?.name ??
+          cleanupRegistry.list().find((vault) => vault.vaultId === lastOwner.vaultId)?.name ??
+          lastOwner.vaultId;
+        if (parsed.confirmLastOwner !== vaultName) {
+          fail(
+            `this is the last owner enrollment; pass --confirm-last-owner ${JSON.stringify(vaultName)}. ` +
+              'Losing it requires filesystem access and `centraid-gateway devices add --trust owner` to recover.',
+            1,
+          );
+        }
+      }
+      const removed = devices.revoke(target);
       for (const row of removed) {
         cleanupRegistry.get(row.vaultId)?.forgetReplicaDevice(row.endpointId);
       }
+      for (const row of removed) process.stdout.write(`${JSON.stringify({ revoked: row })}\n`);
     } finally {
       cleanupRegistry.stop();
     }
-    for (const row of removed) process.stdout.write(`${JSON.stringify({ revoked: row })}\n`);
   } finally {
     database.close();
   }

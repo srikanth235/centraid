@@ -140,7 +140,7 @@ async function fx(opts: FxOptions = {}): Promise<Fx> {
   const health = new HealthRegistry();
   const service = new BackupService({
     config,
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health,
     logger,
@@ -617,7 +617,7 @@ test('offline: segments accumulate across groups, the WAL stays checkpoint-bound
   // Reconnect: a second service over the SAME backupDir/planes, real provider.
   const service2 = new BackupService({
     config: f.config,
-    backupDir: f.backupDir,
+    cacheDir: f.backupDir,
     vaults: f.registry,
     health: new HealthRegistry(),
     logger: silentLogger,
@@ -769,7 +769,7 @@ test('offline for multiple days: daily base rotations fire, the WAL and the loca
   // ── Reconnect ────────────────────────────────────────────────────────────
   const service2 = new BackupService({
     config: f.config,
-    backupDir: f.backupDir,
+    cacheDir: f.backupDir,
     vaults: f.registry,
     health: new HealthRegistry(),
     logger: silentLogger,

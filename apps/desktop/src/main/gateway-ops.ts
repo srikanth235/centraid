@@ -40,19 +40,22 @@ export function exportActiveGatewayDiagnostics() {
   });
 }
 
-export function exportActiveGatewayRecoveryKit() {
-  return exportGatewayRecoveryKitCore({
-    loadSettings,
-    showSaveDialog: async (defaultPath) => {
-      const result = await dialog.showSaveDialog({
-        defaultPath,
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-      });
-      return {
-        canceled: result.canceled,
-        ...(result.filePath ? { filePath: result.filePath } : {}),
-      };
+export function exportActiveGatewayRecoveryKit(input: { password: string }) {
+  return exportGatewayRecoveryKitCore(
+    {
+      loadSettings,
+      showSaveDialog: async (defaultPath) => {
+        const result = await dialog.showSaveDialog({
+          defaultPath,
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+        });
+        return {
+          canceled: result.canceled,
+          ...(result.filePath ? { filePath: result.filePath } : {}),
+        };
+      },
+      writeFile: (file, data) => fs.writeFile(file, data, { encoding: 'utf8', mode: 0o600 }),
     },
-    writeFile: (file, data) => fs.writeFile(file, data, { encoding: 'utf8', mode: 0o600 }),
-  });
+    input,
+  );
 }

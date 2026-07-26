@@ -3,7 +3,7 @@
 // real jpeg-js/pngjs codec (and its own round-trip tests) live in the gateway
 // package. What these tests pin is everything AROUND the codec: which items
 // the backstop selects, that it stages both rungs through the existing
-// staging/promote path, idempotency, unsupported-type skipping, the batch
+// ingest/promote path, idempotency, unsupported-type skipping, the batch
 // bound, missing-bytes accounting, and that `sweepBlobs` runs the backstop and
 // reports its yield in the receipt.
 

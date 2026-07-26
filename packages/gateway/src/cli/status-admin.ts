@@ -75,7 +75,7 @@ function parseStatusArgs(args: string[], fail: Fail): StatusArgs {
 interface DataDirSummary {
   dataDir: string;
   exists: boolean;
-  /** Stable iroh identity derived from `keys/endpoint.key`. */
+  /** Stable iroh identity derived from `keys/endpoint-key.bin`. */
   endpointId?: string;
   /** Refreshable dial address returned by the running daemon only. */
   endpointTicket?: string;
@@ -88,14 +88,8 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
   if (!fs.existsSync(resolved)) return { dataDir: resolved, exists: false };
   const layout = daemonLayoutFor(resolved);
 
-  let endpointId: string | undefined;
-  try {
-    const secret = daemonKeyStore(layout.keysDir).load('endpoint.key');
-    if (secret) endpointId = endpointIdForSecret(secret);
-  } catch {
-    // Missing/corrupt identity is reported by its absence; `pair` provides
-    // the actionable hard failure because it cannot proceed without one.
-  }
+  const secret = daemonKeyStore(layout.keysDir).load('endpoint-key.bin');
+  const endpointId = secret ? endpointIdForSecret(secret) : undefined;
 
   let vaultCount: number | undefined;
   try {

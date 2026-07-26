@@ -90,7 +90,7 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   },
 
   // Gateways (issue #109) — multi-gateway lifecycle. Local gateway is
-  // always present; remote gateways have UUID ids. Issue #505 phase 7 removed
+  // always present; remote gateways use their iroh EndpointId. Issue #505 phase 7 removed
   // the manual "add by URL + token" bridge — gateways are added through the
   // pairing ceremony (`redeemGatewayPairing`), which adds the profile itself.
   listGateways: () => ipcRenderer.invoke(Channel.GATEWAYS_LIST),
@@ -145,7 +145,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // the active gateway's bundle and saves it via a native dialog.
   restartGateway: () => ipcRenderer.invoke(Channel.GATEWAY_RESTART),
   exportGatewayDiagnostics: () => ipcRenderer.invoke(Channel.GATEWAY_DIAGNOSTICS_EXPORT),
-  exportGatewayRecoveryKit: () => ipcRenderer.invoke(Channel.GATEWAY_RECOVERY_KIT_EXPORT),
+  exportGatewayRecoveryKit: (input: { password: string }) =>
+    ipcRenderer.invoke(Channel.GATEWAY_RECOVERY_KIT_EXPORT, input),
   onGatewayChanged: (
     cb: (msg: {
       activeGatewayId: string;

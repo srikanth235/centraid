@@ -53,8 +53,8 @@ export function decodePairingTicket(raw: string): PairingTicketPayload | undefin
 
 /**
  * Client-side fast-feedback expiry check. The gateway re-checks on
- * redemption regardless (the ticket store burns on any redemption attempt),
- * so this only exists to fail a stale paste instantly, before ever dialing.
+ * redemption regardless, so this only exists to fail a stale paste instantly,
+ * before ever dialing.
  */
 export function isTicketExpired(
   payload: Pick<PairingTicketPayload, 'exp'>,

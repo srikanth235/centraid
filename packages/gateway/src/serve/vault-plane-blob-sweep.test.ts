@@ -109,13 +109,13 @@ describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
     return plane;
   }
 
-  test('lease conflict pauses orphan-delete; clearing it resumes and finishes the job', async () => {
+  test('possible cross-host writer pauses orphan-delete; clearing the risk resumes it', async () => {
     const server = await startServer();
     const dir = await tempDir();
     let conflicted = true;
     const plane = openPlane(dir, { endpoint: server.url, skipOrphanDelete: () => conflicted });
 
-    const orphanSha = crypto.createHash('sha256').update('lease-orphan').digest('hex');
+    const orphanSha = crypto.createHash('sha256').update('writer-risk-orphan').digest('hex');
     server.putObjectDirect('b', `p/blobs/sha256/${orphanSha}`, Buffer.from('orphan'));
 
     plane.start();

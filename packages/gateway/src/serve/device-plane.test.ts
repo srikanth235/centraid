@@ -29,7 +29,7 @@ async function tempFile(name: string): Promise<string> {
 }
 
 test('enrollment: multi-vault = multiple rows; revoke by row or by key', async () => {
-  const file = await tempFile('devices.json');
+  const file = await tempFile('gateway.db');
   const store = EnrollmentStore.open(file);
 
   const laptop1 = store.enroll({ endpointId: 'ep-laptop', vaultId: 'v1', label: 'laptop' });
@@ -65,7 +65,7 @@ test('enrollment: multi-vault = multiple rows; revoke by row or by key', async (
 });
 
 test("enrollment: a second process's writes are visible without restart", async () => {
-  const file = await tempFile('devices.json');
+  const file = await tempFile('gateway.db');
   const daemon = EnrollmentStore.open(file, { statTtlMs: 0 });
   expect(daemon.isEnrolled('ep-new')).toBe(false);
 
@@ -74,11 +74,11 @@ test("enrollment: a second process's writes are visible without restart", async 
   cli.enroll({ endpointId: 'ep-new', vaultId: 'v1', label: 'new device' });
 
   expect(daemon.vaultsFor('ep-new')).toEqual(['v1']);
-  await expect(fs.stat(file)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect((await fs.stat(file)).isFile()).toBe(true);
 });
 
 test('enrollment: replica checkpoints only advance within their bootstrap epoch', async () => {
-  const file = await tempFile('devices.json');
+  const file = await tempFile('gateway.db');
   const store = EnrollmentStore.open(file);
   store.enroll({
     endpointId: 'ep-device',
@@ -123,7 +123,7 @@ test('enrollment: replica checkpoints only advance within their bootstrap epoch'
 });
 
 test('enrollment: a stale daemon checkpoint cannot resurrect a CLI revocation', async () => {
-  const file = await tempFile('devices.json');
+  const file = await tempFile('gateway.db');
   const daemon = EnrollmentStore.open(file);
   const row = daemon.enroll({
     endpointId: 'ep-lost',
@@ -151,7 +151,7 @@ test('enrollment: a stale daemon checkpoint cannot resurrect a CLI revocation', 
 });
 
 test('enrollment: gateway.db replaces the old lock directory', async () => {
-  const file = await tempFile('devices.json');
+  const file = await tempFile('gateway.db');
   const store = EnrollmentStore.open(file);
   store.enroll({ endpointId: 'device', vaultId: 'v1', label: 'Laptop' });
   await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({ code: 'ENOENT' });
@@ -159,7 +159,7 @@ test('enrollment: gateway.db replaces the old lock directory', async () => {
 });
 
 test('enrollment: remember, trust, and Companion grants persist across re-pair', async () => {
-  const file = await tempFile('devices.json');
+  const file = await tempFile('gateway.db');
   const store = EnrollmentStore.open(file);
   store.enroll({
     endpointId: 'ep-session',
@@ -219,15 +219,18 @@ test('enrollment: obsolete JSON registries are not read or rewritten', async () 
 });
 
 test('pairing tickets: one-time, secret-checked, TTL-bound', async () => {
-  const file = await tempFile('pairing-tickets.json');
+  const file = await tempFile('gateway.db');
   const store = PairingTicketStore.open(file);
 
   const minted = store.mint('v1');
   expect(store.listActive()).toHaveLength(1);
 
-  // Wrong secret burns the ticket — the right secret is now useless too.
+  // A guessed secret must not burn the ticket before the secret is verified.
   expect(store.redeem(minted.ticketId, 'guessed')).toBeUndefined();
-  expect(store.redeem(minted.ticketId, minted.secret)).toBeUndefined();
+  expect(store.redeem(minted.ticketId, minted.secret)).toEqual({
+    vaultId: 'v1',
+    trust: 'full',
+  });
 
   const second = store.mint('v2');
   expect(store.redeem(second.ticketId, second.secret)).toEqual({ vaultId: 'v2', trust: 'full' });

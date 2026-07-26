@@ -8,10 +8,10 @@
  *
  *   GET    /centraid/_gateway/storage/connections           — list (never carries secrets)
  *   POST   /centraid/_gateway/storage/connections            — create; body = CreateStorageConnectionInput
- *                                                              (+ optional {force: boolean}); 409
+ *                                                              (no bypass); 409
  *                                                              `recovery_kit_not_confirmed` when the
  *                                                              recovery kit hasn't been confirmed, unless
- *                                                              `force: true`; 400 `provider_not_home_profile`
+ *                                                              complete; 400 `provider_not_home_profile`
  *                                                              when the provider isn't a home bundle (#436 §1);
  *                                                              409 `already_exists` if a home connection is
  *                                                              already configured (#436 §7)
@@ -338,7 +338,6 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
       if ((req.method ?? 'GET') === 'POST') {
         try {
           const raw = await readJson(req);
-          const force = raw.force === true;
           if (!looksLikeCreateInput(raw)) {
             return sendJson(res, 400, {
               error: 'bad_request',
@@ -350,13 +349,12 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           // recovery-kit gate always applies before the first remote custody.
           const status = await deps.recoveryKit.status();
           const recoveryKitConfirmed = status.confirmedAt !== null;
-          if (!recoveryKitConfirmed && !force) {
+          if (!recoveryKitConfirmed) {
             return sendJson(res, 409, {
               error: 'recovery_kit_not_confirmed',
               recoveryKitConfirmed: false,
               message:
-                'confirm you have exported and safely stored the recovery kit before enabling a ' +
-                'remote storage tier (or resend with {force: true} to bypass)',
+                'export, re-select, and verify the recovery kit before enabling a remote storage tier',
             });
           }
           // Home-profile gate (#436 §1): only a provider advertising the

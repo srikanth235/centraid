@@ -54,7 +54,7 @@ export default function StorageRoute(): JSX.Element {
         onVerifyBackupNow={verifyGatewayBackupsNow}
         onUpdateBackupPolicy={updateGatewayBackupPolicy}
         onVerifyBackupBucket={verifyGatewayBackupBucket}
-        onExportRecoveryKit={() => window.CentraidApi.exportGatewayRecoveryKit()}
+        onExportRecoveryKit={(input) => window.CentraidApi.exportGatewayRecoveryKit(input)}
         onConfirmRecoveryKit={confirmGatewayRecoveryKit}
         loadStorageUsage={loadStorageUsageAggregate}
         onOpenStorageSettings={() => navigate({ kind: 'settings', page: 'storage' })}

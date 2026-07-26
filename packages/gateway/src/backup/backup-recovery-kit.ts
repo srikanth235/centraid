@@ -1,9 +1,4 @@
-import {
-  writeRecoveryKit,
-  type Keyring,
-  type RecoveryKitDocument,
-  type RecoveryKitTarget,
-} from '@centraid/backup';
+import type { Keyring, RecoveryKitDocument, RecoveryKitTarget } from '@centraid/backup';
 import type { KeyStore } from '@centraid/vault';
 import type { BackupState } from './backup-state.js';
 
@@ -23,6 +18,7 @@ function requiredSealKey(keyStore: KeyStore, vaultId: string): Buffer {
   return key;
 }
 
+/** Build the in-memory plaintext document immediately before password wrapping. */
 export function recoveryKitDocument(opts: {
   keyring: Keyring;
   state: BackupState;
@@ -37,18 +33,4 @@ export function recoveryKitDocument(opts: {
     keyring: opts.keyring,
     targets: targets(opts.state, opts.provider, opts.keyStore),
   };
-}
-
-export async function writeBackupRecoveryKit(opts: {
-  keyring: Keyring;
-  state: BackupState;
-  provider: string;
-  destFile: string;
-  keyStore: KeyStore;
-}): Promise<void> {
-  await writeRecoveryKit({
-    keyring: opts.keyring,
-    targets: targets(opts.state, opts.provider, opts.keyStore),
-    destFile: opts.destFile,
-  });
 }

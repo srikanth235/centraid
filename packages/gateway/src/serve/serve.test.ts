@@ -12,8 +12,28 @@ let handle: GatewayServeHandle;
 function pathsUnder(dir: string): GatewayPaths {
   return {
     vaultDir: path.join(dir, 'vault'),
-    prefsFile: path.join(dir, 'prefs.json'),
   };
+}
+
+async function verifyCurrentRecoveryKit(
+  active: GatewayServeHandle,
+  auth: Record<string, string>,
+): Promise<{ confirmedAt: number }> {
+  const password = 'correct horse battery staple';
+  const kitResponse = await fetch(`${active.url}/centraid/_gateway/backup/kit`, {
+    method: 'POST',
+    headers: { ...auth, 'content-type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  expect(kitResponse.status).toBe(200);
+  const kit = await kitResponse.json();
+  const confirm = await fetch(`${active.url}/centraid/_gateway/backup/kit-confirmed`, {
+    method: 'POST',
+    headers: { ...auth, 'content-type': 'application/json' },
+    body: JSON.stringify({ kit, password, lossConsent: true }),
+  });
+  expect(confirm.status).toBe(200);
+  return confirm.json() as Promise<{ confirmedAt: number }>;
 }
 
 beforeEach(async () => {
@@ -240,13 +260,9 @@ test('backup status/run round-trip when backup IS configured', async () => {
   expect(beforeBody.vaults[0]).toMatchObject({ vaultId, running: false });
   expect(beforeBody.vaults[0]?.lastBackupAt).toBeUndefined();
 
-  // Reading status begins the recovery-kit ceremony. Confirm the current kit
-  // before the fail-closed ceremony gate permits backup mutations.
-  const confirm = await fetch(`${handle.url}/centraid/_gateway/backup/kit-confirmed`, {
-    method: 'POST',
-    headers: auth,
-  });
-  expect(confirm.status).toBe(200);
+  // Reading status begins the recovery-kit ceremony. Export, re-select, and
+  // verify the exact password-wrapped artifact before backup mutations.
+  await verifyCurrentRecoveryKit(handle, auth);
 
   const run = await fetch(`${handle.url}/centraid/_gateway/backup/run`, {
     method: 'POST',
@@ -257,9 +273,9 @@ test('backup status/run round-trip when backup IS configured', async () => {
   expect(runBody.accepted).toBe(true);
 
   // The run happens in the background — poll until it lands (bounded).
-  // Creating the first target intentionally stales the just-confirmed kit and
-  // closes the HTTP surface again, so observe completion through the returned
-  // host-side service handle.
+  // Creating the first target intentionally stales the just-confirmed kit.
+  // Ordinary staleness is a re-download prompt, not a gateway outage; observe
+  // completion through the returned host-side service handle.
   let lastBackupAt: string | undefined;
   for (let i = 0; i < 50; i++) {
     const poll = await handle.backup!.status();
@@ -271,7 +287,7 @@ test('backup status/run round-trip when backup IS configured', async () => {
 });
 
 test('recoveryKit confirmation survives a restart (issue #351 wave 4)', async () => {
-  // Real end-to-end: real HTTP server, real BackupService, real state.json
+  // Real end-to-end: real HTTP server, real BackupService, real gateway.db
   // on disk — `handle.close()` + a fresh `serve()` over the SAME dataDir is
   // as close to "the gateway process restarted" as a unit test gets short
   // of actually spawning a second process.
@@ -297,17 +313,11 @@ test('recoveryKit confirmation survives a restart (issue #351 wave 4)', async ()
     kitFingerprint: expect.any(String),
   });
 
-  const confirm = await fetch(`${handle.url}/centraid/_gateway/backup/kit-confirmed`, {
-    method: 'POST',
-    headers: auth,
-  });
-  expect(confirm.status).toBe(200);
-  const confirmBody = (await confirm.json()) as { ok: boolean; confirmedAt: number };
-  expect(confirmBody.ok).toBe(true);
+  const confirmBody = await verifyCurrentRecoveryKit(handle, auth);
   expect(confirmBody.confirmedAt).toBeGreaterThan(0);
 
   // Restart: close this instance, boot a fresh one over the identical
-  // on-disk dataDir (same `<dataDir>/backup/state.json`).
+  // on-disk dataDir (same gateway.db recovery-kit row).
   await handle.close();
   handle = await serve({
     initVaultName: "Owner's vault",

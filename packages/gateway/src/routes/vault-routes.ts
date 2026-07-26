@@ -127,8 +127,8 @@ export interface VaultRouteOptions {
   /**
    * Recovery-kit confirmation gate (issue #367 §C10): attaching a
    * `connectionId` to `blob_store` (enabling a CAS remote tier) is refused
-   * with `409 recovery_kit_not_confirmed` unless either the operator has
-   * confirmed the recovery kit, or the request carries `{force: true}`.
+   * with `409 recovery_kit_not_confirmed` until the operator has exported,
+   * re-selected, and verified the current recovery kit.
    */
   recoveryKit?: RecoveryKitStateStore;
   /** Device relation used for owner checks and erase cascade. */
@@ -139,6 +139,8 @@ export interface VaultRouteOptions {
   keys?: KeyStore;
   /** Provider generation fence that must land before an offsite-backed erase. */
   fenceVaultForErase?: (vaultId: string) => Promise<void>;
+  /** Crash-injection seam after durable state commit and before file unlink. */
+  afterEraseStateCommitted?: (vaultId: string) => void;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -224,6 +226,12 @@ export function makeVaultRouteHandler(
         const vaultId = plane.boot.vaultId;
         await options.fenceVaultForErase?.(vaultId);
         options.gatewayDatabase.transaction(() => {
+          options
+            .gatewayDatabase!.db.prepare(
+              `INSERT INTO erase_intents (vault_id, created_at) VALUES (?, ?)
+               ON CONFLICT(vault_id) DO NOTHING`,
+            )
+            .run(vaultId, new Date().toISOString());
           // `devices` is the parent of web_sessions; the FK cascade makes a
           // formerly paired device lose every route to this erased vault.
           options
@@ -238,9 +246,14 @@ export function makeVaultRouteHandler(
           options
             .gatewayDatabase!.db.prepare('DELETE FROM cas_reconciliations WHERE vault_id = ?')
             .run(vaultId);
-          vaults.delete(vaultId);
-          options.keys!.destroy(`${vaultId}.sealkey`);
-          options.keys!.destroy(`${vaultId}.sealkey.next`);
+        });
+        options.afterEraseStateCommitted?.(vaultId);
+        vaults.delete(vaultId);
+        options.keys.destroy(`${vaultId}.sealkey`);
+        options.gatewayDatabase.transaction(() => {
+          options
+            .gatewayDatabase!.db.prepare('DELETE FROM erase_intents WHERE vault_id = ?')
+            .run(vaultId);
         });
         return sendJson(res, 200, {
           ok: true,
@@ -385,14 +398,12 @@ export function makeVaultRouteHandler(
             const status = await options.recoveryKit?.status();
             recoveryKitConfirmed =
               status?.confirmedAt !== null && status?.confirmedAt !== undefined;
-            const force = body.force === true;
-            if (options.recoveryKit && !recoveryKitConfirmed && !force) {
+            if (options.recoveryKit && !recoveryKitConfirmed) {
               return sendJson(res, 409, {
                 error: 'recovery_kit_not_confirmed',
                 recoveryKitConfirmed: false,
                 message:
-                  'confirm you have exported and safely stored the recovery kit before enabling ' +
-                  'a remote storage tier (or resend with {force: true} to bypass)',
+                  'export, re-select, and verify the recovery kit before enabling a remote storage tier',
               });
             }
             // A provider connection's S3 coordinates aren't known until a

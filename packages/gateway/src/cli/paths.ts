@@ -28,7 +28,6 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     dataDir: abs,
     gatewayDbFile: path.join(abs, 'gateway.db'),
     keysDir: path.join(abs, 'keys'),
-    prefsFile: path.join(abs, 'gateway.db'),
     cacheDir,
     modelCatalogFile: path.join(cacheDir, 'model-catalog.json'),
     modelPricingFile: path.join(cacheDir, 'model-pricing.json'),
@@ -37,12 +36,10 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     // gateway holding N sovereign vaults, one subdirectory each — and,
     // post-#280, each vault's whole app world.
     vaultDir: path.join(abs, 'vault'),
-    backupDir: cacheDir,
     logsDir: path.join(abs, 'gateway-logs'),
-    storageDir: abs,
     devicesFile: path.join(abs, 'gateway.db'),
     pairingTicketsFile: path.join(abs, 'gateway.db'),
     webSessionsFile: path.join(abs, 'gateway.db'),
-    endpointKeyFile: path.join(abs, 'keys', 'endpoint.key'),
+    endpointKeyFile: path.join(abs, 'keys', 'endpoint-key.bin'),
   };
 }

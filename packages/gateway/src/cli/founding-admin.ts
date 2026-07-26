@@ -5,6 +5,7 @@ import { resolveDaemonConfig } from './resolve-config.js';
 import { jsonFail, runJson, type Fail } from './json-cli.js';
 import { renderTerminalQr } from './pair-qr.js';
 import { daemonKeyStore } from './key-store.js';
+import { landlordBearerForEndpointSecret } from './landlord-auth.js';
 
 interface InitTicketArgs {
   dataDir?: string;
@@ -58,7 +59,7 @@ export async function commandInitTicket(
     if (!handshake.ok) {
       localFail(`daemon not running at ${baseUrl} — start it before minting a founding ticket`, 1);
     }
-    const secret = daemonKeyStore(daemonLayoutFor(config.dataDir).keysDir).load('endpoint.key');
+    const secret = daemonKeyStore(daemonLayoutFor(config.dataDir).keysDir).load('endpoint-key.bin');
     if (
       !secret ||
       handshake.info.endpointId !== endpointIdForSecret(secret) ||
@@ -68,6 +69,9 @@ export async function commandInitTicket(
     }
     const response = await fetchImpl(`${baseUrl}${ROUTES.gatewayFoundingTicket}`, {
       method: 'POST',
+      headers: {
+        Authorization: `Bearer ${landlordBearerForEndpointSecret(secret)}`,
+      },
     }).catch(() => localFail('daemon stopped before it could mint the founding ticket', 1));
     const body = (await response.json().catch(() => ({}))) as {
       ok?: boolean;

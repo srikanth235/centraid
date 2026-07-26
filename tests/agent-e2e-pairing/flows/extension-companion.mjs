@@ -32,14 +32,13 @@ const loginUrl = `http://localhost:${address.port}/login`;
 
 try {
   await runFlow('extension-companion', async (ctx) => {
-    const created = JSON.parse(
-      (await ctx.cli(['vault', 'create', '--name', 'CompanionE2E'])).stdout
-        .trim()
-        .split('\n')
-        .at(-1),
-    );
-    const vaultId = created.vaultId;
-    if (!vaultId) throw new Error('vault create returned no vault id');
+    const vaults = (await ctx.cli(['vault', 'list'])).stdout
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+    const vaultId = vaults.find((vault) => vault.name === 'Pairing E2E')?.vaultId;
+    if (!vaultId) throw new Error('explicitly initialized Pairing E2E vault was not found');
     const headers = {
       authorization: `Bearer ${ctx.gateway.token}`,
       'content-type': 'application/json',
@@ -70,7 +69,7 @@ try {
     });
     if (!add.ok) throw new Error(`Locker seed failed: ${add.status} ${await add.text()}`);
 
-    const { raw: ticket } = await ctx.mintTicket({ vault: 'CompanionE2E' });
+    const { raw: ticket } = await ctx.mintTicket({ vault: 'Pairing E2E' });
     const context = await chromium.launchPersistentContext('', {
       headless: false,
       args: [`--disable-extensions-except=${extensionDir}`, `--load-extension=${extensionDir}`],

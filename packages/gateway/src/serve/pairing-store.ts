@@ -10,9 +10,18 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import type { GrantableTrust, DeviceEnrollment, EnrollmentStore } from './enrollment-store.js';
 import { GatewayDatabase } from './gateway-db.js';
+export {
+  encodePairingTicket,
+  parseFoundingTicket,
+  parsePairingTicket,
+  type FoundingTicketPayload,
+  type PairingTicketPayload,
+} from './pairing-ticket-codec.js';
 
 export const DEFAULT_TICKET_TTL_MS = 15 * 60 * 1000;
 export const FOUNDING_TICKET_TTL_MS = 10 * 60 * 1000;
+/** A started restore may legitimately outlive the QR ticket's mint window. */
+export const FOUNDING_RESERVATION_TTL_MS = 2 * 60 * 60 * 1000;
 
 interface TicketRow {
   ticket_id: string;
@@ -22,61 +31,6 @@ interface TicketRow {
   trust: GrantableTrust | null;
   created_at: string;
   expires_at: number;
-}
-
-export interface PairingTicketPayload {
-  v: 1;
-  kind: 'centraid-gw-pair';
-  gw: string;
-  t: string;
-  s: string;
-  vaultName: string;
-  exp: number;
-}
-
-export interface FoundingTicketPayload {
-  v: 1;
-  kind: 'centraid-gw-found';
-  gw: string;
-  t: string;
-  s: string;
-  exp: number;
-}
-
-export function encodePairingTicket(payload: PairingTicketPayload | FoundingTicketPayload): string {
-  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
-}
-
-export function parsePairingTicket(raw: string): PairingTicketPayload | undefined {
-  try {
-    const obj = JSON.parse(
-      Buffer.from(raw.trim(), 'base64url').toString('utf8'),
-    ) as Partial<PairingTicketPayload>;
-    if (obj.v !== 1 || obj.kind !== 'centraid-gw-pair') return undefined;
-    if (typeof obj.gw !== 'string' || typeof obj.t !== 'string' || typeof obj.s !== 'string') {
-      return undefined;
-    }
-    if (typeof obj.vaultName !== 'string' || typeof obj.exp !== 'number') return undefined;
-    return obj as PairingTicketPayload;
-  } catch {
-    return undefined;
-  }
-}
-
-export function parseFoundingTicket(raw: string): FoundingTicketPayload | undefined {
-  try {
-    const obj = JSON.parse(
-      Buffer.from(raw.trim(), 'base64url').toString('utf8'),
-    ) as Partial<FoundingTicketPayload>;
-    if (obj.v !== 1 || obj.kind !== 'centraid-gw-found') return undefined;
-    if (typeof obj.gw !== 'string' || typeof obj.t !== 'string' || typeof obj.s !== 'string') {
-      return undefined;
-    }
-    if (typeof obj.exp !== 'number') return undefined;
-    return obj as FoundingTicketPayload;
-  } catch {
-    return undefined;
-  }
 }
 
 function hashSecret(secret: string): string {
@@ -215,10 +169,188 @@ export class PairingTicketStore {
     });
   }
 
+  /**
+   * Atomically reserve a valid founding capability before doing slow or
+   * filesystem-mutating work. The original ten-minute window decides whether
+   * work may start; the opaque reservation keeps that one caller's ceremony
+   * alive long enough to finish without making the ticket reusable.
+   */
+  reserveFounding(
+    ticketId: string,
+    secret: string,
+    ttlMs = FOUNDING_RESERVATION_TTL_MS,
+  ): string | undefined {
+    return this.gatewayDatabase.transaction(() => {
+      const row = this.gatewayDatabase.db
+        .prepare(
+          `SELECT ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
+             FROM tickets
+            WHERE ticket_id = ? AND kind = 'found'`,
+        )
+        .get(ticketId) as TicketRow | undefined;
+      if (!row) return undefined;
+      const expected = Buffer.from(row.secret_hash, 'hex');
+      const actual = Buffer.from(hashSecret(secret), 'hex');
+      if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+        return undefined;
+      }
+      const now = Date.now();
+      const existing = this.gatewayDatabase.db
+        .prepare(
+          `SELECT reservation_id, secret_hash, reserved_until
+             FROM founding_ticket_reservations
+            WHERE ticket_id = ?`,
+        )
+        .get(ticketId) as
+        | { reservation_id: string; secret_hash: string; reserved_until: number }
+        | undefined;
+      if (existing) {
+        return existing.secret_hash === row.secret_hash && existing.reserved_until > now
+          ? existing.reservation_id
+          : undefined;
+      }
+      if (row.expires_at <= now) return undefined;
+      const reservationId = crypto.randomUUID();
+      const inserted = this.gatewayDatabase.db
+        .prepare(
+          `INSERT OR IGNORE INTO founding_ticket_reservations (
+             ticket_id, reservation_id, secret_hash, reserved_at, reserved_until
+           ) VALUES (?, ?, ?, ?, ?)`,
+        )
+        .run(ticketId, reservationId, row.secret_hash, now, now + ttlMs);
+      return inserted.changes === 1 ? reservationId : undefined;
+    });
+  }
+
+  /**
+   * Persist the exact filesystem identities a founding reservation is about
+   * to create or restore. Boot removes these local artifacts if the process
+   * dies before the ticket-delete + enrollment transaction commits.
+   */
+  stageReservedFoundingVaults(reservationId: string, vaultIds: readonly string[]): boolean {
+    const encoded = JSON.stringify([...new Set(vaultIds)]);
+    if (vaultIds.length === 0 || encoded === '[]') return false;
+    return this.gatewayDatabase.transaction(() => {
+      const row = this.gatewayDatabase.db
+        .prepare(
+          `SELECT pending_vault_ids_json
+             FROM founding_ticket_reservations
+            WHERE reservation_id = ? AND reserved_until > ?`,
+        )
+        .get(reservationId, Date.now()) as { pending_vault_ids_json: string | null } | undefined;
+      if (!row) return false;
+      if (row.pending_vault_ids_json !== null && row.pending_vault_ids_json !== encoded) {
+        return false;
+      }
+      this.gatewayDatabase.db
+        .prepare(
+          `UPDATE founding_ticket_reservations
+              SET pending_vault_ids_json = ?
+            WHERE reservation_id = ?`,
+        )
+        .run(encoded, reservationId);
+      return true;
+    });
+  }
+
+  clearReservedFoundingVaults(reservationId: string, vaultIds: readonly string[]): void {
+    this.gatewayDatabase.db
+      .prepare(
+        `UPDATE founding_ticket_reservations
+            SET pending_vault_ids_json = NULL
+          WHERE reservation_id = ? AND pending_vault_ids_json = ?`,
+      )
+      .run(reservationId, JSON.stringify([...new Set(vaultIds)]));
+  }
+
+  pendingFoundingVaults(): Array<{
+    reservationId: string;
+    vaultIds: string[];
+  }> {
+    return (
+      this.gatewayDatabase.db
+        .prepare(
+          `SELECT reservation_id, pending_vault_ids_json
+             FROM founding_ticket_reservations
+            WHERE pending_vault_ids_json IS NOT NULL
+            ORDER BY reserved_at, reservation_id`,
+        )
+        .all() as Array<{
+        reservation_id: string;
+        pending_vault_ids_json: string;
+      }>
+    ).map((row) => {
+      const parsed: unknown = JSON.parse(row.pending_vault_ids_json);
+      if (
+        !Array.isArray(parsed) ||
+        parsed.length === 0 ||
+        parsed.some((vaultId) => typeof vaultId !== 'string')
+      ) {
+        throw new Error(
+          `invalid pending founding vault list for reservation ${row.reservation_id}`,
+        );
+      }
+      return {
+        reservationId: row.reservation_id,
+        vaultIds: [...new Set(parsed)],
+      };
+    });
+  }
+
+  redeemReservedFoundingAndEnrollMany(
+    reservationId: string,
+    enrollments: EnrollmentStore,
+    input: {
+      endpointId: string;
+      vaultIds: string[];
+      label: string;
+      platform?: string;
+    },
+    beforeEnroll?: () => void,
+    afterEnroll?: () => void,
+  ): DeviceEnrollment[] | undefined {
+    if (enrollments.gatewayDatabase.file !== this.gatewayDatabase.file) {
+      throw new Error('ticket and enrollment stores must share gateway.db');
+    }
+    return this.gatewayDatabase.transaction(() => {
+      const reservation = this.gatewayDatabase.db
+        .prepare(
+          `SELECT ticket_id
+             FROM founding_ticket_reservations
+            WHERE reservation_id = ? AND reserved_until > ?`,
+        )
+        .get(reservationId, Date.now()) as { ticket_id: string } | undefined;
+      if (!reservation) return undefined;
+      const deleted = this.gatewayDatabase.db
+        .prepare("DELETE FROM tickets WHERE ticket_id = ? AND kind = 'found'")
+        .run(reservation.ticket_id);
+      if (deleted.changes !== 1) return undefined;
+      beforeEnroll?.();
+      const enrolled = input.vaultIds.map((vaultId) =>
+        enrollments.enrollWithinTransaction({
+          endpointId: input.endpointId,
+          vaultId,
+          label: input.label,
+          ...(input.platform !== undefined ? { platform: input.platform } : {}),
+          trust: 'owner',
+        }),
+      );
+      afterEnroll?.();
+      return enrolled;
+    });
+  }
+
   hasActiveFounding(): boolean {
     const row = this.gatewayDatabase.db
-      .prepare("SELECT 1 AS active FROM tickets WHERE kind = 'found' AND expires_at > ? LIMIT 1")
-      .get(Date.now()) as { active: number } | undefined;
+      .prepare(
+        `SELECT 1 AS active
+           FROM tickets t
+           LEFT JOIN founding_ticket_reservations r ON r.ticket_id = t.ticket_id
+          WHERE t.kind = 'found'
+            AND (t.expires_at > ? OR r.reserved_until > ?)
+          LIMIT 1`,
+      )
+      .get(Date.now(), Date.now()) as { active: number } | undefined;
     return row?.active === 1;
   }
 
@@ -322,17 +454,18 @@ export class PairingTicketStore {
       )
       .get(ticketId, kind) as TicketRow | undefined;
     if (!row) return undefined;
+    if (row.expires_at <= Date.now()) return undefined;
+    const expected = Buffer.from(row.secret_hash, 'hex');
+    const actual = Buffer.from(hashSecret(secret), 'hex');
+    if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+      return undefined;
+    }
     const deleted = this.gatewayDatabase.db
       .prepare('DELETE FROM tickets WHERE ticket_id = ? AND kind = ?')
       .run(ticketId, kind);
     // BEGIN IMMEDIATE serializes contenders. The affected row count, rather
     // than any in-process mutex, is the single-use authority.
     if (deleted.changes !== 1) return undefined;
-    if (row.expires_at <= Date.now()) return undefined;
-    const expected = Buffer.from(row.secret_hash, 'hex');
-    const actual = Buffer.from(hashSecret(secret), 'hex');
-    return expected.length === actual.length && crypto.timingSafeEqual(expected, actual)
-      ? row
-      : undefined;
+    return row;
   }
 }

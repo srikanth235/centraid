@@ -174,8 +174,8 @@ test('seedRunnerPrefs calls setPrefs even on empty config so a removed runner is
 
 test('daemonLayoutFor resolves relative paths to absolute', () => {
   const layout = daemonLayoutFor('./relative');
-  expect(path.isAbsolute(layout.prefsFile)).toBeTruthy();
-  expect(layout.prefsFile.endsWith(path.join('relative', 'gateway.db'))).toBeTruthy();
+  expect(path.isAbsolute(layout.gatewayDbFile)).toBeTruthy();
+  expect(layout.gatewayDbFile.endsWith(path.join('relative', 'gateway.db'))).toBeTruthy();
 });
 
 test('daemonLayoutFor mounts the vault plane at <dataDir>/vault', () => {

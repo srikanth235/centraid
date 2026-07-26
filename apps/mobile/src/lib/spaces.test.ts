@@ -48,14 +48,14 @@ describe('Spaces registry', () => {
       desktopName: 'Mac mini',
       deviceId: 'dev-1',
       vaultId: 'vault-a',
-      ticket: 'pair-ticket',
+      endpointHint: 'relay-hint-1',
       vaultName: 'Personal',
     });
     expect(space.gatewayId).toBe('gw-1');
     expect(spaces.listSpaces()).toHaveLength(1);
     expect(spaces.getActiveSpace()?.id).toBe(space.id);
     expect(spaces.getActiveVaultId()).toBe('vault-a');
-    expect(secureMem.get(spaces.LINK_TICKET_KEY)).toBe('pair-ticket');
+    expect(secureMem.get(spaces.LINK_ENDPOINT_HINT_KEY)).toBe('relay-hint-1');
   });
 
   it('upserts the same (gateway, vault) tuple instead of duplicating', async () => {
@@ -65,19 +65,20 @@ describe('Spaces registry', () => {
       desktopName: 'Desk',
       deviceId: 'd1',
       vaultId: 'v1',
-      ticket: 't1',
+      endpointHint: 'hint-old',
     });
     const second = await spaces.addSpace({
       gatewayId: 'gw-1',
       desktopName: 'Desk',
       deviceId: 'd1',
       vaultId: 'v1',
-      ticket: 't2',
+      endpointHint: 'hint-new',
       vaultName: 'Home',
     });
     expect(second.id).toBe(first.id);
     expect(spaces.listSpaces()).toHaveLength(1);
     expect(spaces.getActiveSpace()?.vaultName).toBe('Home');
+    expect(secureMem.get(spaces.LINK_ENDPOINT_HINT_KEY)).toBe('hint-new');
   });
 
   it('switches active space and notifies subscribers', async () => {
@@ -87,14 +88,14 @@ describe('Spaces registry', () => {
       desktopName: 'A',
       deviceId: 'd',
       vaultId: 'va',
-      ticket: 'ta',
+      endpointHint: 'ha',
     });
     const b = await spaces.addSpace({
       gatewayId: 'gw-b',
       desktopName: 'B',
       deviceId: 'd',
       vaultId: 'vb',
-      ticket: 'tb',
+      endpointHint: 'hb',
     });
     expect(spaces.getActiveSpace()?.id).toBe(b.id);
     let ticks = 0;
@@ -114,14 +115,14 @@ describe('Spaces registry', () => {
       desktopName: 'A',
       deviceId: 'd',
       vaultId: 'va',
-      ticket: 'ta',
+      endpointHint: 'ha',
     });
     const b = await spaces.addSpace({
       gatewayId: 'gw-b',
       desktopName: 'B',
       deviceId: 'd',
       vaultId: 'vb',
-      ticket: 'tb',
+      endpointHint: 'hb',
     });
     await spaces.removeSpace(b.id);
     expect(spaces.listSpaces().map((s) => s.id)).toEqual([a.id]);
