@@ -99,7 +99,7 @@ Issue #555 replaces implicit vault bootstrap and split gateway/device state with
 
 ## What changed
 
-- Phase 0 landed first and independently in branch commit `3a891099`: its regression drives claim → foreign-fresh lease → mount → conflict clears → shipper captures, and the production change re-arms capture within one tick. Phase 1 then follows issue #555's explicit instruction that “Its test retires with the lease” by deleting `GatewayInstanceLease` and making WAL ownership unconditional; the ordered commit diff preserves the live-bug regression while the final tree makes its failure mode unrepresentable.
+- Phase 0 landed first and independently in branch commit `d194e2d6`: its regression drives claim → foreign-fresh lease → mount → conflict clears → shipper captures, and the production change re-arms capture within one tick. Phase 1 then follows issue #555's explicit instruction that “Its test retires with the lease” by deleting `GatewayInstanceLease` and making WAL ownership unconditional; the ordered commit diff preserves the live-bug regression while the final tree makes its failure mode unrepresentable.
 - Gateway startup is explicitly vaultless. A complete `gateway.db` is created before any vault, holds the process-lifetime exclusive lock, and owns preferences, enrollments, pairing/founding tickets, web sessions, backup metadata, storage limits, recovery-kit state, and erase intents.
 - The retired split-state and lease model is gone from the final tree. Vault discovery stays filesystem-backed, WAL ownership is unconditional, network filesystems warn and force orphan-safe blob behavior, and laptop/VPS layouts are parity-tested.
 - Gateway connections are iroh-only and keyed by stable EndpointId. Desktop connection metadata lives in one main-process-owned `connections.json`; device credentials live in platform custody, relay tickets remain refreshable hints, and no URL/direct-token pairing path remains.
@@ -111,8 +111,8 @@ Issue #555 replaces implicit vault bootstrap and split gateway/device state with
 
 ### Acceptance evidence crosswalk
 
-- After a lease conflict clears, the WAL shipper re-arms within one tick; a crash + fast restart inside `LEASE_FRESH_WINDOW_MS` does not disable capture for the process's lifetime — Evidence: the ordered diff for branch commit `3a891099`, which lands the Phase 0 production repair and regression before Phase 1 removes the lease exactly as specified.
-- Regression test drives the real sequence (claim → foreign-fresh lease → mount → conflict clears → shipper captures) and fails against today's `main` — Evidence: `git show 3a891099:packages/gateway/src/serve/vault-plane.test.ts` contains `WAL capture re-arms after a fresh foreign lease conflict clears`; the pre-fix constructor leaves `walShipper` undefined after the conflict clears, while commit `3a891099` re-evaluates ownership on `walTick`. Issue #555 explicitly requires this test to retire with the lease in Phase 1, so it is visible in the ordered commit diff rather than the final tree.
+- After a lease conflict clears, the WAL shipper re-arms within one tick; a crash + fast restart inside `LEASE_FRESH_WINDOW_MS` does not disable capture for the process's lifetime — Evidence: the ordered diff for branch commit `d194e2d6`, which lands the Phase 0 production repair and regression before Phase 1 removes the lease exactly as specified.
+- Regression test drives the real sequence (claim → foreign-fresh lease → mount → conflict clears → shipper captures) and fails against today's `main` — Evidence: `git show d194e2d6:packages/gateway/src/serve/vault-plane.test.ts` contains `WAL capture re-arms after a fresh foreign lease conflict clears`; the pre-fix constructor leaves `walShipper` undefined after the conflict clears, while commit `d194e2d6` re-evaluates ownership on `walTick`. Issue #555 explicitly requires this test to retire with the lease in Phase 1, so it is visible in the ordered commit diff rather than the final tree.
 - A gateway with no `core_vault` row boots healthy, reports `status: "uninitialized"`, `/centraid/_vault/vaults` → `{"vaults":[]}`, and does NOT create a vault — Evidence: `packages/gateway/src/serve/build-gateway.test.ts` vaultless HTTP integration.
 - Automations scheduler, health probes, and `/centraid/_apps` return explicit empty-but-healthy answers at zero vaults — Evidence: `packages/gateway/src/serve/build-gateway.test.ts` zero-vault apps/automations/health assertions.
 - Pairing against an uninitialized gateway returns `409 uninitialized` (no hang); the phone shows a sensible error — Evidence: `packages/gateway/src/cli/admin.test.ts`, `packages/gateway/src/serve/build-gateway.test.ts`, and mobile founding error handling.
@@ -522,8 +522,8 @@ Issue #555 replaces implicit vault bootstrap and split gateway/device state with
 Completed on the final implementation before receipt audit:
 
 ```sh
-git show 3a891099:packages/gateway/src/serve/vault-plane.test.ts
-git diff 3a891099^ 3a891099 -- packages/gateway/src/serve/vault-plane.ts packages/gateway/src/serve/vault-plane.test.ts
+git show d194e2d6:packages/gateway/src/serve/vault-plane.test.ts
+git diff d194e2d6^ d194e2d6 -- packages/gateway/src/serve/vault-plane.ts packages/gateway/src/serve/vault-plane.test.ts
 bun run --cwd packages/gateway test
 bun run --cwd packages/client test
 bun run --cwd apps/mobile test
@@ -550,21 +550,21 @@ Results:
 - App engine: 49 files and 544 tests passed.
 - Protocol: 5 files and 32 tests passed.
 - Tunnel: 6 files passed, 1 native-artifact file skipped; 69 tests passed, 2 skipped.
-- Vault: 116 files passed; 971 tests passed, 1 opt-in disk-full test skipped.
+- Vault: 116 files passed; 972 tests passed, 1 opt-in disk-full test skipped.
 - Desktop Playwright gateway/settings flow: 12 tests passed.
 - Production-custody backup/restore/fencing integration: 7 tests passed.
 - Replayable VPS + phone founding journey: PASS in 5,283 ms.
 - Replayable paired-device lifecycle: PASS in 5,559 ms.
 - Replayable pairing-ticket hygiene journey: PASS in 3,767 ms.
 - Affected mutation gate: protocol score 84.75%, above the 73% floor.
-- Full PR gate: 33 affected tasks passed, including format, lint, monorepo hygiene, typecheck, dead-code, CSS/E2E/protocol checks, matrix/report/governance suites, ratchets, and full dependent-package tests.
+- Post-rebase full PR gate: 31/31 affected tasks passed, including format, lint, monorepo hygiene, typecheck, dead-code, CSS/E2E/protocol checks, matrix/report/governance suites, ratchets, and full dependent-package tests.
 - Lock contention, daemon/read-only CLI coexistence, OS holder reporting, `SIGKILL` release, `sqlite3` crash-loop access, erase/restore, desktop founding/restart, full-tree layout parity, fail-closed replica identity, and whole-tree secret-sweep scenarios pass in their focused and package suites.
 
 The GitHub Actions result is recorded on the PR after publication.
 
 ## Decisions
 
-- Issue #555 deliberately requires a sequential state that cannot coexist in the final tree: Phase 0 must land the live-lease repair and its regression separately, while Phase 1 must delete both the lease and that test because WAL ownership becomes unconditional. The branch follows that specification literally in commit `3a891099`; the complete ordered diff, not only the final snapshot, is therefore the evidence for checklist items 1–2.
+- Issue #555 deliberately requires a sequential state that cannot coexist in the final tree: Phase 0 must land the live-lease repair and its regression separately, while Phase 1 must delete both the lease and that test because WAL ownership becomes unconditional. The branch follows that specification literally in commit `d194e2d6`; the complete ordered diff, not only the final snapshot, is therefore the evidence for checklist items 1–2.
 - `gateway.db` is both the durable gateway-state authority and the exclusive process lock; vault enumeration remains rooted in the filesystem.
 - EndpointId and concrete per-vault enrollments replace URL identity, durable pairing tickets, bearer devices, and wildcard authority.
 - `KeyStore` is the gateway secret-custody seam. Headless retains a 0600-file boundary; the desktop embed wraps the at-rest key through `safeStorage`.
@@ -572,11 +572,11 @@ The GitHub Actions result is recorded on the PR after publication.
 
 ## Audit
 
-Overall: PASS — fresh-context staged-diff audit.
+Overall: PASS — fresh-context post-rebase audit of the committed and working-tree change set.
 
-1. PASS — `## What changed` faithfully covers the complete ordered change set: Phase 0 commit `3a891099` lands the WAL re-arm repair and real lease-conflict regression; Phase 1 removes the lease and that test exactly as issue #555 requires, making WAL ownership unconditional. The final material areas—vaultless/locked `gateway.db`, iroh/device storage, `KeyStore` custody, founding, erase, and fail-closed enrollment—are represented without material omission.
-2. PASS — every checked item is realized in the ordered committed plus staged diff. The auditor specifically confirmed the transient Phase 0 regression, its specified Phase 1 retirement, the replacement desktop/headless full-tree parity test, the mobile share/re-select founding implementation and tests, the VPS-phone founding flow, and the corresponding gateway, desktop, client, documentation, and end-to-end coverage.
-3. PASS — `## Checklist` exactly mirrors issue #555 after normalizing completion marks: 92 items, identical text and order, with zero mismatches.
+1. PASS — `## What changed` faithfully covers the complete committed and working-tree change set, including the E2E workflow finalization. It accurately distinguishes Phase 0 commit `d194e2d6`, which lands the WAL re-arm repair and real lease-conflict regression, from Phase 1's specified removal of the lease model and that test.
+2. PASS — all 92 checked items are realized in the ordered branch plus working-tree diff. The auditor specifically confirmed vaultless `gateway.db` locking, founding and restore, `KeyStore` custody, device-local iroh connections, erase, fail-closed enrollment, and issue #555's deliberate Phase 0 → Phase 1 test-retirement sequence.
+3. PASS — exact normalized comparison with canonical GitHub issue #555: 92 issue checklist items versus 92 receipt items, with identical text and order and no diff.
 
 ## Steering
 
@@ -600,6 +600,8 @@ Populated by the governance commit hook.
 | codex-019f9e70-525-1785071812-1 | codex | 019f9e70-5250-7862-b42f-4db4a9d7686c | #555 | gpt-5.6-sol | 484654 | 0 | 11650816 | 26396 | 511050 | 4.5203 | 484654 | 0 | 11650816 | 26396 | fix(gateway): re-arm WAL capture after lease conflict (#555) |
 | codex-019f9e70-525-1785089774-1 | codex | 019f9e70-5250-7862-b42f-4db4a9d7686c | #555 | gpt-5.6-sol | 3238996 | 0 | 163382528 | 403564 | 3642560 | 54.9966 | 3723650 | 0 | 175033344 | 429960 | feat(gateway): implement vault founding plane (#555) |
 | codex-019f9e70-525-1785107858-1 | codex | 019f9e70-5250-7862-b42f-4db4a9d7686c | #555 | gpt-5.6-sol | 3509035 | 0 | 138802688 | 371615 | 3880650 | 49.0475 | 7232685 | 0 | 313836032 | 801575 | fix(gateway): close founding-plane acceptance gaps (#555) -m governance: allow-t |
+| codex-019f9e70-525-1785108755-1 | codex | 019f9e70-5250-7862-b42f-4db4a9d7686c | #555 | gpt-5.6-sol | 198009 | 0 | 4647424 | 10442 | 208451 | 1.8135 | 7430694 | 0 | 318483456 | 812017 | fix(ci): align founding journey with shared setup (#555) -m governance: allow-to |
+| codex-019f9e70-525-1785108800-1 | codex | 019f9e70-5250-7862-b42f-4db4a9d7686c | #555 | gpt-5.6-sol | 2446 | 0 | 197888 | 432 | 2878 | 0.0621 | 7433140 | 0 | 318681344 | 812449 | fix(ci): align founding journey with shared setup (#555) -m governance: allow-to |
 
 ### Steering
 
