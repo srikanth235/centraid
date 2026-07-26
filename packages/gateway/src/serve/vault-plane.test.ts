@@ -9,6 +9,13 @@ import { Dispatcher, Registry } from '@centraid/app-engine';
 import { openVaultPlane, type VaultPlane } from './vault-plane.js';
 import { openVaultRegistry } from './vault-registry.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
+import { HealthRegistry } from './health-registry.js';
+import {
+  GatewayInstanceLease,
+  LEASE_FILE_NAME,
+  LEASE_FRESH_WINDOW_MS,
+  type LeaseRecord,
+} from './gateway-instance-lease.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
@@ -52,6 +59,53 @@ test("a WAL-disabled admin plane never checkpoints another process's stream on s
   plane.stop();
 
   expect(checkpoints).toBe(0);
+});
+
+test('WAL capture re-arms after a fresh foreign lease conflict clears', async () => {
+  const dir = await tempDir();
+  let clock = 1_000_000;
+  const lease = new GatewayInstanceLease({
+    rootDir: dir,
+    health: new HealthRegistry({ now: () => clock }),
+    logger: silentLogger,
+    now: () => clock,
+    instanceId: 'gateway-under-test',
+  });
+  lease.claim();
+  cleanups.push(() => lease.stop());
+
+  const foreignLease: LeaseRecord = {
+    instanceId: 'foreign-gateway',
+    pid: 99999,
+    hostname: 'foreign-host',
+    startedAt: new Date(clock).toISOString(),
+    renewedAt: new Date(clock).toISOString(),
+  };
+  await fs.writeFile(path.join(dir, LEASE_FILE_NAME), JSON.stringify(foreignLease));
+  const renew = (
+    lease as unknown as {
+      checkAndRenew: () => void;
+    }
+  ).checkAndRenew.bind(lease);
+  renew();
+  expect(lease.isConflicted()).toBe(true);
+
+  const plane = openVaultPlane({
+    dir,
+    logger: silentLogger,
+    ownerName: 'Priya',
+    leaseConflicted: () => lease.isConflicted(),
+  });
+  cleanups.push(() => plane.stop());
+  expect(plane.walShipper).toBeUndefined();
+
+  clock += LEASE_FRESH_WINDOW_MS + 1;
+  renew();
+  expect(lease.isConflicted()).toBe(false);
+
+  plane.walTick();
+  expect(plane.walShipper?.status().dbs.vault?.generation).toMatch(/^[0-9a-f]{32}$/);
+  expect(plane.walShipper?.status().dbs.journal?.generation).toMatch(/^[0-9a-f]{32}$/);
 });
 
 test('WAL capture sleeps without backup and re-arms immediately when configured', async () => {
