@@ -20,15 +20,17 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
   createSnapshot,
-  loadKeyring,
   openLocalBackupProvider,
   openManifest,
   SNAPSHOT_FORMAT_V2,
+  validateKeyring,
   type BackupProvider,
   type ObjectStore,
 } from '@centraid/backup';
 import {
   readBackupPolicy,
+  KeyStore,
+  sealKeyFileFor,
   updateBackupPolicy,
   verifyRestoredPair,
   type WalShipper,
@@ -71,6 +73,12 @@ interface Fx {
   logs: string[];
 }
 
+function fixtureKeyring(f: Fx) {
+  const bytes = new KeyStore(path.dirname(sealKeyFileFor(f.plane.dir))).export('keyring.key');
+  if (!bytes) throw new Error('fixture keyring missing');
+  return validateKeyring(JSON.parse(bytes.toString('utf8')));
+}
+
 /**
  * The registry seam: `BackupService` needs only `get()` + `planesList()`,
  * and `VaultRegistry` does not plumb `VaultPlaneOptions.walShipper`
@@ -100,6 +108,7 @@ async function fx(opts: FxOptions = {}): Promise<Fx> {
   const providerDir = await tempDir('wal-e2e-provider');
   const backupDir = await tempDir('wal-e2e-backup');
   const plane = openVaultPlane({
+    bootstrap: true,
     dir: vaultDir,
     logger: silentLogger,
     ownerName: 'Priya',
@@ -252,7 +261,7 @@ async function openNewestManifest(f: Fx): Promise<{
 }> {
   const targetId = (await f.service.status())[f.vaultId]!.targetId;
   const provider = openLocalBackupProvider({ rootDir: f.providerDir });
-  const keyring = await loadKeyring(path.join(f.backupDir, 'keyring.json'));
+  const keyring = fixtureKeyring(f);
   const row = (await provider.listSnapshots(targetId))[0]!;
   const store = await provider.openDataPlane(targetId, 'backup', 'read');
   return openManifest(await store.get(row.manifestKey), keyring, f.vaultId, row.manifestHash);
@@ -902,7 +911,7 @@ async function anchoredGenerations(f: Fx): Promise<Set<string>> {
   const targetId = (await f.service.status())[f.vaultId]?.targetId;
   if (!targetId) return new Set();
   const provider = openLocalBackupProvider({ rootDir: f.providerDir });
-  const keyring = await loadKeyring(path.join(f.backupDir, 'keyring.json'));
+  const keyring = fixtureKeyring(f);
   const store = await provider.openDataPlane(targetId, 'backup', 'read');
   const out = new Set<string>();
   for (const row of await provider.listSnapshots(targetId)) {
@@ -1019,7 +1028,7 @@ test('a no-change run whose PREVIOUS manifest still anchors the live pair DOES c
   const gen = f.shipper.status().dbs.vault!.generation;
   const jgen = f.shipper.status().dbs.journal!.generation;
   const provider = openLocalBackupProvider({ rootDir: f.providerDir });
-  const keyring = await loadKeyring(path.join(f.backupDir, 'keyring.json'));
+  const keyring = fixtureKeyring(f);
   const entries = await assembleSourceEntries({
     plane: f.plane,
     bundleDir: await tempDir('wal-e2e-oob-bundle'),
@@ -1124,7 +1133,6 @@ test('G9 restore-verify: succeeds against a real snapshot+segments, THROWS loudl
       },
       casReconciliations: {},
       sourceInstanceId: 'test',
-      recoveryKit: { confirmedAt: null },
     },
     policyForVault: () => readBackupPolicy(f.plane.db.vault),
     now,
@@ -1226,7 +1234,6 @@ test('G8/G9 restore-verify: dangling receipts leave health DEGRADED, and the pro
         targets: { [f.vaultId]: t },
         casReconciliations: {},
         sourceInstanceId: 'test',
-        recoveryKit: { confirmedAt: null },
       },
       policyForVault: () => readBackupPolicy(f.plane.db.vault),
       now,

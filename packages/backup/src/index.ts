@@ -174,8 +174,13 @@ export type {
 } from './engine.js';
 
 // Recovery kit reader (issue #439 R1) — the counterpart to `writeRecoveryKit`.
-export { parseRecoveryKit } from './recovery-kit.js';
-export type { RecoveryKitDocument } from './recovery-kit.js';
+export {
+  parseRecoveryKit,
+  recoveryKitFingerprint,
+  wrapRecoveryKit,
+  RECOVERY_KIT_SCRYPT,
+} from './recovery-kit.js';
+export type { RecoveryKitDocument, WrappedRecoveryKitDocument } from './recovery-kit.js';
 
 // Targeted blob re-pin (issue #439 R5) — materialize specific shas from a
 // snapshot, for the adopt-time inventory reconcile.

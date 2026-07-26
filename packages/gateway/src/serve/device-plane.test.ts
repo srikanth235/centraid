@@ -4,8 +4,8 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  *
  * The enrollment store is the whole ACL (device key ↔ vault, one bit) and
  * the ticket store is the SSH-bootstrap ceremony; both are cross-process
- * files (admin CLI writes, daemon reads), so reload-on-mtime and
- * burn-on-first-attempt are the load-bearing behaviors.
+ * gateway.db rows (admin CLI and daemon share one control plane), so
+ * cross-handle visibility and burn-on-first-attempt are load-bearing.
  */
 
 import { afterEach, expect, test, vi } from 'vitest';
@@ -14,6 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { EnrollmentStore } from './enrollment-store.js';
 import { PairingTicketStore, encodePairingTicket, parsePairingTicket } from './pairing-store.js';
+import { GatewayDatabase } from './gateway-db.js';
 
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
@@ -72,10 +73,8 @@ test("enrollment: a second process's writes are visible without restart", async 
   const cli = EnrollmentStore.open(file);
   cli.enroll({ endpointId: 'ep-new', vaultId: 'v1', label: 'new device' });
 
-  // Force a distinct mtime (fs timestamps can be coarse), then re-read.
-  const future = new Date(Date.now() + 2000);
-  await fs.utimes(file, future, future);
   expect(daemon.vaultsFor('ep-new')).toEqual(['v1']);
+  await expect(fs.stat(file)).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
 test('enrollment: replica checkpoints only advance within their bootstrap epoch', async () => {
@@ -151,18 +150,12 @@ test('enrollment: a stale daemon checkpoint cannot resurrect a CLI revocation', 
   await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
-test('enrollment: a live writer lock fails fast instead of blocking the daemon thread', async () => {
+test('enrollment: gateway.db replaces the old lock directory', async () => {
   const file = await tempFile('devices.json');
   const store = EnrollmentStore.open(file);
-  await fs.mkdir(`${file}.lock`, { recursive: true });
-  const started = Date.now();
-
-  expect(() => store.enroll({ endpointId: 'busy-device', vaultId: 'v1', label: 'Busy' })).toThrow(
-    /busy/,
-  );
-
-  expect(Date.now() - started).toBeLessThan(500);
-  await fs.rm(`${file}.lock`, { recursive: true, force: true });
+  store.enroll({ endpointId: 'device', vaultId: 'v1', label: 'Laptop' });
+  await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(path.basename(store.gatewayDatabase.file)).toBe('gateway.db');
 });
 
 test('enrollment: remember, trust, and Companion grants persist across re-pair', async () => {
@@ -203,7 +196,7 @@ test('enrollment: remember, trust, and Companion grants persist across re-pair',
   expect(EnrollmentStore.open(file).get('ep-session', 'v1')?.grantProfile).toBeUndefined();
 });
 
-test('enrollment: pre-trust registry rows retain their historical full access', async () => {
+test('enrollment: obsolete JSON registries are not read or rewritten', async () => {
   const file = await tempFile('devices.json');
   await fs.writeFile(
     file,
@@ -221,10 +214,8 @@ test('enrollment: pre-trust registry rows retain their historical full access', 
     }),
   );
 
-  expect(EnrollmentStore.open(file).get('legacy-key', 'v1')).toMatchObject({
-    trust: 'full',
-    rememberDevice: false,
-  });
+  expect(EnrollmentStore.open(file).get('legacy-key', 'v1')).toBeUndefined();
+  expect(JSON.parse(await fs.readFile(file, 'utf8'))).toMatchObject({ version: 1 });
 });
 
 test('pairing tickets: one-time, secret-checked, TTL-bound', async () => {
@@ -247,6 +238,98 @@ test('pairing tickets: one-time, secret-checked, TTL-bound', async () => {
   const brief = store.mint('v3', 1);
   await new Promise((resolve) => setTimeout(resolve, 5));
   expect(store.redeem(brief.ticketId, brief.secret)).toBeUndefined();
+});
+
+test('ticket redemption and enrollment commit atomically and one row wins concurrency', async () => {
+  const file = await tempFile('gateway.db');
+  const gateway = GatewayDatabase.open(path.dirname(file));
+  cleanups.push(() => gateway.close());
+  const tickets = PairingTicketStore.open(gateway);
+  const enrollments = EnrollmentStore.open(gateway);
+  const first = tickets.mint('v1');
+
+  expect(() =>
+    tickets.redeemAndEnroll(
+      first.ticketId,
+      first.secret,
+      enrollments,
+      { endpointId: 'phone', label: 'Phone' },
+      () => {
+        throw new Error('injected crash');
+      },
+    ),
+  ).toThrow('injected crash');
+  expect(tickets.listActive()).toHaveLength(1);
+  expect(enrollments.get('phone', 'v1')).toBeUndefined();
+
+  expect(
+    tickets.redeemAndEnroll(first.ticketId, first.secret, enrollments, {
+      endpointId: 'phone',
+      label: 'Phone',
+    }),
+  ).toMatchObject({ endpointId: 'phone', vaultId: 'v1' });
+
+  const raced = tickets.mint('v1');
+  const results = await Promise.all([
+    Promise.resolve().then(() =>
+      tickets.redeemAndEnroll(raced.ticketId, raced.secret, enrollments, {
+        endpointId: 'tablet-a',
+        label: 'Tablet A',
+      }),
+    ),
+    Promise.resolve().then(() =>
+      tickets.redeemAndEnroll(raced.ticketId, raced.secret, enrollments, {
+        endpointId: 'tablet-b',
+        label: 'Tablet B',
+      }),
+    ),
+  ]);
+  expect(results.filter(Boolean)).toHaveLength(1);
+});
+
+test('founding redemption rolls back on an injected crash and uses the deleted rowcount', async () => {
+  const file = await tempFile('gateway.db');
+  const gateway = GatewayDatabase.open(path.dirname(file));
+  cleanups.push(() => gateway.close());
+  const tickets = PairingTicketStore.open(gateway);
+  const enrollments = EnrollmentStore.open(gateway);
+  const founding = tickets.mintFounding();
+
+  expect(() =>
+    tickets.redeemFoundingAndEnroll(
+      founding.ticketId,
+      founding.secret,
+      enrollments,
+      { endpointId: 'founder', vaultId: 'v1', label: 'Founder' },
+      () => {
+        throw new Error('injected crash');
+      },
+    ),
+  ).toThrow('injected crash');
+  expect(tickets.hasActiveFounding()).toBe(true);
+  expect(enrollments.list()).toEqual([]);
+
+  const raced = await Promise.all([
+    Promise.resolve().then(() =>
+      tickets.redeemFoundingAndEnroll(founding.ticketId, founding.secret, enrollments, {
+        endpointId: 'founder-a',
+        vaultId: 'v1',
+        label: 'Founder A',
+      }),
+    ),
+    Promise.resolve().then(() =>
+      tickets.redeemFoundingAndEnroll(founding.ticketId, founding.secret, enrollments, {
+        endpointId: 'founder-b',
+        vaultId: 'v1',
+        label: 'Founder B',
+      }),
+    ),
+  ]);
+  expect(raced.filter(Boolean)).toHaveLength(1);
+  const row = gateway.db
+    .prepare("SELECT COUNT(*) AS count FROM devices WHERE endpoint_id LIKE 'founder-%'")
+    .get() as { count: number };
+  expect(row.count).toBe(1);
 });
 
 test('the pasteable ticket round-trips and rejects foreign payloads', () => {

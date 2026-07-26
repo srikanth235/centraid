@@ -48,7 +48,7 @@ afterEach(async () => {
   await fs.rm(dataDir, { recursive: true, force: true });
 });
 
-test('vault create / list / rename / delete over the admin plane', async () => {
+test('vault create / list / rename / delete while the daemon lock is free', async () => {
   const created = lastJson(
     await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail)),
   );
@@ -57,7 +57,7 @@ test('vault create / list / rename / delete over the admin plane', async () => {
     .trim()
     .split('\n')
     .filter(Boolean);
-  expect(listed).toHaveLength(2);
+  expect(listed).toHaveLength(1);
   const renamed = lastJson(
     await capture(() =>
       commandVault(['rename', '--data-dir', dataDir, created.vaultId as string, 'Sharma'], fail),
@@ -72,7 +72,7 @@ test('vault create / list / rename / delete over the admin plane', async () => {
   expect(deleted).toMatchObject({ deleted: created.vaultId });
 });
 
-test('vault admin rejects bad usage + the last-vault delete', async () => {
+test('vault CLI rejects bad usage and permits deletion back to zero vaults', async () => {
   await expect(capture(() => commandVault(['bogus', '--data-dir', dataDir], fail))).rejects.toThrow(
     /list, create, rename, delete/,
   );
@@ -86,9 +86,8 @@ test('vault admin rejects bad usage + the last-vault delete', async () => {
     .split('\n')
     .map((line) => JSON.parse(line) as { vaultId: string });
   await capture(() => commandVault(['delete', '--data-dir', dataDir, first!.vaultId], fail));
-  await expect(
-    capture(() => commandVault(['delete', '--data-dir', dataDir, only.vaultId as string], fail)),
-  ).rejects.toThrow(/last vault/);
+  expect(first!.vaultId).toBe(only.vaultId);
+  expect(await capture(() => commandVault(['list', '--data-dir', dataDir], fail))).toBe('');
 });
 
 test('vault list/create --json wrap output in one {ok,...} line (issue #382)', async () => {
@@ -103,7 +102,7 @@ test('vault list/create --json wrap output in one {ok,...} line (issue #382)', a
   );
   expect(listed.ok).toBe(true);
   expect(Array.isArray(listed.vaults)).toBe(true);
-  expect((listed.vaults as unknown[]).length).toBe(2);
+  expect((listed.vaults as unknown[]).length).toBe(1);
   expect(listed.vaults).toContainEqual(
     expect.objectContaining({ vaultId: created.vaultId, name: 'Family' }),
   );

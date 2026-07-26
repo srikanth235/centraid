@@ -46,7 +46,7 @@ function seedAgedAutomation(journal: DatabaseSync, now: number): void {
 
 test('the daily sweep block archives + prunes conversations and rolls one generation', async () => {
   const dir = await tempDir();
-  const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
+  const plane = openVaultPlane({ bootstrap: true, dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());
   expect(plane.walShipper).toBeDefined();
 

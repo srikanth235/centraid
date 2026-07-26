@@ -1,8 +1,8 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * HTTP-level coverage for the storage-connection routes (issue #367 §C1):
- * CRUD against a REAL `StorageConnectionStore` (real sealed JSON file on
- * disk, real AES-256-GCM), the recovery-kit confirmation gate + `force`
+ * CRUD against a REAL `StorageConnectionStore` (gateway.db plus real
+ * AES-256-GCM sealing), the recovery-kit confirmation gate + `force`
  * override (§C10), and the per-vault status shape (§C7).
  */
 
@@ -170,9 +170,14 @@ test('POST create refuses without a confirmed recovery kit; {force:true} bypasse
   expect(asString).not.toContain(apiKey);
   expect('apiKey' in forcedJson.connection).toBe(false);
 
-  // The sealed sidecar on disk never carries the plaintext api key either.
-  const rawFile = await fs.readFile(path.join(dir, 'connections.json'), 'utf8');
-  expect(rawFile).not.toContain(apiKey);
+  // gateway.db carries only ciphertext; custody is an enveloped named key.
+  expect(await fs.readFile(path.join(dir, 'gateway.db'), 'utf8')).not.toContain(apiKey);
+  expect(await fs.readFile(path.join(dir, 'keys', 'connections.sealkey'), 'utf8')).toContain(
+    'CENTRAID-KEY-V1',
+  );
+  await expect(fs.access(path.join(dir, 'connections.json'))).rejects.toMatchObject({
+    code: 'ENOENT',
+  });
 });
 
 test('confirmed recovery kit: create proceeds without force; list/get/patch/delete round-trip', async () => {

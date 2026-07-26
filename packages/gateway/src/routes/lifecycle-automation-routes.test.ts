@@ -85,6 +85,7 @@ beforeEach(async () => {
   // and hang on agentless CI/local hosts. Inject a failing runTurn so the
   // compile path still exercises ledger finish + HTTP 202 without ACP.
   handle = await serve({
+    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     runTurn: async () => {
       throw new Error('compiler unavailable');

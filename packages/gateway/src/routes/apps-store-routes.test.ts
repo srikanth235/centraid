@@ -47,9 +47,7 @@ const MANIFEST = JSON.stringify({
 
 beforeEach(async () => {
   dataDir = await tempDir(`gw-routes-${crypto.randomUUID()}-`);
-  handle = await serve({
-    paths: pathsUnder(dataDir),
-  });
+  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
 });
 
 afterEach(async () => {

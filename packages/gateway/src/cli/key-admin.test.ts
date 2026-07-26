@@ -13,7 +13,7 @@ import { promises as fs, existsSync, readFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { sealKeyFileFor } from '@centraid/vault';
+import { KeyStore, sealKeyFileFor } from '@centraid/vault';
 import { commandVault } from './vault-admin.ts';
 import { commandKey } from './key-admin.ts';
 import { daemonLayoutFor } from './paths.ts';
@@ -111,7 +111,11 @@ test('key export writes a fingerprinted envelope and receipts the gesture', asyn
   const envelope = JSON.parse(readFileSync(outFile, 'utf8')) as Record<string, unknown>;
   expect(envelope['kind']).toBe('centraid-seal-key');
   expect(envelope['vaultId']).toBe(v.vaultId);
-  expect(Buffer.from(String(envelope['key']), 'base64').equals(readFileSync(v.keyFile))).toBe(true);
+  expect(
+    Buffer.from(String(envelope['key']), 'base64').equals(
+      new KeyStore(path.dirname(v.keyFile)).export(path.basename(v.keyFile))!,
+    ),
+  ).toBe(true);
   const receipt = lastReceipt(v.dir);
   expect(receipt.action).toBe('key.export');
   expect(receipt.decision).toBe('allow');

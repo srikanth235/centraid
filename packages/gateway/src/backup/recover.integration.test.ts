@@ -28,9 +28,10 @@ import {
   BackupProviderError,
   openRemoteBackupProvider,
   SNAPSHOT_FORMAT_V2,
+  type RecoveryKitDocument,
 } from '@centraid/backup';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
-import { FsBlobStore, ReplicaIndex } from '@centraid/vault';
+import { FsBlobStore, KeyStore, ReplicaIndex } from '@centraid/vault';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
 import { WorktreeStore } from '../worktree-store/worktree-store.js';
@@ -111,7 +112,7 @@ interface MachineA {
   vaultId: string;
   targetId: string;
   oldGeneration: number;
-  kitDocument: Record<string, unknown>;
+  kitDocument: RecoveryKitDocument;
   originals: string[];
   thumbs: string[];
   itemId: string;
@@ -155,6 +156,7 @@ async function seedMachineA(
     ownerName: 'Mara',
   });
   cleanups.push(() => registry.stop());
+  registry.create("Mara's vault");
   const vaultId = registry.defaultVaultId();
   const plane = registry.get(vaultId)!;
   const service = new BackupService({
@@ -163,6 +165,7 @@ async function seedMachineA(
       provider: { kind: 'remote', endpoint: server.url, apiKey: server.apiKey },
     },
     backupDir,
+    keyStore: new KeyStore(path.join(vaultRoot, 'keys')),
     vaults: registry,
     health: new HealthRegistry(),
     logger: silentLogger,
@@ -290,7 +293,7 @@ test('a blank machine recovers a whole vault from nothing but the kit and the ap
   // The seal key was placed where custody expects it (`<root>/keys/<id>.sealkey`)
   // — the recovered vault has sealed secrets, so a wrong placement would brick
   // the mount below.
-  expect(existsSync(path.join(layout.vaultDir, 'keys', `${a.vaultId}.sealkey`))).toBe(true);
+  expect(existsSync(path.join(layout.keysDir, `${a.vaultId}.sealkey`))).toBe(true);
 
   // The app code store was rehydrated from the bundle (issue #517): the bare
   // repo exists at `<vaultDir>/code/apps.git`, the consumed `apps.bundle` is
@@ -330,16 +333,20 @@ test('a blank machine recovers a whole vault from nothing but the kit and the ap
   expect(grant.revoked_at).not.toBeNull();
 
   // 4. Fencing: the seeded state is generation old+1, lastSeq from the restore.
-  const state = JSON.parse(
-    await fs.readFile(path.join(layout.backupDir!, 'state.json'), 'utf8'),
-  ) as {
-    targets: Record<string, { generation: number; lastSeq: number }>;
+  const gatewayDb = new DatabaseSync(layout.gatewayDbFile, { readOnly: true });
+  const targetState = gatewayDb
+    .prepare('SELECT config_json FROM backup_targets WHERE vault_id = ?')
+    .get(a.vaultId) as { config_json: string };
+  gatewayDb.close();
+  const recoveredTarget = JSON.parse(targetState.config_json) as {
+    generation: number;
+    lastSeq: number;
   };
-  expect(state.targets[a.vaultId]!.generation).toBe(a.oldGeneration + 1);
-  expect(state.targets[a.vaultId]!.lastSeq).toBe(report.seq);
+  expect(recoveredTarget.generation).toBe(a.oldGeneration + 1);
+  expect(recoveredTarget.lastSeq).toBe(report.seq);
   expect(report.generation).toBe(a.oldGeneration + 1);
   // The recovered gateway also inherited the keyring.
-  expect(existsSync(path.join(layout.backupDir!, 'keyring.json'))).toBe(true);
+  expect(new KeyStore(layout.keysDir).export('keyring.key')).not.toBeNull();
 
   // Arm the fence: the recovered machine's FIRST post-recovery backup registers
   // at the seeded generation, bumping the provider — and only THEN does the
@@ -423,7 +430,7 @@ test('recovery refuses a snapshot written by newer software BEFORE any byte is f
   expect(existsSync(path.join(layout.vaultDir, a.vaultId))).toBe(false);
   const rootEntries = existsSync(layout.vaultDir) ? await fs.readdir(layout.vaultDir) : [];
   expect(rootEntries.filter((e) => e.startsWith('.recover-staging-'))).toHaveLength(0);
-  expect(existsSync(path.join(layout.backupDir!, 'keyring.json'))).toBe(false);
+  expect(new KeyStore(layout.keysDir).export('keyring.key')).toBeNull();
 }, 45_000);
 
 test('adopt-time reconcile re-pins a replicated blob the provider dropped, and unmarks it', async () => {

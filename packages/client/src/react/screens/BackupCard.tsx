@@ -155,8 +155,8 @@ function RecoveryKitGate({
       <Icon name="Key" size={13} />
       <div className={styles.sealNudgeBody}>
         <span>
-          Save this recovery kit somewhere offline. It is the only way to decrypt a backup on a new
-          machine.
+          Save this recovery kit somewhere offline. It unlocks backed-up vaults on a new machine;
+          local-only vaults are not included.
         </span>
         {configured ? (
           <>

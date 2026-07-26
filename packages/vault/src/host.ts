@@ -5,13 +5,7 @@
 // database files) recovers credentials by reading the enrolled rows back.
 
 import type { VaultDb } from './db.js';
-import {
-  bootstrapVault,
-  enrollAgent,
-  enrollApp,
-  type BootstrapResult,
-  type BootstrapVaultOptions,
-} from './bootstrap.js';
+import { enrollAgent, enrollApp, type BootstrapResult } from './bootstrap.js';
 import { nowIso } from './ids.js';
 import type { FilterClause, Risk } from './gateway/types.js';
 
@@ -21,18 +15,16 @@ export interface HostBootstrap extends BootstrapResult {
 }
 
 /**
- * Bootstrap the vault on first boot, recover it on every later boot.
- * Recovery re-derives the owner credential from the oldest full-trust
- * owner device and rebuilds the seeded-concept map from the model.
+ * Recover an existing vault. An absent `core_vault` row is an explicit
+ * uninitialized result — creation belongs to the gateway founding gate.
+ * Recovery re-derives the owner credential from the oldest full-trust owner
+ * device and rebuilds the seeded-concept map from the model.
  */
-export function ensureVaultBootstrapped(
-  db: VaultDb,
-  options: BootstrapVaultOptions,
-): HostBootstrap {
+export function recoverVaultBootstrap(db: VaultDb): HostBootstrap | undefined {
   const vaultRow = db.vault
     .prepare('SELECT vault_id, owner_party_id, display_name FROM core_vault LIMIT 1')
     .get() as { vault_id: string; owner_party_id: string; display_name: string } | undefined;
-  if (!vaultRow) return { ...bootstrapVault(db, options), fresh: true };
+  if (!vaultRow) return undefined;
 
   const device = db.vault
     .prepare(

@@ -23,11 +23,8 @@ export interface VaultRequestContext {
   /**
    * The calling device's key when the request arrived over an enrolled
    * transport (issue #289 phase 2): an iroh EndpointId for a proved iroh
-   * caller, or a synthetic `http:<uuid>` for a device that redeemed a
-   * pairing ticket over HTTP and authenticates with a per-device token
-   * (issue #376, `device-token-store.ts`). Absent for the ADMIN plane —
-   * the shared landlord token (loopback embed, or the daemon bearer with
-   * no per-device token) — which is implicitly enrolled in every vault.
+   * caller. A loopback embed also owns a concrete enrollment. Absence is
+   * never an admin wildcard: the composed handler fails closed.
    */
   deviceKey?: string;
   /** App-id allow-list for a constrained Companion device. */
@@ -43,10 +40,8 @@ export interface DeviceAccess {
   /**
    * Extract the calling device's key (iroh EndpointId) from the request's
    * iroh-forwarder proof headers. `undefined` = not a proved iroh
-   * transport — the composed handler (`build-gateway.ts`) then falls back
-   * to the HTTP listener's own device-token header before concluding the
-   * caller is the shared-bearer admin plane, implicitly enrolled in every
-   * vault (issue #376).
+   * transport — the composed handler (`build-gateway.ts`) then refuses the
+   * request unless its host supplied another proved enrollment identity.
    */
   deviceKeyFor(req: import('node:http').IncomingMessage): string | undefined;
   /** The vault ids this device key is enrolled in, oldest enrollment first. */

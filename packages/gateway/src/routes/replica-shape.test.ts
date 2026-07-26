@@ -17,7 +17,7 @@ afterEach(async () => {
 
 async function plane(): Promise<VaultPlane> {
   const dir = await tempDir(`replica-shape-${crypto.randomUUID()}-`);
-  const opened = openVaultPlane({ dir, logger, enableWalShipper: false });
+  const opened = openVaultPlane({ bootstrap: true, dir, logger, enableWalShipper: false });
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   cleanups.push(() => opened.stop());
   return opened;

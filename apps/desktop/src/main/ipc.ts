@@ -12,7 +12,6 @@ import {
   listGateways,
   removeGateway,
   renameGateway,
-  updateGatewayToken,
   updateProfileMetadata,
   type GatewayProfile,
 } from './gateway-store.js';
@@ -213,26 +212,6 @@ export function registerIpcHandlers(): void {
     },
   );
 
-  // Rotate the keychain-stored bearer token for a remote gateway.
-  // Plaintext crosses the bridge exactly once on this call (same shape
-  // as `add`) and is immediately persisted via gateway-secrets. Pass
-  // an empty string to clear. No-op for the local gateway (its token
-  // is minted per launch by the in-process runtime). When the rotated
-  // profile is the active one, drop HTTP-client auth caches so the
-  // next request re-reads the new token from the keychain.
-  ipcMain.handle(
-    Channel.GATEWAYS_UPDATE_TOKEN,
-    async (_e, input: { id: string; token: string }): Promise<{ ok: true }> => {
-      await updateGatewayToken(input.id, input.token);
-      const current = await loadSettings();
-      if (current.activeGatewayId === input.id) {
-        await invalidateGatewayCaches();
-        broadcastGatewayChanged(current);
-      }
-      return { ok: true };
-    },
-  );
-
   ipcMain.handle(
     Channel.GATEWAYS_SET_ACTIVE,
     async (_e, input: { id: string }): Promise<DesktopSettings> => {
@@ -369,7 +348,7 @@ export function registerIpcHandlers(): void {
 
   // Vault create/delete on the LOCAL gateway only (issue #289): the desktop
   // is the landlord for its own in-process gateway. A remote gateway's vault
-  // lifecycle is the server CLI's job (admin plane over SSH) — refuse here
+  // lifecycle is a host-only CLI operation over SSH — refuse here
   // with a message pointing at it. Still used by VAULTS_DELETE unchanged
   // (see its comment below for why delete didn't get the ssh-routing
   // VAULTS_CREATE got).
@@ -424,7 +403,7 @@ export function registerIpcHandlers(): void {
       const route = await resolveVaultCreateRoute();
       if (route.mode === 'local') {
         const { createLocalVault } = await import('./local-gateway.js');
-        return createLocalVault(route.gatewayId, input.name);
+        return await createLocalVault(route.gatewayId, input.name);
       }
       // ssh-routed (issue #382): create the vault remotely, then enroll THIS
       // device into it via the exact same pair+redeem helper
@@ -468,7 +447,7 @@ export function registerIpcHandlers(): void {
   // follow-up rather than widening this issue's CLI surface further.
   ipcMain.handle(
     Channel.VAULTS_DELETE,
-    async (_e, input: { vaultId: string }): Promise<{ deleted: true }> => {
+    async (_e, input: { vaultId: string; name: string }): Promise<{ deleted: true }> => {
       const gatewayId = await assertLocalAdmin();
       const settings = await loadSettings();
       // Never delete the vault the client is currently addressing — clear
@@ -479,7 +458,7 @@ export function registerIpcHandlers(): void {
         await invalidateVaultCaches();
       }
       const { deleteLocalVault } = await import('./local-gateway.js');
-      deleteLocalVault(gatewayId, input.vaultId);
+      await deleteLocalVault(gatewayId, input.vaultId, input.name);
       // Every other vault-mutating handler (create/switch/pair/ssh-connect)
       // broadcasts VAULT_CHANGED so the renderer's active-vault state
       // (sidebar head, switcher, Settings -> Space) re-reads itself. This
@@ -665,8 +644,8 @@ export function registerIpcHandlers(): void {
     Channel.GATEWAY_SERVICE_INSTALL,
     async (): Promise<{ ok: true } | { ok: false; error: string }> => {
       const { installGatewayOsService } = await import('./detached-gateway.js');
-      const { gatewayDir, LOCAL_GATEWAY_ID } = await import('./gateway-paths.js');
-      return installGatewayOsService(gatewayDir(LOCAL_GATEWAY_ID));
+      const { localGatewayDataDir } = await import('./gateway-paths.js');
+      return installGatewayOsService(localGatewayDataDir());
     },
   );
   ipcMain.handle(Channel.UPDATE_RELAUNCH, async () => {

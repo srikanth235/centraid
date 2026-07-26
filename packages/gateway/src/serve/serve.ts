@@ -14,13 +14,13 @@
  *     daemon (paths under a config-file `dataDir`).
  */
 
-import { startRuntimeHttpServer, type RuntimeHttpServerOptions } from '@centraid/app-engine';
+import { startRuntimeHttpServer } from '@centraid/app-engine';
 import { WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
 import { OAUTH_CALLBACK_PATH } from '../routes/connections-routes.js';
-import { PAIR_ROUTE_PATH } from '../routes/pair-routes.js';
 import { WEB_SESSION_REDEEM_PATH } from './web-app-sessions.js';
 import { startWebUiServer } from './web-ui-server.js';
 import { buildGateway, type BuildGatewayOptions, type BuiltGateway } from './build-gateway.js';
+import { ROUTES } from '@centraid/protocol';
 
 export interface ServeOptions extends BuildGatewayOptions {
   /** HTTP bind host. Defaults to `127.0.0.1` (loopback). */
@@ -39,14 +39,6 @@ export interface ServeOptions extends BuildGatewayOptions {
    * per-launch; the daemon persists one across restarts.
    */
   token?: string;
-  /**
-   * Pluggable bearer authorization (issue #376), forwarded verbatim to
-   * `startRuntimeHttpServer`. When set, it replaces the shared-token
-   * equality check with (shared token → admin plane) + (per-device HTTP
-   * token → device plane). Absent → the original single-shared-token
-   * behavior (the desktop embed keeps this).
-   */
-  authorizeBearer?: RuntimeHttpServerOptions['authorizeBearer'];
   /** Optional dedicated-origin PWA listener. Generated apps remain on the API origin. */
   web?: { rootDir: string; host?: string; port?: number };
 }
@@ -56,7 +48,7 @@ export interface GatewayServeHandle extends Omit<
   | 'extraHandlers'
   | 'composedHandler'
   | 'webhookHandler'
-  | 'recoverHandler'
+  | 'foundingHandler'
   | 'webAppSessions'
   | 'start'
   | 'stop'
@@ -81,13 +73,11 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   // outside that per-request vault scope (it resolves its own owning
   // vault across all of them); it falls through (`false`) for any other
   // URL, so `composedHandler` still sees everything else. The recover
-  // handler (issue #439) sits between them for the same reason — it is a
-  // pre-vault landlord act (it stands up and adopts the home vault), so it
-  // must run outside `composedHandler`'s per-request vault scope; it is
-  // bearer-gated (not public) and falls through for any non-recover URL.
+  // The two founding verbs sit behind `foundingHandler`; no wildcard bearer
+  // recovery/admin mount exists.
   const serverOptions: Parameters<typeof startRuntimeHttpServer>[0] = {
     runtime: gateway.runtime,
-    extraHandlers: [gateway.webhookHandler, gateway.recoverHandler, gateway.composedHandler],
+    extraHandlers: [gateway.foundingHandler, gateway.webhookHandler, gateway.composedHandler],
     exposeUserStoreRoute: false,
     exposeConversationRoute: false,
     // The OAuth consent callback (issue #304) is the one bearer-free path:
@@ -104,7 +94,12 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     publicPaths: [
       OAUTH_CALLBACK_PATH,
       WEB_SESSION_REDEEM_PATH,
-      ...(options.devicePairing ? [PAIR_ROUTE_PATH] : []),
+      ROUTES.gatewayInfo,
+      ROUTES.gatewayFoundingTicket,
+      ROUTES.vaultInitialize,
+      ROUTES.vaultInitializeVerify,
+      ROUTES.vaultRestore,
+      '/centraid/_gateway/devices/ticket',
     ],
     publicPathPrefixes: [WEBHOOK_ROUTE_PREFIX],
   };
@@ -114,8 +109,6 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     serverOptions.allowedHosts = options.allowedHosts;
   }
   if (options.token !== undefined) serverOptions.token = options.token;
-  if (options.authorizeBearer !== undefined)
-    serverOptions.authorizeBearer = options.authorizeBearer;
   serverOptions.authorizeRequest = (req) => gateway.webAppSessions.authorize(req);
   // Session-bound shell origins for credentialed CORS (#504). Bearer-only
   // desktop embeds leave this empty and still get non-credentialed `*`.

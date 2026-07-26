@@ -24,7 +24,7 @@ async function fixture(dataPlane?: {
   secret: string;
 }): Promise<{ base: string; plane: VaultPlane }> {
   const dir = await tempDir(`blob-hardening-${crypto.randomUUID()}-`);
-  const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
+  const plane = openVaultPlane({ bootstrap: true, dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());
   const handler = makeBlobRouteHandler(
     { current: () => plane },

@@ -445,7 +445,7 @@
     },
     "desktop.scalability": null,
     "desktop.security": {
-      "owner": "apps/desktop/src/main/transport.test.ts",
+      "owner": "apps/desktop/src/main/gateway-pairing-core.test.ts",
       "tier": "unit"
     },
     "desktop.offline": null,

@@ -61,7 +61,7 @@ function platformGlyph(device: CentraidGatewayDevice): IconName {
   if (/ios|android|iphone|ipad|mobile|phone/.test(platform)) return 'Phone';
   if (/web|browser|chrome|safari|firefox|edge/.test(platform)) return 'Globe';
   if (/mac|win|linux|desktop|electron/.test(platform)) return 'Monitor';
-  // Fall back on the transport: a browser pairs over Iroh or direct HTTP.
+  // Every gateway device is admitted by its iroh identity.
   return 'Globe';
 }
 
@@ -90,7 +90,7 @@ function DeviceRow({
 
   const lastSeen = device.lastUsedAt ? ageLabel(device.lastUsedAt, now) : undefined;
   const paired = ageLabel(device.addedAt, now);
-  const transportLabel = device.transport === 'iroh' ? 'Relay' : 'Direct';
+  const transportLabel = 'Relay';
 
   const revoke = async (): Promise<void> => {
     setBusy(true);
@@ -130,11 +130,7 @@ function DeviceRow({
           <span
             className={styles.transportChip}
             data-transport={device.transport}
-            title={
-              device.transport === 'iroh'
-                ? 'Paired over the relay-only Iroh tunnel'
-                : 'Paired over direct HTTP'
-            }
+            title="Paired over the relay-only Iroh tunnel"
           >
             {transportLabel}
           </span>

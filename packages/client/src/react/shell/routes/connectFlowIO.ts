@@ -132,26 +132,12 @@ async function commitLocal(state: ConnectFlowState): Promise<ConnectFlowResult> 
 
 async function commitGateway(state: ConnectFlowState): Promise<ConnectFlowResult> {
   const label = state.label.trim() || undefined;
-  // Every gateway is added through the pairing ceremony (issue #505 phase 7):
-  // an iroh ticket by default, or the same ticket redeemed over an explicit URL
-  // for the `direct` transport tier — both mint a per-device token. The manual
-  // URL + admin-token paste was retired with the shared gateway-wide bearer.
-  const result = await connectGateway(
-    state.advancedOpen
-      ? {
-          kind: 'ticket-url',
-          label,
-          rememberDevice: state.rememberDevice,
-          ticket: state.ticket.trim(),
-          url: state.url.trim(),
-        }
-      : {
-          kind: 'ticket',
-          label,
-          rememberDevice: state.rememberDevice,
-          ticket: state.ticket.trim(),
-        },
-  );
+  const result = await connectGateway({
+    kind: 'ticket',
+    label,
+    rememberDevice: state.rememberDevice,
+    ticket: state.ticket.trim(),
+  });
   if (!result.ok) throw new Error(result.message);
   return { displayLabel: result.label, gatewayId: result.gatewayId, vaultId: result.vaultId ?? '' };
 }

@@ -6,19 +6,12 @@
  *   - service-supervision state (reuses `service-admin.ts`'s
  *     `queryServiceStatus` — the same OS probe `service status` runs, just
  *     data instead of printed text)
- *   - a data-dir identity summary: does the directory exist, what iroh
- *     endpoint identity has the daemon published there (`endpoint.json`,
- *     present only after `serve` has booted at least once), and how many
- *     vaults its registry holds.
+ *   - a data-dir identity summary: does the directory exist, what stable
+ *     EndpointId derives from its custody key, and how many vaults its
+ *     registry holds. A current dial ticket comes only from the live daemon.
  *
- * Deliberately NOT included: an HTTP liveness probe. `serve()` never
- * persists which host:port it bound to — only its own startup stdout line
- * says that, and that process is gone by the time this CLI runs. Guessing a
- * port (e.g. re-deriving it from a config file default) would produce a
- * false "unreachable" for a daemon actually listening elsewhere, which is
- * worse than omitting the check; the connectivity-test IPC on the desktop
- * side does its OWN liveness probe once it already has a URL from other
- * means (a `direct` profile's stored URL, or the iroh loopback proxy).
+ * The shared fixed default port makes that live query deterministic; an
+ * explicit config remains authoritative for non-default deployments.
  *
  * `--data-dir <path>`/`--config <path>` are optional here (unlike `backup`,
  * where the config is load-bearing) — a caller that only wants "is the
@@ -27,7 +20,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { handshakeGateway } from '@centraid/protocol';
+import { endpointIdForSecret } from '@centraid/tunnel';
 import { daemonLayoutFor } from './paths.js';
+import { daemonKeyStore } from './key-store.js';
 import { resolveDaemonConfig } from './resolve-config.js';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import { queryServiceStatus, type ServiceStatusInfo } from './service-admin.js';
@@ -79,9 +75,11 @@ function parseStatusArgs(args: string[], fail: Fail): StatusArgs {
 interface DataDirSummary {
   dataDir: string;
   exists: boolean;
-  /** The daemon's persistent iroh endpoint id, from `endpoint.json` — absent
-   *  until `serve` has booted at least once with the endpoint enabled. */
+  /** Stable iroh identity derived from `keys/endpoint.key`. */
   endpointId?: string;
+  /** Refreshable dial address returned by the running daemon only. */
+  endpointTicket?: string;
+  daemonRunning?: boolean;
   vaultCount?: number;
 }
 
@@ -92,13 +90,11 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
 
   let endpointId: string | undefined;
   try {
-    const raw = JSON.parse(fs.readFileSync(layout.endpointStateFile, 'utf8')) as {
-      endpointId?: unknown;
-    };
-    if (typeof raw.endpointId === 'string') endpointId = raw.endpointId;
+    const secret = daemonKeyStore(layout.keysDir).load('endpoint.key');
+    if (secret) endpointId = endpointIdForSecret(secret);
   } catch {
-    // No endpoint identity yet (daemon never booted, or iroh disabled) —
-    // that's a normal state, not a failure of this read.
+    // Missing/corrupt identity is reported by its absence; `pair` provides
+    // the actionable hard failure because it cannot proceed without one.
   }
 
   let vaultCount: number | undefined;
@@ -132,7 +128,11 @@ function describeService(service: ServiceStatusInfo): string {
   return `${running} (label ${service.label}${service.pid !== undefined ? `, pid ${service.pid}` : ''})`;
 }
 
-export async function commandStatus(args: string[], fail: Fail): Promise<void> {
+export async function commandStatus(
+  args: string[],
+  fail: Fail,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
   // Pre-scan for `--json` so it governs the whole run — including a
   // `fail()` triggered by argument parsing itself — regardless of flag order.
   const json = args.includes('--json');
@@ -144,30 +144,33 @@ export async function commandStatus(args: string[], fail: Fail): Promise<void> {
     const parsed = parseStatusArgs(args, localFail);
     const service = queryServiceStatus(parsed.label, localFail);
 
-    let dataDir: DataDirSummary | undefined;
-    if (parsed.dataDir || parsed.configPath) {
-      const config = await resolveDaemonConfig(
-        { dataDir: parsed.dataDir, configPath: parsed.configPath },
-        localFail,
-      );
-      dataDir = buildDataDirSummary(config.dataDir);
+    const config = await resolveDaemonConfig(
+      { dataDir: parsed.dataDir, configPath: parsed.configPath },
+      localFail,
+    );
+    const dataDir = buildDataDirSummary(config.dataDir);
+    if (config.port !== undefined && config.port !== 0) {
+      const live = await handshakeGateway(`http://127.0.0.1:${config.port}`, undefined, fetchImpl);
+      dataDir.daemonRunning = live.ok;
+      if (
+        live.ok &&
+        live.info.endpointId === dataDir.endpointId &&
+        live.info.endpointTicket !== undefined
+      ) {
+        dataDir.endpointTicket = live.info.endpointTicket;
+      }
     }
 
     if (json) {
-      process.stdout.write(
-        `${JSON.stringify({ ok: true, service, ...(dataDir ? { dataDir } : {}) })}\n`,
-      );
+      process.stdout.write(`${JSON.stringify({ ok: true, service, dataDir })}\n`);
       return;
     }
 
     const lines = [`service: ${describeService(service)}`];
-    if (dataDir) {
-      lines.push(`data dir: ${dataDir.dataDir} (${dataDir.exists ? 'exists' : 'missing'})`);
-      if (dataDir.endpointId) lines.push(`endpoint: ${dataDir.endpointId}`);
-      if (dataDir.vaultCount !== undefined) lines.push(`vaults: ${dataDir.vaultCount}`);
-    } else {
-      lines.push('data dir: not specified (pass --data-dir or --config for a data summary)');
-    }
+    lines.push(`data dir: ${dataDir.dataDir} (${dataDir.exists ? 'exists' : 'missing'})`);
+    if (dataDir.endpointId) lines.push(`endpoint: ${dataDir.endpointId}`);
+    lines.push(`daemon: ${dataDir.daemonRunning ? 'running' : 'not running'}`);
+    if (dataDir.vaultCount !== undefined) lines.push(`vaults: ${dataDir.vaultCount}`);
     process.stdout.write(`${lines.join('\n')}\n`);
   });
 }

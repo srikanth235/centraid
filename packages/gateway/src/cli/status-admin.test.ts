@@ -14,6 +14,9 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { buildGatewayInfoPayload } from '@centraid/protocol';
+import { endpointIdForSecret } from '@centraid/tunnel';
+import { KeyStore } from '@centraid/vault';
 import { commandStatus } from './status-admin.ts';
 import { commandVault } from './vault-admin.ts';
 import { daemonLayoutFor } from './paths.ts';
@@ -62,14 +65,19 @@ afterEach(async () => {
 });
 
 const servicePlatform = process.platform !== 'darwin' && process.platform !== 'linux';
+const offlineFetch = (async (): Promise<Response> => {
+  throw new Error('connection refused');
+}) as typeof fetch;
 
 // #545 A10 — skipIf so report-signals sees the skip (bare return was false-green).
 test.skipIf(servicePlatform)(
-  'status --json with no --data-dir reports service only (never-installed unit reads clean)',
+  'status --json uses the shared default data dir (never-installed unit reads clean)',
   async () => {
-    const parsed = lastJson(await capture(() => commandStatus(['--json'], fail)));
+    const parsed = lastJson(
+      await capture(() => commandStatus(['--data-dir', dataDir, '--json'], fail, offlineFetch)),
+    );
     expect(parsed.ok).toBe(true);
-    expect(parsed.dataDir).toBeUndefined();
+    expect(parsed.dataDir).toMatchObject({ dataDir, exists: true, daemonRunning: false });
     const service = parsed.service as { installed: boolean; label: string };
     expect(service.installed).toBe(false);
     expect(typeof service.label).toBe('string');
@@ -79,28 +87,37 @@ test.skipIf(servicePlatform)(
 test.skipIf(servicePlatform)(
   'status --json with --data-dir adds the data-dir summary (exists, endpoint identity, vault count)',
   async () => {
-    // A bootstrapped vault + a published endpoint identity, same as a daemon
-    // that has actually booted once.
+    // A vault + endpoint custody key, same as a daemon that has booted once.
     await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
     const layout = daemonLayoutFor(dataDir);
-    await fs.writeFile(
-      layout.endpointStateFile,
-      JSON.stringify({ endpointId: 'gw-endpoint-abc', ticket: 'gw-ticket-base32' }),
-    );
+    const secret = Buffer.alloc(32, 11);
+    new KeyStore(layout.keysDir).store('endpoint.key', secret);
+    const endpointId = endpointIdForSecret(secret);
+    const liveFetch = (async (): Promise<Response> =>
+      Response.json(
+        buildGatewayInfoPayload({
+          instanceId: 'daemon',
+          startedAt: Date.now(),
+          uptimeMs: 1,
+          endpointId,
+          endpointTicket: 'gw-ticket-base32',
+        }),
+      )) as typeof fetch;
 
     const parsed = lastJson(
-      await capture(() => commandStatus(['--data-dir', dataDir, '--json'], fail)),
+      await capture(() => commandStatus(['--data-dir', dataDir, '--json'], fail, liveFetch)),
     );
     expect(parsed.ok).toBe(true);
     const summary = parsed.dataDir as {
       exists: boolean;
       endpointId?: string;
+      endpointTicket?: string;
       vaultCount?: number;
     };
     expect(summary.exists).toBe(true);
-    expect(summary.endpointId).toBe('gw-endpoint-abc');
-    // The bootstrapped default vault + the one just created.
-    expect(summary.vaultCount).toBe(2);
+    expect(summary.endpointId).toBe(endpointId);
+    expect(summary.endpointTicket).toBe('gw-ticket-base32');
+    expect(summary.vaultCount).toBe(1);
   },
 );
 
@@ -109,7 +126,7 @@ test.skipIf(servicePlatform)(
   async () => {
     const missing = path.join(dataDir, 'never-created');
     const parsed = lastJson(
-      await capture(() => commandStatus(['--data-dir', missing, '--json'], fail)),
+      await capture(() => commandStatus(['--data-dir', missing, '--json'], fail, offlineFetch)),
     );
     expect(parsed.ok).toBe(true);
     const summary = parsed.dataDir as { exists: boolean; endpointId?: string };
@@ -119,7 +136,7 @@ test.skipIf(servicePlatform)(
 );
 
 test.skipIf(servicePlatform)('status (human mode) prints readable lines, not JSON', async () => {
-  const text = await capture(() => commandStatus(['--data-dir', dataDir], fail));
+  const text = await capture(() => commandStatus(['--data-dir', dataDir], fail, offlineFetch));
   expect(text).toContain('service:');
   expect(text).toContain('data dir:');
   expect(() => JSON.parse(text)).toThrow();

@@ -4,7 +4,7 @@
  * The desktop gateway runs as a detached child process that outlives the UI
  * (H1). This module is Electron-free so the ownership / port / spawn-flag
  * rules unit-test without spawning anything. Impure glue (spawn, poll HTTP,
- * read/write stamp files) lives in `detached-gateway.ts` and
+ * query gateway.db lock state) lives in `detached-gateway.ts` and
  * `local-gateway.ts`.
  *
  * H7 — crash-loop still uses {@link ./gateway-supervisor-core.ts}:
@@ -22,103 +22,22 @@
 /** Stable default listen port (H4). Replaces ephemeral port:0 for bookmarks / pairing / service. */
 export const DEFAULT_GATEWAY_PORT = 17832;
 
-/** Who stamped the running gateway into `gateway.ownership.json`. */
-export type GatewayOwnerKind = 'desktop' | 'cli' | 'service';
-
-/** On-disk ownership stamp — "who started this" (H3). */
-export interface OwnershipStamp {
-  owner: GatewayOwnerKind;
-  ownerId: string;
-  pid: number;
-  startedAt: string;
-  /**
-   * Opaque identifier of the gateway BUILD this process was spawned from
-   * (issue #528 follow-up). Lets the desktop notice, on the next launch, that
-   * the running daemon predates the current on-disk build and respawn it
-   * instead of adopting a stale binary — the dev "old gateway keeps serving
-   * after a rebuild" footgun, and prod after an app update. Absent on stamps
-   * written before this field existed.
-   */
-  buildTag?: string;
-}
-
-/** Filename under the gateway data dir for the ownership stamp. */
-export const OWNERSHIP_FILE = 'gateway.ownership.json';
-
-/** Filename under the gateway data dir for the live status snapshot. */
-export const STATUS_FILE = 'gateway.status.json';
-
-/** On-disk status written after a successful bind / probe (H4). */
-export interface GatewayStatusFile {
-  url: string;
-  host: string;
-  port: number;
-  pid: number;
-  tokenFile?: string;
-  renewedAt: string;
-}
-
 /** Outcome of the adopt-don't-kill decision (H3). */
 export type ControlDecision = 'own' | 'foreign' | 'stale-reclaim' | 'probe-failed-refuse';
 
 /**
- * Decide whether we may control (stop/restart) a gateway at a data dir.
- *
- * Rules (H3):
- *   - Own ownerId → `own` (stop/restart allowed; wiring still checks pid liveness).
- *   - Different owner + probeOk → `foreign` (never kill).
- *   - Different owner + !probeOk → `probe-failed-refuse` (do NOT reclaim when
- *     the status probe itself failed — the foreign process may still be live).
- *   - Missing stamp + probeOk → `foreign` (unknown live process).
- *   - Missing stamp + !probeOk → `stale-reclaim` (nothing live; safe to spawn).
+ * Decide from the kernel-backed gateway.db lock and a credentialed daemon
+ * probe. No pid, timestamp, or stale-file heuristic participates.
  */
-export function canControl(
-  stamp: OwnershipStamp | null | undefined,
-  ourOwnerId: string,
-  options: { probeOk: boolean; ourPid?: number },
-): ControlDecision {
-  if (stamp && stamp.ownerId === ourOwnerId) {
-    return 'own';
-  }
-  if (options.probeOk) {
-    return 'foreign';
-  }
-  if (stamp && stamp.ownerId !== ourOwnerId) {
-    return 'probe-failed-refuse';
-  }
-  return 'stale-reclaim';
-}
-
-/**
- * Whether an owned, live gateway should be stopped and respawned instead of
- * adopted, because it predates the current on-disk build (issue #528 follow-up).
- *
- * - `replaceOwnedIfStale` off → never respawn (adopt whatever is live).
- * - stamp's `buildTag` differs from the current on-disk `buildTag` → respawn.
- *   A missing stamp buildTag (`undefined`) counts as different, so a gateway
- *   spawned before this field existed is refreshed once, self-establishing the
- *   tag. Equal tags (same build) → adopt, so a no-change relaunch never pays a
- *   needless restart.
- *
- * Callers gate this on ownership first — it must never fire for a foreign
- * gateway (H3).
- */
-export function ownedGatewayNeedsRespawn(
-  stamp: Pick<OwnershipStamp, 'buildTag'>,
-  currentBuildTag: string,
-  replaceOwnedIfStale: boolean,
-): boolean {
-  if (!replaceOwnedIfStale) return false;
-  return stamp.buildTag !== currentBuildTag;
-}
-
-/**
- * Whether `pid` is still running. `checkFn` is injectable so unit tests
- * never touch the real process table (e.g. `(p) => alive.has(p)`).
- */
-export function isProcessAlive(pid: number, checkFn: (pid: number) => boolean): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  return checkFn(pid);
+export function decideControl(input: {
+  lockHeld: boolean;
+  credentialedProbeOk: boolean;
+  publicProbeOk: boolean;
+}): ControlDecision {
+  if (!input.lockHeld) return 'stale-reclaim';
+  if (input.credentialedProbeOk) return 'own';
+  if (input.publicProbeOk) return 'foreign';
+  return 'probe-failed-refuse';
 }
 
 /** Resolve the listen port: a positive configured port wins, else the stable default (H4). */
@@ -148,41 +67,6 @@ export interface DetachedSpawnConfig {
 
 export function buildDetachedSpawnOptions(): DetachedSpawnConfig {
   return { detached: true, stdio: 'ignore', unref: true };
-}
-
-/** Build an ownership stamp for a just-spawned (or adopted) process. */
-export function buildOwnershipStamp(input: {
-  owner: GatewayOwnerKind;
-  ownerId: string;
-  pid: number;
-  startedAt?: string;
-  buildTag?: string;
-}): OwnershipStamp {
-  return {
-    owner: input.owner,
-    ownerId: input.ownerId,
-    pid: input.pid,
-    startedAt: input.startedAt ?? new Date().toISOString(),
-    ...(input.buildTag !== undefined ? { buildTag: input.buildTag } : {}),
-  };
-}
-
-/** Build a status payload after the listen address is known. */
-export function buildStatusFile(input: {
-  host: string;
-  port: number;
-  pid: number;
-  tokenFile?: string;
-  renewedAt?: string;
-}): GatewayStatusFile {
-  return {
-    url: `http://${input.host}:${input.port}`,
-    host: input.host,
-    port: input.port,
-    pid: input.pid,
-    ...(input.tokenFile !== undefined ? { tokenFile: input.tokenFile } : {}),
-    renewedAt: input.renewedAt ?? new Date().toISOString(),
-  };
 }
 
 /**

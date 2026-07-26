@@ -4,7 +4,7 @@
  * second policy path: Conserve/Balanced/Performance only select class and
  * throughput tier; Auto keeps boot-time detection.
  *
- * Pref key lives under the device prefs store (`prefs.json`) so the shell
+ * Pref key lives under the gateway preferences table (`gateway.db`) so the shell
  * can write it via PUT `/_centraid-user/prefs` without env vars.
  */
 
@@ -52,7 +52,7 @@ function safePositiveInteger(value: unknown): number | undefined {
 /**
  * Read the durable knob overrides out of the flat prefs KV. Garbage (strings,
  * negatives, floats, NaN, missing) is silently dropped so a hand-edited or
- * stale prefs.json can never widen a bound or crash boot — the resolver still
+ * stale preference values can never widen a bound or crash boot — the resolver still
  * clamps whatever survives.
  */
 export function parseResourceKnobPrefs(prefs: Record<string, unknown>): ResourceKnobOverrides {

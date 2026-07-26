@@ -47,6 +47,7 @@ async function harness(
     logger: silentLogger,
     ownerName: 'Priya',
   });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const vaultId = registry.defaultVaultId();
 

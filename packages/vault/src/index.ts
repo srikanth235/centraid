@@ -337,6 +337,15 @@ export {
   scrubSealedText,
   writeSealKeyFile,
 } from './schema/sealed.js';
+export {
+  KeyStore,
+  KeyStoreError,
+  aesGcmKeyProtector,
+  KEY_STORE_ENVELOPE_MAGIC,
+  KEY_STORE_SECRET_BYTES,
+  type KeyProtector,
+  type KeyStoreOptions,
+} from './schema/key-store.js';
 export { resealVaultKey, type ResealResult } from './gateway/reseal.js';
 export { writeReceipt } from './gateway/evidence.js';
 export {
@@ -376,7 +385,7 @@ export {
   type ScopeSpec,
 } from './bootstrap.js';
 export {
-  ensureVaultBootstrapped,
+  recoverVaultBootstrap,
   renameVault,
   readVaultSettings,
   updateBlobStoreSettings,

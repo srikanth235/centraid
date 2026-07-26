@@ -11,7 +11,8 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { MULTIPART_THRESHOLD_BYTES, S3BlobStore } from './s3.js';
 import { sha256OfBytes } from './store.js';
 import { openVaultDb } from '../db.js';
-import { ensureVaultBootstrapped, updateBlobStoreSettings } from '../host.js';
+import { bootstrapVault } from '../bootstrap.js';
+import { updateBlobStoreSettings } from '../host.js';
 import { updateBackupPolicy } from '../backup-policy.js';
 
 // ---------- the fake S3 endpoint ----------
@@ -289,7 +290,7 @@ test('settings: storageClass flows through and stale encrypt:false still writes 
   const db = openVaultDb({ s3Credentials: CREDS });
   try {
     // A `core_vault` row must exist for the settings UPDATE to land on it.
-    ensureVaultBootstrapped(db, { ownerName: 'Cold Storage Owner' });
+    bootstrapVault(db, { ownerName: 'Cold Storage Owner' });
     updateBlobStoreSettings(db, {
       blob_store: {
         kind: 's3',

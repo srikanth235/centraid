@@ -34,6 +34,40 @@ import {
   type GatewayPairResponse,
 } from './gateway-endpoint.js';
 
+export interface EndpointTicketHint {
+  endpointId: string;
+  relayHint?: string;
+}
+
+/** Derive the stable public EndpointId without binding or joining the network. */
+export function endpointIdForSecret(secret: Uint8Array): string {
+  if (secret.byteLength !== 32) {
+    throw new Error(`iroh endpoint secret must be 32 bytes, got ${secret.byteLength}`);
+  }
+  return iroh.SecretKey.fromBytes(Array.from(secret)).public().toString();
+}
+
+/**
+ * Split the stable identity from a dial ticket's refreshable address data.
+ * Connection registries persist the EndpointId as identity and may cache the
+ * relay URL independently without treating the whole ticket as durable.
+ */
+export function inspectEndpointTicket(ticket: string): EndpointTicketHint {
+  const addr = iroh.EndpointTicket.fromString(ticket).endpointAddr();
+  const relayHint = addr.relayUrl();
+  return {
+    endpointId: addr.id().toString(),
+    ...(relayHint ? { relayHint } : {}),
+  };
+}
+
+/** Build a fresh dial ticket from stable identity plus current cached hint. */
+export function endpointTicketFor(endpointId: string, relayHint?: string): string {
+  const id = iroh.EndpointId.fromString(endpointId);
+  const addr = new iroh.EndpointAddr(id, relayHint ?? null, null);
+  return iroh.EndpointTicket.fromAddr(addr).toString();
+}
+
 export interface TunnelClientOptions {
   /** 32-byte device secret; omit to generate a fresh device identity. */
   secretKey?: Uint8Array;

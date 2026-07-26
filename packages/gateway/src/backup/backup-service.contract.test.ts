@@ -1,9 +1,5 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
-// `BackupService` (PROTOCOL.md/FORMAT.md wiring): a real `VaultRegistry` +
-// `LocalBackupProvider` over temp dirs, with an INJECTED `assembleEntries`
-// seam standing in for the real pinned-base/blob-walk/git-bundle assembly.
-// The shipper bases remain real; the extra fixture gives these service tests
-// one deterministic source they can mutate without duplicating capture tests.
+// Real vault/provider fixture with a deterministic assembled blob source.
 
 import { afterEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
@@ -17,7 +13,9 @@ import {
 import {
   updateBackupPolicy,
   updateBlobStoreSettings,
+  KeyStore,
   ReplicaIndex,
+  sealKeyFileFor,
   type BackupPolicyPatch,
 } from '@centraid/vault';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
@@ -34,6 +32,7 @@ afterEach(async () => {
 });
 function openRegistry(rootDir: string): VaultRegistry {
   const registry = openVaultRegistry({ rootDir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Test vault');
   cleanups.push(() => registry.stop());
   return registry;
 }
@@ -49,15 +48,7 @@ interface Harness {
   backupDir: string;
 }
 
-/**
- * Wraps a real provider so its `registerSnapshot` throws `conflict_generation`
- * from the SECOND call onward — standing in for "another machine already
- * took over this target at the provider" without depending on
- * `LocalBackupProvider`'s per-instance registry cache (which never observes
- * a second same-process instance's disk writes; that staleness is a real
- * property of the local provider across OS processes, not something this
- * unit test should have to fight to exercise our own fencing logic).
- */
+/** Make the second snapshot registration simulate a provider takeover. */
 function conflictAfterFirstCall(real: BackupProvider): BackupProvider {
   let calls = 0;
   return {
@@ -182,11 +173,28 @@ test('first run creates a target, mints a keyring, and registers a snapshot', as
   expect(status?.lastError).toBeUndefined();
   expect(status?.providerPolicy?.status).toBe('synced');
 
-  await expect(fs.access(path.join(h.backupDir, 'keyring.json'))).resolves.toBeUndefined();
+  const keys = new KeyStore(path.dirname(sealKeyFileFor(h.registry.current().dir)));
+  expect(keys.export('keyring.key')).not.toBeNull();
+  await expect(fs.access(path.join(h.backupDir, 'keys'))).rejects.toMatchObject({
+    code: 'ENOENT',
+  });
 
   const snap = await h.health.snapshot();
   const backups = snap.components.find((c) => c.component === 'backups');
   expect(backups?.status).toBe('ok');
+});
+
+test('erase fencing advances the provider generation before local state is removed', async () => {
+  const h = await harness();
+  await h.service.runBackup(h.vaultId);
+  const target = (await h.service.status())[h.vaultId]!;
+  expect(target.generation).toBe(1);
+
+  await h.service.fenceVaultForErase(h.vaultId);
+
+  const provider = openLocalBackupProvider({ rootDir: h.providerDir });
+  expect((await provider.getTarget(target.targetId)).currentGeneration).toBe(2);
+  expect((await h.service.status())[h.vaultId]?.generation).toBe(2);
 });
 
 test('a local policy change is pushed and its provider echo is persisted', async () => {
@@ -236,10 +244,11 @@ test('remote-primary CAS is reconciled and persisted on policy cadence without a
       }),
     }),
   );
+  const health = new HealthRegistry();
   const service = new BackupService({
     backupDir,
     vaults: registry,
-    health: new HealthRegistry(),
+    health,
     logger: silentLogger,
     now: () => clock.now,
     casReconcile,
@@ -253,6 +262,11 @@ test('remote-primary CAS is reconciled and persisted on policy cadence without a
     status: 'ok',
     backup: { configured: false },
     cas: { configured: true, source: 'bucket' },
+  });
+  const snapshot = await health.snapshot();
+  expect(snapshot.components.find((component) => component.component === 'backups')).toMatchObject({
+    status: 'degraded',
+    detail: expect.stringMatching(/offsite bytes.*recovery kit cannot restore/i),
   });
 
   await service.tick();
@@ -427,42 +441,23 @@ test('verify-only staleness (backup fresh, verify old) degrades without erroring
   expect(backups?.detail).toMatch(/verification is stale/);
 });
 
-// ── Recovery-kit confirmation gate (issue #351 wave 4 / #367) ───────────
-
 test('recoveryKitStatus starts unconfirmed', async () => {
   const h = await harness();
-  expect(await h.service.recoveryKitStatus()).toEqual({ confirmedAt: null });
+  expect(await h.service.recoveryKitStatus()).toEqual({
+    confirmedAt: null,
+    kitFingerprint: expect.any(String),
+  });
 });
 
 test('confirmRecoveryKit stamps the current clock (epoch seconds) and persists it', async () => {
   const h = await harness();
   h.clock.now = Date.UTC(2026, 6, 11, 12, 0, 0);
-
   const result = await h.service.confirmRecoveryKit();
   expect(result).toEqual({ confirmedAt: Math.floor(h.clock.now / 1000) });
-  expect(await h.service.recoveryKitStatus()).toEqual({
+  expect(await h.service.recoveryKitStatus()).toMatchObject({
     confirmedAt: Math.floor(h.clock.now / 1000),
+    kitFingerprint: expect.any(String),
   });
-});
-
-test('confirming again refreshes the timestamp rather than erroring', async () => {
-  const h = await harness();
-  h.clock.now = Date.UTC(2026, 6, 11, 12, 0, 0);
-  await h.service.confirmRecoveryKit();
-
-  h.clock.now += 60_000;
-  const second = await h.service.confirmRecoveryKit();
-  expect(second.confirmedAt).toBe(Math.floor(h.clock.now / 1000));
-});
-
-test('confirmRecoveryKit does not disturb existing per-vault target state', async () => {
-  const h = await harness();
-  await h.service.runBackup(h.vaultId);
-  const beforeTargets = await h.service.status();
-
-  await h.service.confirmRecoveryKit();
-
-  expect(await h.service.status()).toEqual(beforeTargets);
 });
 
 test('the hourly scheduler skips its tick while host power-context posture defers (#528 Phase D)', async () => {

@@ -30,15 +30,10 @@
  * material — with a loud "store this offline" warning.
  */
 
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { openVaultRegistry, type VaultInfo, type VaultRegistry } from '../serve/vault-registry.js';
 import { HealthRegistry } from '../serve/health-registry.js';
-import {
-  LEASE_FILE_NAME,
-  LEASE_FRESH_WINDOW_MS,
-  type LeaseRecord,
-} from '../serve/gateway-instance-lease.js';
+import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
 import { BackupService } from '../backup/backup-service.js';
 import type { BackupProvider } from '@centraid/backup';
 import { daemonLayoutFor } from './paths.js';
@@ -57,19 +52,16 @@ export function refuseIfDaemonHoldsRoot(
   vaultRoot: string,
   fail: (msg: string, code?: number) => never,
 ): void {
-  let lease: LeaseRecord | undefined;
   try {
-    lease = JSON.parse(readFileSync(path.join(vaultRoot, LEASE_FILE_NAME), 'utf8')) as LeaseRecord;
-  } catch {
-    return; // no lease file (or a torn one) — no live daemon
-  }
-  const age = Date.now() - Date.parse(lease.renewedAt);
-  if (Number.isFinite(age) && age >= 0 && age < LEASE_FRESH_WINDOW_MS) {
-    fail(
-      `a live gateway (pid ${lease.pid} on ${lease.hostname}) holds this vault root — ` +
-        'run backup operations through the running gateway (desktop/HTTP), or stop it first',
-      2,
-    );
+    GatewayDatabase.open(path.dirname(vaultRoot), { lock: 'exclusive' }).close();
+  } catch (error) {
+    if (error instanceof GatewayLockError) {
+      fail(
+        'the running daemon holds gateway.db — run this operation through it, or stop it first',
+        2,
+      );
+    }
+    throw error;
   }
 }
 

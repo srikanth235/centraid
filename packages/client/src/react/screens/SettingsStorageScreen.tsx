@@ -128,10 +128,10 @@ function RecoveryKitGateDialog({
         <h3>Before this ships bytes off this machine</h3>
         <p className={styles.gateReason}>{gate.message}</p>
         <p>
-          Hosted storage is ciphertext without the seal key that made it — if it's ever lost,
-          everything stored offsite becomes unrecoverable. Export the recovery kit once (
-          <code>centraid-gateway backup kit</code>, or <code>key export</code>) and store it
-          somewhere offline before continuing.
+          Hosted storage is ciphertext without the seal key that made it — if it's ever lost, the
+          backed-up vaults stored offsite become unrecoverable. Local-only vaults are not included.
+          Export the recovery kit once (<code>centraid-gateway backup kit</code>, or{' '}
+          <code>key export</code>) and store it somewhere offline before continuing.
         </p>
         {error ? <div className={styles.gateError}>{error}</div> : null}
         <div className={modalCss.actions}>

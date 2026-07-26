@@ -1,81 +1,48 @@
 /*
- * Filesystem layout the `centraid-gateway` daemon reads/writes under
- * `<dataDir>`.
- *
- * Mirrors the Electron embed's per-gateway tree at
- * `<userData>/gateways/<id>/`, just without the `gateways/<id>/`
- * segment — the daemon hosts exactly one gateway, so there's nothing
- * to multiplex.
- *
- * Issue #280 — the vault is the unit. Everything personal (apps, code,
- * transcripts, run history) lives inside `vault/<vaultId>/`; the daemon
- * level keeps only plumbing:
- *
- *   <dataDir>/
- *     prefs.json            — device prefs (runner choice, binPath, …)
- *     model-catalog.json    — chat picker's per-runner model catalog
- *     model-pricing.json    — disk-cached LiteLLM price table (#445 warmer)
- *     vault/                — vault registry root (one dir per vault)
- *     backup/               — offsite backup engine state (keyring, per-vault
- *                              targets, staging) — kept OUTSIDE vault/ so a
- *                              raw vault-dir copy never carries the keyring
- *     gateway-logs/         — rotated JSONL persistence of the log ring
- *                              (issue #351), so a crash/restart doesn't
- *                              lose the lines a post-mortem needs
- *     devices.json          — device enrollments: device key ↔ vault (#289)
- *     pairing-tickets.json  — one-time pairing tickets, secret hashes only (#289)
- *     device-tokens.json    — per-device HTTP bearer tokens, secret hashes only (#376)
- *     web-sessions.json     — durable PWA control-browser sessions, cookie hashes only (#376)
- *     endpoint-key.bin      — the gateway's persistent iroh secret key (#289)
- *     endpoint.json         — the live endpoint's id + dial ticket, for the pair CLI (#289)
+ * Canonical daemon layout (issue #555). Desktop and headless hosts derive
+ * the same tree. gateway.db is control state + process lock; keys/ is
+ * custody; vault/ is sovereign state; cache/ is disposable; gateway-logs/
+ * is diagnostics. A zero-vault gateway does not create vault/ or cache/.
  */
 
 import path from 'node:path';
 import type { GatewayPaths } from '../paths.js';
 
 export interface DaemonLayout extends GatewayPaths {
-  /** Device enrollment registry — device key ↔ vault rows (issue #289). */
+  dataDir: string;
+  gatewayDbFile: string;
+  keysDir: string;
+  cacheDir: string;
+  /** Compatibility aliases into gateway.db; no loose JSON file is created. */
   devicesFile: string;
-  /** One-time pairing tickets (secret hashes + TTLs, issue #289). */
   pairingTicketsFile: string;
-  /** Per-device HTTP bearer tokens — secret hashes only (issue #376). */
-  deviceTokensFile: string;
-  /**
-   * Durable PWA control-browser sessions — cookie hashes only (issue #376).
-   * Lets a web pairing survive a gateway restart / the sliding idle window
-   * instead of forcing a fresh pairing ticket every time.
-   */
   webSessionsFile: string;
-  /** The gateway's persistent iroh secret key (32 bytes, mode 0o600). */
+  /** KeyStore envelope for the gateway's persistent iroh identity. */
   endpointKeyFile: string;
-  /**
-   * The running endpoint's public identity — `{endpointId, ticket}` —
-   * written by `serve` on boot so the `pair` CLI can pin it into tickets
-   * without joining the iroh network itself.
-   */
-  endpointStateFile: string;
 }
 
 export function daemonLayoutFor(dataDir: string): DaemonLayout {
   const abs = path.resolve(dataDir);
+  const cacheDir = path.join(abs, 'cache');
   return {
-    prefsFile: path.join(abs, 'prefs.json'),
-    modelCatalogFile: path.join(abs, 'model-catalog.json'),
-    modelPricingFile: path.join(abs, 'model-pricing.json'),
+    dataDir: abs,
+    gatewayDbFile: path.join(abs, 'gateway.db'),
+    keysDir: path.join(abs, 'keys'),
+    prefsFile: path.join(abs, 'gateway.db'),
+    cacheDir,
+    modelCatalogFile: path.join(cacheDir, 'model-catalog.json'),
+    modelPricingFile: path.join(cacheDir, 'model-pricing.json'),
+    templatesCacheDir: path.join(cacheDir, 'templates'),
     // Mounting the vault registry (duaility §12): the daemon hosts one
     // gateway holding N sovereign vaults, one subdirectory each — and,
     // post-#280, each vault's whole app world.
     vaultDir: path.join(abs, 'vault'),
-    backupDir: path.join(abs, 'backup'),
+    backupDir: cacheDir,
     logsDir: path.join(abs, 'gateway-logs'),
-    // Storage connections + recovery-kit state (issue #367 §C1/§C10) — same
-    // sibling-of-`vault/` convention as `backupDir`/`logsDir`.
-    storageDir: path.join(abs, 'storage'),
-    devicesFile: path.join(abs, 'devices.json'),
-    pairingTicketsFile: path.join(abs, 'pairing-tickets.json'),
-    deviceTokensFile: path.join(abs, 'device-tokens.json'),
-    webSessionsFile: path.join(abs, 'web-sessions.json'),
-    endpointKeyFile: path.join(abs, 'endpoint-key.bin'),
-    endpointStateFile: path.join(abs, 'endpoint.json'),
+    storageDir: abs,
+    devicesFile: path.join(abs, 'gateway.db'),
+    pairingTicketsFile: path.join(abs, 'gateway.db'),
+    webSessionsFile: path.join(abs, 'gateway.db'),
+    endpointKeyFile: path.join(abs, 'keys', 'endpoint.key'),
   };
 }

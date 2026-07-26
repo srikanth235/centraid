@@ -33,14 +33,13 @@ export function __resetFlatVaultSwitcherCache(): void {
 
 // `hasSsh` isn't in `centraid-api.d.ts`'s `CentraidGatewayProfile` yet — it's
 // a new field the backend half of issue #382 adds to `listGateways`'s DTO
-// alongside `transport`. Read defensively (optional cast) so this file
+// on each connection. Read defensively (optional cast) so this file
 // type-checks and degrades to `hasSsh: undefined` (no "+ New space" affordance
 // for that gateway) against an older/unwired build rather than throwing.
 type ProfileWithSsh = {
   id: string;
   label: string;
   kind: 'local' | 'remote';
-  transport?: 'local' | 'iroh' | 'direct';
   ssh?: unknown;
 };
 
@@ -50,7 +49,6 @@ function toGateway(p: ProfileWithSsh): FlatSwitcherGateway {
     gatewayKind: p.kind,
     gatewayLabel: p.label,
     hasSsh: p.ssh !== undefined,
-    transport: p.transport,
   };
 }
 

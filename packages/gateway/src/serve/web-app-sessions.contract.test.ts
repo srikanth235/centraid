@@ -56,7 +56,7 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
 
 beforeEach(async () => {
   dataDir = await tempDir(`web-session-${crypto.randomUUID()}-`);
-  handle = await serve({ paths: pathsUnder(dataDir) });
+  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
   const store = await handle.appsStore();
   await seedApp(store, 'alpha');
   await seedApp(store, 'beta');
@@ -283,7 +283,11 @@ test('a persisted control session still authorizes after a gateway restart', asy
   const controlsFile = path.join(dataDir, 'web-sessions.json');
   // Re-serve the same dataDir WITH persistence wired.
   await handle.close();
-  handle = await serve({ paths: pathsUnder(dataDir), webSessions: { controlsFile } });
+  handle = await serve({
+    initVaultName: "Owner's vault",
+    paths: pathsUnder(dataDir),
+    webSessions: { controlsFile },
+  });
   await handle.syncApps();
   const cookie = await establishControl();
   expect((await proxyControl(cookie)).status).toBe(200);
@@ -291,7 +295,11 @@ test('a persisted control session still authorizes after a gateway restart', asy
   // "Restart": a brand-new gateway process on the same file — the browser
   // kept only its HttpOnly cookie, yet it must still authorize.
   await handle.close();
-  handle = await serve({ paths: pathsUnder(dataDir), webSessions: { controlsFile } });
+  handle = await serve({
+    initVaultName: "Owner's vault",
+    paths: pathsUnder(dataDir),
+    webSessions: { controlsFile },
+  });
   await handle.syncApps();
   expect((await proxyControl(cookie)).status).toBe(200);
 });
@@ -338,18 +346,19 @@ test('a proxied DELETE (with ?path) is forwarded, not treated as a logout', asyn
   expect((await proxyControl(cookie)).status).toBe(200);
 });
 
-test('an admin control session (no device key) is unaffected by revocation', async () => {
+test('a control session without a proved device identity fails closed', async () => {
   const controlsFile = path.join(dataDir, 'web-sessions.json');
   await handle.close();
-  // isDeviceValid always denies, but an admin-bearer control session carries
-  // NO device key, so the revocation check never applies to it.
+  // There is no shared-bearer admin wildcard: a session without a device key
+  // cannot survive the enrollment check.
   handle = await serve({
+    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     webSessions: { controlsFile, isDeviceValid: () => false },
   });
   await handle.syncApps();
   const cookie = await establishControl();
-  expect((await proxyControl(cookie)).status).toBe(200);
+  expect((await proxyControl(cookie)).status).toBe(401);
 });
 
 // ── Revocation propagation for device-bound sessions ──────────────────────
@@ -390,11 +399,11 @@ class MockRes {
 }
 
 test('a revoked device key kills a live CONTROL cookie and evicts its row', async () => {
-  const controlsFile = path.join(dataDir, 'control-rev.json');
   const token = 'control-secret-token';
   const hash = hashControlToken(token);
+  const controlStore = WebControlSessionStore.open();
   // Seed a persisted control row bound to a device key.
-  WebControlSessionStore.open(controlsFile).establish({
+  controlStore.establish({
     tokenHash: hash,
     vaultId: 'v1',
     deviceKey: 'dev-1',
@@ -402,7 +411,7 @@ test('a revoked device key kills a live CONTROL cookie and evicts its row', asyn
   });
 
   let enrolled = true;
-  const sessions = new WebAppSessions({ controlsFile, isDeviceValid: () => enrolled });
+  const sessions = new WebAppSessions({ controlStore, isDeviceValid: () => enrolled });
   const control = (): IncomingMessage =>
     req({
       url: `/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`,
@@ -415,7 +424,7 @@ test('a revoked device key kills a live CONTROL cookie and evicts its row', asyn
   // Revoke the enrollment → the very next authorize fails and drops the row.
   enrolled = false;
   expect(sessions.authorize(control())).toBeUndefined();
-  expect(WebControlSessionStore.open(controlsFile).find(hash)).toBeUndefined();
+  expect(controlStore.find(hash)).toBeUndefined();
 });
 
 test('a revoked device key kills a live ACTIVE app session', async () => {

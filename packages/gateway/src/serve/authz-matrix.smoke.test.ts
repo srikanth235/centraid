@@ -22,7 +22,11 @@ function pathsUnder(dir: string): GatewayPaths {
 
 beforeEach(async () => {
   dataDir = await tempDir(`authz-smoke-${crypto.randomUUID()}-`);
-  handle = await serve({ paths: pathsUnder(dataDir), token: ADMIN });
+  handle = await serve({
+    initVaultName: "Owner's vault",
+    paths: pathsUnder(dataDir),
+    token: ADMIN,
+  });
 });
 
 afterEach(async () => {

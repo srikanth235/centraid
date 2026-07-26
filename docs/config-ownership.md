@@ -25,7 +25,7 @@ Code: `apps/desktop/src/main/settings.ts`.
 
 | Path | Owner | Notes |
 | --- | --- | --- |
-| `<userData>/gateways/<id>/prefs.json` (desktop) or `<dataDir>/prefs.json` (daemon) | Gateway prefs API / Settings | Runner choice, bin path, theme-related device prefs, **Resource mode** (`gateway.resourceMode`: `auto` \| `conserve` \| `balanced` \| `performance`, issue #521). Not vault identity (#280). |
+| `<dataDir>/gateway.db` preferences table | Gateway prefs API / Settings | Runner choice, bin path, theme-related device prefs, and Resource mode. Desktop, CLI, and OS service use the same platform-default data dir. |
 
 Declarative "dotfiles" for prefs are not a product feature; treat the JSON as owned by the running gateway. Daemon `config.json` may seed `resourceMode` when the pref is unset; env `CENTRAID_RESOURCE_MODE` wins over both for operators. The selected mode is applied at gateway serve boot (worker limits are process-scoped).
 
@@ -80,7 +80,9 @@ Hand-edited units may be replaced on reinstall. Service install is **opt-in, def
 
 | Path | Owner |
 | --- | --- |
-| `devices.json`, `pairing-tickets.json`, `device-tokens.json`, `web-sessions.json`, `endpoint.json`, `endpoint-key.bin` | Daemon / pairing CLI |
+| `gateway.db` (`devices`, `tickets`, `web_sessions`, backup/storage state) | The lock-holding gateway daemon; stopped-daemon CLI commands may open it explicitly |
+| `<dataDir>/keys/*` | `KeyStore`; desktop supplies `safeStorage`, headless uses atomic `0600` envelopes |
+| `<userData>/connections.json` + `connection-secrets.bin` | Desktop main process only; renderer localStorage owns neither connection records nor credentials |
 
 Do not hand-merge these mid-flight. Recovery: [recovery/pairing.md](recovery/pairing.md).
 

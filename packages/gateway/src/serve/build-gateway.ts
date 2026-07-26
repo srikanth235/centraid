@@ -71,6 +71,7 @@ import {
 import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
 import { ROUTES } from '@centraid/protocol';
+import { endpointIdForSecret } from '@centraid/tunnel';
 import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
 import { closeJournalConversationStores, journalConversationStore } from '../journal-stores.js';
 import {
@@ -89,6 +90,7 @@ import {
   type SurfaceStatus,
 } from '@centraid/agent-runtime';
 import {
+  KeyStore,
   readBlobStoreSettings,
   custodyStateCounts,
   jitterDelayMs,
@@ -107,7 +109,7 @@ import { createEnrichmentHealthProbe } from './enrichment-health.js';
 import { createBlobSweepHealthProbe } from './blob-sweep-health.js';
 import { createStorageQuotaHealthProbe } from './storage-quota-health.js';
 import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
-import { GatewayInstanceLease } from './gateway-instance-lease.js';
+import { GatewayDatabase } from './gateway-db.js';
 import { ConnectionBroker } from './connection-broker.js';
 import { pollProviderEventSource } from './automation-event-sources.js';
 import { reviseAutomationInstructions } from '../lifecycle/automation-revision.js';
@@ -120,11 +122,9 @@ import type { AssistOAuthConfig } from './assist-oauth.js';
 import { OutboxExecutor } from './outbox-executor.js';
 import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
 import { runWithVaultContext, VAULT_HEADER, type DeviceAccess } from './vault-context.js';
-import type { EnrollmentStore } from './enrollment-store.js';
-import type { PairingTicketStore } from './pairing-store.js';
-import type { DeviceTokenStore } from './device-token-store.js';
+import { EnrollmentStore } from './enrollment-store.js';
+import { PairingTicketStore } from './pairing-store.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
-import { makePairRouteHandler } from '../routes/pair-routes.js';
 import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
 import { makeDeviceWorkRouteHandler } from '../routes/device-work-routes.js';
 import { companionRequestAllowed } from './companion-access.js';
@@ -213,21 +213,29 @@ import { sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
 import { BackupService } from '../backup/backup-service.js';
 import type { BackupConfig } from '../backup/backup-config.js';
+import { deriveBackupSourceInstanceId } from '../backup/backup-state.js';
 import { openStorageConnectionStore } from '../backup/storage-connections.js';
 import { StorageUsagePoller } from '../backup/storage-usage.js';
 import { PricingWarmer } from './pricing-warmer.js';
 import { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { makeStorageCredentialsResolver } from '../backup/storage-credentials.js';
 import { makeStorageRouteHandler } from '../routes/storage-routes.js';
-import { RecoverJobRunner } from '../backup/recover-job.js';
-import { makeRecoverRouteHandler } from '../routes/recover-routes.js';
+import { makeFoundingRouteHandler } from '../routes/founding-routes.js';
 import { WebAppSessions } from './web-app-sessions.js';
+import { WebControlSessionStore } from './web-session-store.js';
 
 export type { DeviceAccess } from './vault-context.js';
 
 export interface BuildGatewayOptions {
   /** On-disk slots the runtime reads/writes. Caller-derived. */
   paths: GatewayPaths;
+  /** Shared gateway.db handle when the host opened the process lock before constructing transports. */
+  gatewayDatabase?: GatewayDatabase;
+  /**
+   * Explicit kit-less bootstrap for tests and automation. Human first-run
+   * uses the founding ceremony; omission leaves a legal zero-vault gateway.
+   */
+  initVaultName?: string;
   /**
    * Optional shared-client OAuth courier coordinates. Hosts inject only
    * public values; confidential Google/HMAC secrets remain Worker-only.
@@ -266,13 +274,19 @@ export interface BuildGatewayOptions {
    */
   sessionIdFor?: (appId: string) => string;
   /**
-   * Device-plane access control (issue #289 phase 2). When set, the
-   * composed handler resolves the calling device from the request and
-   * refuses vaults the device is not enrolled in; the vault list filters
-   * to the device's enrollments. Absent (loopback embed, tests), the
-   * transport is implicitly enrolled in every vault.
+   * Device-plane access control (issue #289 phase 2). The composed handler
+   * always resolves a real enrollment. A loopback embed that omits this seam
+   * receives a persisted host enrollment keyed by the gateway endpoint id.
    */
   deviceAccess?: DeviceAccess;
+  /** Host-selected custody backend for every gateway-level named secret. */
+  keyStore?: KeyStore;
+  /**
+   * A host device EndpointId whose loopback requests are resolved by the
+   * supplied deviceAccess seam. Existing vaults receive explicit persisted
+   * owner enrollments; newly founded vaults enroll through their ceremony.
+   */
+  hostDeviceEndpointId?: string;
   /** Optional Rust byte-plane X-Sendfile handoff (issue #456 N3). */
   dataPlaneHttp?: DataPlaneHttpOptions;
   /** Auth callback used only by the native iroh relay on loopback. */
@@ -280,24 +294,20 @@ export interface BuildGatewayOptions {
   /** Host-selected preview engine; daemon defaults to native sharp/libvips. */
   previewCodec?: PreviewCodec;
   /**
-   * The daemon's device-pairing plane (issue #376): its `EnrollmentStore`
-   * + `PairingTicketStore` + `DeviceTokenStore`. When set, `buildGateway`
-   * mounts `POST /centraid/_gateway/pair` (`routes/pair-routes.ts`) — the
-   * HTTP twin of the iroh `gw-pair` ceremony, for devices that cannot dial
-   * the iroh endpoint directly. `serve()` also adds that route's path to
-   * the HTTP listener's `publicPaths` when this is set. Absent for the
-   * desktop embed (no dataDir-backed device plane) and most tests.
+   * Enrollment/ticket plane used by proved iroh callers. HTTP ticket
+   * redemption and per-device bearers were removed by issue #555.
    */
   devicePairing?: {
     enrollments: EnrollmentStore;
     tickets: PairingTicketStore;
-    deviceTokens: DeviceTokenStore;
     /**
      * The gateway's iroh EndpointTicket for a HTTP-minted pairing ticket's
      * `gw` field (`POST /centraid/_gateway/devices/ticket`), read lazily at
      * mint time. Undefined before the daemon has an endpoint.
      */
     endpointTicket?: () => string | undefined;
+    /** Stable gateway identity derived from the endpoint secret. */
+    endpointId?: () => string | undefined;
     /** Close Rust-owned iroh transports after a device loses its final enrollment. */
     onEndpointRevoked?: (endpointId: string) => void | Promise<void>;
   };
@@ -311,6 +321,7 @@ export interface BuildGatewayOptions {
    * control sessions with no revocation hook, exactly the prior behavior.
    */
   webSessions?: {
+    controlStore?: WebControlSessionStore;
     controlsFile?: string;
     isDeviceValid?: (deviceKey: string) => boolean;
   };
@@ -539,7 +550,7 @@ export interface BuiltGateway {
    * this is the live, scheduled one `start()`/`stop()` drive.
    */
   backup?: BackupService;
-  /** Device-prefs store (`prefs.json`) — #280 killed the identity DB. */
+  /** Gateway-wide device preferences stored in `gateway.db`. */
   prefs: PrefsStore;
   /** Run-summary rollup over the current request's journal.db. */
   analyticsStore: AnalyticsStore;
@@ -601,15 +612,8 @@ export interface BuiltGateway {
    * URL so the host can fall through to `composedHandler`.
    */
   webhookHandler: RouteHandler;
-  /**
-   * The pre-vault recovery routes (`/centraid/_gateway/recover/*`, issue #439
-   * R1 wave 4), mounted like `webhookHandler` as a TOP-LEVEL handler outside
-   * `composedHandler`'s per-request vault scope — recovery stands up (and
-   * adopts) the home vault before one is chosen. Bearer-gated by the app-engine
-   * check (not public) and admin-plane only. Returns `false` for any
-   * non-matching URL so the host falls through to `composedHandler`.
-   */
-  recoverHandler: RouteHandler;
+  /** Zero-vault possession plane: ticket mint, initialize, and kit verification. */
+  foundingHandler: RouteHandler;
   /**
    * The gateway's log ring buffer + live fan-out (realtime Logs surface).
    * Every `logger.*` line lands here before the console. Hosts may
@@ -630,6 +634,10 @@ export interface BuiltGateway {
 
 export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltGateway> {
   const { paths } = options;
+  const dataDir = paths.dataDir ?? path.dirname(paths.vaultDir);
+  const gatewayDatabase =
+    options.gatewayDatabase ?? GatewayDatabase.open(dataDir, { lock: 'exclusive' });
+  const instanceId = crypto.randomUUID();
   // Every log line tees through the gateway log store (realtime Logs
   // surface) before reaching the console/host logger — see logs-routes.ts.
   // Persistence (issue #351) is opt-in via `paths.logsDir` — omitted, this
@@ -650,7 +658,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   );
   let storageFsyncMs: number | undefined;
   try {
-    const storageLatency = await measureStorageLatency(paths.vaultDir);
+    const storageLatency = await measureStorageLatency(dataDir);
     storageFsyncMs = storageLatency.fsyncMs;
     performanceMonitor.setStorageFsyncMs(storageLatency.fsyncMs);
     health.reportOk('storage-latency', `4 KiB fsync ${storageLatency.fsyncMs.toFixed(1)} ms`);
@@ -671,7 +679,19 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // same profile resolver as CENTRAID_HARDWARE_PROFILE. Prefs open early so
   // boot class matches what the owner last chose; a mode change after boot
   // is durable and applies on the next serve (worker env is process-scoped).
-  const prefsEarly = new PrefsStore(paths.prefsFile);
+  const prefsEarly = new PrefsStore({
+    read: () =>
+      Object.fromEntries(
+        gatewayDatabase.prefRows().flatMap((row) => {
+          try {
+            return [[row.key, JSON.parse(row.value_json) as unknown] as const];
+          } catch {
+            return [];
+          }
+        }),
+      ),
+    write: (prefs) => gatewayDatabase.replacePrefs(prefs),
+  });
   const earlyPrefs = prefsEarly.getAllPrefs();
   const resourceMode = resolveResourceMode({
     env: process.env,
@@ -712,7 +732,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   process.env.CENTRAID_STATIC_BROTLI_QUALITY = String(hardwareProfile.staticBrotliQuality);
   process.env.CENTRAID_STATIC_GZIP_QUALITY = String(hardwareProfile.staticGzipQuality);
   health.reportOk('hardware-profile', formatHardwareProfileDetail(hardwareProfile));
-  const webAppSessions = new WebAppSessions(options.webSessions ?? {});
+  const webAppSessions = new WebAppSessions({
+    ...options.webSessions,
+    controlStore: options.webSessions?.controlStore ?? WebControlSessionStore.open(gatewayDatabase),
+  });
 
   // Bundled blueprint apps (issue #434): the main client compiles their UI
   // directly, while the gateway reads their shipped directories for metadata,
@@ -723,37 +746,30 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const bundledAppIds = new Set((await listBundledAppTemplates()).map((t) => t.id));
   const isBundledAppId = (id: string): boolean => bundledAppIds.has(id);
 
-  // Second-gateway detection (issue #351 tier 1): "one gateway per user" is
-  // an owner-stated topology, never enforced — nothing stops a copied vault
-  // dir or a daemon + desktop embed both pointed at the same root from
-  // corrupting data via cross-copy WAL semantics. A lease file at the vault
-  // registry root records who's serving; a FRESH foreign lease is never
-  // clobber-written (split-brain must be loud, never auto-resolved — mirrors
-  // the backup protocol's generation fencing), a STALE one (crashed owner)
-  // is reclaimed cleanly. Constructed BEFORE the vault registry (moved up
-  // from its original spot, issue #367 §C6) so `isConflicted()` is a valid
-  // closure target for `VaultRegistryOptions.leaseConflicted` below — the
-  // blob sweep's orphan-delete gate reads this on every tick.
-  const instanceLease = new GatewayInstanceLease({
-    rootDir: paths.vaultDir,
-    health,
-    logger: health.loggerFor('instance', logger),
-  });
-  // WAL ownership must be known before the registry opens any vault plane.
-  instanceLease.claim();
+  health.reportOk('instance', 'gateway.db exclusive process lock held');
+  if (gatewayDatabase.networkFileSystem) {
+    const message =
+      'gateway data directory is on a network filesystem; cross-host locking is not guaranteed and orphan blob deletion is disabled';
+    logger.warn(message);
+    health.reportDegraded('filesystem', message);
+  } else {
+    health.reportOk('filesystem', 'local filesystem');
+  }
 
-  // Gateway-level storage state (issue #367 §C1/§C10): the storage-
-  // connection entity (a sealed provider api key, shared by the backup
-  // engine and every vault's CAS tier) and the recovery-kit
-  // confirmation flag, generalized off the backup-only field it started as.
-  // Both live under `paths.storageDir` (default a `storage` sibling of
-  // `vaultDir`, same convention as `backupDir`) — gateway plumbing, never
-  // inside a vault directory a raw copy could carry off-box.
-  const storageDir = paths.storageDir ?? path.join(path.dirname(paths.vaultDir), 'storage');
-  const storageConnections = await openStorageConnectionStore(storageDir);
+  // Gateway-level storage state is in gateway.db; its credential-encryption
+  // key is a KeyStore envelope under keys/.
+  const gatewayKeys =
+    options.keyStore ??
+    new KeyStore(path.join(dataDir, 'keys'), {
+      warn: (message) => logger.warn(message),
+    });
+  const storageConnections = await openStorageConnectionStore({
+    database: gatewayDatabase,
+    keyStore: gatewayKeys,
+  });
   let walCaptureConfigured =
     options.backup?.enabled === true || (await storageConnections.list()).length > 0;
-  const recoveryKit = new RecoveryKitStateStore(storageDir);
+  const recoveryKit = new RecoveryKitStateStore(gatewayDatabase);
   // Provider usage cache (issue #367 §D1) — cache-with-TTL + stale-while-
   // refresh in front of a provider connection's optional `usage` capability
   // (PROTOCOL.md § Usage). Never polls on its own timer; see storage-usage.ts.
@@ -762,7 +778,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // connections for the same reason. Loaded ONCE here so every later reader
   // — the routes, the `storage-limit` probe, and each vault plane's sweep —
   // shares one instance and sees a change without a restart.
-  const storageLimits = new StorageLimitsStore(storageDir);
+  const storageLimits = new StorageLimitsStore(gatewayDatabase);
   await storageLimits.load();
 
   // Model price catalog (issue #445) — seed the app-engine pricing seam from a
@@ -849,11 +865,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     walCaptureEnabled: () => walCaptureConfigured,
     // Disposable runner cache lives outside the vault tree (defaults to a
     // `-cache` sibling of `vaultDir` when the host doesn't pin one).
-    ...(paths.cacheDir ? { cacheRootDir: paths.cacheDir } : {}),
+    cacheRootDir: paths.cacheDir ?? path.join(dataDir, 'cache'),
     logger: health.loggerFor('vaults', logger),
-    // Lease-gated reconciliation (issue #367 §C6): every mounted plane's
-    // blob sweep reads this fresh on each tick.
-    leaseConflicted: () => instanceLease.isConflicted(),
+    // Network mounts may not honor the local SQLite lock cross-host. Serving
+    // remains available, but destructive orphan GC fails safe.
+    skipOrphanDelete: () => gatewayDatabase.networkFileSystem,
     // Storage-connection-backed credential resolution (issue #367 §C3):
     // supersedes the legacy `CENTRAID_S3_*` env-var lane for any vault whose
     // `blob_store.connectionId` is set; vaults without one keep working off
@@ -881,6 +897,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // a file read inside its synchronous block.
     journalLimitBytes: () => storageLimits.current().journalLimitBytes,
   });
+  if (options.initVaultName !== undefined && vaultRegistry.isFresh()) {
+    vaultRegistry.create(options.initVaultName);
+  }
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
   // plane silently fails to open, so the probe asks the registry directly.
@@ -929,7 +948,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }
     return planes.length > 0
       ? { status: 'ok', detail: `${planes.length} vault${planes.length === 1 ? '' : 's'} mounted` }
-      : { status: 'error', detail: 'no vaults mounted' };
+      : { status: 'ok', detail: 'uninitialized — no vaults founded' };
   });
 
   // Disk watermark (issue #351): free space on the vault volume, plus a
@@ -938,7 +957,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   health.registerProbe(
     'disk',
     createDiskHealthProbe({
-      rootDir: paths.vaultDir,
+      rootDir: dataDir,
       vaults: () =>
         vaultRegistry.planesList().map((p) => ({ vaultId: p.boot.vaultId, dir: p.dir })),
     }),
@@ -950,7 +969,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // `storage-limit` probe below, so the page and the health badge can never
   // report different totals. The walk is TTL-cached; nothing puts it on a timer.
   const localUsage = new LocalUsageScanner({
-    rootDir: paths.vaultDir,
+    rootDir: dataDir,
     vaults: () =>
       vaultRegistry.planesList().map((p) => ({
         vaultId: p.boot.vaultId,
@@ -960,10 +979,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         ...(p.cacheDir && p.cacheDir !== p.dir ? { cacheDir: p.cacheDir } : {}),
       })),
     gatewayDirs: () => ({
-      backup: paths.backupDir ?? path.join(path.dirname(paths.vaultDir), 'backup'),
+      cache: paths.cacheDir,
       logs: paths.logsDir,
       templates: paths.templatesCacheDir,
-      storage: storageDir,
     }),
   });
 
@@ -993,10 +1011,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }
     return { status: 'ok', detail };
   });
-
-  // `instanceLease` is constructed above (before the vault registry) —
-  // `start()`/`stop()` below drive its renew timer; `instanceId` also rides
-  // `_gateway/info` so a client can detect a gateway swap-under-it.
 
   // Connection health lives in each vault's DB (`needs-auth` flips there,
   // not in broker memory) — surface "N connections need re-auth" so a dead
@@ -1192,10 +1206,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // storage connection marked for backup on every operation. This makes a
   // connection created in the desktop immediately effective without a
   // process restart or a second, hidden configuration source.
-  const backupDir = paths.backupDir ?? path.join(path.dirname(paths.vaultDir), 'backup');
+  const backupDir = paths.cacheDir ?? path.join(dataDir, 'cache');
+  const sourceInstanceId = deriveBackupSourceInstanceId(gatewayKeys.loadOrCreate('endpoint.key'));
   const backupService = new BackupService({
     ...(options.backup?.enabled ? { config: options.backup } : {}),
     backupDir,
+    gatewayDatabase,
+    keyStore: gatewayKeys,
+    sourceInstanceId,
     vaults: vaultRegistry,
     health,
     logger: health.loggerFor('backups', logger),
@@ -1213,33 +1231,50 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     },
   });
 
-  // The daemon-owned recovery job (issue #439 R1 wave 4). It runs the
-  // service-layer `recover()` verb with the LIVE gateway's own seams wired in:
-  // `adopt` mounts the recovered vault through the registry, and
-  // `resolveRemoteTier` hands back the mounted plane's `db.remote()` so the
-  // previews-first warm pass runs in-process. Progress persists under
-  // `storageDir` (metadata only — never the kit keyring or the api-key); `init`
-  // reconciles a job the previous daemon process died mid-flight (marks it
-  // interrupted + sweeps torn staging scratch).
-  const recoverJob = new RecoverJobRunner({
-    dir: storageDir,
-    vaultRoot: paths.vaultDir,
-    backupDir,
-    adopt: (vaultId) => {
-      vaultRegistry.adopt(vaultId);
-    },
-    resolveRemoteTier: (ctx) => vaultRegistry.get(ctx.vaultId)?.db.remote() ?? undefined,
-    logger: health.loggerFor('backups', logger),
-  });
-  await recoverJob.init();
-  const recoverHandler = makeRecoverRouteHandler({
-    job: recoverJob,
-    isFresh: () => vaultRegistry.isFresh(),
+  const foundingEnrollments =
+    options.devicePairing?.enrollments ?? EnrollmentStore.open(gatewayDatabase);
+  const foundingTickets =
+    options.devicePairing?.tickets ?? PairingTicketStore.open(gatewayDatabase);
+  const embeddedEndpointId = options.deviceAccess
+    ? undefined
+    : endpointIdForSecret(gatewayKeys.loadOrCreate('endpoint.key'));
+  const embeddedAccess: DeviceAccess | undefined = embeddedEndpointId
+    ? {
+        deviceKeyFor: () => embeddedEndpointId,
+        vaultsFor: (endpointId) => foundingEnrollments.vaultsFor(endpointId),
+      }
+    : undefined;
+  const effectiveDeviceAccess = options.deviceAccess ?? embeddedAccess;
+  const hostEndpointId = options.hostDeviceEndpointId ?? embeddedEndpointId;
+  if (hostEndpointId) {
+    const enrollHost = (vaultId: string): void => {
+      if (foundingEnrollments.get(hostEndpointId, vaultId)) return;
+      foundingEnrollments.enroll({
+        endpointId: hostEndpointId,
+        vaultId,
+        label: options.hostDeviceEndpointId ? 'desktop host' : 'gateway host',
+        platform: 'loopback',
+        trust: 'owner',
+      });
+    };
+    for (const vault of vaultRegistry.list()) enrollHost(vault.vaultId);
+  }
+  const foundingHandler = makeFoundingRouteHandler({
+    vaults: vaultRegistry,
+    enrollments: foundingEnrollments,
+    tickets: foundingTickets,
+    keys: gatewayKeys,
+    recoveryKit,
+    sourceInstanceId,
+    ...(effectiveDeviceAccess ? { deviceAccess: effectiveDeviceAccess } : {}),
+    ...(options.devicePairing?.endpointTicket
+      ? { endpointTicket: options.devicePairing.endpointTicket }
+      : {}),
   });
 
   const currentWorkspace = (): VaultWorkspace => vaultRegistry.currentWorkspace();
 
-  // Device prefs (`prefs.json`) + the request vault's ledger stores. The
+  // Device prefs (`gateway.db`) + the request vault's ledger stores. The
   // analytics/insights providers resolve the request's vault per call, so
   // every client sees its own vault's ledger (#289). Reuse the early prefs
   // handle opened for Resource mode so we don't re-read the same file.
@@ -1258,7 +1293,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     archiveBlobReader: (sha) => vaultRegistry.current().db.blobs.open(sha),
   });
 
-  // Per-turn prefs loader. Re-reads `prefs.json` every chat turn so a
+  // Per-turn prefs loader. Re-reads `gateway.db` every conversation turn so a
   // settings change lands without a restart.
   //
   // Runner selection is PER SUBSYSTEM: `runner.<subsystem>` pins one
@@ -1676,7 +1711,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
    * Mount one vault's host bundle: build it, load its app registry into the
    * runtime (identity enrollment included), then settle its scheduler. The
    * whole mount runs inside the vault's ambient scope; cached by vault id,
-   * so a vault created by the admin CLI mid-flight mounts on first request.
+   * so a vault created by a stopped-daemon maintenance command mounts on first
+   * request.
    */
   const hostFor = (plane: VaultPlane): Promise<VaultHost> => {
     const vaultId = plane.boot.vaultId;
@@ -2848,7 +2884,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     forRoutePrefixes(
       '/centraid/_gateway/info',
       makeGatewayInfoRouteHandler({
-        instanceId: instanceLease.instanceId,
+        instanceId,
+        status: () =>
+          vaultRegistry.isFresh() || recoveryKit.ceremonyIncomplete() ? 'uninitialized' : 'ready',
+        ...(options.devicePairing?.endpointId
+          ? { endpointId: options.devicePairing.endpointId }
+          : {}),
+        ...(options.devicePairing?.endpointTicket
+          ? { endpointTicket: options.devicePairing.endpointTicket }
+          : {}),
         capabilities: {
           webSessions: true,
           devicePairing: Boolean(options.devicePairing),
@@ -2867,32 +2911,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           ),
         ]
       : []),
-    // HTTP ticket redemption (issue #376): the direct-transport twin of
-    // the iroh `gw-pair` ceremony. Mounted only when the daemon wired its
-    // device-pairing stores; `serve.ts` marks its path bearer-free. A
-    // no-op passthrough (`return false`) on every other host.
     ...(options.devicePairing
       ? [
-          forRoutePrefixes(
-            '/centraid/_gateway/pair',
-            makePairRouteHandler({
-              vaults: vaultRegistry,
-              tickets: options.devicePairing.tickets,
-              enrollments: options.devicePairing.enrollments,
-              deviceTokens: options.devicePairing.deviceTokens,
-            }),
-          ),
           // Paired-device roster + revoke (issue #376): the wire twin of
-          // `cli/device-admin.ts`'s list/revoke, scoped to the caller's plane
-          // (device caller sees only its vaults; admin sees all). Mounted only
-          // when the daemon wired its device-pairing stores.
+          // `cli/device-admin.ts`'s list/revoke. Every request is scoped to
+          // the caller's proved EndpointId and persisted enrollments.
           forRoutePrefixes(
             '/centraid/_gateway/devices',
             makeDevicesRouteHandler({
               enrollments: options.devicePairing.enrollments,
-              deviceTokens: options.devicePairing.deviceTokens,
               tickets: options.devicePairing.tickets,
               endpointTicket: options.devicePairing.endpointTicket,
+              isUninitialized: () => vaultRegistry.isFresh(),
               onEndpointRevoked: options.devicePairing.onEndpointRevoked,
               vaultName: (id) => vaultRegistry.get(id)?.name,
               onRevoked: (rows) => {
@@ -3033,12 +3063,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     forRoutePrefixes(
       '/centraid/_vault',
       makeVaultRouteHandler(vaultRegistry, {
-        ...(options.deviceAccess ? { deviceAccess: options.deviceAccess } : {}),
+        ...(effectiveDeviceAccess ? { deviceAccess: effectiveDeviceAccess } : {}),
         onOutboxDecided: drainOutbox,
         // Storage-connection attach flow (issue #367 §C1/§C4/§C10): resolves
         // `blob_store.connectionId` and gates on the recovery-kit nudge.
         storageConnections,
         recoveryKit,
+        enrollments: foundingEnrollments,
+        gatewayDatabase,
+        keys: gatewayKeys,
+        fenceVaultForErase: (vaultId) => backupService.fenceVaultForErase(vaultId),
         // fix (this session): agent-grant approval can be the FIRST enrollment
         // touch for an automation's agent — resolve its real manifest name
         // the same way reconcileScheduler does, so `approveAgentGrant` never
@@ -3146,64 +3180,86 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   };
 
   const composedHandler: RouteHandler = async (req, res) => {
-    // Resolve the request's vault (issue #289): the device's enrollment set
-    // scopes what it may address; the header picks within it. No header →
-    // the device's sole enrollment; the ADMIN plane (the shared landlord
-    // token — loopback embed, or the daemon bearer with no per-device
-    // token, issue #376) carries no device key and is implicitly enrolled
-    // in every vault, defaulting to the oldest. The server never persists
-    // a pointer.
+    if (vaultRegistry.isFresh()) {
+      const url = new URL(req.url ?? '/', 'http://gateway.local');
+      const method = req.method ?? 'GET';
+      if (method === 'GET' && url.pathname === '/centraid/_vault/vaults') {
+        return sendJson(res, 200, { vaults: [] });
+      }
+      if (method === 'GET' && url.pathname === '/centraid/_apps') {
+        return sendJson(res, 200, []);
+      }
+      if (method === 'GET' && url.pathname === '/centraid/_automations') {
+        return sendJson(res, 200, { rows: [], errors: [] });
+      }
+      const gatewayLevel =
+        url.pathname === '/centraid/_gateway/info' ||
+        url.pathname.startsWith('/centraid/_gateway/health') ||
+        url.pathname.startsWith('/centraid/_logs') ||
+        url.pathname.startsWith('/centraid/_templates') ||
+        url.pathname.startsWith('/centraid/_agents');
+      if (gatewayLevel && (await prefixDispatch(req, res))) return true;
+      return sendJson(res, 409, {
+        error: 'uninitialized',
+        message: 'this gateway has no vault; initialize or restore one first',
+      });
+    }
+    if (recoveryKit.ceremonyIncomplete()) {
+      const url = new URL(req.url ?? '/', 'http://gateway.local');
+      const recoveryKitVerification =
+        url.pathname === '/centraid/_gateway/backup/kit' ||
+        url.pathname === '/centraid/_gateway/backup/kit-confirmed';
+      // The vault stays fail-closed, but the owner must still be able to
+      // re-open and verify the exact kit that clears this gate.
+      if (recoveryKitVerification && (await prefixDispatch(req, res))) return true;
+      return sendJson(res, 409, {
+        error: 'founding_verification_required',
+        message: 're-open and verify the recovery kit before using this vault',
+      });
+    }
+    // Resolve the request's vault (issue #289): a proved device enrollment
+    // scopes what it may address; the header picks within it. No identity is a
+    // hard refusal. Loopback embeds use the persisted host enrollment created
+    // above, not wildcard reach.
     //
-    // Device-key resolution has two sources, tried in order: the iroh
-    // endpoint-host's per-boot proof headers (`deviceAccess.deviceKeyFor`,
-    // trusted because only that in-process forwarder can stamp them), else
-    // the HTTP listener's own `AUTHED_DEVICE_HEADER` — stamped by
-    // `startRuntimeHttpServer`'s pluggable `authorizeBearer` AFTER it
-    // verifies the presented bearer names a per-device HTTP token (issue
-    // #376). Both headers are deleted from the client-supplied request
-    // before either can be trusted — a bearer-holder can never forge a
-    // device identity for itself.
-    // This header is authoritative only when stamped below from the proved
-    // enrollment. A client-provided copy may restrict itself but can never
-    // widen access, so discard it before device resolution.
+    // Device-key resolution has one host-owned seam. The daemon endpoint host
+    // accepts either its per-boot proved iroh headers or the explicitly
+    // injected desktop EndpointId on a kernel-observed loopback socket.
+    // Direct bearer/device-token identity was removed in #555.
     delete req.headers[COMPANION_GRANTS_HEADER];
     const rawHeader = req.headers[VAULT_HEADER];
     const requested = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
-    const authedHeader = req.headers[AUTHED_DEVICE_HEADER];
-    const authedDeviceKey =
-      typeof authedHeader === 'string' && authedHeader.length > 0 ? authedHeader : undefined;
-    const deviceKey = options.deviceAccess?.deviceKeyFor(req) ?? authedDeviceKey;
-    let vaultId: string;
-    if (deviceKey !== undefined) {
-      const enrolled = options.deviceAccess?.vaultsFor(deviceKey) ?? [];
-      if (enrolled.length === 0) {
-        return sendJson(res, 403, {
-          error: 'device_not_enrolled',
-          message: 'this device is not enrolled in any vault on this gateway',
-        });
-      }
-      if (requested !== undefined && !enrolled.includes(requested)) {
-        return sendJson(res, 403, {
-          error: 'vault_not_enrolled',
-          message: 'this device is not enrolled in the requested vault',
-        });
-      }
-      vaultId = requested ?? enrolled[0]!;
-    } else if (requested !== undefined) {
-      vaultId = requested;
-    } else {
-      vaultId = vaultRegistry.defaultVaultId();
+    const deviceKey = effectiveDeviceAccess?.deviceKeyFor(req);
+    if (deviceKey === undefined) {
+      return sendJson(res, 403, {
+        error: 'device_identity_required',
+        message: 'this request has no proved enrolled device identity',
+      });
     }
+    req.headers[AUTHED_DEVICE_HEADER] = deviceKey;
+    let vaultId: string;
+    const enrolled =
+      effectiveDeviceAccess?.vaultsFor(deviceKey) ?? foundingEnrollments.vaultsFor(deviceKey);
+    if (enrolled.length === 0) {
+      return sendJson(res, 403, {
+        error: 'device_not_enrolled',
+        message: 'this device is not enrolled in any vault on this gateway',
+      });
+    }
+    if (requested !== undefined && !enrolled.includes(requested)) {
+      return sendJson(res, 403, {
+        error: 'vault_not_enrolled',
+        message: 'this device is not enrolled in the requested vault',
+      });
+    }
+    vaultId = requested ?? enrolled[0]!;
     if (!vaultRegistry.get(vaultId)) {
       return sendJson(res, 404, {
         error: 'vault_not_found',
         message: `unknown vault "${vaultId}"`,
       });
     }
-    const enrollment =
-      deviceKey !== undefined
-        ? options.devicePairing?.enrollments.get(deviceKey, vaultId)
-        : undefined;
+    const enrollment = foundingEnrollments.get(deviceKey, vaultId);
     if (enrollment?.trust === 'readonly' && !readonlyRequestAllowed(req)) {
       return sendJson(res, 403, {
         error: 'readonly_device',
@@ -3222,7 +3278,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return runWithVaultContext(
       {
         vaultId,
-        ...(deviceKey !== undefined ? { deviceKey } : {}),
+        deviceKey,
         ...(enrollment?.grantProfile !== undefined
           ? { grantProfile: enrollment.grantProfile }
           : {}),
@@ -3238,11 +3294,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Publish the live origin to the unified chat runner so post-turn
     // webhook minting can build absolute `_centraid-hook` URLs.
     serverUrl = publicBaseUrl;
-
-    // Claim/renew the instance lease first — a fresh foreign lease should
-    // flip `instance` health red as early in boot as possible, well before
-    // any vault mounts (issue #351).
-    instanceLease.start();
 
     // A vault arriving after boot can introduce an earlier WAL RPO than the
     // currently armed timer and also needs its host/scheduler activated.
@@ -3339,13 +3390,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // write shipper + backup state, and the vault registry teardown below
     // closes the very planes it would touch.
     await backupService.stop();
-    // Flush any pending recovery-job progress write so a graceful shutdown
-    // leaves a durable record (a still-`running` job is reconciled to
-    // interrupted on the next `RecoverJobRunner.init`).
-    await recoverJob.flush();
-    // Release the lease so a fresh start (or another instance) sees an
-    // absent file instead of waiting out LEASE_FRESH_WINDOW_MS.
-    instanceLease.stop();
     // Drain detached automation lifecycle work (compiles, revisions) and any
     // in-flight interactive/steering turn before the vault databases close —
     // otherwise shutdown can land mid-`store.closeItem` or orphan an ACP
@@ -3363,6 +3407,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // the same process keeps its own).
     closeJournalConversationStores(journalFiles);
     performanceMonitor.close();
+    gatewayDatabase.close();
   };
 
   return {
@@ -3380,7 +3425,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     extraHandlers,
     composedHandler,
     webhookHandler,
-    recoverHandler,
+    foundingHandler,
     logs: logStore,
     start,
     stop,

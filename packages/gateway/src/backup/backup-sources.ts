@@ -3,8 +3,9 @@
  * "What a Centraid vault snapshot contains"): the WAL shipper's pinned base
  * clones first (each anchors that database's segment stream — issue #408;
  * the old `stageVaultDbs` VACUUM INTO staging is gone with the /1 format),
- * then the local blob CAS read in place, the code store's git bundle, and the
- * seal key. Remote-CAS configuration alone is not authenticated durability
+ * then the local blob CAS read in place and the code store's git bundle.
+ * Long-lived keys never enter a snapshot: the passphrase-wrapped recovery kit
+ * is their sole portable form. Remote-CAS configuration alone is not authenticated durability
  * evidence, so it never removes a blob from a restorable snapshot.
  */
 
@@ -16,9 +17,7 @@ import {
   conversationArchiveShas,
   liveBlobShas,
   readBlobStoreSettings,
-  readSealKeyFingerprint,
   ReplicaIndex,
-  sealKeyFileFor,
 } from '@centraid/vault';
 import { WAL_DB_FILES, type EngineLogger, type SourceEntry } from '@centraid/backup';
 import { GitError, run } from '../worktree-store/git.js';
@@ -135,31 +134,6 @@ async function bundleCodeStore(
   }
 }
 
-/**
- * The vault's sealed-columns DEK file (`keys/<vaultId>.sealkey`, sibling of
- * the vault dir) — included ONLY when this vault has actually sealed a
- * value.
- *
- * `openVaultDb` (`resolveSealKey`) mints the key FILE eagerly on every
- * on-disk vault's first open, whether or not anything is ever sealed — so
- * `existsSync(keyFile)` alone is true for essentially every real vault and
- * does not mean "this vault has secrets" (a bug caught while writing this
- * module's first real test, `backup-sources.test.ts`). The vault only
- * STAMPS a fingerprint into `core_vault.settings_json` the first time it
- * seals something (`stampSealKeyFingerprint`, schema/sealed.ts) — that
- * stamp, not raw file existence, is "has this vault ever sealed a value",
- * matching this function's doc comment and FORMAT.md's framing ("a snapshot
- * without it restores sealed columns as permanent ciphertext"). Backing up
- * an unused, never-referenced key file needlessly widens what a snapshot
- * carries, so we gate on the stamp.
- */
-function sealKeyEntry(plane: VaultPlane): SourceEntry | undefined {
-  if (readSealKeyFingerprint(plane.db.vault) === null) return undefined;
-  const keyFile = sealKeyFileFor(plane.dir);
-  if (!existsSync(keyFile)) return undefined;
-  return { path: 'seal.key', kind: 'seal-key', absolutePath: keyFile };
-}
-
 export interface AssembleOptions {
   plane: VaultPlane;
   /**
@@ -171,7 +145,8 @@ export interface AssembleOptions {
    * `bundleCodeStore`). Every other entry is read in place — db bases from the
    * shipper's pinned clones, blobs from the CAS, the seal key from custody — so
    * this is the only directory assembly writes to, and there is no ephemeral
-   * staging dir anymore.
+   * staging dir anymore. Secret keys are deliberately absent from this
+   * source list and travel only in the wrapped recovery kit.
    */
   bundleDir: string;
   /**
@@ -272,10 +247,6 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
   // when the code store's refs have not moved (see `bundleCodeStore`).
   const bundle = await bundleCodeStore(plane, bundleDir, log);
   if (bundle) entries.push(bundle);
-
-  // (d) Seal key, if this vault has ever sealed a value.
-  const sealKey = sealKeyEntry(plane);
-  if (sealKey) entries.push(sealKey);
 
   return entries;
 }

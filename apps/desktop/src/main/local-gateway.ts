@@ -6,11 +6,13 @@ import {
 } from '@centraid/gateway';
 import path from 'node:path';
 import {
-  gatewayDir,
   gatewayModelCatalogFile,
   gatewayPrefsFile,
   gatewayVaultDir,
+  LOCAL_GATEWAY_ID,
+  localGatewayDataDir,
 } from './gateway-paths.js';
+import { desktopGatewayKeyStore } from './gateway-secrets.js';
 import { setLocalGatewayInfoProvider } from './gateway-store.js';
 import { desktopSessionIdFor } from './app-sessions.js';
 import { loadPersistedSettings, templatesCacheDir } from './settings.js';
@@ -25,12 +27,8 @@ import {
   ensureDetachedGateway,
   getOrCreateDesktopOwnerId,
   preferEmbeddedGateway,
-  probeGatewayInfo,
-  readDaemonToken,
-  readOwnershipStamp,
   type DetachedGatewayHandle,
 } from './detached-gateway.js';
-import { canControl, DEFAULT_GATEWAY_PORT } from './detached-gateway-core.js';
 
 /**
  * Electron-flavored local-gateway lifecycle (issue #351 / #468).
@@ -59,6 +57,7 @@ export interface LocalGatewayRuntime {
   url: string;
   token: string;
   mode: 'embedded' | 'detached';
+  owned?: boolean;
   close(): Promise<void>;
   /** Compatible with gateway HealthRegistry.registerProbe for the tunnel probe. */
   health: {
@@ -68,8 +67,8 @@ export interface LocalGatewayRuntime {
     ) => void;
   };
   vaults: {
-    create: (name?: string) => { vaultId: string };
-    delete: (vaultId: string) => void;
+    create: (name?: string) => Promise<{ vaultId: string }>;
+    delete: (vaultId: string, name: string) => Promise<void>;
   };
 }
 
@@ -110,6 +109,30 @@ function ensureInfoProviderRegistered(): void {
 }
 
 function wrapEmbedded(handle: GatewayServeHandle): LocalGatewayRuntime {
+  const request = async (
+    pathname: string,
+    body: Record<string, unknown>,
+    vaultId?: string,
+  ): Promise<Record<string, unknown>> => {
+    const response = await fetch(new URL(pathname, `${handle.url}/`), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${handle.token}`,
+        'Content-Type': 'application/json',
+        ...(vaultId ? { 'x-centraid-vault': vaultId } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    const result = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) {
+      throw new Error(
+        typeof result.message === 'string'
+          ? result.message
+          : `vault operation failed (HTTP ${response.status})`,
+      );
+    }
+    return result;
+  };
   return {
     url: handle.url,
     token: handle.token,
@@ -117,12 +140,15 @@ function wrapEmbedded(handle: GatewayServeHandle): LocalGatewayRuntime {
     close: () => handle.close(),
     health: handle.health,
     vaults: {
-      create: (name?: string) => {
-        const info = handle.vaults.create(name);
-        return { vaultId: info.vaultId };
+      create: async (name?: string) => {
+        const result = await request('/centraid/_vault/vaults', { name });
+        if (typeof result.vaultId !== 'string') {
+          throw new Error('vault create returned no vaultId');
+        }
+        return { vaultId: result.vaultId };
       },
-      delete: (vaultId: string) => {
-        handle.vaults.delete(vaultId);
+      delete: async (vaultId: string, name: string) => {
+        await request('/centraid/_vault/vaults:erase', { name }, vaultId);
       },
     },
   };
@@ -133,6 +159,7 @@ function wrapDetached(handle: DetachedGatewayHandle): LocalGatewayRuntime {
     url: handle.url,
     token: handle.token,
     mode: 'detached',
+    owned: handle.owned,
     close: () => handle.close(),
     health: handle.health,
     vaults: handle.vaults,
@@ -141,17 +168,21 @@ function wrapDetached(handle: DetachedGatewayHandle): LocalGatewayRuntime {
 
 async function startEmbedded(gatewayId: string): Promise<LocalGatewayRuntime> {
   const settings = await loadPersistedSettings();
+  const dataDir = localGatewayDataDir();
   const handle = await serve({
     assistOAuth: assistOAuthFromEnvironment(process.env),
     previewCodec: createWasmImagePreviewCodec(),
     paths: {
+      dataDir,
       vaultDir: gatewayVaultDir(gatewayId),
+      cacheDir: path.join(dataDir, 'cache'),
       prefsFile: gatewayPrefsFile(gatewayId),
       modelCatalogFile: gatewayModelCatalogFile(gatewayId),
       templatesCacheDir: templatesCacheDir(gatewayId),
-      logsDir: path.join(gatewayDir(gatewayId), 'gateway-logs'),
+      logsDir: path.join(dataDir, 'gateway-logs'),
       ...(settings.remoteTemplatesUrl ? { remoteTemplatesUrl: settings.remoteTemplatesUrl } : {}),
     },
+    keyStore: desktopGatewayKeyStore(dataDir, LOCAL_GATEWAY_ID),
     sessionIdFor: desktopSessionIdFor,
     logTag: `local-gateway:${gatewayId}`,
   });
@@ -167,9 +198,9 @@ async function startEmbedded(gatewayId: string): Promise<LocalGatewayRuntime> {
   return wrapEmbedded(handle);
 }
 
-async function startDetached(gatewayId: string): Promise<LocalGatewayRuntime> {
+async function startDetached(): Promise<LocalGatewayRuntime> {
   const ownerId = await getOrCreateDesktopOwnerId();
-  const dataDir = gatewayDir(gatewayId);
+  const dataDir = localGatewayDataDir();
   // `replaceOwnedIfStale`: on launch, if we own a gateway that's still running
   // from an older build than the one on disk, respawn it instead of adopting
   // the stale daemon — so a rebuilt gateway (dev) or an updated app (prod)
@@ -221,7 +252,7 @@ export async function ensureLocalGateway(gatewayId: string): Promise<LocalGatewa
     if (preferEmbeddedGateway()) {
       return startEmbedded(gatewayId);
     }
-    return startDetached(gatewayId);
+    return startDetached();
   })()
     .then((handle) => {
       supervisor.delete(gatewayId);
@@ -294,22 +325,12 @@ export async function restartLocalGateway(gatewayId: string): Promise<void> {
   const inFlight = restarting.get(gatewayId);
   if (inFlight) return inFlight;
   const p = (async () => {
-    // H3: never restart a foreign (or probe-failed foreign) detached gateway.
-    if (!preferEmbeddedGateway()) {
-      const ownerId = await getOrCreateDesktopOwnerId();
-      const dataDir = gatewayDir(gatewayId);
-      const stamp = await readOwnershipStamp(dataDir);
-      const token = await readDaemonToken(dataDir);
-      const url = handles.get(gatewayId)?.url ?? `http://127.0.0.1:${DEFAULT_GATEWAY_PORT}`;
-      const probeOk = await probeGatewayInfo(url, token);
-      const decision = canControl(stamp, ownerId, { probeOk });
-      if (decision === 'foreign' || decision === 'probe-failed-refuse') {
-        throw new Error(
-          'This local gateway is owned by another process (CLI or service) and ' +
-            'will not be restarted from the desktop. Stop it from the shell or ' +
-            'leave it running.',
-        );
-      }
+    const current = handles.get(gatewayId);
+    if (current?.mode === 'detached' && current.owned !== true) {
+      throw new Error(
+        'This local gateway is held by another process and will not be restarted ' +
+          'from the desktop. Stop it from the shell or leave it running.',
+      );
     }
     supervisor.delete(gatewayId);
     nextAttemptAt.delete(gatewayId);
@@ -323,9 +344,7 @@ export async function restartLocalGateway(gatewayId: string): Promise<void> {
 }
 
 /**
- * The local gateway's vault registry — create/delete are admin acts (#289).
- * Embedded uses the in-process registry; detached shells out to the same
- * `centraid-gateway vault …` CLI (H6).
+ * Owner-scoped vault operations on the running local gateway.
  */
 function localVaults(gatewayId: string): LocalGatewayRuntime['vaults'] {
   const h = handles.get(gatewayId);
@@ -333,13 +352,19 @@ function localVaults(gatewayId: string): LocalGatewayRuntime['vaults'] {
   return h.vaults;
 }
 
-/** Create a vault on a running local gateway (admin act, #289). */
-export function createLocalVault(gatewayId: string, name?: string): { vaultId: string } {
-  const info = localVaults(gatewayId).create(name);
-  return { vaultId: info.vaultId };
+/** Create a vault as the enrolled local owner. */
+export async function createLocalVault(
+  gatewayId: string,
+  name?: string,
+): Promise<{ vaultId: string }> {
+  return localVaults(gatewayId).create(name);
 }
 
-/** Delete a vault on a running local gateway (admin act, #289). */
-export function deleteLocalVault(gatewayId: string, vaultId: string): void {
-  localVaults(gatewayId).delete(vaultId);
+/** Erase a vault through the typed-name owner ceremony. */
+export async function deleteLocalVault(
+  gatewayId: string,
+  vaultId: string,
+  name: string,
+): Promise<void> {
+  await localVaults(gatewayId).delete(vaultId, name);
 }

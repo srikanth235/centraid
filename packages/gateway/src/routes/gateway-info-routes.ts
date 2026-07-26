@@ -9,22 +9,27 @@
  * it also carries the server-reported runtime clock (`startedAt` /
  * `uptimeMs`).
  *
- * `instanceId` (issue #351) is the per-PROCESS uuid `GatewayInstanceLease`
- * mints at construction.
+ * `instanceId` is a per-process UUID, independent of the stable EndpointId.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { ROUTES, buildGatewayInfoPayload, type GatewayCapabilities } from '@centraid/protocol';
 import type { RouteHandler } from '../serve/build-gateway.js';
-import { sendJson } from './route-helpers.js';
+import { isLoopbackRequest, sendJson } from './route-helpers.js';
 
 const INFO_PATH = ROUTES.gatewayInfo;
 
 export interface GatewayInfoRouteOptions {
-  /** This process's `GatewayInstanceLease.instanceId` (issue #351). */
+  /** Ephemeral identity for this running process. */
   instanceId: string;
   /** Optional capability overrides (tests / reduced surfaces). */
   capabilities?: GatewayCapabilities;
+  /** Read live because the first vault may be founded after process boot. */
+  status?: () => 'uninitialized' | 'ready';
+  /** Stable identity can be derived before the endpoint joins the network. */
+  endpointId?: () => string | undefined;
+  /** Current relay/address data. Never publish this beyond the local host. */
+  endpointTicket?: () => string | undefined;
 }
 
 export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): RouteHandler {
@@ -37,6 +42,8 @@ export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): R
     if ((req.method ?? 'GET') !== 'GET') {
       return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
     }
+    const endpointId = options.endpointId?.();
+    const endpointTicket = isLoopbackRequest(req) ? options.endpointTicket?.() : undefined;
     return sendJson(
       res,
       200,
@@ -44,6 +51,9 @@ export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): R
         instanceId: options.instanceId,
         startedAt,
         uptimeMs: Date.now() - startedAt,
+        status: options.status?.() ?? 'ready',
+        ...(endpointId !== undefined ? { endpointId } : {}),
+        ...(endpointTicket !== undefined ? { endpointTicket } : {}),
         ...(options.capabilities ? { capabilities: options.capabilities } : {}),
       }),
     );

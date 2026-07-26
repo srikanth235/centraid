@@ -1,5 +1,13 @@
-export { createTunnelClient, startLocalProxy, tunnelRequest } from './client.js';
+export {
+  createTunnelClient,
+  endpointIdForSecret,
+  endpointTicketFor,
+  inspectEndpointTicket,
+  startLocalProxy,
+  tunnelRequest,
+} from './client.js';
 export type {
+  EndpointTicketHint,
   LocalProxyHandle,
   TunnelClient,
   TunnelClientOptions,
@@ -16,6 +24,12 @@ export type {
 } from './desktop-tunnel.js';
 export { DeviceStore, sanitizeDeviceName } from './device-store.js';
 export type { PairedDevice } from './device-store.js';
+export { EndpointSecretError, loadEndpointSecret } from './endpoint-secret.js';
+export type {
+  EndpointSecretCorruptionPolicy,
+  EndpointSecretPersistence,
+  LoadEndpointSecretOptions,
+} from './endpoint-secret.js';
 export { startGatewayEndpoint, GW_PAIR_ALPN } from './gateway-endpoint.js';
 export type {
   GatewayEndpointHandle,

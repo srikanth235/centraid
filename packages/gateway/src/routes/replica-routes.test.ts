@@ -28,7 +28,7 @@ async function fixture(
   handler: ReturnType<typeof makeReplicaRouteHandler>;
 }> {
   const dir = await tempDir(`replica-routes-${crypto.randomUUID()}-`);
-  const plane = openVaultPlane({ dir, logger, enableWalShipper: false });
+  const plane = openVaultPlane({ bootstrap: true, dir, logger, enableWalShipper: false });
   const enrollments = EnrollmentStore.open(path.join(dir, 'devices.json'));
   const vaults = { current: () => plane } as unknown as VaultRegistry;
   const handler = makeReplicaRouteHandler(vaults, {

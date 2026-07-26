@@ -1,87 +1,86 @@
-# Recovery: pairing / enrollment
+# Recovery: founding and enrollment
 
-When device pairing strands mid-ceremony. Ground truth for e2e: `tests/agent-e2e-pairing/AGENTS.md`.
+Use this runbook when a gateway has no vault, a pairing capability expired, or
+a device lost its private iroh identity. Ground truth for relay e2e remains
+`tests/agent-e2e-pairing/AGENTS.md`.
 
-## Ceremony sketch
+## Zero-vault founding
 
-1. Gateway running with iroh endpoint bound (`endpoint.json` published).
-2. Admin mints a one-time ticket (`pair` CLI / UI).
-3. Device redeems ticket (secret + endpoint); enrollment written to `devices.json`.
-4. Ticket burned; device uses durable enrollment / device token thereafter.
+1. Start `centraid-gateway serve` on the host. A healthy zero-vault gateway
+   reports `status: "uninitialized"` and keeps serving.
+2. From the host, run `centraid-gateway init-ticket --data-dir … --qr`. The
+   daemon must be running; the 10-minute capability is host-possession-gated,
+   one-time, and has no `vaultId`.
+3. Scan or paste it on the first phone/desktop. Choose Create or Restore.
+4. Create requires a recovery-kit password, delivery of the wrapped kit,
+   re-selecting and opening that file, and explicit loss consent. Home remains
+   unavailable until verification succeeds. The proved first EndpointId becomes
+   the vault's `owner`.
+5. Restore requires the wrapped kit, its password, and provider credentials.
+   Provider credentials are never stored in the kit. The recovered keyring and
+   vault DEK enter custody through `KeyStore`.
 
-### Headless VPS — form-factor map
+For headless automation that deliberately accepts no recovery kit, use
+`serve --init-vault <name>`. This is not the human first-run ceremony.
 
-| Client | Mint | Redeem |
-| --- | --- | --- |
-| **Desktop / PWA** | `centraid-gateway pair --data-dir … [--vault …]` | Paste one-line ticket into **Add gateway** |
-| **Phone** | Same command with **`--qr`** (UTF-8 terminal QR of the same token) | Scan QR **or** paste ticket under mobile **Settings → Gateway link** |
+## Ordinary enrollment
 
-`pair --json` is for automation (no QR on stdout). Desktop "Connect phone" QR remains a separate `centraid-pair` shape for phone↔desktop hub; VPS tickets are always `centraid-gw-pair`.
+Once a vault exists:
 
-## Files (daemon `dataDir` or gateway dir)
+1. An enrolled owner mints `centraid-gateway pair --data-dir … --vault …`
+   (`--qr` for a terminal QR).
+2. The device redeems the one-time capability over the iroh pairing ALPN.
+3. Redemption and the `gateway.db` enrollment commit atomically. New ordinary
+   devices receive `full` trust unless a narrower trust was requested.
+4. Subsequent requests are admitted by the enrolled EndpointId. There is no
+   direct-HTTP pairing route or per-device bearer.
 
-| File | Role |
+## Durable state
+
+| Location | Role |
 | --- | --- |
-| `endpoint.json` | Live endpoint id + dial ticket |
-| `endpoint-key.bin` | Gateway iroh secret (0600) — **do not delete** casually |
-| `pairing-tickets.json` | One-time tickets (hashes + TTL) |
-| `devices.json` | Enrollments |
-| `device-tokens.json` | HTTP bearer hashes |
-| `web-sessions.json` | PWA control sessions |
+| `gateway.db` | Exclusive process lock; enrollments, one-time tickets, web sessions, preferences, backup/storage control state |
+| `keys/endpoint.key` | Wrapped gateway iroh identity; losing it changes EndpointId and requires every device to re-pair |
+| Device secure storage | Per-connection private iroh key |
+| Desktop `connections.json` | Non-secret, device-local gateway registry keyed by EndpointId |
 
-## Symptoms
+Relay hints/tickets are refreshable address cache. They are not durable gateway
+identity and changing one must not create a second connection record.
 
-- QR / ticket paste fails with invalid or expired
-- Redeem succeeds once, second try fails (burned — expected)
-- Device cannot dial after gateway restart
-- "Works on loopback e2e, fails for real phone" (relay path)
+## Recovery steps
 
-## Steps — ticket expired or burned
+### Capability expired or was consumed
 
-1. **Mint a new ticket.** Do not try to revive burned secrets.
-2. Wrong secret burns the ticket — correct secret is useless afterward (hygiene invariant).
-3. Ensure clock skew is not huge (TTL).
+Mint a new capability. Never try to revive or edit the old value. Minting a new
+founding capability invalidates the previous one.
 
-## Steps — gateway has no endpoint yet
+### Device enrolled but cannot connect
 
-1. `pair` before `endpoint.json` exists always fails.
-2. Wait for serve readiness (`endpoint:` log line) or restart gateway and watch [logs.md](../logs.md).
-3. Airgapped machines may be slow/fail binding production relay config — expected limitation for full relay tests.
+1. Run `centraid-gateway lock-status --data-dir …`; distinguish a free lock
+   from a held-but-unresponsive daemon.
+2. Confirm the target vault still exists and the EndpointId remains enrolled
+   with `centraid-gateway devices list`.
+3. If the device secure store was cleared, revoke the old EndpointId and pair a
+   newly minted identity.
+4. For relay-only failures, run
+   `tests/agent-e2e-pairing/flows/cross-network-relay.mjs` and inspect the kept
+   test workspace.
 
-## Steps — device enrolled but cannot talk
+### Sole owner is lost
 
-1. Confirm gateway process is up (H1 policy: should stay up when desktop window closed — until detached lands, keep desktop/daemon running).
-2. Confirm vault id the device targets still exists.
-3. Check enrollment still in `devices.json`; revoke + re-pair if device key was wiped on the phone.
-4. After J4, secrets should live in secure storage — if the app was reinstalled, re-pair.
+Use the filesystem-anchored device CLI on the gateway host. Revoking the last
+owner requires typed confirmation because it leaves only this SSH/console
+recovery path.
 
-## Steps — revoke and start clean
+### Gateway identity is corrupt or lost
 
-1. Use `devices` CLI / UI revoke for the device id.
-2. Clear client pairing state (app storage / secure store).
-3. Mint fresh ticket; redeem once.
+Stop the daemon before custody work. A corrupt non-32-byte endpoint key refuses
+with recovery instructions. Restore the original `keys/endpoint.key`; deleting
+it deliberately mints a new identity and requires every device to re-pair.
 
-## Steps — corrupted enrollment files
+## Do not
 
-1. **Stop** the gateway.
-2. Back up `devices.json` / `pairing-tickets.json` before editing.
-3. Prefer CLI revoke/list over hand-JSON surgery.
-4. If `endpoint-key.bin` is lost, the gateway identity changes — **all devices must re-pair** (new endpoint id).
-
-## Steps — cross-network / relay only failures
-
-1. Loopback pairing e2e does **not** prove relay.
-2. Run `tests/agent-e2e-pairing/flows/cross-network-relay.mjs` (Docker) when touching tunnel dial code.
-3. On FAIL, inspect kept workspace under `runs/<runId>/`.
-
-## What not to do
-
-- Reuse a failed device identity for a later happy-path assertion in tests
-- Hand-merge two `devices.json` copies from different machines
-- Commit real tickets or endpoint secrets
-
-## Related
-
-- `packages/gateway/src/serve/pairing-store.ts`, `enrollment-store.ts`
-- `packages/tunnel`
-- [SECURITY.md](../../SECURITY.md) — trust model
+- Hand-edit `gateway.db` while the daemon holds its exclusive lock.
+- Persist pairing tickets as gateway identity.
+- Copy device credentials into the gateway data directory.
+- Commit real tickets, endpoint secrets, or recovery kits.

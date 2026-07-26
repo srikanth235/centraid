@@ -24,7 +24,7 @@ export type BackupProviderConfig = LocalBackupProviderConfig | RemoteBackupProvi
 
 export interface BackupConfig {
   enabled: boolean;
-  /** Default `<dataDir>/backup/keyring.json`. */
+  /** Backup keyring name in the gateway KeyStore (`keys/keyring.key`). */
   keyringPath?: string;
   provider: BackupProviderConfig;
 }

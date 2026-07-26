@@ -99,8 +99,6 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.invoke(Channel.GATEWAYS_RENAME, input),
   updateProfileMetadata: (input: { id: string; displayName?: string; avatarColor?: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_UPDATE_METADATA, input),
-  updateGatewayToken: (input: { id: string; token: string }) =>
-    ipcRenderer.invoke(Channel.GATEWAYS_UPDATE_TOKEN, input),
   setActiveGateway: (input: { id: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_SET_ACTIVE, input),
   // Active gateway's HTTP base URL + bearer token for the renderer's
@@ -109,13 +107,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   getGatewayAuth: () => ipcRenderer.invoke(Channel.GATEWAY_AUTH_GET),
   // Pairing-ticket redemption (issue #376): decode + dial/POST, add-or-reuse
   // the gateway profile, flip active gateway + active vault together.
-  redeemGatewayPairing: (input: {
-    ticket: string;
-    label?: string;
-    mode?: 'auto' | 'iroh' | 'http';
-    url?: string;
-    rememberDevice?: boolean;
-  }) => ipcRenderer.invoke(Channel.GATEWAY_PAIR_REDEEM, input),
+  redeemGatewayPairing: (input: { ticket: string; label?: string; rememberDevice?: boolean }) =>
+    ipcRenderer.invoke(Channel.GATEWAY_PAIR_REDEEM, input),
   // Preview a gateway's vault list WITHOUT switching to it (issue #376) —
   // the flat (gateway, vault) switcher.
   listGatewayVaults: (input: { gatewayId: string }) =>
@@ -124,7 +117,6 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // for url/ticket/ssh/gateway inputs. Never rejects.
   testGatewayConnection: (
     input:
-      | { kind: 'url'; url: string; token?: string }
       | { kind: 'ticket'; ticket: string }
       | { kind: 'ssh'; destination: string; dataDir?: string }
       | { kind: 'gateway'; gatewayId: string },
@@ -187,9 +179,10 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // the active gateway. A pure client-side pointer flip — no server call.
   setActiveVault: (input: { vaultId?: string }) =>
     ipcRenderer.invoke(Channel.VAULTS_SET_ACTIVE, input),
-  // Vault create/delete — local gateway only (admin plane; remote is server CLI).
+  // Owner-scoped vault create/erase on the local gateway.
   createVault: (input: { name?: string }) => ipcRenderer.invoke(Channel.VAULTS_CREATE, input),
-  deleteVault: (input: { vaultId: string }) => ipcRenderer.invoke(Channel.VAULTS_DELETE, input),
+  deleteVault: (input: { vaultId: string; name: string }) =>
+    ipcRenderer.invoke(Channel.VAULTS_DELETE, input),
   // Notify-only: call after a metadata-only `updateVault()` HTTP call
   // succeeds so every window's `onVaultMetadataChanged` listeners (sidebar
   // head) re-read immediately instead of waiting on an unrelated event.

@@ -33,9 +33,10 @@
 // only, and the product says so out loud when the key is absent at open.
 
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { renameSync } from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+import { KeyStore } from './key-store.js';
 
 /**
  * The registry: logical entity → its sealed columns. Sealing is per-column —
@@ -167,33 +168,29 @@ export function ephemeralSealKey(): Buffer {
  * file (bad length) always throws — that is corruption, never a fresh vault.
  */
 export function loadSealKey(file: string): Buffer | null {
-  try {
-    const key = readFileSync(file);
-    if (key.length === KEY_BYTES) return key;
-    throw new Error(`seal key at ${file} is ${key.length} bytes, expected ${KEY_BYTES}`);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    return null;
-  }
+  return keyStoreForFile(file).load(path.basename(file));
 }
 
 /** Persist a DEK at `file` (0600, parent dirs created). */
 export function writeSealKeyFile(file: string, key: Buffer): void {
-  mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, key, { mode: 0o600 });
+  keyStoreForFile(file).store(path.basename(file), key);
 }
 
 /** Mint (0600) a fresh DEK at `file`. Creation is deliberate, never a fallback. */
 export function createSealKey(file: string): Buffer {
-  const key = randomBytes(KEY_BYTES);
-  writeSealKeyFile(file, key);
-  return key;
+  return keyStoreForFile(file).create(path.basename(file));
 }
 
-/** Deterministic key path for a vault directory: the `keys/` sibling. */
+/** Deterministic key path for `<dataDir>/vault/<id>`: `<dataDir>/keys/<id>.sealkey`. */
 export function sealKeyFileFor(vaultDir: string): string {
-  const parent = path.dirname(path.resolve(vaultDir));
-  return path.join(parent, 'keys', `${path.basename(path.resolve(vaultDir))}.sealkey`);
+  const resolved = path.resolve(vaultDir);
+  const vaultRoot = path.dirname(resolved);
+  const dataRoot = path.basename(vaultRoot) === 'vault' ? path.dirname(vaultRoot) : vaultRoot;
+  return path.join(dataRoot, 'keys', `${path.basename(resolved)}.sealkey`);
+}
+
+function keyStoreForFile(file: string): KeyStore {
+  return new KeyStore(path.dirname(path.resolve(file)));
 }
 
 /**

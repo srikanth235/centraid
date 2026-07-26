@@ -85,14 +85,15 @@ describe('blobSweepBackoff (pure)', () => {
 describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
   function openPlane(
     dir: string,
-    opts: { endpoint: string; leaseConflicted: () => boolean },
+    opts: { endpoint: string; skipOrphanDelete: () => boolean },
   ): VaultPlane {
     const plane = openVaultPlane({
+      bootstrap: true,
       dir,
       logger: silentLogger,
       ownerName: 'Priya',
       sweepIntervalMs: 25, // fast tick for the test
-      leaseConflicted: opts.leaseConflicted,
+      skipOrphanDelete: opts.skipOrphanDelete,
       s3Credentials: async () => ({ accessKeyId: 'AKIA_TEST', secretAccessKey: 'secret_test' }),
     });
     updateBlobStoreSettings(plane.db, {
@@ -112,7 +113,7 @@ describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
     const server = await startServer();
     const dir = await tempDir();
     let conflicted = true;
-    const plane = openPlane(dir, { endpoint: server.url, leaseConflicted: () => conflicted });
+    const plane = openPlane(dir, { endpoint: server.url, skipOrphanDelete: () => conflicted });
 
     const orphanSha = crypto.createHash('sha256').update('lease-orphan').digest('hex');
     server.putObjectDirect('b', `p/blobs/sha256/${orphanSha}`, Buffer.from('orphan'));
@@ -128,7 +129,7 @@ describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
   test('sweep is resumable after a restart — a fresh VaultPlane over the same dir picks the backlog straight back up', async () => {
     const server = await startServer();
     const dir = await tempDir();
-    const plane1 = openPlane(dir, { endpoint: server.url, leaseConflicted: () => false });
+    const plane1 = openPlane(dir, { endpoint: server.url, skipOrphanDelete: () => false });
 
     // Ingest local bytes but stop BEFORE the sweep clock (25ms) has a chance
     // to replicate them — proves the backlog survives as on-disk custody
@@ -148,7 +149,7 @@ describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
 
     // A brand-new VaultPlane instance (simulating a gateway restart) over
     // the SAME directory: nothing in-process carried over, only the files.
-    const plane2 = openPlane(dir, { endpoint: server.url, leaseConflicted: () => false });
+    const plane2 = openPlane(dir, { endpoint: server.url, skipOrphanDelete: () => false });
     plane2.start();
     await until(async () => (await makeS3List(server)).includes(sha), 3000);
     expect(plane2.db.blobs.hasSync(sha)).toBe(true);
@@ -157,7 +158,7 @@ describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
   test('a retained-snapshot GC root survives the sweep; a genuine orphan does not (issue #436 §6)', async () => {
     const server = await startServer();
     const dir = await tempDir();
-    const plane = openPlane(dir, { endpoint: server.url, leaseConflicted: () => false });
+    const plane = openPlane(dir, { endpoint: server.url, skipOrphanDelete: () => false });
 
     const pinnedSha = crypto.createHash('sha256').update('snapshot-referenced').digest('hex');
     const straySha = crypto.createHash('sha256').update('true-orphan').digest('hex');
@@ -176,7 +177,7 @@ describe('VaultPlane blob sweep — real S3, lease gate + resumability', () => {
   test('when the snapshot-roots supplier throws, orphan-delete fails safe — nothing is deleted (issue #436 §6)', async () => {
     const server = await startServer();
     const dir = await tempDir();
-    const plane = openPlane(dir, { endpoint: server.url, leaseConflicted: () => false });
+    const plane = openPlane(dir, { endpoint: server.url, skipOrphanDelete: () => false });
 
     const orphanSha = crypto.createHash('sha256').update('unprovable-reachability').digest('hex');
     server.putObjectDirect('b', `p/blobs/sha256/${orphanSha}`, Buffer.from('orphan'));

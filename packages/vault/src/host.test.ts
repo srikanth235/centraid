@@ -2,11 +2,11 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { afterEach, expect, test } from 'vitest';
 import { openVaultDb, type VaultDb } from './db.js';
 import { createGateway } from './gateway/gateway.js';
-import { createGrant } from './bootstrap.js';
+import { bootstrapVault, createGrant } from './bootstrap.js';
 import {
   ensureAgentEnrolled,
   ensureAppEnrolled,
-  ensureVaultBootstrapped,
+  recoverVaultBootstrap,
   listActiveAgentGrants,
   listActiveGrants,
   listEnrolledAgents,
@@ -21,16 +21,17 @@ const cleanups: (() => void)[] = [];
 afterEach(() => {
   while (cleanups.length > 0) cleanups.pop()?.();
 });
-test('ensureVaultBootstrapped: first boot creates, second boot recovers the same identity', () => {
+test('founding bootstraps explicitly and recovery never creates an absent vault', () => {
   const dir = tempDirSync();
   const first = openVaultDb({ dir });
-  const boot1 = ensureVaultBootstrapped(first, { ownerName: 'Priya' });
-  expect(boot1.fresh).toBe(true);
+  const boot1 = bootstrapVault(first, { ownerName: 'Priya' });
   first.close();
 
   const second = openVaultDb({ dir });
   cleanups.push(() => second.close());
-  const boot2 = ensureVaultBootstrapped(second, { ownerName: 'ignored on recovery' });
+  const boot2 = recoverVaultBootstrap(second);
+  expect(boot2).toBeDefined();
+  if (!boot2) throw new Error('expected recovered vault');
   expect(boot2.fresh).toBe(false);
   expect(boot2.vaultId).toBe(boot1.vaultId);
   expect(boot2.ownerPartyId).toBe(boot1.ownerPartyId);
@@ -42,12 +43,16 @@ test('ensureVaultBootstrapped: first boot creates, second boot recovers the same
   const cred = { kind: 'device', deviceId: boot2.deviceId, deviceKey: boot2.deviceKey } as const;
   const result = gw.read(cred, { entity: 'core.party', purpose: 'dpv:ServiceProvision' });
   expect(result.rows.length).toBeGreaterThan(0);
+
+  const empty = openVaultDb();
+  cleanups.push(() => empty.close());
+  expect(recoverVaultBootstrap(empty)).toBeUndefined();
 });
 
 test('ensureAppEnrolled is idempotent per host-side name', () => {
   const db: VaultDb = openVaultDb();
   cleanups.push(() => db.close());
-  ensureVaultBootstrapped(db, { ownerName: 'Priya' });
+  bootstrapVault(db, { ownerName: 'Priya' });
   const first = ensureAppEnrolled(db, 'expense-tracker');
   expect(first.created).toBe(true);
   const again = ensureAppEnrolled(db, 'expense-tracker');
@@ -69,7 +74,7 @@ test('ensureAppEnrolled is idempotent per host-side name', () => {
 test('listActiveGrants surfaces purpose notation and scopes', () => {
   const db = openVaultDb();
   cleanups.push(() => db.close());
-  const boot = ensureVaultBootstrapped(db, { ownerName: 'Priya' });
+  const boot = bootstrapVault(db, { ownerName: 'Priya' });
   const app = ensureAppEnrolled(db, 'calendar');
   expect(listActiveGrants(db, app.appId)).toEqual([]);
   const purpose = purposeConceptId(db, 'dpv:ServiceProvision');
@@ -95,7 +100,7 @@ test('listActiveGrants surfaces purpose notation and scopes', () => {
 test('ensureAgentEnrolled is idempotent per host-side name; grants match on the agent party', () => {
   const db = openVaultDb();
   cleanups.push(() => db.close());
-  const boot = ensureVaultBootstrapped(db, { ownerName: 'Priya' });
+  const boot = bootstrapVault(db, { ownerName: 'Priya' });
   const gw = createGateway(db);
   registerTaskCommands(gw);
 
@@ -151,7 +156,7 @@ test('ensureAgentEnrolled is idempotent per host-side name; grants match on the 
 test('ensureAgentEnrolled humanizes a raw enrollment key into a readable display name, and self-heals a stale one (issue: parked-invocation trust legibility)', () => {
   const db = openVaultDb();
   cleanups.push(() => db.close());
-  ensureVaultBootstrapped(db, { ownerName: 'Priya' });
+  bootstrapVault(db, { ownerName: 'Priya' });
 
   // No caller has the automation's real manifest name yet — the fallback
   // beats a raw id slug (the exact complaint: Approvals showed

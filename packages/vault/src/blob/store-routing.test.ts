@@ -10,7 +10,8 @@ import http from 'node:http';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { openVaultDb, type VaultDb } from '../db.js';
-import { ensureVaultBootstrapped, updateBlobStoreSettings } from '../host.js';
+import { bootstrapVault } from '../bootstrap.js';
+import { updateBlobStoreSettings } from '../host.js';
 import { BLOB_CACHE_DDL } from '../schema/blob.js';
 import { ReplicaIndex } from './replica-index.js';
 import { stageBlobBytes } from './staging.js';
@@ -128,7 +129,7 @@ function derivedKey(sha: string): string {
 test('derived-capable target: every derivative lands under the derived prefix, none under cas', async () => {
   const db = openVaultDb({ s3Credentials: CREDS });
   try {
-    ensureVaultBootstrapped(db, { ownerName: 'Routing Owner' });
+    bootstrapVault(db, { ownerName: 'Routing Owner' });
     updateBlobStoreSettings(db, {
       blob_store: {
         kind: 's3',
@@ -181,7 +182,7 @@ test('derived-capable target: every derivative lands under the derived prefix, n
 test('an evicted derivative reads back through the derived prefix', async () => {
   const db = openVaultDb({ s3Credentials: CREDS });
   try {
-    ensureVaultBootstrapped(db, { ownerName: 'Read Owner' });
+    bootstrapVault(db, { ownerName: 'Read Owner' });
     updateBlobStoreSettings(db, {
       blob_store: {
         kind: 's3',
@@ -219,7 +220,7 @@ test('an evicted derivative reads back through the derived prefix', async () => 
 test('non-capable target (no derivedPrefix): behavior unchanged, everything under cas', async () => {
   const db = openVaultDb({ s3Credentials: CREDS });
   try {
-    ensureVaultBootstrapped(db, { ownerName: 'Legacy Owner' });
+    bootstrapVault(db, { ownerName: 'Legacy Owner' });
     updateBlobStoreSettings(db, {
       blob_store: { kind: 's3', endpoint: fake.url, bucket: 'test-bucket', prefix: CAS_PREFIX },
     });

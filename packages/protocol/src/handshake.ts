@@ -48,6 +48,18 @@ export interface GatewayInfo {
   startedAt?: number;
   /** Process uptime ms — additive runtime clock. */
   uptimeMs?: number;
+  /**
+   * COMPAT(#555): additive boot state. Older peers omit it and are treated
+   * as ready because they always bootstrapped a vault.
+   */
+  status?: 'uninitialized' | 'ready';
+  /** COMPAT(#555): stable gateway transport identity, independent of its address. */
+  endpointId?: string;
+  /**
+   * COMPAT(#555): current dial address. Hosts expose this only to loopback
+   * callers; clients must never persist it as gateway identity.
+   */
+  endpointTicket?: string;
 }
 
 export type HandshakeResult =
@@ -148,6 +160,11 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
       ...(typeof info.instanceId === 'string' ? { instanceId: info.instanceId } : {}),
       ...(typeof info.startedAt === 'number' ? { startedAt: info.startedAt } : {}),
       ...(typeof info.uptimeMs === 'number' ? { uptimeMs: info.uptimeMs } : {}),
+      ...(info.status === 'uninitialized' || info.status === 'ready'
+        ? { status: info.status }
+        : { status: 'ready' as const }),
+      ...(typeof info.endpointId === 'string' ? { endpointId: info.endpointId } : {}),
+      ...(typeof info.endpointTicket === 'string' ? { endpointTicket: info.endpointTicket } : {}),
     },
   };
 }
@@ -195,6 +212,9 @@ export function buildGatewayInfoPayload(input: {
   instanceId: string;
   startedAt: number;
   uptimeMs: number;
+  status?: 'uninitialized' | 'ready';
+  endpointId?: string;
+  endpointTicket?: string;
   capabilities?: GatewayCapabilities;
 }): GatewayInfo {
   return {
@@ -205,6 +225,9 @@ export function buildGatewayInfoPayload(input: {
     instanceId: input.instanceId,
     startedAt: input.startedAt,
     uptimeMs: input.uptimeMs,
+    status: input.status ?? 'ready',
+    ...(input.endpointId !== undefined ? { endpointId: input.endpointId } : {}),
+    ...(input.endpointTicket !== undefined ? { endpointTicket: input.endpointTicket } : {}),
     capabilities: input.capabilities ?? { ...DEFAULT_GATEWAY_CAPABILITIES },
   };
 }

@@ -14,7 +14,7 @@ import styles from './ConnectFlow.module.css';
 // panels are pure presentation over `connectFlow-core.ts`'s state/reducer,
 // no logic lives here that isn't also in ConnectFlow.tsx's effects.
 
-type Field = 'ticket' | 'label' | 'url' | 'sshDestination' | 'sshDataDir';
+type Field = 'ticket' | 'label' | 'sshDestination' | 'sshDataDir';
 
 function fieldSetter(
   dispatch: Dispatch<ConnectFlowEvent>,
@@ -59,33 +59,6 @@ export function GatewayDetailsStep({
           onChange={setField('label')}
         />
       </label>
-      <details
-        className={styles.advanced}
-        open={state.advancedOpen}
-        onToggle={(e) =>
-          dispatch({ open: (e.target as HTMLDetailsElement).open, type: 'setAdvancedOpen' })
-        }
-      >
-        <summary className={styles.advancedSummary}>Connect by URL</summary>
-        <div className={styles.advancedBody}>
-          <div className={styles.hint}>
-            For a gateway reachable by a direct URL (Tailscale, a reverse proxy, …) instead of the
-            default iroh discovery. The pairing ticket above is still redeemed over that URL — it
-            mints a per-device token; there is no admin-token paste.
-          </div>
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Gateway URL</span>
-            <input
-              className={styles.input}
-              type="text"
-              placeholder="https://gateway.example.com"
-              autoComplete="off"
-              value={state.url}
-              onChange={setField('url')}
-            />
-          </label>
-        </div>
-      </details>
       <label className={styles.rememberRow}>
         <input
           type="checkbox"

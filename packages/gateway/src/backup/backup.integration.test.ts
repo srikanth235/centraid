@@ -20,14 +20,20 @@ import crypto, { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  loadKeyring,
   openLocalBackupProvider,
   openManifest,
   SNAPSHOT_FORMAT_V2,
+  validateKeyring,
   verifySnapshot,
   type BackupProvider,
 } from '@centraid/backup';
-import { currentReplicaLogState, sealAad, unsealValue, updateBackupPolicy } from '@centraid/vault';
+import {
+  currentReplicaLogState,
+  KeyStore,
+  sealAad,
+  unsealValue,
+  updateBackupPolicy,
+} from '@centraid/vault';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
 import { HealthRegistry } from '../serve/health-registry.js';
@@ -37,6 +43,7 @@ import { WorktreeStore } from '../worktree-store/worktree-store.js';
 import { run } from '../worktree-store/git.js';
 import { commandBackup } from '../cli/backup-admin.js';
 import { daemonLayoutFor } from '../cli/paths.js';
+import { loadBackupState, saveBackupState } from './backup-state.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -197,8 +204,15 @@ interface Harness {
 
 let h: Harness;
 
+function harnessKeyring() {
+  const bytes = new KeyStore(path.join(h.dataDir, 'keys')).export('keyring.key');
+  if (!bytes) throw new Error('fixture keyring missing');
+  return validateKeyring(JSON.parse(bytes.toString('utf8')));
+}
+
 function reopen(): void {
   h.registry = openVaultRegistry({ rootDir: h.vaultDir, logger: silentLogger, ownerName: 'Priya' });
+  if (h.registry.isFresh()) h.registry.create('Personal');
   const vaultId = h.vaultId || h.registry.defaultVaultId();
   h.plane = h.registry.get(vaultId)!;
   h.vaultId = vaultId;
@@ -371,7 +385,7 @@ test('CLI restore materializes a fresh dest, and adopting it as a live vault mou
   expect(result.entries).toContain('vault.db');
   expect(result.entries).toContain('journal.db');
   expect(result.entries).toContain('apps.bundle');
-  expect(result.entries).toContain('seal.key');
+  expect(result.entries).not.toContain('seal.key');
   expect(existsSync(path.join(destDir, 'RESTORE_QUARANTINE.json'))).toBe(true);
   h.restoredDestDir = destDir;
   const restoredDb = new DatabaseSync(path.join(destDir, 'vault.db'));
@@ -395,11 +409,10 @@ test('CLI restore materializes a fresh dest, and adopting it as a live vault mou
     path.join(destDir, 'RESTORE_QUARANTINE.json'),
     path.join(adoptedDir, 'RESTORE_QUARANTINE.json'),
   );
-  await fs.mkdir(path.join(freshRoot, 'keys'), { recursive: true });
-  await fs.copyFile(
-    path.join(destDir, 'seal.key'),
-    path.join(freshRoot, 'keys', `${h.vaultId}.sealkey`),
-  );
+  const sourceKeys = new KeyStore(path.join(h.dataDir, 'keys'));
+  const restoredSealKey = sourceKeys.export(`${h.vaultId}.sealkey`);
+  if (!restoredSealKey) throw new Error('source seal key missing');
+  new KeyStore(path.join(freshRoot, 'keys')).import(`${h.vaultId}.sealkey`, restoredSealKey);
   await fs.mkdir(path.join(adoptedDir, 'code'), { recursive: true });
   await run(
     [
@@ -497,13 +510,9 @@ test('fencing for real: a second BackupService registers gen+1; the first servic
   // "read currentGeneration from the target and register the next snapshot
   // with currentGeneration + 1" means in state-file terms.
   const backupDir2 = await tempDir('e2e-backupdir-takeover');
-  await fs.copyFile(path.join(h.backupDir, 'keyring.json'), path.join(backupDir2, 'keyring.json'));
-  const state = JSON.parse(await fs.readFile(path.join(h.backupDir, 'state.json'), 'utf8')) as {
-    targets: Record<string, { generation: number }>;
-    sourceInstanceId: string;
-  };
+  const state = await loadBackupState(h.backupDir);
   state.targets[h.vaultId]!.generation = beforeGen + 1;
-  await fs.writeFile(path.join(backupDir2, 'state.json'), JSON.stringify(state));
+  await saveBackupState(backupDir2, state);
 
   const health2 = new HealthRegistry();
   const serviceB = new BackupService({
@@ -546,7 +555,7 @@ test('verify catches real damage: a deleted chunk is reported missing, a flipped
   // Resolve the two victim chunks from the newest manifest's own public
   // chunkIndex instead, so they are guaranteed to be in scope.
   const provider = openLocalBackupProvider({ rootDir: h.providerDir });
-  const keyring = await loadKeyring(path.join(h.backupDir, 'keyring.json'));
+  const keyring = harnessKeyring();
   const newestRow = (await provider.listSnapshots(targetId))[0]!;
   const store = await provider.openDataPlane(targetId, 'backup', 'read');
   const manifestBytes = await store.get(newestRow.manifestKey);
@@ -588,6 +597,7 @@ test('restore refusal: a registered snapshot with a newer vaultUserVersion refus
     logger: silentLogger,
     ownerName: 'Alex',
   });
+  registry.create('Personal');
   const vaultId = registry.defaultVaultId();
   const health = new HealthRegistry();
   const config: BackupConfig = {

@@ -61,6 +61,7 @@ describe('normalizeProfile', () => {
     id: 'gw-1',
     kind: 'remote' as const,
     label: 'Home',
+    endpointId: 'gw-1',
     createdAt: '2026-01-01T00:00:00.000Z',
   };
 
@@ -76,36 +77,29 @@ describe('normalizeProfile', () => {
     expect(p?.avatarColor).toBe(defaultAvatarColor('gw-1'));
   });
 
-  it('preserves valid optional fields and drops invalid transport/ssh', () => {
+  it('preserves valid optional fields and drops invalid ssh', () => {
     const p = normalizeProfile('gw-1', {
       ...base,
       displayName: 'Family',
       avatarColor: '#E5734A',
-      transport: 'iroh',
-      endpointTicket: 'ticket',
-      endpointId: 'ep',
+      relayHint: 'https://relay.example',
       rememberDevice: true,
       ssh: { destination: 'box' },
-      url: 'https://x',
     });
     expect(p).toMatchObject({
       displayName: 'Family',
       avatarColor: '#E5734A',
-      transport: 'iroh',
-      endpointTicket: 'ticket',
-      endpointId: 'ep',
+      endpointId: 'gw-1',
+      relayHint: 'https://relay.example',
       rememberDevice: true,
       ssh: { destination: 'box' },
-      url: 'https://x',
     });
 
     const bad = normalizeProfile('gw-1', {
       ...base,
-      transport: 'weird' as never,
       ssh: { destination: '' },
       avatarColor: 'nope',
     });
-    expect(bad?.transport).toBeUndefined();
     expect(bad?.ssh).toBeUndefined();
     expect(bad?.avatarColor).toBe(defaultAvatarColor('gw-1'));
   });
@@ -134,39 +128,30 @@ describe('sortGatewayProfiles', () => {
 });
 
 describe('validateAddGatewayFields', () => {
-  it('requires label and exactly one of url / endpointTicket', () => {
-    expect(validateAddGatewayFields({ label: '  ' })).toMatchObject({
+  it('requires a label and valid EndpointId', () => {
+    expect(validateAddGatewayFields({ label: '  ', endpointId: 'gw-1' })).toMatchObject({
       ok: false,
       code: 'invalid_input',
     });
-    expect(validateAddGatewayFields({ label: 'G' })).toMatchObject({
+    expect(validateAddGatewayFields({ label: 'G', endpointId: '' })).toMatchObject({
       ok: false,
-      message: expect.stringContaining('URL or an iroh'),
+      message: expect.stringContaining('EndpointId'),
     });
-    expect(
-      validateAddGatewayFields({ label: 'G', url: 'https://x', endpointTicket: 't' }),
-    ).toMatchObject({ ok: false, message: expect.stringContaining('not both') });
   });
 
-  it('trims and derives transport + displayName', () => {
-    expect(validateAddGatewayFields({ label: '  Home  ', url: '  https://x  ' })).toEqual({
-      ok: true,
-      label: 'Home',
-      url: 'https://x',
-      transport: 'direct',
-      displayName: 'Home',
-    });
+  it('trims the stable identity, relay cache, and display name', () => {
     expect(
       validateAddGatewayFields({
-        label: 'Home',
-        endpointTicket: 'tik',
+        label: '  Home  ',
+        endpointId: '  abc123  ',
+        relayHint: '  https://relay.example  ',
         displayName: '  Family  ',
       }),
     ).toEqual({
       ok: true,
       label: 'Home',
-      endpointTicket: 'tik',
-      transport: 'iroh',
+      endpointId: 'abc123',
+      relayHint: 'https://relay.example',
       displayName: 'Family',
     });
   });

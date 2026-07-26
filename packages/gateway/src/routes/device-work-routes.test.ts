@@ -35,6 +35,7 @@ async function fixture(options: { capability?: 'poster' | 'transcript' } = {}): 
   const dir = await tempDir(`device-work-${crypto.randomUUID()}-`);
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   const plane = openVaultPlane({
+    bootstrap: true,
     dir: path.join(dir, 'vault'),
     logger: silentLogger,
     ownerName: 'Priya',

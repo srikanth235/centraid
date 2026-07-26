@@ -1,6 +1,6 @@
 /*
- * `centraid-gateway pair` / `centraid-gateway devices` — the ADMIN plane
- * for device enrollment (issue #289 phase 2).
+ * `centraid-gateway pair` / `centraid-gateway devices` — stopped-daemon
+ * filesystem maintenance for device enrollment (issue #289 phase 2).
  *
  * SSH is the bootstrap channel for headless gateways: the landlord runs
  * `pair --vault <name>` on the box, gets a one-line ticket (gateway
@@ -9,34 +9,25 @@
  * gateway"; phones scan `pair --qr` (terminal block QR of the same token)
  * or paste it in Settings. `devices add` is the direct shortcut when the
  * admin already knows a device's EndpointId (the desktop shows its own in
- * Settings). Both write files the daemon re-reads live — no restart.
- *
- * The SAME ticket also redeems over plain HTTP (`POST
- * /centraid/_gateway/pair`, `routes/pair-routes.ts`, issue #376) for a
- * device that cannot dial iroh — that path mints an `EnrollmentStore` row
- * exactly like `devices add` (its `endpointId` is a synthetic
- * `http:<uuid>`), plus a per-device HTTP token. `devices list` therefore
- * already shows HTTP-redeemed devices; `devices revoke` cascades into
- * their token too (a device key with no enrollments left anywhere loses
- * the token that rode it).
+ * Settings). Mutations take gateway.db's exclusive lock and refuse while the
+ * daemon is running. Tickets redeem only through the iroh ceremony, where the
+ * joining device proves the EndpointId persisted in its enrollment.
  */
 
-import fs from 'node:fs';
+import { handshakeGateway } from '@centraid/protocol';
+import { endpointIdForSecret } from '@centraid/tunnel';
 import {
   openVaultRegistry,
   VaultRegistryError,
   type VaultRegistry,
 } from '../serve/vault-registry.js';
 import { EnrollmentStore, type GrantableTrust } from '../serve/enrollment-store.js';
-import {
-  PairingTicketStore,
-  encodePairingTicket,
-  DEFAULT_TICKET_TTL_MS,
-} from '../serve/pairing-store.js';
-import { DeviceTokenStore } from '../serve/device-token-store.js';
-import { daemonLayoutFor, type DaemonLayout } from './paths.js';
+import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
+import { daemonLayoutFor } from './paths.js';
+import { daemonKeyStore } from './key-store.js';
 import { jsonFail, runJson, type Fail } from './json-cli.js';
 import { renderTerminalQr } from './pair-qr.js';
+import { resolveDaemonConfig } from './resolve-config.js';
 
 const quietLogger = {
   info: () => undefined,
@@ -46,6 +37,8 @@ const quietLogger = {
 
 interface DeviceArgs {
   dataDir?: string;
+  configPath?: string;
+  port?: number;
   vault?: string;
   label?: string;
   ttlMinutes?: number;
@@ -75,6 +68,17 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
       case '--data-dir':
         out.dataDir = next();
         break;
+      case '--config':
+        out.configPath = next();
+        break;
+      case '--port': {
+        const n = Number(next());
+        if (!Number.isInteger(n) || n < 1 || n > 65_535) {
+          fail('--port must be an integer in [1, 65535]', 2);
+        }
+        out.port = n;
+        break;
+      }
       case '--vault':
         out.vault = next();
         break;
@@ -127,30 +131,10 @@ function resolveVault(
   return { vaultId: match.vaultId, name: match.name };
 }
 
-function readEndpointState(
-  layout: DaemonLayout,
-  fail: (msg: string, code?: number) => never,
-): { endpointId: string; ticket: string } {
-  let raw: string;
-  try {
-    raw = fs.readFileSync(layout.endpointStateFile, 'utf8');
-  } catch {
-    fail(
-      `no gateway endpoint identity at ${layout.endpointStateFile} — ` +
-        'start the daemon once (`centraid-gateway serve`) so it mints its iroh endpoint',
-      1,
-    );
-  }
-  const parsed = JSON.parse(raw) as { endpointId?: unknown; ticket?: unknown };
-  if (typeof parsed.endpointId !== 'string' || typeof parsed.ticket !== 'string') {
-    fail(`unreadable endpoint state at ${layout.endpointStateFile}`, 1);
-  }
-  return { endpointId: parsed.endpointId, ticket: parsed.ticket };
-}
-
 export async function commandPair(
   args: string[],
   fail: (msg: string, code?: number) => never,
+  fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
   // Pre-scan for `--json` so it governs the whole run — including a `fail()`
   // triggered by argument parsing itself — regardless of flag order.
@@ -161,90 +145,136 @@ export async function commandPair(
   const localFail: Fail = jsonFail(json, fail);
   await runJson(json, fail, async () => {
     const parsed = parseDeviceArgs(args, localFail);
-    if (!parsed.dataDir) localFail('--data-dir is required', 2);
-    const layout = daemonLayoutFor(parsed.dataDir);
-    const endpoint = readEndpointState(layout, localFail);
-    const registry = openVaultRegistry({
-      rootDir: layout.vaultDir,
-      logger: quietLogger,
-      enableWalShipper: false,
-    });
+    const config = await resolveDaemonConfig(
+      { dataDir: parsed.dataDir, configPath: parsed.configPath },
+      localFail,
+    );
+    const port = parsed.port ?? config.port;
+    if (port === undefined || port === 0) {
+      localFail('daemon port is not addressable — configure a fixed loopback port', 1);
+    }
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const handshake = await handshakeGateway(baseUrl, undefined, fetchImpl);
+    if (!handshake.ok) {
+      localFail(
+        `daemon not running at ${baseUrl} — start \`centraid-gateway serve\` (${handshake.detail})`,
+        1,
+      );
+    }
+    const endpointSecret = daemonKeyStore(daemonLayoutFor(config.dataDir).keysDir).load(
+      'endpoint.key',
+    );
+    if (!endpointSecret) {
+      localFail(
+        'daemon has no gateway endpoint identity — restart it with the iroh endpoint enabled',
+        1,
+      );
+    }
+    const endpointId = endpointIdForSecret(endpointSecret);
+    if (
+      handshake.info.endpointId !== endpointId ||
+      typeof handshake.info.endpointTicket !== 'string'
+    ) {
+      localFail(
+        handshake.info.endpointId && handshake.info.endpointId !== endpointId
+          ? `daemon at ${baseUrl} owns a different data directory`
+          : 'daemon is running but its iroh endpoint is not ready',
+        1,
+      );
+    }
+    let response: Response;
     try {
-      const vault = resolveVault(registry, parsed.vault, localFail);
-      const tickets = PairingTicketStore.open(layout.pairingTicketsFile);
-      const ttlMs =
-        parsed.ttlMinutes !== undefined ? parsed.ttlMinutes * 60 * 1000 : DEFAULT_TICKET_TTL_MS;
-      // The `owner` tier (issue #505 phase 7) is the per-device, revocable
-      // replacement for the retired shared admin token. `pair` runs on the box
-      // itself (shell access to `--data-dir` is the trust anchor), so the FIRST
-      // device paired into a vault with no enrollments yet defaults to `owner` —
-      // the landlord device. Later pairings default to `full`; `--trust`
-      // overrides either way.
-      const enrollments = EnrollmentStore.open(layout.devicesFile);
-      const firstDeviceForVault = enrollments.listByVault(vault.vaultId).length === 0;
-      const trust: GrantableTrust = parsed.trust ?? (firstDeviceForVault ? 'owner' : 'full');
-      const minted = tickets.mint(vault.vaultId, ttlMs, trust);
-      const token = encodePairingTicket({
-        v: 1,
-        kind: 'centraid-gw-pair',
-        gw: endpoint.ticket,
-        t: minted.ticketId,
-        s: minted.secret,
-        vaultName: vault.name,
-        exp: minted.expiresAt,
+      response = await fetchImpl(`${baseUrl}/centraid/_gateway/devices/ticket`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
+          ...(parsed.ttlMinutes !== undefined ? { ttlMinutes: parsed.ttlMinutes } : {}),
+          ...(parsed.trust !== undefined ? { trust: parsed.trust } : {}),
+        }),
       });
-      if (json) {
-        process.stdout.write(
-          `${JSON.stringify({
-            ok: true,
-            ticket: token,
-            vaultId: vault.vaultId,
-            vaultName: vault.name,
-            expiresAt: new Date(minted.expiresAt).toISOString(),
-            trust,
-          })}\n`,
-        );
-        return;
-      }
-      const lines = [
-        `Pairing ticket for vault "${vault.name}" (${vault.vaultId})`,
-        `Trust: ${trust}`,
-        `Expires: ${new Date(minted.expiresAt).toISOString()}`,
-        '',
-        'Desktop / PWA: paste this one-line ticket into "Add gateway":',
-        '',
-        token,
-        '',
-      ];
-      if (parsed.qr) {
-        try {
-          const qr = await renderTerminalQr(token);
-          lines.push(
-            'Phone: scan this QR in Centraid Mobile (Settings → Gateway link), or paste',
-            'the same one-line ticket if the camera is unavailable:',
-            '',
-            qr.trimEnd(),
-            '',
-          );
-        } catch (err) {
-          lines.push(
-            'Phone: ticket is too long for a terminal QR (relay-heavy EndpointTicket).',
-            'Paste the one-line ticket under Settings → Gateway link on the phone instead.',
-            `QR encode error: ${err instanceof Error ? err.message : String(err)}`,
-            '',
-          );
-        }
-      } else {
+    } catch (error) {
+      localFail(
+        `daemon stopped before it could mint the ticket: ${error instanceof Error ? error.message : String(error)}`,
+        1,
+      );
+    }
+    const result = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      message?: string;
+      ticket?: string;
+      vaultId?: string;
+      vaultName?: string;
+      expiresAt?: string;
+      trust?: GrantableTrust;
+    };
+    if (
+      !response.ok ||
+      result.ok !== true ||
+      typeof result.ticket !== 'string' ||
+      typeof result.vaultId !== 'string' ||
+      typeof result.vaultName !== 'string' ||
+      typeof result.expiresAt !== 'string' ||
+      (result.trust !== 'owner' && result.trust !== 'full' && result.trust !== 'readonly')
+    ) {
+      localFail(
+        result.message ?? `daemon refused pairing ticket (${result.error ?? response.status})`,
+        1,
+      );
+    }
+    const token = result.ticket;
+    const vault = { vaultId: result.vaultId, name: result.vaultName };
+    const trust = result.trust;
+    if (json) {
+      process.stdout.write(
+        `${JSON.stringify({
+          ok: true,
+          ticket: token,
+          vaultId: vault.vaultId,
+          vaultName: vault.name,
+          expiresAt: result.expiresAt,
+          trust,
+        })}\n`,
+      );
+      return;
+    }
+    const lines = [
+      `Pairing ticket for vault "${vault.name}" (${vault.vaultId})`,
+      `Trust: ${trust}`,
+      `Expires: ${result.expiresAt}`,
+      '',
+      'Desktop / PWA: paste this one-line ticket into "Add gateway":',
+      '',
+      token,
+      '',
+    ];
+    if (parsed.qr) {
+      try {
+        const qr = await renderTerminalQr(token);
         lines.push(
-          'Phone on a headless box: re-run with --qr for a terminal QR, or paste',
-          'the ticket under Settings → Gateway link on the phone.',
+          'Phone: scan this QR in Centraid Mobile (Settings → Gateway link), or paste',
+          'the same one-line ticket if the camera is unavailable:',
+          '',
+          qr.trimEnd(),
+          '',
+        );
+      } catch (err) {
+        lines.push(
+          'Phone: ticket is too long for a terminal QR (relay-heavy EndpointTicket).',
+          'Paste the one-line ticket under Settings → Gateway link on the phone instead.',
+          `QR encode error: ${err instanceof Error ? err.message : String(err)}`,
           '',
         );
       }
-      process.stdout.write(lines.join('\n'));
-    } finally {
-      registry.stop();
+    } else {
+      lines.push(
+        'Phone on a headless box: re-run with --qr for a terminal QR, or paste',
+        'the ticket under Settings → Gateway link on the phone.',
+        '',
+      );
     }
+    process.stdout.write(lines.join('\n'));
   });
 }
 
@@ -259,11 +289,49 @@ export async function commandDevices(
   const parsed = parseDeviceArgs(rest, fail);
   if (!parsed.dataDir) fail('--data-dir is required', 2);
   const layout = daemonLayoutFor(parsed.dataDir);
-  const devices = EnrollmentStore.open(layout.devicesFile);
+  let database: GatewayDatabase;
+  try {
+    database = GatewayDatabase.open(parsed.dataDir, {
+      lock: action === 'list' ? 'read-only' : 'exclusive',
+    });
+  } catch (error) {
+    if (error instanceof GatewayLockError) {
+      fail(
+        action === 'list'
+          ? 'the running daemon owns the device registry — query its devices route instead'
+          : error.message,
+        1,
+      );
+    }
+    throw error;
+  }
+  const devices = EnrollmentStore.open(database);
 
-  if (action === 'list') {
-    let rows = devices.list();
-    if (parsed.vault !== undefined) {
+  try {
+    if (action === 'list') {
+      let rows = devices.list();
+      if (parsed.vault !== undefined) {
+        const registry = openVaultRegistry({
+          rootDir: layout.vaultDir,
+          logger: quietLogger,
+          enableWalShipper: false,
+        });
+        try {
+          const vault = resolveVault(registry, parsed.vault, fail);
+          rows = devices.listByVault(vault.vaultId);
+        } finally {
+          registry.stop();
+        }
+      }
+      for (const row of rows) process.stdout.write(`${JSON.stringify(row)}\n`);
+      return;
+    }
+
+    if (action === 'add') {
+      const [endpointId] = parsed.positional;
+      if (!endpointId) {
+        fail('usage: devices add --data-dir <path> <endpoint-id> --vault <name-or-id>', 2);
+      }
       const registry = openVaultRegistry({
         rootDir: layout.vaultDir,
         logger: quietLogger,
@@ -271,69 +339,42 @@ export async function commandDevices(
       });
       try {
         const vault = resolveVault(registry, parsed.vault, fail);
-        rows = devices.listByVault(vault.vaultId);
+        const row = devices.enroll({
+          endpointId,
+          vaultId: vault.vaultId,
+          label: parsed.label ?? `device ${endpointId.slice(0, 10)}…`,
+        });
+        process.stdout.write(`${JSON.stringify(row)}\n`);
+      } catch (err) {
+        if (err instanceof VaultRegistryError) fail(err.message, 1);
+        throw err;
       } finally {
         registry.stop();
       }
+      return;
     }
-    for (const row of rows) process.stdout.write(`${JSON.stringify(row)}\n`);
-    return;
-  }
 
-  if (action === 'add') {
-    const [endpointId] = parsed.positional;
-    if (!endpointId) {
-      fail('usage: devices add --data-dir <path> <endpoint-id> --vault <name-or-id>', 2);
-    }
-    const registry = openVaultRegistry({
+    // revoke
+    const [target] = parsed.positional;
+    if (!target) fail('usage: devices revoke --data-dir <path> <enrollment-or-endpoint-id>', 2);
+    const removed = devices.revoke(target);
+    if (removed.length === 0) fail(`no enrollment matches "${target}"`, 1);
+    // Enrollment revocation is also a vault-local data erasure boundary: an
+    // offline intent outcome is device-scoped and must not survive unpairing.
+    const cleanupRegistry = openVaultRegistry({
       rootDir: layout.vaultDir,
       logger: quietLogger,
       enableWalShipper: false,
     });
     try {
-      const vault = resolveVault(registry, parsed.vault, fail);
-      const row = devices.enroll({
-        endpointId,
-        vaultId: vault.vaultId,
-        label: parsed.label ?? `device ${endpointId.slice(0, 10)}…`,
-      });
-      process.stdout.write(`${JSON.stringify(row)}\n`);
-    } catch (err) {
-      if (err instanceof VaultRegistryError) fail(err.message, 1);
-      throw err;
+      for (const row of removed) {
+        cleanupRegistry.get(row.vaultId)?.forgetReplicaDevice(row.endpointId);
+      }
     } finally {
-      registry.stop();
+      cleanupRegistry.stop();
     }
-    return;
-  }
-
-  // revoke
-  const [target] = parsed.positional;
-  if (!target) fail('usage: devices revoke --data-dir <path> <enrollment-or-endpoint-id>', 2);
-  const removed = devices.revoke(target);
-  if (removed.length === 0) fail(`no enrollment matches "${target}"`, 1);
-  // Enrollment revocation is also a vault-local data erasure boundary: an
-  // offline intent outcome is device-scoped and must not survive unpairing.
-  const cleanupRegistry = openVaultRegistry({
-    rootDir: layout.vaultDir,
-    logger: quietLogger,
-    enableWalShipper: false,
-  });
-  try {
-    for (const row of removed) {
-      cleanupRegistry.get(row.vaultId)?.forgetReplicaDevice(row.endpointId);
-    }
+    for (const row of removed) process.stdout.write(`${JSON.stringify({ revoked: row })}\n`);
   } finally {
-    cleanupRegistry.stop();
+    database.close();
   }
-  // A device key that no longer holds ANY enrollment loses its HTTP token
-  // too (issue #376) — the ACL bit is gone; the token that rode it dies
-  // with it. A key that still holds another vault's row keeps its token
-  // (revoking one row is "leave this vault", not "kill the device").
-  const deviceTokens = DeviceTokenStore.open(layout.deviceTokensFile);
-  const deadKeys = new Set(
-    removed.map((r) => r.endpointId).filter((key) => !devices.isEnrolled(key)),
-  );
-  for (const key of deadKeys) deviceTokens.revokeForDeviceKey(key);
-  for (const row of removed) process.stdout.write(`${JSON.stringify({ revoked: row })}\n`);
 }

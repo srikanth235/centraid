@@ -9,13 +9,6 @@ import { Dispatcher, Registry } from '@centraid/app-engine';
 import { openVaultPlane, type VaultPlane } from './vault-plane.js';
 import { openVaultRegistry } from './vault-registry.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
-import { HealthRegistry } from './health-registry.js';
-import {
-  GatewayInstanceLease,
-  LEASE_FILE_NAME,
-  LEASE_FRESH_WINDOW_MS,
-  type LeaseRecord,
-} from './gateway-instance-lease.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
@@ -34,14 +27,15 @@ async function directoryBytes(dir: string): Promise<number> {
 }
 
 function openPlane(dir: string): VaultPlane {
-  const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
+  const plane = openVaultPlane({ bootstrap: true, dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());
   return plane;
 }
 
-test("a WAL-disabled admin plane never checkpoints another process's stream on stop", async () => {
+test("a WAL-disabled vault plane never checkpoints another process's stream on stop", async () => {
   const dir = await tempDir();
   const plane = openVaultPlane({
+    bootstrap: true,
     dir,
     logger: silentLogger,
     ownerName: 'Priya',
@@ -61,57 +55,11 @@ test("a WAL-disabled admin plane never checkpoints another process's stream on s
   expect(checkpoints).toBe(0);
 });
 
-test('WAL capture re-arms after a fresh foreign lease conflict clears', async () => {
-  const dir = await tempDir();
-  let clock = 1_000_000;
-  const lease = new GatewayInstanceLease({
-    rootDir: dir,
-    health: new HealthRegistry({ now: () => clock }),
-    logger: silentLogger,
-    now: () => clock,
-    instanceId: 'gateway-under-test',
-  });
-  lease.claim();
-  cleanups.push(() => lease.stop());
-
-  const foreignLease: LeaseRecord = {
-    instanceId: 'foreign-gateway',
-    pid: 99999,
-    hostname: 'foreign-host',
-    startedAt: new Date(clock).toISOString(),
-    renewedAt: new Date(clock).toISOString(),
-  };
-  await fs.writeFile(path.join(dir, LEASE_FILE_NAME), JSON.stringify(foreignLease));
-  const renew = (
-    lease as unknown as {
-      checkAndRenew: () => void;
-    }
-  ).checkAndRenew.bind(lease);
-  renew();
-  expect(lease.isConflicted()).toBe(true);
-
-  const plane = openVaultPlane({
-    dir,
-    logger: silentLogger,
-    ownerName: 'Priya',
-    leaseConflicted: () => lease.isConflicted(),
-  });
-  cleanups.push(() => plane.stop());
-  expect(plane.walShipper).toBeUndefined();
-
-  clock += LEASE_FRESH_WINDOW_MS + 1;
-  renew();
-  expect(lease.isConflicted()).toBe(false);
-
-  plane.walTick();
-  expect(plane.walShipper?.status().dbs.vault?.generation).toMatch(/^[0-9a-f]{32}$/);
-  expect(plane.walShipper?.status().dbs.journal?.generation).toMatch(/^[0-9a-f]{32}$/);
-});
-
 test('WAL capture sleeps without backup and re-arms immediately when configured', async () => {
   const dir = await tempDir();
   let backupConfigured = false;
   const plane = openVaultPlane({
+    bootstrap: true,
     dir,
     logger: silentLogger,
     ownerName: 'Priya',
@@ -151,6 +99,7 @@ test('re-enabling capture after fallback autocheckpoint mints a coordinated gene
   const dir = await tempDir();
   let backupConfigured = true;
   const plane = openVaultPlane({
+    bootstrap: true,
     dir,
     logger: silentLogger,
     ownerName: 'Priya',
@@ -658,7 +607,7 @@ test('the agent plane mirrors the widening park (issue #308 A3)', async () => {
 
 test('the plane survives a restart: same identity, grants intact, ctx.vault still works', async () => {
   const dir = await tempDir();
-  const first = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
+  const first = openVaultPlane({ bootstrap: true, dir, logger: silentLogger, ownerName: 'Priya' });
   expect(first.boot.fresh).toBe(true);
   // Enroll with a medium ceiling so the reopened plane executes directly.
   ensureAppEnrolled(first.db, 'planner', { riskCeiling: 'medium' });
@@ -700,6 +649,7 @@ test('owner routes: status, apps, grant, parked confirm, revoke', async () => {
   const dir = await tempDir();
   // The route handler speaks to the registry; the acts land on its active plane.
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const plane = registry.current();
   const calendarId = seedCalendar(plane);
@@ -1198,6 +1148,7 @@ test('cross-referencing (issue #272): shell pick → owner link → app resolves
 test('owner routes (issue #272): picker searches, POST links asserts, DELETE ends', async () => {
   const dir = await tempDir();
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const plane = registry.current();
   const purpose = 'dpv:ServiceProvision';

@@ -88,6 +88,7 @@ async function fixture(
   const dir = await tempDir(`blob-routes-${crypto.randomUUID()}-`);
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   const plane = openVaultPlane({
+    bootstrap: true,
     dir,
     logger: silentLogger,
     ownerName: 'Priya',

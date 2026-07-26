@@ -8,17 +8,7 @@ import {
   irohFetch,
   irohVirtualUrl,
 } from './iroh-transport.js';
-import { loadConnection, saveConnection } from './web-state.js';
 import './web.css';
-
-if (!loadConnection().baseUrl && loadConnection().transport !== 'iroh') {
-  const hosted = await fetch('/web-config.json')
-    .then((response) =>
-      response.ok ? (response.json() as Promise<{ gatewayUrl?: string }>) : undefined,
-    )
-    .catch(() => undefined);
-  if (hosted?.gatewayUrl) saveConnection({ baseUrl: hosted.gatewayUrl });
-}
 
 window.CentraidIroh = { fetch: irohFetch, url: irohVirtualUrl };
 installIrohServiceWorkerBridge();

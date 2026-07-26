@@ -6,6 +6,8 @@ import http from 'node:http';
 import { openVaultRegistry, VaultRegistryError, type VaultRegistry } from './vault-registry.js';
 import { runWithVaultContext } from './vault-context.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
+import { EnrollmentStore } from './enrollment-store.js';
+import { GatewayDatabase } from './gateway-db.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
@@ -15,23 +17,29 @@ afterEach(async () => {
 });
 function openRegistry(rootDir: string): VaultRegistry {
   const registry = openVaultRegistry({ rootDir, logger: silentLogger, ownerName: 'Priya' });
+  if (registry.list().length === 0) registry.create();
   cleanups.push(() => registry.stop());
   return registry;
 }
 
-test('a fresh root bootstraps one default vault in its own directory — and no pointer file', async () => {
+test('a fresh root stays uninitialized until an explicit create', async () => {
   const root = await tempDir();
-  const registry = openRegistry(root);
+  const registry = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
+  cleanups.push(() => registry.stop());
+  expect(registry.list()).toEqual([]);
+  expect(registry.isFresh()).toBe(true);
+  expect(existsSync(path.join(root, 'vaults.json'))).toBe(false);
+
+  registry.create();
   const vaults = registry.list();
   expect(vaults).toHaveLength(1);
   expect(vaults[0]).toMatchObject({ name: "Priya's vault" });
   expect(existsSync(path.join(root, vaults[0]!.vaultId, 'vault.db'))).toBe(true);
-  // Issue #289: the server-global active pointer is dead — the client owns it.
-  expect(existsSync(path.join(root, 'vaults.json'))).toBe(false);
   expect(registry.defaultVaultId()).toBe(vaults[0]!.vaultId);
+  expect(registry.isFresh()).toBe(false);
 });
 
-test('create / rename / delete — and the LAST vault is undeletable', async () => {
+test('create / rename / delete permits the last vault to return to zero', async () => {
   const root = await tempDir();
   const registry = openRegistry(root);
   const first = registry.list()[0]!;
@@ -49,8 +57,9 @@ test('create / rename / delete — and the LAST vault is undeletable', async () 
   expect(existsSync(path.join(root, first.vaultId))).toBe(false);
   expect(registry.get(first.vaultId)).toBeUndefined();
 
-  // A gateway always hosts at least one vault.
-  expect(() => registry.delete(family.vaultId)).toThrow(VaultRegistryError);
+  registry.delete(family.vaultId);
+  expect(registry.list()).toEqual([]);
+  expect(registry.isFresh()).toBe(true);
 });
 
 test('runner cache lives OUTSIDE the vault tree (a `-cache` sibling) and is purged on delete', async () => {
@@ -80,6 +89,7 @@ test('runner cache lives OUTSIDE the vault tree (a `-cache` sibling) and is purg
 test('the registry survives a restart: same vaults, same names', async () => {
   const root = await tempDir();
   const first = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
+  first.create();
   first.create('Work');
   const ids = first
     .list()
@@ -166,21 +176,33 @@ test('late-mount listeners observe out-of-band mounts and can unsubscribe', asyn
   expect(mounted).toEqual([fresh.vaultId]);
 });
 
-test('owner routes: list + rename/presentation; create/delete are admin-plane (405)', async () => {
+test('owner routes: list + create + rename/presentation; delete requires erase ceremony', async () => {
   const root = await tempDir();
   const registry = openRegistry(root);
-  const handler = makeVaultRouteHandler(registry);
+  const database = GatewayDatabase.open(await tempDir());
+  cleanups.push(() => database.close());
+  const enrollments = EnrollmentStore.open(database);
+  const firstVaultId = registry.defaultVaultId();
+  enrollments.enroll({
+    endpointId: 'owner-device',
+    vaultId: firstVaultId,
+    label: 'Owner device',
+    trust: 'owner',
+  });
+  const handler = makeVaultRouteHandler(registry, { enrollments });
   const server = http.createServer((req, res) => {
     // Stand-in for the composed handler: scope each request to the vault
     // named by the addressing header, default vault otherwise.
     const requested = req.headers['x-centraid-vault'];
     const vaultId = typeof requested === 'string' ? requested : registry.defaultVaultId();
-    void runWithVaultContext({ vaultId }, () => handler(req, res)).then((owned) => {
-      if (!owned) {
-        res.statusCode = 404;
-        res.end('{}');
-      }
-    });
+    void runWithVaultContext({ vaultId, deviceKey: 'owner-device' }, () => handler(req, res)).then(
+      (owned) => {
+        if (!owned) {
+          res.statusCode = 404;
+          res.end('{}');
+        }
+      },
+    );
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
@@ -192,15 +214,14 @@ test('owner routes: list + rename/presentation; create/delete are admin-plane (4
   const status = (await (await fetch(`${base}/status`)).json()) as Record<string, unknown>;
   expect(status).toMatchObject({ name: "Priya's vault" });
 
-  // Vault create left the HTTP surface (#289): admin plane only.
+  // A proved owner creates another vault and receives a real enrollment.
   const created = await fetch(`${base}/vaults`, {
     method: 'POST',
     body: JSON.stringify({ name: 'Family' }),
   });
-  expect(created.status).toBe(405);
-
-  // The admin creates one out of band; the list shows it.
-  const family = registry.create('Family');
+  expect(created.status).toBe(201);
+  const family = (await created.json()) as { vaultId: string; name: string };
+  expect(enrollments.get('owner-device', family.vaultId)?.trust).toBe('owner');
   const listed = (await (await fetch(`${base}/vaults`)).json()) as { vaults: unknown[] };
   expect(listed.vaults).toHaveLength(2);
 
@@ -223,7 +244,7 @@ test('owner routes: list + rename/presentation; create/delete are admin-plane (4
   ).json()) as { name: string; color?: string };
   expect(patched).toMatchObject({ name: 'Sharma family', color: '#aa3355' });
 
-  // Vault delete left the HTTP surface too.
+  // DELETE cannot bypass the typed-name recovery-kit erase ceremony.
   const veto = await fetch(`${base}/vaults/${family.vaultId}`, { method: 'DELETE' });
   expect(veto.status).toBe(405);
   expect(registry.list()).toHaveLength(2);
@@ -254,10 +275,16 @@ test('a directory that fails to mount is recorded in failedMounts, retried on a 
       logger: silentLogger,
       ownerName: 'Donor',
     });
+    donor.create();
     const donorVaultId = donor.list()[0]!.vaultId;
     donor.stop();
 
-    const registry = openRegistry(root);
+    const registry = openVaultRegistry({
+      rootDir: root,
+      logger: silentLogger,
+      ownerName: 'Priya',
+    });
+    cleanups.push(() => registry.stop());
 
     // Construction's initial scan() tried badvault, failed, and — unlike
     // before the fix — did NOT permanently swallow it.
@@ -266,8 +293,8 @@ test('a directory that fails to mount is recorded in failedMounts, retried on a 
     expect(failed[0]).toMatchObject({ dir: badDir });
     expect(failed[0]!.message.length).toBeGreaterThan(0);
     const firstAttemptAt = failed[0]!.at;
-    // The auto-created default vault is the only mounted one so far.
-    expect(registry.list()).toHaveLength(1);
+    // A corrupt directory never triggers an unrelated bootstrap.
+    expect(registry.list()).toHaveLength(0);
 
     // Immediately rescanning stays within the backoff window — badvault is
     // still corrupt, but this also proves a naive fix (retry unconditionally
@@ -294,7 +321,7 @@ test('a directory that fails to mount is recorded in failedMounts, retried on a 
     failed = registry.failedMounts();
     expect(failed).toHaveLength(0);
     const mounted = registry.list().map((v) => v.vaultId);
-    expect(mounted).toHaveLength(2);
+    expect(mounted).toHaveLength(1);
     expect(mounted).toContain(donorVaultId);
     expect(firstAttemptAt).not.toBe(undefined); // sanity: we did capture a timestamp above
   } finally {
@@ -312,15 +339,16 @@ test('adopt() mounts a recovered vault dir and removes the pristine auto-created
   // then stopped so its files are consistent to copy.
   const donorRoot = await tempDir();
   const donor = openVaultRegistry({ rootDir: donorRoot, logger: silentLogger, ownerName: 'Mara' });
+  donor.create();
   const recoveredId = donor.list()[0]!.vaultId;
   donor.rename(recoveredId, 'Recovered');
   donor.stop();
 
-  // The blank machine bootstraps its own pristine default onto an empty root.
+  // The blank machine remains empty until recovery adopts the restored vault.
   const root = await tempDir();
-  const registry = openRegistry(root);
-  const pristine = registry.list()[0]!;
-  expect(registry.list()).toHaveLength(1);
+  const registry = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
+  cleanups.push(() => registry.stop());
+  expect(registry.list()).toHaveLength(0);
 
   // recover() renamed the restored dir into place; simulate that with a copy.
   await fs.cp(path.join(donorRoot, recoveredId), path.join(root, recoveredId), { recursive: true });
@@ -334,11 +362,9 @@ test('adopt() mounts a recovered vault dir and removes the pristine auto-created
 
   expect(adopted.vaultId).toBe(recoveredId);
   expect(adopted.name).toBe('Recovered');
-  // The pristine default is gone; the recovered vault stands alone and is the
-  // effective default.
+  // The recovered vault stands alone and is the effective default.
   expect(registry.list().map((v) => v.vaultId)).toEqual([recoveredId]);
   expect(registry.defaultVaultId()).toBe(recoveredId);
-  expect(existsSync(path.join(root, pristine.vaultId))).toBe(false);
 });
 
 test('a directory whose vault.db duplicates an already-mounted vault id is recorded in failedMounts too', async () => {

@@ -4,15 +4,16 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 // through a real `WorktreeStore` publish, and a real sealed value through
 // `locker.add_item`. No hand-written files under blobs/sha256/ or apps.git —
 // everything here goes through the same product surface a real backup tick
-// would see. FORMAT.md's ordering rule (db, db, blobs…, git-bundle,
-// seal-key) is asserted directly off the returned array.
+// would see. FORMAT.md's ordering rule (db, db, blobs…, git-bundle) is
+// asserted directly off the returned array; DEKs travel only in the wrapped
+// recovery kit.
 
 import { afterEach, expect, test } from 'vitest';
 import { existsSync, promises as fs } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, createHash } from 'node:crypto';
 import path from 'node:path';
-import { ReplicaIndex, sealAad, unsealValue } from '@centraid/vault';
+import { ReplicaIndex } from '@centraid/vault';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import { WorktreeStore } from '../worktree-store/worktree-store.js';
 import { run } from '../worktree-store/git.js';
@@ -26,7 +27,7 @@ afterEach(async () => {
 });
 async function openPlane(): Promise<VaultPlane> {
   const dir = await tempDir('backup-sources-vault');
-  const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
+  const plane = openVaultPlane({ bootstrap: true, dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());
   return plane;
 }
@@ -142,7 +143,7 @@ test('a fresh vault (no blobs, no code store, nothing sealed) yields only the tw
 
 test(
   'a vault with real blobs, a real published app, and a real sealed value ' +
-    'yields entries in FORMAT.md order: db, db, blobs…, git-bundle, seal-key',
+    'yields entries in FORMAT.md order: db, db, blobs…, git-bundle',
   async () => {
     const plane = await openPlane();
     const bundleDir = await tempDir('backup-sources-bundle');
@@ -180,14 +181,7 @@ test(
     plane.walTick();
     const entries = await assembleSourceEntries({ plane, bundleDir, log: silentLogger });
 
-    expect(entries.map((e) => e.kind)).toEqual([
-      'db',
-      'db',
-      'blob',
-      'blob',
-      'git-bundle',
-      'seal-key',
-    ]);
+    expect(entries.map((e) => e.kind)).toEqual(['db', 'db', 'blob', 'blob', 'git-bundle']);
     // Blob entries are sorted by path (backup-sources.ts: deterministic
     // manifests, not insertion order) — the big blob's random content means
     // its sha, and therefore its sort position relative to the inline
@@ -201,7 +195,6 @@ test(
       'journal.db',
       ...expectedBlobPaths,
       'apps.bundle',
-      'seal.key',
     ]);
 
     // Staged DB copies are real, openable SQLite.
@@ -245,25 +238,7 @@ test(
     ) as { id: string };
     expect(appJson.id).toBe('todo');
 
-    // The seal-key entry is the vault's real DEK file, and it actually
-    // decrypts the sealed password — the "not a placebo" check.
-    const sealKeyEntry = entries[5]!;
-    expect(sealKeyEntry.absolutePath).toContain('keys');
-    const keyBytes = await fs.readFile(sealKeyEntry.absolutePath);
-    expect(keyBytes.equals(plane.db.sealKey)).toBe(true);
-    const itemId = (
-      plane.db.vault.prepare('SELECT item_id FROM locker_item LIMIT 1').get() as {
-        item_id: string;
-      }
-    ).item_id;
-    const sealedPassword = (
-      plane.db.vault.prepare('SELECT password FROM locker_item WHERE item_id = ?').get(itemId) as {
-        password: string;
-      }
-    ).password;
-    expect(unsealValue(keyBytes, sealAad('locker_item', 'password', itemId), sealedPassword)).toBe(
-      'H2$kL9mVq!pR4wZ',
-    );
+    expect(entries.some((entry) => entry.kind === 'seal-key')).toBe(false);
   },
 );
 

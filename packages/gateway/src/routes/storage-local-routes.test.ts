@@ -68,7 +68,7 @@ async function harness(): Promise<{ base: string; limits: StorageLimitsStore; ro
       localUsage: new LocalUsageScanner({
         rootDir: root,
         vaults: () => [{ vaultId: 'v1', name: 'Personal', dir: vaultDir }],
-        gatewayDirs: () => ({ storage: storageDir }),
+        gatewayDirs: () => ({ cache: storageDir }),
         statfs: () => ({ bavail: 500, bsize: 1, blocks: 5000 }),
       }),
       storageLimits: limits,
@@ -95,7 +95,7 @@ test('GET storage/local reports per-component bytes, the volume, and the limit e
   const byComponent = new Map(vault.components.map((c) => [c.component, c.bytes]));
   expect(byComponent.get('ledger')).toBe(2048);
   expect(byComponent.get('attachments')).toBe(4096);
-  expect(body.components.some((c) => c.component === 'storage')).toBe(true);
+  expect(body.components.some((c) => c.component === 'cache')).toBe(true);
   expect(body.disk).toEqual({ freeBytes: 500, totalBytes: 5000 });
   // No budget set yet — ok with no fraction, not a fabricated denominator.
   expect(body.limits.totalLimitBytes).toBeNull();

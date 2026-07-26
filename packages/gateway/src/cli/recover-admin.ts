@@ -27,17 +27,21 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { daemonLayoutFor } from './paths.js';
-import { formatBytes, refuseIfDaemonHoldsRoot } from './backup-admin.js';
+import { daemonKeyStore } from './key-store.js';
+import { formatBytes } from './backup-admin.js';
+import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
 import {
   discoverRecovery,
   recover,
   type RecoverPhase,
   type RecoveryDiscovery,
 } from '../backup/recover.js';
+import { deriveBackupSourceInstanceId } from '../backup/backup-state.js';
 
 interface RecoverArgs {
   kit?: string;
   apiKey?: string;
+  password?: string;
   dataDir?: string;
   vault?: string;
   atMs?: number;
@@ -60,6 +64,7 @@ function parseRecoverArgs(
     };
     if (flag === '--kit') out.kit = take();
     else if (flag === '--api-key') out.apiKey = take();
+    else if (flag === '--password') out.password = take();
     else if (flag === '--data-dir') out.dataDir = take();
     else if (flag === '--vault') out.vault = take();
     else if (flag === '--at') {
@@ -110,102 +115,123 @@ export async function commandRecover(
   const parsed = parseRecoverArgs(args, fail);
   if (!parsed.kit || !parsed.apiKey || !parsed.dataDir) {
     fail(
-      'usage: recover --kit <file> --api-key <key> --data-dir <dir> ' +
+      'usage: recover --kit <file> --password <password> --api-key <key> --data-dir <dir> ' +
         '[--at <iso-time>] [--full] [--vault <id>] [--yes]',
       2,
     );
   }
   const layout = daemonLayoutFor(parsed.dataDir);
-  refuseIfDaemonHoldsRoot(layout.vaultDir, fail);
-
-  let kitDocument: unknown;
+  let gatewayDatabase: GatewayDatabase;
   try {
-    kitDocument = JSON.parse(readFileSync(parsed.kit, 'utf8'));
-  } catch (err) {
-    fail(
-      `could not read recovery kit "${parsed.kit}": ${err instanceof Error ? err.message : String(err)}`,
-      2,
-    );
+    gatewayDatabase = GatewayDatabase.open(parsed.dataDir, { lock: 'exclusive' });
+  } catch (error) {
+    if (error instanceof GatewayLockError) {
+      fail(
+        'the running daemon holds gateway.db — run restore through its founding route, or stop it first',
+        2,
+      );
+    }
+    throw error;
   }
-
-  // Discovery + the "found your vault" card + the metered-egress gate — all
-  // BEFORE any restore work, and the provider client is reused by recover().
-  let discovery: RecoveryDiscovery;
   try {
-    discovery = await discoverRecovery({
+    const keyStore = daemonKeyStore(layout.keysDir);
+    const sourceInstanceId = deriveBackupSourceInstanceId(keyStore.loadOrCreate('endpoint.key'));
+
+    let kitDocument: unknown;
+    try {
+      kitDocument = JSON.parse(readFileSync(parsed.kit, 'utf8'));
+    } catch (err) {
+      fail(
+        `could not read recovery kit "${parsed.kit}": ${err instanceof Error ? err.message : String(err)}`,
+        2,
+      );
+    }
+
+    // Discovery + the "found your vault" card + the metered-egress gate — all
+    // BEFORE any restore work, and the provider client is reused by recover().
+    let discovery: RecoveryDiscovery;
+    try {
+      discovery = await discoverRecovery({
+        kitDocument,
+        ...(parsed.password !== undefined ? { password: parsed.password } : {}),
+        apiKey: parsed.apiKey,
+        ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
+        ...(parsed.atMs !== undefined ? { at: parsed.atMs } : {}),
+      });
+    } catch (err) {
+      fail(err instanceof Error ? err.message : String(err), 2);
+    }
+    printFacts(discovery);
+
+    if (discovery.restoreCostClass === 'metered-egress' && !parsed.yes) {
+      const fullSize =
+        discovery.fullBytes !== undefined ? formatBytes(discovery.fullBytes) : 'an unknown amount';
+      const line =
+        !parsed.full && discovery.lazyAvailable
+          ? 'recovery is lazy by default and downloads only the vault database plus any blob the ' +
+            'remote does not already hold; originals stream in on demand afterward. '
+          : `a --full recovery downloads the whole library (~${fullSize}). `;
+      fail(
+        `this home is metered-egress — recovering will incur egress charges. ${line}` +
+          'Re-run with --yes to proceed.',
+        2,
+      );
+    }
+
+    const report = await recover({
       kitDocument,
+      ...(parsed.password !== undefined ? { password: parsed.password } : {}),
       apiKey: parsed.apiKey,
+      vaultRoot: layout.vaultDir,
+      gatewayDatabase,
+      keyStore,
+      sourceInstanceId,
+      provider: discovery.provider,
       ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
       ...(parsed.atMs !== undefined ? { at: parsed.atMs } : {}),
+      ...(parsed.full ? { full: true } : {}),
+      onPhase: (phase) => process.stderr.write(`centraid-gateway: ${PHASE_LINES[phase]}\n`),
+      log: {
+        info: () => undefined,
+        warn: (m) => process.stderr.write(`centraid-gateway: ${m}\n`),
+      },
     });
-  } catch (err) {
-    fail(err instanceof Error ? err.message : String(err), 2);
-  }
-  printFacts(discovery);
 
-  if (discovery.restoreCostClass === 'metered-egress' && !parsed.yes) {
-    const fullSize =
-      discovery.fullBytes !== undefined ? formatBytes(discovery.fullBytes) : 'an unknown amount';
-    const line =
-      !parsed.full && discovery.lazyAvailable
-        ? 'recovery is lazy by default and downloads only the vault database plus any blob the ' +
-          'remote does not already hold; originals stream in on demand afterward. '
-        : `a --full recovery downloads the whole library (~${fullSize}). `;
-    fail(
-      `this home is metered-egress — recovering will incur egress charges. ${line}` +
-        'Re-run with --yes to proceed.',
-      2,
-    );
-  }
+    printJson(report);
 
-  const report = await recover({
-    kitDocument,
-    apiKey: parsed.apiKey,
-    vaultRoot: layout.vaultDir,
-    backupDir: layout.backupDir ?? path.join(parsed.dataDir, 'backup'),
-    provider: discovery.provider,
-    ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
-    ...(parsed.atMs !== undefined ? { at: parsed.atMs } : {}),
-    ...(parsed.full ? { full: true } : {}),
-    onPhase: (phase) => process.stderr.write(`centraid-gateway: ${PHASE_LINES[phase]}\n`),
-    log: {
-      info: () => undefined,
-      warn: (m) => process.stderr.write(`centraid-gateway: ${m}\n`),
-    },
-  });
+    // Adopt-time reconcile (issue #439 R5). Recovery SUCCEEDED for everything
+    // else, so this never fails the command (no non-zero exit) — a lost blob is
+    // not a reason to abandon a recovered vault. But LOST bytes are surfaced as a
+    // prominent CRITICAL block so an operator cannot miss them; a re-pin is a
+    // quieter FYI (the byte is back, it will re-upload on the next backup).
+    const rec = report.reconcile;
+    if (rec.lost.length > 0) {
+      process.stderr.write(
+        `\ncentraid-gateway: CRITICAL — ${rec.lost.length} blob(s) are permanently LOST. The provider ` +
+          'no longer holds them and the snapshot did not carry them, so the content they back is ' +
+          `unreadable. blob_replica was corrected. Shas: ${rec.lost.slice(0, 10).join(', ')}` +
+          `${rec.lost.length > 10 ? `, +${rec.lost.length - 10} more` : ''}.\n\n`,
+      );
+    } else if (rec.repinned.length > 0) {
+      process.stderr.write(
+        `centraid-gateway: ${rec.repinned.length} blob(s) the provider had dropped were re-pinned from ` +
+          'the snapshot and will re-upload on the next backup.\n',
+      );
+    }
 
-  printJson(report);
-
-  // Adopt-time reconcile (issue #439 R5). Recovery SUCCEEDED for everything
-  // else, so this never fails the command (no non-zero exit) — a lost blob is
-  // not a reason to abandon a recovered vault. But LOST bytes are surfaced as a
-  // prominent CRITICAL block so an operator cannot miss them; a re-pin is a
-  // quieter FYI (the byte is back, it will re-upload on the next backup).
-  const rec = report.reconcile;
-  if (rec.lost.length > 0) {
+    const previews = report.previews.warmed
+      ? `previews warmed (${report.previews.tiniesWarmed}/${report.previews.tiniesTotal} in ` +
+        `${report.previews.timeToUsableGridMs}ms)`
+      : `previews on demand (${report.previews.reason})`;
     process.stderr.write(
-      `\ncentraid-gateway: CRITICAL — ${rec.lost.length} blob(s) are permanently LOST. The provider ` +
-        'no longer holds them and the snapshot did not carry them, so the content they back is ' +
-        `unreadable. blob_replica was corrected. Shas: ${rec.lost.slice(0, 10).join(', ')}` +
-        `${rec.lost.length > 10 ? `, +${rec.lost.length - 10} more` : ''}.\n\n`,
+      `centraid-gateway: recovered vault ${report.vaultId} to ${path.resolve(report.vaultDir)} — ` +
+        `as of ${new Date(report.recoveredAsOf).toISOString()}${report.truncated ? ' (TRUNCATED — objects were missing)' : ''}, ` +
+        `${report.skippedBlobs} blob(s) deferred, ${previews}. Generation fenced at ${report.generation}: ` +
+        "the old machine's next backup will be refused. The vault parks its outbox and flags automations/" +
+        'connections the first time the gateway mounts it. To resume BACKUPS, add a "backup" config block ' +
+        'pointing at the same provider + api-key, then start the daemon.\n',
     );
-  } else if (rec.repinned.length > 0) {
-    process.stderr.write(
-      `centraid-gateway: ${rec.repinned.length} blob(s) the provider had dropped were re-pinned from ` +
-        'the snapshot and will re-upload on the next backup.\n',
-    );
+  } finally {
+    gatewayDatabase.close();
   }
-
-  const previews = report.previews.warmed
-    ? `previews warmed (${report.previews.tiniesWarmed}/${report.previews.tiniesTotal} in ` +
-      `${report.previews.timeToUsableGridMs}ms)`
-    : `previews on demand (${report.previews.reason})`;
-  process.stderr.write(
-    `centraid-gateway: recovered vault ${report.vaultId} to ${path.resolve(report.vaultDir)} — ` +
-      `as of ${new Date(report.recoveredAsOf).toISOString()}${report.truncated ? ' (TRUNCATED — objects were missing)' : ''}, ` +
-      `${report.skippedBlobs} blob(s) deferred, ${previews}. Generation fenced at ${report.generation}: ` +
-      "the old machine's next backup will be refused. The vault parks its outbox and flags automations/" +
-      'connections the first time the gateway mounts it. To resume BACKUPS, add a "backup" config block ' +
-      'pointing at the same provider + api-key, then start the daemon.\n',
-  );
 }

@@ -263,7 +263,7 @@ describe('BackupCard — configured', () => {
     expect(el.textContent).toContain('raw bucket check');
   });
 
-  it('renders per-vault ages, flags a never-backed-up vault, and shows the seal-key nudge', async () => {
+  it('renders per-vault ages, flags a never-backed-up vault, and states recovery scope', async () => {
     const status: BackupStatusDTO = {
       configured: true,
       vaults: [
@@ -282,7 +282,8 @@ describe('BackupCard — configured', () => {
     expect(el.textContent).toContain('verified 1d 1h ago');
     expect(el.textContent).toContain('Side');
     expect(el.textContent).toContain('backed up never');
-    expect(el.textContent).toContain('only way to decrypt');
+    expect(el.textContent).toContain('unlocks backed-up vaults');
+    expect(el.textContent).toContain('local-only vaults are not included');
     const warn = el.querySelector('[data-emphasis="warn"]');
     expect(warn?.textContent).toContain('never');
   });

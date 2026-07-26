@@ -153,14 +153,20 @@ npm install --prefix $env:USERPROFILE\.centraid @centraid/gateway
 
 ### Pair clients after install (VPS / headless)
 
-Gateway must be serving so `endpoint.json` exists, then mint a one-time ticket:
+Start the gateway, then either found its first vault or pair into an existing one:
 
 ```sh
-# Create a vault if needed, then mint a ticket (desktop paste):
-centraid-gateway vault create --data-dir "$DATA_DIR" --name Family
+# Zero-vault VPS: host possession mints a 10-minute founding capability.
+centraid-gateway init-ticket --data-dir "$DATA_DIR" --qr
+# The phone scans it, chooses Create or Restore, saves and re-opens the
+# recovery kit, and becomes the first owner.
+
+# Already founded: mint an ordinary enrollment ticket.
 centraid-gateway pair --data-dir "$DATA_DIR" --vault Family
-# Phone-friendly: same ticket + UTF-8 block QR over SSH:
 centraid-gateway pair --data-dir "$DATA_DIR" --vault Family --qr
+
+# Automation-only bootstrap (explicitly KIT-LESS):
+centraid-gateway serve --data-dir "$DATA_DIR" --init-vault Family
 ```
 
 | Client | How to enroll |

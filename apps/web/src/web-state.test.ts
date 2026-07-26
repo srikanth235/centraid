@@ -1,43 +1,24 @@
 import { describe, expect, test } from 'vitest';
-
 import { webGatewayId, type WebConnection } from './web-state.js';
 
 const base: WebConnection = {
-  baseUrl: '',
   label: 'Gateway',
   displayName: 'Gateway',
   avatarColor: '#123456',
 };
 
 describe('web gateway identity', () => {
-  test('uses the sovereign Iroh endpoint ticket instead of a loopback transport URL', () => {
+  test('uses only the sovereign gateway EndpointId', () => {
     expect(
       webGatewayId({
         ...base,
-        transport: 'iroh',
-        endpointTicket: 'endpoint-ticket',
-        gatewayId: 'gateway-endpoint',
+        endpointTicket: 'refreshable-ticket',
+        endpointId: 'gateway-endpoint',
       }),
-    ).toBe('iroh:gateway-endpoint');
+    ).toBe('gateway-endpoint');
   });
 
-  test('falls back to the Iroh ticket before a server EndpointId is known', () => {
-    expect(
-      webGatewayId({
-        ...base,
-        transport: 'iroh',
-        endpointTicket: 'endpoint-ticket',
-      }),
-    ).toBe('iroh:endpoint-ticket');
-  });
-
-  test('normalizes a direct gateway URL', () => {
-    expect(
-      webGatewayId({
-        ...base,
-        transport: 'direct',
-        baseUrl: 'https://EXAMPLE.test/root/?temporary=1#fragment',
-      }),
-    ).toBe('direct:https://example.test/root');
+  test('refuses to derive identity from dial cache', () => {
+    expect(webGatewayId({ ...base, endpointTicket: 'refreshable-ticket' })).toBeUndefined();
   });
 });

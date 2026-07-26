@@ -18,7 +18,7 @@ function pathsUnder(dir: string): GatewayPaths {
 
 beforeEach(async () => {
   dataDir = await tempDir(`gateway-runtime-${crypto.randomUUID()}-`);
-  handle = await serve({ paths: pathsUnder(dataDir) });
+  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
 });
 
 afterEach(async () => {
@@ -62,6 +62,7 @@ test('honors a caller-supplied token instead of minting one', async () => {
   await handle.close();
   const fixed = 'fixed-token-for-test-purposes-only-do-not-use-elsewhere';
   handle = await serve({
+    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     token: fixed,
   });
@@ -75,6 +76,7 @@ test('honors a caller-supplied token instead of minting one', async () => {
 test('honors a caller-supplied host (loopback alias still resolves)', async () => {
   await handle.close();
   handle = await serve({
+    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     host: '127.0.0.1',
     port: 0,
@@ -217,6 +219,7 @@ test('backup status/run round-trip when backup IS configured', async () => {
   await handle.close();
   const providerDir = await tempDir('backup-provider-');
   handle = await serve({
+    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     backup: {
       enabled: true,
@@ -237,6 +240,14 @@ test('backup status/run round-trip when backup IS configured', async () => {
   expect(beforeBody.vaults[0]).toMatchObject({ vaultId, running: false });
   expect(beforeBody.vaults[0]?.lastBackupAt).toBeUndefined();
 
+  // Reading status begins the recovery-kit ceremony. Confirm the current kit
+  // before the fail-closed ceremony gate permits backup mutations.
+  const confirm = await fetch(`${handle.url}/centraid/_gateway/backup/kit-confirmed`, {
+    method: 'POST',
+    headers: auth,
+  });
+  expect(confirm.status).toBe(200);
+
   const run = await fetch(`${handle.url}/centraid/_gateway/backup/run`, {
     method: 'POST',
     headers: auth,
@@ -246,13 +257,13 @@ test('backup status/run round-trip when backup IS configured', async () => {
   expect(runBody.accepted).toBe(true);
 
   // The run happens in the background — poll until it lands (bounded).
+  // Creating the first target intentionally stales the just-confirmed kit and
+  // closes the HTTP surface again, so observe completion through the returned
+  // host-side service handle.
   let lastBackupAt: string | undefined;
   for (let i = 0; i < 50; i++) {
-    const poll = await fetch(`${handle.url}/centraid/_gateway/backup`, { headers: auth });
-    const pollBody = (await poll.json()) as {
-      vaults: Array<{ vaultId: string; lastBackupAt?: string; running?: boolean }>;
-    };
-    lastBackupAt = pollBody.vaults[0]?.lastBackupAt;
+    const poll = await handle.backup!.status();
+    lastBackupAt = poll[vaultId]?.lastBackupAt;
     if (lastBackupAt) break;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
@@ -270,12 +281,21 @@ test('recoveryKit confirmation survives a restart (issue #351 wave 4)', async ()
     enabled: true as const,
     provider: { kind: 'local' as const, dir: providerDir },
   };
-  handle = await serve({ paths: pathsUnder(dataDir), backup: backupConfig });
+  handle = await serve({
+    initVaultName: "Owner's vault",
+    paths: pathsUnder(dataDir),
+    backup: backupConfig,
+  });
   const auth = { Authorization: `Bearer ${handle.token}` };
 
   const before = await fetch(`${handle.url}/centraid/_gateway/backup`, { headers: auth });
-  const beforeBody = (await before.json()) as { recoveryKit: { confirmedAt: number | null } };
-  expect(beforeBody.recoveryKit).toEqual({ confirmedAt: null });
+  const beforeBody = (await before.json()) as {
+    recoveryKit: { confirmedAt: number | null; kitFingerprint?: string };
+  };
+  expect(beforeBody.recoveryKit).toMatchObject({
+    confirmedAt: null,
+    kitFingerprint: expect.any(String),
+  });
 
   const confirm = await fetch(`${handle.url}/centraid/_gateway/backup/kit-confirmed`, {
     method: 'POST',
@@ -289,11 +309,20 @@ test('recoveryKit confirmation survives a restart (issue #351 wave 4)', async ()
   // Restart: close this instance, boot a fresh one over the identical
   // on-disk dataDir (same `<dataDir>/backup/state.json`).
   await handle.close();
-  handle = await serve({ paths: pathsUnder(dataDir), backup: backupConfig });
+  handle = await serve({
+    initVaultName: "Owner's vault",
+    paths: pathsUnder(dataDir),
+    backup: backupConfig,
+  });
   const authAfter = { Authorization: `Bearer ${handle.token}` }; // token is re-minted per boot
 
   const after = await fetch(`${handle.url}/centraid/_gateway/backup`, { headers: authAfter });
   expect(after.status).toBe(200);
-  const afterBody = (await after.json()) as { recoveryKit: { confirmedAt: number | null } };
-  expect(afterBody.recoveryKit).toEqual({ confirmedAt: confirmBody.confirmedAt });
+  const afterBody = (await after.json()) as {
+    recoveryKit: { confirmedAt: number | null; kitFingerprint?: string };
+  };
+  expect(afterBody.recoveryKit).toMatchObject({
+    confirmedAt: confirmBody.confirmedAt,
+    kitFingerprint: expect.any(String),
+  });
 });

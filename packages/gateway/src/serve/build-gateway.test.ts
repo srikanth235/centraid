@@ -46,7 +46,7 @@ async function mountUnauthed(
 
 beforeEach(async () => {
   dataDir = await tempDir(`build-gateway-${crypto.randomUUID()}-`);
-  gateway = await buildGateway({ paths: pathsUnder(dataDir) });
+  gateway = await buildGateway({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
 });
 
 afterEach(async () => {
@@ -68,6 +68,38 @@ test('constructs the graph and exposes the lifecycle without binding a socket', 
   expect((gateway as unknown as Record<string, unknown>).token).toBe(undefined);
 });
 
+test('vaultless boot is healthy, explicit, and creates no vault or cache tree (#555)', async () => {
+  await gateway.stop();
+  await fs.rm(dataDir, { recursive: true, force: true });
+  dataDir = await tempDir(`build-gateway-vaultless-${crypto.randomUUID()}-`);
+  gateway = await buildGateway({ paths: pathsUnder(dataDir) });
+  expect(gateway.vaults.list()).toEqual([]);
+  await expect(fs.access(path.join(dataDir, 'vault'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(fs.access(path.join(dataDir, 'cache'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await expect(fs.access(path.join(dataDir, 'gateway.db'))).resolves.toBeUndefined();
+
+  const mounted = await mountUnauthed(gateway.composedHandler);
+  try {
+    const [info, vaults, apps, automations, health, refused] = await Promise.all([
+      fetch(`${mounted.url}/centraid/_gateway/info`),
+      fetch(`${mounted.url}/centraid/_vault/vaults`),
+      fetch(`${mounted.url}/centraid/_apps`),
+      fetch(`${mounted.url}/centraid/_automations`),
+      fetch(`${mounted.url}/centraid/_gateway/health`),
+      fetch(`${mounted.url}/centraid/_vault/status`),
+    ]);
+    expect(await info.json()).toMatchObject({ status: 'uninitialized' });
+    expect(await vaults.json()).toEqual({ vaults: [] });
+    expect(await apps.json()).toEqual([]);
+    expect(await automations.json()).toEqual({ rows: [], errors: [] });
+    expect(health.status).toBe(200);
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ error: 'uninitialized' });
+  } finally {
+    await mounted.close();
+  }
+});
+
 test('mounts the vault registry and recovers it across rebuilds (#280)', async () => {
   // The registry is mandatory now — the whole app world is vault-scoped.
   expect(gateway.vaults).toBeDefined();
@@ -84,16 +116,15 @@ test('mounts the vault registry and recovers it across rebuilds (#280)', async (
     await mounted.close();
   }
 
-  // A rebuild over the same paths recovers the same vault, not a new one.
-  const again = await buildGateway({ paths: pathsUnder(dataDir) });
-  try {
-    expect(again.vaults.current().boot.fresh).toBe(false);
-    expect(again.vaults.current().boot.vaultId).toBe(gateway.vaults.current().boot.vaultId);
-    expect(gateway.vaults.current().walShipper).toBeDefined();
-    expect(again.vaults.current().walShipper).toBeUndefined();
-  } finally {
-    await again.stop();
-  }
+  // A stopped gateway releases gateway.db; a rebuild recovers the same
+  // vault and WAL ownership is unconditional after the lease deletion.
+  const vaultId = gateway.vaults.current().boot.vaultId;
+  expect(gateway.vaults.current().walShipper).toBeDefined();
+  await gateway.stop();
+  gateway = await buildGateway({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+  expect(gateway.vaults.current().boot.fresh).toBe(false);
+  expect(gateway.vaults.current().boot.vaultId).toBe(vaultId);
+  expect(gateway.vaults.current().walShipper).toBeDefined();
 });
 
 test('the active vault owns a code store — activeAppsStore materializes it', async () => {
@@ -124,6 +155,7 @@ test('production route table reaches both tunnel controls and the OAuth callback
   await gateway.stop();
   const secret = 'compiled-route-secret';
   gateway = await buildGateway({
+    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     dataPlaneControl: {
       secret,

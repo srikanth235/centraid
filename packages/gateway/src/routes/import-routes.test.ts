@@ -19,7 +19,7 @@ afterEach(async () => {
 async function fixture(): Promise<{ base: string; plane: VaultPlane }> {
   const dir = await tempDir(`import-routes-${crypto.randomUUID()}-`);
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
-  const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
+  const plane = openVaultPlane({ bootstrap: true, dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());
   const handler = makeImportRouteHandler({ current: () => plane });
   const server = http.createServer((req, res) => {

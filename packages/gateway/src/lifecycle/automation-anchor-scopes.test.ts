@@ -1,8 +1,8 @@
 import {
   createGateway,
   createGrant,
+  bootstrapVault,
   ensureAppEnrolled,
-  ensureVaultBootstrapped,
   openVaultDb,
   purposeConceptId,
   type Credential,
@@ -23,7 +23,7 @@ afterEach(() => {
 function anchoredTaskFixture() {
   const db = openVaultDb();
   cleanups.push(() => db.close());
-  const boot = ensureVaultBootstrapped(db, { ownerName: 'Priya' });
+  const boot = bootstrapVault(db, { ownerName: 'Priya' });
   const insertTask = db.vault.prepare(
     `INSERT INTO schedule_task
        (task_id, owner_party_id, title, description, status, priority)

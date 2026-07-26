@@ -108,17 +108,11 @@ describe('buildGroupedRows', () => {
     expect(groups[0]!.status).toBe('auth_failed');
   });
 
-  it('transport badge: local -> "This Mac", direct -> "URL", ssh-capable remote -> "SSH", else "iroh"', () => {
+  it('transport badge: local -> "This Mac", ssh-capable remote -> "SSH", else "iroh"', () => {
     const local: FlatSwitcherGateway = {
       gatewayId: 'local',
       gatewayKind: 'local',
       gatewayLabel: 'This Mac',
-    };
-    const direct: FlatSwitcherGateway = {
-      gatewayId: 'd',
-      gatewayKind: 'remote',
-      gatewayLabel: 'd',
-      transport: 'direct',
     };
     const ssh: FlatSwitcherGateway = {
       gatewayId: 's',
@@ -130,16 +124,10 @@ describe('buildGroupedRows', () => {
       gatewayId: 'i',
       gatewayKind: 'remote',
       gatewayLabel: 'i',
-      transport: 'iroh',
     };
-    const groups = buildGroupedRows(
-      [local, direct, ssh, iroh],
-      {},
-      { gatewayId: 'local', vaultId: '' },
-    );
+    const groups = buildGroupedRows([local, ssh, iroh], {}, { gatewayId: 'local', vaultId: '' });
     const badge = (id: string): string => groups.find((g) => g.gatewayId === id)!.transportBadge;
     expect(badge('local')).toBe('This Mac');
-    expect(badge('d')).toBe('URL');
     expect(badge('s')).toBe('SSH');
     expect(badge('i')).toBe('iroh');
   });

@@ -3,8 +3,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * `centraid-gateway backup …` (PROTOCOL.md/FORMAT.md CLI surface): status,
  * run, list, verify, restore, kit — constructed from the same `--config`
  * resolution `serve` uses. Exercises the real `LocalBackupProvider` and a
- * real vault dir (the registry auto-bootstraps a default vault on first
- * open, same as `serve` would), so this is closer to an integration test
+ * real explicitly-created vault dir, so this is closer to an integration test
  * than the unit-level `backup-service.test.ts`.
  */
 
@@ -80,13 +79,12 @@ beforeEach(async () => {
       },
     }),
   );
-  // Discover the auto-bootstrapped default vault the same way `serve`
-  // would (opening the registry mints one on a fresh root), then close it
-  // so `commandBackup` (which opens its own) doesn't collide.
+  // CLI tests opt into a vault explicitly; a virgin gateway is legal.
   const registry = openVaultRegistry({
     rootDir: daemonLayoutFor(dataDir).vaultDir,
     logger: silentLogger,
   });
+  registry.create('Backup fixture');
   vaultId = registry.defaultVaultId();
   registry.stop();
 });

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   decodePairingTicket,
   findReusableProfile,
-  foldHttpPairResponse,
   foldIrohPairResponse,
   isFoldError,
   isTicketExpired,
@@ -89,17 +88,27 @@ describe('foldIrohPairResponse', () => {
   it('folds a successful response', () => {
     const folded = foldIrohPairResponse({
       ok: true,
+      gatewayId: 'gateway-endpoint',
       vaultId: 'v1',
       vaultName: 'Personal',
       gatewayName: 'Home',
     });
     expect(isFoldError(folded)).toBe(false);
-    expect(folded).toEqual({ vaultId: 'v1', vaultName: 'Personal', gatewayName: 'Home' });
+    expect(folded).toEqual({
+      gatewayId: 'gateway-endpoint',
+      vaultId: 'v1',
+      vaultName: 'Personal',
+      gatewayName: 'Home',
+    });
   });
 
   it('defaults vaultName to empty string when the gateway omits it', () => {
-    const folded = foldIrohPairResponse({ ok: true, vaultId: 'v1' });
-    expect(folded).toEqual({ vaultId: 'v1', vaultName: '' });
+    const folded = foldIrohPairResponse({
+      ok: true,
+      gatewayId: 'gateway-endpoint',
+      vaultId: 'v1',
+    });
+    expect(folded).toEqual({ gatewayId: 'gateway-endpoint', vaultId: 'v1', vaultName: '' });
   });
 
   it('maps ok:false + error:ticket_expired to the stable expired code', () => {
@@ -114,121 +123,33 @@ describe('foldIrohPairResponse', () => {
   });
 
   it('treats ok:true with no vaultId as a malformed response', () => {
-    const folded = foldIrohPairResponse({ ok: true });
+    const folded = foldIrohPairResponse({ ok: true, gatewayId: 'gateway-endpoint' });
     expect(folded).toEqual({
       error: 'bad_response',
       message: 'Gateway did not return a vault id.',
     });
   });
-});
 
-describe('foldHttpPairResponse', () => {
-  it('folds a successful 200 response', () => {
-    const folded = foldHttpPairResponse(200, {
-      ok: true,
-      deviceToken: 'tok',
-      deviceKey: 'key',
-      vaultId: 'v1',
-      vaultName: 'Personal',
-    });
-    expect(folded).toEqual({
-      deviceToken: 'tok',
-      deviceKey: 'key',
-      vaultId: 'v1',
-      vaultName: 'Personal',
-    });
-  });
-
-  it('omits deviceKey when the gateway does not send one', () => {
-    const folded = foldHttpPairResponse(200, {
-      ok: true,
-      deviceToken: 'tok',
-      vaultId: 'v1',
-      vaultName: 'Personal',
-    });
-    expect(folded).toEqual({ deviceToken: 'tok', vaultId: 'v1', vaultName: 'Personal' });
-  });
-
-  it('maps 403 {error:"ticket_expired"} to the expired code', () => {
-    expect(foldHttpPairResponse(403, { ok: false, error: 'ticket_expired' })).toEqual({
-      error: 'ticket_expired',
-      message: 'This pairing code has expired.',
-    });
-  });
-
-  it('maps 403 {error:"ticket_invalid"} (and any other 403 body) to invalid_ticket', () => {
-    expect(foldHttpPairResponse(403, { ok: false, error: 'ticket_invalid' })).toEqual({
-      error: 'invalid_ticket',
-      message: 'That pairing code is not valid.',
-    });
-    expect(foldHttpPairResponse(403, {})).toEqual({
-      error: 'invalid_ticket',
-      message: 'That pairing code is not valid.',
-    });
-  });
-
-  it('maps a non-200/403 status to unreachable with the status code', () => {
-    expect(foldHttpPairResponse(503, {})).toEqual({ error: 'unreachable', message: 'HTTP 503' });
-  });
-
-  it('treats a non-object 200 body as bad_response', () => {
-    expect(foldHttpPairResponse(200, 'not an object')).toEqual({
+  it('treats ok:true with no gateway EndpointId as malformed', () => {
+    expect(foldIrohPairResponse({ ok: true, vaultId: 'v1' })).toEqual({
       error: 'bad_response',
-      message: 'Gateway returned a malformed pairing response.',
-    });
-    expect(foldHttpPairResponse(200, null)).toEqual({
-      error: 'bad_response',
-      message: 'Gateway returned a malformed pairing response.',
-    });
-  });
-
-  it('treats {ok:false} on a 200 as invalid_ticket', () => {
-    expect(foldHttpPairResponse(200, { ok: false })).toEqual({
-      error: 'invalid_ticket',
-      message: 'That pairing code is not valid.',
-    });
-  });
-
-  it('treats a missing/empty deviceToken as bad_response', () => {
-    expect(foldHttpPairResponse(200, { ok: true, vaultId: 'v1' })).toEqual({
-      error: 'bad_response',
-      message: 'Gateway did not return a device token.',
-    });
-    expect(foldHttpPairResponse(200, { ok: true, deviceToken: '', vaultId: 'v1' })).toEqual({
-      error: 'bad_response',
-      message: 'Gateway did not return a device token.',
-    });
-  });
-
-  it('treats a missing/empty vaultId as bad_response', () => {
-    expect(foldHttpPairResponse(200, { ok: true, deviceToken: 'tok' })).toEqual({
-      error: 'bad_response',
-      message: 'Gateway did not return a vault id.',
+      message: 'Gateway did not return its EndpointId.',
     });
   });
 });
 
 describe('findReusableProfile', () => {
   const profiles = [
-    { id: 'a', transport: 'iroh' as const, endpointTicket: 'ticket-a' },
-    { id: 'b', transport: 'direct' as const, url: 'https://gw.example' },
-    { id: 'c', transport: 'local' as const },
+    { id: 'endpoint-a', endpointId: 'endpoint-a' },
+    { id: 'endpoint-b', endpointId: 'endpoint-b' },
+    { id: 'local' },
   ];
 
-  it('finds an existing iroh profile by endpointTicket', () => {
-    expect(findReusableProfile(profiles, { endpointTicket: 'ticket-a' })?.id).toBe('a');
+  it('finds an existing connection by stable EndpointId', () => {
+    expect(findReusableProfile(profiles, 'endpoint-a')?.id).toBe('endpoint-a');
   });
 
-  it('finds an existing direct profile by url', () => {
-    expect(findReusableProfile(profiles, { url: 'https://gw.example' })?.id).toBe('b');
-  });
-
-  it('does not cross-match transports (an iroh ticket never matches a direct url slot)', () => {
-    expect(findReusableProfile(profiles, { endpointTicket: 'https://gw.example' })).toBeUndefined();
-  });
-
-  it('returns undefined when nothing matches — the caller mints a new profile', () => {
-    expect(findReusableProfile(profiles, { endpointTicket: 'never-seen' })).toBeUndefined();
-    expect(findReusableProfile(profiles, { url: 'https://never-seen.example' })).toBeUndefined();
+  it('does not identify a gateway by address-like cache data', () => {
+    expect(findReusableProfile(profiles, 'https://relay.example')).toBeUndefined();
   });
 });

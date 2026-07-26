@@ -20,19 +20,30 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+export interface PrefsPersistence {
+  read(): Record<string, unknown>;
+  write(prefs: Record<string, unknown>): void;
+}
+
 export class PrefsStore {
-  private readonly file: string;
+  private readonly file: string | undefined;
+  private readonly persistence: PrefsPersistence | undefined;
   private cache: Record<string, unknown> | undefined;
 
-  /** `file` is the JSON path (e.g. `<dataDir>/prefs.json`). Created lazily. */
-  constructor(file: string) {
-    this.file = file;
+  /** Hosts may inject database persistence; string paths retain legacy test compatibility. */
+  constructor(source: string | PrefsPersistence) {
+    if (typeof source === 'string') this.file = source;
+    else this.persistence = source;
   }
 
   private load(): Record<string, unknown> {
     if (this.cache) return this.cache;
+    if (this.persistence) {
+      this.cache = this.persistence.read();
+      return this.cache;
+    }
     try {
-      const parsed = JSON.parse(readFileSync(this.file, 'utf8')) as unknown;
+      const parsed = JSON.parse(readFileSync(this.file!, 'utf8')) as unknown;
       this.cache =
         parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
           ? (parsed as Record<string, unknown>)
@@ -45,10 +56,14 @@ export class PrefsStore {
   }
 
   private persist(): void {
-    mkdirSync(path.dirname(this.file), { recursive: true });
-    const tmp = `${this.file}.tmp`;
+    if (this.persistence) {
+      this.persistence.write(this.cache ?? {});
+      return;
+    }
+    mkdirSync(path.dirname(this.file!), { recursive: true });
+    const tmp = `${this.file!}.tmp`;
     writeFileSync(tmp, JSON.stringify(this.cache ?? {}, null, 2), { mode: 0o600 });
-    renameSync(tmp, this.file);
+    renameSync(tmp, this.file!);
   }
 
   /** Every pref as a `Record<string, unknown>` (a defensive copy). */

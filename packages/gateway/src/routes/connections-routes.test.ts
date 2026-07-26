@@ -74,6 +74,7 @@ async function startTokenServer(): Promise<{
 test('the whole ceremony: configure → authorize → callback → active with sealed tokens', async () => {
   const dir = await tempDir();
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const broker = new ConnectionBroker(() => registry.current());
   const base = await startHandlerServer(makeConnectionsRouteHandler(registry, broker));
@@ -188,6 +189,7 @@ test('the whole ceremony: configure → authorize → callback → active with s
 test('a declined consent screen lands a readable page and consumes the state', async () => {
   const dir = await tempDir();
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const broker = new ConnectionBroker(() => registry.current());
   const base = await startHandlerServer(makeConnectionsRouteHandler(registry, broker));
@@ -227,6 +229,7 @@ test('a declined consent screen lands a readable page and consumes the state', a
 test('Assist config → bound courier handoff → Worker exchange stores tokens without a public gateway callback', async () => {
   const dir = await tempDir();
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const workerRequests: Array<{ path: string; body: Record<string, unknown> }> = [];
   const workerFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -348,6 +351,7 @@ test('Assist config → bound courier handoff → Worker exchange stores tokens 
 test('pause and resume ride PATCH; providers expose the BYO wizard with the Google traps', async () => {
   const dir = await tempDir();
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const broker = new ConnectionBroker(() => registry.current());
   const base = await startHandlerServer(makeConnectionsRouteHandler(registry, broker));
@@ -395,6 +399,7 @@ test('pause and resume ride PATCH; providers expose the BYO wizard with the Goog
 test('DELETE removes a connection with no history, 409s on a real refusal, 404s an unknown id', async () => {
   const dir = await tempDir();
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const broker = new ConnectionBroker(() => registry.current());
   const base = await startHandlerServer(makeConnectionsRouteHandler(registry, broker));

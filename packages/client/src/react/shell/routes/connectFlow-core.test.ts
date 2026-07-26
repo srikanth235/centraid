@@ -48,7 +48,7 @@ describe('connectFlowReducer', () => {
       value: 'abc',
     });
     expect(s.ticket).toBe('abc');
-    expect(s.url).toBe('');
+    expect(s.label).toBe('');
   });
 
   it('startTest moves to the test step and clears the previous report', () => {
@@ -182,13 +182,6 @@ describe('buildTestInput / canStartTest', () => {
     expect(buildTestInput(s)).toEqual({ kind: 'ticket', ticket: 't.icket' });
   });
 
-  it('gateway advanced URL panel still tests via the ticket (issue #505: no admin-token paste)', () => {
-    // The advanced "Connect by URL" panel redeems the SAME ticket over HTTP —
-    // it never accepts a bare bearer token, so the test input stays the ticket.
-    const s = at({ advancedOpen: true, method: 'gateway', ticket: 't.icket', url: 'https://x' });
-    expect(buildTestInput(s)).toEqual({ kind: 'ticket', ticket: 't.icket' });
-  });
-
   it('ssh: destination required, dataDir optional', () => {
     const s = at({ method: 'ssh', sshDestination: 'user@host' });
     expect(buildTestInput(s)).toEqual({
@@ -234,21 +227,6 @@ describe('vaultCapability', () => {
     );
     expect(cap).toEqual({ canCreate: false, locked: { vaultName: 'Office' }, options: [] });
   });
-
-  it('gateway advanced URL panel is still ticket-locked, not create-capable', () => {
-    const cap = vaultCapability(
-      at({
-        advancedOpen: true,
-        method: 'gateway',
-        report: {
-          ok: true,
-          stages: [],
-          ticket: { expiresAt: '', gatewayEndpointId: '', vaultName: 'Office' },
-        },
-      }),
-    );
-    expect(cap).toEqual({ canCreate: false, locked: { vaultName: 'Office' }, options: [] });
-  });
 });
 
 describe('canCommitConnectFlow', () => {
@@ -272,12 +250,6 @@ describe('canCommitConnectFlow', () => {
   it('gateway/ticket requires a non-empty ticket', () => {
     expect(canCommitConnectFlow(at({ method: 'gateway' }))).toBe(false);
     expect(canCommitConnectFlow(at({ method: 'gateway', ticket: 't' }))).toBe(true);
-  });
-
-  it('gateway advanced URL panel still only requires the ticket', () => {
-    const s = at({ advancedOpen: true, method: 'gateway', url: 'https://x' });
-    expect(canCommitConnectFlow(s)).toBe(false);
-    expect(canCommitConnectFlow({ ...s, ticket: 't' })).toBe(true);
   });
 
   it('ssh requires a destination and a resolved vault choice', () => {

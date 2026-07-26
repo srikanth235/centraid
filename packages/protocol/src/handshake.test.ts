@@ -97,6 +97,27 @@ test('buildGatewayInfoPayload ships product + protocol fields', () => {
   expect(payload.protocolVersion).toBe(GATEWAY_PROTOCOL_VERSION);
   expect(payload.minSupportedProtocol).toBe(GATEWAY_MIN_PROTOCOL_VERSION);
   expect(payload.schemaEpoch).toBe(GATEWAY_SCHEMA_EPOCH);
+  expect(payload.status).toBe('ready');
   expect(payload.capabilities?.devicePairing).toBe(true);
   expect(ROUTES.gatewayInfo).toBe('/centraid/_gateway/info');
+});
+
+test('gateway status is additive and older payloads default to ready', () => {
+  const uninitialized = buildGatewayInfoPayload({
+    instanceId: 'i1',
+    startedAt: 1,
+    uptimeMs: 2,
+    status: 'uninitialized',
+  });
+  expect(judgeGatewayInfo(uninitialized)).toMatchObject({
+    ok: true,
+    info: { status: 'uninitialized' },
+  });
+  expect(
+    judgeGatewayInfo({
+      version: GATEWAY_VERSION,
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+    }),
+  ).toMatchObject({ ok: true, info: { status: 'ready' } });
 });

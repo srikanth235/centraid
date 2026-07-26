@@ -65,7 +65,7 @@ export default function FirstRunGate({
           <button type="button" className={styles.choiceBtn} onClick={() => setMode('recover')}>
             <span className={styles.choiceBtnTitle}>Recover my vault</span>
             <span className={styles.choiceBtnSub}>
-              Bring everything back from your recovery kit.
+              Bring backed-up vaults back from your recovery kit.
             </span>
           </button>
         </div>

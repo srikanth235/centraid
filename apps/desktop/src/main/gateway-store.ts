@@ -1,35 +1,17 @@
-// governance: allow-repo-hygiene file-size-limit (#382) one profile-registry
-// module (CRUD + resolution + secrets + ssh-block updater) crossing 500 by
-// 32 lines is more legible than a mid-refactor split; a real split (issue
-// TBD) should separate resolution/transport from CRUD, not happen here.
-//
-// Gateway profile registry + active-gateway selection.
-//
-// Issue #109. Centraid is multi-gateway: one local in-process runtime
-// (id `'local'`, always present) plus 0..N remote gateways the user
-// adds via the Settings → Gateways panel. Each gateway gets a
-// `profile.json` describing its identity and a per-gateway subtree
-// under `<userData>/gateways/<id>/`.
-//
-// This module is the single source of truth for:
-//   - listing profiles (scans `gateways/` + reads each `profile.json`)
-//   - resolving the active gateway (looked up from `settings.json`)
-//   - adding/removing/renaming remote gateways (lifecycle IPCs)
-//   - resolving "effective URL + token" — for local that's the
-//     in-process runtime's ephemeral URL + per-launch token; for
-//     remote it's the profile's stored URL + the keychain token.
-//
-// The local gateway is special-cased throughout:
-//   - id is the fixed string `'local'`
-//   - profile is auto-created on first read if missing
-//   - cannot be removed; rename is allowed (label only)
-//   - URL/token are minted by the in-process runtime, not persisted
+/*
+ * Desktop connection registry (issue #555).
+ *
+ * Electron main owns one `<userData>/connections.json`; it never scans or
+ * creates a directory per connection. Remote gateways are keyed by their
+ * stable iroh EndpointId. Relay hints are refreshable address cache, not
+ * identity, and device secrets live separately behind safeStorage.
+ */
 
+import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { LOCAL_GATEWAY_ID, gatewayDir, gatewayProfilePath, gatewaysRoot } from './gateway-paths.js';
-import { clearGatewayToken, getGatewayToken, setGatewayToken } from './gateway-secrets.js';
+import { connectionsFile, LOCAL_GATEWAY_ID } from './gateway-paths.js';
+import { clearGatewayCredentials } from './gateway-secrets.js';
 import {
   defaultAvatarColor,
   isValidAvatarColor,
@@ -40,24 +22,17 @@ import {
   type GatewayKind,
   type GatewayProfileShape,
 } from './gateway-store-core.js';
-import {
-  assertDirectUrlAllowed,
-  resolveTransport,
-  TransportGuardError,
-  type GatewayTransport,
-} from './transport.js';
 import { ensureIrohProxy } from './iroh-dialer.js';
 
 export type { GatewayKind };
 export type GatewayProfile = GatewayProfileShape;
 export { defaultAvatarColor };
 
-/** Result of `resolveGateway` — profile + effective URL/token. */
 export interface ResolvedGateway {
   readonly profile: GatewayProfile;
-  /** For local: the in-process runtime's URL. For remote: profile.url. */
+  /** Loopback URL: embedded server for local, iroh proxy for remote. */
   readonly url: string;
-  /** For local: the per-launch token. For remote: the keychain value (or ''). */
+  /** Temporary local loopback bearer; remote iroh connections use no bearer. */
   readonly token: string;
 }
 
@@ -75,13 +50,6 @@ class GatewayError extends Error {
   }
 }
 
-/**
- * Per-gateway provider of the local in-process runtime's URL+token.
- * Registered once by `local-gateway.ts`; the closure reads the
- * runtime's handle map at lookup time so a gateway that hasn't been
- * activated yet returns undefined here (and `resolveGateway` returns
- * an empty url/token, which callers in boot-time code paths tolerate).
- */
 let localGatewayInfo: (gatewayId: string) => { url: string; token: string } | undefined = () =>
   undefined;
 
@@ -91,31 +59,55 @@ export function setLocalGatewayInfoProvider(
   localGatewayInfo = fn;
 }
 
-/**
- * Technical fallback label for the auto-created local profile. Not
- * user-facing in normal flow — the renderer gates first launch behind
- * an onboarding view that asks the user to pick their own
- * `displayName`. This label only surfaces if onboarding is somehow
- * bypassed; keeping it terse + neutral so even that degenerate case
- * reads as "system default", not a presumed name.
- */
 const DEFAULT_LOCAL_LABEL = 'Local';
 
-/**
- * Ensure the `gateways/local/` dir and its `profile.json` exist. Safe
- * to call on every boot — no-op when already present. Returns the
- * persisted profile.
- *
- * Crucially, the auto-created profile carries NO `displayName` — the
- * field stays unset on disk so the renderer can detect "user has not
- * personalized this profile yet" and route to onboarding. `readProfile`
- * still threads a default displayName at read time (falls back to
- * `label`) so callers always see a populated string, but the on-disk
- * absence is the signal the onboarding flow keys on.
- */
+async function readProfiles(): Promise<GatewayProfile[]> {
+  let raw: string;
+  try {
+    raw = await fs.readFile(connectionsFile(), 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  const parsed = JSON.parse(raw) as unknown;
+  if (!Array.isArray(parsed)) {
+    throw new GatewayError('invalid_input', 'connections.json must contain an array.');
+  }
+  return parsed.flatMap((row) => {
+    if (!row || typeof row !== 'object') return [];
+    const id = (row as { id?: unknown }).id;
+    if (typeof id !== 'string') return [];
+    const profile = normalizeProfile(id, row as Partial<GatewayProfile>);
+    return profile ? [profile] : [];
+  });
+}
+
+async function writeProfiles(profiles: readonly GatewayProfile[]): Promise<void> {
+  const file = connectionsFile();
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const temp = `${file}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
+  await fs.writeFile(temp, `${JSON.stringify(profiles, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+  try {
+    await fs.rename(temp, file);
+    await fs.chmod(file, 0o600);
+  } finally {
+    await fs.rm(temp, { force: true });
+  }
+}
+
+async function readProfile(id: string): Promise<GatewayProfile | undefined> {
+  return (await readProfiles()).find((profile) => profile.id === id);
+}
+
+async function replaceProfile(profile: GatewayProfile): Promise<void> {
+  const profiles = await readProfiles();
+  const index = profiles.findIndex((row) => row.id === profile.id);
+  if (index < 0) profiles.push(profile);
+  else profiles[index] = profile;
+  await writeProfiles(profiles);
+}
+
 export async function ensureLocalGateway(): Promise<GatewayProfile> {
-  const dir = gatewayDir(LOCAL_GATEWAY_ID);
-  await fs.mkdir(dir, { recursive: true });
   const existing = await readProfile(LOCAL_GATEWAY_ID);
   if (existing) return existing;
   const profile: GatewayProfile = {
@@ -124,147 +116,49 @@ export async function ensureLocalGateway(): Promise<GatewayProfile> {
     label: DEFAULT_LOCAL_LABEL,
     createdAt: new Date().toISOString(),
   };
-  await writeProfile(profile);
-  return profile;
+  await replaceProfile(profile);
+  return normalizeProfile(LOCAL_GATEWAY_ID, profile) as GatewayProfile;
 }
 
-/**
- * Read a profile from disk. Undefined when the file doesn't exist.
- *
- * Read-time defaults: `displayName` falls back to `label` (handles the
- * primordial-local case where `ensureLocalGateway` writes the profile
- * without a displayName so the onboarding flow can detect "user has
- * not personalized this yet"), and `avatarColor` falls back to a
- * deterministic palette pick from the id. Callers always see
- * populated fields.
- */
-async function readProfile(id: string): Promise<GatewayProfile | undefined> {
-  try {
-    const raw = await fs.readFile(gatewayProfilePath(id), 'utf8');
-    const parsed = JSON.parse(raw) as Partial<GatewayProfile>;
-    return normalizeProfile(id, parsed);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw err;
-  }
-}
-
-async function writeProfile(profile: GatewayProfile): Promise<void> {
-  const file = gatewayProfilePath(profile.id);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, JSON.stringify(profile, null, 2) + '\n', { mode: 0o600 });
-}
-
-/**
- * Enumerate every gateway profile under `gateways/`. Folders whose
- * `profile.json` is missing or corrupt are silently skipped — they
- * usually represent a half-finished migration that the user can
- * either complete (write a profile by re-adding) or wipe by removing
- * the folder.
- */
 export async function listGateways(): Promise<GatewayProfile[]> {
   await ensureLocalGateway();
-  const entries = await fs.readdir(gatewaysRoot(), { withFileTypes: true }).catch(() => []);
-  const profiles: GatewayProfile[] = [];
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    const p = await readProfile(e.name);
-    if (p) profiles.push(p);
-  }
-  // Stable order: local first, then remote by creation time (oldest
-  // first — matches the order the user added them).
-  return sortGatewayProfiles(profiles, LOCAL_GATEWAY_ID);
+  return sortGatewayProfiles(await readProfiles(), LOCAL_GATEWAY_ID);
 }
 
 export interface AddGatewayInput {
-  /**
-   * Explicit id to use instead of minting a fresh UUID here. The gateway
-   * pairing flow (issue #376) needs this: an `iroh` profile's device key is
-   * keyed by gateway id (`iroh-dialer.ts`'s `ensureIrohDeviceKey`), and that
-   * key must exist and dial BEFORE the profile is written — so the caller
-   * pre-mints the id, dials with it, and only calls `addGateway({ id, ... })`
-   * once the tunnel confirms the pairing succeeded. Throws `already_exists`
-   * if a profile with this id is already on disk. Omit for the normal
-   * manual "Add gateway" flow, where a UUID is minted here as before.
-   */
-  id?: string;
-  /** User-visible label. Trimmed; required. */
   label: string;
-  /**
-   * `direct` remote (https/http URL + token). Required for a direct add;
-   * omit when adding an `iroh` gateway.
-   */
-  url?: string;
-  /**
-   * `iroh` remote (EndpointTicket — EndpointId + relay hint, redeemed from a
-   * pairing ticket). Required for an iroh add; omit for direct.
-   */
-  endpointTicket?: string;
-  /** Iroh EndpointId (for display). Optional; carried alongside the ticket. */
-  endpointId?: string;
-  /** Bearer token. Stored in keychain, never on disk. Empty = unauthenticated. */
-  token: string;
-  /** Optional friendly name. Defaults to `label` at read time. */
+  endpointId: string;
+  /** Current relay cache from the one-time pairing ticket. */
+  relayHint?: string;
   displayName?: string;
-  /** Optional avatar color as `#RRGGBB`. Defaults to a deterministic palette pick. */
   avatarColor?: string;
-  /** Explicit pairing consent for durable client-side state. */
   rememberDevice?: boolean;
 }
 
-/**
- * Mint a UUID, persist the profile + token, and create the per-gateway
- * dirs. Two transports: `direct` (a URL — the plain-http guardrail rejects
- * cleartext to a public host, #289 decision 6) or `iroh` (an EndpointTicket).
- * We don't probe the gateway here (the UI does its own "Test connection").
- */
 export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile> {
   const fields = validateAddGatewayFields(input);
   if (!fields.ok) throw new GatewayError(fields.code, fields.message);
-  const { label, url, endpointTicket, transport, displayName } = fields;
-  if (url) {
-    try {
-      assertDirectUrlAllowed(url);
-    } catch (err) {
-      throw new GatewayError(
-        'invalid_input',
-        err instanceof TransportGuardError ? err.message : String(err),
-      );
-    }
+  const { endpointId, label, relayHint, displayName } = fields;
+  if (await readProfile(endpointId)) {
+    throw new GatewayError('already_exists', `Gateway "${endpointId}" already exists.`);
   }
-  const id = input.id ?? randomUUID();
-  if (input.id && (await readProfile(id))) {
-    throw new GatewayError('already_exists', `Gateway "${id}" already exists.`);
-  }
-  const avatarColor = isValidAvatarColor(input.avatarColor)
-    ? input.avatarColor
-    : defaultAvatarColor(id);
   const profile: GatewayProfile = {
-    id,
+    id: endpointId,
     kind: 'remote',
     label,
     displayName,
-    avatarColor,
-    transport: transport as GatewayTransport,
-    ...(url ? { url } : {}),
-    ...(endpointTicket ? { endpointTicket } : {}),
-    ...(input.endpointId ? { endpointId: input.endpointId } : {}),
+    avatarColor: isValidAvatarColor(input.avatarColor)
+      ? input.avatarColor
+      : defaultAvatarColor(endpointId),
+    endpointId,
+    ...(relayHint ? { relayHint } : {}),
     rememberDevice: input.rememberDevice === true,
     createdAt: new Date().toISOString(),
   };
-  await fs.mkdir(gatewayDir(id), { recursive: true });
-  // appsDir intentionally not created for remote — the directory is
-  // unused (the gateway owns its own storage). Path helpers still
-  // return the resolved path so handlers don't need kind-specific
-  // branching, they just won't write anything there.
-  await writeProfile(profile);
-  if (input.token.length > 0) {
-    await setGatewayToken(id, input.token);
-  }
+  await replaceProfile(profile);
   return profile;
 }
 
-/** Persist a renewed pairing ceremony's remember-device choice. */
 export async function updateGatewayRememberDevice(
   id: string,
   rememberDevice: boolean,
@@ -272,16 +166,23 @@ export async function updateGatewayRememberDevice(
   const current = await readProfile(id);
   if (!current) throw new GatewayError('unknown_gateway', `Unknown gateway "${id}".`);
   const next = { ...current, rememberDevice };
-  await writeProfile(next);
+  await replaceProfile(next);
   return next;
 }
 
-/**
- * Patch `displayName` and/or `avatarColor` on an existing profile. Pass
- * the empty string for `displayName` to reset it to `label`-derived
- * default at next read; pass `undefined` to leave the field untouched.
- * `avatarColor` accepts `#RRGGBB` or `undefined`.
- */
+/** Refresh address cache without changing a gateway's identity. */
+export async function updateGatewayRelayHint(
+  id: string,
+  relayHint: string | undefined,
+): Promise<GatewayProfile> {
+  const current = await readProfile(id);
+  if (!current) throw new GatewayError('unknown_gateway', `Unknown gateway "${id}".`);
+  const { relayHint: _old, ...rest } = current;
+  const next: GatewayProfile = relayHint ? { ...rest, relayHint } : rest;
+  await replaceProfile(next);
+  return next;
+}
+
 export async function updateProfileMetadata(
   id: string,
   patch: { displayName?: string; avatarColor?: string },
@@ -290,9 +191,8 @@ export async function updateProfileMetadata(
   if (!current) throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
   const next: GatewayProfile = { ...current };
   if (patch.displayName !== undefined) {
-    const trimmed = patch.displayName.trim();
-    // Persist explicitly even when equal to label — round-trips intent.
-    (next as { displayName: string }).displayName = trimmed.length > 0 ? trimmed : current.label;
+    const displayName = patch.displayName.trim() || current.label;
+    (next as { displayName: string }).displayName = displayName;
   }
   if (patch.avatarColor !== undefined) {
     if (!isValidAvatarColor(patch.avatarColor)) {
@@ -303,18 +203,10 @@ export async function updateProfileMetadata(
     }
     (next as { avatarColor: string }).avatarColor = patch.avatarColor;
   }
-  await writeProfile(next);
+  await replaceProfile(next);
   return next;
 }
 
-/**
- * Wipe a gateway's directory and (for remote) its keychain entry.
- * Refuses to remove the primordial `'local'` gateway — every install
- * has one, and the active-gateway fallback path in settings depends on
- * it always being there. Non-primordial local gateways (added via
- * is fine. (#280 removed "additional local workspaces" — a second space
- * is a second VAULT now, so the only locals are the primordial one.)
- */
 export async function removeGateway(id: string): Promise<void> {
   if (id === LOCAL_GATEWAY_ID) {
     throw new GatewayError('local_not_removable', 'The default local profile cannot be removed.');
@@ -322,47 +214,26 @@ export async function removeGateway(id: string): Promise<void> {
   if (!isValidGatewayId(id)) {
     throw new GatewayError('invalid_input', `Invalid gateway id "${id}".`);
   }
-  // Best-effort token clear — local gateways have no keychain entry, so
-  // the call is a no-op for them.
-  await clearGatewayToken(id);
-  // Tear down any live iroh proxy for this gateway before its dir goes.
+  const profiles = await readProfiles();
+  if (!profiles.some((profile) => profile.id === id)) {
+    throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
+  }
   const { closeIrohDialer } = await import('./iroh-dialer.js');
   await closeIrohDialer(id);
-  await fs.rm(gatewayDir(id), { recursive: true, force: true });
+  clearGatewayCredentials(id);
+  await writeProfiles(profiles.filter((profile) => profile.id !== id));
 }
 
-/** Rename a gateway (label only — id and paths never change). */
 export async function renameGateway(id: string, nextLabel: string): Promise<GatewayProfile> {
-  const trimmed = nextLabel.trim();
-  if (!trimmed) throw new GatewayError('invalid_input', 'Gateway label cannot be empty.');
+  const label = nextLabel.trim();
+  if (!label) throw new GatewayError('invalid_input', 'Gateway label cannot be empty.');
   const current = await readProfile(id);
   if (!current) throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
-  const next: GatewayProfile = { ...current, label: trimmed };
-  await writeProfile(next);
+  const next: GatewayProfile = { ...current, label };
+  await replaceProfile(next);
   return next;
 }
 
-/**
- * Replace a remote gateway's stored token. Pass empty string to clear.
- * Local gateway tokens are managed by the in-process runtime; calling
- * this with the local id is a no-op.
- */
-export async function updateGatewayToken(id: string, token: string): Promise<void> {
-  if (id === LOCAL_GATEWAY_ID) return;
-  const profile = await readProfile(id);
-  if (!profile) throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
-  await setGatewayToken(id, token);
-}
-
-/**
- * Persist (or clear) a gateway's `ssh` block (issue #382) — set once
- * GATEWAY_SSH_CONNECT successfully reaches a box over SSH, so later admin
- * acts (create another vault, mint another ticket, "Test connection" from
- * the switcher) can reach it again without re-asking for the destination.
- * Pass `undefined` to clear. No-op for the local gateway (it has no ssh
- * concept). No secrets are stored here — ssh auth rides the user's own
- * key/agent, never a token this app holds.
- */
 export async function updateGatewaySsh(
   id: string,
   ssh: { destination: string; dataDir?: string; remoteCli?: string } | undefined,
@@ -370,46 +241,26 @@ export async function updateGatewaySsh(
   const current = await readProfile(id);
   if (!current) throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
   if (id === LOCAL_GATEWAY_ID) return current;
-  const { ssh: _dropped, ...rest } = current;
+  const { ssh: _old, ...rest } = current;
   const next: GatewayProfile = ssh ? { ...rest, ssh } : rest;
-  await writeProfile(next);
+  await replaceProfile(next);
   return next;
 }
 
-/**
- * Resolve a gateway by id into a `ResolvedGateway`. Returns undefined
- * for an unknown id rather than throwing — callers usually fall back
- * to the local gateway in that case.
- */
 export async function resolveGateway(id: string): Promise<ResolvedGateway | undefined> {
   const profile = await readProfile(id);
   if (!profile) return undefined;
   if (profile.kind === 'local') {
     const info = localGatewayInfo(profile.id);
-    return {
-      profile,
-      url: info?.url ?? '',
-      token: info?.token ?? '',
-    };
+    return { profile, url: info?.url ?? '', token: info?.token ?? '' };
   }
-  const token = (await getGatewayToken(profile.id)) ?? '';
-  // An iroh gateway has no URL — dial it and stand up a loopback proxy so
-  // the HTTP client hits `http://127.0.0.1:<port>` transport-blind (#289).
-  if (resolveTransport(profile) === 'iroh' && profile.endpointTicket) {
-    try {
-      const url = await ensureIrohProxy(profile.id, profile.endpointTicket);
-      return { profile, url, token };
-    } catch {
-      // Dial failure → empty URL; callers surface "unreachable" like any
-      // offline gateway, and the switcher badges it.
-      return { profile, url: '', token };
-    }
+  if (!profile.endpointId) return { profile, url: '', token: '' };
+  try {
+    const url = await ensureIrohProxy(profile.id, profile.endpointId, profile.relayHint);
+    return { profile, url, token: '' };
+  } catch {
+    return { profile, url: '', token: '' };
   }
-  return {
-    profile,
-    url: profile.url ?? '',
-    token,
-  };
 }
 
 export { GatewayError };

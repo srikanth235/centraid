@@ -72,6 +72,7 @@ async function seedAndExportKit(
     ownerName: 'Mara',
   });
   cleanups.push(() => registry.stop());
+  registry.create('Recovery fixture');
   const vaultId = registry.defaultVaultId();
   const service = new BackupService({
     config: {

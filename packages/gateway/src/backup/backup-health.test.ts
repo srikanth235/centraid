@@ -31,7 +31,6 @@ function stateWith(target: BackupTargetState): BackupState {
     targets: { 'vault-a': target },
     casReconciliations: {},
     sourceInstanceId: 'deadbeef',
-    recoveryKit: { confirmedAt: null },
   };
 }
 

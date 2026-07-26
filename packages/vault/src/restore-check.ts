@@ -26,11 +26,11 @@ import { resolveEntity } from './schema/tables.js';
  * catches it:
  *   - `not-sealed`: the vault never sealed a value (no stamped fingerprint) — no
  *     key is expected, nothing to prove.
- *   - `ok`: the vault has sealed secrets and the restored `seal.key` matches the
+ *   - `ok`: the vault has sealed secrets and the recovery-kit DEK matches the
  *     fingerprint stamped in `core_vault` — it would actually unseal.
- *   - `missing`: the vault has sealed secrets but the restore carries no `seal.key`.
- *   - `mismatch`: a `seal.key` is present but is not the key those secrets were
- *     sealed with (regenerated/foreign/corrupt) — GCM garbage on every reveal.
+ *   - `missing`: the vault has sealed secrets but no recovery key was supplied.
+ *   - `mismatch`: the supplied key is not the DEK those secrets were sealed
+ *     with (regenerated/foreign/corrupt) — GCM garbage on every reveal.
  */
 export type SealKeyVerdict = 'not-sealed' | 'ok' | 'missing' | 'mismatch';
 
@@ -44,16 +44,26 @@ export interface RestoredPairReport {
   sealKey: { verdict: SealKeyVerdict; expected?: string };
 }
 
-/** Prove the restored `seal.key` matches the vault's stamped fingerprint. */
-function checkSealKey(destDir: string, vault: DatabaseSync): RestoredPairReport['sealKey'] {
+/** Prove the supplied recovery-kit DEK matches the restored vault fingerprint. */
+function checkSealKey(
+  destDir: string,
+  vault: DatabaseSync,
+  recoveryKey: Buffer | null | undefined,
+): RestoredPairReport['sealKey'] {
   const expected = readSealKeyFingerprint(vault);
   if (expected === null) return { verdict: 'not-sealed' };
   let key: Buffer | null;
-  try {
-    key = loadSealKey(path.join(destDir, 'seal.key'));
-  } catch {
-    // Present but the wrong length — a corrupt key file, not an absent one.
-    return { verdict: 'mismatch', expected };
+  if (recoveryKey !== undefined) {
+    key = recoveryKey;
+  } else {
+    // Compatibility for callers verifying an older snapshot that carried the
+    // now-retired loose seal.key entry. New recovery paths always supply the
+    // DEK from KeyStore/recovery-kit custody.
+    try {
+      key = loadSealKey(path.join(destDir, 'seal.key'));
+    } catch {
+      return { verdict: 'mismatch', expected };
+    }
   }
   if (!key) return { verdict: 'missing', expected };
   return { verdict: sealKeyFingerprint(key) === expected ? 'ok' : 'mismatch', expected };
@@ -81,10 +91,13 @@ function pkOf(db: DatabaseSync, physical: string): string | undefined {
 }
 
 /** Verify a restored vault directory (both files + the G8 cross-check). */
-export function verifyRestoredPair(destDir: string): RestoredPairReport {
+export function verifyRestoredPair(
+  destDir: string,
+  recoveryKey?: Buffer | null,
+): RestoredPairReport {
   const vault = checkFile(path.join(destDir, 'vault.db'));
   const journal = checkFile(path.join(destDir, 'journal.db'));
-  const sealKey = checkSealKey(destDir, vault.db);
+  const sealKey = checkSealKey(destDir, vault.db, recoveryKey);
   const danglingReceipts: RestoredPairReport['danglingReceipts'] = [];
   let receiptsChecked = 0;
   try {
