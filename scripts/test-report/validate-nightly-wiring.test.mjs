@@ -41,9 +41,35 @@ describe('validate-nightly-wiring structure (#545)', () => {
     expect(failBlock).toMatch(/needs\.mutation-testing\.result/);
   });
 
-  test('issue create failure emits ::error:: (A11)', () => {
+  test('a failed issue create is loud, never swallowed (A11)', () => {
+    // #557 moved the open-or-update logic out of four near-identical inline
+    // shell blocks into scripts/ci/file-tracking-issue.mjs. The A11 invariant
+    // is unchanged — a failed create must not be swallowed — so this asserts it
+    // in both halves: the workflow delegates rather than hand-rolling `gh`, and
+    // the script it delegates to exits non-zero. (The decision tree itself is
+    // covered by scripts/ci/file-tracking-issue.test.mjs.)
     const failBlock = e2e.slice(e2e.indexOf('nightly-failure-issue:'));
-    expect(failBlock).toMatch(/::error::Failed to create nightly tracking issue/);
+    expect(failBlock).toMatch(/scripts\/ci\/file-tracking-issue\.mjs/);
+    expect(failBlock).not.toMatch(/gh issue create/);
     expect(failBlock).not.toMatch(/gh issue create[^\n]*\|\|\s*true/);
+
+    const filer = readFileSync(path.join(root, 'scripts/ci/file-tracking-issue.mjs'), 'utf8');
+    expect(filer).toMatch(/::error::Failed to \$\{result\.action\} tracking issue/);
+    expect(filer).toMatch(/process\.exitCode = 1/);
+  });
+
+  test('every workflow that files a tracking issue uses the shared filer', () => {
+    // The four copies had already drifted before they were merged — one lost
+    // its `--label` fallback, another swallowed every failure with
+    // `|| echo "::warning::"`. Nothing is left to drift back apart.
+    for (const workflow of ['e2e.yml', 'extension-e2e.yml', 'interop-weekly.yml']) {
+      const source = readFileSync(path.join(root, '.github/workflows', workflow), 'utf8');
+      expect(source, `${workflow} must not hand-roll gh issue create`).not.toMatch(
+        /gh issue create/,
+      );
+      expect(source, `${workflow} must not hand-roll gh issue comment`).not.toMatch(
+        /gh issue comment/,
+      );
+    }
   });
 });

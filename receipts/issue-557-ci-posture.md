@@ -339,6 +339,14 @@ because it is documentation-as-data with no link to the tree it describes.
 `scripts/release/surfaces.test.mjs` gained a case asserting every named workflow
 is on disk.
 
+`scripts/test-report/validate-nightly-wiring.test.mjs` caught the extraction:
+its `#545 A11` case asserted the literal `::error::Failed to create nightly
+tracking issue` inside `e2e.yml`, and that string had moved into the script. The
+invariant is unchanged — a failed create must be loud — so the case now asserts
+it in both halves (the workflow delegates rather than hand-rolling `gh`; the
+script exits non-zero), plus a new case that no workflow hand-rolls
+`gh issue create`/`comment` at all, so the four copies cannot drift back apart.
+
 **Extract the container smoke shell out of the workflow.** The 28-line Docker
 volume smoke in `lane-gateway-package.yml` moved to
 `scripts/gateway-package/container-smoke.sh`, driven by `IMAGE` and `RUN_ID`, so
@@ -554,6 +562,7 @@ Fresh-context sub-agent audit against the staged diff and issue #557.
 | claude-code-cea40236-1c7-1785075385-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 388 | 583793 | 37457409 | 180281 | 764462 | 26.8864 | 1086 | 1227357 | 109255417 | 430344 |  |
 | claude-code-cea40236-1c7-1785075470-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 8 | 10260 | 963002 | 2680 | 12948 | 0.6127 | 1094 | 1237617 | 110218419 | 433024 |  |
 | claude-code-cea40236-1c7-1785075902-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 88 | 61906 | 11745108 | 38271 | 100265 | 7.2167 | 1182 | 1299523 | 121963527 | 471295 |  |
+| claude-code-cea40236-1c7-1785076088-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 26 | 11898 | 3776200 | 6220 | 18144 | 2.1181 | 1208 | 1311421 | 125739727 | 477515 |  |
 
 ### Steering
 
