@@ -4,6 +4,11 @@
   "private": false,
   "description": "Duaility personal ontology vault — the canonical, person-owned data model (core spine + consent plane + agent plane + 8 life domains) over local-first SQLite, and the gateway: the sole holder of connections, where every read and typed command passes one pipeline (identity → consent → contract → execution → evidence) and leaves receipts. Implements the logical model in duaility-ontology.html.",
   "license": "SEE LICENSE IN REPOSITORY",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srikanth235/centraid.git",
+    "directory": "packages/vault"
+  },
   "files": [
     "dist",
     "README.md"

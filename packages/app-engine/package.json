@@ -4,6 +4,11 @@
   "private": false,
   "description": "Centraid runtime engine — handler loader, sqlite-backed apps, versioned uploads, and the /centraid HTTP surface. Transport-agnostic; consumed by the standalone daemon and the desktop in-process runtime.",
   "license": "SEE LICENSE IN REPOSITORY",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srikanth235/centraid.git",
+    "directory": "packages/app-engine"
+  },
   "files": [
     "dist",
     "README.md"

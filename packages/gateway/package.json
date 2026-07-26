@@ -4,6 +4,11 @@
   "private": false,
   "description": "Host-agnostic centraid gateway: wires app-engine + agent-runtime + stores + chat runner against injected paths and secrets. Consumed by the Electron desktop's in-process embed and the standalone `centraid-gateway` daemon.",
   "license": "SEE LICENSE IN REPOSITORY",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srikanth235/centraid.git",
+    "directory": "packages/gateway"
+  },
   "bin": {
     "centraid-gateway": "./dist/cli/cli.js"
   },

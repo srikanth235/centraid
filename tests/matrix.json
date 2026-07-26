@@ -547,7 +547,7 @@
       "tier": "contract"
     },
     "tunnel-pairing.journey": {
-      "owner": "tests/agent-e2e-pairing/flows/cross-network-relay.mjs",
+      "owner": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
       "tier": "e2e"
     },
     "extension.correctness": {
@@ -1257,10 +1257,18 @@
       "owner": "tests/perf/tunnel-throughput.perf.test.ts"
     },
     {
+      "id": "pairing-device-lifecycle",
+      "name": "Create vault, mint ticket, enrol a never-seen device end to end",
+      "surface": "tunnel-pairing",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs"
+    },
+    {
       "id": "pairing-real-journey",
       "name": "Pair, redeem and relay across networks",
       "surface": "tunnel-pairing",
-      "dimension": "journey",
+      "dimension": "offline",
       "tier": "e2e",
       "owner": "tests/agent-e2e-pairing/flows/cross-network-relay.mjs"
     },

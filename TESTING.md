@@ -69,14 +69,28 @@ Soft SLA (auto-issue, not a hard age gate):
 
 1. A **scheduled** nightly that fails opens or updates a single tracking issue
    titled `[nightly] e2e lane red — tracking` with the Actions run URL and the
-   nightly Pages report link.
+   report link. The report link is the **immutable dated slot** for that run
+   (`test-report/nightly/runs/<date>-<runId>/`), not the `nightly/` alias — the
+   alias is overwritten the next night, so an issue citing it would silently
+   start describing a different run (#557).
 2. **Expected response:** within **24 hours** or before the next scheduled run
    — triage, fix, or document a temporary waiver in the issue.
-3. Branch `workflow_dispatch` runs **do not** publish to GitHub Pages (main-only
+3. A job result of `cancelled` counts as red alongside `failure` (#557): a dead
+   runner is not a pass. The condition reads `needs.*.result` in aggregate, so a
+   job added to `needs:` is covered without editing a second list.
+4. Branch `workflow_dispatch` runs **do not** publish to GitHub Pages (main-only
    guard on `publish-nightly-report`) so they cannot spuriously red the workflow
    with a Pages deploy error.
-4. Missing nightly HTML is **visible** (error annotation + tracking issue), not
-   a silent `::warning` only.
+5. A **failed** `test-health-report` job still publishes (#557). The report's
+   purpose is to show red, and the job fails on its own honesty exits *after*
+   writing the HTML — gating publish on success meant every honesty exit also
+   suppressed the page that would have shown the failure. Only `cancelled` and
+   `skipped` suppress the publish; `skipped` because single-lane dispatch skips
+   the report job and publishing then would false-alarm "HTML missing".
+6. Missing nightly HTML is **visible** (error annotation + tracking issue + a
+   failed job), not a silent `::warning` only.
+7. The scheduled `companion` lane in `extension-e2e.yml` and the weekly
+   `backup-interop` lane both file their own tracking issues on the same terms.
 
 ### Floors ratchet (#496 E4, extended #532)
 
@@ -273,8 +287,13 @@ that run.
 | Slot | URL |
 | --- | --- |
 | main | `https://srikanth235.github.io/centraid/test-report/main/` |
-| Nightly | `https://srikanth235.github.io/centraid/test-report/nightly/` |
+| Nightly (newest — **mutable**, moves every night) | `https://srikanth235.github.io/centraid/test-report/nightly/` |
+| A specific nightly (**immutable**, HTML kept 30 deep) | `…/test-report/nightly/runs/<date>-<runId>/` |
 | Landing | `https://srikanth235.github.io/centraid/` |
+
+Cite the dated slot when linking a report from an issue or a PR; the `nightly/`
+alias is only correct for "whatever ran most recently". The full run series
+(never pruned, even after its HTML is) is `…/test-report/history/index.json`.
 
 Performance and scale budgets use generous regression multipliers. A noisy
 budget is fixed or removed; it is never promoted to the per-PR loop. Lane

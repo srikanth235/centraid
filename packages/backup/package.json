@@ -4,6 +4,11 @@
   "private": false,
   "description": "Offsite storage engine: the centraid-storage-provider/1 wire protocol seam plus the centraid-snapshot/2 authenticated base-and-WAL format — fixed-size parts, entropy-gated zstd chunk compression, AES-256-GCM keyring/epochs, PITR, restore/verify, local and remote providers, and the provider conformance kit. Zero runtime dependencies — Node builtins only.",
   "license": "SEE LICENSE IN REPOSITORY",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srikanth235/centraid.git",
+    "directory": "packages/backup"
+  },
   "files": [
     "dist",
     "README.md",

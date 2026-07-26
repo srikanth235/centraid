@@ -4,6 +4,11 @@
   "private": false,
   "description": "Dependency-free CBSF wire-format constants and codecs.",
   "license": "SEE LICENSE IN REPOSITORY",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srikanth235/centraid.git",
+    "directory": "packages/blob-format"
+  },
   "files": [
     "dist",
     "README.md"

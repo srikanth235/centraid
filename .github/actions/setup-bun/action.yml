@@ -1,0 +1,53 @@
+name: Set up Bun
+description: >-
+  Install the exact Bun pinned by the repo's package.json `packageManager`
+  field, so CI can never silently drift from the version developers use.
+
+# #557 — this replaces 35 hand-copied `bun-version: <literal>` blocks. They all
+# happened to agree, but nothing enforced it: a bump to `packageManager` that
+# missed one workflow would have produced a CI lane running a different Bun
+# than every other lane, with no failure to point at it.
+#
+# The version is read from package.json at run time with `sed` rather than
+# `node -p`, because this action runs BEFORE any toolchain is installed — the
+# only thing guaranteed present is the shell. `shell: bash` resolves to git-bash
+# on Windows runners, where sed is also available.
+#
+# Requires actions/checkout to have run first (package.json must be on disk).
+# Enforced repo-wide by scripts/ci/lint-bun-pin.mjs, which also fails if any
+# workflow reintroduces a literal `bun-version:`.
+
+inputs:
+  working-directory:
+    description: Directory containing the package.json that carries `packageManager`.
+    required: false
+    default: '.'
+
+outputs:
+  bun-version:
+    description: The Bun version resolved from `packageManager`.
+    value: ${{ steps.resolve.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        if [ ! -f package.json ]; then
+          echo "::error::setup-bun: no package.json in $(pwd) — did actions/checkout run first?"
+          exit 1
+        fi
+        version="$(sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"bun@\([^"]*\)".*/\1/p' package.json | head -1)"
+        if [ -z "$version" ]; then
+          echo "::error::setup-bun: package.json has no \"packageManager\": \"bun@<version>\" pin"
+          exit 1
+        fi
+        echo "version=${version}" >> "$GITHUB_OUTPUT"
+        echo "Bun pinned by packageManager: ${version}"
+
+    - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+      with:
+        bun-version: ${{ steps.resolve.outputs.version }}
