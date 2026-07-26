@@ -33,8 +33,7 @@ jobs:
     environment: release
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - run: bun run build --filter=@centraid/desktop...
       - name: Package macOS (unsigned when Apple secrets absent)
         working-directory: apps/desktop
@@ -80,8 +79,7 @@ jobs:
     environment: release
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - run: bun run build --filter=@centraid/desktop...
       - name: Package Windows (Azure Trusted Signing when secrets present — I3)
         working-directory: apps/desktop
@@ -123,8 +121,7 @@ jobs:
     environment: release
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - run: bun run build --filter=@centraid/desktop...
       - name: Package Linux AppImage
         working-directory: apps/desktop
@@ -154,7 +151,11 @@ jobs:
     environment: release
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
+      - uses: ./.github/actions/setup
+        with:
+          # Runs `node scripts/release/changelog-to-github.mjs` only — no
+          # node_modules needed, and this job had no install before #557.
+          install: 'false'
       - name: Detect signing enrollment
         id: sign
         env:
@@ -202,7 +203,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
+      - uses: ./.github/actions/setup
+        with:
+          # `node scripts/release/restamp-rollout.mjs` + gh only.
+          install: 'false'
       - name: I8 re-stamp latest*.yml on release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

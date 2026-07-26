@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Workflow pin hygiene (#557).
+ * Workflow pin and layout hygiene (#557).
  *
- * Three properties this repo relied on convention for, now mechanical:
+ * Five properties this repo relied on convention for, now mechanical:
  *
  *   1. Every third-party `uses:` is pinned to a 40-char commit SHA. A floating
  *      tag (`@v4`, `@stable`) is a mutable reference an upstream owner can
@@ -11,12 +11,24 @@
  *      explicit tag are exempt.
  *
  *   2. No workflow hardcodes a Bun version. `packageManager` in package.json is
- *      the single source of truth; `.github/actions/setup-bun` reads it at run
+ *      the single source of truth; `.github/actions/setup` reads it at run
  *      time. 35 hand-copied literals happened to agree, but nothing said they
  *      had to.
  *
  *   3. Every job declares `timeout-minutes`. Without it a hung job inherits
  *      GitHub's 360-minute default and quietly burns the Actions budget.
+ *
+ *   4. No workflow runs `bun install` by hand — `.github/actions/setup` does it
+ *      behind `install:`. 33 copies of one line is how a `--frozen-lockfile`
+ *      that gets dropped in one lane goes unnoticed.
+ *
+ *   5. `ci.yml` is the ONLY workflow that may listen on `pull_request`. This is
+ *      the load-bearing one. A second PR-triggered workflow is not just untidy:
+ *      because it needs path filters to be affordable, it can never be a
+ *      required check (a filtered-out workflow reports nothing, and a required
+ *      check that never reports blocks the PR forever). Ten such workflows is
+ *      how eight lanes ended up unable to gate a merge. As jobs inside ci.yml
+ *      they skip cleanly and roll up through the required `check`.
  *
  * Offline, no dependencies, ~10ms — belongs on the per-PR loop next to the
  * other linters. Complements actionlint (which validates syntax/expressions,
@@ -57,7 +69,7 @@ export function lintWorkflowSource(name, source) {
   }
 
   let job = null;
-  /** @type {{name: string, line: number, hasTimeout: boolean}[]} */
+  /** @type {{name: string, line: number, hasTimeout: boolean, callsWorkflow: boolean}[]} */
   const jobs = [];
   let inJobs = false;
 
@@ -69,10 +81,15 @@ export function lintWorkflowSource(name, source) {
     if (/^jobs:\s*$/.test(line)) inJobs = true;
     // A job key is exactly two-space indented under `jobs:`.
     if (inJobs && /^ {2}[A-Za-z0-9_-]+:\s*$/.test(line)) {
-      job = { name: trimmed.slice(0, -1), line: lineNo, hasTimeout: false };
+      job = { name: trimmed.slice(0, -1), line: lineNo, hasTimeout: false, callsWorkflow: false };
       jobs.push(job);
     }
     if (job && /^ {4}timeout-minutes:/.test(line)) job.hasTimeout = true;
+    // A job-level `uses:` (4-space indent, vs a step's `      - uses:`) makes
+    // this a reusable-workflow call. GitHub REJECTS timeout-minutes on those —
+    // the bound lives on the called workflow's own jobs, which this linter
+    // checks when it walks that file.
+    if (job && /^ {4}uses:/.test(line)) job.callsWorkflow = true;
 
     // (1) SHA pinning.
     const uses = /^\s*(?:-\s*)?uses:\s*(\S+)/.exec(line);
@@ -90,14 +107,28 @@ export function lintWorkflowSource(name, source) {
     // (2) No literal Bun version.
     if (/^\s*bun-version:/.test(line)) {
       found.push(
-        `${name}:${lineNo} hardcodes a Bun version — use \`uses: ./.github/actions/setup-bun\`, which reads packageManager`,
+        `${name}:${lineNo} hardcodes a Bun version — use \`uses: ./.github/actions/setup\`, which reads packageManager`,
+      );
+    }
+
+    // (4) No hand-rolled install.
+    if (/^\s*(?:-\s*)?(?:run:\s*)?bun install\b/.test(line)) {
+      found.push(
+        `${name}:${lineNo} runs \`bun install\` by hand — use \`uses: ./.github/actions/setup\` (install is on by default)`,
+      );
+    }
+
+    // (5) Single PR entry point.
+    if (/^\s{2}pull_request:/.test(line) && name !== '.github/workflows/ci.yml') {
+      found.push(
+        `${name}:${lineNo} listens on \`pull_request\` — only ci.yml may. Add a job there (gated on the \`changes\` filter) so it rolls up into the required \`check\`, or expose this workflow via \`workflow_call\` and invoke it from ci.yml`,
       );
     }
   }
 
   // (3) Every job bounded.
   for (const entry of jobs) {
-    if (!entry.hasTimeout) {
+    if (!entry.hasTimeout && !entry.callsWorkflow) {
       found.push(
         `${name}:${entry.line} job \`${entry.name}\` has no timeout-minutes (inherits GitHub's 360-minute default)`,
       );
@@ -108,20 +139,20 @@ export function lintWorkflowSource(name, source) {
 }
 
 /** The composite action must itself resolve Bun from packageManager. */
-function lintSetupBunAction() {
+function lintSetupAction() {
   const found = [];
-  const actionPath = path.join(root, '.github/actions/setup-bun/action.yml');
+  const actionPath = path.join(root, '.github/actions/setup/action.yml');
   let source;
   try {
     source = readFileSync(actionPath, 'utf8');
   } catch {
-    return ['.github/actions/setup-bun/action.yml is missing — workflows reference it'];
+    return ['.github/actions/setup/action.yml is missing — workflows reference it'];
   }
   if (!source.includes('packageManager')) {
-    found.push('.github/actions/setup-bun must derive the version from packageManager');
+    found.push('.github/actions/setup must derive the version from packageManager');
   }
   if (!/oven-sh\/setup-bun@[0-9a-f]{40}/.test(source)) {
-    found.push('.github/actions/setup-bun must pin oven-sh/setup-bun to a SHA');
+    found.push('.github/actions/setup must pin oven-sh/setup-bun to a SHA');
   }
   return found;
 }
@@ -135,7 +166,7 @@ function lintPackageManager() {
 }
 
 function main() {
-  errors.push(...lintPackageManager(), ...lintSetupBunAction());
+  errors.push(...lintPackageManager(), ...lintSetupAction());
 
   const files = readdirSync(workflowDir)
     .filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'))
@@ -151,7 +182,9 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  console.log(`workflow-pins: ${files.length} workflow(s) clean (SHA pins, bun pin, timeouts)`);
+  console.log(
+    `workflow-pins: ${files.length} workflow(s) clean (SHA pins, bun pin, timeouts, single PR entry point)`,
+  );
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

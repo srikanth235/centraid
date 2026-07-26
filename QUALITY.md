@@ -15,7 +15,7 @@
   per-layer workstreams (`assert.*` → `expect`, coverage-floor ratchet, desktop
   renderer logic-extraction) landed under #214; the **desktop Playwright e2e
   journeys** landed under #225 (nightly/on-demand + path-filtered PR via
-  `client-e2e-pr.yml`). **Still open:** the Maestro mobile flows (iOS landed;
+  `lane-client-e2e.yml`, invoked by `ci.yml`). **Still open:** the Maestro mobile flows (iOS landed;
   Android home-loads under #496 PC1), and remaining pure-logic extraction from
   `packages/client/src/react/**` (the old monolithic `app.ts` was removed in the
   React flip; appearance-prefs, profile view-models, insights formatters, and

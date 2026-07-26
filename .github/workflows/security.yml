@@ -5,20 +5,18 @@ name: security
 # ceremony, relay, sealed vault columns, an OAuth broker, blob custody.
 #
 # Two independent gates live here:
-#   codeql            — SAST over the TS/Rust product code AND the workflow YAML
-#                       itself (`actions` finds injection + unpinned-ref classes
-#                       that actionlint does not model).
-#   dependency-review — blocks a PR that ADDS a dependency with a known
-#                       advisory. Dependabot tells you about what you already
-#                       have; this stops new ones arriving.
+# CodeQL runs SAST over the TS/Rust product code AND the workflow YAML itself
+# (`actions` finds injection + unpinned-ref classes that actionlint does not
+# model).
 #
-# CodeQL is deliberately NOT on the per-PR loop for the compiled matrix: a Rust
-# database build is minutes, and `ci` already carries a ~20-25 min budget. Push
-# to main + weekly schedule keeps alerts current without taxing every PR.
+# It is deliberately NOT on the per-PR loop: a Rust database build is minutes,
+# and `ci` already carries a ~20-25 min budget. Push to main + weekly schedule
+# keeps alerts current without taxing every PR. The PR-time supply-chain gate is
+# `dependency-review` in ci.yml (#557), where it rolls up into the required
+# `check` — as its own `pull_request` workflow it could gate nothing.
 on:
   push:
     branches: [main]
-  pull_request:
   schedule:
     # Sunday 04:00 UTC — before the 06:00 nightly e2e, so a red security lane
     # and a red nightly are never competing for attention in the same hour.
@@ -26,7 +24,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: security-${{ github.event.pull_request.number || github.ref }}
+  group: security-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -34,10 +32,6 @@ permissions:
 
 jobs:
   codeql:
-    # PRs get the fast `dependency-review` gate below; full CodeQL runs on main
-    # and on the weekly schedule. `actions` is cheap, but keeping the matrix in
-    # one job definition is worth more than shaving it onto PRs separately.
-    if: github.event_name != 'pull_request'
     name: codeql (${{ matrix.language }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -77,25 +71,3 @@ jobs:
         uses: github/codeql-action/analyze@3599b3baa15b485a2e49ef411a7a4bb2452e7f93 # v3.30.5
         with:
           category: /language:${{ matrix.language }}
-
-  # Fails a PR that introduces a dependency with a known advisory, or a licence
-  # outside the allowlist. Runs only on PRs — it diffs base against head.
-  dependency-review:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/dependency-review-action@da24556b548a50705dd671f47852072ea4c105d9 # v4.7.1
-        with:
-          # Start at `high`. Starting at `low` on a monorepo this size means the
-          # gate is muted within a week; tighten once the baseline is clean.
-          fail-on-severity: high
-          comment-summary-in-pr: on-failure
-          # Copyleft licences would contaminate a shipped desktop/mobile binary.
-          # This denies the licence on NEW dependencies only — existing ones are
-          # untouched, so it cannot retroactively red an unrelated PR.
-          deny-licenses: AGPL-3.0, AGPL-3.0-only, AGPL-3.0-or-later, GPL-3.0, GPL-3.0-only, GPL-3.0-or-later

@@ -24,6 +24,10 @@ gaps, found by auditing every workflow in `.github/workflows/`.
 - [x] Single source of truth for the Bun version via a composite action
 - [x] Enforce all three workflow policies with a lint on the PR loop
 - [x] Enable vulnerability alerts and Dependabot security updates
+- [x] Make ci.yml the only pull_request entry point
+- [x] Fold bun install and the build caches into the setup action
+- [x] Extract the duplicated tracking-issue and report-slug shell into tested scripts
+- [x] Extract the container smoke shell out of the workflow
 
 ## What changed
 
@@ -56,11 +60,23 @@ gaps, found by auditing every workflow in `.github/workflows/`.
 - **Give every job a timeout-minutes** — seven jobs across six workflows; the
   eighth is kit-managed and exempted (see `## Decisions`).
 - **Single source of truth for the Bun version via a composite action** —
-  `.github/actions/setup-bun/action.yml`, 35 call sites migrated.
+  `.github/actions/setup/action.yml`, 35 call sites migrated.
 - **Enforce all three workflow policies with a lint on the PR loop** —
   `scripts/lint-workflow-pins.mjs` in `check:pr` and CI `static`.
 - **Enable vulnerability alerts and Dependabot security updates** — repo
   settings, applied directly (evidence in `## Verification`).
+- **Make ci.yml the only pull_request entry point** — eight lanes folded into
+  `.github/workflows/ci.yml` behind one `changes` filter; enforced by policy (5)
+  of `scripts/lint-workflow-pins.mjs`.
+- **Fold bun install and the build caches into the setup action** —
+  `.github/actions/setup/action.yml` gained `install`, `turbo-cache` and
+  `cargo-cache` inputs; 33 install lines and 10 cache blocks deleted.
+- **Extract the duplicated tracking-issue and report-slug shell into tested
+  scripts** — `scripts/ci/file-tracking-issue.mjs` and
+  `scripts/ci/run-slug.mjs`, with `scripts/ci/file-tracking-issue.test.mjs` and
+  `scripts/ci/run-slug.test.mjs`.
+- **Extract the container smoke shell out of the workflow** —
+  `scripts/gateway-package/container-smoke.sh`.
 
 ### Signal — a red run must be visible
 
@@ -163,11 +179,11 @@ parsed as data rather than as script.
 ### Hygiene made mechanical
 
 **Every repo-owned job now declares `timeout-minutes`.** Eight lacked it,
-inheriting GitHub's 360-minute default; seven were fixed here — `changes` in
-`.github/workflows/client-e2e-pr.yml`, `build` in `.github/workflows/docs.yml`,
-`package` in `.github/workflows/extension-release.yml`, `trace-and-smoke` in
-`gateway-package.yml`, `github-release` and `restamp-rollout` in
-`.github/workflows/release-desktop.yml`, and `probe` in
+inheriting GitHub's 360-minute default; seven were fixed here — `changes` and
+`build` (both now jobs of `.github/workflows/ci.yml`), `package` in
+`.github/workflows/extension-release.yml`, `trace-and-smoke` in
+`.github/workflows/lane-gateway-package.yml`, `github-release` and
+`restamp-rollout` in `.github/workflows/release-desktop.yml`, and `probe` in
 `.github/workflows/release-mobile.yml`.
 
 The eighth, `.github/workflows/governance.yml`, is **not** fixed: it carries a
@@ -178,20 +194,24 @@ kit-managed files by that marker and says so on every run, so the exemption stay
 visible instead of becoming a silent hole. The durable fix is upstream in
 governance-kit.
 
-**One Bun pin.** `.github/actions/setup-bun/action.yml` (new composite action)
+**One Bun pin.** `.github/actions/setup/action.yml` (new composite action)
 reads `packageManager` from `package.json` at run time with `sed` — it runs
 before any toolchain exists — and all 35 hand-copied `bun-version:` literals were
-replaced with `uses: ./.github/actions/setup-bun` across
-`.github/workflows/ci.yml`, `client-e2e-pr.yml`, `docs.yml`, `e2e.yml`,
-`extension-e2e.yml`, `extension-release.yml`, `gateway-package.yml`,
-`interop-weekly.yml`, `.github/workflows/iroh-wasm.yml`,
-`npm-gateway-publish.yml`, `.github/workflows/oauth-worker.yml`,
-`release-desktop.yml`, `release-mobile.yml` and `.github/workflows/web.yml`.
+replaced with `uses: ./.github/actions/setup` across
+`.github/workflows/ci.yml`, `.github/workflows/lane-client-e2e.yml`,
+`.github/workflows/lane-gateway-package.yml`, `.github/workflows/e2e.yml`,
+`.github/workflows/extension-e2e.yml`,
+`.github/workflows/extension-release.yml`,
+`.github/workflows/interop-weekly.yml`,
+`.github/workflows/npm-gateway-publish.yml`,
+`.github/workflows/oauth-worker.yml`, `.github/workflows/release-desktop.yml`,
+`.github/workflows/release-mobile.yml` and `.github/workflows/web.yml`.
 Checkout precedes every call site (verified before migrating).
 
-**`scripts/lint-workflow-pins.mjs`** (new) enforces all three policies —
-SHA-pinned third-party `uses:`, no literal Bun version, every job bounded — with
-`scripts/lint-workflow-pins.test.mjs` (new, 8 cases) covering each rejection and
+**`scripts/lint-workflow-pins.mjs`** (new) enforces five policies — SHA-pinned
+third-party `uses:`, no literal Bun version, every job bounded, no hand-rolled
+`bun install`, and only `ci.yml` on `pull_request` — with
+`scripts/lint-workflow-pins.test.mjs` (new, 15 cases) covering each rejection and
 the exemptions. Wired into `package.json` as `lint:workflow-pins`, into
 `check:pr` / `check:pr:full`, into `scripts:test`, and into `ci.yml`'s `static`
 job. It complements actionlint, which validates syntax and expressions but not
@@ -199,6 +219,83 @@ policy.
 
 **Repo settings** (not code, applied directly): vulnerability alerts and
 Dependabot security updates were both disabled and are now enabled.
+
+### Consolidation — one PR entry point
+
+The audit above kept finding the same shape: a lane that could go red without
+anyone noticing. The sprawl was the cause, not a separate cosmetic problem.
+
+**Make ci.yml the only pull_request entry point.** Ten workflows listened on
+`pull_request` independently. To stay affordable each carried its own `paths:`
+filter — and that is exactly what made them unrequirable, because a workflow
+filtered out of a PR reports no status and a required check that never reports
+blocks the PR forever. The `main-protection` ruleset requires `check` and
+`governance`; the other eight lanes could go red with the merge button still
+green. `.github/workflows/ci.yml` now owns one `changes` job (the whole repo's
+paths-filter table, replacing six scattered `on: paths:` blocks and 20 verbatim
+duplicated glob lines) and every PR gate is a job under it: `docs`, `web-build`,
+`iroh-wasm`, `companion-static`, `oauth-worker` and `dependency-review` inline,
+plus two `workflow_call` lanes big enough to keep their own files —
+`.github/workflows/lane-client-e2e.yml` (renamed from
+`.github/workflows/client-e2e-pr.yml`) and
+`.github/workflows/lane-gateway-package.yml` (renamed from
+`.github/workflows/gateway-package.yml`). The
+`check` aggregator now `needs:` all of them and reads `join(needs.*.result)`, so
+a lane added later is covered without editing a hand-kept list. `skipped` passes
+(that is what a path-gated lane reports), `cancelled` fails.
+
+`.github/workflows/docs.yml` and `.github/workflows/iroh-wasm.yml` are deleted —
+their single jobs are now ci.yml lanes. `.github/actions/setup-bun/action.yml`
+is deleted in favour of `.github/actions/setup/action.yml`.
+`apps/desktop/tests/e2e/COVERAGE_REPORT.md` follows the renamed lane file. `.github/workflows/web.yml`,
+`.github/workflows/oauth-worker.yml`, `.github/workflows/extension-e2e.yml` and
+`.github/workflows/security.yml` lost their `pull_request` triggers and keep only
+the deploy / schedule halves. Deploys deliberately stay out of `ci.yml`: they own
+their own secrets and `environment:` gates. `web.yml` also collapses from two
+jobs to one — it was building the PWA twice per push, once to gate and once to
+deploy. `oauth-worker.yml` keeps its separate `verify` job on purpose, because
+`deploy` sits behind a protected environment and a human must be approving a
+build already known green.
+
+Policy (5) of `scripts/lint-workflow-pins.mjs` makes this mechanical: only
+`ci.yml` may carry a `pull_request:` trigger.
+
+**Fold bun install and the build caches into the setup action.**
+`.github/actions/setup-bun` was renamed to `.github/actions/setup` (it no longer
+only sets up Bun) and gained `install`, `turbo-cache` and `cargo-cache` inputs.
+That deletes 33 copies of `bun install --frozen-lockfile`, 5 copies of the Turbo
+cache block and 5 copies of the ~12-line Cargo cache block — three of which were
+byte-identical inside one file. The three Cargo presets (`data-plane`,
+`iroh-wasm`, `verify`) stay separate rather than collapsing to one key, because a
+shared key would let jobs with different `target/` contents overwrite each
+other's entry; a bad preset name now fails loudly instead of silently giving the
+job no cache. `checkout` cannot move in (a composite action must be on disk to be
+resolved), so `checkout` + `setup` is the irreducible prologue. Policy (4) of the
+lint rejects a hand-rolled `bun install` — including the `- name:`-shaped one in
+`npm-gateway-publish.yml` that a `- run:`-anchored pattern would have missed.
+`github-release` and `restamp-rollout` in `.github/workflows/release-desktop.yml`
+pass `install: 'false'`: they run plain `node scripts/release/*.mjs` and had no
+install before.
+
+**Extract the duplicated tracking-issue and report-slug shell into tested
+scripts.** Four workflow blocks opened-or-updated a tracking issue with
+near-identical inline shell, and they had already drifted — the nightly copy had
+no `--label` fallback, and the "HTML missing" copy swallowed every failure with
+`|| echo "::warning::"`. `scripts/ci/file-tracking-issue.mjs` is now the single
+implementation, with `scripts/ci/file-tracking-issue.test.mjs` (11 cases) pinning
+the branch that matters: a failed comment is reported, not swallowed, and a
+failed `gh issue list` opens a new issue rather than going silent. Separately,
+the immutable report slug was derived twice — once in `publish-nightly-report`,
+once in `nightly-failure-issue` — with a comment asking the reader to keep them
+in sync; if they disagreed the tracking issue would link to a 404.
+`scripts/ci/run-slug.mjs` is the one derivation, and
+`scripts/ci/run-slug.test.mjs` (6 cases) covers the case the old shell glob got
+wrong: `[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]` accepts `2026-13-45`.
+
+**Extract the container smoke shell out of the workflow.** The 28-line Docker
+volume smoke in `lane-gateway-package.yml` moved to
+`scripts/gateway-package/container-smoke.sh`, driven by `IMAGE` and `RUN_ID`, so
+it can be run locally and shellcheck'd on the PR loop.
 
 ### Docs write-back (A1)
 
@@ -210,7 +307,11 @@ mutable `nightly/` alias from the immutable `runs/<date>-<runId>/` archive and
 points at the never-pruned `history/index.json`.
 
 `AGENTS.md` — `lint:workflow-pins` added to the enumerated `check:pr` gate list
-so the pre-push contract stays accurate (`CLAUDE.md` is a symlink to it).
+(now naming all five policies) so the pre-push contract stays accurate
+(`CLAUDE.md` is a symlink to it), plus a paragraph recording that `check` now
+aggregates every PR gate and why the one-PR-workflow rule exists.
+`QUALITY.md` — the client-e2e pointer follows the file to
+`lane-client-e2e.yml`.
 
 ## Decisions
 
@@ -235,6 +336,25 @@ so the pre-push contract stays accurate (`CLAUDE.md` is a symlink to it).
   SHA would have frozen two call sites on a major the other nine had already left.
   The repo runs one version of each action or the pinning buys nothing.
 - **The branch ruleset was left alone** — see Out of scope.
+- **Reusable workflows for two lanes, inline jobs for the rest.** A uniform rule
+  would have been simpler to state and worse to read: a `workflow_call` file
+  costs ~10 lines of frame, which is more ceremony than the 5-step `docs` or
+  `oauth-worker` lanes contain. Only `client-e2e` (3 jobs of Playwright/keyring
+  setup) and `gateway-package` earn their own file. Jobs that call a reusable
+  workflow are exempt from the `timeout-minutes` policy — GitHub rejects the key
+  there, and the bound lives on the called workflow's jobs, which the lint walks
+  anyway.
+- **The five release workflows were deliberately NOT merged.** They are the
+  fattest remaining target (613 lines across five files) and the one place where
+  merging would be a regression: `NPM_TOKEN`, the Apple signing identity and GHCR
+  push live in separate files today, so a compromised step in one has no path to
+  the others' secrets. Tidiness is not worth a shared blast radius. Deploy jobs
+  stayed out of `ci.yml` for the same reason.
+- **`workflow_dispatch` was added to `ci.yml`.** Five of the folded workflows had
+  it, and dropping it would have been a silent capability loss. On a manual run
+  `dorny/paths-filter` has no base to diff, so the filter step is skipped and a
+  `changes.outputs.all` flag forces every lane on — stated explicitly in each
+  lane's `if:` rather than having the filter lie about what changed.
 - **`.github/workflows/governance.yml` was left unbounded.** A `timeout-minutes`
   was added first, and the kit-runtime integrity directive blocked the commit:
   the file is `# governance-kit:managed` and digested at apply time, so any
@@ -367,6 +487,8 @@ Fresh-context sub-agent audit against the staged diff and issue #557.
 | claude-code-cea40236-1c7-1785069563-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 634 | 571703 | 61553190 | 227176 | 799513 | 40.0323 | 634 | 571703 | 61553190 | 227176 | ci: make red signals visible and close the supply-chain gaps (#557) -m Audit of  |
 | claude-code-cea40236-1c7-1785070044-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 58 | 55973 | 9249505 | 19431 | 75462 | 5.4606 | 692 | 627676 | 70802695 | 246607 | ci: make red signals visible and close the supply-chain gaps (#557) -m Audit of  |
 | claude-code-cea40236-1c7-1785070106-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 6 | 15888 | 995313 | 3456 | 19350 | 0.6834 | 698 | 643564 | 71798008 | 250063 | ci: make red signals visible and close the supply-chain gaps (#557) -m Audit of  |
+| claude-code-cea40236-1c7-1785075385-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 388 | 583793 | 37457409 | 180281 | 764462 | 26.8864 | 1086 | 1227357 | 109255417 | 430344 |  |
+| claude-code-cea40236-1c7-1785075470-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 8 | 10260 | 963002 | 2680 | 12948 | 0.6127 | 1094 | 1237617 | 110218419 | 433024 |  |
 
 ### Steering
 

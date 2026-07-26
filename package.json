@@ -69,7 +69,7 @@
     "ci:retry": "node scripts/ci/retry.mjs",
     "test:ratchet": "node scripts/test-report/ratchet-floors.mjs",
     "test:ratchet:unit": "node node_modules/vitest/vitest.mjs run --config scripts/test-report/vitest.config.ts --coverage",
-    "scripts:test": "node node_modules/vitest/vitest.mjs run --config scripts/release/vitest.config.ts && bun run release:surfaces:test && node --test scripts/lib/sanitize-connector-svg.test.mjs scripts/lint-workflow-pins.test.mjs",
+    "scripts:test": "node node_modules/vitest/vitest.mjs run --config scripts/release/vitest.config.ts && bun run release:surfaces:test && node --test scripts/lib/sanitize-connector-svg.test.mjs scripts/lint-workflow-pins.test.mjs scripts/ci/file-tracking-issue.test.mjs scripts/ci/run-slug.test.mjs",
     "test:governance-shell": "bash scripts/test.sh",
     "test:diff-coverage": "node scripts/test-report/diff-coverage.mjs",
     "test:mutation": "node scripts/mutation/run.mjs",

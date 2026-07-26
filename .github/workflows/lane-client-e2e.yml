@@ -1,0 +1,112 @@
+name: lane-client-e2e
+
+# A `ci.yml` lane, not an independently-triggered workflow (#557) — the `lane-`
+# prefix marks that. Kept in its own file rather than inlined because three jobs
+# of Playwright/keyring setup would dominate ci.yml; the small lanes (docs,
+# web-build, iroh-wasm, companion-static, oauth-worker) are jobs there instead.
+#
+# L1 / E2 — path-filtered client e2e on PRs. Full suites stay on nightly e2e.yml.
+# Promotion rule: if a nightly-only area burns us twice, move it here.
+
+on:
+  workflow_call:
+    inputs:
+      web:
+        description: Run the web e2e suite (apps/web or shared client changed).
+        required: true
+        type: boolean
+      desktop:
+        description: Run the desktop e2e suite (apps/desktop or shared client changed).
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  web-e2e:
+    if: inputs.web
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # #496 C2 — Turbo/Cargo caches (shared with ci.yml through the composite)
+      # so cold installs are rare.
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+          cargo-cache: iroh-wasm
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - name: Ensure Iroh WASM toolchain
+        run: bash scripts/ci/ensure-iroh-wasm-toolchain.sh
+      - run: bunx playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: bun run build
+      - run: bun run e2e
+        working-directory: apps/web
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: failure()
+        with:
+          name: web-e2e-pr-traces
+          path: apps/web/test-results/
+          retention-days: 7
+
+  desktop-e2e:
+    if: inputs.desktop
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+          cargo-cache: iroh-wasm
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - name: Ensure Iroh WASM toolchain
+        run: bash scripts/ci/ensure-iroh-wasm-toolchain.sh
+      - run: bunx playwright install --with-deps chromium
+        working-directory: apps/desktop
+      - run: bun run build
+      - run: sudo apt-get update && sudo apt-get install -y gnome-keyring libsecret-1-0 libsecret-tools dbus-x11
+      - run: |
+          xvfb-run --auto-servernum dbus-run-session -- bash -c '
+            rm -rf ~/.local/share/keyrings
+            printf "\n" | gnome-keyring-daemon --replace --components=secrets --unlock --foreground &
+            sleep 2
+            bun run test:e2e
+          '
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        if: failure()
+        with:
+          name: desktop-e2e-pr-traces
+          path: apps/desktop/test-results/
+          retention-days: 7
+
+  # #496 E7 — deliberately ungated inside the lane: gateway/app-engine changes
+  # break artifact boot without any client UI edit, and the `client` filter that
+  # invokes this lane already covers those paths.
+  boot-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: 'true'
+          cargo-cache: iroh-wasm
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - name: Ensure Iroh WASM toolchain
+        run: bash scripts/ci/ensure-iroh-wasm-toolchain.sh
+      - run: bun run build --filter=@centraid/desktop...
+      - name: L2 boot-the-artifact structure smoke
+        run: node scripts/release/boot-smoke.mjs

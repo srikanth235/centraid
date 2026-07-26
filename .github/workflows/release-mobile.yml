@@ -64,14 +64,13 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
+      - uses: ./.github/actions/setup
       - uses: actions/setup-java@3a4f6e1af504cf6a31855fa899c6aa5355ba6c12 # v4.7.0
         with:
           distribution: temurin
           java-version: '17'
       - name: Setup Android SDK
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
-      - run: bun install --frozen-lockfile
       - name: assembleDebug (scaffold — no release signing)
         working-directory: apps/mobile/android
         run: ./gradlew assembleDebug --no-daemon
@@ -89,8 +88,7 @@ jobs:
         platform: ${{ github.event.inputs.platform == 'all' && fromJSON('["ios","android"]') || fromJSON(format('["{0}"]', github.event.inputs.platform)) }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - uses: expo/expo-github-action@04c13d00e429d099d9cffcc5370d54ab38675069 # v8
         with:
           eas-version: latest

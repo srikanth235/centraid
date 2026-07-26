@@ -1,0 +1,151 @@
+name: Set up the repo toolchain
+description: >-
+  Pin Bun from package.json `packageManager`, install dependencies, and warm the
+  Turbo/Cargo build caches — the prologue every job in this repo shares.
+
+# #557 replaced 35 hand-copied `bun-version:` literals with a Bun-only version
+# of this action. The prologue around it stayed copied: 33 duplicate
+# `bun install --frozen-lockfile` lines, 5 copies of the Turbo cache block, and
+# 5 copies of the ~12-line Cargo cache block (3 of them byte-identical inside a
+# single file). Copies drift silently — a cache key fixed in one lane and missed
+# in four others produces no error, just slower jobs nobody attributes.
+#
+# The version is read from package.json at run time with `sed` rather than
+# `node -p`, because this action runs BEFORE any toolchain is installed — the
+# only thing guaranteed present is the shell. `shell: bash` resolves to git-bash
+# on Windows runners, where sed is also available.
+#
+# Requires actions/checkout to have run first (package.json must be on disk).
+# That is also why checkout cannot move in here: a composite action has to be on
+# disk already to be resolved, so `checkout` + `setup` is the irreducible
+# two-line prologue.
+#
+# Enforced repo-wide by scripts/lint-workflow-pins.mjs, which fails if any
+# workflow reintroduces a literal `bun-version:`.
+
+inputs:
+  working-directory:
+    description: Directory containing the package.json that carries `packageManager`.
+    required: false
+    default: '.'
+  install:
+    description: Run `bun install --frozen-lockfile` after Bun is on PATH.
+    required: false
+    default: 'true'
+  turbo-cache:
+    description: >-
+      Enable Turbo's native remote cache, backed by the GitHub Actions cache API
+      via a local adapter (#538). Per-task and content-addressed, so unchanged
+      tasks are re-read rather than re-saved as a fresh ~600 MiB blob.
+    required: false
+    default: 'false'
+  cargo-cache:
+    description: >-
+      Which Cargo cache preset to restore — `none`, `data-plane`, `iroh-wasm`,
+      or `verify` (both crates). The presets stay separate on purpose: one
+      shared key would let jobs with different target/ contents overwrite each
+      other's entry, which surfaces only as unexplained cold builds.
+    required: false
+    default: 'none'
+
+outputs:
+  bun-version:
+    description: The Bun version resolved from `packageManager`.
+    value: ${{ steps.resolve.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        if [ ! -f package.json ]; then
+          echo "::error::setup: no package.json in $(pwd) — did actions/checkout run first?"
+          exit 1
+        fi
+        version="$(sed -n 's/.*"packageManager"[[:space:]]*:[[:space:]]*"bun@\([^"]*\)".*/\1/p' package.json | head -1)"
+        if [ -z "$version" ]; then
+          echo "::error::setup: package.json has no \"packageManager\": \"bun@<version>\" pin"
+          exit 1
+        fi
+        echo "version=${version}" >> "$GITHUB_OUTPUT"
+        echo "Bun pinned by packageManager: ${version}"
+
+    # A typo'd preset would otherwise match no `if:` and silently give the job
+    # no Cargo cache at all — a slow lane with a green check, the exact failure
+    # mode this action exists to remove.
+    - name: Validate cargo-cache preset
+      shell: bash
+      env:
+        PRESET: ${{ inputs.cargo-cache }}
+      run: |
+        set -euo pipefail
+        case "$PRESET" in
+          none | data-plane | iroh-wasm | verify) ;;
+          *)
+            echo "::error::setup: cargo-cache must be none|data-plane|iroh-wasm|verify, got '$PRESET'"
+            exit 1
+            ;;
+        esac
+
+    - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
+      with:
+        bun-version: ${{ steps.resolve.outputs.version }}
+
+    - name: Turbo remote cache (GitHub-backed, granular)
+      if: inputs.turbo-cache == 'true'
+      uses: rharkor/caching-for-turbo@75f8ebf4a43d2c60b23bc2a27082cfea94ffdad9 # v2.5.0
+
+    # `turbo lint` runs the data-plane's `cargo fmt` + `clippy`; a warm target/
+    # cuts ~1.5 min off the package-lint step on subsequent PR pushes.
+    - name: Cache Cargo (data-plane)
+      if: inputs.cargo-cache == 'data-plane'
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          packages/tunnel/data-plane/target
+        key: cargo-dataplane-${{ runner.os }}-${{ hashFiles('packages/tunnel/data-plane/Cargo.lock') }}
+        restore-keys: |
+          cargo-dataplane-${{ runner.os }}-
+
+    - name: Cache Cargo (iroh-wasm)
+      if: inputs.cargo-cache == 'iroh-wasm'
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          ~/.cargo/bin
+          apps/web/iroh-wasm/target
+        key: cargo-iroh-wasm-${{ runner.os }}-${{ hashFiles('apps/web/iroh-wasm/Cargo.lock') }}
+        restore-keys: |
+          cargo-iroh-wasm-${{ runner.os }}-
+
+    - name: Cache Cargo (data-plane + iroh-wasm)
+      if: inputs.cargo-cache == 'verify'
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
+          ~/.cargo/bin
+          packages/tunnel/data-plane/target
+          apps/web/iroh-wasm/target
+        key: cargo-verify-${{ runner.os }}-${{ hashFiles('packages/tunnel/data-plane/Cargo.lock', 'apps/web/iroh-wasm/Cargo.lock') }}
+        restore-keys: |
+          cargo-verify-${{ runner.os }}-
+          cargo-dataplane-${{ runner.os }}-
+
+    # No Bun cache: a cold `bun install` is faster than restoring one (#538).
+    - name: Install dependencies
+      if: inputs.install == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: bun install --frozen-lockfile

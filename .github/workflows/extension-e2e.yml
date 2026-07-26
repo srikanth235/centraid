@@ -3,19 +3,7 @@ name: Companion e2e
 on:
   # Live n0-relay companion flow is environmentally flaky and blocks unrelated
   # merges when used as a PR required gate. Keep it on schedule + manual only;
-  # PR coverage is the pure-local companion-static job below plus unit tests.
-  pull_request:
-    paths:
-      - 'apps/extension/**'
-      - 'apps/web/iroh-wasm/**'
-      - 'apps/web/src/generated/**'
-      - 'packages/app-engine/**'
-      - 'packages/blueprints/apps/locker/**'
-      - 'packages/gateway/**'
-      - 'packages/tunnel/**'
-      - 'packages/vault/**'
-      - 'tests/agent-e2e-pairing/**'
-      - '.github/workflows/extension-e2e.yml'
+  # PR coverage is the `companion-static` job in ci.yml plus unit tests (#557).
   schedule:
     - cron: '45 6 * * *'
   workflow_dispatch:
@@ -24,31 +12,15 @@ permissions:
   contents: read
 
 jobs:
-  companion-static:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
-      - run: bun install --frozen-lockfile
-      # Pure-local PR gate: extension unit suite + locker companion query handlers.
-      # Avoid full blueprints app-boot (jsdom teardown noise unrelated to Companion).
-      - run: bunx turbo run build test --filter=@centraid/extension
-      - run: bun run --filter @centraid/blueprints test -- src/query-handlers.test.ts
-
   companion:
-    # Live relay path — not a PR merge blocker.
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
+      - uses: ./.github/actions/setup
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '22'
-      - run: bun install --frozen-lockfile
       - run: bunx playwright install --with-deps chromium
         working-directory: apps/extension
       - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel --filter=@centraid/extension
@@ -84,34 +56,27 @@ jobs:
       - name: Open or update companion tracking issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESULT: ${{ needs.companion.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          TITLE='[companion-e2e] live relay lane red — tracking'
-          BODY="Scheduled Companion e2e (live n0-relay) failed.
+          cat > /tmp/body.md <<EOF
+          Scheduled Companion e2e (live n0-relay) failed.
 
           - Run: ${RUN_URL}
           - Workflow: extension-e2e / companion
-          - Result: \`${{ needs.companion.result }}\`
+          - Result: \`${RESULT}\`
           - Evidence: run → Artifacts → \`companion-e2e-run\` (7-day retention)
 
           This lane is environmentally flaky by design and is **not** a PR gate,
           so triage is: confirm it is the relay and not a regression, then either
           fix or note it here. Repeated flake without a note is how the lane rots.
 
-          _Auto-filed by extension-e2e.yml. Prefer updating this issue over opening duplicates._"
-          existing="$(gh issue list --search 'in:title [companion-e2e] live relay lane red' --state open --json number --jq '.[0].number' || true)"
-          if [ -n "${existing:-}" ] && [ "$existing" != "null" ]; then
-            if ! gh issue comment "$existing" --body "$BODY"; then
-              echo "::error::Failed to comment on companion tracking issue #$existing — run ${RUN_URL}"
-              exit 1
-            fi
-            echo "Updated issue #$existing"
-          else
-            if ! gh issue create --title "$TITLE" --body "$BODY" --label 'tech-debt'; then
-              if ! gh issue create --title "$TITLE" --body "$BODY"; then
-                echo "::error::Failed to create companion tracking issue — run ${RUN_URL}"
-                exit 1
-              fi
-            fi
-          fi
+          _Auto-filed by extension-e2e.yml. Prefer updating this issue over opening duplicates._
+          EOF
+          node scripts/ci/file-tracking-issue.mjs \
+            --title '[companion-e2e] live relay lane red — tracking' \
+            --search '[companion-e2e] live relay lane red' \
+            --body-file /tmp/body.md \
+            --label tech-debt \
+            --run-url "$RUN_URL"

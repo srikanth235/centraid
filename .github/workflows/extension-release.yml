@@ -14,8 +14,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - run: bun run --cwd apps/extension test
       - run: bun run --cwd apps/extension typecheck
       - run: bun run --cwd apps/extension package

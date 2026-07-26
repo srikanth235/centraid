@@ -4,17 +4,17 @@ name: oauth-worker
 # Production deploy is additionally gated by the protected environment and an
 # explicit repository variable; Google/Cloudflare release evidence remains a
 # human operator gate documented under docs/release.
+#
+# #557 — the PR gate is the `oauth-worker` lane in ci.yml, so it rolls up into
+# the single required `check`. This workflow is push-to-main only and keeps its
+# own `verify` job even though that lane covers the same steps: `deploy` sits
+# behind a protected `environment:`, and a reviewer must be approving a build
+# already known to be green. Folding verify into deploy would put the human
+# approval *before* typecheck/test ran.
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - 'apps/oauth-worker/**'
-      - 'packages/gateway/src/serve/assist-oauth.ts'
-      - '.github/workflows/oauth-worker.yml'
-      - 'package.json'
-      - 'bun.lock'
-  pull_request:
     paths:
       - 'apps/oauth-worker/**'
       - 'packages/gateway/src/serve/assist-oauth.ts'
@@ -35,8 +35,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - run: bun run --cwd apps/oauth-worker typecheck
       - run: bun run --cwd apps/oauth-worker test
       - run: bun run --cwd apps/oauth-worker build
@@ -54,8 +53,7 @@ jobs:
       url: https://oauth.centraid.dev
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - name: Deploy protected production Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

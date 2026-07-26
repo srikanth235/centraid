@@ -10,7 +10,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: ./.github/actions/setup-bun
+      - uses: ./.github/actions/setup
       - run: bun test
 `;
 
@@ -30,7 +30,7 @@ test('a floating tag is rejected', () => {
 
 test('a moving branch ref is rejected the same way a tag is', () => {
   const source = clean.replace(
-    '- uses: ./.github/actions/setup-bun',
+    '- uses: ./.github/actions/setup',
     '- uses: dtolnay/rust-toolchain@stable',
   );
   const errors = lintWorkflowSource('w.yml', source);
@@ -48,7 +48,7 @@ test('repo-local and docker:// refs are exempt', () => {
 
 test('a hardcoded bun-version is rejected', () => {
   const source = clean.replace(
-    '      - uses: ./.github/actions/setup-bun\n',
+    '      - uses: ./.github/actions/setup\n',
     '      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2\n        with:\n          bun-version: 1.3.13\n',
   );
   const errors = lintWorkflowSource('w.yml', source);
@@ -105,4 +105,75 @@ jobs:
   // violations in a repo-owned workflow. Editing a kit file breaks its
   // integrity digest, so the lint must not demand a change it cannot make.
   assert.deepEqual(lintWorkflowSource('governance.yml', source), []);
+});
+
+test('a hand-rolled bun install is rejected — the setup action owns it', () => {
+  const source = clean.replace(
+    '      - run: bun test\n',
+    '      - run: bun install --frozen-lockfile\n',
+  );
+  const errors = lintWorkflowSource('w.yml', source);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /runs `bun install` by hand/);
+});
+
+test('a named-step install is caught too, not just `- run:`', () => {
+  // The 33 copies this replaced were not uniformly shaped: npm-gateway-publish
+  // spelled it `- name: Install JS deps` / `run: bun install …`, which a
+  // `- run:`-anchored pattern would have walked straight past.
+  const source = clean.replace(
+    '      - run: bun test\n',
+    '      - name: Install JS deps\n        run: bun install --frozen-lockfile\n',
+  );
+  const errors = lintWorkflowSource('w.yml', source);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /runs `bun install` by hand/);
+});
+
+test('only ci.yml may listen on pull_request', () => {
+  const source = `name: web
+on:
+  pull_request:
+    paths:
+      - 'apps/web/**'
+${clean.slice(clean.indexOf('jobs:'))}`;
+  const errors = lintWorkflowSource('.github/workflows/web.yml', source);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /only ci\.yml may/);
+});
+
+test('ci.yml itself may listen on pull_request', () => {
+  const source = `name: ci
+on:
+  pull_request:
+${clean.slice(clean.indexOf('jobs:'))}`;
+  assert.deepEqual(lintWorkflowSource('.github/workflows/ci.yml', source), []);
+});
+
+test('a `pull_request` mention that is not a trigger is not flagged', () => {
+  // `github.event.pull_request.number` in a concurrency group, and the word in
+  // a comment, are both fine — only a two-space `pull_request:` key is a
+  // trigger.
+  const source = `name: security
+# not a pull_request gate
+concurrency:
+  group: x-\${{ github.event.pull_request.number || github.ref }}
+${clean.slice(clean.indexOf('jobs:'))}`;
+  assert.deepEqual(lintWorkflowSource('.github/workflows/security.yml', source), []);
+});
+
+test('a job that calls a reusable workflow is exempt from timeout-minutes', () => {
+  // GitHub REJECTS timeout-minutes on a `uses:` job — the bound belongs to the
+  // called workflow's jobs, which this linter checks when it walks that file.
+  // Demanding it here would make the workflow unparseable.
+  const source = `name: ci
+jobs:
+  client-e2e:
+    needs: changes
+    if: needs.changes.outputs.client == 'true'
+    uses: ./.github/workflows/lane-client-e2e.yml
+    with:
+      web: true
+`;
+  assert.deepEqual(lintWorkflowSource('.github/workflows/ci.yml', source), []);
 });
