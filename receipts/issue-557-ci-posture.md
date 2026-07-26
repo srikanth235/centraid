@@ -326,8 +326,13 @@ every repo secret. The desktop signing identity, `NPM_TOKEN` and GHCR push now
 each reach exactly one lane.
 
 Mobile stays deliberately unreachable from a tag (J7 — a desktop version bump
-must not auto-submit to TestFlight/Play); it runs only on a
-`workflow_dispatch` with `surfaces: mobile`.
+must not auto-submit to TestFlight/Play), and it is the one lane that does **not**
+accept `surfaces: all`. `surfaces` defaults to `all`, so accepting it would have
+meant that re-dispatching `release.yml` to repackage a desktop installer also
+burned EAS build quota — a real behaviour change from "dispatch
+release-mobile.yml by name", caught on a re-read rather than by a test, since
+release plumbing cannot be exercised outside a real tag. It requires
+`surfaces: mobile` exactly.
 
 Two guards were simplified rather than left as dead conditions: the npm lane's
 dry-run and the image lane's `ref` override both tested
@@ -563,6 +568,7 @@ Fresh-context sub-agent audit against the staged diff and issue #557.
 | claude-code-cea40236-1c7-1785075470-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 8 | 10260 | 963002 | 2680 | 12948 | 0.6127 | 1094 | 1237617 | 110218419 | 433024 |  |
 | claude-code-cea40236-1c7-1785075902-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 88 | 61906 | 11745108 | 38271 | 100265 | 7.2167 | 1182 | 1299523 | 121963527 | 471295 |  |
 | claude-code-cea40236-1c7-1785076088-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 26 | 11898 | 3776200 | 6220 | 18144 | 2.1181 | 1208 | 1311421 | 125739727 | 477515 |  |
+| claude-code-cea40236-1c7-1785076427-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 52 | 35484 | 7936193 | 24410 | 59946 | 4.8004 | 1260 | 1346905 | 133675920 | 501925 |  |
 
 ### Steering
 

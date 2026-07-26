@@ -30,7 +30,7 @@ Machine catalog: `scripts/release/surfaces.mjs`. Print: `bun run release:matrix`
 | `desktop` | tag | yes | `release.yml` → `lane-release-desktop.yml` |
 | `gateway-image` | tag | yes | `release.yml` → `lane-release-gateway-image.yml` |
 | `gateway-npm` | tag | yes (dry-run without `NPM_TOKEN`) | `release.yml` → `lane-release-gateway-npm.yml` |
-| `mobile` | store | **no** — dispatch | `release.yml` → `lane-release-mobile.yml` |
+| `mobile` | store | **no** — dispatch with `surfaces: mobile` (never `all`) | `release.yml` → `lane-release-mobile.yml` |
 | `web` | continuous | n/a | `web.yml` |
 | `oauth-worker` | continuous, gated | n/a | `oauth-worker.yml` |
 | `docs` | continuous | n/a | `ci.yml` (`docs` lane) |

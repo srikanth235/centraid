@@ -27,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       surfaces:
-        description: 'Which surfaces to run'
+        description: 'Which surfaces to run (`all` covers the tag surfaces; `mobile` must be selected by name)'
         required: true
         default: 'all'
         type: choice
@@ -184,11 +184,17 @@ jobs:
 
   # Deliberately NOT reached by a `v*.*.*` tag. The store pipeline is manual by
   # design (J7): a desktop version bump must not auto-submit to TestFlight/Play.
+  #
+  # `surfaces: mobile` is required EXACTLY — this lane is the one that must not
+  # ride along on `all`. `surfaces` defaults to `all`, so accepting it here would
+  # mean re-running release.yml to repackage a desktop installer also burns EAS
+  # build quota. Before #557 you had to dispatch release-mobile.yml by name;
+  # requiring the explicit value keeps ship opt-in, as docs/release.md states.
   mobile:
     needs: plan
     if: >
       github.event_name == 'workflow_dispatch' &&
-      (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'mobile')
+      needs.plan.outputs.surfaces == 'mobile'
     permissions:
       contents: read
     uses: ./.github/workflows/lane-release-mobile.yml
