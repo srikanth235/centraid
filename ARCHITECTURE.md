@@ -30,13 +30,13 @@ One **product version** stamps the monorepo; surfaces may skip *ship* but not di
 
 | Surface | How it ships |
 | --- | --- |
-| **Desktop** | Tag `v*` → `release-desktop.yml` (macOS / Windows / Linux). Installers attach to the GitHub Release when signing secrets are enrolled; electron-updater uses `latest*.yml` / beta channel. |
-| **Mobile** | Same product stamp; **ship** via `release-mobile.yml` dispatch only (not every tag). EAS when enrolled. Store-only routine path (J7). Build numbers derived from product semver. |
+| **Desktop** | Tag `v*` → `release.yml` → its `desktop` lane (`lane-release-desktop.yml`; macOS / Windows / Linux). Installers attach to the GitHub Release when signing secrets are enrolled; electron-updater uses `latest*.yml` / beta channel. |
+| **Mobile** | Same product stamp; **ship** via a `release.yml` dispatch with `surfaces: mobile` only (not every tag) — `lane-release-mobile.yml`. EAS when enrolled. Store-only routine path (J7). Build numbers derived from product semver. |
 | **Web PWA** | Continuous host scaffold `app.centraid.dev` (`apps/web` + `web.yml`). Gateway also embeds the built PWA for LAN/ticket clients. |
 | **Assist OAuth edge** | Protected continuous Worker `oauth.centraid.dev` (`apps/oauth-worker` + `oauth-worker.yml`); stateless callback/exchange/refresh only, with external Google/Cloudflare evidence gates. |
 | **Docs/home** | Cloudflare static assets (`docs:bundle` → `dist/site`); GHA is gate-only. |
 | **Gateway daemon** | Primary: monorepo / npm `@centraid/gateway` + optional H5 OS service. Optional: GHCR image on tags (monorepo-root `Dockerfile`; #504). npm multi-OS tunnel natives (#511). |
-| **Companion extension** | Same product version; package via `extension-release.yml` (not a second product-version line). |
+| **Companion extension** | Same product version; package via the `companion-v*` tag line into `release.yml`'s `companion` lane (`lane-release-companion.yml`) — not a second product-version line. |
 
 Signing residual: [docs/enrollment.md](docs/enrollment.md). Release ritual: [docs/release.md](docs/release.md). Versioning policy: [docs/decisions.md](docs/decisions.md) R1–R5.
 

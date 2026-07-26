@@ -177,3 +177,47 @@ jobs:
 `;
   assert.deepEqual(lintWorkflowSource('.github/workflows/ci.yml', source), []);
 });
+
+test('only release.yml may listen on push tags', () => {
+  const source = `name: release-desktop
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+${clean.slice(clean.indexOf('jobs:'))}`;
+  const errors = lintWorkflowSource('.github/workflows/release-desktop.yml', source);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /only release\.yml may/);
+});
+
+test('release.yml itself may listen on push tags', () => {
+  const source = `name: release
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+${clean.slice(clean.indexOf('jobs:'))}`;
+  assert.deepEqual(lintWorkflowSource('.github/workflows/release.yml', source), []);
+});
+
+test('a `tags:` key inside a job is not mistaken for a trigger', () => {
+  // docker/metadata-action takes a `tags:` input. Only a header-level, 4-space
+  // `tags:` under `push:` is a trigger.
+  const source = `name: lane-release-gateway-image
+on:
+  workflow_call:
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: docker/metadata-action@8e5442c4ef9f78752691e2d8f8d19755c6f78e81 # v5
+        with:
+          tags: |
+            type=semver,pattern={{version}}
+`;
+  assert.deepEqual(
+    lintWorkflowSource('.github/workflows/lane-release-gateway-image.yml', source),
+    [],
+  );
+});

@@ -28,6 +28,7 @@ gaps, found by auditing every workflow in `.github/workflows/`.
 - [x] Fold bun install and the build caches into the setup action
 - [x] Extract the duplicated tracking-issue and report-slug shell into tested scripts
 - [x] Extract the container smoke shell out of the workflow
+- [x] Make release.yml the only tag entry point with one release verdict
 
 ## What changed
 
@@ -77,6 +78,9 @@ gaps, found by auditing every workflow in `.github/workflows/`.
   `scripts/ci/run-slug.test.mjs`.
 - **Extract the container smoke shell out of the workflow** —
   `scripts/gateway-package/container-smoke.sh`.
+- **Make release.yml the only tag entry point with one release verdict** — new
+  `.github/workflows/release.yml` plus five `lane-release-*.yml` files; enforced
+  by policy (6) of `scripts/lint-workflow-pins.mjs`.
 
 ### Signal — a red run must be visible
 
@@ -292,6 +296,49 @@ in sync; if they disagreed the tracking issue would link to a 404.
 `scripts/ci/run-slug.test.mjs` (6 cases) covers the case the old shell glob got
 wrong: `[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]` accepts `2026-13-45`.
 
+**Make release.yml the only tag entry point with one release verdict.** Cutting
+a `v*.*.*` tag started three independent workflow runs —
+`.github/workflows/release-desktop.yml`,
+`.github/workflows/release-gateway-image.yml` and
+`.github/workflows/npm-gateway-publish.yml` — with a fourth,
+`.github/workflows/extension-release.yml`, on `companion-v*`. Nothing tied them
+together, so **there was no answer to "did the release work"**: npm could publish
+while desktop packaging failed, and that partial release looked like two greens
+and a red in three separate places. You had to know to check all of them.
+
+New `.github/workflows/release.yml` is the single listener. A `plan` job
+classifies the tag line (`v*.*.*` → product, `companion-v*` → companion, and an
+unrecognised tag that matched the trigger is a hard error rather than a silent
+no-op), each surface is a `workflow_call` lane, and `release-check` aggregates
+`join(needs.*.result)` into one verdict — `skipped` passes, because a
+`companion-v*` tag legitimately skips every product lane; `cancelled` fails.
+
+The five workflows became `.github/workflows/lane-release-desktop.yml`,
+`.github/workflows/lane-release-gateway-image.yml`,
+`.github/workflows/lane-release-gateway-npm.yml`,
+`.github/workflows/lane-release-mobile.yml` and
+`.github/workflows/lane-release-companion.yml`, each declaring its secrets under
+`on.workflow_call.secrets` rather than reaching into the global pool. This is the
+part that reverses my earlier objection to merging the release workflows: the
+concern was one file holding every publishing credential, and explicit `secrets:`
+passing is *stronger* isolation than five peer workflows that could each read
+every repo secret. The desktop signing identity, `NPM_TOKEN` and GHCR push now
+each reach exactly one lane.
+
+Mobile stays deliberately unreachable from a tag (J7 — a desktop version bump
+must not auto-submit to TestFlight/Play); it runs only on a
+`workflow_dispatch` with `surfaces: mobile`.
+
+Two guards were simplified rather than left as dead conditions: the npm lane's
+dry-run and the image lane's `ref` override both tested
+`github.event_name == 'workflow_dispatch'`, which no longer discriminates now
+that the orchestrator resolves both inputs before the call.
+`scripts/release/surfaces.mjs` — the machine catalog behind `bun run
+release:matrix` — named five workflows that no longer exist, and nothing noticed,
+because it is documentation-as-data with no link to the tree it describes.
+`scripts/release/surfaces.test.mjs` gained a case asserting every named workflow
+is on disk.
+
 **Extract the container smoke shell out of the workflow.** The 28-line Docker
 volume smoke in `lane-gateway-package.yml` moved to
 `scripts/gateway-package/container-smoke.sh`, driven by `IMAGE` and `RUN_ID`, so
@@ -312,6 +359,13 @@ points at the never-pruned `history/index.json`.
 aggregates every PR gate and why the one-PR-workflow rule exists.
 `QUALITY.md` — the client-e2e pointer follows the file to
 `lane-client-e2e.yml`.
+`docs/release.md` — the surface table, the fan-out table and the publish ritual
+now describe one tag → one run → one `release-check`; the mobile step is a
+`release.yml` dispatch. `docs/enrollment.md` — `EXPO_TOKEN` points at the lane.
+`ARCHITECTURE.md` — the three release rows name `release.yml` and its lanes.
+`README.md` — the gateway npm CI pointer follows the rename.
+`apps/desktop/tests/e2e/COVERAGE_REPORT.md` — two links follow the client-e2e
+lane rename.
 
 ## Decisions
 
@@ -344,12 +398,20 @@ aggregates every PR gate and why the one-PR-workflow rule exists.
   workflow are exempt from the `timeout-minutes` policy — GitHub rejects the key
   there, and the bound lives on the called workflow's jobs, which the lint walks
   anyway.
-- **The five release workflows were deliberately NOT merged.** They are the
-  fattest remaining target (613 lines across five files) and the one place where
-  merging would be a regression: `NPM_TOKEN`, the Apple signing identity and GHCR
-  push live in separate files today, so a compromised step in one has no path to
-  the others' secrets. Tidiness is not worth a shared blast radius. Deploy jobs
-  stayed out of `ci.yml` for the same reason.
+- **The release workflows were consolidated after all, and my first answer was
+  wrong.** I argued against merging them: `NPM_TOKEN`, the Apple signing identity
+  and GHCR push live in separate files, and one file holding all of them is a
+  blast radius. That objection was to the wrong design. An orchestrator calling
+  `workflow_call` lanes keeps each surface in its own file *and* lets every lane
+  declare the secrets it accepts, which is stronger than the status quo — today
+  any of the five workflows can read any repo secret simply by naming it. The
+  real defect the objection was hiding: four workflows watching the same tags
+  meant a release had no aggregate verdict at all.
+- **Deploy jobs still stay out of `ci.yml`.** `web.yml` and `oauth-worker.yml`
+  keep their own push-to-main triggers and `environment:` gates. The release
+  orchestrator is a fan-out for a deliberate, tagged event; folding continuous
+  deploys into the PR workflow would put deploy credentials in scope on every
+  PR run, which is a different and worse trade.
 - **`workflow_dispatch` was added to `ci.yml`.** Five of the folded workflows had
   it, and dropping it would have been a silent capability loss. On a manual run
   `dorny/paths-filter` has no base to diff, so the filter step is skipped and a
@@ -371,12 +433,14 @@ aggregates every PR gate and why the one-PR-workflow rule exists.
 
 - **The product failures behind #556** — `mobile-e2e-ios` and the three pairing
   lanes. This change makes their redness visible; it does not fix them.
-- **Adding path-filtered workflows to the ruleset's required checks.** Only
-  `check` and `governance` are required today, so `client-e2e-pr`,
-  `gateway-package`, `web`, `docs`, `oauth-worker` and `iroh-wasm` can go red and
-  still merge. Requiring them directly would deadlock merges: a path-filtered
-  workflow never reports on an unrelated PR, so the required check never arrives.
-  The fix needs a merge queue or always-run skip-jobs first.
+- **Changing the ruleset's required-checks list — no longer needed.** This was
+  filed as out of scope on the grounds that requiring the path-filtered
+  workflows directly would deadlock merges (a filtered-out workflow never
+  reports, and a required check that never arrives blocks the PR forever). The
+  consolidation dissolves it instead of working around it: those lanes are now
+  jobs under `ci.yml`, GitHub counts a skipped job as satisfied, and `check`
+  aggregates them. `check` and `governance` stay the only two required contexts
+  and now cover every PR gate, so the ruleset is untouched.
 - **`main` currently violates `commit-message-format`.** `a33a39f8` was pushed
   directly to `main` with no `(#N)` suffix and no PR; governance caught it on the
   push run and nothing was notified. Fixing it means rewriting `main`'s history.
@@ -489,6 +553,7 @@ Fresh-context sub-agent audit against the staged diff and issue #557.
 | claude-code-cea40236-1c7-1785070106-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 6 | 15888 | 995313 | 3456 | 19350 | 0.6834 | 698 | 643564 | 71798008 | 250063 | ci: make red signals visible and close the supply-chain gaps (#557) -m Audit of  |
 | claude-code-cea40236-1c7-1785075385-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 388 | 583793 | 37457409 | 180281 | 764462 | 26.8864 | 1086 | 1227357 | 109255417 | 430344 |  |
 | claude-code-cea40236-1c7-1785075470-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 8 | 10260 | 963002 | 2680 | 12948 | 0.6127 | 1094 | 1237617 | 110218419 | 433024 |  |
+| claude-code-cea40236-1c7-1785075902-1 | claude-code | cea40236-1c77-4e08-a82d-17a235f43724 | #557 | claude-opus-5 | 88 | 61906 | 11745108 | 38271 | 100265 | 7.2167 | 1182 | 1299523 | 121963527 | 471295 |  |
 
 ### Steering
 

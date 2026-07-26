@@ -1,5 +1,10 @@
-name: release-desktop
+name: lane-release-desktop
 
+# A `release.yml` lane, not an independently-triggered workflow (#557) — the
+# `lane-` prefix marks that. It used to listen on `v*.*.*` itself, alongside two
+# other workflows watching the same tags with no shared notion of whether the
+# release as a whole succeeded.
+#
 # I1–I3, I7, I11 / #501 — package desktop on version tags.
 # Signing/notarization is secret-gated. Without enrolled credentials:
 #   - jobs still build installers (unsigned scaffolding)
@@ -8,20 +13,38 @@ name: release-desktop
 #     (avoids publishing Gatekeeper/SmartScreen-blocked "official" stable builds)
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
-      - 'v*.*.*-beta.*'
-  workflow_dispatch:
+  workflow_call:
     inputs:
       restamp_rollout_hours:
         description: 'I8 re-stamp — set rollout window hours on an existing release (empty = skip)'
         required: false
         default: ''
+        type: string
       restamp_tag:
         description: 'Tag to restamp (e.g. v0.2.0); required when restamp_rollout_hours is set'
         required: false
         default: ''
+        type: string
+    # Declared explicitly rather than `secrets: inherit`. Today every workflow in
+    # the repo can read every secret; a lane that names what it accepts can only
+    # ever receive the signing credentials for its own platform.
+    secrets:
+      APPLE_API_KEY:
+        required: false
+      APPLE_API_KEY_ID:
+        required: false
+      APPLE_API_ISSUER:
+        required: false
+      AZURE_TENANT_ID:
+        required: false
+      AZURE_CLIENT_ID:
+        required: false
+      AZURE_CLIENT_SECRET:
+        required: false
+      AZURE_CODE_SIGNING_ACCOUNT:
+        required: false
+      AZURE_CERT_PROFILE:
+        required: false
 
 permissions:
   contents: write
@@ -195,7 +218,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   restamp-rollout:
-    if: github.event_name == 'workflow_dispatch' && inputs.restamp_rollout_hours != ''
+    if: inputs.restamp_rollout_hours != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: release

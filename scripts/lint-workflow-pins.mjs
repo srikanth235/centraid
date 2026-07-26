@@ -30,6 +30,12 @@
  *      how eight lanes ended up unable to gate a merge. As jobs inside ci.yml
  *      they skip cleanly and roll up through the required `check`.
  *
+ *   6. `release.yml` is the ONLY workflow that may listen on `push: tags`. Same
+ *      shape, different trigger: four workflows watched the release tags
+ *      independently, so cutting one tag produced four unrelated runs and no
+ *      answer to "did the release work". A partial release — npm published,
+ *      desktop packaging red — was three greens and a red in four places.
+ *
  * Offline, no dependencies, ~10ms — belongs on the per-PR loop next to the
  * other linters. Complements actionlint (which validates syntax/expressions,
  * not policy) rather than replacing it.
@@ -124,6 +130,15 @@ export function lintWorkflowSource(name, source) {
         `${name}:${lineNo} listens on \`pull_request\` — only ci.yml may. Add a job there (gated on the \`changes\` filter) so it rolls up into the required \`check\`, or expose this workflow via \`workflow_call\` and invoke it from ci.yml`,
       );
     }
+
+    // (6) Single release entry point. `tags:` sits at 4 spaces under `push:`,
+    // which is itself under `on:` — and only in the header, so a `tags:` key
+    // inside a job's `with:` map cannot be mistaken for a trigger.
+    if (!inJobs && /^ {4}tags:/.test(line) && name !== '.github/workflows/release.yml') {
+      found.push(
+        `${name}:${lineNo} listens on \`push: tags\` — only release.yml may. Expose this workflow via \`workflow_call\` and add a lane to release.yml so the tag produces one run with one \`release-check\` verdict`,
+      );
+    }
   }
 
   // (3) Every job bounded.
@@ -183,7 +198,7 @@ function main() {
     return;
   }
   console.log(
-    `workflow-pins: ${files.length} workflow(s) clean (SHA pins, bun pin, timeouts, single PR entry point)`,
+    `workflow-pins: ${files.length} workflow(s) clean (SHA pins, bun pin, timeouts, no hand-rolled install, single PR + release entry point)`,
   );
 }
 

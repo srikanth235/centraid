@@ -1,23 +1,21 @@
-name: npm-gateway-publish
+name: lane-release-gateway-npm
+
+# A `release.yml` lane, not an independently-triggered workflow (#557).
 
 # #509 / #511 — multi-platform native tunnel build, pack (always), publish (secret-gated).
 # Does not install OS services. Live publish only when NPM_TOKEN is present.
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       dry_run:
         description: 'Force dry-run even if NPM_TOKEN is set'
         required: false
         default: 'true'
-        type: choice
-        options:
-          - 'true'
-          - 'false'
-  push:
-    tags:
-      - 'v*.*.*'
-      - 'v*.*.*-beta.*'
+        type: string
+    secrets:
+      NPM_TOKEN:
+        required: false
 
 permissions:
   contents: read
@@ -145,10 +143,13 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           # #557 — dispatch inputs as env, not interpolated script text.
-          EVENT_NAME: ${{ github.event_name }}
+          # release.yml already resolves this: a tag push passes 'false', a
+          # manual run passes the operator's choice. Re-checking event_name here
+          # would be a dead condition now that the lane cannot be dispatched
+          # directly.
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$INPUT_DRY_RUN" = "true" ]; then
+          if [ "$INPUT_DRY_RUN" = "true" ]; then
             node scripts/gateway-npm/publish.mjs --dry-run
             exit 0
           fi

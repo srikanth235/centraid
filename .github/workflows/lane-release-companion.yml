@@ -1,9 +1,10 @@
-name: Companion packages
+name: lane-release-companion
+
+# A `release.yml` lane, not an independently-triggered workflow (#557). Fires on
+# the `companion-v*` tag line, a separate product cadence from `v*.*.*`.
 
 on:
-  workflow_dispatch:
-  push:
-    tags: ['companion-v*']
+  workflow_call:
 
 permissions:
   contents: read

@@ -1,0 +1,243 @@
+name: release
+
+# The single entry point for cutting a release (#557).
+#
+# Three workflows used to listen on the same `v*.*.*` tags independently —
+# release-desktop, release-gateway-image and npm-gateway-publish — plus a fourth
+# on `companion-v*`. Cutting a tag produced three or four unrelated runs with no
+# shared notion of whether "the release" succeeded: npm could publish while
+# desktop packaging failed, and nothing anywhere said the release was broken.
+# You had to know to check four places.
+#
+# Now one tag produces one run, and `release-check` is the single red/green for
+# it. Each surface stays in its own `lane-release-*.yml` file and declares the
+# secrets it accepts, so a lane can only ever receive the credentials for its own
+# platform — stronger isolation than five peer workflows that could each read
+# every repo secret.
+#
+# Enforced by policy (6) of scripts/lint-workflow-pins.mjs: only this workflow
+# may listen on `push: tags`.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-beta.*'
+      - 'companion-v*'
+  workflow_dispatch:
+    inputs:
+      surfaces:
+        description: 'Which surfaces to run'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - desktop
+          - gateway-npm
+          - gateway-image
+          - mobile
+          - companion
+      dry_run:
+        description: 'npm: force dry-run even if NPM_TOKEN is set'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      ref:
+        description: 'gateway-image: git ref to build (default: current)'
+        required: false
+        default: ''
+      mobile_profile:
+        description: 'mobile: EAS profile (preview = TestFlight/Play internal)'
+        required: false
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - production
+      mobile_platform:
+        description: 'mobile: platform'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ios
+          - android
+      mobile_submit:
+        description: 'mobile: submit to TestFlight / Play internal after build'
+        required: false
+        default: false
+        type: boolean
+      restamp_rollout_hours:
+        description: 'desktop I8: re-stamp rollout window hours on an existing release (empty = skip)'
+        required: false
+        default: ''
+      restamp_tag:
+        description: 'desktop I8: tag to restamp; required when restamp_rollout_hours is set'
+        required: false
+        default: ''
+
+# A tag is immutable — never cancel a release mid-flight for a "newer" one.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Classifies what was cut, so each lane's `if:` reads as a sentence instead of
+  # repeating tag-pattern matching seven times.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      product: ${{ steps.classify.outputs.product }}
+      companion: ${{ steps.classify.outputs.companion }}
+      surfaces: ${{ steps.classify.outputs.surfaces }}
+    steps:
+      - id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.ref_name }}
+          SURFACES: ${{ inputs.surfaces || 'all' }}
+        run: |
+          set -euo pipefail
+          product=false
+          companion=false
+          case "$EVENT" in
+            push)
+              # Tag line decides. `companion-v*` is a separate product cadence
+              # and must never drag the desktop/gateway surfaces along with it.
+              case "$TAG" in
+                companion-v*) companion=true ;;
+                v*.*.*) product=true ;;
+                *) echo "::error::tag '$TAG' matched the trigger but no known release line"; exit 1 ;;
+              esac
+              ;;
+            workflow_dispatch)
+              # A manual run selects surfaces directly; `surfaces` gates the lanes.
+              product=true
+              companion=true
+              ;;
+          esac
+          {
+            echo "product=${product}"
+            echo "companion=${companion}"
+            echo "surfaces=${SURFACES}"
+          } >> "$GITHUB_OUTPUT"
+          echo "event=$EVENT tag=$TAG product=$product companion=$companion surfaces=$SURFACES"
+
+  desktop:
+    needs: plan
+    if: >
+      needs.plan.outputs.product == 'true' &&
+      (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'desktop')
+    permissions:
+      contents: write
+    uses: ./.github/workflows/lane-release-desktop.yml
+    with:
+      restamp_rollout_hours: ${{ inputs.restamp_rollout_hours || '' }}
+      restamp_tag: ${{ inputs.restamp_tag || '' }}
+    secrets:
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_CODE_SIGNING_ACCOUNT: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT }}
+      AZURE_CERT_PROFILE: ${{ secrets.AZURE_CERT_PROFILE }}
+
+  gateway-npm:
+    needs: plan
+    if: >
+      needs.plan.outputs.product == 'true' &&
+      (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'gateway-npm')
+    permissions:
+      contents: read
+      # OIDC for `npm publish --provenance` (#557). Job-level permissions
+      # REPLACE the workflow-level block, so `contents: read` is restated.
+      id-token: write
+    uses: ./.github/workflows/lane-release-gateway-npm.yml
+    with:
+      # A tag publishes for real; a manual run defaults to dry-run.
+      dry_run: ${{ github.event_name == 'push' && 'false' || (inputs.dry_run || 'true') }}
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  gateway-image:
+    needs: plan
+    if: >
+      needs.plan.outputs.product == 'true' &&
+      (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'gateway-image')
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/lane-release-gateway-image.yml
+    with:
+      ref: ${{ inputs.ref || '' }}
+
+  # Deliberately NOT reached by a `v*.*.*` tag. The store pipeline is manual by
+  # design (J7): a desktop version bump must not auto-submit to TestFlight/Play.
+  mobile:
+    needs: plan
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'mobile')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lane-release-mobile.yml
+    with:
+      profile: ${{ inputs.mobile_profile || 'preview' }}
+      platform: ${{ inputs.mobile_platform || 'all' }}
+      submit: ${{ inputs.mobile_submit || false }}
+    secrets:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+
+  companion:
+    needs: plan
+    if: >
+      needs.plan.outputs.companion == 'true' &&
+      (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'companion')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/lane-release-companion.yml
+
+  # The one signal for "did this release work". Before #557 there was none: four
+  # peer workflows each reported separately, so a partial release — npm shipped,
+  # desktop broken — looked like three greens and one red in four different
+  # places, with nothing naming the release itself as bad.
+  #
+  # `skipped` passes (a `companion-v*` tag legitimately skips every product
+  # lane); `cancelled` fails.
+  release-check:
+    needs: [plan, desktop, gateway-npm, gateway-image, mobile, companion]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Aggregate every release lane
+        env:
+          RESULTS: ${{ join(needs.*.result, ',') }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          echo "release $TAG lane results: $RESULTS"
+          bad=0
+          IFS=',' read -ra each <<< "$RESULTS"
+          for result in "${each[@]}"; do
+            case "$result" in
+              success | skipped) ;;
+              *)
+                echo "::error::a release lane reported '$result' — $TAG is a partial release"
+                bad=1
+                ;;
+            esac
+          done
+          exit "$bad"

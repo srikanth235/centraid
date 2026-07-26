@@ -1,20 +1,19 @@
-name: release-gateway-image
+name: lane-release-gateway-image
+
+# A `release.yml` lane, not an independently-triggered workflow (#557).
 
 # #501 / #504 — optional GHCR image for centraid-gateway (D5: never move latest on beta).
 # Build uses monorepo-root Dockerfile (native tunnel + operator-safe defaults).
 # Primary install path remains monorepo source + H5 service install.
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
-      - 'v*.*.*-beta.*'
-  workflow_dispatch:
+  workflow_call:
     inputs:
       ref:
         description: 'Git ref to build (default: current)'
         required: false
         default: ''
+        type: string
 
 permissions:
   contents: read
@@ -36,11 +35,12 @@ jobs:
         # hardening rather than an open hole, but env indirection costs nothing
         # and keeps the value a string.
         env:
+          # release.yml passes '' on a tag push, so a non-empty value can only
+          # have come from an operator's manual run.
           INPUT_REF: ${{ inputs.ref }}
-          EVENT_NAME: ${{ github.event_name }}
         run: |
           REF="${GITHUB_REF_NAME}"
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -n "$INPUT_REF" ]; then
+          if [ -n "$INPUT_REF" ]; then
             REF="$INPUT_REF"
           fi
           # Normalize refs/tags/vX → vX
