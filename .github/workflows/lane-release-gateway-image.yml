@@ -1,20 +1,19 @@
-name: release-gateway-image
+name: lane-release-gateway-image
+
+# A `release.yml` lane, not an independently-triggered workflow (#557).
 
 # #501 / #504 — optional GHCR image for centraid-gateway (D5: never move latest on beta).
 # Build uses monorepo-root Dockerfile (native tunnel + operator-safe defaults).
 # Primary install path remains monorepo source + H5 service install.
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
-      - 'v*.*.*-beta.*'
-  workflow_dispatch:
+  workflow_call:
     inputs:
       ref:
         description: 'Git ref to build (default: current)'
         required: false
         default: ''
+        type: string
 
 permissions:
   contents: read
@@ -30,10 +29,19 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
       - name: Image metadata
         id: meta
+        # #557 — `inputs.ref` is free-text and was interpolated straight into
+        # the shell, so its value was parsed as script rather than data. It
+        # takes repo write access to dispatch this workflow, so this is
+        # hardening rather than an open hole, but env indirection costs nothing
+        # and keeps the value a string.
+        env:
+          # release.yml passes '' on a tag push, so a non-empty value can only
+          # have come from an operator's manual run.
+          INPUT_REF: ${{ inputs.ref }}
         run: |
           REF="${GITHUB_REF_NAME}"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.ref }}" ]; then
-            REF="${{ inputs.ref }}"
+          if [ -n "$INPUT_REF" ]; then
+            REF="$INPUT_REF"
           fi
           # Normalize refs/tags/vX → vX
           REF="${REF#refs/tags/}"
@@ -45,14 +53,14 @@ jobs:
             TAGS="${TAGS},${IMAGE}:latest"
           fi
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
           file: Dockerfile

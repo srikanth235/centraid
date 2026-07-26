@@ -56,9 +56,25 @@ function main() {
     `gateway-npm publish: ${tarballs.length} tarball(s)${effectiveDry ? ' [DRY-RUN — no token or --dry-run]' : ''}`,
   );
 
+  // #557 — npm provenance. Publishing signs a build attestation linking the
+  // tarball to this workflow, commit, and runner; consumers can verify the
+  // package really came from this repo rather than a stolen NPM_TOKEN.
+  //
+  // Gated on ACTIONS_ID_TOKEN_REQUEST_URL, which GitHub only injects when the
+  // job declares `permissions: id-token: write`. `npm publish --provenance`
+  // HARD FAILS without it, so this must stay a runtime probe rather than an
+  // unconditional flag — a local `node publish.mjs` must keep working.
+  const canProvenance = Boolean(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+  if (!effectiveDry && !canProvenance) {
+    console.warn(
+      'gateway-npm publish: publishing WITHOUT provenance (no OIDC token; is `id-token: write` set on the job?)',
+    );
+  }
+
   for (const tgz of tarballs) {
     const args = ['publish', tgz, '--access', 'public'];
     if (effectiveDry) args.push('--dry-run');
+    else if (canProvenance) args.push('--provenance');
     console.log(`  npm ${args.join(' ')}`);
     const env = { ...process.env };
     if (token) {

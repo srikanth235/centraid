@@ -66,7 +66,7 @@ Probe without printing values: `bun run release:verify-secrets`.
 
 - [ ] Create Expo account + EAS project for `apps/mobile`.
 - [ ] Set `EAS_PROJECT_ID` (replaces `placeholder-centraid-mobile` in updates URL when ready).
-- [ ] Store `EXPO_TOKEN` in GitHub Actions for `release-mobile.yml`.
+- [ ] Store `EXPO_TOKEN` in GitHub Actions for `lane-release-mobile.yml` (reached via `release.yml`).
 - [ ] Fill `ascAppId` placeholders in `apps/mobile/eas.json` after App Store Connect app exists.
 - [ ] **Do not** add routine `eas update` to CI (J7 — dormant hotfix lane only).
 

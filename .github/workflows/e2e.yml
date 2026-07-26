@@ -49,10 +49,7 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
-        with:
-          bun-version: 1.3.13
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       # Electron + Playwright need host system libraries (libnss3, libgbm, …)
       # to start a Chromium-based renderer on headless Linux. `--with-deps`
       # apt-installs them; the chromium download itself is what carries the
@@ -120,10 +117,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
-        with:
-          bun-version: 1.3.13
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - run: bunx playwright install --with-deps chromium
         working-directory: apps/web
       - run: bun run build
@@ -154,9 +148,7 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '22'
-      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
-        with:
-          bun-version: 1.3.13
+      - uses: ./.github/actions/setup
       # The iOS dev build is cached and reused whenever nothing that changes the
       # *native binary* changed. A JS/TS commit is served live by Metro, so it
       # must not pay the ~32-minute compile; a config-plugin, native-module,
@@ -185,7 +177,6 @@ jobs:
       # run would SAVE a fresh multi-hundred-MB blob; against GitHub's 10 GB
       # per-repo budget with LRU eviction, the natural victim is the .app entry
       # below — which is only ever read, never re-saved on a hit.
-      - run: bun install --frozen-lockfile
       - name: Fingerprint the iOS native build inputs
         id: native
         working-directory: apps/mobile
@@ -387,9 +378,7 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '22'
-      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
-        with:
-          bun-version: 1.3.13
+      - uses: ./.github/actions/setup
       # ubuntu-latest exposes /dev/kvm; enable it so the x86_64 emulator gets
       # hardware acceleration. macos-15 runners have no Hypervisor.framework
       # (HVF error: HV_UNSUPPORTED), so the Android emulator could not boot there
@@ -405,7 +394,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - run: bun install --frozen-lockfile
       # Fingerprint the Android native build inputs — same mechanism as the iOS
       # job (apps/mobile/scripts/native-fingerprint.mjs). Keyed so a JS-only
       # commit reuses the cached .apk while any native-input change rebuilds it.
@@ -547,13 +535,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
-        with:
-          bun-version: 1.3.13
+      - uses: ./.github/actions/setup
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '22'
-      - run: bun install --frozen-lockfile
       - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
       - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
@@ -580,13 +565,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
-        with:
-          bun-version: 1.3.13
+      - uses: ./.github/actions/setup
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '22'
-      - run: bun install --frozen-lockfile
       - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
       - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
@@ -613,13 +595,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
-        with:
-          bun-version: 1.3.13
+      - uses: ./.github/actions/setup
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '22'
-      - run: bun install --frozen-lockfile
       - run: docker info
       - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
@@ -653,10 +632,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
-        with:
-          bun-version: 1.3.13
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - run: bun run build
       # #545 A2 — mutation must fail the job (and thus nightly-failure-issue)
       # when floors/seeds go red. continue-on-error was silencing breaches.
@@ -700,10 +676,7 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: '22'
-      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
-        with:
-          bun-version: 1.3.13
-      - run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup
       # Same-run evidence only (desktop/web/mobile/pairing). Pairing no longer
       # pulls artifacts from a separate scheduled workflow run.
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
@@ -793,14 +766,25 @@ jobs:
   # Public nightly HTML (same Pages tree as main; no per-PR slots).
   # #496 E2 — main-only so branch workflow_dispatch cannot red the workflow
   # with "Branch … is not allowed to deploy to github-pages".
-  # Only when test-health-report actually produced the artifact. Single-lane
-  # dispatch (suite != all/report) skips the report job; running publish on
-  # skipped/failure would false-alarm "HTML missing" (#496 review).
+  #
+  # #557 — a FAILED report job must still publish. The report's whole purpose is
+  # to show red, and `test-health-report` fails on its own honesty exits
+  # (orphaned failed evidence, silent all-clear, grey creep) *after* writing
+  # dist/test-report/. Gating on `== 'success'` meant every honesty exit also
+  # suppressed the page that would have shown the failure — Pages served a
+  # three-day-stale green report while #556 tracked a red lane. Mirrors
+  # ci.yml's publish-report, which had this right.
+  #
+  # `skipped` is still excluded: single-lane dispatch (suite != all/report)
+  # skips the report job, and publishing then would false-alarm the "HTML
+  # missing" tracking issue below (#496 review). The `Require report HTML`
+  # step remains the real guard for a job that died before writing output.
   publish-nightly-report:
     needs: [test-health-report]
     if: >
       always() &&
-      needs.test-health-report.result == 'success' &&
+      needs.test-health-report.result != 'cancelled' &&
+      needs.test-health-report.result != 'skipped' &&
       github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -840,23 +824,24 @@ jobs:
         if: steps.has_report.outputs.ok != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          TITLE='[nightly] test-health report HTML missing'
-          BODY="Nightly publish skipped because \`dist/test-report/index.html\` was missing.
+          set -euo pipefail
+          cat > /tmp/missing-html.md <<EOF
+          Nightly publish skipped because \`dist/test-report/index.html\` was missing.
 
-          - Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Run: ${RUN_URL}
           - Workflow: e2e / publish-nightly-report
           - Ref: \`${{ github.ref }}\`
 
-          Auto-filed by #496 E2/E3. Update this issue rather than opening duplicates."
-          existing="$(gh issue list --search "in:title [nightly] test-health report HTML missing" --state open --json number --jq '.[0].number' || true)"
-          if [ -n "$existing" ] && [ "$existing" != "null" ]; then
-            gh issue comment "$existing" --body "$BODY" || echo "::warning::could not comment on issue #$existing"
-          else
-            gh issue create --title "$TITLE" --body "$BODY" --label 'tech-debt' || \
-              gh issue create --title "$TITLE" --body "$BODY" || \
-              echo "::warning::could not open tracking issue (permission or label)"
-          fi
+          Auto-filed by #496 E2/E3. Update this issue rather than opening duplicates.
+          EOF
+          node scripts/ci/file-tracking-issue.mjs \
+            --title '[nightly] test-health report HTML missing' \
+            --search '[nightly] test-health report HTML missing' \
+            --body-file /tmp/missing-html.md \
+            --label tech-debt \
+            --run-url "$RUN_URL"
       - name: Restore previous Pages tree (gh-pages)
         if: steps.has_report.outputs.ok == 'true'
         continue-on-error: true
@@ -875,20 +860,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           SLOT="nightly"
           OWNER="${{ github.repository_owner }}"
           REPO="${{ github.event.repository.name }}"
-          # Authoritative run timestamp (not `date` at publish time, so a
-          # re-publish of the same run lands in the same dated slot).
-          RUN_DATE="$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --jq '.created_at' 2>/dev/null | cut -c1-10 || true)"
-          case "$RUN_DATE" in
-            [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
-            *) RUN_DATE="$(date -u +%F)" ;;
-          esac
           echo "slot=${SLOT}" >> "$GITHUB_OUTPUT"
-          echo "date=${RUN_DATE}" >> "$GITHUB_OUTPUT"
           echo "url=https://${OWNER}.github.io/${REPO}/test-report/${SLOT}/" >> "$GITHUB_OUTPUT"
+          # Emits date= and slug= — the same derivation nightly-failure-issue
+          # uses, so the issue's dated link and this publish cannot disagree.
+          node scripts/ci/run-slug.mjs --repo "${{ github.repository }}" --run-id "${{ github.run_id }}"
       - name: Merge report into site tree
         if: steps.has_report.outputs.ok == 'true'
         run: |
@@ -918,6 +898,15 @@ jobs:
       - name: Deploy to GitHub Pages
         if: steps.has_report.outputs.ok == 'true'
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+      # #557 — `echo "::error::"` annotates but does not fail a step, so a
+      # publish that shipped nothing still ended GREEN. The tracking issue above
+      # was the only signal. Fail the job too, so "published nothing" is red in
+      # the Actions UI as well as in an issue.
+      - name: Fail when nothing was published
+        if: always() && steps.has_report.outputs.ok != 'true'
+        run: |
+          echo "::error::nightly report HTML missing — nothing was published"
+          exit 1
 
   # #496 E3 — single tracking issue when a *scheduled* nightly goes red.
   # Soft SLA (documented in TESTING.md): open/update issue with run + report links.
@@ -934,20 +923,18 @@ jobs:
         mutation-testing,
         test-health-report,
       ]
+    # #557 — `cancelled` counts as red. A runner that dies or a job aborted
+    # mid-flight leaves the nightly red in the UI; the old per-job
+    # `== 'failure'` list filed nothing for it. `needs.*.result` also means a
+    # job added to `needs:` is covered automatically, instead of silently
+    # falling outside a hand-maintained list.
     if: >
       always() &&
       github.event_name == 'schedule' &&
       github.ref == 'refs/heads/main' &&
       (
-        needs.desktop-e2e.result == 'failure' ||
-        needs.web-e2e.result == 'failure' ||
-        needs.mobile-e2e-ios.result == 'failure' ||
-        needs.mobile-e2e-android.result == 'failure' ||
-        needs.pairing-lifecycle.result == 'failure' ||
-        needs.pairing-ticket-hygiene.result == 'failure' ||
-        needs.pairing-cross-network-relay.result == 'failure' ||
-        needs.mutation-testing.result == 'failure' ||
-        needs.test-health-report.result == 'failure'
+        contains(join(needs.*.result, ','), 'failure') ||
+        contains(join(needs.*.result, ','), 'cancelled')
       )
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -956,15 +943,24 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Resolve this run's immutable report slot
+        id: slug
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/ci/run-slug.mjs --repo "${{ github.repository }}" --run-id "${{ github.run_id }}"
       - name: Open or update nightly red tracking issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # /test-report/nightly/ is a MUTABLE alias: tomorrow's run overwrites
+          # it, so an issue citing only that link silently starts describing a
+          # different run. prepare-pages-site.mjs archives every publish to an
+          # immutable runs/<slug>/ slot (kept 30 deep); cite that as primary.
+          REPORT_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/runs/${{ steps.slug.outputs.slug }}/
+          LATEST_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/
         run: |
           set -euo pipefail
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          REPORT_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/test-report/nightly/"
-          TITLE='[nightly] e2e lane red — tracking'
-          BODY="$(cat <<EOF
+          cat > /tmp/nightly-red.md <<EOF
           ## Nightly e2e failure
 
           A **scheduled** nightly run failed. Soft SLA (#496 / TESTING.md): respond within **24h** or before the next scheduled run.
@@ -972,8 +968,12 @@ jobs:
           | Signal | Link |
           | --- | --- |
           | Actions run | ${RUN_URL} |
-          | Nightly report (Pages) | ${REPORT_URL} |
+          | Report for **this** run (immutable) | ${REPORT_URL} |
+          | Newest nightly (moves every night) | ${LATEST_URL} |
           | Job Summary | open the run → Summary |
+
+          The dated link is archived for the 30 most recent publishes; after that
+          its HTML is pruned and the run stays in \`test-report/history/index.json\`.
 
           ### Job results
           - desktop-e2e: \`${{ needs.desktop-e2e.result }}\`
@@ -988,17 +988,9 @@ jobs:
 
           _Auto-filed by e2e.yml \`nightly-failure-issue\`. Prefer updating this issue over opening duplicates._
           EOF
-          )"
-          existing="$(gh issue list --search 'in:title [nightly] e2e lane red' --state open --json number --jq '.[0].number' || true)"
-          if [ -n "${existing:-}" ] && [ "$existing" != "null" ]; then
-            if ! gh issue comment "$existing" --body "$BODY"; then
-              echo "::error::Failed to comment on nightly tracking issue #$existing — run ${RUN_URL}"
-              exit 1
-            fi
-            echo "Updated issue #$existing"
-          else
-            if ! gh issue create --title "$TITLE" --body "$BODY"; then
-              echo "::error::Failed to create nightly tracking issue — run ${RUN_URL}"
-              exit 1
-            fi
-          fi
+          node scripts/ci/file-tracking-issue.mjs \
+            --title '[nightly] e2e lane red — tracking' \
+            --search '[nightly] e2e lane red' \
+            --body-file /tmp/nightly-red.md \
+            --label tech-debt \
+            --run-url "$RUN_URL"

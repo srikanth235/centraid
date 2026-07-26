@@ -148,7 +148,7 @@ npm install --prefix $env:USERPROFILE\.centraid @centraid/gateway
 ```
 
 - **Publish set:** `scripts/gateway-npm/publish-set.json` (gateway + workspace deps). Pack: `bun run gateway:npm:pack`. Publish: `bun run gateway:npm:publish` (requires `NPM_TOKEN`; dry-runs without it).
-- **CI:** `.github/workflows/npm-gateway-publish.yml` builds native on Linux/macOS/Windows, merges into pack; publishes only when `NPM_TOKEN` is set.
+- **CI:** `.github/workflows/lane-release-gateway-npm.yml` (the `gateway-npm` lane of `release.yml`) builds native on Linux/macOS/Windows, merges into pack; publishes only when `NPM_TOKEN` is set.
 - **Service:** opt-in only (`--with-service` prints the command; never auto-writes unit files outside `centraid-gateway service install`).
 
 ### Pair clients after install (VPS / headless)

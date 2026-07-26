@@ -25,7 +25,7 @@ export const RELEASE_SURFACES = [
     title: 'Desktop (Electron)',
     cadence: 'tag',
     defaultOnProductTag: true,
-    workflow: 'release-desktop.yml',
+    workflow: 'lane-release-desktop.yml',
     tagPattern: 'v*',
     secretGroups: ['desktop-apple', 'desktop-azure'],
     notes:
@@ -36,7 +36,7 @@ export const RELEASE_SURFACES = [
     title: 'Gateway container (GHCR)',
     cadence: 'tag',
     defaultOnProductTag: true,
-    workflow: 'release-gateway-image.yml',
+    workflow: 'lane-release-gateway-image.yml',
     tagPattern: 'v*',
     secretGroups: ['gateway-image'],
     notes: 'latest tag only for non-beta (D5).',
@@ -46,7 +46,7 @@ export const RELEASE_SURFACES = [
     title: 'Gateway npm graph',
     cadence: 'tag',
     defaultOnProductTag: true,
-    workflow: 'npm-gateway-publish.yml',
+    workflow: 'lane-release-gateway-npm.yml',
     tagPattern: 'v*',
     secretGroups: ['gateway-npm'],
     notes: 'Multi-OS tunnel NAPI (#511). Dry-run without NPM_TOKEN.',
@@ -56,9 +56,10 @@ export const RELEASE_SURFACES = [
     title: 'Mobile (iOS / Android stores)',
     cadence: 'store',
     defaultOnProductTag: false,
-    workflow: 'release-mobile.yml',
+    workflow: 'lane-release-mobile.yml',
     secretGroups: ['mobile'],
-    notes: 'workflow_dispatch only (J7). Same product version stamp; ship is opt-in.',
+    notes:
+      'release.yml dispatch with surfaces: mobile only (J7) — never implied by a tag. Same product version stamp; ship is opt-in.',
   },
   {
     id: 'web',
@@ -74,9 +75,10 @@ export const RELEASE_SURFACES = [
     title: 'Docs / marketing site',
     cadence: 'continuous',
     defaultOnProductTag: false,
-    workflow: 'docs.yml',
+    workflow: 'ci.yml',
     secretGroups: ['web'],
-    notes: 'Continuous on docs paths.',
+    notes:
+      'Continuous on docs paths — the `docs` lane of ci.yml; Cloudflare Git integration deploys.',
   },
   {
     id: 'oauth-worker',
@@ -93,7 +95,7 @@ export const RELEASE_SURFACES = [
     title: 'Browser companion extension',
     cadence: 'sideline',
     defaultOnProductTag: false,
-    workflow: 'extension-release.yml',
+    workflow: 'lane-release-companion.yml',
     tagPattern: 'companion-v* | product v* (prefer product stamp)',
     secretGroups: [],
     notes:

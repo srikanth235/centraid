@@ -37,3 +37,13 @@ test('catalog ids unique', () => {
   const ids = RELEASE_SURFACES.map((s) => s.id);
   assert.equal(new Set(ids).size, ids.length);
 });
+
+test('every surface names a workflow file that exists on disk', async () => {
+  // #557 — the catalog named five workflows that had been renamed, and nothing
+  // noticed: it is documentation-as-data with no link to the tree it describes.
+  const { existsSync } = await import('node:fs');
+  const missing = RELEASE_SURFACES.filter(
+    (surface) => !existsSync(`.github/workflows/${surface.workflow}`),
+  ).map((surface) => `${surface.id} → ${surface.workflow}`);
+  assert.deepEqual(missing, []);
+});

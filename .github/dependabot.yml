@@ -1,0 +1,96 @@
+# Dependency + action updates (#557).
+#
+# Why this file exists: every third-party action in .github/workflows/ is
+# pinned to a 40-char SHA. Pinning without an updater is a freeze, not a
+# control — the pin never moves, including through security fixes. Dependabot
+# rewrites the SHA *and* the trailing `# vX.Y.Z` comment, so the convention in
+# CONTRIBUTING/CI stays intact while the pin stays current.
+#
+# Volume control: everything is weekly and grouped, so a normal week is a
+# handful of PRs rather than one per dependency. Security advisories bypass
+# these groups and open immediately (that is Dependabot security updates, a
+# repo setting — see receipts/issue-557-ci-posture.md).
+version: 2
+
+updates:
+  # ---------------------------------------------------------------- actions --
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    commit-message:
+      # Conventional Commits + mandatory issue suffix are enforced by
+      # .governance/packs/.../commit-message-format. Dependabot cannot append
+      # the "(#N)" suffix, so these land as `ci(deps): …` and the hook's
+      # dependabot exemption (or a manual reword) applies — see the receipt.
+      prefix: 'ci(deps)'
+    groups:
+      actions:
+        patterns: ['*']
+
+  # ------------------------------------------------------------ javascript --
+  # Bun workspaces: the root manifest + bun.lock cover every packages/* and
+  # apps/* workspace, so one entry is enough.
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 10
+    # `prefix-development` is deliberately not set: it is documented for the
+    # older ecosystems and its behaviour on `bun` is unverified, and a rejected
+    # key disables the whole config rather than just that line. The dev/prod
+    # split below already separates the two streams.
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      # Toolchain churn (lint/format/test/build) is noisy and low-risk to batch.
+      dev-toolchain:
+        dependency-type: development
+        patterns: ['*']
+      production:
+        dependency-type: production
+        patterns: ['*']
+
+  # ----------------------------------------------------------------- cargo --
+  # Three independent crates; Cargo.lock lives next to each manifest.
+  - package-ecosystem: cargo
+    directories:
+      - /packages/tunnel/data-plane
+      - /packages/tunnel/native
+      - /apps/web/iroh-wasm
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      cargo:
+        patterns: ['*']
+    ignore:
+      # iroh is the wire protocol. A minor bump can change ALPN/relay behaviour
+      # that only the nightly pairing lanes prove — upgrade deliberately, with
+      # tests/agent-e2e-pairing green, never as a batched dependency PR.
+      - dependency-name: iroh
+        update-types: ['version-update:semver-minor', 'version-update:semver-major']
+
+  # ----------------------------------------------------------------- docker --
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '05:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: 'chore(deps)'

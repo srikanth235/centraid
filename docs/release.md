@@ -27,14 +27,20 @@ Machine catalog: `scripts/release/surfaces.mjs`. Print: `bun run release:matrix`
 
 | Id | Cadence | Default on product `v*`? | Workflow |
 | --- | --- | --- | --- |
-| `desktop` | tag | yes | `release-desktop.yml` |
-| `gateway-image` | tag | yes | `release-gateway-image.yml` |
-| `gateway-npm` | tag | yes (dry-run without `NPM_TOKEN`) | `npm-gateway-publish.yml` |
-| `mobile` | store | **no** — dispatch | `release-mobile.yml` |
+| `desktop` | tag | yes | `release.yml` → `lane-release-desktop.yml` |
+| `gateway-image` | tag | yes | `release.yml` → `lane-release-gateway-image.yml` |
+| `gateway-npm` | tag | yes (dry-run without `NPM_TOKEN`) | `release.yml` → `lane-release-gateway-npm.yml` |
+| `mobile` | store | **no** — dispatch with `surfaces: mobile` (never `all`) | `release.yml` → `lane-release-mobile.yml` |
 | `web` | continuous | n/a | `web.yml` |
 | `oauth-worker` | continuous, gated | n/a | `oauth-worker.yml` |
-| `docs` | continuous | n/a | `docs.yml` |
-| `companion` | sideline | no | `extension-release.yml` |
+| `docs` | continuous | n/a | `ci.yml` (`docs` lane) |
+| `companion` | sideline | no | `release.yml` → `lane-release-companion.yml` |
+
+Since #557 a tag produces **one** run. `release.yml` is the only workflow that
+listens on `push: tags`; it fans out to the lanes above and `release-check`
+aggregates them into a single verdict, so a partial release (npm published,
+desktop packaging red) is one red check rather than three greens and a red
+scattered across four workflow runs.
 
 **Stamp vs ship:** every package.json gets the product version. Which artifacts leave the building is the **ship set** (`--surfaces` on publish). Continuous surfaces deploy from `main`, not from the tag ritual.
 
@@ -62,7 +68,7 @@ Happy path:
 2. Maintainer "go ahead" **including ship set** (default: desktop, gateway-image, gateway-npm).
 3. `bun run release:publish -- --version X.Y.Z --issue N --surfaces desktop,gateway-image,gateway-npm` — requires real issue number (no `#0`); bumps monorepo + mobile native numbers via `scripts/release/sync-versions.mjs`; folds CHANGELOG; writes `artifacts/release-ship.json`; annotated tag.
 4. `git push origin HEAD && git push origin vX.Y.Z` (or `publish` with `--push`) → tag workflows fan out.
-5. If ship set includes `mobile`: `gh workflow run release-mobile.yml …` (never implied by tag alone).
+5. If ship set includes `mobile`: `gh workflow run release.yml -f surfaces=mobile -f mobile_profile=preview …` (never implied by tag alone).
 
 Supporting scripts:
 
@@ -98,8 +104,8 @@ Supporting scripts:
 - [ ] GitHub Release body matches changelog
 - [ ] **Desktop** (if shipped): multi-OS package jobs green; installers attached **only when signing enrolled**
 - [ ] **Gateway image** (if shipped): GHCR job green; `latest` only if non-beta
-- [ ] **Gateway npm** (if shipped): `npm-gateway-publish` multi-OS native matrix + pack; publish when `NPM_TOKEN` enrolled. Required natives: linux-x64, darwin-arm64, win32-x64 (#511). Install: `scripts/install-gateway.sh` (Unix) or `npm i -g @centraid/gateway` (Windows). Does **not** replace H5 `service install`.
-- [ ] **Mobile** (if shipped): `release-mobile` dispatched; store tracks checked
+- [ ] **Gateway npm** (if shipped): `gateway-npm` lane multi-OS native matrix + pack; publish when `NPM_TOKEN` enrolled. Required natives: linux-x64, darwin-arm64, win32-x64 (#511). Install: `scripts/install-gateway.sh` (Unix) or `npm i -g @centraid/gateway` (Windows). Does **not** replace H5 `service install`.
+- [ ] **Mobile** (if shipped): `release.yml` dispatched with `surfaces: mobile`; store tracks checked
 - [ ] **Web** continuous host deploys from `main` when CF secrets present (not a tag checklist item)
 
 ## D4 — Patch vs minor
@@ -116,8 +122,8 @@ The release agent **asserts** classification from the changelog headings; it doe
 
 - **Desktop beta:** tags `v0.x.y-beta.n` → GitHub **pre-release**, electron-updater channel `beta`. Never move the stable download target.
 - **Gateway image:** `ghcr.io/<owner>/centraid-gateway:<tag>`; **`latest` only for non-beta tags**.
-- **Gateway npm:** `@centraid/gateway` (+ publish-set) when `NPM_TOKEN` set; curl|bash via `scripts/install-gateway.sh` (Unix). Multi-platform tunnel NAPI matrix: `scripts/gateway-npm/native-platforms.mjs` + `npm-gateway-publish` job `build-native` (#511).
-- **Mobile beta:** TestFlight / Play internal track (workflow `release-mobile`, EAS profiles `preview` / `production`). **No** `eas update` in CI (J7).
+- **Gateway npm:** `@centraid/gateway` (+ publish-set) when `NPM_TOKEN` set; curl|bash via `scripts/install-gateway.sh` (Unix). Multi-platform tunnel NAPI matrix: `scripts/gateway-npm/native-platforms.mjs` + `lane-release-gateway-npm.yml` job `build-native` (#511).
+- **Mobile beta:** TestFlight / Play internal track (`release.yml` → `lane-release-mobile.yml`, EAS profiles `preview` / `production`). **No** `eas update` in CI (J7).
 - **Web:** continuously deployed public origin **`https://app.centraid.dev`** (scaffold; CF secrets required). Gateway-embedded PWA remains LAN / always-on fallback. No beta tag ritual.
 
 ## D6 — Skills as shims
@@ -133,14 +139,19 @@ Do not fork process text into skills.
 
 | Workflow | Trigger | Notes |
 | --- | --- | --- |
-| `release-desktop.yml` | `v*` tags | macOS + Windows + Linux; Environment `release` |
-| `release-mobile.yml` | `workflow_dispatch` | Environment `mobile-release`; EAS when `EXPO_TOKEN` |
-| `web.yml` | path-filtered main/PR | build+smoke; CF deploy when token present |
-| `oauth-worker.yml` | path-filtered main/PR | test/typecheck/dry build; protected deploy only when explicit flag + production evidence gates pass |
-| `release-gateway-image.yml` | `v*` tags | GHCR optional image |
-| `npm-gateway-publish.yml` | `v*` tags / dispatch | multi-OS native + pack; publish when token |
-| `docs.yml` | docs paths | build+smoke; CF Git deploys marketing+docs |
-| `extension-release.yml` | dispatch / rebuild tags | companion packages |
+| `release.yml` | `v*` / `companion-v*` tags, dispatch | **the only tag listener**; fans out to the lanes below, `release-check` is the one verdict |
+| `lane-release-desktop.yml` | `workflow_call` | macOS + Windows + Linux; Environment `release` |
+| `lane-release-mobile.yml` | `workflow_call` (dispatch only, never a tag) | Environment `mobile-release`; EAS when `EXPO_TOKEN` |
+| `lane-release-gateway-image.yml` | `workflow_call` | GHCR optional image |
+| `lane-release-gateway-npm.yml` | `workflow_call` | multi-OS native + pack; publish when token |
+| `lane-release-companion.yml` | `workflow_call` (`companion-v*`) | companion packages |
+| `ci.yml` | PR / main push / dispatch | **the only `pull_request` listener**; `docs`, `web-build` and every other PR gate roll up into the required `check` |
+| `web.yml` | path-filtered main push | CF deploy when token present (PR gate is ci.yml's `web-build`) |
+| `oauth-worker.yml` | path-filtered main push | protected deploy only when explicit flag + production evidence gates pass (PR gate is ci.yml's `oauth-worker`) |
+
+Each lane declares the secrets it accepts via `on.workflow_call.secrets`, so the
+desktop signing identity, `NPM_TOKEN` and GHCR push never reach a lane that has
+no business with them.
 
 ## Enrollment / signing secrets
 

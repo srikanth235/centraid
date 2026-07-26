@@ -1,0 +1,73 @@
+name: security
+
+# #557 — the repo had no static security analysis at all (`/code-scanning/alerts`
+# → 404) despite shipping a documented threat model (SECURITY.md): pairing
+# ceremony, relay, sealed vault columns, an OAuth broker, blob custody.
+#
+# Two independent gates live here:
+# CodeQL runs SAST over the TS/Rust product code AND the workflow YAML itself
+# (`actions` finds injection + unpinned-ref classes that actionlint does not
+# model).
+#
+# It is deliberately NOT on the per-PR loop: a Rust database build is minutes,
+# and `ci` already carries a ~20-25 min budget. Push to main + weekly schedule
+# keeps alerts current without taxing every PR. The PR-time supply-chain gate is
+# `dependency-review` in ci.yml (#557), where it rolls up into the required
+# `check` — as its own `pull_request` workflow it could gate nothing.
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Sunday 04:00 UTC — before the 06:00 nightly e2e, so a red security lane
+    # and a red nightly are never competing for attention in the same hour.
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: codeql (${{ matrix.language }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+      # Required for CodeQL to map alerts back to the PR/commit on private forks.
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: javascript-typescript
+            os: ubuntu-latest
+          - language: actions
+            os: ubuntu-latest
+          - language: rust
+            os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # `build-mode` is deliberately not set. All three languages here default to
+      # the no-build database (CodeQL reads source directly rather than
+      # observing a compiler), so no Rust toolchain setup is needed — the three
+      # crates, packages/tunnel/{data-plane,native} and apps/web/iroh-wasm, are
+      # picked up straight from the checkout. Passing the flag explicitly only
+      # creates a way to be wrong when a default changes.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@3599b3baa15b485a2e49ef411a7a4bb2452e7f93 # v3.30.5
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended adds the lower-precision-but-real queries; the
+          # default suite alone misses most injection sinks.
+          queries: security-extended
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@3599b3baa15b485a2e49ef411a7a4bb2452e7f93 # v3.30.5
+        with:
+          category: /language:${{ matrix.language }}
