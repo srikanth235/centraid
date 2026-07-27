@@ -95,12 +95,41 @@ export interface ApprovalsGrantRowDTO {
   createdAgo: string;
 }
 
+/**
+ * One Recent activity row (issue #552). Pure display DTO — mapping and
+ * adjacent-duplicate collapse live in `approvalsData.ts`.
+ */
 export interface ApprovalsActivityRowDTO {
   receiptId: string;
+  /** Human-readable verb (Locker specials preserved; else sentence-case). */
   label: string;
+  /** Compact detail line — objectType · truncated objectId, or fill origin. */
   detail: string;
+  /** Full object id for the expanded panel (null when absent). */
+  objectId: string | null;
+  objectType: string;
   occurredAgo: string;
+  /** Absolute ISO timestamp for `title` + expanded detail. */
+  occurredAt: string;
+  /** Wire decision: `allow` | `deny` (schema); rendered as Allowed / Denied. */
   decision: string;
+  /** Salience marker; null on pre-#306 receipts — no placeholder. */
+  risk: string | null;
+  /** Acting identity display name; falls back to kind when null. */
+  actor: string | null;
+  /** Refined kind for KindBadge (`app` / `agent` / `assistant` / `owner`). */
+  actorKind: string | null;
+  /** Standing outbox grant when this receipt was auto-allowed. */
+  grantId: string | null;
+  /**
+   * How the allow decision was made — grant auto-allow vs owner approval.
+   * Null on denies and rows with no attribution signal.
+   */
+  attribution: 'grant' | 'owner' | null;
+  /** Adjacent-collapse multiplicity (1 when not collapsed). */
+  count: number;
+  /** Raw action string for collapse keys / expanded detail. */
+  action: string;
 }
 
 export interface ApprovalsScreenProps {
@@ -110,6 +139,11 @@ export interface ApprovalsScreenProps {
   scopeRequests: readonly ApprovalsScopeRequestRowDTO[];
   grants: readonly ApprovalsGrantRowDTO[];
   activity: readonly ApprovalsActivityRowDTO[];
+  /**
+   * Whether the review feed was truncated at the current limit — drives the
+   * in-place "See all" affordance (issue #552; no separate audit screen).
+   */
+  activityTruncated?: boolean;
   /** The itemId/invocationId/requestId/grantId currently mid-flight — disables its row's actions. */
   busyId: string | null;
   /**
@@ -126,6 +160,8 @@ export interface ApprovalsScreenProps {
   onConfirmParked: (invocationId: string, approve: boolean) => void;
   onDecideScopeRequest: (requestId: string, approve: boolean) => void;
   onRevokeGrant: (grantId: string) => void;
+  /** Raise the review-feed limit in place when the list is truncated. */
+  onSeeAllActivity?: () => void;
 }
 
 function GroupHead({
@@ -495,6 +531,176 @@ function GrantRow({
   );
 }
 
+/** Decision → icon + accent class for Recent activity (issue #552). */
+function activityDecisionVisual(decision: string): {
+  icon: 'CheckCircle' | 'X' | 'Clock';
+  accentClass: string;
+  badge: string;
+} {
+  switch (decision) {
+    case 'allow':
+      return { icon: 'CheckCircle', accentClass: styles.decisionAllow, badge: 'Allowed' };
+    case 'deny':
+      return { icon: 'X', accentClass: styles.decisionDeny, badge: 'Denied' };
+    case 'parked':
+      return { icon: 'Clock', accentClass: styles.decisionParked, badge: 'Parked' };
+    default:
+      return { icon: 'Clock', accentClass: styles.decisionParked, badge: decision };
+  }
+}
+
+/** Absolute local timestamp for title/expanded detail (issue #552). */
+function formatAbsoluteTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function ActivityRow({
+  row,
+  busy,
+  expanded,
+  onToggle,
+  onRevokeGrant,
+}: {
+  row: ApprovalsActivityRowDTO;
+  busy: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onRevokeGrant: (grantId: string) => void;
+}): JSX.Element {
+  const visual = activityDecisionVisual(row.decision);
+  const absolute = formatAbsoluteTime(row.occurredAt);
+  return (
+    <div
+      className={cx(styles.row, styles.activityRow, visual.accentClass)}
+      data-expanded={expanded ? 'true' : undefined}
+      data-decision={row.decision}
+      data-risk={row.risk ?? undefined}
+    >
+      {row.risk ? (
+        <span
+          className={styles.riskMarker}
+          data-testid="activity-risk-marker"
+          title={`Risk: ${row.risk}`}
+          aria-label={`Risk ${row.risk}`}
+        />
+      ) : null}
+      <button
+        type="button"
+        className={styles.rowMain}
+        onClick={onToggle}
+        title={absolute}
+        aria-expanded={expanded}
+      >
+        <span
+          className={cx(styles.rowIcon, styles.activityIcon)}
+          data-testid="activity-decision-icon"
+        >
+          <Icon name={visual.icon} size={14} />
+        </span>
+        <span className={styles.rowBody}>
+          <span className={styles.rowTitle}>
+            {row.label}
+            {row.count > 1 ? (
+              <span className={styles.countMarker} data-testid="activity-count">
+                ×{row.count}
+              </span>
+            ) : null}
+            <span className={styles.decisionBadge} data-testid="activity-decision-badge">
+              {visual.badge}
+            </span>
+          </span>
+          <span className={styles.rowSub}>{row.detail}</span>
+          {row.actor || row.actorKind ? (
+            <span className={cx(styles.rowSub, styles.rowSubCaller)} data-testid="activity-actor">
+              {outboxKindBadge(row.actorKind ?? '')}
+              <span>{row.actor ?? row.actorKind}</span>
+            </span>
+          ) : null}
+          {row.attribution === 'grant' ? (
+            <span className={styles.attribution} data-testid="activity-attribution-grant">
+              Auto-allowed by standing grant
+            </span>
+          ) : null}
+          {row.attribution === 'owner' ? (
+            <span className={styles.attribution} data-testid="activity-attribution-owner">
+              Approved by the owner
+            </span>
+          ) : null}
+        </span>
+        <span className={styles.rowMeta}>{row.occurredAgo}</span>
+        <Icon name="ChevronRight" size={14} />
+      </button>
+      {expanded ? (
+        <div className={styles.detail} data-testid="activity-detail">
+          <dl className={styles.fields}>
+            <div className={styles.field}>
+              <dt>Decision</dt>
+              <dd>{visual.badge}</dd>
+            </div>
+            <div className={styles.field}>
+              <dt>When</dt>
+              <dd>{absolute}</dd>
+            </div>
+            <div className={styles.field}>
+              <dt>Object</dt>
+              <dd>
+                {row.objectType}
+                {row.objectId ? ` · ${row.objectId}` : ''}
+              </dd>
+            </div>
+            {row.risk ? (
+              <div className={styles.field}>
+                <dt>Risk</dt>
+                <dd>{row.risk}</dd>
+              </div>
+            ) : null}
+            {row.actor || row.actorKind ? (
+              <div className={styles.field}>
+                <dt>Actor</dt>
+                <dd>
+                  {row.actor ?? row.actorKind}
+                  {row.actorKind ? ` (${row.actorKind})` : ''}
+                </dd>
+              </div>
+            ) : null}
+            {row.count > 1 ? (
+              <div className={styles.field}>
+                <dt>Repeats</dt>
+                <dd>×{row.count} consecutive</dd>
+              </div>
+            ) : null}
+            <div className={styles.field}>
+              <dt>Receipt</dt>
+              <dd className={styles.monoId}>{row.receiptId}</dd>
+            </div>
+          </dl>
+          {row.grantId ? (
+            <div className={styles.actions} data-testid="activity-revoke-grant">
+              <Button
+                label="Revoke grant"
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => onRevokeGrant(row.grantId!)}
+                className={styles.denyBtn}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** Empty state for the inbox groups — the grants section renders regardless. */
 function InboxEmpty(): JSX.Element {
   return (
@@ -515,6 +721,7 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
     scopeRequests,
     grants,
     activity,
+    activityTruncated = false,
     busyId,
     onApproveOutbox,
     onDenyOutbox,
@@ -522,9 +729,19 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
     onConfirmParked,
     onDecideScopeRequest,
     onRevokeGrant,
+    onSeeAllActivity,
   } = props;
   const [expandedOutbox, setExpandedOutbox] = useState<string | null>(null);
   const [expandedParked, setExpandedParked] = useState<string | null>(null);
+  const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
+  const [activityFilter, setActivityFilter] = useState<'all' | 'denied'>('all');
+
+  const filteredActivity = useMemo(() => {
+    if (activityFilter === 'denied') {
+      return activity.filter((r) => r.decision === 'deny');
+    }
+    return activity;
+  }, [activity, activityFilter]);
 
   const inboxEmpty =
     outbox.length === 0 &&
@@ -670,28 +887,55 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
       </section>
 
       {activity.length > 0 ? (
-        <section className={styles.grantsSection}>
-          <GroupHead
-            icon={<Icon name="History" size={13} />}
-            label="Recent activity"
-            count={activity.length}
-          />
+        <section className={styles.grantsSection} data-testid="recent-activity">
+          <div className={styles.activityHead}>
+            <GroupHead
+              icon={<Icon name="History" size={13} />}
+              label="Recent activity"
+              count={filteredActivity.length}
+            />
+            <div className={styles.activityFilters} role="group" aria-label="Activity filter">
+              <button
+                type="button"
+                className={styles.filterChip}
+                data-active={activityFilter === 'all' ? 'true' : undefined}
+                onClick={() => setActivityFilter('all')}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className={styles.filterChip}
+                data-active={activityFilter === 'denied' ? 'true' : undefined}
+                onClick={() => setActivityFilter('denied')}
+                data-testid="activity-filter-denied"
+              >
+                Denied
+              </button>
+            </div>
+          </div>
           <div className={styles.grantsList}>
-            {activity.map((row) => (
-              <div className={styles.row} key={row.receiptId}>
-                <div className={styles.rowMain}>
-                  <span className={styles.rowIcon}>
-                    <Icon name="Eye" size={14} />
-                  </span>
-                  <span className={styles.rowBody}>
-                    <span className={styles.rowTitle}>{row.label}</span>
-                    <span className={styles.rowSub}>{row.detail}</span>
-                  </span>
-                  <span className={styles.rowMeta}>{row.occurredAgo}</span>
-                </div>
-              </div>
+            {filteredActivity.map((row) => (
+              <ActivityRow
+                key={row.receiptId}
+                row={row}
+                busy={busyId === row.grantId || busyId === row.receiptId}
+                expanded={expandedActivity === row.receiptId}
+                onToggle={() =>
+                  setExpandedActivity(expandedActivity === row.receiptId ? null : row.receiptId)
+                }
+                onRevokeGrant={onRevokeGrant}
+              />
             ))}
           </div>
+          {filteredActivity.length === 0 ? (
+            <p className={styles.grantsEmpty}>No denied activity in this window.</p>
+          ) : null}
+          {activityTruncated && onSeeAllActivity ? (
+            <div className={styles.seeAllRow} data-testid="activity-see-all">
+              <Button label="See all" variant="ghost" size="sm" onClick={onSeeAllActivity} />
+            </div>
+          ) : null}
         </section>
       ) : null}
     </div>

@@ -1,7 +1,9 @@
+// governance: allow-repo-hygiene file-size-limit (#552) one suite per screen — decision/risk/actor/grant/collapse/filter/expand cases all exercise the single ApprovalsScreen activity contract and share its mount fixtures
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import ApprovalsScreen, {
+  type ApprovalsActivityRowDTO,
   type ApprovalsGrantRowDTO,
   type ApprovalsNeedsAuthRowDTO,
   type ApprovalsOutboxRowDTO,
@@ -75,13 +77,40 @@ const grantRow: ApprovalsGrantRowDTO = {
   createdAgo: '3d ago',
 };
 
-const fillActivity = {
+function activityRow(over: Partial<ApprovalsActivityRowDTO> = {}): ApprovalsActivityRowDTO {
+  return {
+    receiptId: 'receipt-1',
+    label: 'Sync remove connection',
+    detail: 'agent.command · cmd-abc…',
+    objectId: 'cmd-abc123def456',
+    objectType: 'agent.command',
+    occurredAgo: '12m ago',
+    occurredAt: '2026-03-01T12:00:00.000Z',
+    decision: 'allow',
+    risk: null,
+    actor: 'gmail-send',
+    actorKind: 'agent',
+    grantId: null,
+    attribution: 'owner',
+    count: 1,
+    action: 'act sync.remove_connection',
+    ...over,
+  };
+}
+
+const fillActivity = activityRow({
   receiptId: 'receipt-fill',
   label: 'Locker filled a login',
   detail: 'https://example.test',
+  objectId: 'login-1',
+  objectType: 'locker.item',
   occurredAgo: '1m ago',
   decision: 'allow',
-};
+  actor: null,
+  actorKind: null,
+  attribution: 'owner',
+  action: 'reveal',
+});
 
 function makeProps(over: Partial<ApprovalsScreenProps> = {}): ApprovalsScreenProps {
   return {
@@ -288,6 +317,185 @@ describe('ApprovalsScreen', () => {
     expect(el.textContent).toContain('Recent activity');
     expect(el.textContent).toContain('Locker filled a login');
     expect(el.textContent).toContain('https://example.test');
+  });
+
+  it('renders a distinct decision badge + icon accent per decision value', () => {
+    const el = mount(
+      makeProps({
+        activity: [
+          activityRow({ receiptId: 'a1', decision: 'allow', label: 'Allowed act' }),
+          activityRow({ receiptId: 'a2', decision: 'deny', label: 'Denied act' }),
+        ],
+      }),
+    );
+    const badges = [...el.querySelectorAll('[data-testid="activity-decision-badge"]')].map(
+      (n) => n.textContent,
+    );
+    expect(badges).toEqual(expect.arrayContaining(['Allowed', 'Denied']));
+    const allowRow = el.querySelector('[data-decision="allow"]');
+    const denyRow = el.querySelector('[data-decision="deny"]');
+    expect(allowRow).not.toBeNull();
+    expect(denyRow).not.toBeNull();
+    expect(allowRow?.className).not.toBe(denyRow?.className);
+    expect(allowRow?.querySelector('[data-testid="activity-decision-icon"]')).not.toBeNull();
+    expect(denyRow?.querySelector('[data-testid="activity-decision-icon"]')).not.toBeNull();
+  });
+
+  it('shows a risk salience marker only when risk is non-null', () => {
+    const el = mount(
+      makeProps({
+        activity: [
+          activityRow({ receiptId: 'r1', risk: 'high', label: 'Risky' }),
+          activityRow({ receiptId: 'r2', risk: null, label: 'Quiet' }),
+        ],
+      }),
+    );
+    expect(el.querySelectorAll('[data-testid="activity-risk-marker"]')).toHaveLength(1);
+    expect(el.querySelector('[data-risk="high"]')).not.toBeNull();
+  });
+
+  it('shows an actor KindBadge matching Outbox treatment per actorKind', () => {
+    const el = mount(
+      makeProps({
+        activity: [
+          activityRow({
+            receiptId: 'app1',
+            actor: 'Briefing',
+            actorKind: 'app',
+            label: 'App act',
+          }),
+          activityRow({
+            receiptId: 'ag1',
+            actor: 'gmail-send',
+            actorKind: 'agent',
+            label: 'Agent act',
+          }),
+          activityRow({
+            receiptId: 'as1',
+            actor: 'Assistant',
+            actorKind: 'assistant',
+            label: 'Assistant act',
+          }),
+        ],
+      }),
+    );
+    expect(el.textContent).toContain('App');
+    expect(el.textContent).toContain('Briefing');
+    expect(el.textContent).toContain('Automation');
+    expect(el.textContent).toContain('gmail-send');
+    expect(el.textContent).toContain('Assistant');
+  });
+
+  it('attributes standing-grant auto-allow and fires onRevokeGrant from the activity row', () => {
+    const onRevokeGrant = vi.fn();
+    const el = mount(
+      makeProps({
+        activity: [
+          activityRow({
+            receiptId: 'g-row',
+            grantId: 'grant-42',
+            attribution: 'grant',
+            decision: 'allow',
+            label: 'Auto send',
+          }),
+        ],
+        onRevokeGrant,
+      }),
+    );
+    expect(el.querySelector('[data-testid="activity-attribution-grant"]')?.textContent).toContain(
+      'Auto-allowed by standing grant',
+    );
+    act(() => {
+      findButton(el, 'Auto send').click();
+    });
+    act(() => {
+      findButton(el, 'Revoke grant').click();
+    });
+    expect(onRevokeGrant).toHaveBeenCalledWith('grant-42');
+  });
+
+  it('says approved-by-the-owner when attribution is owner', () => {
+    const el = mount(
+      makeProps({
+        activity: [activityRow({ attribution: 'owner', decision: 'allow', label: 'Owner ok' })],
+      }),
+    );
+    expect(el.querySelector('[data-testid="activity-attribution-owner"]')?.textContent).toContain(
+      'Approved by the owner',
+    );
+  });
+
+  it('shows a ×N marker for collapsed adjacent duplicates', () => {
+    const el = mount(
+      makeProps({
+        activity: [activityRow({ count: 3, label: 'Draft drop', receiptId: 'collapsed' })],
+      }),
+    );
+    expect(el.querySelector('[data-testid="activity-count"]')?.textContent).toBe('×3');
+  });
+
+  it('expands an activity row to the full object id and absolute time', () => {
+    const el = mount(
+      makeProps({
+        activity: [
+          activityRow({
+            label: 'Remove connection',
+            objectId: 'cmd-abc123def456',
+            objectType: 'agent.command',
+            occurredAt: '2026-03-01T12:00:00.000Z',
+          }),
+        ],
+      }),
+    );
+    expect(el.querySelector('[data-testid="activity-detail"]')).toBeNull();
+    act(() => {
+      findButton(el, 'Remove connection').click();
+    });
+    const detail = el.querySelector('[data-testid="activity-detail"]');
+    expect(detail).not.toBeNull();
+    expect(detail?.textContent).toContain('cmd-abc123def456');
+    expect(detail?.textContent).toContain('agent.command');
+    // Absolute timestamp is reachable in the expanded panel.
+    expect(detail?.textContent).toMatch(/2026|Mar|03/);
+  });
+
+  it('filters to Denied-only when the Denied chip is active', () => {
+    const el = mount(
+      makeProps({
+        activity: [
+          activityRow({ receiptId: 'ok', decision: 'allow', label: 'Allowed row' }),
+          activityRow({ receiptId: 'no', decision: 'deny', label: 'Denied row' }),
+        ],
+      }),
+    );
+    expect(el.textContent).toContain('Allowed row');
+    expect(el.textContent).toContain('Denied row');
+    act(() => {
+      (el.querySelector('[data-testid="activity-filter-denied"]') as HTMLButtonElement).click();
+    });
+    expect(el.textContent).not.toContain('Allowed row');
+    expect(el.textContent).toContain('Denied row');
+  });
+
+  it('shows See all when the feed is truncated and fires onSeeAllActivity', () => {
+    const onSeeAllActivity = vi.fn();
+    const el = mount(
+      makeProps({
+        activity: [activityRow()],
+        activityTruncated: true,
+        onSeeAllActivity,
+      }),
+    );
+    expect(el.querySelector('[data-testid="activity-see-all"]')).not.toBeNull();
+    act(() => {
+      findButton(el, 'See all').click();
+    });
+    expect(onSeeAllActivity).toHaveBeenCalled();
+  });
+
+  it('does not show See all when the feed is not truncated', () => {
+    const el = mount(makeProps({ activity: [activityRow()], activityTruncated: false }));
+    expect(el.querySelector('[data-testid="activity-see-all"]')).toBeNull();
   });
 
   it('shows an Edit affordance only when canEdit is true, and keeps the honest copy otherwise', () => {

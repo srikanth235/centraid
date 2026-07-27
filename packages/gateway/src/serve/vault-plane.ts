@@ -324,6 +324,20 @@ export interface ReviewEntry {
   invocationId: string | null;
   /** Acting identity row id (agent/app/device) when an invocation exists. */
   actorId: string | null;
+  /**
+   * Refined actor kind for the Approvals KindBadge — same vocabulary as the
+   * outbox plane (`app` / `agent` / `assistant` / `owner`). Null when no
+   * invocation/actor is on the receipt (issue #552).
+   */
+  actorKind: string | null;
+  /** Display name for the actor when the join is free; null falls back to kind. */
+  actor: string | null;
+  /**
+   * Standing outbox grant that auto-allowed this receipt (issue #552), when
+   * present — enables "Auto-allowed by standing grant" + inline Revoke.
+   * Distinct from consent.access_grant on the receipt row.
+   */
+  grantId: string | null;
   /** Safe, normalized use context for reveal receipts (never secret values). */
   context: { kind: 'fill'; origin: string } | null;
 }
@@ -1329,11 +1343,20 @@ export class VaultPlane {
       agent_id: string | null;
     }[];
     const riskRank: Record<string, number> = { high: 2, medium: 1, low: 0 };
+    const outboxGrantLookup = this.db.vault.prepare(
+      'SELECT grant_id FROM outbox_item WHERE item_id = ?',
+    );
     const entries = window.map((r) => {
       let risk: string | null = null;
       let context: ReviewEntry['context'] = null;
+      let grantId: string | null = null;
       if (r.detail_json) {
-        const detail = JSON.parse(r.detail_json) as { risk?: unknown; context?: unknown };
+        const detail = JSON.parse(r.detail_json) as {
+          risk?: unknown;
+          context?: unknown;
+          output?: unknown;
+          writes?: unknown;
+        };
         if (typeof detail.risk === 'string') risk = detail.risk;
         if (
           detail.context &&
@@ -1346,7 +1369,44 @@ export class VaultPlane {
             origin: (detail.context as { origin: string }).origin,
           };
         }
+        // Standing outbox grant id: stage/decide output carries it when a
+        // standing (actor, verb, target) rule auto-allowed or was minted.
+        // Prefer the explicit output field; fall back to the outbox item row
+        // when the receipt only named the item_id (issue #552).
+        const output =
+          detail.output && typeof detail.output === 'object'
+            ? (detail.output as Record<string, unknown>)
+            : null;
+        if (output && typeof output.grant_id === 'string' && output.grant_id.length > 0) {
+          grantId = output.grant_id;
+        } else if (output && typeof output.item_id === 'string') {
+          const item = outboxGrantLookup.get(output.item_id) as
+            | { grant_id: string | null }
+            | undefined;
+          if (item?.grant_id) grantId = item.grant_id;
+        } else if (Array.isArray(detail.writes)) {
+          for (const write of detail.writes) {
+            if (
+              write &&
+              typeof write === 'object' &&
+              (write as { entityType?: unknown }).entityType === 'outbox.item' &&
+              typeof (write as { entityId?: unknown }).entityId === 'string'
+            ) {
+              const item = outboxGrantLookup.get((write as { entityId: string }).entityId) as
+                | { grant_id: string | null }
+                | undefined;
+              if (item?.grant_id) {
+                grantId = item.grant_id;
+                break;
+              }
+            }
+          }
+        }
       }
+      const actorId = r.agent_id;
+      const rawKind = actorId ? this.rawActorKind(actorId) : null;
+      const actorKind = actorId && rawKind ? this.refineActorKind(actorId, rawKind) : null;
+      const actor = actorId && rawKind ? this.actorName(actorId, rawKind) : null;
       return {
         entry: {
           receiptId: r.receipt_id,
@@ -1357,7 +1417,10 @@ export class VaultPlane {
           occurredAt: r.occurred_at,
           risk,
           invocationId: r.invocation_id,
-          actorId: r.agent_id,
+          actorId,
+          actorKind,
+          actor,
+          grantId,
           context,
         } satisfies ReviewEntry,
         salience: (riskRank[risk ?? ''] ?? 0) + (r.decision === 'deny' ? 1 : 0),
@@ -1468,6 +1531,27 @@ export class VaultPlane {
       .prepare('SELECT host_key FROM agent_agent WHERE agent_id = ?')
       .get(actorId) as { host_key: string } | undefined;
     return row?.host_key === '_assistant' ? 'assistant' : 'agent';
+  }
+
+  /**
+   * Resolve the raw identity kind for a review-feed actor id (issue #552).
+   * Invocations store only the row id; kind is recovered by table membership
+   * so `refineActorKind` / `actorName` get the same vocabulary as outbox.
+   */
+  private rawActorKind(actorId: string): string | null {
+    const agent = this.db.vault
+      .prepare('SELECT 1 AS x FROM agent_agent WHERE agent_id = ?')
+      .get(actorId) as { x: number } | undefined;
+    if (agent) return 'ai_agent';
+    const app = this.db.vault
+      .prepare('SELECT 1 AS x FROM consent_app WHERE app_id = ?')
+      .get(actorId) as { x: number } | undefined;
+    if (app) return 'app';
+    const device = this.db.vault
+      .prepare('SELECT 1 AS x FROM consent_device WHERE device_id = ?')
+      .get(actorId) as { x: number } | undefined;
+    if (device) return 'owner';
+    return null;
   }
 
   /** Display name for an outbox actor row id (agent party / app name). */

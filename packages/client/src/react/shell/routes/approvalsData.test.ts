@@ -10,11 +10,34 @@ import type { VaultParkedEntry } from '../../../gateway-client-vault.js';
 import {
   buildGrantRow,
   buildActivityRow,
+  collapseAdjacentActivity,
+  formatActivityDetail,
+  humanizeActivityLabel,
+  truncateObjectId,
   buildNeedsAuthRow,
   buildOutboxRow,
   buildParkedRow,
   buildScopeRequestRow,
 } from './approvalsData.js';
+
+function reviewEntry(overrides: Partial<ReviewEntry> = {}): ReviewEntry {
+  return {
+    receiptId: 'receipt-1',
+    action: 'act sync.remove_connection',
+    objectType: 'agent.command',
+    objectId: 'cmd-abc123def456',
+    decision: 'allow',
+    occurredAt: new Date(Date.now() - 12 * 60_000).toISOString(),
+    risk: null,
+    invocationId: 'inv-1',
+    actorId: 'agent-1',
+    actorKind: 'agent',
+    actor: 'gmail-send',
+    grantId: null,
+    context: null,
+    ...overrides,
+  };
+}
 
 function outboxItem(overrides: Partial<OutboxItem> = {}): OutboxItem {
   return {
@@ -167,62 +190,189 @@ describe('buildGrantRow', () => {
   });
 });
 
+describe('humanizeActivityLabel', () => {
+  it('preserves Locker fill / reveal copy unchanged', () => {
+    expect(
+      humanizeActivityLabel('reveal', 'allow', 'locker.item', {
+        kind: 'fill',
+        origin: 'https://example.test',
+      }),
+    ).toBe('Locker filled a login');
+    expect(humanizeActivityLabel('reveal', 'deny', 'locker.item', null)).toBe(
+      'Locker reveal denied',
+    );
+  });
+
+  it('sentence-cases unmapped act verbs (strips act prefix)', () => {
+    expect(
+      humanizeActivityLabel('act sync.remove_connection', 'allow', 'agent.command', null),
+    ).toBe('Sync remove connection');
+    expect(
+      humanizeActivityLabel('act consent.app_ext_draft_drop', 'deny', 'agent.command', null),
+    ).toBe('Consent app ext draft drop');
+  });
+});
+
+describe('formatActivityDetail / truncateObjectId', () => {
+  it('formats objectType · truncated objectId when an id is present', () => {
+    expect(formatActivityDetail('agent.command', 'cmd-abc123def456', null, 'act x')).toBe(
+      `agent.command · ${truncateObjectId('cmd-abc123def456')}`,
+    );
+    expect(truncateObjectId('short')).toBe('short');
+    expect(truncateObjectId('abcdefghijklmnop', 8).endsWith('…')).toBe(true);
+  });
+
+  it('uses fill origin for Locker fill rows', () => {
+    expect(
+      formatActivityDetail(
+        'locker.item',
+        'login-1',
+        { kind: 'fill', origin: 'https://example.test' },
+        'reveal',
+      ),
+    ).toBe('https://example.test');
+  });
+});
+
 describe('buildActivityRow', () => {
   it('turns a Locker reveal into an origin-bearing fill activity row', () => {
-    const row: ReviewEntry = {
+    const row = reviewEntry({
       receiptId: 'receipt-fill',
       action: 'reveal',
       objectType: 'locker.item',
       objectId: 'login-1',
       decision: 'allow',
-      occurredAt: new Date().toISOString(),
-      risk: null,
-      invocationId: null,
       actorId: null,
+      actorKind: null,
+      actor: null,
       context: { kind: 'fill', origin: 'https://example.test' },
-    };
+    });
     expect(buildActivityRow(row)).toMatchObject({
       label: 'Locker filled a login',
       detail: 'https://example.test',
       decision: 'allow',
+      attribution: 'owner',
+      count: 1,
     });
   });
 
   it('does not mislabel a manual Locker reveal as an autofill', () => {
-    const row: ReviewEntry = {
+    const row = reviewEntry({
       receiptId: 'receipt-manual',
       action: 'reveal',
       objectType: 'locker.item',
       objectId: 'login-1',
       decision: 'allow',
-      occurredAt: new Date().toISOString(),
-      risk: null,
-      invocationId: null,
       actorId: null,
+      actorKind: null,
+      actor: null,
       context: null,
-    };
+    });
     expect(buildActivityRow(row)).toMatchObject({
       label: 'Locker login revealed',
-      detail: 'locker.item',
+      detail: `locker.item · ${truncateObjectId('login-1')}`,
     });
   });
 
   it('labels a denied fill without claiming a credential was filled', () => {
-    const row: ReviewEntry = {
+    const row = reviewEntry({
       receiptId: 'receipt-denied',
       action: 'reveal',
       objectType: 'locker.item',
       objectId: 'login-1',
       decision: 'deny',
-      occurredAt: new Date().toISOString(),
-      risk: null,
-      invocationId: null,
       actorId: null,
+      actorKind: null,
+      actor: null,
       context: { kind: 'fill', origin: 'https://example.test' },
-    };
+    });
     expect(buildActivityRow(row)).toMatchObject({
       label: 'Locker fill denied',
       detail: 'https://example.test',
+      attribution: null,
     });
+  });
+
+  it('carries risk, actor, grant attribution, absolute time, and object fields', () => {
+    const occurredAt = '2026-03-01T12:00:00.000Z';
+    const row = buildActivityRow(
+      reviewEntry({
+        risk: 'high',
+        actorKind: 'assistant',
+        actor: 'Assistant',
+        grantId: 'grant-9',
+        decision: 'allow',
+        occurredAt,
+        objectId: 'obj-1',
+        objectType: 'agent.command',
+      }),
+    );
+    expect(row).toMatchObject({
+      risk: 'high',
+      actor: 'Assistant',
+      actorKind: 'assistant',
+      grantId: 'grant-9',
+      attribution: 'grant',
+      objectId: 'obj-1',
+      objectType: 'agent.command',
+      occurredAt,
+      label: 'Sync remove connection',
+    });
+    expect(row.detail).toContain('agent.command');
+    expect(row.detail).toContain(truncateObjectId('obj-1'));
+  });
+
+  it('attributes owner approval when allow has no standing grant', () => {
+    expect(buildActivityRow(reviewEntry({ grantId: null, decision: 'allow' })).attribution).toBe(
+      'owner',
+    );
+  });
+
+  it('handles null actorId / actorKind without inventing values', () => {
+    const row = buildActivityRow(
+      reviewEntry({
+        actorId: null,
+        actorKind: null,
+        actor: null,
+        decision: 'deny',
+      }),
+    );
+    expect(row.actor).toBeNull();
+    expect(row.actorKind).toBeNull();
+    expect(row.attribution).toBeNull();
+  });
+});
+
+describe('collapseAdjacentActivity', () => {
+  it('collapses adjacent rows with the same verb + object + decision', () => {
+    const a = buildActivityRow(reviewEntry({ receiptId: 'r1', decision: 'deny' }));
+    const b = buildActivityRow(reviewEntry({ receiptId: 'r2', decision: 'deny' }));
+    const c = buildActivityRow(reviewEntry({ receiptId: 'r3', decision: 'deny' }));
+    const collapsed = collapseAdjacentActivity([a, b, c]);
+    expect(collapsed).toHaveLength(1);
+    expect(collapsed[0]?.count).toBe(3);
+    expect(collapsed[0]?.receiptId).toBe('r1');
+  });
+
+  it('does not collapse non-adjacent repeats', () => {
+    const a = buildActivityRow(reviewEntry({ receiptId: 'r1', decision: 'deny' }));
+    const mid = buildActivityRow(
+      reviewEntry({
+        receiptId: 'r2',
+        decision: 'allow',
+        action: 'act other.thing',
+        objectId: 'other',
+      }),
+    );
+    const c = buildActivityRow(reviewEntry({ receiptId: 'r3', decision: 'deny' }));
+    const collapsed = collapseAdjacentActivity([a, mid, c]);
+    expect(collapsed).toHaveLength(3);
+    expect(collapsed.every((r) => r.count === 1)).toBe(true);
+  });
+
+  it('does not collapse when decision differs', () => {
+    const a = buildActivityRow(reviewEntry({ receiptId: 'r1', decision: 'allow' }));
+    const b = buildActivityRow(reviewEntry({ receiptId: 'r2', decision: 'deny' }));
+    expect(collapseAdjacentActivity([a, b])).toHaveLength(2);
   });
 });
