@@ -2766,5 +2766,8 @@ figure {
   padding: 0;
   opacity: 0;
   appearance: none;
+  /* Hit-area owner for the whole card; positioned siblings must not paint
+     above it (see client a11y.module.css srControl for the full note). */
+  z-index: 1;
   cursor: inherit;
 }

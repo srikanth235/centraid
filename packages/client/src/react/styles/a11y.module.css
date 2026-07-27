@@ -17,6 +17,12 @@
   opacity: 0;
   appearance: none;
   cursor: inherit;
+  /* The input IS the hit area for the whole card. Positioned siblings later
+     in the DOM (e.g. a preview div that positions its own children) would
+     otherwise paint above it and swallow the click — real pointers and
+     Playwright's hit test alike. Cards using this class must not contain
+     other interactive children (those use the stretch-button pattern). */
+  z-index: 1;
 }
 
 /* Text for assistive tech only — the accessible name a `role="img"` wrapper

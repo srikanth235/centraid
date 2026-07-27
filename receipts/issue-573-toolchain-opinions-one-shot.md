@@ -137,6 +137,13 @@ so they cost analysis and bought nothing).
   moved probe assignments from render bodies into effects (act() flushes
   effects, so no assertion changed), and 3 palette stubs gained the
   `setOnResults` method the source now requires.
+- Post-merge e2e catch: the invisible-input card pattern (`srControl` /
+  `kit-sr-control`) lost real clicks when a positioned sibling later in the
+  DOM painted above it — Chrome's hit test gave the pointer to the sibling,
+  which is exactly what desktop e2e 12.6 caught (`themeCardPreview intercepts
+  pointer events`). Both shared classes now carry `z-index: 1` with the
+  rationale inline; the whole settings-gateways spec re-passes against a
+  fresh desktop build.
 - Three files the sweep pushed past the repo's 500-line cap were split by
   real extraction, not compression: PhotoLightbox's gesture builders moved to
   `apps/mobile/src/apps/photos/lightbox-gestures.ts` (with the
@@ -566,6 +573,10 @@ bun run lint:css && bun run lint:e2e-flows && bun run knip && bun run format:che
 | claude-code-5686fd74-b3c-1785145976-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #573 | claude-fable-5 | 140 | 108117 | 22608092 | 59304 | 167561 | 26.9262 | 1996 | 2884800 | 220862479 | 770560 |  |
 | claude-code-5686fd74-b3c-1785146130-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #573 | claude-fable-5 | 8 | 10110 | 1372995 | 3686 | 13804 | 1.6838 | 2004 | 2894910 | 222235474 | 774246 |  |
 | claude-code-5686fd74-b3c-1785146472-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #573 | claude-fable-5 | 78 | 41505 | 13971040 | 29656 | 71239 | 15.9734 | 2082 | 2936415 | 236206514 | 803902 |  |
+| claude-code-5686fd74-b3c-1785147932-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #573 | claude-fable-5 | 136 | 58159 | 26004206 | 45496 | 103791 | 29.0074 | 2218 | 2994574 | 262210720 | 849398 |  |
+| claude-code-5686fd74-b3c-1785148341-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #573 | claude-fable-5 | 12 | 21066 | 2393100 | 8730 | 29808 | 3.0930 | 2230 | 3015640 | 264603820 | 858128 |  |
+| claude-code-5686fd74-b3c-1785148822-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #573 | claude-opus-5 | 10 | 637282 | 1102995 | 3317 | 640609 | 4.6175 | 2240 | 3652922 | 265706815 | 861445 |  |
+| claude-code-5686fd74-b3c-1785149439-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #573 | claude-opus-5 | 8 | 1436 | 1395601 | 3484 | 4928 | 0.7939 | 2248 | 3654358 | 267102416 | 864929 |  |
 
 ### Steering
 
