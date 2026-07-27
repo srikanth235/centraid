@@ -39,7 +39,7 @@ import {
   type RevocationResult,
   type SweepResult,
 } from './duties.js';
-import { writeReceipt } from './evidence.js';
+import { actingMemberDetail, writeReceipt } from './evidence.js';
 import {
   assertInvocationIdentity,
   insertInvocation,
@@ -826,7 +826,10 @@ export class Gateway {
         objectId: command.command_id,
         purpose: request.purpose,
         decision: 'deny',
-        detail: { failing: consent.failing },
+        // A refusal is attributed too (issue #599 decisions 7–8): "the
+        // assistant, acting for Sid, was refused" is the row a household
+        // needs to read, not "some agent was refused".
+        detail: { failing: consent.failing, ...actingMemberDetail(identity, request) },
       });
       return { status: 'denied', receiptId, reason: consent.failing };
     }

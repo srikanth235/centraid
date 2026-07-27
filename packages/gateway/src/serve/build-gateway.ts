@@ -127,6 +127,7 @@ import { PairingTicketStore } from './pairing-store.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
 import { makeMembersRouteHandler } from '../routes/members-routes.js';
+import { makeShareRouteHandler, SHARE_PATH } from '../routes/share-routes.js';
 import { makeDeviceWorkRouteHandler } from '../routes/device-work-routes.js';
 import { companionRequestAllowed } from './companion-access.js';
 import { makeReplicaRouteHandler } from '../routes/replica-routes.js';
@@ -3293,6 +3294,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return true;
   };
 
+  // Deliberately NOT in `routeEntries`: the share plane is dispatched from
+  // `composedHandler` outside the per-vault scope (see its call site), so it
+  // must not also be reachable through the in-scope chain.
+  const shareHandler = makeShareRouteHandler({
+    enrollments: foundingEnrollments,
+    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+    ...(options.canMintFoundingTicket ? { isHostCustody: options.canMintFoundingTicket } : {}),
+  });
+
   const composedHandler: RouteHandler = async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     // The Rust-owned iroh relay calls this metadata-only control surface
@@ -3374,6 +3384,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         message: 'this device is not enrolled in any vault on this gateway',
       });
     }
+    // The cross-vault share plane (issue #599 decision 11) is dispatched HERE
+    // — after the device identity is proved, and BEFORE the single-vault
+    // `runWithVaultContext` scope below. A share spans two vaults, so running
+    // it inside a scope that names one would be a lie; and the `x-centraid-vault`
+    // header is irrelevant to it, so the per-vault resolution that follows must
+    // not get a chance to refuse the request over a vault it never uses. The
+    // route resolves and authorizes both vaults itself, from `member_roles`.
+    if (url.pathname.startsWith(SHARE_PATH) && (await shareHandler(req, res))) return true;
     if (requested !== undefined && !enrolled.includes(requested)) {
       return sendJson(res, 403, {
         error: 'vault_not_enrolled',
@@ -3410,7 +3428,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // L4 attribution (#599): resolve the ACTING MEMBER once, here, from
         // the device binding, so everything downstream reads "who did this"
         // off the request scope instead of re-deriving it from hardware.
-        ...(enrollment ? { memberId: enrollment.memberId } : {}),
+        ...(enrollment ? { memberId: enrollment.memberId, memberRole: enrollment.role } : {}),
         ...(enrollment?.grantProfile !== undefined
           ? { grantProfile: enrollment.grantProfile }
           : {}),

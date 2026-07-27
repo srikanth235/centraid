@@ -10,7 +10,7 @@
 - [x] CLI parity: `members list|add|rename|remove`, `pair --member --grant`, member column in `devices list`
 - [x] People-first DevicesCard + member-picker pairing panel (client)
 - [x] Share-by-placement: hardlink-or-copy into audience CAS + projected row + `core_share_origin` sidecar, single-DB transaction (vault-package primitive; gateway routes follow in a later commit)
-- [ ] Journal attribution (member + device) on writes
+- [x] Journal attribution (member + device) on writes; gateway share/unshare routes; packaged local orphan sweep; agent on-behalf-of cap
 - [ ] Docs: glossary member vocabulary, decisions.md, SECURITY.md threat-model premise
 - [x] Wire golden regenerated (invitation payload)
 
@@ -51,6 +51,13 @@
 - **Member-picker pairing panel:** `packages/client/src/react/screens/DevicePairPanel.tsx` + new `packages/client/src/react/screens/DevicePairTarget.tsx` — "Pair a device for [Myself | <person>… | New person…]" as a select (never free text; the only text input appears under "New person…"); self-pair is the landing state (sends only `{ttlMinutes}`, hints "joins as you, with your current access"); otherwise per-space grant rows (checkbox + Viewer/Member/Owner ladder, default Member) derived from the roster rather than a new listVaults dependency; new server error codes (`role_above_own`, `not_admin`, `ambiguous_member`, …) surface as human messages. Styles split into new `packages/client/src/react/screens/DevicePairPanel.module.css` (the combined file crossed the 500-line cap).
 - **Mount/wiring + ripple:** `packages/client/src/react/screens/GatewayScreen.tsx`, `packages/client/src/react/shell/routes/GatewayRoute.tsx`, `packages/client/src/device-enrichment-worker.test.ts`. Tests: rewritten `packages/client/src/react/screens/DevicesCard.test.tsx` (9), new `packages/client/src/react/screens/DevicePairPanel.test.tsx` (7), new `packages/client/src/react/screens/device-groups.test.ts` (5).
 
+**Commit 5 — the share plane, local orphan sweep, and attribution.** This realizes the checked checklist item — Journal attribution (member + device) on writes; gateway share/unshare routes; packaged local orphan sweep; agent on-behalf-of cap:
+
+- **Share routes:** new `packages/gateway/src/routes/share-routes.ts` — `POST /centraid/_gateway/share` `{originVaultId, audienceVaultId, itemType, itemId}` and `POST|DELETE /centraid/_gateway/share/remove`; mounted in `packages/gateway/src/serve/build-gateway.ts` **outside** `routeEntries`/`prefixDispatch`, dispatched from `composedHandler` after the device identity is proved and before `runWithVaultContext` — the operation spans two vaults, so it must never be reachable inside a single-vault ALS scope. Authorization fails closed: member needs `canWrite` in the audience and any grant in the origin; no origin grant or no audience grant → 404 `not_found` (no topology leak), read-only in audience → 403 `forbidden`; host custody passes (`sharedByMember: 'host-custody'`); typed codes `invalid_body`, `invalid_item_type`, `share_placement_failed` (409 from `VaultShareError`), `method_not_allowed`. Tests: new `packages/gateway/src/routes/share-routes.test.ts` (12 — e2e share between two vaults, dedupe, unshare, the auth matrix, typed refusals).
+- **Packaged local orphan sweep:** new `packages/vault/src/blob/local-orphan-sweep.ts` (+ `packages/vault/src/blob/local-orphan-sweep.test.ts`, 4 tests) closes the gap surfaced in commit 2 — the sweep unions `liveBlobShas` + `archivedSegmentShas` + `conversationArchiveShas` as roots (narrower roots would have deleted the only copy of an archived journal segment), gates on the shared `blob_orphan` tombstone grace clock, and returns `{deleted, graceHeld}`. Wired into `packages/gateway/src/serve/vault-plane.ts#runBlobSweep` right after `gateway.sweepBlobs`, riding the same safety envelope (skipped on `skipOrphanDelete` lease conflict or unreadable snapshot roots); grace = the backup provider's recovery window when present, else `LOCAL_ORPHAN_GRACE_MS` = 7 days. `packages/vault/src/share/placement-fixture.ts` and `packages/vault/src/share/placement-lifecycle.test.ts` drop their fixture copy and call the packaged function; `packages/vault/src/index.ts` exports it.
+- **Journal attribution:** `packages/vault/src/gateway/types.ts` gains `InvokeRequest.actingMemberId`, agent `Credential.onBehalfOfMember`, and `Identity.onBehalfOfMember`; threaded through `packages/vault/src/gateway/identity.ts`, `packages/vault/src/gateway/consent.ts`, `packages/vault/src/gateway/evidence.ts` (`actingMemberDetail`), `packages/vault/src/gateway/execution.ts`, and `packages/vault/src/gateway/gateway.ts` so `consent_receipt.detail_json` records `actingMember: "<member_id>"` on both allow receipts (surviving replay reconciliation) and consent-deny receipts. `packages/gateway/src/serve/vault-plane.ts#bridgeFor` passes the request scope's member through, and `withoutActingMember` strips any caller-supplied member first so an app cannot forge attribution. Only the id is stored — rename is a no-op on history (asserted). Tests: new `packages/gateway/src/routes/replica-intent-attribution.test.ts` (3) and `packages/vault/src/gateway/acting-member.test.ts` (5).
+- **Agent on-behalf-of cap (Decision 7):** `packages/gateway/src/serve/vault-context.ts` adds `memberRole` to the request scope; `agentBridgeFor` in `vault-plane.ts` attaches `onBehalfOfMember` with `mayAct = canWrite(memberRole)`; `packages/vault/src/gateway/consent.ts` denies every `act`/`reveal` for an agent identity carrying `mayAct === false` (the same shape as the readonly-device rule, distinct failure message). Tests: new `packages/gateway/src/serve/agent-member-cap.test.ts` (5).
+
 _Later commits will be appended per phase._
 
 ## Decisions
@@ -61,6 +68,7 @@ _Later commits will be appended per phase._
 - **Known gap surfaced by commit 2 (deliberate, deferred to the gateway-wiring commit):** there is no shipped *local-only* orphan sweep — `reconcileCustody` deletes only remote orphans and `BlobCache.runEviction` only sheds shas with replica evidence. #599's "the audience vault's own orphan-grace sweep already reclaims" is therefore not yet true for local bytes; the share tests compose the shipped primitives (`liveBlobShas` → `OrphanTombstoneIndex` grace gate → `BlobCustody.deleteLocalSync`) to prove the semantics, and the gateway phase must package that composition as a real sweep or unshared blobs accumulate.
 - **Commit-3 deviations (deliberate):** `DeviceEnrollment` stays a derived per-(device, vault) view rather than rewriting ~30 call sites — authority is still authored in exactly one place (`member_roles`). Host-custody `enroll()` without a member creates one labelled with the device label (the communal-device story; never an "Unassigned" bucket). `tickets.member_id` is nullable for kind `found` only — founding mints before any vault exists, so the owner member is created at redemption. Self-pair with no explicit grants now bakes the member's **current** roles (an admin self-pairing gets admin) instead of defaulting to `write`. **Journal attribution stops at the gateway boundary in this commit**: `memberId` is resolved into the request scope and carried to `ReplicaIntentContext`/`ReplicaRequestAccess`, but the journal receipt writer (`packages/vault/src/gateway/gateway.ts` `writeReceipt`, `InvokeRequest.intentDeviceId`) is a vault-package seam landed in a later commit — same for the agent on-behalf-of hard-cap, whose `app` credential today has no principal dimension.
 - **Commit-4 deviations (deliberate):** `ROLE_PRESETS` moved out of the panel into `device-roles.ts` and relabelled Owner/Member/Viewer (was Read only / Read & write / Admin) so card and panel share one vocabulary table. `createGatewayMember`/`renameGatewayMember` are API-only — "New person…" creates the member through the ticket route per Decision 5; a standalone add/rename-person UI is a follow-up. Grant-row spaces derive from the roster + device rows (the caller's visible set) instead of a new `listVaults` dependency.
+- **Commit-5 deviations (deliberate, honest limits):** the agent cap's granularity is the write bit — `read` → capped, `write`/`admin` → uncapped; `admin` vs `write` is household administration on the gateway plane, not a vault verb, and a finer cap would push the role lattice into the table-scoped `scopeClamp`. The cap applies where the on-behalf-of member is known (agent turns constructed inside a request scope); a scheduler-fired automation has no human behind it, is uncapped, and journals no member — exactly as before (asserted); capping those needs automations to carry a durable owning member, a schema change beyond this issue. Pre-existing sibling hole noted for follow-up: `intentDeviceId` is not stripped from caller-supplied requests the way `actingMemberId` now is (flagged as a spawn-off task, out of scope here).
 - `core_share_origin.shared_at` is INTEGER epoch-ms, diverging from core.ts's "timestamps are TEXT ISO-8601" header rule — it is gateway-plane boundary machinery on the same clock as `blob_orphan.first_orphaned_at` (justified in the DDL comment).
 
 ## Out of scope
@@ -103,6 +111,15 @@ cd packages/client && bun run test -- src/react/screens/DevicesCard.test.tsx src
 ```
 
 Result at commit time: 21/21 targeted tests passing (full client package: 182 files / 1375 tests), typecheck clean.
+
+Commit-5 spot check:
+
+```sh
+cd packages/gateway && bun run test -- src/routes/share-routes.test.ts src/routes/replica-intent-attribution.test.ts src/serve/agent-member-cap.test.ts
+cd packages/vault && bun run test -- src/blob/local-orphan-sweep.test.ts src/gateway/acting-member.test.ts src/share
+```
+
+Result at commit time: gateway 20/20 new tests, vault 22/22 (new + adapted share suites); full suites vault 120 files / 994 passed / 1 skipped, gateway 176 files / 1187 passed / 6 skipped; typecheck clean in both.
 
 Commit-1 result: 3 files, 23 tests, all passing. Full suites for gateway/client/tunnel were green in the authoring session, and `bun run check:pr:full` runs before requesting merge (shared packages `client`, `protocol`, `tunnel`, `gateway` all move). The `packages/tunnel/fixtures/wire-golden.json` diff is limited to dropping the client-supplied `"trust":"full"` field from the pair-request payload.
 
@@ -162,6 +179,20 @@ File-list fidelity is exact: the 19 staged code files plus the receipt all appea
 
 Both halves are realized and behaviourally tested: the people-first card ("People & devices", groups over `DeviceMemberGroup`, `N people · M devices`, roster wired `GatewayScreen.tsx` → `GatewayRoute.tsx` → `listGatewayMembers`/`removeGatewayMember`) and the member-picker panel (person select + per-space grant ladder replacing the role picker; grouping in ownership words; two distinct removal verbs; tombstone disclosure; self-pair sending neither member nor grants; new-person defaulting to Member). The still-unchecked items carry no claim in this diff.
 
+### Commit 5
+
+**Check 1: the Commit-5 "What changed" block faithfully describes the staged diff**
+
+**Verdict: PASS**
+
+File-list fidelity is exact — the 19 staged code files plus the receipt are all named, and every named path is in `git diff --cached --name-only`. Share routes: dispatched from `composedHandler` after device identity is proved and before `runWithVaultContext`, genuinely outside `routeEntries`/`prefixDispatch` (grep-confirmed); the auth matrix matches, including 404 `not_found` for both a missing grant and a nonexistent vault (no topology leak), 403 for read-only-in-audience, host custody passing with `sharedByMember: 'host-custody'`, and `VaultShareError` → 409 `share_placement_failed`. Sweep: unions `liveBlobShas` + `archivedSegmentShas` + `conversationArchiveShas`, rides the `skipOrphanDelete` envelope after `gateway.sweepBlobs`, 7-day default grace; the fixture copy is deleted and the packaged function imported. Attribution: `actingMemberDetail` spread into the allow receipt **unconditionally** (so it survives replay reconciliation) and into the deny receipt; `withoutActingMember` strips caller-supplied values in both `bridgeFor` and `agentBridgeFor`; the rename-is-a-no-op assertion exists. Agent cap: `mayAct = canWrite(memberRole ?? 'revoked')` (fail-closed default), denied in `consent.ts` before grant evaluation. Spot-runs reproduce: 17/17 gateway, 9/9 vault.
+
+**Check 2: the newly checked checklist item is realized in the diff**
+
+**Verdict: PASS**
+
+All four halves are realized and behaviourally tested, and this commit honestly retires the two forward-references left open earlier (the commit-3 "attribution stops at the gateway boundary" deviation and the commit-2 "no shipped local-only sweep" gap). The deviations bullet checks out against the code: write-bit granularity (`canWrite` = admin || write), automations uncapped exactly as before (asserted), and the `intentDeviceId` strip gap confirmed real and left for the flagged follow-up. The still-unchecked docs item carries no claim in this diff.
+
 ## Steering
 
 ### Check 1: Every human-steering event in the session transcript is recorded as a row
@@ -191,3 +222,5 @@ No steering rows recorded; the opening goal directive was correctly not logged a
 | claude-code-8a1af371-ccc-1785179223-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 76 | 50078 | 8515232 | 21439 | 71593 | 10.2139 | 582 | 2880084 | 42143637 | 364242 | feat(vault): share-by-placement primitive — hardlink CAS + core_share_origin (#5 |
 | claude-code-8a1af371-ccc-1785179823-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 58 | 55535 | 7242481 | 27523 | 83116 | 9.3134 | 640 | 2935619 | 49386118 | 391765 | feat(gateway): L2 member layer — members, (member,vault) roles, invitation ticke |
 | claude-code-8a1af371-ccc-1785181123-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 48 | 50242 | 6548877 | 21740 | 72030 | 8.2644 | 688 | 2985861 | 55934995 | 413505 | feat(client): people-first devices card + member-picker pairing panel (#599)Devi |
+| claude-code-8a1af371-ccc-1785181416-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 34 | 30868 | 4978501 | 20270 | 51172 | 6.3782 | 722 | 3016729 | 60913496 | 433775 | feat(gateway): share plane, local orphan sweep, member attribution, agent cap (# |
+| claude-code-8a1af371-ccc-1785181508-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 8 | 7991 | 1222583 | 1854 | 9853 | 1.4153 | 730 | 3024720 | 62136079 | 435629 | feat(gateway): share plane, local orphan sweep, member attribution, agent cap (# |

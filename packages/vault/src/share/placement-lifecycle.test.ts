@@ -3,6 +3,7 @@
 
 import { statSync } from 'node:fs';
 import { afterEach, expect, test } from 'vitest';
+import { sweepLocalOrphans } from '../blob/local-orphan-sweep.js';
 import { liveBlobShas } from '../blob/read.js';
 import { readShareOrigin, shareToVault, unshareFromVault } from './placement.js';
 import {
@@ -11,7 +12,6 @@ import {
   household,
   reclaimOrphans,
   seedPhoto,
-  sweepLocalOrphans,
 } from './placement-fixture.js';
 
 afterEach(closeOpenVaults);
@@ -64,9 +64,14 @@ test('an injected mid-share failure leaves the origin clean and only a reclaimab
   // The orphan-grace rule HOLDS it on first sight, then reclaims it once the
   // recovery window has elapsed.
   const day = 24 * 60 * 60 * 1000;
-  expect(sweepLocalOrphans(audience, { graceWindowMs: 3 * day, now: 1_000 })).toEqual([]);
+  const held = sweepLocalOrphans(audience, { graceWindowMs: 3 * day, now: 1_000 });
+  expect(held.deleted).toEqual([]);
+  expect(held.graceHeld.sort()).toEqual([photo.sha256, photo.thumbSha].sort());
   expect(audience.blobs.hasSync(photo.sha256)).toBe(true);
-  const reclaimed = sweepLocalOrphans(audience, { graceWindowMs: 3 * day, now: 1_000 + 4 * day });
+  const reclaimed = sweepLocalOrphans(audience, {
+    graceWindowMs: 3 * day,
+    now: 1_000 + 4 * day,
+  }).deleted;
   expect(reclaimed.sort()).toEqual([photo.sha256, photo.thumbSha].sort());
   expect(audience.blobs.hasSync(photo.sha256)).toBe(false);
   // Reclaiming the audience's directory entry never touched the origin's.

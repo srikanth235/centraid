@@ -116,6 +116,7 @@ import {
   jitterDelayMs,
   type WalShipperOptions,
   scopeCovers,
+  sweepLocalOrphans,
 } from '@centraid/vault';
 import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -141,10 +142,18 @@ import {
 import { applyRestoreQuarantine, type QuarantineStatus } from './vault-quarantine.js';
 import { replicaIntentContext } from './replica-intent-context.js';
 import { vaultContext } from './vault-context.js';
+import { canWrite } from './enrollment-store.js';
 import { GroupCommitQueue } from './group-commit-queue.js';
 import { decideJournalArchive } from './journal-limit.js';
 
 /** Blob-sweep failure backoff (issue #367 §C5) — one step per consecutive failure, flat-capped. */
+/**
+ * The default local orphan-grace window (issue #599 decision 11) for a vault
+ * with no backup provider to supply a recovery window: one week. A local-only
+ * household still deserves the interval the remote rule buys — long enough to
+ * notice "I unshared the wrong album" before the bytes go.
+ */
+const LOCAL_ORPHAN_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 const BLOB_SWEEP_BACKOFF_STEP_MS = 60_000;
 const BLOB_SWEEP_MAX_BACKOFF_MS = 30 * 60_000;
 
@@ -421,6 +430,17 @@ async function asVaultCallResultAsync(fn: () => Promise<unknown>): Promise<Vault
 
 /** Journal archival cadence (issue #367 §E2): once a day is plenty. */
 const JOURNAL_ARCHIVAL_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Strip any caller-supplied `actingMemberId` from an invoke payload (issue
+ * #599 decision 8). Attribution is HOST-resolved from the device binding; an
+ * app or agent naming its own member would forge the journal, so the field is
+ * dropped here and re-set from the request scope by the caller.
+ */
+function withoutActingMember(payload: InvokeRequest): InvokeRequest {
+  const { actingMemberId: _forged, ...rest } = payload;
+  return rest;
+}
 
 export class VaultPlane {
   readonly db: VaultDb;
@@ -1806,6 +1826,11 @@ export class VaultPlane {
     // Capture it here so worker-message scheduling cannot lose the binding.
     const replicaIntent = replicaIntentContext();
     const requestDeviceId = vaultContext()?.deviceKey;
+    // L4 attribution (issue #599 decision 8): the acting member, host-resolved
+    // from the device binding exactly like the device id beside it. An offline
+    // intent carries its own — the person who made the write on the phone,
+    // which is not necessarily whoever's request replayed it.
+    const actingMemberId = replicaIntent?.memberId ?? vaultContext()?.memberId;
     return async (call): Promise<VaultCallResult> => {
       const app = lookupAppByName(this.db, appId);
       if (!app) {
@@ -1824,12 +1849,13 @@ export class VaultPlane {
       }
       if (call.op === 'invoke') {
         return this.invokeQueued(cred, {
-          ...(call.payload as unknown as InvokeRequest),
+          ...withoutActingMember(call.payload as unknown as InvokeRequest),
           ...(replicaIntent?.appId === appId
             ? { intentId: replicaIntent.intentId, intentDeviceId: replicaIntent.deviceId }
             : requestDeviceId
               ? { intentDeviceId: requestDeviceId }
               : {}),
+          ...(actingMemberId !== undefined ? { actingMemberId } : {}),
         });
       }
       return asVaultCallResult(() => {
@@ -1890,6 +1916,15 @@ export class VaultPlane {
    * lands immediately.
    */
   agentBridgeFor(appId: string, block?: InstallScopeBlock): VaultBridge {
+    // The on-behalf-of principal (issue #599 decision 7), captured at bridge
+    // construction like the intent binding above. Present when the turn rides
+    // a member's request scope; absent for a scheduler-fired automation, which
+    // has no human behind it to be capped at.
+    const scope = vaultContext();
+    const onBehalfOfMember =
+      scope?.memberId !== undefined
+        ? { memberId: scope.memberId, mayAct: canWrite(scope.memberRole ?? 'revoked') }
+        : undefined;
     return async (call): Promise<VaultCallResult> => {
       const agent = lookupAgentByName(this.db, appId);
       if (!agent) {
@@ -1915,6 +1950,7 @@ export class VaultPlane {
               })),
             }
           : {}),
+        ...(onBehalfOfMember ? { onBehalfOfMember } : {}),
       };
       if (call.op === 'content') {
         // The enricher's byte primitive (issue #299 §2): thumb/preview/text
@@ -1925,7 +1961,10 @@ export class VaultPlane {
         );
       }
       if (call.op === 'invoke') {
-        return this.invokeQueued(cred, call.payload as unknown as InvokeRequest);
+        return this.invokeQueued(cred, {
+          ...withoutActingMember(call.payload as unknown as InvokeRequest),
+          ...(onBehalfOfMember ? { actingMemberId: onBehalfOfMember.memberId } : {}),
+        });
       }
       return asVaultCallResult(() => {
         switch (call.op) {
@@ -2322,13 +2361,17 @@ export class VaultPlane {
     // and sum the bytes of newly-replicated objects. Accounting only.
     const replicationStartedAt = Date.now();
     void Promise.all([this.resolveSnapshotBlobRoots(), this.resolveOrphanGraceWindowMs()])
-      .then(([roots, graceWindowMs]) =>
-        this.gateway.sweepBlobs(this.ownerCredential, {
-          skipOrphanDelete: this.skipOrphanDelete() || roots === 'unavailable',
-          ...(roots !== 'unavailable' && roots ? { extraLiveRoots: roots } : {}),
+      .then(async ([roots, graceWindowMs]) => {
+        const skipOrphanDelete = this.skipOrphanDelete() || roots === 'unavailable';
+        const extraLiveRoots = roots !== 'unavailable' && roots ? roots : undefined;
+        const swept = await this.gateway.sweepBlobs(this.ownerCredential, {
+          skipOrphanDelete,
+          ...(extraLiveRoots ? { extraLiveRoots } : {}),
           ...(graceWindowMs !== undefined ? { graceWindowMs } : {}),
-        }),
-      )
+        });
+        this.runLocalOrphanSweep({ skipOrphanDelete, extraLiveRoots, graceWindowMs });
+        return swept;
+      })
       .then((blobs) => {
         if (
           blobs.replicated.length +
@@ -2359,6 +2402,40 @@ export class VaultPlane {
           `vault plane: blob sweep failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       });
+  }
+
+  /**
+   * The LOCAL half of the orphan reclaim (issue #599 decision 11). The remote
+   * reconcile above deletes remote orphans and the cache eviction sheds only
+   * replicated bytes, so nothing reclaimed a local-only CAS entry — which
+   * share-by-placement now produces routinely (a failed share leaves a link,
+   * every unshare orphans one).
+   *
+   * It rides the SAME safety envelope as the remote phase and shares its
+   * tombstone table, so the grace clock is one clock: paused entirely while
+   * the instance lease is conflicted or the snapshot roots are unreadable,
+   * pinned by those roots, and defaulted to `LOCAL_ORPHAN_GRACE_MS` when no
+   * backup provider supplies a recovery window (a local-only vault still gets
+   * a week to notice a mistake). An infinite window — the fail-safe
+   * `resolveOrphanGraceWindowMs` returns when it cannot read the retention
+   * ladder — holds everything, which is the point.
+   */
+  private runLocalOrphanSweep(options: {
+    skipOrphanDelete: boolean;
+    extraLiveRoots: ReadonlySet<string> | undefined;
+    graceWindowMs: number | undefined;
+  }): void {
+    if (options.skipOrphanDelete) return;
+    const result = sweepLocalOrphans(this.db, {
+      graceWindowMs: options.graceWindowMs ?? LOCAL_ORPHAN_GRACE_MS,
+      ...(options.extraLiveRoots ? { extraLiveRoots: options.extraLiveRoots } : {}),
+    });
+    if (result.deleted.length + result.graceHeld.length > 0) {
+      this.logger.info(
+        `vault plane: local orphan sweep reclaimed=${result.deleted.length} ` +
+          `graceHeld=${result.graceHeld.length}`,
+      );
+    }
   }
 
   /**

@@ -55,6 +55,14 @@ export {
   type ShareOriginRecord,
 } from './share/placement.js';
 export { isShareableItemType, type ShareableItemType } from './share/closure.js';
+// The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
+// directory entries, so hardlinked bytes survive until the last vault lets go.
+export {
+  sweepLocalOrphans,
+  type LocalOrphanSweepOptions,
+  type LocalOrphanSweepResult,
+  type LocalOrphanSweepTarget,
+} from './blob/local-orphan-sweep.js';
 export { type BlobPlacement, type BlobPlacementMode } from './share/blobs.js';
 export {
   S3BlobStore,

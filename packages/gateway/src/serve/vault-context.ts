@@ -16,6 +16,7 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { DeviceRole } from './enrollment-store.js';
 
 export interface VaultRequestContext {
   /** The vault this request (or background fire) is addressed to. */
@@ -34,6 +35,14 @@ export interface VaultRequestContext {
    * id is the key, the label is only display.
    */
   memberId?: string;
+  /**
+   * That member's authored role in THIS vault (issue #599 decision 3) —
+   * `member_roles`, inherited by the device, tombstoned to `revoked` when the
+   * binding is dead. Resolved beside `memberId` so an agent turn can be capped
+   * at the human it acts for (decision 7) without re-reading gateway.db from
+   * inside the vault plane.
+   */
+  memberRole?: DeviceRole;
   /** App-id allow-list for a constrained Companion device. */
   grantProfile?: readonly string[];
 }

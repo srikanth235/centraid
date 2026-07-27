@@ -8,8 +8,7 @@ import path from 'node:path';
 import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { expect } from 'vitest';
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
-import { liveBlobShas } from '../blob/read.js';
-import { OrphanTombstoneIndex } from '../blob/orphan-tombstone.js';
+import { sweepLocalOrphans } from '../blob/local-orphan-sweep.js';
 import { blobUriFor } from '../blob/store.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { nowIso, uuidv7 } from '../ids.js';
@@ -115,40 +114,12 @@ export function casPath(db: VaultDb, sha: string): string {
 }
 
 /**
- * The local orphan reclaim, composed from the SHIPPED primitives — the live
- * root set (`liveBlobShas`), the #439 R4 grace tombstone, and custody's local
- * unlink. There is no packaged local-only orphan sweep to call: the shipped
- * `reconcileCustody` pass deletes REMOTE orphans and the cache's eviction pass
- * only sheds bytes with replica evidence, so a local-only vault reclaims
- * through exactly this composition (see the agent report for #599).
- */
-export function sweepLocalOrphans(
-  db: VaultDb,
-  options: { graceWindowMs: number; now: number },
-): string[] {
-  const live = liveBlobShas(db.vault);
-  const tombstones = new OrphanTombstoneIndex(db.vault);
-  const deleted: string[] = [];
-  for (const sha of db.blobs.local.listSync()) {
-    if (live.has(sha)) {
-      tombstones.clear(sha);
-      continue;
-    }
-    const firstOrphanedAt = tombstones.markFirstSeen(sha, options.now);
-    if (options.now - firstOrphanedAt <= options.graceWindowMs) continue;
-    db.blobs.deleteLocalSync(sha);
-    tombstones.clear(sha);
-    deleted.push(sha);
-  }
-  return deleted;
-}
-
-/**
- * Two passes of the sweep: the first tombstones (a freshly-found orphan is
- * HELD, never deleted on sight), the second finds the grace elapsed and
- * unlinks. Returns what the second pass reclaimed.
+ * Two passes of the packaged local orphan sweep (`blob/local-orphan-sweep.ts`):
+ * the first tombstones (a freshly-found orphan is HELD, never deleted on
+ * sight), the second finds the grace elapsed and unlinks. Returns what the
+ * second pass reclaimed.
  */
 export function reclaimOrphans(db: VaultDb): string[] {
-  expect(sweepLocalOrphans(db, { graceWindowMs: 0, now: 1_000 })).toEqual([]);
-  return sweepLocalOrphans(db, { graceWindowMs: 0, now: 2_000 });
+  expect(sweepLocalOrphans(db, { graceWindowMs: 0, now: 1_000 }).deleted).toEqual([]);
+  return sweepLocalOrphans(db, { graceWindowMs: 0, now: 2_000 }).deleted;
 }
