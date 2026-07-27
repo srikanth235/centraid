@@ -32,12 +32,7 @@ import {
   type UploadFollowupFactory,
 } from './followup-record';
 
-export type {
-  NewUploadFollowup,
-  UploadDerivativeFollowup,
-  UploadFollowup,
-  UploadFollowupFactory,
-} from './followup-record';
+export type { NewUploadFollowup, UploadFollowup, UploadFollowupFactory } from './followup-record';
 
 const FOLLOWUP_DDL = `
   CREATE TABLE IF NOT EXISTS upload_followup (

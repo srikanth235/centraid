@@ -37,9 +37,7 @@ permissions:
 jobs:
   desktop-e2e:
     if: >
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.suite == 'all' ||
-      github.event.inputs.suite == 'desktop'
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'desktop'
     runs-on: ubuntu-latest
     # Outer backstop only — the suite's own `globalTimeout` (22m, see
     # tests/e2e/playwright.config.ts) is what fails a runaway run, because it
@@ -108,9 +106,7 @@ jobs:
 
   web-e2e:
     if: >
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.suite == 'all' ||
-      github.event.inputs.suite == 'web'
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'web'
     runs-on: ubuntu-latest
     # Outer backstop only — see desktop-e2e. The suite's `globalTimeout` is
     # 10m against ~1m of healthy tests; setup is ~7m.
@@ -138,9 +134,7 @@ jobs:
 
   mobile-e2e-ios:
     if: >
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.suite == 'all' ||
-      github.event.inputs.suite == 'mobile'
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile'
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -368,9 +362,7 @@ jobs:
   # Metro must be up before Maestro (harness hard-fails without it; iOS job does this).
   mobile-e2e-android:
     if: >
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.suite == 'all' ||
-      github.event.inputs.suite == 'mobile-android'
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile-android'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -528,9 +520,7 @@ jobs:
   # one failure still leaves evidence from the others for the health report.
   pairing-lifecycle:
     if: >
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.suite == 'all' ||
-      github.event.inputs.suite == 'pairing'
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -558,9 +548,7 @@ jobs:
 
   pairing-founding:
     if: >
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.suite == 'all' ||
-      github.event.inputs.suite == 'pairing'
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -588,9 +576,7 @@ jobs:
 
   pairing-ticket-hygiene:
     if: >
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.suite == 'all' ||
-      github.event.inputs.suite == 'pairing'
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -618,9 +604,7 @@ jobs:
 
   pairing-cross-network-relay:
     if: >
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.suite == 'all' ||
-      github.event.inputs.suite == 'pairing'
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -654,10 +638,7 @@ jobs:
   # tests/mutation-floors.json + test:ratchet; per-PR enforces measured floors.
   mutation-testing:
     if: >
-      github.event_name != 'workflow_dispatch' ||
-      github.event.inputs.suite == 'all' ||
-      github.event.inputs.suite == 'report' ||
-      github.event.inputs.suite == 'mutation'
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'mutation'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -694,8 +675,7 @@ jobs:
         mutation-testing,
       ]
     if: >
-      always() &&
-      (
+      always() && (
         github.event_name != 'workflow_dispatch' ||
         github.event.inputs.suite == 'all' ||
         github.event.inputs.suite == 'report'
@@ -813,10 +793,7 @@ jobs:
   publish-nightly-report:
     needs: [test-health-report]
     if: >
-      always() &&
-      needs.test-health-report.result != 'cancelled' &&
-      needs.test-health-report.result != 'skipped' &&
-      github.ref == 'refs/heads/main'
+      always() && needs.test-health-report.result != 'cancelled' && needs.test-health-report.result != 'skipped' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -961,10 +938,7 @@ jobs:
     # job added to `needs:` is covered automatically, instead of silently
     # falling outside a hand-maintained list.
     if: >
-      always() &&
-      github.event_name == 'schedule' &&
-      github.ref == 'refs/heads/main' &&
-      (
+      always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (
         contains(join(needs.*.result, ','), 'failure') ||
         contains(join(needs.*.result, ','), 'cancelled')
       )

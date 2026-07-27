@@ -40,7 +40,6 @@ export {
 export type {
   CursorElement,
   CursorReadResult,
-  CursorSourceKind,
   CursorStore,
   LocalCursorScheduler,
   TriggerCursorFireInput,

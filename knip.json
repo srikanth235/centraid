@@ -1,9 +1,9 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignore": ["tests/**"],
-  "ignoreBinaries": ["actionlint", "python3", "eas"],
+  "ignoreBinaries": ["actionlint", "eas", "hdiutil", "pmset", "sqlite3", "strace", "systemd-creds"],
   "ignoreExportsUsedInFile": true,
-  "exclude": ["enumMembers", "classMembers"],
+  "exclude": ["enumMembers"],
   "workspaces": {
     ".": {
       "entry": ["scripts/**/*.{js,mjs,ts}", ".github/workflows/*.{yml,yaml}"],

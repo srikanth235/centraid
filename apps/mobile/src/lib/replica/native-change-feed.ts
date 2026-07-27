@@ -3,7 +3,6 @@ import { fetch as expoFetch } from 'expo/fetch';
 import {
   authHeaders,
   consumeVaultChangeSse,
-  decodeFrame,
   INITIAL_VAULT_CURSOR,
   parseChange,
   parseCursor,
@@ -270,4 +269,3 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
 }
 
 /** Re-export so callers can build the pure decoder in tests without deep imports. */
-export { decodeFrame };

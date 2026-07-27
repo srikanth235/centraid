@@ -25,7 +25,7 @@ import { validateOutputSchema, type OutputSchema } from './manifest-output.js';
 import { isValidRef } from './ref.js';
 
 export { ManifestError, type ManifestValidationCode } from './manifest-errors.js';
-export { validateOutputAgainstSchema, type OutputSchema } from './manifest-output.js';
+export { type OutputSchema } from './manifest-output.js';
 
 /** Conventional handler filename inside an automation app directory. */
 export const HANDLER_FILE = 'handler.js';

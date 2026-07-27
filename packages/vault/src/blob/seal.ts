@@ -13,7 +13,6 @@
 
 import { Transform } from 'node:stream';
 import {
-  coveringFrames,
   decodeHeader,
   decodeTrailer,
   DEFAULT_FRAME_SIZE,
@@ -148,7 +147,6 @@ export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
 
 // Re-exported for the ranged read-through (custody-read.ts) and tests.
 export {
-  coveringFrames,
   decodeHeader,
   decodeTrailer,
   frameCountFor,

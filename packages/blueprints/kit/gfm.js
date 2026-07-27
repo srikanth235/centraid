@@ -217,7 +217,7 @@ export function blockNodes(text, C) {
       out.push(el('p', { class: C.asstP, trustedHtml: inlineHtml(para.join(' '), C) }));
     para = [];
   };
-  for (let i = 0; i < lines.length; ) {
+  for (let i = 0; i < lines.length;) {
     const line = lines[i].replace(/\s+$/, '');
     if (line.trim() === '') {
       flushPara();

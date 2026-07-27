@@ -16,8 +16,6 @@ import {
   exportGatewayRecoveryKit as exportGatewayRecoveryKitCore,
 } from './gateway-ops-core.js';
 
-export type { ExportDiagnosticsResult } from './gateway-ops-core.js';
-
 /**
  * Fetch the active gateway's diagnostics bundle and save it through the
  * native save dialog. See `CentraidApi.exportGatewayDiagnostics` for the

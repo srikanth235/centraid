@@ -10,8 +10,6 @@ import {
 
 import { ReplicaFts5UnavailableError } from './replica-fts5-error';
 
-export { ReplicaFts5UnavailableError } from './replica-fts5-error';
-
 /** Drives the shared replica store core against an in-process op-sqlite handle. */
 export class OpSqliteDriver implements ReplicaSqliteDriver {
   private constructor(private readonly db: DB) {}

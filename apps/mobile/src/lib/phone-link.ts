@@ -48,13 +48,7 @@ import {
 import { Store } from '../storage';
 import { parsePairingInput } from './phone-link-parse';
 
-export { parsePairingInput, parsePairQr } from './phone-link-parse';
-export type {
-  DesktopPairPayload,
-  GatewayFoundingPayload,
-  GatewayPairPayload,
-  PairingInput,
-} from './phone-link-parse';
+export { parsePairingInput } from './phone-link-parse';
 
 // The active-slot keys now live in their new owner, lib/spaces (the Spaces
 // registry projects the active (gateway, vault) tuple into them); imported above

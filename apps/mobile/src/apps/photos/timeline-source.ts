@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { photoTimelineEngine, type TimelineSnapshot } from './timeline-engine';
-export type { BackupState, PhotoAsset, PhotoSection } from './timeline-model';
+export type { PhotoAsset, PhotoSection } from './timeline-model';
 
 /**
  * Read the one shared timeline (see `timeline-engine.ts`). Every Photos screen

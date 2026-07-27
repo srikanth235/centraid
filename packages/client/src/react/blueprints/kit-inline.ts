@@ -44,7 +44,6 @@ export * from '@centraid/blueprints/kit/kit.js';
 // no longer pulls the full kit barrel into a caller's chunk (boot-size fix).
 // Re-exported here so served-kit consumers that reach it through the `./kit.ts`
 // → kit-inline alias are unchanged.
-export { authorizeBlobUrl } from './blob-auth.js';
 
 const LINKS_ROUTE = '/centraid/_vault/links';
 const SUN_SVG =

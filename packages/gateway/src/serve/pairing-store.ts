@@ -14,8 +14,6 @@ export {
   encodePairingTicket,
   parseFoundingTicket,
   parsePairingTicket,
-  type FoundingTicketPayload,
-  type PairingTicketPayload,
 } from './pairing-ticket-codec.js';
 
 export const DEFAULT_TICKET_TTL_MS = 15 * 60 * 1000;

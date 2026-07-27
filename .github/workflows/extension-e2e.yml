@@ -39,10 +39,7 @@ jobs:
   companion-failure-issue:
     needs: [companion]
     if: >
-      always() &&
-      github.event_name == 'schedule' &&
-      github.ref == 'refs/heads/main' &&
-      (
+      always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (
         contains(join(needs.*.result, ','), 'failure') ||
         contains(join(needs.*.result, ','), 'cancelled')
       )

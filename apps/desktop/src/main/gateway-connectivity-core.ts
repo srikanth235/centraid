@@ -16,7 +16,7 @@ import {
 } from './gateway-pairing-core.js';
 import type { HandshakeResult } from './version-handshake.js';
 import type { ListGatewayVaultsResult } from './gateway-vaults-core.js';
-import type { SshCommandResult, SshFailureCode } from './ssh-host.js';
+import type { SshCommandResult } from './ssh-host.js';
 
 export type ConnectivityStageId =
   | 'reach'
@@ -308,5 +308,3 @@ export function foldSshVaultsStage(
 export function skippedSshStage(id: 'ssh' | 'cli' | 'daemon' | 'vaults'): ConnectivityStage {
   return s(id, 'skip');
 }
-
-export type { SshFailureCode };

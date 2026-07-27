@@ -16,6 +16,4 @@
  *   - automation → composeSkills(['automation-authoring'])
  */
 
-export { skillsDir, listSkills, composeSkills, parseSkillFile, type SkillMeta } from './compose.js';
-export { buildUiGroundingBlocks } from './ui-grounding.js';
-export { buildAuthoringExtraPrompt, type AuthoringExtraPromptInput } from './authoring-prompt.js';
+export { buildAuthoringExtraPrompt } from './authoring-prompt.js';

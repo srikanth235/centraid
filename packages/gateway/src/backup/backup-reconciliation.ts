@@ -44,12 +44,7 @@ import type {
 import { driftSummary as drift, unavailableStore } from './backup-reconciliation-state.js';
 
 export { reconcileCasInventory } from './backup-cas-diff.js';
-export type {
-  BackupReconciliationState,
-  DriftSummary,
-  InventoryAttestationDrift,
-  StoreReconciliationState,
-} from './backup-reconciliation-state.js';
+export type { BackupReconciliationState } from './backup-reconciliation-state.js';
 export { failedReconciliation } from './backup-reconciliation-state.js';
 
 const SAMPLE_LIMIT = 25;

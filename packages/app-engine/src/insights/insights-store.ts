@@ -29,17 +29,7 @@ import type {
   InsightsSummary,
 } from './insights-types.js';
 
-export type {
-  InsightsActivityRow,
-  InsightsAttention,
-  InsightsDailyPoint,
-  InsightsKpis,
-  InsightsModelRow,
-  InsightsPeakDay,
-  InsightsRunnerRow,
-  InsightsSourceRow,
-  InsightsSummary,
-} from './insights-types.js';
+export type { InsightsSummary } from './insights-types.js';
 
 const DEFAULT_WINDOW_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;

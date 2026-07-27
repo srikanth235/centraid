@@ -30,8 +30,6 @@ import { LAST_SUCCESSFUL_SYNC_KEY, nativeUploadPolicy } from './native-policy';
 import { reconcileGate } from './reconcile-gate';
 import { Store } from '../../storage';
 
-export { reconcileGate } from './reconcile-gate';
-
 export interface ReconcileSummary {
   settled: number;
   deduped: number;

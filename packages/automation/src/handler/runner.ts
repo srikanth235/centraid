@@ -1014,16 +1014,19 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     });
 
     worker.on('error', (err) => {
+      // @types/node 26 types this callback's argument as `unknown` — a worker
+      // can reject with any value, not only an Error.
+      const message = err instanceof Error ? err.message : String(err);
       persistedEntries.push({
         ts: Date.now(),
         level: 'error',
-        msg: `worker error: ${err.message}`,
+        msg: `worker error: ${message}`,
         source: 'action',
         handler: handlerName,
       });
-      void closeConnectorRun(false, {}, err.message)
+      void closeConnectorRun(false, {}, message)
         .catch(() => undefined)
-        .finally(() => finish({ ok: false, error: err.message, logs, toolBatches, agentCalls }));
+        .finally(() => finish({ ok: false, error: message, logs, toolBatches, agentCalls }));
     });
 
     worker.on('exit', (code) => {

@@ -27,7 +27,6 @@ import { fileURLToPath } from 'node:url';
 import { endpointIdForSecret } from '@centraid/tunnel';
 import {
   buildDetachedSpawnOptions,
-  DEFAULT_GATEWAY_PORT,
   decideControl,
   resolveListenPort,
   type ControlDecision,
@@ -553,4 +552,4 @@ export async function installGatewayOsService(
   }
 }
 
-export { DEFAULT_GATEWAY_PORT, resolveListenPort };
+export { resolveListenPort };

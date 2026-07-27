@@ -1,6 +1,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 import type { AutomationEditorBridgeProps, AutomationEditorData } from '../screen-contracts.js';
 import AutomationEditorScreen from './AutomationEditorScreen.js';
 
@@ -302,7 +302,7 @@ describe('AutomationEditorScreen — authoring data triggers', () => {
 
   const KINDS = ['core.transaction', 'core.event', 'billing.invoice'];
 
-  async function mountWithDataTrigger(loadEntityTypes: ReturnType<typeof vi.fn>): Promise<{
+  async function mountWithDataTrigger(loadEntityTypes: Mock<() => Promise<string[]>>): Promise<{
     el: HTMLDivElement;
     input: HTMLInputElement;
   }> {

@@ -35,10 +35,7 @@ jobs:
     # #557 — `cancelled` counts as red (a dead runner is not a pass), and a
     # failed alert must itself be loud rather than a swallowed ::warning::.
     if: >
-      always() &&
-      github.event_name == 'schedule' &&
-      github.ref == 'refs/heads/main' &&
-      (
+      always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (
         contains(join(needs.*.result, ','), 'failure') ||
         contains(join(needs.*.result, ','), 'cancelled')
       )

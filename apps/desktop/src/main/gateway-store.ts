@@ -19,12 +19,10 @@ import {
   normalizeProfile,
   sortGatewayProfiles,
   validateAddGatewayFields,
-  type GatewayKind,
   type GatewayProfileShape,
 } from './gateway-store-core.js';
 import { ensureIrohProxy } from './iroh-dialer.js';
 
-export type { GatewayKind };
 export type GatewayProfile = GatewayProfileShape;
 export { defaultAvatarColor };
 
