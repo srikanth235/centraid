@@ -446,6 +446,7 @@ CI on the PR is the final gate.
 | claude-code-91b540ed-688-1785135833-1 | claude-code | 91b540ed-688c-4f97-b5cc-58377ec29378 | #565 | claude-opus-5 | 382 | 197014 | 43691889 | 111997 | 309393 | 25.8791 | 1949 | 1131676 | 198525934 | 543714 |  |
 | claude-code-5686fd74-b3c-1785139176-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-opus-5 | 1128 | 1440742 | 139115145 | 339912 | 1781782 | 87.0657 | 1128 | 1440742 | 139115145 | 339912 |  |
 | claude-code-5686fd74-b3c-1785139267-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-opus-5 | 12 | 12452 | 2422555 | 2795 | 15259 | 1.3590 | 1140 | 1453194 | 141537700 | 342707 |  |
+| claude-code-5686fd74-b3c-1785140383-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-fable-5 | 94 | 234312 | 10954459 | 43056 | 277462 | 16.0371 | 1234 | 1687506 | 152492159 | 385763 | chore(ci): retrigger checks — the push event for 3fdf582b was dropped (#565) |
 
 ### Steering
 
