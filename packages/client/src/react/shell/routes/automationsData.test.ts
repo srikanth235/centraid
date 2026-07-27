@@ -290,7 +290,7 @@ describe('collectAutomationRuns', () => {
     vi.mocked(listAutomationTurns).mockResolvedValue([
       entry({ automationId: 'digest/main' }).run,
     ] as unknown as CentraidAutomationTurnRecord[]);
-    const entries = await collectAutomationRuns();
+    const { entries } = await collectAutomationRuns();
     expect(entries[0]?.automationName).toBe('Daily Digest');
   });
 
@@ -306,7 +306,7 @@ describe('collectAutomationRuns', () => {
         triggerKind: 'cron',
       },
     ] as unknown as CentraidAutomationTurnRecord[]);
-    const entries = await collectAutomationRuns();
+    const { entries } = await collectAutomationRuns();
     expect(entries[0]?.automationName).toBe('Gone Automation');
   });
 
@@ -321,7 +321,7 @@ describe('collectAutomationRuns', () => {
         triggerKind: 'cron',
       },
     ] as unknown as CentraidAutomationTurnRecord[]);
-    const entries = await collectAutomationRuns();
+    const { entries } = await collectAutomationRuns();
     expect(entries[0]?.automationName).toBe('gone-app/gone-auto');
   });
 });

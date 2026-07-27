@@ -18,7 +18,16 @@ export async function compileAutomation(input: {
   return readJson<{ compileTurnId: string }>(res, 'compile automation');
 }
 
-/** Rewrite standing instructions from a steering message, then recompile. */
+/**
+ * Rewrite standing instructions from a steering message, then recompile.
+ *
+ * NOT wired to any screen. The compile screen has exactly one editable surface
+ * (the instructions field) and the run screen has none, so nothing in the
+ * product turns prose into an instruction rewrite any more. This stays as the
+ * typed accessor for the live `POST /centraid/_automations/revise` endpoint —
+ * the endpoint and its gateway tests are unchanged, and retiring the wire
+ * surface is a protocol decision, not a UI one.
+ */
 export async function reviseAutomation(input: {
   automationId: string;
   message: string;

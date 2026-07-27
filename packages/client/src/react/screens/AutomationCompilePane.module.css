@@ -1,0 +1,416 @@
+/* The compiler workbench rail — the right half of the compile screen.
+   Deliberately reads as INSTRUMENTATION next to the airy authoring form on
+   the left: sunken ground, mono-forward, tight vertical rhythm, a hairline
+   spine threading the compile steps. The one saturated element is the tone
+   accent on the verdict card, so the plan's state is legible from across the
+   room without the rail ever competing with the instructions. */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-self: start;
+  /* Grid children default to min-content width; without this a long compiler
+     error or a wide code line pushes the whole workbench sideways. */
+  min-width: 0;
+  padding: 16px;
+  border: 0.5px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-sunken);
+  /* Tone drives one hue for the whole rail; every band borrows it rather than
+     inventing its own colour. */
+  --rail-tone: var(--ink-3);
+}
+.rail[data-tone='active'] {
+  --rail-tone: var(--success);
+}
+.rail[data-tone='running'] {
+  --rail-tone: var(--accent);
+}
+.rail[data-tone='failed'] {
+  --rail-tone: var(--danger);
+}
+.rail[data-tone='draft'] {
+  --rail-tone: var(--c-amber);
+}
+
+/* ── 1. Verdict ─────────────────────────────────────────────────────────── */
+.verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 14px 16px;
+  border: 0.5px solid var(--line);
+  border-left: 2px solid var(--rail-tone);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+.verdictHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.verdictSpacer {
+  flex: 1;
+}
+/* Live "m:ss" beside the Compiling… chip. Tabular figures so a ticking clock
+   does not jitter the chip next to it every second. */
+.elapsed {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
+}
+.verdictDetail {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  /* A compiler error is the one place raw text must survive verbatim. */
+  overflow-wrap: anywhere;
+}
+.verdictActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.runsLink,
+.bandLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 2px 0;
+}
+.runsLink:hover,
+.bandLink:hover {
+  color: var(--accent);
+}
+
+/* ── 2. Steps ───────────────────────────────────────────────────────────── */
+.stepsBand,
+.artifactBand {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bandHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.bandTitle {
+  margin: 0;
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.bandEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-4);
+  padding: 10px 12px;
+  border: 0.5px dashed var(--line);
+  border-radius: 10px;
+}
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 9px;
+  display: flex;
+  flex-direction: column;
+  /* The spine: one hairline behind every mark, so the steps read as a single
+     run of work rather than a stack of unrelated rows. */
+  border-left: 1px solid var(--line);
+}
+.step {
+  position: relative;
+  display: grid;
+  /* Two in-flow children only — `.stepMark` is absolutely positioned and so
+     takes no track. A third `auto` track here put the label in column 1 and
+     the duration in column 2, which made `grid-column: 2 / -1` on the detail
+     start under the DURATION: the failure text hung off the right edge,
+     indented past its own step name. */
+  grid-template-columns: minmax(0, 1fr) auto;
+  /* `center` would park the mark halfway down a row whose detail runs three
+     lines, leaving a tick stranded in open space beside the prose. The mark
+     belongs on the step's first line. */
+  align-items: start;
+  row-gap: 2px;
+  column-gap: 8px;
+  padding: 6px 0 6px 14px;
+}
+.stepMark {
+  position: absolute;
+  top: 4px;
+  left: -10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  color: var(--ink-3);
+}
+.step[data-status='ok'] .stepMark {
+  color: var(--success);
+}
+.step[data-status='fail'] .stepMark {
+  color: var(--danger);
+}
+.step[data-status='running'] .stepMark {
+  color: var(--accent);
+  animation: cd-spin 0.9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .step[data-status='running'] .stepMark {
+    animation: none;
+  }
+}
+.stepLabel {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stepTime {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.stepDetail {
+  grid-column: 1 / -1;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+  /* A model step's narration can run long. Four lines is enough to tell what
+     it was doing; "Full trace →" is one click away for the rest. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.step[data-status='fail'] .stepDetail {
+  color: var(--danger);
+}
+
+.history {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.history summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+.historyList {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.historyRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-2);
+  text-align: left;
+  padding: 5px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.historyRow:hover,
+.historyRow[data-active='true'] {
+  background: var(--bg-elev);
+}
+.historyDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--ink-4);
+}
+.historyRow[data-status='ok'] .historyDot {
+  background: var(--success);
+}
+.historyRow[data-status='fail'] .historyDot {
+  background: var(--danger);
+}
+.historyRow[data-status='running'] .historyDot {
+  background: var(--accent);
+}
+.historyOutcome {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+
+/* ── 3. Artifacts ───────────────────────────────────────────────────────── */
+.bandToggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 4px 0;
+}
+.bandToggle:hover {
+  color: var(--ink);
+}
+.bandToggleHint {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink-4);
+}
+.artifacts {
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.artifactTabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border-bottom: 0.5px solid var(--line);
+}
+.artifactTab {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.artifactTab[data-active='true'] {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.artifactSpacer {
+  flex: 1;
+}
+.artifactCopy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.artifactCopy:hover:not(:disabled) {
+  color: var(--accent);
+}
+.code {
+  margin: 0;
+  padding: 10px 0;
+  max-height: 320px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.codeLine {
+  display: flex;
+  gap: 12px;
+  padding: 0 12px;
+  white-space: pre;
+}
+.codeGutter {
+  min-width: 22px;
+  text-align: right;
+  color: var(--ink-4);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.artifactEmpty {
+  margin: 0;
+  padding: 14px;
+  font-size: 12px;
+  color: var(--ink-4);
+}
+
+/* ── Failure ───────────────────────────────────────────────────────────────
+   A compile error is the one place raw machine text must survive verbatim, so
+   it gets its own mono block rather than being squeezed into the verdict line.
+   The only affordance under it points BACK to the instructions — this rail
+   never edits. */
+.failure {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.failureText {
+  margin: 0;
+  max-height: 168px;
+  overflow: auto;
+  padding: 9px 10px;
+  border-radius: 9px;
+  border: 0.5px solid color-mix(in srgb, var(--danger) 30%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--danger);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.failureFix {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  border: 0.5px solid var(--line-strong);
+  background: var(--bg-sunken);
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 6px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.failureFix:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--accent);
+}

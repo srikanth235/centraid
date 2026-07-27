@@ -22,7 +22,12 @@ vi.mock('../../../gateway-client.js', () => ({
   updateAppMeta: (a: unknown) => updateAppMeta(a),
   renameInstalledApp: (a: unknown) => renameInstalledApp(a),
 }));
-vi.mock('./automationsData.js', () => ({ collectAutomationRuns: () => Promise.resolve([]) }));
+// Home reads its automation rows off the run collector now (one fetch, not
+// two), so the row fixtures each test sets on `listAutomations` ride back
+// through here.
+vi.mock('./automationsData.js', () => ({
+  collectAutomationRuns: async () => ({ rows: await listAutomations(), entries: [] }),
+}));
 const loadAppTemplates = vi.fn();
 vi.mock('./templatesData.js', () => ({ loadAppTemplates: () => loadAppTemplates() }));
 

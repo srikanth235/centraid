@@ -1,16 +1,45 @@
-/* Automation editor — shared create/edit column layout (Automations UI
-   revamp, see receipts/issue-387-automations-ui-revamp.md). Name +
-   instructions card (Connectors picker on the toolbar), Schedule/Data
-   triggers only, Notifications / Plan tabs. Create and edit share the same
-   chrome; only the head actions and primary CTA differ. */
+/* The compile screen — a two-column workbench.
+   LEFT (`.source`): the intent you author — name, instructions, triggers,
+   connectors, notifications — closed by its own save bar. Airy, generous,
+   form-shaped. The ONLY editable surface on the screen.
+   RIGHT (`.rail`, AutomationCompilePane.module.css): the compiler's readout —
+   verdict, steps, artifacts. Dense, mono, instrument-shaped, read-only.
+   The contrast is the point: you can tell at a glance which side of the desk
+   you are working on. Below 1040px the rail stacks under the form and the
+   loop simply reads top-to-bottom.
+
+   Hairline budget: this form is mostly bordered boxes, so a border only earns
+   its keep when it separates two things a box does NOT already separate.
+   Rules that drew a line INSIDE a card that already had one (the instructions
+   toolbar, the empty-trigger note) were removed rather than restyled. */
 
 .page {
-  max-width: 720px;
+  max-width: 1180px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 26px;
-  padding-bottom: 88px;
+  /* No sticky footer to clear any more — the save bar rides in the left
+     column, so the page only needs breathing room at the end. */
+  padding-bottom: 32px;
+}
+.workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 26px;
+  align-items: start;
+}
+.source {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-width: 0;
+}
+@media (min-width: 1040px) {
+  .workbench {
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
+    gap: 32px;
+  }
 }
 .addTriggerWrap {
   position: relative;
@@ -63,25 +92,36 @@
 .addTriggerItem:hover {
   background: var(--bg-sunken);
 }
+/* The hero. One card, one border — label, writing area and tool floor are all
+   inside it, and none of them draws a line of its own. */
 .instructionsCard {
   border: 0.5px solid var(--line);
   border-radius: 16px;
   background: var(--bg);
-  padding: 4px;
+  padding: 3px;
   gap: 0;
+  /* Deliberately NOT `overflow: hidden` — the @-mention popover and the
+     connectors picker are absolutely positioned inside this card and would be
+     clipped by it. */
+}
+.instructionsCard:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
 }
 .instructionsCard .textarea {
   border: 0;
   background: transparent;
   box-shadow: none;
-  min-height: 120px;
-  padding: 14px 14px 8px;
+  /* Autogrow only ever grows, so this is the floor for a one-line
+     instruction — tall enough to invite prose, not so tall it reads as an
+     empty well under three words. */
+  min-height: 92px;
+  padding: 12px 14px 10px;
 }
 .instructionsCard .textarea:focus-visible {
   box-shadow: none;
 }
 .instructionsLabel {
-  padding: 10px 14px 0;
+  padding: 11px 14px 0;
 }
 .selectedConnectors {
   display: flex;
@@ -127,14 +167,19 @@
   line-height: 1;
   margin-left: 2px;
 }
+/* The tool row under the writing area. It reads as the card's floor — a
+   slightly sunken band with the card's own bottom radius — rather than a
+   hairline stubbed inside a bordered box, which is what it used to be. */
 .instrToolbar {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px 10px;
-  border-top: 0.5px solid var(--line);
-  margin: 0 6px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  padding: 9px 11px;
+  border-radius: 0 0 13px 13px;
+  margin-top: 2px;
+  background: color-mix(in srgb, var(--bg-sunken) 60%, transparent);
 }
 .instrChip {
   display: inline-flex;
@@ -161,9 +206,22 @@
   font-weight: 500;
   min-width: 0.8em;
 }
+/* Advisory only — the chips beside it carry the meaning. It gets whatever
+   room is left and truncates; it used to be flex-shrinkable text with no
+   min-width, which at ~700px squeezed it into a one-character-wide column. */
 .instrHint {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 12px;
   color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 560px) {
+  .instrHint {
+    display: none;
+  }
 }
 .agentPickerWrap {
   position: relative;
@@ -499,7 +557,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 10px 16px;
   padding-bottom: 18px;
   border-bottom: 0.5px solid var(--line);
 }
@@ -507,6 +566,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 1 1 14ch;
   min-width: 0;
 }
 .headIdentity > div {
@@ -514,6 +574,15 @@
   flex-direction: column;
   gap: 5px;
   min-width: 0;
+}
+/* Deliberately NOT `align-items: flex-start` on the column above. That sizes
+   every child shrink-to-fit on the cross axis, so `.headName` takes its
+   max-content width (195px inside a 161px column) and the ellipsis below never
+   fires — a long name just runs out under the close button. Children stretch to
+   the column; the status pill, the one child that must hug its text, opts out
+   here on its own. */
+.headStatus {
+  align-self: flex-start;
 }
 .headName {
   font: var(--t-h2);
@@ -527,6 +596,16 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+/* Narrow: give the name the whole row rather than eliding it to "Weekly va…"
+   next to a toggle. The controls wrap under it, still right-aligned. */
+@media (max-width: 560px) {
+  .headIdentity {
+    flex: 1 1 100%;
+  }
+  .headActions {
+    margin-left: auto;
+  }
 }
 
 /* Name / Instructions — labeled fields, Instructions is the visual hero. */
@@ -682,7 +761,12 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.sectionHeading > div:first-child {
+  min-width: 0;
+  flex: 1 1 16ch;
 }
 .sectionHint {
   margin: 4px 0 0;
@@ -711,13 +795,14 @@
   opacity: 0.35;
   cursor: default;
 }
+/* Lives inside `.triggerEmptyCard`, which already draws the boundary. The
+   rules here used to add a border above AND below the sentence, so the empty
+   state showed three stacked hairlines for one line of text. */
 .triggerEmpty {
   margin: 0;
-  padding: 14px 0;
   color: var(--ink-4);
-  font-size: 12px;
-  border-top: 0.5px solid var(--line);
-  border-bottom: 0.5px solid var(--line);
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 .triggerList {
   display: flex;
@@ -989,35 +1074,6 @@
   cursor: default;
 }
 
-/* Tabs — Connectors / Behavior / Notifications. */
-.tabs {
-  display: flex;
-  gap: 2px;
-  border-bottom: 0.5px solid var(--line);
-}
-.tab {
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink-3);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: 9px 4px;
-  margin-right: 18px;
-  cursor: pointer;
-}
-.tab:hover {
-  color: var(--ink);
-}
-.tab[data-active='true'] {
-  color: var(--ink);
-  border-bottom-color: var(--accent);
-}
-.tabPanel {
-  padding-top: 14px;
-}
-
 /* Connectors tab — chip groups (MCPs/tools/secrets/connector/vault access). */
 .connectorsPanel {
   display: flex;
@@ -1197,27 +1253,30 @@
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
-/* Footer — sticky save bar so primary action stays reachable on long forms. */
+/* Save bar. It sits INSIDE `.source`, so Cancel/Save land at the right edge of
+   the form — not at the right edge of the whole 1180px workbench, marooned out
+   past the compiler rail.
+
+   NOT sticky. It used to be, and on a form that very nearly fits one viewport
+   a bottom-pinned bar parks itself in the middle of the last section with that
+   section's own controls still visible below it — which reads as a misplaced
+   element, not as an overlay. A save bar that closes the form is honest at
+   every scroll position. */
 .footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 15;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-top: 8px;
-  padding: 12px 0 4px;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 4px;
+  padding: 16px 0 0;
   border-top: 0.5px solid var(--line);
-  background: linear-gradient(
-    to top,
-    var(--bg) 70%,
-    color-mix(in srgb, var(--bg) 88%, transparent)
-  );
 }
 .footerHint {
   margin: 0;
+  flex: 1 1 12ch;
   font-size: 12px;
+  line-height: 1.45;
   color: var(--ink-4);
   min-width: 0;
 }
@@ -1226,6 +1285,18 @@
   align-items: center;
   gap: 10px;
   flex: none;
+  margin-left: auto;
+}
+/* Narrow: the hint stops competing for the row and the two buttons split it,
+   so Save is a full thumb-width target instead of a 90px sliver at the edge. */
+@media (max-width: 520px) {
+  .footerActions {
+    width: 100%;
+    margin-left: 0;
+  }
+  .footerActions > * {
+    flex: 1;
+  }
 }
 .enableControl {
   display: inline-flex;
@@ -1268,122 +1339,4 @@
 .triggerEmptyBtn:hover {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
   color: var(--accent);
-}
-
-/* Compiled-plan viewer (Plan tab): read-only handler.js / automation.json. */
-.codeViewer {
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-md);
-  overflow: hidden;
-  background: var(--bg-sunken);
-}
-.codeChrome {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 8px 6px 10px;
-  border-bottom: 0.5px solid var(--line);
-  background: var(--bg-elev);
-}
-.codeTabs {
-  display: inline-flex;
-  gap: 2px;
-}
-/* The file switcher composes `.tab` rather than re-inventing a second,
-   pill-shaped tab look on the same page: this screen picks-one-of-N with an
-   accent underline, and that reads the same whether the N are panels or
-   compiled files. Only the scale differs — it sits in a 32px chrome bar and
-   names machine artifacts, so it drops to the mono voice. Declared after
-   `.tab` so the equal-specificity overrides land (same idiom as
-   Button.module.css's variants-after-roots). */
-.codeTab {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  font-weight: 500;
-  padding: 6px 2px;
-  margin-right: 12px;
-}
-.codeMeta {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-.codeLang {
-  font-size: 10px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
-.codeCopy {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  appearance: none;
-  border: 0.5px solid var(--line);
-  background: var(--bg-sunken);
-  color: var(--ink-2);
-  font-size: 11px;
-  padding: 4px 8px;
-  border-radius: 7px;
-  cursor: pointer;
-}
-.codeCopy:hover:not(:disabled) {
-  color: var(--ink);
-  border-color: var(--line-strong);
-}
-.codeCopy:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.codeBody {
-  max-height: 420px;
-  overflow: auto;
-}
-.codePre {
-  margin: 0;
-  padding: 10px 0;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-  tab-size: 2;
-}
-.codeLine {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  gap: 12px;
-}
-.codeLine:hover {
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-}
-.codeGutter {
-  text-align: right;
-  color: var(--ink-4);
-  user-select: none;
-  opacity: 0.6;
-}
-.codeText {
-  white-space: pre;
-  color: var(--ink);
-  padding-right: 14px;
-}
-.codeEmpty {
-  padding: 28px 16px;
-  text-align: center;
-  color: var(--ink-3);
-  font-size: 13px;
-}
-.tkCom {
-  color: var(--ink-4);
-  font-style: italic;
-}
-.tkStr {
-  color: color-mix(in srgb, var(--accent) 78%, var(--ink));
-}
-.tkNum {
-  color: color-mix(in srgb, var(--c-amber) 80%, var(--ink));
-}
-.tkKw {
-  color: color-mix(in srgb, var(--c-indigo) 82%, var(--ink));
-  font-weight: 600;
 }

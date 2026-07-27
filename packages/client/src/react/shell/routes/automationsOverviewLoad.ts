@@ -5,7 +5,6 @@ import type { TemplateEntry } from '../../../app-shell-context.js';
 import {
   getBlocking,
   listAgents,
-  listAutomations,
   listOutboxGrants,
   listTemplates,
 } from '../../../gateway-client.js';
@@ -18,8 +17,9 @@ import { cloneAutomationTemplate, surfaceMintedWebhook } from './templatesData.j
 
 /** Fetch rows, run feed, consent lists → overview DTO with attention badges. */
 export async function loadAutomationsOverviewData(): Promise<AuOverviewData> {
-  const [rows, entries, blocking, grants, agents] = await Promise.all([
-    listAutomations(),
+  // One wave, five requests. `collectAutomationRuns` hands back the automation
+  // rows it already had to fetch, so the list is not pulled twice per visit.
+  const [{ rows, entries }, blocking, grants, agents] = await Promise.all([
     collectAutomationRuns(),
     getBlocking(),
     listOutboxGrants(),

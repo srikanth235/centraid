@@ -57,13 +57,13 @@ describe('AutomationThreadScreen', () => {
     const menu = el.querySelector('[role="menu"]') as HTMLElement;
     expect(menu).not.toBeNull();
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
-    // Pause (enabled), Edit setup, and Delete all live in the menu.
-    expect(menu.textContent).toContain('Edit setup');
+    // Pause (enabled), Edit & compile, and Delete all live in the menu.
+    expect(menu.textContent).toContain('Edit & compile');
     expect(menu.textContent).toContain('Pause');
     expect(menu.textContent).toContain('Delete');
     const edit = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-edit"]')!;
     await act(async () => edit.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onEdit).toHaveBeenCalled();
+    expect(props.onOpenCompiler).toHaveBeenCalled();
     // Choosing an item closes the menu.
     expect(el.querySelector('[role="menu"]')).toBeNull();
   });
@@ -174,7 +174,9 @@ describe('AutomationThreadScreen', () => {
   it('steers the automation from the composer, framing one-off vs standing intent', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const input = el.querySelector<HTMLInputElement>('input[aria-label="Message this automation"]');
+    const input = el.querySelector<HTMLInputElement>(
+      'input[aria-label="Ask about this automation\'s runs"]',
+    );
     const send = el.querySelector<HTMLButtonElement>('button[aria-label="Send"]');
     expect(input).not.toBeNull();
     expect(send).not.toBeNull();
@@ -186,14 +188,12 @@ describe('AutomationThreadScreen', () => {
       nativeSet.call(input, 'only flag movers over 5%');
       input!.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    // "Apply to future runs" defaults on — the message is a standing instruction.
     const form = input!.closest('form') as HTMLFormElement;
     await act(async () =>
       form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
     );
-    expect(props.onSendMessage).toHaveBeenCalledWith(
+    expect(props.onAskAboutRuns).toHaveBeenCalledWith(
       'only flag movers over 5%',
-      true,
       expect.any(Function),
       expect.any(AbortSignal),
     );
@@ -202,40 +202,34 @@ describe('AutomationThreadScreen', () => {
   it('hides the composer for gateways without the automationTurns capability', async () => {
     const el = await mount(makeProps({}, makeData({ automationTurns: false })));
     expect(
-      el.querySelector<HTMLInputElement>('input[aria-label="Message this automation"]'),
+      el.querySelector<HTMLInputElement>('input[aria-label="Ask about this automation\'s runs"]'),
     ).toBeNull();
   });
 
-  it('reframes a reply as one-off when "Apply to future runs" is toggled off', async () => {
+  it('offers no way to change the automation from the composer', async () => {
+    // The run screen READS. The old "Apply to future runs" switch rewrote the
+    // standing instructions and kicked a compile from here; its replacement is
+    // a link to the compiler, which is the only surface that may do that.
     const props = makeProps();
     const el = await mount(props);
-    // Toggle the standing-instruction switch off.
-    const toggle = el.querySelector<HTMLButtonElement>('button[aria-pressed="true"]');
-    expect(toggle).not.toBeNull();
-    await act(async () => toggle!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    const input = el.querySelector<HTMLInputElement>('input[aria-label="Message this automation"]');
-    const nativeSet = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set as (
-      v: string,
-    ) => void;
-    await act(async () => {
-      nativeSet.call(input, 'what changed since yesterday?');
-      input!.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    const form = input!.closest('form') as HTMLFormElement;
-    await act(async () =>
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    expect(el.querySelector('button[aria-pressed]')).toBeNull();
+    const link = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Open the compiler',
     );
-    expect(props.onSendMessage).toHaveBeenCalledWith(
-      'what changed since yesterday?',
-      false,
-      expect.any(Function),
-      expect.any(AbortSignal),
-    );
+    expect(link).not.toBeUndefined();
+    await act(async () => link!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(props.onOpenCompiler).toHaveBeenCalled();
   });
 
   it('marks each turn with a trigger-origin node across origins', async () => {
     // One ok run per origin exercises the origin-aware spine node.
-    const base = { costUsd: null, dateGroup: 'Today', durationMs: 500, status: 'ok' as const };
+    const base = {
+      costUsd: null,
+      dateGroup: 'Today',
+      durationMs: 500,
+      entryKind: 'run' as const,
+      status: 'ok' as const,
+    };
     const el = await mount(
       makeProps(
         {},
@@ -286,6 +280,71 @@ describe('AutomationThreadScreen', () => {
     const el = await mount(makeProps({}, makeData({ runs: [] })));
     expect(el.textContent).toContain('No runs yet');
     expect(el.textContent).toContain('Run now, or wait for the trigger.');
+  });
+
+  // ── The run screen reports on the plan; it never acts on it ──────────────
+  it('stays silent about a healthy plan', async () => {
+    const el = await mount(makeProps());
+    expect(el.querySelector('[data-testid="plan-banner"]')).toBeNull();
+  });
+
+  it('reports a failed compile and hands off instead of offering to retry it', async () => {
+    const props = makeProps(
+      {},
+      makeData({
+        plan: { detail: 'handler.js: unexpected token', label: 'Compile failed', state: 'failed' },
+      }),
+    );
+    const el = await mount(props);
+    const banner = el.querySelector('[data-testid="plan-banner"]');
+    expect(banner?.textContent).toContain('Compile failed');
+    expect(banner?.textContent).toContain('handler.js: unexpected token');
+    // No "Retry compile" anywhere — compiling belongs to the compiler.
+    expect([...el.querySelectorAll('button')].map((b) => b.textContent)).not.toContain(
+      'Retry compile',
+    );
+    await act(async () =>
+      el
+        .querySelector('[data-testid="plan-open-compiler"]')!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+    expect(props.onOpenCompiler).toHaveBeenCalled();
+  });
+
+  it('offers no remedy while a compile is in flight', async () => {
+    const el = await mount(
+      makeProps({}, makeData({ plan: { detail: null, label: 'Compiling…', state: 'compiling' } })),
+    );
+    expect(el.querySelector('[data-testid="plan-banner"]')?.textContent).toContain('Compiling…');
+    expect(el.querySelector('[data-testid="plan-open-compiler"]')).toBeNull();
+  });
+
+  it('renders an ask as the reader’s own turn, with no way to re-fire it', async () => {
+    const el = await mount(
+      makeProps(
+        {},
+        makeData({
+          runs: [
+            {
+              costUsd: null,
+              dateGroup: 'Today',
+              durationMs: 400,
+              endedAt: NOW,
+              entryKind: 'ask',
+              originLabel: 'You asked',
+              runId: 'ask-1',
+              startedAt: NOW - 400,
+              status: 'ok',
+              summary: 'It failed because the token expired.',
+            },
+          ],
+        }),
+      ),
+    );
+    const entry = el.querySelector<HTMLElement>('[data-testid="ask-entry"]');
+    expect(entry).not.toBeNull();
+    expect(entry?.dataset.entryKind).toBe('ask');
+    expect([...el.querySelectorAll('button')].map((b) => b.textContent)).not.toContain('Run again');
   });
 
   it('renders the not-found state with a working breadcrumb back', async () => {

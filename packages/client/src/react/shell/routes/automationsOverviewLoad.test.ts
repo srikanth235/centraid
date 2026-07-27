@@ -47,20 +47,22 @@ const cloneMock = cloneAutomationTemplate as unknown as ReturnType<typeof vi.fn>
 const surfaceMock = surfaceMintedWebhook as unknown as ReturnType<typeof vi.fn>;
 const revealMock = openWebhookReveal as unknown as ReturnType<typeof vi.fn>;
 
+const DIGEST_ROW = {
+  id: 'digest',
+  ref: 'auto.digest/digest',
+  name: 'Daily Digest',
+  enabled: true,
+  ownerApp: 'auto.digest',
+  triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
+  manifest: { requires: { mcps: [] } },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
-  listAutomationsMock.mockResolvedValue([
-    {
-      id: 'digest',
-      ref: 'auto.digest/digest',
-      name: 'Daily Digest',
-      enabled: true,
-      ownerApp: 'auto.digest',
-      triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
-      manifest: { requires: { mcps: [] } },
-    },
-  ]);
-  collectRunsMock.mockResolvedValue([]);
+  listAutomationsMock.mockResolvedValue([DIGEST_ROW]);
+  // The rows now ride back with the run feed — the loader no longer fetches
+  // the automation list a second time of its own.
+  collectRunsMock.mockResolvedValue({ rows: [DIGEST_ROW], entries: [] });
   getBlockingMock.mockResolvedValue({ parked: [], outbox: [] });
   listOutboxGrantsMock.mockResolvedValue([]);
   listAgentsMock.mockResolvedValue([{ hostKey: 'auto.digest', agentId: 'agent-1' }]);
@@ -72,7 +74,9 @@ describe('loadAutomationsOverviewData', () => {
     expect(data.rows).toHaveLength(1);
     expect(data.rows[0]!.name).toBe('Daily Digest');
     expect(data.rows[0]!.attentionCount).toBe(0);
-    expect(listAutomationsMock).toHaveBeenCalledTimes(1);
+    // The automation list costs a request; the overview must pay for it once.
+    // It used to be fetched here AND inside `collectAutomationRuns`.
+    expect(listAutomationsMock).not.toHaveBeenCalled();
     expect(collectRunsMock).toHaveBeenCalledTimes(1);
     expect(getBlockingMock).toHaveBeenCalledTimes(1);
     expect(listOutboxGrantsMock).toHaveBeenCalledTimes(1);

@@ -19,11 +19,28 @@
 .headMain {
   display: flex;
   align-items: center;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 12px 14px;
 }
 .headText {
   min-width: 0;
-  flex: 1;
+  /* A basis, not a bare `flex: 1`. With three action buttons beside it and no
+     wrapping, the title column was crushed to one word per line while
+     `.auActions`' `margin-left: auto` shoved the buttons over the top of it. */
+  flex: 1 1 16ch;
+}
+/* Actions keep their intrinsic size and wrap as a unit rather than compressing
+   "Run now" into two lines. */
+.headActions {
+  flex: none;
+}
+/* Narrow: the actions wrap to their own row, but the title still shares row one
+   with the glyph — a 100% basis would have demanded a whole line and stranded
+   the glyph above it. */
+@media (max-width: 640px) {
+  .headText {
+    flex: 1 1 55%;
+  }
 }
 .headText h1 {
   margin: 0;
@@ -196,6 +213,65 @@
 }
 
 /* ── Consent strip — amber-edged, visually distinct from history ──────── */
+/* ── Plan banner ──────────────────────────────────────────────────────────
+   The run screen's only word on compilation. Hidden entirely when the plan is
+   healthy — a working automation should carry no status furniture — and
+   otherwise a single tone-tinted strip whose only action is a doorway to the
+   compiler. It reads as an ANNOTATION on the runs below, not as a control. */
+.planBanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 0.5px solid var(--line);
+  border-left: 2px solid var(--plan-tone, var(--ink-3));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--plan-tone, var(--ink-3)) 6%, var(--bg-elev));
+}
+.planBanner[data-state='failed'] {
+  --plan-tone: var(--danger);
+}
+.planBanner[data-state='compiling'] {
+  --plan-tone: var(--accent);
+}
+.planBanner[data-state='never'] {
+  --plan-tone: var(--c-amber);
+}
+.planIc {
+  display: inline-flex;
+  color: var(--plan-tone, var(--ink-3));
+  flex: none;
+}
+.planIc[data-spin='true'] {
+  animation: cd-spin 0.9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .planIc[data-spin='true'] {
+    animation: none;
+  }
+}
+.planBody {
+  flex: 1;
+  min-width: 0;
+}
+.planTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.planDetail {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+.planBtn {
+  flex: none;
+  padding: 7px 12px;
+  font-size: 12.5px;
+}
+
 .consentStrip {
   display: flex;
   flex-direction: column;
@@ -364,6 +440,18 @@
   flex-direction: column;
   gap: 8px;
   padding: 14px 2px 16px 4px;
+}
+/* An ask is the reader's own voice in the history, not the automation firing.
+   It keeps the same spine (it happened at a moment, in order) but sits inset
+   and quieter, so scanning the column for "what did this thing DO" never
+   catches on a question. */
+.turn[data-entry-kind='ask'] {
+  margin-left: 10px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+.turn[data-entry-kind='ask'] .turnOrigin {
+  color: var(--ink-4);
 }
 .node {
   position: absolute;
@@ -613,67 +701,37 @@
   color: var(--ink-3);
 }
 
-/* ── Steering composer — reply to refine the automation ───────────────── */
+/* ── Question composer — ask about the runs above ─────────────────────────
+   Read-only by construction: the old "Apply to future runs" toggle (and its
+   switch styling) is gone with the behaviour it exposed. What replaced it is
+   a hint line pointing at the compiler, so a reader who arrived wanting to
+   CHANGE something is sent to the surface that can. */
 .composerWrap {
   position: sticky;
   bottom: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   margin-top: 8px;
   padding-top: 8px;
   background: linear-gradient(to top, var(--bg) 72%, transparent);
 }
-.steerRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.composerHint {
+  margin: 0;
   padding: 0 2px;
-}
-.steerToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 2px;
-  border: none;
-  background: none;
-  font: inherit;
-  font-size: 12px;
-  color: var(--ink-3);
-  cursor: pointer;
-}
-.steerToggleOn {
-  color: var(--accent);
-}
-.steerSwitch {
-  position: relative;
-  width: 28px;
-  height: 16px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--ink) 18%, transparent);
-  transition: background 0.16s ease;
-}
-.steerSwitch::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.16s cubic-bezier(0.22, 0.61, 0.36, 1);
-}
-.steerToggleOn .steerSwitch {
-  background: var(--accent);
-}
-.steerToggleOn .steerSwitch::after {
-  transform: translateX(12px);
-}
-.steerHint {
   font-size: 11.5px;
   color: var(--ink-4);
+}
+.composerLink {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .composer {
   display: flex;

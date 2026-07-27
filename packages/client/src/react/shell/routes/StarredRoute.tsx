@@ -1,6 +1,5 @@
 import { type JSX } from 'react';
 import type { AppearancePrefs } from '../../../app-shell-context.js';
-import { listAutomations } from '../../../gateway-client.js';
 import type { HomeMenuAnchor } from '../../screen-contracts.js';
 import StarredScreen from '../../screens/StarredScreen.js';
 import { useShellActions } from '../actions.js';
@@ -9,7 +8,7 @@ import type { ShellMenuAnchor } from '../Sidebar.js';
 import PageScroll from '../PageScroll.js';
 import { PageEmpty } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
-import { collectAutomationRuns } from './automationsData.js';
+import { collectAutomationRuns, type AutomationFeedEntry } from './automationsData.js';
 import { buildHomeAppItems, buildHomeAutoItems } from './homeData.js';
 
 export interface StarredRouteProps {
@@ -29,13 +28,14 @@ export default function StarredRoute(props: StarredRouteProps): JSX.Element {
   const { navigate, enterBuilder } = useShellActions();
   const { userApps, drafts, tileVariant, isStarred, toggleStar } = props;
 
-  const feed = useAsyncData(async () => {
-    const [rows, entries] = await Promise.all([
-      listAutomations().catch(() => [] as CentraidAutomationRow[]),
-      collectAutomationRuns().catch(() => []),
-    ]);
-    return { rows, entries };
-  });
+  // One call: `collectAutomationRuns` returns the rows it already fetched, so
+  // pairing it with `listAutomations()` only bought the same list twice.
+  const feed = useAsyncData(() =>
+    collectAutomationRuns().catch(() => ({
+      rows: [] as CentraidAutomationRow[],
+      entries: [] as AutomationFeedEntry[],
+    })),
+  );
 
   const apps: AppMetaResolvedType[] = [...userApps, ...drafts];
   const rows = feed.status === 'ready' ? feed.data.rows : [];

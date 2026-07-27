@@ -636,6 +636,53 @@ export interface AuEditorConnectFormInput {
   clientSecret?: string;
   apiKey?: string;
 }
+// ── The compiler workbench (compile screen) ────────────────────────────────
+// Authoring an automation is a compile loop, not a form submit: you edit the
+// instructions, compile them into a deterministic plan, watch the compile
+// steps, read the failure when there is one, and ask the assistant to fix it.
+// All of that belongs to the EDITOR route — the run screen only ever reports
+// that a plan exists (`AuPlanStatusDTO`) and links here.
+
+/** One step of a compile attempt — a tool call or a model step the compiler
+ *  took, flattened from that turn's ledger items. `detail` carries the error
+ *  when the step failed, otherwise a short one-line preview (assistant text /
+ *  tool target) — never the whole payload. */
+export interface CompileStepDTO {
+  itemId: string;
+  ordinal: number;
+  /** Ledger item kind — 'tool' / 'step' / 'agent' / 'message_in'. */
+  kind: string;
+  /** Human label: the tool name, or the phase for a model step. */
+  label: string;
+  status: 'ok' | 'fail' | 'running';
+  durationMs: number | null;
+  detail: string | null;
+}
+
+/** One compile attempt (a `triggerKind: 'compile'` turn). The workbench lists
+ *  these newest-first so a failed compile can be compared with the last good
+ *  one instead of vanishing. */
+export interface CompileAttemptDTO {
+  turnId: string;
+  startedAt: number;
+  endedAt: number | null;
+  status: 'ok' | 'fail' | 'running';
+  /** Failure text from the ledger — shown verbatim in the rail's failure block.
+   *  (It used to seed a fix-it assistant; there is no second editor now.) */
+  error: string | null;
+  summary: string | null;
+  /** Relative label for the attempt header ("just now", "12m ago"). */
+  whenLabel: string;
+}
+
+/** Outcome of watching one compile/test turn to completion. `settled` is what
+ *  the ledger says (false ⇒ the stream dropped with the turn still open, so
+ *  the caller must rejoin); `ok` is the turn's result once settled. */
+export interface TurnWatchOutcome {
+  settled: boolean;
+  ok: boolean;
+}
+
 export interface AutomationEditorBridgeProps {
   /** Load the form. For create mode (no `automationId` in the route),
    *  resolves to defaults (`mode: 'create'`, empty name/instructions/triggers). */
@@ -643,8 +690,36 @@ export interface AutomationEditorBridgeProps {
   /** Persist Name/Instructions/triggers (manifest-only edit + publish —
    *  `updateAutomation`); resolves true on success. */
   onSave: (fields: AutomationEditorSaveFields) => Promise<boolean>;
-  /** Start a hidden compile after the manifest save. */
-  onCompile: (enableOnSuccess?: boolean) => Promise<boolean>;
+  /**
+   * Start a compile and return its turn id — the workbench then watches that
+   * turn in place. It deliberately does NOT navigate: compiling is the
+   * editor's own loop, and being thrown to the run screen mid-compile was the
+   * reason a failed compile had nowhere to be fixed.
+   */
+  onCompile: (enableOnSuccess?: boolean) => Promise<string | null>;
+  /** Compile attempts for this automation, newest first. */
+  loadCompileAttempts: () => Promise<CompileAttemptDTO[]>;
+  /** Cold read of one compile/test turn's steps. */
+  loadTurnSteps: (turnId: string) => Promise<CompileStepDTO[]>;
+  /**
+   * Join a turn's live step stream. Same rejoin contract the thread uses:
+   * resolves `settled: false` when the stream closed with the turn still
+   * open, and performs the one authoritative post-stream ledger re-read.
+   */
+  watchTurnSteps: (
+    turnId: string,
+    onSteps: (steps: CompileStepDTO[]) => void,
+    signal: AbortSignal,
+  ) => Promise<TurnWatchOutcome>;
+  /* No conversational edit path. The compile screen has exactly ONE editable
+     surface — the instructions field — and the run screen has none. An
+     assistant composer in the compiler rail was a second writer on that same
+     field, so a revise could silently supersede text the owner was mid-edit
+     on. Everything the compiler has to say now flows one way: it reports, the
+     owner rewrites the instructions, Save recompiles. */
+  /** Fire a test execution of the compiled plan and return its turn id. Stays
+   *  on this screen; `onOpenRun` is the explicit way out to the run viewer. */
+  onTestRun: () => Promise<string | null>;
   onSearchEntities: (
     term: string,
   ) => Promise<Array<{ type: string; id: string; title: string | null; subtitle: string | null }>>;
@@ -667,9 +742,6 @@ export interface AutomationEditorBridgeProps {
   showToast?: (message: string) => void;
   /** The compiled plan (automation.json + handler.js) for the read-only viewer. */
   onReadSource: () => Promise<{ manifest: string | null; handler: string | null }>;
-  /** Internal-only builder handoff retained for a future surface; hidden in v0. */
-  onOpenBuilder: (seedMessage?: string) => void;
-  onRunNow: () => Promise<boolean>;
   onToggleEnabled: (next: boolean) => Promise<boolean>;
   /** Standing-grant consent review (edit mode) — same decision surface the
    *  thread uses. Kept on the bridge for future surfaces; not shown as a
@@ -681,6 +753,8 @@ export interface AutomationEditorBridgeProps {
     alwaysAllow?: boolean,
   ) => Promise<boolean>;
   onOpenRun: (runId: string) => void;
+  /** Leave the compiler for this automation's run history. */
+  onOpenRuns: () => void;
   onCopyWebhook: (url: string) => void;
   onRotateWebhook: () => Promise<boolean>;
   onDelete: () => Promise<boolean>;
@@ -711,8 +785,23 @@ export interface AutomationThreadHeaderDTO {
   entityTags: Array<{ type: string; id: string }>;
 }
 export type ThreadRunStatus = 'ok' | 'fail' | 'running' | 'pending';
+/**
+ * What a thread entry IS. The run screen shows exactly two things:
+ *
+ * - `run` — an EXECUTION of the compiled plan (scheduled / manual / replay /
+ *   on-failure). This is the automation doing its job.
+ * - `ask` — a question the owner asked ABOUT those executions, answered in
+ *   place (`triggerKind: 'interactive'`). It reads nothing into the future and
+ *   changes nothing.
+ *
+ * Compile turns are NOT thread entries. They are the compiler's own working,
+ * they belong to the editor route, and mixing them in here is what made a
+ * "Compile" card sit in the run history pretending to be a run.
+ */
+export type ThreadEntryKind = 'run' | 'ask';
 export interface ThreadRunDTO {
   runId: string;
+  entryKind: ThreadEntryKind;
   status: ThreadRunStatus;
   originLabel: string;
   startedAt: number;
@@ -723,10 +812,24 @@ export interface ThreadRunDTO {
   /** Small-caps mono date separator label ("Today" / "Yesterday" / "Mon, Jul 6"). */
   dateGroup: string;
 }
+/**
+ * What the run screen is allowed to know about the compiled plan: enough to
+ * say whether executions are running against a current, broken, or absent
+ * plan — and nothing to act on. Every remedy is a link to the compiler.
+ */
+export interface AuPlanStatusDTO {
+  state: 'ready' | 'compiling' | 'failed' | 'never';
+  /** Headline for the banner ("Compile failed", "Plan ready"). */
+  label: string;
+  /** One line of context — the failure, or when the plan was built. */
+  detail: string | null;
+}
 export interface AutomationThreadData {
   header: AutomationThreadHeaderDTO;
   consent: AuConsentDTO;
+  /** Executions + asks, never compiles. */
   runs: ThreadRunDTO[];
+  plan: AuPlanStatusDTO;
   /** Native interactive automation-turn endpoint advertised by the gateway. */
   automationTurns?: boolean;
 }
@@ -734,10 +837,12 @@ export interface AutomationThreadBridgeProps {
   /** Load the automation + its runs + its consent surface. `null` = not found. */
   loadData: () => Promise<AutomationThreadData | null>;
   onBack: () => void;
-  /** Open the instructions-first editor for this automation. */
-  onEdit: () => void;
-  /** Retry the hidden compiler after a failed compile turn. */
-  onRetryCompile: () => Promise<boolean>;
+  /**
+   * Hand off to the compiler screen. Every "change this automation" affordance
+   * on the run screen resolves to this one call — the run screen never edits,
+   * compiles, or revises anything itself.
+   */
+  onOpenCompiler: () => void;
   onOpenRun: (runId: string) => void;
   /** Read one cold turn as the shared Message DTO. */
   loadTurnTrace: (turnId: string) => Promise<AsstMsgDTO[]>;
@@ -764,13 +869,13 @@ export interface AutomationThreadBridgeProps {
     alwaysAllow?: boolean,
   ) => Promise<boolean>;
   /**
-   * Execute a one-off conversation turn, or revise the standing instructions
-   * and compile when `applyFuture` is true. Returns the native turn id whose
-   * trace was streamed.
+   * Ask a question about this automation's executions and stream the answer.
+   * READ-ONLY by construction: there is no `applyFuture` escape hatch any
+   * more, because a reply that silently rewrote the standing instructions was
+   * authoring done from the wrong screen. Returns the native turn id.
    */
-  onSendMessage: (
+  onAskAboutRuns: (
     text: string,
-    applyFuture: boolean,
     onMessages: (messages: AsstMsgDTO[]) => void,
     signal: AbortSignal,
   ) => Promise<string | null>;

@@ -46,15 +46,20 @@ export function triggerOriginLabel(run: CentraidAutomationTurnRecord): {
 } {
   return run.triggerKind === 'compile'
     ? { icon: 'Sparkle', label: 'Compile' }
-    : run.triggerOrigin === 'webhook'
-      ? { icon: 'Webhook', label: 'Webhook' }
-      : run.triggerOrigin === 'data'
-        ? { icon: 'Clock', label: 'Data' }
-        : run.triggerOrigin === 'condition'
-          ? { icon: 'Clock', label: 'Condition' }
-          : run.triggerKind === 'manual'
-            ? { icon: 'Play', label: 'Manual' }
-            : { icon: 'Clock', label: 'Cron' };
+    : // An interactive turn is the owner ASKING about runs, not a run. Left
+      // unlabelled it fell through to the "Cron" default, so a question you
+      // typed showed up in the history as a scheduled fire.
+      run.triggerKind === 'interactive'
+      ? { icon: 'Send', label: 'You asked' }
+      : run.triggerOrigin === 'webhook'
+        ? { icon: 'Webhook', label: 'Webhook' }
+        : run.triggerOrigin === 'data'
+          ? { icon: 'Clock', label: 'Data' }
+          : run.triggerOrigin === 'condition'
+            ? { icon: 'Clock', label: 'Condition' }
+            : run.triggerKind === 'manual'
+              ? { icon: 'Play', label: 'Manual' }
+              : { icon: 'Clock', label: 'Cron' };
 }
 
 /** Render a `where` condition clause readably — a plain string passes
@@ -73,25 +78,40 @@ function formatWhereClause(where: unknown): string {
   }
 }
 
-/** Fetch the automation rows + their recent run feed (vanilla collectAutomationRuns). */
-export async function collectAutomationRuns(): Promise<AutomationFeedEntry[]> {
+/**
+ * Fetch the automation rows + their recent run feed (vanilla
+ * collectAutomationRuns).
+ *
+ * Returns the rows alongside the feed because the caller needs them too, and
+ * they cost a request. `loadAutomationsOverviewData` used to call
+ * `listAutomations()` itself *and* sit in the same `Promise.all` as this
+ * function, which called it again — the overview paid for the same list twice
+ * on every visit. Handing the rows back means one fetch, still fully parallel.
+ */
+export async function collectAutomationRuns(): Promise<{
+  rows: CentraidAutomationRow[];
+  entries: AutomationFeedEntry[];
+}> {
   let autos: CentraidAutomationRow[] = [];
   let runs: CentraidAutomationTurnRecord[] = [];
   try {
     [autos, runs] = await Promise.all([listAutomations(), listAutomationTurns({ limit: 100 })]);
   } catch {
-    return [];
+    return { rows: [], entries: [] };
   }
   const nameByRef = new Map(autos.map((a) => [a.ref, a.name]));
-  return runs.map((run) => ({
-    automationId: run.automationId ?? '',
-    // Live automation name → the run's own last-known name (carried on the
-    // run record even after the automation is deleted) → the raw ref.
-    automationName: run.automationId
-      ? (nameByRef.get(run.automationId) ?? run.automationName ?? run.automationId)
-      : 'Automation',
-    run,
-  }));
+  return {
+    rows: autos,
+    entries: runs.map((run) => ({
+      automationId: run.automationId ?? '',
+      // Live automation name → the run's own last-known name (carried on the
+      // run record even after the automation is deleted) → the raw ref.
+      automationName: run.automationId
+        ? (nameByRef.get(run.automationId) ?? run.automationName ?? run.automationId)
+        : 'Automation',
+      run,
+    })),
+  };
 }
 
 /** Derive the React overview DTO from the loaded rows + run feed (vanilla buildOverviewData).
