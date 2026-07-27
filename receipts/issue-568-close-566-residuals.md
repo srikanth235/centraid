@@ -103,12 +103,15 @@ Every path in the change set, with the item it serves.
 | `packages/gateway/src/routes/founding-routes.test.ts` | Renamed window predicate (C) |
 | `packages/gateway/src/serve/founding-recovery.test.ts` | Renamed window predicate (C) |
 | `packages/gateway/src/cli/admin.test.ts` | Registries opened with daemon custody; `gatewayDbFile` (D/J) |
+| `packages/gateway/src/cli/landlord-auth.test.ts` | New: bearer derivation is stable, identity-bound, and never mints the endpoint key (F, L) |
+| `packages/gateway/src/cli/service-credential.test.ts` | New: adopt-before-write, including the wrong-credential abort that leaves custody untouched (E, L) |
+| `package.json` | `check:diff-coverage` — the CI-only diff-coverage gate now runs in `check:pr` (L) |
 | `SECURITY.md` | Landlord bearer and the enrollment sentence corrected (J) |
 | `ARCHITECTURE.md` | The at-rest format table (L) |
 | `CHANGELOG.md` | The #555 entry plus this issue's fixes (L) |
 | `docs/recovery/vault-erase.md` | New: erase and restore-after-erase runbook (L) |
 | `docs/recovery/backup-restore.md` | Cross-links it; notes the unwrapped-kit refusal (L) |
-| `AGENTS.md` | Docs-index row names the erase runbook (L) |
+| `AGENTS.md` | Docs-index row names the erase runbook; `check:pr` gate list gains `check:diff-coverage` (L) |
 | `receipts/issue-568-close-566-residuals.md` | This receipt |
 
 ### A + B — loopback is not an identity, on both forwarders
@@ -524,6 +527,42 @@ The full pre-push gate, run at serial concurrency because `test:affected` at
 bun run check:pr:full
 ```
 
+The diff-coverage gate, which `check:pr` did not previously run:
+
+```sh
+bun run check:diff-coverage
+```
+
+### The gate `check:pr` was missing
+
+The first CI run on this branch went green on `static` and every path-filtered
+lane and failed only on `verify`: **diff coverage 77.2% < 80%** (305/395 changed
+instrumentable lines). `check:pr` could not have caught it — `test:diff-coverage`
+lived only in the `verify` job, so the whole point of a pre-push superset was
+defeated for exactly the gate most likely to fail on a large change set.
+
+Two things came out of that:
+
+1. **`check:diff-coverage` is now the last step of `check:pr` and
+   `check:pr:full`.** It runs `coverage` then `test:diff-coverage`, mirroring
+   `verify`. It is the slow tail of the script — the repo-wide instrumented
+   vitest run costs minutes the lint gates do not — so `AGENTS.md` tells agents
+   to run it alone while iterating on coverage.
+2. **The `--depth=1` in CI's fetch must not be copied locally.** CI checks out
+   shallow and deepens by one commit to reach the merge base; running the same
+   fetch against a full clone *truncates* `origin/main` and the script then dies
+   with `fatal: origin/main...HEAD: no merge base`. `check:diff-coverage` fetches
+   without `--depth`. (This happened here and was repaired with
+   `git fetch --unshallow`.)
+
+The two uncovered units that closed the gap were the largest and the most
+load-bearing: `adoptKeyStoreCredential` (17 uncovered lines) and
+`landlordBearerForDataDir` (14). Both are item E/F security code, so the tests
+assert the properties that matter rather than merely executing the lines — that
+a credential which cannot decrypt existing keys aborts **before** anything is
+committed, and that deriving a bearer never mints the gateway's permanent
+endpoint identity as a side effect. Diff coverage after: **87.1% (344/395)**.
+
 ### Gates
 
 - `bun run typecheck` — green across all 32 tasks.
@@ -606,3 +645,4 @@ The receipt's "Checklist" correctly captures the issue's full acceptance scope. 
 | claude-code-34260aef-a04-1785130429-1 | claude-code | 34260aef-a04c-4150-b588-1d4957351e0d | #568 | claude-opus-5 | 70 | 61983 | 18482159 | 28088 | 90141 | 10.3310 | 1067 | 945484 | 153031631 | 337688 | fix(gateway): close #566 residuals across forwarders, custody, and contracts (#5 |
 | claude-code-34260aef-a04-1785130522-1 | claude-code | 34260aef-a04c-4150-b588-1d4957351e0d | #568 | claude-opus-5 | 8 | 6134 | 2191382 | 1476 | 7618 | 1.1710 | 1075 | 951618 | 155223013 | 339164 | fix(gateway): close #566 residuals across forwarders, custody, and contracts (#5 |
 | claude-code-34260aef-a04-1785131992-1 | claude-code | 34260aef-a04c-4150-b588-1d4957351e0d | #568 | claude-opus-5 | 32 | 82695 | 5842394 | 3894 | 86621 | 3.5356 | 1107 | 1034313 | 161065407 | 343058 |  |
+| claude-code-34260aef-a04-1785135105-1 | claude-code | 34260aef-a04c-4150-b588-1d4957351e0d | #568 | claude-opus-5 | 164 | 93237 | 7816516 | 33796 | 127197 | 5.3367 | 1271 | 1127550 | 168881923 | 376854 | test(gateway): cover service credential adoption and landlord bearer derivation  |
