@@ -2536,6 +2536,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               runWithVaultContext({ vaultId }, () => {
                 schedulerLedgerFor(vaultId).setDormant(dormant, at);
               }),
+            // Issue #570: gateway default cron zone (tier 2). Re-read prefs each
+            // register/reconcile so Settings changes apply without a restart.
+            defaultCronTimeZone: () => {
+              const raw = prefs.getAllPrefs()[automation.CRON_DEFAULT_TIMEZONE_PREF];
+              return typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
+            },
           });
     schedulers.set(vaultId, created);
     if (schedulersStarted) created.start();

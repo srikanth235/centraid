@@ -485,7 +485,7 @@ export interface AuConsentDTO {
 // `CentraidCreateTrigger` — a webhook entry carries no fields, minting
 // happens server-side).
 export type AuEditorTriggerDTO =
-  | { kind: 'cron'; expr: string }
+  | { kind: 'cron'; expr: string; tz?: string }
   | { kind: 'webhook'; id: string | null; pending: boolean }
   | { kind: 'condition'; entity: string; where?: unknown; every?: string }
   | { kind: 'data'; entities: string[]; every?: string }
@@ -497,7 +497,7 @@ export type AuEditorTriggerDTO =
       every?: string;
     };
 export type AuEditorTriggerInput =
-  | { kind: 'cron'; expr: string }
+  | { kind: 'cron'; expr: string; tz?: string }
   | { kind: 'webhook' }
   | { kind: 'condition'; entity: string; where?: unknown; every?: string }
   | { kind: 'data'; entities: string[]; every?: string }
@@ -598,6 +598,11 @@ export interface AutomationEditorData {
   defaultRunnerKind?: AgentRunnerKind;
   /** Effective model inherited for `defaultRunnerKind` when `model` is null. */
   defaultModel?: string | null;
+  /**
+   * Gateway-wide default cron timezone (prefs `automation.cron.defaultTimezone`).
+   * Used when a cron trigger omits `tz` (issue #570). Absent/empty → host-local.
+   */
+  defaultCronTimeZone?: string | null;
   /** Dynamic gateway runner/model catalog used by the editor Agent control. */
   agentRunners?: Array<{
     kind: AgentRunnerKind;

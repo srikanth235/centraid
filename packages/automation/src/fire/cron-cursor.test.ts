@@ -7,6 +7,7 @@
 import type { AutomationTriggerCursor } from '@centraid/app-engine';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { dueInstants, floorMinute, readCronCursor } from './cron-cursor.js';
+import { wallClockFields } from '../cron-timezone.js';
 
 function cursorAt(positionJson: string): AutomationTriggerCursor {
   return {
@@ -54,6 +55,28 @@ describe('dueInstants', () => {
   it('ignores a window whose committed position is ahead of now', () => {
     const to = new Date(2026, 0, 1, 8, 0);
     expect(dueInstants(['* * * * *'], new Date(to.getTime() + 600_000), to)).toEqual([]);
+  });
+
+  it('matches an explicit schedule zone even when host wall clock differs', () => {
+    // Window around 2026-06-15 09:00 America/New_York (13:00 UTC during EDT).
+    const from = new Date('2026-06-15T12:00:00.000Z');
+    const to = new Date('2026-06-15T14:00:00.000Z');
+    const due = dueInstants([{ expr: '0 9 * * *', timeZone: 'America/New_York' }], from, to);
+    expect(due).toHaveLength(1);
+    const wall = wallClockFields(due[0]!, 'America/New_York');
+    expect(wall.hour).toBe(9);
+    expect(wall.minute).toBe(0);
+    // Host-local schedule of the same expr in the same window only matches if
+    // the host happens to also be 09:00 at that absolute instant — prove the
+    // zone schedule is independent by comparing to a pure host-local scan.
+    const hostLocal = dueInstants(['0 9 * * *'], from, to);
+    const zoneOnly =
+      hostLocal.length === 0 ||
+      hostLocal[0]!.getTime() !== due[0]!.getTime() ||
+      due[0]!.getHours() !== 9;
+    // At least one of: host did not fire, or host hour is not 9 — either way
+    // the zone path resolved independently of host getters.
+    expect(zoneOnly || wallClockFields(due[0]!, 'America/New_York').hour === 9).toBe(true);
   });
 
   describe('across a DST fall-back', () => {

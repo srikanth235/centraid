@@ -32,6 +32,8 @@ export {
   validateManifest,
   webhookTriggerOf,
   isDeniedTriggerCursorEntity,
+  isValidIanaTimeZone,
+  isValidCronExpression,
   EVENT_DEFAULT_EVERY,
   EVENT_TRIGGER_CATALOG,
   type Manifest,
@@ -55,6 +57,17 @@ export {
   type HistoryConfig,
   type HistoryKeep,
 } from './manifest/manifest.js';
+
+// Cron timezone resolution (issue #570) — pure helpers shared by the matcher,
+// cursor reader, and gateway prefs wiring.
+export {
+  CRON_DEFAULT_TIMEZONE_PREF,
+  resolveCronTimezone,
+  wallClockFields,
+  wallClockMinuteKey,
+  type WallClockFields,
+} from './cron-timezone.js';
+export { cronMatches } from './fire/cron-match.js';
 
 // Condition/data cursor sources — the engine reads one consented query per
 // gate tick and delivers unseen rows (duaility: time semantics live in the
@@ -110,7 +123,7 @@ export {
   type CursorElement,
   type CursorStore,
 } from './fire/cursor-engine.js';
-export { dueInstants } from './fire/cron-cursor.js';
+export { dueInstants, type CronSchedule } from './fire/cron-cursor.js';
 
 // Missed-automation-run ledger (issue #351 tier 2): the honest record a
 // downtime leaves behind now that the scheduler's "no backfill" silence is

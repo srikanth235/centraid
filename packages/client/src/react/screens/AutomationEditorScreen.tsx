@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type JSX } 
 import type { IconName } from '@centraid/design-tokens';
 import { relativeRunLabel } from '../../app-format.js';
 import { glyphForId, hueForId } from '../../automation-identity.js';
-import { cronNextRuns } from '../../cron.js';
+import { cronNextRuns, cronRunLabel, resolveCronTimezone } from '../../cron.js';
 import type {
   AuEditorCatalogConnectorDTO,
   AuEditorTriggerInput,
@@ -42,6 +42,8 @@ type TriggerDraft = {
   key: string;
   kind: TriggerKind;
   expr: string;
+  /** Optional IANA timezone for cron triggers (issue #570). Empty = gateway default / host-local. */
+  tz: string;
   entity: string;
   whereRows: WhereRowDraft[];
   every: string;
@@ -155,6 +157,7 @@ function draftTrigger(kind: TriggerKind): TriggerDraft {
     key: `trigger-${triggerKey++}`,
     kind,
     expr: kind === 'cron' ? '0 9 * * *' : '',
+    tz: '',
     entity: '',
     whereRows: [],
     every: '',
@@ -167,7 +170,10 @@ function draftTrigger(kind: TriggerKind): TriggerDraft {
 
 function loadedTrigger(t: AutomationEditorData['triggers'][number]): TriggerDraft {
   const draft = draftTrigger(t.kind);
-  if (t.kind === 'cron') draft.expr = t.expr;
+  if (t.kind === 'cron') {
+    draft.expr = t.expr;
+    draft.tz = t.tz ?? '';
+  }
   if (t.kind === 'condition') {
     draft.entity = t.entity;
     draft.every = t.every ?? '';
@@ -606,7 +612,15 @@ export default function AutomationEditorScreen({
   function buildTriggers(): AuEditorTriggerInput[] {
     return triggers.flatMap((trigger): AuEditorTriggerInput[] => {
       if (trigger.kind === 'cron') {
-        return trigger.expr.trim() ? [{ expr: trigger.expr.trim(), kind: 'cron' }] : [];
+        if (!trigger.expr.trim()) return [];
+        const tz = trigger.tz.trim();
+        return [
+          {
+            expr: trigger.expr.trim(),
+            kind: 'cron',
+            ...(tz ? { tz } : {}),
+          },
+        ];
       }
       if (trigger.kind === 'webhook') return [{ kind: 'webhook' }];
       if (trigger.kind === 'data') {
@@ -828,9 +842,18 @@ export default function AutomationEditorScreen({
           setTriggers((current) =>
             current.map((item) => (item.key === trigger.key ? { ...item, ...patch } : item)),
           );
+        const cronTz =
+          trigger.kind === 'cron'
+            ? resolveCronTimezone(trigger.tz.trim() || undefined, d.defaultCronTimeZone)
+            : undefined;
+        const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
         const preview =
           trigger.kind === 'cron' && trigger.expr.trim()
-            ? cronNextRuns(trigger.expr.trim(), 3).map(relativeRunLabel)
+            ? cronNextRuns(trigger.expr.trim(), 3, new Date(), cronTz).map((dt) =>
+                cronTz
+                  ? cronRunLabel(dt, { timeZone: cronTz, viewerTimeZone: viewerTz })
+                  : relativeRunLabel(dt),
+              )
             : [];
         const everyPreview =
           (trigger.kind === 'data' || trigger.kind === 'condition' || trigger.kind === 'event') &&
@@ -882,6 +905,23 @@ export default function AutomationEditorScreen({
                     onChange={(event) => update({ expr: event.target.value })}
                     placeholder="0 7 * * *"
                   />
+                </label>
+                <label className={styles.subField}>
+                  <span className={styles.microLabel}>Timezone (optional)</span>
+                  <input
+                    className={cx(styles.input, styles.mono)}
+                    value={trigger.tz}
+                    onChange={(event) => update({ tz: event.target.value })}
+                    placeholder={d.defaultCronTimeZone || 'Host local / gateway default'}
+                    list="centraid-cron-timezones"
+                    spellCheck={false}
+                    aria-label={`Trigger ${index + 1} timezone`}
+                    data-testid="cron-timezone"
+                  />
+                  <span className={styles.trigHint}>
+                    IANA name (e.g. America/New_York). Empty uses the gateway default, then the host
+                    clock.
+                  </span>
                 </label>
                 {preview.length > 0 ? (
                   <div className={styles.cronPreview}>
@@ -1366,6 +1406,21 @@ export default function AutomationEditorScreen({
 
   return (
     <div className={styles.page} data-testid="automation-editor" data-mode={d.mode}>
+      <datalist id="centraid-cron-timezones">
+        <option value="UTC" />
+        <option value="America/New_York" />
+        <option value="America/Chicago" />
+        <option value="America/Denver" />
+        <option value="America/Los_Angeles" />
+        <option value="America/Sao_Paulo" />
+        <option value="Europe/London" />
+        <option value="Europe/Paris" />
+        <option value="Europe/Berlin" />
+        <option value="Asia/Kolkata" />
+        <option value="Asia/Tokyo" />
+        <option value="Asia/Shanghai" />
+        <option value="Australia/Sydney" />
+      </datalist>
       <div className={styles.head} data-hue={hue}>
         <div className={styles.headIdentity}>
           <span className={au.auGlyph} data-hue={hue} data-size="lg" aria-hidden="true">

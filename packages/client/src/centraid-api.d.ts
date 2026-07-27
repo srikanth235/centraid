@@ -1187,7 +1187,7 @@ export interface CentraidAutomationManifest {
   enabled: boolean;
   prompt: string;
   triggers: Array<
-    | { kind: 'cron'; expr: string }
+    | { kind: 'cron'; expr: string; tz?: string }
     | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
     | { kind: 'data'; entities: readonly string[]; every?: string }
     | { kind: 'condition'; entity: string; where?: unknown; every?: string }
@@ -1216,7 +1216,7 @@ export interface CentraidAutomationRow {
   dir: string;
   name: string;
   triggers: Array<
-    | { kind: 'cron'; expr: string }
+    | { kind: 'cron'; expr: string; tz?: string }
     | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
     | { kind: 'data'; entities: readonly string[]; every?: string }
     | { kind: 'condition'; entity: string; where?: unknown; every?: string }
@@ -1555,7 +1555,7 @@ declare global {
     enabled: boolean;
     prompt: string;
     triggers: Array<
-      | { kind: 'cron'; expr: string }
+      | { kind: 'cron'; expr: string; tz?: string }
       | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
       | { kind: 'data'; entities: readonly string[]; every?: string }
       | { kind: 'condition'; entity: string; where?: unknown; every?: string }
@@ -1579,7 +1579,7 @@ declare global {
     dir: string;
     name: string;
     triggers: Array<
-      | { kind: 'cron'; expr: string }
+      | { kind: 'cron'; expr: string; tz?: string }
       | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
       | { kind: 'data'; entities: readonly string[]; every?: string }
       | { kind: 'condition'; entity: string; where?: unknown; every?: string }

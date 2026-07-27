@@ -169,7 +169,13 @@ export async function handleAutomationCreate(
         ...(t.every !== undefined ? { every: t.every } : {}),
       } as automation.Trigger;
     }
-    return { kind: 'cron', expr: typeof t.expr === 'string' ? t.expr : '0 9 * * *' };
+    const expr = typeof t.expr === 'string' ? t.expr : '0 9 * * *';
+    const tz = typeof t.tz === 'string' && t.tz.trim() ? t.tz.trim() : undefined;
+    return {
+      kind: 'cron',
+      expr,
+      ...(tz !== undefined ? { tz } : {}),
+    };
   });
   // A condition/data trigger's consented read runs under a requested vault
   // grant (duaility §12) — `validateManifest` refuses those trigger kinds
@@ -426,7 +432,13 @@ export async function handleAutomationUpdate(
           ...(t.every !== undefined ? { every: t.every } : {}),
         } as automation.Trigger;
       }
-      return { kind: 'cron', expr: typeof t.expr === 'string' ? t.expr : '0 9 * * *' };
+      const expr = typeof t.expr === 'string' ? t.expr : '0 9 * * *';
+      const tz = typeof t.tz === 'string' && t.tz.trim() ? t.tz.trim() : undefined;
+      return {
+        kind: 'cron',
+        expr,
+        ...(tz !== undefined ? { tz } : {}),
+      };
     });
   }
 

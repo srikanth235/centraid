@@ -16,7 +16,7 @@ import { authHeader, fetchJson, requireGatewayBase } from './gateway';
 // (CronTrigger.expr is the 5-field schedule; webhook/condition/data fire off
 // events rather than the clock). Unknown kinds fall through to a generic label.
 type WireTrigger =
-  | { kind: 'cron'; expr: string }
+  | { kind: 'cron'; expr: string; tz?: string }
   | { kind: 'webhook'; id?: string; pending?: true }
   | { kind: 'condition'; entity: string }
   | { kind: 'data'; entities: readonly string[] }
