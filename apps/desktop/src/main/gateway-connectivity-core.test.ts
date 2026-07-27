@@ -16,7 +16,7 @@ function encodeTicket(payload: unknown): string {
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
 }
 
-describe('assembleReport', () => {
+describe(assembleReport, () => {
   it('is ok when every stage passed (or was skipped)', () => {
     const report = assembleReport([
       stage('reach', 'Reach', 'pass'),
@@ -43,7 +43,7 @@ describe('assembleReport', () => {
   });
 });
 
-describe('foldUrlIdentityStages', () => {
+describe(foldUrlIdentityStages, () => {
   it('passes all three on a matching handshake', () => {
     const result = foldUrlIdentityStages({
       ok: true,
@@ -55,12 +55,12 @@ describe('foldUrlIdentityStages', () => {
         instanceId: 'inst-1',
       },
     });
-    expect(result.stages.map((s) => [s.id, s.status])).toEqual([
+    expect(result.stages.map((s) => [s.id, s.status])).toStrictEqual([
       ['reach', 'pass'],
       ['identify', 'pass'],
       ['auth', 'pass'],
     ]);
-    expect(result.gateway).toEqual({
+    expect(result.gateway).toStrictEqual({
       version: EXPECTED_GATEWAY_VERSION,
       schemaEpoch: EXPECTED_SCHEMA_EPOCH,
       protocolVersion: EXPECTED_SCHEMA_EPOCH,
@@ -76,7 +76,7 @@ describe('foldUrlIdentityStages', () => {
       reason: 'unreachable',
       detail: 'ECONNREFUSED',
     });
-    expect(result.stages.map((s) => [s.id, s.status])).toEqual([
+    expect(result.stages.map((s) => [s.id, s.status])).toStrictEqual([
       ['reach', 'fail'],
       ['identify', 'skip'],
       ['auth', 'skip'],
@@ -86,7 +86,7 @@ describe('foldUrlIdentityStages', () => {
 
   it('fails auth (reach passes) on a 401/403, skipping identify', () => {
     const result = foldUrlIdentityStages({ ok: false, reason: 'unreachable', detail: 'HTTP 401' });
-    expect(result.stages.map((s) => [s.id, s.status])).toEqual([
+    expect(result.stages.map((s) => [s.id, s.status])).toStrictEqual([
       ['reach', 'pass'],
       ['identify', 'skip'],
       ['auth', 'fail'],
@@ -107,7 +107,7 @@ describe('foldUrlIdentityStages', () => {
       reason: 'protocol_mismatch',
       detail: 'protocol incompatible: gateway protocol 99; this client is protocol 2',
     });
-    expect(result.stages.map((s) => [s.id, s.status])).toEqual([
+    expect(result.stages.map((s) => [s.id, s.status])).toStrictEqual([
       ['reach', 'pass'],
       ['identify', 'fail'],
       ['auth', 'pass'],
@@ -117,7 +117,7 @@ describe('foldUrlIdentityStages', () => {
 
   it('fails identify on a non-401/403 HTTP error status (e.g. 500)', () => {
     const result = foldUrlIdentityStages({ ok: false, reason: 'unreachable', detail: 'HTTP 500' });
-    expect(result.stages.map((s) => [s.id, s.status])).toEqual([
+    expect(result.stages.map((s) => [s.id, s.status])).toStrictEqual([
       ['reach', 'pass'],
       ['identify', 'fail'],
       ['auth', 'pass'],
@@ -125,14 +125,14 @@ describe('foldUrlIdentityStages', () => {
   });
 });
 
-describe('foldVaultsStageFromHttp', () => {
+describe(foldVaultsStageFromHttp, () => {
   it('passes and maps vault rows on success', () => {
     const result = foldVaultsStageFromHttp({
       ok: true,
       vaults: [{ vaultId: 'v1', name: 'Family', color: '#fff' }],
     });
     expect(result.stage.status).toBe('pass');
-    expect(result.vaults).toEqual([{ vaultId: 'v1', name: 'Family', color: '#fff' }]);
+    expect(result.vaults).toStrictEqual([{ vaultId: 'v1', name: 'Family', color: '#fff' }]);
   });
 
   it('fails with a distinct detail per error code', () => {
@@ -145,10 +145,10 @@ describe('foldVaultsStageFromHttp', () => {
   });
 });
 
-describe('reachGuardFailureStages', () => {
+describe(reachGuardFailureStages, () => {
   it('fails reach and skips identify+auth', () => {
     const stages = reachGuardFailureStages('Refusing plain http:// to a public host.');
-    expect(stages.map((s) => [s.id, s.status])).toEqual([
+    expect(stages.map((s) => [s.id, s.status])).toStrictEqual([
       ['reach', 'fail'],
       ['identify', 'skip'],
       ['auth', 'skip'],
@@ -157,7 +157,7 @@ describe('reachGuardFailureStages', () => {
   });
 });
 
-describe('buildTicketReport', () => {
+describe(buildTicketReport, () => {
   const now = Date.parse('2026-07-12T00:00:00Z');
 
   it('decodes a valid, unexpired ticket', () => {
@@ -172,8 +172,8 @@ describe('buildTicketReport', () => {
     });
     const report = buildTicketReport(raw, now);
     expect(report.ok).toBe(true);
-    expect(report.stages).toEqual([{ id: 'decode', label: 'Decode ticket', status: 'pass' }]);
-    expect(report.ticket).toEqual({
+    expect(report.stages).toStrictEqual([{ id: 'decode', label: 'Decode ticket', status: 'pass' }]);
+    expect(report.ticket).toStrictEqual({
       vaultName: 'Family',
       expiresAt: new Date(now + 60_000).toISOString(),
       gatewayEndpointId: 'endpoint-ticket-string',
@@ -206,8 +206,8 @@ describe('buildTicketReport', () => {
 describe('ssh-kind fold helpers', () => {
   it('foldSshVersionStages: success passes both ssh + cli, carrying the version in detail', () => {
     const result = foldSshVersionStages({ ok: true, value: '0.1.0' });
-    expect(result.ssh).toEqual({ id: 'ssh', label: 'Reach host', status: 'pass' });
-    expect(result.cli).toEqual({
+    expect(result.ssh).toStrictEqual({ id: 'ssh', label: 'Reach host', status: 'pass' });
+    expect(result.cli).toStrictEqual({
       id: 'cli',
       label: 'centraid-gateway CLI',
       status: 'pass',
@@ -248,6 +248,6 @@ describe('ssh-kind fold helpers', () => {
       value: { vaults: [{ vaultId: 'v1', name: 'Family' }, { vaultId: 'v2' }, { garbage: true }] },
     });
     expect(result.stage.status).toBe('pass');
-    expect(result.vaults).toEqual([{ vaultId: 'v1', name: 'Family' }]);
+    expect(result.vaults).toStrictEqual([{ vaultId: 'v1', name: 'Family' }]);
   });
 });

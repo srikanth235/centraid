@@ -63,12 +63,12 @@ export type NativeWriteResult =
 /** AppState-shaped foreground signal; RN's `AppState` satisfies it. */
 export interface AppStateLike {
   readonly currentState: string | null;
-  addEventListener(type: 'change', handler: (state: string) => void): { remove(): void };
+  addEventListener: (type: 'change', handler: (state: string) => void) => { remove: () => void };
 }
 
 /** The change-feed adapter plus the session's foreground pause/resume control. */
 export interface NativeChangeFeed extends ReplicaChangeFeedAdapter {
-  setActive(active: boolean): void;
+  setActive: (active: boolean) => void;
 }
 
 export interface CreateNativeReplicaSessionOptions {
@@ -101,8 +101,8 @@ export interface CreateNativeReplicaSessionOptions {
 }
 
 interface Waiter {
-  resolve(result: NativeWriteResult): void;
-  reject(error: unknown): void;
+  resolve: (result: NativeWriteResult) => void;
+  reject: (error: unknown) => void;
 }
 
 /**
@@ -130,7 +130,7 @@ export class NativeReplicaSession {
   #drainPromise: Promise<void> | undefined;
   #drainRequested = false;
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
-  #appStateSub: { remove(): void } | undefined;
+  #appStateSub: { remove: () => void } | undefined;
   #closed = false;
 
   constructor(
@@ -262,8 +262,11 @@ export class NativeReplicaSession {
   /** Wake the one coordinator after the platform reports connectivity. */
   notifyReachable(): void {
     if (!this.#isConnected() || this.#closed) return;
-    if (!this.#hasCursor) void this.bootstrapWhenReachable();
-    else void this.pullNow().catch(() => undefined);
+    if (this.#hasCursor) {
+      void this.pullNow().catch(() => undefined);
+    } else {
+      void this.bootstrapWhenReachable();
+    }
     void this.flushIntents();
   }
 
@@ -324,8 +327,11 @@ export class NativeReplicaSession {
     if (this.#closed) return;
     if (state === 'active') {
       this.#feed.setActive(true);
-      if (!this.#hasCursor) void this.bootstrapWhenReachable();
-      else void this.pullNow().catch(() => undefined);
+      if (this.#hasCursor) {
+        void this.pullNow().catch(() => undefined);
+      } else {
+        void this.bootstrapWhenReachable();
+      }
       void this.flushIntents();
     } else if (state === 'background') {
       this.#feed.setActive(false);
@@ -352,7 +358,7 @@ export class NativeReplicaSession {
       gatewayAuth: this.#gatewayAuth,
       target: this.#coordinator,
       fetcher: this.#fetcher,
-      ...(this.#bootstrapWindow !== undefined ? { window: this.#bootstrapWindow } : {}),
+      ...(this.#bootstrapWindow === undefined ? {} : { window: this.#bootstrapWindow }),
       reconcileOutcomes: async (cursor) => {
         const pending = await this.#coordinator.pendingIntents();
         const exact = await fetchReplicaIntentOutcomes(
@@ -546,7 +552,7 @@ function terminalResult(intent: ReplicaIntent): NativeWriteResult | undefined {
     intentId: intent.intentId,
     status: intent.state,
     ...(intent.reason ? { reason: intent.reason } : {}),
-    ...(intent.output !== undefined ? { output: intent.output } : {}),
+    ...(intent.output === undefined ? {} : { output: intent.output }),
   };
 }
 

@@ -39,7 +39,7 @@ export interface AppKnobsManifest {
 export async function fetchAppManifestRaw(appId: string): Promise<Record<string, unknown> | null> {
   try {
     const live = await appLiveUrl({ id: appId });
-    const url = `${live.url.replace(/\/?$/, '/')}app.json`;
+    const url = `${live.url.replace(/\/?$/u, '/')}app.json`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const parsed = (await res.json()) as unknown;
@@ -94,7 +94,7 @@ export async function writeAppKnobValue(appId: string, key: string, value: strin
 // settings-merge so a live edit lands on the same target a reload will bake.
 function appKnobKebab(key: string): string {
   const tail = key.startsWith('app') ? key.slice(3) : key;
-  return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
+  return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`)}`;
 }
 
 /** The single visible sandboxed app iframe (only one app-view is mounted). */
@@ -109,7 +109,7 @@ export function pushKnobToAppFrame(key: string, value: string): void {
   const name = appKnobKebab(key);
   // Keys ending Color/Accent are continuous colour values → CSS vars; the rest
   // are discrete states → data attributes. Keeps live edit + reload identical.
-  const isCss = /(?:Color|Accent)$/.test(key);
+  const isCss = /(?:Color|Accent)$/u.test(key);
   const dataAttrs = isCss ? {} : { [name]: value };
   const cssVars = isCss ? { [name]: value } : {};
   frame.contentWindow?.postMessage({ type: 'centraid:settings', dataAttrs, cssVars }, '*');
@@ -123,7 +123,7 @@ export function pushKnobToAppFrame(key: string, value: string): void {
  */
 export function pushKnobToInlineRoot(root: HTMLElement, key: string, value: string): void {
   const name = appKnobKebab(key);
-  if (/(?:Color|Accent)$/.test(key)) root.style.setProperty(`--${name}`, value);
+  if (/(?:Color|Accent)$/u.test(key)) root.style.setProperty(`--${name}`, value);
   else root.setAttribute(`data-${name}`, value);
 }
 

@@ -170,13 +170,13 @@ function HealthHero({
       <View style={styles.chips}>
         <Chip label="MEMORY" value={formatBytes(metrics.rssBytes)} styles={styles} />
         <Chip label="OUTBOX" value={formatCount(metrics.outboxPending)} styles={styles} />
-        {p99 !== undefined ? <Chip label="LOOP p99" value={formatMs(p99)} styles={styles} /> : null}
-        {metrics.storageFsyncMs !== undefined ? (
+        {p99 === undefined ? null : <Chip label="LOOP p99" value={formatMs(p99)} styles={styles} />}
+        {metrics.storageFsyncMs === undefined ? null : (
           <Chip label="FSYNC" value={formatMs(metrics.storageFsyncMs)} styles={styles} />
-        ) : null}
-        {metrics.sseClients !== undefined ? (
+        )}
+        {metrics.sseClients === undefined ? null : (
           <Chip label="STREAMS" value={formatCount(metrics.sseClients)} styles={styles} />
-        ) : null}
+        )}
       </View>
 
       <View style={styles.components}>

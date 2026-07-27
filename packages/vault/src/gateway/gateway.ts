@@ -587,7 +587,7 @@ export class Gateway {
       decision: 'allow',
       detail: {
         columns,
-        ...(request.alias !== undefined ? { alias: request.alias } : {}),
+        ...(request.alias === undefined ? {} : { alias: request.alias }),
         ...(context ? { context } : {}),
       },
     });
@@ -1546,7 +1546,7 @@ export class Gateway {
       // Orphan-grace window (issue #439 R4): the recovery window N, as ms. The
       // gateway resolves it from the provider's retention ladder; the delete is
       // deferred until an orphan has been observed for longer than N.
-      ...(options?.graceWindowMs !== undefined ? { graceWindowMs: options.graceWindowMs } : {}),
+      ...(options?.graceWindowMs === undefined ? {} : { graceWindowMs: options.graceWindowMs }),
     });
     // Refresh the app-readable custody-state mirror (issue #352 phase 3/4)
     // AFTER reconcile — the snapshot reflects the post-sweep steady state,

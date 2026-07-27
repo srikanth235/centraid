@@ -74,7 +74,7 @@ export class RemoteBackupProvider implements BackupProvider {
   private readonly grantTtlSeconds: number;
 
   constructor(options: RemoteBackupProviderOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/$/, '');
+    this.baseUrl = options.baseUrl.replace(/\/$/u, '');
     this.apiKey = options.apiKey;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.grantTtlSeconds = options.grantTtlSeconds ?? DEFAULT_GRANT_TTL_SECONDS;

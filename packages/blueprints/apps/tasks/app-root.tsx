@@ -49,7 +49,7 @@ const VIEW_TITLES: Record<View, string> = {
 const VALID_VIEWS = new Set<View>(['today', 'upcoming', 'anytime', 'all', 'logbook']);
 
 function initialView(rootEl: HTMLElement | null): View {
-  const knob = rootEl?.getAttribute('data-app-default-view');
+  const knob = rootEl?.dataset.appDefaultView;
   return knob && VALID_VIEWS.has(knob as View) ? (knob as View) : 'today';
 }
 
@@ -126,7 +126,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         input: { limit: state.boardWindow },
       });
     } catch {
-      readFailed(document.getElementById('noticeBanner'));
+      readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
       state.readFailedShown = true;
       return;
     }
@@ -208,7 +208,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   // ---- chrome wiring: theme toggle, attach input, doorbell, focus, keys, width ----
   useEffect(() => {
     if (themeBtnRef.current) wireThemeToggle(themeBtnRef.current);
-    const attachInput = document.getElementById('attachInput') as HTMLInputElement | null;
+    const attachInput = document.querySelector('#attachInput') as HTMLInputElement | null;
     if (attachInput) {
       wireAttachInput(attachInput, () => logic.getAttachTarget(), {
         act: logic.act,
@@ -410,7 +410,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
               onAddSubtask={(parentId, title2) => logic.addSubtask(parentId, title2)}
               onAttach={(taskId) => {
                 logic.setAttachTarget(taskId);
-                (document.getElementById('attachInput') as HTMLInputElement | null)?.click();
+                (document.querySelector('#attachInput') as HTMLInputElement | null)?.click();
               }}
               onRemoveAttachment={(attachmentId) => logic.removeAttachment(attachmentId)}
               onAddTag={(taskId, label) => logic.addTag(taskId, label)}

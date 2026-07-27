@@ -56,7 +56,7 @@ export class GatewayError extends Error {
 
 /** Strip a trailing `/` so we can confidently concatenate paths. */
 function normalizeBase(raw: string): string {
-  return raw.replace(/\/+$/, '');
+  return raw.replace(/\/+$/u, '');
 }
 
 export async function hydrateGatewayUrl(): Promise<string> {
@@ -298,7 +298,7 @@ function hashIdToColor(id: string): ColorKey {
 
 function titleCaseFromId(id: string): string {
   return id
-    .replace(/[-_]+/g, ' ')
+    .replace(/[-_]+/gu, ' ')
     .split(' ')
     .filter(Boolean)
     .map((w) => w[0]?.toUpperCase() + w.slice(1))

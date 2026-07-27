@@ -65,11 +65,11 @@ export function mergePersistedSettings(
   const activeVaultByGateway = patch.activeVaultByGateway ?? current.activeVaultByGateway;
   return {
     activeGatewayId: patch.activeGatewayId?.trim() || current.activeGatewayId,
-    ...(patch.builderEnabled !== undefined
-      ? { builderEnabled: patch.builderEnabled }
-      : current.builderEnabled !== undefined
+    ...(patch.builderEnabled === undefined
+      ? current.builderEnabled !== undefined
         ? { builderEnabled: current.builderEnabled }
-        : {}),
+        : {}
+      : { builderEnabled: patch.builderEnabled }),
     ...preserveOrSet('remoteTemplatesUrl', patch.remoteTemplatesUrl, current.remoteTemplatesUrl),
     ...(activeVaultByGateway !== undefined && Object.keys(activeVaultByGateway).length
       ? { activeVaultByGateway }
@@ -83,27 +83,27 @@ export function mergePersistedSettings(
       // Preserve-or-set with write-time clamping; a garbage patch value
       // (NaN, wrong type) falls back to the current value.
       const next = clampAlertSeconds(patch.gatewayAlertSeconds) ?? current.gatewayAlertSeconds;
-      return next !== undefined ? { gatewayAlertSeconds: next } : {};
+      return next === undefined ? {} : { gatewayAlertSeconds: next };
     })(),
-    ...(patch.gatewayAlertsEnabled !== undefined
-      ? { gatewayAlertsEnabled: patch.gatewayAlertsEnabled }
-      : current.gatewayAlertsEnabled !== undefined
+    ...(patch.gatewayAlertsEnabled === undefined
+      ? current.gatewayAlertsEnabled !== undefined
         ? { gatewayAlertsEnabled: current.gatewayAlertsEnabled }
-        : {}),
+        : {}
+      : { gatewayAlertsEnabled: patch.gatewayAlertsEnabled }),
     ...preserveOrSet(
       'changelogSeenVersion',
       patch.changelogSeenVersion,
       current.changelogSeenVersion,
     ),
-    ...(patch.launchAtLogin !== undefined
-      ? { launchAtLogin: patch.launchAtLogin }
-      : current.launchAtLogin !== undefined
+    ...(patch.launchAtLogin === undefined
+      ? current.launchAtLogin !== undefined
         ? { launchAtLogin: current.launchAtLogin }
-        : {}),
-    ...(patch.offerGatewayService !== undefined
-      ? { offerGatewayService: patch.offerGatewayService }
-      : current.offerGatewayService !== undefined
+        : {}
+      : { launchAtLogin: patch.launchAtLogin }),
+    ...(patch.offerGatewayService === undefined
+      ? current.offerGatewayService !== undefined
         ? { offerGatewayService: current.offerGatewayService }
-        : {}),
+        : {}
+      : { offerGatewayService: patch.offerGatewayService }),
   };
 }

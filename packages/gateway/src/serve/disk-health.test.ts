@@ -72,7 +72,7 @@ describe('evaluateDiskFreeStatus (percent + absolute floor)', () => {
   });
 });
 
-describe('createDiskHealthProbe', () => {
+describe(createDiskHealthProbe, () => {
   it('reports ok well above the degraded watermark', async () => {
     const probe = createDiskHealthProbe({
       rootDir: '/vaults',
@@ -145,7 +145,7 @@ describe('createDiskHealthProbe', () => {
       },
     });
     await probe();
-    expect(seen.sort()).toEqual(
+    expect(seen.sort()).toStrictEqual(
       [
         '/vaults/v1/vault.db',
         '/vaults/v1/vault.db-wal',
@@ -221,7 +221,7 @@ describe('createDiskHealthProbe: disk-full tracker (issue #351 wave 4)', () => {
   });
 });
 
-describe('formatBytes', () => {
+describe(formatBytes, () => {
   it('formats across units', () => {
     expect(formatBytes(500)).toBe('500 B');
     expect(formatBytes(2048)).toBe('2.0 KB');

@@ -58,8 +58,13 @@ describe('model-picker state', () => {
   it('normalizes a model response body', () => {
     expect(
       normalizeModelState({ current: 'm1', defaultModel: 'default-x', catalog: [{ id: 'm1' }] }),
-    ).toEqual({ loaded: true, current: 'm1', defaultModel: 'default-x', catalog: [{ id: 'm1' }] });
-    expect(normalizeModelState(null)).toEqual({
+    ).toStrictEqual({
+      loaded: true,
+      current: 'm1',
+      defaultModel: 'default-x',
+      catalog: [{ id: 'm1' }],
+    });
+    expect(normalizeModelState(null)).toStrictEqual({
       loaded: true,
       current: null,
       defaultModel: '',
@@ -80,10 +85,22 @@ describe('model-picker state', () => {
 describe('readJsonResponse', () => {
   it('reads a JSON body, tolerating empty/non-JSON payloads', async () => {
     const ok = new Response('{"a":1}', { status: 200 });
-    expect(await readJsonResponse(ok)).toEqual({ ok: true, status: 200, body: { a: 1 } });
+    await expect(readJsonResponse(ok)).resolves.toStrictEqual({
+      ok: true,
+      status: 200,
+      body: { a: 1 },
+    });
     const empty = new Response('', { status: 200 });
-    expect(await readJsonResponse(empty)).toEqual({ ok: true, status: 200, body: null });
+    await expect(readJsonResponse(empty)).resolves.toStrictEqual({
+      ok: true,
+      status: 200,
+      body: null,
+    });
     const junk = new Response('not json', { status: 500 });
-    expect(await readJsonResponse(junk)).toEqual({ ok: false, status: 500, body: null });
+    await expect(readJsonResponse(junk)).resolves.toStrictEqual({
+      ok: false,
+      status: 500,
+      body: null,
+    });
   });
 });

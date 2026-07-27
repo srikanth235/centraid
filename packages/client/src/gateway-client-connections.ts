@@ -119,7 +119,7 @@ export async function listConnections(): Promise<ConnectionEntry[]> {
  */
 export async function oauthCallbackUri(): Promise<string> {
   const { baseUrl } = await auth();
-  return `${baseUrl.replace(/\/$/, '')}${ROUTES.vaultOAuthCallback}`;
+  return `${baseUrl.replace(/\/$/u, '')}${ROUTES.vaultOAuthCallback}`;
 }
 
 // ---- BYO-client wizard presets (GET /_vault/connections/providers) ----

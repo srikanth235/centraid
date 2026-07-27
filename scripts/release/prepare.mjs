@@ -15,10 +15,9 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { buildSurfaceMatrix, defaultShipSurfaceIds } from './surfaces.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 const args = new Set(process.argv.slice(2));
 const allowDirty = args.has('--allow-dirty');
 const skipCheck = args.has('--skip-check');
@@ -50,11 +49,11 @@ const current = pkg.version;
 const classOut = JSON.parse(sh('node scripts/release/classify.mjs CHANGELOG.md'));
 
 function bumpSemver(v, kind) {
-  const m = /^(\d+)\.(\d+)\.(\d+)(?:-.*)?$/.exec(v);
-  if (!m) throw new Error(`unparseable version ${v}`);
-  let maj = Number(m[1]);
-  let min = Number(m[2]);
-  let pat = Number(m[3]);
+  const m = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)(?:-.*)?$/u.exec(v);
+  if (!m?.groups) throw new Error(`unparseable version ${v}`);
+  let maj = Number(m.groups.major);
+  let min = Number(m.groups.minor);
+  let pat = Number(m.groups.patch);
   if (kind === 'major') {
     console.error('agents never propose major before 1.0 (D4/F1)');
     process.exit(2);

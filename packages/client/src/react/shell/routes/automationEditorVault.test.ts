@@ -5,10 +5,10 @@ import { vaultForTriggers } from './AutomationEditorRoute.js';
 // only exercise the pure `vaultForTriggers` derivation, so stub the client so
 // importing the route doesn't need a live gateway. (`vi.mock` is hoisted above
 // the imports at transform time — same mock seam every other route test uses.)
-vi.mock('../../../gateway-client.js', () => ({}));
-vi.mock('../../../assist-oauth-handoff.js', () => ({}));
+vi.mock(import('../../../gateway-client.js'), () => ({}));
+vi.mock(import('../../../assist-oauth-handoff.js'), () => ({}));
 
-describe('vaultForTriggers', () => {
+describe(vaultForTriggers, () => {
   it('returns undefined when no data/condition trigger contributes an entity', () => {
     expect(vaultForTriggers([{ kind: 'cron', expr: '0 9 * * *' }])).toBeUndefined();
     expect(vaultForTriggers([{ kind: 'webhook' }])).toBeUndefined();
@@ -20,7 +20,7 @@ describe('vaultForTriggers', () => {
       { kind: 'condition', entity: 'business.invoice' },
       { kind: 'data', entities: ['core.transaction', 'core.party'] },
     ]);
-    expect(vault).toEqual({
+    expect(vault).toStrictEqual({
       purpose: 'dpv:ServiceProvision',
       why: 'Evaluate automation triggers.',
       scopes: [
@@ -32,7 +32,7 @@ describe('vaultForTriggers', () => {
   });
 
   it('maps a bare (dotless) entity to a schema-only scope with no table', () => {
-    expect(vaultForTriggers([{ kind: 'condition', entity: 'inbox' }])).toEqual({
+    expect(vaultForTriggers([{ kind: 'condition', entity: 'inbox' }])).toStrictEqual({
       purpose: 'dpv:ServiceProvision',
       why: 'Evaluate automation triggers.',
       scopes: [{ schema: 'inbox', verbs: 'read' }],
@@ -44,6 +44,6 @@ describe('vaultForTriggers', () => {
       { kind: 'data', entities: ['core.event'] },
       { kind: 'condition', entity: 'core.event' },
     ]);
-    expect(vault?.scopes).toEqual([{ schema: 'core', table: 'event', verbs: 'read' }]);
+    expect(vault?.scopes).toStrictEqual([{ schema: 'core', table: 'event', verbs: 'read' }]);
   });
 });

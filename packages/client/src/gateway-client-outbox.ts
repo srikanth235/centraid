@@ -233,9 +233,9 @@ export async function decideOutboxItem(input: {
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({
       decision: input.decision,
-      ...(input.artifact !== undefined ? { artifact: input.artifact } : {}),
-      ...(input.alwaysAllow !== undefined ? { always_allow: input.alwaysAllow } : {}),
-      ...(input.note !== undefined ? { note: input.note } : {}),
+      ...(input.artifact === undefined ? {} : { artifact: input.artifact }),
+      ...(input.alwaysAllow === undefined ? {} : { always_allow: input.alwaysAllow }),
+      ...(input.note === undefined ? {} : { note: input.note }),
     }),
   });
   return readOutcome(res, 'decide outbox item');

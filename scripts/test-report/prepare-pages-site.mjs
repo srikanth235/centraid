@@ -19,13 +19,12 @@
  */
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 const flags = parseFlags(process.argv.slice(2));
 const reportDir = path.resolve(flags.report ?? path.join(root, 'dist/test-report'));
 const siteDir = path.resolve(flags.site ?? path.join(root, 'site'));
-const slot = String(flags.slot ?? 'latest').replace(/^\/+|\/+$/g, '');
+const slot = String(flags.slot ?? 'latest').replace(/^\/+|\/+$/gu, '');
 const runDate = normalizeDate(flags.date);
 const runId = sanitizeSegment(flags['run-id'] ?? '');
 const runUrl = String(flags['run-url'] ?? '');
@@ -293,14 +292,14 @@ function numberOrNull(value) {
 function normalizeDate(value) {
   const text = String(value ?? '').trim();
   if (!text) return null;
-  const match = /^(\d{4}-\d{2}-\d{2})/.exec(text);
-  return match ? match[1] : null;
+  const match = /^(?<date>\d{4}-\d{2}-\d{2})/u.exec(text);
+  return match?.groups?.date ?? null;
 }
 
 function sanitizeSegment(value) {
   return String(value ?? '')
     .trim()
-    .replace(/[^A-Za-z0-9._-]/g, '');
+    .replace(/[^A-Za-z0-9._-]/gu, '');
 }
 
 async function readJson(file, fallback) {

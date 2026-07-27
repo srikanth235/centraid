@@ -136,7 +136,7 @@ export function queueDeviceEnrichmentRequest(
 }
 
 const DEVICE_DERIVATIVE_RULES: readonly {
-  matches(mediaType: string): boolean;
+  matches: (mediaType: string) => boolean;
   sqlPredicate: string;
   wanted: readonly WantedDerivative[];
 }[] = [
@@ -191,11 +191,11 @@ const DEVICE_BACKLOG_SQL = DEVICE_DERIVATIVE_RULES.map(
 export function queueMissingDeviceEnrichmentRequests(
   vault: DatabaseSync,
   input: DeviceEnrichmentSource & {
-    newId(): string;
+    newId: () => string;
     requestedAt?: string | Date;
   },
 ): string[] {
-  if (!/^[0-9a-f]{64}$/.test(input.sha256)) throw new Error('device work source needs sha256');
+  if (!/^[0-9a-f]{64}$/u.test(input.sha256)) throw new Error('device work source needs sha256');
   const queued: string[] = [];
   const hasDerivative = vault.prepare(
     'SELECT 1 AS present FROM core_content_derivative WHERE content_id = ? AND variant = ?',
@@ -236,7 +236,7 @@ export function queueMissingDeviceEnrichmentRequests(
  */
 export function queueMissingDeviceEnrichmentBacklog(
   vault: DatabaseSync,
-  input: { newId(): string; requestedAt?: string | Date; limit?: number },
+  input: { newId: () => string; requestedAt?: string | Date; limit?: number },
 ): string[] {
   const limit = Math.max(1, Math.min(500, Math.trunc(input.limit ?? 100)));
   const rows = vault

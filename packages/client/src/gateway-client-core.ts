@@ -37,8 +37,8 @@ export {
 declare global {
   interface Window {
     CentraidIroh?: {
-      fetch(pathname: string, init?: RequestInit): Promise<Response>;
-      url(pathname: string): Promise<string>;
+      fetch: (pathname: string, init?: RequestInit) => Promise<Response>;
+      url: (pathname: string) => Promise<string>;
     };
   }
 }
@@ -58,7 +58,7 @@ export function clientSessionId(): string {
   const storageKey = 'centraid.oauth.client-session.v1';
   try {
     const saved = window.sessionStorage.getItem(storageKey);
-    if (saved && /^[A-Za-z0-9_-]{32,128}$/.test(saved)) {
+    if (saved && /^[A-Za-z0-9_-]{32,128}$/u.test(saved)) {
       cachedClientSessionId = saved;
       return saved;
     }

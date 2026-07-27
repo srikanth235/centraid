@@ -15,7 +15,7 @@ export const INFO_PATH = '/centraid/_gateway/info';
  */
 export async function probeGatewayInfo(baseUrl, opts = {}) {
   const timeoutMs = opts.timeoutMs ?? 5_000;
-  const url = `${baseUrl.replace(/\/$/, '')}${INFO_PATH}`;
+  const url = `${baseUrl.replace(/\/$/u, '')}${INFO_PATH}`;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {

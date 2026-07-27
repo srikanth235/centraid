@@ -6,7 +6,7 @@
  * Refuses a content id that is already current, or one outside this
  * document's own chain. Risk low.
  */
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function restoreVersion({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
@@ -22,4 +22,4 @@ export default async ({ body, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

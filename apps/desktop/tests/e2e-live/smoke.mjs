@@ -9,10 +9,9 @@
 // clean shutdown.
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { launchApp, navTo } from './driver.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const OUT_DIR = path.join(__dirname, 'out');
 
 function assert(cond, msg) {
@@ -45,7 +44,7 @@ async function main() {
 
     // Open one app template's preview modal.
     await page.locator('button[data-kind="app"]').first().click();
-    const dialog = page.getByRole('dialog', { name: /^Preview / });
+    const dialog = page.getByRole('dialog', { name: /^Preview /u });
     await dialog.waitFor({ state: 'visible', timeout: 10_000 });
     console.log('[smoke] template preview dialog opened');
 

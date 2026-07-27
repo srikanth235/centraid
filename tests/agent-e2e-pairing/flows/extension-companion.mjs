@@ -2,11 +2,10 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { runFlow } from '../lib/harness.mjs';
 
-const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const repo = path.resolve(import.meta.dirname, '../../..');
 const extensionDir = path.join(repo, 'apps/extension/dist');
 
 async function run(command, args) {
@@ -93,7 +92,7 @@ try {
       const trigger = page.getByRole('button', { name: 'Centraid' });
       await trigger.waitFor({ timeout: 15_000 });
       await trigger.click();
-      const choice = page.getByRole('button', { name: /Companion acceptance/ });
+      const choice = page.getByRole('button', { name: /Companion acceptance/u });
       await choice.waitFor({ timeout: 15_000 });
       const coldStart = performance.now();
       await choice.click();
@@ -105,7 +104,7 @@ try {
       if (coldMs > 2_000) throw new Error(`cold fill exceeded 2s budget: ${Math.round(coldMs)}ms`);
       if ((await page.locator('input[name="email"]').inputValue()) !== 'owner@example.test')
         throw new Error('username was not filled');
-      if (!/^\d{6}$/.test(await page.locator('input[name="otp"]').inputValue()))
+      if (!/^\d{6}$/u.test(await page.locator('input[name="otp"]').inputValue()))
         throw new Error('derived TOTP was not filled');
 
       await page.reload();
@@ -138,7 +137,7 @@ try {
       await trigger.waitFor({ timeout: 10_000 });
       await trigger.click();
       await page
-        .getByText(/revoked|Pair this browser/i)
+        .getByText(/revoked|Pair this browser/iu)
         .waitFor({ timeout: 15_000 })
         .catch(() => undefined);
       const pairingAfter = await worker.evaluate(async () => {

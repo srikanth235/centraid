@@ -301,7 +301,7 @@ function TriggerChips({
           </span>
         </span>
       ) : null}
-      {!hasStructured ? <span className={styles.chip}>{header.triggerSummary}</span> : null}
+      {hasStructured ? null : <span className={styles.chip}>{header.triggerSummary}</span>}
     </div>
   );
 }
@@ -605,7 +605,7 @@ function RunTurn({
               <span>Done</span>
             </span>
             <span className={styles.turnTelem}>
-              {run.durationMs !== null ? <span>{fmtDuration(run.durationMs)}</span> : null}
+              {run.durationMs === null ? null : <span>{fmtDuration(run.durationMs)}</span>}
               {run.costUsd ? <span>{fmtCost(run.costUsd)}</span> : null}
               {tokens ? <span>{fmtTokens(tokens)}</span> : null}
             </span>
@@ -671,7 +671,7 @@ function RunTurn({
             <span>{failed ? 'Failed' : 'Done'}</span>
           </span>
           <span className={styles.turnTelem}>
-            {run.durationMs !== null ? <span>{fmtDuration(run.durationMs)}</span> : null}
+            {run.durationMs === null ? null : <span>{fmtDuration(run.durationMs)}</span>}
             {run.costUsd ? <span>{fmtCost(run.costUsd)}</span> : null}
             {tokens ? <span>{fmtTokens(tokens)}</span> : null}
           </span>
@@ -727,7 +727,7 @@ function PlanBanner({
         <div className={styles.planTitle}>{plan.label}</div>
         {plan.detail ? <p className={styles.planDetail}>{plan.detail}</p> : null}
       </div>
-      {plan.state !== 'compiling' ? (
+      {plan.state === 'compiling' ? null : (
         <button
           type="button"
           className={cx(au.auBtn, au.auBtnGhost, styles.planBtn)}
@@ -737,7 +737,7 @@ function PlanBanner({
           <span>Open compiler</span>
           <Icon name="ArrowRight" size={13} />
         </button>
-      ) : null}
+      )}
     </div>
   );
 }

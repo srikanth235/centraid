@@ -34,7 +34,7 @@ import type { ConnectionBroker } from './connection-broker.js';
 import type { VaultPlane } from './vault-plane.js';
 import { timeoutSignal } from './fetch-timeout.js';
 
-const CONNECTION_REF_RE = /\{\{connection:([a-z_]+)\}\}/g;
+const CONNECTION_REF_RE = /\{\{connection:(?<name>[a-z_]+)\}\}/gu;
 const BODY_SNIPPET_CHARS = 300;
 /** Approval staleness window (issue #308 A7): older approvals repark. */
 const DEFAULT_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
@@ -244,7 +244,7 @@ export class OutboxExecutor {
       if (
         response.status === 401 ||
         (response.status === 403 &&
-          /insufficient.{0,4}(scope|permission)|invalid_scope/i.test(response.text))
+          /insufficient.{0,4}(?:scope|permission)|invalid_scope/iu.test(response.text))
       ) {
         await auth
           .onAuthDead?.(
@@ -281,7 +281,7 @@ export class OutboxExecutor {
       const response = await this.fetchImpl(spec.url, {
         method: spec.method,
         ...(spec.headers ? { headers: spec.headers } : {}),
-        ...(spec.body !== undefined ? { body: spec.body } : {}),
+        ...(spec.body === undefined ? {} : { body: spec.body }),
         // Injected requests never auto-follow: a cross-host Location would
         // carry the Authorization header past the pin (issue #304).
         redirect: 'manual',
@@ -304,8 +304,8 @@ export class OutboxExecutor {
       input: {
         item_id: itemId,
         disposition,
-        ...(statusCode !== undefined ? { status_code: statusCode } : {}),
-        ...(detail !== undefined ? { detail } : {}),
+        ...(statusCode === undefined ? {} : { status_code: statusCode }),
+        ...(detail === undefined ? {} : { detail }),
       },
     });
     if (outcome.status !== 'executed') {
@@ -340,7 +340,7 @@ function substitute(spec: StagedRequest, values: Readonly<Record<string, string>
     method: spec.method,
     url: sub(spec.url),
     ...(spec.headers ? { headers } : {}),
-    ...(spec.body !== undefined ? { body: sub(spec.body) } : {}),
+    ...(spec.body === undefined ? {} : { body: sub(spec.body) }),
   };
 }
 

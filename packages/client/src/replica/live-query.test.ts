@@ -7,7 +7,7 @@ async function turn(): Promise<void> {
   await Promise.resolve();
 }
 
-describe('LiveQuery', () => {
+describe(LiveQuery, () => {
   test('is awaitable and publishes reruns only for captured dependencies', async () => {
     let value = 1;
     let runs = 0;
@@ -15,11 +15,11 @@ describe('LiveQuery', () => {
       value: { value, run: ++runs },
       dependencies: [{ shapeId: 'shape-agenda', entity: 'core.event' }],
     }));
-    expect(await query).toEqual({ value: 1, run: 1 });
+    await expect(query).resolves.toStrictEqual({ value: 1, run: 1 });
 
     const updates: number[] = [];
     const unsubscribe = query.subscribe((next) => updates.push(next.value));
-    expect(updates).toEqual([1]);
+    expect(updates).toStrictEqual([1]);
 
     value = 2;
     query.invalidate({
@@ -37,7 +37,7 @@ describe('LiveQuery', () => {
       source: 'canonical',
     });
     await turn();
-    expect(updates).toEqual([1, 2]);
+    expect(updates).toStrictEqual([1, 2]);
     expect(runs).toBe(2);
 
     unsubscribe();
@@ -55,7 +55,7 @@ describe('LiveQuery', () => {
     query.refresh();
     query.refresh();
     release();
-    expect(await query).toBe(1);
+    await expect(query).resolves.toBe(1);
     await turn();
     expect(runs).toBe(2);
     query.dispose();

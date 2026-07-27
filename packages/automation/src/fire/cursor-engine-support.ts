@@ -69,8 +69,8 @@ export interface TriggerCursorFireInput {
 }
 
 export interface CursorStore {
-  getCursor(automationId: string, triggerIndex: number): AutomationTriggerCursor | undefined;
-  putCursor(input: {
+  getCursor: (automationId: string, triggerIndex: number) => AutomationTriggerCursor | undefined;
+  putCursor: (input: {
     automationId: string;
     triggerIndex: number;
     sourceKind: string;
@@ -81,8 +81,8 @@ export interface CursorStore {
     skipped?: number;
     gapReason?: string;
     updatedAt: number;
-  }): void;
-  deleteCursorsNotIn?(retained: readonly CursorRetentionKey[]): number;
+  }) => void;
+  deleteCursorsNotIn?: (retained: readonly CursorRetentionKey[]) => number;
 }
 
 /** One declared `(automation, trigger index)` slot whose cursor must survive. */
@@ -154,7 +154,7 @@ export function registrationsFor(row: Row, defaultTimeZone?: string | null): Cur
   const cronSchedules: CronSchedule[] = row.triggers.flatMap((trigger) => {
     if (trigger.kind !== 'cron') return [];
     const timeZone = resolveCronTimezone(trigger.tz, defaultTimeZone);
-    return [{ expr: trigger.expr, ...(timeZone !== undefined ? { timeZone } : {}) }];
+    return [{ expr: trigger.expr, ...(timeZone === undefined ? {} : { timeZone }) }];
   });
   const cronExprs = cronSchedules.map((s) => s.expr);
   const firstCron = row.triggers.findIndex((trigger) => trigger.kind === 'cron');
@@ -275,8 +275,8 @@ export function cursorIdentity(trigger: Trigger): string {
 }
 
 export interface LocalCursorScheduler extends Host {
-  nudge(entityTypes?: readonly string[]): void;
-  nudgeIngress?(sourceKey: string): void;
-  start(): void;
-  stop(): Promise<void>;
+  nudge: (entityTypes?: readonly string[]) => void;
+  nudgeIngress?: (sourceKey: string) => void;
+  start: () => void;
+  stop: () => Promise<void>;
 }

@@ -28,7 +28,7 @@ export default function GreetingHeader({
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   // Salutation follows the device clock at mount (see lib/profile.greetingFor).
   const hello = greetingFor();
-  const tint = /^#[0-9a-fA-F]{6}$/.test(color) ? color : colors.accent;
+  const tint = /^#[0-9a-fA-F]{6}$/u.test(color) ? color : colors.accent;
   const display = firstNameOf(name) || 'there';
 
   return (

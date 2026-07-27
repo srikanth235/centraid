@@ -54,7 +54,7 @@ export function createVisibility({
       .toLowerCase();
     return query
       .toLowerCase()
-      .split(/\s+/)
+      .split(/\s+/u)
       .every((token) => hay.includes(token));
   }
 

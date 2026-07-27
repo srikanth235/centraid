@@ -30,7 +30,7 @@ interface ProvenanceRow {
   occurred_at: string;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function activityHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const documentId = String(input?.document_id ?? '');
   if (!documentId) return { events: [] };
@@ -58,4 +58,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { events: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

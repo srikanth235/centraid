@@ -20,15 +20,15 @@ import {
 // pulling the module in doesn't run gateway-client-core's load-time
 // `window.CentraidApi` side effect (same guard automationsData.test.ts uses).
 // `vi.mock` is hoisted above these imports by vitest.
-vi.mock('../../../gateway-client.js', () => ({
-  confirmVaultParked: vi.fn(),
-  decideOutboxItem: vi.fn(),
-  getBlocking: vi.fn(),
-  listAgents: vi.fn(),
-  listAutomationTurns: vi.fn(),
-  listOutboxGrants: vi.fn(),
-  readAutomation: vi.fn(),
-  revokeOutboxGrant: vi.fn(),
+vi.mock(import('../../../gateway-client.js'), () => ({
+  confirmVaultParked: vi.fn<typeof confirmVaultParked>(),
+  decideOutboxItem: vi.fn<typeof decideOutboxItem>(),
+  getBlocking: vi.fn<typeof getBlocking>(),
+  listAgents: vi.fn<typeof listAgents>(),
+  listAutomationTurns: vi.fn<typeof listAutomationTurns>(),
+  listOutboxGrants: vi.fn<typeof listOutboxGrants>(),
+  readAutomation: vi.fn<typeof readAutomation>(),
+  revokeOutboxGrant: vi.fn<typeof revokeOutboxGrant>(),
 }));
 
 const row = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationRow =>
@@ -50,7 +50,7 @@ const blocking = (over: Partial<BlockingSummary> = {}): BlockingSummary => ({
   ...over,
 });
 
-describe('filterConsentForAutomation', () => {
+describe(filterConsentForAutomation, () => {
   it('keeps only agent-kind parked/outbox rows whose caller/actor matches the automation name', () => {
     const data = blocking({
       outbox: [
@@ -143,18 +143,18 @@ describe('filterConsentForAutomation', () => {
 
     const consent = filterConsentForAutomation('agent-1', data, grants);
 
-    expect(consent.outbox.map((o) => o.itemId)).toEqual(['ob1']);
-    expect(consent.parked.map((p) => p.invocationId)).toEqual(['p1']);
-    expect(consent.grants.map((g) => g.grantId)).toEqual(['g1']);
+    expect(consent.outbox.map((o) => o.itemId)).toStrictEqual(['ob1']);
+    expect(consent.parked.map((p) => p.invocationId)).toStrictEqual(['p1']);
+    expect(consent.grants.map((g) => g.grantId)).toStrictEqual(['g1']);
   });
 
   it('returns empty lists when nothing matches the automation', () => {
     const consent = filterConsentForAutomation(undefined, blocking(), []);
-    expect(consent).toEqual({ grants: [], outbox: [], parked: [] });
+    expect(consent).toStrictEqual({ grants: [], outbox: [], parked: [] });
   });
 });
 
-describe('loadAutomationThreadData', () => {
+describe(loadAutomationThreadData, () => {
   it('returns null when the automation does not resolve', async () => {
     vi.mocked(readAutomation).mockResolvedValue(null);
     vi.mocked(listAutomationTurns).mockResolvedValue([]);
@@ -216,7 +216,7 @@ describe('loadAutomationThreadData', () => {
     expect(result?.row.ref).toBe('digest/main');
     expect(result?.data.header.name).toBe('Daily Digest');
     expect(result?.data.header.kindEyebrow).toBe('Cron schedule');
-    expect(result?.data.runs.map((r) => r.runId)).toEqual(['r-newer', 'r-older']);
+    expect(result?.data.runs.map((r) => r.runId)).toStrictEqual(['r-newer', 'r-older']);
     expect(result?.data.runs[0]?.status).toBe('fail');
     expect(result?.data.runs[0]?.summary).toBe('boom');
     expect(result?.data.runs[0]?.dateGroup).toBe('Today');
@@ -271,11 +271,11 @@ describe('loadAutomationThreadData', () => {
       gatewayOrigin: 'http://127.0.0.1:5173',
     });
 
-    expect(result?.data.runs.map((r) => r.runId)).toEqual(['ask-1', 'r-exec']);
+    expect(result?.data.runs.map((r) => r.runId)).toStrictEqual(['ask-1', 'r-exec']);
     // An interactive turn is the owner asking, not the automation firing.
     expect(result?.data.runs.find((r) => r.runId === 'ask-1')?.entryKind).toBe('ask');
     expect(result?.data.runs.find((r) => r.runId === 'r-exec')?.entryKind).toBe('run');
-    expect(result?.data.plan).toEqual({
+    expect(result?.data.plan).toStrictEqual({
       detail: 'handler.js failed to parse',
       label: 'Compile failed',
       state: 'failed',
@@ -296,11 +296,11 @@ describe('loadAutomationThreadData', () => {
       gatewayOrigin: 'http://127.0.0.1:5173',
     });
     expect(result?.data.plan.state).toBe('never');
-    expect(result?.data.runs).toEqual([]);
+    expect(result?.data.runs).toStrictEqual([]);
   });
 });
 
-describe('decideConsentItem', () => {
+describe(decideConsentItem, () => {
   it('approves an outbox item and reports success only when executed', async () => {
     vi.mocked(decideOutboxItem).mockResolvedValue({
       invocationId: 'i1',

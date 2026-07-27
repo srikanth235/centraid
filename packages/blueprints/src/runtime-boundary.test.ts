@@ -36,7 +36,7 @@ describe('v0 blueprint runtime boundary', () => {
   });
 
   it('keeps the maintenance-script set limited to live generated assets', () => {
-    expect(readdirSync(path.join(packageDir, 'scripts')).toSorted()).toEqual([
+    expect(readdirSync(path.join(packageDir, 'scripts')).toSorted()).toStrictEqual([
       'build-manifest.mjs',
     ]);
   });

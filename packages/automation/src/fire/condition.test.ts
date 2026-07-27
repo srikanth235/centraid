@@ -21,7 +21,7 @@ const TRIGGER: ConditionTrigger = {
  * the committed position and commits whatever they return — so what they
  * return may never run ahead of what they delivered.
  */
-describe('readConditionCursor', () => {
+describe(readConditionCursor, () => {
   const read = (
     rows: Record<string, unknown>[],
     positionJson: string | undefined,
@@ -50,7 +50,7 @@ describe('readConditionCursor', () => {
 
     // Still matching, already delivered: suppressed by content hash.
     const quiet = await read([invoiceA], first.positionJson, new Date(2_000));
-    expect(quiet.elements).toEqual([]);
+    expect(quiet.elements).toStrictEqual([]);
     expect(quiet.positionJson).toBe(first.positionJson);
 
     // It leaves the window (paid) — the hash is forgotten…
@@ -62,20 +62,20 @@ describe('readConditionCursor', () => {
     const reentry = await read([invoiceA], empty.positionJson, new Date(4_000));
     expect(reentry.elements).toHaveLength(1);
     expect(reentry.elements[0]?.position).not.toBe(first.elements[0]?.position);
-    expect(reentry.elements[0]?.payload).toEqual(invoiceA);
+    expect(reentry.elements[0]?.payload).toStrictEqual(invoiceA);
   });
 
   it('leaves matches beyond the cap unseen instead of counting them skipped', async () => {
     const capped = await read([invoiceA, invoiceB], undefined, new Date(1_000), 1);
 
-    expect(capped.elements.map((element) => element.payload)).toEqual([invoiceA]);
+    expect(capped.elements.map((element) => element.payload)).toStrictEqual([invoiceA]);
     // The surplus row is still sitting in the vault — it is not a gap.
     expect(capped.skipped).toBe(0);
     expect(capped.gapReason).toBeUndefined();
     expect(JSON.parse(capped.positionJson ?? '[]')).toHaveLength(1);
 
     const rest = await read([invoiceA, invoiceB], capped.positionJson, new Date(2_000), 1);
-    expect(rest.elements.map((element) => element.payload)).toEqual([invoiceB]);
+    expect(rest.elements.map((element) => element.payload)).toStrictEqual([invoiceB]);
   });
 
   it('throws a consent deny rather than reporting an empty window', async () => {
@@ -102,7 +102,7 @@ describe('readConditionCursor', () => {
   });
 });
 
-describe('readDataCursor', () => {
+describe(readDataCursor, () => {
   const DATA_TRIGGER = { kind: 'data', entities: ['core.transaction'] } as const;
 
   function feed(changes: Record<string, unknown>[], cursor: string) {
@@ -130,9 +130,9 @@ describe('readDataCursor', () => {
       now: new Date(1_000),
     });
 
-    expect(result.elements).toEqual([]);
+    expect(result.elements).toStrictEqual([]);
     expect(result.positionJson).toBe('"p1"');
-    expect(requests).toEqual([{ cursor: null, limit: 50 }]);
+    expect(requests).toStrictEqual([{ cursor: null, limit: 50 }]);
   });
 
   it('delivers every entry it advances past and never pulls more than the cap', async () => {
@@ -154,8 +154,8 @@ describe('readDataCursor', () => {
 
     // The feed's watermark is its last returned row, so committing it is only
     // honest when every returned row is delivered.
-    expect(requests).toEqual([{ cursor: 'p1', limit: 2 }]);
-    expect(result.elements).toEqual([
+    expect(requests).toStrictEqual([{ cursor: 'p1', limit: 2 }]);
+    expect(result.elements).toStrictEqual([
       { position: 'p2', occurredAt: 5_000, payload: changes[0], positionJson: '"p2"' },
       { position: 'p3', occurredAt: 5_000, payload: changes[1], positionJson: '"p3"' },
     ]);

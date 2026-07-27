@@ -180,7 +180,7 @@ export function LightboxInfo({
       {/* faces.ts owns its own "People" heading, imperatively, only when
           face regions actually exist — no static label here, matching the
           old PanelBody's contract exactly. */}
-      <div className="ph-faces" ref={facesHostRef}></div>
+      <div className="ph-faces" ref={facesHostRef} />
 
       {albumList.length > 0 ? (
         <>
@@ -303,7 +303,7 @@ export function LightboxInfo({
       >
         Delete photo
       </button>
-      <p className={styles.note} ref={noteRef}></p>
+      <p className={styles.note} ref={noteRef} />
     </>
   );
 }

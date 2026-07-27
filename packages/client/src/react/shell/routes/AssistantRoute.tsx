@@ -434,11 +434,11 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           return;
         }
         case 'reasoning.delta':
-          if (!thinking) {
+          if (thinking) {
+            thinking.text += event.delta;
+          } else {
             thinking = { kind: 'thinking', text: event.delta, streaming: true };
             m.current.msgs.push(thinking);
-          } else {
-            thinking.text += event.delta;
           }
           push();
           return;
@@ -455,9 +455,9 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           // ledger rollup replaces it on reload.
           const costUsd = event.costUsd;
           msg.usage = {
-            ...(inputTokens !== undefined ? { inputTokens } : {}),
-            ...(outputTokens !== undefined ? { outputTokens } : {}),
-            ...(costUsd !== undefined ? { costUsd, estimated: true } : {}),
+            ...(inputTokens === undefined ? {} : { inputTokens }),
+            ...(outputTokens === undefined ? {} : { outputTokens }),
+            ...(costUsd === undefined ? {} : { costUsd, estimated: true }),
             ...(event.model ? { model: event.model } : {}),
             ...(event.effort ? { effort: event.effort } : {}),
           };

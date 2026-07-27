@@ -174,7 +174,7 @@ export function makeVaultRouteHandler(
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
-    const rest = url.pathname.slice(PREFIX.length).replace(/^\//, '');
+    const rest = url.pathname.slice(PREFIX.length).replace(/^\//u, '');
     const segments = rest === '' ? [] : rest.split('/').map(decodeURIComponent);
     const method = req.method ?? 'GET';
 
@@ -477,10 +477,10 @@ export function makeVaultRouteHandler(
             plane.db.blobTransfers.enqueueExistingLocal();
           }
           updateBlobStoreSettings(plane.db, {
-            ...(blobStorePatch !== undefined ? { blob_store: blobStorePatch } : {}),
-            ...(mediaLocation !== undefined
-              ? { media_location: mediaLocation as 'keep' | 'strip' | null }
-              : {}),
+            ...(blobStorePatch === undefined ? {} : { blob_store: blobStorePatch }),
+            ...(mediaLocation === undefined
+              ? {}
+              : { media_location: mediaLocation as 'keep' | 'strip' | null }),
           });
           if (Object.keys(policyPatch).length > 0) updateBackupPolicy(plane.db.vault, policyPatch);
           if (attachingRemote) plane.db.blobTransfers.kickOutbox();
@@ -493,7 +493,7 @@ export function makeVaultRouteHandler(
           return sendJson(res, 200, {
             blob_store: readBlobStoreSettings(plane.db.vault),
             media_location: mediaLocationPolicy(plane.db),
-            ...(recoveryKitConfirmed !== undefined ? { recoveryKitConfirmed } : {}),
+            ...(recoveryKitConfirmed === undefined ? {} : { recoveryKitConfirmed }),
             ...(remoteWithoutBackup
               ? {
                   warning:
@@ -949,7 +949,7 @@ export function makeVaultRouteHandler(
           res,
           200,
           plane.pickEntities({
-            ...(term !== undefined ? { term } : {}),
+            ...(term === undefined ? {} : { term }),
             ...(kinds ? { kinds } : {}),
             ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
           }),
@@ -963,7 +963,7 @@ export function makeVaultRouteHandler(
           res,
           200,
           plane.pickAnchors({
-            ...(term !== undefined ? { term } : {}),
+            ...(term === undefined ? {} : { term }),
             ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
           }),
         );

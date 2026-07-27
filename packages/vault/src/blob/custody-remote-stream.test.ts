@@ -30,7 +30,7 @@ describe('remote-only blob streaming', () => {
 
     expect(stream).not.toBeNull();
     const streamed = await collect(stream!);
-    expect(streamed.length).toBe(bytes.length);
+    expect(streamed).toHaveLength(bytes.length);
     expect(sha256OfBytes(streamed)).toBe(sha);
     expect(reads).toHaveLength(3);
     expect(reads.every(({ start, end }) => end! - start + 1 <= 4 * 1024 * 1024)).toBe(true);
@@ -60,7 +60,7 @@ describe('remote-only blob streaming', () => {
 
     const stream = custody.openRemoteReadStream(sha, bytes.length, { start: 3, end: 7 });
 
-    await expect(collect(stream!)).resolves.toEqual(Buffer.from('34567'));
+    await expect(collect(stream!)).resolves.toStrictEqual(Buffer.from('34567'));
     expect(get).toHaveBeenCalledWith(sha, { start: 3, end: 7 });
   });
 });

@@ -327,7 +327,7 @@ export class BlobTransferCoordinator {
       tempPath,
       expiresAt,
       ...(input.expectedSha256 ? { expectedSha256: input.expectedSha256 } : {}),
-      ...(input.expectedSize !== undefined ? { expectedSize: input.expectedSize } : {}),
+      ...(input.expectedSize === undefined ? {} : { expectedSize: input.expectedSize }),
       ...(input.mediaType ? { mediaType: input.mediaType } : {}),
       ...(input.filename ? { filename: input.filename } : {}),
       ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),

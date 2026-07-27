@@ -71,8 +71,8 @@ export function evaluateConditions(
     const predicate = `${spec.name}: ${spec.column} ${spec.op} ${JSON.stringify(spec.value)}`;
     try {
       const params: Record<string, string | number | null> = {};
-      for (const match of spec.sql.matchAll(/:([a-z_][a-z0-9_]*)/gi)) {
-        const key = match[1] as string;
+      for (const match of spec.sql.matchAll(/:(?<param>[a-z_][a-z0-9_]*)/giu)) {
+        const key = match.groups?.param as string;
         const value = input[key];
         params[key] =
           typeof value === 'string' || typeof value === 'number'

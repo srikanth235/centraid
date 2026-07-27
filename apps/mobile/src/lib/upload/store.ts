@@ -166,7 +166,9 @@ export class UploadQueueStore {
       // idempotently (see store-migrations.ts) so a kill mid-migration cannot
       // brick the queue and lose a photo that exists nowhere else yet.
       migrateUploadSchema(driver, version, FOLLOWUP_DDL);
-    } else if (version !== SCHEMA_VERSION) {
+    } else if (version === SCHEMA_VERSION) {
+      driver.exec(DDL);
+    } else {
       // v0 pre-release: an unknown (future/foreign) version rebuilds in place
       // rather than migrating. Only this module's own tables are named, so
       // nothing else in the file is collateral.
@@ -178,8 +180,6 @@ export class UploadQueueStore {
       `);
       driver.exec(DDL);
       driver.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`);
-    } else {
-      driver.exec(DDL);
     }
     return new UploadQueueStore(driver);
   }

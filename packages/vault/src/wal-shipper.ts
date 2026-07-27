@@ -250,7 +250,7 @@ function isNonNegativeInteger(value: unknown): value is number {
 function isStreamState(value: unknown, db: WalDbName): value is DbStreamState {
   if (typeof value !== 'object' || value === null) return false;
   const stream = value as Record<string, unknown>;
-  if (typeof stream['generation'] !== 'string' || !/^[0-9a-f]{32}$/.test(stream['generation'])) {
+  if (typeof stream['generation'] !== 'string' || !/^[0-9a-f]{32}$/u.test(stream['generation'])) {
     return false;
   }
   const generation = stream['generation'];
@@ -258,7 +258,7 @@ function isStreamState(value: unknown, db: WalDbName): value is DbStreamState {
   if (
     stream['retiredBaseName'] !== undefined &&
     (typeof stream['retiredBaseName'] !== 'string' ||
-      !new RegExp(`^bases/${db}/[0-9a-f]{32}\\.db$`).test(stream['retiredBaseName']))
+      !new RegExp(`^bases/${db}/[0-9a-f]{32}\\.db$`, 'u').test(stream['retiredBaseName']))
   ) {
     return false;
   }
@@ -282,11 +282,11 @@ function isStreamState(value: unknown, db: WalDbName): value is DbStreamState {
     return false;
   if (
     typeof stream['dbHeaderSha256'] !== 'string' ||
-    !/^[0-9a-f]{64}$/.test(stream['dbHeaderSha256'])
+    !/^[0-9a-f]{64}$/u.test(stream['dbHeaderSha256'])
   ) {
     return false;
   }
-  if (typeof stream['baseSha256'] !== 'string' || !/^[0-9a-f]{64}$/.test(stream['baseSha256'])) {
+  if (typeof stream['baseSha256'] !== 'string' || !/^[0-9a-f]{64}$/u.test(stream['baseSha256'])) {
     return false;
   }
   if (typeof stream['basePending'] !== 'boolean' || typeof stream['closedClean'] !== 'boolean') {
@@ -1092,7 +1092,7 @@ export class WalShipper {
       if (size !== 0) return null; // not fully truncated — treat as busy
       return {
         raced: this.dataVersion(db) !== dvBefore,
-        ...(preflightReason !== undefined ? { untrustedReason: preflightReason } : {}),
+        ...(preflightReason === undefined ? {} : { untrustedReason: preflightReason }),
       };
     } finally {
       handle.exec('PRAGMA busy_timeout = 30000');
@@ -1687,9 +1687,9 @@ export class WalShipper {
     for (const db of WAL_DB_NAMES) {
       const dbRoot = path.join(segRoot, db);
       if (!existsSync(dbRoot)) continue;
-      for (const generation of dirsIn(dbRoot, /^[0-9a-f]{32}$/)) {
+      for (const generation of dirsIn(dbRoot, /^[0-9a-f]{32}$/u)) {
         const genRoot = path.join(dbRoot, generation);
-        for (const groupName of dirsIn(genRoot, /^\d{8}$/)) {
+        for (const groupName of dirsIn(genRoot, /^\d{8}$/u)) {
           const groupRoot = path.join(genRoot, groupName);
           const group = Number.parseInt(groupName, 10);
           for (const name of readdirSync(groupRoot).sort()) {
@@ -1729,7 +1729,7 @@ export class WalShipper {
     // reverse order would cost a tick of RPO on every interrupted drain.
     const markerRoot = path.join(this.dir, 'markers');
     if (existsSync(markerRoot)) {
-      for (const pair of dirsIn(markerRoot, /^[0-9a-f]{32}-[0-9a-f]{32}$/)) {
+      for (const pair of dirsIn(markerRoot, /^[0-9a-f]{32}-[0-9a-f]{32}$/u)) {
         const pairDir = path.join(markerRoot, pair);
         const vaultGeneration = pair.slice(0, 32);
         const journalGeneration = pair.slice(33);

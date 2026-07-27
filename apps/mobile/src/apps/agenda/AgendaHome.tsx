@@ -354,7 +354,7 @@ function EventRow({
 }: {
   event: AgendaEventModel;
   colors: ReturnType<typeof useTheme>['colors'];
-  onPress(): void;
+  onPress: () => void;
 }): React.JSX.Element {
   return (
     <Pressable onPress={onPress} style={[styles.event, { borderBottomColor: colors.line }]}>
@@ -392,7 +392,7 @@ function MonthGrid({
 }: {
   cursor: Date;
   events: AgendaEventModel[];
-  onDay(day: Date): void;
+  onDay: (day: Date) => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }): React.JSX.Element {
   const start = startOfMonth(cursor);

@@ -72,7 +72,7 @@ export function stripFrameAncestors(policy: string): string {
   return policy
     .split(';')
     .map((d) => d.trim())
-    .filter((d) => d.length > 0 && !/^frame-ancestors\b/i.test(d))
+    .filter((d) => d.length > 0 && !/^frame-ancestors\b/iu.test(d))
     .join('; ');
 }
 

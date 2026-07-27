@@ -12,9 +12,8 @@
  */
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const PACKAGE_ROOT = path.resolve(here, '..');
 const SOURCE_INDEX = path.join(PACKAGE_ROOT, 'index.json');
 const OUTPUT = path.join(PACKAGE_ROOT, 'manifest.json');

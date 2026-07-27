@@ -32,12 +32,14 @@ describe('intent payload hash identity across platforms', () => {
   });
 
   test('the WebCrypto default matches the pinned fixture hash', async () => {
-    expect(await intentPayloadHash(payload)).toBe(EXPECTED_HASH);
+    await expect(intentPayloadHash(payload)).resolves.toBe(EXPECTED_HASH);
   });
 
   test('an injected non-WebCrypto digest produces the identical hash', async () => {
-    expect(await intentPayloadHash(payload, nodeDigest)).toBe(EXPECTED_HASH);
-    expect(await intentPayloadHash(payload, nodeDigest)).toBe(await intentPayloadHash(payload));
+    await expect(intentPayloadHash(payload, nodeDigest)).resolves.toBe(EXPECTED_HASH);
+    await expect(intentPayloadHash(payload, nodeDigest)).resolves.toBe(
+      await intentPayloadHash(payload),
+    );
   });
 
   test('key insertion order does not change the hash across implementations', async () => {
@@ -46,6 +48,6 @@ describe('intent payload hash identity across platforms', () => {
       action: 'photos.favorite',
       input: { favorite: true, assetId: 'asset-1' },
     };
-    expect(await intentPayloadHash(reordered, nodeDigest)).toBe(EXPECTED_HASH);
+    await expect(intentPayloadHash(reordered, nodeDigest)).resolves.toBe(EXPECTED_HASH);
   });
 });

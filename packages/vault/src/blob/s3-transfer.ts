@@ -13,11 +13,11 @@ import type {
 
 const PART_BYTES = 16 * 1024 * 1024;
 const MULTIPART_AT = 32 * 1024 * 1024;
-const TEMP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const TEMP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 
 /** Canonical path-style namespace advertised to trusted native carriers. */
 export function s3TemporaryUploadPrefix(input: { bucket: string; prefix?: string }): string {
-  const prefix = input.prefix ? `${input.prefix.replace(/^\/+|\/+$/g, '')}/` : '';
+  const prefix = input.prefix ? `${input.prefix.replace(/^\/+|\/+$/gu, '')}/` : '';
   return `/${encodeKeyPath(input.bucket)}/${encodeKeyPath(`${prefix}tmp/blobs/`)}`;
 }
 
@@ -43,15 +43,15 @@ async function* chunks(source: NodeJS.ReadableStream, size = PART_BYTES): AsyncG
 
 function xmlUnescape(value: string): string {
   return value
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&gt;/g, '>')
-    .replace(/&lt;/g, '<')
-    .replace(/&amp;/g, '&');
+    .replace(/&quot;/gu, '"')
+    .replace(/&apos;/gu, "'")
+    .replace(/&gt;/gu, '>')
+    .replace(/&lt;/gu, '<')
+    .replace(/&amp;/gu, '&');
 }
 
 function xmlValue(xml: string, tag: string): string | undefined {
-  return new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(xml)?.[1];
+  return new RegExp(`<${tag}>(?<value>[^<]*)</${tag}>`, 'u').exec(xml)?.groups?.['value'];
 }
 
 export class S3TransferStore implements RemoteBlobTransfer {
@@ -64,7 +64,7 @@ export class S3TransferStore implements RemoteBlobTransfer {
   }
 
   private prefix(): string {
-    return this.options.prefix ? this.options.prefix.replace(/\/+$/, '') + '/' : '';
+    return this.options.prefix ? this.options.prefix.replace(/\/+$/u, '') + '/' : '';
   }
 
   private shaKey(sha: string): string {
@@ -183,8 +183,8 @@ export class S3TransferStore implements RemoteBlobTransfer {
       const response = await this.send('GET', '', { query });
       if (!response.ok) throw new Error(`s3 list temporary uploads: ${response.status}`);
       const xml = await response.text();
-      for (const match of xml.matchAll(/<Upload>([\s\S]*?)<\/Upload>/g)) {
-        const block = match[1] ?? '';
+      for (const match of xml.matchAll(/<Upload>(?<upload>[\s\S]*?)<\/Upload>/gu)) {
+        const block = match.groups?.upload ?? '';
         const rawKey = xmlValue(block, 'Key');
         const rawUploadId = xmlValue(block, 'UploadId');
         const rawInitiated = xmlValue(block, 'Initiated');
@@ -203,7 +203,7 @@ export class S3TransferStore implements RemoteBlobTransfer {
           initiatedAt: xmlUnescape(rawInitiated),
         });
       }
-      if (!/<IsTruncated>true<\/IsTruncated>/.test(xml)) break;
+      if (!/<IsTruncated>true<\/IsTruncated>/u.test(xml)) break;
       const nextKey = xmlValue(xml, 'NextKeyMarker');
       const nextUploadId = xmlValue(xml, 'NextUploadIdMarker');
       if (!nextKey || (nextKey === keyMarker && nextUploadId === uploadIdMarker)) {

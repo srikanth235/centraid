@@ -119,7 +119,7 @@ describe('enricher template hygiene', () => {
 
   it.each(ENRICHERS.map((id) => [id] as const))('%s: handler passes the determinism lint', (id) => {
     const source = readFileSync(path.join(automationDir(id), 'handler.js'), 'utf8');
-    expect(lintHandlerSource(source)).toEqual([]);
+    expect(lintHandlerSource(source)).toStrictEqual([]);
   });
 });
 
@@ -143,13 +143,13 @@ describe('photo-captioner behavior', () => {
     });
     const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
     // Preview wins over thumb; originals are never a spelling.
-    expect(harness.agentCalls[0]!.content).toEqual([{ contentId: 'c1', variant: 'preview' }]);
-    expect(harness.invokes.length).toBe(1);
+    expect(harness.agentCalls[0]!.content).toStrictEqual([{ contentId: 'c1', variant: 'preview' }]);
+    expect(harness.invokes).toHaveLength(1);
     const staged = harness.invokes[0]!;
     expect(staged.command).toBe('sync.stage_rows');
     expect(staged.input.kind).toBe('enrichment.vision');
     const rows = staged.input.rows as { entity_type: string; external_id: string }[];
-    expect(rows.map((r) => r.entity_type)).toEqual(['knowledge.annotation', 'core.tag']);
+    expect(rows.map((r) => r.entity_type)).toStrictEqual(['knowledge.annotation', 'core.tag']);
     expect(rows[0]!.external_id).toBe('a1:caption');
     expect(harness.state.get('cursor')).toBe('a1');
     expect(result.summary).toContain('captioned 1');
@@ -172,7 +172,7 @@ describe('photo-captioner behavior', () => {
     expect(commands).toContain('sync.stage_rows');
     expect(commands).toContain('enrich.mark_requests_drained');
     const drained = harness.invokes.find((i) => i.command === 'enrich.mark_requests_drained')!;
-    expect(drained.input).toEqual({ request_ids: ['rq1'] });
+    expect(drained.input).toStrictEqual({ request_ids: ['rq1'] });
   });
 
   it('a photo without derivatives is skipped honestly — no bytes, no agent turn', async () => {
@@ -184,8 +184,8 @@ describe('photo-captioner behavior', () => {
       },
     });
     const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.agentCalls.length).toBe(0);
-    expect(harness.invokes.length).toBe(0);
+    expect(harness.agentCalls).toHaveLength(0);
+    expect(harness.invokes).toHaveLength(0);
     expect(result.summary).toContain('skipped 1');
     // The cursor still advances — a later manual re-run can revisit.
     expect(harness.state.get('cursor')).toBe('a2');
@@ -203,9 +203,9 @@ describe('doc-text-extractor behavior', () => {
       agent: () => ({ text: 'Warranty expires 2027-03-01' }),
     });
     const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.agentCalls[0]!.content).toEqual([{ contentId: 'd1', variant: 'preview' }]);
-    expect(harness.invokes.map((i) => i.command)).toEqual(['core.set_extracted_text']);
-    expect(harness.invokes[0]!.input).toEqual({
+    expect(harness.agentCalls[0]!.content).toStrictEqual([{ contentId: 'd1', variant: 'preview' }]);
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual(['core.set_extracted_text']);
+    expect(harness.invokes[0]!.input).toStrictEqual({
       content_id: 'd1',
       text: 'Warranty expires 2027-03-01',
     });
@@ -222,8 +222,8 @@ describe('doc-text-extractor behavior', () => {
       agent: () => ({ summary: 'Home insurance policy for 2026.' }),
     });
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.agentCalls[0]!.content).toEqual([{ contentId: 'd2', variant: 'text' }]);
-    expect(harness.invokes.map((i) => i.command)).toEqual(['sync.stage_rows']);
+    expect(harness.agentCalls[0]!.content).toStrictEqual([{ contentId: 'd2', variant: 'text' }]);
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual(['sync.stage_rows']);
     const rows = harness.invokes[0]!.input.rows as {
       external_id: string;
       payload: { body: string };
@@ -244,8 +244,8 @@ describe('doc-text-extractor behavior', () => {
       },
     });
     const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.agentCalls.length).toBe(0);
-    expect(harness.invokes.length).toBe(0);
+    expect(harness.agentCalls).toHaveLength(0);
+    expect(harness.invokes).toHaveLength(0);
     expect(result.summary).toContain('skipped 1');
   });
 
@@ -270,8 +270,10 @@ describe('doc-text-extractor behavior', () => {
       { derivative_id: 'dv-1', content_id: 'd5', variant: 'preview' },
     ];
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.agentCalls.at(-1)?.content).toEqual([{ contentId: 'd5', variant: 'preview' }]);
-    expect(harness.invokes.at(-1)).toEqual({
+    expect(harness.agentCalls.at(-1)?.content).toStrictEqual([
+      { contentId: 'd5', variant: 'preview' },
+    ]);
+    expect(harness.invokes.at(-1)).toStrictEqual({
       command: 'core.set_extracted_text',
       input: { content_id: 'd5', text: 'Late preview exposes the albatross renewal date' },
     });
@@ -298,7 +300,7 @@ describe('screenshot-extractor behavior', () => {
       }),
     });
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.invokes.map((i) => i.command)).toEqual(['sync.stage_rows']);
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual(['sync.stage_rows']);
     const input = harness.invokes[0]!.input as {
       kind: string;
       rows: { entity_type: string; payload: Record<string, unknown> }[];
@@ -320,7 +322,7 @@ describe('screenshot-extractor behavior', () => {
       agent: () => ({ kind: 'booking', booking: { summary: 'Flight BLR → GOI' } }),
     });
     const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.invokes.length).toBe(0);
+    expect(harness.invokes).toHaveLength(0);
     expect(result.summary).toContain('0 booking(s)');
   });
 });
@@ -349,7 +351,7 @@ describe('face-proposer behavior', () => {
       rows: { entity_type: string; external_id: string; payload: { party_id?: unknown } }[];
     };
     expect(input.kind).toBe('enrichment.faces');
-    expect(input.rows.map((r) => r.external_id)).toEqual(['f1:face:0', 'f1:face:1']);
+    expect(input.rows.map((r) => r.external_id)).toStrictEqual(['f1:face:0', 'f1:face:1']);
     // Identity-blind: proposals never carry a party.
     expect(input.rows.every((r) => r.payload.party_id === undefined)).toBe(true);
   });
@@ -372,16 +374,16 @@ describe('trip-albums behavior', () => {
       reads: { 'media.media_asset': [...homePhotos, ...trip] },
     });
     const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.agentCalls.length).toBe(0); // deterministic code, no model
-    expect(harness.invokes.map((i) => i.command)).toEqual(['sync.stage_rows']);
+    expect(harness.agentCalls).toHaveLength(0); // deterministic code, no model
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual(['sync.stage_rows']);
     const input = harness.invokes[0]!.input as {
       rows: { external_id: string; payload: { name: string; members: unknown[] } }[];
     };
     // The two May photos are too few/short; the June run is one trip.
-    expect(input.rows.length).toBe(1);
+    expect(input.rows).toHaveLength(1);
     expect(input.rows[0]!.external_id).toBe('trip:2026-06-10');
     expect(input.rows[0]!.payload.name).toContain('Jun');
-    expect(input.rows[0]!.payload.members.length).toBe(6);
+    expect(input.rows[0]!.payload.members).toHaveLength(6);
     expect(result.summary).toContain('1 trip album');
   });
 });
@@ -405,7 +407,7 @@ describe('doc-entity-linker behavior', () => {
       }),
     });
     const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.invokes.map((i) => i.command)).toEqual(['core.link_entities']);
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual(['core.link_entities']);
     const input = harness.invokes[0]!.input as Record<string, unknown>;
     expect(input.from_id).toBe('d1');
     expect(input.to_id).toBe('p1'); // Rahul exists; Sunita doesn't — dropped
@@ -451,7 +453,7 @@ describe('obligation-extractor behavior', () => {
       rows: { external_id: string; payload: { status: string; dtstart: string } }[];
     };
     expect(input.kind).toBe('enrichment.obligations');
-    expect(input.rows.length).toBe(1); // "soon" is not a date
+    expect(input.rows).toHaveLength(1); // "soon" is not a date
     expect(input.rows[0]!.external_id).toBe('obligation:d1:0');
     expect(input.rows[0]!.payload.status).toBe('tentative');
     expect(input.rows[0]!.payload.dtstart).toBe('2027-03-01');
@@ -478,8 +480,8 @@ describe('renewal-reminders behavior', () => {
       summary: string;
       output: { upcoming: { due: string }[] };
     };
-    expect(harness.invokes.length).toBe(0);
-    expect(harness.agentCalls.length).toBe(0);
+    expect(harness.invokes).toHaveLength(0);
+    expect(harness.agentCalls).toHaveLength(0);
     expect(result.summary).toContain('2 deadlines');
     expect(result.output.upcoming[0]!.due).toBe('2026-07-12'); // soonest first
   });
@@ -513,15 +515,15 @@ describe('doc-filer behavior', () => {
       },
     });
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.agentCalls[0]!.content).toEqual([{ contentId: 'd1', variant: 'text' }]);
-    expect(harness.invokes.map((i) => i.command)).toEqual(['sync.stage_rows']);
+    expect(harness.agentCalls[0]!.content).toStrictEqual([{ contentId: 'd1', variant: 'text' }]);
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual(['sync.stage_rows']);
     const input = harness.invokes[0]!.input as {
       kind: string;
       rows: { entity_type: string; external_id: string; payload: Record<string, unknown> }[];
     };
     expect(input.kind).toBe('enrichment.doctype');
-    expect(input.rows.map((r) => r.entity_type)).toEqual(['core.content_item', 'core.tag']);
-    expect(input.rows[0]!.payload).toEqual({
+    expect(input.rows.map((r) => r.entity_type)).toStrictEqual(['core.content_item', 'core.tag']);
+    expect(input.rows[0]!.payload).toStrictEqual({
       content_id: 'd1',
       title: 'Home insurance policy 2026',
       folder: 'Insurance',

@@ -92,7 +92,7 @@ async function callbackResponse(
   const limited = await enforceRateLimit('callback', request, env);
   if (limited) return limited;
   const state = bounded(url.searchParams.get('state'), 128);
-  if (!state || !/^[dw]\.[A-Za-z0-9_-]{43}$/.test(state)) {
+  if (!state || !/^[dw]\.[A-Za-z0-9_-]{43}$/u.test(state)) {
     metric(env, 'callback', 'invalid_state', 400);
     return finishPage(400, 'Not connected', 'The authorization return was incomplete.');
   }
@@ -158,12 +158,12 @@ async function callbackResponse(
  */
 function startPage(env: Env): Response {
   const nonce = base64UrlEncode(crypto.getRandomValues(new Uint8Array(18)));
-  const clientId = JSON.stringify(env.GOOGLE_CLIENT_ID).replace(/</g, '\\u003c');
-  const callbackUrl = JSON.stringify(env.CALLBACK_URL).replace(/</g, '\\u003c');
+  const clientId = JSON.stringify(env.GOOGLE_CLIENT_ID).replace(/</gu, '\\u003c');
+  const callbackUrl = JSON.stringify(env.CALLBACK_URL).replace(/</gu, '\\u003c');
   const allowedScopes = JSON.stringify([
     ...STANDARD_GOOGLE_SCOPES,
     ...(String(env.RESTRICTED_SCOPES_ENABLED) === 'true' ? RESTRICTED_GOOGLE_SCOPES : []),
-  ]).replace(/</g, '\\u003c');
+  ]).replace(/</gu, '\\u003c');
   const html = `<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Continue to Google</title>
@@ -221,9 +221,9 @@ async function bindBrowser(request: Request, env: Env, now: number): Promise<Res
   const browserBinding = bounded(body.browser_binding, 128);
   if (
     !state ||
-    !/^[dw]\.[A-Za-z0-9_-]{43}$/.test(state) ||
+    !/^[dw]\.[A-Za-z0-9_-]{43}$/u.test(state) ||
     !browserBinding ||
-    !/^[A-Za-z0-9_-]{43}$/.test(browserBinding)
+    !/^[A-Za-z0-9_-]{43}$/u.test(browserBinding)
   ) {
     metric(env, 'bind', 'invalid_body', 400);
     return responseJson(400, { error: 'invalid_body' });
@@ -268,18 +268,19 @@ async function readBrowserBinding(
     ?.slice(name.length + 1);
   if (!value) return undefined;
   const match =
-    /^v1\.(\d{10})\.([dw]\.[A-Za-z0-9_-]{43})\.([A-Za-z0-9_-]{43})\.([A-Za-z0-9_-]{43})$/.exec(
+    /^v1\.(?<expiresAt>\d{10})\.(?<state>[dw]\.[A-Za-z0-9_-]{43})\.(?<bindingHash>[A-Za-z0-9_-]{43})\.(?<mac>[A-Za-z0-9_-]{43})$/u.exec(
       value,
     );
-  if (!match || match[2] !== expectedState) return undefined;
-  const expiresAt = Number(match[1]);
+  const g: Record<string, string | undefined> = match?.groups ?? {};
+  if (!match || g.state !== expectedState) return undefined;
+  const expiresAt = Number(g.expiresAt);
   const nowSeconds = Math.floor(now / 1000);
   if (expiresAt < nowSeconds || expiresAt > nowSeconds + BROWSER_BINDING_TTL_SECONDS) {
     return undefined;
   }
-  const payload = `v1.${match[1]}.${match[2]}.${match[3]}`;
-  if (!(await verifyHmac(`browser-binding\n${payload}`, match[4]!, secret))) return undefined;
-  return { bindingHash: match[3]! };
+  const payload = `v1.${g.expiresAt}.${g.state}.${g.bindingHash}`;
+  if (!(await verifyHmac(`browser-binding\n${payload}`, g.mac!, secret))) return undefined;
+  return { bindingHash: g.bindingHash! };
 }
 
 function serializeBrowserBindingCookie(url: URL, state: string, value: string): string {
@@ -448,13 +449,13 @@ async function exchangeForm(
   if (
     !code ||
     !verifier ||
-    !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier) ||
+    !/^[A-Za-z0-9._~-]{43,128}$/u.test(verifier) ||
     redirectUri !== env.CALLBACK_URL ||
     !receipt ||
     !state ||
-    !/^[dw]\.[A-Za-z0-9_-]{43}$/.test(state) ||
+    !/^[dw]\.[A-Za-z0-9_-]{43}$/u.test(state) ||
     !browserBinding ||
-    !/^[A-Za-z0-9_-]{43}$/.test(browserBinding) ||
+    !/^[A-Za-z0-9_-]{43}$/u.test(browserBinding) ||
     !scopes
   ) {
     return { error: 'invalid_body' };
@@ -516,16 +517,17 @@ async function verifyReceipt(
   secret: string,
   now: number,
 ): Promise<'valid' | 'invalid_receipt' | 'expired_receipt'> {
-  const match = /^v1\.(\d{10})\.([A-Za-z0-9_-]{43})$/.exec(receipt);
+  const match = /^v1\.(?<expiresAt>\d{10})\.(?<mac>[A-Za-z0-9_-]{43})$/u.exec(receipt);
   if (!match) return 'invalid_receipt';
-  const expiresAt = Number(match[1]);
+  const g: Record<string, string | undefined> = match.groups ?? {};
+  const expiresAt = Number(g.expiresAt);
   const nowSeconds = Math.floor(now / 1000);
   if (expiresAt < nowSeconds || expiresAt > nowSeconds + RECEIPT_TTL_SECONDS) {
     return 'expired_receipt';
   }
   const valid = await verifyHmac(
     receiptMessage(code, state, bindingHash, expiresAt),
-    match[2]!,
+    g.mac!,
     secret,
   );
   return valid ? 'valid' : 'invalid_receipt';
@@ -593,7 +595,7 @@ async function sha256(value: string): Promise<string> {
 function desktopFinishPage(deepLink: string, message: string): Response {
   const nonce = base64UrlEncode(crypto.getRandomValues(new Uint8Array(18)));
   const safeLink = escapeHtml(deepLink);
-  const scriptTarget = JSON.stringify(deepLink).replace(/</g, '\\u003c');
+  const scriptTarget = JSON.stringify(deepLink).replace(/</gu, '\\u003c');
   const html = `<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Return to Centraid</title>
@@ -733,7 +735,7 @@ function validEnvironment(env: Env, requestUrl: URL): boolean {
         isLoopbackOrigin(env.APP_ORIGIN);
   return (
     coordinatesValid &&
-    /^[A-Za-z0-9._-]{3,512}\.apps\.googleusercontent\.com$/.test(env.GOOGLE_CLIENT_ID) &&
+    /^[A-Za-z0-9._-]{3,512}\.apps\.googleusercontent\.com$/u.test(env.GOOGLE_CLIENT_ID) &&
     env.GOOGLE_CLIENT_SECRET.length >= 16 &&
     env.CALLBACK_RECEIPT_SECRET.length >= 32 &&
     ['true', 'false'].includes(String(env.EXCHANGE_ENABLED)) &&
@@ -758,7 +760,9 @@ function isLoopbackOrigin(value: string): boolean {
 }
 
 function safeOAuthError(value: unknown): string {
-  return typeof value === 'string' && /^[a-z_]{1,64}$/.test(value) ? value : 'oauth_upstream_error';
+  return typeof value === 'string' && /^[a-z_]{1,64}$/u.test(value)
+    ? value
+    : 'oauth_upstream_error';
 }
 
 function validatedScopes(
@@ -784,7 +788,7 @@ function validatedScopes(
 
 function sameScopes(value: unknown, expected: readonly string[]): boolean {
   if (typeof value !== 'string' || value.length === 0 || value.length > 4096) return false;
-  const actual = [...new Set(value.split(/\s+/).filter(Boolean))].sort();
+  const actual = [...new Set(value.split(/\s+/u).filter(Boolean))].sort();
   const expectedSorted = [...expected].sort();
   return (
     actual.length === expectedSorted.length &&
@@ -801,20 +805,20 @@ function bounded(value: unknown, maxLength: number): string | undefined {
 function base64UrlEncode(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  return btoa(binary).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/gu, '');
 }
 
 function base64UrlDecode(value: string): Uint8Array {
   const padding = '='.repeat((4 - (value.length % 4)) % 4);
-  const binary = atob(value.replace(/-/g, '+').replace(/_/g, '/') + padding);
+  const binary = atob(value.replace(/-/gu, '+').replace(/_/gu, '/') + padding);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
 function escapeHtml(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;')
+    .replace(/'/gu, '&#39;');
 }

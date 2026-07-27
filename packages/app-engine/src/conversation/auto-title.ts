@@ -58,7 +58,7 @@ export interface GenerateTitleDeps {
 export function cleanTitle(raw: string): string | undefined {
   let t = raw.trim();
   // Model sometimes echoes a leading marker despite the instruction.
-  t = t.replace(/^title\s*[:\-–]\s*/i, '');
+  t = t.replace(/^title\s*[:\-–]\s*/iu, '');
   // Strip a single layer of wrapping quotes (straight or curly).
   const first = t[0];
   const last = t[t.length - 1];
@@ -75,7 +75,7 @@ export function cleanTitle(raw: string): string | undefined {
   const nl = t.indexOf('\n');
   if (nl >= 0) t = t.slice(0, nl).trim();
   t = t
-    .replace(/\s+/g, ' ')
+    .replace(/\s+/gu, ' ')
     .replace(/[.,;:!?…]+$/u, '')
     .trim();
   if (t.length === 0) return undefined;
@@ -130,6 +130,6 @@ export async function generateConversationTitle(
 }
 
 function excerpt(s: string, max: number): string {
-  const flat = s.replace(/\s+/g, ' ').trim();
+  const flat = s.replace(/\s+/gu, ' ').trim();
   return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
 }

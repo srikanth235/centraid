@@ -164,7 +164,7 @@ export interface ProvisionedWebhookInFiles {
   readonly secret: string;
 }
 
-const AUTOMATION_MANIFEST_RE = /^automations\/([^/]+)\/automation\.json$/;
+const AUTOMATION_MANIFEST_RE = /^automations\/(?<automationId>[^/]+)\/automation\.json$/u;
 
 /**
  * Filesystem-free variant of {@link provisionAppPendingWebhooks} for the
@@ -183,8 +183,8 @@ export function provisionPendingWebhooksInFiles(
   const out: WebhookFileMapEntry[] = [];
   const minted: ProvisionedWebhookInFiles[] = [];
   for (const f of files) {
-    const m = AUTOMATION_MANIFEST_RE.exec(f.path);
-    if (!m) {
+    const automationId = AUTOMATION_MANIFEST_RE.exec(f.path)?.groups?.automationId;
+    if (!automationId) {
       out.push(f);
       continue;
     }
@@ -210,7 +210,7 @@ export function provisionPendingWebhooksInFiles(
       isPendingWebhookTrigger(t) ? provisioned : t,
     );
     out.push({ path: f.path, content: JSON.stringify({ ...manifest, triggers }, null, 2) + '\n' });
-    minted.push({ path: f.path, automationId: m[1]!, ownerApp, webhookId, secret });
+    minted.push({ path: f.path, automationId, ownerApp, webhookId, secret });
   }
   return { files: out, minted };
 }
@@ -307,8 +307,8 @@ export interface WebhookRouteOptions {
 
 function extractSecret(req: IncomingMessage): string | undefined {
   const auth = req.headers['authorization'];
-  if (typeof auth === 'string' && /^Bearer\s+/i.test(auth)) {
-    return auth.replace(/^Bearer\s+/i, '').trim() || undefined;
+  if (typeof auth === 'string' && /^Bearer\s+/iu.test(auth)) {
+    return auth.replace(/^Bearer\s+/iu, '').trim() || undefined;
   }
   const header = req.headers['x-openclaw-webhook-secret'];
   if (typeof header === 'string' && header.trim()) return header.trim();
@@ -385,13 +385,13 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
     if (!req.url || !req.url.startsWith(WEBHOOK_ROUTE_PREFIX)) return false;
     const url = new URL(req.url, 'http://x');
     const sub = url.pathname.slice(WEBHOOK_ROUTE_PREFIX.length);
-    const slug = sub.replace(/^\/+/, '').replace(/\/+$/, '');
+    const slug = sub.replace(/^\/+/u, '').replace(/\/+$/u, '');
 
     if ((req.method ?? 'GET').toUpperCase() !== 'POST') {
       sendJson(res, 405, { error: 'webhook triggers accept POST only' });
       return true;
     }
-    if (!slug || !/^[A-Za-z0-9_-]+$/.test(slug)) {
+    if (!slug || !/^[A-Za-z0-9_-]+$/u.test(slug)) {
       sendJson(res, 404, { error: 'unknown webhook' });
       return true;
     }

@@ -22,7 +22,7 @@ import path from 'node:path';
 import { isValidAppOrAssistantId } from '../registry/app-paths.js';
 
 /** A sha256 hex digest — the CAS key + blob filename. */
-const HASH_RE = /^[a-f0-9]{64}$/;
+const HASH_RE = /^[a-f0-9]{64}$/u;
 
 /** Compute the CAS key (sha256 hex) for a byte buffer. */
 export function hashBytes(bytes: Uint8Array): string {

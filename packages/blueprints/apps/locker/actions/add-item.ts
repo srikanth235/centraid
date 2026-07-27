@@ -24,7 +24,7 @@ const FIELDS = [
   'network',
 ] as const;
 
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function addItem({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   const cmdInput: Record<string, unknown> = {
     type: String(input.type ?? ''),
@@ -44,4 +44,4 @@ export default async ({ body, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

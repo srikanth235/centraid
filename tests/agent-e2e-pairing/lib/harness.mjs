@@ -17,14 +17,13 @@ import { randomBytes } from 'node:crypto';
 import { promises as fs, createWriteStream } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createTunnelClient, tunnelRequest } from '../../../packages/tunnel/dist/index.js';
 import { daemonKeyStore } from '../../../packages/gateway/dist/cli/key-store.js';
 import { landlordBearerForEndpointSecret } from '../../../packages/gateway/dist/cli/landlord-auth.js';
 import { daemonLayoutFor } from '../../../packages/gateway/dist/cli/paths.js';
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const GATEWAY_CLI = path.join(REPO_ROOT, 'packages', 'gateway', 'dist', 'cli', 'cli.js');
 const TUNNEL_DIST = path.join(REPO_ROOT, 'packages', 'tunnel', 'dist', 'index.js');
@@ -135,8 +134,10 @@ async function spawnDaemon(
   const scan = (chunk) => {
     log.write(chunk);
     buffer += chunk.toString('utf8');
-    wanted.url ??= buffer.match(/listening on (http:\/\/[^\s]+)/)?.[1];
-    wanted.endpointId ??= buffer.match(/endpoint: ([0-9a-f]{64})/)?.[1];
+    wanted.url ??= buffer.match(/listening on (?<url>http:\/\/[^\s]+)/u)?.groups?.url;
+    wanted.endpointId ??= buffer.match(
+      /endpoint: (?<endpointId>[0-9a-f]{64})/u,
+    )?.groups?.endpointId;
   };
   child.stdout.on('data', scan);
   child.stderr.on('data', scan);
@@ -279,7 +280,7 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
         if (ttlMinutes !== undefined) args.push('--ttl-minutes', String(ttlMinutes));
         args.push('--port', String(state.port));
         const { stdout } = await cli(dataDir, args);
-        const raw = stdout.match(/^(ey[A-Za-z0-9_-]{40,})$/m)?.[1];
+        const raw = stdout.match(/^(?<ticket>ey[A-Za-z0-9_-]{40,})$/mu)?.groups?.ticket;
         if (!raw) throw new Error(`pair printed no ticket token:\n${stdout}`);
         return { raw, payload: parseTicket(raw) };
       },

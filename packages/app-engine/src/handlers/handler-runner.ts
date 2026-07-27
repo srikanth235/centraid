@@ -1,6 +1,5 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { AppRef } from '../types.js';
 import { appendLogs, type LogEntry } from '../data/log-store.js';
 import type { VaultBridge, VaultOp } from './vault-bridge.js';
@@ -10,7 +9,7 @@ import { WorkerPool, workerPoolSizeFromEnv, workerResourceLimitsFromEnv } from '
 function resolveWorkerFile(): string {
   // `here` is this module's dir (`src/handlers` → `dist/handlers` once built);
   // the worker runner lives one level up under `worker/`.
-  const here = path.dirname(fileURLToPath(import.meta.url));
+  const here = import.meta.dirname;
   const jsPath = path.join(here, '..', 'worker', 'runner.js');
   if (existsSync(jsPath)) return jsPath;
   // Running tests via tsx from src/ where .js isn't emitted — fall back to
@@ -141,7 +140,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     }, opts.timeoutMs);
   }
 
-  const handlerName = path.basename(opts.handlerFile).replace(/\.(ts|js)$/, '');
+  const handlerName = path.basename(opts.handlerFile).replace(/\.(?:ts|js)$/u, '');
   const persistedEntries: LogEntry[] = [];
 
   return await new Promise<HandlerOutcome>((resolve) => {

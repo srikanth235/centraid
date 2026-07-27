@@ -1,7 +1,7 @@
 /**
  * Settle a debt (marks it closed, kept as history). Runs through people.settle_debt — consent-checked and receipted, risk low.
  */
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function settleDebt({ body, ctx }: HandlerArgs) {
   try {
     const outcome = await ctx.vault.invoke({
       command: 'people.settle_debt',
@@ -13,4 +13,4 @@ export default async ({ body, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

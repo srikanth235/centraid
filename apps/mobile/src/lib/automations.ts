@@ -60,20 +60,20 @@ export interface AutomationRow {
  * is shown honestly rather than mislabeled.
  */
 function describeCron(expr: string): string {
-  const fields = expr.trim().split(/\s+/);
+  const fields = expr.trim().split(/\s+/u);
   if (fields.length !== 5) return `Cron ${expr}`;
   const [min, hour, dom, mon, dow] = fields as [string, string, string, string, string];
   const everyDay = dom === '*' && mon === '*' && dow === '*';
 
   // Every N minutes / every minute.
-  const minStep = /^\*\/(\d+)$/.exec(min);
-  if (minStep && hour === '*' && everyDay) return `Every ${minStep[1]} minutes`;
+  const minStep = /^\*\/(?<step>\d+)$/u.exec(min);
+  if (minStep && hour === '*' && everyDay) return `Every ${minStep.groups?.step} minutes`;
   if (min === '*' && hour === '*' && everyDay) return 'Every minute';
 
   // Top-of-hour cadences.
   if (min === '0' && hour === '*' && everyDay) return 'Hourly';
-  const hourStep = /^\*\/(\d+)$/.exec(hour);
-  if (min === '0' && hourStep && everyDay) return `Every ${hourStep[1]} hours`;
+  const hourStep = /^\*\/(?<step>\d+)$/u.exec(hour);
+  if (min === '0' && hourStep && everyDay) return `Every ${hourStep.groups?.step} hours`;
 
   // A specific time of day (optionally on a specific weekday).
   const minNum = Number(min);

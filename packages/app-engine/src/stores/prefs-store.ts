@@ -22,8 +22,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isRunnerKind, type RunnerKind } from '../conversation/turn.js';
 
 export interface PrefsPersistence {
-  read(): Record<string, unknown>;
-  write(prefs: Record<string, unknown>): void;
+  read: () => Record<string, unknown>;
+  write: (prefs: Record<string, unknown>) => void;
 }
 
 export class PrefsStore {

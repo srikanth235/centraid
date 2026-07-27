@@ -84,7 +84,7 @@ export function stageBlobBytes(db: VaultDb, options: StageBlobOptions): StagedBl
   if (options.variant !== undefined && !isDerivativeVariant(options.variant)) {
     throw new Error('unknown derivative variant');
   }
-  if (options.variantOf && !/^[0-9a-f]{64}$/.test(options.variantOf)) {
+  if (options.variantOf && !/^[0-9a-f]{64}$/u.test(options.variantOf)) {
     throw new Error('variant_of must be a lowercase sha256');
   }
   if (options.variantOf) {

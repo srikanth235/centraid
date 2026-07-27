@@ -53,27 +53,27 @@ export function tokenize(
   let html = escapeHtml(src);
   if (lang === 'html') {
     html = html
-      .replaceAll(/(&lt;\/?[\w-]+)/g, `${TAG}$1${END}`)
-      .replaceAll(/(\s[\w-]+)=/g, `${ATTR}$1${END}=`)
-      .replaceAll(/("[^"]*")/g, `${STR}$1${END}`);
+      .replaceAll(/(?<tag>&lt;\/?[\w-]+)/gu, `${TAG}$<tag>${END}`)
+      .replaceAll(/(?<attr>\s[\w-]+)=/gu, `${ATTR}$<attr>${END}=`)
+      .replaceAll(/(?<str>"[^"]*")/gu, `${STR}$<str>${END}`);
   } else if (lang === 'js' || lang === 'ts') {
     html = html
-      .replaceAll(/\/\/[^\n]*/g, (m) => `${COM}${m}${END}`)
+      .replaceAll(/\/\/[^\n]*/gu, (m) => `${COM}${m}${END}`)
       .replaceAll(
-        /\b(const|let|var|function|return|if|else|for|new|try|catch|throw|async|await|export|import|from|type|interface|class|extends|implements|satisfies)\b/g,
-        `${KEY}$1${END}`,
+        /\b(?<keyword>const|let|var|function|return|if|else|for|new|try|catch|throw|async|await|export|import|from|type|interface|class|extends|implements|satisfies)\b/gu,
+        `${KEY}$<keyword>${END}`,
       )
-      .replaceAll(/('[^']*'|"[^"]*"|`[^`]*`)/g, `${STR}$1${END}`);
+      .replaceAll(/(?<str>'[^']*'|"[^"]*"|`[^`]*`)/gu, `${STR}$<str>${END}`);
   } else if (lang === 'css') {
     html = html
-      .replaceAll(/(\/\*[\s\S]*?\*\/)/g, `${COM}$1${END}`)
-      .replaceAll(/(--[\w-]+)/g, `${KEY}$1${END}`)
-      .replaceAll(/(#[0-9a-f]{3,8}|\d+px|\d+%)/g, `${STR}$1${END}`);
+      .replaceAll(/(?<comment>\/\*[\s\S]*?\*\/)/gu, `${COM}$<comment>${END}`)
+      .replaceAll(/(?<customProp>--[\w-]+)/gu, `${KEY}$<customProp>${END}`)
+      .replaceAll(/(?<value>#[0-9a-f]{3,8}|\d+px|\d+%)/gu, `${STR}$<value>${END}`);
   } else if (lang === 'json') {
     html = html
-      .replaceAll(/("[^"]*")(\s*:)/g, `${ATTR}$1${END}$2`)
-      .replaceAll(/:\s*("[^"]*")/g, `: ${STR}$1${END}`)
-      .replaceAll(/\b(true|false|null)\b/g, `${KEY}$1${END}`);
+      .replaceAll(/(?<key>"[^"]*")(?<colon>\s*:)/gu, `${ATTR}$<key>${END}$<colon>`)
+      .replaceAll(/:\s*(?<value>"[^"]*")/gu, `: ${STR}$<value>${END}`)
+      .replaceAll(/\b(?<literal>true|false|null)\b/gu, `${KEY}$<literal>${END}`);
   }
   return html
     .replaceAll(TAG, `<span class="${classes.tag}">`)
@@ -113,8 +113,8 @@ export const LANG_DISPLAY: Record<CodeLang, string> = {
 export function slugify(s: string): string {
   return s
     .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/[^a-z0-9-]+/gu, '-')
+    .replace(/^-+|-+$/gu, '')
     .slice(0, 40);
 }
 
@@ -167,6 +167,6 @@ export function formatBytes(n: number): string {
 export function shortVersionTitle(v: { versionId: string; declaredVersion?: string }): string {
   if (v.declaredVersion) return v.declaredVersion;
   // versionId looks like v_2026-05-08T14-30-00-000Z_a1b2c3
-  const m = /v_(\d{4}-\d{2}-\d{2}T\d{2}-\d{2})-/.exec(v.versionId);
-  return m ? m[1]!.replace('T', ' ') : v.versionId.slice(0, 24);
+  const stamp = /v_(?<stamp>\d{4}-\d{2}-\d{2}T\d{2}-\d{2})-/u.exec(v.versionId)?.groups?.stamp;
+  return stamp ? stamp.replace('T', ' ') : v.versionId.slice(0, 24);
 }

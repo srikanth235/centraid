@@ -70,7 +70,7 @@ export type ToolResult = ToolErrorResult | ToolSuccessResult;
 
 function errorResult(code: ToolErrorCode, message: string, path?: string): ToolErrorResult {
   const structured: ToolErrorContent =
-    path !== undefined ? { code, message, path } : { code, message };
+    path === undefined ? { code, message } : { code, message, path };
   return {
     isError: true,
     content: [{ type: 'text', text: JSON.stringify(structured) }],

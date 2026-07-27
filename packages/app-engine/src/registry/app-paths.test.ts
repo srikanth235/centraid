@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ASSISTANT_APP_ID, isValidAppId, isValidAppOrAssistantId } from './app-paths.js';
 
-describe('isValidAppId', () => {
+describe(isValidAppId, () => {
   it('accepts plain-slug app folder ids', () => {
     expect(isValidAppId('crm')).toBe(true);
     expect(isValidAppId('standup-bot')).toBe(true);
@@ -23,7 +23,7 @@ describe('isValidAppId', () => {
   });
 });
 
-describe('isValidAppOrAssistantId', () => {
+describe(isValidAppOrAssistantId, () => {
   it('accepts everything isValidAppId accepts', () => {
     expect(isValidAppOrAssistantId('crm')).toBe(true);
     expect(isValidAppOrAssistantId('standup-bot')).toBe(true);

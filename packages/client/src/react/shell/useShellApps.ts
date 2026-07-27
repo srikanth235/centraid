@@ -65,7 +65,7 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
         ...a,
         ...(vis ? { iconKey: vis.iconKey, colorKey: vis.colorKey, color: vis.color } : {}),
         ...(row.name ? { name: row.name } : {}),
-        ...(row.description !== undefined ? { desc: row.description } : {}),
+        ...(row.description === undefined ? {} : { desc: row.description }),
       };
     });
   if (reconciled.length !== pins.length) Store.set('home.userApps', reconciled);

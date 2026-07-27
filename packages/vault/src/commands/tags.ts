@@ -36,7 +36,7 @@ const SUBJECT_PK: Record<string, { pk: string; live?: boolean }> = {
 
 /** A tag's display label → its notation: lowercased, collapsed whitespace, trimmed. */
 function notationOf(label: string): string {
-  return label.trim().toLowerCase().replace(/\s+/g, ' ');
+  return label.trim().toLowerCase().replace(/\s+/gu, ' ');
 }
 
 /** The acting party: the caller's own party, else the vault owner (apps). */

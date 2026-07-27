@@ -22,7 +22,7 @@ describe('decideJournalArchive — no limit set', () => {
         rung: 0,
         dailyGateElapsed: true,
       }),
-    ).toEqual({
+    ).toStrictEqual({
       run: true,
       windowDays: JOURNAL_ARCHIVE_DEFAULT_WINDOW_DAYS,
       nextRung: 0,
@@ -69,7 +69,7 @@ describe('decideJournalArchive — over the limit', () => {
       seen.push(decision.windowDays);
       rung = decision.nextRung;
     }
-    expect(seen.slice(0, JOURNAL_ARCHIVE_WINDOW_LADDER.length)).toEqual([
+    expect(seen.slice(0, JOURNAL_ARCHIVE_WINDOW_LADDER.length)).toStrictEqual([
       ...JOURNAL_ARCHIVE_WINDOW_LADDER,
     ]);
     // Archival must never eat the window the owner is working in.

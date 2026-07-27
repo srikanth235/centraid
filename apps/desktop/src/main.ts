@@ -1,6 +1,5 @@
 import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   installApplicationMenu,
   installDeepLinkProtocol,
@@ -24,7 +23,7 @@ import { loadSettings } from './main/settings.js';
 import { startUpdateWatcher } from './main/update-watcher.js';
 import { loadWindowState, trackWindowState } from './main/window-state.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 
 /*
  * Single-instance lock (issue #351). Without this, launching a second copy
@@ -45,9 +44,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  */
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
-if (!gotSingleInstanceLock) {
-  app.quit();
-} else {
+if (gotSingleInstanceLock) {
   // Deep-link second-instance handler is also registered in app-chrome;
   // this block focuses the window when the user re-launches without a URL.
   app.on('second-instance', () => {
@@ -251,4 +248,6 @@ if (!gotSingleInstanceLock) {
       app.quit();
     });
   });
+} else {
+  app.quit();
 }

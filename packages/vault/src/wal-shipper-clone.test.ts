@@ -22,7 +22,7 @@ import { tempDirSync } from '@centraid/test-kit/temp-dir';
 import { randomBytes } from 'node:crypto';
 import { readFileSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { cloneDbFile } from './wal-shipper.js';
 
 const MiB = 1024 * 1024;
@@ -31,54 +31,56 @@ const SIZE = 128 * MiB;
 
 let root: string;
 
-beforeEach(() => {
-  root = tempDirSync('wal-clone-');
-});
+describe('wal-shipper-clone', () => {
+  beforeEach(() => {
+    root = tempDirSync('wal-clone-');
+  });
 
-afterEach(() => {
-  rmSync(root, { recursive: true, force: true });
-});
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
 
-/** Free bytes on the volume holding `p`. */
-function freeBytes(p: string): number {
-  const fs = statfsSync(p);
-  return Number(fs.bsize) * Number(fs.bavail);
-}
+  /** Free bytes on the volume holding `p`. */
+  function freeBytes(p: string): number {
+    const fs = statfsSync(p);
+    return Number(fs.bsize) * Number(fs.bavail);
+  }
 
-// APFS (Darwin) and reflink-capable Linux filesystems (btrfs/xfs) clone; ext4
-// cannot, and there a byte copy is the only thing on offer. Only Darwin is a
-// platform we can assert on unconditionally — it is also the one that was
-// silently broken, and the one the desktop app runs on.
-test.skipIf(process.platform !== 'darwin')(
-  'the base clone is a reflink: cloning a 128 MiB database consumes no new disk',
-  () => {
+  // APFS (Darwin) and reflink-capable Linux filesystems (btrfs/xfs) clone; ext4
+  // cannot, and there a byte copy is the only thing on offer. Only Darwin is a
+  // platform we can assert on unconditionally — it is also the one that was
+  // silently broken, and the one the desktop app runs on.
+  test.skipIf(process.platform !== 'darwin')(
+    'the base clone is a reflink: cloning a 128 MiB database consumes no new disk',
+    () => {
+      const src = path.join(root, 'vault.db');
+      // Incompressible — so a byte copy cannot hide behind filesystem compression.
+      writeFileSync(src, randomBytes(SIZE));
+
+      const before = freeBytes(root);
+      const dst = path.join(root, 'base.db');
+      expect(cloneDbFile(src, dst)).toBe(true);
+      const consumed = before - freeBytes(root);
+
+      // The clone must be a complete, independent file...
+      expect(statSync(dst).size).toBe(SIZE);
+      // ...that shares its blocks. A byte copy would consume ~128 MiB; allow a
+      // generous margin for metadata and for unrelated writes racing the test.
+      expect(consumed).toBeLessThan(SIZE / 4);
+    },
+  );
+
+  test('the clone is byte-identical to the source, reflink or not', () => {
     const src = path.join(root, 'vault.db');
-    // Incompressible — so a byte copy cannot hide behind filesystem compression.
-    writeFileSync(src, randomBytes(SIZE));
+    const bytes = randomBytes(4 * MiB);
+    writeFileSync(src, bytes);
 
-    const before = freeBytes(root);
     const dst = path.join(root, 'base.db');
-    expect(cloneDbFile(src, dst)).toBe(true);
-    const consumed = before - freeBytes(root);
+    const reflinked = cloneDbFile(src, dst);
 
-    // The clone must be a complete, independent file...
-    expect(statSync(dst).size).toBe(SIZE);
-    // ...that shares its blocks. A byte copy would consume ~128 MiB; allow a
-    // generous margin for metadata and for unrelated writes racing the test.
-    expect(consumed).toBeLessThan(SIZE / 4);
-  },
-);
-
-test('the clone is byte-identical to the source, reflink or not', () => {
-  const src = path.join(root, 'vault.db');
-  const bytes = randomBytes(4 * MiB);
-  writeFileSync(src, bytes);
-
-  const dst = path.join(root, 'base.db');
-  const reflinked = cloneDbFile(src, dst);
-
-  // Correctness of the copy is platform-independent; only its COST is not.
-  expect(statSync(dst).size).toBe(bytes.length);
-  expect(Buffer.compare(Buffer.from(bytes), readFileSync(dst))).toBe(0);
-  expect(typeof reflinked).toBe('boolean');
+    // Correctness of the copy is platform-independent; only its COST is not.
+    expect(statSync(dst).size).toBe(bytes.length);
+    expect(Buffer.compare(Buffer.from(bytes), readFileSync(dst))).toBe(0);
+    expect(reflinked).toBeTypeOf('boolean');
+  });
 });

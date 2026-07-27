@@ -306,7 +306,7 @@ export function parseId3Metadata(bytes: Buffer): MediaMetadata {
   let at = 10;
   for (let frames = 0; frames < 2048 && at + 10 <= end; frames += 1) {
     const id = bytes.toString('latin1', at, at + 4);
-    if (!/^[A-Z0-9]{4}$/.test(id)) break;
+    if (!/^[A-Z0-9]{4}$/u.test(id)) break;
     const size = version === 4 ? syncSafe(bytes, at + 4) : bytes.readUInt32BE(at + 4);
     const payload = at + 10;
     if (size <= 0 || payload + size > end) break;

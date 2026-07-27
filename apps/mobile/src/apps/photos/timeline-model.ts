@@ -63,7 +63,7 @@ export function mergePhotoAssets(device: PhotoAsset[], remote: PhotoAsset[]): Ph
   });
   const remotePhash = new Set(remote.flatMap((asset) => (asset.phash ? [asset.phash] : [])));
   for (const local of device) {
-    const index = local.sha256 !== undefined ? indexBySha.get(local.sha256) : undefined;
+    const index = local.sha256 === undefined ? undefined : indexBySha.get(local.sha256);
     if (index !== undefined) {
       const existing = merged[index]!;
       merged[index] =

@@ -28,9 +28,9 @@ function memoryStorage(seed?: string) {
 
 describe('list / remember / forget', () => {
   it('returns [] without storage or on corrupt JSON', () => {
-    expect(listReplicaPurgeSelectors(undefined)).toEqual([]);
-    expect(listReplicaPurgeSelectors(memoryStorage('not-json'))).toEqual([]);
-    expect(listReplicaPurgeSelectors(memoryStorage('{}'))).toEqual([]);
+    expect(listReplicaPurgeSelectors(undefined)).toStrictEqual([]);
+    expect(listReplicaPurgeSelectors(memoryStorage('not-json'))).toStrictEqual([]);
+    expect(listReplicaPurgeSelectors(memoryStorage('{}'))).toStrictEqual([]);
   });
 
   it('dedupes, validates kinds, and round-trips remember/forget', () => {
@@ -58,10 +58,10 @@ describe('list / remember / forget', () => {
       listReplicaPurgeSelectors(storage)
         .map((s) => s.kind)
         .sort(),
-    ).toEqual(['identity', 'inactive-vaults']);
+    ).toStrictEqual(['identity', 'inactive-vaults']);
     expect(forgetReplicaPurgeSelector(identity, storage)).toBe(true);
     expect(forgetReplicaPurgeSelector(inactive, storage)).toBe(true);
-    expect(listReplicaPurgeSelectors(storage)).toEqual([]);
+    expect(listReplicaPurgeSelectors(storage)).toStrictEqual([]);
     expect(storage.values.has('centraid.replica.purge-selectors.v1')).toBe(false);
 
     expect(rememberReplicaPurgeSelector(identity, undefined)).toBe(false);
@@ -77,11 +77,13 @@ describe('list / remember / forget', () => {
         { kind: 'nope', gatewayId: 'g' },
       ]),
     );
-    expect(listReplicaPurgeSelectors(storage)).toEqual([{ kind: 'gateway', gatewayId: 'ok' }]);
+    expect(listReplicaPurgeSelectors(storage)).toStrictEqual([
+      { kind: 'gateway', gatewayId: 'ok' },
+    ]);
   });
 });
 
-describe('replicaPurgeSelectorMatches', () => {
+describe(replicaPurgeSelectorMatches, () => {
   const id = { gatewayId: 'gw', vaultId: 'v1' };
   it('matches identity / gateway / inactive-vaults semantics', () => {
     expect(

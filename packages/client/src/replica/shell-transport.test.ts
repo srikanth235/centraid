@@ -1,10 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ReplicaRebootstrapRequiredError } from './errors.js';
-import { fetchReplicaChanges, fetchReplicaIntentOutcomes } from './shell-transport.js';
+import {
+  fetchReplicaChanges,
+  fetchReplicaIntentOutcomes,
+  type ReplicaFetcher,
+} from './shell-transport.js';
 
-vi.mock('../gateway-client-core.js', () => ({
-  authHeaders: (token?: string) => (token ? { Authorization: `Bearer ${token}` } : {}),
-  doFetch: vi.fn(),
+vi.mock(import('../gateway-client-core.js'), () => ({
+  // Explicit `Record<string, string>` return type (matching the real
+  // `authHeaders`) so the empty-object branch isn't narrowed to
+  // `{ Authorization?: undefined }`, which isn't assignable to it.
+  authHeaders: (token?: string): Record<string, string> =>
+    token ? { Authorization: `Bearer ${token}` } : {},
+  doFetch: vi.fn<typeof import('../gateway-client-core.js').doFetch>(),
   GatewayClientError: class GatewayClientError extends Error {
     constructor(
       readonly code: string,
@@ -22,9 +30,9 @@ const gatewayAuth = {
   vaultId: 'vault-a',
 };
 
-describe('fetchReplicaChanges', () => {
+describe(fetchReplicaChanges, () => {
   it('attests the sorted, deduplicated persisted shape ids on every pull', async () => {
-    const fetcher = vi.fn().mockImplementation(
+    const fetcher = vi.fn<ReplicaFetcher>().mockImplementation(
       async () =>
         new Response(
           JSON.stringify({
@@ -63,7 +71,7 @@ describe('fetchReplicaChanges', () => {
 
   it('turns a stale shape attestation conflict into a typed rebootstrap', async () => {
     const fetcher = vi
-      .fn()
+      .fn<ReplicaFetcher>()
       .mockResolvedValue(
         new Response(
           JSON.stringify({ error: 'replica_rebootstrap_required', reason: 'shape-changed' }),
@@ -83,24 +91,26 @@ describe('fetchReplicaChanges', () => {
   });
 });
 
-describe('fetchReplicaIntentOutcomes', () => {
+describe(fetchReplicaIntentOutcomes, () => {
   it('batches exact pending ids behind the bootstrap watermark', async () => {
     const ids = Array.from({ length: 501 }, (_, index) => `intent-${index}`);
     const through = { epoch: 'epoch-a', seq: 42 };
-    const fetcher = vi.fn().mockImplementation(async (_baseUrl, pathname, init: RequestInit) => {
-      const body = JSON.parse(String(init.body)) as {
-        intentIds: string[];
-        through: { epoch: string; seq: number };
-      };
-      expect(pathname).toBe('/centraid/_vault/replica/outcomes');
-      expect(body.through).toEqual(through);
-      return new Response(
-        JSON.stringify({
-          outcomes: body.intentIds.map((intentId) => ({ intentId, status: 'executed' })),
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      );
-    });
+    const fetcher = vi
+      .fn<ReplicaFetcher>()
+      .mockImplementation(async (_baseUrl, pathname, init: RequestInit) => {
+        const body = JSON.parse(String(init.body)) as {
+          intentIds: string[];
+          through: { epoch: string; seq: number };
+        };
+        expect(pathname).toBe('/centraid/_vault/replica/outcomes');
+        expect(body.through).toStrictEqual(through);
+        return new Response(
+          JSON.stringify({
+            outcomes: body.intentIds.map((intentId) => ({ intentId, status: 'executed' })),
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      });
 
     const outcomes = await fetchReplicaIntentOutcomes(
       gatewayAuth,
@@ -111,6 +121,6 @@ describe('fetchReplicaIntentOutcomes', () => {
 
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(outcomes).toHaveLength(501);
-    expect(outcomes.at(-1)).toEqual({ intentId: 'intent-500', status: 'executed' });
+    expect(outcomes.at(-1)).toStrictEqual({ intentId: 'intent-500', status: 'executed' });
   });
 });

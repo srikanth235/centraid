@@ -16,16 +16,56 @@ import {
 
 installGatewayContractHarness();
 
+interface SentRequest {
+  method: string;
+  path: string;
+  query: URLSearchParams;
+}
+
+/**
+ * The wire transcript the client produced since the harness' `beforeEach`
+ * reset. Each test drives its own surface and reads back only its own calls.
+ */
+function transcript(): SentRequest[] {
+  return fetchMock.mock.calls.map(([url, init]) => {
+    const parsed = new URL(String(url));
+    return {
+      method: (init as RequestInit | undefined)?.method ?? 'GET',
+      path: parsed.pathname,
+      query: parsed.searchParams,
+    };
+  });
+}
+
+/**
+ * The `run.*` → `turn.*` wire surface, pinned method + query and all: a path
+ * assertion alone cannot catch a GET that should be a POST or a dropped query
+ * parameter (#541).
+ */
+function sentBy(
+  requests: SentRequest[],
+  path: string,
+  predicate: (query: URLSearchParams) => boolean = () => true,
+  method = 'GET',
+): boolean {
+  return requests.some(
+    (request) => request.path === path && request.method === method && predicate(request.query),
+  );
+}
+
 describe('renderer gateway automation contracts', () => {
-  it('covers the app, turn, health, compile, and lifecycle surfaces', async () => {
+  // Split from the automation drive below along the surface seam (#573): both
+  // halves are independent drives against a fresh fetch mock, so neither
+  // depends on the other having run.
+  it('covers the app, version, prefs, and health surfaces', async () => {
     await expect(client.readGatewayCapabilities()).resolves.toMatchObject({
       automationTurns: true,
     });
-    await expect(client.appLiveUrl({ id: 'daily' })).resolves.toEqual({
+    await expect(client.appLiveUrl({ id: 'daily' })).resolves.toStrictEqual({
       url: 'https://gateway.test/centraid/daily/',
     });
     state.hostAppSessions = true;
-    await expect(client.appLiveUrl({ id: 'daily' })).resolves.toEqual({
+    await expect(client.appLiveUrl({ id: 'daily' })).resolves.toStrictEqual({
       url: 'https://gateway.test/centraid/_web/session/launch-1',
     });
 
@@ -43,6 +83,21 @@ describe('renderer gateway automation contracts', () => {
     await client.getUserId();
     await client.getUserPrefs();
     await client.saveUserPrefs({ runner: 'codex' });
+    await client.getInsightsSummary({ windowDays: 7 });
+    await client.getInsightsSummary();
+    await client.getGatewayHealth();
+    await client.pauseBackgroundWork(60_000);
+    await client.pauseBackgroundWork();
+    await client.resumeBackgroundWork();
+
+    // On a host with `appSessions`, the live URL is minted by the gateway —
+    // never synthesised client-side from the app origin.
+    expect(transcript().map((request) => request.path)).toContain(
+      '/centraid/_apps/daily/web-session',
+    );
+  });
+
+  it('covers the automation turn surface', async () => {
     await client.listAutomations();
     await expect(client.readAutomation({ automationId: 'invalid' })).resolves.toBeNull();
     await client.readAutomation({ automationId: 'daily/daily' });
@@ -60,7 +115,7 @@ describe('renderer gateway automation contracts', () => {
       (event) => turnEvents.push(event.type),
       new AbortController().signal,
     );
-    expect(turnEvents).toEqual(['turn.end']);
+    expect(turnEvents).toStrictEqual(['turn.end']);
     const conversationEvents: string[] = [];
     await expect(
       client.streamAutomationConversationTurn(
@@ -69,69 +124,17 @@ describe('renderer gateway automation contracts', () => {
         (event) => conversationEvents.push(event.type),
         new AbortController().signal,
       ),
-    ).resolves.toEqual({ ended: true, turnId: 'turn-2' });
+    ).resolves.toStrictEqual({ ended: true, turnId: 'turn-2' });
     expect(conversationEvents).toContain('final');
 
     await client.pinAutomationTurn({ turnId: 'turn-1', pinned: true });
-    await client.getInsightsSummary({ windowDays: 7 });
-    await client.getInsightsSummary();
-    await client.getGatewayHealth();
-    await client.pauseBackgroundWork(60_000);
-    await client.pauseBackgroundWork();
-    await client.resumeBackgroundWork();
-    await compile.compileAutomation({ automationId: 'daily/daily', enableOnSuccess: true });
-    await compile.reviseAutomation({ automationId: 'daily/daily', message: 'be concise' });
-    await compile.readAutomationSource('daily/daily');
 
-    const created = await editing.createAutomation({
-      id: 'daily',
-      name: 'Daily',
-      prompt: 'Run daily',
-      triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
-      runner: 'codex',
-      model: 'openai/gpt-test',
-    });
-    expect(created.webhook?.secret).toBe('secret-1');
-    const updated = await editing.updateAutomation({
-      automationId: 'daily/daily',
-      name: 'Daily revised',
-      prompt: 'Run every day',
-      triggers: [{ kind: 'webhook' }],
-      connections: [{ connectionId: 'connection-1', kind: 'github', label: 'Work' }],
-      connector: { kind: 'github', label: 'Work', connectionId: 'connection-1' },
-      runner: null,
-      model: null,
-    });
-    expect(updated.webhook?.secret).toBe('secret-2');
-    await editing.setAutomationEnabled({ automationId: 'daily/daily', enabled: false });
-    await editing.rotateAutomationWebhookSecret({ automationId: 'daily/daily' });
-    await editing.deleteAutomation({ automationId: 'daily/daily' });
-
-    const requests = fetchMock.mock.calls.map(([url, init]) => {
-      const parsed = new URL(String(url));
-      return {
-        method: (init as RequestInit | undefined)?.method ?? 'GET',
-        path: parsed.pathname,
-        query: parsed.searchParams,
-      };
-    });
-    const paths = requests.map((request) => request.path);
-    expect(paths).toContain('/centraid/_automations/compile');
-    expect(paths).toContain('/centraid/_automations/revise');
-    expect(paths).toContain('/centraid/_automations/set-enabled');
-    expect(paths).toContain('/centraid/_apps/_sessions/desktop-daily');
-
-    // The `run.*` → `turn.*` wire surface, pinned method + query and all:
-    // a path assertion alone cannot catch a GET that should be a POST or a
-    // dropped query parameter (#541).
+    const requests = transcript();
     const sent = (
       path: string,
-      predicate: (query: URLSearchParams) => boolean = () => true,
-      method = 'GET',
-    ): boolean =>
-      requests.some(
-        (request) => request.path === path && request.method === method && predicate(request.query),
-      );
+      predicate?: (query: URLSearchParams) => boolean,
+      method?: string,
+    ): boolean => sentBy(requests, path, predicate, method);
 
     // A manual fire mints a turn — a write, never a GET.
     expect(
@@ -178,6 +181,44 @@ describe('renderer gateway automation contracts', () => {
     expect(
       sent('/centraid/_automations/turn/pin', (q) => q.get('turnId') === 'turn-1', 'POST'),
     ).toBe(true);
+  });
+
+  it('covers the automation compile and lifecycle surfaces', async () => {
+    await compile.compileAutomation({ automationId: 'daily/daily', enableOnSuccess: true });
+    await compile.reviseAutomation({ automationId: 'daily/daily', message: 'be concise' });
+    await compile.readAutomationSource('daily/daily');
+
+    const created = await editing.createAutomation({
+      id: 'daily',
+      name: 'Daily',
+      prompt: 'Run daily',
+      triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
+      runner: 'codex',
+      model: 'openai/gpt-test',
+    });
+    expect(created.webhook?.secret).toBe('secret-1');
+    const updated = await editing.updateAutomation({
+      automationId: 'daily/daily',
+      name: 'Daily revised',
+      prompt: 'Run every day',
+      triggers: [{ kind: 'webhook' }],
+      connections: [{ connectionId: 'connection-1', kind: 'github', label: 'Work' }],
+      connector: { kind: 'github', label: 'Work', connectionId: 'connection-1' },
+      runner: null,
+      model: null,
+    });
+    expect(updated.webhook?.secret).toBe('secret-2');
+    await editing.setAutomationEnabled({ automationId: 'daily/daily', enabled: false });
+    await editing.rotateAutomationWebhookSecret({ automationId: 'daily/daily' });
+    await editing.deleteAutomation({ automationId: 'daily/daily' });
+
+    const paths = transcript().map((request) => request.path);
+    expect(paths).toContain('/centraid/_automations/compile');
+    expect(paths).toContain('/centraid/_automations/revise');
+    expect(paths).toContain('/centraid/_automations/set-enabled');
+    // Deleting the automation also drops its editing session — a leaked
+    // worktree is the regression this pins.
+    expect(paths).toContain('/centraid/_apps/_sessions/desktop-daily');
   });
 
   it('fails a client that calls a path the gateway does not serve', () => {

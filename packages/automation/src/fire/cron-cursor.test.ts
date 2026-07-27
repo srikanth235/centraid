@@ -20,14 +20,16 @@ function cursorAt(positionJson: string): AutomationTriggerCursor {
   };
 }
 
-describe('dueInstants', () => {
+describe(dueInstants, () => {
   it('enumerates the half-open window oldest-first', () => {
     const from = new Date(2026, 0, 1, 8, 0);
     const to = new Date(2026, 0, 1, 8, 3);
 
-    expect(dueInstants(['* * * * *'], from, to).map((d) => d.getMinutes())).toEqual([1, 2, 3]);
+    expect(dueInstants(['* * * * *'], from, to).map((d) => d.getMinutes())).toStrictEqual([
+      1, 2, 3,
+    ]);
     // `from` itself is already committed — it must never come back.
-    expect(dueInstants(['0 8 * * *'], from, to)).toEqual([]);
+    expect(dueInstants(['0 8 * * *'], from, to)).toStrictEqual([]);
   });
 
   it('treats several expressions as one schedule rather than one stream each', () => {
@@ -37,7 +39,7 @@ describe('dueInstants', () => {
     const due = dueInstants(['0 8 * * *', '*/30 * * * *'], from, to);
 
     // 08:00 matches BOTH expressions and is one due instant.
-    expect(due.map((d) => `${d.getHours()}:${d.getMinutes()}`)).toEqual(['8:0', '8:30']);
+    expect(due.map((d) => `${d.getHours()}:${d.getMinutes()}`)).toStrictEqual(['8:0', '8:30']);
   });
 
   it('caps an ancient window while still returning the latest due instant', () => {
@@ -47,14 +49,14 @@ describe('dueInstants', () => {
     const due = dueInstants(['* * * * *'], from, to);
 
     // Every minute of 400 days would be 576,000 Date allocations on the tick.
-    expect(due.length).toBe(44_640);
+    expect(due).toHaveLength(44_640);
     expect(due.at(-1)?.getTime()).toBe(to.getTime());
     expect(due[0]!.getTime()).toBeGreaterThan(from.getTime());
   });
 
   it('ignores a window whose committed position is ahead of now', () => {
     const to = new Date(2026, 0, 1, 8, 0);
-    expect(dueInstants(['* * * * *'], new Date(to.getTime() + 600_000), to)).toEqual([]);
+    expect(dueInstants(['* * * * *'], new Date(to.getTime() + 600_000), to)).toStrictEqual([]);
   });
 
   it('matches an explicit schedule zone even when host wall clock differs', () => {
@@ -84,6 +86,7 @@ describe('dueInstants', () => {
     beforeAll(() => {
       process.env.TZ = 'America/New_York';
     });
+
     afterAll(() => {
       if (original === undefined) delete process.env.TZ;
       else process.env.TZ = original;
@@ -117,7 +120,7 @@ describe('dueInstants', () => {
   });
 });
 
-describe('readCronCursor', () => {
+describe(readCronCursor, () => {
   it('records a bootstrap position without firing when nothing is due', () => {
     const at = new Date(2026, 0, 1, 9, 30);
 
@@ -125,7 +128,7 @@ describe('readCronCursor', () => {
 
     // The row has to exist for the NEXT window to have somewhere to start
     // from, but a fresh cron with nothing due delivers nothing.
-    expect(bootstrap.elements).toEqual([]);
+    expect(bootstrap.elements).toStrictEqual([]);
     expect(bootstrap.positionJson).toBe(JSON.stringify(floorMinute(at.getTime())));
   });
 
@@ -136,7 +139,9 @@ describe('readCronCursor', () => {
 
     // A cursor-less read covers `(now - 1min, now]`; the engine is what keeps
     // registration itself from ever entering this window (see cursor-engine).
-    expect(result.elements).toEqual([{ position: String(at.getTime()), occurredAt: at.getTime() }]);
+    expect(result.elements).toStrictEqual([
+      { position: String(at.getTime()), occurredAt: at.getTime() },
+    ]);
     expect(result.skipped).toBe(0);
   });
 
@@ -146,7 +151,9 @@ describe('readCronCursor', () => {
 
     const result = readCronCursor(['* * * * *'], cursorAt(JSON.stringify(from)), at);
 
-    expect(result.elements).toEqual([{ position: String(at.getTime()), occurredAt: at.getTime() }]);
+    expect(result.elements).toStrictEqual([
+      { position: String(at.getTime()), occurredAt: at.getTime() },
+    ]);
     expect(result).toMatchObject({
       skipped: 4,
       gapReason: 'scheduler_gap',
@@ -163,9 +170,9 @@ describe('readCronCursor', () => {
     const stale = readCronCursor(['0 3 * * *'], cursor, new Date(from + 61 * 60_000));
 
     // No write for a minute that produced nothing — 1,440 upserts a day of it.
-    expect(quiet).toEqual({ elements: [], skipped: 0 });
+    expect(quiet).toStrictEqual({ elements: [], skipped: 0 });
     expect(stale.positionJson).toBe(JSON.stringify(from + 61 * 60_000));
-    expect(stale.elements).toEqual([]);
+    expect(stale.elements).toStrictEqual([]);
   });
 
   it('falls back to the one-minute window when the stored position is unreadable', () => {

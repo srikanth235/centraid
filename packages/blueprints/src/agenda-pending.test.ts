@@ -28,7 +28,7 @@ describe('Agenda pending intent presentation', () => {
         rowId: 'unrelated',
       }),
     ).toBe(false);
-    expect([...state.pendingIds]).toEqual(['event-a', 'event-b']);
+    expect([...state.pendingIds]).toStrictEqual(['event-a', 'event-b']);
 
     expect(
       settlePendingChange(state, {
@@ -37,8 +37,8 @@ describe('Agenda pending intent presentation', () => {
         intentState: 'denied',
       }),
     ).toBe(true);
-    expect([...state.pendingIds]).toEqual(['event-b']);
-    expect([...state.pendingCancelIds]).toEqual([]);
+    expect([...state.pendingIds]).toStrictEqual(['event-b']);
+    expect([...state.pendingCancelIds]).toStrictEqual([]);
   });
 
   test('retains exact managed settlement but clears parked legacy chips on a relevant doorbell', async () => {
@@ -56,9 +56,9 @@ describe('Agenda pending intent presentation', () => {
     });
 
     expect(reconcilePendingChange(state, { entity: 'core.event' }, true)).toBe(false);
-    expect([...state.pendingIds]).toEqual(['event-legacy']);
+    expect([...state.pendingIds]).toStrictEqual(['event-legacy']);
     expect(reconcilePendingChange(state, { entity: 'core.event' }, false)).toBe(true);
-    expect([...state.pendingIds]).toEqual([]);
-    expect([...state.pendingCancelIds]).toEqual([]);
+    expect([...state.pendingIds]).toStrictEqual([]);
+    expect([...state.pendingCancelIds]).toStrictEqual([]);
   });
 });

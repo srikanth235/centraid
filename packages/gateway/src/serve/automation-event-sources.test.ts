@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { pollProviderEventSource, type PollJson } from './automation-event-sources.js';
 import { github, gmail, replies } from './automation-event-sources.test-fixtures.js';
 
-describe('pollProviderEventSource', () => {
+describe(pollProviderEventSource, () => {
   it('bootstraps Gmail at the profile historyId, then normalizes new messages', async () => {
     const baselineFetch = replies({
       status: 200,
@@ -23,7 +23,7 @@ describe('pollProviderEventSource', () => {
       limit: 50,
       pollJson: baselineFetch,
     });
-    expect(baseline).toEqual({
+    expect(baseline).toStrictEqual({
       events: [],
       cursor: { provider: 'gmail', historyId: '100' },
     });
@@ -57,8 +57,8 @@ describe('pollProviderEventSource', () => {
       limit: 50,
       pollJson: poll,
     });
-    expect(next.cursor).toEqual({ provider: 'gmail', historyId: '105' });
-    expect(next.events).toEqual([
+    expect(next.cursor).toStrictEqual({ provider: 'gmail', historyId: '105' });
+    expect(next.events).toStrictEqual([
       {
         id: 'gmail:message:message-1',
         occurredAt: Date.parse('2026-07-25T00:05:00Z'),
@@ -88,7 +88,7 @@ describe('pollProviderEventSource', () => {
       limit: 50,
       pollJson: poll,
     });
-    expect(next).toEqual({
+    expect(next).toStrictEqual({
       events: [],
       cursor: { provider: 'gmail', historyId: '900' },
       skipped: 1,
@@ -97,7 +97,7 @@ describe('pollProviderEventSource', () => {
   });
 
   it('exhausts every Gmail history page before advancing the history cursor', async () => {
-    const poll = vi.fn(async (_connection, url) => {
+    const poll = vi.fn<PollJson>(async (_connection, url) => {
       const pageToken = new URL(url).searchParams.get('pageToken');
       return pageToken
         ? {
@@ -138,10 +138,10 @@ describe('pollProviderEventSource', () => {
     });
     expect(poll).toHaveBeenCalledTimes(2);
     expect(new URL(vi.mocked(poll).mock.calls[1]![1]).searchParams.get('pageToken')).toBe('page-2');
-    expect(next.cursor).toEqual({ provider: 'gmail', historyId: '110' });
+    expect(next.cursor).toStrictEqual({ provider: 'gmail', historyId: '110' });
     // The adapter returns the complete provider window. The durable ingress
     // layer applies the fire cap and can therefore record the exact overflow.
-    expect(next.events.map((event) => event.id)).toEqual([
+    expect(next.events.map((event) => event.id)).toStrictEqual([
       'gmail:message:message-1',
       'gmail:message:message-2',
     ]);
@@ -151,7 +151,7 @@ describe('pollProviderEventSource', () => {
   it('re-baselines an over-budget Gmail window and records the unknown tail gap', async () => {
     let historyRequests = 0;
     let profileRequests = 0;
-    const poll = vi.fn(async (_connection, url) => {
+    const poll = vi.fn<PollJson>(async (_connection, url) => {
       if (url.endsWith('/profile')) {
         profileRequests++;
         return { status: 200, headers: {}, body: { historyId: '999' } };
@@ -173,7 +173,7 @@ describe('pollProviderEventSource', () => {
     });
     expect(historyRequests).toBe(100);
     expect(profileRequests).toBe(1);
-    expect(next).toEqual({
+    expect(next).toStrictEqual({
       events: [],
       cursor: { provider: 'gmail', historyId: '999' },
       skipped: 1,
@@ -254,7 +254,7 @@ describe('pollProviderEventSource', () => {
         },
       }),
     });
-    expect(gmailResult.events).toEqual([
+    expect(gmailResult.events).toStrictEqual([
       {
         id: 'gmail:message:message-1',
         occurredAt: now.getTime(),
@@ -291,7 +291,7 @@ describe('pollProviderEventSource', () => {
         ],
       }),
     });
-    expect(githubResult.events).toEqual([
+    expect(githubResult.events).toStrictEqual([
       {
         id: 'github:event:minimal',
         occurredAt: now.getTime(),

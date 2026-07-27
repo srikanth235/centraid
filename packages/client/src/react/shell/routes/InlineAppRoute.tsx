@@ -59,9 +59,9 @@ function ensureInlineScopeTokens(): void {
   if (inlineTokensInjected || typeof document === 'undefined') return;
   inlineTokensInjected = true;
   const scoped = toBlueprintCss()
-    .replace(/:root\[data-theme='dark'\]/g, `:root[data-theme='dark'] .${INLINE_SCOPE_CLASS}`)
-    .replace(/:root:not\(\[data-theme\]\)/g, `:root:not([data-theme]) .${INLINE_SCOPE_CLASS}`)
-    .replace(/(^|\n):root\s*\{/g, `$1.${INLINE_SCOPE_CLASS} {`);
+    .replace(/:root\[data-theme='dark'\]/gu, `:root[data-theme='dark'] .${INLINE_SCOPE_CLASS}`)
+    .replace(/:root:not\(\[data-theme\]\)/gu, `:root:not([data-theme]) .${INLINE_SCOPE_CLASS}`)
+    .replace(/(?<lineStart>^|\n):root\s*\{/gu, `$<lineStart>.${INLINE_SCOPE_CLASS} {`);
   const style = document.createElement('style');
   style.dataset.centraidInlineTokens = 'true';
   style.textContent = scoped;
@@ -407,7 +407,7 @@ export default function InlineAppRoute({
             </Suspense>
           </ErrorBoundary>
         </div>
-        {settings !== null ? (
+        {settings === null ? null : (
           <AppSettingsController
             app={app}
             appId={appId}
@@ -434,7 +434,7 @@ export default function InlineAppRoute({
             }}
             showToast={showToast}
           />
-        ) : null}
+        )}
       </div>
     </ShellFrame>
   );

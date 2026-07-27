@@ -792,9 +792,9 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
                       setExpandedOutbox(expandedOutbox === row.itemId ? null : row.itemId)
                     }
                     onApprove={(alwaysAllow, artifact) =>
-                      artifact !== undefined
-                        ? onApproveOutbox(row.itemId, alwaysAllow, artifact)
-                        : onApproveOutbox(row.itemId, alwaysAllow)
+                      artifact === undefined
+                        ? onApproveOutbox(row.itemId, alwaysAllow)
+                        : onApproveOutbox(row.itemId, alwaysAllow, artifact)
                     }
                     onDeny={() => onDenyOutbox(row.itemId)}
                   />

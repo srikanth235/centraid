@@ -9,5 +9,5 @@ export function isExpectedPrewarmSkip(error: unknown): boolean {
     if (code === 'ENOENT') return true;
   }
   const message = error instanceof Error ? error.message : String(error);
-  return /ENOENT|no such file or directory/i.test(message);
+  return /ENOENT|no such file or directory/iu.test(message);
 }

@@ -344,7 +344,7 @@ export class S3TestServer {
 }
 
 function escapeXml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return s.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;');
 }
 
 function readBody(req: http.IncomingMessage): Promise<Buffer> {

@@ -27,7 +27,7 @@ export function frameData(rawFrame) {
   let data = '';
   for (const line of rawFrame.split('\n')) {
     // `data:foo` and `data: foo` are both valid — trim one leading space.
-    if (line.slice(0, 5) === 'data:') data += line.slice(5).replace(/^ /, '');
+    if (line.slice(0, 5) === 'data:') data += line.slice(5).replace(/^ /u, '');
   }
   return data;
 }
@@ -63,7 +63,7 @@ export function parseFrame(rawFrame) {
 export function isEndFrame(rawFrame) {
   for (const line of rawFrame.split('\n')) {
     // `event:end` and `event: end` are both valid — trim one leading space.
-    if (line.slice(0, 6) === 'event:' && line.slice(6).replace(/^ /, '') === 'end') return true;
+    if (line.slice(0, 6) === 'event:' && line.slice(6).replace(/^ /u, '') === 'end') return true;
   }
   return false;
 }

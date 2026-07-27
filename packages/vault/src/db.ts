@@ -49,7 +49,7 @@ export interface VaultDb {
    */
   blobs: BlobCustody;
   /** Current remote CAS tier, or null when full restore is required. */
-  remote(): RemoteTier | null;
+  remote: () => RemoteTier | null;
   /** Persistent resumable ingress + continuous pending-offsite drain (#414). */
   blobTransfers: BlobTransferCoordinator;
   /**
@@ -70,7 +70,7 @@ export interface VaultDb {
    * behind the shipper's back (a spurious foreign-checkpoint detection on
    * every restart).
    */
-  close(opts?: { skipOptimize?: boolean }): void;
+  close: (opts?: { skipOptimize?: boolean }) => void;
 }
 
 /** The `blob_store` settings bag shape (issue #296 §2, extended #367). */
@@ -400,9 +400,9 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   const blobCache = new BlobCache(vault, local, {
     settings: () => readBlobCacheSettings(vault),
     policy: () => readBackupPolicy(vault),
-    ...(options.replicationConcurrency !== undefined
-      ? { replicationConcurrency: options.replicationConcurrency }
-      : {}),
+    ...(options.replicationConcurrency === undefined
+      ? {}
+      : { replicationConcurrency: options.replicationConcurrency }),
     ...(blobsDir
       ? {
           statfs: () => {

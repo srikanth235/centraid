@@ -6,7 +6,7 @@ import {
   shouldCaptureContextMenu,
 } from './worker-core.js';
 
-describe('approvalBadgeText', () => {
+describe(approvalBadgeText, () => {
   it('clears empty counts and caps at 99', () => {
     expect(approvalBadgeText(0)).toBe('');
     expect(approvalBadgeText(undefined)).toBe('');
@@ -15,7 +15,7 @@ describe('approvalBadgeText', () => {
   });
 });
 
-describe('approvalBadgeForState', () => {
+describe(approvalBadgeForState, () => {
   it('clears when unpaired or locked', () => {
     expect(approvalBadgeForState({ paired: false, locked: false, count: 2 })).toBe('');
     expect(approvalBadgeForState({ paired: true, locked: true, count: 2 })).toBe('');

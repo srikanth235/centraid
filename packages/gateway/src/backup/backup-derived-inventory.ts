@@ -24,7 +24,7 @@ const SAMPLE_LIMIT = 25;
 // store prefix, so a derived-prefixed object key resolves to its sha the same
 // way a cas one does (kept local to break the module cycle with the cas diff).
 function casSha(key: string): string | undefined {
-  return /(?:^|\/)blobs\/(?:sha256\/)?([0-9a-f]{64})$/.exec(key)?.[1];
+  return /(?:^|\/)blobs\/(?:sha256\/)?(?<sha>[0-9a-f]{64})$/u.exec(key)?.groups?.sha;
 }
 
 function drift(list: Iterable<string>): DriftSummary {

@@ -37,8 +37,8 @@ export function windowCutoffMs(nowMs: number, windowDays: number): number {
  * assert a segment actually landed locally before it writes the index row.
  */
 export interface BlobSink {
-  ingestSync(bytes: Buffer): { sha256: string; byteSize: number };
-  has(sha: string): boolean;
+  ingestSync: (bytes: Buffer) => { sha256: string; byteSize: number };
+  has: (sha: string) => boolean;
 }
 
 /**

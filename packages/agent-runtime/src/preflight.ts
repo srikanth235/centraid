@@ -196,12 +196,12 @@ export function parseSemver(text: string): SemVer | undefined {
   // No leading `\b` — strings like `v1.2.3` have a word char before the
   // digit, which would block the boundary. We still want `1.2.3` out of
   // them.
-  const m = text.match(/(\d+)\.(\d+)\.(\d+)/);
+  const m = text.match(/(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)/u);
   if (!m) return undefined;
   return {
-    major: Number(m[1]),
-    minor: Number(m[2]),
-    patch: Number(m[3]),
+    major: Number(m.groups?.major),
+    minor: Number(m.groups?.minor),
+    patch: Number(m.groups?.patch),
   };
 }
 

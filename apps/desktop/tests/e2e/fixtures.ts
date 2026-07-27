@@ -7,10 +7,9 @@ import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = import.meta.filename;
+const __dirname = import.meta.dirname;
 
 /*
  * E2E harness for the desktop app, rebuilt for the post-#109/#137/#141
@@ -121,8 +120,8 @@ export interface MockGateway {
   /** Calls observed, in arrival order (excludes OPTIONS preflight). */
   calls: Array<{ method: string; pathname: string; search: string; auth?: string; body?: string }>;
   /** Convenience: number of calls matching a method + path predicate. */
-  countCalls(method: string, pathTest: (p: string) => boolean): number;
-  close(): Promise<void>;
+  countCalls: (method: string, pathTest: (p: string) => boolean) => number;
+  close: () => Promise<void>;
 }
 
 interface MockGatewayOptions {
@@ -498,7 +497,16 @@ async function route(
   // ---- conversations ----
   if (seg[0] === '_centraid-conversations' && seg[1] === 'apps' && seg[3] === 'sessions') {
     const sid = seg[4];
-    if (!sid) {
+    if (sid) {
+      if (method === 'GET')
+        return json(res, 200, {
+          id: sid,
+          title: '',
+          createdAt: 0,
+          messages: s.conversationMessages,
+        });
+      if (method === 'PATCH' || method === 'DELETE') return json(res, 200, { ok: true });
+    } else {
       if (method === 'GET') return json(res, 200, { sessions: s.conversations });
       if (method === 'POST') {
         const title = (safeJson(body).title as string) ?? '';
@@ -514,15 +522,6 @@ async function route(
         s.conversations.unshift(conv);
         return json(res, 200, conv);
       }
-    } else {
-      if (method === 'GET')
-        return json(res, 200, {
-          id: sid,
-          title: '',
-          createdAt: 0,
-          messages: s.conversationMessages,
-        });
-      if (method === 'PATCH' || method === 'DELETE') return json(res, 200, { ok: true });
     }
   }
   if (seg[0] === '_centraid-conversations' && seg[3] === 'blobs' && method === 'POST') {
@@ -891,7 +890,7 @@ export async function waitForHome(page: Page): Promise<void> {
   try {
     await library.waitFor({ state: 'visible', timeout: 10_000 });
   } catch (error) {
-    const body = (await page.locator('body').textContent())?.replaceAll(/\s+/g, ' ').slice(0, 500);
+    const body = (await page.locator('body').textContent())?.replaceAll(/\s+/gu, ' ').slice(0, 500);
     throw new Error(`home library did not render at ${page.url()}; shell text: ${body ?? ''}`, {
       cause: error,
     });

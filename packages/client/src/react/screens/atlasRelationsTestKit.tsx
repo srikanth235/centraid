@@ -24,7 +24,7 @@ export const node = (
     physical,
     logical: `${pack}.${table}`,
     table,
-    label: table.replace(/_/g, ' '),
+    label: table.replace(/_/gu, ' '),
     pack,
     packKind,
     packLabel: (pack[0]?.toUpperCase() ?? '') + pack.slice(1),
@@ -217,6 +217,6 @@ export const viewportTransform = (el: HTMLElement): string =>
   el.querySelector('[data-testid="atlas-viewport"]')?.getAttribute('transform') ?? '';
 
 export const scaleOf = (el: HTMLElement): number => {
-  const m = /scale\(([-\d.]+)\)/.exec(viewportTransform(el));
-  return m?.[1] !== undefined ? parseFloat(m[1]) : Number.NaN;
+  const scale = /scale\((?<scale>[-\d.]+)\)/u.exec(viewportTransform(el))?.groups?.scale;
+  return scale !== undefined ? parseFloat(scale) : Number.NaN;
 };

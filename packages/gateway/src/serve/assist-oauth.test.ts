@@ -69,7 +69,7 @@ describe('Assist scope tiers', () => {
         ],
         config,
       ),
-    ).toEqual([
+    ).toStrictEqual([
       'https://www.googleapis.com/auth/calendar.readonly',
       'https://www.googleapis.com/auth/contacts.readonly',
     ]);
@@ -86,6 +86,6 @@ describe('Assist scope tiers', () => {
         googleClientId: CLIENT_ID,
         restrictedScopesEnabled: true,
       }),
-    ).toEqual(['https://www.googleapis.com/auth/gmail.readonly']);
+    ).toStrictEqual(['https://www.googleapis.com/auth/gmail.readonly']);
   });
 });

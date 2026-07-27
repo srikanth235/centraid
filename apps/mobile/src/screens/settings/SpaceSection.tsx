@@ -65,11 +65,11 @@ type State =
   | { kind: 'error'; message: string };
 
 type SpaceFormSetters = {
-  setState(next: State): void;
-  setName(next: string): void;
-  setColor(next: string): void;
-  setIcon(next: IconName): void;
-  setBlurb(next: string): void;
+  setState: (next: State) => void;
+  setName: (next: string) => void;
+  setColor: (next: string) => void;
+  setIcon: (next: IconName) => void;
+  setBlurb: (next: string) => void;
 };
 
 /** Push a vault's presentation into the edit form's fields. */

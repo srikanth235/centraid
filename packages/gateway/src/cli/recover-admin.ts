@@ -95,11 +95,11 @@ const PHASE_LINES: Record<RecoverPhase, string> = {
 /** The "found your vault" facts card (issue #439 R6) — zero machine vocabulary. */
 function printFacts(discovery: RecoveryDiscovery): void {
   const size =
-    discovery.fullBytes !== undefined ? formatBytes(discovery.fullBytes) : 'an unknown size';
+    discovery.fullBytes === undefined ? 'an unknown size' : formatBytes(discovery.fullBytes);
   const asOf =
-    discovery.recoveredAsOf !== undefined
-      ? new Date(discovery.recoveredAsOf).toISOString()
-      : 'an unknown time';
+    discovery.recoveredAsOf === undefined
+      ? 'an unknown time'
+      : new Date(discovery.recoveredAsOf).toISOString();
   process.stderr.write(
     `centraid-gateway: found your vault — ${size}, everything safe as of ${asOf}, ` +
       `hosted at ${discovery.target.provider} (${discovery.restoreCostClass ?? 'unknown egress'}).\n`,
@@ -124,7 +124,7 @@ export async function commandRecover(
   }
   let password: string;
   try {
-    password = readFileSync(parsed.passwordFile, 'utf8').replace(/\r?\n$/, '');
+    password = readFileSync(parsed.passwordFile, 'utf8').replace(/\r?\n$/u, '');
   } catch (error) {
     fail(
       `could not read recovery-kit password file "${parsed.passwordFile}": ${
@@ -171,8 +171,8 @@ export async function commandRecover(
         kitDocument,
         password,
         apiKey: parsed.apiKey,
-        ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
-        ...(parsed.atMs !== undefined ? { at: parsed.atMs } : {}),
+        ...(parsed.vault === undefined ? {} : { vaultId: parsed.vault }),
+        ...(parsed.atMs === undefined ? {} : { at: parsed.atMs }),
       });
     } catch (err) {
       fail(err instanceof Error ? err.message : String(err), 2);
@@ -181,7 +181,7 @@ export async function commandRecover(
 
     if (discovery.restoreCostClass === 'metered-egress' && !parsed.yes) {
       const fullSize =
-        discovery.fullBytes !== undefined ? formatBytes(discovery.fullBytes) : 'an unknown amount';
+        discovery.fullBytes === undefined ? 'an unknown amount' : formatBytes(discovery.fullBytes);
       const line =
         !parsed.full && discovery.lazyAvailable
           ? 'recovery is lazy by default and downloads only the vault database plus any blob the ' +
@@ -203,8 +203,8 @@ export async function commandRecover(
       keyStore,
       sourceInstanceId,
       provider: discovery.provider,
-      ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
-      ...(parsed.atMs !== undefined ? { at: parsed.atMs } : {}),
+      ...(parsed.vault === undefined ? {} : { vaultId: parsed.vault }),
+      ...(parsed.atMs === undefined ? {} : { at: parsed.atMs }),
       ...(parsed.full ? { full: true } : {}),
       onPhase: (phase) => process.stderr.write(`centraid-gateway: ${PHASE_LINES[phase]}\n`),
       log: {

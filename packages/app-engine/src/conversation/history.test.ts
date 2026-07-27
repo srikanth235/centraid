@@ -75,7 +75,7 @@ function turn(
   };
 }
 
-describe('deriveTitle', () => {
+describe(deriveTitle, () => {
   it('returns empty for empty/whitespace input', () => {
     expect(deriveTitle('')).toBe('');
     expect(deriveTitle('   \n  ')).toBe('');
@@ -89,14 +89,14 @@ describe('deriveTitle', () => {
   it('truncates at 60 with ellipsis (collapsed first); leaves exactly-60 alone', () => {
     const long = 'word '.repeat(40); // 200 chars
     const t = deriveTitle(long);
-    expect(t.length).toBe(58); // 57 + ellipsis
+    expect(t).toHaveLength(58); // 57 + ellipsis
     expect(t.endsWith('…')).toBeTruthy();
     const sixty = 'a'.repeat(60);
     expect(deriveTitle(sixty)).toBe(sixty);
   });
 });
 
-describe('ConversationHistoryStore', () => {
+describe(ConversationHistoryStore, () => {
   let store: ConversationHistoryStore;
   beforeEach(() => {
     store = newStore();
@@ -105,7 +105,7 @@ describe('ConversationHistoryStore', () => {
   it('createSession + listSessions round-trips', () => {
     const s = store.createSession(APP, '');
     const list = store.listSessions(APP);
-    expect(list.length).toBe(1);
+    expect(list).toHaveLength(1);
     expect(list[0]!.id).toBe(s.id);
     expect(list[0]!.title).toBe('');
     expect(list[0]!.messageCount).toBe(0);
@@ -114,7 +114,7 @@ describe('ConversationHistoryStore', () => {
   it('listSessions returns every session for the user in this app', () => {
     store.createSession(APP, 'one');
     store.createSession(APP, 'two');
-    expect(store.listSessions(APP).length).toBe(2);
+    expect(store.listSessions(APP)).toHaveLength(2);
   });
 
   it('rejects an invalid app id', () => {
@@ -127,8 +127,8 @@ describe('ConversationHistoryStore', () => {
     expect(r?.turnId).toBeTruthy();
     const loaded = store.getSession(APP, s.id);
     expect(loaded?.messages.length).toBe(2);
-    expect(loaded?.messages.map((m) => m.idx)).toEqual([0, 1]);
-    expect(loaded?.messages[0]!.payload).toEqual({ kind: 'user', text: 'first' });
+    expect(loaded?.messages.map((m) => m.idx)).toStrictEqual([0, 1]);
+    expect(loaded?.messages[0]!.payload).toStrictEqual({ kind: 'user', text: 'first' });
     expect(loaded?.messages[1]!.payload).toMatchObject({ kind: 'ai', text: 'reply' });
   });
 
@@ -141,7 +141,7 @@ describe('ConversationHistoryStore', () => {
       retry?: unknown;
     };
     expect(ai.turnId).toBe(r?.turnId);
-    expect(ai.feedback).toBe(null);
+    expect(ai.feedback).toBeNull();
     expect(ai.retry).toBeUndefined();
   });
 
@@ -187,7 +187,7 @@ describe('ConversationHistoryStore', () => {
     const loaded = store.getSession(APP, s.id);
     // One user row + one ai row (the family is collapsed), not two of each.
     expect(loaded?.messages.length).toBe(2);
-    expect(loaded?.messages[0]!.payload).toEqual({ kind: 'user', text: 'why?' });
+    expect(loaded?.messages[0]!.payload).toStrictEqual({ kind: 'user', text: 'why?' });
     const ai = loaded?.messages[1]!.payload as {
       text: string;
       turnId?: string;
@@ -199,8 +199,8 @@ describe('ConversationHistoryStore', () => {
     // ...with both attempts carried for the client pager, oldest→newest.
     expect(ai.retry?.count).toBe(2);
     expect(ai.retry?.index).toBe(2);
-    expect(ai.retry?.attempts.map((a) => a.text)).toEqual(['because A', 'because B']);
-    expect(ai.retry?.attempts.map((a) => a.turnId)).toEqual([first?.turnId, second?.turnId]);
+    expect(ai.retry?.attempts.map((a) => a.text)).toStrictEqual(['because A', 'because B']);
+    expect(ai.retry?.attempts.map((a) => a.turnId)).toStrictEqual([first?.turnId, second?.turnId]);
   });
 
   it('setTurnFeedback sets + clears 👍/👎 and surfaces it on reconstruction (#420)', () => {
@@ -212,7 +212,7 @@ describe('ConversationHistoryStore', () => {
     expect(ai.feedback).toBe('up');
     expect(store.setTurnFeedback(APP, s.id, turnId, null)).toBe(true);
     ai = store.getSession(APP, s.id)?.messages[1]!.payload as { feedback?: unknown };
-    expect(ai.feedback).toBe(null);
+    expect(ai.feedback).toBeNull();
   });
 
   it('setTurnFeedback returns false for a turn outside the session (#420)', () => {
@@ -506,7 +506,7 @@ describe('ConversationHistoryStore', () => {
       }>;
     };
     expect(user.kind).toBe('user');
-    expect(user.attachments).toEqual([
+    expect(user.attachments).toStrictEqual([
       {
         hash: 'a'.repeat(64),
         mime: 'image/png',
@@ -575,7 +575,7 @@ describe('ConversationHistoryStore', () => {
     store.recordTurn(APP, turn(s.id, 'q2', 'a2', 2_000));
     const loaded = store.getSession(APP, s.id);
     const texts = (loaded?.messages ?? []).map((m) => (m.payload as { text?: string }).text);
-    expect(texts).toEqual(['q1', 'a1', 'q2', 'a2']);
+    expect(texts).toStrictEqual(['q1', 'a1', 'q2', 'a2']);
   });
 
   it('recordTurn defaults the run kind to chat; honors an explicit build kind (#181)', () => {
@@ -596,7 +596,7 @@ describe('ConversationHistoryStore', () => {
     // Transcript reconstruction is kind-agnostic — a build turn round-trips
     // exactly like a chat turn.
     const loaded = local.getSession(APP, build.id);
-    expect(loaded?.messages[0]!.payload).toEqual({ kind: 'user', text: 'tweak ui' });
+    expect(loaded?.messages[0]!.payload).toStrictEqual({ kind: 'user', text: 'tweak ui' });
     expect(loaded?.messages[1]!.payload).toMatchObject({ kind: 'ai', text: 'done' });
   });
 
@@ -631,8 +631,8 @@ describe('ConversationHistoryStore', () => {
     expect(tool.tool).toBe('vault_sql');
     expect(tool.sql).toBe('SELECT COUNT(*) FROM x');
     expect(tool.state).toBe('ok');
-    expect(tool.result).toEqual([{ n: 1 }]);
-    expect(typeof tool.id).toBe('string');
+    expect(tool.result).toStrictEqual([{ n: 1 }]);
+    expect(tool.id).toBeTypeOf('string');
     expect(loaded?.messages[2]!.payload).toMatchObject({ kind: 'ai', text: 'there is 1 row' });
   });
 
@@ -692,7 +692,7 @@ describe('ConversationHistoryStore', () => {
   });
 
   it('recordTurn returns undefined for an unknown session', () => {
-    expect(store.recordTurn(APP, turn('not-a-real-id', 'hi', 'x'))).toBe(undefined);
+    expect(store.recordTurn(APP, turn('not-a-real-id', 'hi', 'x'))).toBeUndefined();
   });
 
   it('messageCount counts the reconstructed transcript length', () => {
@@ -710,14 +710,14 @@ describe('ConversationHistoryStore', () => {
   });
 
   it('renameSession returns undefined for unknown id', () => {
-    expect(store.renameSession(APP, 'nope', 'x')).toBe(undefined);
+    expect(store.renameSession(APP, 'nope', 'x')).toBeUndefined();
   });
 
   it('deleteSession cascades to the session runs', () => {
     const s = store.createSession(APP);
     store.recordTurn(APP, turn(s.id, 'doomed', 'x'));
     expect(store.deleteSession(APP, s.id)).toBe(true);
-    expect(store.getSession(APP, s.id)).toBe(undefined);
+    expect(store.getSession(APP, s.id)).toBeUndefined();
   });
 
   it('listSessions orders by updatedAt desc', async () => {
@@ -737,7 +737,7 @@ describe('ConversationHistoryStore', () => {
   it('noteTurn bumps turn_count and persists the adapter columns', () => {
     const s = store.createSession(APP);
     expect(s.turnCount).toBe(0);
-    expect(s.adapterKind).toBe(null);
+    expect(s.adapterKind).toBeNull();
 
     const after1 = store.noteTurn(APP, s.id, { kind: 'codex', sessionId: 'cx-1' });
     expect(after1?.turnCount).toBe(1);
@@ -758,7 +758,7 @@ describe('ConversationHistoryStore', () => {
   });
 
   it('noteTurn returns undefined for an unknown session', () => {
-    expect(store.noteTurn(APP, 'not-a-real-id')).toBe(undefined);
+    expect(store.noteTurn(APP, 'not-a-real-id')).toBeUndefined();
   });
 
   it('getSessionMeta returns meta without the transcript', () => {
@@ -767,7 +767,7 @@ describe('ConversationHistoryStore', () => {
     const meta = store.getSessionMeta(APP, s.id);
     expect(meta?.id).toBe(s.id);
     expect(meta?.messageCount).toBe(2);
-    expect((meta as unknown as { messages?: unknown }).messages).toBe(undefined);
+    expect((meta as unknown as { messages?: unknown }).messages).toBeUndefined();
   });
 });
 
@@ -777,11 +777,11 @@ describe('ConversationHistoryStore per-app scoping', () => {
     const t = store.createSession('todos', 'todos-1');
     store.createSession('habits', 'habits-1');
     store.createSession('habits', 'habits-2');
-    expect(store.listSessions('todos').map((s) => s.title)).toEqual(['todos-1']);
-    expect(store.listSessions('habits').length).toBe(2);
+    expect(store.listSessions('todos').map((s) => s.title)).toStrictEqual(['todos-1']);
+    expect(store.listSessions('habits')).toHaveLength(2);
     // A session id is only found under its owning app.
     expect(store.getSession('todos', t.id)).toBeTruthy();
-    expect(store.getSession('habits', t.id)).toBe(undefined);
+    expect(store.getSession('habits', t.id)).toBeUndefined();
   });
 });
 
@@ -809,31 +809,31 @@ describe('ConversationHistoryStore per-user scoping', () => {
     bob.createSession(APP, 'bob-1');
 
     const aliceList = alice.listSessions(APP);
-    expect(aliceList.length).toBe(2);
+    expect(aliceList).toHaveLength(2);
     expect(aliceList.every((s) => s.userId === 'alice')).toBeTruthy();
 
     const bobList = bob.listSessions(APP);
-    expect(bobList.length).toBe(1);
+    expect(bobList).toHaveLength(1);
     expect(bobList[0]!.title).toBe('bob-1');
   });
 
   it("getSession returns undefined for another user's session id", () => {
     const { alice, bob } = pair();
     const aliceSession = alice.createSession(APP);
-    expect(bob.getSession(APP, aliceSession.id)).toBe(undefined);
+    expect(bob.getSession(APP, aliceSession.id)).toBeUndefined();
   });
 
   it("recordTurn refuses to write into another user's session", () => {
     const { alice, bob } = pair();
     const aliceSession = alice.createSession(APP);
-    expect(bob.recordTurn(APP, turn(aliceSession.id, 'hi', 'x'))).toBe(undefined);
+    expect(bob.recordTurn(APP, turn(aliceSession.id, 'hi', 'x'))).toBeUndefined();
     expect(alice.getSession(APP, aliceSession.id)?.messages.length).toBe(0);
   });
 
   it("renameSession + deleteSession can't touch another user's session", () => {
     const { alice, bob } = pair();
     const aliceSession = alice.createSession(APP, 'mine');
-    expect(bob.renameSession(APP, aliceSession.id, 'stolen')).toBe(undefined);
+    expect(bob.renameSession(APP, aliceSession.id, 'stolen')).toBeUndefined();
     expect(bob.deleteSession(APP, aliceSession.id)).toBe(false);
     expect(alice.getSession(APP, aliceSession.id)?.title).toBe('mine');
   });
@@ -910,7 +910,7 @@ function call(
   return handler(req, res as unknown as ServerResponse).then(() => res);
 }
 
-describe('makeConversationRouteHandler', () => {
+describe(makeConversationRouteHandler, () => {
   const BASE = `/_centraid-conversations/apps/${APP}/sessions`;
   let handler: ReturnType<typeof makeConversationRouteHandler>;
   let store: ConversationHistoryStore;
@@ -922,7 +922,13 @@ describe('makeConversationRouteHandler', () => {
   it('POST sessions creates a session', async () => {
     const res = await call(handler, 'POST', BASE, {});
     expect(res.status).toBe(200);
-    expect((res.body as { id: string }).id.length > 0).toBe(true);
+    expect(
+      (
+        res.body as {
+          id: string;
+        }
+      ).id.length,
+    ).toBeGreaterThan(0);
   });
 
   it('POST sessions honors the title', async () => {
@@ -938,11 +944,11 @@ describe('makeConversationRouteHandler', () => {
 
     const listed = await call(handler, 'GET', BASE);
     expect(listed.status).toBe(200);
-    expect((listed.body as { sessions: unknown[] }).sessions.length).toBe(1);
+    expect((listed.body as { sessions: unknown[] }).sessions).toHaveLength(1);
 
     const loaded = await call(handler, 'GET', `${BASE}/${id}`);
     expect(loaded.status).toBe(200);
-    expect((loaded.body as { messages: unknown[] }).messages).toEqual([]);
+    expect((loaded.body as { messages: unknown[] }).messages).toStrictEqual([]);
 
     const renamed = await call(handler, 'PATCH', `${BASE}/${id}`, { title: 'renamed' });
     expect(renamed.status).toBe(200);
@@ -976,7 +982,7 @@ describe('makeConversationRouteHandler', () => {
     const clear = await call(handler, 'PATCH', `${BASE}/${id}/turns/${turnId}/feedback`, {
       feedback: 'bogus',
     });
-    expect((clear.body as { feedback: unknown }).feedback).toBe(null);
+    expect((clear.body as { feedback: unknown }).feedback).toBeNull();
   });
 
   it('PATCH feedback 404s for an unknown turn (#420)', async () => {
@@ -995,11 +1001,11 @@ describe('makeConversationRouteHandler', () => {
     const res = await call(handler, 'GET', `${BASE}/search?q=quarterly`);
     expect(res.status).toBe(200);
     const results = (res.body as { results: Array<{ id: string; snippet: string }> }).results;
-    expect(results.map((r) => r.id)).toEqual([id]);
+    expect(results.map((r) => r.id)).toStrictEqual([id]);
     expect(results[0]!.snippet).toContain('⟦');
     // A blank query yields no results, not an error.
     const empty = await call(handler, 'GET', `${BASE}/search?q=`);
-    expect((empty.body as { results: unknown[] }).results).toEqual([]);
+    expect((empty.body as { results: unknown[] }).results).toStrictEqual([]);
   });
 
   it('PATCH pins / archives a session and list ordering + flags reflect it (#420)', async () => {
@@ -1019,7 +1025,7 @@ describe('makeConversationRouteHandler', () => {
     // Archived b drops out of search.
     store.recordTurn(APP, turn(b.id, 'beta needle text', 'ok'));
     const res = await call(handler, 'GET', `${BASE}/search?q=needle`);
-    expect((res.body as { results: unknown[] }).results).toEqual([]);
+    expect((res.body as { results: unknown[] }).results).toStrictEqual([]);
   });
 
   it('405s on unsupported method', async () => {

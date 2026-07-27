@@ -59,7 +59,7 @@ export const PICK_KIND_LABELS = {
 export function entityKindLabel(type) {
   if (PICK_KIND_LABELS[type]) return PICK_KIND_LABELS[type];
   const table = String(type).split('.')[1] ?? String(type);
-  return table.replace(/_/g, ' ');
+  return table.replace(/_/gu, ' ');
 }
 
 // ---------- Reactive-property plumbing (the vanilla stand-in for Lit) ----------
@@ -160,7 +160,7 @@ export class KitElement extends HTMLElement {
   }
 
   connectedCallback() {
-    this.setAttribute('data-kit-host', '');
+    this.dataset.kitHost = '';
     this.requestUpdate();
   }
 
@@ -193,7 +193,7 @@ function avatarHue(name) {
 }
 
 function avatarInitials(name) {
-  const parts = name.split(/\s+/);
+  const parts = name.split(/\s+/u);
   return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
 }
 
@@ -233,7 +233,7 @@ export class KitAvatar extends KitElement {
     span.className = 'kit-avatar';
     span.setAttribute('style', style);
     span.setAttribute('aria-hidden', 'true');
-    if (this.shape) span.setAttribute('data-shape', this.shape);
+    if (this.shape) span.dataset.shape = this.shape;
     if (this.src) {
       const img = document.createElement('img');
       img.src = this.src;
@@ -273,7 +273,7 @@ export class KitMeter extends KitElement {
     const fill = document.createElement('span');
     fill.className = 'kit-bar-fill';
     fill.setAttribute('style', `width:${pct}%`);
-    if (this.tone) fill.setAttribute('data-tone', this.tone);
+    if (this.tone) fill.dataset.tone = this.tone;
     bar.appendChild(fill);
     return bar;
   }
@@ -392,7 +392,7 @@ export class KitBarChart extends KitElement {
         rx: 2,
         class: 'kit-chart-barrect',
       });
-      if (item.muted) rect.setAttribute('data-muted', 'true');
+      if (item.muted) rect.dataset.muted = 'true';
       svg.appendChild(rect);
       const text = svgEl('text', {
         x: pad + i * band + band / 2,
@@ -466,7 +466,7 @@ export class KitToast extends KitElement {
   render() {
     const div = document.createElement('div');
     div.className = 'kit-toast';
-    if (this.tone) div.setAttribute('data-tone', this.tone);
+    if (this.tone) div.dataset.tone = this.tone;
 
     const span = document.createElement('span');
     span.textContent = this.text;

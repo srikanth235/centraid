@@ -66,9 +66,9 @@ function partyCandidates(text: string): StageCandidate[] {
   return parseVcards(text).map((card, i) => ({
     entityType: 'core.party',
     externalId:
-      card.identifiers[0] !== undefined
-        ? `${card.identifiers[0].scheme}:${card.identifiers[0].value}`
-        : `vcard:${card.fn}:${i}`,
+      card.identifiers[0] === undefined
+        ? `vcard:${card.fn}:${i}`
+        : `${card.identifiers[0].scheme}:${card.identifiers[0].value}`,
     payload: {
       fn: card.fn,
       sortName: card.sortName,

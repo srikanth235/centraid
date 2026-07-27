@@ -699,7 +699,7 @@ export interface CentraidPhonePairingInfo {
 
 interface CentraidApi {
   /** Host capabilities used where browser security differs from Electron. */
-  getHostCapabilities?(): Promise<{
+  getHostCapabilities?: () => Promise<{
     platform: 'desktop' | 'web';
     appSessions: boolean;
     compute?: {
@@ -714,22 +714,22 @@ interface CentraidApi {
     };
   }>;
   /** Desktop-only device-local file ASR; present only on a host with an adapter seam. */
-  transcribeMedia?(input: {
+  transcribeMedia?: (input: {
     bytes: ArrayBuffer;
     mediaType: string;
     filename?: string;
-  }): Promise<string>;
-  getSettings(): Promise<CentraidSettings>;
-  saveSettings(patch: Partial<CentraidSettings>): Promise<CentraidSettings>;
+  }) => Promise<string>;
+  getSettings: () => Promise<CentraidSettings>;
+  saveSettings: (patch: Partial<CentraidSettings>) => Promise<CentraidSettings>;
   /** Desktop protocol courier. Values are delivered in-memory and never logged. */
-  onDeepLink?(cb: (url: string) => void): () => void;
+  onDeepLink?: (cb: (url: string) => void) => () => void;
 
   // App list/create/files/write/delete/update-meta + publish moved to the
   // renderer's direct HTTP client (renderer/gateway-client.ts) under the
   // thin-client pivot. The preview iframe points at the gateway draft URL
   // (Phase 4: renderer-side `draftPreviewUrl`), so only the local-only
   // reveal-in-Finder stays on IPC.
-  openAppFolder(input: { id: string }): Promise<{ ok: true }>;
+  openAppFolder: (input: { id: string }) => Promise<{ ok: true }>;
 
   // The in-process AGENT_* builder retired with the unified chat (issue
   // #141, Phase 3): the builder streams `/centraid/<id>/_turn` SSE directly
@@ -749,7 +749,7 @@ interface CentraidApi {
    * read surfaces the in-flight flag, the last error string (if any),
    * and the timestamp of the last successful publish.
    */
-  getPublishStatus(input: { id: string }): Promise<{
+  getPublishStatus: (input: { id: string }) => Promise<{
     inFlight: boolean;
     lastError?: string;
     lastPublishedAt?: number;
@@ -758,22 +758,22 @@ interface CentraidApi {
    * Subscribe to per-app publish events. Fired once per auto-publish
    * resolution (success or failure). Returns the unsubscribe.
    */
-  onPublishEvent(
+  onPublishEvent: (
     cb: (msg: { id: string; ok: boolean; error?: string; publishedAt?: number }) => void,
-  ): () => void;
+  ) => () => void;
 
   // ----- Gateways (issue #109) -----
   /** List every gateway profile (local + remote). Sorted local-first. */
-  listGateways(): Promise<CentraidGatewayProfile[]>;
+  listGateways: () => Promise<CentraidGatewayProfile[]>;
   /** Register an iroh connection by stable EndpointId. */
-  addGateway(input: {
+  addGateway: (input: {
     label: string;
     endpointId: string;
     relayHint?: string;
     displayName?: string;
     avatarColor?: string;
     rememberDevice?: boolean;
-  }): Promise<CentraidGatewayProfile>;
+  }) => Promise<CentraidGatewayProfile>;
   /**
    * Remove a gateway (connection). Refuses to remove the primordial
    * `'local'` gateway; remote connections can be removed. Returns the
@@ -781,33 +781,33 @@ interface CentraidApi {
    * the removed gateway was active). (#280 removed additional local
    * workspaces — a second space is a second VAULT.)
    */
-  removeGateway(input: { id: string }): Promise<{ activeGatewayId: string }>;
+  removeGateway: (input: { id: string }) => Promise<{ activeGatewayId: string }>;
   /** Rename a gateway's user-facing label. Id and paths never change. */
-  renameGateway(input: { id: string; label: string }): Promise<CentraidGatewayProfile>;
+  renameGateway: (input: { id: string; label: string }) => Promise<CentraidGatewayProfile>;
   /**
    * Patch profile metadata (`displayName` and/or `avatarColor`). Pass empty
    * string for `displayName` to reset to label-derived default; pass the
    * field as `undefined` (omit) to leave it untouched. `avatarColor` must
    * be a `#RRGGBB` string when provided.
    */
-  updateProfileMetadata(input: {
+  updateProfileMetadata: (input: {
     id: string;
     displayName?: string;
     avatarColor?: string;
-  }): Promise<CentraidGatewayProfile>;
+  }) => Promise<CentraidGatewayProfile>;
   /**
    * Switch the active gateway. The renderer should treat the response
    * as the new authoritative settings and drop gateway-scoped state
    * (app list, agent session, iframe).
    */
-  setActiveGateway(input: { id: string }): Promise<CentraidSettings>;
+  setActiveGateway: (input: { id: string }) => Promise<CentraidSettings>;
   /**
    * Active gateway's HTTP base URL + bearer token for the renderer's
    * direct data-plane client (`renderer/gateway-client.ts`). The token
    * lives in keychain-backed settings on main; this is the only path it
    * crosses to the renderer. Re-fetched on every gateway switch.
    */
-  getGatewayAuth(): Promise<{
+  getGatewayAuth: () => Promise<{
     baseUrl: string;
     /** Stable gateway/profile identity, independent of its current transport URL. */
     gatewayId?: string;
@@ -828,27 +828,29 @@ interface CentraidApi {
    * state; the same `onGatewayChanged` / `onVaultChanged` broadcasts fire.
    * Never rejects — failures come back as `{ok:false, error, message}`.
    */
-  redeemGatewayPairing(input: {
+  redeemGatewayPairing: (input: {
     /** The pasted/scanned one-line pairing token. */
     ticket: string;
     /** Optional profile label; falls back to the gateway/vault's own name. */
     label?: string;
     /** Explicit consent for a durable replica, outbox, and preview cache. */
     rememberDevice?: boolean;
-  }): Promise<CentraidRedeemGatewayPairingResult>;
+  }) => Promise<CentraidRedeemGatewayPairingResult>;
   /**
    * Read a gateway's vault list WITHOUT switching to it (issue #376) — the
    * flat (gateway, vault) switcher's preview. `~3s` timeout; a resolvable
    * but unauthenticated/unreachable gateway comes back `ok:false`, never a
    * rejection.
    */
-  listGatewayVaults(input: { gatewayId: string }): Promise<CentraidListGatewayVaultsResult>;
+  listGatewayVaults: (input: { gatewayId: string }) => Promise<CentraidListGatewayVaultsResult>;
   /**
    * ConnectFlow "handshake ladder" (issue #382): stage-by-stage
    * connectivity check for a method the user just supplied coordinates
    * for, OR an already-known gateway (`kind:'gateway'`). Never rejects.
    */
-  testGatewayConnection(input: CentraidTestConnectionInput): Promise<CentraidConnectivityReport>;
+  testGatewayConnection: (
+    input: CentraidTestConnectionInput,
+  ) => Promise<CentraidConnectivityReport>;
   /**
    * ConnectFlow "Over SSH" commit step (issue #382): (optionally) create a
    * vault on the remote box, mint a pairing ticket over ssh, and redeem it
@@ -857,42 +859,42 @@ interface CentraidApi {
    * `setActiveVault` and drop gateway/vault-scoped state; the same
    * `onGatewayChanged`/`onVaultChanged` broadcasts fire. Never rejects.
    */
-  sshConnectGateway(input: {
+  sshConnectGateway: (input: {
     destination: string;
     dataDir?: string;
     label?: string;
     rememberDevice?: boolean;
     vault: { kind: 'existing'; vaultId: string } | { kind: 'create'; name: string };
-  }): Promise<CentraidSshConnectResult>;
+  }) => Promise<CentraidSshConnectResult>;
   /**
    * Latest gateway-runtime snapshot from the main-process heartbeat
    * monitor. Resolves immediately from the last poll (≤5s old); the first
    * call after launch may run a probe.
    */
-  getGatewayRuntime(): Promise<CentraidGatewayRuntime>;
+  getGatewayRuntime: () => Promise<CentraidGatewayRuntime>;
   /**
    * Subscribe to per-poll runtime snapshots (every ~5s, plus immediately
    * after settings writes and gateway switches). Returns the unsubscribe.
    */
-  onGatewayRuntime(cb: (snapshot: CentraidGatewayRuntime) => void): () => void;
+  onGatewayRuntime: (cb: (snapshot: CentraidGatewayRuntime) => void) => () => void;
   /**
    * Restart the local embedded gateway (issue #351): graceful stop (WAL
    * checkpoint + close) then relaunch. Refused for remote gateways —
    * `ok: false` with an explanatory error.
    */
-  restartGateway(): Promise<{ ok: boolean; error?: string }>;
+  restartGateway: () => Promise<{ ok: boolean; error?: string }>;
   /**
    * Fetch `/centraid/_gateway/diagnostics` from the active gateway and save
    * it through a native save dialog (issue #351). `canceled` when the user
    * dismissed the dialog.
    */
-  exportGatewayDiagnostics(): Promise<
+  exportGatewayDiagnostics: () => Promise<
     { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
   >;
   /** Export a passphrase-wrapped recovery kit through a native 0600 file save. */
-  exportGatewayRecoveryKit(input: {
+  exportGatewayRecoveryKit: (input: {
     password: string;
-  }): Promise<{ ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }>;
+  }) => Promise<{ ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }>;
   /**
    * Switch the vault this client addresses on the active gateway (issue
    * #289). A pure client-side pointer flip — no server call, no re-root:
@@ -900,20 +902,20 @@ interface CentraidApi {
    * `undefined` to clear (let the gateway pick). The renderer keeps its
    * per-(gateway,vault) state and re-renders on `onVaultChanged`.
    */
-  setActiveVault(input: { vaultId?: string }): Promise<CentraidSettings>;
+  setActiveVault: (input: { vaultId?: string }) => Promise<CentraidSettings>;
   /**
    * Create a vault on the active gateway (issue #289). Admin act: works for
    * the desktop's own LOCAL gateway (the desktop is its landlord); rejects
    * for a remote gateway (its vault lifecycle is the server CLI over SSH).
    * The new vault does NOT become active implicitly — call `setActiveVault`.
    */
-  createVault(input: { name?: string }): Promise<{ vaultId: string }>;
+  createVault: (input: { name?: string }) => Promise<{ vaultId: string }>;
   /**
    * Delete a vault on the active LOCAL gateway (issue #289). Rejects for a
    * remote gateway. Clears the client's active-vault pointer first if it
    * names the vault being deleted.
    */
-  deleteVault(input: { vaultId: string; name: string }): Promise<{ deleted: true }>;
+  deleteVault: (input: { vaultId: string; name: string }) => Promise<{ deleted: true }>;
   /**
    * Notify-only (issue #382 follow-up): call after a metadata-only
    * `updateVault()` HTTP call succeeds (rename/retheme) so every window's
@@ -924,17 +926,17 @@ interface CentraidApi {
    * vault changed" and drives a navigate-Home + full re-scope, which is
    * wrong for a same-vault rename.
    */
-  notifyVaultMetadataChanged(): Promise<void>;
+  notifyVaultMetadataChanged: () => Promise<void>;
   // ----- Phone link (issue #263) -----
   /** Tunnel status + the paired-device allowlist. */
-  getPhoneLinkStatus(): Promise<CentraidPhoneLinkStatus>;
+  getPhoneLinkStatus: () => Promise<CentraidPhoneLinkStatus>;
   /** Mint a fresh one-time pairing code; returns the QR as a data URL. */
-  beginPhonePairing(): Promise<CentraidPhonePairingInfo>;
-  cancelPhonePairing(): Promise<{ ok: true }>;
+  beginPhonePairing: () => Promise<CentraidPhonePairingInfo>;
+  cancelPhonePairing: () => Promise<{ ok: true }>;
   /** Revoke a paired phone — drops its live connections at the transport. */
-  revokePhoneDevice(input: { deviceId: string }): Promise<{ removed: boolean }>;
+  revokePhoneDevice: (input: { deviceId: string }) => Promise<{ removed: boolean }>;
   /** Subscribe to pairing completions. Returns the unsubscribe. */
-  onPhonePaired(cb: (msg: { device: CentraidPhoneDevice }) => void): () => void;
+  onPhonePaired: (cb: (msg: { device: CentraidPhoneDevice }) => void) => () => void;
 
   // ----- Relaunch to update -----
   /**
@@ -942,29 +944,29 @@ interface CentraidApi {
    * one is on disk, and the version a relaunch would load. Optional so
    * test harnesses can mock a partial bridge.
    */
-  getUpdateStatus?(): Promise<{
+  getUpdateStatus?: () => Promise<{
     available: boolean;
     version: string;
     /** Packaged: true only after download finished (#501). */
     readyToInstall?: boolean;
   }>;
   /** Manual "check for updates" (I6 — always admits when a feed candidate exists). */
-  checkForUpdates?(): Promise<{
+  checkForUpdates?: () => Promise<{
     available: boolean;
     version: string;
     readyToInstall?: boolean;
   }>;
   /** Restart the app so it loads the new build (app.relaunch + exit). */
-  relaunchToUpdate?(): Promise<{ ok: true }>;
+  relaunchToUpdate?: () => Promise<{ ok: true }>;
   /** Subscribe to "a new build landed on disk". Returns the unsubscribe. */
-  onUpdateAvailable?(
+  onUpdateAvailable?: (
     cb: (msg: { available: boolean; version: string; readyToInstall?: boolean }) => void,
-  ): () => void;
+  ) => () => void;
   /**
    * H5 — opt-in OS service install for the detached local gateway
    * (`centraid-gateway service install`). Never silent; onboarding offers it.
    */
-  installGatewayService?(): Promise<{ ok: true } | { ok: false; error: string }>;
+  installGatewayService?: () => Promise<{ ok: true } | { ok: false; error: string }>;
 
   // ----- "What's new" changelog -----
   /**
@@ -972,13 +974,13 @@ interface CentraidApi {
    * running build version. Optional so test harnesses can mock a partial
    * bridge (the modal shows an error/empty state when it's absent).
    */
-  getChangelog?(): Promise<CentraidChangelogResult>;
+  getChangelog?: () => Promise<CentraidChangelogResult>;
 
   /**
    * Subscribe to active-gateway changes (any cause — add/remove/rename
    * of the active one, or explicit switch). Returns the unsubscribe.
    */
-  onGatewayChanged(
+  onGatewayChanged: (
     cb: (msg: {
       activeGatewayId: string;
       activeGatewayKind: 'local' | 'remote';
@@ -992,7 +994,7 @@ interface CentraidApi {
       /** Present when durable replica consent was explicitly withdrawn. */
       purgeReplicaGatewayId?: string;
     }) => void,
-  ): () => void;
+  ) => () => void;
 
   /**
    * Subscribe to vault-address changes on the active gateway (issue #289).
@@ -1000,9 +1002,9 @@ interface CentraidApi {
    * vault header) and re-renders the vault's world WITHOUT the wholesale
    * wipe a gateway switch triggers. Returns the unsubscribe.
    */
-  onVaultChanged(
+  onVaultChanged: (
     cb: (msg: { activeGatewayId: string; gatewayId?: string; activeVaultId?: string }) => void,
-  ): () => void;
+  ) => () => void;
 
   /**
    * Subscribe to vault METADATA changes (name/color/icon/blurb) on the
@@ -1012,7 +1014,7 @@ interface CentraidApi {
    * this must NOT trigger a navigate-Home/full re-scope. Returns the
    * unsubscribe.
    */
-  onVaultMetadataChanged(cb: () => void): () => void;
+  onVaultMetadataChanged: (cb: () => void) => () => void;
 
   // listTemplates + cloneTemplate moved to the renderer's direct HTTP client
   // (renderer/gateway-client.ts) under the thin-client pivot — the gateway

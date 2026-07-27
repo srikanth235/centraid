@@ -240,7 +240,7 @@ async function until(
   }
 }
 
-describe('createNativeReplicaSession', () => {
+describe(createNativeReplicaSession, () => {
   test('bootstraps on start and pulls deltas when the feed reports a newer cursor', async () => {
     const gateway = createGateway()
       .on('/replica/bootstrap', () => json(page({ epoch: 'replica-1', seq: 1 })))
@@ -259,7 +259,7 @@ describe('createNativeReplicaSession', () => {
       idFactory: sequentialIds(),
     });
     try {
-      expect((await session.status()).cursor).toEqual({ epoch: 'replica-1', seq: 1 });
+      expect((await session.status()).cursor).toStrictEqual({ epoch: 'replica-1', seq: 1 });
       expect(feed.active).toBe(true);
 
       feed.emit({ type: 'centraid:vault-cursor', cursor: { epoch: 'replica-1', seq: 2 } });
@@ -412,8 +412,8 @@ describe('createNativeReplicaSession', () => {
     });
     try {
       const read = await session.read('photos', { entity: 'core.content_item' });
-      expect(read.rows.map((row) => row.values.content_id)).toEqual(['photo-b']);
-      expect((await session.status()).cursor).toEqual({ epoch: 'replica-1', seq: 3 });
+      expect(read.rows.map((row) => row.values.content_id)).toStrictEqual(['photo-b']);
+      expect((await session.status()).cursor).toStrictEqual({ epoch: 'replica-1', seq: 3 });
     } finally {
       await session.close();
     }

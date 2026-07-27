@@ -85,7 +85,7 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
-    const rest = url.pathname.slice(PREFIX.length).replace(/^\//, '');
+    const rest = url.pathname.slice(PREFIX.length).replace(/^\//u, '');
     const method = (req.method ?? 'GET').toUpperCase();
 
     try {

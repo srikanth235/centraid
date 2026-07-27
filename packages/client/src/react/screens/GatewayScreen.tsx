@@ -165,9 +165,9 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
         </div>
         <div className={styles.headMeta}>
           heartbeat · every {Math.round(snapshot.pollIntervalMs / 1000)}s
-          {snapshot.lastCheckAt !== undefined
-            ? ` · checked ${formatAgo(snapshot.lastCheckAt, now)}`
-            : ''}
+          {snapshot.lastCheckAt === undefined
+            ? ''
+            : ` · checked ${formatAgo(snapshot.lastCheckAt, now)}`}
         </div>
       </div>
 
@@ -202,9 +202,9 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                 <div>
                   <div className={styles.statusWord}>{STATUS_WORD[overall]}</div>
                   <div className={styles.statusSub}>
-                    {snapshot.statusSince !== undefined
-                      ? `for ${formatDuration(now - snapshot.statusSince)} · `
-                      : ''}
+                    {snapshot.statusSince === undefined
+                      ? ''
+                      : `for ${formatDuration(now - snapshot.statusSince)} · `}
                     {snapshot.gatewayKind} gateway “{snapshot.gatewayLabel}”
                   </div>
                   {heartbeat === 'down' && snapshot.lastError ? (
@@ -221,7 +221,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
               <div className={styles.figures}>
                 <Figure
                   label="Gateway uptime"
-                  value={uptimeMs !== undefined ? formatUptime(uptimeMs) : '——'}
+                  value={uptimeMs === undefined ? '——' : formatUptime(uptimeMs)}
                   {...(snapshot.gatewayStartedAt !== undefined && uptimeMs !== undefined
                     ? { sub: `since ${formatClock(now - uptimeMs)}` }
                     : {})}
@@ -236,7 +236,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                 />
                 <Figure
                   label="Availability"
-                  value={availability !== undefined ? `${availability.toFixed(1)}%` : '——'}
+                  value={availability === undefined ? '——' : `${availability.toFixed(1)}%`}
                   sub={`${snapshot.checksTotal} checks this session`}
                 />
               </div>
@@ -353,13 +353,13 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                     <dt>Version</dt>
                     <dd className={styles.idMono}>
                       {snapshot.version ?? '—'}
-                      {snapshot.schemaEpoch !== undefined ? ` · epoch ${snapshot.schemaEpoch}` : ''}
+                      {snapshot.schemaEpoch === undefined ? '' : ` · epoch ${snapshot.schemaEpoch}`}
                     </dd>
                   </div>
                   <div className={styles.idRow}>
                     <dt>Started</dt>
                     <dd className={styles.idMono}>
-                      {uptimeMs !== undefined ? formatClock(now - uptimeMs) : '—'}
+                      {uptimeMs === undefined ? '—' : formatClock(now - uptimeMs)}
                     </dd>
                   </div>
                   <div className={styles.idRow}>

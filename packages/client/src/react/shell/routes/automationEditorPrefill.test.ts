@@ -6,10 +6,10 @@ import { buildCreateAutomationEditorData } from './automationEditorCreateData.js
 // only exercise the pure create-mode DTO builder, so stub the client so
 // importing the route needs no live gateway. (`vi.mock` is hoisted above the
 // imports at transform time — the same seam automationEditorVault.test.ts uses.)
-vi.mock('../../../gateway-client.js', () => ({}));
-vi.mock('../../../assist-oauth-handoff.js', () => ({}));
+vi.mock(import('../../../gateway-client.js'), () => ({}));
+vi.mock(import('../../../assist-oauth-handoff.js'), () => ({}));
 
-describe('buildCreateAutomationEditorData', () => {
+describe(buildCreateAutomationEditorData, () => {
   it('opens trigger-less create mode with no template or watched entity', () => {
     const data = buildCreateAutomationEditorData({ instructions: 'do a thing', name: 'Untitled' });
     expect(data.mode).toBe('create');
@@ -17,7 +17,7 @@ describe('buildCreateAutomationEditorData', () => {
     expect(data.rowId).toBeNull();
     expect(data.instructions).toBe('do a thing');
     expect(data.name).toBe('Untitled');
-    expect(data.triggers).toEqual([]);
+    expect(data.triggers).toStrictEqual([]);
   });
 
   it('seeds a data trigger watching the entity kind from watchEntity', () => {
@@ -27,7 +27,7 @@ describe('buildCreateAutomationEditorData', () => {
       name: 'Untitled',
     });
     expect(data.mode).toBe('create');
-    expect(data.triggers).toEqual([{ entities: ['core.transaction'], kind: 'data' }]);
+    expect(data.triggers).toStrictEqual([{ entities: ['core.transaction'], kind: 'data' }]);
   });
 
   it("lets a template's own trigger kind win over watchEntity", () => {
@@ -37,7 +37,7 @@ describe('buildCreateAutomationEditorData', () => {
       instructions: 'x',
       name: 'x',
     });
-    expect(cron.triggers).toEqual([{ expr: '0 9 * * *', kind: 'cron' }]);
+    expect(cron.triggers).toStrictEqual([{ expr: '0 9 * * *', kind: 'cron' }]);
     expect(cron.name).toBe('Daily digest');
     expect(cron.instructions).toBe('Every morning');
 
@@ -47,7 +47,7 @@ describe('buildCreateAutomationEditorData', () => {
       instructions: 'x',
       name: 'x',
     });
-    expect(webhook.triggers).toEqual([{ id: null, kind: 'webhook', pending: true }]);
+    expect(webhook.triggers).toStrictEqual([{ id: null, kind: 'webhook', pending: true }]);
   });
 
   it('falls back to watchEntity when a template carries no trigger kind', () => {
@@ -57,11 +57,11 @@ describe('buildCreateAutomationEditorData', () => {
       instructions: 'x',
       name: 'x',
     });
-    expect(data.triggers).toEqual([{ entities: ['business.invoice'], kind: 'data' }]);
+    expect(data.triggers).toStrictEqual([{ entities: ['business.invoice'], kind: 'data' }]);
   });
 });
 
-describe('buildAutomationAgentEditorData', () => {
+describe(buildAutomationAgentEditorData, () => {
   it('derives effective automations pins and runner-scoped model defaults', () => {
     const data = buildAutomationAgentEditorData({
       anyLoading: false,

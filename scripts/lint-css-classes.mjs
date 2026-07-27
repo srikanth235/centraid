@@ -38,18 +38,19 @@ function walk(dir, out = []) {
     if (SKIP_DIRS.has(entry)) continue;
     const p = resolve(dir, entry);
     if (statSync(p).isDirectory()) walk(p, out);
-    else if (/\.tsx?$/.test(p)) out.push(p);
+    else if (/\.tsx?$/u.test(p)) out.push(p);
   }
   return out;
 }
 
 /** Strip CSS comments so a class named only inside one isn't counted as defined. */
 function definedClasses(css) {
-  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//gu, '');
   // Leading [a-zA-Z] excludes `0.5px` / `11.5px` numerics; `-` and `_` are
   // legal in idents but cannot start one here (authored camelCase per
   // CSS-CONVENTIONS "Component modules").
-  return new Set([...stripped.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]));
+  const matches = [...stripped.matchAll(/\.(?<className>[a-zA-Z][\w-]*)/gu)];
+  return new Set(matches.map((m) => m.groups?.className ?? ''));
 }
 
 /**
@@ -60,7 +61,7 @@ function definedClasses(css) {
 function scannableBody(src) {
   return src
     .split('\n')
-    .filter((l) => !/^\s*import\s/.test(l) && !/^\s*(\/\/|\/\*|\*)/.test(l))
+    .filter((l) => !/^\s*import\s/u.test(l) && !/^\s*(?:\/\/|\/\*|\*)/u.test(l))
     .join('\n');
 }
 
@@ -78,12 +79,16 @@ for (const target of TARGETS) {
   for (const file of walk(dir)) {
     filesScanned += 1;
     const src = readFileSync(file, 'utf8');
-    const imports = [...src.matchAll(/^import\s+(\w+)\s+from\s+'([^']+\.module\.css)'/gm)];
+    const imports = [
+      ...src.matchAll(/^import\s+(?<alias>\w+)\s+from\s+'(?<spec>[^']+\.module\.css)'/gmu),
+    ];
     if (imports.length === 0) continue;
     const body = scannableBody(src);
     const rel = relative(ROOT, file);
 
-    for (const [, alias, spec] of imports) {
+    for (const imported of imports) {
+      const alias = imported.groups?.alias ?? '';
+      const spec = imported.groups?.spec ?? '';
       const cssPath = resolve(dirname(file), spec);
       if (!existsSync(cssPath)) {
         findings.push(`${rel} — import '${spec}' does not resolve`);
@@ -94,11 +99,11 @@ for (const target of TARGETS) {
 
       // Dynamic access defeats static analysis. Report it so the check can
       // never quietly become partial; there are zero today.
-      if (new RegExp(`\\b${alias}\\[`).test(body)) {
+      if (new RegExp(`\\b${alias}\\[`, 'u').test(body)) {
         dynamic.push(`${rel} — ${alias}[…] computed access is unverifiable`);
       }
 
-      for (const [, name] of body.matchAll(new RegExp(`\\b${alias}\\.([a-zA-Z][\\w]*)`, 'g'))) {
+      for (const [, name] of body.matchAll(new RegExp(`\\b${alias}\\.([a-zA-Z][\\w]*)`, 'gu'))) {
         if (!defined.has(name)) {
           findings.push(`${rel}:${alias}.${name} — no .${name} rule in ${basename(cssPath)}`);
         }

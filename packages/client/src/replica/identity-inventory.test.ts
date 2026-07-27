@@ -6,15 +6,15 @@ import { IDBFactory } from 'fake-indexeddb';
 import { describe, expect, it } from 'vitest';
 import { createIndexedDbReplicaIdentityInventory } from './identity-inventory.js';
 
-describe('createIndexedDbReplicaIdentityInventory', () => {
+describe(createIndexedDbReplicaIdentityInventory, () => {
   it('activate / list / markTerminal / deferTerminal / remove', async () => {
     const inv = createIndexedDbReplicaIdentityInventory(new IDBFactory());
     const a = { gatewayId: 'gw', vaultId: 'v1' };
     const b = { gatewayId: 'gw', vaultId: 'v2' };
 
-    expect(await inv.activate(a)).toBe(true);
-    expect(await inv.activate(a)).toBe(true); // re-activate remembered
-    expect(await inv.activate(b)).toBe(true);
+    await expect(inv.activate(a)).resolves.toBe(true);
+    await expect(inv.activate(a)).resolves.toBe(true); // re-activate remembered
+    await expect(inv.activate(b)).resolves.toBe(true);
     let rows = await inv.list();
     expect(rows).toHaveLength(2);
     expect(rows.every((r) => r.state === 'remembered')).toBe(true);
@@ -26,7 +26,7 @@ describe('createIndexedDbReplicaIdentityInventory', () => {
     expect(terminal?.purgeAttempts).toBe(0);
 
     // activate refuses while terminal-pending
-    expect(await inv.activate(a)).toBe(false);
+    await expect(inv.activate(a)).resolves.toBe(false);
 
     const failedAt = 1_000_000;
     await inv.deferTerminal(a, failedAt, 100, 10_000);
@@ -42,6 +42,6 @@ describe('createIndexedDbReplicaIdentityInventory', () => {
     expect(capped.retryAt).toBe(failedAt + 150);
 
     await inv.remove(a);
-    expect((await inv.list()).map((r) => r.vaultId)).toEqual(['v2']);
+    expect((await inv.list()).map((r) => r.vaultId)).toStrictEqual(['v2']);
   });
 });

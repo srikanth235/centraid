@@ -63,13 +63,13 @@ function OccupancyRail({ report }: { report: LocalUsageReportDTO }): JSX.Element
             title={`${slice.label} — ${formatBytes(slice.bytes)}`}
           />
         ))}
-        {scale.warnFraction !== null ? (
+        {scale.warnFraction === null ? null : (
           <span
             className={styles.railWarnMark}
             style={{ left: `${(scale.warnFraction * 100).toFixed(2)}%` }}
             aria-hidden="true"
           />
-        ) : null}
+        )}
       </div>
       <div className={styles.railFoot}>
         <span>0</span>
@@ -147,9 +147,7 @@ export default function LocalFootprintCard({
       <div className={styles.body}>
         {loadError ? (
           <div className={styles.loadError}>Couldn’t measure local storage: {loadError}</div>
-        ) : !report ? (
-          <div className={gwStyles.panelEmpty}>Measuring what’s on disk…</div>
-        ) : (
+        ) : report ? (
           <>
             <div className={styles.headline} data-status={report.limit.status}>
               <span className={styles.headlineFigure}>{formatBytes(report.totalBytes)}</span>
@@ -209,6 +207,8 @@ export default function LocalFootprintCard({
               </div>
             ) : null}
           </>
+        ) : (
+          <div className={gwStyles.panelEmpty}>Measuring what’s on disk…</div>
         )}
       </div>
     </section>

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { Manifest } from '../manifest/manifest.js';
 import type { Row } from '../scaffold/app.js';
-import { VaultCursorEngine } from './cursor-engine.js';
+import { VaultCursorEngine, type VaultCursorEngineOptions } from './cursor-engine.js';
 
 function row(ref: string, triggers: Manifest['triggers']): Row {
   const [ownerApp, id] = ref.split('/') as [string, string];
@@ -55,7 +55,7 @@ describe('VaultCursorEngine cursor invariants', () => {
     const engine = new VaultCursorEngine({
       store: cursors,
       catchUpCap: 2,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       // A reader that ignores `limit` — the engine must still not advance the
       // committed position past what it actually delivered.
       readCursor: async ({ cursor }) => {
@@ -75,7 +75,7 @@ describe('VaultCursorEngine cursor invariants', () => {
 
     await engine.reconcile([row('mail/backlog', [{ kind: 'data', entities: ['core.party'] }])]);
 
-    expect(fired).toEqual(['1', '2']);
+    expect(fired).toStrictEqual(['1', '2']);
     expect(cursors.getCursor('mail/backlog', 0)).toMatchObject({
       positionJson: '"2"',
       // Cap overflow is durable data waiting its turn, never a gap.
@@ -86,7 +86,7 @@ describe('VaultCursorEngine cursor invariants', () => {
     engine.nudge();
     await new Promise<void>((resolve) => setTimeout(resolve, 30));
 
-    expect(fired).toEqual(['1', '2', '3', '4']);
+    expect(fired).toStrictEqual(['1', '2', '3', '4']);
     expect(cursors.getCursor('mail/backlog', 0)?.positionJson).toBe('"4"');
   });
 
@@ -96,7 +96,7 @@ describe('VaultCursorEngine cursor invariants', () => {
     const engine = new VaultCursorEngine({
       store: cursors,
       catchUpCap: 1,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       readCursor: async () => ({
         elements: [
           { position: 'a', occurredAt: 1 },
@@ -109,7 +109,7 @@ describe('VaultCursorEngine cursor invariants', () => {
 
     await engine.reconcile([row('mail/opaque', [{ kind: 'data', entities: ['core.party'] }])]);
 
-    expect(fired).toEqual(['a']);
+    expect(fired).toStrictEqual(['a']);
     // `b` was never delivered, and nothing says where `a` ends — the honest
     // answer is to stay put rather than skip `b`.
     expect(cursors.getCursor('mail/opaque', 0)?.positionJson).toBeUndefined();
@@ -119,12 +119,12 @@ describe('VaultCursorEngine cursor invariants', () => {
     const cursors = store();
     const engine = new VaultCursorEngine({
       store: cursors,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       readCursor: async ({ triggerIndex }) => ({
         elements: [],
         positionJson: JSON.stringify(`p${triggerIndex}`),
       }),
-      fireCursor: vi.fn(),
+      fireCursor: vi.fn<NonNullable<VaultCursorEngineOptions['fireCursor']>>(),
     });
     const triggers: Manifest['triggers'] = [
       { kind: 'data', entities: ['core.party'] },
@@ -136,7 +136,7 @@ describe('VaultCursorEngine cursor invariants', () => {
     // Disabled is not deleted: the watermark has to survive so re-enabling
     // resumes instead of silently skipping the off period.
     await engine.reconcile([{ ...row('watch/pair', triggers), enabled: false }]);
-    expect(await engine.list()).toEqual([]);
+    await expect(engine.list()).resolves.toStrictEqual([]);
     expect(cursors.getCursor('watch/pair', 0)?.positionJson).toBe('"p0"');
     expect(cursors.getCursor('watch/pair', 1)?.positionJson).toBe('"p1"');
 
@@ -156,7 +156,7 @@ describe('VaultCursorEngine cursor invariants', () => {
     const attempts: string[] = [];
     const engine: VaultCursorEngine = new VaultCursorEngine({
       store: cursors,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       readCursor: async () => ({
         elements: [{ position: '9', occurredAt: 9 }],
         positionJson: '9',
@@ -179,7 +179,7 @@ describe('VaultCursorEngine cursor invariants', () => {
 
     // The doorbell was drained inside the same serialized run — and the
     // failure was still surfaced rather than swallowed by the retry.
-    expect(attempts).toEqual(['9', '9']);
+    expect(attempts).toStrictEqual(['9', '9']);
     expect(cursors.getCursor('hooks/doorbell', 0)).toMatchObject({ positionJson: '9' });
     expect(cursors.getCursor('hooks/doorbell', 0)?.pendingJson).toBeUndefined();
   });
@@ -197,8 +197,8 @@ describe('VaultCursorEngine cursor invariants', () => {
     };
     const engine = new VaultCursorEngine({
       store: counting,
-      fire: vi.fn(),
-      fireCursor: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
+      fireCursor: vi.fn<NonNullable<VaultCursorEngineOptions['fireCursor']>>(),
       now: () => clock,
     });
     await engine.reconcile([row('clock/daily', [{ kind: 'cron', expr: '0 3 * * *' }])]);
@@ -221,8 +221,8 @@ describe('VaultCursorEngine cursor invariants', () => {
   it('routes a failing dormancy hook to onError instead of failing the reconcile', async () => {
     const errors: Array<{ ref: string; message: string }> = [];
     const engine = new VaultCursorEngine({
-      fire: vi.fn(),
-      fireCursor: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
+      fireCursor: vi.fn<NonNullable<VaultCursorEngineOptions['fireCursor']>>(),
       onDormancyChange: () => Promise.reject(new Error('ledger write failed')),
       onError: (error, ref) =>
         errors.push({ ref, message: error instanceof Error ? error.message : String(error) }),
@@ -232,8 +232,8 @@ describe('VaultCursorEngine cursor invariants', () => {
       engine.reconcile([row('clock/daily', [{ kind: 'cron', expr: '0 3 * * *' }])]),
     ).resolves.toMatchObject({ added: ['clock/daily'] });
 
-    expect(await engine.list()).toEqual(['clock/daily']);
-    expect(errors).toEqual([{ ref: '<scheduler-dormancy>', message: 'ledger write failed' }]);
+    await expect(engine.list()).resolves.toStrictEqual(['clock/daily']);
+    expect(errors).toStrictEqual([{ ref: '<scheduler-dormancy>', message: 'ledger write failed' }]);
   });
 
   it('fires an automation once per minute however many crons it declares', async () => {
@@ -250,12 +250,12 @@ describe('VaultCursorEngine cursor invariants', () => {
 
     s.tick();
     await settle();
-    expect(fired).toEqual(['a/multi']);
+    expect(fired).toStrictEqual(['a/multi']);
 
     // 08:30 matches only the half-hourly expression — still exactly one fire.
     clock = new Date(2026, 0, 1, 8, 30);
     s.tick();
     await settle();
-    expect(fired).toEqual(['a/multi', 'a/multi']);
+    expect(fired).toStrictEqual(['a/multi', 'a/multi']);
   });
 });

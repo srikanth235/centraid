@@ -63,7 +63,7 @@ function decodeText(uri: string | undefined): string {
   }
 }
 
-export default async ({ ctx }: HandlerArgs) => {
+export default async function journalHandler({ ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   try {
     const [tags, concepts, schemes, activityLinks] = await Promise.all([
@@ -182,7 +182,7 @@ export default async ({ ctx }: HandlerArgs) => {
       id: note.note_id,
       sort_at: note.created_at,
       date: note.created_at.slice(0, 10),
-      mood: note.title.replace(/^People journal · /, ''),
+      mood: note.title.replace(/^People journal · /u, ''),
       text: decodeText(contentById.get(note.body_content_id)),
     }));
     const auto = ((activities.rows ?? []) as unknown as RawActivity[]).map((activity) => {
@@ -209,4 +209,4 @@ export default async ({ ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { entries: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

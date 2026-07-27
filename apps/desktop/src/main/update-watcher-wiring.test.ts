@@ -42,11 +42,15 @@ describe('update-watcher rollout wiring (I4)', () => {
 
   it('maps beta versions to the beta updater channel (D5) — structural', () => {
     // Avoid importing update-watcher (pulls electron). Mirror the pure rule.
-    const channel = (version: string) => (/beta/i.test(version) ? 'beta' : 'latest');
+    const channel = (version: string) => (/beta/iu.test(version) ? 'beta' : 'latest');
     expect(channel('0.2.0-beta.1')).toBe('beta');
     expect(channel('0.2.0')).toBe('latest');
     const src = readFileSync(path.join(here, 'update-watcher.ts'), 'utf8');
-    expect(src).toMatch(/function updaterChannelForVersion/);
-    expect(src).toMatch(/beta\/i\.test/);
+    expect(src).toMatch(/function updaterChannelForVersion/u);
+    // Match the case-insensitive /beta/ test without pinning the exact flag
+    // string: this assertion guards that the rule still lives in the source,
+    // not how the regex literal happens to be spelled. Pinning `/beta\/i\.test/`
+    // broke the moment `require-unicode-regexp` (#573) made it `/beta/iu`.
+    expect(src).toMatch(/\/beta\/[a-z]*i[a-z]*\.test/u);
   });
 });

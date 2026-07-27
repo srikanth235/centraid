@@ -26,70 +26,72 @@ function freshCacheFile(): string {
   return join(tempDirSync('centraid-pricing-'), 'model-pricing.json');
 }
 
-afterEach(() => {
-  // Reset the process-global catalog to the bundled snapshot for other suites
-  // by overlaying a known table (vitest isolates modules per file anyway).
-  setPricingCatalog({ 'reset-marker': { input_cost_per_token: 0 } });
-});
-
-describe('PricingWarmer', () => {
-  it('refresh fetches, filters, overlays the catalog, and writes the disk cache', async () => {
-    const cacheFile = freshCacheFile();
-    const warmer = new PricingWarmer({
-      cacheFile,
-      fetchImpl: async () => okResponse(JSON.stringify(rawCatalog(1e-6))),
-    });
-    await warmer.refresh();
-
-    // Overlaid: 1,000,000 tokens × $1e-6 = $1.
-    expect(costForUsage('claude-probe', { inputTokens: 1_000_000 })).toBeCloseTo(1, 9);
-    expect(existsSync(cacheFile)).toBe(true);
-    const disk = JSON.parse(readFileSync(cacheFile, 'utf8')) as {
-      models: Record<string, unknown>;
-    };
-    expect(disk.models['claude-probe']).toBeTruthy();
+describe('pricing-warmer', () => {
+  afterEach(() => {
+    // Reset the process-global catalog to the bundled snapshot for other suites
+    // by overlaying a known table (vitest isolates modules per file anyway).
+    setPricingCatalog({ 'reset-marker': { input_cost_per_token: 0 } });
   });
 
-  it('boot seeds from a fresh disk cache without fetching', async () => {
-    const cacheFile = freshCacheFile();
-    writeFileSync(
-      cacheFile,
-      JSON.stringify({
-        fetchedAt: new Date().toISOString(),
-        models: { 'claude-probe': { input_cost_per_token: 2e-6, output_cost_per_token: 2e-6 } },
-      }),
-    );
-    let fetched = false;
-    const warmer = new PricingWarmer({
-      cacheFile,
-      fetchImpl: async () => {
-        fetched = true;
-        return okResponse('{}');
-      },
-    });
-    await warmer.boot();
-    expect(costForUsage('claude-probe', { inputTokens: 1_000_000 })).toBeCloseTo(2, 9);
-    expect(fetched).toBe(false); // fresh cache ⇒ no background refresh
-  });
+  describe(PricingWarmer, () => {
+    it('refresh fetches, filters, overlays the catalog, and writes the disk cache', async () => {
+      const cacheFile = freshCacheFile();
+      const warmer = new PricingWarmer({
+        cacheFile,
+        fetchImpl: async () => okResponse(JSON.stringify(rawCatalog(1e-6))),
+      });
+      await warmer.refresh();
 
-  it('a failed refresh keeps the last-good table (never blanks a price)', async () => {
-    const cacheFile = freshCacheFile();
-    // Seed a good table first.
-    const warmer = new PricingWarmer({
-      cacheFile,
-      fetchImpl: async () => okResponse(JSON.stringify(rawCatalog(3e-6))),
+      // Overlaid: 1,000,000 tokens × $1e-6 = $1.
+      expect(costForUsage('claude-probe', { inputTokens: 1_000_000 })).toBeCloseTo(1, 9);
+      expect(existsSync(cacheFile)).toBe(true);
+      const disk = JSON.parse(readFileSync(cacheFile, 'utf8')) as {
+        models: Record<string, unknown>;
+      };
+      expect(disk.models['claude-probe']).toBeTruthy();
     });
-    await warmer.refresh();
-    expect(costForUsage('claude-probe', { inputTokens: 1_000_000 })).toBeCloseTo(3, 9);
 
-    // A subsequent failing fetch must not wipe the table.
-    const failing = new PricingWarmer({
-      cacheFile,
-      fetchImpl: async () => {
-        throw new Error('network down');
-      },
+    it('boot seeds from a fresh disk cache without fetching', async () => {
+      const cacheFile = freshCacheFile();
+      writeFileSync(
+        cacheFile,
+        JSON.stringify({
+          fetchedAt: new Date().toISOString(),
+          models: { 'claude-probe': { input_cost_per_token: 2e-6, output_cost_per_token: 2e-6 } },
+        }),
+      );
+      let fetched = false;
+      const warmer = new PricingWarmer({
+        cacheFile,
+        fetchImpl: async () => {
+          fetched = true;
+          return okResponse('{}');
+        },
+      });
+      await warmer.boot();
+      expect(costForUsage('claude-probe', { inputTokens: 1_000_000 })).toBeCloseTo(2, 9);
+      expect(fetched).toBe(false); // fresh cache ⇒ no background refresh
     });
-    await failing.refresh();
-    expect(costForUsage('claude-probe', { inputTokens: 1_000_000 })).toBeCloseTo(3, 9);
+
+    it('a failed refresh keeps the last-good table (never blanks a price)', async () => {
+      const cacheFile = freshCacheFile();
+      // Seed a good table first.
+      const warmer = new PricingWarmer({
+        cacheFile,
+        fetchImpl: async () => okResponse(JSON.stringify(rawCatalog(3e-6))),
+      });
+      await warmer.refresh();
+      expect(costForUsage('claude-probe', { inputTokens: 1_000_000 })).toBeCloseTo(3, 9);
+
+      // A subsequent failing fetch must not wipe the table.
+      const failing = new PricingWarmer({
+        cacheFile,
+        fetchImpl: async () => {
+          throw new Error('network down');
+        },
+      });
+      await failing.refresh();
+      expect(costForUsage('claude-probe', { inputTokens: 1_000_000 })).toBeCloseTo(3, 9);
+    });
   });
 });

@@ -77,27 +77,28 @@ const ALL_CMDS = new Set([
   'stopApp',
 ]);
 
-const STEP_RE = /^(\s*)-\s+([A-Za-z]+)\s*:?(.*)$/;
+const STEP_RE = /^(?<indent>\s*)-\s+(?<cmd>[A-Za-z]+)\s*:?(?<rest>.*)$/u;
 
 /** Pull the primary matcher value out of a step: the inline value, or the
  * `text:`/`visible:` child a line or two below. Returns the raw token — the
  * contents of a "quoted" literal, or a `${interpolation}` verbatim — or null. */
 function stepValue(lines, i) {
   const m = STEP_RE.exec(lines[i]);
-  if (!m) return null;
-  const inline = m[3].trim();
+  if (!m?.groups) return null;
+  const inline = (m.groups.rest ?? '').trim();
   const fromInline = literalOrInterp(inline);
   if (fromInline != null) return fromInline;
   // Block form: scan the immediate children for `text:` / `visible:`.
-  const baseIndent = m[1].length;
+  const baseIndent = (m.groups.indent ?? '').length;
   for (let j = i + 1; j < lines.length && j <= i + 4; j += 1) {
-    const child = /^(\s*)(text|visible)\s*:(.*)$/.exec(lines[j]);
+    const child = /^\s*(?:text|visible)\s*:(?<rest>.*)$/u.exec(lines[j]);
     if (!child) {
       // Stop at a dedent back to sibling level — we have left this step.
-      if (/^\s*-\s/.test(lines[j]) && (lines[j].match(/^\s*/)[0].length ?? 0) <= baseIndent) break;
+      if (/^\s*-\s/u.test(lines[j]) && (lines[j].match(/^\s*/u)[0].length ?? 0) <= baseIndent)
+        break;
       continue;
     }
-    const v = literalOrInterp(child[3].trim());
+    const v = literalOrInterp((child.groups?.rest ?? '').trim());
     if (v != null) return v;
     // `visible:` with a nested `text:` on the following line.
   }
@@ -107,10 +108,10 @@ function stepValue(lines, i) {
 /** A `"literal"` → its inner text; a `${expr}` → the expr verbatim; else null. */
 function literalOrInterp(s) {
   if (!s) return null;
-  const q = /^"([^"]*)"/.exec(s);
-  if (q) return q[1];
-  const sq = /^'([^']*)'/.exec(s);
-  if (sq) return sq[1];
+  const q = /^"(?<inner>[^"]*)"/u.exec(s);
+  if (q) return q.groups?.inner ?? null;
+  const sq = /^'(?<inner>[^']*)'/u.exec(s);
+  if (sq) return sq.groups?.inner ?? null;
   if (s.startsWith('${')) return s; // interpolation — compared by identity
   return null;
 }
@@ -118,7 +119,7 @@ function literalOrInterp(s) {
 const isInterp = (v) => v != null && v.startsWith('${');
 /** Strip a trailing Maestro regex `.*` and surrounding whitespace for the
  * route-name exact match ("Docs.*" is still an assertion on the Docs label). */
-const asPlain = (v) => (isInterp(v) ? v : v.replace(/\.\*$/, '').trim());
+const asPlain = (v) => (isInterp(v) ? v : v.replace(/\.\*$/u, '').trim());
 
 /** Does a later assertion `a` observe the value `typed`? Interpolations match by
  * identity (same `${expr}`); literals match if the assertion's text contains the
@@ -135,7 +136,7 @@ function observes(typed, a) {
  * upward across contiguous `#` comment (and blank) lines — a reason can wrap
  * onto more than one line — and stops at the first line that is neither. */
 function isAllowed(lines, i, rule) {
-  const marker = new RegExp(`#\\s*e2e-lint-allow:\\s*${rule}\\b`);
+  const marker = new RegExp(`#\\s*e2e-lint-allow:\\s*${rule}\\b`, 'u');
   if (marker.test(lines[i])) return true;
   for (let j = i - 1; j >= 0; j -= 1) {
     const t = lines[j].trim();
@@ -157,8 +158,8 @@ export function lintFlowSource(text) {
   const steps = [];
   for (let i = 0; i < lines.length; i += 1) {
     const m = STEP_RE.exec(lines[i]);
-    if (!m) continue;
-    const cmd = m[2];
+    if (!m?.groups) continue;
+    const cmd = m.groups.cmd;
     if (!ALL_CMDS.has(cmd)) continue;
     steps.push({ i, cmd, value: stepValue(lines, i) });
   }
@@ -190,7 +191,7 @@ export function lintFlowSource(text) {
         // A clearState launch wipes the field — stop looking past it.
         if (later.cmd === 'launchApp') {
           const block = lines.slice(later.i, later.i + 4).join('\n');
-          if (/clearState:\s*true/.test(block)) break;
+          if (/clearState:\s*true/u.test(block)) break;
         }
         if (ASSERT_CMDS.has(later.cmd) && observes(step.value, later.value)) {
           observed = true;

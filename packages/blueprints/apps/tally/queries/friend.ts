@@ -5,7 +5,7 @@
 
 import { ledgerRow, loadTally, pairwise, personOf } from './dashboard.ts';
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function friendHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const pid = String(input?.party_id ?? '');
   try {
@@ -41,4 +41,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

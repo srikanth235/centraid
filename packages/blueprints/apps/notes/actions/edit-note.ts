@@ -4,17 +4,17 @@
  * deduped) content item rather than mutating canonical bytes. Pinning is a
  * field here, not a separate command: it's a flag with no lifecycle.
  */
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function editNote({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
       command: 'knowledge.edit_note',
       input: {
         note_id: String(input.note_id ?? ''),
-        ...(input.title != null ? { title: String(input.title) } : {}),
-        ...(input.body_text != null ? { body_text: String(input.body_text) } : {}),
-        ...(input.format != null ? { format: String(input.format) } : {}),
-        ...(input.pinned != null ? { pinned: Number(input.pinned) } : {}),
+        ...(input.title == null ? {} : { title: String(input.title) }),
+        ...(input.body_text == null ? {} : { body_text: String(input.body_text) }),
+        ...(input.format == null ? {} : { format: String(input.format) }),
+        ...(input.pinned == null ? {} : { pinned: Number(input.pinned) }),
       },
       purpose: 'dpv:ServiceProvision',
     });
@@ -23,4 +23,4 @@ export default async ({ body, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

@@ -54,7 +54,7 @@ export interface LocalGatewayRuntime {
   token: string;
   mode: 'embedded' | 'detached';
   owned?: boolean;
-  close(): Promise<void>;
+  close: () => Promise<void>;
   /** Compatible with gateway HealthRegistry.registerProbe for the tunnel probe. */
   health: {
     registerProbe: (
@@ -263,7 +263,9 @@ export async function ensureLocalGateway(gatewayId: string): Promise<LocalGatewa
       const prev = supervisor.get(gatewayId) ?? initialSupervisorState();
       const next = recordFailure(prev, Date.now(), message);
       supervisor.set(gatewayId, next);
-      if (!next.loopBroken) {
+      if (next.loopBroken) {
+        nextAttemptAt.delete(gatewayId);
+      } else {
         const delay = backoffForAttempt(next.attempt);
         nextAttemptAt.set(gatewayId, Date.now() + delay);
         const timer = setTimeout(() => {
@@ -273,8 +275,6 @@ export async function ensureLocalGateway(gatewayId: string): Promise<LocalGatewa
           });
         }, delay);
         timer.unref?.();
-      } else {
-        nextAttemptAt.delete(gatewayId);
       }
       throw err;
     })

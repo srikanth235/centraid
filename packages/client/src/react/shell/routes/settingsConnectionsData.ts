@@ -69,7 +69,7 @@ function fallbackCapabilities(
       actions.push({
         id: `action:${c.templateId}`,
         title: c.templateId,
-        toolName: `connector.${c.kind.replace(/\./g, '_')}.send`,
+        toolName: `connector.${c.kind.replace(/\./gu, '_')}.send`,
         kind: c.kind,
         templateId: c.templateId,
         approval: 'outbox',
@@ -88,7 +88,7 @@ function fallbackCapabilities(
     actions.push({
       id: `action:list:${c.kind}`,
       title: `List ${c.kind}`,
-      toolName: `connector.${c.kind.replace(/\./g, '_')}.list`,
+      toolName: `connector.${c.kind.replace(/\./gu, '_')}.list`,
       kind: c.kind,
       templateId: c.templateId,
       ...(c.scope ? { scope: c.scope } : {}),
@@ -235,7 +235,7 @@ export async function submitConnectionForm(
     const out = await gwConfigureAssistConnection({
       kind: input.connectorKind,
       label: input.label,
-      scopes: input.scopes?.split(/\s+/).filter(Boolean) ?? [],
+      scopes: input.scopes?.split(/\s+/u).filter(Boolean) ?? [],
     });
     return { connectionId: out.connectionId, status: out.status };
   }

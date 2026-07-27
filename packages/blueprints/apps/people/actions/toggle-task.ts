@@ -1,7 +1,7 @@
 /**
  * Toggle a person task between open and done. Runs through people.toggle_task — consent-checked and receipted, risk low.
  */
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function toggleTask({ body, ctx }: HandlerArgs) {
   try {
     const outcome = await ctx.vault.invoke({
       command: 'people.toggle_task',
@@ -13,4 +13,4 @@ export default async ({ body, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

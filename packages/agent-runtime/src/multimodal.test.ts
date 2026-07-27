@@ -14,9 +14,9 @@ const FULL: PromptCapabilities = { image: true, audio: true, embeddedContext: tr
 /** A baseline agent: text and resource links only. */
 const TEXT_ONLY: PromptCapabilities = {};
 
-describe('acpBlockFor', () => {
+describe(acpBlockFor, () => {
   it('maps an image MIME to an ACP image block (flat data/mimeType)', () => {
-    expect(acpBlockFor({ mime: 'image/png', dataBase64: 'AAAA' }, FULL)).toEqual({
+    expect(acpBlockFor({ mime: 'image/png', dataBase64: 'AAAA' }, FULL)).toStrictEqual({
       type: 'image',
       data: 'AAAA',
       mimeType: 'image/png',
@@ -24,7 +24,7 @@ describe('acpBlockFor', () => {
   });
 
   it('skips an image when the agent did not advertise the image capability', () => {
-    expect(acpBlockFor({ mime: 'image/png', dataBase64: 'AAAA' }, TEXT_ONLY)).toBe(undefined);
+    expect(acpBlockFor({ mime: 'image/png', dataBase64: 'AAAA' }, TEXT_ONLY)).toBeUndefined();
   });
 
   it('carries a PDF as an embedded resource when embeddedContext is advertised', () => {
@@ -37,7 +37,7 @@ describe('acpBlockFor', () => {
       },
       FULL,
     );
-    expect(block).toEqual({
+    expect(block).toStrictEqual({
       type: 'resource',
       resource: { uri: 'file:///blobs/spec.pdf', mimeType: 'application/pdf', blob: 'JVBE' },
     });
@@ -46,14 +46,14 @@ describe('acpBlockFor', () => {
   it('skips a PDF when the agent cannot take embedded context', () => {
     expect(
       acpBlockFor({ mime: 'application/pdf', dataBase64: 'JVBE', filename: 'spec.pdf' }, TEXT_ONLY),
-    ).toBe(undefined);
+    ).toBeUndefined();
   });
 
   it('renders a text/plain attachment as a delimited text block, capability-free', () => {
     const dataBase64 = Buffer.from('hello from a text file').toString('base64');
     expect(
       acpBlockFor({ mime: 'text/plain', dataBase64, filename: 'notes.txt' }, TEXT_ONLY),
-    ).toEqual({
+    ).toStrictEqual({
       type: 'text',
       text: 'Attachment "notes.txt" (text/plain):\n```\nhello from a text file\n```',
     });
@@ -63,7 +63,7 @@ describe('acpBlockFor', () => {
     const dataBase64 = Buffer.from('{"a":1}').toString('base64');
     expect(
       acpBlockFor({ mime: 'application/json', dataBase64, filename: 'data.json' }, FULL),
-    ).toEqual({
+    ).toStrictEqual({
       type: 'text',
       text: 'Attachment "data.json" (application/json):\n```\n{"a":1}\n```',
     });
@@ -73,7 +73,7 @@ describe('acpBlockFor', () => {
     const dataBase64 = Buffer.from('console.log(1)').toString('base64');
     expect(
       acpBlockFor({ mime: 'application/octet-stream', dataBase64, filename: 'script.js' }, FULL),
-    ).toEqual({
+    ).toStrictEqual({
       type: 'text',
       text: 'Attachment "script.js" (application/octet-stream):\n```\nconsole.log(1)\n```',
     });
@@ -98,24 +98,28 @@ describe('acpBlockFor', () => {
         { mime: 'text/plain', dataBase64: binary.toString('base64'), filename: 'not-text.txt' },
         FULL,
       ),
-    ).toBe(undefined);
+    ).toBeUndefined();
   });
 
   it('maps audio only when the agent advertised the audio capability', () => {
     const att = { mime: 'audio/wav', dataBase64: 'UklG' };
-    expect(acpBlockFor(att, FULL)).toEqual({ type: 'audio', data: 'UklG', mimeType: 'audio/wav' });
-    expect(acpBlockFor(att, { image: true })).toBe(undefined);
+    expect(acpBlockFor(att, FULL)).toStrictEqual({
+      type: 'audio',
+      data: 'UklG',
+      mimeType: 'audio/wav',
+    });
+    expect(acpBlockFor(att, { image: true })).toBeUndefined();
   });
 });
 
-describe('acpAttachmentBlocks', () => {
+describe(acpAttachmentBlocks, () => {
   it('reads + encodes attachments the agent can take', () => {
     const dir = tempDirSync('centraid-mm-');
     const png = join(dir, 'p.png');
     writeFileSync(png, Buffer.from('PNGDATA'));
     const { blocks, skipped } = acpAttachmentBlocks([{ path: png, mime: 'image/png' }], FULL);
-    expect(skipped).toEqual([]);
-    expect(blocks).toEqual([
+    expect(skipped).toStrictEqual([]);
+    expect(blocks).toStrictEqual([
       { type: 'image', data: Buffer.from('PNGDATA').toString('base64'), mimeType: 'image/png' },
     ]);
   });
@@ -128,8 +132,8 @@ describe('acpAttachmentBlocks', () => {
       [{ path: png, mime: 'image/png', filename: 'shot.png' }],
       TEXT_ONLY,
     );
-    expect(blocks).toEqual([]);
-    expect(skipped).toEqual(['shot.png']);
+    expect(blocks).toStrictEqual([]);
+    expect(skipped).toStrictEqual(['shot.png']);
   });
 
   it('reports a missing blob as skipped rather than throwing', () => {
@@ -137,8 +141,8 @@ describe('acpAttachmentBlocks', () => {
       [{ path: '/no/such/blob', mime: 'image/png', filename: 'gone.png' }],
       FULL,
     );
-    expect(blocks).toEqual([]);
-    expect(skipped).toEqual(['gone.png']);
+    expect(blocks).toStrictEqual([]);
+    expect(skipped).toStrictEqual(['gone.png']);
   });
 
   it('includes a .txt attachment as a text block so the model can read it', () => {
@@ -149,7 +153,7 @@ describe('acpAttachmentBlocks', () => {
       [{ path: txt, mime: 'text/plain', filename: 'notes.txt' }],
       TEXT_ONLY,
     );
-    expect(blocks).toEqual([
+    expect(blocks).toStrictEqual([
       {
         type: 'text',
         text: 'Attachment "notes.txt" (text/plain):\n```\nremember to buy milk\n```',

@@ -30,7 +30,7 @@ interface UnknownStreamDeps {
   remote: () => RemoteTier | null;
   policy: () => BackupPolicy;
   contributePreview?: (input: IngressPreviewInput) => void;
-  emit(): void;
+  emit: () => void;
 }
 
 async function* temporaryPlaintext(input: {

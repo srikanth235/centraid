@@ -361,8 +361,8 @@ export async function updateAppMeta(input: {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.name === undefined ? {} : { name: input.name }),
+      ...(input.description === undefined ? {} : { description: input.description }),
       sessionId,
       publish: true,
     }),

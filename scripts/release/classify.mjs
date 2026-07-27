@@ -30,13 +30,13 @@ function sectionFor(ver) {
   // ## [0.2.0] or ## Unreleased
   const re = ver
     ? new RegExp(
-        `^##\\s+\\[?${ver.replace(/\./g, '\\.')}\\]?[^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`,
-        'm',
+        `^##\\s+\\[?${ver.replace(/\./gu, '\\.')}\\]?[^\\n]*\\n(?<body>[\\s\\S]*?)(?=^##\\s+|$)`,
+        'mu',
       )
-    : /^##\s+\[?Unreleased\]?[^\n]*\n([\s\S]*?)(?=^##\s+|$)/m;
+    : /^##\s+\[?Unreleased\]?[^\n]*\n(?<body>[\s\S]*?)(?=^##\s+|$)/mu;
   const m = text.match(re);
   if (!m) return null;
-  return { heading: ver ?? 'Unreleased', body: m[1] ?? '' };
+  return { heading: ver ?? 'Unreleased', body: m.groups?.body ?? '' };
 }
 
 const section = sectionFor(version);
@@ -51,8 +51,10 @@ if (!section) {
 }
 
 const body = section.body;
-const headings = [...body.matchAll(/^###\s+(\w+)\s*$/gm)].map((m) => m[1].toLowerCase());
-const bullets = [...body.matchAll(/^[-*]\s+\S/gm)];
+const headings = [...body.matchAll(/^###\s+(?<heading>\w+)\s*$/gmu)].map((m) =>
+  (m.groups?.heading ?? '').toLowerCase(),
+);
+const bullets = [...body.matchAll(/^[-*]\s+\S/gmu)];
 
 if (bullets.length === 0) {
   process.stdout.write(

@@ -31,9 +31,9 @@ const WEB_APP_HEADER = 'x-centraid-web-app';
 const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
 
 export interface RuntimeLogger {
-  info(message: string): void;
-  warn(message: string): void;
-  error(message: string): void;
+  info: (message: string) => void;
+  warn: (message: string) => void;
+  error: (message: string) => void;
 }
 
 export interface RuntimeOptions {

@@ -53,8 +53,8 @@ describe('replica query evaluation', () => {
         },
       ],
     );
-    expect(first.map((row) => row.rowId)).toEqual(['a', 'b']);
-    expect(first[0]!.oversizedFields).toEqual([]);
+    expect(first.map((row) => row.rowId)).toStrictEqual(['a', 'b']);
+    expect(first[0]!.oversizedFields).toStrictEqual([]);
 
     const rebased = rows();
     rebased[0]!.values.title = 'Canonical changed';
@@ -106,7 +106,7 @@ describe('replica query evaluation', () => {
         },
       ],
     );
-    expect(result[0]?.values).toEqual({ task_id: 1, title: 'Optimistic' });
+    expect(result[0]?.values).toStrictEqual({ task_id: 1, title: 'Optimistic' });
   });
 
   test('reruns an unknown column online instead of compiling caller text locally', () => {
@@ -139,7 +139,7 @@ describe('replica query evaluation', () => {
         entity: 'core.task',
         orderBy: { column: 'title' },
       }).map((row) => row.rowId),
-    ).toEqual(['b', 'a']);
+    ).toStrictEqual(['b', 'a']);
 
     unicode[0]!.values.title = 'Alpha';
     unicode[1]!.values.title = 'alpha';
@@ -149,7 +149,7 @@ describe('replica query evaluation', () => {
         entity: 'core.task',
         where: [{ column: 'title', op: 'eq', value: 'alpha' }],
       }).map((row) => row.rowId),
-    ).toEqual(['b']);
+    ).toStrictEqual(['b']);
   });
 
   test('breaks ORDER BY ties by exposed scalar primary key before applying LIMIT', () => {
@@ -164,7 +164,7 @@ describe('replica query evaluation', () => {
         orderBy: { column: 'rank', dir: 'desc' },
         limit: 1,
       }).map((row) => row.rowId),
-    ).toEqual(['a']);
+    ).toStrictEqual(['a']);
   });
 
   test('reruns tied ordering online when the real primary key stays opaque', () => {
@@ -195,11 +195,13 @@ describe('replica query evaluation', () => {
     const guard = new OnlineOnlyGuard();
     const guarded = guardReplicaRow(rows()[0]!, guard);
     expect(guarded.title).toBe('A');
-    try {
+    // `toThrow` swallows the error exactly like handler code that try/catches
+    // around a field read — the point of the test is that swallowing it does
+    // NOT clear the guard. Asserting through `toThrow` (rather than inside a
+    // `catch`) also means the assertion still runs if the read stops throwing.
+    expect(() => {
       void guarded.body;
-    } catch (error) {
-      expect(error).toBeInstanceOf(OnlineOnlyError);
-    }
+    }).toThrow(OnlineOnlyError);
     expect(guard.required).toBe(true);
     expect(() => guard.assertLocal()).toThrow(OnlineOnlyError);
   });

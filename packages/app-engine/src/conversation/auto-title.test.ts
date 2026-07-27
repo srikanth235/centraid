@@ -22,7 +22,7 @@ function stubRunTurn(text: string, capture?: Capture): RunTurnFn {
   };
 }
 
-describe('cleanTitle', () => {
+describe(cleanTitle, () => {
   it('strips wrapping quotes, a Title: marker, and trailing punctuation', () => {
     expect(cleanTitle('"Quarterly budget review."')).toBe('Quarterly budget review');
     expect(cleanTitle('Title: Trip planning')).toBe('Trip planning');
@@ -44,7 +44,7 @@ describe('cleanTitle', () => {
   });
 });
 
-describe('generateConversationTitle', () => {
+describe(generateConversationTitle, () => {
   it('drives a tool-less one-shot at the given tier and returns a cleaned title', async () => {
     const capture: Capture = {};
     const runTurn = stubRunTurn('  "Budget planning"  ', capture);
@@ -77,7 +77,7 @@ describe('generateConversationTitle', () => {
   });
 
   it('propagates a runTurn rejection (caller owns the fire-and-forget swallow)', async () => {
-    const runTurn: RunTurnFn = vi.fn().mockRejectedValue(new Error('spawn failed'));
+    const runTurn: RunTurnFn = vi.fn<RunTurnFn>().mockRejectedValue(new Error('spawn failed'));
     await expect(
       generateConversationTitle({
         runTurn,

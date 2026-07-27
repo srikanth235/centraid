@@ -7,7 +7,7 @@ function byPath(files: ScaffoldFile[]): Map<string, string> {
   return new Map(files.map((f) => [f.path, f.content]));
 }
 
-describe('scaffoldAppFiles', () => {
+describe(scaffoldAppFiles, () => {
   it('emits app.json + manifest + handler under the derived automation id', () => {
     const out = byPath(scaffoldAppFiles('briefing', { name: 'Briefing', cronExpr: '0 8 * * *' }));
     expect(out.has('app.json')).toBeTruthy();
@@ -20,7 +20,7 @@ describe('scaffoldAppFiles', () => {
       triggers: { kind: string; expr: string }[];
     };
     expect(mf.enabled).toBe(true);
-    expect(mf.triggers).toEqual([{ kind: 'cron', expr: '0 8 * * *' }]);
+    expect(mf.triggers).toStrictEqual([{ kind: 'cron', expr: '0 8 * * *' }]);
   });
 
   it('rejects a dotted / path-unsafe app id', () => {
@@ -29,7 +29,7 @@ describe('scaffoldAppFiles', () => {
 
   it('emits a replay-safe default handler (passes the determinism lint)', () => {
     const out = byPath(scaffoldAppFiles('briefing'));
-    expect(lintHandlerSource(out.get('automations/briefing/handler.js')!)).toEqual([]);
+    expect(lintHandlerSource(out.get('automations/briefing/handler.js')!)).toStrictEqual([]);
   });
 
   it('accepts a condition/data trigger paired with a vault block', () => {
@@ -47,7 +47,7 @@ describe('scaffoldAppFiles', () => {
       triggers: { kind: string; entities?: string[]; every?: string }[];
       vault?: { purpose: string };
     };
-    expect(mf.triggers).toEqual([
+    expect(mf.triggers).toStrictEqual([
       { kind: 'data', entities: ['core.invoice'], every: '*/10 * * * *' },
     ]);
     expect(mf.vault?.purpose).toBe('dpv:ServiceProvision');
@@ -69,9 +69,9 @@ describe('scaffoldAppFiles', () => {
       }
     ).requires;
     // ctx.tool was removed (issue #484) — no tools allowlist is scaffolded.
-    expect(reqs.tools).toBe(undefined);
-    expect(reqs.runner).toBe(undefined);
-    expect(reqs.model).toBe(undefined);
+    expect(reqs.tools).toBeUndefined();
+    expect(reqs.runner).toBeUndefined();
+    expect(reqs.model).toBeUndefined();
 
     const withModel = byPath(
       scaffoldAppFiles('briefing', { runner: 'claude-code', model: 'anthropic/x' }),
@@ -92,22 +92,22 @@ describe('setEnabledInFiles / deleteFromFiles', () => {
 
   it('flips enabled and returns only the changed manifest', () => {
     const changed = setEnabledInFiles(draft(), 'briefing', false);
-    expect(changed.length).toBe(1);
+    expect(changed).toHaveLength(1);
     expect(changed[0]!.path).toBe('automations/briefing/automation.json');
     expect((JSON.parse(changed[0]!.content) as { enabled: boolean }).enabled).toBe(false);
   });
 
   it('no-ops when already at the requested state or absent', () => {
-    expect(setEnabledInFiles(draft(), 'briefing', true)).toEqual([]);
-    expect(setEnabledInFiles(draft(), 'nope', false)).toEqual([]);
+    expect(setEnabledInFiles(draft(), 'briefing', true)).toStrictEqual([]);
+    expect(setEnabledInFiles(draft(), 'nope', false)).toStrictEqual([]);
   });
 
   it('removes every file under the automation subdir', () => {
     const { keep, removed } = deleteFromFiles(draft(), 'briefing');
-    expect(removed.sort()).toEqual([
+    expect(removed.sort()).toStrictEqual([
       'automations/briefing/automation.json',
       'automations/briefing/handler.js',
     ]);
-    expect(keep.map((f) => f.path)).toEqual(['app.json']);
+    expect(keep.map((f) => f.path)).toStrictEqual(['app.json']);
   });
 });

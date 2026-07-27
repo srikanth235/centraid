@@ -38,10 +38,10 @@ export function Checkbox({
 // React analogue of kit.ts's `snippetInto()`, which mutates a container's DOM
 // directly and must never target a React-owned node.
 export function Snippet({ snippet, className }: { snippet?: string | null; className?: string }) {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  const parts = String(snippet ?? '').split(/[⟦⟧]/u);
   return (
     <div className={className}>
-      {parts.map((part, i) => (!part ? null : i % 2 === 1 ? <mark key={i}>{part}</mark> : part))}
+      {parts.map((part, i) => (part ? i % 2 === 1 ? <mark key={i}>{part}</mark> : part : null))}
     </div>
   );
 }

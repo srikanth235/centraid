@@ -16,7 +16,7 @@ export function NewMenu({
         <Icon svg={I.addPerson} />
         Add person
       </button>
-      <div className={styles.menuSep}></div>
+      <div className={styles.menuSep} />
       <button type="button" className={styles.menuItem} role="menuitem" onClick={onNewList}>
         <Icon svg={I.circlePlus} />
         New list

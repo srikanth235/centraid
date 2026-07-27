@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import {
   sealManifest,
   type BackupProvider,
@@ -85,98 +85,100 @@ function fakeProvider(opts: {
   return { provider, unpruned };
 }
 
-test('blobShasFromManifestEntries returns only blob entries, keyed by their content sha', () => {
-  const blobSha = 'a'.repeat(64);
-  const entries: ManifestEntry[] = [
-    blobEntry(blobSha),
-    { path: 'vault.db', kind: 'db', size: 10, mtimeMs: 0, chunks: [] },
-    { path: 'journal.db', kind: 'db', size: 10, mtimeMs: 0, chunks: [] },
-  ];
-  expect(blobShasFromManifestEntries(entries)).toEqual([blobSha]);
-});
-
-test('a blob no longer live in the vault stays a retained-snapshot GC root', async () => {
-  const kr = keyring();
-  const retainedSha = 'b'.repeat(64);
-  const { provider } = fakeProvider({
-    kr,
-    snapshots: [{ seq: 1, entries: [blobEntry(retainedSha)] }],
+describe('snapshot-blob-roots', () => {
+  test('blobShasFromManifestEntries returns only blob entries, keyed by their content sha', () => {
+    const blobSha = 'a'.repeat(64);
+    const entries: ManifestEntry[] = [
+      blobEntry(blobSha),
+      { path: 'vault.db', kind: 'db', size: 10, mtimeMs: 0, chunks: [] },
+      { path: 'journal.db', kind: 'db', size: 10, mtimeMs: 0, chunks: [] },
+    ];
+    expect(blobShasFromManifestEntries(entries)).toStrictEqual([blobSha]);
   });
 
-  const roots = await snapshotReferencedBlobShas({
-    provider,
-    targetId: 't',
-    keyring: kr,
-    vaultId: VAULT_ID,
+  test('a blob no longer live in the vault stays a retained-snapshot GC root', async () => {
+    const kr = keyring();
+    const retainedSha = 'b'.repeat(64);
+    const { provider } = fakeProvider({
+      kr,
+      snapshots: [{ seq: 1, entries: [blobEntry(retainedSha)] }],
+    });
+
+    const roots = await snapshotReferencedBlobShas({
+      provider,
+      targetId: 't',
+      keyring: kr,
+      vaultId: VAULT_ID,
+    });
+
+    // The vault model no longer references retainedSha at all — the ONLY thing
+    // keeping it live is the retained snapshot. It must be in the root set.
+    expect(roots.has(retainedSha)).toBe(true);
   });
 
-  // The vault model no longer references retainedSha at all — the ONLY thing
-  // keeping it live is the retained snapshot. It must be in the root set.
-  expect(roots.has(retainedSha)).toBe(true);
-});
+  test('the manifest-blob memo skips re-opening an already-seen manifest', async () => {
+    const kr = keyring();
+    const sha = 'c'.repeat(64);
+    const { provider, unpruned } = fakeProvider({
+      kr,
+      snapshots: [{ seq: 1, entries: [blobEntry(sha)] }],
+    });
+    const cache = new Map<string, string[]>();
 
-test('the manifest-blob memo skips re-opening an already-seen manifest', async () => {
-  const kr = keyring();
-  const sha = 'c'.repeat(64);
-  const { provider, unpruned } = fakeProvider({
-    kr,
-    snapshots: [{ seq: 1, entries: [blobEntry(sha)] }],
+    await snapshotReferencedBlobShas({
+      provider,
+      targetId: 't',
+      keyring: kr,
+      vaultId: VAULT_ID,
+      manifestBlobCache: cache,
+    });
+    expect(cache.get(unpruned[0]!.manifestHash)).toStrictEqual([sha]);
+
+    // Second run against a provider whose `get` would throw — proves the memo,
+    // not a re-open, produced the result.
+    const memoOnly = {
+      listSnapshots: async () => unpruned,
+      openDataPlane: async () => ({
+        get: async () => {
+          throw new Error('should not re-open a cached manifest');
+        },
+      }),
+    } as unknown as BackupProvider;
+    const roots = await snapshotReferencedBlobShas({
+      provider: memoOnly,
+      targetId: 't',
+      keyring: kr,
+      vaultId: VAULT_ID,
+      manifestBlobCache: cache,
+    });
+    expect(roots.has(sha)).toBe(true);
   });
-  const cache = new Map<string, string[]>();
 
-  await snapshotReferencedBlobShas({
-    provider,
-    targetId: 't',
-    keyring: kr,
-    vaultId: VAULT_ID,
-    manifestBlobCache: cache,
+  test('an unreadable retained manifest FAILS the root computation (never shrinks it)', async () => {
+    const kr = keyring();
+    const provider = {
+      listSnapshots: async (): Promise<SnapshotRow[]> => [
+        {
+          seq: 7,
+          manifestKey: 'manifests/7.json',
+          manifestHash: 'f'.repeat(64),
+          prevManifestHash: null,
+          totalBytes: 1,
+          objectCount: 0,
+          generation: 1,
+          format: 'centraid-snapshot/2',
+          appMeta: {},
+          createdAt: 7,
+          prunedAt: null,
+        },
+      ],
+      openDataPlane: async () => ({
+        get: async () => new TextEncoder().encode('not a manifest'),
+      }),
+    } as unknown as BackupProvider;
+
+    await expect(
+      snapshotReferencedBlobShas({ provider, targetId: 't', keyring: kr, vaultId: VAULT_ID }),
+    ).rejects.toThrow(/cannot read manifest seq 7/);
   });
-  expect(cache.get(unpruned[0]!.manifestHash)).toEqual([sha]);
-
-  // Second run against a provider whose `get` would throw — proves the memo,
-  // not a re-open, produced the result.
-  const memoOnly = {
-    listSnapshots: async () => unpruned,
-    openDataPlane: async () => ({
-      get: async () => {
-        throw new Error('should not re-open a cached manifest');
-      },
-    }),
-  } as unknown as BackupProvider;
-  const roots = await snapshotReferencedBlobShas({
-    provider: memoOnly,
-    targetId: 't',
-    keyring: kr,
-    vaultId: VAULT_ID,
-    manifestBlobCache: cache,
-  });
-  expect(roots.has(sha)).toBe(true);
-});
-
-test('an unreadable retained manifest FAILS the root computation (never shrinks it)', async () => {
-  const kr = keyring();
-  const provider = {
-    listSnapshots: async (): Promise<SnapshotRow[]> => [
-      {
-        seq: 7,
-        manifestKey: 'manifests/7.json',
-        manifestHash: 'f'.repeat(64),
-        prevManifestHash: null,
-        totalBytes: 1,
-        objectCount: 0,
-        generation: 1,
-        format: 'centraid-snapshot/2',
-        appMeta: {},
-        createdAt: 7,
-        prunedAt: null,
-      },
-    ],
-    openDataPlane: async () => ({
-      get: async () => new TextEncoder().encode('not a manifest'),
-    }),
-  } as unknown as BackupProvider;
-
-  await expect(
-    snapshotReferencedBlobShas({ provider, targetId: 't', keyring: kr, vaultId: VAULT_ID }),
-  ).rejects.toThrow(/cannot read manifest seq 7/);
 });

@@ -17,16 +17,16 @@ export interface Vcard {
 
 function unfold(text: string): string[] {
   return text
-    .replace(/\r\n[ \t]/g, '')
-    .replace(/\n[ \t]/g, '')
-    .split(/\r?\n/)
+    .replace(/\r\n[ \t]/gu, '')
+    .replace(/\n[ \t]/gu, '')
+    .split(/\r?\n/u)
     .filter((line) => line.length > 0);
 }
 
 /** Normalize a handle: lowercase emails, strip separators from tel. */
 export function normalizeHandle(scheme: 'email' | 'tel', value: string): string {
   if (scheme === 'email') return value.trim().toLowerCase();
-  return value.replace(/[\s().-]/g, '');
+  return value.replace(/[\s().-]/gu, '');
 }
 
 /** Parse every VCARD in a document. */
@@ -40,7 +40,7 @@ export function parseVcards(text: string): Vcard[] {
     const value = line.slice(colon + 1);
     const [rawName, ...paramParts] = left.split(';');
     // Strip vCard 2.1/3.0 grouping prefix (item1.EMAIL).
-    const name = (rawName ?? '').replace(/^[^.]+\./, '').toUpperCase();
+    const name = (rawName ?? '').replace(/^[^.]+\./u, '').toUpperCase();
     const params = paramParts.join(';').toUpperCase();
     if (name === 'BEGIN' && value.toUpperCase() === 'VCARD') {
       current = { fn: '', sortName: null, bday: null, identifiers: [] };

@@ -14,7 +14,7 @@ export interface OpaqueAppDocument {
   /** A self-contained document with an opaque principal once sandboxed. */
   documentUrl: string;
   /** Parent-owned fetch capability, locked to this one virtual tunnel scope. */
-  fetchResource(request: AppFrameResourceRequest): Promise<AppFrameResourceResponse>;
+  fetchResource: (request: AppFrameResourceRequest) => Promise<AppFrameResourceResponse>;
 }
 
 export function isOpaqueAppTunnelUrl(raw: string): boolean {
@@ -79,7 +79,7 @@ async function inlineStylesheets(
   const links = [...parsed.querySelectorAll<HTMLLinkElement>('link[href]')];
   await Promise.all(
     links.map(async (link) => {
-      const rel = new Set(link.rel.toLowerCase().split(/\s+/).filter(Boolean));
+      const rel = new Set(link.rel.toLowerCase().split(/\s+/u).filter(Boolean));
       if (!rel.has('stylesheet')) {
         // A data document cannot safely consume preloads, icons, manifests, or
         // alternate documents from the shell origin. The live server already
@@ -113,7 +113,7 @@ async function inlineScripts(
       const response = await fetcher(url, { credentials: 'same-origin' });
       if (!response.ok) throw resourceError(`App script failed to load (${response.status}).`);
       assertResponseStayedInScope(response, scope, appId);
-      const source = (await response.text()).replace(/<\/script/gi, '<\\/script');
+      const source = (await response.text()).replace(/<\/script/giu, '<\\/script');
       script.removeAttribute('src');
       script.removeAttribute('integrity');
       script.removeAttribute('crossorigin');
@@ -176,7 +176,7 @@ function hardenDocument(
   for (const script of parsed.querySelectorAll<HTMLScriptElement>('script')) {
     script.setAttribute('nonce', values.shellNonce);
     if (!script.src && script.textContent) {
-      script.textContent = script.textContent.replace(/<\/script/gi, '<\\/script');
+      script.textContent = script.textContent.replace(/<\/script/giu, '<\\/script');
     }
   }
   head.prepend(csp, bootstrap);
@@ -190,7 +190,7 @@ async function fetchScopedResource(
 ): Promise<AppFrameResourceResponse> {
   const url = normalizeScopedUrl(request.url, scope, appId);
   const method = request.method.toUpperCase();
-  if (!/^(GET|HEAD|POST|PUT|PATCH|DELETE)$/.test(method)) {
+  if (!/^(?:GET|HEAD|POST|PUT|PATCH|DELETE)$/u.test(method)) {
     throw resourceError('App resource method is not allowed.');
   }
   const headers = new Headers(request.headers);
@@ -265,7 +265,7 @@ function normalizeScopedUrl(
     // Root-relative app code (blob routes, replica capability paths, etc.) was
     // authored for a direct gateway origin. Re-home it under this exact Iroh
     // bridge rather than letting it address the PWA shell.
-    url = new URL(`${scope.rootUrl.replace(/\/$/, '')}${url.pathname}${url.search}${url.hash}`);
+    url = new URL(`${scope.rootUrl.replace(/\/$/u, '')}${url.pathname}${url.search}${url.hash}`);
   }
   if (!url.pathname.startsWith(`${scope.rootPath}/`)) {
     throw resourceError('App resource escaped its Iroh session.');
@@ -319,7 +319,7 @@ function tunnelScope(raw: string): TunnelScope | undefined {
     const slash = rest.indexOf('/');
     if (slash < 1) return undefined;
     const bridgeId = rest.slice(0, slash);
-    if (!/^[de]-[A-Za-z0-9_-]+$/.test(bridgeId)) return undefined;
+    if (!/^[de]-[A-Za-z0-9_-]+$/u.test(bridgeId)) return undefined;
     const rootPath = `${IROH_VIRTUAL_PREFIX}${bridgeId}`;
     return {
       origin: url.origin,
@@ -343,7 +343,7 @@ function htmlDataUrl(html: string): string {
 }
 
 function safeInlineJson(value: unknown): string {
-  return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, (character) => {
+  return JSON.stringify(value).replace(/[<>&\u2028\u2029]/gu, (character) => {
     const code = character.charCodeAt(0).toString(16).padStart(4, '0');
     return `\\u${code}`;
   });

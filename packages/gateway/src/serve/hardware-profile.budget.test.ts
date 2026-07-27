@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { resolveGatewayHardwareProfile, type ResourceMode } from './hardware-profile.js';
 
 /*
@@ -88,19 +88,21 @@ for (const host of Object.keys(HOSTS)) {
   }
 }
 
-test.each(Object.entries(SNAPSHOT))('resolved knobs unchanged for %s', (label, expected) => {
-  const [host, mode] = label.split(' | ') as [string, ResourceMode];
-  const profile = resolveGatewayHardwareProfile({ ...HOSTS[host], resourceMode: mode }, {});
-  expect({
-    class: profile.class,
-    sqliteSynchronous: profile.sqliteSynchronous,
-    workerMaxConcurrent: profile.workerMaxConcurrent,
-    workerMaxOldGenerationMb: profile.workerMaxOldGenerationMb,
-    workerPoolSize: profile.workerPoolSize,
-    replicationConcurrency: profile.replicationConcurrency,
-    staticBrotliQuality: profile.staticBrotliQuality,
-    staticGzipQuality: profile.staticGzipQuality,
-    vaultSweepIntervalMs: profile.vaultSweepIntervalMs,
-    outboxIdleIntervalMs: profile.outboxIdleIntervalMs,
-  }).toEqual(expected);
+describe('hardware-profile.budget', () => {
+  test.each(Object.entries(SNAPSHOT))('resolved knobs unchanged for %s', (label, expected) => {
+    const [host, mode] = label.split(' | ') as [string, ResourceMode];
+    const profile = resolveGatewayHardwareProfile({ ...HOSTS[host], resourceMode: mode }, {});
+    expect({
+      class: profile.class,
+      sqliteSynchronous: profile.sqliteSynchronous,
+      workerMaxConcurrent: profile.workerMaxConcurrent,
+      workerMaxOldGenerationMb: profile.workerMaxOldGenerationMb,
+      workerPoolSize: profile.workerPoolSize,
+      replicationConcurrency: profile.replicationConcurrency,
+      staticBrotliQuality: profile.staticBrotliQuality,
+      staticGzipQuality: profile.staticGzipQuality,
+      vaultSweepIntervalMs: profile.vaultSweepIntervalMs,
+      outboxIdleIntervalMs: profile.outboxIdleIntervalMs,
+    }).toStrictEqual(expected);
+  });
 });

@@ -135,9 +135,10 @@ async function callTool(
 /** Constant-time bearer check. Never logs, never reports which half mismatched. */
 function bearerOk(header: string | undefined, token: string): boolean {
   if (!header) return false;
-  const match = /^Bearer[ \t]+(\S+)$/i.exec(header.trim());
-  if (!match?.[1]) return false;
-  const given = Buffer.from(match[1], 'utf8');
+  const match = /^Bearer[ \t]+(?<token>\S+)$/iu.exec(header.trim());
+  const presented = match?.groups?.token;
+  if (!presented) return false;
+  const given = Buffer.from(presented, 'utf8');
   const want = Buffer.from(token, 'utf8');
   // timingSafeEqual throws on a length mismatch, so gate on length first.
   // Token length is not secret (it is a fixed 64 hex chars).
@@ -313,8 +314,11 @@ export async function startVaultMcpServer(
 
   const http: Server = createServer((req, res) => {
     void handle(req, res).catch(() => {
-      if (!res.headersSent) sendJson(res, 500, { error: 'internal error' });
-      else res.end();
+      if (res.headersSent) {
+        res.end();
+      } else {
+        sendJson(res, 500, { error: 'internal error' });
+      }
     });
   });
 

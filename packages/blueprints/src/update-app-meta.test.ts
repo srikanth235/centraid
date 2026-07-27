@@ -5,7 +5,7 @@ import path from 'node:path';
 import { scaffoldApp, updateAppMeta } from './scaffold.js';
 import { AppScaffoldError } from './scaffold-types.js';
 
-describe('updateAppMeta', () => {
+describe(updateAppMeta, () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -131,7 +131,7 @@ describe('updateAppMeta', () => {
     expect(manifest.name).toBe('Morning Briefing');
     // Rename must NOT re-stamp `generated`: that's clone-time metadata,
     // not "last rename time".
-    expect(manifest.generated).toEqual(originalGenerated);
+    expect(manifest.generated).toStrictEqual(originalGenerated);
     // Unrelated fields carry through.
     expect(manifest.prompt).toBe('do');
   });
@@ -147,6 +147,6 @@ describe('updateAppMeta', () => {
     );
     await updateAppMeta(dir, appId, { name: 'Renamed' });
     const entries = await fs.readdir(path.join(dir, appId));
-    expect(entries.sort()).toEqual(['app.json']);
+    expect(entries.sort()).toStrictEqual(['app.json']);
   });
 });

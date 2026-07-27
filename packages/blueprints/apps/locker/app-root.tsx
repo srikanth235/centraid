@@ -116,7 +116,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     try {
       next = await window.centraid.read<ItemsPayload>({ query: 'items', input: { limit: 300 } });
     } catch {
-      readFailed(document.getElementById('noticeBanner'));
+      readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
       state.readFailedShown = true;
       return;
     }
@@ -129,7 +129,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       return;
     }
     state.denied = false;
-    const consent = document.getElementById('consentBanner');
+    const consent = document.querySelector('#consentBanner');
     if (consent) (consent as HTMLElement).hidden = true;
 
     data.items = next?.items ?? [];

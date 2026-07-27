@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { navThemeFor, navThemes, resolveTheme } from './resolve';
 import { darkPalette, lightPalette } from './tokens.generated';
 
-describe('resolveTheme', () => {
+describe(resolveTheme, () => {
   it('selects the palette by scheme', () => {
     expect(resolveTheme('light').scheme).toBe('light');
     expect(resolveTheme('dark').scheme).toBe('dark');
@@ -41,7 +41,7 @@ describe('resolveTheme', () => {
   });
 });
 
-describe('navThemeFor', () => {
+describe(navThemeFor, () => {
   it('flips the dark flag and tracks the palette', () => {
     expect(navThemeFor('dark').dark).toBe(true);
     expect(navThemeFor('light').dark).toBe(false);

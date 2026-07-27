@@ -10,9 +10,8 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(import.meta.dirname, '..');
 
 // Keep in sync with packages/protocol/src/routes.ts ROUTES values.
 const ROUTE_PATHS = [
@@ -42,7 +41,7 @@ function walk(dir, out = []) {
     const st = statSync(full);
     if (st.isDirectory()) walk(full, out);
     else if (
-      /\.(ts|tsx|js|mjs)$/.test(name) &&
+      /\.(?:ts|tsx|js|mjs)$/u.test(name) &&
       !name.endsWith('.test.ts') &&
       !name.endsWith('.test.tsx')
     ) {
@@ -68,7 +67,8 @@ for (const scope of SCOPES) {
     for (const route of ROUTE_PATHS) {
       // Match quoted string literals exactly equal to the route (or route + query).
       const re = new RegExp(
-        `['"\`]${route.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\?[^'"\`]*)?['"\`]`,
+        `['"\`]${route.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?:\\?[^'"\`]*)?['"\`]`,
+        'u',
       );
       if (re.test(text)) {
         violations.push(

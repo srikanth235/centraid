@@ -122,11 +122,11 @@ export function encodeHeaderFrame(header: unknown): Array<number> {
 }
 
 interface FrameRecv {
-  readExact(size: number): Promise<Array<number>>;
+  readExact: (size: number) => Promise<Array<number>>;
 }
 
 interface ChunkRecv {
-  read(sizeLimit: number): Promise<Array<number>>;
+  read: (sizeLimit: number) => Promise<Array<number>>;
 }
 
 // Async stream readers are integration-owned (#532 property suite covers

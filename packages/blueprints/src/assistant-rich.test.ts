@@ -155,7 +155,7 @@ describe('wireCodeCopy', () => {
     wireCodeCopy(host);
     wireCodeCopy(host);
     host.querySelector('.asstCopyBtn').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledOnce();
   });
 });
 

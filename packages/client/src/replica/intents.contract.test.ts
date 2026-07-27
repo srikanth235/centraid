@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { MemoryIntentStore } from './intent-store.js';
 import { IntentQueue } from './intents.js';
 
-describe('IntentQueue', () => {
+describe(IntentQueue, () => {
   test('retries with the same id and removes the overlay only after canonical outcome', async () => {
     const queue = new IntentQueue(new MemoryIntentStore(), { idFactory: () => 'intent-1' });
     const enqueued = await queue.enqueue({
@@ -23,20 +23,20 @@ describe('IntentQueue', () => {
     expect(enqueued).toMatchObject({ intentId: 'intent-1', state: 'queued', attempts: 0 });
     expect(enqueued.payloadHash).toMatch(/^[a-f0-9]{64}$/);
 
-    expect(await queue.claimNext()).toMatchObject({ state: 'sending', attempts: 1 });
+    await expect(queue.claimNext()).resolves.toMatchObject({ state: 'sending', attempts: 1 });
     await queue.transportFailed('intent-1', 'offline');
-    expect(await queue.claimNext()).toMatchObject({
+    await expect(queue.claimNext()).resolves.toMatchObject({
       intentId: 'intent-1',
       state: 'sending',
       attempts: 2,
     });
     await queue.awaitingChange('intent-1');
-    expect(await queue.overlayMutations()).toHaveLength(1);
+    await expect(queue.overlayMutations()).resolves.toHaveLength(1);
 
     const [settled] = await queue.applyOutcomes([{ intentId: 'intent-1', status: 'executed' }]);
-    expect(await queue.overlayMutations()).toEqual([]);
+    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
     expect(settled).toMatchObject({ intentId: 'intent-1', state: 'executed', attempts: 2 });
-    expect(await queue.list()).toEqual([]);
+    await expect(queue.list()).resolves.toStrictEqual([]);
   });
 
   test('parked overlays survive reload-length waits while denial rolls them back', async () => {
@@ -60,7 +60,7 @@ describe('IntentQueue', () => {
     await queue.applyOutcomes([
       { intentId: 'intent-parked', status: 'parked', reason: 'confirmation required' },
     ]);
-    expect(await queue.overlayMutations()).toHaveLength(1);
+    await expect(queue.overlayMutations()).resolves.toHaveLength(1);
     expect((await queue.pending())[0]).toMatchObject({
       state: 'parked',
       reason: 'confirmation required',
@@ -69,9 +69,9 @@ describe('IntentQueue', () => {
     const [denied] = await queue.applyOutcomes([
       { intentId: 'intent-parked', status: 'denied', reason: 'owner denied' },
     ]);
-    expect(await queue.overlayMutations()).toEqual([]);
+    await expect(queue.overlayMutations()).resolves.toStrictEqual([]);
     expect(denied).toMatchObject({ state: 'denied', reason: 'owner denied' });
-    expect(await queue.list()).toEqual([]);
+    await expect(queue.list()).resolves.toStrictEqual([]);
   });
 
   test('explicit intent ids dedupe equal payloads and reject tampered reuse', async () => {
@@ -88,8 +88,8 @@ describe('IntentQueue', () => {
       action: 'create',
       input: { title: 'First' },
     });
-    expect(replay).toEqual(first);
-    expect(await queue.list()).toHaveLength(1);
+    expect(replay).toStrictEqual(first);
+    await expect(queue.list()).resolves.toHaveLength(1);
     await expect(
       queue.enqueue({
         intentId: 'stable-id',
@@ -111,7 +111,7 @@ describe('IntentQueue', () => {
     await first.claimNext();
 
     const recovered = new IntentQueue(store);
-    expect(await recovered.recoverSending()).toEqual([
+    await expect(recovered.recoverSending()).resolves.toStrictEqual([
       expect.objectContaining({
         intentId: queued.intentId,
         payloadHash: queued.payloadHash,
@@ -119,7 +119,7 @@ describe('IntentQueue', () => {
         attempts: 1,
       }),
     ]);
-    expect(await recovered.claimNext()).toMatchObject({
+    await expect(recovered.claimNext()).resolves.toMatchObject({
       intentId: 'intent-reload',
       payloadHash: queued.payloadHash,
       state: 'sending',

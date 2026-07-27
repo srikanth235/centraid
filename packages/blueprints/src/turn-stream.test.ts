@@ -36,7 +36,7 @@ describe('turn-stream frame parsing', () => {
   });
 
   it('parses a frame by the JSON `type`, ignoring heartbeats and the end frame', () => {
-    expect(parseFrame(frame({ type: 'assistant.delta', delta: 'hi' }))).toEqual({
+    expect(parseFrame(frame({ type: 'assistant.delta', delta: 'hi' }))).toStrictEqual({
       type: 'assistant.delta',
       delta: 'hi',
     });
@@ -54,7 +54,7 @@ describe('turn-stream frame parsing', () => {
       'event: end\ndata: {}',
     ].join('\n\n');
     const types = parseSseText(blob).map((e: { type: string }) => e.type);
-    expect(types).toEqual(['assistant.start', 'assistant.delta', 'final']);
+    expect(types).toStrictEqual(['assistant.start', 'assistant.delta', 'final']);
   });
 });
 
@@ -74,8 +74,12 @@ describe('consumeSse', () => {
     const res = await consumeSse(streamOf([full.slice(0, mid), full.slice(mid)]), (e) =>
       events.push(e),
     );
-    expect(events.map((e) => e.type)).toEqual(['assistant.delta', 'assistant.delta', 'final']);
-    expect(events[2]).toEqual({ type: 'final', text: 'Hello' });
+    expect(events.map((e) => e.type)).toStrictEqual([
+      'assistant.delta',
+      'assistant.delta',
+      'final',
+    ]);
+    expect(events[2]).toStrictEqual({ type: 'final', text: 'Hello' });
     // The terminal `event: end` frame was seen → the turn finished cleanly.
     expect(res.ended).toBe(true);
   });
@@ -87,7 +91,7 @@ describe('consumeSse', () => {
       streamOf([frame({ type: 'assistant.delta', delta: 'partial' }) + '\n\n']),
       (e) => events.push(e),
     );
-    expect(events.map((e) => e.type)).toEqual(['assistant.delta']);
+    expect(events.map((e) => e.type)).toStrictEqual(['assistant.delta']);
     expect(res.ended).toBe(false);
   });
 

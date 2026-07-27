@@ -16,7 +16,7 @@ const snap = (patch: Partial<AuthInjectorSnapshot> = {}): AuthInjectorSnapshot =
   ...patch,
 });
 
-describe('matchesGateway', () => {
+describe(matchesGateway, () => {
   it('matches same origin including path/query differences', () => {
     expect(matchesGateway('https://gw.example/centraid/app/', 'https://gw.example')).toBe(true);
     expect(matchesGateway('https://gw.example:443/x?q=1', 'https://gw.example')).toBe(true);
@@ -29,7 +29,7 @@ describe('matchesGateway', () => {
   });
 });
 
-describe('applyOutgoingAuthHeaders', () => {
+describe(applyOutgoingAuthHeaders, () => {
   it('injects Authorization and vault headers for gateway traffic', () => {
     const out = applyOutgoingAuthHeaders(
       { Accept: 'text/html' },
@@ -62,15 +62,17 @@ describe('applyOutgoingAuthHeaders', () => {
         snap({ gatewayToken: '' }),
         'https://gw.example/',
       ),
-    ).toEqual({ Accept: '*/*' });
+    ).toStrictEqual({ Accept: '*/*' });
     expect(
       applyOutgoingAuthHeaders(
         { Accept: '*/*' },
         snap({ gatewayOrigin: '' }),
         'https://gw.example/',
       ),
-    ).toEqual({ Accept: '*/*' });
-    expect(applyOutgoingAuthHeaders({ Accept: '*/*' }, snap(), 'https://other.example/')).toEqual({
+    ).toStrictEqual({ Accept: '*/*' });
+    expect(
+      applyOutgoingAuthHeaders({ Accept: '*/*' }, snap(), 'https://other.example/'),
+    ).toStrictEqual({
       Accept: '*/*',
     });
   });
@@ -98,8 +100,8 @@ describe('stripFrameAncestors / relaxFrameAncestors', () => {
       'X-Frame-Options': 'DENY',
       'Content-Type': 'text/html',
     });
-    expect(out['Content-Security-Policy']).toEqual(["default-src 'self'"]);
-    expect(out['Content-Security-Policy-Report-Only']).toEqual(['img-src *']);
+    expect(out['Content-Security-Policy']).toStrictEqual(["default-src 'self'"]);
+    expect(out['Content-Security-Policy-Report-Only']).toStrictEqual(['img-src *']);
     expect(out['X-Frame-Options']).toBeUndefined();
     expect(out['Content-Type']).toBe('text/html');
   });
@@ -108,20 +110,22 @@ describe('stripFrameAncestors / relaxFrameAncestors', () => {
     const out = relaxFrameAncestors({
       'content-security-policy': "script-src 'self'; frame-ancestors 'self'",
     });
-    expect(out['content-security-policy']).toEqual(["script-src 'self'"]);
+    expect(out['content-security-policy']).toStrictEqual(["script-src 'self'"]);
   });
 });
 
-describe('applyIncomingFrameRelaxation', () => {
+describe(applyIncomingFrameRelaxation, () => {
   it('rewrites only matching gateway responses with a configured origin', () => {
     const headers = {
       'Content-Security-Policy': "default-src 'self'; frame-ancestors 'self'",
     };
-    expect(applyIncomingFrameRelaxation(headers, snap(), 'https://gw.example/x')).toEqual({
+    expect(applyIncomingFrameRelaxation(headers, snap(), 'https://gw.example/x')).toStrictEqual({
       'Content-Security-Policy': ["default-src 'self'"],
     });
     // A CSP that is only frame-ancestors collapses to an empty list.
-    expect(relaxFrameAncestors({ 'Content-Security-Policy': "frame-ancestors 'self'" })).toEqual({
+    expect(
+      relaxFrameAncestors({ 'Content-Security-Policy': "frame-ancestors 'self'" }),
+    ).toStrictEqual({
       'Content-Security-Policy': [],
     });
   });

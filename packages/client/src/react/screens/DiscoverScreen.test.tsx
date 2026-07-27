@@ -75,7 +75,7 @@ const baseProps = (over: Partial<DiscoverBridgeProps> = {}): DiscoverBridgeProps
 
 const count = (html: string, needle: string): number => html.split(needle).length - 1;
 
-describe('DiscoverScreen', () => {
+describe(DiscoverScreen, () => {
   it('renders the Discover chrome and the kind segmented filter', () => {
     const html = renderToStaticMarkup(<DiscoverScreen {...baseProps()} />);
     expect(html).toContain('wrap');

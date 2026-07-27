@@ -109,7 +109,7 @@ const cssModuleCache = new Map<string, CssModuleCacheEntry>();
 // `components/jsx-runtime.js`, one directory too deep. esbuild always emits
 // double quotes, but a single-quoted form costs nothing extra to also
 // handle.
-const JSX_RUNTIME_SPECIFIER_RE = /(["'])\.\/jsx-runtime\1/g;
+const JSX_RUNTIME_SPECIFIER_RE = /(?<quote>["'])\.\/jsx-runtime\k<quote>/gu;
 
 /**
  * The relative-path prefix that climbs from a served file's directory back
@@ -121,7 +121,7 @@ const JSX_RUNTIME_SPECIFIER_RE = /(["'])\.\/jsx-runtime\1/g;
  */
 function jsxRuntimeClimb(rel: string): { depth: number; prefix: string } {
   const segments = rel
-    .replace(/^\.?\/+/, '')
+    .replace(/^\.?\/+/u, '')
     .split('/')
     .filter(Boolean);
   const depth = Math.max(0, segments.length - 1);
@@ -176,7 +176,10 @@ async function transformJsx(
       jsx: 'automatic',
       jsxImportSource: '.',
     });
-    const code = result.code.replace(JSX_RUNTIME_SPECIFIER_RE, `$1${prefix}jsx-runtime.js$1`);
+    const code = result.code.replace(
+      JSX_RUNTIME_SPECIFIER_RE,
+      `$<quote>${prefix}jsx-runtime.js$<quote>`,
+    );
     const etag = computeEtag(Buffer.from(code, 'utf8'));
     jsxCache.set(cacheKey, { mtimeMs: stat.mtimeMs, ok: true, code, etag });
     return { code, etag };
@@ -240,9 +243,10 @@ export async function serveStatic(
   // filesystem — see app-bundle.ts. Live serving only: a draft never
   // references one (its HTML isn't rewritten), so under `_draft/` this
   // shape falls through to normal resolution and 404s loudly.
-  const bundleMatch = opts.draft ? null : BUNDLE_REL_RE.exec(rel.replace(/^\.?\/+/, ''));
-  if (bundleMatch) {
-    const bundle = findBundleByHash(appDir, bundleMatch[1]!);
+  const bundleMatch = opts.draft ? null : BUNDLE_REL_RE.exec(rel.replace(/^\.?\/+/u, ''));
+  const bundleHash = bundleMatch?.groups?.hash;
+  if (bundleHash) {
+    const bundle = findBundleByHash(appDir, bundleHash);
     if (!bundle) return sendError(res, 404, 'not_found', 'Unknown bundle hash.');
     return finishStaticAsset(req, res, {
       contentType: 'application/javascript; charset=utf-8',
@@ -276,7 +280,7 @@ export async function serveStatic(
     // of these names is root-level; a nested one (for example
     // `components/kit.ts`) means a hand-written relative import is wrong and
     // must 404 loudly instead of silently resolving to the shared copy.
-    const isRootLevel = !rel.replace(/^\.?\/+/, '').includes('/');
+    const isRootLevel = !rel.replace(/^\.?\/+/u, '').includes('/');
     const base = path.basename(file);
     const shared =
       isRootLevel && opts.sharedAssetsDir && SHARED_ASSET_FILES.has(base)
@@ -438,20 +442,20 @@ async function statOrNull(file: string): Promise<import('node:fs').Stats | null>
  * limitation since the runtime only serves HTML it controls.
  */
 function stampInlineScriptNonces(html: string, nonce: string): string {
-  return html.replace(/<script\b([^>]*)>/gi, (match, attrs: string) => {
-    if (/\bsrc\s*=/i.test(attrs)) return match;
-    if (/\bnonce\s*=/i.test(attrs)) return match;
+  return html.replace(/<script\b(?<attrs>[^>]*)>/giu, (match, attrs: string) => {
+    if (/\bsrc\s*=/iu.test(attrs)) return match;
+    if (/\bnonce\s*=/iu.test(attrs)) return match;
     return `<script${attrs} nonce="${nonce}">`;
   });
 }
 
 // `data-<name>` attribute names: lowercase letters, digits, dashes only.
-const DATA_KEY_RE = /^[a-z][a-z0-9-]*$/;
+const DATA_KEY_RE = /^[a-z][a-z0-9-]*$/u;
 // CSS custom-property names (`--foo-bar`): lowercase letters, digits, dashes.
-const CSS_KEY_RE = /^[a-z][a-z0-9-]*$/;
+const CSS_KEY_RE = /^[a-z][a-z0-9-]*$/u;
 // Attribute values: forbid quotes, angle brackets, and control chars. A "%"
 // suffix is fine, so the existing `--bg-l: 5%` use case still flows through.
-const VALUE_RE = /^[A-Za-z0-9 #()%.,_/:-]+$/;
+const VALUE_RE = /^[A-Za-z0-9 #()%.,_/:-]+$/u;
 
 /**
  * Rewrite the first `<html ...>` tag to carry the provided data attrs and
@@ -471,12 +475,12 @@ function injectSettings(html: string, vals: SettingsInject): string {
   const cssKeys = Object.keys(cssVars);
   if (dataKeys.length === 0 && cssKeys.length === 0) return html;
 
-  return html.replace(/<html\b([^>]*)>/i, (_match, attrs: string) => {
+  return html.replace(/<html\b(?<attrs>[^>]*)>/iu, (_match, attrs: string) => {
     let out = attrs;
 
     for (const k of dataKeys) {
       const v = dataAttrs[k]!;
-      const re = new RegExp(`\\bdata-${k}\\s*=`, 'i');
+      const re = new RegExp(`\\bdata-${k}\\s*=`, 'iu');
       if (!re.test(out)) {
         out += ` data-${k}="${v}"`;
       }
@@ -484,9 +488,9 @@ function injectSettings(html: string, vals: SettingsInject): string {
 
     if (cssKeys.length > 0) {
       const inlineVars = cssKeys.map((k) => `--${k}:${cssVars[k]!}`).join(';');
-      if (/\bstyle\s*=\s*"/i.test(out)) {
+      if (/\bstyle\s*=\s*"/iu.test(out)) {
         out = out.replace(
-          /\bstyle\s*=\s*"([^"]*)"/i,
+          /\bstyle\s*=\s*"(?<body>[^"]*)"/iu,
           (_m, body: string) => `style="${body};${inlineVars}"`,
         );
       } else {

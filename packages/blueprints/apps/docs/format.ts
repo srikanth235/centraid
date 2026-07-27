@@ -81,7 +81,7 @@ export function typeMeta(mediaType: string | null | undefined): TypeMeta {
 // it. Anything else (including a scanned PDF or an image) takes the
 // Replace-file door instead.
 export function isTextEditable(doc: DocFields): boolean {
-  return /^text\//i.test(String(doc.media_type ?? ''));
+  return /^text\//iu.test(String(doc.media_type ?? ''));
 }
 
 // Decode a data: URI's text payload directly, without a network round trip.
@@ -117,7 +117,7 @@ export function loadable(uri: string | null | undefined): boolean {
   // Same-origin vault blob URLs (issue #296) render everywhere data: did —
   // and in iframes BETTER: `default-src 'self'` allows them where data:
   // PDFs went blank.
-  return /^(data:|https?:|\/centraid\/_vault\/blobs\/)/i.test(String(uri ?? ''));
+  return /^(?:data:|https?:|\/centraid\/_vault\/blobs\/)/iu.test(String(uri ?? ''));
 }
 export function isImage(doc: DocFields): boolean {
   return String(doc.media_type ?? '').startsWith('image/') && loadable(doc.content_uri);
@@ -223,8 +223,8 @@ export function activityLabel(activity: string | null | undefined): string {
   const known = activity ? ACTIVITY_LABELS[activity] : undefined;
   if (known) return known;
   const cleaned = String(activity ?? '')
-    .replace(/^command\.core\./, '')
-    .replace(/_/g, ' ')
+    .replace(/^command\.core\./u, '')
+    .replace(/_/gu, ' ')
     .trim();
   return cleaned || 'Activity';
 }

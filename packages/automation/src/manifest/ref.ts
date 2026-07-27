@@ -15,7 +15,7 @@ import { isValidAppId } from '@centraid/app-engine';
  */
 export function isValidId(id: string): boolean {
   if (typeof id !== 'string' || id.length === 0) return false;
-  return /^[A-Za-z0-9_-]+$/.test(id);
+  return /^[A-Za-z0-9_-]+$/u.test(id);
 }
 
 /**

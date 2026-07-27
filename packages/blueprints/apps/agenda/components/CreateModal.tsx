@@ -132,7 +132,7 @@ export function CreateModal({
       ...(startTz ? { start_tz: startTz } : {}),
       ...(description.trim() ? { description: description.trim() } : {}),
       ...(invited.size ? { attendee_party_ids: [...invited] } : {}),
-      ...(repeat !== 'none' ? { rrule: repeat } : {}),
+      ...(repeat === 'none' ? {} : { rrule: repeat }),
       ...(conferencingUri.trim() ? { conferencing_uri: conferencingUri.trim() } : {}),
     });
     setBusy(false);

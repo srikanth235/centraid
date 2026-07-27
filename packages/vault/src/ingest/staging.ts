@@ -63,23 +63,23 @@ export interface PublishedWrite {
  */
 export interface Publisher {
   entityType: string;
-  probe(
+  probe: (
     vault: DatabaseSync,
     payload: Record<string, unknown>,
-  ): { entityId: string; disposition: 'update' | 'skip'; note?: string } | null;
-  create(
+  ) => { entityId: string; disposition: 'update' | 'skip'; note?: string } | null;
+  create: (
     vault: DatabaseSync,
     ownerPartyId: string,
     payload: Record<string, unknown>,
     now: string,
-  ): { entityId: string; wrote: PublishedWrite[] };
-  update(
+  ) => { entityId: string; wrote: PublishedWrite[] };
+  update: (
     vault: DatabaseSync,
     entityId: string,
     payload: Record<string, unknown>,
     now: string,
     ownerPartyId: string,
-  ): { wrote: PublishedWrite[] };
+  ) => { wrote: PublishedWrite[] };
 }
 
 export interface StageResult {
@@ -547,7 +547,7 @@ export function publishBatch(
   const { created, updated, skipped, failed } = applied;
   // `file.ics` → `import.ics`: the provenance activity names the SOURCE
   // format, not the transport — continuous with the pre-spine importers.
-  const activity = `import.${applied.kind.replace(/^file\./, '')}`;
+  const activity = `import.${applied.kind.replace(/^file\./u, '')}`;
   for (const write of applied.provenanced) {
     writeProvenance(db.journal, owner, write.type, write.id, activity, undefined, 'import');
   }

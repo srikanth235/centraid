@@ -10,7 +10,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * a wrong secret 401s, and an unknown id 404s.
  */
 
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -124,119 +124,121 @@ async function createWebhookAutomation(
   return { id: body.webhook!.id, secret: body.webhook!.secret, ref: body.row!.ref };
 }
 
-beforeEach(async () => {
-  dataDir = await tempDir(`gw-webhook-${crypto.randomUUID()}-`);
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
-});
-
-afterEach(async () => {
-  await handle?.close().catch(() => undefined);
-  await fs.rm(dataDir, { recursive: true, force: true });
-});
-
-test('the correct secret durably ingresses then fires WITHOUT the gateway owner bearer token', async () => {
-  const { id, secret, ref } = await createWebhookAutomation('hookapp');
-
-  // Deliberately no `auth()` header — the gateway owner's bearer is
-  // intentionally absent. The shared webhook secret is the only auth here.
-  const res = await fetch(`${handle.url}/_centraid-hook/${id}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ hello: 'world' }),
-  });
-  expect(res.status).toBe(202);
-  const body = (await res.json()) as {
-    accepted: boolean;
-    deliveryId?: string;
-    error?: string;
-  };
-  expect(body.accepted).toBe(true);
-  expect(body.deliveryId).toBeTruthy();
-  expect(body.error).toBeUndefined();
-
-  await vi.waitFor(async () => {
-    const db = new DatabaseSync(await journalDbPath(), { readOnly: true });
-    try {
-      expect(
-        (db.prepare('SELECT COUNT(*) AS n FROM trigger_ingress').get() as { n: number }).n,
-      ).toBe(1);
-      const cursor = db
-        .prepare(
-          `SELECT position_json FROM automation_trigger_cursor
-            WHERE automation_id = ? AND source_kind = 'webhook'`,
-        )
-        .get(ref) as { position_json: string | null } | undefined;
-      expect(cursor?.position_json).toEqual(expect.any(String));
-      expect(Number(JSON.parse(cursor!.position_json!))).toBeGreaterThan(0);
-    } finally {
-      db.close();
-    }
+describe('webhook-route-over-http', () => {
+  beforeEach(async () => {
+    dataDir = await tempDir(`gw-webhook-${crypto.randomUUID()}-`);
+    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
   });
 
-  await vi.waitFor(
-    async () => {
+  afterEach(async () => {
+    await handle?.close().catch(() => undefined);
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  test('the correct secret durably ingresses then fires WITHOUT the gateway owner bearer token', async () => {
+    const { id, secret, ref } = await createWebhookAutomation('hookapp');
+
+    // Deliberately no `auth()` header — the gateway owner's bearer is
+    // intentionally absent. The shared webhook secret is the only auth here.
+    const res = await fetch(`${handle.url}/_centraid-hook/${id}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hello: 'world' }),
+    });
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as {
+      accepted: boolean;
+      deliveryId?: string;
+      error?: string;
+    };
+    expect(body.accepted).toBe(true);
+    expect(body.deliveryId).toBeTruthy();
+    expect(body.error).toBeUndefined();
+
+    await vi.waitFor(async () => {
       const db = new DatabaseSync(await journalDbPath(), { readOnly: true });
       try {
-        const direct = db
+        expect(
+          (db.prepare('SELECT COUNT(*) AS n FROM trigger_ingress').get() as { n: number }).n,
+        ).toBe(1);
+        const cursor = db
           .prepare(
-            `SELECT t.id AS turn_id, t.trigger_origin, t.ended_at, t.ok, c.automation_id
-               FROM turns t JOIN conversations c ON c.id = t.conversation_id`,
+            `SELECT position_json FROM automation_trigger_cursor
+            WHERE automation_id = ? AND source_kind = 'webhook'`,
           )
-          .all() as Array<{
-          turn_id: string;
-          trigger_origin: string;
-          ended_at: number | null;
-          ok: number | null;
-          automation_id: string;
-        }>;
-        expect(direct).toContainEqual(
-          expect.objectContaining({
-            automation_id: ref,
-            trigger_origin: 'webhook',
-            ended_at: expect.any(Number),
-            ok: 1,
-          }),
-        );
+          .get(ref) as { position_json: string | null } | undefined;
+        expect(cursor?.position_json).toStrictEqual(expect.any(String));
+        expect(Number(JSON.parse(cursor!.position_json!))).toBeGreaterThan(0);
       } finally {
         db.close();
       }
-      const feed = await fetch(
-        `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent(ref)}`,
-        { headers: auth() },
-      );
-      const payload = (await feed.json()) as {
-        turns: Array<{ triggerOrigin?: string; endedAt?: number; ok?: boolean }>;
-      };
-      expect(payload.turns).toContainEqual(
-        expect.objectContaining({
-          triggerOrigin: 'webhook',
-          endedAt: expect.any(Number),
-          ok: true,
-        }),
-      );
-    },
-    { timeout: 10_000 },
-  );
-});
+    });
 
-test('a wrong secret is rejected with 401, still without the gateway owner bearer token', async () => {
-  const { id } = await createWebhookAutomation('hookapp2');
-
-  const res = await fetch(`${handle.url}/_centraid-hook/${id}`, {
-    method: 'POST',
-    headers: { Authorization: 'Bearer not-the-right-secret' },
+    await vi.waitFor(
+      async () => {
+        const db = new DatabaseSync(await journalDbPath(), { readOnly: true });
+        try {
+          const direct = db
+            .prepare(
+              `SELECT t.id AS turn_id, t.trigger_origin, t.ended_at, t.ok, c.automation_id
+               FROM turns t JOIN conversations c ON c.id = t.conversation_id`,
+            )
+            .all() as Array<{
+            turn_id: string;
+            trigger_origin: string;
+            ended_at: number | null;
+            ok: number | null;
+            automation_id: string;
+          }>;
+          expect(direct).toContainEqual(
+            expect.objectContaining({
+              automation_id: ref,
+              trigger_origin: 'webhook',
+              ended_at: expect.any(Number),
+              ok: 1,
+            }),
+          );
+        } finally {
+          db.close();
+        }
+        const feed = await fetch(
+          `${handle.url}/centraid/_automations/turns?ref=${encodeURIComponent(ref)}`,
+          { headers: auth() },
+        );
+        const payload = (await feed.json()) as {
+          turns: Array<{ triggerOrigin?: string; endedAt?: number; ok?: boolean }>;
+        };
+        expect(payload.turns).toContainEqual(
+          expect.objectContaining({
+            triggerOrigin: 'webhook',
+            endedAt: expect.any(Number),
+            ok: true,
+          }),
+        );
+      },
+      { timeout: 10_000 },
+    );
   });
-  expect(res.status).toBe(401);
-  const body = (await res.json()) as { error: string };
-  expect(body.error).toContain('secret');
-});
 
-test('an unknown webhook id is a 404', async () => {
-  const res = await fetch(`${handle.url}/_centraid-hook/${'a'.repeat(24)}`, {
-    method: 'POST',
-    headers: { Authorization: 'Bearer whatever-the-caller-sends' },
+  test('a wrong secret is rejected with 401, still without the gateway owner bearer token', async () => {
+    const { id } = await createWebhookAutomation('hookapp2');
+
+    const res = await fetch(`${handle.url}/_centraid-hook/${id}`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer not-the-right-secret' },
+    });
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('secret');
   });
-  expect(res.status).toBe(404);
-  const body = (await res.json()) as { error: string };
-  expect(body.error).toBe('unknown webhook');
+
+  test('an unknown webhook id is a 404', async () => {
+    const res = await fetch(`${handle.url}/_centraid-hook/${'a'.repeat(24)}`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer whatever-the-caller-sends' },
+    });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('unknown webhook');
+  });
 });

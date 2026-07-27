@@ -3,7 +3,7 @@
  * PARTSTAT). The vault refuses responses from parties never invited and
  * responses to cancelled events; those arrive here as `failed` outcomes.
  */
-export default async ({ body, ctx }: HandlerArgs): Promise<ActionResult> => {
+export default async function rsvp({ body, ctx }: HandlerArgs): Promise<ActionResult> {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
@@ -20,4 +20,4 @@ export default async ({ body, ctx }: HandlerArgs): Promise<ActionResult> => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

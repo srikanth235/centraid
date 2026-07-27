@@ -8,6 +8,7 @@ import {
   VaultCursorEngine,
   assertTriggerCursorAllowed,
   type TriggerCursorFireInput,
+  type VaultCursorEngineOptions,
 } from './cursor-engine.js';
 
 function row(ref: string, triggers: Manifest['triggers']): Row {
@@ -44,7 +45,7 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
-describe('VaultCursorEngine', () => {
+describe(VaultCursorEngine, () => {
   it('collapses a cron restart gap to the latest instant with write-ahead intent', async () => {
     const cursors = store();
     cursors.putCursor({
@@ -59,7 +60,7 @@ describe('VaultCursorEngine', () => {
     const engine = new VaultCursorEngine({
       store: cursors,
       now: () => at,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       fireCursor: (input) => {
         const during = cursors.getCursor(input.automationRef, input.triggerIndex);
         expect(during?.positionJson).toBe(JSON.stringify(Date.UTC(2026, 0, 1, 8, 0)));
@@ -100,18 +101,18 @@ describe('VaultCursorEngine', () => {
     const engine = new VaultCursorEngine({
       store: cursors,
       now: () => at,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       fireCursor: (input) => void fired.push(input),
     });
 
     await engine.reconcile([row('clock/daily', [{ kind: 'cron', expr: '0 9 * * *' }])]);
     // Registration itself must never fire — the catch-up belongs to the tick.
-    expect(fired).toEqual([]);
+    expect(fired).toStrictEqual([]);
 
     engine.tick();
     await settle();
 
-    expect(fired).toEqual([
+    expect(fired).toStrictEqual([
       expect.objectContaining({
         element: expect.objectContaining({ occurredAt: new Date(2026, 0, 1, 9, 0).getTime() }),
       }),
@@ -125,7 +126,7 @@ describe('VaultCursorEngine', () => {
     const engine = new VaultCursorEngine({
       store: cursors,
       catchUpCap: 2,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       readCursor: async () => ({
         elements: [
           { position: '1', occurredAt: 1 },
@@ -142,7 +143,7 @@ describe('VaultCursorEngine', () => {
       row('mail/watch', [{ kind: 'data', entities: ['core.party'], every: '* * * * *' }]),
     ]);
 
-    expect(fired.map((entry) => entry.element.position)).toEqual(['1', '2']);
+    expect(fired.map((entry) => entry.element.position)).toStrictEqual(['1', '2']);
     expect(fired.every((entry) => entry.skipped === 3)).toBe(true);
     expect(cursors.getCursor('mail/watch', 0)).toMatchObject({
       positionJson: '"watermark-5"',
@@ -155,7 +156,7 @@ describe('VaultCursorEngine', () => {
     const readRefs: string[] = [];
     const at = new Date(Date.UTC(2026, 0, 1, 8, 1));
     const engine = new VaultCursorEngine({
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       now: () => at,
       readCursor: async ({ automationRef }) => {
         readRefs.push(automationRef);
@@ -171,7 +172,7 @@ describe('VaultCursorEngine', () => {
     engine.tick();
     await settle();
 
-    expect(readRefs).toEqual(['watch/data']);
+    expect(readRefs).toStrictEqual(['watch/data']);
   });
 
   it('drains durable webhook ingress on restart bootstrap', async () => {
@@ -184,7 +185,7 @@ describe('VaultCursorEngine', () => {
     };
     const engine = new VaultCursorEngine({
       store: cursors,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       readCursor: async ({ cursor }) => ({
         elements: cursor ? [] : [{ position: '9', occurredAt: 9, payload: { hello: true } }],
         positionJson: '9',
@@ -194,7 +195,7 @@ describe('VaultCursorEngine', () => {
 
     await engine.reconcile([row('hooks/receive', [trigger])]);
 
-    expect(fired).toEqual(['9']);
+    expect(fired).toStrictEqual(['9']);
     expect(cursors.getCursor('hooks/receive', 0)?.positionJson).toBe('9');
   });
 
@@ -218,9 +219,9 @@ describe('VaultCursorEngine', () => {
     const trigger = { kind: 'data' as const, entities: ['core.party'] };
     const first = new VaultCursorEngine({
       store: cursors,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       readCursor,
-      fireCursor: vi.fn(),
+      fireCursor: vi.fn<NonNullable<VaultCursorEngineOptions['fireCursor']>>(),
     });
     await first.reconcile([row('watch/restart', [trigger])]);
     expect(cursors.getCursor('watch/restart', 0)?.positionJson).toBe('0');
@@ -229,13 +230,13 @@ describe('VaultCursorEngine', () => {
     const fired: string[] = [];
     const restarted = new VaultCursorEngine({
       store: cursors,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       readCursor,
       fireCursor: ({ element }) => void fired.push(element.position),
     });
     await restarted.reconcile([row('watch/restart', [trigger])]);
 
-    expect(fired).toEqual(['1']);
+    expect(fired).toStrictEqual(['1']);
     expect(cursors.getCursor('watch/restart', 0)?.positionJson).toBe('1');
   });
 
@@ -248,7 +249,7 @@ describe('VaultCursorEngine', () => {
     const attempted: string[] = [];
     const first = new VaultCursorEngine({
       store: cursors,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       readCursor: async () => ({ elements, positionJson: '10' }),
       fireCursor: ({ element }) => {
         attempted.push(element.position);
@@ -271,7 +272,7 @@ describe('VaultCursorEngine', () => {
 
     const second = new VaultCursorEngine({
       store: cursors,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       readCursor: async ({ cursor }) => ({
         elements:
           cursor?.positionJson === '10'
@@ -283,7 +284,7 @@ describe('VaultCursorEngine', () => {
     });
     await second.reconcile([row('hooks/restart', [trigger])]);
 
-    expect(attempted).toEqual(['9', '10', '10']);
+    expect(attempted).toStrictEqual(['9', '10', '10']);
     expect(cursors.getCursor('hooks/restart', 0)).toMatchObject({
       positionJson: '10',
     });
@@ -291,7 +292,7 @@ describe('VaultCursorEngine', () => {
 
     second.nudgeIngress('hook-id');
     await settle();
-    expect(attempted).toEqual(['9', '10', '10', '11']);
+    expect(attempted).toStrictEqual(['9', '10', '10', '11']);
     expect(cursors.getCursor('hooks/restart', 0)?.positionJson).toBe('11');
   });
 
@@ -307,7 +308,7 @@ describe('VaultCursorEngine', () => {
     const engine = new VaultCursorEngine({
       store: cursors,
       nudgeDelayMs: 0,
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       readCursor: async () => ({
         elements: pending.splice(0),
         positionJson: pending.length ? pending.at(-1)?.position : '0',
@@ -320,13 +321,13 @@ describe('VaultCursorEngine', () => {
     engine.nudgeIngress('hook-id');
     await new Promise<void>((resolve) => setTimeout(resolve, 5));
 
-    expect(fired).toEqual(['10']);
+    expect(fired).toStrictEqual(['10']);
   });
 
   it('keeps an event trigger registered when its provider is unavailable at bootstrap', async () => {
-    const onError = vi.fn();
+    const onError = vi.fn<NonNullable<VaultCursorEngineOptions['onError']>>();
     const engine = new VaultCursorEngine({
-      fire: vi.fn(),
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
       readCursor: async () => {
         throw new Error('account needs auth');
       },
@@ -345,7 +346,7 @@ describe('VaultCursorEngine', () => {
       ]),
     ).resolves.toMatchObject({ added: ['mail/watch'] });
 
-    expect(await engine.list()).toEqual(['mail/watch']);
+    await expect(engine.list()).resolves.toStrictEqual(['mail/watch']);
     expect(onError).toHaveBeenCalledWith(expect.any(Error), 'mail/watch');
   });
 
@@ -355,7 +356,9 @@ describe('VaultCursorEngine', () => {
       entity: 'trigger_ingress',
     };
     expect(() => assertTriggerCursorAllowed(denied)).toThrow(/loop-sensitive runtime table/);
-    const engine = new VaultCursorEngine({ fire: vi.fn() });
+    const engine = new VaultCursorEngine({
+      fire: vi.fn<VaultCursorEngineOptions['fire']>(),
+    });
     await expect(engine.reconcile([row('bad/loop', [denied])])).rejects.toThrow(
       /loop-sensitive runtime table/,
     );

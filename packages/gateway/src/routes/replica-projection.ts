@@ -90,7 +90,7 @@ function outcomeWire(
   return {
     intentId: outcome.intentId,
     status: outcome.status as ReplicaIntentOutcomeWire['status'],
-    ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
+    ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
   };
 }
 

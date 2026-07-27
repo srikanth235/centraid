@@ -62,7 +62,7 @@ export function buildSearchQuery(search) {
 export function parseExistingNumber(stdout) {
   const trimmed = (stdout ?? '').trim();
   if (!trimmed || trimmed === 'null') return null;
-  if (!/^\d+$/.test(trimmed)) return null;
+  if (!/^\d+$/u.test(trimmed)) return null;
   return Number(trimmed);
 }
 

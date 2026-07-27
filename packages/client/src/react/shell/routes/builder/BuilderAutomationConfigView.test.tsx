@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 // for the trigger save path — stub it the same way AppFrame.test.tsx does so
 // a static render doesn't need `window.CentraidApi` (only present under
 // Electron, not jsdom).
-vi.mock('../../../../gateway-client.js', () => ({
+vi.mock(import('../../../../gateway-client.js'), () => ({
   writeAppFile: vi.fn(),
   publish: vi.fn(),
   readAutomation: vi.fn(),

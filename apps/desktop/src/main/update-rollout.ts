@@ -52,7 +52,7 @@ export async function admitUpdate(input: {
     bucket,
     releasedAtMs: input.releasedAtMs,
     nowMs: input.nowMs ?? Date.now(),
-    ...(input.windowMs !== undefined ? { windowMs: input.windowMs } : {}),
-    ...(input.manualCheck !== undefined ? { manualCheck: input.manualCheck } : {}),
+    ...(input.windowMs === undefined ? {} : { windowMs: input.windowMs }),
+    ...(input.manualCheck === undefined ? {} : { manualCheck: input.manualCheck }),
   });
 }

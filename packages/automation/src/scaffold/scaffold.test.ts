@@ -6,7 +6,7 @@ import { parseManifest } from '../manifest/manifest.js';
 import { scaffoldApp, validateId, validateAppId } from './scaffold.js';
 import { AppScaffoldError } from '@centraid/blueprints';
 
-describe('scaffoldApp', () => {
+describe(scaffoldApp, () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -37,8 +37,8 @@ describe('scaffoldApp', () => {
     );
     expect(manifest.name).toBe('Daily digest');
     expect(manifest.prompt).toBe('Summarize my PRs');
-    expect(manifest.triggers).toEqual([{ kind: 'cron', expr: '0 8 * * *' }]);
-    expect(manifest.apps).toEqual(['todos']);
+    expect(manifest.triggers).toStrictEqual([{ kind: 'cron', expr: '0 8 * * *' }]);
+    expect(manifest.apps).toStrictEqual(['todos']);
     expect(manifest.enabled).toBe(true);
 
     const handler = await fs.readFile(path.join(autoDir, 'handler.js'), 'utf8');
@@ -52,7 +52,7 @@ describe('scaffoldApp', () => {
       await fs.readFile(path.join(autoDir, 'automation.json'), 'utf8'),
     );
     expect(manifest.name).toBe('autox');
-    expect(manifest.triggers).toEqual([{ kind: 'cron', expr: '0 9 * * *' }]);
+    expect(manifest.triggers).toStrictEqual([{ kind: 'cron', expr: '0 9 * * *' }]);
   });
 
   it('honors an explicit automationId', async () => {

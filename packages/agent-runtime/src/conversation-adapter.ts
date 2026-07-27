@@ -54,7 +54,7 @@ export function makeConversationRunner(opts: MakeConversationRunnerOptions): Con
     ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     getDispatcher: opts.getDispatcher,
     // The local codex/claude turn driver.
-    runTurn: runTurn,
+    runTurn,
     // Data chat runs in the app's data dir; the route preamble is passed
     // through unchanged (no authoring grounding) and there's no post-turn
     // side effect, so those seams are left at their defaults.

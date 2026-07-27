@@ -144,7 +144,7 @@ export function deriveOutageEvents(input: DeriveOutageEventsInput): OutageLogEve
       at: eventAt,
       kind: 'recovered',
       ...base,
-      ...(closed?.endedAt !== undefined ? { durationMs: closed.endedAt - closed.startedAt } : {}),
+      ...(closed?.endedAt === undefined ? {} : { durationMs: closed.endedAt - closed.startedAt }),
     });
   }
 
@@ -153,7 +153,7 @@ export function deriveOutageEvents(input: DeriveOutageEventsInput): OutageLogEve
       at: eventAt,
       kind: 'degraded',
       ...base,
-      ...(state.latencyMs !== undefined ? { detail: `${state.latencyMs}ms latency` } : {}),
+      ...(state.latencyMs === undefined ? {} : { detail: `${state.latencyMs}ms latency` }),
     });
   }
 

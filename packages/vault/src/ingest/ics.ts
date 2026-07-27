@@ -17,9 +17,9 @@ export interface IcsEvent {
 /** Unfold RFC 5545 folded lines (CRLF followed by space or tab). */
 function unfold(text: string): string[] {
   return text
-    .replace(/\r\n[ \t]/g, '')
-    .replace(/\n[ \t]/g, '')
-    .split(/\r?\n/)
+    .replace(/\r\n[ \t]/gu, '')
+    .replace(/\n[ \t]/gu, '')
+    .split(/\r?\n/u)
     .filter((line) => line.length > 0);
 }
 
@@ -43,13 +43,22 @@ function parseLine(line: string): Prop | null {
   return { name: (name ?? '').toUpperCase(), params, value };
 }
 
+const ICS_DATE_RE = /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})$/u;
+const ICS_DATE_TIME_RE =
+  /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})T(?<hour>\d{2})(?<minute>\d{2})(?<second>\d{2})(?<zulu>Z?)$/u;
+
 /** RFC 5545 date/date-time → ISO-8601 (UTC when the value carries Z). */
 function toIso(value: string): string {
-  const dateOnly = /^(\d{4})(\d{2})(\d{2})$/.exec(value);
-  if (dateOnly) return `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]}`;
-  const dt = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/.exec(value);
+  const dateOnly = ICS_DATE_RE.exec(value);
+  if (dateOnly) {
+    const d = dateOnly.groups!;
+    return `${d.year}-${d.month}-${d.day}`;
+  }
+  const dt = ICS_DATE_TIME_RE.exec(value);
   if (!dt) return value; // pass through anything exotic, unmangled
-  return `${dt[1]}-${dt[2]}-${dt[3]}T${dt[4]}:${dt[5]}:${dt[6]}${dt[7] === 'Z' ? 'Z' : ''}`;
+  const t = dt.groups!;
+  const zulu = t.zulu === 'Z' ? 'Z' : '';
+  return `${t.year}-${t.month}-${t.day}T${t.hour}:${t.minute}:${t.second}${zulu}`;
 }
 
 const TEXT_UNESCAPES: Record<string, string> = {
@@ -61,7 +70,7 @@ const TEXT_UNESCAPES: Record<string, string> = {
 };
 
 function unescapeText(value: string): string {
-  return value.replace(/\\[nN,;\\]/g, (m) => TEXT_UNESCAPES[m] ?? m);
+  return value.replace(/\\[nN,;\\]/gu, (m) => TEXT_UNESCAPES[m] ?? m);
 }
 
 /** Parse every VEVENT in an ICS document. */

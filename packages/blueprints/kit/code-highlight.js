@@ -15,10 +15,10 @@
 
 /** HTML-escape one string (same policy as assistant-rich's escapeHtml). */
 function esc(s) {
-  return String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  return String(s).replace(/[&<>"']/gu, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-const KW = (s) => new Set(s.split(/\s+/).filter(Boolean));
+const KW = (s) => new Set(s.split(/\s+/u).filter(Boolean));
 
 const JS_KW = KW(`await break case catch class const continue debugger default delete do else
   export extends finally for function if import in instanceof let new return super switch this
@@ -98,8 +98,8 @@ export function configFor(lang) {
   return key ? LANGS[key] : null;
 }
 
-const isIdentStart = (c) => /[A-Za-z_$]/.test(c);
-const isIdent = (c) => /[\w$]/.test(c);
+const isIdentStart = (c) => /[A-Za-z_$]/u.test(c);
+const isIdent = (c) => /[\w$]/u.test(c);
 const isDigit = (c) => c >= '0' && c <= '9';
 
 /**
@@ -158,7 +158,7 @@ export function highlightCode(code, lang) {
       continue;
     }
     // Shell variables ($VAR / ${VAR}).
-    if (cfg.dollar && c === '$' && i + 1 < n && /[A-Za-z_{]/.test(src[i + 1])) {
+    if (cfg.dollar && c === '$' && i + 1 < n && /[A-Za-z_{]/u.test(src[i + 1])) {
       let j = i + 1;
       if (src[j] === '{') {
         const close = src.indexOf('}', j);
@@ -171,9 +171,9 @@ export function highlightCode(code, lang) {
     // Numbers (leading digit; a dotted/hex/exponent run).
     if (isDigit(c) || (c === '.' && isDigit(src[i + 1] || ''))) {
       let j = i;
-      while (j < n && /[0-9a-fA-FxXbBoO._+-]/.test(src[j])) {
+      while (j < n && /[0-9a-fA-FxXbBoO._+-]/u.test(src[j])) {
         // Stop a trailing sign unless it's an exponent.
-        if ((src[j] === '+' || src[j] === '-') && !/[eE]/.test(src[j - 1] || '')) break;
+        if ((src[j] === '+' || src[j] === '-') && !/[eE]/u.test(src[j - 1] || '')) break;
         j += 1;
       }
       out += span('hlNumber', src.slice(i, j));

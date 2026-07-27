@@ -4,10 +4,9 @@
  */
 import { appendFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { renderSummaryMarkdown } from './summary-markdown.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 const flags = parseFlags(process.argv.slice(2));
 const summaryPath = path.resolve(flags.summary ?? path.join(root, 'dist/test-report/summary.json'));
 const reportUrl = flags['report-url'] ?? process.env.TEST_REPORT_PUBLIC_URL ?? '';

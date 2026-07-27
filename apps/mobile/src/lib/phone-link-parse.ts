@@ -116,7 +116,7 @@ export function parsePairingInput(raw: string): PairingInput | undefined {
 }
 
 function utf8FromBase64Url(raw: string): string {
-  const b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+  const b64 = raw.replace(/-/gu, '+').replace(/_/gu, '/');
   const bytes = base64ToBytes(b64);
   return new TextDecoder().decode(bytes);
 }

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { IconName } from '@centraid/design-tokens';
 import Icon from './Icon.js';
 
-describe('Icon', () => {
+describe(Icon, () => {
   it('emits a 24-viewBox svg inheriting currentColor by default', () => {
     const html = renderToStaticMarkup(<Icon name="Bolt" />);
     expect(html).toContain('viewBox="0 0 24 24"');

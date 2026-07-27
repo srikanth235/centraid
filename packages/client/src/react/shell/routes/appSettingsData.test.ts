@@ -3,14 +3,14 @@ import { knobsManifestFrom, manifestVaultBlock, pushKnobToAppFrame } from './app
 
 // `vi.mock` is hoisted above the import by vitest, so gateway-client-core's
 // load-time side-effect never runs.
-vi.mock('../../../gateway-client.js', () => ({}));
+vi.mock(import('../../../gateway-client.js'), () => ({}));
 
-describe('manifestVaultBlock', () => {
+describe(manifestVaultBlock, () => {
   it('parses a sound vault block', () => {
     const block = manifestVaultBlock({
       vault: { purpose: 'Read tasks', why: 'to summarise', scopes: [{ table: 'tasks' }] },
     });
-    expect(block).toEqual({
+    expect(block).toStrictEqual({
       purpose: 'Read tasks',
       why: 'to summarise',
       scopes: [{ table: 'tasks' }],
@@ -30,20 +30,20 @@ describe('manifestVaultBlock', () => {
   });
 });
 
-describe('knobsManifestFrom', () => {
+describe(knobsManifestFrom, () => {
   it('reads the knobs array + manifest version', () => {
     const m = knobsManifestFrom({ manifestVersion: 3, knobs: [{ key: 'appFont' }] });
-    expect(m).toEqual({ version: 3, knobs: [{ key: 'appFont' }] });
+    expect(m).toStrictEqual({ version: 3, knobs: [{ key: 'appFont' }] });
   });
 
   it('defaults version to 1 and returns null without a knobs array', () => {
-    expect(knobsManifestFrom({ knobs: [] })).toEqual({ version: 1, knobs: [] });
+    expect(knobsManifestFrom({ knobs: [] })).toStrictEqual({ version: 1, knobs: [] });
     expect(knobsManifestFrom({})).toBeNull();
     expect(knobsManifestFrom(null)).toBeNull();
   });
 });
 
-describe('pushKnobToAppFrame', () => {
+describe(pushKnobToAppFrame, () => {
   it('routes Color/Accent keys to CSS vars and the rest to data attributes', () => {
     const frame = document.createElement('iframe');
     frame.dataset.centraidApp = '1';

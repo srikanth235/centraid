@@ -37,7 +37,7 @@ describe('ROUTES table + plane prefixes', () => {
   });
 
   it('ROUTE_PATHS is the frozen value set of ROUTES', () => {
-    expect(ROUTE_PATHS).toEqual(Object.values(ROUTES));
+    expect(ROUTE_PATHS).toStrictEqual(Object.values(ROUTES));
     expect(Object.isFrozen(ROUTE_PATHS)).toBe(true);
     expect(ROUTES.gatewayInfo).toBe('/centraid/_gateway/info');
     expect(ROUTES.appsList).toBe('/centraid/_apps');

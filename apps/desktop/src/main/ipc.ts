@@ -160,8 +160,8 @@ export function registerIpcHandlers(): void {
       input: { id: string; displayName?: string; avatarColor?: string },
     ): Promise<GatewayProfile> => {
       const updated = await updateProfileMetadata(input.id, {
-        ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
-        ...(input.avatarColor !== undefined ? { avatarColor: input.avatarColor } : {}),
+        ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
+        ...(input.avatarColor === undefined ? {} : { avatarColor: input.avatarColor }),
       });
       // Metadata-only change — no URL/token flip — but the renderer's
       // switcher cache wants to refresh, so emit on the bus.
@@ -604,13 +604,13 @@ export function registerIpcHandlers(): void {
         (candidate) => candidate.id === settings.activeGatewayId,
       );
       return {
-        baseUrl: settings.gatewayUrl.replace(/\/+$/, ''),
+        baseUrl: settings.gatewayUrl.replace(/\/+$/u, ''),
         gatewayId: profile?.id ?? settings.activeGatewayId,
         token: settings.gatewayToken || undefined,
         rememberDevice: profile?.rememberDevice === true,
         // The vault the renderer addresses on this gateway (#289) — sent as
         // the `x-centraid-vault` header. Undefined = let the gateway pick.
-        ...(settings.activeVaultId !== undefined ? { vaultId: settings.activeVaultId } : {}),
+        ...(settings.activeVaultId === undefined ? {} : { vaultId: settings.activeVaultId }),
       };
     },
   );

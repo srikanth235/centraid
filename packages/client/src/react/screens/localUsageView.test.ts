@@ -45,10 +45,10 @@ function report(over: Partial<LocalUsageReportDTO> = {}): LocalUsageReportDTO {
   };
 }
 
-describe('footprintSlices', () => {
+describe(footprintSlices, () => {
   it('folds per-vault and gateway-level components into one legend, largest first', () => {
     const slices = footprintSlices(report());
-    expect(slices.map((s) => s.component)).toEqual(['attachments', 'ledger', 'logs']);
+    expect(slices.map((s) => s.component)).toStrictEqual(['attachments', 'ledger', 'logs']);
     // Attachments sums across BOTH vaults; logs is gateway-level.
     expect(slices[0]!.bytes).toBe(7 * GB);
     expect(slices[1]!.bytes).toBe(2 * GB);
@@ -80,7 +80,7 @@ describe('footprintSlices', () => {
 
   it('does not divide by zero on an empty gateway', () => {
     const slices = footprintSlices(report({ totalBytes: 0, components: [], vaults: [] }));
-    expect(slices).toEqual([]);
+    expect(slices).toStrictEqual([]);
   });
 
   it('keeps a component on its own hue regardless of rank', () => {
@@ -98,7 +98,7 @@ describe('footprintSlices', () => {
   });
 });
 
-describe('footprintScale', () => {
+describe(footprintScale, () => {
   it('measures against the owner’s budget when they set one', () => {
     const scale = footprintScale(
       report({
@@ -154,7 +154,7 @@ describe('formatBytes / parseBytes', () => {
   });
 });
 
-describe('budgetSummary', () => {
+describe(budgetSummary, () => {
   it('says nothing is blocked when over budget', () => {
     const over = report({
       limits: { totalLimitBytes: 5 * GB, warnAtPercent: 80, journalLimitBytes: null },

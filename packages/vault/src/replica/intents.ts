@@ -58,7 +58,7 @@ function outcomeOf(row: IntentRow): ReplicaIntentOutcome {
     payloadHash: row.payload_hash,
     status: row.status,
     ...(row.invocation_id ? { invocationId: row.invocation_id } : {}),
-    ...(row.reason !== null ? { reason: row.reason } : {}),
+    ...(row.reason === null ? {} : { reason: row.reason }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

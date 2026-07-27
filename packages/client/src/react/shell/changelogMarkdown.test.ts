@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { changelogNotesToHtml } from './changelogMarkdown.js';
 
-describe('changelogNotesToHtml', () => {
+describe(changelogNotesToHtml, () => {
   it('renders headings as section labels', () => {
     expect(changelogNotesToHtml('### Fixed')).toBe('<h4>Fixed</h4>');
     expect(changelogNotesToHtml('# New')).toBe('<h4>New</h4>');

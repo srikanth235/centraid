@@ -203,7 +203,7 @@ async function gmailPoll(input: PollProviderEventSourceInput): Promise<ProviderP
 
 function githubRepo(trigger: EventTrigger): string {
   const repo = string(trigger.filter?.repo);
-  if (!repo || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
+  if (!repo || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(repo)) {
     throw new Error('GitHub event trigger filter.repo must be "owner/repo"');
   }
   return repo;
@@ -252,9 +252,9 @@ function githubNextPage(headers: Readonly<Record<string, string>>): string | und
   const link = headers.link;
   if (!link) return undefined;
   for (const part of link.split(',')) {
-    const match = part.match(/<([^>]+)>\s*;\s*rel="?next"?/);
-    if (!match?.[1]) continue;
-    const url = new URL(match[1]);
+    const nextUrl = part.match(/<(?<nextUrl>[^>]+)>\s*;\s*rel="?next"?/u)?.groups?.nextUrl;
+    if (!nextUrl) continue;
+    const url = new URL(nextUrl);
     if (url.protocol !== 'https:' || url.hostname !== 'api.github.com') {
       throw new Error('GitHub events pagination returned an unsafe next URL');
     }
@@ -324,8 +324,8 @@ async function githubPoll(input: PollProviderEventSourceInput): Promise<Provider
   return {
     events,
     cursor: { ...cursor, ...next },
-    ...(skipped !== undefined ? { skipped } : {}),
-    ...(gapReason !== undefined ? { gapReason } : {}),
+    ...(skipped === undefined ? {} : { skipped }),
+    ...(gapReason === undefined ? {} : { gapReason }),
   };
 }
 

@@ -16,25 +16,25 @@ export default async ({ ctx, log }) => {
 };
 `;
 
-describe('lintHandlerSource', () => {
+describe(lintHandlerSource, () => {
   it('passes a clean handler that routes everything through ctx.*', () => {
-    expect(lintHandlerSource(CLEAN_HANDLER)).toEqual([]);
+    expect(lintHandlerSource(CLEAN_HANDLER)).toStrictEqual([]);
   });
 
   it('flags Date.now()', () => {
     const findings = lintHandlerSource('const t = Date.now();');
-    expect(findings.length).toBe(1);
+    expect(findings).toHaveLength(1);
     expect(findings[0]!.rule).toBe('no-date-now');
     expect(findings[0]!.line).toBe(1);
   });
 
   it('flags argless new Date() but not new Date(value)', () => {
     const bad = lintHandlerSource('const a = new Date(); const b = new Date(  );');
-    expect(bad.length).toBe(2);
+    expect(bad).toHaveLength(2);
     expect(bad.every((f) => f.rule === 'no-new-date')).toBeTruthy();
-    expect(lintHandlerSource('const a = new Date(ctx.input.ms);')).toEqual([]);
-    expect(lintHandlerSource("const a = new Date('2026-01-01');")).toEqual([]);
-    expect(lintHandlerSource('const now = ctx.now;')).toEqual([]);
+    expect(lintHandlerSource('const a = new Date(ctx.input.ms);')).toStrictEqual([]);
+    expect(lintHandlerSource("const a = new Date('2026-01-01');")).toStrictEqual([]);
+    expect(lintHandlerSource('const now = ctx.now;')).toStrictEqual([]);
   });
 
   it('flags Math.random, randomUUID, crypto randomness, performance.now', () => {
@@ -47,7 +47,7 @@ describe('lintHandlerSource', () => {
     ).map((f) => f.rule);
     expect(rules.includes('no-math-random')).toBeTruthy();
     // crypto.randomUUID() and bare randomUUID() both match the same rule.
-    expect(rules.filter((r) => r === 'no-random-uuid').length).toBe(2);
+    expect(rules.filter((r) => r === 'no-random-uuid')).toHaveLength(2);
     expect(rules.includes('no-random-bytes')).toBeTruthy();
     expect(rules.includes('no-performance-now')).toBeTruthy();
   });
@@ -58,7 +58,7 @@ describe('lintHandlerSource', () => {
     // The steer names the actual external-write path (issue #308 B6).
     expect(fetchFindings[0]!.message).toContain('outbox.stage');
     // ctx.fetch is the audited connector rail, not ambient I/O — exempt…
-    expect(lintHandlerSource('const r = await ctx.fetch({ url });')).toEqual([]);
+    expect(lintHandlerSource('const r = await ctx.fetch({ url });')).toStrictEqual([]);
     // …but other member spellings stay flagged.
     expect(lintHandlerSource('globalThis.fetch("https://x");')[0]!.rule).toBe('no-raw-fetch');
 
@@ -86,13 +86,13 @@ describe('lintHandlerSource', () => {
       const tpl = \`text with Math.random() inside\`;
       return { summary: 'ok' };
     `;
-    expect(lintHandlerSource(src)).toEqual([]);
+    expect(lintHandlerSource(src)).toStrictEqual([]);
   });
 
   it('DOES flag unsafe calls inside template-literal interpolation', () => {
     // eslint-disable-next-line no-template-curly-in-string -- this string IS handler source under test (#247)
     const findings = lintHandlerSource('const id = `req-${Math.random()}`;');
-    expect(findings.length).toBe(1);
+    expect(findings).toHaveLength(1);
     expect(findings[0]!.rule).toBe('no-math-random');
   });
 
@@ -100,7 +100,7 @@ describe('lintHandlerSource', () => {
     // eslint-disable-next-line no-template-curly-in-string -- this string IS handler source under test (#247)
     const src = 'const s = `${ { a: 1 }.a + Date.now() }`; const ok = ctx.state.get("x");';
     const findings = lintHandlerSource(src);
-    expect(findings.length).toBe(1);
+    expect(findings).toHaveLength(1);
     expect(findings[0]!.rule).toBe('no-date-now');
   });
 
@@ -120,7 +120,7 @@ describe('lintHandlerSource', () => {
   it('reports accurate line/column and sorts by position', () => {
     const src = ['line one', 'const a = Math.random();', 'const b = Date.now();'].join('\n');
     const findings = lintHandlerSource(src);
-    expect(findings.length).toBe(2);
+    expect(findings).toHaveLength(2);
     expect(findings[0]!.line).toBe(2);
     expect(findings[0]!.rule).toBe('no-math-random');
     expect(findings[1]!.line).toBe(3);
@@ -128,9 +128,9 @@ describe('lintHandlerSource', () => {
   });
 });
 
-describe('formatHandlerLintError', () => {
+describe(formatHandlerLintError, () => {
   it('returns undefined when there are no findings', () => {
-    expect(formatHandlerLintError([])).toBe(undefined);
+    expect(formatHandlerLintError([])).toBeUndefined();
   });
 
   it('formats findings into a single authoring error mentioning the file and rules', () => {

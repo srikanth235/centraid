@@ -10,7 +10,7 @@ import {
   validateAddGatewayFields,
 } from './gateway-store-core.js';
 
-describe('defaultAvatarColor', () => {
+describe(defaultAvatarColor, () => {
   it('is deterministic and lands in the palette', () => {
     const a = defaultAvatarColor('local');
     const b = defaultAvatarColor('local');
@@ -21,7 +21,7 @@ describe('defaultAvatarColor', () => {
   });
 });
 
-describe('isValidAvatarColor', () => {
+describe(isValidAvatarColor, () => {
   it('accepts only #RRGGBB', () => {
     expect(isValidAvatarColor('#5B8DEF')).toBe(true);
     expect(isValidAvatarColor('#abcdef')).toBe(true);
@@ -32,7 +32,7 @@ describe('isValidAvatarColor', () => {
   });
 });
 
-describe('isValidSshBlock', () => {
+describe(isValidSshBlock, () => {
   it('requires a non-empty destination string', () => {
     expect(isValidSshBlock({ destination: 'user@host' })).toBe(true);
     expect(isValidSshBlock({ destination: 'user@host', dataDir: '/data', remoteCli: 'c' })).toBe(
@@ -46,7 +46,7 @@ describe('isValidSshBlock', () => {
   });
 });
 
-describe('isValidGatewayId', () => {
+describe(isValidGatewayId, () => {
   it('accepts local or a real EndpointId and rejects parallel slug identities', () => {
     expect(isValidGatewayId('local')).toBe(true);
     expect(isValidGatewayId('a'.repeat(64))).toBe(true);
@@ -58,7 +58,7 @@ describe('isValidGatewayId', () => {
   });
 });
 
-describe('normalizeProfile', () => {
+describe(normalizeProfile, () => {
   const endpointId = 'a'.repeat(64);
   const base = {
     id: endpointId,
@@ -116,7 +116,7 @@ describe('normalizeProfile', () => {
   });
 });
 
-describe('sortGatewayProfiles', () => {
+describe(sortGatewayProfiles, () => {
   it('puts local first then remotes by createdAt ascending', () => {
     const out = sortGatewayProfiles(
       [
@@ -126,11 +126,11 @@ describe('sortGatewayProfiles', () => {
       ],
       'local',
     );
-    expect(out.map((p) => p.id)).toEqual(['local', 'a', 'b']);
+    expect(out.map((p) => p.id)).toStrictEqual(['local', 'a', 'b']);
   });
 });
 
-describe('validateAddGatewayFields', () => {
+describe(validateAddGatewayFields, () => {
   it('requires a label and valid EndpointId', () => {
     expect(validateAddGatewayFields({ label: '  ', endpointId: 'gw-1' })).toMatchObject({
       ok: false,
@@ -151,7 +151,7 @@ describe('validateAddGatewayFields', () => {
         relayHint: '  https://relay.example  ',
         displayName: '  Family  ',
       }),
-    ).toEqual({
+    ).toStrictEqual({
       ok: true,
       label: 'Home',
       endpointId,

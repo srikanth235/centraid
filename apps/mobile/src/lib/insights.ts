@@ -194,5 +194,5 @@ export function relativeTime(when: number | string): string {
 
 function trim(n: number): string {
   // One decimal, but drop a trailing ".0" so 3.0k reads as 3k.
-  return n.toFixed(1).replace(/\.0$/, '');
+  return n.toFixed(1).replace(/\.0$/u, '');
 }

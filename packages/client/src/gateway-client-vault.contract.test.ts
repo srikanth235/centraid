@@ -84,7 +84,7 @@ describe('renderer gateway owner-plane contracts', () => {
       new AbortController().signal,
       1,
     );
-    expect(entries).toEqual(['ready']);
+    expect(entries).toStrictEqual(['ready']);
 
     const writes = fetchMock.mock.calls.map(([url, init]) => ({
       method: (init as RequestInit | undefined)?.method,

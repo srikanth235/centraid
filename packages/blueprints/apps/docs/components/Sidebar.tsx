@@ -27,7 +27,7 @@ function NavItem({
     <button type="button" className={styles.navItem} aria-current={active} onClick={onClick}>
       <Icon svg={icon} />
       <span>{label}</span>
-      {count != null ? <span className={styles.navCount}>{count}</span> : null}
+      {count == null ? null : <span className={styles.navCount}>{count}</span>}
     </button>
   );
 }

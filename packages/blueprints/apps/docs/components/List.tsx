@@ -180,12 +180,12 @@ export function ListHead({
         onClick={() => onToggleAll(rows, allSel)}
         label={allSel ? 'Deselect all' : 'Select all'}
       />
-      <span style={{ width: '34px' }}></span>
+      <span style={{ width: '34px' }} />
       <span className={`${styles.col} ${styles.name}`}>Name</span>
       <span className={`${styles.col} ${styles.where}`}>Where</span>
       <span className={`${styles.col} ${styles.size}`}>Size</span>
       <span className={`${styles.col} ${styles.added}`}>Added</span>
-      <span className={`${styles.col} ${styles.end}`}></span>
+      <span className={`${styles.col} ${styles.end}`} />
     </>
   );
 }

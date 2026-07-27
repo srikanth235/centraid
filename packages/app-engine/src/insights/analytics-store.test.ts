@@ -93,7 +93,7 @@ describe('AnalyticsStore (read-only lens over the run_summary view)', () => {
   it('shows only FINISHED runs — an in-flight turn is not a summary yet', () => {
     const { runs, analytics } = setup();
     const runId = seedFire(runs, { finish: false });
-    expect(analytics.getSummary(runId)).toBe(undefined);
+    expect(analytics.getSummary(runId)).toBeUndefined();
     runs.finishTurn({ turnId: runId, endedAt: 2_000, ok: false, error: 'boom' });
     const got = analytics.getSummary(runId);
     expect(got?.ok).toBe(false);
@@ -105,11 +105,10 @@ describe('AnalyticsStore (read-only lens over the run_summary view)', () => {
     seedFire(runs, { runId: 'r1', automationRef: 'auto.a/job', startedAt: 100 });
     seedFire(runs, { runId: 'r2', automationRef: 'auto.b/job', startedAt: 300 });
     seedFire(runs, { runId: 'r3', automationRef: 'auto.a/job', startedAt: 200 });
-    expect(analytics.listSummaries().map((r) => r.runId)).toEqual(['r2', 'r3', 'r1']);
-    expect(analytics.listSummaries({ automationRef: 'auto.a/job' }).map((r) => r.runId)).toEqual([
-      'r3',
-      'r1',
-    ]);
+    expect(analytics.listSummaries().map((r) => r.runId)).toStrictEqual(['r2', 'r3', 'r1']);
+    expect(
+      analytics.listSummaries({ automationRef: 'auto.a/job' }).map((r) => r.runId),
+    ).toStrictEqual(['r3', 'r1']);
   });
 
   it('reflects ledger mutations: turn pins and automation deletes', () => {
@@ -120,7 +119,7 @@ describe('AnalyticsStore (read-only lens over the run_summary view)', () => {
     runs.setTurnPinned('r1', true);
     expect(analytics.getSummary('r1')?.pinned).toBe(true);
     runs.deleteAutomationData('auto.a/job');
-    expect(analytics.getSummary('r1')).toBe(undefined);
+    expect(analytics.getSummary('r1')).toBeUndefined();
     expect(analytics.getSummary('r2')).toBeTruthy();
   });
 

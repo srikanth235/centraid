@@ -4,7 +4,7 @@
  * is the explicit clear_due / clear_description intent, never an empty
  * string. Outcome passed through for the UI to narrate.
  */
-export default async ({ body, ctx }: HandlerArgs): Promise<ActionResult> => {
+export default async function edit({ body, ctx }: HandlerArgs): Promise<ActionResult> {
   const raw = (body ?? {}) as Record<string, unknown>;
   const input: Record<string, unknown> = { task_id: String(raw.task_id ?? '') };
   if (raw.title) input.title = String(raw.title);
@@ -29,4 +29,4 @@ export default async ({ body, ctx }: HandlerArgs): Promise<ActionResult> => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

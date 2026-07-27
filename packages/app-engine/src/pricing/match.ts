@@ -18,10 +18,10 @@
 
 import type { PricingCatalog, PricingEntry } from './types.js';
 
-const REGIONAL_BEDROCK = /^(us|eu|apac|jp|au)\./;
-const PROVIDER_DOT = /^(anthropic|openai)\./;
-const VERSION_SUFFIX = /-v\d+$/;
-const DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$|-\d{8}$/;
+const REGIONAL_BEDROCK = /^(?:us|eu|apac|jp|au)\./u;
+const PROVIDER_DOT = /^(?:anthropic|openai)\./u;
+const VERSION_SUFFIX = /-v\d+$/u;
+const DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$|-\d{8}$/u;
 
 /** Ordered candidate ids to try for an exact catalog hit, most→least specific. */
 function candidates(model: string): string[] {
@@ -36,7 +36,7 @@ function candidates(model: string): string[] {
 
 function isBoundary(ch: string | undefined): boolean {
   // End-of-string or a non-alphanumeric separator both count as a boundary.
-  return ch === undefined || !/[a-z0-9]/i.test(ch);
+  return ch === undefined || !/[a-z0-9]/iu.test(ch);
 }
 
 /** Longest catalog key that is a boundary-safe prefix of `id` (or equals it). */

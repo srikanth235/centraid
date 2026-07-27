@@ -43,7 +43,7 @@ export function parseReplicaCursor(input: ReplicaCursorInput): ReplicaCursor {
   }
   const epoch = input.slice(0, split);
   const rawSeq = input.slice(split + 1);
-  if (!/^\d+$/.test(rawSeq)) {
+  if (!/^\d+$/u.test(rawSeq)) {
     throw new InvalidReplicaCursorError('replica cursor seq must contain decimal digits only');
   }
   const seq = Number(rawSeq);

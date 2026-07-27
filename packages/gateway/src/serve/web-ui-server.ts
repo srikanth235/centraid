@@ -55,29 +55,31 @@ export interface WebUiServerOptions {
 
 export interface WebUiServerHandle {
   url: string;
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 function fileFor(rootDir: string, pathname: string): string | undefined {
   const relative =
-    pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
+    pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/u, '');
   const resolved = path.resolve(rootDir, relative);
   const root = path.resolve(rootDir);
   return resolved === root || resolved.startsWith(`${root}${path.sep}`) ? resolved : undefined;
 }
 
 function stampShellNonce(bytes: Buffer, nonce: string): Buffer {
-  let html = bytes.toString('utf8').replace(/<script\b([^>]*)>/gi, (tag, attributes: string) => {
-    if (/\bnonce\s*=/i.test(attributes)) return tag;
-    return `<script${attributes} nonce="${nonce}">`;
-  });
+  let html = bytes
+    .toString('utf8')
+    .replace(/<script\b(?<attributes>[^>]*)>/giu, (tag, attributes: string) => {
+      if (/\bnonce\s*=/iu.test(attributes)) return tag;
+      return `<script${attributes} nonce="${nonce}">`;
+    });
   const marker = `<meta name="centraid-csp-nonce" content="${nonce}">`;
-  const head = /<head\b[^>]*>/i.exec(html);
+  const head = /<head\b[^>]*>/iu.exec(html);
   if (head) {
     const at = head.index + head[0].length;
     html = html.slice(0, at) + marker + html.slice(at);
   } else {
-    const doctype = /<!doctype\s+html\s*>/i.exec(html);
+    const doctype = /<!doctype\s+html\s*>/iu.exec(html);
     const at = doctype ? doctype.index + doctype[0].length : 0;
     html = html.slice(0, at) + marker + html.slice(at);
   }
@@ -86,8 +88,8 @@ function stampShellNonce(bytes: Buffer, nonce: string): Buffer {
 
 function acceptedSidecar(req: http.IncomingMessage): '.br' | '.gz' | undefined {
   const accepted = String(req.headers['accept-encoding'] ?? '');
-  if (/(?:^|,)\s*br(?:\s*;|\s*,|\s*$)/i.test(accepted)) return '.br';
-  if (/(?:^|,)\s*gzip(?:\s*;|\s*,|\s*$)/i.test(accepted)) return '.gz';
+  if (/(?:^|,)\s*br(?:\s*;|\s*,|\s*$)/iu.test(accepted)) return '.br';
+  if (/(?:^|,)\s*gzip(?:\s*;|\s*,|\s*$)/iu.test(accepted)) return '.gz';
   return undefined;
 }
 

@@ -71,7 +71,7 @@ async function resolveAgentAttachments(
       payload: {
         contentId: ref.contentId,
         variant: ref.variant,
-        ...(ref.maxBytes !== undefined ? { maxBytes: ref.maxBytes } : {}),
+        ...(ref.maxBytes === undefined ? {} : { maxBytes: ref.maxBytes }),
       },
     });
     if (!reply.ok) {
@@ -96,8 +96,8 @@ async function resolveAgentAttachments(
     attachments.push({
       name: `content-${i}-${ref.contentId.slice(0, 8)}.${ext}`,
       mediaType: resolved.mediaType,
-      ...(resolved.base64 !== undefined ? { base64: resolved.base64 } : {}),
-      ...(resolved.text !== undefined ? { text: resolved.text } : {}),
+      ...(resolved.base64 === undefined ? {} : { base64: resolved.base64 }),
+      ...(resolved.text === undefined ? {} : { text: resolved.text }),
     });
   }
   return attachments;
@@ -162,8 +162,8 @@ export async function handleAgentMessage(
           callId: ev.toolCallId,
           kind: 'tool',
           name: ev.toolName,
-          ...(ev.args !== undefined ? { args: ev.args } : {}),
-          ...(ev.rawJson !== undefined ? { rawJson: ev.rawJson } : {}),
+          ...(ev.args === undefined ? {} : { args: ev.args }),
+          ...(ev.rawJson === undefined ? {} : { rawJson: ev.rawJson }),
           started: toolStarted,
         });
         toolItems.set(ev.toolCallId, {
@@ -198,9 +198,9 @@ export async function handleAgentMessage(
             ordinal: open.ordinal,
             callId: ev.toolCallId,
             ok: ev.ok,
-            ...(ev.result !== undefined ? { result: ev.result } : {}),
-            ...(ev.errorText !== undefined ? { error: ev.errorText } : {}),
-            ...(ev.rawJson !== undefined ? { rawJson: ev.rawJson } : {}),
+            ...(ev.result === undefined ? {} : { result: ev.result }),
+            ...(ev.errorText === undefined ? {} : { error: ev.errorText }),
+            ...(ev.rawJson === undefined ? {} : { rawJson: ev.rawJson }),
             started: open.started,
             ended: Date.now(),
           });
@@ -243,7 +243,7 @@ export async function handleAgentMessage(
       ordinal,
       ok: true,
       result,
-      ...(finalRawJson !== undefined ? { rawJson: finalRawJson } : {}),
+      ...(finalRawJson === undefined ? {} : { rawJson: finalRawJson }),
       started,
       ended: Date.now(),
       ...usageCloseFields(lastUsage),
@@ -259,7 +259,7 @@ export async function handleAgentMessage(
       ordinal,
       ok: false,
       error,
-      ...(finalRawJson !== undefined ? { rawJson: finalRawJson } : {}),
+      ...(finalRawJson === undefined ? {} : { rawJson: finalRawJson }),
       started,
       ended: Date.now(),
       ...usageCloseFields(lastUsage),
@@ -311,8 +311,8 @@ export async function handleVaultMessage(
       nodeId,
       ordinal,
       ok: reply.ok,
-      ...(reply.result !== undefined ? { result: reply.result } : {}),
-      ...(reply.error !== undefined ? { error: reply.error } : {}),
+      ...(reply.result === undefined ? {} : { result: reply.result }),
+      ...(reply.error === undefined ? {} : { error: reply.error }),
       started,
       ended: Date.now(),
     });
@@ -385,7 +385,7 @@ export function handleRunsMessage(
     const rows = audit.store
       .listAutomationTurns(automationRef, {
         ...(filter.status ? { status: filter.status } : {}),
-        ...(filter.since !== undefined ? { since: filter.since } : {}),
+        ...(filter.since === undefined ? {} : { since: filter.since }),
         limit: limit + 1,
       })
       .filter((r) => r.turnId !== audit.runId)

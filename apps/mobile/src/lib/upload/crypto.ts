@@ -14,14 +14,14 @@
 
 export interface UploadCrypto {
   /** AES-256-GCM. Returns `ciphertext || tag(16)`, matching WebCrypto. */
-  sealGcm(
+  sealGcm: (
     key: Uint8Array,
     nonce: Uint8Array,
     additionalData: Uint8Array,
     plain: Uint8Array,
-  ): Promise<Uint8Array>;
+  ) => Promise<Uint8Array>;
   /** HMAC-SHA-256 over the concatenated parts. */
-  hmacSha256(key: Uint8Array, ...parts: readonly Uint8Array[]): Promise<Uint8Array>;
+  hmacSha256: (key: Uint8Array, ...parts: readonly Uint8Array[]) => Promise<Uint8Array>;
 }
 
 export class UploadCryptoUnavailableError extends Error {
@@ -40,6 +40,13 @@ export class UploadCryptoUnavailableError extends Error {
  * doubles as the contract a device polyfill has to satisfy: raw key import for
  * AES-GCM and HMAC-SHA-256, `encrypt`, and `sign`.
  */
+/* oxlint-disable typescript/method-signature-style -- This interface is a
+   structural stand-in for the DOM's `SubtleCrypto`, and must stay assignable
+   FROM it: the real `importKey`/`encrypt` accept much wider `format` and
+   `algorithm` unions than the narrow subset spelled out here. Method
+   shorthand is bivariant, property style is contravariant under
+   `strictFunctionTypes` — as property style, no real WebCrypto implementation
+   satisfies this type. The bivariance is the point, not an oversight. */
 export interface SubtleCryptoLike {
   importKey(
     format: 'raw',
@@ -55,13 +62,14 @@ export interface SubtleCryptoLike {
   ): Promise<ArrayBuffer>;
   sign(algorithm: 'HMAC', key: CryptoKeyLike, data: ArrayBuffer): Promise<ArrayBuffer>;
 }
+/* oxlint-enable typescript/method-signature-style */
 
 /** An opaque imported key handle; never inspected on this side. */
 export type CryptoKeyLike = object;
 
 /** Bind the sealer to a WebCrypto implementation (node, or a device polyfill). */
 export function webCryptoUploadCrypto(subtle?: SubtleCryptoLike): UploadCrypto {
-  const impl = subtle ?? (globalThis as { crypto?: { subtle?: SubtleCryptoLike } }).crypto?.subtle;
+  const impl = subtle ?? globalThis.crypto?.subtle;
   if (!impl) throw new UploadCryptoUnavailableError();
   return {
     async sealGcm(key, nonce, additionalData, plain) {

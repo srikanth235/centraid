@@ -57,7 +57,7 @@ describe('gatewayChangedPayload / vaultChangedPayload', () => {
         },
         { removedGatewayId: 'gw-1', purgeReplicaGatewayId: 'gw-1' },
       ),
-    ).toEqual({
+    ).toStrictEqual({
       activeGatewayId: 'gw-2',
       activeGatewayKind: 'remote',
       activeGatewayLabel: 'Home',
@@ -70,11 +70,11 @@ describe('gatewayChangedPayload / vaultChangedPayload', () => {
   });
 
   it('omits activeVaultId when unset (vault switcher treats absent as default)', () => {
-    expect(vaultChangedPayload({ activeGatewayId: 'local' })).toEqual({
+    expect(vaultChangedPayload({ activeGatewayId: 'local' })).toStrictEqual({
       activeGatewayId: 'local',
       gatewayId: 'local',
     });
-    expect(vaultChangedPayload({ activeGatewayId: 'local', activeVaultId: 'v1' })).toEqual({
+    expect(vaultChangedPayload({ activeGatewayId: 'local', activeVaultId: 'v1' })).toStrictEqual({
       activeGatewayId: 'local',
       gatewayId: 'local',
       activeVaultId: 'v1',
@@ -82,7 +82,7 @@ describe('gatewayChangedPayload / vaultChangedPayload', () => {
   });
 });
 
-describe('hostCapabilities', () => {
+describe(hostCapabilities, () => {
   it('always reports desktop platform and wires the transcript probe result', () => {
     expect(hostCapabilities(true).compute.transcript).toBe(true);
     expect(hostCapabilities(false)).toMatchObject({

@@ -38,20 +38,24 @@ export interface DeviceWorkSource {
 }
 
 export interface DeviceWorkerApi {
-  conditions(): Promise<DeviceWorkConditions>;
-  devices(): Promise<CentraidGatewayDevice[]>;
-  advertise(device: CentraidGatewayDevice): Promise<CentraidGatewayDevice>;
-  lease(input: {
+  conditions: () => Promise<DeviceWorkConditions>;
+  devices: () => Promise<CentraidGatewayDevice[]>;
+  advertise: (device: CentraidGatewayDevice) => Promise<CentraidGatewayDevice>;
+  lease: (input: {
     vaultId: string;
     capabilities: DeviceEnrichmentLease['capability'][];
     charging: boolean;
     unmetered: boolean;
-  }): Promise<DeviceEnrichmentLease | null>;
-  read(vaultId: string, source: DeviceWorkSource): Promise<Blob>;
-  compute(lease: DeviceEnrichmentLease, source: Blob): Promise<DeviceWorkContribution[]>;
-  stage(vaultId: string, parentSha256: string, contribution: DeviceWorkContribution): Promise<void>;
-  finish(vaultId: string, lease: DeviceEnrichmentLease): Promise<boolean>;
-  release(vaultId: string, lease: DeviceEnrichmentLease): Promise<boolean>;
+  }) => Promise<DeviceEnrichmentLease | null>;
+  read: (vaultId: string, source: DeviceWorkSource) => Promise<Blob>;
+  compute: (lease: DeviceEnrichmentLease, source: Blob) => Promise<DeviceWorkContribution[]>;
+  stage: (
+    vaultId: string,
+    parentSha256: string,
+    contribution: DeviceWorkContribution,
+  ) => Promise<void>;
+  finish: (vaultId: string, lease: DeviceEnrichmentLease) => Promise<boolean>;
+  release: (vaultId: string, lease: DeviceEnrichmentLease) => Promise<boolean>;
 }
 
 export type DeviceWorkerResult =
@@ -87,7 +91,7 @@ export function parseDeviceWorkSource(lease: DeviceEnrichmentLease): DeviceWorkS
     if (
       typeof value.contentId !== 'string' ||
       typeof value.sha256 !== 'string' ||
-      !/^[0-9a-f]{64}$/.test(value.sha256) ||
+      !/^[0-9a-f]{64}$/u.test(value.sha256) ||
       typeof value.mediaType !== 'string' ||
       value.mediaType.length === 0
     ) {

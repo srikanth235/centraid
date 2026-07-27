@@ -334,9 +334,8 @@ async function tick(): Promise<void> {
     activeGatewayKind === 'local'
       ? getLocalGatewaySupervisorState(trackedState.gatewayId)
       : undefined;
-  const probe: GatewayProbe = !settings
-    ? { at: Date.now(), ok: false, detail: settingsError ?? 'settings unavailable' }
-    : localSupervisor?.loopBroken
+  const probe: GatewayProbe = settings
+    ? localSupervisor?.loopBroken
       ? {
           at: Date.now(),
           ok: false,
@@ -344,7 +343,8 @@ async function tick(): Promise<void> {
         }
       : settings.gatewayUrl
         ? await probeGateway(settings.gatewayUrl, settings.gatewayToken)
-        : { at: Date.now(), ok: false, detail: 'gateway URL not resolved yet' };
+        : { at: Date.now(), ok: false, detail: 'gateway URL not resolved yet' }
+    : { at: Date.now(), ok: false, detail: settingsError ?? 'settings unavailable' };
   // Piggyback the power-context push (#528 Phase D) on the heartbeat so the
   // gateway's live host power posture never approaches its 120s staleness
   // window while the desktop runs. Best-effort and independent of the probe
@@ -433,8 +433,8 @@ async function tick(): Promise<void> {
   const alertHistory: OutageLogSnapshotEntry[] = outageHistory.map((e) => ({
     at: e.at,
     kind: e.kind,
-    ...(e.detail !== undefined ? { detail: e.detail } : {}),
-    ...(e.durationMs !== undefined ? { durationMs: e.durationMs } : {}),
+    ...(e.detail === undefined ? {} : { detail: e.detail }),
+    ...(e.durationMs === undefined ? {} : { durationMs: e.durationMs }),
     previousSession: historyBootAt !== undefined && e.at < historyBootAt,
   }));
   lastSnapshot = {

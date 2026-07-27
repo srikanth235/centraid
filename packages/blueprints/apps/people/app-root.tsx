@@ -73,7 +73,7 @@ interface SearchPayload {
 // Knobs: read the initial default view from the app ROOT element (the host sets
 // data-app-* there), not documentElement (#505 trap 5).
 function initialView(rootEl: HTMLElement | null): 'grid' | 'list' {
-  return rootEl?.getAttribute('data-app-view') === 'list' ? 'list' : 'grid';
+  return rootEl?.dataset.appView === 'list' ? 'list' : 'grid';
 }
 
 function makeState(view: 'grid' | 'list'): AppState {
@@ -141,7 +141,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         input: { limit: state.peopleWindow },
       });
     } catch {
-      readFailed(document.getElementById('noticeBanner'));
+      readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
       readFailedShownRef.current = true;
       return;
     }
@@ -212,7 +212,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     () =>
       debounce(async () => {
         const state = stateRef.current;
-        const input = document.getElementById('searchInput') as HTMLInputElement | null;
+        const input = document.querySelector('#searchInput') as HTMLInputElement | null;
         const q = (input?.value ?? '').trim();
         if (q === state.search) return;
         state.search = q;
@@ -436,7 +436,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       ) : (
         <>
           <div className={styles.listwrap}>
-            {!state.narrow ? (
+            {state.narrow ? null : (
               <div className={styles.listHead}>
                 <ListHead
                   rows={rows}
@@ -444,7 +444,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                   onToggleAll={logic.toggleAllVisible}
                 />
               </div>
-            ) : null}
+            )}
             <div>
               {rows.map((p) => (
                 <ListRow

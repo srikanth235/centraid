@@ -134,7 +134,7 @@ const snapshot: ReplicaSnapshot = {
   rows: [],
 };
 
-describe('ReplicaCoordinator', () => {
+describe(ReplicaCoordinator, () => {
   test('uses an in-memory outbox when requested persistence falls back to memory', async () => {
     const worker = new StateWorker();
     const indexedDbFactory = {
@@ -234,8 +234,8 @@ describe('ReplicaCoordinator', () => {
         pullChanges: async () => undefined,
       },
     );
-    expect(status.cursor).toEqual({ epoch: 'warm', seq: 42 });
-    expect(events).toEqual(['shapes:', 'resume:warm:42', 'subscribe']);
+    expect(status.cursor).toStrictEqual({ epoch: 'warm', seq: 42 });
+    expect(events).toStrictEqual(['shapes:', 'resume:warm:42', 'subscribe']);
     await replica.close();
   });
 
@@ -277,7 +277,7 @@ describe('ReplicaCoordinator', () => {
     });
     replica.subscribeInvalidations((items) => invalidations.push(...items));
     await replica.bootstrap(snapshot);
-    expect(feed.resumed).toEqual({ epoch: 'epoch', seq: 0 });
+    expect(feed.resumed).toStrictEqual({ epoch: 'epoch', seq: 0 });
 
     await replica.enqueue({
       appId: 'agenda',
@@ -306,10 +306,10 @@ describe('ReplicaCoordinator', () => {
       },
     });
     await batchApplied;
-    expect((await client.status()).cursor).toEqual({ epoch: 'epoch', seq: 1 });
-    expect(pulledFrom).toEqual([{ epoch: 'epoch', seq: 0 }]);
-    expect(await intents.list()).toEqual([]);
-    expect(await intents.overlayMutations()).toEqual([]);
+    expect((await client.status()).cursor).toStrictEqual({ epoch: 'epoch', seq: 1 });
+    expect(pulledFrom).toStrictEqual([{ epoch: 'epoch', seq: 0 }]);
+    await expect(intents.list()).resolves.toStrictEqual([]);
+    await expect(intents.overlayMutations()).resolves.toStrictEqual([]);
     expect(invalidations).toContainEqual({
       shapeId: 'shape',
       entity: 'core.task',
@@ -322,7 +322,7 @@ describe('ReplicaCoordinator', () => {
     await replica.purge();
     expect(feed.listener).toBeUndefined();
     expect(worker.terminated).toBe(true);
-    expect(await intents.list()).toEqual([]);
+    await expect(intents.list()).resolves.toStrictEqual([]);
   });
 
   test('retries a failed pull without requiring another feed cursor event', async () => {
@@ -357,7 +357,7 @@ describe('ReplicaCoordinator', () => {
 
     await batchApplied;
     expect(attempts).toBe(2);
-    expect((await client.status()).cursor).toEqual({ epoch: 'epoch', seq: 1 });
+    expect((await client.status()).cursor).toStrictEqual({ epoch: 'epoch', seq: 1 });
     await replica.close();
   });
 
@@ -389,7 +389,7 @@ describe('ReplicaCoordinator', () => {
     await vi.waitFor(() => {
       expect(pulls).toBe(1);
     });
-    expect((await client.status()).cursor).toEqual({ epoch: 'new-epoch', seq: 0 });
+    expect((await client.status()).cursor).toStrictEqual({ epoch: 'new-epoch', seq: 0 });
     await replica.close();
   });
 
@@ -419,8 +419,8 @@ describe('ReplicaCoordinator', () => {
       ...snapshot,
       outcomes: [{ intentId: 'persisted', status: 'denied', reason: 'grant expired' }],
     });
-    expect(await intents.list()).toEqual([]);
-    expect(await intents.overlayMutations()).toEqual([]);
+    await expect(intents.list()).resolves.toStrictEqual([]);
+    await expect(intents.overlayMutations()).resolves.toStrictEqual([]);
     await replica.close();
   });
 
@@ -490,7 +490,7 @@ describe('ReplicaCoordinator', () => {
     });
     await flushMacrotasks();
 
-    expect((await client.status()).cursor).toEqual({ epoch: 'new-epoch', seq: 0 });
+    expect((await client.status()).cursor).toStrictEqual({ epoch: 'new-epoch', seq: 0 });
     expect(worker.requests.filter((request) => request.op === 'apply-changes')).toHaveLength(0);
     await replica.close();
   });
@@ -521,7 +521,7 @@ describe('ReplicaCoordinator', () => {
     await replica.bootstrap(snapshot);
 
     feed.emit({ type: 'centraid:vault-cursor', cursor: { epoch: 'epoch', seq: 1 } });
-    await vi.waitFor(() => expect(onRebootstrapRequired).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(onRebootstrapRequired).toHaveBeenCalledOnce());
 
     expect(pullChanges).toHaveBeenCalledTimes(3);
     expect((await client.status()).cursor).toBeNull();

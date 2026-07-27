@@ -8,6 +8,7 @@
 
 import { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import type { AutomationThreadBridgeProps } from '../screen-contracts.js';
 import {
   installThreadHarness,
   makeData,
@@ -24,11 +25,13 @@ describe('AutomationThreadScreen — live turn watch', () => {
     try {
       // Every join is refused (the gateway's SSE subscriber cap answers 503,
       // or the socket just dies) — the screen must keep trying, bounded.
-      const watchTurn = vi.fn().mockRejectedValue(new Error('HTTP 503'));
+      const watchTurn = vi
+        .fn<AutomationThreadBridgeProps['watchTurn']>()
+        .mockRejectedValue(new Error('HTTP 503'));
       const props = makeProps({ watchTurn }, newestFirst());
       const el = await mount(props);
       // The auto-watch effect joins the still-running latest turn (r3).
-      expect(watchTurn).toHaveBeenCalledTimes(1);
+      expect(watchTurn).toHaveBeenCalledOnce();
       expect(watchTurn.mock.calls[0]?.[0]).toBe('r3');
 
       // Four bounded rejoins, each after its backoff.
@@ -60,7 +63,7 @@ describe('AutomationThreadScreen — live turn watch', () => {
     vi.useFakeTimers();
     try {
       const watchTurn = vi
-        .fn()
+        .fn<AutomationThreadBridgeProps['watchTurn']>()
         .mockRejectedValueOnce(new Error('stream closed'))
         .mockResolvedValue(true);
       const el = await mount(makeProps({ watchTurn }, newestFirst()));
@@ -79,7 +82,8 @@ describe('AutomationThreadScreen — live turn watch', () => {
   });
 
   it('re-reads nothing extra once a watch settles — the watcher owns that read', async () => {
-    const props = makeProps({ watchTurn: vi.fn().mockResolvedValue(true) }, newestFirst());
+    const watchTurn = vi.fn<AutomationThreadBridgeProps['watchTurn']>().mockResolvedValue(true);
+    const props = makeProps({ watchTurn }, newestFirst());
     await mount(props);
     // r3 is watched, so its cold trace is fetched exactly once by the warm
     // auto-load — never again after the stream settles (#541).
@@ -91,7 +95,7 @@ describe('AutomationThreadScreen — live turn watch', () => {
 
   it('offers a retry when a cold trace read fails instead of faking an empty turn', async () => {
     const loadTurnTrace = vi
-      .fn()
+      .fn<AutomationThreadBridgeProps['loadTurnTrace']>()
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValue([
         {

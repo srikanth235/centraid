@@ -5,7 +5,7 @@ import {
   resolveStrictGatewayRunnerPrefs,
 } from './runner-prefs.js';
 
-describe('resolveGatewayRunnerPrefs', () => {
+describe(resolveGatewayRunnerPrefs, () => {
   const prefs = {
     'agent.runner.kind': 'codex',
     'agent.runner.binPath': '/custom/codex',
@@ -17,7 +17,7 @@ describe('resolveGatewayRunnerPrefs', () => {
   };
 
   it('keeps custom launch settings only for their configured runner', () => {
-    expect(resolveGatewayRunnerPrefs(prefs)).toEqual({
+    expect(resolveGatewayRunnerPrefs(prefs)).toStrictEqual({
       kind: 'codex',
       binPath: '/custom/codex',
       extraArgs: ['--codex-profile'],
@@ -25,14 +25,14 @@ describe('resolveGatewayRunnerPrefs', () => {
   });
 
   it('uses registry launch defaults for a different manifest-requested runner', () => {
-    expect(resolveGatewayRunnerPrefs(prefs, 'automations', 'claude-code')).toEqual({
+    expect(resolveGatewayRunnerPrefs(prefs, 'automations', 'claude-code')).toStrictEqual({
       kind: 'claude-code',
       configPins: { thought_level: 'high' },
     });
   });
 
   it('also isolates a subsystem pin from the default runner launch settings', () => {
-    expect(resolveGatewayRunnerPrefs(prefs, 'automations')).toEqual({
+    expect(resolveGatewayRunnerPrefs(prefs, 'automations')).toStrictEqual({
       kind: 'claude-code',
       configPins: { thought_level: 'high' },
     });

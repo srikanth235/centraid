@@ -54,7 +54,7 @@ interface ContentRow {
   created_at?: string;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function historyHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const documentId = String(input?.document_id ?? '');
   if (!documentId) return { versions: [] };
@@ -150,4 +150,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { versions: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

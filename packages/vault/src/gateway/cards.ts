@@ -190,7 +190,7 @@ function cardFor(vault: DatabaseSync, type: string, id: string): RefCard {
       id,
       status: row.trashed ? 'trashed' : 'live',
       title: row.title ?? null,
-      subtitle: row.subtitle != null ? String(row.subtitle) : null,
+      subtitle: row.subtitle == null ? null : String(row.subtitle),
       thumbnail_content_id: row.thumb ?? null,
     };
   }

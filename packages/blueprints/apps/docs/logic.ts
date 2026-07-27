@@ -18,7 +18,7 @@ import { createVersions } from './versions.ts';
 import { stageDocumentFile } from './upload.ts';
 import type { AppData, AppState, DriveDoc, Folder } from './types.ts';
 
-const $ = (id: string) => document.getElementById(id)!;
+const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 // Bytes stream to the blob staging route (issue #296) — no base64 through
 // command JSON — so big documents fit; the route itself caps at 512 MB.
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
@@ -373,7 +373,7 @@ export function createLogic({ state, data, render, refresh, openQuick }: LogicDe
       const outcome = await act('upload', {
         staged_sha: staged.sha256,
         title: file.name,
-        ...(folderId != null ? { folder_id: folderId } : {}),
+        ...(folderId == null ? {} : { folder_id: folderId }),
       });
       if (outcome?.status === 'executed') {
         if (isPendingOffsite(staged)) pendingOffsite += 1;

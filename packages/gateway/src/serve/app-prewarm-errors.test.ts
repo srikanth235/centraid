@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
 
-describe('isExpectedPrewarmSkip', () => {
+describe(isExpectedPrewarmSkip, () => {
   test('treats ENOENT code as expected (missing index in test vaults)', () => {
     const err = Object.assign(
       new Error("ENOENT: no such file or directory, open '.../index.html'"),

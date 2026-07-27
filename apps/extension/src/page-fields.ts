@@ -34,13 +34,13 @@ export function findFields(root: ParentNode = document): PageFields {
   const totp = inputs.find(
     (input) =>
       input.autocomplete === 'one-time-code' ||
-      /(?:otp|totp|one.?time|verification.?code)/i.test(`${input.name} ${input.id}`),
+      /(?:otp|totp|one.?time|verification.?code)/iu.test(`${input.name} ${input.id}`),
   );
   const username = inputs.find(
     (input) =>
       input.autocomplete === 'username' ||
       input.type === 'email' ||
-      /(?:user|email|login)/i.test(`${input.name} ${input.id}`),
+      /(?:user|email|login)/iu.test(`${input.name} ${input.id}`),
   );
   return { username, password, totp, newPassword };
 }

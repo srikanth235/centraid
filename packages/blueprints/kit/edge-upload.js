@@ -191,7 +191,7 @@ function asResumableError(error) {
 }
 
 function bytesFromHex(hex) {
-  if (!/^[0-9a-f]{64}$/.test(hex)) throw new Error('invalid sha256');
+  if (!/^[0-9a-f]{64}$/u.test(hex)) throw new Error('invalid sha256');
   return Uint8Array.from({ length: 32 }, (_, index) =>
     Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16),
   );

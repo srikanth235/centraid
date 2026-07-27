@@ -65,12 +65,11 @@ export function tileFinish(color: string, variant: TileVariant): TileFinish {
   }
 }
 
-const HEX_RE = /^#([0-9a-f]{6})$/i;
+const HEX_RE = /^#(?<digits>[0-9a-f]{6})$/iu;
 
 function parseHex(hex: string): [number, number, number] | undefined {
-  const m = HEX_RE.exec(hex);
-  if (!m) return undefined;
-  const v = m[1] as string;
+  const v = HEX_RE.exec(hex)?.groups?.digits;
+  if (v === undefined) return undefined;
   return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
 }
 

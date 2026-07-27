@@ -177,9 +177,9 @@ export default async ({ ctx, log }) => {
 
 function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
   const triggers: readonly Trigger[] =
-    opts.triggers !== undefined
-      ? opts.triggers
-      : [{ kind: 'cron', expr: opts.cronExpr?.trim() || '0 9 * * *' }];
+    opts.triggers === undefined
+      ? [{ kind: 'cron', expr: opts.cronExpr?.trim() || '0 9 * * *' }]
+      : opts.triggers;
   // Emit the `requires` slots the builder may fill (issue #167): `model` is the
   // ctx.agent capability tier (`provider/model-id`) — picked for the cheapest
   // tier that does the inference (e.g. a small/cheap tier for summarization).

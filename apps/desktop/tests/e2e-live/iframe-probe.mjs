@@ -13,10 +13,9 @@
 // Run with: node apps/desktop/tests/e2e-live/iframe-probe.mjs
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { launchApp, navTo } from './driver.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const OUT_DIR = path.join(__dirname, 'out');
 
 function assert(cond, msg) {
@@ -48,7 +47,7 @@ async function main() {
     await agendaCard.first().waitFor({ state: 'visible', timeout: 20_000 });
     await agendaCard.first().click();
 
-    const dialog = page.getByRole('dialog', { name: /^Preview Agenda/ });
+    const dialog = page.getByRole('dialog', { name: /^Preview Agenda/u });
     await dialog.waitFor({ state: 'visible', timeout: 10_000 });
     await dialog.getByRole('button', { name: 'Use this template' }).click();
     console.log('[iframe-probe] installed Agenda from its template');

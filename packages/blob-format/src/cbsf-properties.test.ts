@@ -30,7 +30,7 @@ describe('CBSF wire property', () => {
           const decoded = decodeCbsfDirectory(bytes, sealedLens.length);
           expect(decoded.frameSize).toBe(frameSize);
           expect(decoded.totalSize).toBe(totalSize);
-          expect(decoded.sealedLens).toEqual(sealedLens);
+          expect(decoded.sealedLens).toStrictEqual(sealedLens);
         },
       ),
       { numRuns: 48, seed: 53260 },
@@ -47,7 +47,9 @@ describe('CBSF wire property', () => {
         (frameSize, totalSize, sealedLens, wrongOffset) => {
           const bytes = encodeCbsfDirectory(frameSize, totalSize, sealedLens);
           const wrongCount = sealedLens.length + 1 + wrongOffset;
-          expect(() => decodeCbsfDirectory(bytes, wrongCount)).toThrow();
+          expect(() => decodeCbsfDirectory(bytes, wrongCount)).toThrow(
+            'CBSF directory size mismatch',
+          );
         },
       ),
       { numRuns: 24, seed: 53261 },

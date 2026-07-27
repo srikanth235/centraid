@@ -823,7 +823,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     try {
       await setAutomationEnabled({ automationId: row.ref, enabled: next });
       const t0 = row.manifest.triggers[0];
-      const sched = !t0 ? 'manual' : t0.kind === 'cron' ? describeCron(t0.expr) : 'Webhook';
+      const sched = t0 ? (t0.kind === 'cron' ? describeCron(t0.expr) : 'Webhook') : 'manual';
       showToast(next ? `Enabled · ${sched}` : 'Disabled — schedule stopped');
       await refreshAutomationRow();
     } catch (err) {
@@ -872,24 +872,24 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       });
     } catch (err) {
       const msg = String(err);
-      if (/no_changes|no staged changes/i.test(msg)) {
+      if (/no_changes|no staged changes/iu.test(msg)) {
         updateMessage(statusIdx, { kind: 'status', text: 'Already up to date — added to Home.' });
         showToast('Already published — added to Home.');
         onAddToHome?.({ prompt: initialPrompt, appId: appId.current, name: projName.current });
-      } else if (/HTTP 401|HTTP 403|gateway rejected|auth_required/i.test(msg)) {
+      } else if (/HTTP 401|HTTP 403|gateway rejected|auth_required/iu.test(msg)) {
         updateMessage(statusIdx, {
           kind: 'status',
           text: 'Gateway needs a token to accept uploads.',
         });
         showToast('Gateway requires a token. Configure it in Settings.');
       } else if (
-        /gateway_unreachable|Could not reach gateway|fetch failed|ECONNREFUSED/i.test(msg)
+        /gateway_unreachable|Could not reach gateway|fetch failed|ECONNREFUSED/iu.test(msg)
       ) {
         updateMessage(statusIdx, { kind: 'status', text: 'Gateway not reachable. Is it running?' });
         showToast('Gateway not reachable. Check the URL in Settings.');
-      } else if (/HTTP 422/i.test(msg)) {
-        const file = msg.match(/"file"\s*:\s*"([^"]+)"/)?.[1];
-        const sqlError = msg.match(/"sqlError"\s*:\s*"([^"]+)"/)?.[1];
+      } else if (/HTTP 422/iu.test(msg)) {
+        const file = msg.match(/"file"\s*:\s*"(?<file>[^"]+)"/u)?.groups?.file;
+        const sqlError = msg.match(/"sqlError"\s*:\s*"(?<sqlError>[^"]+)"/u)?.groups?.sqlError;
         const detail = file
           ? sqlError
             ? `Migration ${file} failed: ${sqlError}`

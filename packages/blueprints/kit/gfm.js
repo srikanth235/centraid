@@ -31,7 +31,7 @@ export function el(tag, attrs = {}, children = []) {
 
 /** HTML-escape a string (numeric entities for the five dangerous chars). */
 export function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+  return String(s).replace(/[&<>"']/gu, (c) => `&#${c.charCodeAt(0)};`);
 }
 
 /** Sentinel wrapping an extracted inline-code span (control chars: never in escaped text). */
@@ -50,12 +50,12 @@ const CODE_CLOSE = '\u0001';
  */
 export function sanitizeUrl(url, isImage) {
   // Strip control + whitespace chars browsers ignore during scheme detection.
-  const cleaned = String(url).replace(/[\u0000-\u0020]+/g, '');
+  const cleaned = String(url).replace(/[\u0000-\u0020]+/gu, '');
   if (!cleaned) return null;
   if (cleaned.startsWith('//')) return null; // protocol-relative → external
-  const scheme = cleaned.match(/^([a-z][a-z0-9+.-]*):/i);
+  const scheme = cleaned.match(/^(?<scheme>[a-z][a-z0-9+.-]*):/iu);
   if (scheme) {
-    const s = scheme[1].toLowerCase();
+    const s = (scheme.groups?.scheme ?? '').toLowerCase();
     const ok = s === 'http' || s === 'https' || (!isImage && s === 'mailto');
     return ok ? cleaned : null;
   }
@@ -74,62 +74,62 @@ export function inlineHtml(raw, C) {
   let s = escapeHtml(raw);
   // Extract inline code so `*`/`[` etc. inside it are not re-interpreted.
   const codes = [];
-  s = s.replace(/`([^`]+)`/g, (_m, code) => {
+  s = s.replace(/`(?<code>[^`]+)`/gu, (_m, code) => {
     codes.push(code);
     return `${CODE_OPEN}${codes.length - 1}${CODE_CLOSE}`;
   });
   // Vault ref chips (@[Title](ref:type/id)).
   s = s.replace(
-    /@\[([^\]]+)\]\(ref:([a-z_]+\.[a-z_]+)\/([A-Za-z0-9_-]+)\)/g,
+    /@\[(?<label>[^\]]+)\]\(ref:(?<type>[a-z_]+\.[a-z_]+)\/(?<id>[A-Za-z0-9_-]+)\)/gu,
     (_m, label, type, id) =>
       `<button type="button" class="${C.asstRef}" data-ref-type="${type}" data-ref-id="${id}">${label}</button>`,
   );
   // Images ![alt](url) — before links (the leading `!` disambiguates).
-  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&#34;[^)]*)?\)/g, (_m, alt, url) => {
+  s = s.replace(/!\[(?<alt>[^\]]*)\]\((?<url>[^)\s]+)(?:\s+&#34;[^)]*)?\)/gu, (_m, alt, url) => {
     const safe = sanitizeUrl(url, true);
     return safe ? `<img class="${C.asstImg}" src="${safe}" alt="${alt}" loading="lazy" />` : alt;
   });
   // Links [text](url).
-  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+&#34;[^)]*)?\)/g, (_m, text, url) => {
+  s = s.replace(/\[(?<text>[^\]]+)\]\((?<url>[^)\s]+)(?:\s+&#34;[^)]*)?\)/gu, (_m, text, url) => {
     const safe = sanitizeUrl(url, false);
     if (!safe) return text;
-    const attrs = /^https?:/i.test(safe) ? ' target="_blank" rel="noopener noreferrer"' : '';
+    const attrs = /^https?:/iu.test(safe) ? ' target="_blank" rel="noopener noreferrer"' : '';
     return `<a class="${C.asstA}" href="${safe}"${attrs}>${text}</a>`;
   });
   // Strikethrough, bold, italic.
-  s = s.replace(/~~([^~]+)~~/g, `<del class="${C.asstDel}">$1</del>`);
-  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/(^|[\s(>])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+  s = s.replace(/~~(?<struck>[^~]+)~~/gu, `<del class="${C.asstDel}">$<struck></del>`);
+  s = s.replace(/\*\*(?<bold>[^*]+)\*\*/gu, '<strong>$<bold></strong>');
+  s = s.replace(/(?<lead>^|[\s(>])\*(?<italic>[^*\n]+)\*/gu, '$<lead><em>$<italic></em>');
   // Restore inline code.
   s = s.replace(
-    new RegExp(`${CODE_OPEN}(\\d+)${CODE_CLOSE}`, 'g'),
+    new RegExp(`${CODE_OPEN}(\\d+)${CODE_CLOSE}`, 'gu'),
     (_m, i) => `<code>${codes[Number(i)]}</code>`,
   );
   return s;
 }
 
-const HR_RE = /^ {0,3}([-*_])( *\1){2,} *$/;
-const LIST_RE = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
-const HEADING_RE = /^(#{1,6})\s+(.*)$/;
+const HR_RE = /^ {0,3}(?<rule>[-*_])(?: *\k<rule>){2,} *$/u;
+const LIST_RE = /^(?<indent>\s*)(?<marker>[-*+]|\d+[.)])\s+(?<content>.*)$/u;
+const HEADING_RE = /^(?<hashes>#{1,6})\s+(?<text>.*)$/u;
 
 /** Cells of a pipe-table row, trimmed, outer pipes stripped. */
 function tableCells(row) {
   return row
-    .replace(/^\s*\|/, '')
-    .replace(/\|\s*$/, '')
+    .replace(/^\s*\|/u, '')
+    .replace(/\|\s*$/u, '')
     .split('|')
     .map((c) => c.trim());
 }
 
 /** Is `sep` a table delimiter row (dashes/colons/pipes, at least one dash + pipe/colon)? */
 function isTableSep(sep) {
-  return sep !== undefined && /-/.test(sep) && /^[\s|:-]+$/.test(sep) && /[|:]/.test(sep);
+  return sep !== undefined && /-/u.test(sep) && /^[\s|:-]+$/u.test(sep) && /[|:]/u.test(sep);
 }
 
 function buildTable(lines, start, C) {
   const header = lines[start];
   const sep = lines[start + 1];
-  if (!header || !/\|/.test(header) || !isTableSep(sep)) return null;
+  if (!header || !/\|/u.test(header) || !isTableSep(sep)) return null;
   const cols = tableCells(header);
   const aligns = tableCells(sep).map((s) =>
     s.startsWith(':') && s.endsWith(':')
@@ -159,7 +159,7 @@ function buildTable(lines, start, C) {
   );
   const body = el('tbody');
   let i = start + 2;
-  for (; i < lines.length && /\|/.test(lines[i]) && lines[i].trim() !== ''; i += 1) {
+  for (; i < lines.length && /\|/u.test(lines[i]) && lines[i].trim() !== ''; i += 1) {
     const cells = tableCells(lines[i]);
     body.append(
       el(
@@ -218,14 +218,14 @@ export function blockNodes(text, C) {
     para = [];
   };
   for (let i = 0; i < lines.length;) {
-    const line = lines[i].replace(/\s+$/, '');
+    const line = lines[i].replace(/\s+$/u, '');
     if (line.trim() === '') {
       flushPara();
       i += 1;
       continue;
     }
     // Table (header line has a pipe, next line is a delimiter).
-    if (/\|/.test(line) && isTableSep(lines[i + 1])) {
+    if (/\|/u.test(line) && isTableSep(lines[i + 1])) {
       flushPara();
       const built = buildTable(lines, i, C);
       if (built) {
@@ -246,20 +246,20 @@ export function blockNodes(text, C) {
     if (heading) {
       flushPara();
       out.push(
-        el(`h${Math.min(heading[1].length + 2, 6)}`, {
+        el(`h${Math.min((heading.groups?.hashes ?? '').length + 2, 6)}`, {
           class: C.asstH,
-          trustedHtml: inlineHtml(heading[2] ?? '', C),
+          trustedHtml: inlineHtml(heading.groups?.text ?? '', C),
         }),
       );
       i += 1;
       continue;
     }
     // Blockquote (collect the run, strip one `>`, recurse).
-    if (/^\s*>/.test(line)) {
+    if (/^\s*>/u.test(line)) {
       flushPara();
       const inner = [];
-      while (i < lines.length && /^\s*>/.test(lines[i])) {
-        inner.push(lines[i].replace(/^\s*>\s?/, ''));
+      while (i < lines.length && /^\s*>/u.test(lines[i])) {
+        inner.push(lines[i].replace(/^\s*>\s?/u, ''));
         i += 1;
       }
       out.push(el('blockquote', { class: C.asstQuote }, blockNodes(inner.join('\n'), C)));
@@ -272,7 +272,11 @@ export function blockNodes(text, C) {
       while (i < lines.length) {
         const mm = lines[i].match(LIST_RE);
         if (!mm) break;
-        items.push({ indent: mm[1].length, ordered: /\d/.test(mm[2]), content: mm[3] ?? '' });
+        items.push({
+          indent: (mm.groups?.indent ?? '').length,
+          ordered: /\d/u.test(mm.groups?.marker ?? ''),
+          content: mm.groups?.content ?? '',
+        });
         i += 1;
       }
       out.push(buildList(items, C));

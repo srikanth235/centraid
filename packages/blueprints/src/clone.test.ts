@@ -10,7 +10,7 @@ import {
 } from './clone.js';
 import { scaffoldApp } from './scaffold.js';
 
-describe('suggestCloneIdentity', () => {
+describe(suggestCloneIdentity, () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -76,7 +76,7 @@ describe('suggestCloneIdentity', () => {
 describe('suggestCloneIdentityFrom (git-store backend — no filesystem)', () => {
   it('returns the bare (id, name) against an empty set', () => {
     const picked = suggestCloneIdentityFrom([], 'hydrate', 'Hydrate');
-    expect(picked).toEqual({ id: 'hydrate', name: 'Hydrate' });
+    expect(picked).toStrictEqual({ id: 'hydrate', name: 'Hydrate' });
   });
 
   it('bumps to (id-2, "Name 2") when the bare id is taken', () => {
@@ -85,7 +85,7 @@ describe('suggestCloneIdentityFrom (git-store backend — no filesystem)', () =>
       'hydrate',
       'Hydrate',
     );
-    expect(picked).toEqual({ id: 'hydrate-2', name: 'Hydrate 2' });
+    expect(picked).toStrictEqual({ id: 'hydrate-2', name: 'Hydrate 2' });
   });
 
   it('skips a display-name collision even when the id slot is free', () => {
@@ -97,18 +97,18 @@ describe('suggestCloneIdentityFrom (git-store backend — no filesystem)', () =>
       'hydrate',
       'Hydrate',
     );
-    expect(picked).toEqual({ id: 'hydrate-3', name: 'Hydrate 3' });
+    expect(picked).toStrictEqual({ id: 'hydrate-3', name: 'Hydrate 3' });
   });
 
   it('does case-insensitive display-name comparison', () => {
     const picked = suggestCloneIdentityFrom([{ id: 'x', name: 'HYDRATE' }], 'hydrate', 'Hydrate');
-    expect(picked).toEqual({ id: 'hydrate-2', name: 'Hydrate 2' });
+    expect(picked).toStrictEqual({ id: 'hydrate-2', name: 'Hydrate 2' });
   });
 
   it('falls back to the id for apps with no display name', () => {
     // An app published with no `name` still blocks its own id.
     const picked = suggestCloneIdentityFrom([{ id: 'hydrate' }], 'hydrate', 'Hydrate');
-    expect(picked).toEqual({ id: 'hydrate-2', name: 'Hydrate 2' });
+    expect(picked).toStrictEqual({ id: 'hydrate-2', name: 'Hydrate 2' });
   });
 });
 
@@ -276,7 +276,7 @@ describe('cloneTemplate index.html <title> rewrite', () => {
     expect(mf.generated.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     // Other fields carry through unchanged.
     expect(mf.prompt).toBe('do the thing');
-    expect(mf.triggers).toEqual([{ kind: 'cron', expr: '0 18 * * 1-5' }]);
+    expect(mf.triggers).toStrictEqual([{ kind: 'cron', expr: '0 18 * * 1-5' }]);
 
     await fs.rm(templateDir, { recursive: true, force: true });
   });

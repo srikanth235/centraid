@@ -13,14 +13,14 @@ import type { Trigger } from '../manifest/manifest.js';
 
 const at = (h: number, mi: number, day = 1): Date => new Date(2026, 0, day, h, mi, 0, 0);
 
-describe('computeMissedWindows', () => {
+describe(computeMissedWindows, () => {
   it('returns nothing for an ordinary tick-to-tick gap (no outage)', () => {
     const missed = computeMissedWindows({
       lastTickAt: at(8, 0),
       now: at(8, 1),
       entries: [{ ref: 'a/one', crons: ['* * * * *'] }],
     });
-    expect(missed).toEqual([]);
+    expect(missed).toStrictEqual([]);
   });
 
   it('returns nothing for a fast-restart gap under the grace margin', () => {
@@ -30,7 +30,7 @@ describe('computeMissedWindows', () => {
       entries: [{ ref: 'a/one', crons: ['* * * * *'] }],
       graceMs: 3 * 60_000,
     });
-    expect(missed).toEqual([]);
+    expect(missed).toStrictEqual([]);
   });
 
   it('records ONE entry per automation for a gap spanning several missed fire times', () => {
@@ -59,7 +59,7 @@ describe('computeMissedWindows', () => {
       ],
     });
     const refs = missed.map((m) => m.automationRef).sort();
-    expect(refs).toEqual(['a/at-08-30', 'a/every-5']);
+    expect(refs).toStrictEqual(['a/at-08-30', 'a/every-5']);
     const every5 = missed.find((m) => m.automationRef === 'a/every-5')!;
     expect(every5.scheduledFor).toBe(at(8, 5).toISOString());
     const at0830 = missed.find((m) => m.automationRef === 'a/at-08-30')!;
@@ -72,7 +72,7 @@ describe('computeMissedWindows', () => {
       now: at(8, 10),
       entries: [{ ref: 'a/watch-only', crons: [] }],
     });
-    expect(missed).toEqual([]);
+    expect(missed).toStrictEqual([]);
   });
 
   it('is a no-op when lastTickAt is at/after now (clock skew safety)', () => {
@@ -81,7 +81,7 @@ describe('computeMissedWindows', () => {
       now: at(8, 0),
       entries: [{ ref: 'a/one', crons: ['* * * * *'] }],
     });
-    expect(missed).toEqual([]);
+    expect(missed).toStrictEqual([]);
   });
 
   /**
@@ -164,7 +164,7 @@ describe('computeMissedWindows', () => {
           entries: [{ ref: 'a/one', crons: ['* * * * *'] }],
           graceMs: 3 * 60_000,
         });
-        expect(missed).toEqual([]);
+        expect(missed).toStrictEqual([]);
       }),
       { numRuns: 16, seed: 53232 },
     );
@@ -175,7 +175,7 @@ describe('computeMissedWindows', () => {
       fc.property(fc.integer({ min: 10, max: 10_000 }), (gapMinutes) => {
         const lastTickAt = at(8, 0);
         const now = new Date(lastTickAt.getTime() + gapMinutes * 60_000);
-        expect(computeMissedWindows({ lastTickAt, now, entries: [] })).toEqual([]);
+        expect(computeMissedWindows({ lastTickAt, now, entries: [] })).toStrictEqual([]);
       }),
       { numRuns: 16, seed: 53233 },
     );
@@ -198,12 +198,12 @@ describe('computeMissedWindows', () => {
   });
 });
 
-describe('parseSchedulerLedgerSnapshot', () => {
+describe(parseSchedulerLedgerSnapshot, () => {
   it('returns an empty snapshot for absent/malformed input', () => {
-    expect(parseSchedulerLedgerSnapshot(undefined)).toEqual({ missed: [] });
-    expect(parseSchedulerLedgerSnapshot(null)).toEqual({ missed: [] });
-    expect(parseSchedulerLedgerSnapshot('not json')).toEqual({ missed: [] });
-    expect(parseSchedulerLedgerSnapshot('42')).toEqual({ missed: [] });
+    expect(parseSchedulerLedgerSnapshot(undefined)).toStrictEqual({ missed: [] });
+    expect(parseSchedulerLedgerSnapshot(null)).toStrictEqual({ missed: [] });
+    expect(parseSchedulerLedgerSnapshot('not json')).toStrictEqual({ missed: [] });
+    expect(parseSchedulerLedgerSnapshot('42')).toStrictEqual({ missed: [] });
   });
 
   it('round-trips a well-formed snapshot', () => {
@@ -214,7 +214,7 @@ describe('parseSchedulerLedgerSnapshot', () => {
       reason: 'gateway-down',
     };
     const json = JSON.stringify({ lastTickAt: at(8, 10).toISOString(), missed: [entry] });
-    expect(parseSchedulerLedgerSnapshot(json)).toEqual({
+    expect(parseSchedulerLedgerSnapshot(json)).toStrictEqual({
       lastTickAt: at(8, 10).toISOString(),
       missed: [entry],
     });
@@ -239,10 +239,10 @@ function fakeConversationStore(): {
   };
 }
 
-describe('SchedulerLedgerStore', () => {
+describe(SchedulerLedgerStore, () => {
   it('persists lastTickAt and accumulates missed entries under the reserved sentinel key', () => {
     const store = new SchedulerLedgerStore(fakeConversationStore());
-    expect(store.load()).toEqual({ missed: [] });
+    expect(store.load()).toStrictEqual({ missed: [] });
 
     store.recordTick(at(8, 0));
     expect(store.load().lastTickAt).toBe(at(8, 0).toISOString());
@@ -254,10 +254,10 @@ describe('SchedulerLedgerStore', () => {
       reason: 'gateway-down',
     };
     store.recordMissed([entry]);
-    expect(store.load().missed).toEqual([entry]);
+    expect(store.load().missed).toStrictEqual([entry]);
     // recordTick after doesn't clobber missed entries.
     store.recordTick(at(8, 11));
-    expect(store.load()).toEqual({ lastTickAt: at(8, 11).toISOString(), missed: [entry] });
+    expect(store.load()).toStrictEqual({ lastTickAt: at(8, 11).toISOString(), missed: [entry] });
   });
 
   it('bounds the missed-entry ring buffer', () => {
@@ -280,24 +280,24 @@ describe('SchedulerLedgerStore', () => {
     store.recordTick(at(8, 0));
     expect(raw.stateGet(SCHEDULER_LEDGER_AUTOMATION_ID, SCHEDULER_LEDGER_KEY)).toBeDefined();
     // Real refs are always `<appId>/<id>` — the sentinel deliberately has no slash.
-    expect(SCHEDULER_LEDGER_AUTOMATION_ID.includes('/')).toBe(false);
+    expect(SCHEDULER_LEDGER_AUTOMATION_ID).not.toContain('/');
   });
 
   it('marks dormancy without advancing time and resets the baseline on wake', () => {
     const store = new SchedulerLedgerStore(fakeConversationStore());
     store.recordTick(at(8, 0));
     store.setDormant(true, at(8, 1));
-    expect(store.load()).toEqual({
+    expect(store.load()).toStrictEqual({
       lastTickAt: at(8, 0).toISOString(),
       dormant: true,
       missed: [],
     });
     store.setDormant(false, at(12, 0));
-    expect(store.load()).toEqual({ lastTickAt: at(12, 0).toISOString(), missed: [] });
+    expect(store.load()).toStrictEqual({ lastTickAt: at(12, 0).toISOString(), missed: [] });
   });
 });
 
-describe('recordSchedulerTick', () => {
+describe(recordSchedulerTick, () => {
   const cron = (expr: string): readonly Trigger[] => [{ kind: 'cron', expr }];
 
   it('records nothing on the very first tick (no prior lastTickAt to compare against)', () => {
@@ -307,7 +307,7 @@ describe('recordSchedulerTick', () => {
       now: at(8, 0),
       automations: [{ ref: 'a/one', enabled: true, triggers: cron('* * * * *') }],
     });
-    expect(missed).toEqual([]);
+    expect(missed).toStrictEqual([]);
     expect(ledger.load().lastTickAt).toBe(at(8, 0).toISOString());
   });
 
@@ -315,7 +315,7 @@ describe('recordSchedulerTick', () => {
     const ledger = new SchedulerLedgerStore(fakeConversationStore());
     recordSchedulerTick({ ledger, now: at(8, 0), automations: [] });
     const missed = recordSchedulerTick({ ledger, now: at(8, 1), automations: [] });
-    expect(missed).toEqual([]);
+    expect(missed).toStrictEqual([]);
   });
 
   it('detects a gap between two ticks and records one entry per enabled automation', () => {
@@ -341,7 +341,7 @@ describe('recordSchedulerTick', () => {
 
     expect(missed).toHaveLength(1);
     expect(missed[0]!.automationRef).toBe('a/every-minute');
-    expect(ledger.load().missed).toEqual(missed);
+    expect(ledger.load().missed).toStrictEqual(missed);
     expect(ledger.load().lastTickAt).toBe(at(8, 20).toISOString());
   });
 
@@ -357,7 +357,7 @@ describe('recordSchedulerTick', () => {
       now: at(9, 0),
       automations: [{ ref: 'a/off', enabled: false, triggers: cron('* * * * *') }],
     });
-    expect(missed).toEqual([]);
+    expect(missed).toStrictEqual([]);
   });
 
   test('property: recordSchedulerTick never backfills disabled automations', () => {
@@ -401,7 +401,7 @@ describe('recordSchedulerTick', () => {
             now: at(8, i),
             automations: [...automations],
           });
-          expect(missed).toEqual([]);
+          expect(missed).toStrictEqual([]);
         }
       }),
       { numRuns: 16, seed: 53236 },

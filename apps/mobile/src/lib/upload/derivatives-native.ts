@@ -90,7 +90,7 @@ export async function generateDeviceDerivatives(
   const decoded = jpeg.decode(await new File(thumb).bytes(), { useTArray: true });
   const thumbhash = bytesToBase64(
     rgbaToThumbHash(decoded.width, decoded.height, decoded.data),
-  ).replace(/=+$/, '');
+  ).replace(/=+$/u, '');
   // A per-set token keeps concurrent producers from colliding on durable names.
   const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   return {

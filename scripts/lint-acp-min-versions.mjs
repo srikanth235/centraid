@@ -7,13 +7,12 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(import.meta.dirname, '..');
 const registry = readFileSync(path.join(root, 'packages/agent-runtime/src/registry.ts'), 'utf8');
 const runnersDoc = readFileSync(path.join(root, 'docs/runners.md'), 'utf8');
 
-const minVersionObjs = [...registry.matchAll(/minVersion:\s*\{\s*major:\s*\d+/g)];
+const minVersionObjs = [...registry.matchAll(/minVersion:\s*\{\s*major:\s*\d+/gu)];
 if (minVersionObjs.length < 5) {
   process.stderr.write(
     `lint-acp-min-versions: expected several minVersion objects, found ${minVersionObjs.length}\n`,
@@ -21,7 +20,9 @@ if (minVersionObjs.length < 5) {
   process.exit(1);
 }
 
-const bins = [...registry.matchAll(/defaultBin:\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+const bins = [...registry.matchAll(/defaultBin:\s*['"](?<bin>[^'"]+)['"]/gu)].map(
+  (m) => m.groups?.bin ?? '',
+);
 if (bins.length < 5) {
   process.stderr.write(`lint-acp-min-versions: expected several defaultBin entries\n`);
   process.exit(1);

@@ -14,7 +14,7 @@ interface RawParty {
   [k: string]: unknown;
 }
 
-export default async ({ ctx }: HandlerArgs) => {
+export default async function partiesHandler({ ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   try {
     // The owner is the implicit `me` (same source Tally reads) — everyone
@@ -43,4 +43,4 @@ export default async ({ ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { parties: [], me: null, vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

@@ -319,17 +319,7 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
         />
 
         <section className={styles.main}>
-          {!selected ? (
-            <div className={styles.prompt} data-testid="atlas-browse-empty">
-              <span className={styles.promptIcon}>
-                <Icon name="Braces" size={22} />
-              </span>
-              <p className={styles.promptText}>
-                Pick a table to page through its rows and edit them through the vault’s journalled
-                write path — never raw SQL.
-              </p>
-            </div>
-          ) : (
+          {selected ? (
             <>
               <header className={styles.mainHead}>
                 <div className={styles.mainTitle}>
@@ -403,6 +393,16 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
                 </button>
               ) : null}
             </>
+          ) : (
+            <div className={styles.prompt} data-testid="atlas-browse-empty">
+              <span className={styles.promptIcon}>
+                <Icon name="Braces" size={22} />
+              </span>
+              <p className={styles.promptText}>
+                Pick a table to page through its rows and edit them through the vault’s journalled
+                write path — never raw SQL.
+              </p>
+            </div>
           )}
         </section>
       </div>

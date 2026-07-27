@@ -200,12 +200,7 @@ export default function BackupInventoryPanel({
         </p>
       ) : null}
 
-      {!current ? (
-        <p className={styles.inventoryEmpty}>
-          Awaiting the first provider inventory audit. Attachment safety remains pinned until the
-          remote is verified.
-        </p>
-      ) : (
+      {current ? (
         <>
           <div className={styles.inventoryStores}>
             <StoreLine label="Databases, code & WAL" store={current.backup} />
@@ -260,6 +255,11 @@ export default function BackupInventoryPanel({
             </div>
           ) : null}
         </>
+      ) : (
+        <p className={styles.inventoryEmpty}>
+          Awaiting the first provider inventory audit. Attachment safety remains pinned until the
+          remote is verified.
+        </p>
       )}
 
       {onVerifyBucket ? (

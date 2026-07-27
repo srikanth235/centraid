@@ -170,9 +170,9 @@ function vaultStatus(
   const store = readBlobStoreSettings(plane.db.vault);
   // Every remote CAS connection is a provider home bundle now (#436 §2).
   const destination: BackupDestinationStatus =
-    store.kind !== 's3'
-      ? { kind: 'gateway-local' }
-      : { kind: 'provider', ...(store.connectionId ? { connectionId: store.connectionId } : {}) };
+    store.kind === 's3'
+      ? { kind: 'provider', ...(store.connectionId ? { connectionId: store.connectionId } : {}) }
+      : { kind: 'gateway-local' };
   const outbox = plane.db.blobTransfers.status();
   const reconciliation = newestReconciliation(target?.reconciliation, casReconciliation);
   return {

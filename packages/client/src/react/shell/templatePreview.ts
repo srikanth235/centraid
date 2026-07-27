@@ -24,7 +24,7 @@ interface AccessGroup {
 /** Human name for one requested scope: its table (or schema when table-wide),
  *  with underscores relaxed into words ("content_item" → "content item"). */
 function scopeNoun(scope: TemplateVaultBlock['scopes'][number]): string {
-  return (scope.table ?? scope.schema).replace(/_/g, ' ');
+  return (scope.table ?? scope.schema).replace(/_/gu, ' ');
 }
 
 // Verb code → owner-facing lead. Apps declare `read` (projection) and `act`

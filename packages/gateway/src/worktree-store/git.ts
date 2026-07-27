@@ -88,7 +88,7 @@ export async function run(args: readonly string[], opts: GitRunOptions): Promise
   if (result.code !== 0 && !opts.allowNonZero) {
     throw new GitError(args, result.code, result.stdout, result.stderr);
   }
-  return result.stdout.replace(/\n+$/, '');
+  return result.stdout.replace(/\n+$/u, '');
 }
 
 export function runRaw(args: readonly string[], opts: GitRunOptions): Promise<GitRunResult> {
@@ -127,10 +127,10 @@ export function runRaw(args: readonly string[], opts: GitRunOptions): Promise<Gi
     child.on('close', (code) => {
       resolve({ code: code ?? -1, stdout, stderr });
     });
-    if (opts.stdin !== undefined) {
-      child.stdin.end(opts.stdin);
-    } else {
+    if (opts.stdin === undefined) {
       child.stdin.end();
+    } else {
+      child.stdin.end(opts.stdin);
     }
   });
 }

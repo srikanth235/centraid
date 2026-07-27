@@ -23,10 +23,10 @@ export interface GatewayPerformanceSnapshot {
 interface EventLoopDelayHistogramLike {
   readonly count: number;
   readonly max: number;
-  enable(): boolean;
-  disable(): boolean;
-  reset(): void;
-  percentile(percentile: number): number;
+  enable: () => boolean;
+  disable: () => boolean;
+  reset: () => void;
+  percentile: (percentile: number) => number;
 }
 
 export interface GatewayPerformanceMonitorOptions {
@@ -84,7 +84,7 @@ export class GatewayPerformanceMonitor {
     return {
       ...signal,
       eventLoopLagPeakP99Ms: this.peakP99Ms,
-      ...(this.storageFsyncMs !== undefined ? { storageFsyncMs: this.storageFsyncMs } : {}),
+      ...(this.storageFsyncMs === undefined ? {} : { storageFsyncMs: this.storageFsyncMs }),
     };
   }
 

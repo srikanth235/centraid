@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const memory = new Map<string, unknown>();
 
-vi.mock('../storage', () => ({
+vi.mock(import('../storage'), () => ({
   Store: {
     get<T>(key: string, fallback: T): T {
       return memory.has(key) ? (memory.get(key) as T) : fallback;
@@ -35,36 +35,38 @@ import {
   setProfileName,
 } from './profile';
 
-beforeEach(() => {
-  memory.clear();
-});
-
-describe('onboarding profile helpers', () => {
-  it('trims display name and reports onboarded flag', () => {
-    expect(isOnboarded()).toBe(false);
-    setProfileName('  Ada Lovelace  ');
-    setOnboarded(true);
-    expect(getProfileName()).toBe('Ada Lovelace');
-    expect(isOnboarded()).toBe(true);
+describe('profile', () => {
+  beforeEach(() => {
+    memory.clear();
   });
 
-  it('defaults profile color to brand teal', () => {
-    expect(getProfileColor()).toBe(BRAND_TEAL);
-    setProfileColor('#112233');
-    expect(getProfileColor()).toBe('#112233');
-  });
+  describe('onboarding profile helpers', () => {
+    it('trims display name and reports onboarded flag', () => {
+      expect(isOnboarded()).toBe(false);
+      setProfileName('  Ada Lovelace  ');
+      setOnboarded(true);
+      expect(getProfileName()).toBe('Ada Lovelace');
+      expect(isOnboarded()).toBe(true);
+    });
 
-  it('derives initials and first name for avatar + greeting', () => {
-    expect(initialsOf('')).toBe('·');
-    expect(initialsOf('  ada  ')).toBe('A');
-    expect(initialsOf('Ada Lovelace')).toBe('AL');
-    expect(firstNameOf('Ada Lovelace')).toBe('Ada');
-    expect(firstNameOf('   ')).toBe('');
-  });
+    it('defaults profile color to brand teal', () => {
+      expect(getProfileColor()).toBe(BRAND_TEAL);
+      setProfileColor('#112233');
+      expect(getProfileColor()).toBe('#112233');
+    });
 
-  it('picks time-of-day greeting buckets', () => {
-    expect(greetingFor(new Date(2026, 0, 1, 8))).toBe('Good morning');
-    expect(greetingFor(new Date(2026, 0, 1, 14))).toBe('Good afternoon');
-    expect(greetingFor(new Date(2026, 0, 1, 20))).toBe('Good evening');
+    it('derives initials and first name for avatar + greeting', () => {
+      expect(initialsOf('')).toBe('·');
+      expect(initialsOf('  ada  ')).toBe('A');
+      expect(initialsOf('Ada Lovelace')).toBe('AL');
+      expect(firstNameOf('Ada Lovelace')).toBe('Ada');
+      expect(firstNameOf('   ')).toBe('');
+    });
+
+    it('picks time-of-day greeting buckets', () => {
+      expect(greetingFor(new Date(2026, 0, 1, 8))).toBe('Good morning');
+      expect(greetingFor(new Date(2026, 0, 1, 14))).toBe('Good afternoon');
+      expect(greetingFor(new Date(2026, 0, 1, 20))).toBe('Good evening');
+    });
   });
 });

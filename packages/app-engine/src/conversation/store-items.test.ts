@@ -30,7 +30,7 @@ describe('ConversationStore — items + message_in', () => {
       durationMs: 1,
     });
     const items = store.listItems('t');
-    expect(items.map((i) => [i.kind, i.ordinal])).toEqual([
+    expect(items.map((i) => [i.kind, i.ordinal])).toStrictEqual([
       ['message_in', 0],
       ['step', 1],
     ]);
@@ -61,7 +61,7 @@ describe('ConversationStore — items + message_in', () => {
       startedAt: 10,
     });
     let [n] = store.listItems('t');
-    expect(n?.endedAt).toBe(undefined);
+    expect(n?.endedAt).toBeUndefined();
     expect(n?.ok).toBe(true);
     store.closeItem({
       itemId: 'n1',
@@ -72,7 +72,7 @@ describe('ConversationStore — items + message_in', () => {
       durationMs: 25,
     });
     [n] = store.listItems('t');
-    expect(store.listItems('t').length).toBe(1);
+    expect(store.listItems('t')).toHaveLength(1);
     expect(n?.ok).toBe(false);
     expect(n?.error).toBe('rate limited');
     expect(n?.argsJson).toBe('{"q":1}');
@@ -148,7 +148,7 @@ describe('ConversationStore — items + message_in', () => {
       durationMs: 1,
     });
     const [item] = store.listItems('t');
-    expect(JSON.parse(item?.rawJson ?? '')).toEqual({
+    expect(JSON.parse(item?.rawJson ?? '')).toStrictEqual({
       rawTruncated: true,
       rawOriginalBytes: 200_000,
     });
@@ -206,11 +206,11 @@ describe('ConversationStore — attachments', () => {
       filename: 'pic.png',
     });
     const byItem = store.listAttachmentsForItem(itemId);
-    expect(byItem.length).toBe(1);
+    expect(byItem).toHaveLength(1);
     expect(byItem[0]?.mime).toBe('image/png');
     expect(byItem[0]?.filename).toBe('pic.png');
-    expect(store.listAttachmentsForTurn('t').length).toBe(1);
-    expect([...store.referencedHashes()]).toEqual(['a'.repeat(64)]);
+    expect(store.listAttachmentsForTurn('t')).toHaveLength(1);
+    expect([...store.referencedHashes()]).toStrictEqual(['a'.repeat(64)]);
     store.close();
   });
 });

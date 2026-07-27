@@ -9,7 +9,6 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   buildNpmInstallArgs,
   defaultInstallPrefix,
@@ -19,7 +18,7 @@ import {
   parseInstallArgs,
 } from './gateway-npm/pack-helpers.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 
 function usage() {
   console.log(`Centraid gateway installer (npm path)

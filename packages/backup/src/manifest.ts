@@ -257,7 +257,7 @@ function validateStoredManifest(value: unknown): StoredManifest {
   for (const chunk of v['chunkIndex'] as unknown[]) {
     if (typeof chunk !== 'object' || chunk === null) throw new Error('manifest: bad chunkIndex');
     const c = chunk as Record<string, unknown>;
-    if (typeof c['id'] !== 'string' || !/^[0-9a-f]{64}$/.test(c['id'])) {
+    if (typeof c['id'] !== 'string' || !/^[0-9a-f]{64}$/u.test(c['id'])) {
       throw new Error('manifest: bad chunk id');
     }
     if (!Number.isSafeInteger(c['size']) || (c['size'] as number) < 0) {
@@ -343,10 +343,10 @@ export function validateSnapshotBasePair(entries: ManifestEntry[]): SnapshotBase
   const [vaultEntry] = vault;
   const [journalEntry] = journal;
   for (const entry of [vaultEntry!, journalEntry!]) {
-    if (typeof entry.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(entry.sha256)) {
+    if (typeof entry.sha256 !== 'string' || !/^[0-9a-f]{64}$/u.test(entry.sha256)) {
       throw new Error(`manifest /1: ${entry.path} is missing a valid sha256`);
     }
-    if (typeof entry.walGeneration !== 'string' || !/^[0-9a-f]{32}$/.test(entry.walGeneration)) {
+    if (typeof entry.walGeneration !== 'string' || !/^[0-9a-f]{32}$/u.test(entry.walGeneration)) {
       throw new Error(`manifest /1: ${entry.path} is missing a valid WAL generation`);
     }
     if (!Number.isSafeInteger(entry.baseTickMs) || entry.baseTickMs! < 0) {
@@ -369,7 +369,7 @@ export function validateSnapshotBasePair(entries: ManifestEntry[]): SnapshotBase
     vault: vaultEntry!,
     journal: journalEntry!,
     baseTickMs: vaultEntry!.baseTickMs!,
-    ...(vaultEntry!.walTipTickMs !== undefined ? { walTipTickMs: vaultEntry!.walTipTickMs } : {}),
+    ...(vaultEntry!.walTipTickMs === undefined ? {} : { walTipTickMs: vaultEntry!.walTipTickMs }),
   };
 }
 
@@ -377,8 +377,8 @@ export function validateSnapshotBasePair(entries: ManifestEntry[]): SnapshotBase
 export function isSafeEntryPath(p: string): boolean {
   if (p.length === 0) return false;
   if (p.startsWith('/') || p.startsWith('\\')) return false;
-  if (/^[A-Za-z]:[\\/]/.test(p)) return false;
-  const segments = p.split(/[\\/]/);
+  if (/^[A-Za-z]:[\\/]/u.test(p)) return false;
+  const segments = p.split(/[\\/]/u);
   return segments.every((seg) => seg !== '..' && seg !== '.');
 }
 

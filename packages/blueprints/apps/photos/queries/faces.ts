@@ -22,7 +22,7 @@ interface RawParty {
   display_name?: string | null;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function faces({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const assetId = String(input?.asset_id ?? '');
   if (!assetId) return { status: 400, body: { error: 'asset_id required' } };
@@ -66,7 +66,7 @@ export default async ({ input, ctx }: HandlerArgs) => {
     }
     return { status: 200, body: { regions: [], people: [], error: String(e.message ?? err) } };
   }
-};
+}
 
 function safeParse(json: unknown): unknown {
   try {

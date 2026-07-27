@@ -26,7 +26,7 @@ const PREFIX = '/centraid/_vault/demo';
 
 export interface DemoRouteDeps {
   /** Live code root (`<main worktree>/apps`) of the ACTIVE vault's store. */
-  codeAppsDir(): string;
+  codeAppsDir: () => string;
 }
 
 /** Apps whose live code ships a seed.js scenario generator. */
@@ -48,7 +48,7 @@ export function makeDemoRouteHandler(vaults: VaultRegistry, deps: DemoRouteDeps)
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
-    const rest = url.pathname.slice(PREFIX.length).replace(/^\//, '');
+    const rest = url.pathname.slice(PREFIX.length).replace(/^\//u, '');
     const appId = rest === '' ? null : decodeURIComponent(rest);
     const method = req.method ?? 'GET';
     const plane = vaults.current();

@@ -241,7 +241,7 @@ describe('GatewayScreen interactions', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(loadHealth).toHaveBeenCalled();
+    expect(loadHealth).toHaveBeenCalledWith();
     expect(host.textContent).toContain('Vaults');
   });
 
@@ -328,7 +328,7 @@ describe('GatewayScreen interactions', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(onRestartGateway).toHaveBeenCalledTimes(1);
+    expect(onRestartGateway).toHaveBeenCalledOnce();
     expect(host.textContent).toContain('Restart gateway'); // back to idle label
   });
 
@@ -389,7 +389,7 @@ describe('GatewayScreen interactions', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(onExportDiagnostics).toHaveBeenCalledTimes(1);
+    expect(onExportDiagnostics).toHaveBeenCalledOnce();
     expect(host.textContent).toContain('/tmp/diag.json');
   });
 

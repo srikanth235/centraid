@@ -69,8 +69,8 @@ function humanizeKind(kind: string): string {
 
 function titleFromTemplate(templateId: string, kind: string): string {
   const base = templateId
-    .replace(/-pull$/, '')
-    .replace(/-send$/, '')
+    .replace(/-pull$/u, '')
+    .replace(/-send$/u, '')
     .split('-')
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join(' ');
@@ -91,7 +91,7 @@ export function capabilitiesFromConnectors(
         title: titleFromTemplate(c.templateId, c.kind),
         // Send templates can share a connection kind (Gmail mail + calendar
         // invite), so the template id—not kind—is the collision-free key.
-        toolName: `connector.${c.templateId.replace(/-/g, '_')}`,
+        toolName: `connector.${c.templateId.replace(/-/gu, '_')}`,
         kind: c.kind,
         templateId: c.templateId,
         approval: 'outbox',
@@ -111,7 +111,7 @@ export function capabilitiesFromConnectors(
     actions.push({
       id: `action:list:${c.kind}`,
       title: `List recent ${humanizeKind(c.kind)}`,
-      toolName: `connector.${c.kind.replace(/\./g, '_')}.list`,
+      toolName: `connector.${c.kind.replace(/\./gu, '_')}.list`,
       kind: c.kind,
       templateId: c.templateId,
       ...(c.scope ? { scope: c.scope } : {}),

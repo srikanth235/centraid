@@ -16,7 +16,7 @@ export const WEB_APP_HEADER = 'x-centraid-web-app';
 export const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
 
 const CONTROL_COOKIE = '__centraid_control';
-const MINT_RE = /^\/centraid\/_apps\/([^/]+)\/web-session$/;
+const MINT_RE = /^\/centraid\/_apps\/(?<appId>[^/]+)\/web-session$/u;
 const PENDING_TTL_MS = 60_000;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const REPLICA_APP_PATHS = new Set([
@@ -183,7 +183,7 @@ export class WebAppSessions {
     }
     let appId: string;
     try {
-      appId = decodeURIComponent(match[1] ?? '');
+      appId = decodeURIComponent(match.groups?.appId ?? '');
     } catch {
       sendJson(res, 400, { error: 'invalid_app_id' });
       return true;
@@ -240,9 +240,9 @@ export class WebAppSessions {
       const origin = safeOrigin(req.headers.origin);
       const presentedToken = presented.get(CONTROL_COOKIE);
       const control =
-        presentedToken !== undefined
-          ? this.controlStore.find(hashControlToken(presentedToken))
-          : undefined;
+        presentedToken === undefined
+          ? undefined
+          : this.controlStore.find(hashControlToken(presentedToken));
       if (!control || origin !== control.shellOrigin) return undefined;
       // A revoked device's cookie stops working immediately — evict the row.
       if (this.revoked(control.deviceKey)) {

@@ -5,10 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { serve } from '../dist/index.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const packageRoot = path.dirname(here);
 const args = process.argv.slice(2);
 
@@ -306,8 +305,8 @@ function fsyncCallsIn(trace, marker) {
     // A blocking syscall can be split into `<unfinished ...>` and a later
     // `<... fsync resumed>` record. Count the resumed record exactly once;
     // ordinary one-line calls count through the opening-call form.
-    if (/<\.\.\. (?:fsync|fdatasync) resumed>/.test(line)) return true;
-    return /\b(?:fsync|fdatasync)\(/.test(line) && !line.includes('<unfinished ...>');
+    if (/<\.\.\. (?:fsync|fdatasync) resumed>/u.test(line)) return true;
+    return /\b(?:fsync|fdatasync)\(/u.test(line) && !line.includes('<unfinished ...>');
   }).length;
 }
 
@@ -339,17 +338,17 @@ function checkBudgets(report, budgets, requireFsync) {
   } else if (requireFsync) {
     throw new Error('fsync metric required but strace is unavailable');
   }
-  if (report.idle.diskWriteBytesPerHour !== null) {
-    checks.push([
-      'idle.diskWriteBytesPerHour',
-      report.idle.diskWriteBytesPerHour,
-      budgets.idleDiskWriteBytesPerHour,
-    ]);
-  } else {
+  if (report.idle.diskWriteBytesPerHour === null) {
     checks.push([
       'idle.resourceFsWritesPerHour',
       report.idle.resourceFsWritesPerHour,
       budgets.idleResourceFsWritesPerHour,
+    ]);
+  } else {
+    checks.push([
+      'idle.diskWriteBytesPerHour',
+      report.idle.diskWriteBytesPerHour,
+      budgets.idleDiskWriteBytesPerHour,
     ]);
   }
   const failures = checks.filter(([, actual, ceiling]) => actual === null || actual > ceiling);
@@ -394,7 +393,7 @@ async function traceFsyncCalls() {
         '-o',
         traceFile,
         process.execPath,
-        fileURLToPath(import.meta.url),
+        import.meta.filename,
         ...childArgs,
       ],
       {

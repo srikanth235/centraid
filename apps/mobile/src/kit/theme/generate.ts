@@ -59,8 +59,10 @@ export interface GeneratedTheme {
 function parseDeclarations(body: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const decl of body.split(';')) {
-    const m = /^\s*(--[\w-]+)\s*:\s*(.+?)\s*$/.exec(decl);
-    if (m?.[1] !== undefined && m[2] !== undefined) out[m[1]] = m[2].trim();
+    const m = /^\s*(?<name>--[\w-]+)\s*:\s*(?<value>.+?)\s*$/u.exec(decl);
+    const name = m?.groups?.name;
+    const value = m?.groups?.value;
+    if (name !== undefined && value !== undefined) out[name] = value.trim();
   }
   return out;
 }
@@ -70,11 +72,11 @@ function parseDeclarations(body: string): Record<string, string> {
  *  overrides, which we already read from the attribute selector. */
 export function parseTokensCss(css: string): TokenBlocks {
   // `[^}]*` is safe: these blocks contain no nested braces.
-  const light = /:root\s*\{([^}]*)\}/.exec(css);
-  const dark = /:root\[data-theme='dark'\]\s*\{([^}]*)\}/.exec(css);
+  const light = /:root\s*\{(?<body>[^}]*)\}/u.exec(css)?.groups?.body;
+  const dark = /:root\[data-theme='dark'\]\s*\{(?<body>[^}]*)\}/u.exec(css)?.groups?.body;
   return {
-    light: light?.[1] !== undefined ? parseDeclarations(light[1]) : {},
-    darkOverride: dark?.[1] !== undefined ? parseDeclarations(dark[1]) : {},
+    light: light !== undefined ? parseDeclarations(light) : {},
+    darkOverride: dark !== undefined ? parseDeclarations(dark) : {},
   };
 }
 
@@ -131,14 +133,16 @@ function resolveVars(input: string, scope: Record<string, string>, seen: Set<str
  *  (only `%` appears in the token source). Repeats until no `calc(` remains. */
 function evalCalc(input: string): string {
   let s = input;
-  const re = /calc\(\s*(-?[\d.]+)(%?)\s*([+-])\s*(-?[\d.]+)(%?)\s*\)/;
+  const re =
+    /calc\(\s*(?<left>-?[\d.]+)(?<leftUnit>%?)\s*(?<op>[+-])\s*(?<right>-?[\d.]+)(?<rightUnit>%?)\s*\)/u;
   for (;;) {
     const m = re.exec(s);
     if (!m) break;
-    const a = parseFloat(m[1] ?? '0');
-    const b = parseFloat(m[4] ?? '0');
-    const unit = m[2] || m[5] || '';
-    const val = m[3] === '+' ? a + b : a - b;
+    const g: Record<string, string | undefined> = m.groups ?? {};
+    const a = parseFloat(g.left ?? '0');
+    const b = parseFloat(g.right ?? '0');
+    const unit = g.leftUnit || g.rightUnit || '';
+    const val = g.op === '+' ? a + b : a - b;
     s = s.slice(0, m.index) + `${val}${unit}` + s.slice(m.index + m[0].length);
   }
   return s;
@@ -183,22 +187,22 @@ function roundAlpha(a: number): number {
 export function cssColorToRn(resolved: string): string | null {
   const v = resolved.trim();
   if (!v) return null;
-  if (/^#[0-9a-fA-F]{3}$/.test(v)) {
+  if (/^#[0-9a-fA-F]{3}$/u.test(v)) {
     return (
       '#' +
       v
         .slice(1)
-        .replace(/./g, (c) => c + c)
+        .replace(/./gu, (c) => c + c)
         .toLowerCase()
     );
   }
-  if (/^#[0-9a-fA-F]{6}$/.test(v)) return v.toLowerCase();
-  if (/^rgba?\([^)]*\)$/.test(v)) return v;
+  if (/^#[0-9a-fA-F]{6}$/u.test(v)) return v.toLowerCase();
+  if (/^rgba?\([^)]*\)$/u.test(v)) return v;
 
-  const hsl = /^hsla?\(\s*([^)]*)\)$/.exec(v);
-  if (hsl?.[1] !== undefined) {
-    const segments = hsl[1].split('/').map((p) => p.trim());
-    const parts = (segments[0] ?? '').split(/[\s,]+/).filter(Boolean);
+  const hsl = /^hsla?\(\s*(?<body>[^)]*)\)$/u.exec(v)?.groups?.body;
+  if (hsl !== undefined) {
+    const segments = hsl.split('/').map((p) => p.trim());
+    const parts = (segments[0] ?? '').split(/[\s,]+/u).filter(Boolean);
     if (parts.length < 3) return null;
     const h = parseFloat(parts[0] ?? '');
     const s = parseFloat(parts[1] ?? '') / 100;
@@ -215,21 +219,23 @@ export function cssColorToRn(resolved: string): string | null {
 
 /** A resolved length (`14px`, `0.75rem`) → pixels, or null. rem = 16px. */
 export function cssLengthToPx(resolved: string): number | null {
-  const px = /^(-?[\d.]+)px$/.exec(resolved.trim());
-  if (px?.[1] !== undefined) return parseFloat(px[1]);
-  const rem = /^(-?[\d.]+)rem$/.exec(resolved.trim());
-  if (rem?.[1] !== undefined) return parseFloat(rem[1]) * 16;
+  const px = /^(?<value>-?[\d.]+)px$/u.exec(resolved.trim())?.groups?.value;
+  if (px !== undefined) return parseFloat(px);
+  const rem = /^(?<value>-?[\d.]+)rem$/u.exec(resolved.trim())?.groups?.value;
+  if (rem !== undefined) return parseFloat(rem) * 16;
   return null;
 }
 
 /** `--ink-2` → `ink2`, `--bg-elev` → `bgElev`, `--on-accent` → `onAccent`. */
 function camelKey(name: string): string {
-  return name.replace(/^--/, '').replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+  return name
+    .replace(/^--/u, '')
+    .replace(/-(?<char>[a-z0-9])/gu, (_, char: string) => char.toUpperCase());
 }
 
 /** `--r-card` → `card`, `--radius-sm` → `radiusSm` (drop the `r-` prefix). */
 function radiusKey(name: string): string {
-  return camelKey(name.replace(/^--r-/, '--'));
+  return camelKey(name.replace(/^--r-/u, '--'));
 }
 
 // Internal (`--_accent`) and swatch (`--c-amber`) vars are excluded from the
@@ -296,11 +302,11 @@ function sortedEntries<T>(obj: Record<string, T>): [string, T][] {
 // strings) so `bun run generate:theme` followed by `bun run format` is a
 // no-op — otherwise every regeneration would show a spurious quoting diff.
 function keyLiteral(k: string): string {
-  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k) ? k : `'${k}'`;
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(k) ? k : `'${k}'`;
 }
 
 function stringLiteral(v: string): string {
-  return `'${v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+  return `'${v.replace(/\\/gu, '\\\\').replace(/'/gu, "\\'")}'`;
 }
 
 function renderRecord(obj: Record<string, string | number>, indent: string): string {
@@ -314,8 +320,7 @@ function renderFonts(indent: string): string {
   for (const [role, weights] of sortedEntries(
     FONT_ROLES as unknown as Record<string, Record<string, string>>,
   )) {
-    lines.push(`${indent}${role}: {`);
-    lines.push(renderRecord(weights, indent + '  '));
+    lines.push(`${indent}${role}: {`, renderRecord(weights, indent + '  '));
     lines.push(`${indent}},`);
   }
   return lines.join('\n');

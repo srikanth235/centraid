@@ -105,7 +105,7 @@ interface TombstoneRow {
 
 const tombstoneExtent = (row: TombstoneRow): ScopeTriple => ({
   schema: row.schema_name,
-  ...(row.table_name !== null ? { table: row.table_name } : {}),
+  ...(row.table_name === null ? {} : { table: row.table_name }),
   verbs: row.verbs as ScopeTriple['verbs'],
   ...(row.row_filter_json ? { rowFilter: JSON.parse(row.row_filter_json) as FilterClause[] } : {}),
   ...(row.field_mask_json ? { fieldMask: JSON.parse(row.field_mask_json) as string[] } : {}),

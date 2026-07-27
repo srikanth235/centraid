@@ -7,7 +7,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * not carry as `absent` (which the reconcile records lost) — never write it.
  */
 
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
@@ -51,54 +51,56 @@ async function buildSource(sourceDir: string, blobs: Buffer[]): Promise<SourceEn
   return entries;
 }
 
-test('materializes exactly the requested carried shas, byte-exact, and reports the rest absent', async () => {
-  const provider = openLocalBackupProvider({ rootDir: await tempDir('mz-provider') });
-  const { targetId } = await provider.createTarget({ label: 'mz' });
-  const keyring = await createKeyring(path.join(await tempDir('mz-keyring'), 'keyring.json'));
+describe('materialize', () => {
+  test('materializes exactly the requested carried shas, byte-exact, and reports the rest absent', async () => {
+    const provider = openLocalBackupProvider({ rootDir: await tempDir('mz-provider') });
+    const { targetId } = await provider.createTarget({ label: 'mz' });
+    const keyring = await createKeyring(path.join(await tempDir('mz-keyring'), 'keyring.json'));
 
-  const wantBytes = randomBytes(9000);
-  const otherBytes = randomBytes(4000); // in the snapshot, but NOT requested
-  const wantSha = sha256(wantBytes);
-  const otherSha = sha256(otherBytes);
-  const absentSha = 'f'.repeat(64); // never in the snapshot
+    const wantBytes = randomBytes(9000);
+    const otherBytes = randomBytes(4000); // in the snapshot, but NOT requested
+    const wantSha = sha256(wantBytes);
+    const otherSha = sha256(otherBytes);
+    const absentSha = 'f'.repeat(64); // never in the snapshot
 
-  const sourceDir = await tempDir('mz-source');
-  const entries = await buildSource(sourceDir, [wantBytes, otherBytes]);
-  const row = await createSnapshot({
-    provider,
-    targetId,
-    keyring,
-    vaultId: 'vault-1',
-    entries,
-    generation: 1,
-    appMeta: { vaultUserVersion: '1', ontologyVersion: '1.0' },
+    const sourceDir = await tempDir('mz-source');
+    const entries = await buildSource(sourceDir, [wantBytes, otherBytes]);
+    const row = await createSnapshot({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      entries,
+      generation: 1,
+      appMeta: { vaultUserVersion: '1', ontologyVersion: '1.0' },
+    });
+    expect(row?.seq).toBe(1);
+
+    const destDir = await tempDir('mz-dest');
+    const result = await materializeSnapshotBlobs({
+      provider,
+      targetId,
+      keyring,
+      vaultId: 'vault-1',
+      seq: row!.seq,
+      shas: [wantSha, absentSha],
+      destDir,
+    });
+
+    expect(result.materialized).toStrictEqual([wantSha]);
+    expect(result.absent).toStrictEqual([absentSha]);
+
+    // The wanted blob landed byte-exact at the FsBlobStore path.
+    const landed = await fs.readFile(
+      path.join(destDir, 'blobs', 'sha256', wantSha.slice(0, 2), wantSha),
+    );
+    expect(landed.equals(wantBytes)).toBe(true);
+    // Selective: neither the un-requested carried blob nor the absent one was written.
+    await expect(
+      fs.readdir(path.join(destDir, 'blobs', 'sha256', otherSha.slice(0, 2))).catch(() => []),
+    ).resolves.not.toContain(otherSha);
+    await expect(
+      fs.access(path.join(destDir, 'blobs', 'sha256', absentSha.slice(0, 2), absentSha)),
+    ).rejects.toThrow(/ENOENT/);
   });
-  expect(row?.seq).toBe(1);
-
-  const destDir = await tempDir('mz-dest');
-  const result = await materializeSnapshotBlobs({
-    provider,
-    targetId,
-    keyring,
-    vaultId: 'vault-1',
-    seq: row!.seq,
-    shas: [wantSha, absentSha],
-    destDir,
-  });
-
-  expect(result.materialized).toEqual([wantSha]);
-  expect(result.absent).toEqual([absentSha]);
-
-  // The wanted blob landed byte-exact at the FsBlobStore path.
-  const landed = await fs.readFile(
-    path.join(destDir, 'blobs', 'sha256', wantSha.slice(0, 2), wantSha),
-  );
-  expect(landed.equals(wantBytes)).toBe(true);
-  // Selective: neither the un-requested carried blob nor the absent one was written.
-  expect(
-    await fs.readdir(path.join(destDir, 'blobs', 'sha256', otherSha.slice(0, 2))).catch(() => []),
-  ).not.toContain(otherSha);
-  await expect(
-    fs.access(path.join(destDir, 'blobs', 'sha256', absentSha.slice(0, 2), absentSha)),
-  ).rejects.toThrow();
 });

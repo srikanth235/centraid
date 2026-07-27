@@ -113,7 +113,7 @@ function vorbisFixture(): Buffer {
 
 describe('bounded media metadata parsers', () => {
   test('ISO-BMFF reads mvhd/tkhd/stsd without decoding media', () => {
-    expect(parseIsoBmffMetadata(mp4Fixture())).toEqual({
+    expect(parseIsoBmffMetadata(mp4Fixture())).toStrictEqual({
       duration_s: 6.5,
       width: 1920,
       height: 1080,
@@ -154,7 +154,7 @@ describe('bounded media metadata parsers', () => {
       title: 'Night train',
       artist: 'Mira',
     });
-    expect(parseMediaMetadata(Buffer.from('not a container'), 'video/mp4')).toEqual({});
-    expect(parseIsoBmffMetadata(Buffer.from('broken'))).toEqual({});
+    expect(parseMediaMetadata(Buffer.from('not a container'), 'video/mp4')).toStrictEqual({});
+    expect(parseIsoBmffMetadata(Buffer.from('broken'))).toStrictEqual({});
   });
 });

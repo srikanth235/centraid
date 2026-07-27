@@ -61,7 +61,7 @@ describe('connectorPlatform', () => {
       row({ connectionId: 'auth', health: 'needs-auth' }),
       row({ connectionId: 'pause', health: 'paused' }),
     ]);
-    expect(sorted.map((r) => r.connectionId)).toEqual(['fail', 'auth', 'pause', 'ok']);
+    expect(sorted.map((r) => r.connectionId)).toStrictEqual(['fail', 'auth', 'pause', 'ok']);
   });
 
   it('flags reconnect for needs-auth and failing only', () => {
@@ -82,7 +82,7 @@ describe('connectorPlatform', () => {
       capabilitiesByProvider: byProvider,
     });
     expect(tools.every((t) => t.connectionId === 'live')).toBe(true);
-    expect(tools.map((t) => t.toolName).sort()).toEqual([
+    expect(tools.map((t) => t.toolName).sort()).toStrictEqual([
       'connector.pull_gmail.list',
       'connector.pull_gmail.send',
     ]);
@@ -94,7 +94,7 @@ describe('connectorPlatform', () => {
       connections: [row({ connectionId: 'live', health: 'ok', provider: 'unknown' })],
       capabilitiesByProvider: new Map(),
     });
-    expect(tools).toEqual([]);
+    expect(tools).toStrictEqual([]);
   });
 
   it('builds durable connection binding payloads for automation save', () => {
@@ -104,7 +104,7 @@ describe('connectorPlatform', () => {
       { connectionId: 'c2', kind: 'pull.github', label: 'B' },
       { connectionId: '', kind: 'x', label: 'skip' },
     ]);
-    expect(payload).toEqual([
+    expect(payload).toStrictEqual([
       { connectionId: 'c1', kind: 'pull.gmail', label: 'A' },
       { connectionId: 'c2', kind: 'pull.github', label: 'B' },
     ]);
@@ -117,7 +117,7 @@ describe('connectorPlatform', () => {
         label: 'personal',
         connectionId: 'conn-9',
       }),
-    ).toEqual({
+    ).toStrictEqual({
       kind: 'pull.github',
       label: 'personal',
       connectionId: 'conn-9',

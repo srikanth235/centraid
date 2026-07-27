@@ -243,7 +243,7 @@ export class ConnectionBroker {
     const challenge = createHash('sha256').update(verifier).digest('base64url');
     const browserBinding = randomBytes(32).toString('base64url');
     const redirectUri = assistCallbackUrl(config);
-    const requestedScopes = assistScopes((row.scopes ?? '').split(/\s+/).filter(Boolean), config);
+    const requestedScopes = assistScopes((row.scopes ?? '').split(/\s+/u).filter(Boolean), config);
     const googleUrl = new URL(ASSIST_GOOGLE_AUTH_URL);
     googleUrl.searchParams.set('client_id', config.googleClientId);
     googleUrl.searchParams.set('redirect_uri', redirectUri);
@@ -532,7 +532,7 @@ export class ConnectionBroker {
       const value = response.headers.get(name);
       if (value) headers[name] = value;
     }
-    return { status: response.status, headers, ...(body !== undefined ? { body } : {}) };
+    return { status: response.status, headers, ...(body === undefined ? {} : { body }) };
   }
 
   /**

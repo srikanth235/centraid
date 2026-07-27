@@ -57,7 +57,7 @@ interface RawCollection {
   cover_content_id?: string | null;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function searchHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const term = String(input?.term ?? '').trim();
   if (!term) return { assets: [] };
@@ -163,4 +163,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     }
     return { assets: [], error: String(e.message ?? err) };
   }
-};
+}

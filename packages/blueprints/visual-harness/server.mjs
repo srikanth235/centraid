@@ -18,13 +18,12 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 // Imported straight from source — bun runs .ts directly, no build step, and
 // this is the whole point of the harness: exercise the REAL serveStatic.
 import { serveStatic } from '../../app-engine/src/http/static-server.ts';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, '../../..');
 const APPS_DIR = path.join(REPO_ROOT, 'packages/blueprints/apps');
 const KIT_DIR = path.join(REPO_ROOT, 'packages/blueprints/kit');
@@ -103,16 +102,16 @@ async function serveAppAsset(req, res, appId, rel) {
   if (cap.statusCode === 200 && contentType.startsWith('text/html')) {
     let html = body.toString('utf8');
     const csp = String(cap.headers['Content-Security-Policy'] || '');
-    const nonceMatch = /nonce-([^']+)'/.exec(csp);
-    const nonceAttr = nonceMatch ? ` nonce="${nonceMatch[1]}"` : '';
+    const nonceMatch = /nonce-(?<nonce>[^']+)'/u.exec(csp);
+    const nonceAttr = nonceMatch ? ` nonce="${nonceMatch.groups?.nonce ?? ''}"` : '';
     const mockSrc = await mockScriptSource();
     const tag = `<script${nonceAttr}>\n${mockSrc}\n</script>\n`;
-    if (/<script\s+type=["']module["']/i.test(html)) {
-      html = html.replace(/<script\s+type=["']module["']/i, tag + '<script type="module"');
+    if (/<script\s+type=["']module["']/iu.test(html)) {
+      html = html.replace(/<script\s+type=["']module["']/iu, tag + '<script type="module"');
     } else {
       // Defensive fallback — both shipped apps have a module script, but a
       // future app might not.
-      html = html.replace(/<\/body>/i, `${tag}</body>`);
+      html = html.replace(/<\/body>/iu, `${tag}</body>`);
     }
     body = Buffer.from(html, 'utf8');
   }
@@ -145,7 +144,7 @@ function hashHue(id) {
 
 function escapeXml(s) {
   return s.replace(
-    /[<>&"]/g,
+    /[<>&"]/gu,
     (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c],
   );
 }
@@ -255,17 +254,17 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const appMatch = /^\/centraid\/([^/]+)(\/.*)?$/.exec(pathname);
+    const appMatch = /^\/centraid\/(?<appId>[^/]+)(?<rest>\/.*)?$/u.exec(pathname);
     if (!appMatch) {
       sendPlain(res, 404, 'not found');
       return;
     }
-    const appId = decodeURIComponent(appMatch[1]);
+    const appId = decodeURIComponent(appMatch.groups?.appId ?? '');
     if (!SUPPORTED_APPS.has(appId)) {
       sendPlain(res, 404, `unknown app: ${appId} (wired up: ${[...SUPPORTED_APPS].join('/')})`);
       return;
     }
-    let rel = appMatch[2] || '/';
+    let rel = appMatch.groups?.rest || '/';
 
     if (rel === '/_changes') {
       handleChangesStub(req, res, appId);

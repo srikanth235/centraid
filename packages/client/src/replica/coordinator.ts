@@ -30,11 +30,11 @@ import type {
 
 export interface ReplicaChangeFeedAdapter {
   /** Pass `subscribeVaultChanges` from the shell-owned singleton feed. */
-  subscribe(listener: (message: VaultChangeMessage) => void): () => void;
+  subscribe: (listener: (message: VaultChangeMessage) => void) => () => void;
   /** Attest the exact catalog stored locally before opening/resuming a feed. */
-  setShapeIds(shapeIds: readonly string[]): Promise<void>;
+  setShapeIds: (shapeIds: readonly string[]) => Promise<void>;
   /** Pass `resumeVaultChanges`; called only after an atomic bootstrap commits. */
-  resume(cursor: ReplicaCursor): Promise<void>;
+  resume: (cursor: ReplicaCursor) => Promise<void>;
 }
 
 export type ReplicaChangePuller = (

@@ -96,10 +96,10 @@ describe('kit smoke', () => {
       { attachment_id: 'a2', media_type: 'application/pdf', content_uri: 'x.pdf', title: 'Doc' },
     ];
     renderAttachments(strip, list, null);
-    expect(strip.querySelectorAll('.kit-attach-tile').length).toBe(2);
+    expect(strip.querySelectorAll('.kit-attach-tile')).toHaveLength(2);
     expect(strip.querySelector('.kit-attach-remove')).toBeNull();
     renderAttachments(strip, list, () => {}, { onZoom: () => {} });
-    expect(strip.querySelectorAll('.kit-attach-remove').length).toBe(2);
+    expect(strip.querySelectorAll('.kit-attach-remove')).toHaveLength(2);
     expect(strip.querySelector('img.kit-attach-zoom')).toBeTruthy();
     expect(strip.querySelector('.kit-attach-meta').textContent).toBe('2 KB');
   });
@@ -174,13 +174,13 @@ describe('kit smoke', () => {
     const updates: string[] = [];
     const subscription = subscribeReadUpdates(read, (value: string) => updates.push(value));
 
-    expect(await read).toBe('current');
+    await expect(read).resolves.toBe('current');
     await Promise.resolve();
     expect(subscription.managed).toBe(true);
-    expect(updates).toEqual([]);
+    expect(updates).toStrictEqual([]);
 
     for (const listener of listeners) listener('rerun');
-    expect(updates).toEqual(['rerun']);
+    expect(updates).toStrictEqual(['rerun']);
     subscription.unsubscribe();
     expect(listeners.size).toBe(0);
   });
@@ -204,7 +204,7 @@ describe('kit smoke', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(updates).toEqual(['fresh']);
+    expect(updates).toStrictEqual(['fresh']);
     subscription.unsubscribe();
   });
 
@@ -237,7 +237,7 @@ describe('kit smoke', () => {
     });
     vi.advanceTimersByTime(10);
 
-    expect(updates.map(({ intentId, intentState }) => ({ intentId, intentState }))).toEqual([
+    expect(updates.map(({ intentId, intentState }) => ({ intentId, intentState }))).toStrictEqual([
       { intentId: 'intent-a', intentState: 'executed' },
       { intentId: 'intent-b', intentState: 'denied' },
     ]);
@@ -253,7 +253,7 @@ describe('kit smoke', () => {
     );
     expect(subscription.managed).toBe(false);
     subscription.unsubscribe();
-    expect(updates).toEqual([]);
+    expect(updates).toStrictEqual([]);
   });
 
   it('KitElement subclasses render light DOM and stamp data-kit-host', () => {

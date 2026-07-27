@@ -96,7 +96,7 @@ export function isReservedAppId(id: string): boolean {
  */
 export function resolveStaticPath(appDir: string, relRequest: string): string | null {
   // Strip leading slash, normalize.
-  const rel = relRequest.replace(/^\/+/, '');
+  const rel = relRequest.replace(/^\/+/u, '');
   if (rel === '' || rel === '/') {
     return path.join(appDir, 'index.html');
   }

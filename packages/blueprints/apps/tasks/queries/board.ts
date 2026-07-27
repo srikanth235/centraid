@@ -107,7 +107,7 @@ function attachmentsBySubject(
 const OPEN_STATUSES = ['needs-action', 'in-process'];
 const CLOSED_STATUSES = ['completed', 'cancelled'];
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function boardHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const OPEN = new Set(OPEN_STATUSES);
   const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
@@ -380,4 +380,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

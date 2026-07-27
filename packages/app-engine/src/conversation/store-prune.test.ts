@@ -63,9 +63,9 @@ describe('ConversationStore — prune + delete', () => {
       .listAutomationTurns('app/foo', { limit: 100 })
       .map((t) => t.turnId)
       .sort();
-    expect(remaining).toEqual(['r0', 'r4', 'r5']);
-    expect(store.listItems('r1').length).toBe(0);
-    expect(store.listItems('r5').length).toBe(1);
+    expect(remaining).toStrictEqual(['r0', 'r4', 'r5']);
+    expect(store.listItems('r1')).toHaveLength(0);
+    expect(store.listItems('r5')).toHaveLength(1);
     store.close();
   });
 
@@ -74,10 +74,10 @@ describe('ConversationStore — prune + delete', () => {
     for (let i = 0; i < 4; i++) seedFire(store, i, i % 2 === 0);
     store.pruneAutomation('app/foo', { errorsOnly: true });
     const remaining = store.listAutomationTurns('app/foo', { limit: 100 });
-    expect(remaining.length).toBe(2);
+    expect(remaining).toHaveLength(2);
     for (const turn of remaining) expect(turn.ok).toBe(false);
     store.pruneAutomation('app/foo', { all: true });
-    expect(store.listAutomationTurns('app/foo', { limit: 100 }).length).toBe(2);
+    expect(store.listAutomationTurns('app/foo', { limit: 100 })).toHaveLength(2);
     store.close();
   });
 
@@ -89,10 +89,10 @@ describe('ConversationStore — prune + delete', () => {
     store.stateSet('app/a', 'k', JSON.stringify('v'), 1);
     store.stateSet('app/b', 'k', JSON.stringify('v'), 1);
     store.deleteAutomationData('app/a');
-    expect(store.listAutomationTurns('app/a').length).toBe(0);
-    expect(store.listItems('a1').length).toBe(0);
-    expect(store.stateGet('app/a', 'k')).toBe(undefined);
-    expect(store.listAutomationTurns('app/b').length).toBe(1);
+    expect(store.listAutomationTurns('app/a')).toHaveLength(0);
+    expect(store.listItems('a1')).toHaveLength(0);
+    expect(store.stateGet('app/a', 'k')).toBeUndefined();
+    expect(store.listAutomationTurns('app/b')).toHaveLength(1);
     expect(store.stateGet('app/b', 'k')).toBeTruthy();
     store.close();
   });
@@ -115,7 +115,7 @@ describe('ConversationStore — prune + delete', () => {
     store.insertAttachment({ itemId, hash: 'b'.repeat(64), mime: 'image/png', sizeBytes: 1 });
     expect(store.deleteConversation(conversation.id, 'other-user')).toBe(false);
     expect(store.deleteConversation(conversation.id, 'u1')).toBe(true);
-    expect(store.listItems('t').length).toBe(0);
+    expect(store.listItems('t')).toHaveLength(0);
     expect(store.referencedHashes().size).toBe(0);
     store.close();
   });

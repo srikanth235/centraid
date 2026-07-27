@@ -11,7 +11,7 @@ import { useTheme, type ThemeColors } from '../../kit/theme';
 export interface ColorSwatchRowProps {
   value: string;
   options: readonly string[];
-  onChange(hex: string): void;
+  onChange: (hex: string) => void;
 }
 
 export default function ColorSwatchRow({

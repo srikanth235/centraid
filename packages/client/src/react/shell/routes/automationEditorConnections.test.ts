@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ConnectionRowDTO } from '../../screens/SettingsConnectionsScreen.js';
 import { matchEditorConnection } from './AutomationEditorRoute.js';
 
-vi.mock('../../../gateway-client.js', () => ({}));
-vi.mock('../../../assist-oauth-handoff.js', () => ({}));
+vi.mock(import('../../../gateway-client.js'), () => ({}));
+vi.mock(import('../../../assist-oauth-handoff.js'), () => ({}));
 
 function row(over: Partial<ConnectionRowDTO>): ConnectionRowDTO {
   return {
@@ -20,14 +20,14 @@ function row(over: Partial<ConnectionRowDTO>): ConnectionRowDTO {
   };
 }
 
-describe('matchEditorConnection', () => {
+describe(matchEditorConnection, () => {
   it('requires an exact provider as well as connector kind', () => {
     const result = matchEditorConnection(
       [row({ provider: 'attacker-provider' })],
       'github',
       'pull.github',
     );
-    expect(result).toEqual({ match: null, matches: [] });
+    expect(result).toStrictEqual({ match: null, matches: [] });
   });
 
   it('refuses to guess between multiple accounts', () => {
@@ -40,6 +40,9 @@ describe('matchEditorConnection', () => {
       'pull.github',
     );
     expect(result.match).toBeNull();
-    expect(result.matches.map((candidate) => candidate.connectionId)).toEqual(['personal', 'work']);
+    expect(result.matches.map((candidate) => candidate.connectionId)).toStrictEqual([
+      'personal',
+      'work',
+    ]);
   });
 });

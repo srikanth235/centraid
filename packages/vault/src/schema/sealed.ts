@@ -126,7 +126,7 @@ const TAG_BYTES = 16;
 // #298 item 8) keeps the prefix predicate structural: a user password that
 // happens to START with "sealed:v1:" no longer satisfies it, so the seal
 // sweep seals it instead of storing it verbatim as "already sealed".
-const SEALED_BODY_RE = /^[A-Za-z0-9+/]{38,}={0,2}$/;
+const SEALED_BODY_RE = /^[A-Za-z0-9+/]{38,}={0,2}$/u;
 
 export function isSealedValue(value: unknown): value is string {
   if (typeof value !== 'string' || !value.startsWith(SEALED_PREFIX)) return false;
@@ -354,8 +354,8 @@ export function scrubSealedText(key: Buffer, text: string, values: readonly stri
 // there are per-table and dynamic, so redaction and scrub must look inside
 // the container, keyed by the table's declared sealed list.
 function extSecretContainer(commandName: string): 'values' | 'set' | null {
-  if (/^ext\.[a-z0-9-]+\.insert$/.test(commandName)) return 'values';
-  if (/^ext\.[a-z0-9-]+\.update$/.test(commandName)) return 'set';
+  if (/^ext\.[a-z0-9-]+\.insert$/u.test(commandName)) return 'values';
+  if (/^ext\.[a-z0-9-]+\.update$/u.test(commandName)) return 'set';
   return null;
 }
 

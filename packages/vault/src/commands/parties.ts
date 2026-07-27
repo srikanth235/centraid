@@ -217,7 +217,7 @@ function updateParty(ctx: HandlerCtx): Record<string, unknown> {
   // birth_date moves, reconcile the matching People row's MM-DD so the two can
   // never disagree. (add_important_date reconciles the other direction.)
   if (input.birth_date !== undefined) {
-    const md = /(\d{2}-\d{2})$/.exec(input.birth_date)?.[1] ?? null;
+    const md = /(?<monthDay>\d{2}-\d{2})$/u.exec(input.birth_date)?.groups?.monthDay ?? null;
     if (md) {
       const stale = ctx.db
         .prepare(

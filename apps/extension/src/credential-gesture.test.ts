@@ -25,11 +25,11 @@ describe('credential gesture boundary', () => {
       receipt_id: 'receipt-1',
     };
     clearFillMaterial(material);
-    expect(material).toEqual({});
+    expect(material).toStrictEqual({});
 
     const save = { type: 'locker:save', password: 'new secret', title: 'Login' };
     clearSavedPassword(save);
-    expect(save).toEqual({ type: 'locker:save', title: 'Login' });
+    expect(save).toStrictEqual({ type: 'locker:save', title: 'Login' });
   });
 
   it('offers the generated signup password to the save journey', () => {

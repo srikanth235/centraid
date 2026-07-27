@@ -113,7 +113,7 @@ export function thumbHashFromRgba(
   }
   let binary = '';
   for (const byte of hash) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/=+$/, '');
+  return btoa(binary).replace(/=+$/u, '');
 }
 
 /**

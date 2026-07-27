@@ -26,7 +26,7 @@ export function makeImportRouteHandler(vaults: Pick<VaultRegistry, 'current'>): 
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
-    const rest = url.pathname.slice(PREFIX.length).replace(/^\//, '');
+    const rest = url.pathname.slice(PREFIX.length).replace(/^\//u, '');
     const segments = rest === '' ? [] : rest.split('/').map(decodeURIComponent);
     const method = req.method ?? 'GET';
     const plane = vaults.current();

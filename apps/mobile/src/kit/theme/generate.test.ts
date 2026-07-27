@@ -39,7 +39,7 @@ const FIXTURE = `
 }
 `;
 
-describe('cssColorToRn', () => {
+describe(cssColorToRn, () => {
   it('resolves hsl space syntax to hex', () => {
     expect(cssColorToRn('hsl(0 0% 100%)')).toBe('#ffffff');
     expect(cssColorToRn('hsl(0 0% 0%)')).toBe('#000000');
@@ -67,7 +67,7 @@ describe('cssColorToRn', () => {
   });
 });
 
-describe('cssLengthToPx', () => {
+describe(cssLengthToPx, () => {
   it('reads px directly and converts rem at 16px', () => {
     expect(cssLengthToPx('14px')).toBe(14);
     expect(cssLengthToPx('0.75rem')).toBe(12);
@@ -76,7 +76,7 @@ describe('cssLengthToPx', () => {
   });
 });
 
-describe('parseTokensCss', () => {
+describe(parseTokensCss, () => {
   it('splits the light root and dark override blocks', () => {
     const { light, darkOverride } = parseTokensCss(FIXTURE);
     expect(light['--accent']).toBe('#4E68DD');
@@ -87,7 +87,7 @@ describe('parseTokensCss', () => {
   });
 });
 
-describe('buildTheme', () => {
+describe(buildTheme, () => {
   const theme = buildTheme(FIXTURE);
 
   it('extracts resolved light colors', () => {
@@ -113,7 +113,7 @@ describe('buildTheme', () => {
   });
 
   it('keeps light and dark key sets identical', () => {
-    expect(Object.keys(theme.dark).sort()).toEqual(Object.keys(theme.light).sort());
+    expect(Object.keys(theme.dark).sort()).toStrictEqual(Object.keys(theme.light).sort());
   });
 
   it('lowers radii, dropping the r- prefix', () => {
@@ -130,7 +130,7 @@ describe('buildTheme', () => {
   });
 });
 
-describe('renderTokensModule', () => {
+describe(renderTokensModule, () => {
   const theme = buildTheme(FIXTURE);
 
   it('is deterministic across runs', () => {
@@ -143,7 +143,7 @@ describe('renderTokensModule', () => {
     const out = renderTokensModule(theme, 'src.css');
     const block = /export const lightPalette = \{([\s\S]*?)\} as const;/.exec(out)?.[1] ?? '';
     const keys = [...block.matchAll(/^\s*([A-Za-z0-9_$]+):/gm)].map((m) => m[1]);
-    expect(keys).toEqual([...keys].sort());
+    expect(keys).toStrictEqual([...keys].sort());
     expect(keys.length).toBeGreaterThan(0);
   });
 

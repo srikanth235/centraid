@@ -17,7 +17,7 @@ const github = {
 };
 
 function replies(...responses: PollJsonResponse[]): PollJson {
-  return vi.fn(async () => {
+  return vi.fn<PollJson>(async () => {
     const response = responses.shift();
     if (!response) throw new Error('unexpected provider request');
     return response;

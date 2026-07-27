@@ -8,7 +8,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
-import { fileURLToPath } from 'node:url';
 import { assertSafeConnectorSvg } from './lib/sanitize-connector-svg.mjs';
 
 const MAP = {
@@ -29,7 +28,7 @@ const MAP = {
   dropbox: 'logos:dropbox',
 };
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.resolve(import.meta.dirname, '..');
 const DEST = path.join(ROOT, 'packages/client/src/react/screens/connectorBrandMarks.tsx');
 
 function fetchSvg(url) {
@@ -51,24 +50,24 @@ function fetchSvg(url) {
 
 function normalizeSvg(svg, tone) {
   assertSafeConnectorSvg(svg, tone);
-  let s = svg.trim().replace(/\s+/g, ' ').replace(/> </g, '><');
-  s = s.replace(/<svg\b([^>]*)>/, (_m, attrs) => {
-    const vb = attrs.match(/viewBox="([^"]+)"/);
-    const viewBox = vb ? vb[1] : '0 0 24 24';
+  let s = svg.trim().replace(/\s+/gu, ' ').replace(/> </gu, '><');
+  s = s.replace(/<svg\b(?<attrs>[^>]*)>/u, (_m, attrs) => {
+    const vb = attrs.match(/viewBox="(?<viewBox>[^"]+)"/u);
+    const viewBox = vb?.groups?.viewBox ?? '0 0 24 24';
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="100%" height="100%" aria-hidden="true" focusable="false">`;
   });
   if (tone === 'github' || tone === 'linear') {
     s = s
-      .replace(/fill="#161614"/gi, 'fill="currentColor"')
-      .replace(/fill="#222326"/gi, 'fill="currentColor"')
-      .replace(/fill="#000000?"/gi, 'fill="currentColor"')
-      .replace(/fill="black"/gi, 'fill="currentColor"');
+      .replace(/fill="#161614"/giu, 'fill="currentColor"')
+      .replace(/fill="#222326"/giu, 'fill="currentColor"')
+      .replace(/fill="#000000?"/giu, 'fill="currentColor"')
+      .replace(/fill="black"/giu, 'fill="currentColor"');
   }
   if (tone === 'notion') {
     s = s
-      .replace(/fill="#000000?"/gi, 'fill="currentColor"')
-      .replace(/fill="#191919"/gi, 'fill="currentColor"')
-      .replace(/stroke="#000000?"/gi, 'stroke="currentColor"');
+      .replace(/fill="#000000?"/giu, 'fill="currentColor"')
+      .replace(/fill="#191919"/giu, 'fill="currentColor"')
+      .replace(/stroke="#000000?"/giu, 'stroke="currentColor"');
   }
   return s;
 }

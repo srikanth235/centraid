@@ -232,8 +232,8 @@ export function buildGatewayInfoPayload(input: {
     startedAt: input.startedAt,
     uptimeMs: input.uptimeMs,
     status: input.status ?? 'ready',
-    ...(input.endpointId !== undefined ? { endpointId: input.endpointId } : {}),
-    ...(input.endpointTicket !== undefined ? { endpointTicket: input.endpointTicket } : {}),
+    ...(input.endpointId === undefined ? {} : { endpointId: input.endpointId }),
+    ...(input.endpointTicket === undefined ? {} : { endpointTicket: input.endpointTicket }),
     ...(input.foundingPending ? { foundingPending: true } : {}),
     capabilities: input.capabilities ?? { ...DEFAULT_GATEWAY_CAPABILITIES },
   };

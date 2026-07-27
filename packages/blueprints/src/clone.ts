@@ -321,14 +321,14 @@ export function cloneTemplateFiles(opts: CloneTemplateFilesOptions): ScaffoldFil
       set('index.html', rewriteTitleInHtml(out[htmlIdx]!.content, opts.newName));
     }
     for (const f of out) {
-      if (!/^automations\/[^/]+\/automation\.json$/.test(f.path)) continue;
+      if (!/^automations\/[^/]+\/automation\.json$/u.test(f.path)) continue;
       const next = applyManifestName(f.content, opts.newName, { stampGenerated: true });
       if (next !== null) set(f.path, next);
     }
   }
 
   // Seed an automations brief when the template ships none.
-  const hasAutomation = out.some((f) => /^automations\/[^/]+\/automation\.json$/.test(f.path));
+  const hasAutomation = out.some((f) => /^automations\/[^/]+\/automation\.json$/u.test(f.path));
   if (!hasAutomation && !byPath.has('automations/README.md')) {
     set('automations/README.md', AUTOMATIONS_README);
   }

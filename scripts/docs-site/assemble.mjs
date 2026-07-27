@@ -11,10 +11,9 @@
  * in Cloudflare's Git integration, not in a GitHub Actions job.
  */
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const repoRoot = join(import.meta.dirname, '..', '..');
 const docsOut = join(repoRoot, 'dist', 'docs-site');
 const homePublic = join(repoRoot, 'scripts', 'home-site', 'public');
 const siteDir = join(repoRoot, 'dist', 'site');

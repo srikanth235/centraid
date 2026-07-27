@@ -29,14 +29,17 @@ export function restampReleaseDate(yml, hours, nowMs = Date.now()) {
     throw new Error(`hours must be >= 0, got ${hours}`);
   }
   const target = new Date(nowMs - hours * 3600 * 1000).toISOString();
-  if (!/releaseDate:/m.test(yml)) {
-    const withDate = yml.replace(/^(version:\s*.+)$/m, `$1\nreleaseDate: '${target}'`);
+  if (!/releaseDate:/mu.test(yml)) {
+    const withDate = yml.replace(
+      /^(?<versionLine>version:\s*.+)$/mu,
+      `$<versionLine>\nreleaseDate: '${target}'`,
+    );
     if (withDate === yml) {
       return { text: `${yml.trimEnd()}\nreleaseDate: '${target}'\n`, releaseDate: target };
     }
     return { text: withDate, releaseDate: target };
   }
-  const text = yml.replace(/^releaseDate:\s*.+$/m, `releaseDate: '${target}'`);
+  const text = yml.replace(/^releaseDate:\s*.+$/mu, `releaseDate: '${target}'`);
   return { text, releaseDate: target };
 }
 

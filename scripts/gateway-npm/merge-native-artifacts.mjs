@@ -11,7 +11,6 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   NATIVE_PLATFORMS,
   auditNativeArtifacts,
@@ -19,7 +18,7 @@ import {
   requiredNativePlatformIds,
 } from './native-platforms.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const ROOT = path.resolve(__dirname, '../..');
 const DEST = path.join(ROOT, 'packages/tunnel/native');
 
@@ -137,5 +136,5 @@ function main() {
   console.log(`merge-native-artifacts: ok`);
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
 if (isMain) main();

@@ -27,10 +27,10 @@ function hmac(key: Buffer, data: string): Buffer {
 /** AWS SigV4 URI-encoding: unreserved chars pass through, everything else is %XX. */
 function awsUriEncode(input: string, encodeSlashChar: boolean): string {
   let out = encodeURIComponent(input).replace(
-    /[!'()*]/g,
+    /[!'()*]/gu,
     (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
   );
-  if (!encodeSlashChar) out = out.replace(/%2F/g, '/');
+  if (!encodeSlashChar) out = out.replace(/%2F/gu, '/');
   return out;
 }
 
@@ -49,7 +49,7 @@ function canonicalQuery(query: Record<string, string>): string {
 }
 
 function amzTimestamp(now: Date): { amzDate: string; dateStamp: string } {
-  const iso = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const iso = now.toISOString().replace(/[:-]|\.\d{3}/gu, '');
   return { amzDate: iso, dateStamp: iso.slice(0, 8) };
 }
 
@@ -134,11 +134,11 @@ async function collectBody(data: Uint8Array | AsyncIterable<Uint8Array>): Promis
 
 function unescapeXml(s: string): string {
   return s
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&');
+    .replace(/&lt;/gu, '<')
+    .replace(/&gt;/gu, '>')
+    .replace(/&quot;/gu, '"')
+    .replace(/&apos;/gu, "'")
+    .replace(/&amp;/gu, '&');
 }
 
 async function* streamResponseBody(res: Response): AsyncGenerator<Uint8Array> {
@@ -273,28 +273,41 @@ export class S3ObjectStore implements ObjectStore {
         );
       }
       const xml = await res.text();
-      for (const block of xml.match(/<Contents>[\s\S]*?<\/Contents>/g) ?? []) {
-        const keyMatch = /<Key>([\s\S]*?)<\/Key>/.exec(block);
-        const sizeMatch = /<Size>(\d+)<\/Size>/.exec(block);
-        const etagMatch = /<ETag>([\s\S]*?)<\/ETag>/.exec(block);
-        const modifiedMatch = /<LastModified>([\s\S]*?)<\/LastModified>/.exec(block);
-        const storageClassMatch = /<StorageClass>([\s\S]*?)<\/StorageClass>/.exec(block);
+      for (const block of xml.match(/<Contents>[\s\S]*?<\/Contents>/gu) ?? []) {
+        const keyMatch = /<Key>(?<key>[\s\S]*?)<\/Key>/u.exec(block);
+        const sizeMatch = /<Size>(?<size>\d+)<\/Size>/u.exec(block);
+        const etagMatch = /<ETag>(?<etag>[\s\S]*?)<\/ETag>/u.exec(block);
+        const modifiedMatch = /<LastModified>(?<lastModified>[\s\S]*?)<\/LastModified>/u.exec(
+          block,
+        );
+        const storageClassMatch = /<StorageClass>(?<storageClass>[\s\S]*?)<\/StorageClass>/u.exec(
+          block,
+        );
         if (!keyMatch) continue;
-        const fullKey = unescapeXml(keyMatch[1] ?? '');
+        const fullKey = unescapeXml(keyMatch.groups?.key ?? '');
         if (!fullKey.startsWith(this.grant.prefix)) continue;
-        const etag = etagMatch ? unescapeXml(etagMatch[1] ?? '').replace(/^"|"$/g, '') : undefined;
-        const modifiedMs = modifiedMatch ? Date.parse(unescapeXml(modifiedMatch[1] ?? '')) : NaN;
+        const etag = etagMatch
+          ? unescapeXml(etagMatch.groups?.etag ?? '').replace(/^"|"$/gu, '')
+          : undefined;
+        const modifiedMs = modifiedMatch
+          ? Date.parse(unescapeXml(modifiedMatch.groups?.lastModified ?? ''))
+          : NaN;
         yield {
           key: fullKey.slice(this.grant.prefix.length),
-          size: sizeMatch ? Number.parseInt(sizeMatch[1] ?? '0', 10) : 0,
+          size: sizeMatch ? Number.parseInt(sizeMatch.groups?.size ?? '0', 10) : 0,
           ...(etag ? { etagOrHash: etag } : {}),
           ...(Number.isFinite(modifiedMs) ? { storedAt: Math.floor(modifiedMs / 1000) } : {}),
-          ...(storageClassMatch ? { storageClass: unescapeXml(storageClassMatch[1] ?? '') } : {}),
+          ...(storageClassMatch
+            ? { storageClass: unescapeXml(storageClassMatch.groups?.storageClass ?? '') }
+            : {}),
         };
       }
-      const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
-      const tokenMatch = /<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/.exec(xml);
-      continuationToken = truncated && tokenMatch ? unescapeXml(tokenMatch[1] ?? '') : undefined;
+      const truncated = /<IsTruncated>true<\/IsTruncated>/u.test(xml);
+      const tokenMatch = /<NextContinuationToken>(?<token>[\s\S]*?)<\/NextContinuationToken>/u.exec(
+        xml,
+      );
+      continuationToken =
+        truncated && tokenMatch ? unescapeXml(tokenMatch.groups?.token ?? '') : undefined;
     } while (continuationToken);
   }
 

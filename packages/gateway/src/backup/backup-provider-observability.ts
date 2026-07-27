@@ -208,7 +208,7 @@ function difference(left: Set<string>, right: Set<string>): string[] {
 }
 
 function normalizedObjectHash(value: string): string {
-  return value.trim().replace(/^"|"$/g, '').toLowerCase();
+  return value.trim().replace(/^"|"$/gu, '').toLowerCase();
 }
 
 /**

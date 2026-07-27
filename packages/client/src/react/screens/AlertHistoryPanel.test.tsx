@@ -19,39 +19,41 @@ const snapshot = {
 let host: HTMLDivElement;
 let root: Root;
 
-beforeEach(() => {
-  host = document.createElement('div');
-  document.body.appendChild(host);
-  root = createRoot(host);
-});
-
-afterEach(async () => {
-  await act(async () => root.unmount());
-  host.remove();
-});
-
-describe('AlertHistoryPanel', () => {
-  it('renders persisted entries newest-first, marking earlier-session ones', async () => {
-    await act(async () => {
-      root.render(<AlertHistoryPanel rows={buildAlertHistoryRows(snapshot)} />);
-    });
-    expect(host.textContent).toContain('Alert history');
-    expect(host.textContent).toContain('Recovered');
-    expect(host.textContent).toContain('Gateway down');
-    expect(host.textContent).toContain('fetch failed');
-    expect(host.textContent).toContain('earlier session');
-    // Newest first — "Recovered" (current session) renders before "Gateway down" (earlier).
-    const recoveredIdx = host.textContent?.indexOf('Recovered') ?? -1;
-    const downIdx = host.textContent?.indexOf('Gateway down') ?? -1;
-    expect(recoveredIdx).toBeGreaterThanOrEqual(0);
-    expect(downIdx).toBeGreaterThan(recoveredIdx);
-    expect(host.querySelectorAll('[data-testid="alert-history-row"]').length).toBe(2);
+describe('screens/AlertHistoryPanel', () => {
+  beforeEach(() => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
   });
 
-  it('shows the empty state when no history has landed yet', async () => {
-    await act(async () => {
-      root.render(<AlertHistoryPanel rows={[]} />);
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+
+  describe(AlertHistoryPanel, () => {
+    it('renders persisted entries newest-first, marking earlier-session ones', async () => {
+      await act(async () => {
+        root.render(<AlertHistoryPanel rows={buildAlertHistoryRows(snapshot)} />);
+      });
+      expect(host.textContent).toContain('Alert history');
+      expect(host.textContent).toContain('Recovered');
+      expect(host.textContent).toContain('Gateway down');
+      expect(host.textContent).toContain('fetch failed');
+      expect(host.textContent).toContain('earlier session');
+      // Newest first — "Recovered" (current session) renders before "Gateway down" (earlier).
+      const recoveredIdx = host.textContent?.indexOf('Recovered') ?? -1;
+      const downIdx = host.textContent?.indexOf('Gateway down') ?? -1;
+      expect(recoveredIdx).toBeGreaterThanOrEqual(0);
+      expect(downIdx).toBeGreaterThan(recoveredIdx);
+      expect(host.querySelectorAll('[data-testid="alert-history-row"]')).toHaveLength(2);
     });
-    expect(host.textContent).toContain('No alerts recorded yet');
+
+    it('shows the empty state when no history has landed yet', async () => {
+      await act(async () => {
+        root.render(<AlertHistoryPanel rows={[]} />);
+      });
+      expect(host.textContent).toContain('No alerts recorded yet');
+    });
   });
 });

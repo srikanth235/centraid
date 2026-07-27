@@ -52,7 +52,7 @@ export type Encoding = 'br' | 'gzip';
  * future caller.
  */
 const COMPRESSIBLE_TYPE_RE =
-  /^(?:text\/(?!event-stream)|application\/(?:json|javascript|manifest\+json|xml)|image\/svg\+xml)/i;
+  /^(?:text\/(?!event-stream)|application\/(?:json|javascript|manifest\+json|xml)|image\/svg\+xml)/iu;
 
 export function isCompressibleType(contentType: string | undefined): boolean {
   return contentType !== undefined && COMPRESSIBLE_TYPE_RE.test(contentType);
@@ -79,8 +79,9 @@ export function negotiateEncoding(header: string | string[] | undefined): Encodi
     if (!name) continue;
     let weight = 1;
     for (const p of params) {
-      const m = /^\s*q=([0-9.]+)\s*$/i.exec(p);
-      if (m) weight = Number.parseFloat(m[1]!);
+      const m = /^\s*q=(?<weight>[0-9.]+)\s*$/iu.exec(p);
+      const parsed = m?.groups?.weight;
+      if (parsed !== undefined) weight = Number.parseFloat(parsed);
     }
     q.set(name, Number.isNaN(weight) ? 0 : weight);
   }

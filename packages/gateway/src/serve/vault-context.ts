@@ -59,9 +59,9 @@ export interface DeviceAccess {
    * transport — the composed handler (`build-gateway.ts`) then refuses the
    * request unless its host supplied another proved enrollment identity.
    */
-  deviceKeyFor(req: import('node:http').IncomingMessage): string | undefined;
+  deviceKeyFor: (req: import('node:http').IncomingMessage) => string | undefined;
   /** The vault ids this device key is enrolled in, oldest enrollment first. */
-  vaultsFor(deviceKey: string): string[];
+  vaultsFor: (deviceKey: string) => string[];
 }
 
 const storage = new AsyncLocalStorage<VaultRequestContext>();

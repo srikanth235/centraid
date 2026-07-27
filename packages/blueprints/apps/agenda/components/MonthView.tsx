@@ -39,7 +39,7 @@ function Pill({
         onEventOpen(ev);
       }}
     >
-      {!seg.spansAll ? <CalDot color={color} /> : null}
+      {seg.spansAll ? null : <CalDot color={color} />}
       <span className={styles.pillText}>
         {seg.startsHere && !seg.spansAll ? `${fmtTime(ev.dtstart)} ${ev.summary}` : ev.summary}
       </span>

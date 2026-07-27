@@ -4,7 +4,7 @@ import path from 'node:path';
 
 /** Shared run identity used by the desktop, mobile and pairing manual-QA adapters. */
 export function defaultRunId() {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/Z$/, '');
+  const stamp = new Date().toISOString().replace(/[:.]/gu, '-').replace(/Z$/u, '');
   return `${stamp}-${crypto.randomBytes(3).toString('hex')}`;
 }
 

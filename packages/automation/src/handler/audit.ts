@@ -167,18 +167,18 @@ export interface OpenRunNodeArgs {
  */
 export function openRunNode(args: OpenRunNodeArgs): string {
   const nodeId = makeNodeId(args.runId, args.ordinal);
-  const argsJson = args.args !== undefined ? (truncateForAudit(args.args) ?? '') : undefined;
+  const argsJson = args.args === undefined ? undefined : (truncateForAudit(args.args) ?? '');
   try {
     args.store.openItem({
       itemId: nodeId,
       turnId: args.runId,
       ordinal: args.ordinal,
-      ...(args.callId !== undefined ? { callId: args.callId } : {}),
-      ...(args.batchId !== undefined ? { batchId: args.batchId } : {}),
+      ...(args.callId === undefined ? {} : { callId: args.callId }),
+      ...(args.batchId === undefined ? {} : { batchId: args.batchId }),
       kind: args.kind,
-      ...(args.name !== undefined ? { name: args.name } : {}),
-      ...(argsJson !== undefined ? { argsJson } : {}),
-      ...(args.rawJson !== undefined ? { rawJson: args.rawJson } : {}),
+      ...(args.name === undefined ? {} : { name: args.name }),
+      ...(argsJson === undefined ? {} : { argsJson }),
+      ...(args.rawJson === undefined ? {} : { rawJson: args.rawJson }),
       startedAt: args.started,
     });
   } catch {
@@ -189,12 +189,12 @@ export function openRunNode(args: OpenRunNodeArgs): string {
       type: 'item.start',
       itemId: nodeId,
       ordinal: args.ordinal,
-      ...(args.callId !== undefined ? { callId: args.callId } : {}),
-      ...(args.batchId !== undefined ? { batchId: args.batchId } : {}),
+      ...(args.callId === undefined ? {} : { callId: args.callId }),
+      ...(args.batchId === undefined ? {} : { batchId: args.batchId }),
       kind: args.kind,
-      ...(args.name !== undefined ? { name: args.name } : {}),
-      ...(args.args !== undefined ? { args: args.args } : {}),
-      ...(args.rawJson !== undefined ? { rawJson: args.rawJson } : {}),
+      ...(args.name === undefined ? {} : { name: args.name }),
+      ...(args.args === undefined ? {} : { args: args.args }),
+      ...(args.rawJson === undefined ? {} : { rawJson: args.rawJson }),
     });
   } catch {
     /* swallow */
@@ -214,16 +214,16 @@ export function usageCloseFields(
   // Prefer agent cost when present; catalog fill happens in closeRunNode when
   // tokens exist but cost does not (issue #514).
   const costSource =
-    usage.costSource ?? (usage.costUsd !== undefined ? ('agent' as const) : undefined);
+    usage.costSource ?? (usage.costUsd === undefined ? undefined : ('agent' as const));
   return {
-    ...(usage.model !== undefined ? { model: usage.model } : {}),
-    ...(usage.provider !== undefined ? { provider: usage.provider } : {}),
-    ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
-    ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
-    ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
-    ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
-    ...(usage.costUsd !== undefined ? { costUsd: usage.costUsd } : {}),
-    ...(costSource !== undefined ? { costSource } : {}),
+    ...(usage.model === undefined ? {} : { model: usage.model }),
+    ...(usage.provider === undefined ? {} : { provider: usage.provider }),
+    ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
+    ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
+    ...(usage.cacheReadTokens === undefined ? {} : { cacheReadTokens: usage.cacheReadTokens }),
+    ...(usage.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: usage.cacheWriteTokens }),
+    ...(usage.costUsd === undefined ? {} : { costUsd: usage.costUsd }),
+    ...(costSource === undefined ? {} : { costSource }),
   };
 }
 
@@ -267,10 +267,10 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
   const outputJson =
     args.ok && args.result !== undefined ? (truncateForAudit(args.result) ?? '') : undefined;
   const usage = {
-    ...(args.inputTokens !== undefined ? { inputTokens: args.inputTokens } : {}),
-    ...(args.outputTokens !== undefined ? { outputTokens: args.outputTokens } : {}),
-    ...(args.cacheReadTokens !== undefined ? { cacheReadTokens: args.cacheReadTokens } : {}),
-    ...(args.cacheWriteTokens !== undefined ? { cacheWriteTokens: args.cacheWriteTokens } : {}),
+    ...(args.inputTokens === undefined ? {} : { inputTokens: args.inputTokens }),
+    ...(args.outputTokens === undefined ? {} : { outputTokens: args.outputTokens }),
+    ...(args.cacheReadTokens === undefined ? {} : { cacheReadTokens: args.cacheReadTokens }),
+    ...(args.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: args.cacheWriteTokens }),
   };
   const priced =
     args.costSource === 'agent' && args.costUsd !== undefined
@@ -278,7 +278,7 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
       : args.costSource === 'estimated' && args.costUsd !== undefined
         ? { costUsd: args.costUsd, costSource: 'estimated' as const }
         : resolveItemCost({
-            ...(args.costUsd !== undefined ? { agentCostUsd: args.costUsd } : {}),
+            ...(args.costUsd === undefined ? {} : { agentCostUsd: args.costUsd }),
             model: args.model,
             usage,
           });
@@ -286,20 +286,20 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
     args.store.closeItem({
       itemId: args.nodeId,
       ok: args.ok,
-      ...(outputJson !== undefined ? { outputJson } : {}),
-      ...(args.rawJson !== undefined ? { rawJson: args.rawJson } : {}),
-      ...(args.error !== undefined ? { error: args.error } : {}),
-      ...(args.childTurnId !== undefined ? { childTurnId: args.childTurnId } : {}),
+      ...(outputJson === undefined ? {} : { outputJson }),
+      ...(args.rawJson === undefined ? {} : { rawJson: args.rawJson }),
+      ...(args.error === undefined ? {} : { error: args.error }),
+      ...(args.childTurnId === undefined ? {} : { childTurnId: args.childTurnId }),
       endedAt: args.ended,
       durationMs,
-      ...(args.model !== undefined ? { model: args.model } : {}),
-      ...(args.provider !== undefined ? { provider: args.provider } : {}),
-      ...(args.inputTokens !== undefined ? { inputTokens: args.inputTokens } : {}),
-      ...(args.outputTokens !== undefined ? { outputTokens: args.outputTokens } : {}),
-      ...(args.cacheReadTokens !== undefined ? { cacheReadTokens: args.cacheReadTokens } : {}),
-      ...(args.cacheWriteTokens !== undefined ? { cacheWriteTokens: args.cacheWriteTokens } : {}),
-      ...(priced.costUsd !== undefined ? { costUsd: priced.costUsd } : {}),
-      ...(priced.costSource !== undefined ? { costSource: priced.costSource } : {}),
+      ...(args.model === undefined ? {} : { model: args.model }),
+      ...(args.provider === undefined ? {} : { provider: args.provider }),
+      ...(args.inputTokens === undefined ? {} : { inputTokens: args.inputTokens }),
+      ...(args.outputTokens === undefined ? {} : { outputTokens: args.outputTokens }),
+      ...(args.cacheReadTokens === undefined ? {} : { cacheReadTokens: args.cacheReadTokens }),
+      ...(args.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: args.cacheWriteTokens }),
+      ...(priced.costUsd === undefined ? {} : { costUsd: priced.costUsd }),
+      ...(priced.costSource === undefined ? {} : { costSource: priced.costSource }),
     });
   } catch {
     /* swallow */
@@ -309,12 +309,12 @@ export function closeRunNode(args: CloseRunNodeArgs): void {
       type: 'item.end',
       itemId: args.nodeId,
       ordinal: args.ordinal,
-      ...(args.callId !== undefined ? { callId: args.callId } : {}),
+      ...(args.callId === undefined ? {} : { callId: args.callId }),
       ok: args.ok,
-      ...(args.result !== undefined ? { result: args.result } : {}),
-      ...(args.error !== undefined ? { error: args.error } : {}),
+      ...(args.result === undefined ? {} : { result: args.result }),
+      ...(args.error === undefined ? {} : { error: args.error }),
       durationMs,
-      ...(args.rawJson !== undefined ? { rawJson: args.rawJson } : {}),
+      ...(args.rawJson === undefined ? {} : { rawJson: args.rawJson }),
     });
   } catch {
     /* swallow */

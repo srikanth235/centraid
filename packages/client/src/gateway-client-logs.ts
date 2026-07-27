@@ -51,7 +51,7 @@ export async function streamGatewayLogs(
   after?: number,
 ): Promise<void> {
   const { baseUrl, token } = await auth();
-  const qs = after !== undefined ? `?after=${encodeURIComponent(String(after))}` : '';
+  const qs = after === undefined ? '' : `?after=${encodeURIComponent(String(after))}`;
   try {
     const res = await doFetch(baseUrl, `/centraid/_logs/events${qs}`, {
       method: 'GET',

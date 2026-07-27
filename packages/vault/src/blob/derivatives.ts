@@ -192,14 +192,14 @@ function canonicalEmbedding(bytes: Buffer): string {
  * spelling (padding, whitespace, base64url) so the stored value is exact.
  */
 function canonicalThumbhash(text: string): string {
-  if (!/^[A-Za-z0-9+/]+$/.test(text)) {
+  if (!/^[A-Za-z0-9+/]+$/u.test(text)) {
     throw new Error('thumbhash derivative must be unpadded standard base64');
   }
   const bytes = Buffer.from(text, 'base64');
   if (bytes.length < 5 || bytes.length > 64) {
     throw new Error('thumbhash derivative must decode to 5..64 bytes');
   }
-  const canonical = bytes.toString('base64').replace(/=+$/, '');
+  const canonical = bytes.toString('base64').replace(/=+$/u, '');
   if (canonical !== text) {
     throw new Error('thumbhash derivative is not canonical base64');
   }
@@ -229,7 +229,7 @@ export function validateDerivativeContribution(input: {
     textContent = canonicalEmbedding(bytes);
   } else {
     textContent = decodeUtf8(bytes, variant).trim();
-    if (variant === 'phash' && !/^[0-9a-f]{4,64}$/.test(textContent)) {
+    if (variant === 'phash' && !/^[0-9a-f]{4,64}$/u.test(textContent)) {
       throw new Error('phash derivative must be 4..64 lowercase hexadecimal characters');
     }
     if (variant === 'thumbhash') {

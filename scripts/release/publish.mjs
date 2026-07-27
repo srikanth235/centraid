@@ -19,11 +19,10 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { runSyncVersions } from './sync-versions.mjs';
 import { buildSurfaceMatrix, defaultShipSurfaceIds, resolveShipSurfaces } from './surfaces.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 const args = process.argv.slice(2);
 let version = null;
 let issue = null;
@@ -49,13 +48,13 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
+if (!version || !/^\d+\.\d+\.\d+$/u.test(version)) {
   console.error(
     'usage: node scripts/release/publish.mjs --version X.Y.Z --issue N [--surfaces a,b] [--beta] [--dry-run] [--push]',
   );
   process.exit(2);
 }
-if (!issue || !/^\d+$/.test(issue) || issue === '0') {
+if (!issue || !/^\d+$/u.test(issue) || issue === '0') {
   console.error('publish requires --issue N (real GitHub issue; #0 is forbidden)');
   process.exit(2);
 }
@@ -108,11 +107,11 @@ function extractReleaseBody() {
   if (!existsSync(clPath)) return `Centraid ${version}`;
   const text = readFileSync(clPath, 'utf8');
   const re = new RegExp(
-    `^##\\s+\\[${version.replace(/\./g, '\\.')}\\][^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`,
-    'm',
+    `^##\\s+\\[${version.replace(/\./gu, '\\.')}\\][^\\n]*\\n(?<body>[\\s\\S]*?)(?=^##\\s+|$)`,
+    'mu',
   );
   const m = text.match(re);
-  return (m?.[1] ?? '').trim() || `Centraid ${version}`;
+  return (m?.groups?.body ?? '').trim() || `Centraid ${version}`;
 }
 
 console.error(

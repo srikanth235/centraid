@@ -11,13 +11,13 @@ import {
 
 const T0 = 1_000_000;
 
-describe('recordFailure', () => {
+describe(recordFailure, () => {
   it('records a single failure without tripping the loop breaker', () => {
     const state = recordFailure(initialSupervisorState(), T0, 'boom');
     expect(state.attempt).toBe(1);
     expect(state.loopBroken).toBe(false);
     expect(state.lastError).toBe('boom');
-    expect(state.failures).toEqual([T0]);
+    expect(state.failures).toStrictEqual([T0]);
   });
 
   it('trips loopBroken once failures reach the threshold inside the window', () => {
@@ -48,18 +48,18 @@ describe('recordFailure', () => {
     state = recordFailure(state, T0 + 1000, 'old-2');
     // Past the window relative to the first two — they should be pruned.
     state = recordFailure(state, T0 + CRASH_LOOP_WINDOW_MS + 2000, 'new-1');
-    expect(state.failures).toEqual([T0 + CRASH_LOOP_WINDOW_MS + 2000]);
+    expect(state.failures).toStrictEqual([T0 + CRASH_LOOP_WINDOW_MS + 2000]);
     expect(state.loopBroken).toBe(false);
   });
 });
 
-describe('recordSuccess', () => {
+describe(recordSuccess, () => {
   it('resets to the initial state', () => {
-    expect(recordSuccess()).toEqual(initialSupervisorState());
+    expect(recordSuccess()).toStrictEqual(initialSupervisorState());
   });
 });
 
-describe('backoffForAttempt', () => {
+describe(backoffForAttempt, () => {
   it('walks the schedule and clamps at the last entry', () => {
     expect(backoffForAttempt(1)).toBe(BACKOFF_SCHEDULE_MS[0]);
     expect(backoffForAttempt(2)).toBe(BACKOFF_SCHEDULE_MS[1]);

@@ -28,7 +28,7 @@
 import { wallClockFields } from '../cron-timezone.js';
 
 export function cronMatches(expr: string, date: Date, timeZone?: string): boolean {
-  const fields = expr.trim().split(/\s+/);
+  const fields = expr.trim().split(/\s+/u);
   if (fields.length !== 5) return false;
   const [minute, hour, dom, month, dow] = fields as [string, string, string, string, string];
   const wall = wallClockFields(date, timeZone);

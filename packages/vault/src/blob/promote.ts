@@ -18,9 +18,9 @@ import { blobUriFor } from './store.js';
 export interface PromoteDeps {
   vault: DatabaseSync;
   now: string;
-  newId(): string;
+  newId: () => string;
   /** Provenance hook — ctx.wrote inside commands, a collector in publishers. */
-  wrote(entityType: string, entityId: string): void;
+  wrote: (entityType: string, entityId: string) => void;
   creatorPartyId: string | null;
 }
 

@@ -109,11 +109,16 @@ const LIST_OPS: ReadonlySet<string> = new Set(['in']);
 /** Ops whose value is a bare day count (a number). */
 const NUMERIC_OPS: ReadonlySet<string> = new Set(['within-days', 'within-next-days']);
 
+/** An `@[<entityType>/<entityId>]` mention token, exactly as `insertMention`
+ *  writes it into the instructions. Global, but every read goes through
+ *  `matchAll`, which clones the regex — no shared `lastIndex`. */
+const ENTITY_TOKEN_RE = /@\[(?<entityType>[^/\]]+)\/(?<entityId>[^\]]+)\]/gu;
+
 /** Turn a clean numeric string into a number; leave everything else a string
  *  (so `eq status open` stays `"open"`, `eq amount 100` becomes `100`). */
 function coerceScalar(raw: string): string | number {
   const t = raw.trim();
-  return t !== '' && /^-?\d+(?:\.\d+)?$/.test(t) ? Number(t) : t;
+  return t !== '' && /^-?\d+(?:\.\d+)?$/u.test(t) ? Number(t) : t;
 }
 
 /** A DTO where clause (value is `unknown` on the wire) → an editable row. */
@@ -693,8 +698,8 @@ export default function AutomationEditorScreen({
         name: name.trim(),
         triggers: builtTriggers,
         connections,
-        ...(runner !== undefined ? { runner } : {}),
-        ...(model !== undefined ? { model } : {}),
+        ...(runner === undefined ? {} : { runner }),
+        ...(model === undefined ? {} : { model }),
       });
       if (ok) {
         setBaselineInstructions(instructions);
@@ -757,8 +762,8 @@ export default function AutomationEditorScreen({
     autogrow(e.target);
     const cursor = e.target.selectionStart;
     const before = e.target.value.slice(0, cursor);
-    const match = /(?:^|\s)@([^\s@\]]*)$/.exec(before);
-    setMention(match ? { start: cursor - match[1]!.length - 1, query: match[1]! } : null);
+    const query = /(?:^|\s)@(?<query>[^\s@\]]*)$/u.exec(before)?.groups?.query;
+    setMention(query === undefined ? null : { start: cursor - query.length - 1, query });
   };
 
   const insertMention = (hit: { type: string; id: string }): void => {
@@ -1287,17 +1292,22 @@ export default function AutomationEditorScreen({
         placeholder="Read my unread emails and summarize…"
         aria-label="Instructions"
       />
-      {Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g)).length > 0 ? (
+      {Array.from(instructions.matchAll(ENTITY_TOKEN_RE)).length > 0 ? (
         <div className={styles.entityTokens} aria-label="Tagged data">
-          {Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g), (match) => (
+          {Array.from(instructions.matchAll(ENTITY_TOKEN_RE), (match) => (
             <span key={match[0]} className={styles.entityToken}>
-              <code>@{match[1] === 'core.link_anchor' ? 'anchor' : match[1]}</code>
+              <code>
+                @
+                {match.groups?.entityType === 'core.link_anchor'
+                  ? 'anchor'
+                  : match.groups?.entityType}
+              </code>
               <span>
-                {match[1] === 'core.link_anchor'
+                {match.groups?.entityType === 'core.link_anchor'
                   ? 'row · field · span'
-                  : match[2] === '*'
+                  : match.groups?.entityId === '*'
                     ? 'type'
-                    : match[2]}
+                    : match.groups?.entityId}
               </span>
             </span>
           ))}
@@ -1565,13 +1575,13 @@ export default function AutomationEditorScreen({
 
           <div className={styles.footer}>
             <p className={styles.footerHint}>
-              {!name.trim()
-                ? 'Name required to save'
-                : isCreate
+              {name.trim()
+                ? isCreate
                   ? 'Saves, then compiles your instructions into a plan'
                   : dirty
                     ? 'Saves and recompiles — the instructions changed'
-                    : 'Saves name, triggers, and connectors'}
+                    : 'Saves name, triggers, and connectors'
+                : 'Name required to save'}
             </p>
             <div className={styles.footerActions}>
               <Button variant="ghost" label="Cancel" onClick={onCancel} />

@@ -8,11 +8,11 @@ import path from 'node:path';
 
 const root = process.cwd();
 const lock = readFileSync(path.join(root, 'bun.lock'), 'utf8');
-const allowedHost = /registry\.npmjs\.org|npm\.pkg\.github\.com|bun\.sh/;
+const allowedHost = /registry\.npmjs\.org|npm\.pkg\.github\.com|bun\.sh/u;
 let failed = 0;
 
 // HTTP (non-TLS) package URLs
-const httpUrls = lock.match(/http:\/\/[^\s"']+/g) ?? [];
+const httpUrls = lock.match(/http:\/\/[^\s"']+/gu) ?? [];
 for (const u of httpUrls) {
   if (u.includes('localhost') || u.includes('127.0.0.1')) continue;
   console.error(`FAIL http (non-TLS) URL in lockfile: ${u}`);
@@ -20,13 +20,13 @@ for (const u of httpUrls) {
 }
 
 // Integrity-ish tokens should appear for resolved packages (bun uses integrity fields)
-if (!/integrity|sha512-|sha256-/.test(lock)) {
+if (!/integrity|sha512-|sha256-/u.test(lock)) {
   console.error('FAIL lockfile has no integrity/hash markers');
   failed++;
 }
 
 // Suspicious hosts outside allowlist (best-effort on https:// URLs)
-const httpsUrls = lock.match(/https:\/\/([^/\s"']+)/g) ?? [];
+const httpsUrls = lock.match(/https:\/\/(?:[^/\s"']+)/gu) ?? [];
 for (const full of httpsUrls) {
   const host = full.replace('https://', '');
   if (

@@ -757,7 +757,7 @@ export class BackupService {
       const entries = await this.assembleEntries({
         plane,
         bundleDir,
-        ...(walTipTickMs !== undefined ? { walTipTickMs } : {}),
+        ...(walTipTickMs === undefined ? {} : { walTipTickMs }),
         log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
       });
       const row = await this.snapshot({
@@ -1780,7 +1780,7 @@ export class BackupService {
     const entries = await this.assembleEntries({
       plane,
       bundleDir,
-      ...(walTipTickMs !== undefined ? { walTipTickMs } : {}),
+      ...(walTipTickMs === undefined ? {} : { walTipTickMs }),
       log: {
         info: (message) => this.logger.info(message),
         warn: (message) => this.logger.warn(message),
@@ -1861,8 +1861,8 @@ export class BackupService {
       targetId: target.targetId,
       keyring,
       vaultId: opts.vaultId,
-      ...(opts.seq !== undefined ? { seq: opts.seq } : {}),
-      ...(opts.pointInTimeMs !== undefined ? { pointInTimeMs: opts.pointInTimeMs } : {}),
+      ...(opts.seq === undefined ? {} : { seq: opts.seq }),
+      ...(opts.pointInTimeMs === undefined ? {} : { pointInTimeMs: opts.pointInTimeMs }),
       destDir: opts.destDir,
       // Lazy mode: defer any blob the remote CAS already holds — a live
       // `has(sha)` against the remote is the durability evidence a snapshot's
@@ -1890,7 +1890,7 @@ export class BackupService {
       remote: lazy.remote,
       startedAtMs: restoreCompleteMs,
       now: () => this.now(),
-      ...(lazy.warmConcurrency !== undefined ? { concurrency: lazy.warmConcurrency } : {}),
+      ...(lazy.warmConcurrency === undefined ? {} : { concurrency: lazy.warmConcurrency }),
       log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
     });
     return { ...result, previewsWarm };

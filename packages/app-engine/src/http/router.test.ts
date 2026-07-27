@@ -1,38 +1,40 @@
-import { describe, expect, it } from 'vitest';
+import { assert, describe, expect, it } from 'vitest';
 import { parseRoute, parseWithDraft } from './router.js';
 
 describe('parseRoute — app RPC routes (issue #505)', () => {
   it('parses POST /centraid/<id>/actions/<action>', () => {
     const r = parseRoute('POST', '/centraid/todos/actions/add');
     expect(r.kind).toBe('app-action');
-    if (r.kind === 'app-action') {
-      expect(r.appId).toBe('todos');
-      expect(r.action).toBe('add');
-    }
+    // Narrows the route union so the per-kind assertions below always run.
+    assert(r.kind === 'app-action');
+    expect(r.appId).toBe('todos');
+    expect(r.action).toBe('add');
   });
 
   it('parses POST /centraid/<id>/queries/<query>', () => {
     const r = parseRoute('POST', '/centraid/todos/queries/upcoming');
     expect(r.kind).toBe('app-query');
-    if (r.kind === 'app-query') {
-      expect(r.appId).toBe('todos');
-      expect(r.query).toBe('upcoming');
-    }
+    assert(r.kind === 'app-query');
+    expect(r.appId).toBe('todos');
+    expect(r.query).toBe('upcoming');
   });
 
   it('decodes percent-encoded handler names', () => {
     const r = parseRoute('POST', '/centraid/todos/actions/add%2Ditem');
     expect(r.kind).toBe('app-action');
-    if (r.kind === 'app-action') expect(r.action).toBe('add-item');
+    assert(r.kind === 'app-action');
+    expect(r.action).toBe('add-item');
   });
 
   it('parses GET /centraid/<id>/_describe with an optional filter', () => {
     const bare = parseRoute('GET', '/centraid/todos/_describe');
     expect(bare.kind).toBe('app-describe');
-    if (bare.kind === 'app-describe') expect(bare.query).toEqual({});
+    assert(bare.kind === 'app-describe');
+    expect(bare.query).toStrictEqual({});
     const filtered = parseRoute('GET', '/centraid/todos/_describe?action=add');
     expect(filtered.kind).toBe('app-describe');
-    if (filtered.kind === 'app-describe') expect(filtered.query).toEqual({ action: 'add' });
+    assert(filtered.kind === 'app-describe');
+    expect(filtered.query).toStrictEqual({ action: 'add' });
   });
 
   it('rejects non-POST action/query invocation', () => {
@@ -71,7 +73,7 @@ describe('parseRoute — old per-app routes are gone (issue #107)', () => {
 describe('parseRoute — unaffected routes still work', () => {
   it('parses the query-only browser module route', () => {
     const r = parseRoute('GET', '/centraid/todos/_query/upcoming.mjs');
-    expect(r).toEqual({
+    expect(r).toStrictEqual({
       kind: 'app-query-bundle',
       appId: 'todos',
       queryName: 'upcoming',
@@ -108,7 +110,7 @@ describe('parseRoute — unaffected routes still work', () => {
 describe('parseWithDraft — draft-preview prefix (issue #141)', () => {
   it('passes a non-draft URL through unchanged with no session id', () => {
     const { route, draftSessionId } = parseWithDraft('GET', '/centraid/todos/');
-    expect(draftSessionId).toBe(undefined);
+    expect(draftSessionId).toBeUndefined();
     expect(route.kind).toBe('app-index');
   });
 
@@ -132,7 +134,7 @@ describe('parseWithDraft — draft-preview prefix (issue #141)', () => {
       '/centraid/_draft/s1/todos/_query/upcoming.mjs',
     );
     expect(draftSessionId).toBe('s1');
-    expect(route).toEqual({
+    expect(route).toStrictEqual({
       kind: 'app-query-bundle',
       appId: 'todos',
       queryName: 'upcoming',
@@ -153,7 +155,7 @@ describe('parseWithDraft — draft-preview prefix (issue #141)', () => {
   it('preserves the query string when rewriting', () => {
     const { route } = parseWithDraft('GET', '/centraid/_draft/s1/todos?theme=dark');
     expect(route.kind).toBe('app-index');
-    expect((route as { query: Record<string, string> }).query).toEqual({ theme: 'dark' });
+    expect((route as { query: Record<string, string> }).query).toStrictEqual({ theme: 'dark' });
   });
 
   it('a draft prefix with no session id is not-found', () => {

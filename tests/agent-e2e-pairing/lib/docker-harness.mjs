@@ -91,11 +91,10 @@ import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import { ensureBuilt, parseTicket } from './harness.mjs';
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const RUNS_DIR = path.join(__dirname, '..', 'runs');
 const NODE_IMAGE = 'node:22-bookworm-slim';
@@ -291,8 +290,8 @@ async function waitForGatewayReady(containerName, logFile, { timeoutMs = 90000 }
       '{{.State.Status}}',
     ]);
     const logs = await sh('docker', ['logs', containerName]);
-    wanted.url ??= logs.match(/listening on (http:\/\/[^\s]+)/)?.[1];
-    wanted.endpointId ??= logs.match(/endpoint: ([0-9a-f]{64})/)?.[1];
+    wanted.url ??= logs.match(/listening on (?<url>http:\/\/[^\s]+)/u)?.groups?.url;
+    wanted.endpointId ??= logs.match(/endpoint: (?<endpointId>[0-9a-f]{64})/u)?.groups?.endpointId;
     if (wanted.url && wanted.endpointId) {
       await fs.writeFile(logFile, logs);
       return wanted;
@@ -334,9 +333,10 @@ async function hostAddresses(fwName) {
   const addrs = [];
   for (const line of out.split('\n')) {
     // "2: eth0    inet 10.1.0.4/16 brd 10.1.255.255 scope global eth0"
-    const m = line.match(/^\d+:\s+(\S+)\s+inet\s+(\d+\.\d+\.\d+\.\d+)\//);
-    if (!m) continue;
-    const [, iface, addr] = m;
+    const m = line.match(/^\d+:\s+(?<iface>\S+)\s+inet\s+(?<addr>\d+\.\d+\.\d+\.\d+)\//u);
+    if (!m?.groups) continue;
+    const iface = m.groups.iface ?? '';
+    const addr = m.groups.addr ?? '';
     if (
       iface === 'lo' ||
       iface === 'docker0' ||
@@ -924,7 +924,7 @@ export async function runFlow(slug, fn) {
         if (vault) args.push('--vault', vault);
         if (ttlMinutes !== undefined) args.push('--ttl-minutes', String(ttlMinutes));
         const { stdout } = await ctx.gatewayExec(args);
-        const raw = stdout.match(/^(ey[A-Za-z0-9_-]{40,})$/m)?.[1];
+        const raw = stdout.match(/^(?<ticket>ey[A-Za-z0-9_-]{40,})$/mu)?.groups?.ticket;
         if (!raw) throw new Error(`pair printed no ticket token:\n${stdout}`);
         return { raw, payload: parseTicket(raw) };
       },

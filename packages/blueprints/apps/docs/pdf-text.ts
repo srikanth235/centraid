@@ -17,11 +17,11 @@ interface PdfPageTextContent {
   items?: PdfPageTextItem[];
 }
 interface PdfPage {
-  getTextContent(): Promise<PdfPageTextContent>;
+  getTextContent: () => Promise<PdfPageTextContent>;
 }
 interface PdfDocument {
   numPages: number;
-  getPage(pageNo: number): Promise<PdfPage>;
+  getPage: (pageNo: number) => Promise<PdfPage>;
   destroy?: () => Promise<void> | void;
 }
 interface PdfLoadingTask {
@@ -29,15 +29,15 @@ interface PdfLoadingTask {
 }
 interface PdfJsModule {
   GlobalWorkerOptions: { workerSrc: string };
-  getDocument(params: {
+  getDocument: (params: {
     data: Uint8Array;
     useSystemFonts?: boolean;
     isEvalSupported?: boolean;
-  }): PdfLoadingTask;
+  }) => PdfLoadingTask;
   version?: string;
 }
 interface PdfFileLike {
-  arrayBuffer(): Promise<ArrayBuffer>;
+  arrayBuffer: () => Promise<ArrayBuffer>;
 }
 
 let runtimeLoad: Promise<PdfJsModule> | undefined;
@@ -115,7 +115,7 @@ export async function extractPdfTextWithPdfJs(
         .map((item) => (typeof item?.str === 'string' ? item.str : ''))
         .filter(Boolean)
         .join(' ')
-        .replace(/\s+/g, ' ')
+        .replace(/\s+/gu, ' ')
         .trim();
       if (!text) continue;
       const remaining = MAX_TEXT_CHARS - chars;

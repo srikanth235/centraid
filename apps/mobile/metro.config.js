@@ -27,7 +27,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   try {
     return resolve(context, moduleName, platform);
   } catch (error) {
-    if (/^\.{1,2}\/.+\.js$/.test(moduleName)) {
+    if (/^\.{1,2}\/.+\.js$/u.test(moduleName)) {
       return resolve(context, moduleName.slice(0, -3), platform);
     }
     throw error;

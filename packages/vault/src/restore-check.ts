@@ -53,9 +53,7 @@ function checkSealKey(
   const expected = readSealKeyFingerprint(vault);
   if (expected === null) return { verdict: 'not-sealed' };
   let key: Buffer | null;
-  if (recoveryKey !== undefined) {
-    key = recoveryKey;
-  } else {
+  if (recoveryKey === undefined) {
     // Compatibility for callers verifying an older snapshot that carried the
     // now-retired loose seal.key entry. New recovery paths always supply the
     // DEK from KeyStore/recovery-kit custody.
@@ -64,6 +62,8 @@ function checkSealKey(
     } catch {
       return { verdict: 'mismatch', expected };
     }
+  } else {
+    key = recoveryKey;
   }
   if (!key) return { verdict: 'missing', expected };
   return { verdict: sealKeyFingerprint(key) === expected ? 'ok' : 'mismatch', expected };

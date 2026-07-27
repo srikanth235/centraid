@@ -95,7 +95,7 @@ describe('replica payload-hash property', () => {
               title: input.title,
             },
           };
-          expect(await intentPayloadHash(forward, nodeDigest)).toBe(
+          await expect(intentPayloadHash(forward, nodeDigest)).resolves.toBe(
             await intentPayloadHash(reordered, nodeDigest),
           );
         },

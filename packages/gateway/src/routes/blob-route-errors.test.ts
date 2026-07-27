@@ -44,7 +44,7 @@ function mockRes(over: Partial<MockRes> = {}): MockRes {
       }
       return res;
     },
-    destroy: vi.fn(function destroy(this: MockRes) {
+    destroy: vi.fn<(this: MockRes) => MockRes>(function destroy(this: MockRes) {
       this.destroyed = true;
       return this;
     }),
@@ -57,11 +57,11 @@ function asServerRes(res: MockRes): ServerResponse {
   return res as unknown as ServerResponse;
 }
 
-describe('sendBlobRouteError', () => {
+describe(sendBlobRouteError, () => {
   it('destroys the response when headers were already sent', () => {
     const res = mockRes({ headersSent: true, destroyed: false });
     expect(sendBlobRouteError(asServerRes(res), new Error('late'))).toBe(true);
-    expect(res.destroy).toHaveBeenCalled();
+    expect(res.destroy).toHaveBeenCalledWith();
   });
 
   it('is a no-op when the socket is already destroyed', () => {
@@ -133,6 +133,6 @@ describe('sendBlobRouteError', () => {
     const res = mockRes();
     sendBlobRouteError(asServerRes(res), 'raw');
     expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body ?? '{}')).toEqual({ error: 'raw' });
+    expect(JSON.parse(res.body ?? '{}')).toStrictEqual({ error: 'raw' });
   });
 });

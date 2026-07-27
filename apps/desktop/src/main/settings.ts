@@ -190,7 +190,7 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
       : {}),
     ...(() => {
       const clamped = clampAlertSeconds(raw.gatewayAlertSeconds);
-      return clamped !== undefined ? { gatewayAlertSeconds: clamped } : {};
+      return clamped === undefined ? {} : { gatewayAlertSeconds: clamped };
     })(),
     ...(typeof raw.gatewayAlertsEnabled === 'boolean'
       ? { gatewayAlertsEnabled: raw.gatewayAlertsEnabled }
@@ -285,21 +285,21 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     activeProfileAvatarColor: resolved.profile.avatarColor ?? '#5B8DEF',
     gatewayUrl: resolved.url,
     gatewayToken: resolved.token,
-    ...(p.builderEnabled !== undefined ? { builderEnabled: p.builderEnabled } : {}),
-    ...(activeVaultId !== undefined ? { activeVaultId } : {}),
-    ...(p.remoteTemplatesUrl !== undefined ? { remoteTemplatesUrl: p.remoteTemplatesUrl } : {}),
-    ...(p.onboardingCompletedAt !== undefined
-      ? { onboardingCompletedAt: p.onboardingCompletedAt }
-      : {}),
-    ...(p.gatewayAlertSeconds !== undefined ? { gatewayAlertSeconds: p.gatewayAlertSeconds } : {}),
-    ...(p.gatewayAlertsEnabled !== undefined
-      ? { gatewayAlertsEnabled: p.gatewayAlertsEnabled }
-      : {}),
-    ...(p.changelogSeenVersion !== undefined
-      ? { changelogSeenVersion: p.changelogSeenVersion }
-      : {}),
-    ...(p.launchAtLogin !== undefined ? { launchAtLogin: p.launchAtLogin } : {}),
-    ...(p.offerGatewayService !== undefined ? { offerGatewayService: p.offerGatewayService } : {}),
+    ...(p.builderEnabled === undefined ? {} : { builderEnabled: p.builderEnabled }),
+    ...(activeVaultId === undefined ? {} : { activeVaultId }),
+    ...(p.remoteTemplatesUrl === undefined ? {} : { remoteTemplatesUrl: p.remoteTemplatesUrl }),
+    ...(p.onboardingCompletedAt === undefined
+      ? {}
+      : { onboardingCompletedAt: p.onboardingCompletedAt }),
+    ...(p.gatewayAlertSeconds === undefined ? {} : { gatewayAlertSeconds: p.gatewayAlertSeconds }),
+    ...(p.gatewayAlertsEnabled === undefined
+      ? {}
+      : { gatewayAlertsEnabled: p.gatewayAlertsEnabled }),
+    ...(p.changelogSeenVersion === undefined
+      ? {}
+      : { changelogSeenVersion: p.changelogSeenVersion }),
+    ...(p.launchAtLogin === undefined ? {} : { launchAtLogin: p.launchAtLogin }),
+    ...(p.offerGatewayService === undefined ? {} : { offerGatewayService: p.offerGatewayService }),
   };
 }
 

@@ -18,9 +18,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 
 export const DEFAULT_THRESHOLD = 80;
 export const DEVIATION_PATH = 'tests/diff-coverage-deviation.json';
@@ -44,15 +43,15 @@ export function parseUnifiedDiffAddedLines(diffText) {
         current = null;
         continue;
       }
-      const filePath = rest.replace(/^[ab]\//, '');
+      const filePath = rest.replace(/^[ab]\//u, '');
       current = filePath;
       if (!files.has(current)) files.set(current, new Set());
       continue;
     }
     if (raw.startsWith('@@')) {
       // @@ -a,b +c,d @@
-      const m = /\+(\d+)(?:,(\d+))?/.exec(raw);
-      newLine = m ? Number(m[1]) : 0;
+      const m = /\+(?<startLine>\d+)(?:,\d+)?/u.exec(raw);
+      newLine = Number(m?.groups?.startLine ?? 0);
       continue;
     }
     if (!current) continue;
@@ -78,11 +77,11 @@ export function parseUnifiedDiffAddedLines(diffText) {
  * @returns {boolean} Return value.
  */
 export function isInstrumentableSource(filePath) {
-  if (!/^(packages|apps)\//.test(filePath)) return false;
+  if (!/^(?:packages|apps)\//u.test(filePath)) return false;
   // Coverage only instruments production sources under src/.
   if (!filePath.includes('/src/')) return false;
-  if (!/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(filePath)) return false;
-  if (/\.(test|spec)\.(ts|tsx|js|jsx)$/.test(filePath)) return false;
+  if (!/\.(?:ts|tsx|js|jsx|mjs|cjs)$/u.test(filePath)) return false;
+  if (/\.(?:test|spec)\.(?:ts|tsx|js|jsx)$/u.test(filePath)) return false;
   if (filePath.endsWith('.d.ts')) return false;
   if (filePath.includes('/dist/')) return false;
   return true;
@@ -128,9 +127,9 @@ export function lineHits(coverageMap, filePath, line) {
  * @param {string} filePath filePath parameter.
  */
 function findCoverageEntry(coverageMap, filePath) {
-  const norm = filePath.replace(/\\/g, '/');
+  const norm = filePath.replace(/\\/gu, '/');
   for (const [key, value] of Object.entries(coverageMap)) {
-    const k = key.replace(/\\/g, '/');
+    const k = key.replace(/\\/gu, '/');
     if (k === norm || k.endsWith(`/${norm}`) || k.endsWith(norm)) {
       return /** @type {Record<string, unknown>} */ (value);
     }
@@ -200,7 +199,7 @@ export function evaluateDiffCoverage(score, threshold, approvedDeviation) {
   const hunks = groupUncoveredHunks(score.uncovered).slice(0, 40);
   const messages = hunks.map(
     (h) =>
-      `${h.file}:${h.start}${h.end !== h.start ? `-${h.end}` : ''} (${h.count} uncovered line${h.count === 1 ? '' : 's'})`,
+      `${h.file}:${h.start}${h.end === h.start ? '' : `-${h.end}`} (${h.count} uncovered line${h.count === 1 ? '' : 's'})`,
   );
   return {
     ok: false,
@@ -396,7 +395,7 @@ function main() {
   process.exitCode = 1;
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
 if (isMain) {
   main();
 }

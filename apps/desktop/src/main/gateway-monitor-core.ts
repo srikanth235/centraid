@@ -267,7 +267,7 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
     {
       at: probe.at,
       ok: probe.ok,
-      ...(probe.latencyMs !== undefined ? { latencyMs: probe.latencyMs } : {}),
+      ...(probe.latencyMs === undefined ? {} : { latencyMs: probe.latencyMs }),
     },
   ].slice(-SAMPLE_CAP);
   const latencyDegraded = sustainedHighLatency(samples);
@@ -294,7 +294,7 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
     samples,
     outages,
     latencyDegraded,
-    ...(healthStatus !== undefined ? { healthStatus } : {}),
+    ...(healthStatus === undefined ? {} : { healthStatus }),
     ...(probe.ok && probe.componentIssues !== undefined
       ? { componentIssues: probe.componentIssues }
       : {}),
@@ -302,15 +302,15 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
     // failures (the page still shows the last-known version while down).
     ...(probe.ok
       ? {
-          ...(probe.latencyMs !== undefined ? { latencyMs: probe.latencyMs } : {}),
-          ...(probe.gatewayStartedAt !== undefined
-            ? { gatewayStartedAt: probe.gatewayStartedAt }
-            : {}),
-          ...(probe.gatewayUptimeMs !== undefined
-            ? { gatewayUptimeMs: probe.gatewayUptimeMs }
-            : {}),
-          ...(probe.version !== undefined ? { version: probe.version } : {}),
-          ...(probe.schemaEpoch !== undefined ? { schemaEpoch: probe.schemaEpoch } : {}),
+          ...(probe.latencyMs === undefined ? {} : { latencyMs: probe.latencyMs }),
+          ...(probe.gatewayStartedAt === undefined
+            ? {}
+            : { gatewayStartedAt: probe.gatewayStartedAt }),
+          ...(probe.gatewayUptimeMs === undefined
+            ? {}
+            : { gatewayUptimeMs: probe.gatewayUptimeMs }),
+          ...(probe.version === undefined ? {} : { version: probe.version }),
+          ...(probe.schemaEpoch === undefined ? {} : { schemaEpoch: probe.schemaEpoch }),
           // Version handshake (wave 2 of #351) — REMOTE gateways only; a
           // local gateway is embedded in this same build and can never
           // skew. `/info`-fallback probes (no version/schemaEpoch) leave
@@ -336,9 +336,9 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
               }
             : {}),
         }
-      : probe.detail !== undefined
-        ? { lastError: probe.detail }
-        : {}),
+      : probe.detail === undefined
+        ? {}
+        : { lastError: probe.detail }),
   };
 }
 
@@ -431,7 +431,7 @@ export function applyComponentAlerts(
     nextRecords.push({
       ...rec,
       ...(issue.message ? { message: issue.message } : {}),
-      ...(alertedAt !== undefined ? { alertedAt } : {}),
+      ...(alertedAt === undefined ? {} : { alertedAt }),
     });
   }
   // Components that started erroring this tick get a fresh record.

@@ -32,7 +32,7 @@ import type {
 const DETAIL_CHARS = 160;
 
 function clip(text: string): string {
-  const flat = text.replace(/\s+/g, ' ').trim();
+  const flat = text.replace(/\s+/gu, ' ').trim();
   return flat.length > DETAIL_CHARS ? `${flat.slice(0, DETAIL_CHARS - 1)}…` : flat;
 }
 
@@ -155,8 +155,8 @@ export async function watchTurnSteps(
         turnId,
         ordinal: event.ordinal,
         kind: event.kind,
-        ...(event.name !== undefined ? { name: event.name } : {}),
-        ...(event.args !== undefined ? { argsJson: JSON.stringify(event.args) } : {}),
+        ...(event.name === undefined ? {} : { name: event.name }),
+        ...(event.args === undefined ? {} : { argsJson: JSON.stringify(event.args) }),
         ok: true,
         startedAt: prev?.startedAt ?? Date.now(),
       });
@@ -170,9 +170,9 @@ export async function watchTurnSteps(
         turnId,
         ordinal: event.ordinal,
         kind: prev?.kind ?? 'tool',
-        ...(event.result !== undefined ? { outputJson: JSON.stringify(event.result) } : {}),
+        ...(event.result === undefined ? {} : { outputJson: JSON.stringify(event.result) }),
         ok: event.ok,
-        ...(event.error !== undefined ? { error: event.error } : {}),
+        ...(event.error === undefined ? {} : { error: event.error }),
         startedAt,
         endedAt: startedAt + event.durationMs,
         durationMs: event.durationMs,

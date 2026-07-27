@@ -12,7 +12,7 @@ import {
   type ManifestEntry,
 } from './manifest.js';
 
-describe('canonicalJson', () => {
+describe(canonicalJson, () => {
   test('sorts object keys recursively', () => {
     const a = canonicalJson({ b: 1, a: { d: 2, c: 3 } });
     const b = canonicalJson({ a: { c: 3, d: 2 }, b: 1 });
@@ -55,7 +55,7 @@ describe('sha256Hex / verifyManifest', () => {
   });
 });
 
-describe('isSafeEntryPath', () => {
+describe(isSafeEntryPath, () => {
   test('accepts normal relative paths', () => {
     expect(isSafeEntryPath('vault.db')).toBe(true);
     expect(isSafeEntryPath('blobs/ab/cdef')).toBe(true);
@@ -113,8 +113,8 @@ describe('sealManifest / openManifest', () => {
     const opened = openManifest(bytes, keyring, 'vault-1', manifestHash);
     expect(opened.public.generation).toBe(3);
     expect(opened.public.keyEpoch).toBe(1);
-    expect(opened.public.chunkIndex).toEqual(manifest.chunkIndex);
-    expect(opened.entries).toEqual(entries);
+    expect(opened.public.chunkIndex).toStrictEqual(manifest.chunkIndex);
+    expect(opened.entries).toStrictEqual(entries);
   });
 
   test('hash verification catches a modified manifest object', async () => {
@@ -153,7 +153,9 @@ describe('sealManifest / openManifest', () => {
     parsed['appMeta'] = { ontologyVersion: '0.1' };
     const rewritten = new TextEncoder().encode(canonicalJson(parsed));
 
-    expect(() => openManifest(rewritten, keyring, 'vault-1', sha256Hex(rewritten))).toThrow();
+    expect(() => openManifest(rewritten, keyring, 'vault-1', sha256Hex(rewritten))).toThrow(
+      /unsupported state or unable to authenticate data/i,
+    );
   });
 
   test('openManifest rejects a hostile entry path even if the hash is valid', async () => {
@@ -186,7 +188,9 @@ describe('sealManifest / openManifest', () => {
       appMeta: {},
       entries: [],
     });
-    expect(() => openManifest(bytes, keyring, 'vault-OTHER', manifestHash)).toThrow();
+    expect(() => openManifest(bytes, keyring, 'vault-OTHER', manifestHash)).toThrow(
+      /unsupported state or unable to authenticate data/i,
+    );
   });
 
   test('sealed payload is not readable without opening (base64 blob, not plaintext)', async () => {

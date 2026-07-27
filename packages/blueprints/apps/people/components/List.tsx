@@ -58,7 +58,7 @@ export function ListRow({
           e.stopPropagation();
           onOpenDetails(p.party_id);
         }}
-      ></KitAvatar>
+      />
       <div className={styles.rowMain}>
         <div className={styles.rowTitle}>
           {p.name}
@@ -76,7 +76,7 @@ export function ListRow({
       <span className={`${styles.cell} ${styles.list}`}>{listName(data, p.list_id ?? null)}</span>
       <span className={`${styles.cell} ${styles.last}`}>{shortFmt(daysSince(p))}</span>
       <span className={`${styles.cell} ${styles.status}`}>
-        <span className="kit-dotmini" style={{ background: st.color }}></span>
+        <span className="kit-dotmini" style={{ background: st.color }} />
         {st.label}
       </span>
       <div className={styles.rowEnd}>
@@ -118,12 +118,12 @@ export function ListHead({
       >
         {allSel ? <Icon svg={I.check} /> : null}
       </button>
-      <span style={{ width: '34px' }}></span>
+      <span style={{ width: '34px' }} />
       <span className={`${styles.col} ${styles.name}`}>Name</span>
       <span className={`${styles.col} ${styles.list}`}>List</span>
       <span className={`${styles.col} ${styles.last}`}>Last spoke</span>
       <span className={`${styles.col} ${styles.status}`}>Status</span>
-      <span className={`${styles.col} ${styles.end}`}></span>
+      <span className={`${styles.col} ${styles.end}`} />
     </>
   );
 }

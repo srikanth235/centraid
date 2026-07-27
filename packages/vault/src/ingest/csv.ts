@@ -65,11 +65,11 @@ function isoDay(raw: string): string | null {
   const t = raw.trim();
   // ISO first; then dd/mm/yyyy and mm/dd/yyyy are ambiguous — accept
   // dd/mm/yyyy (statement convention outside the US) and yyyy-mm-dd.
-  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
-  const dmy = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (/^\d{4}-\d{2}-\d{2}/u.test(t)) return t.slice(0, 10);
+  const dmy = t.match(/^(?<day>\d{1,2})[/-](?<month>\d{1,2})[/-](?<year>\d{4})$/u);
   if (dmy) {
-    const [, d, m, y] = dmy;
-    return `${y}-${m!.padStart(2, '0')}-${d!.padStart(2, '0')}`;
+    const g = dmy.groups!;
+    return `${g.year}-${g.month!.padStart(2, '0')}-${g.day!.padStart(2, '0')}`;
   }
   const parsed = Date.parse(t);
   return Number.isNaN(parsed) ? null : new Date(parsed).toISOString().slice(0, 10);
@@ -95,7 +95,7 @@ export function parseTransactionsCsv(text: string): CsvTransaction[] {
   const out: CsvTransaction[] = [];
   for (const row of rows.slice(1)) {
     const day = isoDay(row[dateCol] ?? '');
-    const rawAmount = (row[amountCol] ?? '').replace(/[,\s₹$€£]/g, '');
+    const rawAmount = (row[amountCol] ?? '').replace(/[,\s₹$€£]/gu, '');
     const amount = Number.parseFloat(rawAmount);
     if (!day || Number.isNaN(amount)) continue; // ledger noise lines
     out.push({

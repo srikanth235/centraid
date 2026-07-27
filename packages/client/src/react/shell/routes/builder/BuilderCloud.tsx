@@ -144,11 +144,11 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
     result: { activeVersion?: string; versions: CentraidVersionRecord[] };
   } | null>(null);
   const [liveUrl, setLiveUrl] = useState<string | undefined>(undefined);
-  const versionsCache: VersionsCache = !appId
-    ? undefined
-    : versionsFor !== null && versionsFor.appId === appId
+  const versionsCache: VersionsCache = appId
+    ? versionsFor !== null && versionsFor.appId === appId
       ? versionsFor.result
-      : 'pending';
+      : 'pending'
+    : undefined;
 
   // Logs — newest-first, polled every 3s while the Logs section is visible.
   const [logsCache, setLogsCache] = useState<LogsCache>(undefined);

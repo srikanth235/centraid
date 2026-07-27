@@ -43,7 +43,7 @@ export function buildRunSnapshot(
   // single caption instead of showing a wall of dashes/zeros.
   const hasUsage = tokens > 0 || (run.totalCostUsd ?? 0) > 0 || (run.stepCount ?? nodes.length) > 0;
   const duration =
-    run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
+    run.endedAt === undefined ? 'running' : formatDuration(run.endedAt - run.startedAt);
   const statusKind: AuStatusKind = inFlight ? 'running' : run.ok ? 'success' : 'failed';
   const statusLabel = inFlight ? 'Running' : run.ok ? 'Completed' : 'Failed';
   const hasWebhook =
@@ -154,7 +154,7 @@ export function buildRunSnapshot(
     hue: hueForId(identityId),
     inFlight,
     logKpi: {
-      cost: run.totalCostUsd !== undefined ? `$${run.totalCostUsd.toFixed(3)}` : '—',
+      cost: run.totalCostUsd === undefined ? '—' : `$${run.totalCostUsd.toFixed(3)}`,
       duration,
       tokens: fmtTokens(tokens),
       triggerIcon: trig.icon,

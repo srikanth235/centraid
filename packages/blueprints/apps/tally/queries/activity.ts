@@ -6,7 +6,7 @@
 
 import { loadTally, personOf } from './dashboard.ts';
 
-export default async ({ ctx }: HandlerArgs) => {
+export default async function activityHandler({ ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   try {
     const data = await loadTally(ctx, purpose);
@@ -14,7 +14,7 @@ export default async ({ ctx }: HandlerArgs) => {
     const groupName = new Map(data.groups.map((g) => [g.group_id, g.name]));
     const rows: Array<Record<string, unknown>> = [];
     for (const e of data.expenses) {
-      const myShare = me != null ? e.splits[me] : undefined;
+      const myShare = me == null ? undefined : e.splits[me];
       const yourShare = myShare ?? 0;
       let your_role = 'none';
       let your_amount_minor = 0;
@@ -60,4 +60,4 @@ export default async ({ ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

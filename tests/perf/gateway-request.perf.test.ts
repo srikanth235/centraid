@@ -2,7 +2,7 @@ import { fork, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { expect, onTestFinished, test } from 'vitest';
+import { describe, expect, onTestFinished, test } from 'vitest';
 
 const OWNER = 'tests/perf/gateway-request.perf.test.ts';
 
@@ -20,68 +20,70 @@ const REQUEST_P95_BUDGET_MS = 120;
 const IDLE_CPU_BUDGET_MS_PER_S = 25;
 const IDLE_WINDOW_MS = 5_000;
 
-test('gateway request latency and idle CPU stay within low-end budgets', async () => {
-  const root = await tempDir('gateway-perf-');
-  const child = fork(path.resolve('tests/perf/fixtures/gateway-idle-server.mjs'), [root], {
-    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-  });
-  let childError = '';
-  child.stderr?.on('data', (chunk) => {
-    childError += String(chunk);
-  });
-  onTestFinished(() => {
-    if (child.connected) child.send({ type: 'close' });
-    child.kill();
-  });
-
-  const ready = await childMessage<{ type: 'ready'; url: string; token: string }>(
-    child,
-    'ready',
-    () => childError,
-    20_000,
-  );
-
-  const samples: number[] = [];
-  for (let index = 0; index < 60; index += 1) {
-    const started = performance.now();
-    const response = await fetch(`${ready.url}/centraid/_apps`, {
-      headers: { authorization: `Bearer ${ready.token}` },
+describe('gateway-request.perf', () => {
+  test('gateway request latency and idle CPU stay within low-end budgets', async () => {
+    const root = await tempDir('gateway-perf-');
+    const child = fork(path.resolve('tests/perf/fixtures/gateway-idle-server.mjs'), [root], {
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     });
-    expect(response.status).toBe(200);
-    await response.arrayBuffer();
-    samples.push(performance.now() - started);
-  }
-  samples.sort((left, right) => left - right);
-  const p95Ms = samples[Math.floor(samples.length * 0.95)] ?? Number.POSITIVE_INFINITY;
+    let childError = '';
+    child.stderr?.on('data', (chunk) => {
+      childError += String(chunk);
+    });
+    onTestFinished(() => {
+      if (child.connected) child.send({ type: 'close' });
+      child.kill();
+    });
 
-  child.send({ type: 'measure-idle', windowMs: IDLE_WINDOW_MS });
-  const idle = await childMessage<{
-    type: 'idle';
-    cpuUserUs: number;
-    cpuSystemUs: number;
-    wallMs: number;
-  }>(child, 'idle', () => childError, IDLE_WINDOW_MS + 15_000);
-  const idleCpuMs = (idle.cpuUserUs + idle.cpuSystemUs) / 1_000;
-  const idleCpuMsPerSecond = idleCpuMs / (idle.wallMs / 1_000);
+    const ready = await childMessage<{ type: 'ready'; url: string; token: string }>(
+      child,
+      'ready',
+      () => childError,
+      20_000,
+    );
 
-  const passed = p95Ms < REQUEST_P95_BUDGET_MS && idleCpuMsPerSecond < IDLE_CPU_BUDGET_MS_PER_S;
-  await recordQualityResult({
-    lane: 'perf',
-    owner: OWNER,
-    name: 'Gateway request p95 and idle CPU',
-    status: passed ? 'passed' : 'failed',
-    measurements: [
-      { name: 'request p95', value: p95Ms, unit: 'ms', budget: REQUEST_P95_BUDGET_MS },
-      {
-        name: 'idle CPU per second',
-        value: idleCpuMsPerSecond,
-        unit: 'ms/s',
-        budget: IDLE_CPU_BUDGET_MS_PER_S,
-      },
-    ],
+    const samples: number[] = [];
+    for (let index = 0; index < 60; index += 1) {
+      const started = performance.now();
+      const response = await fetch(`${ready.url}/centraid/_apps`, {
+        headers: { authorization: `Bearer ${ready.token}` },
+      });
+      expect(response.status).toBe(200);
+      await response.arrayBuffer();
+      samples.push(performance.now() - started);
+    }
+    samples.sort((left, right) => left - right);
+    const p95Ms = samples[Math.floor(samples.length * 0.95)] ?? Number.POSITIVE_INFINITY;
+
+    child.send({ type: 'measure-idle', windowMs: IDLE_WINDOW_MS });
+    const idle = await childMessage<{
+      type: 'idle';
+      cpuUserUs: number;
+      cpuSystemUs: number;
+      wallMs: number;
+    }>(child, 'idle', () => childError, IDLE_WINDOW_MS + 15_000);
+    const idleCpuMs = (idle.cpuUserUs + idle.cpuSystemUs) / 1_000;
+    const idleCpuMsPerSecond = idleCpuMs / (idle.wallMs / 1_000);
+
+    const passed = p95Ms < REQUEST_P95_BUDGET_MS && idleCpuMsPerSecond < IDLE_CPU_BUDGET_MS_PER_S;
+    await recordQualityResult({
+      lane: 'perf',
+      owner: OWNER,
+      name: 'Gateway request p95 and idle CPU',
+      status: passed ? 'passed' : 'failed',
+      measurements: [
+        { name: 'request p95', value: p95Ms, unit: 'ms', budget: REQUEST_P95_BUDGET_MS },
+        {
+          name: 'idle CPU per second',
+          value: idleCpuMsPerSecond,
+          unit: 'ms/s',
+          budget: IDLE_CPU_BUDGET_MS_PER_S,
+        },
+      ],
+    });
+    expect(p95Ms).toBeLessThan(REQUEST_P95_BUDGET_MS);
+    expect(idleCpuMsPerSecond).toBeLessThan(IDLE_CPU_BUDGET_MS_PER_S);
   });
-  expect(p95Ms).toBeLessThan(REQUEST_P95_BUDGET_MS);
-  expect(idleCpuMsPerSecond).toBeLessThan(IDLE_CPU_BUDGET_MS_PER_S);
 });
 
 function childMessage<T>(

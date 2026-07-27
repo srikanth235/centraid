@@ -300,7 +300,7 @@ export interface Citation {
  */
 export interface HandlerBlobs {
   /** Staged, unclaimed info for a sha (null = nothing staged). */
-  staged(sha256: string): {
+  staged: (sha256: string) => {
     mediaType: string;
     byteSize: number;
     originalName: string | null;
@@ -311,10 +311,10 @@ export interface HandlerBlobs {
    * "bytes waiting" to "model" (issue #296 §3). Idempotent over dedup:
    * a live content item already owning the sha restores + returns.
    */
-  claimStaged(
+  claimStaged: (
     sha256: string,
     options?: { title?: string },
-  ): {
+  ) => {
     contentId: string;
     mediaType: string;
     byteSize: number;
@@ -326,9 +326,9 @@ export interface HandlerBlobs {
    * data_uri compatibility path (§3): the command already holds the bytes,
    * custody moves them out of the row.
    */
-  spill(bytes: Buffer): string;
+  spill: (bytes: Buffer) => string;
   /** Local CAS presence — precondition-grade, no bytes returned. */
-  has(sha256: string): boolean;
+  has: (sha256: string) => boolean;
 }
 
 /** Transaction-scoped surface handed to command handlers. */
@@ -342,11 +342,11 @@ export interface HandlerCtx {
    * endpoints under the same purpose the act rode in on). */
   purpose: string;
   now: string;
-  newId(): string;
+  newId: () => string;
   /** Record a write so the gateway stamps consent.provenance for it. */
-  wrote(entityType: string, entityId: string): void;
+  wrote: (entityType: string, entityId: string) => void;
   /** Cite a row the command read to justify its action. */
-  cite(citation: Citation): void;
+  cite: (citation: Citation) => void;
   /**
    * Decrypt one sealed cell INSIDE the command (issue #293 decision 5):
    * derivatives without revelation — `locker.totp_code` unseals the seed,
@@ -355,7 +355,7 @@ export interface HandlerCtx {
    * noted on the command's receipt (column names, never values). Plaintext
    * legacy values return as-is; a missing row/column returns null.
    */
-  unseal(entityType: string, entityId: string, column: string): string | null;
+  unseal: (entityType: string, entityId: string, column: string) => string | null;
   /** Blob custody surface (issue #296) — staged claims and data_uri spills. */
   blobs: HandlerBlobs;
 }
@@ -363,7 +363,7 @@ export interface HandlerCtx {
 /** Domain-owned command implementation, hosted and checked by the gateway. */
 export interface CommandHandler {
   name: string;
-  execute(ctx: HandlerCtx): Record<string, unknown>;
+  execute: (ctx: HandlerCtx) => Record<string, unknown>;
 }
 
 /** Registration payload: the agent.command row + its handler. */

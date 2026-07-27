@@ -9,25 +9,25 @@ const THUMBHASH_EDGE = 100;
 interface VipsImage {
   readonly width: number;
   readonly height: number;
-  autorot(): VipsImage;
-  resize(scale: number, options?: { vscale?: number }): VipsImage;
-  copy(): VipsImage;
-  hasAlpha(): boolean;
-  flatten(options?: { background?: number[] }): VipsImage;
-  colourspace(space: string): VipsImage;
-  cast(format: string): VipsImage;
-  addalpha(): VipsImage;
-  writeToBuffer(format: string): Uint8Array;
-  writeToMemory(): Uint8Array;
-  delete(): void;
+  autorot: () => VipsImage;
+  resize: (scale: number, options?: { vscale?: number }) => VipsImage;
+  copy: () => VipsImage;
+  hasAlpha: () => boolean;
+  flatten: (options?: { background?: number[] }) => VipsImage;
+  colourspace: (space: string) => VipsImage;
+  cast: (format: string) => VipsImage;
+  addalpha: () => VipsImage;
+  writeToBuffer: (format: string) => Uint8Array;
+  writeToMemory: () => Uint8Array;
+  delete: () => void;
 }
 
 interface VipsRuntime {
-  Image: { newFromBuffer(source: Uint8Array): VipsImage };
+  Image: { newFromBuffer: (source: Uint8Array) => VipsImage };
   Cache: {
-    max(value: number): void;
-    maxMem(value: number): void;
-    maxFiles(value: number): void;
+    max: (value: number) => void;
+    maxMem: (value: number) => void;
+    maxFiles: (value: number) => void;
   };
 }
 
@@ -170,7 +170,7 @@ export function createWasmImagePreviewCodec(): PreviewCodec {
         const rgba = srgb.hasAlpha() ? srgb : srgb.addalpha();
         images.push(rgba);
         const bytes = rgbaToThumbHash(rgba.width, rgba.height, rgba.writeToMemory());
-        return Buffer.from(bytes).toString('base64').replace(/=+$/, '');
+        return Buffer.from(bytes).toString('base64').replace(/=+$/u, '');
       } catch {
         return null;
       } finally {

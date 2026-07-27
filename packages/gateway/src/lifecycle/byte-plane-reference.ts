@@ -21,7 +21,7 @@ interface BlobTicket {
 
 export interface TypeScriptBytePlaneHandle {
   baseUrl: string;
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
@@ -259,9 +259,11 @@ export async function startTypeScriptBytePlane(options: {
       }
       sendJson(res, 404, { error: 'not_found' });
     })().catch((error) => {
-      if (!res.headersSent)
+      if (res.headersSent) {
+        res.destroy(error instanceof Error ? error : new Error(String(error)));
+      } else {
         sendJson(res, error instanceof RangeError ? 413 : 400, { error: String(error) });
-      else res.destroy(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   });
   await new Promise<void>((resolve, reject) => {

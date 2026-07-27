@@ -30,7 +30,7 @@ import { GatewayError } from './types.js';
  */
 export function ftsMatchExpression(query: string): string | null {
   const tokens = query
-    .split(/\s+/)
+    .split(/\s+/u)
     .map((t) => t.replaceAll('"', ''))
     .filter((t) => /[\p{L}\p{N}]/u.test(t))
     .slice(0, 16);

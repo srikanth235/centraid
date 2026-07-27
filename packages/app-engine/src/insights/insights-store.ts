@@ -236,7 +236,7 @@ function foldBySource(stmts: InsightsPreparedStatements, since: number): Insight
       runs: g.runs,
       tokens: g.tokens,
       costUsd: round(g.cost),
-      ...(g.name !== null ? { automationName: g.name } : {}),
+      ...(g.name === null ? {} : { automationName: g.name }),
     }));
 }
 

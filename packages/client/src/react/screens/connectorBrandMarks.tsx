@@ -86,14 +86,14 @@ export function ConnectorBrandGlyph({
   tone: string;
   size?: number;
 }): JSX.Element {
-  const reactId = useId().replace(/:/g, '');
+  const reactId = useId().replace(/:/gu, '');
   const svg = CONNECTOR_BRAND_SVG[tone] ?? CONNECTOR_BRAND_SVG.default!;
   // Prefix gradient/filter IDs so multiple marks on one page don't collide.
-  const uid = `cb-${tone.replace(/[^a-z0-9]+/gi, '')}-${reactId}`;
+  const uid = `cb-${tone.replace(/[^a-z0-9]+/giu, '')}-${reactId}`;
   const unique = svg
-    .replace(/id="([^"]+)"/g, (_m, id) => `id="${uid}-${id}"`)
-    .replace(/url\(#([^)]+)\)/g, (_m, id) => `url(#${uid}-${id})`)
-    .replace(/href="#([^"]+)"/g, (_m, id) => `href="#${uid}-${id}"`);
+    .replace(/id="(?<id>[^"]+)"/gu, (_m, id) => `id="${uid}-${id}"`)
+    .replace(/url\(#(?<id>[^)]+)\)/gu, (_m, id) => `url(#${uid}-${id})`)
+    .replace(/href="#(?<id>[^"]+)"/gu, (_m, id) => `href="#${uid}-${id}"`);
 
   return (
     <span

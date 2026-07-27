@@ -33,7 +33,7 @@ const AVATAR_PALETTE = [
 function initials(name: string): string {
   const trimmed = name.trim();
   if (trimmed.length === 0) return '·';
-  const parts = trimmed.split(/\s+/).filter((w) => w.length > 0);
+  const parts = trimmed.split(/\s+/u).filter((w) => w.length > 0);
   if (parts.length === 1) {
     const w = parts[0] ?? '';
     return (w.charAt(0) + (w.charAt(1) || '')).toUpperCase();

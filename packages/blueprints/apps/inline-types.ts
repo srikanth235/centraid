@@ -34,7 +34,7 @@ export interface InlineQueryArgs {
   query: Record<string, unknown>;
   input?: Record<string, unknown>;
   app: { id: string; dir: string };
-  log: { info(msg: string): void; warn(msg: string): void; error(msg: string): void };
+  log: { info: (msg: string) => void; warn: (msg: string) => void; error: (msg: string) => void };
   ctx: unknown;
 }
 

@@ -28,7 +28,7 @@ export interface SkillMeta {
 }
 
 const SKILL_FILE = 'SKILL.md';
-const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+const FRONTMATTER_RE = /^---\r?\n(?<frontmatter>[\s\S]*?)\r?\n---\r?\n?/u;
 
 /**
  * Absolute path to the gateway's `skills/` grounding catalog (package root,
@@ -46,7 +46,7 @@ export function parseSkillFile(raw: string): { meta: Record<string, string>; bod
   const m = FRONTMATTER_RE.exec(raw);
   if (!m) return { meta: {}, body: raw.trim() };
   const meta: Record<string, string> = {};
-  for (const line of m[1]!.split('\n')) {
+  for (const line of (m.groups?.frontmatter ?? '').split('\n')) {
     const idx = line.indexOf(':');
     if (idx === -1) continue;
     const key = line.slice(0, idx).trim();

@@ -244,10 +244,10 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
         size: stat.size,
         mtimeMs: stat.mtimeMs,
         chunks: prior.chunks,
-        ...(entry.sha256 !== undefined ? { sha256: entry.sha256 } : {}),
-        ...(entry.walGeneration !== undefined ? { walGeneration: entry.walGeneration } : {}),
-        ...(entry.baseTickMs !== undefined ? { baseTickMs: entry.baseTickMs } : {}),
-        ...(entry.walTipTickMs !== undefined ? { walTipTickMs: entry.walTipTickMs } : {}),
+        ...(entry.sha256 === undefined ? {} : { sha256: entry.sha256 }),
+        ...(entry.walGeneration === undefined ? {} : { walGeneration: entry.walGeneration }),
+        ...(entry.baseTickMs === undefined ? {} : { baseTickMs: entry.baseTickMs }),
+        ...(entry.walTipTickMs === undefined ? {} : { walTipTickMs: entry.walTipTickMs }),
       });
       continue;
     }
@@ -289,10 +289,10 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
       size: stat.size,
       mtimeMs: stat.mtimeMs,
       chunks: chunkIds,
-      ...(entry.sha256 !== undefined ? { sha256: entry.sha256 } : {}),
-      ...(entry.walGeneration !== undefined ? { walGeneration: entry.walGeneration } : {}),
-      ...(entry.baseTickMs !== undefined ? { baseTickMs: entry.baseTickMs } : {}),
-      ...(entry.walTipTickMs !== undefined ? { walTipTickMs: entry.walTipTickMs } : {}),
+      ...(entry.sha256 === undefined ? {} : { sha256: entry.sha256 }),
+      ...(entry.walGeneration === undefined ? {} : { walGeneration: entry.walGeneration }),
+      ...(entry.baseTickMs === undefined ? {} : { baseTickMs: entry.baseTickMs }),
+      ...(entry.walTipTickMs === undefined ? {} : { walTipTickMs: entry.walTipTickMs }),
     });
   }
 
@@ -536,7 +536,10 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
           'at or before that instant',
       );
     }
-  } else if (opts.pointInTimeMs !== undefined) {
+  } else if (opts.pointInTimeMs === undefined) {
+    const row = (await opts.provider.listSnapshots(opts.targetId))[0];
+    if (row) selected = await openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current);
+  } else {
     const rows = await opts.provider.listSnapshots(opts.targetId);
     const candidates: OpenedSnapshot[] = [];
     for (const row of rows) {
@@ -549,9 +552,6 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
         `restoreSnapshot: no snapshot exists at or before ${new Date(opts.pointInTimeMs).toISOString()}`,
       );
     }
-  } else {
-    const row = (await opts.provider.listSnapshots(opts.targetId))[0];
-    if (row) selected = await openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current);
   }
   if (!selected) throw new Error('restoreSnapshot: no snapshot available');
   const { row, opened } = selected;
@@ -647,8 +647,8 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
       journal: pair.journal.walGeneration!,
     },
     baseTickMsByDb: { vault: pair.baseTickMs, journal: pair.baseTickMs },
-    ...(pair.walTipTickMs !== undefined ? { walTipTickMs: pair.walTipTickMs } : {}),
-    ...(opts.pointInTimeMs !== undefined ? { pointInTimeMs: opts.pointInTimeMs } : {}),
+    ...(pair.walTipTickMs === undefined ? {} : { walTipTickMs: pair.walTipTickMs }),
+    ...(opts.pointInTimeMs === undefined ? {} : { pointInTimeMs: opts.pointInTimeMs }),
     log,
   });
 
@@ -698,9 +698,9 @@ export interface VerifySnapshotResult {
 
 export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<VerifySnapshotResult> {
   const row =
-    opts.seq !== undefined
-      ? await opts.provider.getSnapshot(opts.targetId, opts.seq)
-      : (await opts.provider.listSnapshots(opts.targetId))[0];
+    opts.seq === undefined
+      ? (await opts.provider.listSnapshots(opts.targetId))[0]
+      : await opts.provider.getSnapshot(opts.targetId, opts.seq);
   if (!row) throw new Error('verifySnapshot: no snapshot available');
 
   const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');

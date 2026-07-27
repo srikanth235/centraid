@@ -40,7 +40,7 @@ const fail = (at: number, detail = 'fetch failed'): GatewayProbe => ({ at, ok: f
 const run = (probes: GatewayProbe[]): GatewayRuntimeState =>
   probes.reduce(applyProbe, initialRuntimeState(GW, T0));
 
-describe('applyProbe', () => {
+describe(applyProbe, () => {
   it('establishes up on the first successful probe and carries identity fields', () => {
     const state = run([ok(T0 + 5000)]);
     expect(state.status).toBe('up');
@@ -55,14 +55,14 @@ describe('applyProbe', () => {
   it('opens an outage when the first-ever probe fails (down from the start)', () => {
     const state = run([fail(T0 + 5000)]);
     expect(state.status).toBe('down');
-    expect(state.outages).toEqual([{ startedAt: T0 + 5000 }]);
+    expect(state.outages).toStrictEqual([{ startedAt: T0 + 5000 }]);
     expect(state.lastError).toBe('fetch failed');
   });
 
   it('opens on up→down and closes on down→up, keeping last-known identity', () => {
     const state = run([ok(T0 + 5000), fail(T0 + 10_000), fail(T0 + 15_000), ok(T0 + 20_000)]);
     expect(state.status).toBe('up');
-    expect(state.outages).toEqual([{ startedAt: T0 + 10_000, endedAt: T0 + 20_000 }]);
+    expect(state.outages).toStrictEqual([{ startedAt: T0 + 10_000, endedAt: T0 + 20_000 }]);
     expect(state.checksTotal).toBe(4);
     expect(state.checksFailed).toBe(2);
   });
@@ -92,7 +92,7 @@ describe('applyProbe', () => {
   });
 });
 
-describe('evaluateAlert', () => {
+describe(evaluateAlert, () => {
   const config = { enabled: true, thresholdSeconds: DEFAULT_ALERT_SECONDS };
 
   it('stays quiet before the threshold', () => {
@@ -104,7 +104,7 @@ describe('evaluateAlert', () => {
   it('fires the down alert once the outage crosses the threshold, exactly once', () => {
     const state = run([fail(T0)]);
     const first = evaluateAlert(state, config, T0 + 120_000);
-    expect(first.action).toEqual({ kind: 'down', downForMs: 120_000 });
+    expect(first.action).toStrictEqual({ kind: 'down', downForMs: 120_000 });
     const second = evaluateAlert(first.state, config, T0 + 180_000);
     expect(second.action).toBeUndefined();
   });
@@ -121,7 +121,7 @@ describe('evaluateAlert', () => {
     ({ state } = evaluateAlert(state, config, T0 + 120_000));
     state = applyProbe(state, ok(T0 + 150_000));
     const recovered = evaluateAlert(state, config, T0 + 150_000);
-    expect(recovered.action).toEqual({ kind: 'recovered', outageMs: 150_000 });
+    expect(recovered.action).toStrictEqual({ kind: 'recovered', outageMs: 150_000 });
     expect(evaluateAlert(recovered.state, config, T0 + 155_000).action).toBeUndefined();
 
     // Short, un-alerted outage → no recovery noise.
@@ -134,7 +134,7 @@ describe('evaluateAlert', () => {
     ({ state } = evaluateAlert(state, config, T0 + 120_000));
     state = applyProbe(state, ok(T0 + 200_000));
     const { action } = evaluateAlert(state, { ...config, enabled: false }, T0 + 200_000);
-    expect(action).toEqual({ kind: 'recovered', outageMs: 200_000 });
+    expect(action).toStrictEqual({ kind: 'recovered', outageMs: 200_000 });
   });
 
   it('no-ops with an empty outage log', () => {
@@ -143,7 +143,7 @@ describe('evaluateAlert', () => {
   });
 });
 
-describe('clampAlertSeconds', () => {
+describe(clampAlertSeconds, () => {
   it('clamps into the valid range and rounds', () => {
     expect(clampAlertSeconds(1)).toBe(MIN_ALERT_SECONDS);
     expect(clampAlertSeconds(120.4)).toBe(120);
@@ -156,7 +156,7 @@ describe('clampAlertSeconds', () => {
   });
 });
 
-describe('formatDurationMs', () => {
+describe(formatDurationMs, () => {
   it('formats across magnitudes', () => {
     expect(formatDurationMs(47_000)).toBe('47s');
     expect(formatDurationMs(200_000)).toBe('3m 20s');
@@ -180,7 +180,7 @@ describe('applyProbe: health reconciliation', () => {
       }),
     ]);
     expect(state.healthStatus).toBe('error');
-    expect(state.componentIssues).toEqual([{ component: 'vaults', status: 'error' }]);
+    expect(state.componentIssues).toStrictEqual([{ component: 'vaults', status: 'error' }]);
   });
 
   it('a degraded component reads as degraded', () => {
@@ -242,7 +242,7 @@ describe('applyProbe: health reconciliation', () => {
   });
 });
 
-describe('applyComponentAlerts', () => {
+describe(applyComponentAlerts, () => {
   const config = { enabled: true, thresholdSeconds: DEFAULT_COMPONENT_ALERT_SECONDS };
   const errorIssue = (component: string, message?: string): GatewayComponentIssue => ({
     component,
@@ -258,8 +258,10 @@ describe('applyComponentAlerts', () => {
     // a later tick, still erroring but short of the threshold, stays quiet.
     ({ state } = applyComponentAlerts(state, T0, config));
     const { state: next, actions } = applyComponentAlerts(state, T0 + 60_000, config);
-    expect(actions).toEqual([]);
-    expect(next.componentAlerts).toEqual([{ component: 'vaults', sinceAt: T0, message: 'boom' }]);
+    expect(actions).toStrictEqual([]);
+    expect(next.componentAlerts).toStrictEqual([
+      { component: 'vaults', sinceAt: T0, message: 'boom' },
+    ]);
   });
 
   it('fires once the component has been erroring past the threshold, exactly once', () => {
@@ -268,7 +270,7 @@ describe('applyComponentAlerts', () => {
     ]);
     ({ state } = applyComponentAlerts(state, T0, config));
     const first = applyComponentAlerts(state, T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000, config);
-    expect(first.actions).toEqual([
+    expect(first.actions).toStrictEqual([
       { component: 'vaults', message: 'boom', downForMs: DEFAULT_COMPONENT_ALERT_SECONDS * 1000 },
     ]);
     const second = applyComponentAlerts(
@@ -276,7 +278,7 @@ describe('applyComponentAlerts', () => {
       T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000 + 5000,
       config,
     );
-    expect(second.actions).toEqual([]);
+    expect(second.actions).toStrictEqual([]);
   });
 
   it('drops the record on recovery, re-arming the alert for a later re-error', () => {
@@ -287,7 +289,7 @@ describe('applyComponentAlerts', () => {
     // Recovers — the record is dropped.
     state = applyProbe(state, ok(T0 + 500_000, { healthStatus: 'ok', componentIssues: [] }));
     ({ state } = applyComponentAlerts(state, T0 + 500_000, config));
-    expect(state.componentAlerts).toEqual([]);
+    expect(state.componentAlerts).toStrictEqual([]);
 
     // Re-errors — starts a fresh window, doesn't immediately re-fire.
     state = applyProbe(
@@ -295,8 +297,8 @@ describe('applyComponentAlerts', () => {
       ok(T0 + 501_000, { healthStatus: 'error', componentIssues: [errorIssue('vaults')] }),
     );
     const reErrored = applyComponentAlerts(state, T0 + 501_000, config);
-    expect(reErrored.actions).toEqual([]);
-    expect(reErrored.state.componentAlerts).toEqual([
+    expect(reErrored.actions).toStrictEqual([]);
+    expect(reErrored.state.componentAlerts).toStrictEqual([
       { component: 'vaults', sinceAt: T0 + 501_000 },
     ]);
   });
@@ -307,7 +309,7 @@ describe('applyComponentAlerts', () => {
       ...config,
       enabled: false,
     });
-    expect(actions).toEqual([]);
+    expect(actions).toStrictEqual([]);
   });
 
   it('tracks multiple components independently', () => {
@@ -323,7 +325,7 @@ describe('applyComponentAlerts', () => {
       T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000,
       config,
     );
-    expect(actions.map((a) => a.component).sort()).toEqual(['outbox', 'vaults']);
+    expect(actions.map((a) => a.component).sort()).toStrictEqual(['outbox', 'vaults']);
     expect(next.componentAlerts).toHaveLength(2);
   });
 
@@ -339,8 +341,8 @@ describe('applyComponentAlerts', () => {
       T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000,
       config,
     );
-    expect(actions).toEqual([]);
-    expect(next.componentAlerts).toEqual([]);
+    expect(actions).toStrictEqual([]);
+    expect(next.componentAlerts).toStrictEqual([]);
   });
 });
 
@@ -357,7 +359,7 @@ describe('applyProbe: version handshake (issue #351, wave 2)', () => {
     const state = runRemote([
       ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH }),
     ]);
-    expect(state.versionSkew).toEqual({
+    expect(state.versionSkew).toStrictEqual({
       skewed: false,
       gatewayVersion: EXPECTED_GATEWAY_VERSION,
       gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH,
@@ -404,7 +406,7 @@ describe('applyProbe: version handshake (issue #351, wave 2)', () => {
   });
 });
 
-describe('applyVersionSkewAlert', () => {
+describe(applyVersionSkewAlert, () => {
   const config = { enabled: true, thresholdSeconds: DEFAULT_ALERT_SECONDS };
   const runRemote = (probes: GatewayProbe[]): GatewayRuntimeState =>
     probes.reduce(applyProbe, initialRuntimeState(REMOTE_GW, T0));
@@ -414,7 +416,7 @@ describe('applyVersionSkewAlert', () => {
       ok(T0, { version: EXPECTED_GATEWAY_VERSION, schemaEpoch: EXPECTED_SCHEMA_EPOCH + 1 }),
     ]);
     const { action } = applyVersionSkewAlert(state, config, T0);
-    expect(action).toEqual({
+    expect(action).toStrictEqual({
       gatewayVersion: EXPECTED_GATEWAY_VERSION,
       gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
     });
@@ -473,7 +475,7 @@ describe('applyVersionSkewAlert', () => {
       }),
     );
     const refired = applyVersionSkewAlert(state, config, T0 + 20_000);
-    expect(refired.action).toEqual({
+    expect(refired.action).toStrictEqual({
       gatewayVersion: EXPECTED_GATEWAY_VERSION,
       gatewaySchemaEpoch: EXPECTED_SCHEMA_EPOCH + 1,
     });

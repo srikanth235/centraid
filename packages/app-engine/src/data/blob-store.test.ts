@@ -10,7 +10,7 @@ function freshAppsDir(appId = 'app'): string {
   return dir;
 }
 
-describe('BlobStore', () => {
+describe(BlobStore, () => {
   it('content-addresses bytes and dedups a second identical put', async () => {
     const store = new BlobStore(freshAppsDir());
     const bytes = Buffer.from('hello world');
@@ -26,8 +26,8 @@ describe('BlobStore', () => {
   it('round-trips bytes through read; missing hash → undefined', async () => {
     const store = new BlobStore(freshAppsDir());
     const { hash } = await store.put('app', Buffer.from('data'));
-    expect(await store.read('app', hash)).toEqual(Buffer.from('data'));
-    expect(await store.read('app', 'f'.repeat(64))).toBe(undefined);
+    await expect(store.read('app', hash)).resolves.toStrictEqual(Buffer.from('data'));
+    await expect(store.read('app', 'f'.repeat(64))).resolves.toBeUndefined();
   });
 
   it('rejects a non-sha256 hash (path-traversal guard)', () => {
@@ -46,12 +46,12 @@ describe('BlobStore', () => {
     expect(removed).toBe(1);
     expect(existsSync(store.pathFor('app', keep.hash))).toBe(true);
     expect(existsSync(store.pathFor('app', drop.hash))).toBe(false);
-    expect(readdirSync(join(dir, 'app', 'blobs'))).toEqual([keep.hash]);
+    expect(readdirSync(join(dir, 'app', 'blobs'))).toStrictEqual([keep.hash]);
   });
 
   it('gc on an app with no blobs dir is a no-op', async () => {
     const store = new BlobStore(freshAppsDir());
-    expect(await store.gc('app', new Set())).toEqual({ removed: 0 });
+    await expect(store.gc('app', new Set())).resolves.toStrictEqual({ removed: 0 });
   });
 
   it('blobUrl builds the chat-history download path', () => {
@@ -68,6 +68,8 @@ describe('BlobStore', () => {
   it('allows the reserved `_assistant` scope through the same app-id gate', async () => {
     const store = new BlobStore(freshAppsDir('_assistant'));
     const put = await store.put('_assistant', Buffer.from('assistant upload'));
-    expect(await store.read('_assistant', put.hash)).toEqual(Buffer.from('assistant upload'));
+    await expect(store.read('_assistant', put.hash)).resolves.toStrictEqual(
+      Buffer.from('assistant upload'),
+    );
   });
 });

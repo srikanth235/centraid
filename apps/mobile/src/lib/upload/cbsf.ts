@@ -92,7 +92,7 @@ async function nonceFor(
 }
 
 export function encodeHeader(sha: string): Uint8Array {
-  if (!/^[0-9a-f]{64}$/.test(sha)) throw new Error('sealed blob: invalid header sha');
+  if (!/^[0-9a-f]{64}$/u.test(sha)) throw new Error('sealed blob: invalid header sha');
   return concatBytes([MAGIC, Uint8Array.of(SEAL_VERSION), hexToBytes(sha)]);
 }
 
@@ -155,7 +155,7 @@ export interface SealPartInput {
   /** Pre-sealed directory; identical for every part, so seal it once per drain. */
   directory: Uint8Array;
   /** Reads plaintext at an absolute offset. */
-  read(offset: number, length: number): Promise<Uint8Array>;
+  read: (offset: number, length: number) => Promise<Uint8Array>;
 }
 
 /**

@@ -40,7 +40,7 @@ function rawManifest(over: Record<string, unknown> = {}): Record<string, unknown
 describe('connector manifest contract', () => {
   it('accepts a well-formed connector block', () => {
     const m = validateManifest(rawManifest());
-    expect(m.connector).toEqual({
+    expect(m.connector).toStrictEqual({
       kind: 'mcp.gmail',
       label: 'personal',
       principal: 'me@example.com',
@@ -66,7 +66,9 @@ describe('connector manifest contract', () => {
         connections: [{ connectionId: 'c1', kind: 'pull.github', label: 'work' }],
       }),
     );
-    expect(soft.connections).toEqual([{ connectionId: 'c1', kind: 'pull.github', label: 'work' }]);
+    expect(soft.connections).toStrictEqual([
+      { connectionId: 'c1', kind: 'pull.github', label: 'work' },
+    ]);
   });
 
   it('refuses a connector without a vault block', () => {
@@ -226,7 +228,7 @@ describe('connector runtime gates', () => {
       summary: 'pulled one',
       output: { staged: 1, published: 1 },
     });
-    expect(invoked.map((payload) => payload.command)).toEqual([
+    expect(invoked.map((payload) => payload.command)).toStrictEqual([
       'sync.begin_run',
       'sync.stage_rows',
       'sync.set_cursor',
@@ -321,7 +323,7 @@ describe('connector runtime gates', () => {
       expect(outcome.ok).toBe(true);
     }
 
-    expect(beginInputs).toEqual([
+    expect(beginInputs).toStrictEqual([
       expect.objectContaining({ connection_id: 'conn-personal' }),
       expect.objectContaining({ connection_id: 'conn-work' }),
     ]);
@@ -368,7 +370,7 @@ describe('connector runtime gates', () => {
       summary: 'skipped: paused by owner',
       output: { skipped: true },
     });
-    expect(invoked).toEqual(['sync.begin_run']);
+    expect(invoked).toStrictEqual(['sync.begin_run']);
   });
 
   it('does not expose vault or state rails to declarative pull specs', async () => {
@@ -467,7 +469,7 @@ describe('connector runtime gates', () => {
 
     expect(outcome.ok).toBe(false);
     expect(outcome.error).toMatch(/provider pagination failed/);
-    expect(invoked.map((payload) => payload.command)).toEqual([
+    expect(invoked.map((payload) => payload.command)).toStrictEqual([
       'sync.begin_run',
       'sync.finish_run',
     ]);
@@ -560,7 +562,7 @@ describe('connector secrets (issue #293)', () => {
         requires: { secrets: ['locker:item-1:password'] },
       }),
     );
-    expect(m.requires.secrets).toEqual(['locker:item-1:password']);
+    expect(m.requires.secrets).toStrictEqual(['locker:item-1:password']);
     expect(() => validateManifest(rawManifest({ requires: { secrets: ['not-a-ref'] } }))).toThrow(
       /locker:<item_id>:<column>/,
     );
@@ -610,8 +612,8 @@ describe('connector secrets (issue #293)', () => {
       );
       expect(outcome.ok).toBe(true);
       // The wire carried the REAL secret (transport-level injection)…
-      expect(seen).toEqual(['Bearer imap-app-p4ss']);
-      expect(reveals).toEqual(['item-1']);
+      expect(seen).toStrictEqual(['Bearer imap-app-p4ss']);
+      expect(reveals).toStrictEqual(['item-1']);
       // …but nothing the run RECORDS holds it: the echoed body is scrubbed.
       expect(JSON.stringify(outcome.value)).not.toContain('imap-app-p4ss');
       expect(JSON.stringify(outcome.value)).toContain('«secret»');
@@ -633,12 +635,12 @@ describe('connector secrets (issue #293)', () => {
       { requires: { secrets: ['locker:@github-token:password'] } },
     );
     const aliases: Array<string | undefined> = [];
+    const entityIds: Array<string | undefined> = [];
     const bridge: VaultBridge = async (call) => {
       if (call.op === 'reveal') {
         const p = call.payload as { alias?: string; entityId?: string };
         aliases.push(p.alias);
-        // The ref carried an alias, never an entityId.
-        expect(p.entityId).toBeUndefined();
+        entityIds.push(p.entityId);
         return { ok: true, result: { values: { password: 'aliased-secret' } } };
       }
       if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
@@ -648,7 +650,9 @@ describe('connector secrets (issue #293)', () => {
       { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
       { openDispatch: noDispatch },
     );
-    expect(aliases).toEqual(['github-token']);
+    expect(aliases).toStrictEqual(['github-token']);
+    // The ref carried an alias, never an entityId.
+    expect(entityIds).toStrictEqual([undefined]);
   });
 
   it('a placeholder outside requires.secrets errors without resolving', async () => {
@@ -734,7 +738,7 @@ describe('connector secrets (issue #293)', () => {
     expect(outcome.ok).toBe(false);
     expect(outcome.error).toMatch(/needs-auth/);
     expect(outcome.value).toBeUndefined(); // the handler never executed
-    expect(invoked).toEqual([
+    expect(invoked).toStrictEqual([
       {
         command: 'sync.set_connection_status',
         input: { connection_id: 'conn-1', status: 'needs-auth' },
@@ -827,7 +831,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
           { openDispatch: noDispatch },
         );
         expect(outcome.ok).toBe(true);
-        expect(seen).toEqual(['Bearer tok-live-1']);
+        expect(seen).toStrictEqual(['Bearer tok-live-1']);
         expect(JSON.stringify(outcome.value)).not.toContain('tok-live-1');
         expect(JSON.stringify(outcome.value)).toContain('«secret»');
       },
@@ -923,7 +927,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
         expect(outcome.ok).toBe(true);
         expect(outcome.value).toMatchObject({ status: 200 });
         expect(refreshes).toBe(1);
-        expect(seen).toEqual(['Bearer tok-stale', 'Bearer tok-refreshed']);
+        expect(seen).toStrictEqual(['Bearer tok-stale', 'Bearer tok-refreshed']);
       },
     );
   });
@@ -963,7 +967,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
         );
         expect(outcome.ok).toBe(true);
         expect(outcome.value).toMatchObject({ status: 401 });
-        expect(dead).toEqual([expect.stringContaining('401')]);
+        expect(dead).toStrictEqual([expect.stringContaining('401')]);
       },
     );
   });

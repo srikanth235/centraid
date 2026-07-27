@@ -7,7 +7,7 @@ import {
   type ExportDiagnosticsDeps,
 } from './gateway-ops-core.js';
 
-describe('diagnosticsFileName', () => {
+describe(diagnosticsFileName, () => {
   it('formats the local calendar date, zero-padded', () => {
     expect(diagnosticsFileName(new Date(2026, 0, 5))).toBe('centraid-diagnostics-2026-01-05.json');
     expect(diagnosticsFileName(new Date(2026, 10, 23))).toBe(
@@ -16,14 +16,14 @@ describe('diagnosticsFileName', () => {
   });
 });
 
-describe('fetchDiagnosticsText', () => {
+describe(fetchDiagnosticsText, () => {
   it('pretty-prints a successful JSON response', async () => {
     const result = await fetchDiagnosticsText(
       'http://127.0.0.1:1',
       'tok',
       async () => new Response(JSON.stringify({ status: 'ok', components: [] }), { status: 200 }),
     );
-    expect(result).toEqual({
+    expect(result).toStrictEqual({
       ok: true,
       text: JSON.stringify({ status: 'ok', components: [] }, null, 2),
     });
@@ -35,14 +35,14 @@ describe('fetchDiagnosticsText', () => {
       undefined,
       async () => new Response('', { status: 503 }),
     );
-    expect(result).toEqual({ ok: false, error: 'HTTP 503' });
+    expect(result).toStrictEqual({ ok: false, error: 'HTTP 503' });
   });
 
   it('surfaces a network failure', async () => {
     const result = await fetchDiagnosticsText('http://gw', undefined, async () => {
       throw new Error('ECONNREFUSED');
     });
-    expect(result).toEqual({ ok: false, error: 'ECONNREFUSED' });
+    expect(result).toStrictEqual({ ok: false, error: 'ECONNREFUSED' });
   });
 
   it('surfaces a malformed (non-JSON) response', async () => {
@@ -51,7 +51,7 @@ describe('fetchDiagnosticsText', () => {
       undefined,
       async () => new Response('not json', { status: 200 }),
     );
-    expect(result).toEqual({ ok: false, error: 'diagnostics response was not JSON' });
+    expect(result).toStrictEqual({ ok: false, error: 'diagnostics response was not JSON' });
   });
 });
 
@@ -66,14 +66,14 @@ function makeDeps(overrides: Partial<ExportDiagnosticsDeps> = {}): ExportDiagnos
   };
 }
 
-describe('exportGatewayDiagnostics', () => {
+describe(exportGatewayDiagnostics, () => {
   it('happy path: fetches, saves, and returns the written path', async () => {
     const writes: Array<{ path: string; data: string }> = [];
     const result = await exportGatewayDiagnostics(
       makeDeps({ writeFile: async (path, data) => void writes.push({ path, data }) }),
     );
-    expect(result).toEqual({ ok: true, path: '/tmp/centraid-diagnostics-2026-07-11.json' });
-    expect(writes).toEqual([
+    expect(result).toStrictEqual({ ok: true, path: '/tmp/centraid-diagnostics-2026-07-11.json' });
+    expect(writes).toStrictEqual([
       {
         path: '/tmp/centraid-diagnostics-2026-07-11.json',
         data: JSON.stringify({ status: 'ok' }, null, 2),
@@ -89,8 +89,8 @@ describe('exportGatewayDiagnostics', () => {
         writeFile: async () => void writes.push(1),
       }),
     );
-    expect(result).toEqual({ ok: false, canceled: true });
-    expect(writes).toEqual([]);
+    expect(result).toStrictEqual({ ok: false, canceled: true });
+    expect(writes).toStrictEqual([]);
   });
 
   it('no active gateway URL: refuses before ever fetching', async () => {
@@ -104,7 +104,10 @@ describe('exportGatewayDiagnostics', () => {
         },
       }),
     );
-    expect(result).toEqual({ ok: false, error: 'No active gateway to export diagnostics from.' });
+    expect(result).toStrictEqual({
+      ok: false,
+      error: 'No active gateway to export diagnostics from.',
+    });
     expect(fetchCalled).toBe(false);
   });
 
@@ -119,7 +122,7 @@ describe('exportGatewayDiagnostics', () => {
         },
       }),
     );
-    expect(result).toEqual({ ok: false, error: 'HTTP 500' });
+    expect(result).toStrictEqual({ ok: false, error: 'HTTP 500' });
     expect(dialogCalled).toBe(false);
   });
 
@@ -131,11 +134,11 @@ describe('exportGatewayDiagnostics', () => {
         },
       }),
     );
-    expect(result).toEqual({ ok: false, error: 'EACCES: permission denied' });
+    expect(result).toStrictEqual({ ok: false, error: 'EACCES: permission denied' });
   });
 });
 
-describe('exportGatewayRecoveryKit', () => {
+describe(exportGatewayRecoveryKit, () => {
   it('fetches the key-bearing document from the backup endpoint and saves it', async () => {
     let requested = '';
     let requestInit: RequestInit | undefined;
@@ -157,8 +160,8 @@ describe('exportGatewayRecoveryKit', () => {
       method: 'POST',
       body: JSON.stringify({ password: 'correct horse' }),
     });
-    expect(result).toEqual({ ok: true, path: '/tmp/centraid-recovery-kit.json' });
-    expect(writes).toEqual([
+    expect(result).toStrictEqual({ ok: true, path: '/tmp/centraid-recovery-kit.json' });
+    expect(writes).toStrictEqual([
       { path: '/tmp/centraid-recovery-kit.json', data: JSON.stringify(kit, null, 2) },
     ]);
   });

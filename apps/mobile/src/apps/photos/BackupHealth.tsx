@@ -349,7 +349,7 @@ function Rule({
 }: {
   label: string;
   value: boolean;
-  onValueChange(value: boolean): void;
+  onValueChange: (value: boolean) => void;
   colors: ReturnType<typeof useTheme>['colors'];
   disabled?: boolean;
 }): React.JSX.Element {

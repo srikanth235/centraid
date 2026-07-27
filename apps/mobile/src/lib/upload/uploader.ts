@@ -43,7 +43,7 @@ export type PartPutter = (input: {
  * every item recoverable.
  */
 export interface UploadPolicy {
-  canTransfer(): boolean | Promise<boolean>;
+  canTransfer: () => boolean | Promise<boolean>;
 }
 
 export interface UploadDrainerDeps {

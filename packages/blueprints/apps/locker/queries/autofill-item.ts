@@ -18,7 +18,13 @@ interface LoginRow {
   deleted_at?: string | null;
 }
 
-export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: HandlerCtx }) => {
+export default async function autofillItem({
+  input,
+  ctx,
+}: {
+  input?: Record<string, unknown>;
+  ctx: HandlerCtx;
+}) {
   const purpose = 'dpv:ServiceProvision';
   const itemId = String(input?.item_id ?? '');
   const origin = pageOrigin(input?.page_origin);
@@ -75,4 +81,4 @@ export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: Ha
     const error = err as { code?: string; message?: string };
     return { fill: null, vaultDenied: { code: error.code, message: error.message } };
   }
-};
+}

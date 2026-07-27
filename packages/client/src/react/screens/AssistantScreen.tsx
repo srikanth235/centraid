@@ -98,11 +98,11 @@ export function ModelPicker({
 
   if (picker.models.length === 0) return null;
   const selected = picker.models.find((m) => m.id === picker.selectedModelId);
-  const label = !loaded
-    ? 'Model'
-    : selected
+  const label = loaded
+    ? selected
       ? (selected.name ?? selected.id)
-      : `Default · ${picker.defaultModelName || 'gateway default'}`;
+      : `Default · ${picker.defaultModelName || 'gateway default'}`
+    : 'Model';
 
   const choose = (modelId: string): void => {
     onSelect(modelId);
@@ -131,7 +131,7 @@ export function ModelPicker({
             role="menuitemradio"
             aria-checked={!picker.selectedModelId}
             className={styles.modelItem}
-            data-active={!picker.selectedModelId ? 'true' : undefined}
+            data-active={picker.selectedModelId ? undefined : 'true'}
             onClick={() => choose('')}
           >
             <span>Use default</span>

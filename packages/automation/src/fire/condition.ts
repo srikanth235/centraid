@@ -186,7 +186,7 @@ export async function readDataCursor(options: ReadDataCursorOptions): Promise<Cu
         position: changePosition(change, index),
         occurredAt: options.now.getTime(),
         payload: change,
-        ...(watermark !== undefined ? { positionJson: JSON.stringify(watermark) } : {}),
+        ...(watermark === undefined ? {} : { positionJson: JSON.stringify(watermark) }),
       };
     }),
     ...(typeof feed.cursor === 'string' ? { positionJson: JSON.stringify(feed.cursor) } : {}),

@@ -38,7 +38,6 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type {
   ResolvedTemplate,
   TemplateKind,
@@ -58,7 +57,7 @@ export type {
   TemplateSource,
 } from './types.js';
 
-const DIST_DIR = path.dirname(fileURLToPath(import.meta.url));
+const DIST_DIR = import.meta.dirname;
 const PACKAGE_ROOT = path.resolve(DIST_DIR, '..');
 
 /** Absolute path to the bundled templates directory (the package root). */
@@ -186,9 +185,9 @@ export async function readTemplateFiles(
   opts: { cacheDir?: string } = {},
 ): Promise<{ path: string; content: string }[]> {
   const dir = templateSourceDir(template.id, {
-    ...(template.kind !== undefined ? { kind: template.kind } : {}),
-    ...(opts.cacheDir !== undefined ? { cacheDir: opts.cacheDir } : {}),
-    ...(template.source !== undefined ? { source: template.source } : {}),
+    ...(template.kind === undefined ? {} : { kind: template.kind }),
+    ...(opts.cacheDir === undefined ? {} : { cacheDir: opts.cacheDir }),
+    ...(template.source === undefined ? {} : { source: template.source }),
   });
   return Promise.all(
     template.files.map(async (rel) => ({

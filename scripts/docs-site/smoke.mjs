@@ -12,10 +12,9 @@
  *  5. No page resurrects retired Duaility branding.
  */
 import { access, readFile, readdir, stat } from 'node:fs/promises';
-import { dirname, join, posix } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, posix } from 'node:path';
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const repoRoot = join(import.meta.dirname, '..', '..');
 const outDir = join(repoRoot, 'dist', 'docs-site');
 const homeIndex = join(repoRoot, 'scripts', 'home-site', 'public', 'index.html');
 
@@ -73,10 +72,10 @@ async function resolves(clean, fromPage) {
   if (candidate.startsWith('/')) {
     const basePath = process.env.DOCS_SITE_BASE_PATH || '';
     candidate = candidate.replace(
-      new RegExp(`^${basePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?`),
+      new RegExp(`^${basePath.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}/?`, 'u'),
       '',
     );
-    candidate = candidate.replace(/^\//, '');
+    candidate = candidate.replace(/^\//u, '');
   } else {
     candidate = posix.normalize(posix.join(posix.dirname(fromPage), candidate));
   }
@@ -93,13 +92,13 @@ for (const rel of REQUIRED) {
 }
 
 const pages = (await walk(outDir)).filter((f) => f.endsWith('.html'));
-const HREF_RE = /(?:href|src)="([^"]+)"/g;
+const HREF_RE = /(?:href|src)="(?<url>[^"]+)"/gu;
 const tagAttr = (html, tag, attr, value, readAttr = 'content') => {
   const re = new RegExp(
-    `<${tag}\\b(?=[^>]*\\b${attr}="${value}")[^>]*\\b${readAttr}="([^"]*)"[^>]*>`,
-    'i',
+    `<${tag}\\b(?=[^>]*\\b${attr}="${value}")[^>]*\\b${readAttr}="(?<attrValue>[^"]*)"[^>]*>`,
+    'iu',
   );
-  return html.match(re)?.[1] || '';
+  return html.match(re)?.groups?.attrValue || '';
 };
 const titleValues = new Map();
 const descriptionValues = new Map();
@@ -107,11 +106,12 @@ const descriptionValues = new Map();
 for (const page of pages) {
   const html = await readFile(join(outDir, page), 'utf8');
 
-  if (/duaility/i.test(html)) fail(`${page}: retired "Duaility" branding still present`);
+  if (/duaility/iu.test(html)) fail(`${page}: retired "Duaility" branding still present`);
 
-  const title = html.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim() || '';
+  const title =
+    html.match(/<title>(?<titleText>[^<]+)<\/title>/iu)?.groups?.titleText?.trim() || '';
   const description = tagAttr(html, 'meta', 'name', 'description');
-  const noIndex = /<meta\b(?=[^>]*\bname="robots")(?=[^>]*\bcontent="[^"]*noindex)/i.test(html);
+  const noIndex = /<meta\b(?=[^>]*\bname="robots")(?=[^>]*\bcontent="[^"]*noindex)/iu.test(html);
 
   if (!title) fail(`${page}: missing <title>`);
   if (title.length > 70)
@@ -136,13 +136,13 @@ for (const page of pages) {
     if (!tagAttr(html, 'meta', 'property', 'og:image')) fail(`${page}: missing og:image`);
     if (!tagAttr(html, 'meta', 'name', 'twitter:card')) fail(`${page}: missing twitter:card`);
     if (!tagAttr(html, 'meta', 'name', 'twitter:image')) fail(`${page}: missing twitter:image`);
-    if (!/<main\b[^>]*data-pagefind-body(?:[=>\s]|$)/.test(html)) {
+    if (!/<main\b[^>]*data-pagefind-body(?:[=>\s]|$)/u.test(html)) {
       fail(`${page}: missing Pagefind body marker`);
     }
-    if (!/<meta\b(?=[^>]*\bdata-pagefind-meta="label\[content\]")/.test(html)) {
+    if (!/<meta\b(?=[^>]*\bdata-pagefind-meta="label\[content\]")/u.test(html)) {
       fail(`${page}: missing Pagefind label metadata`);
     }
-    if (!/<script\b[^>]*type="application\/ld\+json"[^>]*>/.test(html)) {
+    if (!/<script\b[^>]*type="application\/ld\+json"[^>]*>/u.test(html)) {
       fail(`${page}: missing JSON-LD structured data`);
     }
     if (titleValues.has(title))
@@ -157,7 +157,8 @@ for (const page of pages) {
     }
   }
 
-  for (const [, url] of html.matchAll(HREF_RE)) {
+  for (const href of html.matchAll(HREF_RE)) {
+    const url = href.groups?.url ?? '';
     if (
       url.startsWith('http') ||
       url.startsWith('#') ||
@@ -172,10 +173,10 @@ for (const page of pages) {
 }
 
 const homeHtml = await readFile(homeIndex, 'utf8');
-if (/https:\/\/docs\.centraid\.dev/.test(homeHtml)) {
+if (/https:\/\/docs\.centraid\.dev/u.test(homeHtml)) {
   fail('home-site index.html: production docs links must stay under /docs/');
 }
-if (/href="\/docs\/(?:start|data|apps|devices|backups|ontology)\.html(?:#.*?)?"/.test(homeHtml)) {
+if (/href="\/docs\/(?:start|data|apps|devices|backups|ontology)\.html(?:#.*?)?"/u.test(homeHtml)) {
   fail('home-site index.html: docs links must use clean /docs/<route>/ URLs');
 }
 

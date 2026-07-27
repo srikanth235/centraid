@@ -68,11 +68,11 @@ export function systemdCredentialPath(
 
 function xmlEscape(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;')
+    .replace(/'/gu, '&apos;');
 }
 
 /**
@@ -127,8 +127,8 @@ export function buildLaunchdPlist(label: string, spec: ServiceUnitSpec): string 
 
 /** Quote one argv token for a systemd `ExecStart=` line (unit-file C-style quoting). */
 function systemdQuote(token: string): string {
-  if (/^[A-Za-z0-9._\-/=:]+$/.test(token)) return token;
-  return `"${token.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  if (/^[A-Za-z0-9._\-/=:]+$/u.test(token)) return token;
+  return `"${token.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"')}"`;
 }
 
 /**

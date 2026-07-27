@@ -120,21 +120,22 @@ describe('CBSF device sealer', () => {
   // Spans every structural branch: empty, sub-frame, exact frame boundary,
   // multi-frame single part, and an object that spills past one 16 MiB part.
   const sizes = [
-    ['empty', 0],
-    ['one byte', 1],
-    ['sub-frame', 1024],
-    ['exactly one frame', FRAME_BYTES],
-    ['one frame + 1', FRAME_BYTES + 1],
-    ['exactly one part (4 frames)', FRAME_BYTES * 4],
-    ['two parts', FRAME_BYTES * 4 + 17],
+    { label: 'empty', size: 0 },
+    { label: 'one byte', size: 1 },
+    { label: 'sub-frame', size: 1024 },
+    { label: 'exactly one frame', size: FRAME_BYTES },
+    { label: 'one frame + 1', size: FRAME_BYTES + 1 },
+    { label: 'exactly one part (4 frames)', size: FRAME_BYTES * 4 },
+    { label: 'two parts', size: FRAME_BYTES * 4 + 17 },
   ] as const;
 
-  for (const [label, size] of sizes) {
-    // The multi-frame sizes seal 64+ MiB; fine bare, above the 5s default
-    // under v8 coverage instrumentation — measured per-test budget.
-    // #496 — under full monorepo parallel load the two-parts case can exceed
-    // 15s on a busy host; budget is still well below a hang.
-    it(`round-trips ${label} through the vault reader`, { timeout: 30_000 }, async () => {
+  // The multi-frame sizes seal 64+ MiB; fine bare, above the 5s default
+  // under v8 coverage instrumentation — measured per-test budget.
+  // #496 — under full monorepo parallel load the two-parts case can exceed
+  // 15s on a busy host; budget is still well below a hang.
+  it.each(sizes)(
+    'round-trips $label through the vault reader',
+    async ({ size }) => {
       const plain = plaintextOf(size);
       const sha256 = shaOf(plain);
       const sealed = await sealWholeObject(plain);
@@ -143,10 +144,11 @@ describe('CBSF device sealer', () => {
       expect(sealed.byteLength).toBe(sealedSizeFor(size, frameCountFor(size)));
 
       const recovered = vaultUnseal(sealed, sha256, size);
-      expect(recovered.length).toBe(size);
+      expect(recovered).toHaveLength(size);
       expect(Buffer.from(plain).equals(recovered)).toBe(true);
-    });
-  }
+    },
+    30_000,
+  );
 
   it('seals byte-identically on a re-seal, so a replayed PUT is a no-op', async () => {
     // The property the durable queue leans on: HMAC-derived nonces make a
@@ -176,6 +178,8 @@ describe('CBSF device sealer', () => {
       directory.offsets[0]! + directory.sealedLens[0]!,
     );
     // Replaying frame 0 as frame 1 must fail GCM's AAD check.
-    expect(() => unsealFrame(Buffer.from(KEY), sha256, 1, trailer.frameCount, frame0)).toThrow();
+    expect(() => unsealFrame(Buffer.from(KEY), sha256, 1, trailer.frameCount, frame0)).toThrow(
+      'Unsupported state or unable to authenticate data',
+    );
   });
 });

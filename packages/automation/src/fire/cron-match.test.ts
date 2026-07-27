@@ -22,7 +22,7 @@ function atZone(timeZone: string, y: number, mo: number, d: number, h: number, m
   throw new Error(`could not find instant for ${y}-${mo}-${d} ${h}:${mi} in ${timeZone}`);
 }
 
-describe('cronMatches', () => {
+describe(cronMatches, () => {
   it('matches a single minute/hour and rejects neighbours', () => {
     expect(cronMatches('0 8 * * *', at(2026, 1, 1, 8, 0))).toBe(true);
     expect(cronMatches('0 8 * * *', at(2026, 1, 1, 8, 1))).toBe(false);
@@ -80,10 +80,12 @@ describe('cronMatches', () => {
     // Host-local (no zone) only matches if the host happens to also be 09:00.
     const hostHour = nineEt.getHours();
     expect(cronMatches('0 9 * * *', nineEt)).toBe(hostHour === 9);
-    // A different zone at the same absolute instant must not spuriously match.
-    if (wallClockFields(nineEt, 'Asia/Kolkata').hour !== 9) {
-      expect(cronMatches('0 9 * * *', nineEt, 'Asia/Kolkata')).toBe(false);
-    }
+    // A different zone at the same absolute instant must not spuriously match:
+    // it fires only when ITS OWN wall clock also reads 09:00.
+    const kolkata = wallClockFields(nineEt, 'Asia/Kolkata');
+    expect(cronMatches('0 9 * * *', nineEt, 'Asia/Kolkata')).toBe(
+      kolkata.hour === 9 && kolkata.minute === 0,
+    );
   });
 
   it('DST gap: spring-forward non-existent wall clock never matches (skip)', () => {
@@ -136,7 +138,7 @@ describe('cronMatches', () => {
   });
 });
 
-describe('resolveCronTimezone', () => {
+describe(resolveCronTimezone, () => {
   it('tiers trigger → gateway default → host-local with no geographic fallback', () => {
     expect(resolveCronTimezone('Asia/Kolkata', 'America/New_York')).toBe('Asia/Kolkata');
     expect(resolveCronTimezone(undefined, 'Europe/London')).toBe('Europe/London');

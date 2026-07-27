@@ -337,22 +337,22 @@ export class BackupProviderError extends Error {
  * `conformance.ts` grades any third implementation against the same cases.
  */
 export interface BackupProvider {
-  capabilities(): Promise<ProviderCapabilities>;
+  capabilities: () => Promise<ProviderCapabilities>;
 
-  createTarget(opts: { label: string }): Promise<{ targetId: string }>;
-  deleteTarget(targetId: string): Promise<void>;
-  undeleteTarget(targetId: string): Promise<void>;
+  createTarget: (opts: { label: string }) => Promise<{ targetId: string }>;
+  deleteTarget: (targetId: string) => Promise<void>;
+  undeleteTarget: (targetId: string) => Promise<void>;
   /** Local provider supports it (api-key tier); remote MUST throw `interactive_auth_required`. */
-  purgeTarget(targetId: string): Promise<void>;
+  purgeTarget: (targetId: string) => Promise<void>;
 
   /** Store-class-scoped data plane handle (PROTOCOL.md § Layer 1 — per-store
    *  isolated prefixes). Every provider MUST support `"backup"`; `"cas"` and
    *  `"derived"` MUST each be supported when `capabilities` declares it. */
-  openDataPlane(
+  openDataPlane: (
     targetId: string,
     store: StoreClass,
     mode: 'read' | 'read-write',
-  ): Promise<import('./object-store.js').ObjectStore>;
+  ) => Promise<import('./object-store.js').ObjectStore>;
 
   /**
    * Layer-1 grant introspection (PROTOCOL.md § Credential grant) — OPTIONAL.
@@ -362,32 +362,35 @@ export interface BackupProvider {
    * `LocalBackupProvider`'s filesystem) has no grant to hand back and omits
    * it; conformance skips the grant-shape assertions when absent.
    */
-  requestGrant?(
+  requestGrant?: (
     targetId: string,
     store: StoreClass,
     mode: 'read' | 'read-write',
     ttlSeconds?: number,
-  ): Promise<S3Grant>;
+  ) => Promise<S3Grant>;
 
-  registerSnapshot(targetId: string, reg: SnapshotRegistration): Promise<SnapshotRow>;
-  listSnapshots(targetId: string, opts?: { includePruned?: boolean }): Promise<SnapshotRow[]>;
-  getSnapshot(targetId: string, seq: number): Promise<SnapshotRow>;
+  registerSnapshot: (targetId: string, reg: SnapshotRegistration) => Promise<SnapshotRow>;
+  listSnapshots: (targetId: string, opts?: { includePruned?: boolean }) => Promise<SnapshotRow[]>;
+  getSnapshot: (targetId: string, seq: number) => Promise<SnapshotRow>;
 
   /** Includes `currentGeneration` and the backup store's `usage`. */
-  getTarget(targetId: string): Promise<TargetInfo>;
-  usage(targetId: string): Promise<{ usage: Usage; accountStatus: AccountStatus }>;
+  getTarget: (targetId: string) => Promise<TargetInfo>;
+  usage: (targetId: string) => Promise<{ usage: Usage; accountStatus: AccountStatus }>;
 
   /** Layer-1 optional `usage` capability (PROTOCOL.md § Usage) — per-store-class
    *  report. OPTIONAL; present iff `capabilities` includes `"usage"`. */
-  usageReport?(targetId: string): Promise<UsageByStore>;
+  usageReport?: (targetId: string) => Promise<UsageByStore>;
 
   /** Optional `policy` capability — declaration and provider-stamped echo. */
-  putPolicy?(targetId: string, policy: ProviderPolicyDeclaration): Promise<ProviderPolicy>;
-  getPolicy?(targetId: string): Promise<ProviderPolicy>;
+  putPolicy?: (targetId: string, policy: ProviderPolicyDeclaration) => Promise<ProviderPolicy>;
+  getPolicy?: (targetId: string) => Promise<ProviderPolicy>;
 
   /** Optional `inventory` capability — provider-attested, per-store pages. */
-  listInventory?(targetId: string, query: ProviderInventoryQuery): Promise<ProviderInventoryPage>;
+  listInventory?: (
+    targetId: string,
+    query: ProviderInventoryQuery,
+  ) => Promise<ProviderInventoryPage>;
 
   /** Optional `audit` capability — append-only lifecycle and custody events. */
-  listEvents?(targetId: string, query?: ProviderAuditQuery): Promise<ProviderAuditPage>;
+  listEvents?: (targetId: string, query?: ProviderAuditQuery) => Promise<ProviderAuditPage>;
 }

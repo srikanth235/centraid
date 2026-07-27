@@ -48,7 +48,7 @@ const asString = (v: unknown): string | undefined =>
   typeof v === 'string' && v.length > 0 ? v : undefined;
 const asPercent = (v: unknown): string | undefined => {
   if (typeof v === 'number' && Number.isFinite(v)) return `${v}%`;
-  if (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v)) return `${v}%`;
+  if (typeof v === 'string' && /^\d+(?:\.\d+)?$/u.test(v)) return `${v}%`;
   return undefined;
 };
 const asBoolFlag =
@@ -81,7 +81,7 @@ function camelTailToKebab(tail: string): string {
   // First char is uppercase (we strip it before calling), so we just
   // lowercase and prefix subsequent uppercase boundaries with `-`.
   return (
-    tail.charAt(0).toLowerCase() + tail.slice(1).replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)
+    tail.charAt(0).toLowerCase() + tail.slice(1).replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`)
   );
 }
 
@@ -107,7 +107,7 @@ function appKnobTarget(
 ): { kind: 'data'; attr: string } | { kind: 'css'; cssVar: string } {
   const kebab = camelTailToKebab(key.slice(3));
   const name = `app-${kebab}`;
-  return /(?:Color|Accent)$/.test(key)
+  return /(?:Color|Accent)$/u.test(key)
     ? { kind: 'css', cssVar: name }
     : { kind: 'data', attr: name };
 }

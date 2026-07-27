@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { RegistryEntry } from '../types.js';
 
 export interface DeregisterLogger {
-  warn(message: string): void;
+  warn: (message: string) => void;
 }
 
 /**

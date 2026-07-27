@@ -11,7 +11,7 @@ import {
 // this pane persists through never runs that validator — see the file
 // header comment in BuilderAutomationTriggers.tsx for why.
 
-describe('isValidCronExpr', () => {
+describe(isValidCronExpr, () => {
   it('accepts a standard 5-field expression', () => {
     expect(isValidCronExpr('0 9 * * *')).toBe(true);
     expect(isValidCronExpr('*/5 * * * *')).toBe(true);
@@ -31,7 +31,7 @@ describe('isValidCronExpr', () => {
   });
 });
 
-describe('isValidEntityName', () => {
+describe(isValidEntityName, () => {
   it('accepts <schema>.<table> names', () => {
     expect(isValidEntityName('core.transaction')).toBe(true);
     expect(isValidEntityName('business.invoice')).toBe(true);
@@ -47,7 +47,7 @@ describe('isValidEntityName', () => {
   });
 });
 
-describe('formatWhereClauses', () => {
+describe(formatWhereClauses, () => {
   it('returns null for an empty/absent where', () => {
     expect(formatWhereClauses(undefined)).toBeNull();
     expect(formatWhereClauses([])).toBeNull();

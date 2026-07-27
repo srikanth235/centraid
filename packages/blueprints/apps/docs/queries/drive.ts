@@ -57,7 +57,7 @@ interface ContentRow {
   content_uri?: string | null;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function driveHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
@@ -227,4 +227,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

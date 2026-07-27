@@ -35,7 +35,7 @@ import { existsSync } from 'node:fs';
 import { register } from 'node:module';
 import path from 'node:path';
 import { parentPort, workerData } from 'node:worker_threads';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 
 /**
  * Install the `.ts`/`.tsx` module-customization hooks (worker/ts-loader-hooks)
@@ -50,7 +50,7 @@ let tsLoaderRegistered = false;
 function ensureTsLoader(): void {
   if (tsLoaderRegistered) return;
   tsLoaderRegistered = true;
-  const here = path.dirname(fileURLToPath(import.meta.url));
+  const here = import.meta.dirname;
   const jsHooks = path.join(here, 'ts-loader-hooks.js');
   const hooksFile = existsSync(jsHooks) ? jsHooks : path.join(here, 'ts-loader-hooks.ts');
   register(pathToFileURL(hooksFile).href);
@@ -222,7 +222,7 @@ function execute(req: WorkerRequest): void {
     try {
       // A TS handler graph needs the esbuild loader hook before it can import
       // under plain Node; a JS handler skips this entirely.
-      if (/\.tsx?$/.test(req.handlerFile)) ensureTsLoader();
+      if (/\.tsx?$/u.test(req.handlerFile)) ensureTsLoader();
       const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
         default?: (args: unknown) => Promise<unknown>;
       };

@@ -12,14 +12,13 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import type { PricingCatalog, PricingEntry } from './types.js';
 import { matchEntry } from './match.js';
 
 function loadSnapshot(): PricingCatalog {
   try {
-    const here = path.dirname(fileURLToPath(import.meta.url));
+    const here = import.meta.dirname;
     const raw = readFileSync(path.join(here, 'litellm-snapshot.json'), 'utf8');
     const parsed = JSON.parse(raw) as { models?: PricingCatalog };
     return parsed.models ?? {};

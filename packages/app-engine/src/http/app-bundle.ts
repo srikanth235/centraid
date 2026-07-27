@@ -74,7 +74,7 @@ import { compress, staticQualityForHost, type Encoding } from './compression.js'
  * before filesystem resolution, so a real file by this name could never
  * shadow it anyway.
  */
-export const BUNDLE_REL_RE = /^_bundle\.([0-9a-f]{16})\.js$/;
+export const BUNDLE_REL_RE = /^_bundle\.(?<hash>[0-9a-f]{16})\.js$/u;
 
 /** Directories never part of the browser graph (mirror of the serving guards
  * — `queries`/`actions` are RESERVED_DIRS in security.ts, never served;
@@ -197,11 +197,21 @@ function appGraphPlugin(root: string, sharedRoot: string | null): esbuild.Plugin
       // Same shared helper as the per-file server, so the two paths compile a
       // module identically. The `<link>`-inlining of GLOBAL css (index.html)
       // is unaffected — those files never enter the JS graph.
+      // esbuild compiles plugin `filter` patterns with Go's RE2, not the JS engine.
+      // RE2 has no `u` flag, so a unicode-flagged filter is rejected and the hook
+      // never fires — the bundle silently comes out empty. Not a JS regex; the
+      // `require-unicode-regexp` fix does not apply here.
+      // oxlint-disable-next-line require-unicode-regexp
       build.onLoad({ filter: /\.module\.css$/ }, async (args) => {
         const compiled = await compileCssModule(args.path, root);
         return { contents: compiled.js, loader: 'js', resolveDir: path.dirname(args.path) };
       });
 
+      // esbuild compiles plugin `filter` patterns with Go's RE2, not the JS engine.
+      // RE2 has no `u` flag, so a unicode-flagged filter is rejected and the hook
+      // never fires — the bundle silently comes out empty. Not a JS regex; the
+      // `require-unicode-regexp` fix does not apply here.
+      // oxlint-disable-next-line require-unicode-regexp
       build.onResolve({ filter: /.*/ }, async (args) => {
         if (args.kind === 'entry-point') return null;
         const spec = args.path;
@@ -361,7 +371,9 @@ export async function prewarmAppAssets(
   const html = await fs.readFile(path.join(appDir, 'index.html'), 'utf8');
   const prepared = await prepareBundledIndex(html, appDir, sharedAssetsDir);
   const hashes = new Set(
-    [...prepared.matchAll(/_bundle\.([0-9a-f]{16})\.js/g)].map((match) => match[1]!),
+    [...prepared.matchAll(/_bundle\.(?<hash>[0-9a-f]{16})\.js/gu)].flatMap(
+      (match) => match.groups?.hash ?? [],
+    ),
   );
   let variants = 0;
   for (const hash of hashes) {
@@ -381,19 +393,19 @@ export async function prewarmAppAssets(
 
 // --- index.html rewriting ---------------------------------------------------
 
-const SCRIPT_TAG_RE = /<script\b[^>]*>/gi;
-const LINK_TAG_RE = /<link\b[^>]*>/gi;
+const SCRIPT_TAG_RE = /<script\b[^>]*>/giu;
+const LINK_TAG_RE = /<link\b[^>]*>/giu;
 
 function attrOf(tag: string, name: string): string | null {
-  const m = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, 'i').exec(tag);
-  return m ? (m[2] ?? m[3] ?? '') : null;
+  const m = new RegExp(`\\b${name}\\s*=\\s*(?:"(?<dq>[^"]*)"|'(?<sq>[^']*)')`, 'iu').exec(tag);
+  return m ? (m.groups?.['dq'] ?? m.groups?.['sq'] ?? '') : null;
 }
 
 /** Root-level relative URL (`x.css`, `./app.jsx`) → bare filename, else null. */
 function rootLevelRel(url: string | null): string | null {
   if (!url) return null;
-  if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(url) || url.startsWith('/')) return null;
-  const stripped = url.replace(/^\.\//, '');
+  if (/^[a-z][a-z0-9+.-]*:|^\/\//iu.test(url) || url.startsWith('/')) return null;
+  const stripped = url.replace(/^\.\//u, '');
   if (stripped.includes('/') || stripped.includes('?') || stripped.includes('#')) return null;
   return stripped;
 }
@@ -430,7 +442,7 @@ export async function prepareBundledIndex(
     if (!type || type.toLowerCase() !== 'module') continue;
     const src = attrOf(tag, 'src');
     const entryRel = rootLevelRel(src);
-    if (!entryRel || !/\.(js|jsx|ts|tsx|mjs)$/i.test(entryRel)) continue;
+    if (!entryRel || !/\.(?:js|jsx|ts|tsx|mjs)$/iu.test(entryRel)) continue;
     const bundle = await bundleForEntry(appDir, entryRel, sharedAssetsDir);
     if (!bundle) continue;
     const rewritten = tag.replace(src!, `./_bundle.${bundle.hash}.js`);
@@ -456,7 +468,7 @@ export async function prepareBundledIndex(
     }
     if (!file) continue;
     const css = (await fs.readFile(file)).toString('utf8');
-    if (/<\/style/i.test(css)) continue;
+    if (/<\/style/iu.test(css)) continue;
     inlined.push({ tag, css: `/* inlined: ${name} */\n${css}` });
   }
   if (inlined.length > 0) {

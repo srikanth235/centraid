@@ -359,14 +359,14 @@ export default function AutomationsOverviewScreen({
 
   const q = filter.trim().toLowerCase();
   const sortedRows = sortOverviewRows(rows);
-  const visibleRows = !q
-    ? sortedRows
-    : sortedRows.filter(
+  const visibleRows = q
+    ? sortedRows.filter(
         (r) =>
           r.name.toLowerCase().includes(q) ||
           r.triggerLabel.toLowerCase().includes(q) ||
           r.statusLabel.toLowerCase().includes(q),
-      );
+      )
+    : sortedRows;
 
   const recentRuns = runs.slice(0, RECENT_CAP);
   const runGroups = groupRuns(recentRuns);
@@ -380,9 +380,9 @@ export default function AutomationsOverviewScreen({
           <p className={styles.subtitle}>{subtitle}</p>
         </div>
         {/* Empty state owns its CTAs so we don't double the same pair. */}
-        {!isEmpty ? (
+        {isEmpty ? null : (
           <HeaderActions onBrowseTemplates={onBrowseTemplates} onNewAutomation={onNewAutomation} />
-        ) : null}
+        )}
       </header>
 
       {isEmpty ? (

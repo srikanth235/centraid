@@ -244,7 +244,7 @@ export interface EnrolledApp {
  * Pure function of the key, so repeated enrollment never oscillates.
  */
 export function humanizeSlug(slug: string): string {
-  const words = slug.split(/[-_]+/).filter((w) => w.length > 0);
+  const words = slug.split(/[-_]+/u).filter((w) => w.length > 0);
   if (words.length === 0) return slug;
   return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }

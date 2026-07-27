@@ -81,7 +81,7 @@ export function pickSnapshotRow(
  *  reconcile audit uses (`backup-cas-diff.ts`): objects land at
  *  `blobs/sha256/<sha>` under the cas prefix. */
 function casShaOf(key: string): string | undefined {
-  return /(?:^|\/)blobs\/(?:sha256\/)?([0-9a-f]{64})$/.exec(key)?.[1];
+  return /(?:^|\/)blobs\/(?:sha256\/)?(?<sha>[0-9a-f]{64})$/u.exec(key)?.groups?.sha;
 }
 
 /** Paginate the provider's ATTESTED cas inventory into the set of shas it holds
@@ -98,7 +98,7 @@ export async function collectRemoteCasShas(
   do {
     const page = await provider.listInventory!(targetId, {
       store: 'cas',
-      ...(cursor !== undefined ? { cursor } : {}),
+      ...(cursor === undefined ? {} : { cursor }),
     });
     for (const object of page.objects) {
       if (object.state !== 'live') continue;

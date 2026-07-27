@@ -14,7 +14,7 @@ const at = (patch: Partial<ConnectFlowState>): ConnectFlowState => ({
   ...patch,
 });
 
-describe('connectFlowReducer', () => {
+describe(connectFlowReducer, () => {
   it('selectMethod(local) skips straight to the vault step', () => {
     const s = connectFlowReducer(createInitialConnectFlowState(), {
       method: 'local',
@@ -67,7 +67,7 @@ describe('connectFlowReducer', () => {
     };
     const s = connectFlowReducer(testing, { report, type: 'testSettled' });
     expect(s.testing).toBe(false);
-    expect(s.report).toEqual(report);
+    expect(s.report).toStrictEqual(report);
   });
 
   it('continueToVault defaults to the first reported existing vault', () => {
@@ -84,13 +84,13 @@ describe('connectFlowReducer', () => {
     });
     const s = connectFlowReducer(withVaults, { type: 'continueToVault' });
     expect(s.step).toBe('vault');
-    expect(s.vaultChoice).toEqual({ kind: 'existing', vaultId: 'a' });
+    expect(s.vaultChoice).toStrictEqual({ kind: 'existing', vaultId: 'a' });
   });
 
   it('continueToVault defaults to "create" for a create-capable method with no reported vaults', () => {
     const sshNoVaults = at({ method: 'ssh', report: { ok: true, stages: [] }, step: 'test' });
     const s = connectFlowReducer(sshNoVaults, { type: 'continueToVault' });
-    expect(s.vaultChoice).toEqual({ kind: 'create' });
+    expect(s.vaultChoice).toStrictEqual({ kind: 'create' });
   });
 
   it('continueToVault leaves vaultChoice null for a ticket connect (locked, not a real choice)', () => {
@@ -132,7 +132,7 @@ describe('connectFlowReducer', () => {
       type: 'back',
     });
     expect(s.step).toBe('test');
-    expect(s.report).toEqual(report);
+    expect(s.report).toStrictEqual(report);
   });
 
   it('back from the error step returns to vault so the user can retry', () => {
@@ -153,7 +153,7 @@ describe('connectFlowReducer', () => {
     });
     expect(s.step).toBe('done');
     expect(s.committing).toBe(false);
-    expect(s.result).toEqual({ displayLabel: 'Home', gatewayId: 'gw1', vaultId: 'v1' });
+    expect(s.result).toStrictEqual({ displayLabel: 'Home', gatewayId: 'gw1', vaultId: 'v1' });
   });
 
   it('commitFailed reaches the error step with the message', () => {
@@ -167,7 +167,9 @@ describe('connectFlowReducer', () => {
 
   it('reset returns to the initial state', () => {
     const dirty = at({ method: 'ssh', step: 'vault', ticket: 'x' });
-    expect(connectFlowReducer(dirty, { type: 'reset' })).toEqual(createInitialConnectFlowState());
+    expect(connectFlowReducer(dirty, { type: 'reset' })).toStrictEqual(
+      createInitialConnectFlowState(),
+    );
   });
 });
 
@@ -179,18 +181,18 @@ describe('buildTestInput / canStartTest', () => {
 
   it('gateway/ticket mode: {kind:"ticket"} once a ticket is present', () => {
     const s = at({ method: 'gateway', ticket: '  t.icket  ' });
-    expect(buildTestInput(s)).toEqual({ kind: 'ticket', ticket: 't.icket' });
+    expect(buildTestInput(s)).toStrictEqual({ kind: 'ticket', ticket: 't.icket' });
   });
 
   it('ssh: destination required, dataDir optional', () => {
     const s = at({ method: 'ssh', sshDestination: 'user@host' });
-    expect(buildTestInput(s)).toEqual({
+    expect(buildTestInput(s)).toStrictEqual({
       dataDir: undefined,
       destination: 'user@host',
       kind: 'ssh',
     });
     const withDir = at({ method: 'ssh', sshDataDir: '/data', sshDestination: 'user@host' });
-    expect(buildTestInput(withDir)).toEqual({
+    expect(buildTestInput(withDir)).toStrictEqual({
       dataDir: '/data',
       destination: 'user@host',
       kind: 'ssh',
@@ -198,10 +200,10 @@ describe('buildTestInput / canStartTest', () => {
   });
 });
 
-describe('vaultCapability', () => {
+describe(vaultCapability, () => {
   it('local: create-capable, no lock', () => {
     const cap = vaultCapability(at({ method: 'local' }));
-    expect(cap).toEqual({ canCreate: true, locked: null, options: [] });
+    expect(cap).toStrictEqual({ canCreate: true, locked: null, options: [] });
   });
 
   it('ssh: create-capable, options come from the report', () => {
@@ -211,7 +213,11 @@ describe('vaultCapability', () => {
         report: { ok: true, stages: [], vaults: [{ name: 'A', vaultId: 'a' }] },
       }),
     );
-    expect(cap).toEqual({ canCreate: true, locked: null, options: [{ name: 'A', vaultId: 'a' }] });
+    expect(cap).toStrictEqual({
+      canCreate: true,
+      locked: null,
+      options: [{ name: 'A', vaultId: 'a' }],
+    });
   });
 
   it('gateway/ticket: locked to the ticket vault name, not create-capable', () => {
@@ -225,11 +231,11 @@ describe('vaultCapability', () => {
         },
       }),
     );
-    expect(cap).toEqual({ canCreate: false, locked: { vaultName: 'Office' }, options: [] });
+    expect(cap).toStrictEqual({ canCreate: false, locked: { vaultName: 'Office' }, options: [] });
   });
 });
 
-describe('canCommitConnectFlow', () => {
+describe(canCommitConnectFlow, () => {
   it('local requires a vault choice, and a name when creating', () => {
     expect(canCommitConnectFlow(at({ method: 'local' }))).toBe(false);
     expect(

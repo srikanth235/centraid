@@ -122,7 +122,7 @@ const COMPONENT_LABEL: Record<string, string> = {
 export function componentLabel(component: string): string {
   return (
     COMPONENT_LABEL[component] ??
-    component.charAt(0).toUpperCase() + component.slice(1).replace(/-/g, ' ')
+    component.charAt(0).toUpperCase() + component.slice(1).replace(/-/gu, ' ')
   );
 }
 
@@ -224,11 +224,11 @@ function ComponentRow({
 
 function MetricsPanel({ metrics }: { metrics: HealthMetricsDTO }): JSX.Element {
   const lag =
-    metrics.eventLoopLagP99Ms !== undefined
-      ? `p99 ${metrics.eventLoopLagP99Ms.toFixed(1)} ms`
-      : '—';
+    metrics.eventLoopLagP99Ms === undefined
+      ? '—'
+      : `p99 ${metrics.eventLoopLagP99Ms.toFixed(1)} ms`;
   const fsync =
-    metrics.storageFsyncMs !== undefined ? `${metrics.storageFsyncMs.toFixed(1)} ms` : '—';
+    metrics.storageFsyncMs === undefined ? '—' : `${metrics.storageFsyncMs.toFixed(1)} ms`;
   return (
     <div className={styles.metrics} data-testid="diag-metrics">
       <div className={styles.metric}>

@@ -38,7 +38,7 @@ function row(ref: string, triggers: Manifest['triggers']): Row {
   };
 }
 
-describe('readPendingBatch', () => {
+describe(readPendingBatch, () => {
   it('round-trips a receipt including per-element watermarks', () => {
     const pending = {
       targetPositionJson: '"p3"',
@@ -53,7 +53,7 @@ describe('readPendingBatch', () => {
       gapReason: 'scheduler_gap',
     };
 
-    expect(readPendingBatch(JSON.stringify(pending))).toEqual(pending);
+    expect(readPendingBatch(JSON.stringify(pending))).toStrictEqual(pending);
   });
 
   it.each([
@@ -89,7 +89,7 @@ describe('readPendingBatch', () => {
       }),
     );
 
-    expect(parsed).toEqual({
+    expect(parsed).toStrictEqual({
       elements: [{ position: 'a', occurredAt: 1 }],
       acknowledged: ['a'],
       skipped: 0,
@@ -97,7 +97,7 @@ describe('readPendingBatch', () => {
   });
 });
 
-describe('registrationsFor', () => {
+describe(registrationsFor, () => {
   it('collapses every cron trigger into one registration at the first cron index', () => {
     const registrations = registrationsFor(
       row('a/multi', [
@@ -107,7 +107,7 @@ describe('registrationsFor', () => {
       ]),
     );
 
-    expect(registrations).toEqual([
+    expect(registrations).toStrictEqual([
       { ref: 'a/multi', triggerIndex: 0, trigger: { kind: 'data', entities: ['core.party'] } },
       {
         ref: 'a/multi',
@@ -126,7 +126,7 @@ describe('registrationsFor', () => {
   });
 });
 
-describe('retentionKeysFor', () => {
+describe(retentionKeysFor, () => {
   it('names every declared trigger slot, disabled rows included', () => {
     const disabled = { ...row('b/off', [{ kind: 'cron', expr: '0 8 * * *' }]), enabled: false };
 
@@ -139,7 +139,7 @@ describe('retentionKeysFor', () => {
         disabled,
         row('c/none', []),
       ]),
-    ).toEqual([
+    ).toStrictEqual([
       { automationId: 'a/two', triggerIndex: 0 },
       { automationId: 'a/two', triggerIndex: 1 },
       { automationId: 'b/off', triggerIndex: 0 },

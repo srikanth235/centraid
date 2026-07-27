@@ -51,9 +51,9 @@ const SHEET_TRAVEL = 720; // ≥ max sheet height, so the closed sheet sits full
 
 export interface SpacesSwitcherProps {
   open: boolean;
-  onClose(): void;
+  onClose: () => void;
   /** Route to the desktop-pairing flow (Settings owns the QR scanner). */
-  onPairDesktop(): void;
+  onPairDesktop: () => void;
 }
 
 /** A saved Space, or a vault the active gateway offers that isn't saved yet. */
@@ -357,8 +357,8 @@ function SpaceRow({
   styles: ReturnType<typeof makeStyles>;
   space: Space;
   disabled: boolean;
-  onPress(): void;
-  onForget(): void;
+  onPress: () => void;
+  onForget: () => void;
 }): React.JSX.Element {
   const tint = space.color ?? colors.accent;
   return (
@@ -408,7 +408,7 @@ function AddRow({
   styles: ReturnType<typeof makeStyles>;
   vault: AddableVault;
   disabled: boolean;
-  onPress(): void;
+  onPress: () => void;
 }): React.JSX.Element {
   const tint = vault.color ?? colors.accent;
   return (
@@ -439,7 +439,7 @@ function AddRow({
 // are opaque, so append an alpha byte (~12%) to the #rrggbb; non-hex tints fall
 // back to a neutral elevated surface handled by the caller's border.
 function washFor(hex: string): string {
-  return /^#[0-9a-fA-F]{6}$/.test(hex) ? `${hex}1f` : 'transparent';
+  return /^#[0-9a-fA-F]{6}$/u.test(hex) ? `${hex}1f` : 'transparent';
 }
 
 const makeStyles = (colors: ThemeColors) =>

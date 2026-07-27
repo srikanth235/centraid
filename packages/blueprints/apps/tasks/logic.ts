@@ -27,7 +27,7 @@ interface CapturePayload {
 
 export function createLogic({ state, data, render, refresh }: LogicDeps) {
   function notice(text: string) {
-    const el = document.getElementById('noticeBanner');
+    const el = document.querySelector<HTMLElement>('#noticeBanner');
     if (!el) return;
     el.textContent = text;
     el.hidden = !text;
@@ -279,7 +279,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   ): Promise<VaultOutcome | undefined> {
     const outcome = await write('edit', { task_id: taskId, ...patch });
     if (outcome?.status === 'executed') {
-      logActivity(taskId, activityText ?? toastText.replace(/\s*·\s*receipt$/, ''), outcome);
+      logActivity(taskId, activityText ?? toastText.replace(/\s*·\s*receipt$/u, ''), outcome);
       toast(toastText);
     }
     return outcome;

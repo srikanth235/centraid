@@ -27,7 +27,7 @@ function ClusterTile({
 }) {
   return (
     <label className={styles.tile}>
-      <div className={styles.tileMedia} ref={(el) => mountMedia(el, asset)}></div>
+      <div className={styles.tileMedia} ref={(el) => mountMedia(el, asset)} />
       <input
         type="checkbox"
         checked={checked}

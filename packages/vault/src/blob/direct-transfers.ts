@@ -82,7 +82,7 @@ export interface DirectBlobTransferDeps {
   remote: () => RemoteTier | null;
   contentKeys: BlobContentKeyRegistry;
   state: BlobTransferState;
-  preflight(sha256: string): Promise<{
+  preflight: (sha256: string) => Promise<{
     exists: boolean;
     custody: CustodyState;
     remoteAvailable: boolean;
@@ -90,7 +90,7 @@ export interface DirectBlobTransferDeps {
     mediaType?: string;
     contentId?: string;
   }>;
-  emit(): void;
+  emit: () => void;
 }
 
 export class DirectBlobTransfers {
@@ -142,7 +142,7 @@ export class DirectBlobTransfers {
           casAck,
           custody: existing.custody,
           acknowledged: casAck === 'replicated',
-          ...(existing.byteSize !== undefined ? { byteSize: existing.byteSize } : {}),
+          ...(existing.byteSize === undefined ? {} : { byteSize: existing.byteSize }),
           ...(existing.mediaType ? { mediaType: existing.mediaType } : {}),
           ...(existing.contentId ? { existingContentId: existing.contentId } : {}),
         },

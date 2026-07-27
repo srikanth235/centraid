@@ -13,6 +13,7 @@ import {
   cbsfFrameAad,
   decodeCbsfDirectory,
 } from '@centraid/blob-format';
+
 type Bytes = Uint8Array<ArrayBuffer>;
 
 export interface DirectBlobDownloadPlan {
@@ -32,9 +33,10 @@ function magic(bytes: Uint8Array): string {
 async function range(url: string, value: string): Promise<{ bytes: Bytes; total: number }> {
   const response = await fetch(url, { headers: { Range: value } });
   if (response.status !== 206) throw new Error('provider did not honor CBSF range read');
-  const match = response.headers.get('content-range')?.match(/\/([0-9]+)$/);
+  const match = response.headers.get('content-range')?.match(/\/(?<total>[0-9]+)$/u);
   if (!match) throw new Error('provider did not expose Content-Range');
-  return { bytes: new Uint8Array(await response.arrayBuffer()), total: Number(match[1]) };
+  const total = Number(match.groups?.total);
+  return { bytes: new Uint8Array(await response.arrayBuffer()), total };
 }
 
 function aad(value: string): Bytes {
@@ -76,7 +78,7 @@ export async function readDirectBlob(
   sha256: string,
   mediaType: string,
 ): Promise<Blob> {
-  if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error('direct read needs sha256');
+  if (!/^[0-9a-f]{64}$/u.test(sha256)) throw new Error('direct read needs sha256');
   const key = await crypto.subtle.importKey(
     'raw',
     base64Bytes(plan.keyBase64).buffer,

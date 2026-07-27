@@ -278,7 +278,7 @@ function parseJpegExif(bytes: Buffer): JpegExif {
   const ascii = (entry: Entry): string => {
     const at = valueAt(entry);
     // eslint-disable-next-line no-control-regex -- EXIF ASCII fields are NUL-padded to a fixed length; trim the trailing NULs (#296)
-    return bytes.toString('latin1', at, at + entry.count).replace(/\0+$/, '');
+    return bytes.toString('latin1', at, at + entry.count).replace(/\0+$/u, '');
   };
   const rationals = (entry: Entry): number[] => {
     const at = valueAt(entry);
@@ -300,8 +300,11 @@ function parseJpegExif(bytes: Buffer): JpegExif {
     if (dto && dto.type === 2) {
       // "YYYY:MM:DD HH:MM:SS" → ISO-8601 local instant.
       const raw = ascii(dto);
-      const m = /^(\d{4}):(\d{2}):(\d{2}) (\d{2}:\d{2}:\d{2})$/.exec(raw);
-      if (m) out.captured_at = `${m[1]}-${m[2]}-${m[3]}T${m[4]}`;
+      const m = /^(?<year>\d{4}):(?<month>\d{2}):(?<day>\d{2}) (?<time>\d{2}:\d{2}:\d{2})$/u.exec(
+        raw,
+      );
+      const g = m?.groups;
+      if (g) out.captured_at = `${g.year}-${g.month}-${g.day}T${g.time}`;
     }
   }
   if (gpsPtr) {

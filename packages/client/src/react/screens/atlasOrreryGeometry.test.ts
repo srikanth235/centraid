@@ -24,7 +24,7 @@ describe('atlasOrreryGeometry', () => {
     const g = makeGraph();
     const tables = g.nodes.map((n) => n.physical);
     const unreached = unreachedFrom('core_party', g.fkEdges, tables);
-    expect(new Set(unreached)).toEqual(new Set(g.island));
+    expect(new Set(unreached)).toStrictEqual(new Set(g.island));
   });
 
   it('hop distances grow with graph distance from the centre', () => {
@@ -56,7 +56,7 @@ describe('atlasOrreryGeometry', () => {
     }
     // sectors partition a full turn, packs in stable name order
     const names = a.sectors.map((s) => s.pack);
-    expect(names).toEqual([...names].sort());
+    expect(names).toStrictEqual([...names].sort());
   });
 
   it('ring radius places unreached beyond hop 3+', () => {
@@ -91,19 +91,23 @@ describe('atlasOrreryGeometry', () => {
   });
 
   it('panView translates without touching k', () => {
-    expect(panView({ x: 5, y: 7, k: 2 }, 3, -4)).toEqual({ x: 8, y: 3, k: 2 });
+    expect(panView({ x: 5, y: 7, k: 2 }, 3, -4)).toStrictEqual({ x: 8, y: 3, k: 2 });
   });
 
   it('clientToViewBox maps by ratio and returns null on a degenerate rect', () => {
     // jsdom reports zero-size rects — must fall back to null (→ centre zoom)
     expect(clientToViewBox({ left: 0, top: 0, width: 0, height: 0 }, 620, 10, 10)).toBeNull();
     // a full-size square rect maps client px straight onto viewBox coords
-    expect(clientToViewBox({ left: 0, top: 0, width: 620, height: 620 }, 620, 155, 310)).toEqual({
+    expect(
+      clientToViewBox({ left: 0, top: 0, width: 620, height: 620 }, 620, 155, 310),
+    ).toStrictEqual({
       x: 155,
       y: 310,
     });
     // an offset, half-scale rect maps its top-left corner to the origin
-    expect(clientToViewBox({ left: 100, top: 50, width: 310, height: 310 }, 620, 100, 50)).toEqual({
+    expect(
+      clientToViewBox({ left: 100, top: 50, width: 310, height: 310 }, 620, 100, 50),
+    ).toStrictEqual({
       x: 0,
       y: 0,
     });

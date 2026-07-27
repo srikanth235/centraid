@@ -46,7 +46,7 @@ describe('automation-app', () => {
 
   it('list returns an empty result for a missing directory', async () => {
     const res = await list(path.join(appsDir, 'nope'));
-    expect(res).toEqual({ rows: [], errors: [] });
+    expect(res).toStrictEqual({ rows: [], errors: [] });
   });
 
   it('reads an app and hoists the scheduler fields + handle', async () => {
@@ -62,7 +62,7 @@ describe('automation-app', () => {
     expect(row!.ownerApp).toBe('auto.digest');
     expect(row!.ref).toBe('auto.digest/digest');
     expect(row!.name).toBe('Morning digest');
-    expect(row!.triggers).toEqual([{ kind: 'cron', expr: '0 9 * * *' }]);
+    expect(row!.triggers).toStrictEqual([{ kind: 'cron', expr: '0 9 * * *' }]);
     expect(row!.enabled).toBe(true);
   });
 
@@ -70,7 +70,7 @@ describe('automation-app', () => {
     await writeAutomation(appsDir, 'auto.digest', 'digest', manifest());
     const row = await readAppOwned(appsDir, 'auto.digest', 'digest');
     expect(row?.ref).toBe('auto.digest/digest');
-    expect(await readAppOwned(appsDir, 'auto.digest', 'ghost')).toBe(undefined);
+    await expect(readAppOwned(appsDir, 'auto.digest', 'ghost')).resolves.toBeUndefined();
   });
 
   it('lists automations across app folders sorted by name, reports invalid ones', async () => {
@@ -80,9 +80,9 @@ describe('automation-app', () => {
     await fs.mkdir(badDir, { recursive: true });
     await fs.writeFile(path.join(badDir, 'automation.json'), '{not json');
     const res = await list(appsDir);
-    expect(res.rows.map((r) => r.name)).toEqual(['Alpha', 'Zebra']);
-    expect(res.rows.map((r) => r.ref)).toEqual(['ui-app/a', 'auto.zebra/z']);
-    expect(res.errors.length).toBe(1);
+    expect(res.rows.map((r) => r.name)).toStrictEqual(['Alpha', 'Zebra']);
+    expect(res.rows.map((r) => r.ref)).toStrictEqual(['ui-app/a', 'auto.zebra/z']);
+    expect(res.errors).toHaveLength(1);
     expect(res.errors[0]!.id).toBe('ui-app/broken');
   });
 });

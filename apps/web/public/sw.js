@@ -42,9 +42,9 @@ async function assetUrlsFromIndex() {
     if (!res.ok) return [];
     const html = await res.text();
     const found = new Set();
-    const re = /(?:src|href)="(\/assets\/[^"]+)"/g;
+    const re = /(?:src|href)="(?<url>\/assets\/[^"]+)"/gu;
     let match;
-    while ((match = re.exec(html))) found.add(match[1]);
+    while ((match = re.exec(html))) found.add(match.groups.url);
     return [...found];
   } catch {
     return [];
@@ -75,7 +75,7 @@ async function crawlAssetChunks(seeds, cache) {
   const toAbs = (ref) => (ref[0] === '/' ? ref : `/${ref}`);
   const seen = new Set(seeds.map(toAbs));
   const queue = seeds.filter((url) => url.endsWith('.js'));
-  const chunkRe = /\/?assets\/[A-Za-z0-9_.-]+\.(?:js|css)/g;
+  const chunkRe = /\/?assets\/[A-Za-z0-9_.-]+\.(?:js|css)/gu;
   while (queue.length > 0 && seen.size < CHUNK_CRAWL_CEILING) {
     const url = queue.shift();
     try {
@@ -142,8 +142,8 @@ self.addEventListener('message', (event) => {
 
 function appIdForTarget(target) {
   const url = new URL(target, self.location.origin);
-  const match = /^\/centraid\/(?!_)([^/]+)(?:\/|$)/.exec(url.pathname);
-  if (match) return decodeURIComponent(match[1]);
+  const match = /^\/centraid\/(?!_)(?<appId>[^/]+)(?:\/|$)/u.exec(url.pathname);
+  if (match) return decodeURIComponent(match.groups.appId);
   const attested = url.searchParams.get('__centraid_app');
   return attested || undefined;
 }
@@ -353,7 +353,7 @@ function isBlobTarget(route) {
 
 function isAppDocumentTarget(target) {
   const pathname = new URL(target, self.location.origin).pathname;
-  return /^\/centraid\/(?!_)[^/]+\/$/.test(pathname);
+  return /^\/centraid\/(?!_)[^/]+\/$/u.test(pathname);
 }
 
 // A sandboxed same-origin iframe has an opaque principal. Module scripts and

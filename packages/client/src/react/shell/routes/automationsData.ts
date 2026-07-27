@@ -202,7 +202,7 @@ export function buildOverviewData(
         lastRunLabel: last
           ? `Last run ${relativeTime(new Date(last.run.startedAt).toISOString())}`
           : 'No runs yet',
-        lastRunOk: last?.run.endedAt !== undefined ? last.run.ok : null,
+        lastRunOk: last?.run.endedAt === undefined ? null : last.run.ok,
         lastRunSummary: last
           ? last.run.ok
             ? (last.run.summary ?? null)
@@ -224,7 +224,7 @@ export function buildOverviewData(
     runs: runs.map((entry) => {
       const { run, automationName, automationId } = entry;
       const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
-      const dur = run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : '—';
+      const dur = run.endedAt === undefined ? '—' : formatDuration(run.endedAt - run.startedAt);
       return {
         automationId,
         metaLabel: `${triggerOriginLabel(run).label} · ${dur} · ${fmtTokens(tokens)}`,

@@ -48,24 +48,30 @@ function fieldDescriptors(sel: LockerDetail): FieldDesc[] {
   const otp = (seed: string): FieldDesc => ({ kind: 'otp', seed });
 
   if (sel.type === 'login') {
-    fields.push(plain('Username', sel.username));
-    fields.push(secret('pw-' + sel.item_id, 'Password', sel.password, { strength: true }));
+    fields.push(
+      plain('Username', sel.username),
+      secret('pw-' + sel.item_id, 'Password', sel.password, { strength: true }),
+    );
     if (sel.url) fields.push(link('Website', sel.url));
     if (sel.otp_seed) fields.push(otp(sel.otp_seed));
   } else if (sel.type === 'card') {
-    fields.push(secret('num-' + sel.item_id, 'Card number', sel.card_number));
-    fields.push(plain('Cardholder', sel.cardholder));
-    fields.push(plain('Expiry', sel.expiry, { mono: true }));
-    fields.push(secret('cvv-' + sel.item_id, 'CVV', sel.cvv));
+    fields.push(
+      secret('num-' + sel.item_id, 'Card number', sel.card_number),
+      plain('Cardholder', sel.cardholder),
+    );
+    fields.push(
+      plain('Expiry', sel.expiry, { mono: true }),
+      secret('cvv-' + sel.item_id, 'CVV', sel.cvv),
+    );
     if (sel.brand) fields.push(plain('Brand', sel.brand));
   } else if (sel.type === 'identity') {
-    fields.push(plain('Full name', sel.fullname));
-    fields.push(plain('Email', sel.email));
-    fields.push(plain('Phone', sel.phone, { mono: true }));
-    fields.push(plain('Address', sel.address));
+    fields.push(plain('Full name', sel.fullname), plain('Email', sel.email));
+    fields.push(plain('Phone', sel.phone, { mono: true }), plain('Address', sel.address));
   } else if (sel.type === 'wifi') {
-    fields.push(plain('Network', sel.network));
-    fields.push(secret('wf-' + sel.item_id, 'Password', sel.password, { strength: true }));
+    fields.push(
+      plain('Network', sel.network),
+      secret('wf-' + sel.item_id, 'Password', sel.password, { strength: true }),
+    );
   } else if (sel.type === 'password') {
     fields.push(secret('pw-' + sel.item_id, 'Password', sel.password, { strength: true }));
   }

@@ -123,7 +123,7 @@ describe('gateway endpoint', () => {
       await tunnelRequest(connection, { method: 'GET', target: '/centraid/_apps' });
       await connection.closed();
       await tunnelRequest(connection, { method: 'GET', target: '/centraid/_apps' });
-    }).rejects.toThrow();
+    }).rejects.toThrow(/reason: b"unauthorized"/);
   });
 
   it('redeems a ticket exactly once and answers the handshake material', async () => {
@@ -215,7 +215,7 @@ describe('gateway endpoint', () => {
       await tunnelRequest(connection, { method: 'GET', target: '/centraid/_apps' });
       await connection.closed();
       await tunnelRequest(connection, { method: 'GET', target: '/centraid/_apps' });
-    }).rejects.toThrow();
+    }).rejects.toThrow(/reason: b"revoked"/);
     enrolled.add(device.endpointId);
   });
 });

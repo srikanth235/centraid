@@ -17,7 +17,7 @@ export interface OriginCandidate {
 /** True only for real IPv4 loopback (`127.0.0.0/8`) and exact localhost / ::1. */
 export function isLoopback(hostname: string): boolean {
   if (hostname === 'localhost' || hostname === '::1' || hostname === '[::1]') return true;
-  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) return false;
+  if (!/^\d{1,3}(?:\.\d{1,3}){3}$/u.test(hostname)) return false;
   const octets = hostname.split('.').map(Number);
   if (octets.length !== 4 || octets.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) {
     return false;

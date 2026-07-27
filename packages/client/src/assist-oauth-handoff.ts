@@ -25,7 +25,7 @@ export function parseAssistHandoffUrl(rawUrl: string): AssistOAuthHandoff | unde
   if (!webFinish && !desktopFinish) return undefined;
   const fragment = new URLSearchParams(url.hash.startsWith('#') ? url.hash.slice(1) : url.hash);
   const state = bounded(fragment.get('state'), 128);
-  if (!state || !/^[dw]\.[A-Za-z0-9_-]{43}$/.test(state)) return undefined;
+  if (!state || !/^[dw]\.[A-Za-z0-9_-]{43}$/u.test(state)) return undefined;
   const error = bounded(fragment.get('error'), 128);
   if (error) return { state, error };
   const code = bounded(fragment.get('code'), 4096);

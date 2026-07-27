@@ -22,7 +22,7 @@ import { sendError } from './http-utils.js';
 export const QUERY_SOURCE_HASH_HEADER = 'X-Centraid-Query-Source-Hash';
 export const QUERY_NAME_HEADER = 'X-Centraid-Query-Name';
 
-const QUERY_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+const QUERY_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u;
 const QUERY_MODULE_EXTENSIONS = new Set(['.js', '.mjs', '.ts']);
 
 export class QueryBundleError extends Error {
@@ -159,6 +159,11 @@ function queryGraphPlugin(queryRoot: string): esbuild.Plugin {
   return {
     name: 'centraid-query-only-graph',
     setup(build) {
+      // esbuild compiles plugin `filter` patterns with Go's RE2, not the JS engine.
+      // RE2 has no `u` flag, so a unicode-flagged filter is rejected and the hook
+      // never fires — the bundle silently comes out empty. Not a JS regex; the
+      // `require-unicode-regexp` fix does not apply here.
+      // oxlint-disable-next-line require-unicode-regexp
       build.onResolve({ filter: /.*/ }, (args) => {
         if (args.kind === 'entry-point') return null;
         return resolveQueryImport(queryRoot, args.resolveDir, args.path);

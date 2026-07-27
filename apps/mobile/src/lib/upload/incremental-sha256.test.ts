@@ -11,7 +11,7 @@ function nodeSha(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-describe('IncrementalSha256', () => {
+describe(IncrementalSha256, () => {
   // Sizes chosen around the 64-byte block and the 55/56/64 padding boundaries,
   // where a hand-rolled SHA-256 goes wrong if it goes wrong at all.
   for (const size of [0, 1, 55, 56, 57, 63, 64, 65, 119, 120, 127, 128, 1000, 100_000]) {

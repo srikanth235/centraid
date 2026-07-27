@@ -117,7 +117,7 @@ describe('store-sql row mappers', () => {
         archived: 1,
       }),
     );
-    expect(full).toEqual({
+    expect(full).toStrictEqual({
       id: 'c1',
       kind: 'chat',
       userId: 'u1',
@@ -200,7 +200,7 @@ describe('store-sql row mappers', () => {
       workspace_path: null,
       created_at: 1,
     };
-    expect(attachmentFromRaw(att)).toEqual({
+    expect(attachmentFromRaw(att)).toStrictEqual({
       id: 'a1',
       itemId: 'i1',
       hash: 'ab'.repeat(32),
@@ -217,7 +217,7 @@ describe('store-sql row mappers', () => {
       value_json: '{"n":1}',
       updated_at: 5,
     };
-    expect(stateFromRaw(st)).toEqual({
+    expect(stateFromRaw(st)).toStrictEqual({
       automationId: 'app/digest',
       key: 'cursor',
       valueJson: '{"n":1}',
@@ -233,11 +233,11 @@ describe('store-sql prepare()', () => {
     const stmts = prepare(db);
 
     // Every statement slot is a live prepared handle.
-    expect(typeof stmts.insertConversation.run).toBe('function');
-    expect(typeof stmts.getConversation.get).toBe('function');
-    expect(typeof stmts.insertTurn.run).toBe('function');
-    expect(typeof stmts.insertItem.run).toBe('function');
-    expect(typeof stmts.upsertState.run).toBe('function');
+    expect(stmts.insertConversation.run).toBeTypeOf('function');
+    expect(stmts.getConversation.get).toBeTypeOf('function');
+    expect(stmts.insertTurn.run).toBeTypeOf('function');
+    expect(stmts.insertItem.run).toBeTypeOf('function');
+    expect(stmts.upsertState.run).toBeTypeOf('function');
 
     // (id, kind, user_id, app_id, automation_id, title, adapter_kind,
     //  created_at, updated_at) — adapter_session_id / adapter_usage_json /

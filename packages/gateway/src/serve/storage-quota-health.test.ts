@@ -21,7 +21,7 @@ function probeWith(
   });
 }
 
-describe('createStorageQuotaHealthProbe', () => {
+describe(createStorageQuotaHealthProbe, () => {
   it('reports ok with "no provider-kind" when there are no connections at all', async () => {
     const probe = probeWith([], {});
     const result = await probe();

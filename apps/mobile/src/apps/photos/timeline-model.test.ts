@@ -57,7 +57,7 @@ describe('native Photos timeline model', () => {
     // localIds must survive so free-up-space can reach every device original.
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ source: 'merged', localId: 'local-a' });
-    expect(rows[0]?.localIds).toEqual(['local-a', 'local-b']);
+    expect(rows[0]?.localIds).toStrictEqual(['local-a', 'local-b']);
   });
 
   test('sections by capture-local day using tzOffsetMin, not the raw UTC slice', () => {
@@ -76,7 +76,9 @@ describe('native Photos timeline model', () => {
         photo('trash', { deleted: true }),
       ]),
     ).toHaveLength(1);
-    expect(sectionPhotoAssets([photo('live')])[0]?.assets.map((row) => row.id)).toEqual(['live']);
+    expect(sectionPhotoAssets([photo('live')])[0]?.assets.map((row) => row.id)).toStrictEqual([
+      'live',
+    ]);
   });
 
   test('day sections carry stable month groups for the timeline rail', () => {
@@ -84,7 +86,7 @@ describe('native Photos timeline model', () => {
       photo('july'),
       photo('june', { capturedAt: '2025-06-30T10:00:00.000Z' }),
     ]);
-    expect(sections.map((section) => section.month)).toEqual(['2025-07', '2025-06']);
+    expect(sections.map((section) => section.month)).toStrictEqual(['2025-07', '2025-06']);
     expect(sections[0]?.monthTitle).toContain('2025');
   });
 
@@ -110,12 +112,12 @@ describe('native Photos timeline model', () => {
         [photo('old'), photo('today', { capturedAt: '2026-07-16T10:00:00.000Z' })],
         new Date('2026-07-16T12:00:00Z'),
       ).map((row) => row.id),
-    ).toEqual(['old']);
+    ).toStrictEqual(['old']);
   });
 
   test('drag selection accumulates every asset reached during one gesture', () => {
     const afterFirst = addDragSelection(new Set(['before']), 'first');
     const afterSecond = addDragSelection(afterFirst, 'second');
-    expect([...afterSecond]).toEqual(['before', 'first', 'second']);
+    expect([...afterSecond]).toStrictEqual(['before', 'first', 'second']);
   });
 });

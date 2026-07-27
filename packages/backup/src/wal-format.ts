@@ -126,7 +126,7 @@ export interface WalPairMarker {
   journal: WalPairPosition;
 }
 
-const GENERATION_RE = /^[0-9a-f]{32}$/;
+const GENERATION_RE = /^[0-9a-f]{32}$/u;
 
 /**
  * Mint a WAL stream generation id: 128 random bits, hex. Random — not a
@@ -202,9 +202,11 @@ export function walPairMarkerRootPrefix(): string {
 }
 
 const SEGMENT_KEY_RE =
-  /^wal\/(vault|journal)\/([0-9a-f]{32})\/(\d{8})\/(\d{12})-(\d{12})-(\d{13})$/;
-const CLOSER_KEY_RE = /^wal\/(vault|journal)\/([0-9a-f]{32})\/(\d{8})\/closed-(\d{12})$/;
-const PAIR_MARKER_KEY_RE = /^wal\/tick\/([0-9a-f]{32})-([0-9a-f]{32})\/(\d{13})$/;
+  /^wal\/(?<db>vault|journal)\/(?<generation>[0-9a-f]{32})\/(?<group>\d{8})\/(?<startOffset>\d{12})-(?<endOffset>\d{12})-(?<tickMs>\d{13})$/u;
+const CLOSER_KEY_RE =
+  /^wal\/(?<db>vault|journal)\/(?<generation>[0-9a-f]{32})\/(?<group>\d{8})\/closed-(?<endOffset>\d{12})$/u;
+const PAIR_MARKER_KEY_RE =
+  /^wal\/tick\/(?<vaultGeneration>[0-9a-f]{32})-(?<journalGeneration>[0-9a-f]{32})\/(?<tickMs>\d{13})$/u;
 
 /** The addressing fields of a pair marker — everything its key carries. */
 export interface WalPairMarkerAddress {
@@ -217,10 +219,11 @@ export interface WalPairMarkerAddress {
 export function parseWalPairMarkerKey(key: string): WalPairMarkerAddress | null {
   const m = PAIR_MARKER_KEY_RE.exec(key);
   if (!m) return null;
+  const g = m.groups!;
   return {
-    vaultGeneration: m[1]!,
-    journalGeneration: m[2]!,
-    tickMs: Number.parseInt(m[3]!, 10),
+    vaultGeneration: g.vaultGeneration!,
+    journalGeneration: g.journalGeneration!,
+    tickMs: Number.parseInt(g.tickMs!, 10),
   };
 }
 
@@ -228,13 +231,14 @@ export function parseWalPairMarkerKey(key: string): WalPairMarkerAddress | null 
 export function parseWalSegmentKey(key: string): WalSegmentAddress | null {
   const m = SEGMENT_KEY_RE.exec(key);
   if (!m) return null;
+  const g = m.groups!;
   const addr: WalSegmentAddress = {
-    db: m[1] as WalDbName,
-    generation: m[2]!,
-    group: Number.parseInt(m[3]!, 10),
-    startOffset: Number.parseInt(m[4]!, 10),
-    endOffset: Number.parseInt(m[5]!, 10),
-    tickMs: Number.parseInt(m[6]!, 10),
+    db: g.db as WalDbName,
+    generation: g.generation!,
+    group: Number.parseInt(g.group!, 10),
+    startOffset: Number.parseInt(g.startOffset!, 10),
+    endOffset: Number.parseInt(g.endOffset!, 10),
+    tickMs: Number.parseInt(g.tickMs!, 10),
   };
   return addr.endOffset > addr.startOffset ? addr : null;
 }
@@ -243,11 +247,12 @@ export function parseWalSegmentKey(key: string): WalSegmentAddress | null {
 export function parseWalCloserKey(key: string): WalGroupCloser | null {
   const m = CLOSER_KEY_RE.exec(key);
   if (!m) return null;
+  const g = m.groups!;
   return {
-    db: m[1] as WalDbName,
-    generation: m[2]!,
-    group: Number.parseInt(m[3]!, 10),
-    endOffset: Number.parseInt(m[4]!, 10),
+    db: g.db as WalDbName,
+    generation: g.generation!,
+    group: Number.parseInt(g.group!, 10),
+    endOffset: Number.parseInt(g.endOffset!, 10),
   };
 }
 

@@ -108,8 +108,11 @@ function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta 
   };
   for (const t of range.turns) {
     delta.runCount += 1;
-    if (num(t.ok) !== 0) delta.okCount += 1;
-    else delta.errCount += 1;
+    if (num(t.ok) === 0) {
+      delta.errCount += 1;
+    } else {
+      delta.okCount += 1;
+    }
     if (t.retry_of !== null && t.retry_of !== undefined) delta.retryCount += 1;
     const input = num(t.total_input_tokens);
     const output = num(t.total_output_tokens);

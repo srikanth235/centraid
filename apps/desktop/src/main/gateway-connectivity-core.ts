@@ -151,8 +151,8 @@ export function foldUrlIdentityStages(handshake: HandshakeResult): {
     };
   }
 
-  const statusMatch = /^HTTP (\d+)$/.exec(handshake.detail);
-  const status = statusMatch?.[1] !== undefined ? Number(statusMatch[1]) : undefined;
+  const statusText = /^HTTP (?<status>\d+)$/u.exec(handshake.detail)?.groups?.status;
+  const status = statusText !== undefined ? Number(statusText) : undefined;
 
   if (status === undefined) {
     // No HTTP response reached us at all (or the body wasn't even parseable

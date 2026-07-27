@@ -77,7 +77,7 @@ interface RawCollection {
   cover_content_id?: string | null;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function libraryHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
   // The keyset cursor: a non-empty ISO timestamp, or nothing at all. An
@@ -249,4 +249,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     }
     return { ...empty, error: String(e.message ?? err) };
   }
-};
+}

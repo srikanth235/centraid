@@ -5,7 +5,7 @@ import Button, { IconButton } from './Button.js';
 // Vitest's `classNameStrategy: 'non-scoped'` returns the module-local names
 // (`styles.btn` → 'btn'), so these assertions match the authored classes.
 
-describe('Button', () => {
+describe(Button, () => {
   it('emits the module classes for the variant', () => {
     const html = renderToStaticMarkup(<Button label="Save" variant="primary" />);
     expect(html).toContain('class="btn primary"');
@@ -48,7 +48,7 @@ describe('Button', () => {
   });
 });
 
-describe('IconButton', () => {
+describe(IconButton, () => {
   it('renders an icon-only square with an aria-label', () => {
     const html = renderToStaticMarkup(<IconButton icon="Bolt" ariaLabel="Run" />);
     expect(html).toContain('class="icon"');

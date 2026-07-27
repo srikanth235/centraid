@@ -81,7 +81,7 @@ interface UpcomingData {
   vaultDenied?: { code?: string; message?: string };
 }
 
-const byId = (id: string): HTMLElement | null => document.getElementById(id);
+const byId = (id: string): HTMLElement | null => document.querySelector(`#${id}`);
 
 function initialView(rootEl: HTMLElement | null): ViewKind {
   // The inline shell pushes the default-view knob onto the app's OWN root
@@ -89,9 +89,7 @@ function initialView(rootEl: HTMLElement | null): ViewKind {
   // (they mount `Root` into #appRoot and can't reach into it). Read the app
   // root first, then fall back to documentElement so both boot paths honour the
   // knob (#505).
-  const knob =
-    rootEl?.getAttribute('data-app-default-view') ??
-    document.documentElement.getAttribute('data-app-default-view');
+  const knob = rootEl?.dataset.appDefaultView ?? document.documentElement.dataset.appDefaultView;
   return knob && VALID_VIEWS.has(knob as ViewKind) ? (knob as ViewKind) : 'month';
 }
 

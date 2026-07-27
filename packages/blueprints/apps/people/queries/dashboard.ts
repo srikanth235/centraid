@@ -94,7 +94,7 @@ function daysUntilMonthDay(monthDay: string): number {
   return Math.round((next.getTime() - today.getTime()) / DAY);
 }
 
-export default async ({ ctx }: HandlerArgs) => {
+export default async function dashboard({ ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const window = 500;
   try {
@@ -269,4 +269,4 @@ export default async ({ ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

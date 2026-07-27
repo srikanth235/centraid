@@ -4,7 +4,7 @@
  * named notebooks are indistinguishable in every filing UI); renaming a
  * notebook to its own name is an idempotent no-op.
  */
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function renameNotebook({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
@@ -20,4 +20,4 @@ export default async ({ body, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

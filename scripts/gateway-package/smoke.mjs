@@ -19,11 +19,10 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { waitForGatewayInfo } from './probe.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
@@ -85,7 +84,7 @@ async function hostMode() {
   let baseUrl = `http://${host}:${port || 18787}`;
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
-    const m = output.match(/https?:\/\/127\.0\.0\.1:\d+/);
+    const m = output.match(/https?:\/\/127\.0\.0\.1:\d+/u);
     if (m) {
       baseUrl = m[0];
       break;

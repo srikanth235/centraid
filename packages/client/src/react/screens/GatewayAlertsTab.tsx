@@ -80,11 +80,11 @@ export default function GatewayAlertsTab(props: GatewayAlertsTabProps): JSX.Elem
                   {p.label}
                 </button>
               ))}
-              {!hasPreset ? (
+              {hasPreset ? null : (
                 <span className={cx(styles.preset, styles.presetActive)}>
                   {thresholdLabel(alert.thresholdSeconds)}
                 </span>
-              ) : null}
+              )}
             </div>
           </div>
         </div>

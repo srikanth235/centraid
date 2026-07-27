@@ -39,9 +39,12 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
   it('uses the bounded low-end read pragmas (#456 S1)', () => {
     const db = openJournalDb(freshDbPath());
     try {
-      expect(db.prepare('PRAGMA cache_size').get()).toEqual({ cache_size: -16000 });
-      expect(db.prepare('PRAGMA mmap_size').get()).toEqual({ mmap_size: 67_108_864 });
-      expect(db.prepare('PRAGMA temp_store').get()).toEqual({ temp_store: 2 });
+      // node:sqlite hands back null-prototype rows; spreading compares the
+      // column data (which is the contract) without asserting the driver's
+      // choice of prototype.
+      expect({ ...db.prepare('PRAGMA cache_size').get() }).toStrictEqual({ cache_size: -16000 });
+      expect({ ...db.prepare('PRAGMA mmap_size').get() }).toStrictEqual({ mmap_size: 67_108_864 });
+      expect({ ...db.prepare('PRAGMA temp_store').get() }).toStrictEqual({ temp_store: 2 });
     } finally {
       db.close();
     }
@@ -76,7 +79,7 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
     // and its internal shadow tables (`fts_conversation_data`, `_idx`, …); the
     // ledger's own tables are everything that isn't part of that plane.
     const ledgerTables = tableNames(path).filter((n) => !n.startsWith('fts_conversation'));
-    expect(ledgerTables).toEqual([
+    expect(ledgerTables).toStrictEqual([
       'attachments',
       'automation_state',
       'automation_trigger_cursor',
@@ -99,11 +102,11 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
       const views = db
         .prepare(`SELECT name FROM sqlite_master WHERE type='view' ORDER BY name`)
         .all() as Array<{ name: string }>;
-      expect(views.map((v) => v.name)).toEqual(['run_summary']);
+      expect(views.map((v) => v.name)).toStrictEqual(['run_summary']);
       const triggers = db
         .prepare(`SELECT name FROM sqlite_master WHERE type='trigger' ORDER BY name`)
         .all() as Array<{ name: string }>;
-      expect(triggers.map((t) => t.name)).toEqual([
+      expect(triggers.map((t) => t.name)).toStrictEqual([
         'conversation_item_count_ad',
         'conversation_item_count_ai',
         'fts_conversation_conv_ad',
@@ -123,7 +126,7 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
     openJournalDb(path).close();
     const db = new DatabaseSync(path);
     try {
-      expect(db.prepare(`PRAGMA foreign_key_list('conversations')`).all().length).toBe(0);
+      expect(db.prepare(`PRAGMA foreign_key_list('conversations')`).all()).toHaveLength(0);
     } finally {
       db.close();
     }
@@ -425,7 +428,7 @@ describe('STRICT tables (issue #374 SQLite hardening)', () => {
              VALUES ('c1', 'chat', 'u1', 'not-a-number', ?, ?)`,
           )
           .run(now, now),
-      ).toThrow();
+      ).toThrow(/cannot store TEXT value in INTEGER column/);
     } finally {
       db.close();
     }

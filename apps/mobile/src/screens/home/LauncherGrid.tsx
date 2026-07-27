@@ -35,7 +35,7 @@ const PRESS_SPRING = { damping: 14, mass: 0.5, stiffness: 240 } as const;
 function buildPressHandlers(
   scale: SharedValue<number>,
   installed: boolean,
-): { pressIn(): void; pressOut(): void } {
+): { pressIn: () => void; pressOut: () => void } {
   return {
     pressIn: () => {
       scale.value = withSpring(0.94, PRESS_SPRING);
@@ -51,7 +51,7 @@ function buildPressHandlers(
 
 export interface LauncherGridProps {
   items: readonly LauncherItem[];
-  onOpen(item: LauncherItem): void;
+  onOpen: (item: LauncherItem) => void;
 }
 
 export default function LauncherGrid({ items, onOpen }: LauncherGridProps): React.JSX.Element {
@@ -72,7 +72,7 @@ function LauncherTile({
   styles,
 }: {
   item: LauncherItem;
-  onPress(): void;
+  onPress: () => void;
   styles: ReturnType<typeof makeStyles>;
 }): React.JSX.Element {
   const { meta, installed } = item;

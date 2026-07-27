@@ -63,8 +63,8 @@ describe('pollProviderEventSource — GitHub', () => {
       notBefore: Date.parse('2026-07-25T00:01:30Z'),
     });
 
-    const secondFetch = vi.fn(async (_connection, _url, headers) => {
-      expect(headers).toEqual({
+    const secondFetch = vi.fn<PollJson>(async (_connection, _url, headers) => {
+      expect(headers).toStrictEqual({
         'if-none-match': '"events-v2"',
         'if-modified-since': 'Sat, 25 Jul 2026 00:00:00 GMT',
       });
@@ -83,7 +83,7 @@ describe('pollProviderEventSource — GitHub', () => {
       limit: 50,
       pollJson: secondFetch,
     });
-    expect(second.events).toEqual([]);
+    expect(second.events).toStrictEqual([]);
     expect(second.cursor).toMatchObject({
       provider: 'github',
       etag: '"events-v2"',
@@ -139,7 +139,10 @@ describe('pollProviderEventSource — GitHub', () => {
     expect(poll).toHaveBeenCalledTimes(2);
     expect(vi.mocked(poll).mock.calls[1]![1]).toContain('page=2');
     expect(vi.mocked(poll).mock.calls[1]![2]).toBeUndefined();
-    expect(next.events.map((event) => event.id)).toEqual(['github:event:1', 'github:event:2']);
+    expect(next.events.map((event) => event.id)).toStrictEqual([
+      'github:event:1',
+      'github:event:2',
+    ]);
     expect(next.cursor).toMatchObject({ provider: 'github', etag: '"events-all"' });
   });
 
@@ -150,7 +153,7 @@ describe('pollProviderEventSource — GitHub', () => {
       event: 'issue',
       filter: { repo: 'acme/app' },
     };
-    const waitingFetch = vi.fn() satisfies PollJson;
+    const waitingFetch = vi.fn<PollJson>();
     const waiting = await pollProviderEventSource({
       trigger,
       connection: github,
@@ -163,7 +166,7 @@ describe('pollProviderEventSource — GitHub', () => {
       limit: 50,
       pollJson: waitingFetch,
     });
-    expect(waiting.events).toEqual([]);
+    expect(waiting.events).toStrictEqual([]);
     expect(waitingFetch).not.toHaveBeenCalled();
 
     const baseline = await pollProviderEventSource({
@@ -177,7 +180,7 @@ describe('pollProviderEventSource — GitHub', () => {
         body: [{ id: 'historical', type: 'IssuesEvent', payload: { issue: {} } }],
       }),
     });
-    expect(baseline.events).toEqual([]);
+    expect(baseline.events).toStrictEqual([]);
     expect(baseline.cursor).toMatchObject({
       provider: 'github',
       etag: '"current"',

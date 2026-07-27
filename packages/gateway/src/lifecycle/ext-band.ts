@@ -22,13 +22,13 @@ import type { WorktreeStore } from '../worktree-store/index.js';
 
 /** The slice of the vault plane the lifecycle needs — injected, testable. */
 export interface ExtBandOps {
-  applyAppExt(appId: string, tables: ExtTableSpec[]): ExtApplyOutcome;
-  seedAppExtDraft(
+  applyAppExt: (appId: string, tables: ExtTableSpec[]) => ExtApplyOutcome;
+  seedAppExtDraft: (
     appId: string,
     tables: ExtTableSpec[],
     opts?: { reset?: boolean },
-  ): ExtApplyOutcome;
-  dropAppExtDraft(appId: string): { dropped: string[] };
+  ) => ExtApplyOutcome;
+  dropAppExtDraft: (appId: string) => { dropped: string[] };
 }
 
 /**

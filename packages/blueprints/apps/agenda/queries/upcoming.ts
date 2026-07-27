@@ -244,21 +244,32 @@ function parseRrule(rrule: string): ParsedRule | null {
 function parseIcalInstant(value: string): Date | null {
   const direct = Date.parse(value);
   if (!Number.isNaN(direct)) return new Date(direct);
-  const match = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?Z?$/.exec(String(value).trim());
+  const match =
+    /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})(?:T(?<hour>\d{2})(?<minute>\d{2})(?<second>\d{2}))?Z?$/u.exec(
+      String(value).trim(),
+    );
   if (!match) return null;
-  const [, y, mo, d, hh = '00', mm = '00', ss = '00'] = match;
-  const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm), Number(ss));
+  const parts: Record<string, string | undefined> = match.groups ?? {};
+  const { year, month, day, hour = '00', minute = '00', second = '00' } = parts;
+  const ms = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+  );
   return Number.isNaN(ms) ? null : new Date(ms);
 }
 
 function addDays(d: Date, n: number): Date {
-  const next = new Date(d.getTime());
+  const next = new Date(d);
   next.setUTCDate(next.getUTCDate() + n);
   return next;
 }
 
 function addMonths(d: Date, n: number): Date {
-  const next = new Date(d.getTime());
+  const next = new Date(d);
   const day = next.getUTCDate();
   next.setUTCDate(1);
   next.setUTCMonth(next.getUTCMonth() + n);
@@ -382,7 +393,7 @@ function expandRecurringEvents(
   return out;
 }
 
-export default async ({ query, ctx }: HandlerArgs) => {
+export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   try {
     const from =
@@ -521,4 +532,4 @@ export default async ({ query, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { events: [], calendars: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

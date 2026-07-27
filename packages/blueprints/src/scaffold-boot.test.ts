@@ -2,6 +2,7 @@
    no DOM lib; this test boots the browser scaffold under jsdom. */
 // @ts-nocheck
 // @vitest-environment jsdom
+import assert from 'node:assert';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -21,7 +22,9 @@ describe('dependency-free app scaffold', () => {
     rmSync(scratchDir, { recursive: true, force: true });
     mkdirSync(scratchDir, { recursive: true });
     const app = scaffoldAppFiles('demo', { name: 'Demo' }).find((file) => file.path === 'app.js');
-    expect(app, 'scaffold no longer emits app.js').toBeTruthy();
+    // A precondition check in a `beforeAll`, not a test body — vitest's `expect`
+    // isn't usable here (vitest/no-standalone-expect), so a plain assertion.
+    assert.ok(app, 'scaffold no longer emits app.js');
     writeFileSync(path.join(scratchDir, 'app.js'), app.content);
     process.on('unhandledRejection', capture);
     process.on('uncaughtException', capture);
@@ -74,6 +77,6 @@ describe('dependency-free app scaffold', () => {
       expect(document.querySelector<HTMLElement>('#consentBanner')?.hidden).toBe(true);
       expect(document.querySelector<HTMLElement>('.surface')?.hidden).toBe(false);
     });
-    expect(errors).toEqual([]);
+    expect(errors).toStrictEqual([]);
   });
 });

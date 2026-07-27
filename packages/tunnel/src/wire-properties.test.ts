@@ -30,7 +30,16 @@ describe('tunnel wire property', () => {
           const frame = Buffer.from(encodeHeaderFrame(header));
           const len = frame.readUInt32BE(0);
           expect(len).toBe(frame.length - 4);
-          expect(JSON.parse(frame.subarray(4).toString('utf8'))).toEqual(header);
+          // Compare what the frame decodes to against what `header` encodes
+          // to, decoded the same way. That is the actual wire contract, and it
+          // also sidesteps a fast-check detail: the shrinker can hand back a
+          // counterexample built from null-prototype objects at any depth
+          // (including nested `headers`), which `toStrictEqual` would reject
+          // against a plain-object literal even when every field matches.
+          // `structuredClone` is NOT a substitute here — it would preserve
+          // `undefined`-valued keys that JSON encoding drops.
+          const encodedHeader: unknown = JSON.parse(JSON.stringify(header) as string);
+          expect(JSON.parse(frame.subarray(4).toString('utf8'))).toStrictEqual(encodedHeader);
           expect(len).toBeLessThanOrEqual(MAX_HEADER_FRAME_BYTES);
         },
       ),
@@ -45,7 +54,7 @@ describe('tunnel wire property', () => {
         fc.string({ minLength: 1, maxLength: 16 }),
         (ticket, code) => {
           const raw = JSON.stringify({ v: 1, kind: 'centraid-pair', ticket, code });
-          expect(parsePairQrPayload(raw)).toEqual({
+          expect(parsePairQrPayload(raw)).toStrictEqual({
             v: 1,
             kind: 'centraid-pair',
             ticket,
@@ -114,19 +123,17 @@ describe('tunnel wire property', () => {
           const out = sanitizeHeaders(headers);
           for (const key of Object.keys(out)) {
             expect(key).toBe(key.toLowerCase());
-            expect(
-              [
-                'connection',
-                'keep-alive',
-                'proxy-authenticate',
-                'proxy-authorization',
-                'proxy-connection',
-                'te',
-                'trailer',
-                'transfer-encoding',
-                'upgrade',
-              ].includes(key),
-            ).toBe(false);
+            expect([
+              'connection',
+              'keep-alive',
+              'proxy-authenticate',
+              'proxy-authorization',
+              'proxy-connection',
+              'te',
+              'trailer',
+              'transfer-encoding',
+              'upgrade',
+            ]).not.toContain(key);
           }
           if ('Content-Type' in headers || 'content-type' in headers) {
             expect(out['content-type']).toBeDefined();
@@ -140,7 +147,7 @@ describe('tunnel wire property', () => {
   test('encodeHeaderFrame is deterministic for the same object shape', () => {
     fc.assert(
       fc.property(fc.constantFrom({ method: 'GET', target: '/centraid/', headers: {} }), (h) => {
-        expect(encodeHeaderFrame(h)).toEqual(encodeHeaderFrame(h));
+        expect(encodeHeaderFrame(h)).toStrictEqual(encodeHeaderFrame(h));
       }),
       { numRuns: 8, seed: 53284 },
     );

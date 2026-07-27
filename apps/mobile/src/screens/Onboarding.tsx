@@ -264,12 +264,12 @@ function ConnectionStep({
       />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {!available ? (
+      {available ? null : (
         <Text style={styles.note}>
           Pairing needs a development build — the tunnel isn't available in Expo Go. You can pair
           later from Settings.
         </Text>
-      ) : null}
+      )}
 
       {available ? (
         <>
@@ -505,7 +505,7 @@ function RestoreVaultStep({
 }
 
 function Done({ name, onEnter }: { name: string; onEnter: () => void }): React.JSX.Element {
-  const greet = name.trim().split(/\s+/).find(Boolean) ?? 'friend';
+  const greet = name.trim().split(/\s+/u).find(Boolean) ?? 'friend';
   return (
     <View style={styles.center}>
       <View style={styles.doneBadge}>

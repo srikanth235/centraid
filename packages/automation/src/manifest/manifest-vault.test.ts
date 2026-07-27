@@ -20,7 +20,7 @@ describe('manifest vault block', () => {
         ],
       },
     });
-    expect(m.vault).toEqual({
+    expect(m.vault).toStrictEqual({
       purpose: 'dpv:ServiceProvision',
       why: 'reads your agenda',
       scopes: [
@@ -51,7 +51,7 @@ describe('manifest vault block', () => {
           ],
         },
       }).vault?.scopes[0],
-    ).toEqual({
+    ).toStrictEqual({
       schema: 'schedule',
       table: 'task',
       verbs: 'read',

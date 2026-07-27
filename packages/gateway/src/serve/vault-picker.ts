@@ -143,7 +143,17 @@ export function pickEntities(
   const refs: { type: string; id: string; snippet?: string }[] = [];
   for (const kind of kinds) {
     try {
-      if (term !== '') {
+      if (term === '') {
+        const pk = CARD_PK[kind];
+        if (!pk) continue;
+        const result = gateway.read(cred, {
+          entity: kind,
+          orderBy: { column: pk, dir: 'desc' },
+          limit: perKind,
+          purpose,
+        });
+        for (const row of result.rows) refs.push({ type: kind, id: String(row[pk]) });
+      } else {
         const searchable = SEARCHABLE[kind];
         if (!searchable) continue; // a term can only match text-indexed kinds
         const result = gateway.search(cred, { entity: kind, query: term, limit: perKind, purpose });
@@ -154,16 +164,6 @@ export function pickEntities(
             ...(typeof row._snippet === 'string' ? { snippet: row._snippet } : {}),
           });
         }
-      } else {
-        const pk = CARD_PK[kind];
-        if (!pk) continue;
-        const result = gateway.read(cred, {
-          entity: kind,
-          orderBy: { column: pk, dir: 'desc' },
-          limit: perKind,
-          purpose,
-        });
-        for (const row of result.rows) refs.push({ type: kind, id: String(row[pk]) });
       }
     } catch (err) {
       logger.warn(

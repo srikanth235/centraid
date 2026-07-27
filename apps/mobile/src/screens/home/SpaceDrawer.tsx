@@ -28,7 +28,7 @@ const PANEL_WIDTH = 288;
 
 export interface SpaceDrawerProps {
   open: boolean;
-  onClose(): void;
+  onClose: () => void;
   /** Desktop-link state, shared with Home so the drawer never re-fetches it. */
   connection: ConnectionState;
   /** Pending parked approvals — shown as a badge on the Approvals row. */
@@ -36,12 +36,12 @@ export interface SpaceDrawerProps {
   /** Local identity: display name + accent, straight from Home's profile state. */
   profile: { name: string; color: string };
   /** Open the Spaces switcher (add / switch / forget device-local vaults). */
-  onSpaces(): void;
-  onAssistant(): void;
-  onAutomations(): void;
-  onInsights(): void;
-  onApprovals(): void;
-  onSettings(): void;
+  onSpaces: () => void;
+  onAssistant: () => void;
+  onAutomations: () => void;
+  onInsights: () => void;
+  onApprovals: () => void;
+  onSettings: () => void;
 }
 
 type ConnTone = 'connected' | 'idle' | 'offline';

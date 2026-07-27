@@ -44,20 +44,20 @@ export type ReplicaBindValue = string | number | null;
  */
 export interface ReplicaSqliteDriver {
   /** Run one parameterized statement (INSERT/UPDATE/DELETE); results discarded. */
-  run(sql: string, bind?: readonly ReplicaBindValue[]): void;
+  run: (sql: string, bind?: readonly ReplicaBindValue[]) => void;
   /** Run one parameterized query, materializing each row as a plain object. */
-  all<T extends object>(sql: string, bind?: readonly ReplicaBindValue[]): T[];
+  all: <T extends object>(sql: string, bind?: readonly ReplicaBindValue[]) => T[];
   /** Execute a multi-statement, bindless SQL script (DDL, PRAGMA, tx control). */
-  exec(sql: string): void;
+  exec: (sql: string) => void;
   /** Release the underlying handle. */
-  close(): void;
+  close: () => void;
   /**
    * Optional open-time capability gate. Called once after the base PRAGMAs and
    * before schema creation so a driver can fail loud (e.g. probe FTS5 on a
    * native build that omitted the extension) instead of throwing opaquely
    * mid-bootstrap.
    */
-  assertCapabilities?(): void;
+  assertCapabilities?: () => void;
 }
 
 interface MetaRow {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatCrashLine, shouldRotate, toCrashRecord } from './crash-log-core.js';
 
-describe('toCrashRecord', () => {
+describe(toCrashRecord, () => {
   const now = () => new Date('2026-07-11T12:00:00.000Z');
 
   it('captures message + stack from a real Error', () => {
@@ -25,7 +25,7 @@ describe('toCrashRecord', () => {
   });
 });
 
-describe('formatCrashLine', () => {
+describe(formatCrashLine, () => {
   it('emits one newline-terminated JSON line', () => {
     const line = formatCrashLine({
       at: '2026-07-11T12:00:00.000Z',
@@ -33,7 +33,7 @@ describe('formatCrashLine', () => {
       message: 'boom',
     });
     expect(line.endsWith('\n')).toBe(true);
-    expect(JSON.parse(line.trimEnd())).toEqual({
+    expect(JSON.parse(line.trimEnd())).toStrictEqual({
       at: '2026-07-11T12:00:00.000Z',
       kind: 'uncaughtException',
       message: 'boom',
@@ -41,7 +41,7 @@ describe('formatCrashLine', () => {
   });
 });
 
-describe('shouldRotate', () => {
+describe(shouldRotate, () => {
   it('rotates once size exceeds the cap, not at exactly the cap', () => {
     expect(shouldRotate(999, 1000)).toBe(false);
     expect(shouldRotate(1000, 1000)).toBe(false);

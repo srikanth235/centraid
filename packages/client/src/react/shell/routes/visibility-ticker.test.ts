@@ -14,62 +14,64 @@ function setVisibility(state: DocumentVisibilityState): void {
 
 let teardown: (() => void) | null = null;
 
-beforeEach(() => {
-  vi.useFakeTimers();
-  setVisibility('visible');
-});
-
-afterEach(() => {
-  teardown?.();
-  teardown = null;
-  vi.useRealTimers();
-});
-
-describe('startVisibilityTicker', () => {
-  it('ticks every second while visible', () => {
-    const tick = vi.fn();
-    teardown = startVisibilityTicker(tick);
-    vi.advanceTimersByTime(3000);
-    expect(tick).toHaveBeenCalledTimes(3);
-  });
-
-  it('stops ticking while the tab is hidden', () => {
-    const tick = vi.fn();
-    teardown = startVisibilityTicker(tick);
-    vi.advanceTimersByTime(1000);
-    expect(tick).toHaveBeenCalledTimes(1);
-
-    setVisibility('hidden');
-    document.dispatchEvent(new Event('visibilitychange'));
-
-    vi.advanceTimersByTime(5000);
-    expect(tick).toHaveBeenCalledTimes(1); // no further fires while hidden
-  });
-
-  it('refreshes immediately and resumes when the tab becomes visible again', () => {
-    const tick = vi.fn();
-    teardown = startVisibilityTicker(tick);
-
-    setVisibility('hidden');
-    document.dispatchEvent(new Event('visibilitychange'));
-    vi.advanceTimersByTime(5000);
-    expect(tick).toHaveBeenCalledTimes(0);
-
+describe('visibility-ticker', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
     setVisibility('visible');
-    document.dispatchEvent(new Event('visibilitychange'));
-    expect(tick).toHaveBeenCalledTimes(1); // immediate catch-up on return
-
-    vi.advanceTimersByTime(2000);
-    expect(tick).toHaveBeenCalledTimes(3); // then resumes ticking
   });
 
-  it('detaches the listener and clears the interval on teardown', () => {
-    const tick = vi.fn();
-    const stop = startVisibilityTicker(tick);
-    stop();
-    vi.advanceTimersByTime(5000);
-    setVisibility('visible');
-    document.dispatchEvent(new Event('visibilitychange'));
-    expect(tick).toHaveBeenCalledTimes(0);
+  afterEach(() => {
+    teardown?.();
+    teardown = null;
+    vi.useRealTimers();
+  });
+
+  describe(startVisibilityTicker, () => {
+    it('ticks every second while visible', () => {
+      const tick = vi.fn<() => void>();
+      teardown = startVisibilityTicker(tick);
+      vi.advanceTimersByTime(3000);
+      expect(tick).toHaveBeenCalledTimes(3);
+    });
+
+    it('stops ticking while the tab is hidden', () => {
+      const tick = vi.fn<() => void>();
+      teardown = startVisibilityTicker(tick);
+      vi.advanceTimersByTime(1000);
+      expect(tick).toHaveBeenCalledOnce();
+
+      setVisibility('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+
+      vi.advanceTimersByTime(5000);
+      expect(tick).toHaveBeenCalledOnce(); // no further fires while hidden
+    });
+
+    it('refreshes immediately and resumes when the tab becomes visible again', () => {
+      const tick = vi.fn<() => void>();
+      teardown = startVisibilityTicker(tick);
+
+      setVisibility('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      vi.advanceTimersByTime(5000);
+      expect(tick).toHaveBeenCalledTimes(0);
+
+      setVisibility('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(tick).toHaveBeenCalledOnce(); // immediate catch-up on return
+
+      vi.advanceTimersByTime(2000);
+      expect(tick).toHaveBeenCalledTimes(3); // then resumes ticking
+    });
+
+    it('detaches the listener and clears the interval on teardown', () => {
+      const tick = vi.fn<() => void>();
+      const stop = startVisibilityTicker(tick);
+      stop();
+      vi.advanceTimersByTime(5000);
+      setVisibility('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      expect(tick).toHaveBeenCalledTimes(0);
+    });
   });
 });

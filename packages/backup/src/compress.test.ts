@@ -28,9 +28,9 @@ describe('frameChunkPayload / unframeChunkPayload', () => {
     const raw = new TextEncoder().encode('async-compression'.repeat(10_000));
     const first = await frameChunkPayloadAsync(raw);
     const retry = await frameChunkPayloadAsync(raw);
-    expect(first).toEqual(retry);
+    expect(first).toStrictEqual(retry);
     expect(first[0]).toBe(frameChunkPayload(raw)[0]);
-    expect(unframeChunkPayload(first)).toEqual(raw);
+    expect(unframeChunkPayload(first)).toStrictEqual(raw);
   });
 
   test('algo id bytes are the format-normative values', () => {
@@ -51,7 +51,7 @@ describe('frameChunkPayload / unframeChunkPayload', () => {
     // Strictly smaller than the stored frame (raw + 1) — the keep-if-smaller
     // gate kept the compressed body.
     expect(framed.length).toBeLessThan(raw.length + 1);
-    expect([...unframeChunkPayload(framed)]).toEqual([...raw]);
+    expect([...unframeChunkPayload(framed)]).toStrictEqual([...raw]);
   });
 
   test('incompressible input stores raw (0x00) with at most one byte of overhead', () => {
@@ -60,8 +60,8 @@ describe('frameChunkPayload / unframeChunkPayload', () => {
     expect(framed[0]).toBe(ALGO_STORE);
     // The whole point of the gate: random bytes never inflate the object by
     // more than the single frame id byte (#405 §1 acceptance).
-    expect(framed.length).toBe(raw.length + 1);
-    expect([...unframeChunkPayload(framed)]).toEqual([...raw]);
+    expect(framed).toHaveLength(raw.length + 1);
+    expect([...unframeChunkPayload(framed)]).toStrictEqual([...raw]);
   });
 
   test('a mixed batch round-trips: compressed and stored frames both recover', () => {
@@ -71,20 +71,20 @@ describe('frameChunkPayload / unframeChunkPayload', () => {
     const framedIncomp = frameChunkPayload(incomp);
     expect(framedComp[0]).toBe(ALGO_ZSTD);
     expect(framedIncomp[0]).toBe(ALGO_STORE);
-    expect([...unframeChunkPayload(framedComp)]).toEqual([...comp]);
-    expect([...unframeChunkPayload(framedIncomp)]).toEqual([...incomp]);
+    expect([...unframeChunkPayload(framedComp)]).toStrictEqual([...comp]);
+    expect([...unframeChunkPayload(framedIncomp)]).toStrictEqual([...incomp]);
   });
 
   test('framing is deterministic — a retried frame is byte-identical (G7)', () => {
     const raw = compressible(32 * 1024);
-    expect([...frameChunkPayload(raw)]).toEqual([...frameChunkPayload(raw)]);
+    expect([...frameChunkPayload(raw)]).toStrictEqual([...frameChunkPayload(raw)]);
   });
 
   test('empty input frames as stored (empty part list never reaches here, but be total)', () => {
     const framed = frameChunkPayload(new Uint8Array(0));
     expect(framed[0]).toBe(ALGO_STORE);
-    expect(framed.length).toBe(1);
-    expect(unframeChunkPayload(framed).length).toBe(0);
+    expect(framed).toHaveLength(1);
+    expect(unframeChunkPayload(framed)).toHaveLength(0);
   });
 
   describe('reader handles every id byte a conformant writer could emit', () => {
@@ -96,7 +96,7 @@ describe('frameChunkPayload / unframeChunkPayload', () => {
       const framed = new Uint8Array(body.length + 1);
       framed[0] = ALGO_DEFLATE;
       framed.set(body, 1);
-      expect([...unframeChunkPayload(framed)]).toEqual([...raw]);
+      expect([...unframeChunkPayload(framed)]).toStrictEqual([...raw]);
     });
 
     test('a hand-built 0x00 stored frame decodes to its body verbatim', () => {
@@ -104,7 +104,7 @@ describe('frameChunkPayload / unframeChunkPayload', () => {
       const framed = new Uint8Array(raw.length + 1);
       framed[0] = ALGO_STORE;
       framed.set(raw, 1);
-      expect([...unframeChunkPayload(framed)]).toEqual([...raw]);
+      expect([...unframeChunkPayload(framed)]).toStrictEqual([...raw]);
     });
   });
 

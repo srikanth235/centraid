@@ -13,10 +13,9 @@ import {
   type NativeImage,
 } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { isOAuthFinishDeepLink } from './oauth-deep-link.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 
 let tray: Tray | null = null;
 let gatewayRunning = false;

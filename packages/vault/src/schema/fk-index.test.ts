@@ -9,7 +9,7 @@
 // rowid table's TEXT PRIMARY KEY / UNIQUE constraint, or a WITHOUT ROWID
 // table's own PRIMARY KEY.
 import { DatabaseSync } from 'node:sqlite';
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { openVaultDb } from '../db.js';
 
 interface UncoveredFk {
@@ -100,25 +100,33 @@ function describeUncovered(items: UncoveredFk[]): string {
   return items.map((u) => `${u.table}.${u.columns.join(',')} -> ${u.toTable}`).join('\n  ');
 }
 
-test('every vault.db FK child column-set is covered by a leftmost index prefix', () => {
-  const { vault, journal, close } = openVaultDb();
-  try {
-    const uncovered = findUncoveredForeignKeys(vault);
-    expect(uncovered, `uncovered FK child columns:\n  ${describeUncovered(uncovered)}`).toEqual([]);
-  } finally {
-    close();
-    // journal is closed by close() too; referencing it keeps the pair open
-    // together for the duration of the assertion above.
-    void journal;
-  }
-});
+describe('fk-index', () => {
+  test('every vault.db FK child column-set is covered by a leftmost index prefix', () => {
+    const { vault, journal, close } = openVaultDb();
+    try {
+      const uncovered = findUncoveredForeignKeys(vault);
+      expect(
+        uncovered,
+        `uncovered FK child columns:\n  ${describeUncovered(uncovered)}`,
+      ).toStrictEqual([]);
+    } finally {
+      close();
+      // journal is closed by close() too; referencing it keeps the pair open
+      // together for the duration of the assertion above.
+      void journal;
+    }
+  });
 
-test('every journal.db FK child column-set is covered by a leftmost index prefix', () => {
-  const { journal, close } = openVaultDb();
-  try {
-    const uncovered = findUncoveredForeignKeys(journal);
-    expect(uncovered, `uncovered FK child columns:\n  ${describeUncovered(uncovered)}`).toEqual([]);
-  } finally {
-    close();
-  }
+  test('every journal.db FK child column-set is covered by a leftmost index prefix', () => {
+    const { journal, close } = openVaultDb();
+    try {
+      const uncovered = findUncoveredForeignKeys(journal);
+      expect(
+        uncovered,
+        `uncovered FK child columns:\n  ${describeUncovered(uncovered)}`,
+      ).toStrictEqual([]);
+    } finally {
+      close();
+    }
+  });
 });

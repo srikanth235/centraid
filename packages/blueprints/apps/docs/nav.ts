@@ -5,7 +5,7 @@
 // own `state`/`data` plus the render entry points only app.tsx can define.
 import type { AppState, Nav } from './types.ts';
 
-const $ = (id: string) => document.getElementById(id)!;
+const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 
 interface NavDeps {
   state: AppState;

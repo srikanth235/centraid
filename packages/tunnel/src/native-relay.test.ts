@@ -99,7 +99,7 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
 
     expect(response.status).toBe(200);
     expect(response.headers['x-seen-device']).toBe(client.endpointId);
-    expect(response.body).toEqual(body);
+    expect(response.body).toStrictEqual(body);
     expect(controlCalls.map(({ path }) => path)).toContain('/centraid/_gateway/tunnel/pair');
     expect(boxedAuthorize).not.toHaveBeenCalled();
     expect(boxedPair).not.toHaveBeenCalled();
@@ -110,7 +110,7 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
         method: 'GET',
         target: '/revoked-live-connection',
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/reason: b"revoked"/);
     connection.close(0n, []);
   }, 30_000);
 
@@ -150,7 +150,7 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== '1')('native gateway 
         body,
       });
       expect(response.status).toBe(200);
-      expect(response.body).toEqual(body);
+      expect(response.body).toStrictEqual(body);
 
       upstream = undefined;
       const unavailable = await tunnelRequest(connection, {

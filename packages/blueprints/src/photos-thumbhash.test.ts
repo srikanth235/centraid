@@ -5,7 +5,7 @@
 // encoder is testable outside the browser.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 
 const moduleUrl = pathToFileURL(
   path.resolve(import.meta.dirname, '..', 'apps/photos/thumbhash.js'),
@@ -29,19 +29,21 @@ function gradient(w: number, h: number): Uint8Array {
   return data;
 }
 
-test('client encoder matches the gateway codec byte-for-byte on the same RGBA', () => {
-  // Identical fixtures to packages/gateway/src/preview/codec.test.ts — client
-  // and gateway are the same reference algorithm, so a photo staged at upload
-  // and one filled by the backstop carry the same placeholder.
-  expect(thumbHashFromRgba(64, 64, gradient(64, 64))).toBe('mOkFFwoywEiCh4eGeFiIV4eE0eBXA4sK');
-  expect(thumbHashFromRgba(96, 48, gradient(96, 48))).toBe('WQkGJIhABeJzh3dziIVPikSx9w');
-});
+describe('photos-thumbhash', () => {
+  test('client encoder matches the gateway codec byte-for-byte on the same RGBA', () => {
+    // Identical fixtures to packages/gateway/src/preview/codec.test.ts — client
+    // and gateway are the same reference algorithm, so a photo staged at upload
+    // and one filled by the backstop carry the same placeholder.
+    expect(thumbHashFromRgba(64, 64, gradient(64, 64))).toBe('mOkFFwoywEiCh4eGeFiIV4eE0eBXA4sK');
+    expect(thumbHashFromRgba(96, 48, gradient(96, 48))).toBe('WQkGJIhABeJzh3dziIVPikSx9w');
+  });
 
-test('produces canonical unpadded base64 and refuses inputs over 100 px', () => {
-  const hash = thumbHashFromRgba(64, 64, gradient(64, 64))!;
-  expect(hash).toMatch(/^[A-Za-z0-9+/]+$/); // unpadded, standard alphabet
-  expect(Buffer.from(hash, 'base64').toString('base64').replace(/=+$/, '')).toBe(hash);
-  // ThumbHash caps at 100×100 — callers downscale first; a raw over-size input
-  // is refused (null), never a throw that could sink an upload.
-  expect(thumbHashFromRgba(200, 10, gradient(1, 1))).toBeNull();
+  test('produces canonical unpadded base64 and refuses inputs over 100 px', () => {
+    const hash = thumbHashFromRgba(64, 64, gradient(64, 64))!;
+    expect(hash).toMatch(/^[A-Za-z0-9+/]+$/); // unpadded, standard alphabet
+    expect(Buffer.from(hash, 'base64').toString('base64').replace(/=+$/, '')).toBe(hash);
+    // ThumbHash caps at 100×100 — callers downscale first; a raw over-size input
+    // is refused (null), never a throw that could sink an upload.
+    expect(thumbHashFromRgba(200, 10, gradient(1, 1))).toBeNull();
+  });
 });

@@ -66,7 +66,7 @@ export function stopReasonBubble(
     copyText: text,
     feedback: null,
     ...(turnId ? { turnId } : {}),
-    ...(createdAt !== undefined ? { createdAt } : {}),
+    ...(createdAt === undefined ? {} : { createdAt }),
   };
 }
 
@@ -80,11 +80,11 @@ export function usageForItem(item: CentraidAutomationItem): AsstUsageDTO | undef
     return undefined;
   }
   return {
-    ...(item.inputTokens !== undefined ? { inputTokens: item.inputTokens } : {}),
-    ...(item.outputTokens !== undefined ? { outputTokens: item.outputTokens } : {}),
-    ...(item.costUsd !== undefined ? { costUsd: item.costUsd } : {}),
+    ...(item.inputTokens === undefined ? {} : { inputTokens: item.inputTokens }),
+    ...(item.outputTokens === undefined ? {} : { outputTokens: item.outputTokens }),
+    ...(item.costUsd === undefined ? {} : { costUsd: item.costUsd }),
     ...(item.costSource === 'estimated' ? { estimated: true } : {}),
-    ...(item.model !== undefined ? { model: item.model } : {}),
+    ...(item.model === undefined ? {} : { model: item.model }),
   };
 }
 
@@ -228,15 +228,16 @@ export function automationTurnMessages(
             ? 'running…'
             : state === 'error'
               ? (item.error ?? 'failed')
-              : item.durationMs !== undefined
-                ? `${item.durationMs}ms`
-                : 'completed',
+              : item.durationMs === undefined
+                ? 'completed'
+                : `${item.durationMs}ms`,
       };
       const prior = callIndex.get(key);
-      if (prior !== undefined) calls[prior] = call;
-      else {
+      if (prior === undefined) {
         callsAnchor ??= item.itemId;
         callIndex.set(key, calls.push(call) - 1);
+      } else {
+        calls[prior] = call;
       }
       continue;
     }

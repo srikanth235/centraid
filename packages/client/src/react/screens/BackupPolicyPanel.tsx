@@ -146,11 +146,11 @@ export default function BackupPolicyPanel({
             <dd>{destinationLabel(destination)}</dd>
           </div>
         </dl>
-        {!remote ? (
+        {remote ? null : (
           <p className={styles.localWarning}>
             Attachments have no offsite copy until a snapshot reaches remote storage.
           </p>
-        ) : null}
+        )}
       </section>
 
       <section className={styles.policyGroup}>

@@ -170,7 +170,7 @@ END`;
 }
 
 function normalizeSql(sql: string): string {
-  return sql.replaceAll(/\s+/g, ' ').replace(/;$/, '').trim();
+  return sql.replaceAll(/\s+/gu, ' ').replace(/;$/u, '').trim();
 }
 
 function sqliteSchemaVersion(vault: DatabaseSync): number {

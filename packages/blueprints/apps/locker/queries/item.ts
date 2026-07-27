@@ -41,7 +41,13 @@ interface FullRow {
 type SealedField = 'password' | 'otp_seed' | 'card_number' | 'cvv' | 'content';
 const SEALED_FIELDS: SealedField[] = ['password', 'otp_seed', 'card_number', 'cvv', 'content'];
 
-export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: HandlerCtx }) => {
+export default async function itemHandler({
+  input,
+  ctx,
+}: {
+  input?: Record<string, unknown>;
+  ctx: HandlerCtx;
+}) {
   const purpose = 'dpv:ServiceProvision';
   const itemId = String(input?.item_id ?? '');
   if (!itemId) return { item: null };
@@ -103,4 +109,4 @@ export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: Ha
     const e = err as { code?: string; message?: string };
     return { item: null, vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

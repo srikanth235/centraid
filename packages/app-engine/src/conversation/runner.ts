@@ -362,5 +362,5 @@ export interface ConversationRunner {
    *  or the run aborted/errored. Errors are reported via `onEvent`
    *  (type: 'error') AND by rejecting the returned promise — the route
    *  handler relies on the rejection to release the per-session lock. */
-  run(input: ConversationTurnInput): Promise<ConversationTurnResult | void>;
+  run: (input: ConversationTurnInput) => Promise<ConversationTurnResult | void>;
 }

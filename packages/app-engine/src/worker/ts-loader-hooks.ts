@@ -55,7 +55,7 @@ interface LoadResult {
 }
 type NextLoad = (url: string, context: LoadContext) => LoadResult | Promise<LoadResult>;
 
-const TS_URL_RE = /\.tsx?$/;
+const TS_URL_RE = /\.tsx?$/u;
 
 /** Candidate on-disk TS URLs for a relative specifier Node couldn't resolve. */
 function tsCandidates(specifier: string, parentURL: string): string[] {

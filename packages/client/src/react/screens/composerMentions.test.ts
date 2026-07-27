@@ -7,11 +7,11 @@ import {
   slashCommandAt,
 } from './composerMentions.js';
 
-describe('mentionTokenAt', () => {
+describe(mentionTokenAt, () => {
   it('detects an @token at a word boundary', () => {
-    expect(mentionTokenAt('hello @ann', 10)).toEqual({ start: 6, query: 'ann' });
-    expect(mentionTokenAt('@ann', 4)).toEqual({ start: 0, query: 'ann' });
-    expect(mentionTokenAt('(@ann', 5)).toEqual({ start: 1, query: 'ann' });
+    expect(mentionTokenAt('hello @ann', 10)).toStrictEqual({ start: 6, query: 'ann' });
+    expect(mentionTokenAt('@ann', 4)).toStrictEqual({ start: 0, query: 'ann' });
+    expect(mentionTokenAt('(@ann', 5)).toStrictEqual({ start: 1, query: 'ann' });
   });
   it('rejects an @ mid-word, with whitespace, or over length', () => {
     expect(mentionTokenAt('email@x', 7)).toBeNull();
@@ -19,14 +19,14 @@ describe('mentionTokenAt', () => {
     expect(mentionTokenAt(`@${'a'.repeat(41)}`, 42)).toBeNull();
   });
   it('reads only up to the caret', () => {
-    expect(mentionTokenAt('@annie', 3)).toEqual({ start: 0, query: 'an' });
+    expect(mentionTokenAt('@annie', 3)).toStrictEqual({ start: 0, query: 'an' });
   });
 });
 
-describe('slashCommandAt', () => {
+describe(slashCommandAt, () => {
   it('detects a leading /command word', () => {
-    expect(slashCommandAt('/exp', 4)).toEqual({ start: 0, query: 'exp' });
-    expect(slashCommandAt('/', 1)).toEqual({ start: 0, query: '' });
+    expect(slashCommandAt('/exp', 4)).toStrictEqual({ start: 0, query: 'exp' });
+    expect(slashCommandAt('/', 1)).toStrictEqual({ start: 0, query: '' });
   });
   it('ignores a slash that is not first or has a space', () => {
     expect(slashCommandAt('a/b', 3)).toBeNull();
@@ -53,7 +53,7 @@ describe('refString + insertRef', () => {
   });
 });
 
-describe('clearSlash', () => {
+describe(clearSlash, () => {
   it('drops the leading /command up to the caret', () => {
     expect(clearSlash('/export', 7)).toBe('');
   });

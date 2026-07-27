@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { errorText, moduleAvailability, unwrapPopupEnvelope } from './popup-core.js';
 import type { ModuleStatus } from './types.js';
 
-describe('errorText', () => {
+describe(errorText, () => {
   it('prefers Error.message and stringifies otherwise', () => {
     expect(errorText(new Error('nope'))).toBe('nope');
     expect(errorText('string-err')).toBe('string-err');
@@ -10,7 +10,7 @@ describe('errorText', () => {
   });
 });
 
-describe('moduleAvailability', () => {
+describe(moduleAvailability, () => {
   it('enables only granted modules and toggles agenda/people visibility', () => {
     const modules: ModuleStatus[] = [
       { id: 'tasks', name: 'Tasks', state: 'granted' },
@@ -26,9 +26,11 @@ describe('moduleAvailability', () => {
   });
 });
 
-describe('unwrapPopupEnvelope', () => {
+describe(unwrapPopupEnvelope, () => {
   it('returns value or throws with a stable fallback message', () => {
-    expect(unwrapPopupEnvelope({ ok: true, value: { paired: true } })).toEqual({ paired: true });
+    expect(unwrapPopupEnvelope({ ok: true, value: { paired: true } })).toStrictEqual({
+      paired: true,
+    });
     expect(() => unwrapPopupEnvelope({ ok: false, error: 'locked' })).toThrow('locked');
     expect(() => unwrapPopupEnvelope(undefined)).toThrow('Request failed.');
   });

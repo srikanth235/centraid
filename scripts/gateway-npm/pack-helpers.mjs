@@ -159,7 +159,7 @@ export function parseInstallArgs(argv) {
  * @returns {string} Default install prefix path.
  */
 export function defaultInstallPrefix(home) {
-  return `${home.replace(/\/$/, '')}/.centraid`;
+  return `${home.replace(/\/$/u, '')}/.centraid`;
 }
 
 /**
@@ -226,8 +226,8 @@ export function formatPostInstallMessage(opts) {
  */
 export function minNodeMajorFromEngines(enginesNode) {
   if (!enginesNode) return 22;
-  const m = enginesNode.match(/(\d+)/);
-  return m ? Number(m[1]) : 22;
+  const major = enginesNode.match(/(?<major>\d+)/u)?.groups?.major;
+  return major ? Number(major) : 22;
 }
 
 /**
@@ -236,7 +236,7 @@ export function minNodeMajorFromEngines(enginesNode) {
  * @returns {boolean} True when nodeVersion major is >= minMajor.
  */
 export function nodeVersionSatisfies(nodeVersion, minMajor) {
-  const m = nodeVersion.replace(/^v/, '').match(/^(\d+)/);
-  if (!m) return false;
-  return Number(m[1]) >= minMajor;
+  const major = nodeVersion.replace(/^v/u, '').match(/^(?<major>\d+)/u)?.groups?.major;
+  if (!major) return false;
+  return Number(major) >= minMajor;
 }

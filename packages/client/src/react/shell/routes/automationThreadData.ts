@@ -152,7 +152,7 @@ function buildThreadRun(run: CentraidAutomationTurnRecord): ThreadRunDTO {
   return {
     costUsd: run.totalCostUsd ?? null,
     dateGroup: dateGroupLabel(run.startedAt),
-    durationMs: run.endedAt !== undefined ? run.endedAt - run.startedAt : null,
+    durationMs: run.endedAt === undefined ? null : run.endedAt - run.startedAt,
     endedAt: run.endedAt ?? null,
     entryKind: run.triggerKind === 'interactive' ? 'ask' : 'run',
     originLabel: triggerOriginLabel(run).label,
@@ -271,10 +271,10 @@ export async function loadAutomationThreadData(input: {
     triggerSummary: hero.when,
     webhook: hero.webhook,
     entityTags: Array.from(
-      (row.manifest.prompt ?? '').matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g),
+      (row.manifest.prompt ?? '').matchAll(/@\[(?<entityType>[^/\]]+)\/(?<entityId>[^\]]+)\]/gu),
       (match) => ({
-        type: match[1]!,
-        id: match[2]!,
+        type: match.groups?.entityType ?? '',
+        id: match.groups?.entityId ?? '',
       }),
     ),
   };
@@ -317,7 +317,7 @@ export async function decideConsentItem(input: {
       const outcome = await decideOutboxItem({
         decision: input.decision === 'discard' ? 'discard' : 'approve',
         itemId: input.id,
-        ...(input.alwaysAllow !== undefined ? { alwaysAllow: input.alwaysAllow } : {}),
+        ...(input.alwaysAllow === undefined ? {} : { alwaysAllow: input.alwaysAllow }),
       });
       return outcome.status === 'executed';
     }

@@ -36,7 +36,7 @@ export function GridCard({
         className={styles.cardTop}
         style={{ background: `color-mix(in oklab, ${color} 12%, transparent)` }}
       >
-        <KitAvatar name={p.name} size="58px" color={color}></KitAvatar>
+        <KitAvatar name={p.name} size="58px" color={color} />
       </div>
       <button
         type="button"
@@ -69,14 +69,14 @@ export function GridCard({
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="m12 3 2.6 5.6 6 .7-4.5 4.2 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"></path>
+          <path d="m12 3 2.6 5.6 6 .7-4.5 4.2 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z" />
         </svg>
       </button>
       <div className={styles.cardBody}>
         <div className={styles.cardTitle}>{p.name}</div>
         <div className={styles.cardRole}>{p.role || ''}</div>
         <div className={styles.cardMeta}>
-          <span className="kit-dotmini" style={{ background: st.color }}></span>
+          <span className="kit-dotmini" style={{ background: st.color }} />
           {metaLine(p)}
         </div>
       </div>

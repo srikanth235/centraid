@@ -24,7 +24,7 @@ function run(patch: Partial<CentraidAutomationTurnRecord>): CentraidAutomationTu
 // 'manual' / …), which can't tell a cron fire from a data/condition one.
 // This must match automationsData.ts:229-238's mapping exactly (that file is
 // owned by another concurrent change and is not editable from here).
-describe('runOriginLabel', () => {
+describe(runOriginLabel, () => {
   it('prefers triggerOrigin, Title-Cased', () => {
     expect(runOriginLabel(run({ triggerOrigin: 'webhook' }))).toBe('Webhook');
     expect(runOriginLabel(run({ triggerOrigin: 'data' }))).toBe('Data');
@@ -42,7 +42,7 @@ describe('runOriginLabel', () => {
   });
 });
 
-describe('fmtRetention', () => {
+describe(fmtRetention, () => {
   it('formats every HistoryKeep shape', () => {
     expect(fmtRetention('all')).toBe('Keep all runs');
     expect(fmtRetention('errors')).toBe('Keep failed runs only');
@@ -51,7 +51,7 @@ describe('fmtRetention', () => {
   });
 });
 
-describe('relTime', () => {
+describe(relTime, () => {
   it('buckets by age', () => {
     const now = Date.now();
     expect(relTime(now)).toBe('just now');
@@ -61,7 +61,7 @@ describe('relTime', () => {
   });
 });
 
-describe('manifestHasVault', () => {
+describe(manifestHasVault, () => {
   const base: CentraidAutomationManifest = {
     name: 'test',
     version: '0.1.0',
@@ -83,7 +83,7 @@ describe('manifestHasVault', () => {
   });
 });
 
-describe('getVaultBlock', () => {
+describe(getVaultBlock, () => {
   const base: CentraidAutomationManifest = {
     name: 'test',
     version: '0.1.0',
@@ -111,6 +111,6 @@ describe('getVaultBlock', () => {
     const block = getVaultBlock(withVault as CentraidAutomationManifest);
     expect(block?.purpose).toBe('dpv:ServiceProvision');
     expect(block?.why).toBe('Reads invoice status.');
-    expect(block?.scopes).toEqual([{ schema: 'business', table: 'invoice', verbs: 'read' }]);
+    expect(block?.scopes).toStrictEqual([{ schema: 'business', table: 'invoice', verbs: 'read' }]);
   });
 });

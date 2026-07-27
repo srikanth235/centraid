@@ -101,7 +101,7 @@ describe('Docs device-side PDF text', () => {
     Reflect.deleteProperty(Promise, 'try');
     try {
       const pdfjs = await loadPdfJs();
-      expect(typeof Reflect.get(Promise, 'try')).toBe('function');
+      expect(Reflect.get(Promise, 'try')).toBeTypeOf('function');
       // Pinned on purpose: proves the real client-bundled runtime loaded rather
       // than a stub. Bump in lockstep with the `pdfjs-dist` dependency.
       expect(pdfjs.version).toBe('6.1.200');

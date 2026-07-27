@@ -15,7 +15,7 @@ interface RawPolicy {
   tier?: string;
 }
 
-export default async ({ ctx }: HandlerArgs) => {
+export default async function enrichmentStatus({ ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   try {
     const result = await ctx.vault.read({
@@ -32,4 +32,4 @@ export default async ({ ctx }: HandlerArgs) => {
     }
     return { tier: null, error: String(e.message ?? err) };
   }
-};
+}

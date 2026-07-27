@@ -114,7 +114,7 @@ export class S3BlobStore implements BlobStore {
 
   private keyFor(sha: string): string {
     assertSha(sha);
-    const prefix = this.options.prefix ? this.options.prefix.replace(/\/+$/, '') + '/' : '';
+    const prefix = this.options.prefix ? this.options.prefix.replace(/\/+$/u, '') + '/' : '';
     return `${prefix}blobs/sha256/${sha}`;
   }
 
@@ -299,14 +299,15 @@ export class S3BlobStore implements BlobStore {
       const res = await this.send('GET', '', { query });
       if (!res.ok) throw new Error(`s3 list: ${res.status} ${await res.text()}`);
       const xml = await res.text();
-      for (const m of xml.matchAll(/<Key>([^<]+)<\/Key>/g)) {
-        const sha = (m[1] ?? '').slice(prefix.length);
-        if (/^[0-9a-f]{64}$/.test(sha)) shas.push(sha);
+      for (const m of xml.matchAll(/<Key>(?<key>[^<]+)<\/Key>/gu)) {
+        const sha = (m.groups?.key ?? '').slice(prefix.length);
+        if (/^[0-9a-f]{64}$/u.test(sha)) shas.push(sha);
       }
-      const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
-      token = truncated
-        ? /<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(xml)?.[1]
-        : undefined;
+      const truncated = /<IsTruncated>true<\/IsTruncated>/u.test(xml);
+      const tokenMatch = /<NextContinuationToken>(?<token>[^<]+)<\/NextContinuationToken>/u.exec(
+        xml,
+      );
+      token = truncated ? tokenMatch?.groups?.token : undefined;
     } while (token);
     return shas.sort();
   }

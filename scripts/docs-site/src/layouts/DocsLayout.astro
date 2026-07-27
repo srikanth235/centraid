@@ -46,7 +46,7 @@ const asset = (path) => {
   const v = assetHash(path);
   return `${base}${path}${v ? `?v=${v}` : ''}`;
 };
-const pageName = title.replace(/\s+[—-]\s+Centraid docs.*$/, '').trim();
+const pageName = title.replace(/\s+[—-]\s+Centraid docs.*$/u, '').trim();
 const pageLabel = searchLabel ?? pageName;
 const breadcrumbItems = [
   { name: 'Centraid', url: 'https://centraid.dev/' },

@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { applyAppVisualIdentity, stampAppVisualIdentity } from './app-rewrites.js';
 
-describe('applyAppVisualIdentity', () => {
+describe(applyAppVisualIdentity, () => {
   const manifest = (extra: Record<string, unknown> = {}): string =>
     JSON.stringify({ id: 'hydrate', name: 'Hydrate', version: '0.1.0', ...extra }, null, 2) + '\n';
 
@@ -36,11 +36,11 @@ describe('applyAppVisualIdentity', () => {
   });
 
   it('returns null on unparseable input', () => {
-    expect(applyAppVisualIdentity('not json', { iconKey: 'Water' })).toBe(null);
+    expect(applyAppVisualIdentity('not json', { iconKey: 'Water' })).toBeNull();
   });
 });
 
-describe('stampAppVisualIdentity', () => {
+describe(stampAppVisualIdentity, () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -66,6 +66,6 @@ describe('stampAppVisualIdentity', () => {
 
   it('is a no-op when app.json is missing', async () => {
     await stampAppVisualIdentity(dir, { iconKey: 'Water' });
-    await expect(fs.access(path.join(dir, 'app.json'))).rejects.toThrow();
+    await expect(fs.access(path.join(dir, 'app.json'))).rejects.toThrow(/ENOENT/);
   });
 });

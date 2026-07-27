@@ -9,7 +9,6 @@ import { promises as fs } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { daemonLayoutFor } from './paths.js';
 import { resolveDaemonConfig } from './resolve-config.js';
 import {
@@ -85,8 +84,8 @@ function parseServiceArgs(args: string[], fail: Fail): ServiceArgs {
  *  correct whether invoked via the `centraid-gateway` bin, `node dist/cli/cli.js`,
  *  or a dev `tsx` run. */
 function resolveCliEntry(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const ext = path.extname(fileURLToPath(import.meta.url));
+  const here = import.meta.dirname;
+  const ext = path.extname(import.meta.filename);
   return path.join(here, `cli${ext}`);
 }
 
@@ -298,8 +297,8 @@ export interface ServiceStatusInfo {
 function launchdStatusInfo(label: string, fail: Fail): ServiceStatusInfo {
   const { code, output } = run(fail, 'launchctl', ['print', `${guiTarget()}/${label}`]);
   if (code !== 0) return { label, installed: false };
-  const state = output.match(/state\s*=\s*(\S+)/)?.[1];
-  const pid = output.match(/\bpid\s*=\s*(\d+)/)?.[1];
+  const state = output.match(/state\s*=\s*(?<state>\S+)/u)?.groups?.state;
+  const pid = output.match(/\bpid\s*=\s*(?<pid>\d+)/u)?.groups?.pid;
   return {
     label,
     installed: true,
@@ -372,8 +371,8 @@ function launchdStatus(parsed: ServiceArgs, fail: Fail): void {
     process.stdout.write(`${JSON.stringify({ label, installed: false })}\n`);
     return;
   }
-  const state = output.match(/state\s*=\s*(\S+)/)?.[1];
-  const pid = output.match(/\bpid\s*=\s*(\d+)/)?.[1];
+  const state = output.match(/state\s*=\s*(?<state>\S+)/u)?.groups?.state;
+  const pid = output.match(/\bpid\s*=\s*(?<pid>\d+)/u)?.groups?.pid;
   process.stdout.write(
     `${JSON.stringify({
       label,

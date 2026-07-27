@@ -5,9 +5,10 @@ import { replaySettledUploadFollowups } from './followup';
 import type { UploadQueue } from './native-queue';
 import type { UploadFollowup } from './store';
 
-vi.mock('./derivatives-native', () => ({
-  contributeDeviceDerivatives: vi.fn(),
-  cleanupDeviceDerivatives: vi.fn(),
+vi.mock(import('./derivatives-native'), () => ({
+  contributeDeviceDerivatives:
+    vi.fn<typeof import('./derivatives-native').contributeDeviceDerivatives>(),
+  cleanupDeviceDerivatives: vi.fn<typeof import('./derivatives-native').cleanupDeviceDerivatives>(),
 }));
 
 function followupOf(overrides: Partial<UploadFollowup> = {}): UploadFollowup {
@@ -86,14 +87,16 @@ describe('settled upload follow-ups', () => {
     // The kill lands on the FIRST clear; the record is not cleared, so the next
     // pass replays the same intent (idempotent) rather than losing the work.
     await replaySettledUploadFollowups(queue, session, 'http://gateway');
-    await expect(replaySettledUploadFollowups(queue, session, 'http://gateway')).resolves.toEqual({
+    await expect(
+      replaySettledUploadFollowups(queue, session, 'http://gateway'),
+    ).resolves.toStrictEqual({
       replayed: 1,
       poisoned: 0,
     });
 
-    expect(writes).toEqual([followup.intentId, followup.intentId]);
+    expect(writes).toStrictEqual([followup.intentId, followup.intentId]);
     expect(createdDocuments.size, 'the canonical document is created once').toBe(1);
-    expect(pending).toEqual([]);
+    expect(pending).toStrictEqual([]);
   });
 
   it('isolates a poison-payload follow-up so the rest still replay (F4)', async () => {
@@ -113,8 +116,8 @@ describe('settled upload follow-ups', () => {
       last = await replaySettledUploadFollowups(queue, session, 'http://gateway');
     }
 
-    expect(writes, 'the healthy record replayed exactly once').toEqual(['good']);
-    expect(poisoned).toEqual([{ id: 1, reason: expect.stringMatching(/staged_sha/) }]);
+    expect(writes, 'the healthy record replayed exactly once').toStrictEqual(['good']);
+    expect(poisoned).toStrictEqual([{ id: 1, reason: expect.stringMatching(/staged_sha/) }]);
     expect(last.poisoned).toBe(1);
   });
 
@@ -130,6 +133,6 @@ describe('settled upload follow-ups', () => {
     for (let pass = 0; pass < 5; pass += 1) {
       await replaySettledUploadFollowups(queue, session, 'http://gateway');
     }
-    expect(poisoned).toEqual([{ id: 1, reason: expect.stringMatching(/replica rejected/) }]);
+    expect(poisoned).toStrictEqual([{ id: 1, reason: expect.stringMatching(/replica rejected/) }]);
   });
 });

@@ -43,10 +43,20 @@ interface ParsedRule {
 export function parseIcalInstant(value: string): number | undefined {
   const direct = Date.parse(value);
   if (!Number.isNaN(direct)) return direct;
-  const match = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?Z?$/.exec(value.trim());
+  const match =
+    /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})(?:T(?<hour>\d{2})(?<minute>\d{2})(?<second>\d{2}))?Z?$/u.exec(
+      value.trim(),
+    );
   if (!match) return undefined;
-  const [, y, mo, d, hh = '00', mm = '00', ss = '00'] = match;
-  const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm), Number(ss));
+  const g: Record<string, string | undefined> = match.groups ?? {};
+  const ms = Date.UTC(
+    Number(g.year),
+    Number(g.month) - 1,
+    Number(g.day),
+    Number(g.hour ?? '00'),
+    Number(g.minute ?? '00'),
+    Number(g.second ?? '00'),
+  );
   return Number.isNaN(ms) ? undefined : ms;
 }
 
@@ -79,7 +89,7 @@ export function parseRule(value: string): ParsedRule | undefined {
     freq,
     interval,
     ...(count ? { count } : {}),
-    ...(until !== undefined ? { until } : {}),
+    ...(until === undefined ? {} : { until }),
     ...(byDay && byDay.length > 0 ? { byDay } : {}),
   };
 }

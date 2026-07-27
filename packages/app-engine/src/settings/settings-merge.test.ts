@@ -1,32 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import { buildSettingsInject } from './settings-merge.js';
 
-describe('buildSettingsInject', () => {
+describe(buildSettingsInject, () => {
   it('routes known keys to the right bucket', () => {
     const out = buildSettingsInject([{ theme: 'dark', bgL: 5, density: 'comfy' }]);
-    expect(out.dataAttrs).toEqual({ theme: 'dark', density: 'comfy' });
-    expect(out.cssVars).toEqual({ 'bg-l': '5%' });
+    expect(out.dataAttrs).toStrictEqual({ theme: 'dark', density: 'comfy' });
+    expect(out.cssVars).toStrictEqual({ 'bg-l': '5%' });
   });
 
   it('drops unknown keys silently', () => {
     const out = buildSettingsInject([{ theme: 'dark', somethingElse: 'value' }]);
-    expect(out.dataAttrs).toEqual({ theme: 'dark' });
-    expect(out.cssVars).toEqual({});
+    expect(out.dataAttrs).toStrictEqual({ theme: 'dark' });
+    expect(out.cssVars).toStrictEqual({});
   });
 
   it('coerces booleans for coolCast', () => {
-    expect(buildSettingsInject([{ coolCast: true }]).dataAttrs).toEqual({ 'cool-cast': 'on' });
-    expect(buildSettingsInject([{ coolCast: false }]).dataAttrs).toEqual({ 'cool-cast': 'off' });
+    expect(buildSettingsInject([{ coolCast: true }]).dataAttrs).toStrictEqual({
+      'cool-cast': 'on',
+    });
+    expect(buildSettingsInject([{ coolCast: false }]).dataAttrs).toStrictEqual({
+      'cool-cast': 'off',
+    });
   });
 
   it('coerces numeric bgL into a percentage string', () => {
-    expect(buildSettingsInject([{ bgL: 12 }]).cssVars).toEqual({ 'bg-l': '12%' });
-    expect(buildSettingsInject([{ bgL: '7' }]).cssVars).toEqual({ 'bg-l': '7%' });
+    expect(buildSettingsInject([{ bgL: 12 }]).cssVars).toStrictEqual({ 'bg-l': '12%' });
+    expect(buildSettingsInject([{ bgL: '7' }]).cssVars).toStrictEqual({ 'bg-l': '7%' });
   });
 
   it('drops invalid bgL values', () => {
-    expect(buildSettingsInject([{ bgL: 'abc' }]).cssVars).toEqual({});
-    expect(buildSettingsInject([{ bgL: NaN }]).cssVars).toEqual({});
+    expect(buildSettingsInject([{ bgL: 'abc' }]).cssVars).toStrictEqual({});
+    expect(buildSettingsInject([{ bgL: NaN }]).cssVars).toStrictEqual({});
   });
 
   it('layers later wins, undefined/null falls through', () => {
@@ -49,8 +53,8 @@ describe('buildSettingsInject', () => {
 
   it('empty layers produce empty result', () => {
     const out = buildSettingsInject([]);
-    expect(out.dataAttrs).toEqual({});
-    expect(out.cssVars).toEqual({});
+    expect(out.dataAttrs).toStrictEqual({});
+    expect(out.cssVars).toStrictEqual({});
   });
 
   it('skips undefined layer entries', () => {
@@ -62,22 +66,22 @@ describe('buildSettingsInject', () => {
     const out = buildSettingsInject([
       { appFont: 'serif', appWidth: 'wide', appCornerRadius: 'pill' },
     ]);
-    expect(out.dataAttrs).toEqual({
+    expect(out.dataAttrs).toStrictEqual({
       'app-font': 'serif',
       'app-width': 'wide',
       'app-corner-radius': 'pill',
     });
-    expect(out.cssVars).toEqual({});
+    expect(out.cssVars).toStrictEqual({});
   });
 
   it('routes Color/Accent-suffixed app keys to CSS vars', () => {
     const out = buildSettingsInject([{ appColor: '#5847e0', appAccent: '#2EA098' }]);
-    expect(out.cssVars).toEqual({ 'app-color': '#5847e0', 'app-accent': '#2EA098' });
-    expect(out.dataAttrs).toEqual({});
+    expect(out.cssVars).toStrictEqual({ 'app-color': '#5847e0', 'app-accent': '#2EA098' });
+    expect(out.dataAttrs).toStrictEqual({});
   });
 
   it('ignores bare `app` and `apps` (not the namespace prefix)', () => {
     const out = buildSettingsInject([{ app: 'x', apps: 'y', appFoo: 'z' }]);
-    expect(out.dataAttrs).toEqual({ 'app-foo': 'z' });
+    expect(out.dataAttrs).toStrictEqual({ 'app-foo': 'z' });
   });
 });

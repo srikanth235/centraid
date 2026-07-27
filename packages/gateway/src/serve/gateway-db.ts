@@ -337,7 +337,7 @@ function installGatewaySchema(db: DatabaseSync): void {
 function isBusy(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const code = (error as Error & { code?: string }).code;
-  return code === 'ERR_SQLITE_ERROR' && /busy|locked/i.test(error.message);
+  return code === 'ERR_SQLITE_ERROR' && /busy|locked/iu.test(error.message);
 }
 
 /** Remote filesystem names as BSD `statfs.f_fstypename` reports them. */
@@ -359,9 +359,9 @@ export function parseDarwinFileSystemType(mountOutput: string, root: string): st
   // `mount` lines read: `<source> on <mount point> (<fstype>, <opts…>)`.
   let best: { mountPoint: string; type: string } | undefined;
   for (const line of mountOutput.split('\n')) {
-    const match = /^.* on (.+) \(([^,)]+)[,)]/.exec(line.trim());
-    const mountPoint = match?.[1];
-    const type = match?.[2];
+    const match = /^.* on (?<mountPoint>.+) \((?<type>[^,)]+)[,)]/u.exec(line.trim());
+    const mountPoint = match?.groups?.mountPoint;
+    const type = match?.groups?.type;
     if (!mountPoint || !type) continue;
     const contains =
       root === mountPoint || root.startsWith(mountPoint === '/' ? '/' : `${mountPoint}${path.sep}`);

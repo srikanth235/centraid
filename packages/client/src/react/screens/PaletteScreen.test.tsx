@@ -46,83 +46,85 @@ function makeProps(over: Partial<PaletteBridgeProps> = {}): PaletteBridgeProps {
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
-afterEach(() => {
-  act(() => root?.unmount());
-  root = null;
-  container?.remove();
-  container = null;
-  vi.clearAllMocks();
-});
-function mount(props: PaletteBridgeProps): HTMLDivElement {
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  act(() => {
-    root = createRoot(container as HTMLDivElement);
-    root.render(<PaletteScreen {...props} />);
+describe('screens/PaletteScreen', () => {
+  afterEach(() => {
+    act(() => root?.unmount());
+    root = null;
+    container?.remove();
+    container = null;
+    vi.clearAllMocks();
   });
-  return container;
-}
-
-const rows = (el: HTMLElement): HTMLButtonElement[] =>
-  [...el.querySelectorAll('.row')] as HTMLButtonElement[];
-
-describe('PaletteScreen', () => {
-  it('renders grouped rows with the first row active', () => {
-    const el = mount(makeProps());
-    expect(el.querySelectorAll('.group').length).toBe(2);
-    expect(rows(el).length).toBe(3);
-    expect(rows(el)[0]?.dataset.active).toBe('true');
-    // app-variant row carries the gradient tile + injected icon svg
-    expect(el.querySelector('.rowTile')).toBeTruthy();
-    expect(el.querySelector('.rowTile svg')).toBeTruthy();
-  });
-
-  it('moves the active row with ArrowDown and runs it on Enter', () => {
-    const el = mount(makeProps());
-    const input = el.querySelector('.input') as HTMLInputElement;
-    void act(() =>
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })),
-    );
-    expect(rows(el)[1]?.dataset.active).toBe('true');
-    void act(() =>
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
-    );
-    expect(browseRun).toHaveBeenCalledTimes(1);
-    expect(buildRun).not.toHaveBeenCalled();
-  });
-
-  it('runs a row on click', () => {
-    const el = mount(makeProps());
-    void act(() => rows(el)[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(appRun).toHaveBeenCalledTimes(1);
-  });
-
-  it('recomputes groups from the query and passes it to buildGroups', () => {
-    const props = makeProps();
-    const el = mount(props);
-    const input = el.querySelector('.input') as HTMLInputElement;
-    const setter = Object.getOwnPropertyDescriptor(
-      globalThis.HTMLInputElement.prototype,
-      'value',
-    )?.set;
+  function mount(props: PaletteBridgeProps): HTMLDivElement {
+    container = document.createElement('div');
+    document.body.appendChild(container);
     act(() => {
-      setter?.call(input, 'notes');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
+      root = createRoot(container as HTMLDivElement);
+      root.render(<PaletteScreen {...props} />);
     });
-    expect(props.buildGroups).toHaveBeenCalledWith('notes');
-    expect(el.textContent).toContain('Build notes');
-  });
+    return container;
+  }
 
-  it('closes on Escape and on backdrop click', () => {
-    const props = makeProps();
-    const el = mount(props);
-    const input = el.querySelector('.input') as HTMLInputElement;
-    void act(() =>
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
-    );
-    expect(props.onClose).toHaveBeenCalledTimes(1);
-    const backdrop = el.querySelector('.backdrop') as HTMLElement;
-    void act(() => backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onClose).toHaveBeenCalledTimes(2);
+  const rows = (el: HTMLElement): HTMLButtonElement[] =>
+    [...el.querySelectorAll('.row')] as HTMLButtonElement[];
+
+  describe(PaletteScreen, () => {
+    it('renders grouped rows with the first row active', () => {
+      const el = mount(makeProps());
+      expect(el.querySelectorAll('.group')).toHaveLength(2);
+      expect(rows(el)).toHaveLength(3);
+      expect(rows(el)[0]?.dataset.active).toBe('true');
+      // app-variant row carries the gradient tile + injected icon svg
+      expect(el.querySelector('.rowTile')).toBeTruthy();
+      expect(el.querySelector('.rowTile svg')).toBeTruthy();
+    });
+
+    it('moves the active row with ArrowDown and runs it on Enter', () => {
+      const el = mount(makeProps());
+      const input = el.querySelector('.input') as HTMLInputElement;
+      void act(() =>
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })),
+      );
+      expect(rows(el)[1]?.dataset.active).toBe('true');
+      void act(() =>
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+      );
+      expect(browseRun).toHaveBeenCalledOnce();
+      expect(buildRun).not.toHaveBeenCalled();
+    });
+
+    it('runs a row on click', () => {
+      const el = mount(makeProps());
+      void act(() => rows(el)[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(appRun).toHaveBeenCalledOnce();
+    });
+
+    it('recomputes groups from the query and passes it to buildGroups', () => {
+      const props = makeProps();
+      const el = mount(props);
+      const input = el.querySelector('.input') as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(
+        globalThis.HTMLInputElement.prototype,
+        'value',
+      )?.set;
+      act(() => {
+        setter?.call(input, 'notes');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      expect(props.buildGroups).toHaveBeenCalledWith('notes');
+      expect(el.textContent).toContain('Build notes');
+    });
+
+    it('closes on Escape and on backdrop click', () => {
+      const props = makeProps();
+      const el = mount(props);
+      const input = el.querySelector('.input') as HTMLInputElement;
+      void act(() =>
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+      );
+      expect(props.onClose).toHaveBeenCalledOnce();
+      const backdrop = el.querySelector('.backdrop') as HTMLElement;
+      void act(() => backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(props.onClose).toHaveBeenCalledTimes(2);
+    });
   });
 });

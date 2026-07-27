@@ -1291,7 +1291,7 @@ export default function SettingsConnectionsScreen({
       </section>
 
       {/* Detail / picker sheet */}
-      {sheet.kind !== 'closed' ? (
+      {sheet.kind === 'closed' ? null : (
         <div
           className={styles.backdrop}
           role="presentation"
@@ -1635,7 +1635,7 @@ export default function SettingsConnectionsScreen({
             )}
           </dialog>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

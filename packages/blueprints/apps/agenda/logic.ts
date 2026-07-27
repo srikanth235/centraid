@@ -22,7 +22,7 @@ interface LogicDeps {
 
 export function createLogic({ state, data, render, refresh }: LogicDeps) {
   function notice(text: string): void {
-    const el = document.getElementById('noticeBanner');
+    const el = document.querySelector<HTMLElement>('#noticeBanner');
     if (!el) return;
     el.textContent = text;
     (el as HTMLElement).hidden = !text;
@@ -98,7 +98,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       return await window.centraid.write({
         action,
         input,
-        ...(optimistic !== undefined ? { optimistic } : {}),
+        ...(optimistic === undefined ? {} : { optimistic }),
       });
     } catch (err) {
       notice(String((err as { message?: string })?.message ?? err));

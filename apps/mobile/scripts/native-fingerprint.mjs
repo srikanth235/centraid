@@ -23,8 +23,7 @@
  * to stdout with no trailing newline, suitable for `>> "$GITHUB_OUTPUT"`.
  */
 import { createFingerprintAsync } from '@expo/fingerprint';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 const platform = process.argv[2];
 if (platform !== 'ios' && platform !== 'android') {
@@ -35,7 +34,7 @@ if (platform !== 'ios' && platform !== 'android') {
 // scripts/ → apps/mobile. Resolve relative to this file, not cwd: gradle and
 // the monorepo root both invoke Expo tooling from different cwds (see the same
 // note in app.config.ts).
-const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const projectRoot = resolve(import.meta.dirname, '..');
 
 const fingerprint = await createFingerprintAsync(projectRoot, { platforms: [platform] });
 // Guard against a silent empty digest becoming a constant (always-hit) key.

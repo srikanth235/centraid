@@ -286,7 +286,7 @@ export async function ensureTunnelStarted(): Promise<{ baseUrl: string } | undef
 }
 
 /** Status subscription passthrough — no-op remover when the module is unavailable. */
-export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): { remove(): void } {
+export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): { remove: () => void } {
   if (!isTunnelAvailable()) {
     return {
       remove: () => {

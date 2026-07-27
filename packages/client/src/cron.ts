@@ -138,7 +138,7 @@ export function cronFieldMatch(
     if (part !== '*' && part !== '?' && part !== '') {
       const resolve = (t: string): number => {
         const named = names[t.trim().toUpperCase()];
-        return named !== undefined ? named : parseInt(t, 10);
+        return named === undefined ? parseInt(t, 10) : named;
       };
       if (part.includes('-')) {
         const [a, b] = part.split('-');
@@ -194,7 +194,7 @@ export function cronNextRuns(
   from: Date = new Date(),
   timeZone?: string,
 ): Date[] {
-  const f = expr.trim().split(/\s+/);
+  const f = expr.trim().split(/\s+/u);
   if (f.length !== 5) return [];
   const [minF, hourF, domF, monF, dowF] = f as [string, string, string, string, string];
   const out: Date[] = [];
@@ -247,7 +247,7 @@ export function cronNextRuns(
  * gloss when provided so the preview does not look local when it is not.
  */
 export function describeCron(expr: string, timeZone?: string): string {
-  const t = expr.trim().replace(/\s+/g, ' ');
+  const t = expr.trim().replace(/\s+/gu, ' ');
   const zoneSuffix = timeZone ? ` (${shortTimeZoneName(timeZone)})` : '';
   const known: Record<string, string> = {
     '0 9 * * *': `Every day at 09:00${zoneSuffix}`,
@@ -265,8 +265,8 @@ export function describeCron(expr: string, timeZone?: string): string {
   const pad2 = (n: string): string => n.padStart(2, '0');
   if (f.length === 5) {
     if (
-      /^\d+$/.test(f[0]!) &&
-      /^\d+$/.test(f[1]!) &&
+      /^\d+$/u.test(f[0]!) &&
+      /^\d+$/u.test(f[1]!) &&
       f[2] === '*' &&
       f[3] === '*' &&
       f[4] === '*'
@@ -276,7 +276,7 @@ export function describeCron(expr: string, timeZone?: string): string {
     if (f[0]!.startsWith('*/') && f.slice(1).every((x) => x === '*')) {
       return `Every ${f[0]!.slice(2)} minutes`;
     }
-    if (/^\d+$/.test(f[0]!) && f.slice(1).every((x) => x === '*')) {
+    if (/^\d+$/u.test(f[0]!) && f.slice(1).every((x) => x === '*')) {
       return `Every hour at :${pad2(f[0]!)}`;
     }
   }
@@ -297,7 +297,7 @@ export function shortTimeZoneName(timeZone: string, at: Date = new Date()): stri
   }
   // Prefer the city tail of an IANA name over the full path.
   const slash = timeZone.lastIndexOf('/');
-  return slash >= 0 ? timeZone.slice(slash + 1).replace(/_/g, ' ') : timeZone;
+  return slash >= 0 ? timeZone.slice(slash + 1).replace(/_/gu, ' ') : timeZone;
 }
 
 /**

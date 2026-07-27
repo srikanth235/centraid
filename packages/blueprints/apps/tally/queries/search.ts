@@ -6,7 +6,7 @@
 
 import { ledgerRow, loadTally } from './dashboard.ts';
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function search({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const term = String(input?.term ?? '')
     .trim()
@@ -32,4 +32,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

@@ -38,8 +38,8 @@ describe('replica intent generated-payload property', () => {
           action: 'create',
           input: structuredClone(input),
         });
-        expect(replay).toEqual(first);
-        expect(await queue.list()).toHaveLength(1);
+        expect(replay).toStrictEqual(first);
+        await expect(queue.list()).resolves.toHaveLength(1);
         await expect(
           queue.enqueue({
             intentId,
@@ -73,7 +73,7 @@ describe('replica intent generated-payload property', () => {
         });
         expect(a.intentId).toBe(idA);
         expect(b.intentId).toBe(idB);
-        expect(await queue.list()).toHaveLength(2);
+        await expect(queue.list()).resolves.toHaveLength(2);
         queue.close();
       }),
       { numRuns: 32, seed: 53222 },
@@ -97,9 +97,9 @@ describe('replica intent generated-payload property', () => {
             action: 'create',
             input: structuredClone(input),
           });
-          expect(again).toEqual(first);
+          expect(again).toStrictEqual(first);
         }
-        expect(await queue.list()).toHaveLength(1);
+        await expect(queue.list()).resolves.toHaveLength(1);
         queue.close();
       }),
       { numRuns: 24, seed: 53223 },
@@ -181,7 +181,7 @@ describe('replica intent generated-payload property', () => {
               input: { ...input, title: `${input.title}-${intentId}` },
             });
           }
-          expect(await queue.list()).toHaveLength(ids.length);
+          await expect(queue.list()).resolves.toHaveLength(ids.length);
           queue.close();
         },
       ),
@@ -220,9 +220,9 @@ describe('replica intent generated-payload property', () => {
     await fc.assert(
       fc.asyncProperty(intentIdArb, payloadArb, async (intentId, input) => {
         const queue = new IntentQueue(new MemoryIntentStore());
-        expect(await queue.list()).toHaveLength(0);
+        await expect(queue.list()).resolves.toHaveLength(0);
         await queue.enqueue({ intentId, appId: 'notes', action: 'create', input });
-        expect(await queue.list()).toHaveLength(1);
+        await expect(queue.list()).resolves.toHaveLength(1);
         queue.close();
       }),
       { numRuns: 16, seed: 53229 },
@@ -245,7 +245,7 @@ describe('replica intent generated-payload property', () => {
           action: 'create',
           input: structuredClone(input),
         });
-        expect(second).toEqual(first);
+        expect(second).toStrictEqual(first);
         queue.close();
       }),
       { numRuns: 20, seed: 53230 },

@@ -126,8 +126,9 @@ async function local() {
 
 if (args.includes('--local')) await local();
 else if (args.includes('--serve')) await serve();
-else if (flag('--dial') !== undefined) await dial(flag('--dial'));
-else {
+else if (flag('--dial') === undefined) {
   log('usage: spike-pipe.mjs --local | --serve [--upstream URL --token T] | --dial <payload>');
   process.exit(2);
+} else {
+  await dial(flag('--dial'));
 }

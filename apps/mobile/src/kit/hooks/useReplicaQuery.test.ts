@@ -4,7 +4,7 @@ import { mapReplicaRows } from './useReplicaQuery';
 
 // The hook drags in the ReplicaProvider's native module chain (op-sqlite,
 // expo-network); stub it so the pure mapper can be exercised under node.
-vi.mock('../replica/ReplicaProvider', () => ({
+vi.mock(import('../replica/ReplicaProvider'), () => ({
   useReplica: () => ({ ready: false, online: false }),
 }));
 
@@ -12,7 +12,7 @@ const wire = (
   rows: Array<{ rowId: string; values: Record<string, unknown> }>,
 ): ReplicaReadWireResult => ({ rows }) as unknown as ReplicaReadWireResult;
 
-describe('mapReplicaRows', () => {
+describe(mapReplicaRows, () => {
   test('projects values with the row id and preserves order', () => {
     const mapped = mapReplicaRows(
       wire([
@@ -20,15 +20,15 @@ describe('mapReplicaRows', () => {
         { rowId: 'r2', values: { title: 'B' } },
       ]),
     );
-    expect(mapped).toEqual([
+    expect(mapped).toStrictEqual([
       { title: 'A', __rowId: 'r1' },
       { title: 'B', __rowId: 'r2' },
     ]);
   });
 
   test('empty and undefined results both yield an empty array', () => {
-    expect(mapReplicaRows(undefined)).toEqual([]);
-    expect(mapReplicaRows(wire([]))).toEqual([]);
+    expect(mapReplicaRows(undefined)).toStrictEqual([]);
+    expect(mapReplicaRows(wire([]))).toStrictEqual([]);
   });
 
   test('is a pure transform of the underlying result — the memo identity anchor', () => {
@@ -39,7 +39,7 @@ describe('mapReplicaRows', () => {
     const first = mapReplicaRows(result);
     const second = mapReplicaRows(result);
     expect(first).not.toBe(second);
-    expect(first).toEqual(second);
+    expect(first).toStrictEqual(second);
     expect(result.rows).toHaveLength(1);
   });
 });

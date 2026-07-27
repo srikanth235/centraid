@@ -101,12 +101,12 @@ function mapCursor(row: CursorRow): AutomationTriggerCursor {
     automationId: row.automation_id,
     triggerIndex: row.trigger_index,
     sourceKind: row.source_kind,
-    ...(row.position_json !== null ? { positionJson: row.position_json } : {}),
-    ...(row.pending_json !== null ? { pendingJson: row.pending_json } : {}),
-    ...(row.window_from !== null ? { windowFrom: row.window_from } : {}),
-    ...(row.window_to !== null ? { windowTo: row.window_to } : {}),
+    ...(row.position_json === null ? {} : { positionJson: row.position_json }),
+    ...(row.pending_json === null ? {} : { pendingJson: row.pending_json }),
+    ...(row.window_from === null ? {} : { windowFrom: row.window_from }),
+    ...(row.window_to === null ? {} : { windowTo: row.window_to }),
     skipped: row.skipped,
-    ...(row.gap_reason !== null ? { gapReason: row.gap_reason } : {}),
+    ...(row.gap_reason === null ? {} : { gapReason: row.gap_reason }),
     updatedAt: row.updated_at,
   };
 }
@@ -118,8 +118,8 @@ function mapIngress(row: IngressRow): TriggerIngressRecord {
     sourceKey: row.source_key,
     deliveryId: row.delivery_id,
     receivedAt: row.received_at,
-    ...(row.payload_json !== null ? { payloadJson: row.payload_json } : {}),
-    ...(row.payload_ref !== null ? { payloadRef: row.payload_ref } : {}),
+    ...(row.payload_json === null ? {} : { payloadJson: row.payload_json }),
+    ...(row.payload_ref === null ? {} : { payloadRef: row.payload_ref }),
     expiresAt: row.expires_at,
   };
 }
@@ -269,7 +269,7 @@ export class AutomationTriggerStore {
       .get(sourceKey, afterId) as unknown as { count: number; latest_id: number | null };
     return {
       count: Number(row.count),
-      ...(row.latest_id !== null ? { latestId: Number(row.latest_id) } : {}),
+      ...(row.latest_id === null ? {} : { latestId: Number(row.latest_id) }),
     };
   }
 

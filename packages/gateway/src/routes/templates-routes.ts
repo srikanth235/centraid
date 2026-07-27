@@ -179,12 +179,12 @@ export function makeTemplatesRouteHandler(
         // that surface permanently empty. Pass it through, plus the
         // automation-only display fields the gallery card renders. All are
         // conditional so app templates stay lean.
-        ...(t.kind !== undefined ? { kind: t.kind } : {}),
-        ...(t.emoji !== undefined ? { emoji: t.emoji } : {}),
-        ...(t.category !== undefined ? { category: t.category } : {}),
-        ...(t.triggerKind !== undefined ? { triggerKind: t.triggerKind } : {}),
-        ...(t.triggerLabel !== undefined ? { triggerLabel: t.triggerLabel } : {}),
-        ...(t.integrations !== undefined ? { integrations: t.integrations } : {}),
+        ...(t.kind === undefined ? {} : { kind: t.kind }),
+        ...(t.emoji === undefined ? {} : { emoji: t.emoji }),
+        ...(t.category === undefined ? {} : { category: t.category }),
+        ...(t.triggerKind === undefined ? {} : { triggerKind: t.triggerKind }),
+        ...(t.triggerLabel === undefined ? {} : { triggerLabel: t.triggerLabel }),
+        ...(t.integrations === undefined ? {} : { integrations: t.integrations }),
       })),
     );
     return true;

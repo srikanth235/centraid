@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 
-const script = fileURLToPath(import.meta.url);
+const script = import.meta.filename;
 
 async function probeCurrentRuntime() {
   const runtime = typeof Bun === 'undefined' ? 'node' : 'bun';

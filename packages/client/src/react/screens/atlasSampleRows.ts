@@ -89,7 +89,7 @@ const PREFERRED_NAME_PARTS = [
 
 /** A column whose name reads as an identifier, not content — skipped by the two
  *  content passes so an FK/pk value never masquerades as a display string. */
-const looksLikeId = (key: string): boolean => /(^|_)id$/i.test(key);
+const looksLikeId = (key: string): boolean => /(?:^|_)id$/iu.test(key);
 
 /** A usable display string is a non-blank string (numbers are only accepted as
  *  the primary-key fallback, so a numeric measure never reads as a title). */

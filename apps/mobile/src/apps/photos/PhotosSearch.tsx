@@ -277,7 +277,7 @@ export default function PhotosSearch({
 }
 
 function validDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+  return /^\d{4}-\d{2}-\d{2}$/u.test(value) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
 }
 
 function cycleId(
@@ -300,7 +300,7 @@ function FilterChip({
 }: {
   label: string;
   active: boolean;
-  onPress(): void;
+  onPress: () => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }): React.JSX.Element {
   return (

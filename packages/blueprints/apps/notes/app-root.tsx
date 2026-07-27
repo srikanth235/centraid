@@ -43,7 +43,7 @@ export const CHANGE_TABLES = [
 const VALID_VIEWS = new Set<AppState['view']>(['masonry', 'list']);
 
 function initialView(rootEl: HTMLElement | null): AppState['view'] {
-  const knob = rootEl?.getAttribute('data-app-default-view');
+  const knob = rootEl?.dataset.appDefaultView;
   return knob && VALID_VIEWS.has(knob as AppState['view']) ? (knob as AppState['view']) : 'masonry';
 }
 
@@ -101,7 +101,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       });
     } catch {
       // A broken vault must not look like an empty one.
-      readFailed(document.getElementById('noticeBanner'));
+      readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
       state.readFailedShown = true;
       return;
     }
@@ -207,7 +207,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   // ---- chrome wiring: theme toggle, attach input, doorbell, focus, keys, width ----
   useEffect(() => {
     if (themeBtnRef.current) wireThemeToggle(themeBtnRef.current);
-    const attachInput = document.getElementById('attachInput') as HTMLInputElement | null;
+    const attachInput = document.querySelector('#attachInput') as HTMLInputElement | null;
     if (attachInput) {
       wireAttachInput(attachInput, () => logic.getAttachTarget(), {
         act: logic.act,
@@ -413,7 +413,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
               onDelete={(n) => logic.deleteNote(n)}
               onAttach={(noteId) => {
                 logic.setAttachTarget(noteId);
-                (document.getElementById('attachInput') as HTMLInputElement | null)?.click();
+                (document.querySelector('#attachInput') as HTMLInputElement | null)?.click();
               }}
               onRemoveAttachment={(attachmentId) => logic.removeAttachment(attachmentId)}
               onAddTag={(noteId, label) => logic.addTag(noteId, label)}

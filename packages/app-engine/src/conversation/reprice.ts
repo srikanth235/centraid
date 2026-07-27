@@ -113,10 +113,10 @@ export function repriceLedger(db: DatabaseSync, opts: RepriceOptions = {}): Repr
       if (row.cost_source === 'agent') continue;
       const recomputed =
         costForUsage(row.model ?? undefined, {
-          ...(row.input_tokens !== null ? { inputTokens: row.input_tokens } : {}),
-          ...(row.output_tokens !== null ? { outputTokens: row.output_tokens } : {}),
-          ...(row.cache_read_tokens !== null ? { cacheReadTokens: row.cache_read_tokens } : {}),
-          ...(row.cache_write_tokens !== null ? { cacheWriteTokens: row.cache_write_tokens } : {}),
+          ...(row.input_tokens === null ? {} : { inputTokens: row.input_tokens }),
+          ...(row.output_tokens === null ? {} : { outputTokens: row.output_tokens }),
+          ...(row.cache_read_tokens === null ? {} : { cacheReadTokens: row.cache_read_tokens }),
+          ...(row.cache_write_tokens === null ? {} : { cacheWriteTokens: row.cache_write_tokens }),
         }) ?? null;
       if (!differs(recomputed, row.cost_usd)) continue;
       updateItem.run(recomputed, recomputed, row.rowid);

@@ -218,7 +218,7 @@ export function createPortableImagePreviewCodec(): PreviewCodec {
         const bytes = rgbaToThumbHash(small.width, small.height, small.data);
         // Canonical form: unpadded standard base64 (validated the same way on
         // the ingress side, so a device- and a codec-produced hash match).
-        return Buffer.from(bytes).toString('base64').replace(/=+$/, '');
+        return Buffer.from(bytes).toString('base64').replace(/=+$/u, '');
       } catch {
         return null;
       }

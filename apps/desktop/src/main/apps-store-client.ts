@@ -29,7 +29,7 @@ async function auth(): Promise<AuthCache> {
     inflightAuth = (async () => {
       const settings = await loadSettings();
       const next: AuthCache = {
-        baseUrl: settings.gatewayUrl.replace(/\/$/, ''),
+        baseUrl: settings.gatewayUrl.replace(/\/$/u, ''),
         token: settings.gatewayToken || undefined,
         vaultId: settings.activeVaultId || undefined,
       };

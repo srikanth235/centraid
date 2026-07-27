@@ -18,21 +18,32 @@ import {
 } from './handshake.js';
 import { ROUTES } from './routes.js';
 
-describe('readProtocolFromInfo', () => {
+/**
+ * `handshakeGateway` only reads `.ok`, `.status`, and `.json()` off the response,
+ * so the stubs below model that slice of `fetch` rather than the whole Response
+ * (hence the `as never` at each call site).
+ */
+type StubResponse = { ok: boolean; status: number; json: () => Promise<unknown> };
+type StubFetch = (
+  url: string,
+  init?: { headers?: Record<string, string> },
+) => Promise<StubResponse>;
+
+describe(readProtocolFromInfo, () => {
   it('prefers protocolVersion and falls back to schemaEpoch / peer=min', () => {
-    expect(readProtocolFromInfo({ protocolVersion: 2, minSupportedProtocol: 1 })).toEqual({
+    expect(readProtocolFromInfo({ protocolVersion: 2, minSupportedProtocol: 1 })).toStrictEqual({
       protocolVersion: 2,
       minSupportedProtocol: 1,
     });
-    expect(readProtocolFromInfo({ schemaEpoch: 2 })).toEqual({
+    expect(readProtocolFromInfo({ schemaEpoch: 2 })).toStrictEqual({
       protocolVersion: 2,
       minSupportedProtocol: 2,
     });
-    expect(readProtocolFromInfo({})).toEqual({
+    expect(readProtocolFromInfo({})).toStrictEqual({
       protocolVersion: null,
       minSupportedProtocol: null,
     });
-    expect(readProtocolFromInfo({ protocolVersion: 2.5 })).toEqual({
+    expect(readProtocolFromInfo({ protocolVersion: 2.5 })).toStrictEqual({
       protocolVersion: null,
       minSupportedProtocol: null,
     });
@@ -110,27 +121,33 @@ describe('handshakeGateway network branches', () => {
   });
 
   it('unreachable on fetch throw and non-2xx', async () => {
-    const fetchThrow = vi.fn(async () => {
+    const fetchThrow = vi.fn<StubFetch>(async () => {
       throw new Error('ECONNREFUSED');
     });
-    await expect(handshakeGateway('http://127.0.0.1:9', 't', fetchThrow as never)).resolves.toEqual(
+    await expect(
+      handshakeGateway('http://127.0.0.1:9', 't', fetchThrow as never),
+    ).resolves.toStrictEqual({
+      ok: false,
+      reason: 'unreachable',
+      detail: 'ECONNREFUSED',
+    });
+
+    const fetch404 = vi.fn<StubFetch>(async () => ({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    }));
+    await expect(handshakeGateway('http://x', undefined, fetch404 as never)).resolves.toStrictEqual(
       {
         ok: false,
         reason: 'unreachable',
-        detail: 'ECONNREFUSED',
+        detail: 'HTTP 404',
       },
     );
-
-    const fetch404 = vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) }));
-    await expect(handshakeGateway('http://x', undefined, fetch404 as never)).resolves.toEqual({
-      ok: false,
-      reason: 'unreachable',
-      detail: 'HTTP 404',
-    });
   });
 
   it('malformed when body is not JSON; ok when body is a valid info payload', async () => {
-    const badJson = vi.fn(async () => ({
+    const badJson = vi.fn<StubFetch>(async () => ({
       ok: true,
       status: 200,
       json: async () => {
@@ -142,7 +159,7 @@ describe('handshakeGateway network branches', () => {
       reason: 'malformed',
     });
 
-    const good = vi.fn(async (url: string, init?: { headers?: Record<string, string> }) => {
+    const good = vi.fn<StubFetch>(async (url, init) => {
       expect(url).toContain(ROUTES.gatewayInfo);
       expect(init?.headers?.Authorization).toBe('Bearer tok');
       return {

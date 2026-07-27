@@ -64,9 +64,11 @@ describe('pricing cost property', () => {
           cacheReadTokens: (usage.cacheReadTokens ?? 0) * 2,
           cacheWriteTokens: (usage.cacheWriteTokens ?? 0) * 2,
         });
-        // floating point — allow tiny relative error
-        if (base === 0) expect(doubled).toBe(0);
-        else expect(Math.abs(doubled - base * 2)).toBeLessThan(1e-12 * Math.max(1, Math.abs(base)));
+        // A zero base must double to EXACT zero — no float slop is tolerable
+        // when there is nothing to scale.
+        expect(doubled === 0).toBe(base === 0);
+        // Otherwise: floating point — allow tiny relative error.
+        expect(Math.abs(doubled - base * 2)).toBeLessThan(1e-12 * Math.max(1, Math.abs(base)));
       }),
       { numRuns: 40, seed: 53312 },
     );

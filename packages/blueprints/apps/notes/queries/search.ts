@@ -95,9 +95,9 @@ function decodeBody(uri: unknown): string {
   const payload = uri.slice(comma + 1);
   try {
     if (meta.includes(';base64')) {
-      return typeof Buffer !== 'undefined'
-        ? Buffer.from(payload, 'base64').toString('utf8')
-        : atob(payload);
+      return typeof Buffer === 'undefined'
+        ? atob(payload)
+        : Buffer.from(payload, 'base64').toString('utf8');
     }
     return decodeURIComponent(payload);
   } catch {
@@ -108,7 +108,7 @@ function decodeBody(uri: unknown): string {
 // Same list-row discipline as library.ts: results carry a short preview + the
 // checklist tally, never the whole body (issue #404). See library.ts for the
 // shape's home.
-const CHECK_RE = /^\s*[-*] \[( |x|X)\]\s?(.*)$/;
+const CHECK_RE = /^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u;
 
 function previewOf(body: unknown): string {
   const lines = String(body ?? '').split('\n');
@@ -117,13 +117,13 @@ function previewOf(body: unknown): string {
     if (out.length >= 6) break;
     const check = CHECK_RE.exec(line);
     if (check) {
-      out.push((/x/i.test(check[1]!) ? '☑ ' : '☐ ') + check[2]);
+      out.push((/x/iu.test(check.groups?.mark ?? '') ? '☑ ' : '☐ ') + (check.groups?.text ?? ''));
       continue;
     }
-    if (/^#{1,3}\s+/.test(line)) continue;
-    const li = /^\s*(?:[-*]|\d+\.)\s+(.*)$/.exec(line);
+    if (/^#{1,3}\s+/u.test(line)) continue;
+    const li = /^\s*(?:[-*]|\d+\.)\s+(?<text>.*)$/u.exec(line);
     if (li) {
-      out.push('• ' + li[1]);
+      out.push('• ' + (li.groups?.text ?? ''));
       continue;
     }
     if (line.trim() === '') continue;
@@ -131,9 +131,9 @@ function previewOf(body: unknown): string {
   }
   const text = out
     .join('\n')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1');
+    .replace(/\*\*(?<bold>.+?)\*\*/gu, '$<bold>')
+    .replace(/\*(?<italic>.+?)\*/gu, '$<italic>')
+    .replace(/`(?<code>.+?)`/gu, '$<code>');
   return text.length > 200 ? text.slice(0, 200) : text;
 }
 
@@ -144,12 +144,12 @@ function checkOf(body: unknown): { total: number; done: number } {
     const m = CHECK_RE.exec(line);
     if (!m) continue;
     total += 1;
-    if (/x/i.test(m[1]!)) done += 1;
+    if (/x/iu.test(m.groups?.mark ?? '')) done += 1;
   }
   return { total, done };
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function searchHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const term = String(input?.term ?? '').trim();
   if (!term) return { notes: [] };
@@ -237,4 +237,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { notes: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

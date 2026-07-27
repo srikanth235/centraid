@@ -39,8 +39,8 @@ type Metric = 'rows' | 'bytes';
  *  (kind labels are singular, e.g. "Party" → "parties"). */
 function pluralize(label: string): string {
   const w = label.toLowerCase();
-  if (/[^aeiou]y$/.test(w)) return `${w.slice(0, -1)}ies`;
-  if (/(s|x|z|ch|sh)$/.test(w)) return `${w}es`;
+  if (/[^aeiou]y$/u.test(w)) return `${w.slice(0, -1)}ies`;
+  if (/(?:s|x|z|ch|sh)$/u.test(w)) return `${w}es`;
   return `${w}s`;
 }
 
@@ -171,7 +171,7 @@ function OntologyPack({
         <h2 className={styles.packLabel}>{pack.packLabel}</h2>
         <span className={styles.packMeta}>
           {pack.rows.toLocaleString()} rows
-          {pack.bytes !== null ? ` · ${formatBytes(pack.bytes)}` : ''}
+          {pack.bytes === null ? '' : ` · ${formatBytes(pack.bytes)}`}
         </span>
       </header>
       <div className={styles.grid}>

@@ -354,7 +354,7 @@ function SampleSection({
   // Reduce each real row to one display string, then note how many rows the
   // centre holds beyond the handful shown (only when that total is known).
   const shown = rows.map(pickSampleDisplay);
-  const more = centerRows !== undefined ? Math.max(0, centerRows - shown.length) : 0;
+  const more = centerRows === undefined ? 0 : Math.max(0, centerRows - shown.length);
   return (
     <section className={styles.roSec}>
       <p className={styles.roLabel}>A few of yours</p>

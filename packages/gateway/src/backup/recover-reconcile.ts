@@ -73,7 +73,7 @@ function snapshotBlobShas(entries: readonly string[]): Set<string> {
   for (const p of entries) {
     if (!p.startsWith('blobs/')) continue;
     const last = p.split('/').pop();
-    if (last && /^[0-9a-f]{64}$/.test(last)) shas.add(last);
+    if (last && /^[0-9a-f]{64}$/u.test(last)) shas.add(last);
   }
   return shas;
 }

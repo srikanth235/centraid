@@ -160,11 +160,11 @@ describe('ctx.vault worker channel', () => {
     expect(invocationIds[0]).not.toBe('handler-selected-first');
     expect(invocationIds[1]).toBe(invocationIds[0]);
     expect(invocationIds[2]).not.toBe(invocationIds[0]);
-    expect(invocationIds.slice(3, 5)).toEqual(invocationIds.slice(5, 7));
+    expect(invocationIds.slice(3, 5)).toStrictEqual(invocationIds.slice(5, 7));
     expect(invocationIds[3]).not.toBe(invocationIds[4]);
     expect(invocationIds.slice(3, 5)).not.toContain('handler-selected-first');
     expect(invocationIds.slice(3, 5)).not.toContain('handler-selected-second');
-    expect(calls).toEqual(
+    expect(calls).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({
           op: 'invoke',
@@ -218,7 +218,7 @@ describe('manifest vault block', () => {
         vault: { purpose: 'dpv:ServiceProvision', scopes: [{ schema: 'schedule', verbs: 'read' }] },
       }),
     );
-    expect(manifest.vault).toEqual({
+    expect(manifest.vault).toStrictEqual({
       purpose: 'dpv:ServiceProvision',
       scopes: [{ schema: 'schedule', verbs: 'read' }],
     });

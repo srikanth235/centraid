@@ -12,10 +12,9 @@
 
 import { existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { GATEWAY_WORKSPACE_PACKAGES } from './assemble-runtime.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 
 /** Native / special binary surface (Phase A decision record). */
 const NATIVE_MODULE_DECISION = {
@@ -55,8 +54,7 @@ function listDistIfPresent(pkgRel) {
 
 const entries = [];
 for (const pkg of GATEWAY_WORKSPACE_PACKAGES) {
-  entries.push(`${pkg}/package.json`);
-  entries.push(...listDistIfPresent(pkg));
+  entries.push(`${pkg}/package.json`, ...listDistIfPresent(pkg));
   const skills = path.join(root, pkg, 'skills');
   if (existsSync(skills)) entries.push(`${pkg}/skills/**`);
 }

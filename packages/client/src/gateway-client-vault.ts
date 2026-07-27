@@ -250,10 +250,10 @@ export async function updateVault(input: {
     method: 'PATCH',
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.color !== undefined ? { color: input.color } : {}),
-      ...(input.icon !== undefined ? { icon: input.icon } : {}),
-      ...(input.blurb !== undefined ? { blurb: input.blurb } : {}),
+      ...(input.name === undefined ? {} : { name: input.name }),
+      ...(input.color === undefined ? {} : { color: input.color }),
+      ...(input.icon === undefined ? {} : { icon: input.icon }),
+      ...(input.blurb === undefined ? {} : { blurb: input.blurb }),
     }),
   });
   return readJson<VaultListEntry>(res, 'update vault');

@@ -136,7 +136,7 @@ export async function announceUpdateIfAdmitted(input: {
 
 /** D5: beta tags use channel `beta`; everything else `latest`. */
 export function updaterChannelForVersion(version: string): 'beta' | 'latest' {
-  return /beta/i.test(version) ? 'beta' : 'latest';
+  return /beta/iu.test(version) ? 'beta' : 'latest';
 }
 
 /**

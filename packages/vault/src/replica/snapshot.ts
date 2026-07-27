@@ -203,12 +203,12 @@ export function readReplicaRow(
 
 export interface ReplicaSnapshotReader {
   state: ReplicaLogState;
-  readRows(entity: string, options?: ReadReplicaRowsOptions): ReplicaRowsPage;
-  readRow(
+  readRows: (entity: string, options?: ReadReplicaRowsOptions) => ReplicaRowsPage;
+  readRow: (
     entity: string,
     rowId: string,
     options?: Pick<ReadReplicaRowsOptions, 'maxValueBytes'>,
-  ): ReplicaRow | undefined;
+  ) => ReplicaRow | undefined;
 }
 
 export interface ReplicaSnapshotResult<T> {

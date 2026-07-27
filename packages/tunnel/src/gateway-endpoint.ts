@@ -118,10 +118,10 @@ export interface GatewayEndpointHandle {
   /** The gateway's stable transport identity (base32 EndpointId). */
   endpointId: string;
   /** Current dial ticket (recomputed — the addr can change with the network). */
-  ticket(): string;
+  ticket: () => string;
   /** Immediately close every live transport owned by a revoked device key. */
-  revokeEndpoint(endpointId: string): Promise<void>;
-  close(): Promise<void>;
+  revokeEndpoint: (endpointId: string) => Promise<void>;
+  close: () => Promise<void>;
 }
 
 export async function startGatewayEndpoint(

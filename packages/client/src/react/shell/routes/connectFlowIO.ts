@@ -41,8 +41,8 @@ export type SshConnectResult =
   | { ok: false; error: string; message: string };
 
 export interface ConnectFlowBridge {
-  testGatewayConnection(input: ConnectTestInput): Promise<ConnectivityReport>;
-  sshConnectGateway(input: SshConnectInput): Promise<SshConnectResult>;
+  testGatewayConnection: (input: ConnectTestInput) => Promise<ConnectivityReport>;
+  sshConnectGateway: (input: SshConnectInput) => Promise<SshConnectResult>;
 }
 
 function bridge(): ConnectFlowBridge {

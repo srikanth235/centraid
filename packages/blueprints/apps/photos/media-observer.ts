@@ -18,7 +18,7 @@ function stopObserving(img: HTMLElement): void {
 function scrollRootFor(img: HTMLElement): HTMLElement | null {
   for (let node = img.parentElement; node && node !== document.documentElement;) {
     const style = getComputedStyle(node);
-    if (/(auto|scroll|overlay)/.test(`${style.overflow} ${style.overflowY}`)) return node;
+    if (/(?:auto|scroll|overlay)/u.test(`${style.overflow} ${style.overflowY}`)) return node;
     node = node.parentElement;
   }
   return null;

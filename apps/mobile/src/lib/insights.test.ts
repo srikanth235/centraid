@@ -5,11 +5,15 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./gateway', () => ({
+vi.mock(import('./gateway'), () => ({
   apiHeaders: () => ({}),
   authHeader: () => ({}),
+  // `fetchJson` is generic (`<T>(href, init?) => Promise<T>`); a typed mock erases
+  // the type parameter, so `Mock<...>` stops being assignable to the export.
   fetchJson: vi.fn(),
-  requireGatewayBase: vi.fn(async () => 'http://127.0.0.1:9'),
+  requireGatewayBase: vi.fn<typeof import('./gateway').requireGatewayBase>(
+    async () => 'http://127.0.0.1:9',
+  ),
 }));
 
 import {
@@ -52,7 +56,7 @@ describe('Insights format helpers', () => {
     expect(formatMs(Number.NaN)).toBe('—');
   });
 
-  describe('relativeTime', () => {
+  describe(relativeTime, () => {
     afterEach(() => {
       vi.useRealTimers();
     });

@@ -6,11 +6,11 @@
 import { describe, expect, it } from 'vitest';
 import { buildUsageEvent, deltaCumulativeUsage, readCost, readTokenUsage } from './usage.js';
 
-describe('deltaCumulativeUsage', () => {
+describe(deltaCumulativeUsage, () => {
   it('books the full total when there is no prior snapshot', () => {
     const d = deltaCumulativeUsage({ inputTokens: 100, outputTokens: 50 }, undefined, undefined);
-    expect(d.tokens).toEqual({ inputTokens: 100, outputTokens: 50 });
-    expect(d.snapshot).toEqual({ inputTokens: 100, outputTokens: 50 });
+    expect(d.tokens).toStrictEqual({ inputTokens: 100, outputTokens: 50 });
+    expect(d.snapshot).toStrictEqual({ inputTokens: 100, outputTokens: 50 });
   });
 
   it('books cumulative-minus-baseline on a resumed session', () => {
@@ -19,7 +19,7 @@ describe('deltaCumulativeUsage', () => {
       undefined,
       { inputTokens: 40, outputTokens: 20, cacheReadTokens: 8, cacheWriteTokens: 2 },
     );
-    expect(d.tokens).toEqual({
+    expect(d.tokens).toStrictEqual({
       inputTokens: 60,
       outputTokens: 30,
       cacheReadTokens: 12,
@@ -42,8 +42,8 @@ describe('deltaCumulativeUsage', () => {
       inputTokens: 40,
       outputTokens: 20,
     });
-    expect(d.tokens).toEqual({ outputTokens: 70 });
-    expect(d.snapshot).toEqual({ inputTokens: 40, outputTokens: 90 });
+    expect(d.tokens).toStrictEqual({ outputTokens: 70 });
+    expect(d.snapshot).toStrictEqual({ inputTokens: 40, outputTokens: 90 });
   });
 
   it('ignores non-finite and negative counters rather than booking garbage', () => {
@@ -52,7 +52,7 @@ describe('deltaCumulativeUsage', () => {
       undefined,
       undefined,
     );
-    expect(d.tokens).toEqual({ cacheReadTokens: 7 });
+    expect(d.tokens).toStrictEqual({ cacheReadTokens: 7 });
   });
 
   it('subtracts a same-currency cost baseline, case-insensitively', () => {
@@ -63,8 +63,8 @@ describe('deltaCumulativeUsage', () => {
         cost: { amount: 0.12, currency: 'USD' },
       },
     );
-    expect(d.cost).toEqual({ amount: 0.3, currency: 'usd' });
-    expect(d.snapshot?.cost).toEqual({ amount: 0.42, currency: 'usd' });
+    expect(d.cost).toStrictEqual({ amount: 0.3, currency: 'usd' });
+    expect(d.snapshot?.cost).toStrictEqual({ amount: 0.42, currency: 'usd' });
   });
 
   it('charges a changed currency in full instead of subtracting across units', () => {
@@ -76,7 +76,7 @@ describe('deltaCumulativeUsage', () => {
         cost: { amount: 0.12, currency: 'USD' },
       },
     );
-    expect(d.cost).toEqual({ amount: 0.42, currency: 'EUR' });
+    expect(d.cost).toStrictEqual({ amount: 0.42, currency: 'EUR' });
   });
 
   it('charges a regressed cost counter in full', () => {
@@ -94,8 +94,8 @@ describe('deltaCumulativeUsage', () => {
     // Returning no snapshot here would CLEAR the persisted baseline and make
     // the next turn book the whole session total a second time.
     const d = deltaCumulativeUsage({}, undefined, { inputTokens: 40, outputTokens: 20 });
-    expect(d.tokens).toEqual({});
-    expect(d.snapshot).toEqual({ inputTokens: 40, outputTokens: 20 });
+    expect(d.tokens).toStrictEqual({});
+    expect(d.snapshot).toStrictEqual({ inputTokens: 40, outputTokens: 20 });
   });
 
   it('reports no snapshot when there is nothing to remember', () => {
@@ -109,7 +109,7 @@ describe('readTokenUsage / readCost', () => {
       readTokenUsage({
         usage: { inputTokens: 1, outputTokens: 2, cachedReadTokens: 3, cachedWriteTokens: 4 },
       }),
-    ).toEqual({ inputTokens: 1, outputTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 4 });
+    ).toStrictEqual({ inputTokens: 1, outputTokens: 2, cacheReadTokens: 3, cacheWriteTokens: 4 });
   });
 
   it('accepts the snake_case / promptTokens spellings older agents emit', () => {
@@ -119,18 +119,21 @@ describe('readTokenUsage / readCost', () => {
         output_tokens: 2,
         cache_creation_input_tokens: 4,
       }),
-    ).toEqual({ inputTokens: 1, outputTokens: 2, cacheWriteTokens: 4 });
+    ).toStrictEqual({ inputTokens: 1, outputTokens: 2, cacheWriteTokens: 4 });
   });
 
   it('drops a cost with a missing or wrongly-typed field', () => {
     expect(readCost({ amount: 1 })).toBeUndefined();
     expect(readCost({ amount: '1', currency: 'USD' })).toBeUndefined();
     expect(readCost(null)).toBeUndefined();
-    expect(readCost({ amount: 1.5, currency: 'USD' })).toEqual({ amount: 1.5, currency: 'USD' });
+    expect(readCost({ amount: 1.5, currency: 'USD' })).toStrictEqual({
+      amount: 1.5,
+      currency: 'USD',
+    });
   });
 });
 
-describe('buildUsageEvent', () => {
+describe(buildUsageEvent, () => {
   it('emits nothing when the agent reported nothing worth recording', () => {
     expect(buildUsageEvent('acp', 'm', undefined, {}, undefined)).toBeUndefined();
   });

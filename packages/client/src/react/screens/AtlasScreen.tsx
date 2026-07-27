@@ -139,9 +139,7 @@ export default function AtlasScreen({
           <div className={styles.error} data-testid="atlas-census-error">
             Couldn’t read the census: {statsError}
           </div>
-        ) : !stats ? (
-          <div className={styles.loading}>Reading your vault’s census…</div>
-        ) : (
+        ) : stats ? (
           <AtlasKindsTab
             stats={stats}
             pulse={pulse}
@@ -149,6 +147,8 @@ export default function AtlasScreen({
             onRefresh={refreshCensus}
             onOpenBrowse={openBrowse}
           />
+        ) : (
+          <div className={styles.loading}>Reading your vault’s census…</div>
         )
       ) : null}
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cx } from './cx.js';
 
-describe('cx', () => {
+describe(cx, () => {
   it('joins truthy string args with spaces', () => {
     expect(cx('a', 'b', 'c')).toBe('a b c');
   });

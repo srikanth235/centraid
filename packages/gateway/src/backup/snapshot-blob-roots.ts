@@ -42,7 +42,7 @@ export function blobShasFromManifestEntries(entries: readonly ManifestEntry[]): 
   for (const entry of entries) {
     if (entry.kind !== 'blob') continue;
     const sha = entry.path.split('/').pop() ?? '';
-    if (/^[0-9a-f]{64}$/.test(sha)) shas.push(sha);
+    if (/^[0-9a-f]{64}$/u.test(sha)) shas.push(sha);
   }
   return shas;
 }

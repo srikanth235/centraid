@@ -89,7 +89,7 @@ export function summarizeToolArgs(tool: string, args: unknown): string | undefin
       return pickStr('path', 'file_path');
     case 'bash': {
       const cmd = pickStr('command');
-      return cmd ? truncate(cmd.replace(/\s+/g, ' ').trim(), 90) : undefined;
+      return cmd ? truncate(cmd.replace(/\s+/gu, ' ').trim(), 90) : undefined;
     }
     case 'glob':
     case 'grep': {
@@ -213,7 +213,8 @@ export function relTime(ts: number, now: number): string {
 
 /** Parse the ISO timestamp embedded in a gateway version id, if present. */
 export function parseVersionTime(versionId: string): number | undefined {
-  const m = versionId.match(/^v_(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})/);
+  const m = versionId.match(/^v_(?<date>\d{4}-\d{2}-\d{2})T(?<hour>\d{2})-(?<minute>\d{2})/u);
   if (!m) return undefined;
-  return Date.parse(`${m[1]}T${m[2]}:${m[3]}:00Z`);
+  const g = m.groups;
+  return Date.parse(`${g?.date}T${g?.hour}:${g?.minute}:00Z`);
 }

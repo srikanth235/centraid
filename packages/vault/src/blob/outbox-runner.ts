@@ -22,7 +22,7 @@ export interface BlobOutboxRunnerOptions {
   cache: BlobCache;
   remote: () => RemoteTier | null;
   remoteConfigured: () => boolean;
-  onStatus(): void;
+  onStatus: () => void;
   /** Host-wide event-loop pressure gate. Explicit `drainSha` calls stay foreground. */
   shouldDeferBackgroundWork?: () => boolean;
   /** Close coordinator-owned resources before an expired row/file is removed. */
@@ -74,11 +74,11 @@ export class BlobOutboxRunner {
 
   private scheduleNext(): void {
     if (this.closing || this.closed || this.timer) return;
-    const delay = !this.options.remoteConfigured()
-      ? OUTBOX_UNCONFIGURED_INTERVAL_MS
-      : this.options.state.dueOutbox().length > 0
+    const delay = this.options.remoteConfigured()
+      ? this.options.state.dueOutbox().length > 0
         ? (this.options.intervalMs ?? OUTBOX_ACTIVE_INTERVAL_MS)
-        : OUTBOX_IDLE_INTERVAL_MS;
+        : OUTBOX_IDLE_INTERVAL_MS
+      : OUTBOX_UNCONFIGURED_INTERVAL_MS;
     this.timer = setTimeout(() => {
       this.timer = undefined;
       this.kick();

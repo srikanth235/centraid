@@ -7,7 +7,7 @@
 
 import { groupNet, ledgerRow, loadTally, personOf } from './dashboard.ts';
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function groupHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const groupId = String(input?.group_id ?? '');
   try {
@@ -47,4 +47,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

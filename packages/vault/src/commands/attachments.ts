@@ -178,7 +178,9 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     contentId = minted.contentId;
     mediaType = minted.mediaType;
     byteSize = minted.byteSize;
-  } else if (input.content_id !== undefined) {
+  } else if (input.content_id === undefined) {
+    throw new Error('attach needs a staged_sha, data_uri or content_id'); // precondition guards this
+  } else {
     const existing = ctx.db
       .prepare(
         'SELECT media_type, byte_size FROM core_content_item WHERE content_id = ? AND deleted_at IS NULL',
@@ -188,8 +190,6 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     contentId = input.content_id;
     mediaType = existing.media_type;
     byteSize = existing.byte_size;
-  } else {
-    throw new Error('attach needs a staged_sha, data_uri or content_id'); // precondition guards this
   }
   // Role defaults from the media type; images read as photos.
   const role = input.role ?? (mediaType.startsWith('image/') ? 'photo' : 'other');

@@ -24,7 +24,7 @@ function PickerTile({
       aria-label={asset.title ?? 'Photo'}
       ref={(el) => mountMedia(el, asset)}
       onClick={onToggle}
-    ></button>
+    />
   );
 }
 

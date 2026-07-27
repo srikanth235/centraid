@@ -3,7 +3,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { Turn } from '@centraid/app-engine';
+import type { ConversationStore, Turn } from '@centraid/app-engine';
+import type { RunEventSink } from './audit.js';
 import {
   applyRetention,
   extractReturnEnvelope,
@@ -16,7 +17,7 @@ import {
   closeRunNode,
 } from './audit.js';
 
-describe('truncateForAudit', () => {
+describe(truncateForAudit, () => {
   it('returns undefined for undefined and serializes small values', () => {
     expect(truncateForAudit(undefined)).toBeUndefined();
     expect(truncateForAudit({ a: 1 })).toBe(JSON.stringify({ a: 1 }));
@@ -31,13 +32,13 @@ describe('truncateForAudit', () => {
     };
     expect(out._truncated).toBe(true);
     expect(out.bytes).toBeGreaterThan(64 * 1024);
-    expect(out.head.length).toBe(256);
+    expect(out.head).toHaveLength(256);
   });
 
   it('marks unserializable values', () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
-    expect(JSON.parse(truncateForAudit(cyclic)!)).toEqual({
+    expect(JSON.parse(truncateForAudit(cyclic)!)).toStrictEqual({
       _truncated: true,
       reason: 'unserializable',
     });
@@ -73,10 +74,10 @@ describe('rowToRunRef / extractReturnEnvelope / makeNodeId', () => {
   });
 
   it('extractReturnEnvelope only lifts summary/output from plain objects', () => {
-    expect(extractReturnEnvelope(undefined)).toEqual({ value: undefined });
-    expect(extractReturnEnvelope('x')).toEqual({ value: 'x' });
-    expect(extractReturnEnvelope([1])).toEqual({ value: [1] });
-    expect(extractReturnEnvelope({ summary: 's', output: { a: 1 }, extra: true })).toEqual({
+    expect(extractReturnEnvelope(undefined)).toStrictEqual({ value: undefined });
+    expect(extractReturnEnvelope('x')).toStrictEqual({ value: 'x' });
+    expect(extractReturnEnvelope([1])).toStrictEqual({ value: [1] });
+    expect(extractReturnEnvelope({ summary: 's', output: { a: 1 }, extra: true })).toStrictEqual({
       value: { summary: 's', output: { a: 1 }, extra: true },
       summary: 's',
       output: { a: 1 },
@@ -91,7 +92,7 @@ describe('rowToRunRef / extractReturnEnvelope / makeNodeId', () => {
 
 describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
   it('applyRetention maps history keep policies onto pruneAutomation', () => {
-    const store = { pruneAutomation: vi.fn() };
+    const store = { pruneAutomation: vi.fn<ConversationStore['pruneAutomation']>() };
     applyRetention(store as never, 'app/a', undefined);
     expect(store.pruneAutomation).not.toHaveBeenCalled();
 
@@ -109,7 +110,7 @@ describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
   });
 
   it('usageCloseFields folds a usage stream event into close args', () => {
-    expect(usageCloseFields(undefined)).toEqual({});
+    expect(usageCloseFields(undefined)).toStrictEqual({});
     expect(
       usageCloseFields({
         type: 'usage',
@@ -131,14 +132,14 @@ describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
 
   it('openRunNode + closeRunNode write the ledger and emit without throwing on store failures', () => {
     const store = {
-      openItem: vi.fn(() => {
+      openItem: vi.fn<ConversationStore['openItem']>(() => {
         throw new Error('open boom');
       }),
-      closeItem: vi.fn(() => {
+      closeItem: vi.fn<ConversationStore['closeItem']>(() => {
         throw new Error('close boom');
       }),
     };
-    const emit = vi.fn(() => {
+    const emit = vi.fn<RunEventSink>(() => {
       throw new Error('emit boom');
     });
     // Swallowed failures — handler must not die on audit.
@@ -164,11 +165,28 @@ describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
       started: 1,
       ended: 5,
     });
-    expect(store.openItem).toHaveBeenCalled();
-    expect(store.closeItem).toHaveBeenCalled();
+    expect(store.openItem).toHaveBeenCalledWith({
+      itemId: nodeId,
+      turnId: 'r1',
+      ordinal: 0,
+      kind: 'tool',
+      name: 'vault_sql',
+      argsJson: JSON.stringify({ sql: 'select 1' }),
+      startedAt: 1,
+    });
+    expect(store.closeItem).toHaveBeenCalledWith({
+      itemId: nodeId,
+      ok: true,
+      outputJson: JSON.stringify({ rows: [] }),
+      endedAt: 5,
+      durationMs: 4,
+    });
 
     // Happy path still emits item.start / item.end when store+emit succeed.
-    const goodStore = { openItem: vi.fn(), closeItem: vi.fn() };
+    const goodStore = {
+      openItem: vi.fn<ConversationStore['openItem']>(),
+      closeItem: vi.fn<ConversationStore['closeItem']>(),
+    };
     const events: unknown[] = [];
     const id = openRunNode({
       store: goodStore as never,
@@ -188,7 +206,7 @@ describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
       started: 10,
       ended: 20,
     });
-    expect(events).toEqual([
+    expect(events).toStrictEqual([
       { type: 'item.start', itemId: id, ordinal: 1, kind: 'step' },
       {
         type: 'item.end',

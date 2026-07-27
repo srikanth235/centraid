@@ -1,9 +1,9 @@
 import { onTestFinished, vi } from 'vitest';
 
 export interface FakeClock {
-  now(): number;
-  set(time: number | string | Date): void;
-  advance(ms: number): Promise<void>;
+  now: () => number;
+  set: (time: number | string | Date) => void;
+  advance: (ms: number) => Promise<void>;
 }
 
 /** Install a deterministic fake clock and always restore real timers. */

@@ -65,7 +65,7 @@ export async function openNativeReplicaDriver(
   identity: ReplicaIdentity,
   digest?: ReplicaDigest,
 ): Promise<OpSqliteDriver> {
-  const name = (await replicaDatabaseName(identity, digest)).replace(/^\/+/, '');
+  const name = (await replicaDatabaseName(identity, digest)).replace(/^\/+/u, '');
   return OpSqliteDriver.open({ name });
 }
 

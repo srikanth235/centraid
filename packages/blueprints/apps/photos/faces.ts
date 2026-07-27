@@ -75,7 +75,7 @@ export async function renderFaces(
       continue;
     }
     const label = document.createElement('span');
-    const pct = region.confidence != null ? ` · ${Math.round(region.confidence * 100)}%` : '';
+    const pct = region.confidence == null ? '' : ` · ${Math.round(region.confidence * 100)}%`;
     label.textContent = `Face${region.person_name ? ` — ${region.person_name}?` : ''}${pct}`;
     row.appendChild(label);
     const picker = document.createElement('select');

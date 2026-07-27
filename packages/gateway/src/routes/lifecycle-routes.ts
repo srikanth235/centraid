@@ -114,9 +114,9 @@ export function makeLifecycleRouteHandler(
       if (pathname === '/centraid/_apps/_install' && method === 'POST') {
         return await handleInstall(opts, req, res);
       }
-      const metaMatch = /^\/centraid\/_apps\/([^/]+)\/meta$/.exec(pathname);
+      const metaMatch = /^\/centraid\/_apps\/(?<appId>[^/]+)\/meta$/u.exec(pathname);
       if (metaMatch && method === 'POST') {
-        return await handleMeta(opts, req, res, decodeURIComponent(metaMatch[1] ?? ''));
+        return await handleMeta(opts, req, res, decodeURIComponent(metaMatch.groups?.appId ?? ''));
       }
       if (pathname === '/centraid/_automations' && method === 'POST') {
         return await handleAutomationCreate(opts, req, res);
@@ -189,10 +189,10 @@ async function handleCreate(
   }
 
   const files = scaffoldAppFiles(id, {
-    ...(name !== undefined ? { name } : {}),
-    ...(version !== undefined ? { version } : {}),
-    ...(iconKey !== undefined ? { iconKey } : {}),
-    ...(colorKey !== undefined ? { colorKey } : {}),
+    ...(name === undefined ? {} : { name }),
+    ...(version === undefined ? {} : { version }),
+    ...(iconKey === undefined ? {} : { iconKey }),
+    ...(colorKey === undefined ? {} : { colorKey }),
   });
   await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   await stageAndMaybePublish(opts, {
@@ -205,7 +205,7 @@ async function handleCreate(
   });
 
   return sendJson(res, 201, {
-    app: { id, ...(name !== undefined ? { name } : {}), kind: 'app' as const },
+    app: { id, ...(name === undefined ? {} : { name }), kind: 'app' as const },
     sessionId,
     staged: !publish,
   });
@@ -288,7 +288,7 @@ async function handleClone(
     app: {
       id: newAppId,
       name: newName,
-      ...(tmpl.desc !== undefined ? { description: tmpl.desc } : {}),
+      ...(tmpl.desc === undefined ? {} : { description: tmpl.desc }),
       kind: tmpl.kind ?? 'app',
     },
     template: {
@@ -371,8 +371,8 @@ async function handleMeta(
     current as ScaffoldFile[],
     appId,
     {
-      ...(name !== undefined ? { name } : {}),
-      ...(description !== undefined ? { description } : {}),
+      ...(name === undefined ? {} : { name }),
+      ...(description === undefined ? {} : { description }),
     },
     existing,
   );

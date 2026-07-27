@@ -4,9 +4,9 @@
 // no stale-buffer bugs, no defaultValue tricks. Edits commit on blur/Enter
 // (never per keystroke) so typing never spams the vault with writes.
 import { useEffect, useRef, useState } from 'react';
-import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react';
+import type { FormEvent, KeyboardEvent } from 'react';
 import { renderAttachments } from '../kit.ts';
-import { flagLevel, fmtDay, plusDays, todayStr } from '../format.ts';
+import { flagLevel, plusDays, todayStr } from '../format.ts';
 import type { ActivityEntry, EditPatch, Task } from '../types.ts';
 import { I } from '../icons.ts';
 import { Icon } from './Shared.tsx';
@@ -362,11 +362,11 @@ export function Detail({
               </div>
             </div>
           </div>
-          {!task.due_at ? (
+          {task.due_at ? null : (
             <p className={`muted small ${styles.detailHint}`}>
               Set a due date to repeat or remind on this task.
             </p>
-          ) : null}
+          )}
 
           <div className={shared.eyebrowLabel}>Tags</div>
           <TagStrip task={task} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />

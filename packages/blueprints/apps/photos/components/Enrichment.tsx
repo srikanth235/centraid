@@ -110,7 +110,7 @@ export function EnrichmentPanel() {
               Face detection is turned off here. Turn it on in settings to use this.
             </p>
           )}
-          <p className="lightbox-note enrichment-note" ref={noteRef}></p>
+          <p className="lightbox-note enrichment-note" ref={noteRef} />
         </dialog>
       ) : null}
     </div>

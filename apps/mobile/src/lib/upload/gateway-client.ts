@@ -50,9 +50,12 @@ export interface SettlementReceipt extends Record<string, unknown> {
 }
 
 export interface DirectTransferClient {
-  begin(input: DirectBeginInput): Promise<DirectBeginResult>;
-  recordPart(sessionId: string, partNumber: number, etag: string): Promise<void>;
-  complete(sessionId: string, parts: readonly MultipartPartReceipt[]): Promise<SettlementReceipt>;
+  begin: (input: DirectBeginInput) => Promise<DirectBeginResult>;
+  recordPart: (sessionId: string, partNumber: number, etag: string) => Promise<void>;
+  complete: (
+    sessionId: string,
+    parts: readonly MultipartPartReceipt[],
+  ) => Promise<SettlementReceipt>;
 }
 
 export class DirectTransferError extends Error {
@@ -81,7 +84,7 @@ export function httpDirectTransferClient(
   options: DirectTransferClientOptions,
 ): DirectTransferClient {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const base = options.gatewayBaseUrl.replace(/\/+$/, '');
+  const base = options.gatewayBaseUrl.replace(/\/+$/u, '');
   const headers = (): Record<string, string> => ({
     'content-type': 'application/json',
     accept: 'application/json',

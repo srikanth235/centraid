@@ -8,7 +8,7 @@ import {
   auStatusForRow,
 } from './automation-identity.js';
 
-describe('hashId', () => {
+describe(hashId, () => {
   it('is deterministic for the same input', () => {
     expect(hashId('automation-abc123')).toBe(hashId('automation-abc123'));
   });
@@ -24,7 +24,7 @@ describe('hashId', () => {
   });
 });
 
-describe('hueForId', () => {
+describe(hueForId, () => {
   it('is deterministic and always a known palette hue', () => {
     const id = 'automation-7fa9c2';
     expect(hueForId(id)).toBe(hueForId(id));
@@ -38,7 +38,7 @@ describe('hueForId', () => {
   });
 });
 
-describe('glyphForId', () => {
+describe(glyphForId, () => {
   it('is deterministic and always a known glyph', () => {
     const id = 'automation-7fa9c2';
     expect(glyphForId(id)).toBe(glyphForId(id));
@@ -55,7 +55,7 @@ describe('glyphForId', () => {
   });
 });
 
-describe('auStatusForRow', () => {
+describe(auStatusForRow, () => {
   it('enabled → active regardless of run history', () => {
     expect(auStatusForRow(true, false)).toBe('active');
     expect(auStatusForRow(true, true)).toBe('active');

@@ -106,8 +106,10 @@ export function walInventoryGaps(keys: Iterable<string>, generations: Set<string
   }
   const gaps: string[] = [];
   for (const generation of generations) {
-    gaps.push(...walStreamGaps('vault', generation, segments, closers));
-    gaps.push(...walStreamGaps('journal', generation, segments, closers));
+    gaps.push(
+      ...walStreamGaps('vault', generation, segments, closers),
+      ...walStreamGaps('journal', generation, segments, closers),
+    );
   }
   return gaps;
 }

@@ -118,7 +118,7 @@ function attendeesByEvent(
   return byEvent;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function searchHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const term = String(input?.term ?? '').trim();
   if (!term) return { events: [] };
@@ -207,4 +207,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { events: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

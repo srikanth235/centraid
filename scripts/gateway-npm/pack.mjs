@@ -9,10 +9,9 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { rewriteWorkspaceDependencies, topologicalPublishOrder } from './pack-helpers.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const ROOT = path.resolve(__dirname, '../..');
 
 function parseArgs(argv) {
@@ -82,7 +81,7 @@ function main() {
         fs.mkdirSync(destDir, { recursive: true });
         for (const name of fs.readdirSync(fromDir)) {
           // crude glob: only * as suffix/prefix on basename
-          const re = new RegExp('^' + base.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+          const re = new RegExp('^' + base.replace(/\./gu, '\\.').replace(/\*/gu, '.*') + '$', 'u');
           if (!re.test(name)) continue;
           fs.cpSync(path.join(fromDir, name), path.join(destDir, name), { recursive: true });
         }

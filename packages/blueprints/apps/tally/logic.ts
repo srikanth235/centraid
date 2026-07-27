@@ -47,7 +47,7 @@ export function createLogic({
   loadView,
   refreshAll,
 }: LogicDeps) {
-  const $ = (id: string) => document.getElementById(id)!;
+  const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 
   // ---------- Notice / consent narration ----------
 

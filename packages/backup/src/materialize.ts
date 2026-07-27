@@ -58,7 +58,7 @@ export interface MaterializeSnapshotBlobsResult {
 function blobShaOf(entry: ManifestEntry): string | undefined {
   if (entry.kind !== 'blob') return undefined;
   const sha = entry.path.split('/').pop();
-  return sha && /^[0-9a-f]{64}$/.test(sha) ? sha : undefined;
+  return sha && /^[0-9a-f]{64}$/u.test(sha) ? sha : undefined;
 }
 
 export async function materializeSnapshotBlobs(

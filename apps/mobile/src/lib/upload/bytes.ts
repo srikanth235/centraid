@@ -35,7 +35,7 @@ export function utf8(value: string): Uint8Array {
 }
 
 export function hexToBytes(hex: string): Uint8Array {
-  if (!/^[0-9a-f]+$/.test(hex) || hex.length % 2 !== 0) throw new Error('invalid hex');
+  if (!/^[0-9a-f]+$/u.test(hex) || hex.length % 2 !== 0) throw new Error('invalid hex');
   return Uint8Array.from({ length: hex.length / 2 }, (_, index) =>
     Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16),
   );
@@ -56,7 +56,7 @@ export function bytesToBase64(bytes: Uint8Array): string {
 }
 
 export function base64ToBytes(value: string): Uint8Array {
-  const clean = value.replace(/[\n\r=]/g, '');
+  const clean = value.replace(/[\n\r=]/gu, '');
   const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
   let bits = 0;
   let accumulator = 0;

@@ -87,7 +87,7 @@ async function handleBackgroundPut(
       error instanceof Error ? error.message : String(error),
     );
   }
-  if (!/^[a-zA-Z0-9._-]{1,160}$/.test(transferId)) {
+  if (!/^[a-zA-Z0-9._-]{1,160}$/u.test(transferId)) {
     throw new BridgeFailureError('invalid_args', 'Background transfer id is invalid.');
   }
   if (bodyBase64.length > MAX_BACKGROUND_PART_BASE64_CHARS) {

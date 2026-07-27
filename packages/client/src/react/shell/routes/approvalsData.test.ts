@@ -61,14 +61,14 @@ function outboxItem(overrides: Partial<OutboxItem> = {}): OutboxItem {
   };
 }
 
-describe('buildOutboxRow', () => {
+describe(buildOutboxRow, () => {
   it('reads a plain-string recipient + subject/body straight off the artifact', () => {
     const row = buildOutboxRow(outboxItem());
     expect(row.recipient).toBe('ravi@example.com');
     expect(row.subject).toBe('Hi');
     expect(row.bodyPreview).toBe('See you at 6.');
     expect(row.connectionLabel).toBe('personal');
-    expect(row.fields).toEqual(
+    expect(row.fields).toStrictEqual(
       expect.arrayContaining([
         { key: 'to', label: 'To', value: 'ravi@example.com' },
         { key: 'subject', label: 'Subject', value: 'Hi' },
@@ -76,7 +76,11 @@ describe('buildOutboxRow', () => {
       ]),
     );
     expect(row.canEdit).toBe(false);
-    expect(row.artifact).toEqual({ to: 'ravi@example.com', subject: 'Hi', body: 'See you at 6.' });
+    expect(row.artifact).toStrictEqual({
+      to: 'ravi@example.com',
+      subject: 'Hi',
+      body: 'See you at 6.',
+    });
     expect(row.caller).toBe('gmail-send');
     expect(row.callerKind).toBe('agent');
   });
@@ -113,7 +117,7 @@ describe('buildOutboxRow', () => {
   });
 });
 
-describe('buildNeedsAuthRow', () => {
+describe(buildNeedsAuthRow, () => {
   it('carries the connection health note through unchanged', () => {
     const row: OutboxNeedsAuth = {
       connectionId: 'c1',
@@ -121,11 +125,11 @@ describe('buildNeedsAuthRow', () => {
       label: 'personal',
       note: 'token expired',
     };
-    expect(buildNeedsAuthRow(row)).toEqual(row);
+    expect(buildNeedsAuthRow(row)).toStrictEqual(row);
   });
 });
 
-describe('buildParkedRow', () => {
+describe(buildParkedRow, () => {
   it('falls back to the caller kind when the caller name is null', () => {
     const row: VaultParkedEntry = {
       invocationId: 'inv1',
@@ -158,7 +162,7 @@ describe('buildParkedRow', () => {
   });
 });
 
-describe('buildScopeRequestRow', () => {
+describe(buildScopeRequestRow, () => {
   it('summarizes scopes as "schema.table (verbs)"', () => {
     const row: OutboxScopeRequest = {
       requestId: 'r1',
@@ -175,7 +179,7 @@ describe('buildScopeRequestRow', () => {
   });
 });
 
-describe('buildGrantRow', () => {
+describe(buildGrantRow, () => {
   it('falls back to the actor id when the resolved name is null', () => {
     const row: OutboxGrant = {
       grantId: 'g1',
@@ -190,7 +194,7 @@ describe('buildGrantRow', () => {
   });
 });
 
-describe('humanizeActivityLabel', () => {
+describe(humanizeActivityLabel, () => {
   it('preserves Locker fill / reveal copy unchanged', () => {
     expect(
       humanizeActivityLabel('reveal', 'allow', 'locker.item', {
@@ -234,7 +238,7 @@ describe('formatActivityDetail / truncateObjectId', () => {
   });
 });
 
-describe('buildActivityRow', () => {
+describe(buildActivityRow, () => {
   it('turns a Locker reveal into an origin-bearing fill activity row', () => {
     const row = reviewEntry({
       receiptId: 'receipt-fill',
@@ -343,7 +347,7 @@ describe('buildActivityRow', () => {
   });
 });
 
-describe('collapseAdjacentActivity', () => {
+describe(collapseAdjacentActivity, () => {
   it('collapses adjacent rows with the same verb + object + decision', () => {
     const a = buildActivityRow(reviewEntry({ receiptId: 'r1', decision: 'deny' }));
     const b = buildActivityRow(reviewEntry({ receiptId: 'r2', decision: 'deny' }));

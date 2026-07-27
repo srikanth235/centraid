@@ -5,7 +5,7 @@ function row(id: string, enabled: boolean): EnrichmentAutomationRow {
   return { id, enabled, ref: `${id}/${id}` };
 }
 
-describe('createEnrichmentHealthProbe', () => {
+describe(createEnrichmentHealthProbe, () => {
   it('reports ok, zero enabled, when no enricher is installed', async () => {
     const probe = createEnrichmentHealthProbe({
       vaults: () => [{ vaultId: 'v1', listAutomations: async () => [], recentRuns: () => [] }],
@@ -122,7 +122,7 @@ describe('createEnrichmentHealthProbe', () => {
         },
       ],
     });
-    await expect(probe()).resolves.toEqual({
+    await expect(probe()).resolves.toStrictEqual({
       status: 'ok',
       detail: '0 of 0 enrichers enabled',
     });

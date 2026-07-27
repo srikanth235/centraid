@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { ChangeBus, type AppChange } from './change-bus.js';
 
-describe('ChangeBus', () => {
+describe(ChangeBus, () => {
   it('delivers emits to matching-app subscribers in subscription order', () => {
     const bus = new ChangeBus();
     const seen: string[] = [];
     bus.subscribe('app1', (c) => seen.push(`a:${c.tables.join(',')}`));
     bus.subscribe('app1', (c) => seen.push(`b:${c.tables.join(',')}`));
     bus.emit({ appId: 'app1', tables: ['todos'], ts: 1, source: 'handler' });
-    expect(seen).toEqual(['a:todos', 'b:todos']);
+    expect(seen).toStrictEqual(['a:todos', 'b:todos']);
   });
 
   it('does not deliver to subscribers of other apps', () => {
@@ -80,7 +80,7 @@ describe('ChangeBus', () => {
     bus.emit({ appId: 'app1', tables: ['t'], ts: 1, source: 'handler' });
     bus.emit({ appId: 'app1', tables: ['t'], ts: 2, source: 'handler' });
     // First emit: a, b. Second emit: only b (a unsubscribed itself).
-    expect(order).toEqual(['a', 'b', 'b']);
+    expect(order).toStrictEqual(['a', 'b', 'b']);
   });
 
   it('exposes listenerCount for diagnostics', () => {
@@ -100,8 +100,8 @@ describe('ChangeBus', () => {
     const captured: AppChange[] = [];
     bus.subscribe('app1', (c) => captured.push(c));
     bus.emit({ appId: 'app1', tables: ['a', 'b'], ts: 12345, source: 'handler' });
-    expect(captured.length).toBe(1);
-    expect(captured[0]).toEqual({
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toStrictEqual({
       appId: 'app1',
       tables: ['a', 'b'],
       ts: 12345,

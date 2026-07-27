@@ -61,7 +61,7 @@ function triggerToDto(t: CentraidAutomationRow['triggers'][number]): AuEditorTri
       return {
         entity: t.entity,
         kind: 'condition',
-        ...(t.where !== undefined ? { where: t.where } : {}),
+        ...(t.where === undefined ? {} : { where: t.where }),
         ...(t.every ? { every: t.every } : {}),
       };
     case 'event':
@@ -263,9 +263,9 @@ export default function AutomationEditorRoute({
                 ...(vaultForTriggers(fields.triggers)
                   ? { vault: vaultForTriggers(fields.triggers) }
                   : {}),
-                ...(connections !== undefined ? { connections } : { connections: [] }),
-                ...(fields.runner !== undefined ? { runner: fields.runner } : {}),
-                ...(fields.model !== undefined ? { model: fields.model } : {}),
+                ...(connections === undefined ? { connections: [] } : { connections }),
+                ...(fields.runner === undefined ? {} : { runner: fields.runner }),
+                ...(fields.model === undefined ? {} : { model: fields.model }),
               });
               if (row) rowRef.current = row;
               // A `{kind:'webhook'}` trigger that didn't exist before mints a
@@ -419,7 +419,7 @@ export default function AutomationEditorRoute({
               decision,
               id,
               kind,
-              ...(alwaysAllow !== undefined ? { alwaysAllow } : {}),
+              ...(alwaysAllow === undefined ? {} : { alwaysAllow }),
             });
           } catch (err) {
             showToast(`Could not update: ${err instanceof Error ? err.message : String(err)}`);

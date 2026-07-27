@@ -91,7 +91,7 @@ describe('shouldAdmitUpdate (I5/I6)', () => {
   });
 });
 
-describe('stableBucketId', () => {
+describe(stableBucketId, () => {
   it('returns a value in [0, 1)', () => {
     for (const id of ['a', 'install-1', 'xxxxxxxx', '']) {
       const b = stableBucketId(id);
@@ -110,7 +110,9 @@ describe('stableBucketId', () => {
   });
 });
 
-describe('ROLLOUT_WINDOW_MS', () => {
+// Titled in prose, not `describe(ROLLOUT_WINDOW_MS)`: the constant is a number,
+// and `describe` only accepts a string or a function.
+describe('the rollout window', () => {
   it('is 72 hours', () => {
     expect(ROLLOUT_WINDOW_MS).toBe(72 * 60 * 60 * 1000);
   });

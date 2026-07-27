@@ -350,7 +350,7 @@ export function createSessionUpdateMapper(
         toolCallId: id,
         toolName: title,
         rawJson: JSON.stringify(update),
-        ...(update.rawInput !== undefined ? { args: update.rawInput } : {}),
+        ...(update.rawInput === undefined ? {} : { args: update.rawInput }),
         ...(typeof update.kind === 'string' ? { kind: update.kind } : {}),
       });
       maybeEmitToolResult(id, update);
@@ -367,7 +367,7 @@ export function createSessionUpdateMapper(
       emit({
         type: 'phase',
         phase: 'plan',
-        ...(update.entries !== undefined ? { detail: update.entries } : {}),
+        ...(update.entries === undefined ? {} : { detail: update.entries }),
         ...(plan.length ? { plan } : {}),
       });
       return;

@@ -17,10 +17,9 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = import.meta.filename;
+const __dirname = import.meta.dirname;
 const DESKTOP_ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(__dirname, 'out');
 

@@ -78,12 +78,12 @@ export function revokeGrantCascade(
     grant.app_id !== null || grant.grantee_party_id !== null
       ? writeScopeTombstones(
           db,
-          grant.app_id !== null
-            ? { appId: grant.app_id }
-            : { granteePartyId: grant.grantee_party_id as string },
+          grant.app_id === null
+            ? { granteePartyId: grant.grantee_party_id as string }
+            : { appId: grant.app_id },
           revokedScopes.map((s) => ({
             schema: s.schema_name,
-            ...(s.table_name !== null ? { table: s.table_name } : {}),
+            ...(s.table_name === null ? {} : { table: s.table_name }),
             verbs: s.verbs as 'read' | 'read+act' | 'act' | 'reveal',
             ...(s.row_filter_json
               ? { rowFilter: JSON.parse(s.row_filter_json) as FilterClause[] }

@@ -2,9 +2,8 @@ import { copyFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(import.meta.dirname, '..');
 
 // Packaging / Docker set CENTRAID_REQUIRE_NATIVE_TUNNEL=1 — tunnel is product-
 // critical for remote devices; fail the build if cargo or the artifact is missing.

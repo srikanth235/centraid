@@ -1,7 +1,7 @@
 // Minimal ZIP reader unit tests (issue #545 B6).
 
 import { deflateRawSync } from 'node:zlib';
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { readZipEntries } from './zip.js';
 
 /** Build a tiny non-zip64 archive with one stored and one deflated file. */
@@ -82,15 +82,17 @@ function buildZip(): Buffer {
   return Buffer.concat([locals, cdir, eocd]);
 }
 
-test('readZipEntries extracts stored and deflated files', () => {
-  const entries = readZipEntries(buildZip());
-  expect(entries.map((e) => e.name).sort()).toEqual(['hello.txt', 'nested/data.bin']);
-  const hello = entries.find((e) => e.name === 'hello.txt')!;
-  expect(hello.data.toString('utf8')).toBe('hello world');
-  const nested = entries.find((e) => e.name === 'nested/data.bin')!;
-  expect(nested.data.toString('utf8')).toBe('compressed-bytes-here');
-});
+describe('zip', () => {
+  test('readZipEntries extracts stored and deflated files', () => {
+    const entries = readZipEntries(buildZip());
+    expect(entries.map((e) => e.name).sort()).toStrictEqual(['hello.txt', 'nested/data.bin']);
+    const hello = entries.find((e) => e.name === 'hello.txt')!;
+    expect(hello.data.toString('utf8')).toBe('hello world');
+    const nested = entries.find((e) => e.name === 'nested/data.bin')!;
+    expect(nested.data.toString('utf8')).toBe('compressed-bytes-here');
+  });
 
-test('readZipEntries throws on a non-zip buffer', () => {
-  expect(() => readZipEntries(Buffer.from('not a zip'))).toThrow(/not a zip file/);
+  test('readZipEntries throws on a non-zip buffer', () => {
+    expect(() => readZipEntries(Buffer.from('not a zip'))).toThrow(/not a zip file/);
+  });
 });

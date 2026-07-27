@@ -7,7 +7,7 @@ const doFetch = vi.fn();
 const readJson = vi.fn();
 // vitest hoists vi.mock above imports at run time, so declaration order here is
 // only for the linter's import-first rule.
-vi.mock('../../gateway-client-core.js', () => ({
+vi.mock(import('../../gateway-client-core.js'), () => ({
   auth: vi.fn(async () => ({ baseUrl: 'https://gw.test', token: 'tok' })),
   authHeaders: (token: string | undefined, ct?: string) => ({
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -72,7 +72,7 @@ function client(target: { centraid?: unknown }): {
 
 const noQueries: InlineAppModule['queries'] = {};
 
-describe('installInlineCentraid', () => {
+describe(installInlineCentraid, () => {
   beforeEach(() => {
     doFetch.mockReset();
     readJson.mockReset();
@@ -87,7 +87,7 @@ describe('installInlineCentraid', () => {
       input: { task_id: 't1' },
       intentId: 'intent-xyz',
     });
-    expect(session.writes).toEqual([
+    expect(session.writes).toStrictEqual([
       { action: 'set-status', input: { task_id: 't1' }, intentId: 'intent-xyz' },
     ]);
     expect(outcome.status).toBe('executed');
@@ -125,7 +125,7 @@ describe('installInlineCentraid', () => {
     const target: { centraid?: unknown } = {};
     installInlineCentraid({ appId: 'tasks', session, queries, target, isOnline: () => true });
     const res = await client(target).read<{ open: unknown[] }>({ query: 'board' });
-    expect(res.open).toEqual(['from-gateway']);
+    expect(res.open).toStrictEqual(['from-gateway']);
     expect(doFetch).toHaveBeenCalledWith(
       'https://gw.test',
       '/centraid/tasks/queries/board',
@@ -158,7 +158,7 @@ describe('installInlineCentraid', () => {
       { shapeId: 's', entity: 'schedule.task', source: 'canonical' } as ReplicaInvalidation,
     ]);
     expect(seen).toHaveLength(1);
-    expect(seen[0]?.tables).toEqual(['schedule.task']);
+    expect(seen[0]?.tables).toStrictEqual(['schedule.task']);
   });
 
   it('restores the previous window.centraid on teardown', () => {

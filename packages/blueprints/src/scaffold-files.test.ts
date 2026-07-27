@@ -6,7 +6,7 @@ function byPath(files: ScaffoldFile[]): Map<string, string> {
   return new Map(files.map((f) => [f.path, f.content]));
 }
 
-describe('scaffoldAppFiles', () => {
+describe(scaffoldAppFiles, () => {
   it('emits the canonical file set with the id/name baked in', () => {
     const files = byPath(scaffoldAppFiles('todos', { name: 'Todos' }));
     expect(files.has('package.json')).toBeTruthy();
@@ -65,12 +65,12 @@ describe('scaffoldAppFiles', () => {
   });
 });
 
-describe('updateAppMetaFiles', () => {
+describe(updateAppMetaFiles, () => {
   const base = (): ScaffoldFile[] => scaffoldAppFiles('todos', { name: 'Todos' });
 
   it('rewrites app.json#name and the index.html <title> on rename', () => {
     const changed = byPath(updateAppMetaFiles(base(), 'todos', { name: 'Tasks' }));
-    expect([...changed.keys()].sort()).toEqual(['app.json', 'index.html']);
+    expect([...changed.keys()].sort()).toStrictEqual(['app.json', 'index.html']);
     expect((JSON.parse(changed.get('app.json')!) as { name: string }).name).toBe('Tasks');
     expect(changed.get('index.html')!).toMatch(/<title>Tasks<\/title>/);
   });
@@ -78,10 +78,10 @@ describe('updateAppMetaFiles', () => {
   it('clears description on empty patch and only touches app.json', () => {
     const start = scaffoldAppFiles('todos', { name: 'Todos', description: 'x' });
     const changed = byPath(updateAppMetaFiles(start, 'todos', { description: '   ' }));
-    expect([...changed.keys()]).toEqual(['app.json']);
-    expect((JSON.parse(changed.get('app.json')!) as { description?: string }).description).toBe(
-      undefined,
-    );
+    expect([...changed.keys()]).toStrictEqual(['app.json']);
+    expect(
+      (JSON.parse(changed.get('app.json')!) as { description?: string }).description,
+    ).toBeUndefined();
   });
 
   it('rejects an empty name and a duplicate display name', () => {
@@ -99,7 +99,7 @@ describe('updateAppMetaFiles', () => {
   });
 });
 
-describe('cloneTemplateFiles', () => {
+describe(cloneTemplateFiles, () => {
   const template = (): ScaffoldFile[] => [
     {
       path: 'app.json',

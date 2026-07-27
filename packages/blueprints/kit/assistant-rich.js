@@ -38,7 +38,7 @@
 //      visible (escaped) code block, never silent loss and never eval.
 // Adversarial coverage lives in packages/blueprints/src/assistant-sanitize.test.ts.
 
-import { cx, el, escapeHtml, inlineHtml, blockNodes } from './gfm.js';
+import { cx, el, blockNodes } from './gfm.js';
 import { highlightCode } from './code-highlight.js';
 
 /** The literal class names the kit's kit.css styles. Callers may override any. */
@@ -220,7 +220,8 @@ export function richAnswerHtml(text, classes) {
     for (const k in classes) if (classes[k]) C[k] = classes[k];
   }
   const host = el('div', { class: C.asstRich });
-  const fence = /```(block:table|block:chart|block:stat|[A-Za-z0-9+#_-]*)\n([\s\S]*?)```/g;
+  const fence =
+    /```(?<tag>block:table|block:chart|block:stat|[A-Za-z0-9+#_-]*)\n(?<payload>[\s\S]*?)```/gu;
   let last = 0;
   let m;
   const pushProse = (seg) => {
@@ -229,8 +230,8 @@ export function richAnswerHtml(text, classes) {
   while ((m = fence.exec(text)) !== null) {
     pushProse(text.slice(last, m.index));
     last = m.index + m[0].length;
-    const tag = m[1] ?? '';
-    const payload = m[2] ?? '';
+    const tag = m.groups?.tag ?? '';
+    const payload = m.groups?.payload ?? '';
     if (tag.startsWith('block:')) {
       let node = null;
       try {
@@ -246,7 +247,7 @@ export function richAnswerHtml(text, classes) {
       }
       host.append(node ?? codeBlock(payload.trim(), '', C));
     } else {
-      host.append(codeBlock(payload.replace(/\n$/, ''), tag, C));
+      host.append(codeBlock(payload.replace(/\n$/u, ''), tag, C));
     }
   }
   pushProse(text.slice(last));

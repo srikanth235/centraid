@@ -18,10 +18,10 @@ import { CENTRAID_HANDSHAKE, type BridgeRequest } from '../lib/bridge/protocol';
 import type { AppDetailScreenProps } from '../navigation';
 
 type BaseResolveSetters = {
-  setBaseUrl(next: string | undefined): void;
-  setNoGateway(next: boolean): void;
-  setLoadError(next: string | undefined): void;
-  setLoading(next: boolean): void;
+  setBaseUrl: (next: string | undefined) => void;
+  setNoGateway: (next: boolean) => void;
+  setLoadError: (next: string | undefined) => void;
+  setLoading: (next: boolean) => void;
 };
 
 /**

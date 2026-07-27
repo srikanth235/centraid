@@ -54,41 +54,43 @@ describe('partStream boundary math', () => {
     // 40+40+40+10 = 130 bytes → parts of 64, 64, 2.
     const input = [seq(40, 0), seq(40, 40), seq(40, 80), seq(10, 120)];
     const parts = await collect(pieces(...input), 64);
-    expect(parts.map((p) => p.length)).toEqual([64, 64, 2]);
+    expect(parts.map((p) => p.length)).toStrictEqual([64, 64, 2]);
     // Byte-exact reassembly: no bytes lost, duplicated, or reordered.
-    expect([...concatAll(parts)]).toEqual([...seq(130, 0)]);
+    expect([...concatAll(parts)]).toStrictEqual([...seq(130, 0)]);
   });
 
   test('one piece larger than several parts splits within the piece', async () => {
     const parts = await collect(pieces(seq(200, 0)), 64);
-    expect(parts.map((p) => p.length)).toEqual([64, 64, 64, 8]);
-    expect([...concatAll(parts)]).toEqual([...seq(200, 0)]);
-    expect([...parts[1]!]).toEqual([...seq(64, 64)]);
+    expect(parts.map((p) => p.length)).toStrictEqual([64, 64, 64, 8]);
+    expect([...concatAll(parts)]).toStrictEqual([...seq(200, 0)]);
+    expect([...parts[1]!]).toStrictEqual([...seq(64, 64)]);
   });
 
   test('exact multiple of partBytes yields no empty trailing part', async () => {
     const parts = await collect(pieces(seq(50, 0), seq(78, 50)), 64);
-    expect(parts.map((p) => p.length)).toEqual([64, 64]);
-    expect([...concatAll(parts)]).toEqual([...seq(128, 0)]);
+    expect(parts.map((p) => p.length)).toStrictEqual([64, 64]);
+    expect([...concatAll(parts)]).toStrictEqual([...seq(128, 0)]);
   });
 
   test('input exactly one part long yields exactly one part', async () => {
     const parts = await collect(pieces(seq(64, 0)), 64);
-    expect(parts.map((p) => p.length)).toEqual([64]);
-    expect([...parts[0]!]).toEqual([...seq(64, 0)]);
+    expect(parts.map((p) => p.length)).toStrictEqual([64]);
+    expect([...parts[0]!]).toStrictEqual([...seq(64, 0)]);
   });
 
   test('empty source yields zero parts (a zero-byte file has an empty part list)', async () => {
-    expect(await collect(pieces(), 64)).toEqual([]);
+    await expect(collect(pieces(), 64)).resolves.toStrictEqual([]);
   });
 
   test('source of only empty pieces yields zero parts', async () => {
-    expect(await collect(pieces(new Uint8Array(0), new Uint8Array(0)), 64)).toEqual([]);
+    await expect(collect(pieces(new Uint8Array(0), new Uint8Array(0)), 64)).resolves.toStrictEqual(
+      [],
+    );
   });
 
   test('single byte yields a single one-byte part', async () => {
     const parts = await collect(pieces(Uint8Array.of(0xab)), 64);
-    expect(parts.map((p) => [...p])).toEqual([[0xab]]);
+    expect(parts.map((p) => [...p])).toStrictEqual([[0xab]]);
   });
 
   test('empty pieces interleaved with data do not perturb boundaries', async () => {
@@ -96,8 +98,8 @@ describe('partStream boundary math', () => {
       pieces(new Uint8Array(0), seq(64, 0), new Uint8Array(0), seq(3, 64)),
       64,
     );
-    expect(parts.map((p) => p.length)).toEqual([64, 3]);
-    expect([...concatAll(parts)]).toEqual([...seq(67, 0)]);
+    expect(parts.map((p) => p.length)).toStrictEqual([64, 3]);
+    expect([...concatAll(parts)]).toStrictEqual([...seq(67, 0)]);
   });
 
   test('rejects invalid part sizes', async () => {
@@ -122,9 +124,15 @@ describe('source-buffer aliasing (engine readFileStream reuses its read buffer)'
       yield buf;
     }
     const parts = await collect(reused(), 64);
-    expect(parts.map((p) => p.length)).toEqual([64, 56]);
-    expect([...parts[0]!]).toEqual([...new Uint8Array(40).fill(1), ...new Uint8Array(24).fill(2)]);
-    expect([...parts[1]!]).toEqual([...new Uint8Array(16).fill(2), ...new Uint8Array(40).fill(3)]);
+    expect(parts.map((p) => p.length)).toStrictEqual([64, 56]);
+    expect([...parts[0]!]).toStrictEqual([
+      ...new Uint8Array(40).fill(1),
+      ...new Uint8Array(24).fill(2),
+    ]);
+    expect([...parts[1]!]).toStrictEqual([
+      ...new Uint8Array(16).fill(2),
+      ...new Uint8Array(40).fill(3),
+    ]);
   });
 
   test('a part spanning exactly one full source piece is copied, never aliased', async () => {
@@ -139,9 +147,9 @@ describe('source-buffer aliasing (engine readFileStream reuses its read buffer)'
       yield buf;
     }
     const parts = await collect(reused(), 64);
-    expect(parts.map((p) => p.length)).toEqual([64, 64]);
-    expect([...parts[0]!]).toEqual([...new Uint8Array(64).fill(1)]);
-    expect([...parts[1]!]).toEqual([...new Uint8Array(64).fill(2)]);
+    expect(parts.map((p) => p.length)).toStrictEqual([64, 64]);
+    expect([...parts[0]!]).toStrictEqual([...new Uint8Array(64).fill(1)]);
+    expect([...parts[1]!]).toStrictEqual([...new Uint8Array(64).fill(2)]);
   });
 
   test('multiple parts cut from one reused oversized piece are all copies', async () => {
@@ -153,11 +161,11 @@ describe('source-buffer aliasing (engine readFileStream reuses its read buffer)'
       yield buf;
     }
     const parts = await collect(reused(), 64);
-    expect(parts.map((p) => p.length)).toEqual([64, 64, 64, 64]);
-    expect([...parts[0]!]).toEqual([...new Uint8Array(64).fill(1)]);
-    expect([...parts[1]!]).toEqual([...new Uint8Array(64).fill(1)]);
-    expect([...parts[2]!]).toEqual([...new Uint8Array(64).fill(2)]);
-    expect([...parts[3]!]).toEqual([...new Uint8Array(64).fill(2)]);
+    expect(parts.map((p) => p.length)).toStrictEqual([64, 64, 64, 64]);
+    expect([...parts[0]!]).toStrictEqual([...new Uint8Array(64).fill(1)]);
+    expect([...parts[1]!]).toStrictEqual([...new Uint8Array(64).fill(1)]);
+    expect([...parts[2]!]).toStrictEqual([...new Uint8Array(64).fill(2)]);
+    expect([...parts[3]!]).toStrictEqual([...new Uint8Array(64).fill(2)]);
   });
 
   test('the final short part does not alias the source buffer either', async () => {
@@ -171,7 +179,7 @@ describe('source-buffer aliasing (engine readFileStream reuses its read buffer)'
     const parts = await collect(reused(), 64);
     buf.fill(9); // mutate AFTER the stream completed
     expect(done).toBe(true);
-    expect([...parts[0]!]).toEqual([...new Uint8Array(10).fill(5)]);
+    expect([...parts[0]!]).toStrictEqual([...new Uint8Array(10).fill(5)]);
   });
 });
 
@@ -183,11 +191,11 @@ describe('partBuffer / partStream agreement', () => {
       pieces(data.subarray(0, 1), data.subarray(1, 65), data.subarray(65, 130), data.subarray(130)),
       64,
     );
-    expect(fromBuffer.map((p) => [...p])).toEqual(fromRaggedStream.map((p) => [...p]));
-    expect(fromBuffer.map((p) => p.length)).toEqual([64, 64, 64, 8]);
+    expect(fromBuffer.map((p) => [...p])).toStrictEqual(fromRaggedStream.map((p) => [...p]));
+    expect(fromBuffer.map((p) => p.length)).toStrictEqual([64, 64, 64, 8]);
   });
 
   test('partBuffer of an empty buffer is an empty part list', async () => {
-    expect(await partBuffer(new Uint8Array(0), 64)).toEqual([]);
+    await expect(partBuffer(new Uint8Array(0), 64)).resolves.toStrictEqual([]);
   });
 });

@@ -8,11 +8,11 @@ import { handleRunsMessage, handleStateMessage, nextOrdinal, type AuditState } f
 function audit(over: Partial<AuditState> = {}): AuditState {
   return {
     store: {
-      stateGet: vi.fn(),
-      stateSet: vi.fn(),
-      stateDelete: vi.fn(),
-      listAutomationTurns: vi.fn(() => []),
-      messageInText: vi.fn(() => undefined),
+      stateGet: vi.fn<AuditState['store']['stateGet']>(),
+      stateSet: vi.fn<AuditState['store']['stateSet']>(),
+      stateDelete: vi.fn<AuditState['store']['stateDelete']>(),
+      listAutomationTurns: vi.fn<AuditState['store']['listAutomationTurns']>(() => []),
+      messageInText: vi.fn<AuditState['store']['messageInText']>(() => undefined),
     } as never,
     runId: 'current-run',
     automationId: 'app/digest',
@@ -22,7 +22,7 @@ function audit(over: Partial<AuditState> = {}): AuditState {
   };
 }
 
-describe('nextOrdinal', () => {
+describe(nextOrdinal, () => {
   it('increments the audit ordinal and returns the previous value', () => {
     const a = audit({ ordinal: 3 });
     expect(nextOrdinal(a)).toBe(3);
@@ -31,24 +31,24 @@ describe('nextOrdinal', () => {
   });
 });
 
-describe('handleStateMessage', () => {
+describe(handleStateMessage, () => {
   it('get/set/delete against the automation state map', () => {
     const store = {
-      stateGet: vi.fn((automationId: string, key: string) =>
+      stateGet: vi.fn<AuditState['store']['stateGet']>((automationId, key) =>
         key === 'cursor' && automationId === 'app/digest'
           ? { automationId, key, valueJson: '{"n":1}', updatedAt: 1 }
           : undefined,
       ),
-      stateSet: vi.fn(),
-      stateDelete: vi.fn(),
+      stateSet: vi.fn<AuditState['store']['stateSet']>(),
+      stateDelete: vi.fn<AuditState['store']['stateDelete']>(),
     };
     const a = audit({ store: store as never });
 
-    expect(handleStateMessage(a, 'get', 'missing', undefined)).toEqual({
+    expect(handleStateMessage(a, 'get', 'missing', undefined)).toStrictEqual({
       ok: true,
       result: undefined,
     });
-    expect(handleStateMessage(a, 'get', 'cursor', undefined)).toEqual({
+    expect(handleStateMessage(a, 'get', 'cursor', undefined)).toStrictEqual({
       ok: true,
       result: { n: 1 },
     });
@@ -62,7 +62,7 @@ describe('handleStateMessage', () => {
     });
     expect(handleStateMessage(a, 'get', 'raw', undefined).result).toBe('not-json');
 
-    expect(handleStateMessage(a, 'set', 'cursor', { n: 2 })).toEqual({ ok: true });
+    expect(handleStateMessage(a, 'set', 'cursor', { n: 2 })).toStrictEqual({ ok: true });
     expect(store.stateSet).toHaveBeenCalledWith(
       'app/digest',
       'cursor',
@@ -70,7 +70,7 @@ describe('handleStateMessage', () => {
       expect.any(Number),
     );
 
-    expect(handleStateMessage(a, 'delete', 'cursor', undefined)).toEqual({ ok: true });
+    expect(handleStateMessage(a, 'delete', 'cursor', undefined)).toStrictEqual({ ok: true });
     expect(store.stateDelete).toHaveBeenCalledWith('app/digest', 'cursor');
 
     expect(handleStateMessage(a, 'nope' as 'get', 'k', undefined)).toMatchObject({
@@ -87,14 +87,14 @@ describe('handleStateMessage', () => {
         },
       } as never,
     });
-    expect(handleStateMessage(a, 'get', 'k', undefined)).toEqual({
+    expect(handleStateMessage(a, 'get', 'k', undefined)).toStrictEqual({
       ok: false,
       error: 'db down',
     });
   });
 });
 
-describe('handleRunsMessage', () => {
+describe(handleRunsMessage, () => {
   it('lists / last-s the automation turns excluding the in-progress self-turn', () => {
     const turns = [
       {
@@ -127,15 +127,17 @@ describe('handleRunsMessage', () => {
       },
     ];
     const store = {
-      listAutomationTurns: vi.fn(() => turns),
-      messageInText: vi.fn((id: string) => (id === 't1' ? '{"x":1}' : undefined)),
+      listAutomationTurns: vi.fn<AuditState['store']['listAutomationTurns']>(() => turns),
+      messageInText: vi.fn<AuditState['store']['messageInText']>((id) =>
+        id === 't1' ? '{"x":1}' : undefined,
+      ),
     };
     const a = audit({ store: store as never });
 
     const list = handleRunsMessage(a, 'list', { limit: 10 });
     expect(list.ok).toBe(true);
-    expect((list.result as { runId: string }[]).map((r) => r.runId)).toEqual(['t1', 't0']);
-    expect((list.result as { input?: unknown }[])[0]?.input).toEqual({ x: 1 });
+    expect((list.result as { runId: string }[]).map((r) => r.runId)).toStrictEqual(['t1', 't0']);
+    expect((list.result as { input?: unknown }[])[0]?.input).toStrictEqual({ x: 1 });
 
     const last = handleRunsMessage(a, 'last', {});
     expect(last.ok).toBe(true);

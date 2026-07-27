@@ -48,7 +48,7 @@ const CONV: ExportableConversation = {
   ],
 };
 
-describe('conversationToMarkdown', () => {
+describe(conversationToMarkdown, () => {
   const md = conversationToMarkdown(CONV);
   it('renders a title header and role sections', () => {
     expect(md.startsWith('# Quarterly budget review\n')).toBe(true);
@@ -64,7 +64,7 @@ describe('conversationToMarkdown', () => {
   });
 });
 
-describe('conversationToJson', () => {
+describe(conversationToJson, () => {
   it('round-trips the structured transcript under an export envelope', () => {
     const parsed = JSON.parse(conversationToJson(CONV)) as {
       conversation: { id: string; title: string };
@@ -73,11 +73,11 @@ describe('conversationToJson', () => {
     expect(parsed.conversation.id).toBe('c1');
     expect(parsed.conversation.title).toBe('Quarterly budget review');
     expect(parsed.messages).toHaveLength(3);
-    expect(typeof (parsed as { exportedAt?: unknown }).exportedAt).toBe('string');
+    expect((parsed as { exportedAt?: unknown }).exportedAt).toBeTypeOf('string');
   });
 });
 
-describe('exportFilename', () => {
+describe(exportFilename, () => {
   it('slugs the title and stamps the date with the right extension', () => {
     expect(exportFilename(CONV, 'markdown')).toBe('quarterly-budget-review-2026-07-02.md');
     expect(exportFilename(CONV, 'json')).toBe('quarterly-budget-review-2026-07-02.json');

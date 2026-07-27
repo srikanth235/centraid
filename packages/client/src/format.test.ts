@@ -11,7 +11,7 @@ import {
   shortVersionTitle,
 } from './format.js';
 
-describe('escapeHtml', () => {
+describe(escapeHtml, () => {
   it('escapes the three HTML-significant characters', () => {
     expect(escapeHtml('<a href="x">&</a>')).toBe('&lt;a href="x"&gt;&amp;&lt;/a&gt;');
   });
@@ -25,7 +25,7 @@ describe('escapeHtml', () => {
   });
 });
 
-describe('tokenize', () => {
+describe(tokenize, () => {
   it('wraps a JS keyword in a tok-key span', () => {
     expect(tokenize('const x = 1', 'js')).toContain('<span class="tok-key">const</span>');
   });
@@ -51,7 +51,7 @@ describe('tokenize', () => {
   });
 });
 
-describe('languageHint', () => {
+describe(languageHint, () => {
   it.each([
     ['app.ts', 'ts'],
     ['main.js', 'js'],
@@ -74,7 +74,7 @@ describe('languageHint', () => {
   });
 });
 
-describe('slugify', () => {
+describe(slugify, () => {
   it('lowercases and hyphenates non-alphanumerics', () => {
     expect(slugify('Morning Digest!')).toBe('morning-digest');
   });
@@ -84,7 +84,7 @@ describe('slugify', () => {
   });
 
   it('caps the slug at 40 characters', () => {
-    expect(slugify('a'.repeat(60)).length).toBe(40);
+    expect(slugify('a'.repeat(60))).toHaveLength(40);
   });
 
   it('collapses a run of separators into a single hyphen', () => {
@@ -92,7 +92,7 @@ describe('slugify', () => {
   });
 });
 
-describe('generateAppId', () => {
+describe(generateAppId, () => {
   it('combines the slugified seed with a six-char base36 suffix', () => {
     expect(generateAppId('My App')).toMatch(/^my-app-[0-9a-z]{6}$/);
   });
@@ -107,7 +107,7 @@ describe('generateAppId', () => {
   });
 });
 
-describe('formatBytes', () => {
+describe(formatBytes, () => {
   it('shows integer bytes below 1 KiB', () => {
     expect(formatBytes(0)).toBe('0 B');
     expect(formatBytes(1023)).toBe('1023 B');
@@ -124,7 +124,7 @@ describe('formatBytes', () => {
   });
 });
 
-describe('shortVersionTitle', () => {
+describe(shortVersionTitle, () => {
   it('prefers an explicit declared version', () => {
     expect(
       shortVersionTitle({ versionId: 'v_2026-05-08T14-30-00-000Z_a1', declaredVersion: '1.2.0' }),
@@ -144,7 +144,7 @@ describe('shortVersionTitle', () => {
   });
 });
 
-describe('relativeWhen', () => {
+describe(relativeWhen, () => {
   afterEach(() => {
     vi.useRealTimers();
   });

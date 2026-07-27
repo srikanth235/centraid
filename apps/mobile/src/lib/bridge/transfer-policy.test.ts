@@ -3,7 +3,7 @@ import { assertGatewayMintedUploadUrl } from './transfer-policy';
 
 const scope = {
   gatewayBaseUrl: 'http://127.0.0.1:18789',
-  fetchImpl: vi.fn(async () =>
+  fetchImpl: vi.fn<typeof fetch>(async () =>
     Response.json({
       blob_store: {
         kind: 's3',

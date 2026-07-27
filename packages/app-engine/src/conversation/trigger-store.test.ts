@@ -10,7 +10,7 @@ function store(): AutomationTriggerStore {
   );
 }
 
-describe('AutomationTriggerStore', () => {
+describe(AutomationTriggerStore, () => {
   it('upserts independent per-trigger cursors and removes stale automations', () => {
     const subject = store();
     subject.putCursor({
@@ -112,20 +112,20 @@ describe('AutomationTriggerStore', () => {
     });
 
     expect(first.inserted).toBe(true);
-    expect(duplicate).toEqual({ inserted: false, id: first.id });
+    expect(duplicate).toStrictEqual({ inserted: false, id: first.id });
     expect(second.id).toBeGreaterThan(first.id);
-    expect(subject.ingressBoundsAfter('hook-1', 0)).toEqual({
+    expect(subject.ingressBoundsAfter('hook-1', 0)).toStrictEqual({
       count: 2,
       latestId: second.id,
     });
-    expect(subject.listIngressAfter('hook-1', 0, 1)).toEqual([
+    expect(subject.listIngressAfter('hook-1', 0, 1)).toStrictEqual([
       expect.objectContaining({ id: first.id, payloadJson: '{"n":1}' }),
     ]);
-    expect(subject.pruneIngress(600)).toEqual({
+    expect(subject.pruneIngress(600)).toStrictEqual({
       deleted: 1,
       gaps: [{ sourceKey: 'hook-1', pruned: 1, throughId: first.id }],
     });
-    expect(subject.listIngressAfter('hook-1', 0, 10)).toEqual([
+    expect(subject.listIngressAfter('hook-1', 0, 10)).toStrictEqual([
       expect.objectContaining({ id: second.id }),
     ]);
   });
@@ -160,11 +160,11 @@ describe('AutomationTriggerStore', () => {
     const pruned = subject.pruneIngress(200);
 
     expect(pruned.deleted).toBe(2);
-    expect(pruned.gaps).toEqual([
+    expect(pruned.gaps).toStrictEqual([
       { sourceKey: 'hook-stalled', pruned: 2, throughId: stale.id + 1 },
     ]);
     // Nothing expired for the live source, so it reports no gap at all.
-    expect(subject.pruneIngress(200)).toEqual({ deleted: 0, gaps: [] });
+    expect(subject.pruneIngress(200)).toStrictEqual({ deleted: 0, gaps: [] });
     expect(subject.ingressBoundsAfter('poll-live', 0).count).toBe(1);
   });
 });

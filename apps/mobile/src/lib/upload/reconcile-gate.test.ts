@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { reconcileGate } from './reconcile-gate';
 
-describe('reconcileGate', () => {
+describe(reconcileGate, () => {
   it('proceeds whenever there are transfers, session or not', () => {
     expect(reconcileGate({ hasTransfers: true, hasFollowups: false, hasSession: false })).toBe(
       true,

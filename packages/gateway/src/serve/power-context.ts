@@ -147,13 +147,13 @@ function runPmset(): Promise<string> {
 
 /** Parse `pmset -g batt`. No `InternalBattery` line ⇒ a desktop Mac (no battery). */
 export function parsePmset(out: string): BatteryProbeResult {
-  if (!/-InternalBattery-/.test(out)) {
+  if (!/-InternalBattery-/u.test(out)) {
     return { present: false, percent: null, charging: null, discharging: null };
   }
-  const percentMatch = out.match(/(\d+)%/);
-  const percent = percentMatch ? Number(percentMatch[1]) : null;
-  const onBattery = /'Battery Power'/.test(out) || /;\s*discharging/.test(out);
-  const charging = /'AC Power'/.test(out) || /;\s*(charging|charged)/.test(out);
+  const percentMatch = out.match(/(?<percent>\d+)%/u);
+  const percent = percentMatch ? Number(percentMatch.groups?.percent) : null;
+  const onBattery = /'Battery Power'/u.test(out) || /;\s*discharging/u.test(out);
+  const charging = /'AC Power'/u.test(out) || /;\s*(?:charging|charged)/u.test(out);
   return {
     present: true,
     percent,
@@ -209,7 +209,7 @@ export function defaultStealSampler(platform: NodeJS.Platform): () => CpuStealSa
         .split('\n')
         .find((l) => l.startsWith('cpu '));
       if (!line) return null;
-      const cols = line.trim().split(/\s+/).slice(1).map(Number);
+      const cols = line.trim().split(/\s+/u).slice(1).map(Number);
       if (cols.length < 8 || cols.some((n) => !Number.isFinite(n))) return null;
       const total = cols.reduce((a, b) => a + b, 0);
       return { steal: cols[7] ?? 0, total };

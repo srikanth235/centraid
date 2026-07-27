@@ -97,9 +97,9 @@ function decodeBody(uri: unknown): string {
   const payload = uri.slice(comma + 1);
   try {
     if (meta.includes(';base64')) {
-      return typeof Buffer !== 'undefined'
-        ? Buffer.from(payload, 'base64').toString('utf8')
-        : atob(payload);
+      return typeof Buffer === 'undefined'
+        ? atob(payload)
+        : Buffer.from(payload, 'base64').toString('utf8');
     }
     return decodeURIComponent(payload);
   } catch {
@@ -114,7 +114,7 @@ function decodeBody(uri: unknown): string {
 // (flatten the first blocks, glyph the checklist/bullets) capped to ~200
 // chars; `checkOf` mirrors checkStats via the same checklist regex. Both are
 // inlined here because query handlers are standalone modules.
-const CHECK_RE = /^\s*[-*] \[( |x|X)\]\s?(.*)$/;
+const CHECK_RE = /^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u;
 
 function previewOf(body: unknown): string {
   const lines = String(body ?? '').split('\n');
@@ -123,13 +123,13 @@ function previewOf(body: unknown): string {
     if (out.length >= 6) break;
     const check = CHECK_RE.exec(line);
     if (check) {
-      out.push((/x/i.test(check[1]!) ? '☑ ' : '☐ ') + check[2]);
+      out.push((/x/iu.test(check.groups?.mark ?? '') ? '☑ ' : '☐ ') + (check.groups?.text ?? ''));
       continue;
     }
-    if (/^#{1,3}\s+/.test(line)) continue; // headings drop — the title carries them
-    const li = /^\s*(?:[-*]|\d+\.)\s+(.*)$/.exec(line);
+    if (/^#{1,3}\s+/u.test(line)) continue; // headings drop — the title carries them
+    const li = /^\s*(?:[-*]|\d+\.)\s+(?<text>.*)$/u.exec(line);
     if (li) {
-      out.push('• ' + li[1]);
+      out.push('• ' + (li.groups?.text ?? ''));
       continue;
     }
     if (line.trim() === '') continue;
@@ -137,9 +137,9 @@ function previewOf(body: unknown): string {
   }
   const text = out
     .join('\n')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1');
+    .replace(/\*\*(?<bold>.+?)\*\*/gu, '$<bold>')
+    .replace(/\*(?<italic>.+?)\*/gu, '$<italic>')
+    .replace(/`(?<code>.+?)`/gu, '$<code>');
   return text.length > 200 ? text.slice(0, 200) : text;
 }
 
@@ -150,7 +150,7 @@ function checkOf(body: unknown): { total: number; done: number } {
     const m = CHECK_RE.exec(line);
     if (!m) continue;
     total += 1;
-    if (/x/i.test(m[1]!)) done += 1;
+    if (/x/iu.test(m.groups?.mark ?? '')) done += 1;
   }
   return { total, done };
 }
@@ -193,7 +193,7 @@ function attachmentsBySubject(
   return bySubject;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function libraryHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
@@ -414,4 +414,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { notes: [], notebooks: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

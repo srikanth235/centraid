@@ -12,7 +12,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * published version; the `_draft` path serves the staged edits.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -65,69 +65,71 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   await store.closeSession('seed');
 }
 
-beforeEach(async () => {
-  dataDir = await tempDir(`gateway-draft-${crypto.randomUUID()}-`);
-});
-
-afterEach(async () => {
-  await handle?.close().catch(() => undefined);
-  await fs.rm(dataDir, { recursive: true, force: true });
-});
-
-test('serves a staged draft (static + handlers) while live keeps the published version', async () => {
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
-  const store = await handle.appsStore();
-  await seedApp(store, 'app');
-  await handle.syncApps();
-
-  // Open a session and stage a draft: new HTML + a changed query handler.
-  await store.openSession('draft1');
-  const draftDir = await store.snapshotSessionAppDir('draft1', 'app');
-  await fs.writeFile(path.join(draftDir, 'index.html'), '<!doctype html><head></head>DRAFT');
-  await fs.writeFile(
-    path.join(draftDir, 'queries', 'ping.js'),
-    "export default async () => ({ marker: 'draft' });\n",
-  );
-
-  const auth = { Authorization: `Bearer ${handle.token}` };
-
-  // Live path: unchanged published static + handler.
-  const liveHtml = await fetch(`${handle.url}/centraid/app/`, { headers: auth });
-  expect(liveHtml.status).toBe(200);
-  expect(await liveHtml.text()).toMatch(/PUBLISHED/);
-
-  const liveRead = await fetch(`${handle.url}/centraid/app/queries/ping`, {
-    method: 'POST',
-    headers: { ...auth, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input: {} }),
+describe('draft-preview-over-http', () => {
+  beforeEach(async () => {
+    dataDir = await tempDir(`gateway-draft-${crypto.randomUUID()}-`);
   });
-  expect(await liveRead.json()).toEqual({ marker: 'published' });
 
-  // Draft path: staged static + the staged handler, against the same data.
-  const draftHtml = await fetch(`${handle.url}/centraid/_draft/draft1/app/`, { headers: auth });
-  expect(draftHtml.status).toBe(200);
-  const draftBody = await draftHtml.text();
-  expect(draftBody).toMatch(/DRAFT/);
-  // The injected bridge must route app RPC calls through the draft prefix so
-  // the draft's handlers run (not the live ones).
-  expect(draftBody).toMatch(/\/centraid\/_draft\/draft1\/app\//);
-
-  const draftRead = await fetch(`${handle.url}/centraid/_draft/draft1/app/queries/ping`, {
-    method: 'POST',
-    headers: { ...auth, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input: {} }),
+  afterEach(async () => {
+    await handle?.close().catch(() => undefined);
+    await fs.rm(dataDir, { recursive: true, force: true });
   });
-  expect(draftRead.status).toBe(200);
-  expect(await draftRead.json()).toEqual({ marker: 'draft' });
-});
 
-test('an unknown draft session yields 503 (no live fallback)', async () => {
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
-  await seedApp(await handle.appsStore(), 'app');
-  await handle.syncApps();
+  test('serves a staged draft (static + handlers) while live keeps the published version', async () => {
+    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    const store = await handle.appsStore();
+    await seedApp(store, 'app');
+    await handle.syncApps();
 
-  const res = await fetch(`${handle.url}/centraid/_draft/ghost/app/`, {
-    headers: { Authorization: `Bearer ${handle.token}` },
+    // Open a session and stage a draft: new HTML + a changed query handler.
+    await store.openSession('draft1');
+    const draftDir = await store.snapshotSessionAppDir('draft1', 'app');
+    await fs.writeFile(path.join(draftDir, 'index.html'), '<!doctype html><head></head>DRAFT');
+    await fs.writeFile(
+      path.join(draftDir, 'queries', 'ping.js'),
+      "export default async () => ({ marker: 'draft' });\n",
+    );
+
+    const auth = { Authorization: `Bearer ${handle.token}` };
+
+    // Live path: unchanged published static + handler.
+    const liveHtml = await fetch(`${handle.url}/centraid/app/`, { headers: auth });
+    expect(liveHtml.status).toBe(200);
+    await expect(liveHtml.text()).resolves.toMatch(/PUBLISHED/);
+
+    const liveRead = await fetch(`${handle.url}/centraid/app/queries/ping`, {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: {} }),
+    });
+    await expect(liveRead.json()).resolves.toStrictEqual({ marker: 'published' });
+
+    // Draft path: staged static + the staged handler, against the same data.
+    const draftHtml = await fetch(`${handle.url}/centraid/_draft/draft1/app/`, { headers: auth });
+    expect(draftHtml.status).toBe(200);
+    const draftBody = await draftHtml.text();
+    expect(draftBody).toMatch(/DRAFT/);
+    // The injected bridge must route app RPC calls through the draft prefix so
+    // the draft's handlers run (not the live ones).
+    expect(draftBody).toMatch(/\/centraid\/_draft\/draft1\/app\//);
+
+    const draftRead = await fetch(`${handle.url}/centraid/_draft/draft1/app/queries/ping`, {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: {} }),
+    });
+    expect(draftRead.status).toBe(200);
+    await expect(draftRead.json()).resolves.toStrictEqual({ marker: 'draft' });
   });
-  expect(res.status).toBe(503);
+
+  test('an unknown draft session yields 503 (no live fallback)', async () => {
+    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    await seedApp(await handle.appsStore(), 'app');
+    await handle.syncApps();
+
+    const res = await fetch(`${handle.url}/centraid/_draft/ghost/app/`, {
+      headers: { Authorization: `Bearer ${handle.token}` },
+    });
+    expect(res.status).toBe(503);
+  });
 });

@@ -21,13 +21,13 @@ export function inlineBlueprintAliases(): InlineAliasEntry[] {
   const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
   return [
     {
-      find: /^\.\.?\/(?:.*\/)?kit\.ts$/,
+      find: /^\.\.?\/(?:.*\/)?kit\.ts$/u,
       replacement: here('./kit-inline.ts'),
     },
     {
       // Photos retains a relative browser-module specifier; inline it resolves
       // directly to the client's canonical TypeScript implementation.
-      find: /^\.\.?\/(?:.*\/)?video-frame\.js$/,
+      find: /^\.\.?\/(?:.*\/)?video-frame\.js$/u,
       replacement: here('../../video-frame.ts'),
     },
   ];

@@ -22,7 +22,7 @@ export async function serveBlobRead(input: {
   const { req, res, method, blob, custody, dataPlane } = input;
   const etag = `"${blob.sha256}"`;
   const disposition = input.download ? 'attachment' : 'inline';
-  const name = (blob.title ?? blob.sha256.slice(0, 12)).replace(/["\\\r\n]/g, '');
+  const name = (blob.title ?? blob.sha256.slice(0, 12)).replace(/["\\\r\n]/gu, '');
   const setRepresentationHeaders = (): void => {
     res.setHeader('ETag', etag);
     res.setHeader('Accept-Ranges', 'bytes');

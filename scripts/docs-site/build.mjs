@@ -9,12 +9,11 @@
  */
 import { spawn } from 'node:child_process';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, posix } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, posix } from 'node:path';
 import { JSDOM } from 'jsdom';
 import * as pagefind from 'pagefind';
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const repoRoot = join(import.meta.dirname, '..', '..');
 const outDir = join(repoRoot, 'dist', 'docs-site');
 
 function run(command, args) {

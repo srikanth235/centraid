@@ -3,7 +3,7 @@ import type { BackupProvider } from '@centraid/backup';
 import type { StorageConnectionStore } from './storage-connections.js';
 import { resolveBackupBackend } from './backup-backend.js';
 
-describe('resolveBackupBackend', () => {
+describe(resolveBackupBackend, () => {
   it('keeps an explicit daemon provider authoritative', async () => {
     const provider = {} as BackupProvider;
     const backend = await resolveBackupBackend({
@@ -21,7 +21,9 @@ describe('resolveBackupBackend', () => {
   });
 
   it('activates the single home connection (#436 §7)', async () => {
-    const resolveProviderApiKey = vi.fn().mockResolvedValue('sk-live');
+    const resolveProviderApiKey = vi
+      .fn<StorageConnectionStore['resolveProviderApiKey']>()
+      .mockResolvedValue('sk-live');
     const storageConnections = {
       list: async () => [
         {
@@ -46,6 +48,6 @@ describe('resolveBackupBackend', () => {
     const storageConnections = {
       list: async () => [],
     } as unknown as StorageConnectionStore;
-    expect(await resolveBackupBackend({ storageConnections })).toBeUndefined();
+    await expect(resolveBackupBackend({ storageConnections })).resolves.toBeUndefined();
   });
 });

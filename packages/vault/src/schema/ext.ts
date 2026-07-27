@@ -64,8 +64,8 @@ export interface ExtTableSpec {
  * session's scratch copy (seeded from live, dropped or promoted on publish). */
 export type ExtBand = 'live' | 'draft';
 
-const NAME_RE = /^[a-z][a-z0-9_]{0,47}$/;
-const APP_ID_RE = /^[a-z][a-z0-9-]{0,63}$/;
+const NAME_RE = /^[a-z][a-z0-9_]{0,47}$/u;
+const APP_ID_RE = /^[a-z][a-z0-9-]{0,63}$/u;
 
 /** appIds allow hyphens; SQLite identifiers shouldn't. `my-app` → `my_app`. */
 export function normalizeAppId(appId: string): string {
@@ -216,8 +216,8 @@ export function canonicalSpecJson(spec: ExtTableSpec): string {
     type: c.type,
     ...(c.primaryKey ? { primaryKey: true } : {}),
     ...(c.notNull ? { notNull: true } : {}),
-    ...(c.default !== undefined ? { default: c.default } : {}),
-    ...(c.references !== undefined ? { references: c.references } : {}),
+    ...(c.default === undefined ? {} : { default: c.default }),
+    ...(c.references === undefined ? {} : { references: c.references }),
   });
   return JSON.stringify({
     name: spec.name,

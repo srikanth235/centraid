@@ -68,13 +68,13 @@ export default function PlacesMap({
           />
         ))}
       </MapView>
-      {!points.length ? (
+      {points.length ? null : (
         <View pointerEvents="none" style={styles.empty}>
           <Text style={[styles.emptyText, { backgroundColor: colors.bgElev, color: colors.ink2 }]}>
             Geotagged assets appear here. Set-place changes sync as replica intents.
           </Text>
         </View>
-      ) : null}
+      )}
     </SafeAreaView>
   );
 }

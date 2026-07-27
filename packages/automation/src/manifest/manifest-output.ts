@@ -90,8 +90,8 @@ export function validateOutputSchema(raw: unknown): OutputSchema | undefined {
   }
   return {
     type: 'object',
-    ...(properties !== undefined ? { properties } : {}),
-    ...(required !== undefined ? { required } : {}),
+    ...(properties === undefined ? {} : { properties }),
+    ...(required === undefined ? {} : { required }),
   };
 }
 

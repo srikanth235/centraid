@@ -115,7 +115,7 @@ export interface GatewayDiagnosticsOptions {
  *  positive just redacts a harmless field, a false negative leaks a
  *  credential into something a user emails to support. */
 const SECRET_KEY_PATTERN =
-  /token|secret|password|passwd|credential|api[-_]?key|private[-_]?key|bearer|authorization|cookie/i;
+  /token|secret|password|passwd|credential|api[-_]?key|private[-_]?key|bearer|authorization|cookie/iu;
 
 const REDACTED = '[REDACTED]';
 

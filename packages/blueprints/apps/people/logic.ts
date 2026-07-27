@@ -30,7 +30,7 @@ import type {
   PersonList,
 } from './types.ts';
 
-const $ = (id: string) => document.getElementById(id)!;
+const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 
 export function createLogic({
   state,
@@ -337,7 +337,7 @@ export function createLogic({
       cadence_days: cadence,
       avatar_color,
       ...(role ? { role } : {}),
-      ...(listId != null ? { list_id: listId } : {}),
+      ...(listId == null ? {} : { list_id: listId }),
     };
     const outcome = await act('add-person', input);
     if (!narrate(outcome)) return false;

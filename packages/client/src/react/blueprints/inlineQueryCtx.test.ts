@@ -67,7 +67,7 @@ describe('inlineQueryCtx', () => {
     expect(result.vaultDenied).toBeUndefined();
     expect(result.open).toHaveLength(2);
     // due-first sort: the dated task leads the undated one.
-    expect(result.open.map((t) => t.title)).toEqual(['First', 'Second']);
+    expect(result.open.map((t) => t.title)).toStrictEqual(['First', 'Second']);
   });
 
   it('resolves mentions to {cards:[]} offline and never rejects', async () => {
@@ -76,7 +76,7 @@ describe('inlineQueryCtx', () => {
       { session: seededSession(), appId: 'tasks', isOnline: () => false },
       guard,
     ) as { vault: { resolve(): Promise<{ cards: unknown[] }> } };
-    await expect(ctx.vault.resolve()).resolves.toEqual({ cards: [] });
+    await expect(ctx.vault.resolve()).resolves.toStrictEqual({ cards: [] });
     expect(guard.error).toBeNull();
   });
 

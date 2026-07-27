@@ -86,7 +86,7 @@ export interface LiveDispatch {
   finalizeTurn(store: ConversationStore, conversationId: string, turnId: string, ok: boolean): void;
   /** Tear down the scratch dir (only ever created if an attachment was
    *  staged). Safe to call once. */
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 const AGENT_FAILURE_PREFIX = 'centraid-agent-failure:';
@@ -189,10 +189,10 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
     const lines: string[] = [];
     for (const att of call.attachments) {
       const file = path.join(scratchDir, `attach-${randomUUID().slice(0, 8)}-${att.name}`);
-      if (att.base64 !== undefined) {
-        await fs.writeFile(file, Buffer.from(att.base64, 'base64'));
-      } else {
+      if (att.base64 === undefined) {
         await fs.writeFile(file, att.text ?? '', 'utf8');
+      } else {
+        await fs.writeFile(file, Buffer.from(att.base64, 'base64'));
       }
       lines.push(`- ${file} (${att.mediaType})`);
     }

@@ -41,14 +41,18 @@ describe('selector edges', () => {
       seq: 1,
       startedAt: daysAgo(119),
       endedAt: null,
-    }); // unfinished, old
+    });
+
+    // unfinished, old
     seedTurn(journal, {
       turnId: 't2',
       conversationId: 'a/x',
       seq: 2,
       startedAt: daysAgo(118),
       model: 'm',
-    }); // newest
+    });
+
+    // newest
 
     runConversationArchival({ journal, blobSink, custodyProven: () => true }, { nowMs: now });
     // Only t0 was eligible (t1 unfinished breaks the range before the newest t2,
@@ -58,7 +62,7 @@ describe('selector edges', () => {
         id: string;
       }[]
     ).map((r) => r.id);
-    expect(remaining).toEqual(['t1', 't2']);
+    expect(remaining).toStrictEqual(['t1', 't2']);
     journal.close();
   });
 
@@ -99,7 +103,9 @@ describe('selector edges', () => {
       seq: 3,
       startedAt: daysAgo(1),
       model: 'm',
-    }); // live head
+    });
+
+    // live head
 
     const r = runConversationArchival(
       { journal, blobSink, custodyProven: () => true },
@@ -113,7 +119,7 @@ describe('selector edges', () => {
         id: string;
       }[]
     ).map((x) => x.id);
-    expect(remaining).toEqual(['t1', 't3']); // pinned + live head survive
+    expect(remaining).toStrictEqual(['t1', 't3']); // pinned + live head survive
     journal.close();
   });
 

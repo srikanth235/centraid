@@ -101,7 +101,7 @@ const LIST_SCHEME_URI = 'https://centraid.dev/schemes/lists';
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 const RELATIONS_SCHEME_URI = 'urn:duaility:relations';
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function personHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const partyId = String(input?.party_id ?? '');
   if (!partyId) return { person: null };
@@ -337,7 +337,7 @@ export default async ({ input, ctx }: HandlerArgs) => {
       relationships: relationLinks.map((link) => {
         const related = relatedById.get(link.to_id);
         const notation = conceptById.get(link.relation_concept_id)?.notation ?? 'people-related';
-        const tokens = notation.replace(/^people-/, '').split('-');
+        const tokens = notation.replace(/^people-/u, '').split('-');
         const pet = related?.kind === 'animal' ? (tokens.pop() ?? null) : null;
         return {
           relationship_id: link.link_id,
@@ -393,4 +393,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { person: null, vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

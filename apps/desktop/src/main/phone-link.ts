@@ -74,12 +74,12 @@ export async function ensurePhoneLink(): Promise<DesktopTunnelHandle> {
         warn: (message) => console.warn(`phone link: ${message}`),
       }),
       deviceStore: deviceStore(),
-      desktopName: os.hostname().replace(/\.local$/, ''),
+      desktopName: os.hostname().replace(/\.local$/u, ''),
       upstream: async () => {
         const settings = await loadSettings();
         if (settings.activeGatewayKind !== 'local') return undefined;
         if (!(settings.gatewayUrl && settings.gatewayToken)) return undefined;
-        return { baseUrl: settings.gatewayUrl.replace(/\/+$/, ''), token: settings.gatewayToken };
+        return { baseUrl: settings.gatewayUrl.replace(/\/+$/u, ''), token: settings.gatewayToken };
       },
       onPaired: (device) => {
         for (const win of BrowserWindow.getAllWindows()) {

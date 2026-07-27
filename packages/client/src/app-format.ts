@@ -79,14 +79,14 @@ export function inferAppVisual(prompt: string): {
 } {
   const p = prompt.toLowerCase();
   const map: [IconNameType, RegExp][] = [
-    ['Todo', /\b(todo|to-do|task|grocery|list|shopping)\b/],
-    ['Habit', /\b(habit|streak|daily)\b/],
-    ['Journal', /\b(journal|diary|note|writing|log|read|reading)\b/],
-    ['Pomodoro', /\b(pomodoro|timer|focus|work\s*block)\b/],
-    ['Plant', /\b(plant|water|garden)\b/],
-    ['Water', /\b(hydrate|water|cup|drink)\b/],
-    ['Gift', /\b(gift|present|idea|wish)\b/],
-    ['Mood', /\b(mood|feel|emotion|check[- ]?in)\b/],
+    ['Todo', /\b(?:todo|to-do|task|grocery|list|shopping)\b/u],
+    ['Habit', /\b(?:habit|streak|daily)\b/u],
+    ['Journal', /\b(?:journal|diary|note|writing|log|read|reading)\b/u],
+    ['Pomodoro', /\b(?:pomodoro|timer|focus|work\s*block)\b/u],
+    ['Plant', /\b(?:plant|water|garden)\b/u],
+    ['Water', /\b(?:hydrate|water|cup|drink)\b/u],
+    ['Gift', /\b(?:gift|present|idea|wish)\b/u],
+    ['Mood', /\b(?:mood|feel|emotion|check[- ]?in)\b/u],
   ];
   let iconKey: IconNameType =
     ICON_KEYS_POOL[Math.floor(Math.random() * ICON_KEYS_POOL.length)] ?? 'Todo';
@@ -101,8 +101,8 @@ export function inferAppVisual(prompt: string): {
   // keywords hit, `iconKey` falls back to a random pool entry; that entry
   // still has a canonical colour via colorKeyForIcon().
   const colorKey = colorKeyForIcon(iconKey);
-  const cleaned = prompt.replace(/^\s*(a|an)\s+/i, '').trim();
-  const words = cleaned.split(/\s+/).slice(0, 3).join(' ');
+  const cleaned = prompt.replace(/^\s*(?:a|an)\s+/iu, '').trim();
+  const words = cleaned.split(/\s+/u).slice(0, 3).join(' ');
   const name = words.charAt(0).toUpperCase() + words.slice(1);
   return { iconKey, colorKey, color: colorForIcon(iconKey), name: name || 'New app' };
 }
@@ -185,7 +185,7 @@ export function nodeRunStatus(node: CentraidAutomationItem): 'ok' | 'running' | 
  * actually feel.
  */
 export function cronToHuman(expr: string): string {
-  const fields = expr.trim().split(/\s+/);
+  const fields = expr.trim().split(/\s+/u);
   if (fields.length !== 5) return expr;
   const [min, hour, dom, month, dow] = fields as [string, string, string, string, string];
 
@@ -215,9 +215,9 @@ export function cronToHuman(expr: string): string {
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   // Every N minutes
-  const stepMin = min.match(/^\*\/(\d+)$/);
+  const stepMin = min.match(/^\*\/(?<step>\d+)$/u);
   if (stepMin && hour === '*' && dom === '*' && month === '*' && dow === '*') {
-    const n = Number(stepMin[1]);
+    const n = Number(stepMin.groups?.step);
     return n === 1 ? 'Every minute' : `Every ${n} minutes`;
   }
 
@@ -285,7 +285,7 @@ export function formatWhereClauses(where: unknown): string | null {
     if (typeof c.column !== 'string' || typeof c.op !== 'string') {
       return JSON.stringify(where, null, 2);
     }
-    lines.push(`${c.column} ${c.op}${c.value !== undefined ? ` ${JSON.stringify(c.value)}` : ''}`);
+    lines.push(`${c.column} ${c.op}${c.value === undefined ? '' : ` ${JSON.stringify(c.value)}`}`);
   }
   return lines.join('\n');
 }

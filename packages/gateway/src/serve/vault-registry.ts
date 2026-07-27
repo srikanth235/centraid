@@ -352,7 +352,7 @@ export class VaultRegistry {
       ...(this.keyStore ? { keyStore: this.keyStore } : {}),
       ...(this.ownerName ? { ownerName: this.ownerName } : {}),
       ...(boot.vaultId ? { bootstrap: true } : {}),
-      ...(this.sweepIntervalMs !== undefined ? { sweepIntervalMs: this.sweepIntervalMs } : {}),
+      ...(this.sweepIntervalMs === undefined ? {} : { sweepIntervalMs: this.sweepIntervalMs }),
       enableWalShipper: this.enableWalShipper,
       ...(this.walCaptureConfigured ? { walCaptureConfigured: this.walCaptureConfigured } : {}),
       ...(this.skipOrphanDelete ? { skipOrphanDelete: this.skipOrphanDelete } : {}),
@@ -363,9 +363,9 @@ export class VaultRegistry {
       ...(this.shouldDeferBackgroundWork
         ? { shouldDeferBackgroundWork: this.shouldDeferBackgroundWork }
         : {}),
-      ...(this.replicationConcurrency !== undefined
-        ? { replicationConcurrency: this.replicationConcurrency }
-        : {}),
+      ...(this.replicationConcurrency === undefined
+        ? {}
+        : { replicationConcurrency: this.replicationConcurrency }),
       ...(this.onSweepPass ? { onSweepPass: this.onSweepPass } : {}),
       ...(this.onReplicationPass ? { onReplicationPass: this.onReplicationPass } : {}),
       ...(this.journalLimitBytes ? { journalLimitBytes: this.journalLimitBytes } : {}),
@@ -446,7 +446,9 @@ export class VaultRegistry {
     const vaultId = reservedVaultId ?? uuidv7();
     if (
       reservedVaultId !== undefined &&
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(reservedVaultId)
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+        reservedVaultId,
+      )
     ) {
       throw new VaultRegistryError(
         'bad_name',

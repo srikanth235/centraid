@@ -6,7 +6,7 @@
 
 import { decorate, readTags, readStarred, type RawItem } from './items.ts';
 
-export default async ({ ctx }: HandlerArgs) => {
+export default async function trash({ ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   try {
     const res = await ctx.vault.read({
@@ -27,4 +27,4 @@ export default async ({ ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

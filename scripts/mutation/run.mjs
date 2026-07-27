@@ -17,10 +17,9 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS } from './seeds.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 
 export { MUTATION_GLOBAL_WATCH, MUTATION_SEEDS };
 
@@ -161,7 +160,7 @@ export function selectAffectedSeeds(
   seeds = MUTATION_SEEDS,
   globalWatch = MUTATION_GLOBAL_WATCH,
 ) {
-  const changed = new Set(changedFiles.map((f) => f.replace(/\\/g, '/')));
+  const changed = new Set(changedFiles.map((f) => f.replace(/\\/gu, '/')));
   if (globalWatch.some((g) => changed.has(g))) return [...seeds];
   return seeds.filter((seed) =>
     seed.watch.some((w) => changed.has(w) || [...changed].some((c) => c.startsWith(`${w}/`))),
@@ -287,7 +286,7 @@ function runSeeds(seeds) {
     const combined = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
     if (
       result.status !== 0 &&
-      /No tests were (executed|found)/i.test(combined) &&
+      /No tests were (?:executed|found)/iu.test(combined) &&
       !existsSync(path.join(root, seed.report))
     ) {
       console.warn(`mutation: ${seed.id} dry-run found no tests — retrying once…`);
@@ -441,7 +440,7 @@ function main() {
   if (failed) process.exitCode = 1;
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
 if (isMain) {
   main();
 }

@@ -101,8 +101,8 @@ function transformInlineSource(source: string, rel = 'app.tsx'): string {
       // Vite from hijacking it. Behaviour is identical to the gateway; only the
       // scratch filename differs from the app source.
       .replace(
-        /(["'])((?:\.\.?\/)[^"']*\.module\.css)\1/g,
-        (_m, q: string, spec: string) => `${q}${spec}.js${q}`,
+        /(?<quote>["'])(?<spec>(?:\.\.?\/)[^"']*\.module\.css)\k<quote>/gu,
+        (_m, quote: string, spec: string) => `${quote}${spec}.js${quote}`,
       )
   );
 }
@@ -499,7 +499,7 @@ export function describeAppBoot(
         };
 
         const module = await import(pathToFileURL(path.join(dir, 'app-root.tsx')).href);
-        reactRoot = createRoot(document.getElementById('appRoot')!);
+        reactRoot = createRoot(document.querySelector('#appRoot')!);
         reactRoot.render(createElement(module.Root, { rootRef: () => {} }));
         await settle();
         expectNoErrors('rendering its granted replica in airplane mode');

@@ -20,7 +20,7 @@ function encodeFounding(payload: { gw: string; t: string; s: string; exp: number
   ).toString('base64url');
 }
 
-describe('parsePairingInput', () => {
+describe(parsePairingInput, () => {
   it('parses desktop centraid-pair JSON', () => {
     const raw = JSON.stringify({
       v: 1,
@@ -28,12 +28,12 @@ describe('parsePairingInput', () => {
       ticket: 'ep-ticket',
       code: 'ABCD',
     });
-    expect(parsePairingInput(raw)).toEqual({
+    expect(parsePairingInput(raw)).toStrictEqual({
       kind: 'centraid-pair',
       ticket: 'ep-ticket',
       code: 'ABCD',
     });
-    expect(parsePairQr(raw)).toEqual({ ticket: 'ep-ticket', code: 'ABCD' });
+    expect(parsePairQr(raw)).toStrictEqual({ ticket: 'ep-ticket', code: 'ABCD' });
   });
 
   it('parses headless centraid-gw-pair one-line tickets', () => {
@@ -45,7 +45,7 @@ describe('parsePairingInput', () => {
       vaultName: 'Family',
       exp,
     });
-    expect(parsePairingInput(token)).toEqual({
+    expect(parsePairingInput(token)).toStrictEqual({
       kind: 'centraid-gw-pair',
       gw: 'gw-endpoint-ticket',
       t: 'ticket-id',
@@ -74,7 +74,7 @@ describe('parsePairingInput', () => {
       s: 'one-time-secret',
       exp,
     });
-    expect(parsePairingInput(token)).toEqual({
+    expect(parsePairingInput(token)).toStrictEqual({
       kind: 'centraid-gw-found',
       gw: 'refreshable-endpoint-hint',
       t: 'one-time-id',

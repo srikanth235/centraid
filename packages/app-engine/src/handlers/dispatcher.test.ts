@@ -6,7 +6,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { assert, beforeEach, describe, expect, it } from 'vitest';
 import { Dispatcher } from './dispatcher.js';
 import { Registry } from '../registry/registry.js';
 
@@ -41,131 +41,148 @@ const MANIFEST = {
   ],
 };
 
-beforeEach(async () => {
-  appsDir = await tempDir('centraid-dispatch-');
-  codeDir = path.join(appsDir, 'code');
-  await mkdir(path.join(codeDir, 'actions'), { recursive: true });
-  await mkdir(path.join(codeDir, 'queries'), { recursive: true });
-  await writeFile(path.join(codeDir, 'app.json'), JSON.stringify(MANIFEST));
-  await writeFile(
-    path.join(codeDir, 'actions', 'add_note.js'),
-    `export default async ({ body }) => ({ status: 200, body: { added: body.title } });`,
-  );
-  await writeFile(
-    path.join(codeDir, 'queries', 'list_notes.js'),
-    `export default async () => ({ notes: [] });`,
-  );
-  registry = new Registry(appsDir);
-  await registry.load();
-  await registry.ensureUploaded('demo');
-  notified = [];
-  dispatcher = new Dispatcher({
-    registry,
-    codeDirOverride: async () => codeDir,
-    onWriteFor: (appId) => () => notified.push(appId),
-  });
-});
-
-describe('TypeScript handlers', () => {
-  it('prefers a .ts handler over a .js of the same name', async () => {
-    // Both files exist for the declared `add_note`; the dispatcher probes
-    // `.ts` first, so the TS handler must be the one that runs.
+describe('dispatcher', () => {
+  beforeEach(async () => {
+    appsDir = await tempDir('centraid-dispatch-');
+    codeDir = path.join(appsDir, 'code');
+    await mkdir(path.join(codeDir, 'actions'), { recursive: true });
+    await mkdir(path.join(codeDir, 'queries'), { recursive: true });
+    await writeFile(path.join(codeDir, 'app.json'), JSON.stringify(MANIFEST));
     await writeFile(
-      path.join(codeDir, 'actions', 'add_note.ts'),
-      `interface Body { title: string }\n` +
-        `export default async ({ body }: { body: Body }) => ({ status: 200, body: { added: 'TS:' + body.title } });`,
-    );
-    const out = await dispatcher.write({ app: 'demo', action: 'add_note', input: { title: 'x' } });
-    expect(out.isError).toBe(false);
-    expect(out.structuredContent).toEqual({ added: 'TS:x' });
-  });
-
-  it('dispatches a .ts action and a .ts query, each with a relative .ts sibling import', async () => {
-    await writeFile(
-      path.join(codeDir, 'actions', 'helper.ts'),
-      `export function shout(s: string): string { return s.toUpperCase(); }`,
+      path.join(codeDir, 'actions', 'add_note.js'),
+      `export default async ({ body }) => ({ status: 200, body: { added: body.title } });`,
     );
     await writeFile(
-      path.join(codeDir, 'actions', 'add_note.ts'),
-      `import { shout } from './helper.js';\n` +
-        `interface Body { title: string }\n` +
-        `export default async ({ body }: { body: Body }) => ({ status: 200, body: { added: shout(body.title) } });`,
+      path.join(codeDir, 'queries', 'list_notes.js'),
+      `export default async () => ({ notes: [] });`,
     );
-    await writeFile(
-      path.join(codeDir, 'queries', 'countHelper.ts'),
-      `export const seed: number = 3;`,
-    );
-    await writeFile(
-      path.join(codeDir, 'queries', 'list_notes.ts'),
-      `import { seed } from './countHelper.js';\n` +
-        `export default async (): Promise<{ notes: number[] }> => ({ notes: [seed, seed + 1] });`,
-    );
-
-    const wrote = await dispatcher.write({
-      app: 'demo',
-      action: 'add_note',
-      input: { title: 'hi' },
+    registry = new Registry(appsDir);
+    await registry.load();
+    await registry.ensureUploaded('demo');
+    notified = [];
+    dispatcher = new Dispatcher({
+      registry,
+      codeDirOverride: async () => codeDir,
+      onWriteFor: (appId) => () => notified.push(appId),
     });
-    expect(wrote.isError).toBe(false);
-    expect(wrote.structuredContent).toEqual({ added: 'HI' });
-
-    const read = await dispatcher.read({ app: 'demo', query: 'list_notes' });
-    expect(read.isError).toBe(false);
-    expect(read.structuredContent).toEqual({ notes: [3, 4] });
-  }, 30_000);
-});
-
-describe('declared routing', () => {
-  it('write runs a declared action and fires the change notification', async () => {
-    const out = await dispatcher.write({ app: 'demo', action: 'add_note', input: { title: 'x' } });
-    expect(out.isError).toBe(false);
-    expect(out.structuredContent).toEqual({ added: 'x' });
-    expect(notified).toEqual(['demo']);
   });
 
-  it('read runs a declared query (and never notifies)', async () => {
-    const out = await dispatcher.read({ app: 'demo', query: 'list_notes' });
-    expect(out.isError).toBe(false);
-    expect(out.structuredContent).toEqual({ notes: [] });
-    expect(notified).toEqual([]);
+  describe('TypeScript handlers', () => {
+    it('prefers a .ts handler over a .js of the same name', async () => {
+      // Both files exist for the declared `add_note`; the dispatcher probes
+      // `.ts` first, so the TS handler must be the one that runs.
+      await writeFile(
+        path.join(codeDir, 'actions', 'add_note.ts'),
+        `interface Body { title: string }\n` +
+          `export default async ({ body }: { body: Body }) => ({ status: 200, body: { added: 'TS:' + body.title } });`,
+      );
+      const out = await dispatcher.write({
+        app: 'demo',
+        action: 'add_note',
+        input: { title: 'x' },
+      });
+      expect(out.isError).toBe(false);
+      expect(out.structuredContent).toStrictEqual({ added: 'TS:x' });
+    });
+
+    it('dispatches a .ts action and a .ts query, each with a relative .ts sibling import', async () => {
+      await writeFile(
+        path.join(codeDir, 'actions', 'helper.ts'),
+        `export function shout(s: string): string { return s.toUpperCase(); }`,
+      );
+      await writeFile(
+        path.join(codeDir, 'actions', 'add_note.ts'),
+        `import { shout } from './helper.js';\n` +
+          `interface Body { title: string }\n` +
+          `export default async ({ body }: { body: Body }) => ({ status: 200, body: { added: shout(body.title) } });`,
+      );
+      await writeFile(
+        path.join(codeDir, 'queries', 'countHelper.ts'),
+        `export const seed: number = 3;`,
+      );
+      await writeFile(
+        path.join(codeDir, 'queries', 'list_notes.ts'),
+        `import { seed } from './countHelper.js';\n` +
+          `export default async (): Promise<{ notes: number[] }> => ({ notes: [seed, seed + 1] });`,
+      );
+
+      const wrote = await dispatcher.write({
+        app: 'demo',
+        action: 'add_note',
+        input: { title: 'hi' },
+      });
+      expect(wrote.isError).toBe(false);
+      expect(wrote.structuredContent).toStrictEqual({ added: 'HI' });
+
+      const read = await dispatcher.read({ app: 'demo', query: 'list_notes' });
+      expect(read.isError).toBe(false);
+      expect(read.structuredContent).toStrictEqual({ notes: [3, 4] });
+    }, 30_000);
   });
 
-  it('input failing the declared JSON Schema is refused before the worker', async () => {
-    const out = await dispatcher.write({ app: 'demo', action: 'add_note', input: { nope: 1 } });
-    expect(out.isError).toBe(true);
-    if (out.isError) expect(out.structuredContent.code).toBe('INVALID_INPUT');
-  });
+  describe('declared routing', () => {
+    it('write runs a declared action and fires the change notification', async () => {
+      const out = await dispatcher.write({
+        app: 'demo',
+        action: 'add_note',
+        input: { title: 'x' },
+      });
+      expect(out.isError).toBe(false);
+      expect(out.structuredContent).toStrictEqual({ added: 'x' });
+      expect(notified).toStrictEqual(['demo']);
+    });
 
-  it('a query addressed through write surfaces WRONG_KIND', async () => {
-    const out = await dispatcher.write({ app: 'demo', action: 'list_notes' });
-    expect(out.isError).toBe(true);
-    if (out.isError) expect(out.structuredContent.code).toBe('WRONG_KIND');
-  });
+    it('read runs a declared query (and never notifies)', async () => {
+      const out = await dispatcher.read({ app: 'demo', query: 'list_notes' });
+      expect(out.isError).toBe(false);
+      expect(out.structuredContent).toStrictEqual({ notes: [] });
+      expect(notified).toStrictEqual([]);
+    });
 
-  it('describe returns the manifest — no schema payload, no silo', async () => {
-    const out = await dispatcher.describe({ app: 'demo' });
-    expect(out.isError).toBe(false);
-    const value = out.structuredContent as { manifest: { id: string }; schema?: unknown };
-    expect(value.manifest.id).toBe('demo');
-    expect('schema' in value).toBe(false);
-  });
+    it('input failing the declared JSON Schema is refused before the worker', async () => {
+      const out = await dispatcher.write({ app: 'demo', action: 'add_note', input: { nope: 1 } });
+      expect(out.isError).toBe(true);
+      // Narrows the result union so the code assertion below always runs.
+      assert(out.isError);
+      expect(out.structuredContent.code).toBe('INVALID_INPUT');
+    });
 
-  it('the `_sql` builtin is gone: underscore names are unknown handlers', async () => {
-    const write = await dispatcher.write({ app: 'demo', action: '_sql', input: { sql: 'x' } });
-    expect(write.isError).toBe(true);
-    if (write.isError) expect(write.structuredContent.code).toBe('UNKNOWN_ACTION');
-    const read = await dispatcher.read({ app: 'demo', query: '_sql', input: { sql: 'x' } });
-    expect(read.isError).toBe(true);
-    if (read.isError) expect(read.structuredContent.code).toBe('UNKNOWN_QUERY');
-  });
+    it('a query addressed through write surfaces WRONG_KIND', async () => {
+      const out = await dispatcher.write({ app: 'demo', action: 'list_notes' });
+      expect(out.isError).toBe(true);
+      assert(out.isError);
+      expect(out.structuredContent.code).toBe('WRONG_KIND');
+    });
 
-  it('unknown app / missing code dir map to their own error codes', async () => {
-    const out = await dispatcher.write({ app: 'ghost', action: 'a' });
-    expect(out.isError).toBe(true);
-    if (out.isError) expect(out.structuredContent.code).toBe('UNKNOWN_APP');
-    const bare = new Dispatcher({ registry });
-    const noCode = await bare.read({ app: 'demo', query: 'list_notes' });
-    expect(noCode.isError).toBe(true);
-    if (noCode.isError) expect(noCode.structuredContent.code).toBe('NO_ACTIVE_VERSION');
+    it('describe returns the manifest — no schema payload, no silo', async () => {
+      const out = await dispatcher.describe({ app: 'demo' });
+      expect(out.isError).toBe(false);
+      const value = out.structuredContent as { manifest: { id: string }; schema?: unknown };
+      expect(value.manifest.id).toBe('demo');
+      expect('schema' in value).toBe(false);
+    });
+
+    it('the `_sql` builtin is gone: underscore names are unknown handlers', async () => {
+      const write = await dispatcher.write({ app: 'demo', action: '_sql', input: { sql: 'x' } });
+      expect(write.isError).toBe(true);
+      assert(write.isError);
+      expect(write.structuredContent.code).toBe('UNKNOWN_ACTION');
+      const read = await dispatcher.read({ app: 'demo', query: '_sql', input: { sql: 'x' } });
+      expect(read.isError).toBe(true);
+      assert(read.isError);
+      expect(read.structuredContent.code).toBe('UNKNOWN_QUERY');
+    });
+
+    it('unknown app / missing code dir map to their own error codes', async () => {
+      const out = await dispatcher.write({ app: 'ghost', action: 'a' });
+      expect(out.isError).toBe(true);
+      assert(out.isError);
+      expect(out.structuredContent.code).toBe('UNKNOWN_APP');
+      const bare = new Dispatcher({ registry });
+      const noCode = await bare.read({ app: 'demo', query: 'list_notes' });
+      expect(noCode.isError).toBe(true);
+      assert(noCode.isError);
+      expect(noCode.structuredContent.code).toBe('NO_ACTIVE_VERSION');
+    });
   });
 });

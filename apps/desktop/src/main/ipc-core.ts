@@ -106,7 +106,7 @@ export function vaultChangedPayload(next: { activeGatewayId: string; activeVault
   return {
     activeGatewayId: next.activeGatewayId,
     gatewayId: next.activeGatewayId,
-    ...(next.activeVaultId !== undefined ? { activeVaultId: next.activeVaultId } : {}),
+    ...(next.activeVaultId === undefined ? {} : { activeVaultId: next.activeVaultId }),
   };
 }
 

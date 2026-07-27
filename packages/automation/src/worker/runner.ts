@@ -315,8 +315,8 @@ const ctx = {
     return rpcCall({
       type: 'agent',
       prompt: args.prompt,
-      ...(args.json !== undefined ? { json: args.json } : {}),
-      ...(args.content !== undefined ? { content: args.content } : {}),
+      ...(args.json === undefined ? {} : { json: args.json }),
+      ...(args.content === undefined ? {} : { content: args.content }),
     });
   },
   state,
@@ -341,12 +341,12 @@ interface PullContext {
 
 interface PullSpec {
   protocol: 'centraid.pull/v1';
-  principal(args: { ctx: PullContext; log: typeof log }): Promise<string>;
-  pull(args: {
+  principal: (args: { ctx: PullContext; log: typeof log }) => Promise<string>;
+  pull: (args: {
     ctx: PullContext;
     log: typeof log;
     cursor: ReturnType<typeof cursorManager>;
-  }): Promise<{ rows: PullRow[]; summary?: string }>;
+  }) => Promise<{ rows: PullRow[]; summary?: string }>;
 }
 
 function cursorManager(initial: Record<string, unknown>) {

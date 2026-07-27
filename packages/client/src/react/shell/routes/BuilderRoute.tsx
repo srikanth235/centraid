@@ -80,10 +80,10 @@ export default function BuilderRoute({
         a.centraidAppId === input.appId || a.id === input.appId
           ? {
               ...a,
-              ...(input.name !== undefined ? { name: input.name } : {}),
-              ...(input.description !== undefined
-                ? { desc: input.description || 'Built with Centraid.' }
-                : {}),
+              ...(input.name === undefined ? {} : { name: input.name }),
+              ...(input.description === undefined
+                ? {}
+                : { desc: input.description || 'Built with Centraid.' }),
             }
           : a,
       ),

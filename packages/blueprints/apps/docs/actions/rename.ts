@@ -2,7 +2,7 @@
  * Rename a document through core.rename_document. The vault refuses trashed
  * documents — restore first, then rename. Risk low.
  */
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function renameHandler({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
@@ -18,4 +18,4 @@ export default async ({ body, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

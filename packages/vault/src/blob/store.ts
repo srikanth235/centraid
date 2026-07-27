@@ -20,7 +20,7 @@ import { createHash } from 'node:crypto';
 export const BLOB_URI_PREFIX = 'blob:sha256-';
 
 /** 64 lowercase hex chars — the only accepted blob key shape. */
-const SHA_HEX = /^[0-9a-f]{64}$/;
+const SHA_HEX = /^[0-9a-f]{64}$/u;
 
 export function isBlobUri(uri: unknown): uri is string {
   return typeof uri === 'string' && uri.startsWith(BLOB_URI_PREFIX);
@@ -73,14 +73,14 @@ export interface BlobStore {
    * default; absent ⇒ the instance default; both absent ⇒ no header. Local
    * stores ignore it.
    */
-  put(sha256: string, bytes: Buffer, storageClass?: string): Promise<void>;
+  put: (sha256: string, bytes: Buffer, storageClass?: string) => Promise<void>;
   /** Bytes of one blob (or a byte range of it). Null when absent. */
-  get(sha256: string, range?: BlobRange): Promise<Buffer | null>;
-  has(sha256: string): Promise<boolean>;
-  delete(sha256: string): Promise<void>;
+  get: (sha256: string, range?: BlobRange) => Promise<Buffer | null>;
+  has: (sha256: string) => Promise<boolean>;
+  delete: (sha256: string) => Promise<void>;
   /** Every sha the store holds — the reconciliation sweep's ground truth. */
-  list(): Promise<string[]>;
-  stat(sha256: string): Promise<BlobStat | null>;
+  list: () => Promise<string[]>;
+  stat: (sha256: string) => Promise<BlobStat | null>;
   /**
    * Optional streaming upload (issue #367 §C8): push `source` without the
    * caller materializing the whole blob in memory first. Implementations
@@ -90,12 +90,12 @@ export interface BlobStore {
    * `put` (issue #425 Wave 3), applied to whichever object-creating call the
    * size selects (single PUT or CreateMultipartUpload).
    */
-  putStream?(
+  putStream?: (
     sha256: string,
     source: NodeJS.ReadableStream,
     approxSize: number,
     storageClass?: string,
-  ): Promise<void>;
+  ) => Promise<void>;
 }
 
 /** Clamp a requested range against a known size; null = unsatisfiable. */

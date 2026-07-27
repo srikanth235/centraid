@@ -170,7 +170,7 @@ function decompressFrame(algoId: number, payload: Buffer): Buffer {
 
 /** Header identity is checked before any frame is trusted. */
 export function encodeHeader(sha: string): Buffer {
-  if (!/^[0-9a-f]{64}$/.test(sha)) throw new Error('sealed blob: invalid header sha');
+  if (!/^[0-9a-f]{64}$/u.test(sha)) throw new Error('sealed blob: invalid header sha');
   return Buffer.concat([MAGIC, Buffer.from([SEAL_VERSION]), Buffer.from(sha, 'hex')]);
 }
 

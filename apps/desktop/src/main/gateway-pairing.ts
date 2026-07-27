@@ -35,7 +35,7 @@ export interface RedeemGatewayPairingInput {
 }
 
 function localDeviceName(label: string | undefined): string {
-  return sanitizeDeviceName(label?.trim() || os.hostname().replace(/\.local$/, ''));
+  return sanitizeDeviceName(label?.trim() || os.hostname().replace(/\.local$/u, ''));
 }
 
 export async function redeemGatewayPairing(

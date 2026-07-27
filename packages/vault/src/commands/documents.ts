@@ -611,9 +611,9 @@ function editDocument(ctx: HandlerCtx): Record<string, unknown> {
   ctx.wrote('core.document', input.document_id);
   ctx.cite({
     claim:
-      minted.contentId !== doc.content_id
-        ? `document ${input.document_id} edited; new revision ${minted.contentId} revises ${doc.content_id}`
-        : `document ${input.document_id} edited; bytes unchanged (dedup)`,
+      minted.contentId === doc.content_id
+        ? `document ${input.document_id} edited; bytes unchanged (dedup)`
+        : `document ${input.document_id} edited; new revision ${minted.contentId} revises ${doc.content_id}`,
     entityType: 'core.document',
     entityId: input.document_id,
   });
@@ -726,9 +726,9 @@ function replaceDocumentContent(ctx: HandlerCtx): Record<string, unknown> {
   ctx.wrote('core.document', input.document_id);
   ctx.cite({
     claim:
-      contentId !== doc.current_content_id
-        ? `document ${input.document_id} content replaced; new revision ${contentId} revises ${doc.current_content_id}`
-        : `document ${input.document_id} content replaced; bytes unchanged (dedup)`,
+      contentId === doc.current_content_id
+        ? `document ${input.document_id} content replaced; bytes unchanged (dedup)`
+        : `document ${input.document_id} content replaced; new revision ${contentId} revises ${doc.current_content_id}`,
     entityType: 'core.document',
     entityId: input.document_id,
   });

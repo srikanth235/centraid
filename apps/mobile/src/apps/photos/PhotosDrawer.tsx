@@ -27,7 +27,7 @@ const ON_GREEN = '#5C8A4E';
 // A ~12%-alpha wash of a 6-hex colour for the accent pill; opaque palette hexes
 // get an alpha byte appended, anything else falls back to an elevated surface.
 function washFor(hex: string, fallback: string): string {
-  return /^#[0-9a-fA-F]{6}$/.test(hex) ? `${hex}22` : fallback;
+  return /^#[0-9a-fA-F]{6}$/u.test(hex) ? `${hex}22` : fallback;
 }
 
 export type PhotosDrawerProps = {

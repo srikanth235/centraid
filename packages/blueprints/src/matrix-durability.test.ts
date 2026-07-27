@@ -32,6 +32,6 @@ describe('blueprint scaffold durability', () => {
     const original = scaffoldAppFiles('keep-files', { description: 'before' });
     const before = original.map((f) => ({ ...f }));
     updateAppMetaFiles(original, 'keep-files', { description: 'after' });
-    expect(original).toEqual(before);
+    expect(original).toStrictEqual(before);
   });
 });

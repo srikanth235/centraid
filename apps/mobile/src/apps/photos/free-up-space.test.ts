@@ -40,7 +40,7 @@ describe('free-up-space eligibility', () => {
       ],
       new Set(['asset-pinned']),
     );
-    expect(candidates.map((candidate) => candidate.assetId)).toEqual(['asset-ok']);
+    expect(candidates.map((candidate) => candidate.assetId)).toStrictEqual(['asset-ok']);
   });
 
   test('collects every device copy of one backed-up sha', () => {
@@ -48,7 +48,7 @@ describe('free-up-space eligibility', () => {
       [backedUp('dup', { localIds: ['local-a', 'local-b'] })],
       new Set(),
     );
-    expect(candidate?.localIds).toEqual(['local-a', 'local-b']);
+    expect(candidate?.localIds).toStrictEqual(['local-a', 'local-b']);
   });
 
   test('revalidation keeps matches and excludes bytes that changed since backup', async () => {
@@ -62,7 +62,7 @@ describe('free-up-space eligibility', () => {
           ? { sha256: 'sha-DIFFERENT', size: 99 } // edited in place after backup
           : null; // OS no longer has the copy
     const result = await revalidateBackedUp(candidates, probe);
-    expect(result.deletableLocalIds).toEqual(['stable']);
+    expect(result.deletableLocalIds).toStrictEqual(['stable']);
     expect(result.eligibleBytes).toBe(42);
     expect(result.changedCount).toBe(1);
     expect(result.missingCount).toBe(1);
@@ -73,7 +73,7 @@ describe('free-up-space eligibility', () => {
       [{ assetId: 'a', localIds: ['cloud', 'gone'], sha256: 'sha-a', fileSize: 5 }],
       async (localId) => (localId === 'cloud' ? 'in-cloud' : null),
     );
-    expect(result.deletableLocalIds).toEqual([]);
+    expect(result.deletableLocalIds).toStrictEqual([]);
     expect(result.inCloudCount).toBe(1);
     expect(result.missingCount).toBe(1);
   });
@@ -85,7 +85,7 @@ describe('free-up-space eligibility', () => {
         throw new Error('read failed');
       },
     );
-    expect(result.deletableLocalIds).toEqual([]);
+    expect(result.deletableLocalIds).toStrictEqual([]);
     expect(result.missingCount).toBe(1);
   });
 });

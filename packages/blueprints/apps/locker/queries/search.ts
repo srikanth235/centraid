@@ -9,7 +9,13 @@
 
 import { decorate, readTags, readStarred, readWatchtower, type RawItem } from './items.ts';
 
-export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: HandlerCtx }) => {
+export default async function searchHandler({
+  input,
+  ctx,
+}: {
+  input?: Record<string, unknown>;
+  ctx: HandlerCtx;
+}) {
   const purpose = 'dpv:ServiceProvision';
   const term = String(input?.term ?? '')
     .trim()
@@ -47,4 +53,4 @@ export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: Ha
     const e = err as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

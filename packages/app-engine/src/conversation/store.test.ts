@@ -92,7 +92,7 @@ describe('ConversationStore — conversations', () => {
     });
     store.insertMessageIn({ turnId: 't1', role: 'user', text: 'hello', startedAt: 1 });
     const list = store.listConversationsMeta('u1');
-    expect(list.length).toBe(1);
+    expect(list).toHaveLength(1);
     expect(list[0]?.id).toBe(c.id);
     expect(list[0]?.messageCount).toBe(1);
 
@@ -142,10 +142,10 @@ describe('ConversationStore — search / pin / archive (issue #420)', () => {
     const budgetId = seedChat(store, 'u1', 'Budget review', 'help me plan the quarterly budget');
     seedChat(store, 'u1', 'Trip ideas', 'where should we travel next summer');
     const byBody = store.searchConversations('u1', 'quarterly');
-    expect(byBody.map((h) => h.id)).toEqual([budgetId]);
+    expect(byBody.map((h) => h.id)).toStrictEqual([budgetId]);
     expect(byBody[0]?.snippet).toContain('⟦');
     const byTitle = store.searchConversations('u1', 'budget');
-    expect(byTitle.map((h) => h.id)).toEqual([budgetId]);
+    expect(byTitle.map((h) => h.id)).toStrictEqual([budgetId]);
     store.close();
   });
 
@@ -153,9 +153,9 @@ describe('ConversationStore — search / pin / archive (issue #420)', () => {
     const store = newStore();
     const mine = seedChat(store, 'u1', 'Travel plans', 'planning a trip');
     seedChat(store, 'u2', 'Other travel', 'their trip');
-    expect(store.searchConversations('u1', 'trav').map((h) => h.id)).toEqual([mine]);
+    expect(store.searchConversations('u1', 'trav').map((h) => h.id)).toStrictEqual([mine]);
     store.setConversationArchived(mine, 'u1', true);
-    expect(store.searchConversations('u1', 'trav')).toEqual([]);
+    expect(store.searchConversations('u1', 'trav')).toStrictEqual([]);
     store.close();
   });
 
@@ -163,8 +163,8 @@ describe('ConversationStore — search / pin / archive (issue #420)', () => {
     const store = newStore();
     const id = seedChat(store, 'u1', 'Untitled', 'the body text here');
     store.renameConversation(id, 'u1', 'Groceries list');
-    expect(store.searchConversations('u1', 'groceries').map((h) => h.id)).toEqual([id]);
-    expect(store.searchConversations('u1', '   ')).toEqual([]);
+    expect(store.searchConversations('u1', 'groceries').map((h) => h.id)).toStrictEqual([id]);
+    expect(store.searchConversations('u1', '   ')).toStrictEqual([]);
     store.close();
   });
 
@@ -174,11 +174,11 @@ describe('ConversationStore — search / pin / archive (issue #420)', () => {
     const b = seedChat(store, 'u1', 'Beta', 'b');
     const c = seedChat(store, 'u1', 'Gamma', 'g');
     // Newest-first by default: c, b, a.
-    expect(store.listConversationsMeta('u1').map((m) => m.id)).toEqual([c, b, a]);
+    expect(store.listConversationsMeta('u1').map((m) => m.id)).toStrictEqual([c, b, a]);
     expect(store.setConversationPinned(a, 'u1', true)).toBe(true);
     expect(store.setConversationArchived(c, 'u1', true)).toBe(true);
     // Pinned a first, then unpinned b, then archived c last.
-    expect(store.listConversationsMeta('u1').map((m) => m.id)).toEqual([a, b, c]);
+    expect(store.listConversationsMeta('u1').map((m) => m.id)).toStrictEqual([a, b, c]);
     const metaA = store.getConversationMeta(a, 'u1');
     expect(metaA?.pinned).toBe(true);
     expect(store.getConversationMeta(c, 'u1')?.archived).toBe(true);
@@ -192,7 +192,7 @@ describe('ConversationStore — search / pin / archive (issue #420)', () => {
     const id = seedChat(s1, 'u1', 'Reopen test', 'searchable needle body');
     s1.close();
     const s2 = new ConversationStore(provider);
-    expect(s2.searchConversations('u1', 'needle').map((h) => h.id)).toEqual([id]);
+    expect(s2.searchConversations('u1', 'needle').map((h) => h.id)).toStrictEqual([id]);
     s2.close();
   });
 });
@@ -322,11 +322,14 @@ describe('ConversationStore — turns', () => {
       });
       store.finishTurn({ turnId: id, endedAt: 200 + i, ok: i !== 1 });
     }
-    expect(store.listTurnsFiltered(c.id).length).toBe(5);
-    expect(store.listTurnsFiltered(c.id, { status: 'ok' }).length).toBe(4);
-    expect(store.listTurnsFiltered(c.id, { status: 'error' }).length).toBe(1);
-    expect(store.listTurnsFiltered(c.id, { since: 103 }).length).toBe(2);
-    expect(store.listTurnsFiltered(c.id, { limit: 2 }).map((t) => t.turnId)).toEqual(['r4', 'r3']);
+    expect(store.listTurnsFiltered(c.id)).toHaveLength(5);
+    expect(store.listTurnsFiltered(c.id, { status: 'ok' })).toHaveLength(4);
+    expect(store.listTurnsFiltered(c.id, { status: 'error' })).toHaveLength(1);
+    expect(store.listTurnsFiltered(c.id, { since: 103 })).toHaveLength(2);
+    expect(store.listTurnsFiltered(c.id, { limit: 2 }).map((t) => t.turnId)).toStrictEqual([
+      'r4',
+      'r3',
+    ]);
     store.close();
   });
 
@@ -359,7 +362,7 @@ describe('ConversationStore — automation state', () => {
     expect(s2.stateGet('auto-foo', 'cursor')?.valueJson).toBe(JSON.stringify({ since: 42 }));
     expect(s2.stateGet('auto-bar', 'cursor')?.valueJson).toBe(JSON.stringify('B'));
     s2.stateDelete('auto-foo', 'cursor');
-    expect(s2.stateGet('auto-foo', 'cursor')).toBe(undefined);
+    expect(s2.stateGet('auto-foo', 'cursor')).toBeUndefined();
     s2.close();
   });
 });

@@ -22,7 +22,7 @@ export async function streamThroughOnce(
     remote: () => RemoteTier | null;
     policy: () => BackupPolicy;
     contributePreview?: (input: IngressPreviewInput) => void;
-    emit(): void;
+    emit: () => void;
   },
   input: {
     expectedSha256: string;

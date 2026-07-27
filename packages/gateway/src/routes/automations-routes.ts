@@ -141,24 +141,24 @@ function replayItemEvents(item: Item): AutomationTurnStreamEvent[] {
     type: 'item.start',
     itemId: item.itemId,
     ordinal: item.ordinal,
-    ...(item.callId !== undefined ? { callId: item.callId } : {}),
-    ...(item.batchId !== undefined ? { batchId: item.batchId } : {}),
+    ...(item.callId === undefined ? {} : { callId: item.callId }),
+    ...(item.batchId === undefined ? {} : { batchId: item.batchId }),
     kind: item.kind,
-    ...(item.name !== undefined ? { name: item.name } : {}),
-    ...(item.argsJson !== undefined ? { args: safeParseJson(item.argsJson) } : {}),
-    ...(item.rawJson !== undefined ? { rawJson: item.rawJson } : {}),
+    ...(item.name === undefined ? {} : { name: item.name }),
+    ...(item.argsJson === undefined ? {} : { args: safeParseJson(item.argsJson) }),
+    ...(item.rawJson === undefined ? {} : { rawJson: item.rawJson }),
   };
   if (item.endedAt === undefined) return [start];
   const end: AutomationTurnStreamEvent = {
     type: 'item.end',
     itemId: item.itemId,
     ordinal: item.ordinal,
-    ...(item.callId !== undefined ? { callId: item.callId } : {}),
+    ...(item.callId === undefined ? {} : { callId: item.callId }),
     ok: item.ok,
-    ...(item.outputJson !== undefined ? { result: safeParseJson(item.outputJson) } : {}),
-    ...(item.error !== undefined ? { error: item.error } : {}),
+    ...(item.outputJson === undefined ? {} : { result: safeParseJson(item.outputJson) }),
+    ...(item.error === undefined ? {} : { error: item.error }),
     durationMs: item.durationMs ?? 0,
-    ...(item.rawJson !== undefined ? { rawJson: item.rawJson } : {}),
+    ...(item.rawJson === undefined ? {} : { rawJson: item.rawJson }),
   };
   return [start, end];
 }
@@ -172,7 +172,7 @@ function turnToAutomationTurn(
 ): AutomationTurnJson {
   return {
     ...turn,
-    ...(automationRef !== undefined ? { automationId: automationRef } : {}),
+    ...(automationRef === undefined ? {} : { automationId: automationRef }),
     ...(conversationTitle ? { automationName: conversationTitle } : {}),
     ...(adapterKind ? { adapterKind } : {}),
   };
@@ -272,7 +272,7 @@ export function makeAutomationsRouteHandler(
         type: 'turn.end',
         turnId,
         ok: turn.ok,
-        ...(turn.error !== undefined ? { error: turn.error } : {}),
+        ...(turn.error === undefined ? {} : { error: turn.error }),
       });
       cleanup();
       return true;
@@ -309,7 +309,7 @@ export function makeAutomationsRouteHandler(
         );
       }
 
-      const sub = pathname.slice('/centraid/_automations'.length).replace(/^\/+/, '');
+      const sub = pathname.slice('/centraid/_automations'.length).replace(/^\/+/u, '');
 
       if (sub === '' && method === 'GET') {
         return sendJson(res, 200, await automation.list(codeAppsDir()));

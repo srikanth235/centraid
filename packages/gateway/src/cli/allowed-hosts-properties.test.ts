@@ -19,7 +19,7 @@ describe('allowed-hosts properties', () => {
         const raw = tokens.map((t) => ` ${t} `).join(',');
         const parsed = parseAllowedHostsEnv({ CENTRAID_ALLOWED_HOSTS: raw });
         expect(parsed.every((h) => h === h.toLowerCase() && h.length > 0)).toBe(true);
-        expect(parsed).toEqual(tokens.map((t) => t.toLowerCase()));
+        expect(parsed).toStrictEqual(tokens.map((t) => t.toLowerCase()));
       }),
       { numRuns: 40, seed: 54506 },
     );
@@ -32,7 +32,7 @@ describe('allowed-hosts properties', () => {
         const second = mergeAllowedHosts([], {
           CENTRAID_ALLOWED_HOSTS: first.join(','),
         });
-        expect(second).toEqual(first);
+        expect(second).toStrictEqual(first);
       }),
       { numRuns: 32, seed: 54507 },
     );
@@ -44,7 +44,7 @@ describe('allowed-hosts properties', () => {
         const merged = mergeAllowedHosts([host, host.toUpperCase(), host.toLowerCase()], {
           CENTRAID_ALLOWED_HOSTS: host,
         });
-        expect(merged).toEqual([host.toLowerCase()]);
+        expect(merged).toStrictEqual([host.toLowerCase()]);
       }),
       { numRuns: 24, seed: 54508 },
     );

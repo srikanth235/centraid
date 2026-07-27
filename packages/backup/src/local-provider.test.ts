@@ -14,13 +14,14 @@ async function makeHarness(): Promise<ConformanceHarness> {
 }
 
 describe('conformance suite', () => {
-  for (const c of providerConformanceCases(makeHarness)) {
-    test(c.name, async () => {
+  test.each(providerConformanceCases(makeHarness).map((c) => [c.name, c] as const))(
+    '%s',
+    async (_name, c) => {
       await c.run();
       // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496 E5).
       expect(true).toBe(true);
-    });
-  }
+    },
+  );
 });
 
 describe('LocalBackupProvider lifecycle edge cases', () => {
@@ -46,7 +47,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
     // Same idempotencyKey, generation now "stale" relative to currentGeneration (5) —
     // replay must win over fencing (spec-mandated order).
     const replay = await provider.registerSnapshot(targetId, { ...reg, generation: 1 });
-    expect(replay).toEqual(first);
+    expect(replay).toStrictEqual(first);
   });
 
   test('undelete after the soft-delete window has expired refuses (undelete_window_expired)', async () => {
@@ -91,7 +92,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
     });
     await provider.purgeTarget(targetId);
     const rows = await provider.listSnapshots(targetId, { includePruned: true });
-    expect(rows).toEqual([]);
+    expect(rows).toStrictEqual([]);
     const roAfterPurge = await provider
       .openDataPlane(targetId, 'backup', 'read')
       .catch((e: unknown) => e);
@@ -111,8 +112,10 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
       format: 'centraid-snapshot/2',
       appMeta: {},
     });
-    try {
-      await provider.registerSnapshot(targetId, {
+    // Captured rather than caught, so all three assertions always run — a
+    // silent success leaves `err` a non-error and fails `toBeInstanceOf`.
+    const err: unknown = await provider
+      .registerSnapshot(targetId, {
         idempotencyKey: 'k2',
         manifestKey: 'manifests/2.json',
         manifestHash: 'b'.repeat(64),
@@ -121,13 +124,11 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
         generation: 2,
         format: 'centraid-snapshot/2',
         appMeta: {},
-      });
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(BackupProviderError);
-      expect((err as BackupProviderError).code).toBe('conflict_generation');
-      expect((err as BackupProviderError).details?.currentGeneration).toBe(4);
-    }
+      })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BackupProviderError);
+    expect((err as BackupProviderError).code).toBe('conflict_generation');
+    expect((err as BackupProviderError).details?.currentGeneration).toBe(4);
   });
 
   test('listSnapshots(targetId) excludes pruned rows by default (none pruned here, sanity check on shape)', async () => {
@@ -193,13 +194,16 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
     await first.deleteTarget(targetId);
 
     const restarted = new LocalBackupProvider({ rootDir: dir });
-    expect(await restarted.getPolicy(targetId)).toEqual(policy);
+    await expect(restarted.getPolicy(targetId)).resolves.toStrictEqual(policy);
     const inventory = await restarted.listInventory(targetId, { store: 'cas' });
     expect(inventory.objects).toMatchObject([
       { key: 'blobs/a', sizeBytes: 3, state: 'soft-deleted' },
     ]);
     const audit = await restarted.listEvents(targetId);
-    expect(audit.events.map((event) => event.kind)).toEqual(['policy-changed', 'soft-delete']);
+    expect(audit.events.map((event) => event.kind)).toStrictEqual([
+      'policy-changed',
+      'soft-delete',
+    ]);
   });
 
   // Gap 1 (the whole point of generation fencing, PROTOCOL.md: "two

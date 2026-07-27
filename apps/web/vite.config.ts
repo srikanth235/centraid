@@ -53,7 +53,7 @@ export default defineConfig({
           groups: [
             {
               name: 'shell-common',
-              test: /packages\/(client\/src\/(video-frame|gateway-auth|gateway-client-core|device-blob-source|gateway-client-devices|replica\/shell-session)|blob-format\/dist\/index)\.(ts|js)$/,
+              test: /packages\/(?:client\/src\/(?:video-frame|gateway-auth|gateway-client-core|device-blob-source|gateway-client-devices|replica\/shell-session)|blob-format\/dist\/index)\.(?:ts|js)$/u,
             },
           ],
         },

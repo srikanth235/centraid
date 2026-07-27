@@ -26,9 +26,11 @@ const errors: string[] = [];
 for (const file of await filesUnder(root)) {
   const source = await readFile(file, 'utf8');
   const fromApp = appOf(file);
-  for (const match of source.matchAll(/(?:from\s+|import\s*\()(['"])([^'"]+)\1/g)) {
-    const specifier = match[2]!;
-    if (!specifier.startsWith('.')) continue;
+  for (const match of source.matchAll(
+    /(?:from\s+|import\s*\()(?<quote>['"])(?<specifier>[^'"]+)\k<quote>/gu,
+  )) {
+    const specifier = match.groups?.specifier;
+    if (specifier === undefined || !specifier.startsWith('.')) continue;
     const targetApp = appOf(path.resolve(path.dirname(file), specifier));
     const label = path.relative(root, file);
     if (!fromApp && targetApp)

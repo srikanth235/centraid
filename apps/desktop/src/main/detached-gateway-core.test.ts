@@ -34,7 +34,7 @@ describe("decideControl (gateway.db lock-informed adopt-don't-kill)", () => {
   });
 });
 
-describe('resolveListenPort', () => {
+describe(resolveListenPort, () => {
   it('returns the stable default when unconfigured', () => {
     expect(resolveListenPort()).toBe(DEFAULT_GATEWAY_PORT);
     expect(resolveListenPort(undefined)).toBe(DEFAULT_GATEWAY_PORT);
@@ -54,7 +54,7 @@ describe('resolveListenPort', () => {
 
 describe('buildDetachedSpawnOptions (H2)', () => {
   it('describes detached + ignored stdio + unref', () => {
-    expect(buildDetachedSpawnOptions()).toEqual({
+    expect(buildDetachedSpawnOptions()).toStrictEqual({
       detached: true,
       stdio: 'ignore',
       unref: true,

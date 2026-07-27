@@ -13,7 +13,7 @@ export function companionRequestAllowed(
   // module (issue #505). The per-operation allowlist is enforced separately
   // by the runtime's `companionHandlerAllowed` gate.
   const appRpc =
-    method === 'POST' && /^\/centraid\/[^_/][^/]*\/(?:actions|queries)\/[^/]+$/.test(pathname);
+    method === 'POST' && /^\/centraid\/[^_/][^/]*\/(?:actions|queries)\/[^/]+$/u.test(pathname);
   return (
     appRpc ||
     pathname === '/centraid/_vault/status' ||

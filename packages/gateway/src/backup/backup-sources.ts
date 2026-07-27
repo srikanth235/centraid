@@ -40,7 +40,7 @@ async function listBlobEntries(
       continue;
     }
     for (const name of names) {
-      if (!/^[0-9a-f]{64}$/.test(name)) continue;
+      if (!/^[0-9a-f]{64}$/u.test(name)) continue;
       if (only && !only.has(name)) continue;
       entries.push({
         path: `blobs/sha256/${fan}/${name}`,
@@ -221,7 +221,7 @@ export async function assembleSourceEntries(opts: AssembleOptions): Promise<Sour
       // at a store that lost objects it acknowledged. Without it, deleting the
       // whole `wal/tick/` prefix is perfectly silent — every object the manifest
       // names is still there, and the restore just quietly returns the base pair.
-      ...(opts.walTipTickMs !== undefined ? { walTipTickMs: opts.walTipTickMs } : {}),
+      ...(opts.walTipTickMs === undefined ? {} : { walTipTickMs: opts.walTipTickMs }),
     });
   }
 

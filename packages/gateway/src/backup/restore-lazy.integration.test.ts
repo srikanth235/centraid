@@ -23,7 +23,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * remote `has(sha)`.
  */
 
-import { expect, test, vi } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import crypto, { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -124,207 +124,218 @@ function declareRemotePrimary(plane: VaultPlane): void {
   );
 }
 
-test('lazy restore: a library bigger than local disk restores previews-first — remote-held blobs stay remote-only, local-only blobs materialize, tinies warm', async () => {
-  const vaultDir = await tempDir('lazy-vault');
-  const providerDir = await tempDir('lazy-provider');
-  const backupDir = await tempDir('lazy-backup');
-  const config: BackupConfig = { enabled: true, provider: { kind: 'local', dir: providerDir } };
-  const registry = openVaultRegistry({
-    rootDir: vaultDir,
-    logger: silentLogger,
-    ownerName: 'Mara',
-  });
-  registry.create('Personal');
-  const vaultId = registry.defaultVaultId();
-  const plane = registry.get(vaultId)!;
-  const health = new HealthRegistry();
-  const service = new BackupService({
-    config,
-    cacheDir: backupDir,
-    vaults: registry,
-    health,
-    logger: silentLogger,
-  });
+describe('restore-lazy', () => {
+  test('lazy restore: a library bigger than local disk restores previews-first — remote-held blobs stay remote-only, local-only blobs materialize, tinies warm', async () => {
+    const vaultDir = await tempDir('lazy-vault');
+    const providerDir = await tempDir('lazy-provider');
+    const backupDir = await tempDir('lazy-backup');
+    const config: BackupConfig = { enabled: true, provider: { kind: 'local', dir: providerDir } };
+    const registry = openVaultRegistry({
+      rootDir: vaultDir,
+      logger: silentLogger,
+      ownerName: 'Mara',
+    });
+    registry.create('Personal');
+    const vaultId = registry.defaultVaultId();
+    const plane = registry.get(vaultId)!;
+    const health = new HealthRegistry();
+    const service = new BackupService({
+      config,
+      cacheDir: backupDir,
+      vaults: registry,
+      health,
+      logger: silentLogger,
+    });
 
-  // The remote CAS + the seal key its objects are encrypted under. In
-  // production this is the vault's configured blob_store; here it is injected.
-  const remoteStore = new MemoryRemoteStore();
-  const sealKey = randomBytes(32);
-  const remote: RemoteTier = { store: remoteStore, encryptKey: sealKey };
+    // The remote CAS + the seal key its objects are encrypted under. In
+    // production this is the vault's configured blob_store; here it is injected.
+    const remoteStore = new MemoryRemoteStore();
+    const sealKey = randomBytes(32);
+    const remote: RemoteTier = { store: remoteStore, encryptKey: sealKey };
 
-  try {
-    // 1. Seed three "image" content items, each with an ORIGINAL blob and a
-    // tiny THUMB derivative. Buffers are bytes, not real images — the lazy
-    // restore is byte-level, and `core_content_derivative` is what the warm
-    // pass reads to find the tinies.
-    const originals: { contentId: string; sha: string; bytes: Buffer }[] = [];
-    const thumbs: { sha: string; bytes: Buffer }[] = [];
-    for (let i = 0; i < 3; i++) {
-      const taskId = invoke(plane, 'schedule.add_task', { title: `Photo ${i}` })[
-        'task_id'
-      ] as string;
-      const originalBytes = randomBytes(400 + i); // distinct bytes ⇒ distinct shas
-      const originalSha = stage(plane, originalBytes, `photo-${i}.bin`);
-      const attach = invoke(plane, 'core.attach', {
-        subject_type: 'schedule.task',
-        subject_id: taskId,
-        staged_sha: originalSha,
-      });
-      const contentId = attach['content_id'] as string;
-      expect(contentId).toBeTruthy();
-      originals.push({ contentId, sha: originalSha, bytes: originalBytes });
+    try {
+      // 1. Seed three "image" content items, each with an ORIGINAL blob and a
+      // tiny THUMB derivative. Buffers are bytes, not real images — the lazy
+      // restore is byte-level, and `core_content_derivative` is what the warm
+      // pass reads to find the tinies.
+      const originals: { contentId: string; sha: string; bytes: Buffer }[] = [];
+      const thumbs: { sha: string; bytes: Buffer }[] = [];
+      for (let i = 0; i < 3; i++) {
+        const taskId = invoke(plane, 'schedule.add_task', { title: `Photo ${i}` })[
+          'task_id'
+        ] as string;
+        const originalBytes = randomBytes(400 + i); // distinct bytes ⇒ distinct shas
+        const originalSha = stage(plane, originalBytes, `photo-${i}.bin`);
+        const attach = invoke(plane, 'core.attach', {
+          subject_type: 'schedule.task',
+          subject_id: taskId,
+          staged_sha: originalSha,
+        });
+        const contentId = attach['content_id'] as string;
+        expect(contentId).toBeTruthy();
+        originals.push({ contentId, sha: originalSha, bytes: originalBytes });
 
-      const thumbBytes = randomBytes(64 + i);
-      const thumbSha = stage(plane, thumbBytes, `photo-${i}.thumb`);
-      plane.db.vault
-        .prepare(
-          `INSERT INTO core_content_derivative
+        const thumbBytes = randomBytes(64 + i);
+        const thumbSha = stage(plane, thumbBytes, `photo-${i}.thumb`);
+        plane.db.vault
+          .prepare(
+            `INSERT INTO core_content_derivative
              (derivative_id, content_id, variant, sha256, media_type, byte_size, created_at)
            VALUES (?, ?, 'thumb', ?, 'image/webp', ?, ?)`,
-        )
-        .run(crypto.randomUUID(), contentId, thumbSha, thumbBytes.length, new Date().toISOString());
-      thumbs.push({ sha: thumbSha, bytes: thumbBytes });
-    }
+          )
+          .run(
+            crypto.randomUUID(),
+            contentId,
+            thumbSha,
+            thumbBytes.length,
+            new Date().toISOString(),
+          );
+        thumbs.push({ sha: thumbSha, bytes: thumbBytes });
+      }
 
-    // 2. Replicate to the remote CAS: originals[0] and originals[1] plus ALL
-    // three thumbs. originals[2] is deliberately LEFT local-only (the remote
-    // does NOT hold it) so we can prove lazy still materializes it.
-    const seedCustody = new BlobCustody(
-      new FsBlobStore(path.join(plane.dir, 'blobs')),
-      () => remote,
-    );
-    const replicated = [originals[0]!.sha, originals[1]!.sha, ...thumbs.map((t) => t.sha)];
-    await seedCustody.replicate(replicated);
-    for (const sha of replicated) expect(await remoteStore.has(sha)).toBe(true);
-    expect(await remoteStore.has(originals[2]!.sha)).toBe(false);
+      // 2. Replicate to the remote CAS: originals[0] and originals[1] plus ALL
+      // three thumbs. originals[2] is deliberately LEFT local-only (the remote
+      // does NOT hold it) so we can prove lazy still materializes it.
+      const seedCustody = new BlobCustody(
+        new FsBlobStore(path.join(plane.dir, 'blobs')),
+        () => remote,
+      );
+      const replicated = [originals[0]!.sha, originals[1]!.sha, ...thumbs.map((t) => t.sha)];
+      await seedCustody.replicate(replicated);
+      for (const sha of replicated) await expect(remoteStore.has(sha)).resolves.toBe(true);
+      await expect(remoteStore.has(originals[2]!.sha)).resolves.toBe(false);
 
-    // 3. Snapshot the whole vault (snapshots carry EVERY local CAS blob).
-    await service.runBackup(vaultId);
-    expect((await service.status())[vaultId]?.lastSeq).toBe(1);
+      // 3. Snapshot the whole vault (snapshots carry EVERY local CAS blob).
+      await service.runBackup(vaultId);
+      expect((await service.status())[vaultId]?.lastSeq).toBe(1);
 
-    // 4. LAZY restore into a fresh dest.
-    const destParent = await tempDir('lazy-dest');
-    const destDir = path.join(destParent, 'restored');
-    const result = await service.restore({ vaultId, destDir, lazy: { remote } });
+      // 4. LAZY restore into a fresh dest.
+      const destParent = await tempDir('lazy-dest');
+      const destDir = path.join(destParent, 'restored');
+      const result = await service.restore({ vaultId, destDir, lazy: { remote } });
 
-    // --- The DB restored intact ---
-    expect(result.entries).toContain('vault.db');
-    expect(result.entries).toContain('journal.db');
-    const restoredDb = new DatabaseSync(path.join(destDir, 'vault.db'), { readOnly: true });
-    try {
-      const taskCount = (
-        restoredDb.prepare('SELECT COUNT(*) AS n FROM schedule_task').get() as { n: number }
-      ).n;
-      expect(taskCount).toBe(3);
-      const thumbCount = (
-        restoredDb
-          .prepare(`SELECT COUNT(*) AS n FROM core_content_derivative WHERE variant = 'thumb'`)
-          .get() as { n: number }
-      ).n;
-      expect(thumbCount).toBe(3);
+      // --- The DB restored intact ---
+      expect(result.entries).toContain('vault.db');
+      expect(result.entries).toContain('journal.db');
+      const restoredDb = new DatabaseSync(path.join(destDir, 'vault.db'), { readOnly: true });
+      try {
+        const taskCount = (
+          restoredDb.prepare('SELECT COUNT(*) AS n FROM schedule_task').get() as { n: number }
+        ).n;
+        expect(taskCount).toBe(3);
+        const thumbCount = (
+          restoredDb
+            .prepare(`SELECT COUNT(*) AS n FROM core_content_derivative WHERE variant = 'thumb'`)
+            .get() as { n: number }
+        ).n;
+        expect(thumbCount).toBe(3);
+      } finally {
+        restoredDb.close();
+      }
+
+      // --- Remote-held blobs were DEFERRED, local-only blob MATERIALIZED ---
+      const destBlobs = new FsBlobStore(path.join(destDir, 'blobs'));
+      expect(destBlobs.hasSync(originals[0]!.sha)).toBe(false); // remote holds it ⇒ skipped
+      expect(destBlobs.hasSync(originals[1]!.sha)).toBe(false); // remote holds it ⇒ skipped
+      expect(destBlobs.hasSync(originals[2]!.sha)).toBe(true); // local-only ⇒ materialized
+      // The engine reports exactly what it held back.
+      expect(result.skippedBlobs).toContain(originals[0]!.sha);
+      expect(result.skippedBlobs).toContain(originals[1]!.sha);
+      expect(result.skippedBlobs).not.toContain(originals[2]!.sha);
+
+      // --- The warm pass made ALL tinies present locally (usable grid) ---
+      for (const t of thumbs) expect(destBlobs.hasSync(t.sha)).toBe(true);
+
+      // --- The §5 time-to-usable-grid metric is reported ---
+      expect(result.previewsWarm).toBeDefined();
+      expect(result.previewsWarm!.tiniesTotal).toBe(3);
+      expect(result.previewsWarm!.tiniesWarmed).toBe(3);
+      expect(result.previewsWarm!.tiniesFailed).toBe(0);
+      expect(result.previewsWarm!.timeToUsableGridMs).toBeTypeOf('number');
+      expect(result.previewsWarm!.timeToUsableGridMs).toBeGreaterThanOrEqual(0);
+
+      // --- A deferred original read-throughs on demand (mediums/originals stay
+      //     remote-only until something asks for them) ---
+      const readCustody = new BlobCustody(
+        new FsBlobStore(path.join(destDir, 'blobs')),
+        () => remote,
+      );
+      const readBack = await readCustody.open(originals[0]!.sha);
+      expect(readBack).not.toBeNull();
+      expect(readBack!.equals(originals[0]!.bytes)).toBe(true);
+      // And the local-only original reads straight from the materialized copy.
+      const localOnly = await readCustody.open(originals[2]!.sha);
+      expect(localOnly!.equals(originals[2]!.bytes)).toBe(true);
     } finally {
-      restoredDb.close();
+      registry.stop();
     }
+  }, 30_000);
 
-    // --- Remote-held blobs were DEFERRED, local-only blob MATERIALIZED ---
-    const destBlobs = new FsBlobStore(path.join(destDir, 'blobs'));
-    expect(destBlobs.hasSync(originals[0]!.sha)).toBe(false); // remote holds it ⇒ skipped
-    expect(destBlobs.hasSync(originals[1]!.sha)).toBe(false); // remote holds it ⇒ skipped
-    expect(destBlobs.hasSync(originals[2]!.sha)).toBe(true); // local-only ⇒ materialized
-    // The engine reports exactly what it held back.
-    expect(result.skippedBlobs).toContain(originals[0]!.sha);
-    expect(result.skippedBlobs).toContain(originals[1]!.sha);
-    expect(result.skippedBlobs).not.toContain(originals[2]!.sha);
+  test('remote-primary snapshot restores from provider bytes plus only the durable outbox', async () => {
+    const vaultDir = await tempDir('remote-primary-vault');
+    const providerDir = await tempDir('remote-primary-provider');
+    const backupDir = await tempDir('remote-primary-backup');
+    const registry = openVaultRegistry({
+      rootDir: vaultDir,
+      logger: silentLogger,
+      ownerName: 'Mara',
+    });
+    registry.create('Personal');
+    const vaultId = registry.defaultVaultId();
+    const plane = registry.get(vaultId)!;
+    const service = new BackupService({
+      config: { enabled: true, provider: { kind: 'local', dir: providerDir } },
+      cacheDir: backupDir,
+      vaults: registry,
+      health: new HealthRegistry(),
+      logger: silentLogger,
+    });
+    const remoteStore = new MemoryRemoteStore();
+    const remote: RemoteTier = { store: remoteStore, encryptKey: randomBytes(32) };
 
-    // --- The warm pass made ALL tinies present locally (usable grid) ---
-    for (const t of thumbs) expect(destBlobs.hasSync(t.sha)).toBe(true);
+    try {
+      declareRemotePrimary(plane);
+      const taskId = invoke(plane, 'schedule.add_task', { title: 'Restore split custody' })[
+        'task_id'
+      ] as string;
+      const remoteBytes = randomBytes(700);
+      const pendingBytes = randomBytes(701);
+      const remoteSha = stage(plane, remoteBytes, 'remote.bin');
+      const pendingSha = stage(plane, pendingBytes, 'pending.bin');
+      for (const sha of [remoteSha, pendingSha]) {
+        invoke(plane, 'core.attach', {
+          subject_type: 'schedule.task',
+          subject_id: taskId,
+          staged_sha: sha,
+        });
+      }
 
-    // --- The §5 time-to-usable-grid metric is reported ---
-    expect(result.previewsWarm).toBeDefined();
-    expect(result.previewsWarm!.tiniesTotal).toBe(3);
-    expect(result.previewsWarm!.tiniesWarmed).toBe(3);
-    expect(result.previewsWarm!.tiniesFailed).toBe(0);
-    expect(typeof result.previewsWarm!.timeToUsableGridMs).toBe('number');
-    expect(result.previewsWarm!.timeToUsableGridMs).toBeGreaterThanOrEqual(0);
+      const seedCustody = new BlobCustody(
+        new FsBlobStore(path.join(plane.dir, 'blobs')),
+        () => remote,
+      );
+      await seedCustody.replicate([remoteSha]);
+      new ReplicaIndex(plane.db.vault).mark(remoteSha, remoteBytes.length);
+      plane.db.blobTransfers.state.completeOutbox(remoteSha);
+      expect(plane.db.blobTransfers.pendingSnapshotShas()).toStrictEqual([pendingSha]);
 
-    // --- A deferred original read-throughs on demand (mediums/originals stay
-    //     remote-only until something asks for them) ---
-    const readCustody = new BlobCustody(new FsBlobStore(path.join(destDir, 'blobs')), () => remote);
-    const readBack = await readCustody.open(originals[0]!.sha);
-    expect(readBack).not.toBeNull();
-    expect(readBack!.equals(originals[0]!.bytes)).toBe(true);
-    // And the local-only original reads straight from the materialized copy.
-    const localOnly = await readCustody.open(originals[2]!.sha);
-    expect(localOnly!.equals(originals[2]!.bytes)).toBe(true);
-  } finally {
-    registry.stop();
-  }
-}, 30_000);
+      await service.runBackup(vaultId);
+      const destDir = path.join(await tempDir('remote-primary-dest'), 'restored');
+      const result = await service.restore({ vaultId, destDir, lazy: { remote } });
+      const restoredLocal = new FsBlobStore(path.join(destDir, 'blobs'));
 
-test('remote-primary snapshot restores from provider bytes plus only the durable outbox', async () => {
-  const vaultDir = await tempDir('remote-primary-vault');
-  const providerDir = await tempDir('remote-primary-provider');
-  const backupDir = await tempDir('remote-primary-backup');
-  const registry = openVaultRegistry({
-    rootDir: vaultDir,
-    logger: silentLogger,
-    ownerName: 'Mara',
-  });
-  registry.create('Personal');
-  const vaultId = registry.defaultVaultId();
-  const plane = registry.get(vaultId)!;
-  const service = new BackupService({
-    config: { enabled: true, provider: { kind: 'local', dir: providerDir } },
-    cacheDir: backupDir,
-    vaults: registry,
-    health: new HealthRegistry(),
-    logger: silentLogger,
-  });
-  const remoteStore = new MemoryRemoteStore();
-  const remote: RemoteTier = { store: remoteStore, encryptKey: randomBytes(32) };
+      // Remote-primary originals never enter the snapshot at all; the restored
+      // DB still addresses them by SHA and the configured remote answers later.
+      expect(result.entries.some((entry) => entry.endsWith(remoteSha))).toBe(false);
+      expect(result.skippedBlobs).not.toContain(pendingSha);
+      expect(restoredLocal.hasSync(remoteSha)).toBe(false);
+      expect(restoredLocal.hasSync(pendingSha)).toBe(true);
+      expect((await restoredLocal.get(pendingSha))?.equals(pendingBytes)).toBe(true);
 
-  try {
-    declareRemotePrimary(plane);
-    const taskId = invoke(plane, 'schedule.add_task', { title: 'Restore split custody' })[
-      'task_id'
-    ] as string;
-    const remoteBytes = randomBytes(700);
-    const pendingBytes = randomBytes(701);
-    const remoteSha = stage(plane, remoteBytes, 'remote.bin');
-    const pendingSha = stage(plane, pendingBytes, 'pending.bin');
-    for (const sha of [remoteSha, pendingSha]) {
-      invoke(plane, 'core.attach', {
-        subject_type: 'schedule.task',
-        subject_id: taskId,
-        staged_sha: sha,
-      });
+      const restoredCustody = new BlobCustody(restoredLocal, () => remote);
+      expect((await restoredCustody.open(remoteSha))?.equals(remoteBytes)).toBe(true);
+    } finally {
+      registry.stop();
     }
-
-    const seedCustody = new BlobCustody(
-      new FsBlobStore(path.join(plane.dir, 'blobs')),
-      () => remote,
-    );
-    await seedCustody.replicate([remoteSha]);
-    new ReplicaIndex(plane.db.vault).mark(remoteSha, remoteBytes.length);
-    plane.db.blobTransfers.state.completeOutbox(remoteSha);
-    expect(plane.db.blobTransfers.pendingSnapshotShas()).toEqual([pendingSha]);
-
-    await service.runBackup(vaultId);
-    const destDir = path.join(await tempDir('remote-primary-dest'), 'restored');
-    const result = await service.restore({ vaultId, destDir, lazy: { remote } });
-    const restoredLocal = new FsBlobStore(path.join(destDir, 'blobs'));
-
-    // Remote-primary originals never enter the snapshot at all; the restored
-    // DB still addresses them by SHA and the configured remote answers later.
-    expect(result.entries.some((entry) => entry.endsWith(remoteSha))).toBe(false);
-    expect(result.skippedBlobs).not.toContain(pendingSha);
-    expect(restoredLocal.hasSync(remoteSha)).toBe(false);
-    expect(restoredLocal.hasSync(pendingSha)).toBe(true);
-    expect((await restoredLocal.get(pendingSha))?.equals(pendingBytes)).toBe(true);
-
-    const restoredCustody = new BlobCustody(restoredLocal, () => remote);
-    expect((await restoredCustody.open(remoteSha))?.equals(remoteBytes)).toBe(true);
-  } finally {
-    registry.stop();
-  }
-}, 30_000);
+  }, 30_000);
+});

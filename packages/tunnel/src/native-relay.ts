@@ -10,25 +10,25 @@ import { TUNNEL_FORWARDED_HEADER } from './protocol.js';
 
 interface NativeRelay {
   readonly endpointId: string;
-  ticket(): string;
-  close(): Promise<void>;
-  revokeEndpoint(endpointId: string): Promise<void>;
+  ticket: () => string;
+  close: () => Promise<void>;
+  revokeEndpoint: (endpointId: string) => Promise<void>;
 }
 
 interface NativeBinding {
-  startGatewayRelay(options: {
+  startGatewayRelay: (options: {
     secretKeyHex: string;
     upstreamUrl: string;
     upstreamToken: string;
     controlSecret: string;
     useN0Relays: boolean;
-  }): Promise<NativeRelay>;
-  startDesktopRelay(options: {
+  }) => Promise<NativeRelay>;
+  startDesktopRelay: (options: {
     secretKeyHex: string;
     controlUrl: string;
     controlSecret: string;
     useN0Relays: boolean;
-  }): Promise<NativeRelay>;
+  }) => Promise<NativeRelay>;
 }
 
 let binding: NativeBinding | undefined;

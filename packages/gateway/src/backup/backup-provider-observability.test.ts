@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import {
   BackupProviderError,
   type BackupProvider,
@@ -77,117 +77,119 @@ const desired = {
   casAck: 'receipt' as const,
 };
 
-test('policy push persists a typed provider rejection instead of flattening it', async () => {
-  const result = await pushProviderPolicy({
-    provider: provider({
-      capabilities: async () => capabilities(['policy']),
-      putPolicy: async () => {
-        throw BackupProviderError.of('policy_unmet', 'replicated acknowledgement unavailable', {
-          field: 'casAck',
-        });
-      },
-    }),
-    targetId: 'target',
-    desired,
-    checkedAt: '2026-07-16T00:00:00.000Z',
-  });
-  expect(result).toMatchObject<Partial<ProviderPolicySyncState>>({
-    status: 'rejected',
-    errorCode: 'policy_unmet',
-    details: { field: 'casAck' },
-  });
-});
-
-test('policy push grades a mismatched provider echo as drift', async () => {
-  const result = await pushProviderPolicy({
-    provider: provider({
-      capabilities: async () => capabilities(['policy']),
-      putPolicy: async (_target, policy) => ({
-        ...policy,
-        rpoSeconds: policy.rpoSeconds * 2,
-        declaredAt: 1,
+describe('backup-provider-observability', () => {
+  test('policy push persists a typed provider rejection instead of flattening it', async () => {
+    const result = await pushProviderPolicy({
+      provider: provider({
+        capabilities: async () => capabilities(['policy']),
+        putPolicy: async () => {
+          throw BackupProviderError.of('policy_unmet', 'replicated acknowledgement unavailable', {
+            field: 'casAck',
+          });
+        },
       }),
-    }),
-    targetId: 'target',
-    desired,
-    checkedAt: '2026-07-16T00:00:00.000Z',
+      targetId: 'target',
+      desired,
+      checkedAt: '2026-07-16T00:00:00.000Z',
+    });
+    expect(result).toMatchObject<Partial<ProviderPolicySyncState>>({
+      status: 'rejected',
+      errorCode: 'policy_unmet',
+      details: { field: 'casAck' },
+    });
   });
-  expect(result.status).toBe('drift');
-  expect(result.echo?.rpoSeconds).toBe(120);
-});
 
-test('verify-bucket inventory cross-check reports both directions of provider drift', async () => {
-  const rows = (keys: string[]): ProviderInventoryObject[] =>
-    keys.map((key) => ({
-      key,
-      sizeBytes: key.length,
-      etagOrHash: key,
-      storedAt: 1,
-      state: 'live',
-    }));
-  const result = await collectInventory({
-    provider: provider({
-      capabilities: async () => capabilities(['inventory']),
-      listInventory: async () => ({
-        store: 'backup',
-        objects: rows(['shared', 'provider-only']),
-        nextCursor: null,
+  test('policy push grades a mismatched provider echo as drift', async () => {
+    const result = await pushProviderPolicy({
+      provider: provider({
+        capabilities: async () => capabilities(['policy']),
+        putPolicy: async (_target, policy) => ({
+          ...policy,
+          rpoSeconds: policy.rpoSeconds * 2,
+          declaredAt: 1,
+        }),
       }),
-      openDataPlane: async () => listStore(['shared', 'bucket-only']),
-    }),
-    targetId: 'target',
-    store: 'backup',
-    verifyBucket: true,
+      targetId: 'target',
+      desired,
+      checkedAt: '2026-07-16T00:00:00.000Z',
+    });
+    expect(result.status).toBe('drift');
+    expect(result.echo?.rpoSeconds).toBe(120);
   });
-  expect(result.source).toBe('bucket');
-  expect(result.crossCheck).toEqual({
-    providerOnly: ['provider-only'],
-    bucketOnly: ['bucket-only'],
-    metadataMismatch: [],
-  });
-});
 
-test('verify-bucket inventory rejects a same-key byte metadata mismatch', async () => {
-  const result = await collectInventory({
-    provider: provider({
-      capabilities: async () => capabilities(['inventory']),
-      listInventory: async () => ({
-        store: 'cas',
-        objects: [
-          {
-            key: 'blobs/sha256/value',
-            sizeBytes: 99,
-            etagOrHash: 'stale-etag',
-            storedAt: 1,
-            state: 'live',
-          },
-        ],
-        nextCursor: null,
+  test('verify-bucket inventory cross-check reports both directions of provider drift', async () => {
+    const rows = (keys: string[]): ProviderInventoryObject[] =>
+      keys.map((key) => ({
+        key,
+        sizeBytes: key.length,
+        etagOrHash: key,
+        storedAt: 1,
+        state: 'live',
+      }));
+    const result = await collectInventory({
+      provider: provider({
+        capabilities: async () => capabilities(['inventory']),
+        listInventory: async () => ({
+          store: 'backup',
+          objects: rows(['shared', 'provider-only']),
+          nextCursor: null,
+        }),
+        openDataPlane: async () => listStore(['shared', 'bucket-only']),
       }),
-      openDataPlane: async () => listStore(['blobs/sha256/value']),
-    }),
-    targetId: 'target',
-    store: 'cas',
-    verifyBucket: true,
+      targetId: 'target',
+      store: 'backup',
+      verifyBucket: true,
+    });
+    expect(result.source).toBe('bucket');
+    expect(result.crossCheck).toStrictEqual({
+      providerOnly: ['provider-only'],
+      bucketOnly: ['bucket-only'],
+      metadataMismatch: [],
+    });
   });
-  expect(result.crossCheck?.metadataMismatch).toEqual(['blobs/sha256/value']);
-});
 
-test('an advertised but failing inventory falls back to raw LIST with an honest label', async () => {
-  const result = await collectInventory({
-    provider: provider({
-      capabilities: async () => capabilities(['inventory']),
-      listInventory: async () => {
-        throw new Error('attestation unavailable');
-      },
-      openDataPlane: async () => listStore(['chunks/a']),
-    }),
-    targetId: 'target',
-    store: 'backup',
-    verifyBucket: false,
+  test('verify-bucket inventory rejects a same-key byte metadata mismatch', async () => {
+    const result = await collectInventory({
+      provider: provider({
+        capabilities: async () => capabilities(['inventory']),
+        listInventory: async () => ({
+          store: 'cas',
+          objects: [
+            {
+              key: 'blobs/sha256/value',
+              sizeBytes: 99,
+              etagOrHash: 'stale-etag',
+              storedAt: 1,
+              state: 'live',
+            },
+          ],
+          nextCursor: null,
+        }),
+        openDataPlane: async () => listStore(['blobs/sha256/value']),
+      }),
+      targetId: 'target',
+      store: 'cas',
+      verifyBucket: true,
+    });
+    expect(result.crossCheck?.metadataMismatch).toStrictEqual(['blobs/sha256/value']);
   });
-  expect(result.source).toBe('bucket');
-  expect(result.providerAttested).toBe(false);
-  expect(result.attestationError).toContain('unavailable');
-  expect(result.objects.map((row) => row.key)).toEqual(['chunks/a']);
+
+  test('an advertised but failing inventory falls back to raw LIST with an honest label', async () => {
+    const result = await collectInventory({
+      provider: provider({
+        capabilities: async () => capabilities(['inventory']),
+        listInventory: async () => {
+          throw new Error('attestation unavailable');
+        },
+        openDataPlane: async () => listStore(['chunks/a']),
+      }),
+      targetId: 'target',
+      store: 'backup',
+      verifyBucket: false,
+    });
+    expect(result.source).toBe('bucket');
+    expect(result.providerAttested).toBe(false);
+    expect(result.attestationError).toContain('unavailable');
+    expect(result.objects.map((row) => row.key)).toStrictEqual(['chunks/a']);
+  });
 });

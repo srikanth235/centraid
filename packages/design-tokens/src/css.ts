@@ -90,7 +90,7 @@ export function toCss(): string {
   // (`bodyStrong` → `--t-body-strong`, `display1` → `--t-display-1`).
   for (const [k, v] of Object.entries(fontStacks)) staticProps[`--font-${k}`] = v;
   for (const [k, v] of Object.entries({ ...type, ...marketingType })) {
-    const kebab = k.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+    const kebab = k.replace(/(?<lower>[a-z])(?<upper>[A-Z])/gu, '$<lower>-$<upper>').toLowerCase();
     staticProps[`--t-${kebab}`] = typeShorthand(v);
   }
   // Shared library-tile tokens (Home + Discover render the same tile).

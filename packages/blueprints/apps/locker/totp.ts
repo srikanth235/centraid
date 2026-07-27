@@ -10,9 +10,9 @@ export function base32Decode(input: string | null | undefined): Uint8Array<Array
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   const clean = String(input || '')
     .toUpperCase()
-    .replace(/=+$/, '')
-    .replace(/\s/g, '');
-  if (!clean || /[^A-Z2-7]/.test(clean)) return null;
+    .replace(/=+$/u, '')
+    .replace(/\s/gu, '');
+  if (!clean || /[^A-Z2-7]/u.test(clean)) return null;
   let bits = 0;
   let value = 0;
   const out: number[] = [];
@@ -143,9 +143,9 @@ export function strength(pw: string | null | undefined): Strength {
   let s = 0;
   if (pw.length >= 8) s++;
   if (pw.length >= 14) s++;
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
-  if (/[0-9]/.test(pw)) s++;
-  if (/[^A-Za-z0-9]/.test(pw)) s++;
+  if (/[A-Z]/u.test(pw) && /[a-z]/u.test(pw)) s++;
+  if (/[0-9]/u.test(pw)) s++;
+  if (/[^A-Za-z0-9]/u.test(pw)) s++;
   const label = s <= 2 ? 'Weak' : s === 3 ? 'Fair' : s === 4 ? 'Good' : 'Strong';
   const tone = s <= 2 ? 'danger' : s === 3 ? 'warn' : 'ok';
   const color = s <= 2 ? 'var(--danger)' : s === 3 ? 'var(--warn)' : 'var(--ok)';

@@ -1,8 +1,7 @@
 import { defineConfig } from '@playwright/test';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 
 export default defineConfig({
   testDir: here,

@@ -10,12 +10,12 @@ import type {
 import type { ReplicaMode, ReplicaStatus, ReplicaWorkerOpenOptions } from './types.js';
 
 interface WorkerScope {
-  addEventListener(
+  addEventListener: (
     type: 'message',
     listener: (event: MessageEvent<ReplicaWorkerRequest>) => void,
-  ): void;
-  postMessage(message: ReplicaWorkerResponse): void;
-  close(): void;
+  ) => void;
+  postMessage: (message: ReplicaWorkerResponse) => void;
+  close: () => void;
 }
 
 const scope = globalThis as unknown as WorkerScope;
@@ -172,9 +172,9 @@ function opfsAvailable(): boolean {
 }
 
 function fileStem(name: string): string {
-  const match = /centraid-replica-([a-f0-9]+)\.sqlite3$/.exec(name);
-  if (!match?.[1]) throw new ReplicaProtocolError('Replica database name is not namespaced');
-  return match[1];
+  const stem = /centraid-replica-(?<stem>[a-f0-9]+)\.sqlite3$/u.exec(name)?.groups?.stem;
+  if (!stem) throw new ReplicaProtocolError('Replica database name is not namespaced');
+  return stem;
 }
 
 function serializeError(error: unknown): SerializedReplicaError {

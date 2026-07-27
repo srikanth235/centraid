@@ -21,7 +21,7 @@ function freshVaultDir(): string {
   return dir;
 }
 
-describe('repriceLedger', () => {
+describe(repriceLedger, () => {
   let dir: string;
   let db: DatabaseSync;
   let store: ConversationHistoryStore;

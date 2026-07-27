@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ManifestError } from './manifest-errors.js';
 import { validateOutputAgainstSchema, validateOutputSchema } from './manifest-output.js';
 
-describe('validateOutputSchema', () => {
+describe(validateOutputSchema, () => {
   it('returns undefined when the schema is omitted', () => {
     expect(validateOutputSchema(undefined)).toBeUndefined();
   });
@@ -10,11 +10,15 @@ describe('validateOutputSchema', () => {
   it('rejects non-object roots', () => {
     for (const raw of [null, 'x', 1, true, []]) {
       expect(() => validateOutputSchema(raw)).toThrow(ManifestError);
+      // Captured outside a catch so the code/field assertion always runs —
+      // `thrown` stays undefined if the call silently returns.
+      let thrown: unknown;
       try {
         validateOutputSchema(raw);
       } catch (err) {
-        expect(err).toMatchObject({ code: 'invalid_output_schema', field: 'outputSchema' });
+        thrown = err;
       }
+      expect(thrown).toMatchObject({ code: 'invalid_output_schema', field: 'outputSchema' });
     }
   });
 
@@ -23,7 +27,7 @@ describe('validateOutputSchema', () => {
   });
 
   it('accepts a bare object schema', () => {
-    expect(validateOutputSchema({ type: 'object' })).toEqual({ type: 'object' });
+    expect(validateOutputSchema({ type: 'object' })).toStrictEqual({ type: 'object' });
   });
 
   it('validates property type declarations', () => {
@@ -32,7 +36,7 @@ describe('validateOutputSchema', () => {
         type: 'object',
         properties: { name: { type: 'string' }, count: { type: 'number' } },
       }),
-    ).toEqual({
+    ).toStrictEqual({
       type: 'object',
       properties: { name: { type: 'string' }, count: { type: 'number' } },
     });
@@ -63,7 +67,7 @@ describe('validateOutputSchema', () => {
         required: ['a', 'b'],
         properties: { a: { type: 'string' } },
       }),
-    ).toEqual({
+    ).toStrictEqual({
       type: 'object',
       properties: { a: { type: 'string' } },
       required: ['a', 'b'],
@@ -80,7 +84,7 @@ describe('validateOutputSchema', () => {
   });
 });
 
-describe('validateOutputAgainstSchema', () => {
+describe(validateOutputAgainstSchema, () => {
   const schema = validateOutputSchema({
     type: 'object',
     properties: {

@@ -14,7 +14,7 @@ const REVOKED = 'iroh-device-revoked';
 describe('byte codecs', () => {
   it('round-trips raw bytes through base64', () => {
     const bytes = new Uint8Array([0, 1, 255, 42]);
-    expect(Array.from(decodeBytes(encodeBytes(bytes)))).toEqual([0, 1, 255, 42]);
+    expect(Array.from(decodeBytes(encodeBytes(bytes)))).toStrictEqual([0, 1, 255, 42]);
   });
 });
 
@@ -27,7 +27,7 @@ describe('failure classification', () => {
   });
 });
 
-describe('shouldRetryCompanionRequest', () => {
+describe(shouldRetryCompanionRequest, () => {
   it('never retries device revocation', () => {
     expect(
       shouldRetryCompanionRequest({
@@ -88,7 +88,7 @@ describe('shouldRetryCompanionRequest', () => {
   });
 });
 
-describe('companionHttpError', () => {
+describe(companionHttpError, () => {
   it('maps 401 to the revoked message and otherwise prefers body text', () => {
     expect(companionHttpError(401, 'ignored')).toContain('revoked');
     expect(companionHttpError(500, 'upstream down')).toBe('upstream down');

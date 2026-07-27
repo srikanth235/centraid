@@ -113,9 +113,7 @@ function ActivityCard({
             'Loading…'
           ) : lastRun === 'error' ? (
             "Couldn't load"
-          ) : !last ? (
-            'No runs yet'
-          ) : (
+          ) : last ? (
             <span className={styles.activityLast}>
               <span className={styles.runDot} data-ok={String(last.ok)} />
               <span>{last.summary || last.error || (last.ok ? 'Completed' : 'Failed')}</span>
@@ -123,6 +121,8 @@ function ActivityCard({
                 {`· ${runOriginLabel(last)} · ${relTime(last.startedAt)}`}
               </span>
             </span>
+          ) : (
+            'No runs yet'
           )}
         </span>
       </div>

@@ -30,8 +30,8 @@ export interface EnqueueInput {
 
 /** The streaming-digest shape; `IncrementalSha256` is the portable default. */
 export interface StreamingDigest {
-  update(bytes: Uint8Array): unknown;
-  digestHex(): string;
+  update: (bytes: Uint8Array) => unknown;
+  digestHex: () => string;
 }
 
 export interface EnqueueDeps {

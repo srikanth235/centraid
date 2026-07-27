@@ -34,7 +34,7 @@
 import path from 'node:path';
 
 /** Matches a PATH entry that is (or ends in) a `node_modules/.bin` dir, either separator. */
-const NODE_MODULES_BIN_RE = /[\\/]node_modules[\\/]\.bin[\\/]?$/;
+const NODE_MODULES_BIN_RE = /[\\/]node_modules[\\/]\.bin[\\/]?$/u;
 
 /**
  * Strip `node_modules/.bin` entries out of a `PATH`-shaped string. Other

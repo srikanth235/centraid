@@ -16,13 +16,13 @@ vi.hoisted(() => {
 
 function makeProps(over: Partial<FirstRunGateProps> = {}): FirstRunGateProps {
   return {
-    onOnboardingComplete: vi.fn(),
-    onFoundingComplete: vi.fn(),
+    onOnboardingComplete: vi.fn<FirstRunGateProps['onOnboardingComplete']>(),
+    onFoundingComplete: vi.fn<FirstRunGateProps['onFoundingComplete']>(),
     gatewayStatus: 'uninitialized',
     founding: {
-      initialize: vi.fn(),
-      verify: vi.fn(),
-      restore: vi.fn(),
+      initialize: vi.fn<FirstRunGateProps['founding']['initialize']>(),
+      verify: vi.fn<FirstRunGateProps['founding']['verify']>(),
+      restore: vi.fn<FirstRunGateProps['founding']['restore']>(),
     },
     ...over,
   };
@@ -30,75 +30,77 @@ function makeProps(over: Partial<FirstRunGateProps> = {}): FirstRunGateProps {
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
-afterEach(() => {
-  act(() => root?.unmount());
-  root = null;
-  container?.remove();
-  container = null;
-  vi.restoreAllMocks();
-});
+describe('screens/FirstRunGate', () => {
+  afterEach(() => {
+    act(() => root?.unmount());
+    root = null;
+    container?.remove();
+    container = null;
+    vi.restoreAllMocks();
+  });
 
-async function flush(times = 3): Promise<void> {
-  for (let i = 0; i < times; i++) {
-    await act(async () => {
-      await Promise.resolve();
-    });
+  async function flush(times = 3): Promise<void> {
+    for (let i = 0; i < times; i++) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
   }
-}
 
-async function mount(props: FirstRunGateProps): Promise<HTMLDivElement> {
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  await act(async () => {
-    root = createRoot(container as HTMLDivElement);
-    root.render(<FirstRunGate {...props} />);
-  });
-  await flush();
-  return container;
-}
-
-function clickIncludes(el: HTMLElement, text: string): void {
-  const btn = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes(text));
-  act(() => btn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-}
-
-describe('FirstRunGate', () => {
-  it('offers exactly the two first-run choices', async () => {
-    const el = await mount(makeProps());
-    expect(el.textContent).toContain('Create vault');
-    expect(el.textContent).toContain('Restore vault');
-    expect(el.textContent).toContain('Starting fresh, or bringing a vault back');
-  });
-
-  it('"Create vault" opens the founding ceremony', async () => {
-    const el = await mount(makeProps());
-    clickIncludes(el, 'Create vault');
+  async function mount(props: FirstRunGateProps): Promise<HTMLDivElement> {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    await act(async () => {
+      root = createRoot(container as HTMLDivElement);
+      root.render(<FirstRunGate {...props} />);
+    });
     await flush();
-    expect(el.textContent).toContain('Create your vault');
-    expect(el.textContent).toContain('Recovery-kit password');
-  });
+    return container;
+  }
 
-  it('"Restore vault" opens the restore peer of the same ceremony', async () => {
-    const el = await mount(makeProps());
-    clickIncludes(el, 'Restore vault');
-    await flush();
-    expect(el.textContent).toContain('Restore your vault');
-    expect(el.textContent).toContain('Storage-provider key');
-  });
+  function clickIncludes(el: HTMLElement, text: string): void {
+    const btn = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes(text));
+    act(() => btn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  }
 
-  it('"Back" from founding returns to the choice', async () => {
-    const el = await mount(makeProps());
-    clickIncludes(el, 'Restore vault');
-    await flush();
-    clickIncludes(el, 'Back');
-    await flush();
-    expect(el.textContent).toContain('Starting fresh, or bringing a vault back');
-  });
+  describe(FirstRunGate, () => {
+    it('offers exactly the two first-run choices', async () => {
+      const el = await mount(makeProps());
+      expect(el.textContent).toContain('Create vault');
+      expect(el.textContent).toContain('Restore vault');
+      expect(el.textContent).toContain('Starting fresh, or bringing a vault back');
+    });
 
-  it('never shows Create / Restore for an already-founded gateway', async () => {
-    const el = await mount(makeProps({ gatewayStatus: 'ready' }));
-    expect(el.textContent).toContain('Make yourself');
-    expect(el.textContent).not.toContain('Create vault');
-    expect(el.textContent).not.toContain('Restore vault');
+    it('"Create vault" opens the founding ceremony', async () => {
+      const el = await mount(makeProps());
+      clickIncludes(el, 'Create vault');
+      await flush();
+      expect(el.textContent).toContain('Create your vault');
+      expect(el.textContent).toContain('Recovery-kit password');
+    });
+
+    it('"Restore vault" opens the restore peer of the same ceremony', async () => {
+      const el = await mount(makeProps());
+      clickIncludes(el, 'Restore vault');
+      await flush();
+      expect(el.textContent).toContain('Restore your vault');
+      expect(el.textContent).toContain('Storage-provider key');
+    });
+
+    it('"Back" from founding returns to the choice', async () => {
+      const el = await mount(makeProps());
+      clickIncludes(el, 'Restore vault');
+      await flush();
+      clickIncludes(el, 'Back');
+      await flush();
+      expect(el.textContent).toContain('Starting fresh, or bringing a vault back');
+    });
+
+    it('never shows Create / Restore for an already-founded gateway', async () => {
+      const el = await mount(makeProps({ gatewayStatus: 'ready' }));
+      expect(el.textContent).toContain('Make yourself');
+      expect(el.textContent).not.toContain('Create vault');
+      expect(el.textContent).not.toContain('Restore vault');
+    });
   });
 });

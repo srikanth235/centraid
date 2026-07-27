@@ -10,7 +10,7 @@ import {
   turnProgress,
 } from './builderModel.js';
 
-describe('toolVerb', () => {
+describe(toolVerb, () => {
   it('maps known tools and title-cases the rest', () => {
     expect(toolVerb('read')).toBe('Reading');
     expect(toolVerb('multi_edit')).toBe('Editing');
@@ -19,7 +19,7 @@ describe('toolVerb', () => {
   });
 });
 
-describe('summarizeGroup', () => {
+describe(summarizeGroup, () => {
   it('collapses adjacent same-verb calls to "Verb ×N"', () => {
     expect(
       summarizeGroup([
@@ -31,7 +31,7 @@ describe('summarizeGroup', () => {
   });
 });
 
-describe('summarizeToolArgs', () => {
+describe(summarizeToolArgs, () => {
   it('picks the path for file tools and truncates long bash', () => {
     expect(summarizeToolArgs('write', { path: 'a/b.ts' })).toBe('a/b.ts');
     expect(summarizeToolArgs('grep', { pattern: 'foo', path: 'src' })).toBe('foo  in  src');
@@ -40,9 +40,9 @@ describe('summarizeToolArgs', () => {
   });
 });
 
-describe('toBuilderMsg', () => {
+describe(toBuilderMsg, () => {
   it('splits AI text into paragraphs', () => {
-    expect(toBuilderMsg({ kind: 'ai', text: 'a\n\nb' }, 0)).toEqual({
+    expect(toBuilderMsg({ kind: 'ai', text: 'a\n\nb' }, 0)).toStrictEqual({
       kind: 'ai',
       paras: ['a', 'b'],
     });
@@ -60,12 +60,12 @@ describe('toBuilderMsg', () => {
     };
     const dto = toBuilderMsg(m, 2);
     if (dto.kind !== 'toolGroup') throw new Error('expected toolGroup');
-    expect(dto.change).toEqual({ count: 1, subtitle: 'app.ts', version: 'v3' });
-    expect(dto.rows).toEqual([]); // collapsed → no rows
+    expect(dto.change).toStrictEqual({ count: 1, subtitle: 'app.ts', version: 'v3' });
+    expect(dto.rows).toStrictEqual([]); // collapsed → no rows
   });
 });
 
-describe('turnProgress', () => {
+describe(turnProgress, () => {
   it('reports the running tool with a determinate dot count', () => {
     const chat: ConversationMsg[] = [
       { kind: 'user', text: 'go' },
@@ -79,7 +79,7 @@ describe('turnProgress', () => {
         ],
       },
     ];
-    expect(turnProgress(chat, -1)).toEqual({
+    expect(turnProgress(chat, -1)).toStrictEqual({
       verb: 'Writing',
       file: 'b.ts',
       sub: 'Reading, Writing',

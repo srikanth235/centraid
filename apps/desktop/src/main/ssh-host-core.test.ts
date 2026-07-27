@@ -12,11 +12,11 @@ import {
   type SshRunResult,
 } from './ssh-host-core.js';
 
-describe('validateSshDestination', () => {
+describe(validateSshDestination, () => {
   it('accepts user@host, bare host, and ssh config aliases', () => {
-    expect(validateSshDestination('pi@raspberrypi.local')).toEqual({ ok: true });
-    expect(validateSshDestination('192.168.1.42')).toEqual({ ok: true });
-    expect(validateSshDestination('my-homelab-box')).toEqual({ ok: true });
+    expect(validateSshDestination('pi@raspberrypi.local')).toStrictEqual({ ok: true });
+    expect(validateSshDestination('192.168.1.42')).toStrictEqual({ ok: true });
+    expect(validateSshDestination('my-homelab-box')).toStrictEqual({ ok: true });
   });
 
   it('rejects empty and whitespace-padded destinations', () => {
@@ -63,23 +63,23 @@ describe('shellQuoteArg / shellQuoteArgv', () => {
   });
 });
 
-describe('buildRemoteArgv', () => {
+describe(buildRemoteArgv, () => {
   it('--version takes no flags at all', () => {
-    expect(buildRemoteArgv('centraid-gateway', '/data', { kind: 'version' })).toEqual([
+    expect(buildRemoteArgv('centraid-gateway', '/data', { kind: 'version' })).toStrictEqual([
       'centraid-gateway',
       '--version',
     ]);
   });
 
   it('status/vault-list/vault-create/pair always append --data-dir (when set) and --json', () => {
-    expect(buildRemoteArgv('centraid-gateway', '/data', { kind: 'status' })).toEqual([
+    expect(buildRemoteArgv('centraid-gateway', '/data', { kind: 'status' })).toStrictEqual([
       'centraid-gateway',
       'status',
       '--data-dir',
       '/data',
       '--json',
     ]);
-    expect(buildRemoteArgv('centraid-gateway', '/data', { kind: 'vault-list' })).toEqual([
+    expect(buildRemoteArgv('centraid-gateway', '/data', { kind: 'vault-list' })).toStrictEqual([
       'centraid-gateway',
       'vault',
       'list',
@@ -89,7 +89,7 @@ describe('buildRemoteArgv', () => {
     ]);
     expect(
       buildRemoteArgv('centraid-gateway', '/data', { kind: 'vault-create', name: 'Family' }),
-    ).toEqual([
+    ).toStrictEqual([
       'centraid-gateway',
       'vault',
       'create',
@@ -101,7 +101,7 @@ describe('buildRemoteArgv', () => {
     ]);
     expect(
       buildRemoteArgv('centraid-gateway', '/data', { kind: 'pair', vaultId: 'v1', ttlMinutes: 15 }),
-    ).toEqual([
+    ).toStrictEqual([
       'centraid-gateway',
       'pair',
       '--vault',
@@ -115,7 +115,7 @@ describe('buildRemoteArgv', () => {
   });
 
   it('omits --data-dir entirely when the profile has none', () => {
-    expect(buildRemoteArgv('centraid-gateway', undefined, { kind: 'vault-list' })).toEqual([
+    expect(buildRemoteArgv('centraid-gateway', undefined, { kind: 'vault-list' })).toStrictEqual([
       'centraid-gateway',
       'vault',
       'list',
@@ -126,17 +126,17 @@ describe('buildRemoteArgv', () => {
   it('honors a custom remote CLI path', () => {
     expect(
       buildRemoteArgv('/opt/homebrew/bin/centraid-gateway', undefined, { kind: 'status' }),
-    ).toEqual(['/opt/homebrew/bin/centraid-gateway', 'status', '--json']);
+    ).toStrictEqual(['/opt/homebrew/bin/centraid-gateway', 'status', '--json']);
   });
 });
 
-describe('buildSshArgv', () => {
+describe(buildSshArgv, () => {
   it('matches the frozen ssh invocation shape', () => {
     const argv = buildSshArgv({
       destination: 'pi@raspberrypi.local',
       remoteArgv: ['centraid-gateway', 'vault', 'list', '--json'],
     });
-    expect(argv).toEqual([
+    expect(argv).toStrictEqual([
       '-o',
       'BatchMode=yes',
       '-o',
@@ -158,9 +158,9 @@ describe('buildSshArgv', () => {
   });
 });
 
-describe('parseSshJsonOutput', () => {
+describe(parseSshJsonOutput, () => {
   it('parses a clean single JSON line', () => {
-    expect(parseSshJsonOutput('{"ok":true,"vaultId":"v1"}\n')).toEqual({
+    expect(parseSshJsonOutput('{"ok":true,"vaultId":"v1"}\n')).toStrictEqual({
       ok: true,
       value: { ok: true, vaultId: 'v1' },
     });
@@ -186,19 +186,21 @@ describe('parseSshJsonOutput', () => {
       'some text {not real json}',
       '{"ok":false,"error":"usage","message":"bad flag"}',
     ].join('\n');
-    expect(parseSshJsonOutput(stdout)).toEqual({
+    expect(parseSshJsonOutput(stdout)).toStrictEqual({
       ok: true,
       value: { ok: false, error: 'usage', message: 'bad flag' },
     });
   });
 
   it('reports ok:false when nothing on stdout parses as JSON', () => {
-    expect(parseSshJsonOutput('just some banner text\nno json here\n')).toEqual({ ok: false });
-    expect(parseSshJsonOutput('')).toEqual({ ok: false });
+    expect(parseSshJsonOutput('just some banner text\nno json here\n')).toStrictEqual({
+      ok: false,
+    });
+    expect(parseSshJsonOutput('')).toStrictEqual({ ok: false });
   });
 });
 
-describe('parseSshVersionOutput', () => {
+describe(parseSshVersionOutput, () => {
   it('returns the last non-empty line', () => {
     expect(parseSshVersionOutput('MOTD line\n\n0.1.0\n')).toBe('0.1.0');
     expect(parseSshVersionOutput('')).toBeUndefined();
@@ -206,11 +208,11 @@ describe('parseSshVersionOutput', () => {
   });
 });
 
-describe('mapSshFailure', () => {
+describe(mapSshFailure, () => {
   const base: SshRunResult = { code: 0, stdout: '', stderr: '', timedOut: false };
 
   it('maps a local spawn failure (ssh binary missing) to ssh_unreachable', () => {
-    expect(mapSshFailure({ ...base, spawnError: 'spawn ssh ENOENT' })).toEqual({
+    expect(mapSshFailure({ ...base, spawnError: 'spawn ssh ENOENT' })).toStrictEqual({
       code: 'ssh_unreachable',
       detail: 'spawn ssh ENOENT',
     });

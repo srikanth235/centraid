@@ -71,9 +71,10 @@ export class ProviderNotHomeProfileError extends Error {
 /** Pull the `(missing a, b, c)` clause out of the gateway's home-profile
  *  message into a clean capability list. Empty when none was named. */
 function parseMissingCapabilities(message: string | undefined): string[] {
-  const match = /missing ([^)]+)\)/.exec(message ?? '');
-  if (!match || !match[1]) return [];
-  return match[1]
+  const match = /missing (?<capabilities>[^)]+)\)/u.exec(message ?? '');
+  const capabilities = match?.groups?.capabilities;
+  if (!capabilities) return [];
+  return capabilities
     .split(',')
     .map((c) => c.trim())
     .filter((c) => c.length > 0);

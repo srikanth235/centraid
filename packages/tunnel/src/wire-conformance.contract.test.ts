@@ -242,7 +242,7 @@ describe('wire golden fixture', () => {
   const fixture = loadFixture();
 
   it('is in sync with the current encoder (regen with UPDATE_GOLDEN=1)', () => {
-    expect(fixture).toEqual(buildFixture());
+    expect(fixture).toStrictEqual(buildFixture());
   });
 
   it('pins the caps constants', () => {
@@ -268,7 +268,7 @@ describe('wire golden fixture', () => {
   });
 
   it('pins the hop-by-hop header set', () => {
-    expect(new Set(fixture.hopByHopHeaders)).toEqual(new Set(HOP_BY_HOP));
+    expect(new Set(fixture.hopByHopHeaders)).toStrictEqual(new Set(HOP_BY_HOP));
   });
 });
 
@@ -294,7 +294,7 @@ describe.each(VECTORS)('wire vector $name', ({ name, value }) => {
   it('readHeaderFrame round-trips the golden frame back to the object', async () => {
     const bytes = Buffer.from(vector.frameBase64, 'base64');
     const decoded = await readHeaderFrame(bufferRecv(bytes));
-    expect(decoded).toEqual(value);
+    expect(decoded).toStrictEqual(value);
   });
 });
 

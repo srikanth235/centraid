@@ -22,7 +22,6 @@ import {
   ShieldIcon,
   TrashIcon,
 } from '../icons.tsx';
-import { Fragment } from 'react';
 import type { ReactNode } from 'react';
 import type { Album } from '../types.ts';
 import { InlineInput } from './InlineInput.tsx';
@@ -51,7 +50,7 @@ function NavItem({
     >
       <span className={styles.navIcon}>{icon}</span>
       <span className={styles.navLabel}>{label}</span>
-      {count != null ? <span className={styles.navCount}>{count}</span> : null}
+      {count == null ? null : <span className={styles.navCount}>{count}</span>}
     </button>
   );
 }
@@ -175,7 +174,7 @@ export function SidebarView({
   onUpload: () => void;
 }) {
   return (
-    <Fragment>
+    <>
       {/* The dismiss-on-outside-click target is a real button (kit-modal-scrim
           strips the UA button box; `.scrim` still draws the dim), so the drawer
           can be closed from the keyboard too. */}
@@ -317,6 +316,6 @@ export function SidebarView({
           </div>
         </div>
       </aside>
-    </Fragment>
+    </>
   );
 }

@@ -15,10 +15,10 @@ function newAppDir(): string {
   return tempDirSync('centraid-app-settings-');
 }
 
-describe('readAppSettings', () => {
+describe(readAppSettings, () => {
   it('returns {} when the app dir has no settings.json', () => {
-    expect(readAppSettings('/nonexistent/app/dir')).toEqual({});
-    expect(readAppSettings(newAppDir())).toEqual({});
+    expect(readAppSettings('/nonexistent/app/dir')).toStrictEqual({});
+    expect(readAppSettings(newAppDir())).toStrictEqual({});
   });
 
   it('reads the JSON object', () => {
@@ -32,9 +32,9 @@ describe('readAppSettings', () => {
   it('treats malformed or non-object JSON as empty (never throws)', () => {
     const dir = newAppDir();
     writeFileSync(join(dir, APP_SETTINGS_FILE), 'not json{');
-    expect(readAppSettings(dir)).toEqual({});
+    expect(readAppSettings(dir)).toStrictEqual({});
     writeFileSync(join(dir, APP_SETTINGS_FILE), JSON.stringify([1, 2]));
-    expect(readAppSettings(dir)).toEqual({});
+    expect(readAppSettings(dir)).toStrictEqual({});
   });
 });
 
@@ -48,7 +48,7 @@ describe('readAppSetting / writeAppSetting / deleteAppSetting', () => {
   it('round-trips an object', () => {
     const dir = newAppDir();
     writeAppSetting(dir, 'pref', { a: 1, b: 'two' });
-    expect(readAppSetting(dir, 'pref')).toEqual({ a: 1, b: 'two' });
+    expect(readAppSetting(dir, 'pref')).toStrictEqual({ a: 1, b: 'two' });
   });
 
   it('write creates settings.json on demand and keeps other keys', () => {
@@ -60,7 +60,7 @@ describe('readAppSetting / writeAppSetting / deleteAppSetting', () => {
       string,
       unknown
     >;
-    expect(raw).toEqual({ first: true, second: 2 });
+    expect(raw).toStrictEqual({ first: true, second: 2 });
   });
 
   it('overwrites on second write to the same key', () => {
@@ -71,11 +71,11 @@ describe('readAppSetting / writeAppSetting / deleteAppSetting', () => {
   });
 
   it('returns undefined for missing key / file', () => {
-    expect(readAppSetting('/nonexistent/app/dir', 'k')).toBe(undefined);
+    expect(readAppSetting('/nonexistent/app/dir', 'k')).toBeUndefined();
     const dir = newAppDir();
-    expect(readAppSetting(dir, 'k')).toBe(undefined); // no file yet
+    expect(readAppSetting(dir, 'k')).toBeUndefined(); // no file yet
     writeAppSetting(dir, 'other', 1);
-    expect(readAppSetting(dir, 'missing')).toBe(undefined); // file exists, key doesn't
+    expect(readAppSetting(dir, 'missing')).toBeUndefined(); // file exists, key doesn't
   });
 
   it('delete removes the key; subsequent read is undefined', () => {
@@ -83,7 +83,7 @@ describe('readAppSetting / writeAppSetting / deleteAppSetting', () => {
     writeAppSetting(dir, 'k', 'v');
     expect(readAppSetting(dir, 'k')).toBe('v');
     deleteAppSetting(dir, 'k');
-    expect(readAppSetting(dir, 'k')).toBe(undefined);
+    expect(readAppSetting(dir, 'k')).toBeUndefined();
   });
 
   it('delete is a no-op when file / key is missing', () => {

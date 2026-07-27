@@ -24,7 +24,7 @@ import { spawnSync } from 'node:child_process';
 /** GitHub returns an ISO-8601 timestamp; we key the slot on the UTC date. */
 export function toRunDate(createdAt, fallbackNow) {
   const candidate = String(createdAt ?? '').slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(candidate)) {
+  if (/^\d{4}-\d{2}-\d{2}$/u.test(candidate)) {
     // Reject a well-shaped but impossible date (e.g. 2026-13-45) — silently
     // publishing to a nonsense slot is worse than falling back.
     const parsed = new Date(`${candidate}T00:00:00Z`);

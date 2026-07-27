@@ -8,7 +8,7 @@ export interface ReplicaQueryState {
   rows: Array<ReplicaRow & { __rowId: string }>;
   loading: boolean;
   error?: string;
-  refresh(): Promise<void>;
+  refresh: () => Promise<void>;
 }
 
 /**

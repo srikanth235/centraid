@@ -42,12 +42,11 @@
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(import.meta.dirname, '..');
 const workflowDir = path.join(root, '.github/workflows');
 
-const SHA_PINNED = /^[^@\s]+@[0-9a-f]{40}\s*(#.*)?$/;
+const SHA_PINNED = /^[^@\s]+@[0-9a-f]{40}\s*(?:#.*)?$/u;
 const errors = [];
 
 /** `uses:` values that are not third-party refs and so need no SHA. */
@@ -69,7 +68,7 @@ export function lintWorkflowSource(name, source) {
   // next `governance update` anyway, so this repo cannot own their policy —
   // fixes belong upstream in governance-kit. Reported once, as a notice, so the
   // exemption stays visible rather than becoming an invisible hole.
-  if (/^#\s*governance-kit:managed/m.test(source)) {
+  if (/^#\s*governance-kit:managed/mu.test(source)) {
     console.log(`workflow-pins: ${name} is governance-kit:managed — policy is upstream, skipping`);
     return found;
   }
@@ -84,25 +83,25 @@ export function lintWorkflowSource(name, source) {
     const lineNo = index + 1;
     const trimmed = line.trim();
 
-    if (/^jobs:\s*$/.test(line)) inJobs = true;
+    if (/^jobs:\s*$/u.test(line)) inJobs = true;
     // A job key is exactly two-space indented under `jobs:`.
-    if (inJobs && /^ {2}[A-Za-z0-9_-]+:\s*$/.test(line)) {
+    if (inJobs && /^ {2}[A-Za-z0-9_-]+:\s*$/u.test(line)) {
       job = { name: trimmed.slice(0, -1), line: lineNo, hasTimeout: false, callsWorkflow: false };
       jobs.push(job);
     }
-    if (job && /^ {4}timeout-minutes:/.test(line)) job.hasTimeout = true;
+    if (job && /^ {4}timeout-minutes:/u.test(line)) job.hasTimeout = true;
     // A job-level `uses:` (4-space indent, vs a step's `      - uses:`) makes
     // this a reusable-workflow call. GitHub REJECTS timeout-minutes on those —
     // the bound lives on the called workflow's own jobs, which this linter
     // checks when it walks that file.
-    if (job && /^ {4}uses:/.test(line)) job.callsWorkflow = true;
+    if (job && /^ {4}uses:/u.test(line)) job.callsWorkflow = true;
 
     // (1) SHA pinning.
-    const uses = /^\s*(?:-\s*)?uses:\s*(\S+)/.exec(line);
+    const uses = /^\s*(?:-\s*)?uses:\s*(?<ref>\S+)/u.exec(line);
     if (uses) {
-      const ref = uses[1];
+      const ref = uses.groups?.ref ?? '';
       if (!exemptUses(ref) && !SHA_PINNED.test(`${ref} ${trimmed.split('#')[1] ?? ''}`.trim())) {
-        if (!/@[0-9a-f]{40}$/.test(ref)) {
+        if (!/@[0-9a-f]{40}$/u.test(ref)) {
           found.push(
             `${name}:${lineNo} uses a floating ref \`${ref}\` — pin to a 40-char SHA with a trailing \`# vX.Y.Z\` comment`,
           );
@@ -111,21 +110,21 @@ export function lintWorkflowSource(name, source) {
     }
 
     // (2) No literal Bun version.
-    if (/^\s*bun-version:/.test(line)) {
+    if (/^\s*bun-version:/u.test(line)) {
       found.push(
         `${name}:${lineNo} hardcodes a Bun version — use \`uses: ./.github/actions/setup\`, which reads packageManager`,
       );
     }
 
     // (4) No hand-rolled install.
-    if (/^\s*(?:-\s*)?(?:run:\s*)?bun install\b/.test(line)) {
+    if (/^\s*(?:-\s*)?(?:run:\s*)?bun install\b/u.test(line)) {
       found.push(
         `${name}:${lineNo} runs \`bun install\` by hand — use \`uses: ./.github/actions/setup\` (install is on by default)`,
       );
     }
 
     // (5) Single PR entry point.
-    if (/^\s{2}pull_request:/.test(line) && name !== '.github/workflows/ci.yml') {
+    if (/^\s{2}pull_request:/u.test(line) && name !== '.github/workflows/ci.yml') {
       found.push(
         `${name}:${lineNo} listens on \`pull_request\` — only ci.yml may. Add a job there (gated on the \`changes\` filter) so it rolls up into the required \`check\`, or expose this workflow via \`workflow_call\` and invoke it from ci.yml`,
       );
@@ -134,7 +133,7 @@ export function lintWorkflowSource(name, source) {
     // (6) Single release entry point. `tags:` sits at 4 spaces under `push:`,
     // which is itself under `on:` — and only in the header, so a `tags:` key
     // inside a job's `with:` map cannot be mistaken for a trigger.
-    if (!inJobs && /^ {4}tags:/.test(line) && name !== '.github/workflows/release.yml') {
+    if (!inJobs && /^ {4}tags:/u.test(line) && name !== '.github/workflows/release.yml') {
       found.push(
         `${name}:${lineNo} listens on \`push: tags\` — only release.yml may. Expose this workflow via \`workflow_call\` and add a lane to release.yml so the tag produces one run with one \`release-check\` verdict`,
       );
@@ -166,7 +165,7 @@ function lintSetupAction() {
   if (!source.includes('packageManager')) {
     found.push('.github/actions/setup must derive the version from packageManager');
   }
-  if (!/oven-sh\/setup-bun@[0-9a-f]{40}/.test(source)) {
+  if (!/oven-sh\/setup-bun@[0-9a-f]{40}/u.test(source)) {
     found.push('.github/actions/setup must pin oven-sh/setup-bun to a SHA');
   }
   return found;
@@ -174,7 +173,7 @@ function lintSetupAction() {
 
 function lintPackageManager() {
   const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-  if (!/^bun@\d+\.\d+\.\d+$/.test(pkg.packageManager ?? '')) {
+  if (!/^bun@\d+\.\d+\.\d+$/u.test(pkg.packageManager ?? '')) {
     return [`package.json packageManager must be \`bun@<x.y.z>\`, got \`${pkg.packageManager}\``];
   }
   return [];
@@ -202,6 +201,6 @@ function main() {
   );
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
   main();
 }

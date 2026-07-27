@@ -43,7 +43,7 @@ export interface DestinationValidation {
  * sanity check, but it closes the door on a destination string that some
  * OTHER layer might one day interpolate into a shell command.
  */
-const DESTINATION_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*(@[A-Za-z0-9][A-Za-z0-9._-]*)?$/;
+const DESTINATION_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:@[A-Za-z0-9][A-Za-z0-9._-]*)?$/u;
 
 export function validateSshDestination(destination: string): DestinationValidation {
   const trimmed = destination.trim();
@@ -66,8 +66,8 @@ export function validateSshDestination(destination: string): DestinationValidati
 
 /** POSIX single-quote an argv element, unless it's already shell-safe bare. */
 export function shellQuoteArg(arg: string): string {
-  if (arg.length > 0 && /^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) return arg;
-  return `'${arg.replace(/'/g, `'\\''`)}'`;
+  if (arg.length > 0 && /^[A-Za-z0-9_@%+=:,./-]+$/u.test(arg)) return arg;
+  return `'${arg.replace(/'/gu, `'\\''`)}'`;
 }
 
 /** Join a whitelisted argv into one shell-safe command string — this is
@@ -218,7 +218,7 @@ export function mapSshFailure(result: SshRunResult): { code: SshFailureCode; det
   }
   const combined = `${result.stdout}\n${result.stderr}`;
   if (result.code === 255) {
-    if (/permission denied/i.test(combined)) {
+    if (/permission denied/iu.test(combined)) {
       return { code: 'ssh_auth', detail: textDetail(result) };
     }
     return {
@@ -226,10 +226,10 @@ export function mapSshFailure(result: SshRunResult): { code: SshFailureCode; det
       detail: textDetail(result) || 'ssh connection failed (exit 255)',
     };
   }
-  if (/permission denied/i.test(result.stderr)) {
+  if (/permission denied/iu.test(result.stderr)) {
     return { code: 'ssh_auth', detail: textDetail(result) };
   }
-  if (/command not found|no such file or directory/i.test(combined)) {
+  if (/command not found|no such file or directory/iu.test(combined)) {
     return { code: 'cli_not_found', detail: textDetail(result) };
   }
   if (result.code === 0) {

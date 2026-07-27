@@ -273,7 +273,7 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
           ) : (
             runs.map((r) => {
               const dur =
-                r.endedAt !== undefined ? `${((r.endedAt - r.startedAt) / 1000).toFixed(1)}s` : '—';
+                r.endedAt === undefined ? '—' : `${((r.endedAt - r.startedAt) / 1000).toFixed(1)}s`;
               return (
                 <div className={styles.runrow} data-ok={String(r.ok)} key={r.turnId}>
                   <span className={styles.runDot} data-ok={String(r.ok)} />

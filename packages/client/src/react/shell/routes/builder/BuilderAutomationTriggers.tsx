@@ -61,14 +61,14 @@ export const CONDITION_OPS = [
   'within-next-days',
 ] as const;
 
-const ENTITY_RE = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
-const CRON_FIELD_RE = /^[0-9*,\-/?A-Za-z]+$/;
+const ENTITY_RE = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u;
+const CRON_FIELD_RE = /^[0-9*,\-/?A-Za-z]+$/u;
 
 /** Mirrors manifest.ts `isValidCronExpression`. */
 export function isValidCronExpr(expr: string): boolean {
   const trimmed = expr.trim();
   if (!trimmed) return false;
-  const fields = trimmed.split(/\s+/);
+  const fields = trimmed.split(/\s+/u);
   return fields.length === 5 && fields.every((f) => CRON_FIELD_RE.test(f));
 }
 
@@ -84,7 +84,7 @@ interface FieldError {
 
 function parseEntities(text: string): string[] {
   return text
-    .split(/[,\n]/)
+    .split(/[,\n]/u)
     .map((s) => s.trim())
     .filter(Boolean);
 }
@@ -120,7 +120,7 @@ function parseWhereInput(text: string): { where?: ConditionWhereClauseLike[] } |
     clauses.push({
       column: c.column,
       op: c.op,
-      ...(c.value !== undefined ? { value: c.value } : {}),
+      ...(c.value === undefined ? {} : { value: c.value }),
     });
   }
   return { where: clauses };

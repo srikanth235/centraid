@@ -8,15 +8,19 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // `vi.mock` is hoisted so gateway-client-core never touches window.CentraidApi.
-vi.mock('../../../../gateway-client.js', () => ({}));
-vi.mock('../../../../format.js', () => ({
+vi.mock(import('../../../../gateway-client.js'), () => ({}));
+vi.mock(import('../../../../format.js'), () => ({
   generateAppId: () => 'app',
-  shortVersionTitle: (s: string) => s,
+  // Matches the real `(v: { versionId, declaredVersion? }) => string` param
+  // shape rather than a bare `string`.
+  shortVersionTitle: (v: { versionId: string; declaredVersion?: string }) => v.versionId,
 }));
-vi.mock('../../../../app-format.js', () => ({
-  inferAppVisual: () => ({ iconKey: 'Sparkle', colorKey: 'violet', color: '#000', name: 'x' }),
+vi.mock(import('../../../../app-format.js'), () => ({
+  // `color` uses a real palette hex (violet, matching `colorKey`) so it's a
+  // valid `ColorHex` literal rather than the arbitrary `'#000'`.
+  inferAppVisual: () => ({ iconKey: 'Sparkle', colorKey: 'violet', color: '#7C5BD9', name: 'x' }),
 }));
-vi.mock('../../../../cron.js', () => ({ describeCron: () => '' }));
+vi.mock(import('../../../../cron.js'), () => ({ describeCron: () => '' }));
 
 import { builderPickerForConversation, useBuilder } from './useBuilder.js';
 
@@ -24,13 +28,16 @@ describe('useBuilder module', () => {
   it('is a React hook (throws when called without shell context)', () => {
     expect(useBuilder.name).toBe('useBuilder');
     // Without AppContext / React dispatcher the hook fails closed — not a
-    // typeof-only smoke. Message varies by React version and input shape.
+    // typeof-only smoke. React has no dispatcher outside a render, so the very
+    // first hook call (`useState`) dereferences null. Matched loosely because
+    // the exact wording is a React/engine detail, but the *shape* — a null
+    // dispatcher hit on a hook, not some unrelated crash — is the assertion.
     expect(() =>
       useBuilder({
         appKind: 'app',
         showToast: () => undefined,
       }),
-    ).toThrow();
+    ).toThrow(/Cannot read properties of null \(reading 'useState'\)/);
   });
 
   it('restores a persisted conversation runner ahead of the builder default', () => {

@@ -44,7 +44,7 @@ function snapshot(): ReplicaSnapshot {
   };
 }
 
-describe('NativeReplicaStore', () => {
+describe(NativeReplicaStore, () => {
   test('reports a native durable mode', async () => {
     const store = NativeReplicaStore.create(new NodeSqliteDriver(), 'vault-a');
     try {
@@ -57,10 +57,13 @@ describe('NativeReplicaStore', () => {
   test('bootstraps and returns clone-safe wire rows', async () => {
     const store = NativeReplicaStore.create(new NodeSqliteDriver(), 'vault-a');
     try {
-      expect(await store.bootstrap(snapshot())).toEqual({ epoch: 'replica-1', seq: 2 });
+      await expect(store.bootstrap(snapshot())).resolves.toStrictEqual({
+        epoch: 'replica-1',
+        seq: 2,
+      });
       const wire = await store.readWire({ shapeId: 'shape-photos', entity: 'core.content_item' });
       expect(wire.rows[0]?.values.title).toBe('Moonlit campsite');
-      expect(wire.rows[0]?.oversizedFields).toEqual(['caption']);
+      expect(wire.rows[0]?.oversizedFields).toStrictEqual(['caption']);
     } finally {
       await store.close();
     }
@@ -88,7 +91,7 @@ describe('NativeReplicaStore', () => {
         entity: 'core.content_item',
         query: 'moon',
       });
-      expect(result.rows.map((row) => row.rowId)).toEqual(['photo-1']);
+      expect(result.rows.map((row) => row.rowId)).toStrictEqual(['photo-1']);
     } finally {
       await store.close();
     }
@@ -115,7 +118,7 @@ describe('NativeReplicaStore', () => {
       // Replica rows are gone (a read now demands a fresh bootstrap)...
       expect((await store.status()).cursor).toBeNull();
       // ...but the queued intent in its own table survives the wipe.
-      expect((await intents.list(['queued'])).map((intent) => intent.intentId)).toEqual([
+      expect((await intents.list(['queued'])).map((intent) => intent.intentId)).toStrictEqual([
         'intent-1',
       ]);
     } finally {

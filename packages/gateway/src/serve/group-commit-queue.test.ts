@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GroupCommitQueue } from './group-commit-queue.js';
 
-describe('GroupCommitQueue', () => {
+describe(GroupCommitQueue, () => {
   afterEach(() => vi.useRealTimers());
 
   it('coalesces arrivals inside the durability window and preserves order', async () => {
@@ -12,11 +12,11 @@ describe('GroupCommitQueue', () => {
     await vi.advanceTimersByTimeAsync(4);
     const second = queue.enqueue(() => order.push(2));
 
-    expect(order).toEqual([]);
+    expect(order).toStrictEqual([]);
     expect(queue.pendingCount()).toBe(2);
     await vi.advanceTimersByTimeAsync(4);
     await Promise.all([first, second]);
-    expect(order).toEqual([1, 2]);
+    expect(order).toStrictEqual([1, 2]);
   });
 
   it('isolates a failed write from the rest of the batch', async () => {
@@ -42,8 +42,8 @@ describe('GroupCommitQueue', () => {
     });
     const writes = Array.from({ length: 10 }, (_, index) => queue.enqueue(() => index));
     await vi.advanceTimersByTimeAsync(5);
-    await expect(Promise.all(writes)).resolves.toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    expect(batches).toEqual([10]);
+    await expect(Promise.all(writes)).resolves.toStrictEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(batches).toStrictEqual([10]);
   });
 
   it('settles each result independently when the shared runner preserves a failed write', async () => {

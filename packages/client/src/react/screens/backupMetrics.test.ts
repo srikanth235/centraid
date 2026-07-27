@@ -7,7 +7,7 @@ import { aggregateUsage, computeStorageMetrics } from './backupMetrics.js';
 import type { BackupStatusDTO } from './BackupCard.js';
 import type { StorageConnectionUsageDTO } from '../../gateway-client.js';
 
-describe('aggregateUsage', () => {
+describe(aggregateUsage, () => {
   it('returns null for empty / missing connections', () => {
     expect(aggregateUsage(null)).toBeNull();
     expect(aggregateUsage([])).toBeNull();
@@ -33,7 +33,7 @@ describe('aggregateUsage', () => {
         },
       },
     ] as StorageConnectionUsageDTO[];
-    expect(aggregateUsage(rows)).toEqual({
+    expect(aggregateUsage(rows)).toStrictEqual({
       backup: { bytesStored: 30, quotaBytes: 100 },
       cas: { bytesStored: 5, quotaBytes: null },
       derived: { bytesStored: 3, quotaBytes: 9 },
@@ -41,7 +41,7 @@ describe('aggregateUsage', () => {
   });
 });
 
-describe('computeStorageMetrics', () => {
+describe(computeStorageMetrics, () => {
   it('uses the oldest vault clocks and slowest declared cadence', () => {
     const now = Date.parse('2026-07-25T12:00:00.000Z');
     const oldestSnapshot = Date.parse('2026-07-24T10:00:00.000Z');
@@ -74,7 +74,7 @@ describe('computeStorageMetrics', () => {
 
     const metrics = computeStorageMetrics(status, null, now);
     expect(metrics.freshness.declaredCadenceMs).toBe(slowestCadenceMs);
-    expect(metrics.freshness.clocks).toEqual({
+    expect(metrics.freshness.clocks).toStrictEqual({
       lastRegisteredSnapshotAt: oldestSnapshot,
       lastSuccessfulVerificationAt: oldestVerify,
       lastAckedWalSegmentAt: oldestWal,

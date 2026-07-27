@@ -56,7 +56,7 @@ export function defaultAvatarColor(id: string): string {
 
 /** Validate a user-supplied avatar color. Accepts `#RRGGBB` only. */
 export function isValidAvatarColor(value: unknown): value is string {
-  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
+  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/u.test(value);
 }
 
 /** Shape-validate a persisted `ssh` block (issue #382) at read time —
@@ -72,7 +72,7 @@ export function isValidSshBlock(
   return true;
 }
 
-export const ENDPOINT_ID_RE = /^[0-9a-f]{64}$/;
+export const ENDPOINT_ID_RE = /^[0-9a-f]{64}$/u;
 
 /**
  * A connection identity is either the primordial local gateway or a real

@@ -5,10 +5,12 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_GATEWAY_CAPABILITIES, isGatewayCapabilities } from './capabilities.js';
 
-describe('DEFAULT_GATEWAY_CAPABILITIES', () => {
+// Titled in prose, not `describe(DEFAULT_GATEWAY_CAPABILITIES)`: the constant
+// is an object, and `describe` only accepts a string or a function.
+describe('the default gateway capabilities', () => {
   it('is frozen and advertises the modern loopback surface', () => {
     expect(Object.isFrozen(DEFAULT_GATEWAY_CAPABILITIES)).toBe(true);
-    expect(DEFAULT_GATEWAY_CAPABILITIES).toEqual({
+    expect(DEFAULT_GATEWAY_CAPABILITIES).toStrictEqual({
       webSessions: true,
       devicePairing: true,
       tunnel: true,
@@ -19,7 +21,7 @@ describe('DEFAULT_GATEWAY_CAPABILITIES', () => {
   });
 });
 
-describe('isGatewayCapabilities', () => {
+describe(isGatewayCapabilities, () => {
   it('accepts the required booleans and optional assistOAuth / automationTurns', () => {
     expect(isGatewayCapabilities(null)).toBe(false);
     expect(isGatewayCapabilities('x')).toBe(false);

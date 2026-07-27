@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AppMetaResolved } from '@centraid/design-tokens';
 
-vi.mock('../../lib/gateway', () => ({
+vi.mock(import('../../lib/gateway'), () => ({
   resolveAppMeta: (row: {
     id: string;
     name?: string;
@@ -37,13 +37,13 @@ function meta(id: string, name: string, description = ''): AppMetaResolved {
   } as unknown as AppMetaResolved;
 }
 
-describe('buildLauncherItems', () => {
+describe(buildLauncherItems, () => {
   it('always includes native covers as installed', () => {
     const items = buildLauncherItems([]);
     const natives = items.filter((it) => NATIVE_APP_IDS.has(it.meta.id));
     expect(natives).toHaveLength(3);
     expect(natives.every((it) => it.installed)).toBe(true);
-    expect(natives.map((it) => it.route.kind).sort()).toEqual(['agenda', 'docs', 'photos']);
+    expect(natives.map((it) => it.route.kind).sort()).toStrictEqual(['agenda', 'docs', 'photos']);
   });
 
   it('dims uninstalled gateway catalog apps and routes them to pair', () => {
@@ -69,11 +69,11 @@ describe('buildLauncherItems', () => {
   });
 });
 
-describe('filterLauncherItems', () => {
+describe(filterLauncherItems, () => {
   it('filters by name case-insensitively and returns a copy for empty query', () => {
     const items = buildLauncherItems([]);
     const copy = filterLauncherItems(items, '  ');
-    expect(copy).toEqual(items);
+    expect(copy).toStrictEqual(items);
     expect(copy).not.toBe(items);
     const photos = filterLauncherItems(items, 'PHOTO');
     expect(photos.every((it) => it.meta.name.toLowerCase().includes('photo'))).toBe(true);

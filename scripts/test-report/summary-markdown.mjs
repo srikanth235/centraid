@@ -50,7 +50,7 @@ export function renderSummaryMarkdown(summary, meta = {}) {
   if (Array.isArray(s.unhandledErrorMessages) && s.unhandledErrorMessages.length) {
     lines.push('<details><summary>Unhandled error messages</summary>', '');
     for (const msg of s.unhandledErrorMessages.slice(0, 8)) {
-      lines.push(`- \`${String(msg).replace(/`/g, "'").slice(0, 240)}\``);
+      lines.push(`- \`${String(msg).replace(/`/gu, "'").slice(0, 240)}\``);
     }
     if (s.unhandledErrorMessages.length > 8) {
       lines.push(`- …and ${s.unhandledErrorMessages.length - 8} more`);
@@ -85,7 +85,7 @@ export function renderSummaryMarkdown(summary, meta = {}) {
  * slot e.g. `main`, `nightly` (PR slots are not published)
  */
 export function publicReportUrl({ owner, repo, slot }) {
-  const clean = String(slot).replace(/^\/+|\/+$/g, '');
+  const clean = String(slot).replace(/^\/+|\/+$/gu, '');
   return `https://${owner}.github.io/${repo}/test-report/${clean}/`;
 }
 

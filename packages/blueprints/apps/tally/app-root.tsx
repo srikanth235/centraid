@@ -139,7 +139,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     try {
       next = await logic.read<DashboardPayload>('dashboard');
     } catch {
-      readFailed(document.getElementById('noticeBanner'));
+      readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
       return false;
     }
     dashReadyRef.current = true;
@@ -311,9 +311,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       />
     );
   } else if (state.view === 'dashboard') {
-    content = !dashReadyRef.current ? (
-      <KitSkeleton rows={4} />
-    ) : (
+    content = dashReadyRef.current ? (
       <Dashboard
         dash={dashWithPending()}
         onOpenFriend={(friendId) => navTo({ view: 'friend', friendId, search: '' })}
@@ -322,6 +320,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         onOpenNewGroup={logic.openNewGroup}
         onRestoreExpense={logic.restoreExpense}
       />
+    ) : (
+      <KitSkeleton rows={4} />
     );
   } else if (state.view === 'activity') {
     content = <ActivityFeed viewData={state.viewData} me={dash.me} currency={dash.currency} />;

@@ -79,8 +79,8 @@ export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): R
         uptimeMs: Date.now() - startedAt,
         status: options.status?.() ?? 'ready',
         ...(options.foundingPending?.() ? { foundingPending: true } : {}),
-        ...(endpointId !== undefined ? { endpointId } : {}),
-        ...(endpointTicket !== undefined ? { endpointTicket } : {}),
+        ...(endpointId === undefined ? {} : { endpointId }),
+        ...(endpointTicket === undefined ? {} : { endpointTicket }),
         ...(options.capabilities ? { capabilities: options.capabilities } : {}),
       }),
     );

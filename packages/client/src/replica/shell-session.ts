@@ -84,23 +84,25 @@ export type ShellReplicaWriteResult =
   | { intentId: string; status: 'queued' | 'in-flight'; reason?: string };
 
 export interface ShellReplicaCoordinator {
-  bootstrap(snapshot: Awaited<ReturnType<typeof fetchReplicaBootstrap>>): Promise<ReplicaCursor>;
-  status(): Promise<ReplicaStatus>;
-  catalog(): Promise<ReplicaShape[]>;
-  readWire(request: ReplicaReadRequest): Promise<ReplicaReadWireResult>;
-  searchWire(request: ReplicaSearchRequest): Promise<ReplicaSearchWireResult>;
-  enqueue(input: EnqueueIntentInput): Promise<ReplicaIntent>;
-  claimNextIntent(): Promise<ReplicaIntent | undefined>;
-  markIntentTransportFailed(intentId: string, reason?: string): Promise<ReplicaIntent>;
-  markIntentAwaitingChange(intentId: string): Promise<ReplicaIntent>;
-  applyIntentOutcome(outcome: IntentOutcome): Promise<ReplicaIntent | undefined>;
-  recoverSending(): Promise<ReplicaIntent[]>;
-  pendingIntents(): Promise<ReplicaIntent[]>;
-  subscribeInvalidations(
+  bootstrap: (
+    snapshot: Awaited<ReturnType<typeof fetchReplicaBootstrap>>,
+  ) => Promise<ReplicaCursor>;
+  status: () => Promise<ReplicaStatus>;
+  catalog: () => Promise<ReplicaShape[]>;
+  readWire: (request: ReplicaReadRequest) => Promise<ReplicaReadWireResult>;
+  searchWire: (request: ReplicaSearchRequest) => Promise<ReplicaSearchWireResult>;
+  enqueue: (input: EnqueueIntentInput) => Promise<ReplicaIntent>;
+  claimNextIntent: () => Promise<ReplicaIntent | undefined>;
+  markIntentTransportFailed: (intentId: string, reason?: string) => Promise<ReplicaIntent>;
+  markIntentAwaitingChange: (intentId: string) => Promise<ReplicaIntent>;
+  applyIntentOutcome: (outcome: IntentOutcome) => Promise<ReplicaIntent | undefined>;
+  recoverSending: () => Promise<ReplicaIntent[]>;
+  pendingIntents: () => Promise<ReplicaIntent[]>;
+  subscribeInvalidations: (
     listener: (invalidations: readonly ReplicaInvalidation[]) => void,
-  ): () => void;
-  close(): Promise<void>;
-  purge(): Promise<void>;
+  ) => () => void;
+  close: () => Promise<void>;
+  purge: () => Promise<void>;
 }
 
 export interface ReplicaShellSessionOptions {
@@ -980,10 +982,10 @@ function normalizedGatewayUrl(value: string): string {
     const url = new URL(value);
     url.hash = '';
     url.search = '';
-    url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+    url.pathname = url.pathname.replace(/\/+$/u, '') || '/';
     return `url:${url.toString()}`;
   } catch {
-    return `url:${value.replace(/\/+$/, '')}`;
+    return `url:${value.replace(/\/+$/u, '')}`;
   }
 }
 
@@ -1070,6 +1072,6 @@ function admissionResult(intent: ReplicaIntent): ShellReplicaWriteResult | undef
     intentId: intent.intentId,
     status: intent.state,
     ...(intent.reason ? { reason: intent.reason } : {}),
-    ...(intent.output !== undefined ? { output: intent.output } : {}),
+    ...(intent.output === undefined ? {} : { output: intent.output }),
   };
 }

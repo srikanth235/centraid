@@ -21,8 +21,8 @@ import type { InlineQueryModule } from '@centraid/blueprints/apps/inline-types';
 
 /** The slice of the replica session an inline query context needs. */
 export interface InlineReplicaSession {
-  read(appId: string, request: ShellReplicaReadRequest): Promise<ReplicaReadWireResult>;
-  search(appId: string, request: ShellReplicaSearchRequest): Promise<ReplicaSearchWireResult>;
+  read: (appId: string, request: ShellReplicaReadRequest) => Promise<ReplicaReadWireResult>;
+  search: (appId: string, request: ShellReplicaSearchRequest) => Promise<ReplicaSearchWireResult>;
 }
 
 export interface OnlineOnlyError extends Error {
@@ -32,7 +32,7 @@ export interface OnlineOnlyError extends Error {
 export interface InlineOnlineGuard {
   error: OnlineOnlyError | null;
   /** Records (once) that the query needs the online vault and returns the error. */
-  mark(reason: string): OnlineOnlyError;
+  mark: (reason: string) => OnlineOnlyError;
 }
 
 export function createOnlineGuard(): InlineOnlineGuard {

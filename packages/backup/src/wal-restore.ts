@@ -252,7 +252,7 @@ async function spoolSegments(opts: {
       listingByDb,
       generationByDb: opts.generationByDb,
       markers: opts.markers,
-      ...(opts.pointInTimeMs !== undefined ? { cutTickMs: opts.pointInTimeMs } : {}),
+      ...(opts.pointInTimeMs === undefined ? {} : { cutTickMs: opts.pointInTimeMs }),
     });
     let dropped = false;
     for (const db of WAL_DB_NAMES) {

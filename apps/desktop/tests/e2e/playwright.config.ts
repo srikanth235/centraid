@@ -1,8 +1,7 @@
 import { defineConfig } from '@playwright/test';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 
 /**
  * Playwright config for the Centraid desktop E2E suite.

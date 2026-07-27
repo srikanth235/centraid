@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_STARTERS, resolveStarters } from './assistantStarters.js';
 
-describe('resolveStarters', () => {
+describe(resolveStarters, () => {
   it('returns defaults when the pref is absent or not an array', () => {
-    expect(resolveStarters(undefined)).toEqual([...DEFAULT_STARTERS]);
-    expect(resolveStarters({})).toEqual([...DEFAULT_STARTERS]);
-    expect(resolveStarters({ 'assistant.starters': 'nope' })).toEqual([...DEFAULT_STARTERS]);
+    expect(resolveStarters(undefined)).toStrictEqual([...DEFAULT_STARTERS]);
+    expect(resolveStarters({})).toStrictEqual([...DEFAULT_STARTERS]);
+    expect(resolveStarters({ 'assistant.starters': 'nope' })).toStrictEqual([...DEFAULT_STARTERS]);
   });
 
   it('uses configured starters, trimming blanks and capping at 8', () => {
-    expect(resolveStarters({ 'assistant.starters': ['One', '  Two  ', '', 3] })).toEqual([
+    expect(resolveStarters({ 'assistant.starters': ['One', '  Two  ', '', 3] })).toStrictEqual([
       'One',
       'Two',
     ]);
@@ -18,6 +18,8 @@ describe('resolveStarters', () => {
   });
 
   it('falls back to defaults when the configured list is all blanks', () => {
-    expect(resolveStarters({ 'assistant.starters': ['', '   '] })).toEqual([...DEFAULT_STARTERS]);
+    expect(resolveStarters({ 'assistant.starters': ['', '   '] })).toStrictEqual([
+      ...DEFAULT_STARTERS,
+    ]);
   });
 });

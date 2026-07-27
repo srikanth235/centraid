@@ -8,7 +8,7 @@
  */
 const PURPOSE = 'dpv:ServiceProvision';
 
-export default async ({ input, log, ctx }) => {
+export default async function seedHandler({ input, log, ctx }) {
   const now = new Date(input?.now ?? Date.now()).getTime();
   const day = (n) => new Date(now + n * 86400000).toISOString();
   const invoke = async (command, args) => {
@@ -48,4 +48,4 @@ export default async ({ input, log, ctx }) => {
 
   log.info('tasks scenario: 9 tasks seeded (2 completed, 1 project with subtasks)');
   return { seeded: 9 };
-};
+}

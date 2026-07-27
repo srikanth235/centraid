@@ -152,6 +152,6 @@ export function buildUsageEvent(
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
     ...tokens,
-    ...(costUsd !== undefined ? { costUsd } : {}),
+    ...(costUsd === undefined ? {} : { costUsd }),
   };
 }

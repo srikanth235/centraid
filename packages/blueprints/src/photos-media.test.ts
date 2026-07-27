@@ -3,6 +3,14 @@
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
+// The typed `vi.mock(import('../apps/photos/format.js'), …)` form that
+// vitest/prefer-import-in-mock wants pulls that module into this package's TS
+// program, but `apps/` sits outside its `rootDir: ./src` (tsconfig.json), so
+// typecheck fails with TS6059 plus TS2307 on the module's own `./kit.ts`
+// import. The blueprint apps are typechecked separately by tsconfig.apps.json,
+// and the `@ts-nocheck` above does not help because module resolution still
+// happens. The string specifier keeps the module out of this program.
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- see above
 vi.mock('../apps/photos/format.js', () => ({
   isVideoAsset: (asset: Record<string, unknown>) =>
     asset.kind === 'video' || String(asset.media_type ?? '').startsWith('video/'),
@@ -28,6 +36,11 @@ describe('Photos next-screen media loading', () => {
     observers.length = 0;
     mutationCallback = undefined;
     document.body.innerHTML = '';
+    vi.stubGlobal(
+      'IntersectionObserver',
+      FakeIntersectionObserver as unknown as typeof IntersectionObserver,
+    );
+    vi.stubGlobal('MutationObserver', FakeMutationObserver as unknown as typeof MutationObserver);
   });
 
   afterEach(() => {
@@ -49,16 +62,9 @@ describe('Photos next-screen media loading', () => {
 
   function FakeMutationObserver(callback: MutationCallback) {
     mutationCallback = callback;
-    this.observe = vi.fn();
+    vi.spyOn(this, 'observe').mockReturnValue(undefined);
   }
-
-  beforeEach(() => {
-    vi.stubGlobal(
-      'IntersectionObserver',
-      FakeIntersectionObserver as unknown as typeof IntersectionObserver,
-    );
-    vi.stubGlobal('MutationObserver', FakeMutationObserver as unknown as typeof MutationObserver);
-  });
+  FakeMutationObserver.prototype.observe = () => undefined;
 
   test('roots the one-screen lookahead in the overflowing photo pane', async () => {
     const { observeNextScreen } = await importFixture('../apps/photos/media-observer.js');

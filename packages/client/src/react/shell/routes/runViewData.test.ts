@@ -8,7 +8,7 @@ import {
 
 // `vi.mock` is hoisted above the import by vitest, so the gateway stub lands
 // before runViewData.js pulls gateway-client-core's load-time side-effect.
-vi.mock('../../../gateway-client.js', () => ({}));
+vi.mock(import('../../../gateway-client.js'), () => ({}));
 
 const row = (): CentraidAutomationRow =>
   ({
@@ -31,7 +31,7 @@ const run = (over: Partial<CentraidAutomationTurnRecord> = {}): CentraidAutomati
     ...over,
   }) as unknown as CentraidAutomationTurnRecord;
 
-describe('buildRunSnapshot', () => {
+describe(buildRunSnapshot, () => {
   it('marks an in-flight run running with a pending final', () => {
     const snap = buildRunSnapshot(row(), run({ endedAt: undefined }), [], new Map());
     expect(snap.inFlight).toBe(true);
@@ -57,7 +57,7 @@ describe('buildRunSnapshot', () => {
     ] as unknown as CentraidAutomationItem[];
     const snap = buildRunSnapshot(row(), run({ endedAt: Date.now() }), nodes, new Map());
     // trigger + node + completion row
-    expect(snap.logRows.length).toBe(3);
+    expect(snap.logRows).toHaveLength(3);
     expect(snap.logRows[1]?.label).toBe('fetch');
     expect(snap.logRows[1]?.sub).toBe('tool');
   });
@@ -194,7 +194,7 @@ describe('buildRunSnapshot', () => {
   });
 });
 
-describe('automationTurnMessages', () => {
+describe(automationTurnMessages, () => {
   it('coalesces updates by callId while keeping parallel same-named calls distinct', () => {
     const messages = automationTurnMessages(
       run({ turnId: 'turn-1', endedAt: Date.now() }),
@@ -238,7 +238,7 @@ describe('automationTurnMessages', () => {
       new Map(),
     );
     const tools = messages.find((message) => message.kind === 'tools');
-    expect(tools?.kind === 'tools' ? tools.calls : []).toEqual([
+    expect(tools?.kind === 'tools' ? tools.calls : []).toStrictEqual([
       { tool: 'read_file', state: 'error', meta: 'denied' },
       { tool: 'read_file', state: 'ok', meta: '2ms' },
     ]);
@@ -311,7 +311,7 @@ describe('automation live trace reducer', () => {
       stopReason: 'end_turn',
     });
     const messages = automationLiveMessages(state);
-    expect(messages.map((message) => message.kind)).toEqual([
+    expect(messages.map((message) => message.kind)).toStrictEqual([
       'user',
       'thinking',
       'tools',
@@ -348,7 +348,7 @@ describe('automation live trace reducer', () => {
       errorText: 'denied',
     });
     const tools = automationLiveMessages(state).find((message) => message.kind === 'tools');
-    expect(tools?.kind === 'tools' ? tools.calls : []).toEqual([
+    expect(tools?.kind === 'tools' ? tools.calls : []).toStrictEqual([
       { tool: 'read_file', state: 'run', meta: 'running…' },
       { tool: 'read_file', state: 'error', meta: 'denied' },
     ]);

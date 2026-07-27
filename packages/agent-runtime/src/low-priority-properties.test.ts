@@ -27,7 +27,7 @@ describe('lowPriorityCommand properties', () => {
             niceness,
             exists: () => true,
           }),
-        ).toEqual({ bin, args: [...args] });
+        ).toStrictEqual({ bin, args: [...args] });
       }),
       { numRuns: 32, seed: 54516 },
     );
@@ -42,7 +42,7 @@ describe('lowPriorityCommand properties', () => {
             platform: 'darwin',
             exists: () => true,
           }),
-        ).toEqual({ bin, args: [...args] });
+        ).toStrictEqual({ bin, args: [...args] });
       }),
       { numRuns: 24, seed: 54517 },
     );
@@ -58,30 +58,43 @@ describe('lowPriorityCommand properties', () => {
           exists: (file) => file === '/usr/bin/nice',
         });
         expect(cmd.bin).toBe('/usr/bin/nice');
-        expect(cmd.args).toEqual(['-n', String(niceness), '--', bin, ...args]);
+        expect(cmd.args).toStrictEqual(['-n', String(niceness), '--', bin, ...args]);
       }),
       { numRuns: 32, seed: 54518 },
     );
   });
 
-  test('linux prefers ionice when present, else nice alone', () => {
+  // The ionice/nice choice is split into one property per branch so both sets
+  // of assertions always run — a single property with an `if` could have
+  // silently exercised only one arm.
+  test('linux prefers ionice when it is present', () => {
     delete process.env.CENTRAID_CHILD_PRIORITY;
     fc.assert(
-      fc.property(binArb, argsArb, fc.boolean(), (bin, args, hasIonice) => {
+      fc.property(binArb, argsArb, (bin, args) => {
         const cmd = lowPriorityCommand(bin, args, {
           platform: 'linux',
-          exists: (file) => file === '/usr/bin/nice' || (hasIonice && file === '/usr/bin/ionice'),
+          exists: (file) => file === '/usr/bin/nice' || file === '/usr/bin/ionice',
         });
-        if (hasIonice) {
-          expect(cmd.bin).toBe('/usr/bin/ionice');
-          expect(cmd.args.slice(0, 4)).toEqual(['-c', '2', '-n', '7']);
-          expect(cmd.args.slice(-args.length - 1)).toEqual([bin, ...args]);
-        } else {
-          expect(cmd.bin).toBe('/usr/bin/nice');
-          expect(cmd.args.at(-args.length - 1)).toBe(bin);
-        }
+        expect(cmd.bin).toBe('/usr/bin/ionice');
+        expect(cmd.args.slice(0, 4)).toStrictEqual(['-c', '2', '-n', '7']);
+        expect(cmd.args.slice(-args.length - 1)).toStrictEqual([bin, ...args]);
       }),
       { numRuns: 32, seed: 54519 },
+    );
+  });
+
+  test('linux falls back to nice alone when ionice is absent', () => {
+    delete process.env.CENTRAID_CHILD_PRIORITY;
+    fc.assert(
+      fc.property(binArb, argsArb, (bin, args) => {
+        const cmd = lowPriorityCommand(bin, args, {
+          platform: 'linux',
+          exists: (file) => file === '/usr/bin/nice',
+        });
+        expect(cmd.bin).toBe('/usr/bin/nice');
+        expect(cmd.args.at(-args.length - 1)).toBe(bin);
+      }),
+      { numRuns: 32, seed: 54520 },
     );
   });
 });

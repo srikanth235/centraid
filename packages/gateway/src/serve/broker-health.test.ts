@@ -51,7 +51,7 @@ function insertConnection(
   }
 }
 
-describe('createBrokerHealthProbe', () => {
+describe(createBrokerHealthProbe, () => {
   it('reports ok when there are no broker-carried connections', async () => {
     const probe = createBrokerHealthProbe({ vaults: () => [{ vaultId: 'v1', db: fakeVaultDb() }] });
     const result = await probe();
@@ -153,7 +153,7 @@ describe('createBrokerHealthProbe', () => {
   it('tolerates a vault whose sync tables are missing (fresh/unmounted plane)', async () => {
     const db = new DatabaseSync(':memory:'); // no tables at all
     const probe = createBrokerHealthProbe({ vaults: () => [{ vaultId: 'v1', db }] });
-    await expect(probe()).resolves.toEqual({
+    await expect(probe()).resolves.toStrictEqual({
       status: 'ok',
       detail: 'broker-carried connections healthy',
     });

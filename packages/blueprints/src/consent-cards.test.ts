@@ -21,8 +21,8 @@ const {
 
 describe('outcomeOf', () => {
   it('finds a bare or nested InvokeOutcome, else null', () => {
-    expect(outcomeOf({ status: 'parked' })).toEqual({ status: 'parked' });
-    expect(outcomeOf({ output: { status: 'denied' } })).toEqual({ status: 'denied' });
+    expect(outcomeOf({ status: 'parked' })).toStrictEqual({ status: 'parked' });
+    expect(outcomeOf({ output: { status: 'denied' } })).toStrictEqual({ status: 'denied' });
     expect(outcomeOf({ nope: 1 })).toBeNull();
     expect(outcomeOf(null)).toBeNull();
   });
@@ -56,9 +56,11 @@ describe('fetchParkedEntry', () => {
       status: 200,
       body: { parked: [{ invocationId: 'inv-1', command: 'a' }, { invocationId: 'inv-2' }] },
     });
-    expect(await fetchParkedEntry('inv-2', { fetchJson })).toEqual({ invocationId: 'inv-2' });
+    await expect(fetchParkedEntry('inv-2', { fetchJson })).resolves.toStrictEqual({
+      invocationId: 'inv-2',
+    });
     expect(fetchJson).toHaveBeenCalledWith('/centraid/_vault/parked');
-    expect(await fetchParkedEntry('gone', { fetchJson })).toBeNull();
+    await expect(fetchParkedEntry('gone', { fetchJson })).resolves.toBeNull();
   });
 });
 
@@ -70,11 +72,11 @@ describe('confirmParked', () => {
       body: { status: 'executed', receiptId: 'r1' },
     });
     const out = await confirmParked('inv-1', true, { fetchJson });
-    expect(out).toEqual({ status: 'executed', receiptId: 'r1' });
+    expect(out).toStrictEqual({ status: 'executed', receiptId: 'r1' });
     const [url, opts] = fetchJson.mock.calls[0];
     expect(url).toBe('/centraid/_vault/parked/inv-1');
     expect(opts.method).toBe('POST');
-    expect(JSON.parse(opts.body)).toEqual({ approve: true });
+    expect(JSON.parse(opts.body)).toStrictEqual({ approve: true });
   });
 
   it('throws the server message on a non-ok response', async () => {
@@ -87,19 +89,19 @@ describe('confirmParked', () => {
 
 describe('normalizeApproveOutcome', () => {
   it('maps executed/replayed to ok, everything else to a refusal note', () => {
-    expect(normalizeApproveOutcome({ status: 'executed', receiptId: 'r1' })).toEqual({
+    expect(normalizeApproveOutcome({ status: 'executed', receiptId: 'r1' })).toStrictEqual({
       ok: true,
       receipt: 'approved · receipt r1',
     });
-    expect(normalizeApproveOutcome({ status: 'replayed' })).toEqual({
+    expect(normalizeApproveOutcome({ status: 'replayed' })).toStrictEqual({
       ok: true,
       receipt: 'already applied',
     });
-    expect(normalizeApproveOutcome({ status: 'denied', reason: 'no grant' })).toEqual({
+    expect(normalizeApproveOutcome({ status: 'denied', reason: 'no grant' })).toStrictEqual({
       ok: false,
       note: 'no grant',
     });
-    expect(normalizeApproveOutcome(null)).toEqual({
+    expect(normalizeApproveOutcome(null)).toStrictEqual({
       ok: false,
       note: 'The vault refused this write.',
     });

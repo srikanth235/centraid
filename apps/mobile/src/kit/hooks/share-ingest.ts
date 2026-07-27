@@ -101,9 +101,9 @@ export async function processShareIntent(
           mediaType: file.mimeType,
           plaintextSize,
           kind: mediaKind(file.mimeType),
-          ...(file.width != null ? { width: file.width } : {}),
-          ...(file.height != null ? { height: file.height } : {}),
-          ...(file.duration != null ? { durationS: file.duration } : {}),
+          ...(file.width == null ? {} : { width: file.width }),
+          ...(file.height == null ? {} : { height: file.height }),
+          ...(file.duration == null ? {} : { durationS: file.duration }),
           deleteSourceAfterSettle: true,
         });
       } else {

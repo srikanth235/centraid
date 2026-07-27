@@ -140,7 +140,7 @@ function LimitControl({
               {preset.label}
             </button>
           ))}
-          {value !== null ? (
+          {value === null ? null : (
             <button
               type="button"
               className={controlsCss.chip}
@@ -149,7 +149,7 @@ function LimitControl({
             >
               Turn off
             </button>
-          ) : null}
+          )}
         </div>
         <div className={styles.customField}>
           <input
@@ -226,9 +226,9 @@ export default function StorageLimitsPanel({
               hereNow={
                 report
                   ? `Using ${formatBytes(report.totalBytes)} today` +
-                    (limits.totalLimitBytes !== null
-                      ? ` — you’ll see a warning past ${limits.warnAtPercent}%.`
-                      : '.')
+                    (limits.totalLimitBytes === null
+                      ? '.'
+                      : ` — you’ll see a warning past ${limits.warnAtPercent}%.`)
                   : null
               }
               onCommit={(bytes) => onSave({ totalLimitBytes: bytes })}
@@ -244,9 +244,9 @@ export default function StorageLimitsPanel({
               floorBytes={64 * 1024 ** 2}
               floorLabel="ledger limit"
               hereNow={
-                ledger !== null
-                  ? `Your ledger is ${formatBytes(ledger)} today across every vault.`
-                  : null
+                ledger === null
+                  ? null
+                  : `Your ledger is ${formatBytes(ledger)} today across every vault.`
               }
               onCommit={(bytes) => onSave({ journalLimitBytes: bytes })}
             />

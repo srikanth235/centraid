@@ -1,18 +1,20 @@
 import { defineConfig } from 'oxlint';
 import core from 'ultracite/oxlint/core';
 import react from 'ultracite/oxlint/react';
+import vitest from 'ultracite/oxlint/vitest';
 
 // Ultracite ships its oxlint presets as ESM modules from 7.5 on, so the former
 // .oxlintrc.json "extends" paths stopped resolving and the config moved here.
 // oxlint loads a JS config through Node, which is why the lint scripts invoke
 // it via node rather than bunx.
 //
-// core + react are the two presets this repo has always composed. The vitest
-// preset is deliberately NOT extended: it applies through "overrides", which
-// outrank anything declared here, and it lands 11,736 findings across the suite
-// (require-top-level-describe, prefer-strict-equal, max-expects, ...). Those are
-// test-authoring opinions, and prefer-strict-equal rewrites assertion semantics.
-// Adopting them is a deliberate change, not a side effect of a Dependabot bump.
+// core + react are the two presets this repo has always composed; vitest joined
+// them in #573. core and react are `extends`ed, but vitest is NOT: it applies
+// entirely through "overrides", and an extended preset's overrides outrank the
+// consumer's, so `extends: [vitest]` would leave no way to say "these rules,
+// but not on the Playwright specs". Its override is therefore spliced into
+// `overrides` below verbatim — same rules, same glob — which makes ordering
+// ours. See TESTING.md, "ultracite vitest preset (#573)".
 export default defineConfig({
   extends: [core, react],
   ignorePatterns: [
@@ -37,64 +39,20 @@ export default defineConfig({
     // The jsx-a11y family was the first to be adopted on its own terms
     // (#573): all ten rules are back on the preset's defaults and their 223
     // sites are fixed with native elements, not suppressions. Nothing from
-    // that family belongs in this list again.
-    'import/default': 'off', // 1 sites
-    'import/newline-after-import': 'off', // 8 sites
-    'import/no-duplicates': 'off', // 3 sites
-    'jsdoc/require-param-description': 'off', // 37 sites
-    'jsdoc/require-returns-description': 'off', // 21 sites
-    'jsdoc/require-yields-type': 'off', // 4 sites
-    'logical-assignment-operators': 'off', // 15 sites
-    'max-classes-per-file': 'off', // 1 sites
-    'no-await-in-loop': 'off', // 722 sites
-    'no-control-regex': 'off', // 1 sites
-    'no-duplicate-imports': 'off', // 3 sites
-    'no-empty': 'off', // 5 sites
-    'no-implicit-globals': 'off', // 27 sites
-    'no-param-reassign': 'off', // 3 sites
-    'no-unreachable-loop': 'off', // 8 sites
-    'no-unused-expressions': 'off', // 2 sites
-    'no-unused-vars': 'off', // 13 sites
-    'no-useless-return': 'off', // 3 sites
-    'no-var': 'off', // 100 sites
-    'node/callback-return': 'off', // 30 sites
-    'object-shorthand': 'off', // 27 sites
-    'oxc/branches-sharing-code': 'off', // 8 sites
-    'prefer-arrow-callback': 'off', // 70 sites
-    'prefer-named-capture-group': 'off', // 399 sites
-    'promise/no-callback-in-promise': 'off', // 2 sites
-    'promise/param-names': 'off', // 1 sites
-    'promise/prefer-catch': 'off', // 5 sites
-    'react-hooks/exhaustive-deps': 'off', // 1 sites
-    'react/hook-use-state': 'off', // 5 sites
-    'react/iframe-missing-sandbox': 'off', // 2 sites
-    'react/jsx-fragments': 'off', // 1 sites
-    'react/jsx-handler-names': 'off', // 92 sites
-    'react/no-object-type-as-default-prop': 'off', // 2 sites
-    'react/no-unstable-nested-components': 'off', // 3 sites
-    'react/self-closing-comp': 'off', // 38 sites
-    'require-unicode-regexp': 'off', // 1889 sites
-    'typescript/method-signature-style': 'off', // 541 sites
-    'typescript/prefer-for-of': 'off', // 1 sites
-    'unicorn/consistent-date-clone': 'off', // 2 sites
-    'unicorn/import-style': 'off', // 34 sites
-    'unicorn/no-anonymous-default-export': 'off', // 132 sites
-    'unicorn/no-negated-condition': 'off', // 804 sites
-    'unicorn/no-useless-collection-argument': 'off', // 1 sites
-    'unicorn/no-useless-spread': 'off', // 3 sites
-    'unicorn/prefer-add-event-listener': 'off', // 6 sites
-    'unicorn/prefer-array-find': 'off', // 1 sites
-    'unicorn/prefer-default-parameters': 'off', // 1 sites
-    'unicorn/prefer-dom-node-dataset': 'off', // 17 sites
-    'unicorn/prefer-export-from': 'off', // 26 sites
-    'unicorn/prefer-import-meta-properties': 'off', // 95 sites
-    'unicorn/prefer-includes': 'off', // 2 sites
-    'unicorn/prefer-number-coercion': 'off', // 52 sites
-    'unicorn/prefer-optional-catch-binding': 'off', // 5 sites
-    'unicorn/prefer-query-selector': 'off', // 28 sites
-    'unicorn/prefer-single-call': 'off', // 30 sites
-    'unicorn/require-post-message-target-origin': 'off', // 3 sites
-    'vars-on-top': 'off', // 65 sites
+    // that family belongs in this list again. Families C-F followed; what is
+    // left in this list is what survived being audited, not what was skipped.
+    //
+    // `no-await-in-loop` is the one rule audited and deliberately DECLINED.
+    // The old annotation said 722; the measured number is 2276 (1765 in
+    // tests, 511 in source). In tests the loop is the scenario. In source the
+    // hits sit exactly where ordering IS the correctness property —
+    // wal-restore.ts (14: WAL segments applied concurrently corrupt the
+    // restore), backup-service.ts (19), build-gateway.ts (17: ordered
+    // startup), automation/handler/runner.ts (10: user-authored steps in
+    // author order). A rule whose findings mean "correct" in most of its hits
+    // is not a gate; enabling it buys ~550 suppressions and teaches readers to
+    // skim past the marker. Do not re-adopt without re-reading #573.
+    'no-await-in-loop': 'off', // 2276 sites — declined, see above
 
     // Repo profile (#210).
     'arrow-body-style': 'off',
@@ -211,6 +169,64 @@ export default defineConfig({
     'unicorn/text-encoding-identifier-case': 'off',
   },
   overrides: [
+    // The vitest preset applies through `overrides`, and an extended preset's
+    // overrides outrank the consumer's — so extending it leaves no way to say
+    // "not these files". Its single override is therefore spliced in here
+    // verbatim (rules unchanged, glob unchanged: wholesale adoption) purely so
+    // the Playwright exclusion below can be ordered after it.
+    ...vitest.overrides,
+    {
+      // The two rules in the preset that trade assertion precision for
+      // brevity, and the only two that contradict a rule this repo already
+      // documents: TESTING.md's test convention says "Prefer specific matchers
+      // and meaningful expected values over `toBeTruthy()`". `expect(x).toBe(true)`
+      // asserts x is exactly the boolean true; `expect(x).toBeTruthy()` also
+      // passes for 1, 'x', [], {}. Autofixing the preset over this suite
+      // rewrites 1,117 `toBe(true)` and 720 `toBe(false)` into strictly weaker
+      // assertions. Everything else in the preset is adopted as-is; these two
+      // are held off deliberately. See TESTING.md, "ultracite vitest preset (#573)".
+      files: ['**/*.{test,spec}.{ts,tsx,js,jsx}', '**/__tests__/**/*.{ts,tsx,js,jsx}'],
+      plugins: ['vitest'],
+      rules: {
+        'vitest/prefer-to-be-falsy': 'off',
+        'vitest/prefer-to-be-truthy': 'off',
+        // The rule defaults to jest's signature, where `expect` takes exactly
+        // one argument. vitest's takes an optional second one — the message
+        // printed when the assertion fails, e.g.
+        // `expect(res.status, JSON.stringify(body)).toBe(400)`. Complying with
+        // the default would mean deleting those messages, which is the opposite
+        // of the "clear failure output" rule in TESTING.md. This corrects the
+        // rule for the runner rather than relaxing it: everything else it
+        // checks still applies.
+        'vitest/valid-expect': ['error', { maxArgs: 2 }],
+        // The preset's default is 5. This suite is deliberately built around
+        // integration-shaped tests that drive one scenario and then assert the
+        // whole resulting state — splitting those to satisfy a count would mean
+        // re-running the setup per assertion, which changes what is under test
+        // and slows the suite for no coverage gain. Measured sensitivity across
+        // the suite: max 5 -> 2030 findings, 10 -> 448, 15 -> 162, 20 -> 68,
+        // 30 -> 26. 20 keeps the rule a real gate on genuinely sprawling tests
+        // (the remaining 68 were split) while accepting the scenario style the
+        // repo already documents in TESTING.md. Same class of decision as
+        // valid-expect above: configuring the rule for this codebase, not
+        // relaxing it.
+        'vitest/max-expects': ['error', { max: 20 }],
+      },
+    },
+    {
+      // The vitest glob `**/*.{test,spec}.*` also catches the Playwright e2e
+      // specs — a different runner with its own `test`/`expect`. Left in scope,
+      // `prefer-importing-vitest-globals` autofixes a `from 'vitest'` import on
+      // top of the `@playwright/test` one and the files stop parsing. This is
+      // about which runner owns the file, not about opting out of a rule.
+      files: ['apps/desktop/tests/e2e/**', 'apps/web/tests/e2e/**'],
+      plugins: ['vitest'],
+      rules: Object.fromEntries(
+        Object.keys(vitest.overrides[0].rules)
+          .filter((rule) => rule.startsWith('vitest/'))
+          .map((rule) => [rule, 'off']),
+      ),
+    },
     {
       // react/react-compiler was adopted repo-wide in #573 (714 real sites
       // fixed once the exhaustive-deps disables that made the compiler bail

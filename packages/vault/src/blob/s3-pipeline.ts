@@ -19,11 +19,11 @@ function delay(ms: number): Promise<void> {
 
 function xmlEscape(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;')
+    .replace(/'/gu, '&apos;');
 }
 
 class TokenBucket {
@@ -114,7 +114,8 @@ export class S3RequestPipeline {
       ...(headers ? { headers } : {}),
     });
     if (!response.ok) throw new Error(`s3 create multipart upload: ${response.status}`);
-    const uploadId = /<UploadId>([^<]+)<\/UploadId>/.exec(await response.text())?.[1];
+    const match = /<UploadId>(?<uploadId>[^<]+)<\/UploadId>/u.exec(await response.text());
+    const uploadId = match?.groups?.uploadId;
     if (!uploadId) throw new Error('s3 create multipart upload: missing UploadId');
     return uploadId;
   }

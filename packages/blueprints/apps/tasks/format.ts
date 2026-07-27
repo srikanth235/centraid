@@ -113,40 +113,46 @@ const NL_MONTHS: Record<string, number> = {
 
 export function parseNlDue(title: string): NlDue | null {
   const t = String(title).trim();
-  let m = t.match(/^(.*\S)\s+\+(\d{1,3})([dw])$/i);
+  let m = t.match(/^(?<clean>.*\S)\s+\+(?<amount>\d{1,3})(?<unit>[dw])$/iu);
   if (m) {
-    const n = Number(m[2]) * (m[3]!.toLowerCase() === 'w' ? 7 : 1);
-    return { clean: m[1]!, due: plusDays(n), token: `+${m[2]}${m[3]}` };
+    const amount = m.groups?.amount ?? '';
+    const unit = m.groups?.unit ?? '';
+    const n = Number(amount) * (unit.toLowerCase() === 'w' ? 7 : 1);
+    return { clean: m.groups?.clean ?? '', due: plusDays(n), token: `+${amount}${unit}` };
   }
-  m = t.match(/^(.*\S)\s+(today|tod|tomorrow|tmr|tom)$/i);
+  m = t.match(/^(?<clean>.*\S)\s+(?<word>today|tod|tomorrow|tmr|tom)$/iu);
   if (m) {
-    const w = m[2]!.toLowerCase();
+    const word = m.groups?.word ?? '';
+    const w = word.toLowerCase();
     const due = w === 'today' || w === 'tod' ? todayStr() : plusDays(1);
-    return { clean: m[1]!, due, token: m[2]! };
+    return { clean: m.groups?.clean ?? '', due, token: word };
   }
-  m = t.match(/^(.*\S)\s+([a-z]{3,9})$/i);
+  m = t.match(/^(?<clean>.*\S)\s+(?<word>[a-z]{3,9})$/iu);
   if (m) {
-    const target = NL_WEEKDAYS[m[2]!.toLowerCase()];
+    const word = m.groups?.word ?? '';
+    const target = NL_WEEKDAYS[word.toLowerCase()];
     if (target !== undefined) {
       const diff = (target - new Date().getDay() + 7) % 7 || 7;
-      return { clean: m[1]!, due: plusDays(diff), token: m[2]! };
+      return { clean: m.groups?.clean ?? '', due: plusDays(diff), token: word };
     }
   }
-  m = t.match(/^(.*\S)\s+([a-z]{3,9})\s+(\d{1,2})$/i);
+  m = t.match(/^(?<clean>.*\S)\s+(?<month>[a-z]{3,9})\s+(?<day>\d{1,2})$/iu);
   if (m) {
-    const month = NL_MONTHS[m[2]!.toLowerCase()];
+    const monthWord = m.groups?.month ?? '';
+    const dayText = m.groups?.day ?? '';
+    const month = NL_MONTHS[monthWord.toLowerCase()];
     if (month !== undefined) {
       const now = new Date();
-      const day = Number(m[3]);
+      const day = Number(dayText);
       if (day < 1 || day > 31) return null;
       const d = new Date(now.getFullYear(), month, day, 12);
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       if (d < startOfToday) d.setFullYear(d.getFullYear() + 1);
       const pad = (n: number) => String(n).padStart(2, '0');
       return {
-        clean: m[1]!,
+        clean: m.groups?.clean ?? '',
         due: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-        token: `${m[2]} ${m[3]}`,
+        token: `${monthWord} ${dayText}`,
       };
     }
   }
@@ -206,6 +212,6 @@ export function highlightSegments(text: string | null | undefined, term: string)
 
 /** Split a vault FTS `⟦hit⟧`-marked snippet into `[{ text, hit }]` segments. */
 export function snippetSegments(snippet: string | null | undefined): Segment[] {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  const parts = String(snippet ?? '').split(/[⟦⟧]/u);
   return parts.map((text, i) => ({ text, hit: i % 2 === 1 })).filter((s) => s.text !== '');
 }

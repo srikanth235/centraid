@@ -40,16 +40,16 @@ export interface ReplicaIdentityInventoryEntry extends ReplicaIdentity {
 }
 
 export interface ReplicaIdentityInventory {
-  activate(identity: ReplicaIdentity): Promise<boolean>;
-  markTerminal(identity: ReplicaIdentity): Promise<void>;
-  deferTerminal(
+  activate: (identity: ReplicaIdentity) => Promise<boolean>;
+  markTerminal: (identity: ReplicaIdentity) => Promise<void>;
+  deferTerminal: (
     identity: ReplicaIdentity,
     failedAt: number,
     baseDelayMs: number,
     maxDelayMs: number,
-  ): Promise<void>;
-  remove(identity: ReplicaIdentity): Promise<void>;
-  list(): Promise<ReplicaIdentityInventoryEntry[]>;
+  ) => Promise<void>;
+  remove: (identity: ReplicaIdentity) => Promise<void>;
+  list: () => Promise<ReplicaIdentityInventoryEntry[]>;
 }
 
 /** Durable, non-secret inventory used to wipe replica scopes that are not open. */
@@ -207,14 +207,14 @@ export async function purgeReplicaIdentityStorage(
 
   const factory = options.indexedDbFactory ?? availableIndexedDb();
   if (!options.purgeIdentity) {
-    if (!factory) {
-      failures.push(new Error('IndexedDB is unavailable for confirmed replica outbox purge'));
-    } else {
+    if (factory) {
       try {
         await deleteIndexedDb(factory, await replicaIntentDatabaseName(identity));
       } catch (error) {
         failures.push(error);
       }
+    } else {
+      failures.push(new Error('IndexedDB is unavailable for confirmed replica outbox purge'));
     }
   }
 

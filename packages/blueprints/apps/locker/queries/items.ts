@@ -238,7 +238,13 @@ export async function readStarred(
   return starred;
 }
 
-export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: HandlerCtx }) => {
+export default async function itemsHandler({
+  input,
+  ctx,
+}: {
+  input?: Record<string, unknown>;
+  ctx: HandlerCtx;
+}) {
   const purpose = 'dpv:ServiceProvision';
   const window = Math.min(Math.max(Number(input?.limit) || 300, 20), 2000);
   try {
@@ -274,4 +280,4 @@ export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: Ha
     const e = err as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

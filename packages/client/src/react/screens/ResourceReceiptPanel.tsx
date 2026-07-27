@@ -77,12 +77,12 @@ export default function ResourceReceiptPanel({ usage }: ResourceReceiptPanelProp
         {subsystems.map((row) => (
           <UsageRow key={row.label} row={row} />
         ))}
-        {wakeups !== null ? (
+        {wakeups === null ? null : (
           <UsageRow
             key="wakeups"
             row={{ label: 'Background wakeups (last hour)', value: String(wakeups) }}
           />
-        ) : null}
+        )}
       </dl>
 
       <p className={styles.footnote}>

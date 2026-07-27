@@ -6,7 +6,7 @@
  */
 const PURPOSE = 'dpv:ServiceProvision';
 
-export default async ({ log, ctx }) => {
+export default async function seedHandler({ log, ctx }) {
   const invoke = async (command, args) => {
     const out = await ctx.vault.invoke({ command, input: args, purpose: PURPOSE });
     if (out.status !== 'executed') {
@@ -76,4 +76,4 @@ export default async ({ log, ctx }) => {
 
   log.info('people scenario: 4 people, 3 interactions, 2 dates, 2 gifts, 1 debt');
   return { seeded: 12 };
-};
+}

@@ -12,7 +12,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * automation with a pending webhook trigger.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -43,160 +43,166 @@ function baseInput(
   };
 }
 
-beforeEach(async () => {
-  root = await tempDir(`gw-unified-${crypto.randomUUID()}-`);
-  store = new WorktreeStore({ root: path.join(root, 'code') });
-  await store.init();
-});
-
-afterEach(async () => {
-  await fs.rm(root, { recursive: true, force: true });
-});
-
-test('runs the turn in the draft worktree with the union of tools + builder prompt', async () => {
-  let captured: { input: TurnInput; config: TurnConfig } | undefined;
-  const events: TurnStreamEvent[] = [];
-
-  const runner = makeUnifiedConversationRunner({
-    store,
-    prefsLoader: async () => ({ kind: 'codex' }),
-    getDispatcher: () => dispatcher,
-    publicBaseUrl: () => 'http://127.0.0.1:9999',
-    runTurn: async (input, config): Promise<TurnResult> => {
-      captured = { input, config };
-      input.onEvent({ type: 'assistant.delta', delta: 'ok' });
-      input.onEvent({ type: 'final', text: 'done' });
-      return { adapterKind: 'codex', sessionId: 'thread-1' };
-    },
+describe('unified-conversation-runner', () => {
+  beforeEach(async () => {
+    root = await tempDir(`gw-unified-${crypto.randomUUID()}-`);
+    store = new WorktreeStore({ root: path.join(root, 'code') });
+    await store.init();
   });
 
-  const result = await runner.run(baseInput({}, (e) => events.push(e)));
-
-  // cwd is the app's draft worktree app dir under the host-neutral `chat-<appId>` default session.
-  const expectedCwd = await store.snapshotSessionAppDir('chat-notes', 'notes');
-  expect(captured?.input.cwd).toBe(expectedCwd);
-
-  // Union of tools: the `centraid_*` dispatcher is threaded for this app.
-  expect(captured?.input.toolContext?.appId).toBe('notes');
-  expect(captured?.input.toolContext?.dispatcher).toBe(dispatcher);
-
-  // Unified prompt: the data preamble is kept AND the builder authoring
-  // block is folded in (app kind → CENTRAID_APPEND_PROMPT).
-  expect(captured!.input.extraSystemPrompt).toMatch(/BASE_DATA_PREAMBLE/);
-  expect(captured!.input.extraSystemPrompt.length > 'BASE_DATA_PREAMBLE'.length + 100).toBeTruthy();
-
-  // This IS the builder surface — the route reads `runKind` to persist its
-  // turns as `kind: 'build'` in the ledger (#181).
-  expect(runner.runKind).toBe('build');
-
-  // Resume handle round-trips back to the route.
-  expect(result?.adapterKind).toBe('codex');
-  expect(result?.adapterSessionId).toBe('thread-1');
-
-  // Stream events flowed through.
-  expect(events.some((e) => e.type === 'final')).toBeTruthy();
-});
-
-test('uses a one-shot draft session when the turn supplies one', async () => {
-  let cwd = '';
-  const runner = makeUnifiedConversationRunner({
-    store,
-    prefsLoader: async () => ({ kind: 'codex' }),
-    getDispatcher: () => dispatcher,
-    publicBaseUrl: () => 'http://127.0.0.1:9999',
-    runTurn: async (input): Promise<TurnResult> => {
-      cwd = input.cwd;
-      return { adapterKind: 'codex' };
-    },
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true });
   });
 
-  await runner.run(baseInput({ draftSessionId: 'compile-notes-a1b2c3d4' }, () => undefined));
+  test('runs the turn in the draft worktree with the union of tools + builder prompt', async () => {
+    let captured: { input: TurnInput; config: TurnConfig } | undefined;
+    const events: TurnStreamEvent[] = [];
 
-  expect(cwd).toBe(await store.snapshotSessionAppDir('compile-notes-a1b2c3d4', 'notes'));
-  await expect(store.snapshotSessionAppDir('chat-notes', 'notes')).rejects.toMatchObject({
-    code: 'session_missing',
-  });
-});
+    const runner = makeUnifiedConversationRunner({
+      store,
+      prefsLoader: async () => ({ kind: 'codex' }),
+      getDispatcher: () => dispatcher,
+      publicBaseUrl: () => 'http://127.0.0.1:9999',
+      runTurn: async (input, config): Promise<TurnResult> => {
+        captured = { input, config };
+        input.onEvent({ type: 'assistant.delta', delta: 'ok' });
+        input.onEvent({ type: 'final', text: 'done' });
+        return { adapterKind: 'codex', sessionId: 'thread-1' };
+      },
+    });
 
-test('mints a pending webhook authored during the turn and surfaces it once', async () => {
-  const events: TurnStreamEvent[] = [];
+    const result = await runner.run(baseInput({}, (e) => events.push(e)));
 
-  const runner = makeUnifiedConversationRunner({
-    store,
-    prefsLoader: async () => ({ kind: 'codex' }),
-    getDispatcher: () => dispatcher,
-    publicBaseUrl: () => 'http://127.0.0.1:9999',
-    runTurn: async (input): Promise<TurnResult> => {
-      // The agent authors an automation with a PENDING webhook trigger —
-      // it can't mint crypto-random credentials itself.
-      const autoDir = path.join(input.cwd, 'automations', 'notify');
-      await fs.mkdir(autoDir, { recursive: true });
-      await fs.writeFile(
-        path.join(autoDir, 'automation.json'),
-        JSON.stringify(
-          {
-            name: 'Notify',
-            version: '0.1.0',
-            enabled: true,
-            prompt: 'fire on webhook',
-            triggers: [{ kind: 'webhook', pending: true }],
-            requires: {},
-            history: { keep: { count: 50 } },
-            generated: { by: 'test', at: '2026-05-22' },
-          },
-          null,
-          2,
-        ),
-        'utf8',
-      );
-      await fs.writeFile(
-        path.join(autoDir, 'handler.js'),
-        'export default async () => ({});',
-        'utf8',
-      );
-      return { adapterKind: 'codex', sessionId: 'thread-2' };
-    },
+    // cwd is the app's draft worktree app dir under the host-neutral `chat-<appId>` default session.
+    const expectedCwd = await store.snapshotSessionAppDir('chat-notes', 'notes');
+    expect(captured?.input.cwd).toBe(expectedCwd);
+
+    // Union of tools: the `centraid_*` dispatcher is threaded for this app.
+    expect(captured?.input.toolContext?.appId).toBe('notes');
+    expect(captured?.input.toolContext?.dispatcher).toBe(dispatcher);
+
+    // Unified prompt: the data preamble is kept AND the builder authoring
+    // block is folded in (app kind → CENTRAID_APPEND_PROMPT).
+    expect(captured!.input.extraSystemPrompt).toMatch(/BASE_DATA_PREAMBLE/);
+    expect(
+      captured!.input.extraSystemPrompt.length > 'BASE_DATA_PREAMBLE'.length + 100,
+    ).toBeTruthy();
+
+    // This IS the builder surface — the route reads `runKind` to persist its
+    // turns as `kind: 'build'` in the ledger (#181).
+    expect(runner.runKind).toBe('build');
+
+    // Resume handle round-trips back to the route.
+    expect(result?.adapterKind).toBe('codex');
+    expect(result?.adapterSessionId).toBe('thread-1');
+
+    // Stream events flowed through.
+    expect(events.some((e) => e.type === 'final')).toBeTruthy();
   });
 
-  await runner.run(baseInput({ appId: 'notes' }, (e) => events.push(e)));
+  test('uses a one-shot draft session when the turn supplies one', async () => {
+    let cwd = '';
+    const runner = makeUnifiedConversationRunner({
+      store,
+      prefsLoader: async () => ({ kind: 'codex' }),
+      getDispatcher: () => dispatcher,
+      publicBaseUrl: () => 'http://127.0.0.1:9999',
+      runTurn: async (input): Promise<TurnResult> => {
+        cwd = input.cwd;
+        return { adapterKind: 'codex' };
+      },
+    });
 
-  const webhookEvents = events.filter((e) => e.type === 'webhooks');
-  expect(webhookEvents.length).toBe(1);
-  const evt = webhookEvents[0] as Extract<TurnStreamEvent, { type: 'webhooks' }>;
-  expect(evt.minted.length).toBe(1);
-  const minted = evt.minted[0]!;
-  expect(minted.automationId).toBe('notify');
-  expect(minted.ownerApp).toBe('notes');
-  expect(minted.secret.length > 0).toBeTruthy();
-  expect(minted.url).toMatch(/^http:\/\/127\.0\.0\.1:9999\/_centraid-hook\//);
+    await runner.run(baseInput({ draftSessionId: 'compile-notes-a1b2c3d4' }, () => undefined));
 
-  // The staged manifest no longer carries the plaintext secret — only a hash.
-  const appDir = await store.snapshotSessionAppDir('chat-notes', 'notes');
-  const raw = await fs.readFile(
-    path.join(appDir, 'automations', 'notify', 'automation.json'),
-    'utf8',
-  );
-  const parsed = JSON.parse(raw) as {
-    triggers: Array<{ kind: string; secretHash?: string; pending?: boolean }>;
-  };
-  const trig = parsed.triggers[0]!;
-  expect(trig.kind).toBe('webhook');
-  expect(trig.secretHash).toBeTruthy();
-  expect(!trig.pending).toBeTruthy();
-});
-
-test('errors when no coding agent is configured', async () => {
-  const events: TurnStreamEvent[] = [];
-  const runner = makeUnifiedConversationRunner({
-    store,
-    prefsLoader: async () => undefined,
-    getDispatcher: () => dispatcher,
-    publicBaseUrl: () => 'http://127.0.0.1:9999',
-    runTurn: async (): Promise<TurnResult> => {
-      throw new Error('should not be called');
-    },
+    expect(cwd).toBe(await store.snapshotSessionAppDir('compile-notes-a1b2c3d4', 'notes'));
+    await expect(store.snapshotSessionAppDir('chat-notes', 'notes')).rejects.toMatchObject({
+      code: 'session_missing',
+    });
   });
 
-  await expect((() => runner.run(baseInput({}, (e) => events.push(e))))()).rejects.toThrow();
-  expect(events.some((e) => e.type === 'error')).toBeTruthy();
+  test('mints a pending webhook authored during the turn and surfaces it once', async () => {
+    const events: TurnStreamEvent[] = [];
+
+    const runner = makeUnifiedConversationRunner({
+      store,
+      prefsLoader: async () => ({ kind: 'codex' }),
+      getDispatcher: () => dispatcher,
+      publicBaseUrl: () => 'http://127.0.0.1:9999',
+      runTurn: async (input): Promise<TurnResult> => {
+        // The agent authors an automation with a PENDING webhook trigger —
+        // it can't mint crypto-random credentials itself.
+        const autoDir = path.join(input.cwd, 'automations', 'notify');
+        await fs.mkdir(autoDir, { recursive: true });
+        await fs.writeFile(
+          path.join(autoDir, 'automation.json'),
+          JSON.stringify(
+            {
+              name: 'Notify',
+              version: '0.1.0',
+              enabled: true,
+              prompt: 'fire on webhook',
+              triggers: [{ kind: 'webhook', pending: true }],
+              requires: {},
+              history: { keep: { count: 50 } },
+              generated: { by: 'test', at: '2026-05-22' },
+            },
+            null,
+            2,
+          ),
+          'utf8',
+        );
+        await fs.writeFile(
+          path.join(autoDir, 'handler.js'),
+          'export default async () => ({});',
+          'utf8',
+        );
+        return { adapterKind: 'codex', sessionId: 'thread-2' };
+      },
+    });
+
+    await runner.run(baseInput({ appId: 'notes' }, (e) => events.push(e)));
+
+    const webhookEvents = events.filter((e) => e.type === 'webhooks');
+    expect(webhookEvents).toHaveLength(1);
+    const evt = webhookEvents[0] as Extract<TurnStreamEvent, { type: 'webhooks' }>;
+    expect(evt.minted).toHaveLength(1);
+    const minted = evt.minted[0]!;
+    expect(minted.automationId).toBe('notify');
+    expect(minted.ownerApp).toBe('notes');
+    expect(minted.secret.length > 0).toBeTruthy();
+    expect(minted.url).toMatch(/^http:\/\/127\.0\.0\.1:9999\/_centraid-hook\//);
+
+    // The staged manifest no longer carries the plaintext secret — only a hash.
+    const appDir = await store.snapshotSessionAppDir('chat-notes', 'notes');
+    const raw = await fs.readFile(
+      path.join(appDir, 'automations', 'notify', 'automation.json'),
+      'utf8',
+    );
+    const parsed = JSON.parse(raw) as {
+      triggers: Array<{ kind: string; secretHash?: string; pending?: boolean }>;
+    };
+    const trig = parsed.triggers[0]!;
+    expect(trig.kind).toBe('webhook');
+    expect(trig.secretHash).toBeTruthy();
+    expect(!trig.pending).toBeTruthy();
+  });
+
+  test('errors when no coding agent is configured', async () => {
+    const events: TurnStreamEvent[] = [];
+    const runner = makeUnifiedConversationRunner({
+      store,
+      prefsLoader: async () => undefined,
+      getDispatcher: () => dispatcher,
+      publicBaseUrl: () => 'http://127.0.0.1:9999',
+      runTurn: async (): Promise<TurnResult> => {
+        throw new Error('should not be called');
+      },
+    });
+
+    await expect((() => runner.run(baseInput({}, (e) => events.push(e))))()).rejects.toThrow(
+      'no coding agent configured',
+    );
+    expect(events.some((e) => e.type === 'error')).toBeTruthy();
+  });
 });

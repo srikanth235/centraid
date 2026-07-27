@@ -39,6 +39,20 @@ const baseManifest = () => ({
   ] as Array<Record<string, unknown>>,
 });
 
+/**
+ * Runs `fn` and hands back whatever it threw — `undefined` when it returned
+ * normally. Keeps the "it threw X with code Y" assertions unconditional: a
+ * silent no-throw leaves `err` undefined and fails `toBeInstanceOf`.
+ */
+function thrownBy(fn: () => unknown): unknown {
+  try {
+    fn();
+  } catch (err) {
+    return err;
+  }
+  return undefined;
+}
+
 describe('manifest constants', () => {
   it('exposes file name and version', () => {
     expect(APP_MANIFEST_FILE).toBe('app.json');
@@ -46,12 +60,12 @@ describe('manifest constants', () => {
   });
 });
 
-describe('validateManifest', () => {
+describe(validateManifest, () => {
   it('accepts a well-formed manifest', () => {
     const m = validateManifest(baseManifest());
     expect(m.id).toBe('todos');
-    expect(m.actions.length).toBe(1);
-    expect(m.queries.length).toBe(1);
+    expect(m.actions).toHaveLength(1);
+    expect(m.queries).toHaveLength(1);
   });
 
   it('rejects non-object input', () => {
@@ -63,37 +77,24 @@ describe('validateManifest', () => {
   it('rejects missing manifestVersion with a clear code', () => {
     const m = baseManifest() as Record<string, unknown>;
     delete m.manifestVersion;
-    try {
-      validateManifest(m);
-      expect.fail('should have thrown');
-    } catch (err) {
-      expect(err instanceof ManifestError).toBeTruthy();
-      expect((err as ManifestError).code).toBe('unsupported_manifest_version');
-    }
+    const err = thrownBy(() => validateManifest(m));
+    expect(err).toBeInstanceOf(ManifestError);
+    expect((err as ManifestError).code).toBe('unsupported_manifest_version');
   });
 
   it('rejects an unsupported manifestVersion', () => {
     const m = baseManifest();
     (m as Record<string, unknown>).manifestVersion = 99;
-    try {
-      validateManifest(m);
-      expect.fail('should have thrown');
-    } catch (err) {
-      expect(err instanceof ManifestError).toBeTruthy();
-      expect((err as ManifestError).code).toBe('unsupported_manifest_version');
-    }
+    const err = thrownBy(() => validateManifest(m));
+    expect(err).toBeInstanceOf(ManifestError);
+    expect((err as ManifestError).code).toBe('unsupported_manifest_version');
   });
 
   it('rejects missing required top-level fields', () => {
     const m = baseManifest() as Record<string, unknown>;
     delete m.id;
-    let err: unknown;
-    try {
-      validateManifest(m);
-    } catch (e) {
-      err = e;
-    }
-    expect(err instanceof ManifestError).toBeTruthy();
+    const err = thrownBy(() => validateManifest(m));
+    expect(err).toBeInstanceOf(ManifestError);
     expect((err as ManifestError).code).toBe('invalid_manifest');
   });
 
@@ -106,13 +107,9 @@ describe('validateManifest', () => {
   it('rejects duplicate action names', () => {
     const m = baseManifest();
     m.actions.push({ ...m.actions[0]! });
-    try {
-      validateManifest(m);
-      expect.fail('should have thrown');
-    } catch (err) {
-      expect(err instanceof ManifestError).toBeTruthy();
-      expect((err as ManifestError).code).toBe('duplicate_handler');
-    }
+    const err = thrownBy(() => validateManifest(m));
+    expect(err).toBeInstanceOf(ManifestError);
+    expect((err as ManifestError).code).toBe('duplicate_handler');
   });
 
   it('rejects an action whose name starts with the reserved "_" prefix', () => {
@@ -122,13 +119,9 @@ describe('validateManifest', () => {
       confirmation: 'none' as const,
       input: { type: 'object' },
     });
-    try {
-      validateManifest(m);
-      expect.fail('should have thrown');
-    } catch (err) {
-      expect(err instanceof ManifestError).toBeTruthy();
-      expect((err as ManifestError).code).toBe('reserved_handler_name');
-    }
+    const err = thrownBy(() => validateManifest(m));
+    expect(err).toBeInstanceOf(ManifestError);
+    expect((err as ManifestError).code).toBe('reserved_handler_name');
   });
 
   it('rejects a query whose name starts with the reserved "_" prefix', () => {
@@ -137,13 +130,9 @@ describe('validateManifest', () => {
       name: '_sql',
       input: { type: 'object' },
     });
-    try {
-      validateManifest(m);
-      expect.fail('should have thrown');
-    } catch (err) {
-      expect(err instanceof ManifestError).toBeTruthy();
-      expect((err as ManifestError).code).toBe('reserved_handler_name');
-    }
+    const err = thrownBy(() => validateManifest(m));
+    expect(err).toBeInstanceOf(ManifestError);
+    expect((err as ManifestError).code).toBe('reserved_handler_name');
   });
 
   it('allows the same name in actions and queries', () => {
@@ -153,18 +142,18 @@ describe('validateManifest', () => {
       input: { type: 'object', properties: {}, additionalProperties: false },
     });
     const out = validateManifest(m);
-    expect(out.queries.length).toBe(2);
+    expect(out.queries).toHaveLength(2);
   });
 
   it('treats the ext band as optional', () => {
     const m = baseManifest();
     const out = validateManifest(m);
-    expect(out.ext).toBe(undefined);
+    expect(out.ext).toBeUndefined();
   });
 
   it('omits kind when absent and carries an automation kind through', () => {
     // No `kind` → a normal UI app; the field is simply absent.
-    expect(validateManifest(baseManifest()).kind).toBe(undefined);
+    expect(validateManifest(baseManifest()).kind).toBeUndefined();
     // `kind: 'automation'` marks a UI-less automation app (replaces the
     // legacy `auto.` id prefix) and round-trips through validation.
     const auto = { ...baseManifest(), kind: 'automation' };
@@ -177,20 +166,16 @@ describe('validateManifest', () => {
   });
 });
 
-describe('parseManifest', () => {
+describe(parseManifest, () => {
   it('parses well-formed JSON', () => {
     const out = parseManifest(JSON.stringify(baseManifest()));
     expect(out.name).toBe('Todos');
   });
 
   it('rejects invalid JSON with code invalid_json', () => {
-    try {
-      parseManifest('not json');
-      expect.fail('should have thrown');
-    } catch (err) {
-      expect(err instanceof ManifestError).toBeTruthy();
-      expect((err as ManifestError).code).toBe('invalid_json');
-    }
+    const err = thrownBy(() => parseManifest('not json'));
+    expect(err).toBeInstanceOf(ManifestError);
+    expect((err as ManifestError).code).toBe('invalid_json');
   });
 });
 
@@ -212,8 +197,8 @@ describe('findAction / findQuery', () => {
   it('looks up by name', () => {
     const m = validateManifest(baseManifest());
     expect(findAction(m, 'add')?.name).toBe('add');
-    expect(findAction(m, 'missing')).toBe(undefined);
+    expect(findAction(m, 'missing')).toBeUndefined();
     expect(findQuery(m, 'list')?.name).toBe('list');
-    expect(findQuery(m, 'missing')).toBe(undefined);
+    expect(findQuery(m, 'missing')).toBeUndefined();
   });
 });

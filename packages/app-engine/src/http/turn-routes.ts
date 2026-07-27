@@ -56,7 +56,7 @@ export function isValidConversationId(id: string): boolean {
   if (!id || id.length > 128) return false;
   if (id === 'index.json') return false;
   if (id.startsWith('.')) return false;
-  return /^[A-Za-z0-9_\-:]+$/.test(id);
+  return /^[A-Za-z0-9_\-:]+$/u.test(id);
 }
 
 /**

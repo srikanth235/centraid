@@ -71,7 +71,7 @@ describe('custody-gated prune', () => {
     const archiveRows = journal.prepare(`SELECT pruned_at FROM conversation_archive`).all() as {
       pruned_at: number | null;
     }[];
-    expect(archiveRows.length).toBe(1); // idempotent — one range, one row
+    expect(archiveRows).toHaveLength(1); // idempotent — one range, one row
     expect(archiveRows[0]!.pruned_at).toBeNull();
     journal.close();
   });
@@ -105,7 +105,9 @@ describe('custody-gated prune', () => {
       seq: 2,
       startedAt: daysAgo(1),
       model: 'm',
-    }); // live head
+    });
+
+    // live head
 
     runConversationArchival({ journal, blobSink, custodyProven: () => false }, { nowMs: now });
     expect(countTurns(journal, 'a/digest')).toBe(3);
@@ -182,9 +184,11 @@ describe('segment round-trip', () => {
     expect(segment.version).toBe(1);
     expect(segment.conversationId).toBe('c1');
     expect(segment.conversation.title).toBe('Old chat');
-    expect(segment.turns).toEqual([srcTurn]);
-    expect(segment.items).toEqual(srcItems);
-    expect(segment.attachments).toEqual(srcAtt);
+    // node:sqlite hands back null-prototype rows; spreading compares the column
+    // data (which is the contract) without asserting the driver's prototype.
+    expect(segment.turns).toStrictEqual([{ ...srcTurn }]);
+    expect(segment.items).toStrictEqual(srcItems.map((row) => ({ ...row })));
+    expect(segment.attachments).toStrictEqual(srcAtt.map((row) => ({ ...row })));
     journal.close();
   });
 });

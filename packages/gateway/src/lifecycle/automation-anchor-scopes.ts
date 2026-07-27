@@ -37,12 +37,12 @@ function readRows(
   return vault.gateway.read(vault.credential, {
     entity,
     where,
-    ...(limit !== undefined ? { limit } : {}),
+    ...(limit === undefined ? {} : { limit }),
     purpose: AUTOMATION_ANCHOR_PURPOSE,
   }).rows;
 }
 
-const ANCHOR_TOKEN_RE = /@\[core\.link_anchor\/([^\]]+)\]/g;
+const ANCHOR_TOKEN_RE = /@\[core\.link_anchor\/(?<anchorId>[^\]]+)\]/gu;
 
 export interface AutomationAnchorSelector {
   exact: string;
@@ -300,7 +300,9 @@ export function resolveAutomationAnchors(
   instructions: string,
 ): ResolvedAutomationAnchor[] {
   const ids = [
-    ...new Set(Array.from(instructions.matchAll(ANCHOR_TOKEN_RE), (match) => match[1]!)),
+    ...new Set(
+      [...instructions.matchAll(ANCHOR_TOKEN_RE)].flatMap((match) => match.groups?.anchorId ?? []),
+    ),
   ];
   const live = liveAnchorRows(vault, ids);
   return ids.map((anchorId) => {

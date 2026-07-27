@@ -9,7 +9,11 @@ import type {
   ReplicaCursor,
   ReplicaSnapshotRow,
 } from './types.js';
-import { runWindowedBootstrap, type WindowedBootstrapTarget } from './windowed-bootstrap.js';
+import {
+  runWindowedBootstrap,
+  type RunWindowedBootstrapOptions,
+  type WindowedBootstrapTarget,
+} from './windowed-bootstrap.js';
 
 import type { GatewayAuth } from '../gateway-auth.js';
 
@@ -112,7 +116,7 @@ const emptyBatch = (cursor: ReplicaCursor): ReplicaChangeBatch => ({
   changes: [],
 });
 
-describe('runWindowedBootstrap', () => {
+describe(runWindowedBootstrap, () => {
   test('walks every page and applies all rows', async () => {
     const target = createTarget();
     const { fetcher, requests } = createFetcher({
@@ -144,12 +148,14 @@ describe('runWindowedBootstrap', () => {
         complete: true,
       },
     });
-    const pullChanges = vi.fn(async (cursor: ReplicaCursor) => emptyBatch(cursor));
+    const pullChanges = vi.fn<RunWindowedBootstrapOptions['pullChanges']>(async (cursor) =>
+      emptyBatch(cursor),
+    );
 
     await runWindowedBootstrap({ gatewayAuth, target, fetcher, window: 1, pullChanges });
 
-    expect(target.rows.map((item) => item.rowId)).toEqual(['photo-1', 'photo-2', 'photo-3']);
-    expect(target.header?.shapes).toEqual(shapes);
+    expect(target.rows.map((item) => item.rowId)).toStrictEqual(['photo-1', 'photo-2', 'photo-3']);
+    expect(target.header?.shapes).toStrictEqual(shapes);
     expect(requests).toHaveLength(3);
     expect(requests[0]).toContain('window=1');
     expect(requests[1]).toContain('after=token-2');
@@ -196,8 +202,8 @@ describe('runWindowedBootstrap', () => {
         ],
       },
     ];
-    const pullChanges = vi.fn(
-      async (cursor: ReplicaCursor) => batches.shift() ?? emptyBatch(cursor),
+    const pullChanges = vi.fn<RunWindowedBootstrapOptions['pullChanges']>(
+      async (cursor) => batches.shift() ?? emptyBatch(cursor),
     );
 
     const cursor = await runWindowedBootstrap({
@@ -209,12 +215,15 @@ describe('runWindowedBootstrap', () => {
     });
 
     // The crux: committed at page 1's cursor, and the delta pull started there.
-    expect(target.committedAt).toEqual({ epoch: 'replica-1', seq: 10 });
-    expect(pullChanges).toHaveBeenCalled();
-    expect(pullChanges.mock.calls[0]?.[0]).toEqual({ epoch: 'replica-1', seq: 10 });
+    expect(target.committedAt).toStrictEqual({ epoch: 'replica-1', seq: 10 });
+    expect(pullChanges).toHaveBeenCalledWith(
+      { epoch: 'replica-1', seq: 10 },
+      expect.any(AbortSignal),
+    );
+    expect(pullChanges.mock.calls[0]?.[0]).toStrictEqual({ epoch: 'replica-1', seq: 10 });
     // The deletion that slipped between per-page snapshots is repaired.
-    expect(target.rows.map((item) => item.rowId)).toEqual(['photo-1', 'photo-3']);
-    expect(cursor).toEqual({ epoch: 'replica-1', seq: 12 });
+    expect(target.rows.map((item) => item.rowId)).toStrictEqual(['photo-1', 'photo-3']);
+    expect(cursor).toStrictEqual({ epoch: 'replica-1', seq: 12 });
   });
 
   test('reconciles durable intent outcomes against the page-1 cursor', async () => {
@@ -230,9 +239,9 @@ describe('runWindowedBootstrap', () => {
         complete: true,
       },
     });
-    const reconcileOutcomes = vi.fn(async (_cursor: ReplicaCursor) => [
-      { intentId: 'intent-1', status: 'executed' } as IntentOutcome,
-    ]);
+    const reconcileOutcomes = vi.fn<NonNullable<RunWindowedBootstrapOptions['reconcileOutcomes']>>(
+      async () => [{ intentId: 'intent-1', status: 'executed' } as IntentOutcome],
+    );
 
     await runWindowedBootstrap({
       gatewayAuth,
@@ -242,8 +251,8 @@ describe('runWindowedBootstrap', () => {
       pullChanges: async (cursor) => emptyBatch(cursor),
     });
 
-    expect(reconcileOutcomes.mock.calls[0]?.[0]).toEqual({ epoch: 'replica-1', seq: 10 });
-    expect(target.committedOutcomes).toEqual([{ intentId: 'intent-1', status: 'executed' }]);
+    expect(reconcileOutcomes.mock.calls[0]?.[0]).toStrictEqual({ epoch: 'replica-1', seq: 10 });
+    expect(target.committedOutcomes).toStrictEqual([{ intentId: 'intent-1', status: 'executed' }]);
   });
 
   test('surfaces a mid-pagination 409 as a rebootstrap so the walk restarts', async () => {

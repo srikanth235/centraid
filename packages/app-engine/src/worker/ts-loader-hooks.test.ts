@@ -14,7 +14,7 @@ describe('ts-loader-hooks resolve', () => {
     const next = async () => ({ url: 'file:///ok.js', format: 'module' as const });
     await expect(
       resolve('./x', { parentURL: 'file:///a/b.ts', conditions: [], importAttributes: {} }, next),
-    ).resolves.toEqual({ url: 'file:///ok.js', format: 'module' });
+    ).resolves.toStrictEqual({ url: 'file:///ok.js', format: 'module' });
   });
 
   it('rewrites ./util.js → ./util.ts when the .ts sibling exists on disk', async () => {
@@ -72,7 +72,7 @@ describe('ts-loader-hooks load', () => {
     const next = async () => ({ format: 'module' as const, source: 'export {}' });
     await expect(
       load('file:///a.js', { conditions: [], importAttributes: {} }, next),
-    ).resolves.toEqual({ format: 'module', source: 'export {}' });
+    ).resolves.toStrictEqual({ format: 'module', source: 'export {}' });
   });
 
   it('compiles .ts source to ESM via esbuild', async () => {

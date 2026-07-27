@@ -612,7 +612,7 @@ export async function getInsightsSummary(input?: {
   windowDays?: number;
 }): Promise<CentraidInsightsSummary> {
   const { baseUrl, token } = await auth();
-  const qs = input?.windowDays !== undefined ? `?windowDays=${enc(String(input.windowDays))}` : '';
+  const qs = input?.windowDays === undefined ? '' : `?windowDays=${enc(String(input.windowDays))}`;
   const res = await doFetch(baseUrl, `/centraid/_insights/summary${qs}`, {
     method: 'GET',
     headers: authHeaders(token),
@@ -649,7 +649,7 @@ export async function pauseBackgroundWork(
   const res = await doFetch(baseUrl, '/centraid/_gateway/resource/pause', {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify(durationMs !== undefined ? { durationMs } : {}),
+    body: JSON.stringify(durationMs === undefined ? {} : { durationMs }),
   });
   return readJson<{ paused: boolean; until: string | null }>(res, 'pause background work');
 }

@@ -71,10 +71,10 @@ export function CustodyDot({ state }: { state: string | null }) {
 // root). Plain strings interleaved with `<mark>` reproduce the exact old
 // text-node + <mark> shape `.snippet mark` styles.
 export function Snippet({ snippet }: { snippet: string }) {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  const parts = String(snippet ?? '').split(/[⟦⟧]/u);
   return (
     <div className={styles.snippet}>
-      {parts.map((part, i) => (!part ? null : i % 2 === 1 ? <mark key={i}>{part}</mark> : part))}
+      {parts.map((part, i) => (part ? i % 2 === 1 ? <mark key={i}>{part}</mark> : part : null))}
     </div>
   );
 }

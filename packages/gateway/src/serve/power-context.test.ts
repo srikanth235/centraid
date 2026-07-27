@@ -7,7 +7,7 @@ import {
   type CpuStealSample,
 } from './power-context.js';
 
-describe('evaluatePosture', () => {
+describe(evaluatePosture, () => {
   const base = {
     platform: 'linux' as NodeJS.Platform,
     hasBattery: true,
@@ -25,7 +25,7 @@ describe('evaluatePosture', () => {
     expect(s.reason).toBe('on-battery');
     expect(s.deferringBackgroundWork).toBe(true);
     expect(s.kind).toBe('battery');
-    expect(s.battery).toEqual({ percent: 80, charging: false });
+    expect(s.battery).toStrictEqual({ percent: 80, charging: false });
   });
 
   it('low battery floor (<20 and discharging) reports low-battery', () => {
@@ -80,11 +80,11 @@ describe('evaluatePosture', () => {
   });
 });
 
-describe('parsePmset', () => {
+describe(parsePmset, () => {
   it('parses a discharging laptop', () => {
     const out =
       "Now drawing from 'Battery Power'\n -InternalBattery-0 (id=1)\t62%; discharging; 3:12 remaining present: true";
-    expect(parsePmset(out)).toEqual({
+    expect(parsePmset(out)).toStrictEqual({
       present: true,
       percent: 62,
       charging: false,
@@ -103,7 +103,7 @@ describe('parsePmset', () => {
   });
 
   it('reports no battery for a desktop Mac', () => {
-    expect(parsePmset("Now drawing from 'AC Power'\n")).toEqual({
+    expect(parsePmset("Now drawing from 'AC Power'\n")).toStrictEqual({
       present: false,
       percent: null,
       charging: null,
@@ -135,7 +135,7 @@ async function monitorWith(
   return m;
 }
 
-describe('PowerContextMonitor', () => {
+describe(PowerContextMonitor, () => {
   it('boot probe with no battery on darwin is mains, source os-probe, battery null', async () => {
     const m = await monitorWith({
       platform: 'darwin',
@@ -169,7 +169,7 @@ describe('PowerContextMonitor', () => {
     const s = m.snapshot();
     expect(s.source).toBe('client-push');
     expect(s.reason).toBe('low-battery');
-    expect(s.battery).toEqual({ percent: 15, charging: false });
+    expect(s.battery).toStrictEqual({ percent: 15, charging: false });
   });
 
   it('client push decays after 120s and posture falls back to the probe', async () => {
@@ -185,7 +185,7 @@ describe('PowerContextMonitor', () => {
     const s = m.snapshot();
     expect(s.source).toBe('os-probe');
     expect(s.reason).toBeNull();
-    expect(s.battery).toEqual({ percent: 95, charging: true });
+    expect(s.battery).toStrictEqual({ percent: 95, charging: true });
   });
 
   it('clearClientPush drops pushed state immediately', async () => {
@@ -251,12 +251,12 @@ describe('PowerContextMonitor', () => {
       onDeferringChange: (d) => changes.push(d),
     });
     m.snapshot(); // boot false — no fire
-    expect(changes).toEqual([]);
+    expect(changes).toStrictEqual([]);
     m.applyClientPush({ onBattery: true, batteryPercent: 50 });
     m.snapshot(); // false -> true
     m.clearClientPush();
     m.snapshot(); // true -> false
-    expect(changes).toEqual([true, false]);
+    expect(changes).toStrictEqual([true, false]);
   });
 
   it('isDeferringBackgroundWork reflects the current posture', async () => {

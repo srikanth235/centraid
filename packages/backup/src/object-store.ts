@@ -20,12 +20,12 @@ export interface ObjectListEntry {
 }
 
 export interface ObjectStore {
-  put(key: string, data: Uint8Array | AsyncIterable<Uint8Array>): Promise<void>;
-  get(key: string): Promise<Uint8Array>;
-  getStream(key: string): AsyncIterable<Uint8Array>;
-  head(key: string): Promise<{ size: number } | null>;
-  list(prefix: string): AsyncIterable<ObjectListEntry>;
-  delete(key: string): Promise<void>;
+  put: (key: string, data: Uint8Array | AsyncIterable<Uint8Array>) => Promise<void>;
+  get: (key: string) => Promise<Uint8Array>;
+  getStream: (key: string) => AsyncIterable<Uint8Array>;
+  head: (key: string) => Promise<{ size: number } | null>;
+  list: (prefix: string) => AsyncIterable<ObjectListEntry>;
+  delete: (key: string) => Promise<void>;
 }
 
 /**
@@ -35,7 +35,7 @@ export interface ObjectStore {
  */
 export function assertSafeKey(key: string): void {
   if (key.length === 0) throw new Error('object key must not be empty');
-  if (key.startsWith('/') || /^[A-Za-z]:[\\/]/.test(key)) {
+  if (key.startsWith('/') || /^[A-Za-z]:[\\/]/u.test(key)) {
     throw new Error(`object key must be relative: "${key}"`);
   }
   const segments = key.split('/');

@@ -61,7 +61,7 @@ export interface TunnelStartArgs {
 }
 
 type CentraidTunnelEvents = {
-  onStatusChange(status: TunnelStatus): void;
+  onStatusChange: (status: TunnelStatus) => void;
 };
 
 declare class CentraidTunnelNativeModule extends NativeModule<CentraidTunnelEvents> {
@@ -130,7 +130,9 @@ export async function getTunnelStatus(): Promise<TunnelStatus> {
 }
 
 /** Fires on every state transition. No-op subscription when native is absent. */
-export function addTunnelStatusListener(cb: (status: TunnelStatus) => void): { remove(): void } {
+export function addTunnelStatusListener(cb: (status: TunnelStatus) => void): {
+  remove: () => void;
+} {
   if (!native) return { remove: () => {} };
   const subscription = native.addListener('onStatusChange', cb);
   return { remove: () => subscription.remove() };

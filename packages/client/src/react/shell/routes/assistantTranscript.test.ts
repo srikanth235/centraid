@@ -3,9 +3,11 @@ import { activeAttemptOf, hydrateMessages, msgToDTO, type AsstMsg } from './assi
 
 // The renderer pulls in the auth-aware resolver; stub it as assistantRich's own
 // test does (the codec under test never calls it).
-vi.mock('../../../gateway-client.js', () => ({ resolveAssistantRefs: vi.fn() }));
+vi.mock(import('../../../gateway-client.js'), () => ({
+  resolveAssistantRefs: vi.fn<typeof import('../../../gateway-client.js').resolveAssistantRefs>(),
+}));
 
-describe('hydrateMessages', () => {
+describe(hydrateMessages, () => {
   it('carries createdAt + turn identity onto reconstructed answers', () => {
     const msgs = hydrateMessages([
       { payload: { kind: 'user', text: 'hi' }, createdAt: 100 },
@@ -53,9 +55,9 @@ describe('hydrateMessages', () => {
       { payload: { kind: 'tool', id: 'x', tool: 'vault_sql', state: 'ok' }, createdAt: 1 },
       { payload: { kind: 'tool', id: 'y', tool: 'vault_sql', state: 'error' }, createdAt: 2 },
     ]);
-    expect(msgs.length).toBe(1);
+    expect(msgs).toHaveLength(1);
     expect(msgs[0]).toMatchObject({ kind: 'tools' });
-    expect((msgs[0] as Extract<AsstMsg, { kind: 'tools' }>).calls.length).toBe(2);
+    expect((msgs[0] as Extract<AsstMsg, { kind: 'tools' }>).calls).toHaveLength(2);
   });
 
   it('prepends a from-the-archive notice and marks rehydrated answers (issue #438)', () => {
@@ -73,7 +75,7 @@ describe('hydrateMessages', () => {
   });
 });
 
-describe('msgToDTO', () => {
+describe(msgToDTO, () => {
   it('renders the active attempt + a pager position for a retried answer', () => {
     const msg: AsstMsg = {
       kind: 'ai',
@@ -93,7 +95,7 @@ describe('msgToDTO', () => {
       expect(dto.copyText).toBe('A');
       expect(dto.turnId).toBe('t1');
       expect(dto.feedback).toBe('down');
-      expect(dto.retry).toEqual({ index: 1, count: 2 });
+      expect(dto.retry).toStrictEqual({ index: 1, count: 2 });
       expect(dto.html).toContain('A');
     }
   });

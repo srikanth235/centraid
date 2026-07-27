@@ -22,13 +22,13 @@ const validPayload: PairingTicketPayload = {
   exp: Date.now() + 60_000,
 };
 
-describe('decodePairingTicket', () => {
+describe(decodePairingTicket, () => {
   it('decodes a well-formed token', () => {
-    expect(decodePairingTicket(encode(validPayload))).toEqual(validPayload);
+    expect(decodePairingTicket(encode(validPayload))).toStrictEqual(validPayload);
   });
 
   it('tolerates surrounding whitespace (paste artifact)', () => {
-    expect(decodePairingTicket(`  ${encode(validPayload)}\n`)).toEqual(validPayload);
+    expect(decodePairingTicket(`  ${encode(validPayload)}\n`)).toStrictEqual(validPayload);
   });
 
   it('rejects non-base64url garbage', () => {
@@ -61,14 +61,14 @@ describe('decodePairingTicket', () => {
   });
 
   it('accepts an empty vaultName (still a string)', () => {
-    expect(decodePairingTicket(encode({ ...validPayload, vaultName: '' }))).toEqual({
+    expect(decodePairingTicket(encode({ ...validPayload, vaultName: '' }))).toStrictEqual({
       ...validPayload,
       vaultName: '',
     });
   });
 });
 
-describe('isTicketExpired', () => {
+describe(isTicketExpired, () => {
   it('is false strictly before expiry', () => {
     expect(isTicketExpired({ exp: 1000 }, 999)).toBe(false);
   });
@@ -84,7 +84,7 @@ describe('isTicketExpired', () => {
   });
 });
 
-describe('foldIrohPairResponse', () => {
+describe(foldIrohPairResponse, () => {
   it('folds a successful response', () => {
     const folded = foldIrohPairResponse({
       ok: true,
@@ -94,7 +94,7 @@ describe('foldIrohPairResponse', () => {
       gatewayName: 'Home',
     });
     expect(isFoldError(folded)).toBe(false);
-    expect(folded).toEqual({
+    expect(folded).toStrictEqual({
       gatewayId: 'gateway-endpoint',
       vaultId: 'v1',
       vaultName: 'Personal',
@@ -108,37 +108,40 @@ describe('foldIrohPairResponse', () => {
       gatewayId: 'gateway-endpoint',
       vaultId: 'v1',
     });
-    expect(folded).toEqual({ gatewayId: 'gateway-endpoint', vaultId: 'v1', vaultName: '' });
+    expect(folded).toStrictEqual({ gatewayId: 'gateway-endpoint', vaultId: 'v1', vaultName: '' });
   });
 
   it('maps ok:false + error:ticket_expired to the stable expired code', () => {
     const folded = foldIrohPairResponse({ ok: false, error: 'ticket_expired' });
     expect(isFoldError(folded)).toBe(true);
-    expect(folded).toEqual({ error: 'ticket_expired', message: 'This pairing code has expired.' });
+    expect(folded).toStrictEqual({
+      error: 'ticket_expired',
+      message: 'This pairing code has expired.',
+    });
   });
 
   it('maps any other rejection to invalid_ticket', () => {
     const folded = foldIrohPairResponse({ ok: false, error: 'bad_secret' });
-    expect(folded).toEqual({ error: 'invalid_ticket', message: 'bad_secret' });
+    expect(folded).toStrictEqual({ error: 'invalid_ticket', message: 'bad_secret' });
   });
 
   it('treats ok:true with no vaultId as a malformed response', () => {
     const folded = foldIrohPairResponse({ ok: true, gatewayId: 'gateway-endpoint' });
-    expect(folded).toEqual({
+    expect(folded).toStrictEqual({
       error: 'bad_response',
       message: 'Gateway did not return a vault id.',
     });
   });
 
   it('treats ok:true with no gateway EndpointId as malformed', () => {
-    expect(foldIrohPairResponse({ ok: true, vaultId: 'v1' })).toEqual({
+    expect(foldIrohPairResponse({ ok: true, vaultId: 'v1' })).toStrictEqual({
       error: 'bad_response',
       message: 'Gateway did not return its EndpointId.',
     });
   });
 });
 
-describe('findReusableProfile', () => {
+describe(findReusableProfile, () => {
   const profiles = [
     { id: 'endpoint-a', endpointId: 'endpoint-a' },
     { id: 'endpoint-b', endpointId: 'endpoint-b' },

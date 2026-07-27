@@ -67,10 +67,9 @@ import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const dist = path.join(here, '..', 'dist');
 const vaultDist = path.join(here, '..', '..', 'vault', 'dist');
 
@@ -109,7 +108,7 @@ const secs = (t0) => (performance.now() - t0) / 1000;
 // base consumes no new blocks, so file sizes lie and `df` does not.
 const dfBytes = () => {
   const out = execFileSync('df', ['-k', WORK], { encoding: 'utf8' }).trim().split('\n')[1];
-  return Number(out.split(/\s+/)[3]) * 1024; // available KiB -> bytes
+  return Number(out.split(/\s+/u)[3]) * 1024; // available KiB -> bytes
 };
 const freeAtStart = dfBytes();
 let peakPhysical = 0;

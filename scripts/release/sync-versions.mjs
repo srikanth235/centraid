@@ -13,10 +13,10 @@
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 const require = createRequire(import.meta.url);
 const { nativeBuildNumber } = require(path.join(root, 'apps/mobile/src/version-core.cjs'));
 
@@ -24,8 +24,8 @@ const { nativeBuildNumber } = require(path.join(root, 'apps/mobile/src/version-c
  * Patch Android build.gradle versionCode / versionName.
  */
 export function patchAndroidVersions(gradleText, semver, buildNumber) {
-  let next = gradleText.replace(/versionCode\s+\d+\b/, `versionCode ${buildNumber}`);
-  next = next.replace(/versionName\s+"[^"]+"/, `versionName "${semver}"`);
+  let next = gradleText.replace(/versionCode\s+\d+\b/u, `versionCode ${buildNumber}`);
+  next = next.replace(/versionName\s+"[^"]+"/u, `versionName "${semver}"`);
   return {
     ok: next.includes(`versionCode ${buildNumber}`) && next.includes(`versionName "${semver}"`),
     detail: next === gradleText ? 'unchanged' : 'patched',
@@ -38,12 +38,12 @@ export function patchAndroidVersions(gradleText, semver, buildNumber) {
  */
 export function patchIosPbxproj(pbxText, semver, buildNumber) {
   let next = pbxText.replace(
-    /CURRENT_PROJECT_VERSION = \d+;/g,
+    /CURRENT_PROJECT_VERSION = \d+;/gu,
     `CURRENT_PROJECT_VERSION = ${buildNumber};`,
   );
-  next = next.replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${semver};`);
+  next = next.replace(/MARKETING_VERSION = [^;]+;/gu, `MARKETING_VERSION = ${semver};`);
   return {
-    ok: /CURRENT_PROJECT_VERSION = \d+;/.test(next),
+    ok: /CURRENT_PROJECT_VERSION = \d+;/u.test(next),
     detail: next === pbxText ? 'unchanged' : 'patched',
     text: next,
   };
@@ -54,12 +54,12 @@ export function patchIosPbxproj(pbxText, semver, buildNumber) {
  */
 export function patchInfoPlist(plistText, semver, buildNumber) {
   let next = plistText.replace(
-    /(<key>CFBundleVersion<\/key>\s*<string>)[^<]+(<\/string>)/,
-    `$1${buildNumber}$2`,
+    /(?<openTag><key>CFBundleVersion<\/key>\s*<string>)[^<]+(?<closeTag><\/string>)/u,
+    `$<openTag>${buildNumber}$<closeTag>`,
   );
   next = next.replace(
-    /(<key>CFBundleShortVersionString<\/key>\s*<string>)[^<]+(<\/string>)/,
-    `$1${semver}$2`,
+    /(?<openTag><key>CFBundleShortVersionString<\/key>\s*<string>)[^<]+(?<closeTag><\/string>)/u,
+    `$<openTag>${semver}$<closeTag>`,
   );
   return {
     ok:
@@ -88,7 +88,7 @@ export function runSyncVersions({ rootDir = root, version, dryRun = false } = {}
   const rootPkg = JSON.parse(readFileSync(rootPkgPath, 'utf8'));
   const prev = rootPkg.version;
   const ver = version || prev;
-  if (!/^\d+\.\d+\.\d+$/.test(ver)) {
+  if (!/^\d+\.\d+\.\d+$/u.test(ver)) {
     throw new Error(`unparseable version ${ver}`);
   }
   const build = nativeBuildNumber(ver);

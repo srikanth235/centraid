@@ -55,7 +55,7 @@ describe('ingest pure parsers (#545 B6)', () => {
 
   test('parseCsvRows and password CSV header detection', () => {
     const rows = parseCsvRows('name,url,username,password\n"Bank","https://b","u","p"\n');
-    expect(rows[0]).toEqual(['name', 'url', 'username', 'password']);
+    expect(rows[0]).toStrictEqual(['name', 'url', 'username', 'password']);
     expect(isPasswordsCsvHeader(rows[0]!)).toBe(true);
     const items = parsePasswordsCsv(
       'name,url,username,password\nBank,https://bank.example,ada,s3cret\n',

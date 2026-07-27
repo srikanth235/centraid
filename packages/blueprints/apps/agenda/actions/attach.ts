@@ -5,7 +5,7 @@
  * bytes into a canonical content item and links it. The same handler shape is
  * copied across every app — only the subject_type differs.
  */
-export default async ({ body, ctx }: HandlerArgs): Promise<ActionResult> => {
+export default async function attachHandler({ body, ctx }: HandlerArgs): Promise<ActionResult> {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
@@ -13,11 +13,11 @@ export default async ({ body, ctx }: HandlerArgs): Promise<ActionResult> => {
       input: {
         subject_type: 'core.event',
         subject_id: String(input.subject_id ?? ''),
-        ...(input.staged_sha != null
-          ? { staged_sha: String(input.staged_sha) }
-          : { data_uri: String(input.data_uri ?? '') }),
-        ...(input.title != null ? { title: String(input.title) } : {}),
-        ...(input.role != null ? { role: String(input.role) } : {}),
+        ...(input.staged_sha == null
+          ? { data_uri: String(input.data_uri ?? '') }
+          : { staged_sha: String(input.staged_sha) }),
+        ...(input.title == null ? {} : { title: String(input.title) }),
+        ...(input.role == null ? {} : { role: String(input.role) }),
       },
       purpose: 'dpv:ServiceProvision',
     });
@@ -26,4 +26,4 @@ export default async ({ body, ctx }: HandlerArgs): Promise<ActionResult> => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

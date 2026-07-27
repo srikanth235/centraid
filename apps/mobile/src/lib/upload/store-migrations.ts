@@ -32,7 +32,7 @@ function hasColumn(driver: Driver, table: string, column: string): boolean {
 }
 
 function quote(literal: string): string {
-  return `'${literal.replace(/'/g, "''")}'`;
+  return `'${literal.replace(/'/gu, "''")}'`;
 }
 
 /** Run `work` and the version bump atomically; roll back together on a kill. */

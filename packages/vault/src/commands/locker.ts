@@ -519,7 +519,7 @@ const UNSTAR_ITEM: CommandDefinition = {
 /** RFC 4648 base32 decode (case-insensitive, spaces and padding ignored). */
 function base32Decode(seed: string): Buffer {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  const clean = seed.toUpperCase().replace(/[\s=-]/g, '');
+  const clean = seed.toUpperCase().replace(/[\s=-]/gu, '');
   let bits = 0;
   let value = 0;
   const bytes: number[] = [];
@@ -604,9 +604,9 @@ export function strengthScore(pw: string): number {
   let s = 0;
   if (pw.length >= 8) s++;
   if (pw.length >= 14) s++;
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
-  if (/[0-9]/.test(pw)) s++;
-  if (/[^A-Za-z0-9]/.test(pw)) s++;
+  if (/[A-Z]/u.test(pw) && /[a-z]/u.test(pw)) s++;
+  if (/[0-9]/u.test(pw)) s++;
+  if (/[^A-Za-z0-9]/u.test(pw)) s++;
   return s;
 }
 
@@ -648,7 +648,7 @@ const WATCHTOWER: CommandDefinition = {
     const items = rows.map((r) => {
       if (r.type === 'card') {
         const digits = (ctx.unseal(LOCKER_ITEM_TYPE, r.item_id, 'card_number') ?? '').replace(
-          /\s/g,
+          /\s/gu,
           '',
         );
         return {

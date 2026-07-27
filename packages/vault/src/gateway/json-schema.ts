@@ -49,7 +49,7 @@ function check(schema: Schema, value: unknown, path: string, errors: string[]): 
     if (schema.minLength !== undefined && value.length < schema.minLength) {
       errors.push(`${path}: shorter than minLength ${schema.minLength}`);
     }
-    if (schema.pattern !== undefined && !new RegExp(schema.pattern).test(value)) {
+    if (schema.pattern !== undefined && !new RegExp(schema.pattern, 'u').test(value)) {
       errors.push(`${path}: does not match pattern ${schema.pattern}`);
     }
   }

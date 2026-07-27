@@ -7,10 +7,9 @@
  */
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const root = path.dirname(import.meta.dirname);
 const wasm = path.join(root, 'src/generated/centraid_web_iroh_bg.wasm');
 const force = process.env.FORCE_IROH_WASM === '1';
 

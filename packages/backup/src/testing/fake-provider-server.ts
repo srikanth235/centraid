@@ -206,10 +206,10 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
       return;
     }
 
-    const match = /^\/v1\/storage\/vaults\/([^/]+)(.*)$/.exec(route);
+    const match = /^\/v1\/storage\/vaults\/(?<targetId>[^/]+)(?<rest>.*)$/u.exec(route);
     if (!match) return errorBody(res, 404, 'not_found', `no route for ${route}`);
-    const targetId = match[1]!;
-    const rest = match[2]!;
+    const targetId = match.groups?.targetId ?? '';
+    const rest = match.groups?.rest ?? '';
     const target = targets.get(targetId);
     if (!target) return errorBody(res, 404, 'not_found', `unknown target "${targetId}"`);
 
@@ -328,9 +328,9 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
           : rows.filter((row) => row.prunedAt === null),
       );
     }
-    const seqMatch = /^\/snapshots\/(\d+)$/.exec(rest);
+    const seqMatch = /^\/snapshots\/(?<seq>\d+)$/u.exec(rest);
     if (req.method === 'GET' && seqMatch) {
-      const seq = Number(seqMatch[1]);
+      const seq = Number(seqMatch.groups?.seq);
       const row = (snapshots.get(targetId) ?? []).find((item) => item.seq === seq);
       return row
         ? jsonBody(res, 200, row)

@@ -63,7 +63,7 @@ describe('AutomationThreadScreen', () => {
     expect(menu.textContent).toContain('Delete');
     const edit = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-edit"]')!;
     await act(async () => edit.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onOpenCompiler).toHaveBeenCalled();
+    expect(props.onOpenCompiler).toHaveBeenCalledWith();
     // Choosing an item closes the menu.
     expect(el.querySelector('[role="menu"]')).toBeNull();
   });
@@ -97,7 +97,7 @@ describe('AutomationThreadScreen', () => {
     await act(async () => trigger.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     const del = el.querySelector<HTMLButtonElement>('[data-testid="automation-menu-delete"]')!;
     await act(async () => del.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onDelete).toHaveBeenCalled();
+    expect(props.onDelete).toHaveBeenCalledWith();
   });
 
   it('closes the overflow menu on Escape', async () => {
@@ -150,10 +150,10 @@ describe('AutomationThreadScreen', () => {
   it('renders each run as a chat turn, oldest to newest, with the run summary as the body', async () => {
     const el = await mount(makeProps());
     const seps = [...el.querySelectorAll('.dateSep')].map((n) => n.textContent);
-    expect(seps).toEqual(['Yesterday', 'Today']);
+    expect(seps).toStrictEqual(['Yesterday', 'Today']);
     const turns = [...el.querySelectorAll<HTMLElement>('.turn')];
     expect(turns).toHaveLength(3);
-    expect(turns.map((e) => e.dataset.runStatus)).toEqual(['ok', 'fail', 'running']);
+    expect(turns.map((e) => e.dataset.runStatus)).toStrictEqual(['ok', 'fail', 'running']);
     // ok run speaks its summary as a message; failed run speaks its error.
     expect(turns[0]!.textContent).toContain('ok run');
     expect(turns[1]!.textContent).toContain('failed run');
@@ -215,9 +215,9 @@ describe('AutomationThreadScreen', () => {
     const link = [...el.querySelectorAll('button')].find(
       (b) => b.textContent === 'Open the compiler',
     );
-    expect(link).not.toBeUndefined();
+    expect(link).toBeDefined();
     await act(async () => link!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onOpenCompiler).toHaveBeenCalled();
+    expect(props.onOpenCompiler).toHaveBeenCalledWith(expect.objectContaining({ type: 'click' }));
   });
 
   it('marks each turn with a trigger-origin node across origins', async () => {
@@ -307,7 +307,7 @@ describe('AutomationThreadScreen', () => {
         .querySelector('[data-testid="plan-open-compiler"]')!
         .dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
-    expect(props.onOpenCompiler).toHaveBeenCalled();
+    expect(props.onOpenCompiler).toHaveBeenCalledWith(expect.objectContaining({ type: 'click' }));
   });
 
   it('offers no remedy while a compile is in flight', async () => {
@@ -352,6 +352,6 @@ describe('AutomationThreadScreen', () => {
     expect(el.textContent).toContain('Automation not found.');
     const back = el.querySelector('.auCrumb button') as HTMLButtonElement;
     await act(async () => back.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onBack).toHaveBeenCalled();
+    expect(props.onBack).toHaveBeenCalledWith(expect.objectContaining({ type: 'click' }));
   });
 });

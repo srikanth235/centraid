@@ -2,9 +2,9 @@ import type { CompanionModule } from './types.js';
 
 declare const BarcodeDetector: {
   new (options: { formats: string[] }): {
-    detect(source: ImageBitmapSource): Promise<Array<{ rawValue: string }>>;
+    detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue: string }>>;
   };
-  getSupportedFormats(): Promise<string[]>;
+  getSupportedFormats: () => Promise<string[]>;
 };
 
 const video = document.querySelector('video')!;

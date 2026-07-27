@@ -103,7 +103,7 @@ export function QuickLook({
             opacity: 0.85,
             marginBottom: '22px',
           }}
-        ></i>
+        />
         {widths.map((w, i) => (
           <i
             key={i}
@@ -113,7 +113,7 @@ export function QuickLook({
               background: i < 4 ? '#e6e7ea' : '#eceef1',
               marginBottom: `${i === 3 ? 26 : 11}px`,
             }}
-          ></i>
+          />
         ))}
       </div>
     );

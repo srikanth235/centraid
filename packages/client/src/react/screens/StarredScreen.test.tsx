@@ -50,44 +50,46 @@ function makeProps(over: Partial<StarredScreenProps> = {}): StarredScreenProps {
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
-afterEach(() => {
-  act(() => root?.unmount());
-  root = null;
-  container?.remove();
-  container = null;
-  vi.clearAllMocks();
-});
-function mount(props: StarredScreenProps): HTMLDivElement {
-  container = document.createElement('div');
-  document.body.appendChild(container);
-  act(() => {
-    root = createRoot(container as HTMLDivElement);
-    root.render(<StarredScreen {...props} />);
+describe('screens/StarredScreen', () => {
+  afterEach(() => {
+    act(() => root?.unmount());
+    root = null;
+    container?.remove();
+    container = null;
+    vi.clearAllMocks();
   });
-  return container as HTMLDivElement;
-}
+  function mount(props: StarredScreenProps): HTMLDivElement {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    act(() => {
+      root = createRoot(container as HTMLDivElement);
+      root.render(<StarredScreen {...props} />);
+    });
+    return container as HTMLDivElement;
+  }
 
-describe('StarredScreen', () => {
-  it('renders starred app + automation cards with their star flags', () => {
-    const el = mount(makeProps());
-    expect(el.textContent).toContain('Todos');
-    expect(el.textContent).toContain('Digest');
-    expect(el.querySelectorAll('[data-starred="true"]').length).toBe(2);
-  });
+  describe(StarredScreen, () => {
+    it('renders starred app + automation cards with their star flags', () => {
+      const el = mount(makeProps());
+      expect(el.textContent).toContain('Todos');
+      expect(el.textContent).toContain('Digest');
+      expect(el.querySelectorAll('[data-starred="true"]')).toHaveLength(2);
+    });
 
-  it('opens an app on tile click', () => {
-    const props = makeProps();
-    const el = mount(props);
-    const tile = el.querySelector<HTMLButtonElement>('[data-testid="app-tile"]');
-    act(() => tile?.click());
-    expect(props.onOpenApp).toHaveBeenCalledWith('todos');
-  });
+    it('opens an app on tile click', () => {
+      const props = makeProps();
+      const el = mount(props);
+      const tile = el.querySelector<HTMLButtonElement>('[data-testid="app-tile"]');
+      act(() => tile?.click());
+      expect(props.onOpenApp).toHaveBeenCalledWith('todos');
+    });
 
-  it('opens an automation on its card click', () => {
-    const props = makeProps();
-    const el = mount(props);
-    const card = el.querySelector<HTMLButtonElement>('[data-kind="automation"]');
-    act(() => card?.click());
-    expect(props.onOpenAutomation).toHaveBeenCalledWith('a@1');
+    it('opens an automation on its card click', () => {
+      const props = makeProps();
+      const el = mount(props);
+      const card = el.querySelector<HTMLButtonElement>('[data-kind="automation"]');
+      act(() => card?.click());
+      expect(props.onOpenAutomation).toHaveBeenCalledWith('a@1');
+    });
   });
 });

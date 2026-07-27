@@ -1,7 +1,6 @@
 import { createCipheriv, createHash, createHmac } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { deflateRawSync, zstdCompressSync } from 'node:zlib';
 import { cbsfFrameAad } from '@centraid/blob-format';
 import { deriveDataKey, type Keyring } from '../../backup/src/crypto.ts';
@@ -14,7 +13,7 @@ import {
   sealStoredFrame,
 } from '../../vault/src/blob/seal-frames.ts';
 
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const root = path.dirname(import.meta.dirname);
 const key = Buffer.from(Array.from({ length: 32 }, (_, index) => index));
 const plain = Buffer.from('CBSF v2 cross-language golden bytes span several frames.');
 const frameSize = 13;

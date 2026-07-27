@@ -189,9 +189,9 @@ function TimelineGestureLayer({
   children,
 }: {
   columns: number;
-  onColumns(next: number): void;
-  onTap(x: number, y: number): void;
-  onDrag(x: number, y: number): void;
+  onColumns: (next: number) => void;
+  onTap: (x: number, y: number) => void;
+  onDrag: (x: number, y: number) => void;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -215,8 +215,8 @@ const AssetCell = memo(function AssetCell({
   width: number;
   selected: boolean;
   selecting: boolean;
-  onOpen(asset: PhotoAsset): void;
-  onSelect(asset: PhotoAsset): void;
+  onOpen: (asset: PhotoAsset) => void;
+  onSelect: (asset: PhotoAsset) => void;
 }) {
   const { colors } = useTheme();
   return (
@@ -263,9 +263,9 @@ export default function PhotoTimeline({
   onSelectionChange,
 }: {
   sections: PhotoSection[];
-  onOpen(asset: PhotoAsset): void;
+  onOpen: (asset: PhotoAsset) => void;
   selection: Set<string>;
-  onSelectionChange(next: Set<string>): void;
+  onSelectionChange: (next: Set<string>) => void;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();

@@ -19,14 +19,14 @@ import type { GatewayAuth } from '../gateway-auth.js';
  * the walk can be tested against a fake without a store or a worker.
  */
 export interface WindowedBootstrapTarget {
-  bootstrapBegin(header: ReplicaBootstrapHeader): Promise<void>;
-  bootstrapPage(rows: ReplicaBootstrapPage['rows']): Promise<void>;
-  bootstrapCommit(
+  bootstrapBegin: (header: ReplicaBootstrapHeader) => Promise<void>;
+  bootstrapPage: (rows: ReplicaBootstrapPage['rows']) => Promise<void>;
+  bootstrapCommit: (
     cursor: ReplicaCursor,
     header: ReplicaBootstrapHeader,
     outcomes?: IntentOutcome[],
-  ): Promise<ReplicaCursor>;
-  applyChanges(batch: ReplicaChangeBatch): Promise<ReplicaCursor>;
+  ) => Promise<ReplicaCursor>;
+  applyChanges: (batch: ReplicaChangeBatch) => Promise<ReplicaCursor>;
 }
 
 export interface RunWindowedBootstrapOptions {

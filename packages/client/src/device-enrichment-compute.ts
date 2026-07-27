@@ -64,7 +64,7 @@ async function extractPdfText(source: Blob): Promise<string | null> {
         .map((item) => ('str' in item && typeof item.str === 'string' ? item.str : ''))
         .filter(Boolean)
         .join(' ')
-        .replace(/\s+/g, ' ')
+        .replace(/\s+/gu, ' ')
         .trim();
       if (!text) continue;
       const remaining = MAX_TEXT_CHARS - chars;

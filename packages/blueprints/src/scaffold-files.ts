@@ -24,7 +24,7 @@ export interface ScaffoldFile {
 // A plain filesystem-safe slug. Automation apps are marked by the
 // manifest's `kind` field, not a dotted `auto.` id prefix (issue #98), so
 // no dot is allowed — a tree-traversing `..` is impossible by construction.
-const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
 /** Validate an app id against centraid's reserved-prefix and shape rules. */
 export function validateAppId(id: string): void {
@@ -148,7 +148,7 @@ export function updateAppMetaFiles(
       if (next !== html) changed.push({ path: 'index.html', content: next });
     }
     for (const f of current) {
-      if (!/^automations\/[^/]+\/automation\.json$/.test(f.path)) continue;
+      if (!/^automations\/[^/]+\/automation\.json$/u.test(f.path)) continue;
       const next = applyManifestName(f.content, renameTo);
       if (next !== null && next !== f.content) changed.push({ path: f.path, content: next });
     }

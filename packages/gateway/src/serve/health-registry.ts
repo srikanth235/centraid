@@ -398,12 +398,12 @@ export class HealthRegistry {
       .map(([component, s]) => ({
         component,
         status: s.status,
-        ...(s.detail !== undefined ? { detail: s.detail } : {}),
-        ...(s.lastOkAt !== undefined ? { lastOkAt: new Date(s.lastOkAt).toISOString() } : {}),
-        ...(s.lastErrorAt !== undefined
-          ? { lastErrorAt: new Date(s.lastErrorAt).toISOString() }
-          : {}),
-        ...(s.lastError !== undefined ? { lastError: s.lastError } : {}),
+        ...(s.detail === undefined ? {} : { detail: s.detail }),
+        ...(s.lastOkAt === undefined ? {} : { lastOkAt: new Date(s.lastOkAt).toISOString() }),
+        ...(s.lastErrorAt === undefined
+          ? {}
+          : { lastErrorAt: new Date(s.lastErrorAt).toISOString() }),
+        ...(s.lastError === undefined ? {} : { lastError: s.lastError }),
         errorCount: s.errorCount,
       }))
       .sort((a, b) => a.component.localeCompare(b.component));
@@ -421,16 +421,16 @@ export class HealthRegistry {
       metrics: {
         rssBytes: process.memoryUsage().rss,
         outboxPending: sourced.outboxPending ?? 0,
-        ...(sourced.sseClients !== undefined ? { sseClients: sourced.sseClients } : {}),
-        ...(sourced.hardwareProfileClass !== undefined
-          ? { hardwareProfileClass: sourced.hardwareProfileClass }
-          : {}),
-        ...(sourced.resourceMode !== undefined ? { resourceMode: sourced.resourceMode } : {}),
-        ...(sourced.resourceProfile !== undefined
-          ? { resourceProfile: sourced.resourceProfile }
-          : {}),
-        ...(sourced.resourceUsage !== undefined ? { resourceUsage: sourced.resourceUsage } : {}),
-        ...(sourced.powerContext !== undefined ? { powerContext: sourced.powerContext } : {}),
+        ...(sourced.sseClients === undefined ? {} : { sseClients: sourced.sseClients }),
+        ...(sourced.hardwareProfileClass === undefined
+          ? {}
+          : { hardwareProfileClass: sourced.hardwareProfileClass }),
+        ...(sourced.resourceMode === undefined ? {} : { resourceMode: sourced.resourceMode }),
+        ...(sourced.resourceProfile === undefined
+          ? {}
+          : { resourceProfile: sourced.resourceProfile }),
+        ...(sourced.resourceUsage === undefined ? {} : { resourceUsage: sourced.resourceUsage }),
+        ...(sourced.powerContext === undefined ? {} : { powerContext: sourced.powerContext }),
         backgroundPause: this.readBackgroundPause(),
         ...performance,
         uptimeMs,

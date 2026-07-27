@@ -64,7 +64,7 @@ interface StreamIngressDeps {
   dir: string;
   chunkBytes?: number;
   contributePreview?: (input: IngressPreviewInput) => void;
-  emit(): void;
+  emit: () => void;
 }
 
 function parseParts(json: string): MultipartPart[] {

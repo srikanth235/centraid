@@ -18,7 +18,7 @@ describe('appearance prefs', () => {
       bogus: 'nope',
       density2: 'x',
     });
-    expect(got).toEqual({
+    expect(got).toStrictEqual({
       theme: 'dark',
       density: 'comfy',
       cardVariant: 'elevated',
@@ -28,13 +28,13 @@ describe('appearance prefs', () => {
   });
 
   it('rejects invalid union values', () => {
-    expect(pickAppearance({ density: 'huge', cards: 'shiny', accentKey: 'chartreuse' })).toEqual(
-      {},
-    );
+    expect(
+      pickAppearance({ density: 'huge', cards: 'shiny', accentKey: 'chartreuse' }),
+    ).toStrictEqual({});
   });
 
   it('falls back to the legacy `accent` key when `accentKey` is absent', () => {
-    expect(pickAppearance({ accent: 'teal' })).toEqual({ accent: 'teal' });
+    expect(pickAppearance({ accent: 'teal' })).toStrictEqual({ accent: 'teal' });
   });
 
   it('emits both the accent key and its resolved swatches to the wire', () => {
@@ -46,7 +46,7 @@ describe('appearance prefs', () => {
   });
 
   it('maps cardVariant → cards on the wire', () => {
-    expect(toRemoteShape({ cardVariant: 'flat' })).toEqual({ cards: 'flat' });
+    expect(toRemoteShape({ cardVariant: 'flat' })).toStrictEqual({ cards: 'flat' });
   });
 
   it('round-trips a full pref set through wire → pick', () => {

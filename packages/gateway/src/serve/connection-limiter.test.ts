@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { authDeadError, ConnectionLimiter, delay } from './connection-limiter.js';
 
-describe('authDeadError', () => {
+describe(authDeadError, () => {
   it('is a plain Error stamped with the AuthDeadError name', () => {
     const err = authDeadError('no refresh token');
     expect(err).toBeInstanceOf(Error);
@@ -10,7 +10,7 @@ describe('authDeadError', () => {
   });
 });
 
-describe('delay', () => {
+describe(delay, () => {
   it('resolves after roughly the requested interval', async () => {
     const start = Date.now();
     await delay(20);
@@ -18,7 +18,7 @@ describe('delay', () => {
   });
 });
 
-describe('ConnectionLimiter', () => {
+describe(ConnectionLimiter, () => {
   it('runs a task and returns its value', async () => {
     const limiter = new ConnectionLimiter(2, 0);
     await expect(limiter.run(async () => 'ok')).resolves.toBe('ok');
@@ -40,10 +40,10 @@ describe('ConnectionLimiter', () => {
     });
     // Let both microtasks settle: the second must be queued, not started.
     await delay(10);
-    expect(order).toEqual(['first-start']);
+    expect(order).toStrictEqual(['first-start']);
     releaseFirst();
     await Promise.all([first, second]);
-    expect(order).toEqual(['first-start', 'first-end', 'second-start']);
+    expect(order).toStrictEqual(['first-start', 'first-end', 'second-start']);
   });
 
   it('spaces successive starts by at least minIntervalMs', async () => {

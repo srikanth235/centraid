@@ -94,8 +94,7 @@ export function money(minor: number | null | undefined, currency: string | undef
 // amount already follows the vault's base currency via fmtMoney (₹, €, …),
 // so a hard-coded "$" next to the input lies whenever the vault isn't USD —
 // derive the symbol from the same currency instead.
-export function curSymbolFor(currency: string | undefined): string {
-  const cur = currency || 'USD';
+export function curSymbolFor(cur: string | undefined = 'USD'): string {
   try {
     return (
       new Intl.NumberFormat(undefined, { style: 'currency', currency: cur })
@@ -116,7 +115,7 @@ export function todayKey(): string {
   return localDayKey(new Date());
 }
 export function first(name: string | null | undefined): string {
-  return String(name ?? '').split(/\s+/)[0] || name || '';
+  return String(name ?? '').split(/\s+/u)[0] || name || '';
 }
 
 export function balLabelFriend(v: number, currency: string | undefined): BalLabel {
@@ -210,7 +209,7 @@ export function splitSumInfo(
   if (exp.method === 'percent') {
     const sum = parts.reduce((a, m) => a + (parseFloat(exp.percent[m.party_id] ?? '') || 0), 0);
     const bad = Math.abs(sum - 100) > 0.1;
-    return { bad, text: sum.toFixed(0) + '% of 100%' + (!bad ? ' ✓' : '') };
+    return { bad, text: sum.toFixed(0) + '% of 100%' + (bad ? '' : ' ✓') };
   }
   const per = parts.length && cents > 0 ? cents / parts.length : 0;
   return {

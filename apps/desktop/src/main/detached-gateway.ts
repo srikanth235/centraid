@@ -23,7 +23,6 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { endpointIdForSecret } from '@centraid/tunnel';
 import { landlordBearerForDataDir } from '@centraid/gateway';
 import {
@@ -62,7 +61,7 @@ export interface DetachedGatewayHandle {
    * App quit must NOT call this for detached handles — see
    * `shutdownAllLocalGatewaysExcept` in local-gateway.ts.
    */
-  close(): Promise<void>;
+  close: () => Promise<void>;
   /** Minimal health surface so callers that only registerProbe don't crash. */
   health: {
     registerProbe: (
@@ -101,7 +100,7 @@ export function resolveGatewayCliPath(): string {
   } catch {
     // fall through
   }
-  const here = path.dirname(fileURLToPath(import.meta.url));
+  const here = import.meta.dirname;
   // apps/desktop/dist/main → ../../../packages/gateway/dist/cli/cli.js
   const monorepo = path.resolve(here, '../../../packages/gateway/dist/cli/cli.js');
   return monorepo;

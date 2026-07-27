@@ -35,10 +35,10 @@ export function mentionTokenAt(text: string, caret: number): CaretToken | null {
   const at = upto.lastIndexOf('@');
   if (at < 0) return null;
   const before = at === 0 ? ' ' : upto[at - 1];
-  if (before !== undefined && !/[\s(]/.test(before)) return null;
+  if (before !== undefined && !/[\s(]/u.test(before)) return null;
   const query = upto.slice(at + 1);
   if (query.length > MAX_MENTION_LEN) return null;
-  if (/[\s\n]/.test(query)) return null;
+  if (/[\s\n]/u.test(query)) return null;
   return { start: at, query };
 }
 
@@ -51,14 +51,14 @@ export function slashCommandAt(text: string, caret: number): CaretToken | null {
   if (text[0] !== '/') return null;
   const upto = text.slice(0, caret);
   const query = upto.slice(1);
-  if (/\s/.test(query)) return null;
+  if (/\s/u.test(query)) return null;
   return { start: 0, query };
 }
 
 /** The canonical inline-ref string the shared renderer hydrates into a chip. */
 export function refString(label: string, type: string, id: string): string {
   // Labels can't contain `]`; strip it so the `@[label](...)` bracket stays valid.
-  const safeLabel = label.replace(/[\]]/g, '').trim() || `${type} ${id}`;
+  const safeLabel = label.replace(/[\]]/gu, '').trim() || `${type} ${id}`;
   return `@[${safeLabel}](ref:${type}/${id})`;
 }
 

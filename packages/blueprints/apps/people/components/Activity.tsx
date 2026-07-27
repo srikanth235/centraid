@@ -25,8 +25,8 @@ function ActivityItem({
           size="36px"
           color={color}
           onClick={() => a.party_id && onOpenDetails(a.party_id)}
-        ></KitAvatar>
-        <span className={shared.activityLine}></span>
+        />
+        <span className={shared.activityLine} />
       </div>
       <div style={{ flex: 1, minWidth: 0, paddingTop: '2px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>

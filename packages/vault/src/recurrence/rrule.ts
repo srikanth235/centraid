@@ -43,6 +43,9 @@ export function parseRrule(rrule: string): ParsedRrule | null {
   return { freq, interval, count, until, byDay: byDay && byDay.length > 0 ? byDay : undefined };
 }
 
+const ICAL_INSTANT_RE =
+  /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})(?:T(?<hour>\d{2})(?<minute>\d{2})(?<second>\d{2}))?Z?$/u;
+
 /**
  * RFC 5545 UNTIL is written extended (`2026-07-03T00:00:00Z`) or basic
  * (`20260703T000000Z`, the form ICS ingest stores verbatim). `Date.parse`
@@ -52,10 +55,17 @@ export function parseRrule(rrule: string): ParsedRrule | null {
 function parseIcalInstant(value: string): Date | null {
   const direct = Date.parse(value);
   if (!Number.isNaN(direct)) return new Date(direct);
-  const match = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?Z?$/.exec(value.trim());
+  const match = ICAL_INSTANT_RE.exec(value.trim());
   if (!match) return null;
-  const [, y, mo, d, hh = '00', mm = '00', ss = '00'] = match;
-  const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm), Number(ss));
+  const { year, month, day, hour = '00', minute = '00', second = '00' } = match.groups!;
+  const ms = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+  );
   return Number.isNaN(ms) ? null : new Date(ms);
 }
 

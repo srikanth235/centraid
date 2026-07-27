@@ -26,7 +26,6 @@ import {
   unlinkSync,
 } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 /** Must stay aligned with scripts/gateway-package/trace.mjs. */
 export const GATEWAY_WORKSPACE_PACKAGES = [
@@ -45,7 +44,7 @@ export const GATEWAY_WORKSPACE_PACKAGES = [
 
 /** Package directory names under packages/ that belong in the runtime. */
 const KEEP_CENTRAID_NAMES = new Set(
-  GATEWAY_WORKSPACE_PACKAGES.map((p) => p.replace(/^packages\//, '')),
+  GATEWAY_WORKSPACE_PACKAGES.map((p) => p.replace(/^packages\//u, '')),
 );
 
 function arg(name, fallback) {
@@ -380,11 +379,9 @@ export function assembleRuntime({ root, out, packagesOnly = false }) {
   return report;
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
 if (isMain) {
-  const root = path.resolve(
-    arg('--root', path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')),
-  );
+  const root = path.resolve(arg('--root', path.resolve(import.meta.dirname, '../..')));
   const out = path.resolve(arg('--out', path.join(root, 'artifacts/gateway-runtime')));
   const packagesOnly = process.argv.includes('--packages-only');
   try {

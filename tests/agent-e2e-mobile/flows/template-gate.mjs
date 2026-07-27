@@ -13,14 +13,13 @@
 
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { runFlow } from '../lib/harness.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
 const GATEWAY_URL = (process.env.MAESTRO_GATEWAY_URL ?? 'http://127.0.0.1:18789').replace(
-  /\/+$/,
+  /\/+$/u,
   '',
 );
 const GATEWAY_TOKEN = process.env.MAESTRO_GATEWAY_TOKEN ?? '';
@@ -79,17 +78,17 @@ async function templateMarker(templateId) {
       path.join(REPO_ROOT, 'packages', 'blueprints', 'apps', templateId, 'index.html'),
       'utf8',
     );
-    const h1 = /<h1[^>]*>([^<]+)<\/h1>/.exec(html);
-    if (h1) return h1[1].trim();
-    const title = /<title>([^<]+)<\/title>/.exec(html);
-    if (title) return title[1].trim();
+    const h1 = /<h1[^>]*>(?<heading>[^<]+)<\/h1>/u.exec(html);
+    if (h1?.groups?.heading) return h1.groups.heading.trim();
+    const title = /<title>(?<titleText>[^<]+)<\/title>/u.exec(html);
+    if (title?.groups?.titleText) return title.groups.titleText.trim();
   } catch {
     /* template without an index.html shouldn't be in the app list, but don't die here */
   }
   return undefined;
 }
 
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 
 await runFlow('template-gate', async (ctx) => {
   await ctx.configureGateway(GATEWAY_URL, GATEWAY_TOKEN);

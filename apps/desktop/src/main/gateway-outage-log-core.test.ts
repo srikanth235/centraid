@@ -26,7 +26,7 @@ describe('formatOutageLogLine / parseOutageLogLines', () => {
     const e = event({ detail: 'fetch failed' });
     const line = formatOutageLogLine(e);
     expect(line.endsWith('\n')).toBe(true);
-    expect(parseOutageLogLines(line)).toEqual([e]);
+    expect(parseOutageLogLines(line)).toStrictEqual([e]);
   });
 
   it('round-trips multiple events in order', () => {
@@ -35,7 +35,7 @@ describe('formatOutageLogLine / parseOutageLogLines', () => {
       event({ at: T0 + 1000, kind: 'recovered', durationMs: 1000 }),
     ];
     const raw = events.map(formatOutageLogLine).join('');
-    expect(parseOutageLogLines(raw)).toEqual(events);
+    expect(parseOutageLogLines(raw)).toStrictEqual(events);
   });
 
   it('skips blank lines', () => {
@@ -60,21 +60,21 @@ describe('formatOutageLogLine / parseOutageLogLines', () => {
   });
 
   it('empty input parses to an empty list', () => {
-    expect(parseOutageLogLines('')).toEqual([]);
+    expect(parseOutageLogLines('')).toStrictEqual([]);
   });
 });
 
-describe('capOutageLog', () => {
+describe(capOutageLog, () => {
   it('keeps everything under the cap, order preserved', () => {
     const events = [event({ at: T0 }), event({ at: T0 + 1 })];
-    expect(capOutageLog(events, 500)).toEqual(events);
+    expect(capOutageLog(events, 500)).toStrictEqual(events);
   });
 
   it('drops the oldest entries once over the cap, keeping the tail', () => {
     const events = Array.from({ length: 10 }, (_, i) => event({ at: T0 + i }));
     const capped = capOutageLog(events, 3);
     expect(capped).toHaveLength(3);
-    expect(capped.map((e) => e.at)).toEqual([T0 + 7, T0 + 8, T0 + 9]);
+    expect(capped.map((e) => e.at)).toStrictEqual([T0 + 7, T0 + 8, T0 + 9]);
   });
 
   it('the shipped cap is 500', () => {
@@ -82,7 +82,7 @@ describe('capOutageLog', () => {
   });
 });
 
-describe('deriveOutageEvents', () => {
+describe(deriveOutageEvents, () => {
   function state(over: Partial<GatewayRuntimeState> = {}): GatewayRuntimeState {
     return {
       ...initialRuntimeState({ id: 'local', label: 'Local', kind: 'local' }, T0),
@@ -98,7 +98,7 @@ describe('deriveOutageEvents', () => {
       componentActions: [],
       now: T0 + 5000,
     });
-    expect(events).toEqual([
+    expect(events).toStrictEqual([
       {
         at: T0 + 5000,
         kind: 'down',
@@ -117,7 +117,7 @@ describe('deriveOutageEvents', () => {
       componentActions: [],
       now: T0 + 5000,
     });
-    expect(events).toEqual([]);
+    expect(events).toStrictEqual([]);
   });
 
   it('logs a recovered event on a down→up transition, carrying the outage duration', () => {
@@ -132,7 +132,7 @@ describe('deriveOutageEvents', () => {
       componentActions: [],
       now: T0 + 10_000,
     });
-    expect(events).toEqual([
+    expect(events).toStrictEqual([
       {
         at: T0 + 10_000,
         kind: 'recovered',
@@ -151,7 +151,7 @@ describe('deriveOutageEvents', () => {
       componentActions: [],
       now: T0 + 10_000,
     });
-    expect(events[0]).toEqual({
+    expect(events[0]).toStrictEqual({
       at: T0 + 10_000,
       kind: 'recovered',
       gatewayId: 'local',
@@ -172,7 +172,7 @@ describe('deriveOutageEvents', () => {
       componentActions: [],
       now: T0 + 5000,
     });
-    expect(events).toEqual([
+    expect(events).toStrictEqual([
       {
         at: T0 + 5000,
         kind: 'degraded',
@@ -196,7 +196,7 @@ describe('deriveOutageEvents', () => {
       componentActions: [],
       now: T0 + 10_000,
     });
-    expect(events).toEqual([]);
+    expect(events).toStrictEqual([]);
   });
 
   it('logs one component-error event per de-duped alert action', () => {
@@ -210,7 +210,7 @@ describe('deriveOutageEvents', () => {
       ],
       now: T0 + 5000,
     });
-    expect(events).toEqual([
+    expect(events).toStrictEqual([
       {
         at: T0 + 5000,
         kind: 'component-error',
@@ -239,7 +239,7 @@ describe('deriveOutageEvents', () => {
       versionSkewAction: { gatewayVersion: '0.2.0', gatewaySchemaEpoch: 2 },
       now: T0 + 5000,
     });
-    expect(events).toEqual([
+    expect(events).toStrictEqual([
       {
         at: T0 + 5000,
         kind: 'version-skew',
@@ -265,6 +265,6 @@ describe('deriveOutageEvents', () => {
       versionSkewAction: { gatewayVersion: '0.2.0', gatewaySchemaEpoch: 2 },
       now: T0 + 5000,
     });
-    expect(events.map((e) => e.kind)).toEqual(['recovered', 'degraded', 'version-skew']);
+    expect(events.map((e) => e.kind)).toStrictEqual(['recovered', 'degraded', 'version-skew']);
   });
 });

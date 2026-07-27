@@ -120,9 +120,9 @@ export default function DocsHome({
     const inScope = drive.documents.filter((document) =>
       searching
         ? matches.has(document.id)
-        : !folderId
-          ? !document.folderId
-          : document.folderId === folderId,
+        : folderId
+          ? document.folderId === folderId
+          : !document.folderId,
     );
     const visible = inScope.filter((document) => {
       if (filter === 'trash') return document.trashed;
@@ -136,7 +136,7 @@ export default function DocsHome({
     (folder) =>
       filter === 'all' &&
       !searching &&
-      (!folderId ? !folder.parentId : folder.parentId === folderId),
+      (folderId ? folder.parentId === folderId : !folder.parentId),
   );
   const items: DriveItem[] = [
     ...folders.map((folder) => ({ kind: 'folder' as const, folder })),
@@ -234,7 +234,7 @@ export default function DocsHome({
         ) : null}
       </View>
 
-      {!folderId ? (
+      {folderId ? null : (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -266,7 +266,7 @@ export default function DocsHome({
             );
           })}
         </ScrollView>
-      ) : null}
+      )}
 
       <View style={styles.libraryHeader}>
         <View>
@@ -365,7 +365,7 @@ export default function DocsHome({
               </Text>
             </View>
           </Pressable>
-          {!folderId ? (
+          {folderId ? null : (
             <>
               <Text style={[styles.newFolderLabel, { color: colors.ink2 }]}>NEW FOLDER</Text>
               <TextInput
@@ -390,7 +390,7 @@ export default function DocsHome({
                 </Text>
               </Pressable>
             </>
-          ) : null}
+          )}
         </View>
       </Modal>
     </SafeAreaView>

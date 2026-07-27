@@ -66,7 +66,7 @@ interface Reminder {
 const LIST_SCHEME_URI = 'https://centraid.dev/schemes/lists';
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function peopleHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
@@ -166,4 +166,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { people: [], lists: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

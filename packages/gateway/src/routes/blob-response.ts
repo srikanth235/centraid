@@ -9,9 +9,10 @@ export function parseRange(
   header: string | undefined,
   size: number,
 ): { start: number; end: number } | null {
-  const match = header?.match(/^bytes=(\d*)-(\d*)$/);
+  const match = header?.match(/^bytes=(?<rawStart>\d*)-(?<rawEnd>\d*)$/u);
   if (!match) return null;
-  const [, rawStart, rawEnd] = match;
+  const rawStart = match.groups?.rawStart;
+  const rawEnd = match.groups?.rawEnd;
   if (rawStart === '' && rawEnd === '') return null;
   // Suffix form `bytes=-N`: the final N bytes.
   const start = rawStart === '' ? Math.max(0, size - Number(rawEnd)) : Number(rawStart);

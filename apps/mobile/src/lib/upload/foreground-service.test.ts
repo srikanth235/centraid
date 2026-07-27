@@ -5,58 +5,64 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const native = { start: vi.fn(), update: vi.fn(), stop: vi.fn() };
 
-vi.mock('react-native', () => ({
-  Platform: { OS: 'android' },
+vi.mock(import('react-native'), () => ({
+  // foreground-service.ts only reads `Platform.OS` — react-native's real
+  // `Platform` type is a union of per-platform statics with many members
+  // (Version, isTV, select, …) that a test stub has no reason to implement,
+  // so this narrow stand-in is asserted to the real type instead.
+  Platform: { OS: 'android' } as unknown as typeof import('react-native').Platform,
   NativeModules: { CentraidUploadForeground: native },
 }));
 
 let UploadForegroundService: typeof import('./foreground-service').UploadForegroundService;
 
-beforeEach(async () => {
-  native.start.mockClear();
-  native.update.mockClear();
-  native.stop.mockClear();
-  // Re-import fresh so the module-level refcount resets between cases.
-  vi.resetModules();
-  ({ UploadForegroundService } = await import('./foreground-service'));
-});
-
-afterEach(() => vi.clearAllMocks());
-
-describe('UploadForegroundService refcount', () => {
-  it('starts the native service once and stops it once across a single owner', () => {
-    UploadForegroundService.start(3);
-    UploadForegroundService.stop();
-    expect(native.start).toHaveBeenCalledTimes(1);
-    expect(native.stop).toHaveBeenCalledTimes(1);
+describe('foreground-service', () => {
+  beforeEach(async () => {
+    native.start.mockClear();
+    native.update.mockClear();
+    native.stop.mockClear();
+    // Re-import fresh so the module-level refcount resets between cases.
+    vi.resetModules();
+    ({ UploadForegroundService } = await import('./foreground-service'));
   });
 
-  it('keeps the service alive until the LAST concurrent owner stops', () => {
-    UploadForegroundService.start(2);
-    UploadForegroundService.start(5);
-    expect(native.start, 'started once, not per owner').toHaveBeenCalledTimes(1);
+  afterEach(() => vi.clearAllMocks());
 
-    UploadForegroundService.stop();
-    expect(native.stop, 'first stop must not tear down the live drain').not.toHaveBeenCalled();
-    UploadForegroundService.stop();
-    expect(native.stop).toHaveBeenCalledTimes(1);
-  });
+  describe('UploadForegroundService refcount', () => {
+    it('starts the native service once and stops it once across a single owner', () => {
+      UploadForegroundService.start(3);
+      UploadForegroundService.stop();
+      expect(native.start).toHaveBeenCalledOnce();
+      expect(native.stop).toHaveBeenCalledOnce();
+    });
 
-  it('treats start(0) as a no-op and never underflows on an unowned stop', () => {
-    UploadForegroundService.start(0);
-    UploadForegroundService.stop();
-    UploadForegroundService.update(1, 2);
-    expect(native.start).not.toHaveBeenCalled();
-    expect(native.stop).not.toHaveBeenCalled();
-    expect(native.update, 'no update without an owner').not.toHaveBeenCalled();
-  });
+    it('keeps the service alive until the LAST concurrent owner stops', () => {
+      UploadForegroundService.start(2);
+      UploadForegroundService.start(5);
+      expect(native.start, 'started once, not per owner').toHaveBeenCalledOnce();
 
-  it('forwards progress only while an owner holds the service', () => {
-    UploadForegroundService.start(4);
-    UploadForegroundService.update(2, 4);
-    expect(native.update).toHaveBeenCalledWith(2, 4);
-    UploadForegroundService.stop();
-    UploadForegroundService.update(3, 4);
-    expect(native.update, 'no update after the owner released').toHaveBeenCalledTimes(1);
+      UploadForegroundService.stop();
+      expect(native.stop, 'first stop must not tear down the live drain').not.toHaveBeenCalled();
+      UploadForegroundService.stop();
+      expect(native.stop).toHaveBeenCalledOnce();
+    });
+
+    it('treats start(0) as a no-op and never underflows on an unowned stop', () => {
+      UploadForegroundService.start(0);
+      UploadForegroundService.stop();
+      UploadForegroundService.update(1, 2);
+      expect(native.start).not.toHaveBeenCalled();
+      expect(native.stop).not.toHaveBeenCalled();
+      expect(native.update, 'no update without an owner').not.toHaveBeenCalled();
+    });
+
+    it('forwards progress only while an owner holds the service', () => {
+      UploadForegroundService.start(4);
+      UploadForegroundService.update(2, 4);
+      expect(native.update).toHaveBeenCalledWith(2, 4);
+      UploadForegroundService.stop();
+      UploadForegroundService.update(3, 4);
+      expect(native.update, 'no update after the owner released').toHaveBeenCalledOnce();
+    });
   });
 });

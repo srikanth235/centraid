@@ -1,9 +1,8 @@
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { detectDefaultCiEnvGate } from './report-signals.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 const allowedStatuses = new Set(['solid', 'partial', 'gap', 'skip']);
 
 export async function validateMatrix(matrix, options = {}) {
@@ -118,7 +117,7 @@ export async function validateMatrix(matrix, options = {}) {
         await access(ownerPath);
         const source = await readFile(ownerPath, 'utf8');
         if (flow.minimumTests !== undefined && flow.minimumTests !== null) {
-          const testCount = source.match(/\b(?:test|it)\s*\(/g)?.length ?? 0;
+          const testCount = source.match(/\b(?:test|it)\s*\(/gu)?.length ?? 0;
           if (testCount < flow.minimumTests) {
             errors.push(
               `${flow.id} contract shrank: ${testCount} tests, minimum ${flow.minimumTests}`,
@@ -166,6 +165,6 @@ async function main() {
   );
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename) {
   await main();
 }

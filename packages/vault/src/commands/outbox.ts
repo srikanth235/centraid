@@ -380,8 +380,8 @@ function recordResult(ctx: HandlerCtx): Record<string, unknown> {
       input.disposition,
       ctx.now,
       JSON.stringify({
-        ...(input.status_code !== undefined ? { status_code: input.status_code } : {}),
-        ...(input.detail !== undefined ? { detail: input.detail } : {}),
+        ...(input.status_code === undefined ? {} : { status_code: input.status_code }),
+        ...(input.detail === undefined ? {} : { detail: input.detail }),
       }),
       input.item_id,
     );
@@ -483,13 +483,17 @@ function publishSentMessage(ctx: HandlerCtx, itemId: string): string | null {
 
   // One thread per (connection, wire address): repeated sends converse.
   const externalRef = `outbox:${item.connection_id}:${item.target}`;
-  const channel = /mail/.test(item.verb) ? 'email' : 'dm';
+  const channel = /mail/u.test(item.verb) ? 'email' : 'dm';
   let threadId = (
     ctx.db
       .prepare('SELECT thread_id FROM social_thread WHERE external_ref = ?')
       .get(externalRef) as { thread_id: string } | undefined
   )?.thread_id;
-  if (!threadId) {
+  if (threadId) {
+    ctx.db
+      .prepare('UPDATE social_thread SET last_message_at = ? WHERE thread_id = ?')
+      .run(ctx.now, threadId);
+  } else {
     threadId = ctx.newId();
     ctx.db
       .prepare(
@@ -498,10 +502,6 @@ function publishSentMessage(ctx: HandlerCtx, itemId: string): string | null {
       )
       .run(threadId, channel, subject, externalRef, ctx.now, ctx.now);
     ctx.wrote('social.thread', threadId);
-  } else {
-    ctx.db
-      .prepare('UPDATE social_thread SET last_message_at = ? WHERE thread_id = ?')
-      .run(ctx.now, threadId);
   }
 
   const recipient = item.recipient_party_id ?? partyForAddress(ctx, item.target);

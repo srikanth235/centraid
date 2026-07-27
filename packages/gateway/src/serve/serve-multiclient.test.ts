@@ -17,7 +17,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * a second client expects after the gateway holds a published app.
  */
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -48,34 +48,36 @@ async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   await store.closeSession('seed');
 }
 
-beforeEach(async () => {
-  dataDir = await tempDir(`mc-gateway-${crypto.randomUUID()}-`);
-  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
-  await seedApp(await handle.appsStore(), 'multiclient-test');
-  await handle.syncApps();
-});
-
-afterEach(async () => {
-  await handle.close().catch(() => undefined);
-  await fs.rm(dataDir, { recursive: true, force: true });
-});
-
-test('two clients see the published app consistently in the registry + static serve', async () => {
-  // Client A: list — sees the app synced from `main`.
-  const list = await fetch(`${handle.url}/centraid/_apps`, {
-    headers: { Authorization: `Bearer ${handle.token}` },
+describe('serve-multiclient', () => {
+  beforeEach(async () => {
+    dataDir = await tempDir(`mc-gateway-${crypto.randomUUID()}-`);
+    handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
+    await seedApp(await handle.appsStore(), 'multiclient-test');
+    await handle.syncApps();
   });
-  expect(list.status).toBe(200);
-  const apps = (await list.json()) as Array<{ id: string }>;
-  expect(apps.some((a) => a.id === 'multiclient-test')).toBeTruthy();
 
-  // Client B: static-serve the app's index.html — proves the daemon's
-  // `/centraid/<id>/` static path resolves the live `main` worktree, not
-  // just the registry index.
-  const html = await fetch(`${handle.url}/centraid/multiclient-test/`, {
-    headers: { Authorization: `Bearer ${handle.token}` },
+  afterEach(async () => {
+    await handle.close().catch(() => undefined);
+    await fs.rm(dataDir, { recursive: true, force: true });
   });
-  expect(html.status).toBe(200);
-  const body = await html.text();
-  expect(body).toMatch(/<title>mc<\/title>/);
+
+  test('two clients see the published app consistently in the registry + static serve', async () => {
+    // Client A: list — sees the app synced from `main`.
+    const list = await fetch(`${handle.url}/centraid/_apps`, {
+      headers: { Authorization: `Bearer ${handle.token}` },
+    });
+    expect(list.status).toBe(200);
+    const apps = (await list.json()) as Array<{ id: string }>;
+    expect(apps.some((a) => a.id === 'multiclient-test')).toBeTruthy();
+
+    // Client B: static-serve the app's index.html — proves the daemon's
+    // `/centraid/<id>/` static path resolves the live `main` worktree, not
+    // just the registry index.
+    const html = await fetch(`${handle.url}/centraid/multiclient-test/`, {
+      headers: { Authorization: `Bearer ${handle.token}` },
+    });
+    expect(html.status).toBe(200);
+    const body = await html.text();
+    expect(body).toMatch(/<title>mc<\/title>/);
+  });
 });

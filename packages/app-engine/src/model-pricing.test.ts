@@ -64,7 +64,7 @@ describe('resolveItemCost (#514)', () => {
   });
 
   it('reports nothing when the model is unknown even with tokens in hand', () => {
-    expect(resolveItemCost({ usage: { inputTokens: 2, outputTokens: 3 } })).toEqual({});
+    expect(resolveItemCost({ usage: { inputTokens: 2, outputTokens: 3 } })).toStrictEqual({});
   });
 });
 
@@ -129,21 +129,25 @@ describe('costForUsage — Anthropic price anchors (live LiteLLM catalog)', () =
 
 describe('model-id matching (ccusage rules)', () => {
   it('exact and provider-prefixed forms resolve identically', () => {
-    expect(priceForModel('anthropic/claude-opus-4-8')).toEqual(priceForModel('claude-opus-4-8'));
+    expect(priceForModel('anthropic/claude-opus-4-8')).toStrictEqual(
+      priceForModel('claude-opus-4-8'),
+    );
   });
 
   it('is case-insensitive', () => {
-    expect(priceForModel('CLAUDE-HAIKU-4-5')).toEqual(priceForModel('claude-haiku-4-5'));
+    expect(priceForModel('CLAUDE-HAIKU-4-5')).toStrictEqual(priceForModel('claude-haiku-4-5'));
   });
 
   it('strips regional Bedrock + anthropic. prefixes and a :version suffix', () => {
-    expect(priceForModel('us.anthropic.claude-opus-4-5-20251101-v1:0')).toEqual(
+    expect(priceForModel('us.anthropic.claude-opus-4-5-20251101-v1:0')).toStrictEqual(
       priceForModel('claude-opus-4-5'),
     );
   });
 
   it('strips a date suffix', () => {
-    expect(priceForModel('claude-opus-4-5-20251101')).toEqual(priceForModel('claude-opus-4-5'));
+    expect(priceForModel('claude-opus-4-5-20251101')).toStrictEqual(
+      priceForModel('claude-opus-4-5'),
+    );
   });
 
   it('unknown model → undefined (never a default price)', () => {
@@ -167,7 +171,7 @@ describe('model-id matching (ccusage rules)', () => {
   });
 });
 
-describe('filterLiteLLM', () => {
+describe(filterLiteLLM, () => {
   it('keeps only claude/gpt price fields and drops other families/modalities', () => {
     const out = filterLiteLLM({
       sample_spec: { notes: 'ignore' },
@@ -187,8 +191,8 @@ describe('filterLiteLLM', () => {
       'whisper-x': { litellm_provider: 'openai', mode: 'audio_transcription' },
       'gemini-x': { litellm_provider: 'vertex_ai', input_cost_per_token: 1e-6 },
     });
-    expect(Object.keys(out).sort()).toEqual(['claude-x', 'gpt-x']);
-    expect(out['claude-x']).toEqual({
+    expect(Object.keys(out).sort()).toStrictEqual(['claude-x', 'gpt-x']);
+    expect(out['claude-x']).toStrictEqual({
       litellm_provider: 'anthropic',
       input_cost_per_token: 1e-6,
       output_cost_per_token: 2e-6,
@@ -230,7 +234,7 @@ describe('setPricingCatalog overlay', () => {
         model: 'not-in-this-overlay',
         usage: { inputTokens: 1_000_000, outputTokens: 1_000_000 },
       }),
-    ).toEqual({});
+    ).toStrictEqual({});
   });
 
   it('an empty overlay never clobbers the current table', () => {

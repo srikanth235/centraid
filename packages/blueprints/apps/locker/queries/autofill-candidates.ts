@@ -16,7 +16,7 @@ interface LoginRow {
   compromised?: number | boolean | null;
 }
 
-export default async ({ ctx }: { ctx: HandlerCtx }) => {
+export default async function autofillCandidates({ ctx }: { ctx: HandlerCtx }) {
   const purpose = 'dpv:ServiceProvision';
   try {
     const [response, watchtower] = await Promise.all([
@@ -64,4 +64,4 @@ export default async ({ ctx }: { ctx: HandlerCtx }) => {
     const error = err as { code?: string; message?: string };
     return { candidates: [], vaultDenied: { code: error.code, message: error.message } };
   }
-};
+}

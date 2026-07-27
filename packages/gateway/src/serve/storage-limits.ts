@@ -98,7 +98,9 @@ export function applyLimitsPatch(current: StorageLimits, patch: StorageLimitsPat
   const next: StorageLimits = { ...current };
   if ('totalLimitBytes' in patch) {
     const value = patch.totalLimitBytes;
-    if (value !== null) {
+    if (value === null) {
+      next.totalLimitBytes = null;
+    } else {
       if (typeof value !== 'number' || !Number.isFinite(value) || value < MIN_TOTAL_LIMIT_BYTES) {
         throw new StorageLimitsError(
           'invalid_total_limit',
@@ -106,13 +108,13 @@ export function applyLimitsPatch(current: StorageLimits, patch: StorageLimitsPat
         );
       }
       next.totalLimitBytes = Math.floor(value);
-    } else {
-      next.totalLimitBytes = null;
     }
   }
   if ('journalLimitBytes' in patch) {
     const value = patch.journalLimitBytes;
-    if (value !== null) {
+    if (value === null) {
+      next.journalLimitBytes = null;
+    } else {
       if (typeof value !== 'number' || !Number.isFinite(value) || value < MIN_JOURNAL_LIMIT_BYTES) {
         throw new StorageLimitsError(
           'invalid_journal_limit',
@@ -120,8 +122,6 @@ export function applyLimitsPatch(current: StorageLimits, patch: StorageLimitsPat
         );
       }
       next.journalLimitBytes = Math.floor(value);
-    } else {
-      next.journalLimitBytes = null;
     }
   }
   if (patch.warnAtPercent !== undefined) {

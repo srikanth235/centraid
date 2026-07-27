@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeReleases } from './changelog-core.js';
 
-describe('normalizeReleases', () => {
+describe(normalizeReleases, () => {
   it('maps the GitHub fields the modal renders', () => {
     const [r] = normalizeReleases([
       {
@@ -14,7 +14,7 @@ describe('normalizeReleases', () => {
         draft: false,
       },
     ]);
-    expect(r).toEqual({
+    expect(r).toStrictEqual({
       version: 'v0.2.0',
       title: 'Sharper sync',
       notes: '### Fixed\n- a bug',
@@ -30,7 +30,7 @@ describe('normalizeReleases', () => {
       { tag_name: 'v0.2.0' },
       { tag_name: 'v0.1.0' },
     ]);
-    expect(out.map((r) => r.version)).toEqual(['v0.3.0', 'v0.2.0', 'v0.1.0']);
+    expect(out.map((r) => r.version)).toStrictEqual(['v0.3.0', 'v0.2.0', 'v0.1.0']);
   });
 
   it('drops drafts', () => {
@@ -38,12 +38,12 @@ describe('normalizeReleases', () => {
       { tag_name: 'v0.2.0', draft: true },
       { tag_name: 'v0.1.0', draft: false },
     ]);
-    expect(out.map((r) => r.version)).toEqual(['v0.1.0']);
+    expect(out.map((r) => r.version)).toStrictEqual(['v0.1.0']);
   });
 
   it('drops entries with no usable label', () => {
     const out = normalizeReleases([{ body: 'notes but no tag or name' }, { tag_name: 'v0.1.0' }]);
-    expect(out.map((r) => r.version)).toEqual(['v0.1.0']);
+    expect(out.map((r) => r.version)).toStrictEqual(['v0.1.0']);
   });
 
   it('falls back tag<->name and normalizes missing fields', () => {
@@ -65,8 +65,8 @@ describe('normalizeReleases', () => {
   });
 
   it('returns [] for non-array / junk input', () => {
-    expect(normalizeReleases(null)).toEqual([]);
-    expect(normalizeReleases({ message: 'Not Found' })).toEqual([]);
-    expect(normalizeReleases('nope')).toEqual([]);
+    expect(normalizeReleases(null)).toStrictEqual([]);
+    expect(normalizeReleases({ message: 'Not Found' })).toStrictEqual([]);
+    expect(normalizeReleases('nope')).toStrictEqual([]);
   });
 });

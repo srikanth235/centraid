@@ -27,9 +27,8 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 
 /** Perf budget source files ratcheted under #532 (path → kind). */
 export const PERF_BUDGET_SOURCES = [
@@ -91,7 +90,7 @@ export function diffCoverageFloors(base, head) {
  * @returns {string[]} Human-readable decrease errors.
  */
 export function diffMutationFloors(base, head) {
-  return diffCoverageFloors(base, head).map((e) => e.replace(/^coverage floor/, 'mutation floor'));
+  return diffCoverageFloors(base, head).map((e) => e.replace(/^coverage floor/u, 'mutation floor'));
 }
 
 /**
@@ -114,13 +113,13 @@ export function diffMinimumTests(base, head) {
       ) {
         continue;
       }
-      if (!flow) {
+      if (flow) {
         errors.push(
-          `flow "${prev.id}" removed (had minimumTests ${prev.minimumTests}); add approvedMinimumTestsDeviation on a residual entry or restore the flow`,
+          `flow "${prev.id}" minimumTests removed (was ${prev.minimumTests}; add approvedMinimumTestsDeviation to allow)`,
         );
       } else {
         errors.push(
-          `flow "${prev.id}" minimumTests removed (was ${prev.minimumTests}; add approvedMinimumTestsDeviation to allow)`,
+          `flow "${prev.id}" removed (had minimumTests ${prev.minimumTests}); add approvedMinimumTestsDeviation on a residual entry or restore the flow`,
         );
       }
       continue;
@@ -148,7 +147,7 @@ export function diffMinimumTests(base, head) {
  * @returns {boolean} Return value.
  */
 export function isBudgetFloorKey(key) {
-  return /^min[A-Z_]|^minimum/i.test(key);
+  return /^min[A-Z_]|^minimum/iu.test(key);
 }
 
 /**
@@ -181,7 +180,7 @@ export function flattenBudgetNumbers(value, prefix = '') {
  * @returns {Record<string, number>} Flattened path → number.
  */
 export function extractBudgetNumbersFromSource(source, exportName) {
-  const marker = new RegExp(`export\\s+const\\s+${exportName}\\s*(?::\\s*[^=]+)?=\\s*\\{`);
+  const marker = new RegExp(`export\\s+const\\s+${exportName}\\s*(?::\\s*[^=]+)?=\\s*\\{`, 'u');
   const match = marker.exec(source);
   if (!match || match.index === undefined) return {};
   const start = match.index + match[0].length - 1;
@@ -216,21 +215,21 @@ function parseBudgetObjectLiteral(text) {
   const s = text;
 
   function skipWs() {
-    while (i < s.length && /\s|,/.test(s[i])) i += 1;
+    while (i < s.length && /\s|,/u.test(s[i])) i += 1;
   }
 
   function readIdent() {
-    const m = /^[A-Za-z_][A-Za-z0-9_]*/.exec(s.slice(i));
+    const m = /^[A-Za-z_][A-Za-z0-9_]*/u.exec(s.slice(i));
     if (!m) return null;
     i += m[0].length;
     return m[0];
   }
 
   function readNumber() {
-    const m = /^-?\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?/.exec(s.slice(i));
+    const m = /^-?\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?/u.exec(s.slice(i));
     if (!m) return null;
     i += m[0].length;
-    return Number(m[0].replace(/_/g, ''));
+    return Number(m[0].replace(/_/gu, ''));
   }
 
   function parseObject() {
@@ -442,8 +441,8 @@ function loadBudgetSource(absPath, source, ref) {
   if (!text) return { numbers: {}, approvedDeviation: '' };
 
   let approvedDeviation = '';
-  const waiver = /approvedDeviation\s*[:=]\s*['"`]([^'"`]+)['"`]/.exec(text);
-  if (waiver) approvedDeviation = waiver[1];
+  const waiver = /approvedDeviation\s*[:=]\s*['"`](?<deviation>[^'"`]+)['"`]/u.exec(text);
+  if (waiver?.groups?.deviation) approvedDeviation = waiver.groups.deviation;
 
   if (source.path.endsWith('.json')) {
     try {
@@ -506,7 +505,7 @@ function main() {
       return;
     }
     console.error(
-      `ratchet-floors: ${!baseFloors ? floorsPath : matrixPath} missing on ${baseRef} while present on head — refusing silent skip`,
+      `ratchet-floors: ${baseFloors ? matrixPath : floorsPath} missing on ${baseRef} while present on head — refusing silent skip`,
     );
     process.exitCode = 1;
     return;
@@ -559,7 +558,7 @@ function main() {
   console.log(`ratchet-floors: ok (no decreases vs ${baseRef})`);
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
 if (isMain) {
   main();
 }

@@ -29,7 +29,7 @@ function NavItem({
     <button type="button" className={styles.navItem} aria-current={!!active} onClick={onClick}>
       <Icon svg={icon} />
       <span className={styles.lbl}>{label}</span>
-      {count != null ? <span className={styles.navCount}>{count}</span> : null}
+      {count == null ? null : <span className={styles.navCount}>{count}</span>}
     </button>
   );
 }
@@ -202,7 +202,7 @@ function ListNavRow({
         aria-current={active}
         onClick={() => onSelectNav({ kind: 'list', listId: c.list_id })}
       >
-        <span className={styles.navDot} style={{ background: listColor(c.list_id) }}></span>
+        <span className={styles.navDot} style={{ background: listColor(c.list_id) }} />
         <span className={styles.lbl}>{c.name}</span>
         <span className={styles.navCount}>{count || ''}</span>
       </button>

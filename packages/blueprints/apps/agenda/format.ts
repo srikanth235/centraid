@@ -86,7 +86,7 @@ export function nextRoundHourOn(date: Date): Date {
 export function initials(name: string | null | undefined): string {
   return String(name ?? '?')
     .trim()
-    .split(/\s+/)
+    .split(/\s+/u)
     .slice(0, 2)
     .map((w) => w[0])
     .join('')
@@ -254,6 +254,6 @@ export function colorForCalendar(
 export function snippetSegments(
   snippet: string | null | undefined,
 ): { text: string; hit: boolean }[] {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  const parts = String(snippet ?? '').split(/[⟦⟧]/u);
   return parts.map((text, i) => ({ text, hit: i % 2 === 1 })).filter((s) => s.text !== '');
 }

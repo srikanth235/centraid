@@ -131,10 +131,10 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
       <TbBtn
         key="chat"
         wrapClass={chrome.chatToggleWrap}
-        icon={props.chatPaneOpen !== false ? <ChatPanelOpenGlyph /> : <ChatPanelClosedGlyph />}
-        title={props.chatPaneOpen !== false ? 'Hide chat pane' : 'Show chat pane'}
+        icon={props.chatPaneOpen === false ? <ChatPanelClosedGlyph /> : <ChatPanelOpenGlyph />}
+        title={props.chatPaneOpen === false ? 'Show chat pane' : 'Hide chat pane'}
         shortcut="⌘\"
-        ariaLabel={props.chatPaneOpen !== false ? 'Hide chat pane' : 'Show chat pane'}
+        ariaLabel={props.chatPaneOpen === false ? 'Show chat pane' : 'Hide chat pane'}
         onClick={props.onToggleChat}
       />
     ) : null,

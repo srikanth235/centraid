@@ -511,7 +511,7 @@ export function injectChangeBridge(
 ): string {
   // Inject right after the opening <head>. If the document has no <head>
   // (rare in practice but legal HTML) the script falls through unchanged.
-  const m = /<head\b[^>]*>/i.exec(html);
+  const m = /<head\b[^>]*>/iu.exec(html);
   if (!m) return html;
   const insertAt = m.index + m[0].length;
   return html.slice(0, insertAt) + changeBridgeScript(draft) + html.slice(insertAt);

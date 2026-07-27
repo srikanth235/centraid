@@ -47,7 +47,7 @@ interface RawContent {
   deleted_at?: string | null;
 }
 
-export default async ({ ctx }: HandlerArgs) => {
+export default async function duplicatesHandler({ ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   try {
     const phashRows = await ctx.vault.read({
@@ -134,4 +134,4 @@ export default async ({ ctx }: HandlerArgs) => {
     }
     return { clusters: [], error: String(e.message ?? err) };
   }
-};
+}

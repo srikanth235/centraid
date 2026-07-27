@@ -280,7 +280,13 @@ const messagePublisher: Publisher = {
     let thread = vault
       .prepare('SELECT thread_id FROM social_thread WHERE external_ref = ?')
       .get(threadRef) as { thread_id: string } | undefined;
-    if (!thread) {
+    if (thread) {
+      vault
+        .prepare(
+          `UPDATE social_thread SET last_message_at = max(coalesce(last_message_at, ''), ?) WHERE thread_id = ?`,
+        )
+        .run(p.sentAt, thread.thread_id);
+    } else {
       const threadId = uuidv7();
       vault
         .prepare(
@@ -290,12 +296,6 @@ const messagePublisher: Publisher = {
         .run(threadId, p.subject, threadRef, now, p.sentAt);
       wrote.push({ type: 'social.thread', id: threadId });
       thread = { thread_id: threadId };
-    } else {
-      vault
-        .prepare(
-          `UPDATE social_thread SET last_message_at = max(coalesce(last_message_at, ''), ?) WHERE thread_id = ?`,
-        )
-        .run(p.sentAt, thread.thread_id);
     }
     if (senderId) {
       const tp = vault

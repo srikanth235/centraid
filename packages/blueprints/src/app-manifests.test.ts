@@ -65,7 +65,7 @@ describe('bundled blueprint manifests', () => {
       'todoist-pull': 'core.content_item',
     } as const;
 
-    expect(automations.filter((id) => id.endsWith('-pull')).toSorted()).toEqual(
+    expect(automations.filter((id) => id.endsWith('-pull')).toSorted()).toStrictEqual(
       Object.keys(expected).toSorted(),
     );
     for (const [id, entityType] of Object.entries(expected)) {
@@ -171,7 +171,7 @@ describe('bundled blueprint manifests', () => {
       return manifest.vault !== undefined;
     });
     // The §01 projection band, as blueprints.
-    expect(projections).toEqual(
+    expect(projections).toStrictEqual(
       ['agenda', 'docs', 'locker', 'notes', 'people', 'photos', 'tally', 'tasks'].toSorted(),
     );
     for (const id of projections) {
@@ -205,6 +205,6 @@ describe('bundled blueprint manifests', () => {
       ...templateDirs('apps').map((id) => `apps/${id}`),
       ...templateDirs('automations').map((id) => `automations/${id}`),
     ].toSorted();
-    expect(indexed).toEqual(onDisk);
+    expect(indexed).toStrictEqual(onDisk);
   });
 });

@@ -104,7 +104,7 @@ function sendCeremonyHtml(res: ServerResponse, ok: boolean, message: string): vo
 }
 
 function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return text.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;');
 }
 
 export function makeConnectionsRouteHandler(
@@ -143,7 +143,7 @@ export function makeConnectionsRouteHandler(
     }
 
     if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
-    const rest = url.pathname.slice(PREFIX.length).replace(/^\//, '');
+    const rest = url.pathname.slice(PREFIX.length).replace(/^\//u, '');
     const segments = rest === '' ? [] : rest.split('/').map(decodeURIComponent);
 
     let plane: VaultPlane;
@@ -393,7 +393,7 @@ export function makeConnectionsRouteHandler(
 
 function clientSessionHeader(req: IncomingMessage): string | undefined {
   const raw = req.headers['x-centraid-client-session'];
-  if (typeof raw !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/.test(raw)) return undefined;
+  if (typeof raw !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/u.test(raw)) return undefined;
   return raw;
 }
 

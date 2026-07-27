@@ -125,9 +125,9 @@ export default function PhoneScreen({
     <>
       {status.error ? (
         <Note>{`The tunnel endpoint failed to start: ${status.error}`}</Note>
-      ) : !status.running ? (
+      ) : status.running ? null : (
         <Note>The tunnel endpoint is starting…</Note>
-      ) : null}
+      )}
 
       <div className={styles.pairing}>
         {pairing ? (

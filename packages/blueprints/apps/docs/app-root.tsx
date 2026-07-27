@@ -63,7 +63,7 @@ interface SearchResult {
 const VALID_VIEWS = new Set<AppState['view']>(['grid', 'list']);
 
 function initialView(rootEl: HTMLElement | null): AppState['view'] {
-  const knob = rootEl?.getAttribute('data-app-view');
+  const knob = rootEl?.dataset.appView;
   return knob && VALID_VIEWS.has(knob as AppState['view']) ? (knob as AppState['view']) : 'grid';
 }
 
@@ -148,7 +148,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           input: { limit: state.driveWindow },
         });
       } catch {
-        readFailed(document.getElementById('noticeBanner'));
+        readFailed(document.querySelector<HTMLElement>('#noticeBanner'));
         readFailedRef.current = true;
         setLoaded(true);
         return;
@@ -184,7 +184,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     };
 
     core.applySearch = debounce(async () => {
-      const q = (document.getElementById('searchInput') as HTMLInputElement).value.trim();
+      const q = (document.querySelector('#searchInput') as HTMLInputElement).value.trim();
       if (q === state.search) return;
       state.search = q;
       core.logic.clearSelection();
@@ -332,7 +332,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   useLayoutEffect(() => {
     const el = rootElRef.current;
     if (!el) return;
-    const forced = el.getAttribute('data-app-width') === 'narrow';
+    const forced = el.dataset.appWidth === 'narrow';
     const isNarrow = forced || el.clientWidth < 860;
     if (isNarrow !== stateRef.current.narrow) {
       stateRef.current.narrow = isNarrow;
@@ -590,7 +590,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     scroll = (
       <>
         <div className={styles.listwrap}>
-          {!state.narrow ? (
+          {state.narrow ? null : (
             <div className={styles.listHead}>
               <ListHead
                 rows={rows}
@@ -598,7 +598,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 onToggleAll={logic.toggleAllVisible}
               />
             </div>
-          ) : null}
+          )}
           <div>
             {rows.map((d, i) => (
               <ListRow

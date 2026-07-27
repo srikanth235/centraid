@@ -62,11 +62,11 @@ export default function RunsPane({ automationId }: { automationId: string }): JS
                 {relativeTime(new Date(run.startedAt).toISOString())}
               </span>
               <span className={styles.trigger}>{run.triggerKind}</span>
-              {run.endedAt !== undefined ? (
+              {run.endedAt === undefined ? null : (
                 <span className={styles.duration}>
                   {formatDuration(run.endedAt - run.startedAt)}
                 </span>
-              ) : null}
+              )}
             </div>
             {run.summary || run.error ? (
               <div className={styles.summary}>{run.error ?? run.summary}</div>

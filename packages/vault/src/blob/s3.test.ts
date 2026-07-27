@@ -7,7 +7,7 @@
 
 import http from 'node:http';
 import { Readable } from 'node:stream';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { MULTIPART_THRESHOLD_BYTES, S3BlobStore } from './s3.js';
 import { sha256OfBytes } from './store.js';
 import { openVaultDb } from '../db.js';
@@ -146,172 +146,178 @@ const CREDS = () => Promise.resolve({ accessKeyId: 'AK', secretAccessKey: 'SK' }
 const NO_SLEEP = () => Promise.resolve();
 
 let fake: FakeS3;
-beforeEach(async () => {
-  fake = await startFakeS3();
-});
-afterEach(async () => {
-  await fake.close();
-});
-
-// ---------- issue #405 §6: storage class ----------
-
-test('storage class: PUT carries a signed x-amz-storage-class when configured', async () => {
-  const store = new S3BlobStore({
-    endpoint: fake.url,
-    bucket: 'test-bucket',
-    credentials: CREDS,
-    storageClass: 'GLACIER',
+describe('s3', () => {
+  beforeEach(async () => {
+    fake = await startFakeS3();
   });
-  const bytes = Buffer.from('cold bytes');
-  await store.put(sha256OfBytes(bytes), bytes);
-
-  const put = fake.requests.find((r) => r.method === 'PUT');
-  expect(put?.storageClass).toBe('GLACIER');
-  // The header is not merely present — it is part of the SigV4 signature, so
-  // a proxy that dropped it would break the signature (issue #405 §6 accept).
-  expect(signedHeadersOf(put!.authorization)).toContain('x-amz-storage-class');
-});
-
-test("storage class: unset ⇒ no header ⇒ today's behavior (byte-for-byte)", async () => {
-  const store = new S3BlobStore({ endpoint: fake.url, bucket: 'test-bucket', credentials: CREDS });
-  const bytes = Buffer.from('warm bytes');
-  await store.put(sha256OfBytes(bytes), bytes);
-
-  const put = fake.requests.find((r) => r.method === 'PUT');
-  expect(put?.storageClass).toBeNull();
-  expect(signedHeadersOf(put!.authorization)).not.toContain('x-amz-storage-class');
-});
-
-test('storage class: multipart CREATE carries it, UploadPart does not (§6)', async () => {
-  const store = new S3BlobStore({
-    endpoint: fake.url,
-    bucket: 'test-bucket',
-    credentials: CREDS,
-    storageClass: 'STANDARD_IA',
+  afterEach(async () => {
+    await fake.close();
   });
-  // Force the multipart path: bigger than the single-PUT threshold, streamed
-  // lazily so we never hold the whole (>32 MiB) blob at once.
-  const partish = Buffer.alloc(12 * 1024 * 1024, 3);
-  const total = MULTIPART_THRESHOLD_BYTES + partish.length; // > threshold ⇒ multipart
-  const source = Readable.from([partish, partish, partish, partish]); // 48 MiB ⇒ 3 parts
-  await store.putStream('a'.repeat(64), source, total);
 
-  const create = fake.requests.find((r) => r.method === 'POST' && r.search.includes('uploads'));
-  expect(create?.storageClass).toBe('STANDARD_IA');
-  const parts = fake.requests.filter((r) => r.method === 'PUT' && r.search.includes('uploadId'));
-  expect(parts.length).toBeGreaterThanOrEqual(2);
-  for (const part of parts) expect(part.storageClass).toBeNull();
-});
+  // ---------- issue #405 §6: storage class ----------
 
-// ---------- issue #405 §4: retry / backoff ----------
-
-test('retry: two 503s then 200 ⇒ the PUT succeeds after exactly 3 requests', async () => {
-  fake.failNext = 2;
-  fake.failStatus = 503;
-  const store = new S3BlobStore({
-    endpoint: fake.url,
-    bucket: 'test-bucket',
-    credentials: CREDS,
-    sleepImpl: NO_SLEEP,
-  });
-  const bytes = Buffer.from('flaky upload');
-  await store.put(sha256OfBytes(bytes), bytes);
-  expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(3);
-});
-
-test('retry: a 400 is definitive — no retry, the op throws on the first answer', async () => {
-  fake.failNext = 1;
-  fake.failStatus = 400;
-  const store = new S3BlobStore({
-    endpoint: fake.url,
-    bucket: 'test-bucket',
-    credentials: CREDS,
-    sleepImpl: NO_SLEEP,
-  });
-  const bytes = Buffer.from('rejected upload');
-  await expect(store.put(sha256OfBytes(bytes), bytes)).rejects.toThrow(/s3 put .*: 400/);
-  expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(1);
-});
-
-test('retry: a 429 is retried like a 5xx', async () => {
-  fake.failNext = 1;
-  fake.failStatus = 429;
-  const store = new S3BlobStore({
-    endpoint: fake.url,
-    bucket: 'test-bucket',
-    credentials: CREDS,
-    sleepImpl: NO_SLEEP,
-  });
-  const bytes = Buffer.from('throttled upload');
-  await store.put(sha256OfBytes(bytes), bytes);
-  expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(2);
-});
-
-test('retry: a thrown fetch/network error is retried, then succeeds', async () => {
-  let attempts = 0;
-  const flakyFetch: typeof fetch = (input, init) => {
-    attempts += 1;
-    // First attempt never reaches the server (simulated socket refusal); the
-    // retry delegates to the real fetch against the fake endpoint.
-    if (attempts === 1) return Promise.reject(new Error('ECONNREFUSED 127.0.0.1'));
-    return fetch(input, init);
-  };
-  const store = new S3BlobStore({
-    endpoint: fake.url,
-    bucket: 'test-bucket',
-    credentials: CREDS,
-    fetchImpl: flakyFetch,
-    sleepImpl: NO_SLEEP,
-  });
-  const bytes = Buffer.from('dropped socket');
-  await store.put(sha256OfBytes(bytes), bytes);
-  expect(attempts).toBe(2);
-  // Only the second (successful) attempt ever reached the server.
-  expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(1);
-});
-
-test('retry: exhausting all attempts on 5xx surfaces the final status', async () => {
-  fake.failNext = 3; // default attempts total = 3 ⇒ never succeeds
-  fake.failStatus = 500;
-  const store = new S3BlobStore({
-    endpoint: fake.url,
-    bucket: 'test-bucket',
-    credentials: CREDS,
-    sleepImpl: NO_SLEEP,
-  });
-  const bytes = Buffer.from('down for good');
-  await expect(store.put(sha256OfBytes(bytes), bytes)).rejects.toThrow(/s3 put .*: 500/);
-  expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(3);
-});
-
-// ---------- settings passthrough: blob_store.storageClass → remoteTier → driver ----------
-
-test('settings: storageClass flows through and stale encrypt:false still writes mandatory CBSF', async () => {
-  const db = openVaultDb({ s3Credentials: CREDS });
-  try {
-    // A `core_vault` row must exist for the settings UPDATE to land on it.
-    bootstrapVault(db, { ownerName: 'Cold Storage Owner' });
-    updateBlobStoreSettings(db, {
-      blob_store: {
-        kind: 's3',
-        endpoint: fake.url,
-        bucket: 'test-bucket',
-        encrypt: false,
-      },
+  test('storage class: PUT carries a signed x-amz-storage-class when configured', async () => {
+    const store = new S3BlobStore({
+      endpoint: fake.url,
+      bucket: 'test-bucket',
+      credentials: CREDS,
+      storageClass: 'GLACIER',
     });
-    updateBackupPolicy(db.vault, { storageClass: 'DEEP_ARCHIVE' });
-    const bytes = Buffer.from('replicate me to cold storage');
-    const { sha256 } = db.blobs.ingestSync(bytes);
-    const moved = await db.blobs.replicate();
-    expect(moved).toContain(sha256);
+    const bytes = Buffer.from('cold bytes');
+    await store.put(sha256OfBytes(bytes), bytes);
 
     const put = fake.requests.find((r) => r.method === 'PUT');
-    expect(put?.storageClass).toBe('DEEP_ARCHIVE');
+    expect(put?.storageClass).toBe('GLACIER');
+    // The header is not merely present — it is part of the SigV4 signature, so
+    // a proxy that dropped it would break the signature (issue #405 §6 accept).
     expect(signedHeadersOf(put!.authorization)).toContain('x-amz-storage-class');
-    const raw = fake.objects.get(`blobs/sha256/${sha256}`);
-    expect(raw?.subarray(0, 4).toString('ascii')).toBe('CBSF');
-    expect(raw?.equals(bytes)).toBe(false);
-  } finally {
-    db.close();
-  }
+  });
+
+  test("storage class: unset ⇒ no header ⇒ today's behavior (byte-for-byte)", async () => {
+    const store = new S3BlobStore({
+      endpoint: fake.url,
+      bucket: 'test-bucket',
+      credentials: CREDS,
+    });
+    const bytes = Buffer.from('warm bytes');
+    await store.put(sha256OfBytes(bytes), bytes);
+
+    const put = fake.requests.find((r) => r.method === 'PUT');
+    expect(put?.storageClass).toBeNull();
+    expect(signedHeadersOf(put!.authorization)).not.toContain('x-amz-storage-class');
+  });
+
+  test('storage class: multipart CREATE carries it, UploadPart does not (§6)', async () => {
+    const store = new S3BlobStore({
+      endpoint: fake.url,
+      bucket: 'test-bucket',
+      credentials: CREDS,
+      storageClass: 'STANDARD_IA',
+    });
+    // Force the multipart path: bigger than the single-PUT threshold, streamed
+    // lazily so we never hold the whole (>32 MiB) blob at once.
+    const partish = Buffer.alloc(12 * 1024 * 1024, 3);
+    const total = MULTIPART_THRESHOLD_BYTES + partish.length; // > threshold ⇒ multipart
+    const source = Readable.from([partish, partish, partish, partish]); // 48 MiB ⇒ 3 parts
+    await store.putStream('a'.repeat(64), source, total);
+
+    const create = fake.requests.find((r) => r.method === 'POST' && r.search.includes('uploads'));
+    expect(create?.storageClass).toBe('STANDARD_IA');
+    const parts = fake.requests.filter((r) => r.method === 'PUT' && r.search.includes('uploadId'));
+    expect(parts.length).toBeGreaterThanOrEqual(2);
+    for (const part of parts) expect(part.storageClass).toBeNull();
+  });
+
+  // ---------- issue #405 §4: retry / backoff ----------
+
+  test('retry: two 503s then 200 ⇒ the PUT succeeds after exactly 3 requests', async () => {
+    fake.failNext = 2;
+    fake.failStatus = 503;
+    const store = new S3BlobStore({
+      endpoint: fake.url,
+      bucket: 'test-bucket',
+      credentials: CREDS,
+      sleepImpl: NO_SLEEP,
+    });
+    const bytes = Buffer.from('flaky upload');
+    await store.put(sha256OfBytes(bytes), bytes);
+    expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(3);
+  });
+
+  test('retry: a 400 is definitive — no retry, the op throws on the first answer', async () => {
+    fake.failNext = 1;
+    fake.failStatus = 400;
+    const store = new S3BlobStore({
+      endpoint: fake.url,
+      bucket: 'test-bucket',
+      credentials: CREDS,
+      sleepImpl: NO_SLEEP,
+    });
+    const bytes = Buffer.from('rejected upload');
+    await expect(store.put(sha256OfBytes(bytes), bytes)).rejects.toThrow(/s3 put .*: 400/);
+    expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(1);
+  });
+
+  test('retry: a 429 is retried like a 5xx', async () => {
+    fake.failNext = 1;
+    fake.failStatus = 429;
+    const store = new S3BlobStore({
+      endpoint: fake.url,
+      bucket: 'test-bucket',
+      credentials: CREDS,
+      sleepImpl: NO_SLEEP,
+    });
+    const bytes = Buffer.from('throttled upload');
+    await store.put(sha256OfBytes(bytes), bytes);
+    expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(2);
+  });
+
+  test('retry: a thrown fetch/network error is retried, then succeeds', async () => {
+    let attempts = 0;
+    const flakyFetch: typeof fetch = (input, init) => {
+      attempts += 1;
+      // First attempt never reaches the server (simulated socket refusal); the
+      // retry delegates to the real fetch against the fake endpoint.
+      if (attempts === 1) return Promise.reject(new Error('ECONNREFUSED 127.0.0.1'));
+      return fetch(input, init);
+    };
+    const store = new S3BlobStore({
+      endpoint: fake.url,
+      bucket: 'test-bucket',
+      credentials: CREDS,
+      fetchImpl: flakyFetch,
+      sleepImpl: NO_SLEEP,
+    });
+    const bytes = Buffer.from('dropped socket');
+    await store.put(sha256OfBytes(bytes), bytes);
+    expect(attempts).toBe(2);
+    // Only the second (successful) attempt ever reached the server.
+    expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(1);
+  });
+
+  test('retry: exhausting all attempts on 5xx surfaces the final status', async () => {
+    fake.failNext = 3; // default attempts total = 3 ⇒ never succeeds
+    fake.failStatus = 500;
+    const store = new S3BlobStore({
+      endpoint: fake.url,
+      bucket: 'test-bucket',
+      credentials: CREDS,
+      sleepImpl: NO_SLEEP,
+    });
+    const bytes = Buffer.from('down for good');
+    await expect(store.put(sha256OfBytes(bytes), bytes)).rejects.toThrow(/s3 put .*: 500/);
+    expect(fake.requests.filter((r) => r.method === 'PUT')).toHaveLength(3);
+  });
+
+  // ---------- settings passthrough: blob_store.storageClass → remoteTier → driver ----------
+
+  test('settings: storageClass flows through and stale encrypt:false still writes mandatory CBSF', async () => {
+    const db = openVaultDb({ s3Credentials: CREDS });
+    try {
+      // A `core_vault` row must exist for the settings UPDATE to land on it.
+      bootstrapVault(db, { ownerName: 'Cold Storage Owner' });
+      updateBlobStoreSettings(db, {
+        blob_store: {
+          kind: 's3',
+          endpoint: fake.url,
+          bucket: 'test-bucket',
+          encrypt: false,
+        },
+      });
+      updateBackupPolicy(db.vault, { storageClass: 'DEEP_ARCHIVE' });
+      const bytes = Buffer.from('replicate me to cold storage');
+      const { sha256 } = db.blobs.ingestSync(bytes);
+      const moved = await db.blobs.replicate();
+      expect(moved).toContain(sha256);
+
+      const put = fake.requests.find((r) => r.method === 'PUT');
+      expect(put?.storageClass).toBe('DEEP_ARCHIVE');
+      expect(signedHeadersOf(put!.authorization)).toContain('x-amz-storage-class');
+      const raw = fake.objects.get(`blobs/sha256/${sha256}`);
+      expect(raw?.subarray(0, 4).toString('ascii')).toBe('CBSF');
+      expect(raw?.equals(bytes)).toBe(false);
+    } finally {
+      db.close();
+    }
+  });
 });

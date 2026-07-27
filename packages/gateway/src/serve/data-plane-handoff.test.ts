@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createBlobHandoffUrl } from './data-plane-handoff.js';
 
-describe('createBlobHandoffUrl', () => {
+describe(createBlobHandoffUrl, () => {
   const options = {
     baseUrl: 'http://127.0.0.1:18891',
     secret: '0123456789abcdef0123456789abcdef',

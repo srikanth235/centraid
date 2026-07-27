@@ -92,7 +92,7 @@ export function makeBlobRouteHandler(
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
-    const rest = url.pathname.slice(PREFIX.length).replace(/^\//, '');
+    const rest = url.pathname.slice(PREFIX.length).replace(/^\//u, '');
     const segments = rest === '' ? [] : rest.split('/').map(decodeURIComponent);
     const method = (req.method ?? 'GET').toUpperCase();
     const plane = vaults.current();
@@ -178,7 +178,7 @@ export function makeBlobRouteHandler(
         const expectedSize = optionalSize(req.headers['content-length'], 'Content-Length');
         const begin = await plane.db.blobTransfers.beginIngress({
           ...(expectedSha ? { expectedSha256: expectedSha } : {}),
-          ...(expectedSize !== undefined ? { expectedSize } : {}),
+          ...(expectedSize === undefined ? {} : { expectedSize }),
           ...(mediaType ? { mediaType } : {}),
           ...(filename ? { filename } : {}),
           stagedBy: plane.boot.deviceId,
@@ -242,7 +242,7 @@ export function makeBlobRouteHandler(
       if (method === 'HEAD' && segments[0] === '_sha' && segments.length === 2) {
         const byteSize = optionalSize(url.searchParams.get('byte_size'), 'byte_size');
         const status = await plane.db.blobTransfers.preflight(segments[1] ?? '', {
-          ...(byteSize !== undefined ? { byteSize } : {}),
+          ...(byteSize === undefined ? {} : { byteSize }),
           ...(url.searchParams.get('media_type')
             ? { mediaType: url.searchParams.get('media_type')! }
             : {}),
@@ -288,7 +288,7 @@ export function makeBlobRouteHandler(
           ...(typeof body.expectedSha256 === 'string'
             ? { expectedSha256: body.expectedSha256 }
             : {}),
-          ...(expectedSize !== undefined ? { expectedSize } : {}),
+          ...(expectedSize === undefined ? {} : { expectedSize }),
           ...(typeof body.mediaType === 'string' ? { mediaType: body.mediaType } : {}),
           ...(typeof body.filename === 'string' ? { filename: body.filename } : {}),
           stagedBy,
@@ -361,7 +361,7 @@ export function makeBlobRouteHandler(
           sha256: body.sha256,
           plaintextSize,
           sealedSize,
-          ...(body.partCount !== undefined ? { partCount: Number(body.partCount) } : {}),
+          ...(body.partCount === undefined ? {} : { partCount: Number(body.partCount) }),
           ...(typeof body.mediaType === 'string' ? { mediaType: body.mediaType } : {}),
           ...(typeof body.filename === 'string' ? { filename: body.filename } : {}),
           stagedBy: deviceIdentity,

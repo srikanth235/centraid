@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { pageCaptureFromTab, randomPassword, unwrapCompanionEnvelope } from './content-core.js';
 
-describe('unwrapCompanionEnvelope', () => {
+describe(unwrapCompanionEnvelope, () => {
   it('returns value on ok envelopes and throws otherwise', () => {
     expect(unwrapCompanionEnvelope({ ok: true, value: 42 })).toBe(42);
     expect(() => unwrapCompanionEnvelope({ ok: false, error: 'locked' })).toThrow('locked');
@@ -9,7 +9,7 @@ describe('unwrapCompanionEnvelope', () => {
   });
 });
 
-describe('randomPassword', () => {
+describe(randomPassword, () => {
   it('returns the requested length from the allowed alphabet', () => {
     // Deterministic stream of small values always accepted by rejection sampling.
     let n = 0;
@@ -36,14 +36,14 @@ describe('randomPassword', () => {
   });
 });
 
-describe('pageCaptureFromTab', () => {
+describe(pageCaptureFromTab, () => {
   it('falls back title to url and includes selection when present', () => {
-    expect(pageCaptureFromTab({ url: 'https://x.test' })).toEqual({
+    expect(pageCaptureFromTab({ url: 'https://x.test' })).toStrictEqual({
       title: 'https://x.test',
       url: 'https://x.test',
     });
     expect(
       pageCaptureFromTab({ title: 'Page', url: 'https://x.test', selectionText: 'hi' }),
-    ).toEqual({ title: 'Page', url: 'https://x.test', selection: 'hi' });
+    ).toStrictEqual({ title: 'Page', url: 'https://x.test', selection: 'hi' });
   });
 });

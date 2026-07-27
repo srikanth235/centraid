@@ -79,7 +79,7 @@ function contextTurnLine(turn: Turn): string | undefined {
   const result = turn.summary ?? turn.outputJson ?? turn.error;
   if (!result) return undefined;
   const status = turn.endedAt === undefined ? 'running' : turn.ok ? 'ok' : 'error';
-  const flattened = result.replaceAll(/\s+/g, ' ').replaceAll('<<<', '< < <').trim();
+  const flattened = result.replaceAll(/\s+/gu, ' ').replaceAll('<<<', '< < <').trim();
   const clipped =
     flattened.length > UNTRUSTED_TURN_CHAR_BUDGET
       ? `${flattened.slice(0, UNTRUSTED_TURN_CHAR_BUDGET)}…[clipped]`

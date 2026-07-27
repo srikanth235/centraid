@@ -80,9 +80,9 @@ function StepRow({ step }: { step: CompileStepDTO }): JSX.Element {
         />
       </span>
       <span className={styles.stepLabel}>{step.label}</span>
-      {step.durationMs !== null ? (
+      {step.durationMs === null ? null : (
         <span className={styles.stepTime}>{fmtDuration(step.durationMs)}</span>
-      ) : null}
+      )}
       {step.detail ? <span className={styles.stepDetail}>{step.detail}</span> : null}
     </li>
   );
@@ -275,19 +275,19 @@ export default function AutomationCompilePane({
             label: 'Compile failed',
             tone: 'failed',
           }
-        : !latest
-          ? {
-              detail: 'Compile once to turn these instructions into a plan that can run.',
-              label: 'No plan yet',
-              tone: 'draft',
-            }
-          : dirty
+        : latest
+          ? dirty
             ? {
                 detail: 'The instructions changed since the last compile. Recompile to apply them.',
                 label: 'Plan is stale',
                 tone: 'paused',
               }
-            : { detail: `Compiled ${latest.whenLabel}.`, label: 'Plan ready', tone: 'active' };
+            : { detail: `Compiled ${latest.whenLabel}.`, label: 'Plan ready', tone: 'active' }
+          : {
+              detail: 'Compile once to turn these instructions into a plan that can run.',
+              label: 'No plan yet',
+              tone: 'draft',
+            };
 
   return (
     <aside className={styles.rail} data-testid="automation-compile-pane" data-tone={verdict.tone}>
@@ -316,7 +316,7 @@ export default function AutomationCompilePane({
             </span>
           ) : null}
           <span className={styles.verdictSpacer} />
-          {!isCreate ? (
+          {isCreate ? null : (
             <button
               type="button"
               className={styles.runsLink}
@@ -326,7 +326,7 @@ export default function AutomationCompilePane({
               <span>Runs</span>
               <Icon name="ArrowRight" size={12} />
             </button>
-          ) : null}
+          )}
         </div>
         <p className={styles.verdictDetail}>{verdict.detail}</p>
         {failure ? (
@@ -347,7 +347,7 @@ export default function AutomationCompilePane({
             </button>
           </div>
         ) : null}
-        {!isCreate ? (
+        {isCreate ? null : (
           <div className={styles.verdictActions}>
             <button
               type="button"
@@ -381,10 +381,10 @@ export default function AutomationCompilePane({
               <span>{phase === 'testing' ? 'Testing…' : 'Test run'}</span>
             </button>
           </div>
-        ) : null}
+        )}
       </section>
 
-      {!isCreate ? (
+      {isCreate ? null : (
         <section className={styles.stepsBand}>
           <div className={styles.bandHead}>
             <h3 className={styles.bandTitle}>
@@ -448,9 +448,9 @@ export default function AutomationCompilePane({
             </details>
           ) : null}
         </section>
-      ) : null}
+      )}
 
-      {!isCreate ? (
+      {isCreate ? null : (
         <section className={styles.artifactBand}>
           <button
             type="button"
@@ -466,7 +466,7 @@ export default function AutomationCompilePane({
             <AutomationCompileArtifacts source={source} file={file} onFile={setFile} />
           ) : null}
         </section>
-      ) : null}
+      )}
     </aside>
   );
 }

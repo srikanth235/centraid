@@ -70,7 +70,7 @@ export async function ensureAppSession(appId: string): Promise<string> {
   // tolerate "already exists" by treating it as success — the worktree
   // is there, which is all the caller needs.
   const p = openSession(wanted).catch((err: unknown) => {
-    if (err instanceof Error && /already has a worktree|session_exists/.test(err.message)) {
+    if (err instanceof Error && /already has a worktree|session_exists/u.test(err.message)) {
       return wanted;
     }
     throw err;

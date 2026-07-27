@@ -6,7 +6,6 @@
 // independently testable. Worth a real decomposition, but not inside a CI fix.
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { validateMatrix } from './validate-matrix.mjs';
 import {
   cellsMissingRatchet,
@@ -20,7 +19,7 @@ import {
 } from './report-signals.mjs';
 import { coverageScopesBelowFloor, writeSummarySidecars } from './summary-markdown.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 const flags = parseFlags(process.argv.slice(2));
 const matrixPath = path.resolve(flags.matrix ?? path.join(root, 'tests/matrix.json'));
 const outputPath = path.resolve(flags.output ?? path.join(root, 'dist/test-report/index.html'));
@@ -270,7 +269,7 @@ async function readPlaywright(target) {
     return (
       await Promise.all(
         files.map(async (file) => ({
-          lane: file.replace(/\.json$/, ''),
+          lane: file.replace(/\.json$/u, ''),
           report: await readJson(path.join(target, file), null),
         })),
       )
@@ -447,7 +446,7 @@ async function collectVitestFiles(json) {
       if (skipped) {
         try {
           const source = await readFile(path.join(root, file), 'utf8');
-          if (/process\.env|\.skipIf\(|\.runIf\(|t\.skip\(|platform\s*[!=]==?/.test(source)) {
+          if (/process\.env|\.skipIf\(|\.runIf\(|t\.skip\(|platform\s*[!=]==?/u.test(source)) {
             envGated = skipped;
           }
         } catch {

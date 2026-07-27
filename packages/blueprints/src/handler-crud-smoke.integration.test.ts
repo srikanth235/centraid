@@ -91,20 +91,14 @@ describe('blueprint handler invoke smoke', () => {
         const file = handlerPath(appId, 'actions', action.name);
         expect(file, `${appId} action ${action.name} missing handler file`).toBeTruthy();
         const mod = await importHandler(file!);
-        expect(
-          typeof mod.default,
-          `${appId} action ${action.name} default export must be a function (got ${typeof mod.default})`,
-        ).toBe('function');
+        expect(mod.default).toBeTypeOf('function');
       }
 
       for (const query of queries) {
         const file = handlerPath(appId, 'queries', query.name);
         expect(file, `${appId} query ${query.name} missing handler file`).toBeTruthy();
         const mod = await importHandler(file!);
-        expect(
-          typeof mod.default,
-          `${appId} query ${query.name} default export must be a function (got ${typeof mod.default})`,
-        ).toBe('function');
+        expect(mod.default).toBeTypeOf('function');
         // Invoke with an empty vault. Handlers may return empty projections or
         // throw on missing required input — both prove the export is the real
         // callable. A non-function default never gets here.

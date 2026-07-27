@@ -49,7 +49,7 @@ describe('Locker Companion queries (#462)', () => {
       ],
     });
     const result = await candidates({ ctx });
-    expect(result.candidates).toEqual([
+    expect(result.candidates).toStrictEqual([
       {
         item_id: 'login-1',
         title: 'Example',
@@ -97,7 +97,7 @@ describe('Locker Companion queries (#462)', () => {
       input: { item_id: 'login-1', page_origin: 'https://example.com' },
       ctx,
     });
-    expect(result.fill).toEqual({
+    expect(result.fill).toStrictEqual({
       username: 'priya',
       password: 'live-password',
       totp: '123456',
@@ -196,9 +196,9 @@ describe('notes library query (issue #404)', () => {
     // No full body on the wire anymore.
     expect(row.body).toBeUndefined();
     // Checklist tally computed server-side (2 boxes, 1 done).
-    expect(row.check).toEqual({ total: 2, done: 1 });
+    expect(row.check).toStrictEqual({ total: 2, done: 1 });
     // Preview is short and glyphs the checklist, dropping the heading.
-    expect(typeof row.preview).toBe('string');
+    expect(row.preview).toBeTypeOf('string');
     expect(row.preview.length).toBeLessThanOrEqual(200);
     expect(row.preview).toContain('☐ buy milk');
     expect(row.preview).toContain('☑ call bob');
@@ -258,7 +258,7 @@ describe('agenda upcoming query — range-bounded recurrence (issue #404)', () =
   it('is idempotent across repeated reads of the same range (memoized expansion)', async () => {
     const a = await run({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-08T00:00:00.000Z' });
     const b = await run({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-08T00:00:00.000Z' });
-    expect(b.events.map((e) => e.instance_key)).toEqual(a.events.map((e) => e.instance_key));
+    expect(b.events.map((e) => e.instance_key)).toStrictEqual(a.events.map((e) => e.instance_key));
   });
 });
 

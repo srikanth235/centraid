@@ -24,7 +24,7 @@ interface LogicDeps {
 
 export function createLogic({ state, data, render, refresh }: LogicDeps) {
   function notice(text?: string) {
-    const el = document.getElementById('noticeBanner');
+    const el = document.querySelector<HTMLElement>('#noticeBanner');
     if (!el) return;
     el.textContent = text || '';
     (el as HTMLElement).hidden = !text;
@@ -60,8 +60,8 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 
   function applyDenied(d: DeniedInfo | null | undefined) {
     state.denied = true;
-    (document.getElementById('consentBanner') as HTMLElement).hidden = false;
-    document.getElementById('consentDetail')!.textContent = d?.message ?? '';
+    (document.querySelector('#consentBanner') as HTMLElement).hidden = false;
+    document.querySelector('#consentDetail')!.textContent = d?.message ?? '';
     data.items = [];
     state.selectedId = null;
     state.detail = null;
@@ -364,7 +364,7 @@ export function copy(text: string, label?: string, secret?: boolean) {
 // The rows for the current nav → search → filter → sort by title.
 export function currentPool(state: AppState, data: AppData): LockerRow[] {
   if (state.nav.kind === 'trash') return [...state.trashRows].sort(byTitle);
-  let pool = state.searchResults != null ? state.searchResults.slice() : data.items.slice();
+  let pool = state.searchResults == null ? data.items.slice() : state.searchResults.slice();
   if (state.nav.kind === 'fav') pool = pool.filter((i) => i.favorite);
   else if (state.nav.kind === 'cat') {
     const nav = state.nav;

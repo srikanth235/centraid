@@ -105,7 +105,7 @@ export async function callProviderRoute<T>(
   body?: unknown,
 ): Promise<T> {
   const fetchImpl = opts.fetchImpl ?? fetch;
-  const baseUrl = opts.baseUrl.replace(/\/$/, '');
+  const baseUrl = opts.baseUrl.replace(/\/$/u, '');
   const rateLimit = budget(opts.retry?.rateLimit, RATE_LIMIT_DEFAULTS);
   const serverError = budget(opts.retry?.serverError, SERVER_ERROR_DEFAULTS);
   const sleep = opts.retry?.sleep ?? defaultSleep;
@@ -120,9 +120,9 @@ export async function callProviderRoute<T>(
       method,
       headers: {
         authorization: `Bearer ${opts.apiKey}`,
-        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const text = await res.text();
     // The body is normally a JSON envelope, but a provider under duress can

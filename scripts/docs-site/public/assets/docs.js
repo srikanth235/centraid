@@ -93,7 +93,7 @@
 
     const esc = (s) =>
       s.replace(
-        /[&<>"']/g,
+        /[&<>"']/gu,
         (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
       );
     const loadSearch = async () => {

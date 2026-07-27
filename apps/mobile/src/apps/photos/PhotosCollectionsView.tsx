@@ -30,7 +30,7 @@ interface CollectionRowProps {
   title: string;
   count: string;
   last?: boolean;
-  onPress(): void;
+  onPress: () => void;
 }
 
 function CollectionRow({

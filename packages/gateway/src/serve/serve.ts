@@ -60,7 +60,7 @@ export interface GatewayServeHandle extends Omit<
   /** Dedicated PWA origin when web hosting is enabled. */
   webUrl?: string;
   /** Stop the HTTP server. Idempotent in callers. */
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 export async function serve(options: ServeOptions): Promise<GatewayServeHandle> {
@@ -113,7 +113,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
         rootDir: options.web.rootDir,
         apiUrl: server.url,
         ...(options.web.host ? { host: options.web.host } : {}),
-        ...(options.web.port !== undefined ? { port: options.web.port } : {}),
+        ...(options.web.port === undefined ? {} : { port: options.web.port }),
       })
     : undefined;
 

@@ -142,7 +142,7 @@ describe.skipIf(!enabled)(
         body: bytes,
       });
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({
+      await expect(response.json()).resolves.toStrictEqual({
         sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
         byteSize: bytes.length,
       });
@@ -161,7 +161,7 @@ describe.skipIf(!enabled)(
       const response = await fetch(url, { headers: { Range: 'bytes=4-11' } });
       expect(response.status).toBe(206);
       expect(response.headers.get('content-range')).toBe('bytes 4-11/36');
-      expect(await response.text()).toBe('456789ab');
+      await expect(response.text()).resolves.toBe('456789ab');
       expect((await fetch(url)).status).toBe(401);
 
       const zeroSuffixUrl = createBlobHandoffUrl(
@@ -193,7 +193,7 @@ describe.skipIf(!enabled)(
       });
       expect(compressed.status).toBe(200);
       expect(compressed.headers.get('content-type')).toBe('application/zstd');
-      expect(Buffer.from(await compressed.arrayBuffer()).subarray(0, 4)).toEqual(
+      expect(Buffer.from(await compressed.arrayBuffer()).subarray(0, 4)).toStrictEqual(
         Buffer.from([0x28, 0xb5, 0x2f, 0xfd]),
       );
 
@@ -217,8 +217,8 @@ describe.skipIf(!enabled)(
       expect(preview.status).toBe(200);
       expect(preview.headers.get('content-type')).toBe('image/jpeg');
       const jpeg = Buffer.from(await preview.arrayBuffer());
-      expect(jpeg.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
-      expect(jpeg.subarray(-2)).toEqual(Buffer.from([0xff, 0xd9]));
+      expect(jpeg.subarray(0, 2)).toStrictEqual(Buffer.from([0xff, 0xd8]));
+      expect(jpeg.subarray(-2)).toStrictEqual(Buffer.from([0xff, 0xd9]));
     });
 
     test('streams an authorized file window to the provider pump', async () => {
@@ -247,7 +247,7 @@ describe.skipIf(!enabled)(
         body: JSON.stringify(request),
       });
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({
+      await expect(response.json()).resolves.toStrictEqual({
         byteSize: 8,
         providerStatus: 201,
         etag: '"provider-etag"',

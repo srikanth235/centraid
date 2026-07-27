@@ -110,10 +110,10 @@ export function exifRows(asset: Asset): ExifRow[] {
     const aperture = exif.f_number ?? exif.aperture;
     const shutter = exif.exposure_time ?? exif.shutter_speed;
     const exposure = [
-      exif.iso != null ? `ISO ${exif.iso}` : null,
-      aperture != null ? `ƒ/${aperture}` : null,
+      exif.iso == null ? null : `ISO ${exif.iso}`,
+      aperture == null ? null : `ƒ/${aperture}`,
       shutter ?? null,
-      exif.focal_length != null ? `${exif.focal_length}mm` : null,
+      exif.focal_length == null ? null : `${exif.focal_length}mm`,
     ]
       .filter(Boolean)
       .join(' · ');

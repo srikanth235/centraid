@@ -10,7 +10,7 @@
 // POLY_REF_EXCLUSIONS (with a documented reason). A 7th mechanism added
 // without a registry entry fails here — the registry cannot silently rot.
 import type { DatabaseSync } from 'node:sqlite';
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { openVaultDb } from '../db.js';
 import { POLY_REF_EXCLUSIONS, POLY_REF_REGISTRY } from './poly-refs.js';
 
@@ -76,63 +76,66 @@ function isAccounted(pair: DetectedPair): boolean {
   return entry?.pairs.some((p) => p.typeCol === pair.typeCol && p.idCol === pair.idCol) ?? false;
 }
 
-test('every polymorphic (type, id) pair in either file is registered or excluded', () => {
-  const { vault, journal, close } = openVaultDb();
-  try {
-    const detected = [...detectPolyPairs(vault), ...detectPolyPairs(journal)];
-    // Sanity: the scan actually finds the known mechanisms (guards against a
-    // detection bug that would make the assertion below vacuously pass).
-    expect(detected.length).toBeGreaterThanOrEqual(10);
-    const unaccounted = detected.filter((p) => !isAccounted(p));
-    expect(
-      unaccounted,
-      `polymorphic (type,id) pairs with no registry entry or documented exclusion:\n  ${unaccounted
-        .map((p) => `${p.table}.(${p.typeCol}, ${p.idCol})`)
-        .join(
-          '\n  ',
-        )}\nAdd each to POLY_REF_REGISTRY (with a cleanup policy) or POLY_REF_EXCLUSIONS (with a reason) in schema/poly-refs.ts.`,
-    ).toEqual([]);
-  } finally {
-    close();
-    void journal;
-  }
-});
-
-test('every registered poly-ref table and its columns actually exist in the DDL', () => {
-  // The inverse guard: a registry entry that names a dropped/renamed table or
-  // column would make cleanupPolyRefs throw at runtime — catch it here.
-  const { vault, close } = openVaultDb();
-  try {
-    for (const entry of POLY_REF_REGISTRY) {
-      const cols = new Set(
-        (
-          vault.prepare(`PRAGMA table_info(${JSON.stringify(entry.table)})`).all() as {
-            name: string;
-          }[]
-        ).map((c) => c.name),
-      );
-      expect(cols.size, `registry table ${entry.table} does not exist in vault.db`).toBeGreaterThan(
-        0,
-      );
-      for (const pair of entry.pairs) {
-        expect(cols.has(pair.typeCol), `${entry.table}.${pair.typeCol} missing`).toBe(true);
-        expect(cols.has(pair.idCol), `${entry.table}.${pair.idCol} missing`).toBe(true);
-      }
+describe('poly-refs', () => {
+  test('every polymorphic (type, id) pair in either file is registered or excluded', () => {
+    const { vault, journal, close } = openVaultDb();
+    try {
+      const detected = [...detectPolyPairs(vault), ...detectPolyPairs(journal)];
+      // Sanity: the scan actually finds the known mechanisms (guards against a
+      // detection bug that would make the assertion below vacuously pass).
+      expect(detected.length).toBeGreaterThanOrEqual(10);
+      const unaccounted = detected.filter((p) => !isAccounted(p));
+      expect(
+        unaccounted,
+        `polymorphic (type,id) pairs with no registry entry or documented exclusion:\n  ${unaccounted
+          .map((p) => `${p.table}.(${p.typeCol}, ${p.idCol})`)
+          .join(
+            '\n  ',
+          )}\nAdd each to POLY_REF_REGISTRY (with a cleanup policy) or POLY_REF_EXCLUSIONS (with a reason) in schema/poly-refs.ts.`,
+      ).toStrictEqual([]);
+    } finally {
+      close();
+      void journal;
     }
-  } finally {
-    close();
-  }
-});
+  });
 
-test('registry and exclusions are disjoint and reasons are non-empty', () => {
-  for (const entry of POLY_REF_REGISTRY) {
-    expect(
-      POLY_REF_EXCLUSIONS.has(entry.table),
-      `${entry.table} is both registered and excluded`,
-    ).toBe(false);
-    expect(entry.note.length, `${entry.table} registry note is empty`).toBeGreaterThan(0);
-  }
-  for (const [table, reason] of POLY_REF_EXCLUSIONS) {
-    expect(reason.length, `${table} exclusion reason is empty`).toBeGreaterThan(0);
-  }
+  test('every registered poly-ref table and its columns actually exist in the DDL', () => {
+    // The inverse guard: a registry entry that names a dropped/renamed table or
+    // column would make cleanupPolyRefs throw at runtime — catch it here.
+    const { vault, close } = openVaultDb();
+    try {
+      for (const entry of POLY_REF_REGISTRY) {
+        const cols = new Set(
+          (
+            vault.prepare(`PRAGMA table_info(${JSON.stringify(entry.table)})`).all() as {
+              name: string;
+            }[]
+          ).map((c) => c.name),
+        );
+        expect(
+          cols.size,
+          `registry table ${entry.table} does not exist in vault.db`,
+        ).toBeGreaterThan(0);
+        for (const pair of entry.pairs) {
+          expect(cols.has(pair.typeCol), `${entry.table}.${pair.typeCol} missing`).toBe(true);
+          expect(cols.has(pair.idCol), `${entry.table}.${pair.idCol} missing`).toBe(true);
+        }
+      }
+    } finally {
+      close();
+    }
+  });
+
+  test('registry and exclusions are disjoint and reasons are non-empty', () => {
+    for (const entry of POLY_REF_REGISTRY) {
+      expect(
+        POLY_REF_EXCLUSIONS.has(entry.table),
+        `${entry.table} is both registered and excluded`,
+      ).toBe(false);
+      expect(entry.note.length, `${entry.table} registry note is empty`).toBeGreaterThan(0);
+    }
+    for (const [table, reason] of POLY_REF_EXCLUSIONS) {
+      expect(reason.length, `${table} exclusion reason is empty`).toBeGreaterThan(0);
+    }
+  });
 });

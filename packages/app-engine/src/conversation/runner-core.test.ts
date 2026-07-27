@@ -9,11 +9,13 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { makeConversationRunnerCore } from './runner-core.js';
+import { makeConversationRunnerCore, type ConversationRunnerCoreOptions } from './runner-core.js';
 import type { ConversationTurnInput } from './runner.js';
 import type { Dispatcher } from '../handlers/dispatcher.js';
 import type { ModelSubsystem } from '../stores/prefs-store.js';
-import type { RunnerPrefs, TurnConfig, TurnInput, TurnResult } from './turn.js';
+import type { RunnerPrefs, RunTurnFn, TurnInput } from './turn.js';
+
+type PrefsLoader = ConversationRunnerCoreOptions['prefsLoader'];
 
 const dispatcher = {} as Dispatcher;
 
@@ -32,15 +34,9 @@ function turnInput(over: Partial<ConversationTurnInput> = {}): ConversationTurnI
 }
 
 /** A core wired to a stub turn driver; captures what the driver received. */
-function build(opts: {
-  prefsLoader: (
-    subsystem?: ModelSubsystem,
-    runnerKind?: RunnerPrefs['kind'],
-  ) => Promise<RunnerPrefs | undefined>;
-  subsystem?: ModelSubsystem;
-}) {
+function build(opts: { prefsLoader: PrefsLoader; subsystem?: ModelSubsystem }) {
   const seen: TurnInput[] = [];
-  const runTurn = vi.fn(async (input: TurnInput, _config: TurnConfig): Promise<TurnResult> => {
+  const runTurn = vi.fn<RunTurnFn>(async (input) => {
     seen.push(input);
     return { adapterKind: 'codex', sessionId: 'new-session' };
   });
@@ -56,7 +52,7 @@ function build(opts: {
 
 describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
   it("passes the register's subsystem to the prefs loader on every turn", async () => {
-    const prefsLoader = vi.fn(async () => ({ kind: 'claude-code' as const }));
+    const prefsLoader = vi.fn<PrefsLoader>(async () => ({ kind: 'claude-code' as const }));
     const { runner } = build({ prefsLoader, subsystem: 'ask' });
 
     await runner.run(turnInput());
@@ -70,7 +66,7 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
   });
 
   it('calls the loader bare when the register has no subsystem (back-compat)', async () => {
-    const prefsLoader = vi.fn(async () => ({ kind: 'codex' as const }));
+    const prefsLoader = vi.fn<PrefsLoader>(async () => ({ kind: 'codex' as const }));
     const { runner } = build({ prefsLoader });
 
     await runner.run(turnInput());
@@ -88,16 +84,16 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
     });
 
     await runner.run(turnInput());
-    expect(runTurn.mock.calls[0]![1]).toEqual({ prefs: { kind: 'codex' } });
+    expect(runTurn.mock.calls[0]![1]).toStrictEqual({ prefs: { kind: 'codex' } });
 
     // The owner re-pins `runner.assistant` between turns.
     kind = 'claude-code';
     await runner.run(turnInput());
-    expect(runTurn.mock.calls[1]![1]).toEqual({ prefs: { kind: 'claude-code' } });
+    expect(runTurn.mock.calls[1]![1]).toStrictEqual({ prefs: { kind: 'claude-code' } });
   });
 
   it('lets a validated automation turn override only the loaded runner kind', async () => {
-    const prefsLoader = vi.fn(
+    const prefsLoader = vi.fn<PrefsLoader>(
       async (_subsystem?: ModelSubsystem, requested?: RunnerPrefs['kind']) =>
         requested === 'claude-code'
           ? {
@@ -114,7 +110,7 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
 
     await runner.run(turnInput({ runnerKind: 'claude-code', model: 'claude-custom' }));
 
-    expect(runTurn.mock.calls[0]![1]).toEqual({
+    expect(runTurn.mock.calls[0]![1]).toStrictEqual({
       prefs: {
         kind: 'claude-code',
         binPath: '/configured/claude',
@@ -137,7 +133,7 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
 
     await runner.run(turnInput({ runnerKind: 'claude-code' }));
 
-    expect(runTurn.mock.calls[0]![1]).toEqual({ prefs: { kind: 'claude-code' } });
+    expect(runTurn.mock.calls[0]![1]).toStrictEqual({ prefs: { kind: 'claude-code' } });
   });
 });
 
@@ -206,7 +202,7 @@ describe('makeConversationRunnerCore — session resume gating', () => {
       }),
     );
 
-    expect(seen[0]!.prevUsageSnapshot).toEqual(snapshot);
+    expect(seen[0]!.prevUsageSnapshot).toStrictEqual(snapshot);
   });
 
   it("invalidates the session when the subsystem's runner has changed", async () => {

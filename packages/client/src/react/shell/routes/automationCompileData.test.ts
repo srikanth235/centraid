@@ -16,7 +16,7 @@ import {
 // `automationCompileData.ts` imports the gateway-client barrel; stub it so
 // pulling the module in doesn't run gateway-client-core's load-time
 // `window.CentraidApi` side effect (same guard automationsData.test.ts uses).
-vi.mock('../../../gateway-client.js', () => ({
+vi.mock(import('../../../gateway-client.js'), () => ({
   listAutomationTurns: vi.fn(),
   readAutomationTurnExpanded: vi.fn(),
   streamAutomationTurn: vi.fn(),
@@ -36,7 +36,7 @@ const item = (over: Partial<CentraidAutomationItem> = {}): CentraidAutomationIte
     ...over,
   }) as CentraidAutomationItem;
 
-describe('compileStepOf', () => {
+describe(compileStepOf, () => {
   it('drops the compiler input item — the instructions are already on screen', () => {
     expect(compileStepOf(item({ kind: 'message_in', name: undefined }))).toBeNull();
   });
@@ -69,18 +69,18 @@ describe('compileStepOf', () => {
   });
 });
 
-describe('compileSteps', () => {
+describe(compileSteps, () => {
   it('orders by ordinal so a live stream reads in the order work happened', () => {
     const steps = compileSteps([
       item({ itemId: 'b', ordinal: 2, name: 'typecheck' }),
       item({ itemId: 'a', ordinal: 1, name: 'write_file' }),
       item({ itemId: 'in', ordinal: 0, kind: 'message_in', name: undefined }),
     ]);
-    expect(steps.map((s) => s.label)).toEqual(['write_file', 'typecheck']);
+    expect(steps.map((s) => s.label)).toStrictEqual(['write_file', 'typecheck']);
   });
 });
 
-describe('compileAttemptOf', () => {
+describe(compileAttemptOf, () => {
   it('reads an unfinished compile as running, not as a failure', () => {
     const attempt = compileAttemptOf({
       turnId: 'c-1',
@@ -116,14 +116,14 @@ const turn = (over: Partial<CentraidAutomationTurnRecord> = {}): CentraidAutomat
     ...over,
   }) as unknown as CentraidAutomationTurnRecord;
 
-describe('loadCompileAttempts', () => {
+describe(loadCompileAttempts, () => {
   it('keeps only compile turns — a real run is not a compile attempt', async () => {
     vi.mocked(listAutomationTurns).mockResolvedValue([
       turn({ turnId: 'c-1', startedAt: 1000 }),
       turn({ turnId: 'r-1', startedAt: 2000, triggerKind: 'scheduled' }),
     ] as never);
     const attempts = await loadCompileAttempts('digest/main');
-    expect(attempts.map((a) => a.turnId)).toEqual(['c-1']);
+    expect(attempts.map((a) => a.turnId)).toStrictEqual(['c-1']);
   });
 
   it('orders newest first, so the rail opens on the attempt that matters', async () => {
@@ -132,22 +132,22 @@ describe('loadCompileAttempts', () => {
       turn({ turnId: 'new', startedAt: 9000 }),
     ] as never);
     const attempts = await loadCompileAttempts('digest/main');
-    expect(attempts.map((a) => a.turnId)).toEqual(['new', 'old']);
+    expect(attempts.map((a) => a.turnId)).toStrictEqual(['new', 'old']);
   });
 });
 
-describe('loadTurnSteps', () => {
+describe(loadTurnSteps, () => {
   it('reads one turn cold and projects its items to ordered steps', async () => {
     vi.mocked(readAutomationTurnExpanded).mockResolvedValue({
       turn: turn(),
       items: [item({ itemId: 'b', ordinal: 1 }), item({ itemId: 'a', ordinal: 0 })],
     } as never);
     const steps = await loadTurnSteps('c-1');
-    expect(steps.map((s) => s.itemId)).toEqual(['a', 'b']);
+    expect(steps.map((s) => s.itemId)).toStrictEqual(['a', 'b']);
   });
 });
 
-describe('watchTurnSteps', () => {
+describe(watchTurnSteps, () => {
   it('paints the ledger first, folds live events, then trusts the final read', async () => {
     // A turn that is already underway when the rail attaches: the cold read
     // seeds the list so the owner never sees an empty rail for a compile that
@@ -176,7 +176,7 @@ describe('watchTurnSteps', () => {
 
     expect(seen[0]).toBe(1); // cold paint before any event
     expect(seen).toContain(2); // the streamed step landed
-    expect(outcome).toEqual({ settled: true, ok: true });
+    expect(outcome).toStrictEqual({ settled: true, ok: true });
   });
 
   it('reports unsettled on abort rather than claiming the compile finished', async () => {
@@ -188,7 +188,7 @@ describe('watchTurnSteps', () => {
     const outcome = await watchTurnSteps('c-1', () => undefined, controller.signal);
     // An aborted watch must never be read as a settled turn — the rail would
     // stop following a compile that is still running.
-    expect(outcome).toEqual({ settled: false, ok: false });
+    expect(outcome).toStrictEqual({ settled: false, ok: false });
   });
 
   it('survives a cold read that fails, so a stream can still drive the rail', async () => {
@@ -197,6 +197,6 @@ describe('watchTurnSteps', () => {
       .mockResolvedValueOnce({ turn: turn({ endedAt: 5000, ok: false }), items: [] } as never);
     vi.mocked(streamAutomationTurn).mockImplementation((async () => undefined) as never);
     const outcome = await watchTurnSteps('c-1', () => undefined, new AbortController().signal);
-    expect(outcome).toEqual({ settled: true, ok: false });
+    expect(outcome).toStrictEqual({ settled: true, ok: false });
   });
 });

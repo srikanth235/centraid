@@ -23,7 +23,7 @@ describe('shell router', () => {
   it('records navigations and advances the cursor', () => {
     let s = nav(INITIAL_ROUTER, { kind: 'home' });
     s = nav(s, { kind: 'insights' });
-    expect(currentRoute(s)).toEqual({ kind: 'insights' });
+    expect(currentRoute(s)).toStrictEqual({ kind: 'insights' });
     expect(s.stack).toHaveLength(2);
     expect(canGoBack(s)).toBe(true);
     expect(canGoForward(s)).toBe(false);
@@ -42,10 +42,10 @@ describe('shell router', () => {
     s = nav(s, { kind: 'insights' });
     s = nav(s, { kind: 'discover' });
     s = routerReducer(s, { type: 'back' });
-    expect(currentRoute(s)).toEqual({ kind: 'insights' });
+    expect(currentRoute(s)).toStrictEqual({ kind: 'insights' });
     expect(canGoForward(s)).toBe(true);
     s = routerReducer(s, { type: 'forward' });
-    expect(currentRoute(s)).toEqual({ kind: 'discover' });
+    expect(currentRoute(s)).toStrictEqual({ kind: 'discover' });
   });
 
   it('truncates the forward branch on a new navigation', () => {
@@ -53,7 +53,7 @@ describe('shell router', () => {
     s = nav(s, { kind: 'insights' });
     s = routerReducer(s, { type: 'back' }); // back to home
     s = nav(s, { kind: 'discover' }); // new branch drops insights
-    expect(s.stack.map((r) => r.kind)).toEqual(['home', 'discover']);
+    expect(s.stack.map((r) => r.kind)).toStrictEqual(['home', 'discover']);
     expect(canGoForward(s)).toBe(false);
   });
 

@@ -48,7 +48,7 @@ const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
  * now marked by the manifest's `kind` field, not a dotted `auto.` id
  * prefix, so the id grammar is a plain slug again.
  */
-const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/i;
+const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/iu;
 
 /** Stable symlink name (under the store root) pointing at the live main worktree. */
 const ACTIVE_MAIN_LINK = 'active-main';
@@ -369,9 +369,9 @@ export class WorktreeStore {
     for (const line of out.split('\n')) {
       const [tag, sha, uploadedAt] = line.split('\t');
       if (!tag || !sha || !uploadedAt) continue;
-      const m = /\/v(\d+)$/.exec(tag);
+      const m = /\/v(?<version>\d+)$/u.exec(tag);
       if (!m) continue;
-      const version = Number.parseInt(m[1] ?? '', 10);
+      const version = Number.parseInt(m.groups?.version ?? '', 10);
       if (!Number.isFinite(version)) continue;
       const tagAppTree = await this.treeSha(`${tag}:apps/${appId}`);
       const active = mainAppTree !== undefined && tagAppTree === mainAppTree;

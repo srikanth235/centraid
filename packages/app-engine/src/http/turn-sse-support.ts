@@ -12,7 +12,7 @@ export interface TurnAttachmentRef {
   sizeBytes?: number;
 }
 
-const ATTACHMENT_HASH_RE = /^[a-f0-9]{64}$/;
+const ATTACHMENT_HASH_RE = /^[a-f0-9]{64}$/u;
 
 /**
  * Parse+validate the `attachments` field of a `_turn` POST body (issue
@@ -74,7 +74,7 @@ export function resolveTurnAttachments(
   return validateTurnAttachmentRefs(conversationStore, appId, refs).map((a) => ({
     path: conversationStore.blobPathFor(appId, a.hash),
     mime: a.mime,
-    ...(a.filename !== undefined ? { filename: a.filename } : {}),
+    ...(a.filename === undefined ? {} : { filename: a.filename }),
   }));
 }
 

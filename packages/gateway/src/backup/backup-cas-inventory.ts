@@ -22,7 +22,7 @@ export interface CasInventoryResult {
 }
 
 function casSha(key: string): string | undefined {
-  return /(?:^|\/)blobs\/(?:sha256\/)?([0-9a-f]{64})$/.exec(key)?.[1];
+  return /(?:^|\/)blobs\/(?:sha256\/)?(?<sha>[0-9a-f]{64})$/u.exec(key)?.groups?.sha;
 }
 
 async function authenticatedFailures(

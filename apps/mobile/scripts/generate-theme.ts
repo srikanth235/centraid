@@ -5,12 +5,11 @@
 // this wrapper only does file I/O so the parser stays pure and testable.
 
 import { writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join, relative } from 'node:path';
 import { toBlueprintCss } from '@centraid/design-tokens';
 import { buildTheme, renderTokensModule } from '../src/kit/theme/generate';
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const repoRoot = join(here, '..', '..', '..');
 const OUT = join(here, '..', 'src', 'kit', 'theme', 'tokens.generated.ts');
 const SOURCE = '@centraid/design-tokens#toBlueprintCss';

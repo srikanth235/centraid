@@ -106,8 +106,8 @@ describe('runFire + ctx.vault', () => {
 
     const { outcome } = await fire(appsDir);
     expect(outcome.ok).toBe(true);
-    expect(bridgeApps).toEqual(['notes']);
-    expect(calls.map((c) => c.op)).toEqual(['read', 'invoke', 'invoke']);
+    expect(bridgeApps).toStrictEqual(['notes']);
+    expect(calls.map((c) => c.op)).toStrictEqual(['read', 'invoke', 'invoke']);
     const ids = calls.filter((c) => c.op === 'invoke').map((c) => c.payload.invocationId);
     expect(ids[0]).toMatch(/^run-fixed:v\d+$/);
     expect(ids[1]).toMatch(/^run-fixed:v\d+$/);
@@ -125,7 +125,7 @@ describe('runFire + ctx.vault', () => {
     } finally {
       await fs.rm(replayDir, { recursive: true, force: true });
     }
-    expect(calls.filter((c) => c.op === 'invoke').map((c) => c.payload.invocationId)).toEqual(
+    expect(calls.filter((c) => c.op === 'invoke').map((c) => c.payload.invocationId)).toStrictEqual(
       before,
     );
   });

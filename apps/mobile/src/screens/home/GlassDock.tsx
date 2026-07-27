@@ -20,9 +20,9 @@ import { family, useTheme, type ThemeColors } from '../../kit/theme';
 import type { IconName } from '@centraid/design-tokens';
 
 export interface GlassDockProps {
-  onSearch(): void;
-  onAssistant(): void;
-  onSettings(): void;
+  onSearch: () => void;
+  onAssistant: () => void;
+  onSettings: () => void;
 }
 
 export default function GlassDock({
@@ -98,7 +98,7 @@ function DockSlot({
 }: {
   icon: IconName;
   label: string;
-  onPress(): void;
+  onPress: () => void;
   styles: ReturnType<typeof makeStyles>;
   colors: ThemeColors;
 }): React.JSX.Element {

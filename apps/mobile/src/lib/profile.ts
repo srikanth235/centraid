@@ -72,7 +72,7 @@ export function setOnboarded(value: boolean): void {
 
 /** Up-to-two-letter initials for an avatar. Falls back to a person glyph. */
 export function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const parts = name.trim().split(/\s+/u).filter(Boolean);
   if (parts.length === 0) return '·';
   if (parts.length === 1) return parts[0]!.slice(0, 1).toUpperCase();
   return (parts[0]!.slice(0, 1) + parts[parts.length - 1]!.slice(0, 1)).toUpperCase();
@@ -80,7 +80,7 @@ export function initialsOf(name: string): string {
 
 /** First name only, for the greeting line. */
 export function firstNameOf(name: string): string {
-  return name.trim().split(/\s+/).find(Boolean) ?? '';
+  return name.trim().split(/\s+/u).find(Boolean) ?? '';
 }
 
 /** Time-of-day greeting to match the home header. */

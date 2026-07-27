@@ -32,7 +32,7 @@ export interface SseFrame {
 export const INITIAL_VAULT_CURSOR: VaultChangeCursor = { epoch: '0', seq: 0 };
 
 export function frameBoundary(buffer: string): { index: number; length: number } | undefined {
-  const match = /\r?\n\r?\n/.exec(buffer);
+  const match = /\r?\n\r?\n/u.exec(buffer);
   return match ? { index: match.index, length: match[0].length } : undefined;
 }
 
@@ -40,7 +40,7 @@ export function decodeFrame(raw: string): SseFrame | undefined {
   let event = 'message';
   let id: string | undefined;
   const data: string[] = [];
-  for (const rawLine of raw.split(/\r?\n/)) {
+  for (const rawLine of raw.split(/\r?\n/u)) {
     if (!rawLine || rawLine.startsWith(':')) continue;
     const colon = rawLine.indexOf(':');
     const field = colon < 0 ? rawLine : rawLine.slice(0, colon);

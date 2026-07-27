@@ -17,11 +17,11 @@ const GATEWAY = 'http://127.0.0.1:8787';
 
 function fakePorts(overrides: Partial<ShareIngestPorts> = {}): ShareIngestPorts {
   return {
-    backupDeviceMedia: vi.fn(async () => 'sha-media'),
-    backupDocument: vi.fn(async () => 'sha-doc'),
-    fileSize: vi.fn(() => 1234),
-    reset: vi.fn(),
-    alert: vi.fn(),
+    backupDeviceMedia: vi.fn<ShareIngestPorts['backupDeviceMedia']>(async () => 'sha-media'),
+    backupDocument: vi.fn<ShareIngestPorts['backupDocument']>(async () => 'sha-doc'),
+    fileSize: vi.fn<ShareIngestPorts['fileSize']>(() => 1234),
+    reset: vi.fn<ShareIngestPorts['reset']>(),
+    alert: vi.fn<ShareIngestPorts['alert']>(),
     ...overrides,
   };
 }
@@ -112,9 +112,11 @@ describe('processShareIntent lifecycle', () => {
     await processShareIntent(ports, session, GATEWAY, { files: [], text: 'hello' });
     expect(ports.backupDeviceMedia).toHaveBeenCalledTimes(0);
     expect(ports.backupDocument).toHaveBeenCalledTimes(0);
-    expect(ports.alert).toHaveBeenCalledTimes(1);
-    expect(ports.alert).toHaveBeenCalledWith('Can’t save this to Centraid', expect.any(String));
-    expect(ports.reset).toHaveBeenCalledTimes(1);
+    expect(ports.alert).toHaveBeenCalledExactlyOnceWith(
+      'Can’t save this to Centraid',
+      expect.any(String),
+    );
+    expect(ports.reset).toHaveBeenCalledOnce();
   });
 
   it('always resets — on success', async () => {
@@ -122,12 +124,12 @@ describe('processShareIntent lifecycle', () => {
     await processShareIntent(ports, session, GATEWAY, {
       files: [file({ mimeType: 'image/png' })],
     });
-    expect(ports.reset).toHaveBeenCalledTimes(1);
+    expect(ports.reset).toHaveBeenCalledOnce();
   });
 
   it('always resets — and surfaces a paused alert on producer failure', async () => {
     const ports = fakePorts({
-      backupDeviceMedia: vi.fn(async () => {
+      backupDeviceMedia: vi.fn<ShareIngestPorts['backupDeviceMedia']>(async () => {
         throw new Error('gateway unreachable');
       }),
     });
@@ -135,11 +137,11 @@ describe('processShareIntent lifecycle', () => {
       files: [file({ mimeType: 'image/png' })],
     });
     expect(ports.alert).toHaveBeenCalledWith('Save to Centraid paused', 'gateway unreachable');
-    expect(ports.reset).toHaveBeenCalledTimes(1);
+    expect(ports.reset).toHaveBeenCalledOnce();
   });
 });
 
-describe('ShareIntentGate', () => {
+describe(ShareIntentGate, () => {
   it('does not double-ingest while a pass is still in flight', async () => {
     const gate = new ShareIntentGate();
     let started = 0;
@@ -159,7 +161,7 @@ describe('ShareIntentGate', () => {
 
   it('runs again once the previous pass settled', async () => {
     const gate = new ShareIntentGate();
-    const task = vi.fn(async () => {});
+    const task = vi.fn<() => Promise<void>>(async () => {});
     await gate.run(task);
     await gate.run(task);
     expect(task).toHaveBeenCalledTimes(2);

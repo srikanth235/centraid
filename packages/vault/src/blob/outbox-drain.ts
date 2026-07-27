@@ -44,7 +44,7 @@ export interface OutboxDrainDeps {
   local: LocalBlobStore;
   cache: BlobCache;
   remote: () => RemoteTier | null;
-  onReplicated(sha256: string): void;
+  onReplicated: (sha256: string) => void;
   settlementAllowed?: () => boolean;
   /** The store class a sha's bytes belong in (issue #425 Wave 2). Default cas. */
   desiredStore?: (sha256: string) => ReplicaStore;

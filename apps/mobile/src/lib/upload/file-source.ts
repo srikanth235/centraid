@@ -7,8 +7,8 @@
 export interface FileSource {
   readonly size: number;
   /** Read exactly `length` plaintext bytes at absolute `offset`. */
-  read(offset: number, length: number): Promise<Uint8Array>;
-  close(): void;
+  read: (offset: number, length: number) => Promise<Uint8Array>;
+  close: () => void;
 }
 
 export type FileSourceOpener = (localUri: string) => Promise<FileSource>;

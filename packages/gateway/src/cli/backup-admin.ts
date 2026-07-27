@@ -263,14 +263,14 @@ export async function commandBackup(
         // remote-held blob, so it downloads far less upfront.
         const estimate = await service.restoreEgressEstimate({
           vaultId,
-          ...(parsed.seq !== undefined ? { seq: parsed.seq } : {}),
-          ...(parsed.atMs !== undefined ? { pointInTimeMs: parsed.atMs } : {}),
+          ...(parsed.seq === undefined ? {} : { seq: parsed.seq }),
+          ...(parsed.atMs === undefined ? {} : { pointInTimeMs: parsed.atMs }),
         });
         if (estimate.costClass === 'metered-egress' && !parsed.yes) {
           const fullSize =
-            estimate.fullBytes !== undefined
-              ? formatBytes(estimate.fullBytes)
-              : 'an unknown amount';
+            estimate.fullBytes === undefined
+              ? 'an unknown amount'
+              : formatBytes(estimate.fullBytes);
           const lazyLine =
             !parsed.full && estimate.lazyAvailable
               ? 'this restore is lazy by default and downloads only the vault database plus any ' +
@@ -285,8 +285,8 @@ export async function commandBackup(
         const result = await service.restore({
           vaultId,
           destDir: parsed.dest,
-          ...(parsed.seq !== undefined ? { seq: parsed.seq } : {}),
-          ...(parsed.atMs !== undefined ? { pointInTimeMs: parsed.atMs } : {}),
+          ...(parsed.seq === undefined ? {} : { seq: parsed.seq }),
+          ...(parsed.atMs === undefined ? {} : { pointInTimeMs: parsed.atMs }),
           ...(parsed.full ? { full: true } : {}),
         });
         printJson({ restored: parsed.dest, ...result });
@@ -310,7 +310,7 @@ export async function commandBackup(
         if (!parsed.out || !parsed.passwordFile) {
           fail('usage: backup kit --out <file> --password-file <file>', 2);
         }
-        const password = readFileSync(parsed.passwordFile, 'utf8').replace(/\r?\n$/, '');
+        const password = readFileSync(parsed.passwordFile, 'utf8').replace(/\r?\n$/u, '');
         if (password.length === 0) fail('recovery-kit password file is empty', 2);
         await service.writeKit(parsed.out, password);
         printJson({ kit: parsed.out });

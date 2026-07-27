@@ -6,7 +6,7 @@
  */
 const PURPOSE = 'dpv:ServiceProvision';
 
-export default async ({ input, log, ctx }) => {
+export default async function seedHandler({ input, log, ctx }) {
   const now = new Date(input?.now ?? Date.now()).getTime();
   const day = (n) => new Date(now + n * 86400000).toISOString().slice(0, 10);
   const invoke = async (command, args) => {
@@ -83,4 +83,4 @@ export default async ({ input, log, ctx }) => {
 
   log.info('tally scenario: 3 friends, 1 group, 5 expenses, 1 settlement');
   return { seeded: 10 };
-};
+}

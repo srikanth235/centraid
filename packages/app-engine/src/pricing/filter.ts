@@ -28,9 +28,9 @@ const KEPT_FIELDS = [
 // Text-completion families. Anthropic ships only Claude; OpenAI's tag also
 // covers image/audio/tts/realtime, so a chat/responses mode gate plus a
 // modality exclusion keeps this to the models that bill on prompt tokens.
-const CLAUDE_STEM = /claude/;
-const OPENAI_TEXT_STEM = /gpt|codex/;
-const OPENAI_NON_TEXT = /image|audio|realtime|tts|transcribe|whisper/;
+const CLAUDE_STEM = /claude/u;
+const OPENAI_TEXT_STEM = /gpt|codex/u;
+const OPENAI_NON_TEXT = /image|audio|realtime|tts|transcribe|whisper/u;
 const OPENAI_TEXT_MODES = new Set(['chat', 'responses']);
 
 function keep(id: string, entry: Record<string, unknown>): boolean {

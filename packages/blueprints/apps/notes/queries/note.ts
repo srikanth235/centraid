@@ -23,9 +23,9 @@ function decodeBody(uri: unknown): string {
   const payload = uri.slice(comma + 1);
   try {
     if (meta.includes(';base64')) {
-      return typeof Buffer !== 'undefined'
-        ? Buffer.from(payload, 'base64').toString('utf8')
-        : atob(payload);
+      return typeof Buffer === 'undefined'
+        ? atob(payload)
+        : Buffer.from(payload, 'base64').toString('utf8');
     }
     return decodeURIComponent(payload);
   } catch {
@@ -33,7 +33,7 @@ function decodeBody(uri: unknown): string {
   }
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function noteHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const noteId = String(input?.note_id ?? '').trim();
   if (!noteId) return { note_id: noteId, body: '' };
@@ -60,4 +60,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { note_id: noteId, vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

@@ -3,7 +3,7 @@ import { fingerprintOf, UpdatePoller } from './update-check.js';
 
 const fp = (n: number): string => fingerprintOf([{ mtimeMs: n, size: 100 }, null]);
 
-describe('fingerprintOf', () => {
+describe(fingerprintOf, () => {
   it('is order-sensitive and marks missing files', () => {
     expect(fingerprintOf([{ mtimeMs: 1, size: 2 }, null])).toBe('1:2|absent');
     expect(fingerprintOf([null, { mtimeMs: 1, size: 2 }])).toBe('absent|1:2');
@@ -16,7 +16,7 @@ describe('fingerprintOf', () => {
   });
 });
 
-describe('UpdatePoller', () => {
+describe(UpdatePoller, () => {
   it('stays unchanged while the disk matches the launch baseline', () => {
     const poller = new UpdatePoller(fp(1));
     expect(poller.tick(fp(1))).toBe('unchanged');

@@ -12,8 +12,8 @@ import { randomBytes } from 'node:crypto';
 export type EndpointSecretCorruptionPolicy = 'refuse' | 'remint';
 
 export interface EndpointSecretPersistence {
-  load(): Uint8Array | null;
-  store(secret: Uint8Array): void;
+  load: () => Uint8Array | null;
+  store: (secret: Uint8Array) => void;
 }
 
 export interface LoadEndpointSecretOptions {

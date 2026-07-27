@@ -99,7 +99,7 @@ function friendColor(partyId: string): string {
 function initials(name: string | undefined): string {
   if (!name) return '?';
   return name
-    .split(/\s+/)
+    .split(/\s+/u)
     .slice(0, 2)
     .map((w) => w[0])
     .join('')
@@ -300,7 +300,7 @@ export function groupNet(data: TallyData, gid: string): Map<string, number> {
 /** A ledger row: the expense decorated with the owner's lent/borrowed stance. */
 export function ledgerRow(data: TallyData, e: ExpenseFact) {
   const me = data.me;
-  const myShare = me != null ? e.splits[me] : undefined;
+  const myShare = me == null ? undefined : e.splits[me];
   const yourShare = myShare ?? 0;
   const involved = myShare != null;
   let your_role: 'lent' | 'borrowed' | 'none';
@@ -339,7 +339,7 @@ export function ledgerRow(data: TallyData, e: ExpenseFact) {
   };
 }
 
-export default async ({ ctx }: HandlerArgs) => {
+export default async function dashboardHandler({ ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   try {
     const data = await loadTally(ctx, purpose);
@@ -409,4 +409,4 @@ export default async ({ ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

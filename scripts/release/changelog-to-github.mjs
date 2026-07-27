@@ -20,10 +20,10 @@ if (!version) {
 }
 const text = readFileSync(path.resolve('CHANGELOG.md'), 'utf8');
 const re = new RegExp(
-  `^##\\s+\\[${version.replace(/\./g, '\\.')}\\][^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`,
-  'm',
+  `^##\\s+\\[${version.replace(/\./gu, '\\.')}\\][^\\n]*\\n(?<body>[\\s\\S]*?)(?=^##\\s+|$)`,
+  'mu',
 );
 const m = text.match(re);
-const body = (m?.[1] ?? `Centraid ${version}\n`).trim() + '\n';
+const body = (m?.groups?.body ?? `Centraid ${version}\n`).trim() + '\n';
 if (out) writeFileSync(out, body);
 else process.stdout.write(body);

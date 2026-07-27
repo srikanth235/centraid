@@ -20,7 +20,7 @@ export function isOAuthFinishDeepLink(rawUrl: string): boolean {
     }
     const fragment = new URLSearchParams(url.hash.slice(1));
     const state = fragment.get('state');
-    if (!state || !/^d\.[A-Za-z0-9_-]{43}$/.test(state)) return false;
+    if (!state || !/^d\.[A-Za-z0-9_-]{43}$/u.test(state)) return false;
     const providerError = fragment.get('error');
     if (providerError) {
       return providerError.length <= 128 && fragment.size === 2;
@@ -33,7 +33,7 @@ export function isOAuthFinishDeepLink(rawUrl: string): boolean {
       code.length > 0 &&
       code.length <= 4_096 &&
       typeof receipt === 'string' &&
-      /^v1\.\d{10}\.[A-Za-z0-9_-]{43}$/.test(receipt)
+      /^v1\.\d{10}\.[A-Za-z0-9_-]{43}$/u.test(receipt)
     );
   } catch {
     return false;
@@ -47,8 +47,8 @@ export function isOAuthFinishDeepLink(rawUrl: string): boolean {
  * persisting the code-bearing URL.
  */
 export function createDeepLinkBuffer(limit = 4): {
-  push(url: string): void;
-  subscribe(listener: (url: string) => void): () => void;
+  push: (url: string) => void;
+  subscribe: (listener: (url: string) => void) => () => void;
 } {
   const pending: string[] = [];
   let activeListener: ((url: string) => void) | undefined;

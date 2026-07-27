@@ -43,31 +43,31 @@ describe('InProcessScheduler.reconcile', () => {
       row('a/two', false, ['0 9 * * *']), // disabled → skipped
       row('a/three', true, []), // no cron → skipped
     ]);
-    expect(diff.added).toEqual(['a/one']);
-    expect(diff.removed).toEqual([]);
-    expect(await s.list()).toEqual(['a/one']);
+    expect(diff.added).toStrictEqual(['a/one']);
+    expect(diff.removed).toStrictEqual([]);
+    await expect(s.list()).resolves.toStrictEqual(['a/one']);
 
     // Change one's schedule, add one, drop the original.
     diff = await s.reconcile([
       row('a/one', true, ['30 8 * * *']), // expr changed → updated
       row('b/four', true, ['0 10 * * *']), // new → added
     ]);
-    expect(diff.added).toEqual(['b/four']);
-    expect(diff.updated).toEqual(['a/one']);
-    expect(diff.removed).toEqual([]);
-    expect(await s.list()).toEqual(['a/one', 'b/four']);
+    expect(diff.added).toStrictEqual(['b/four']);
+    expect(diff.updated).toStrictEqual(['a/one']);
+    expect(diff.removed).toStrictEqual([]);
+    await expect(s.list()).resolves.toStrictEqual(['a/one', 'b/four']);
   });
 
   it('register/unregister honour enabled + cron presence', async () => {
     const s = new InProcessScheduler({ fire: () => {} });
     await s.register(row('a/one', true, ['0 8 * * *']));
-    expect(await s.list()).toEqual(['a/one']);
+    await expect(s.list()).resolves.toStrictEqual(['a/one']);
     // Disabling via register drops it from the registry.
     await s.register(row('a/one', false, ['0 8 * * *']));
-    expect(await s.list()).toEqual([]);
+    await expect(s.list()).resolves.toStrictEqual([]);
     await s.register(row('a/one', true, ['0 8 * * *']));
     await s.unregister('a/one');
-    expect(await s.list()).toEqual([]);
+    await expect(s.list()).resolves.toStrictEqual([]);
   });
 });
 
@@ -83,24 +83,24 @@ describe('InProcessScheduler.tick', () => {
     // Registering at 08:00 does not run the 08:00 automation: cron has the
     // same no-fire bootstrap data triggers get.
     await settle();
-    expect(fired).toEqual([]);
+    expect(fired).toStrictEqual([]);
 
     // 08:00 — only the morning automation matches.
     s.tick();
     await settle();
-    expect(fired).toEqual(['a/morning']);
+    expect(fired).toStrictEqual(['a/morning']);
 
     // Same minute again — de-duped, no second fire.
     s.tick();
     await settle();
-    expect(fired).toEqual(['a/morning']);
+    expect(fired).toStrictEqual(['a/morning']);
 
     // The scheduler slept across 20:00. Its cursor catches the latest due
     // instant on the first wake minute instead of losing the evening run.
     clock = at(20, 1);
     s.tick();
     await settle();
-    expect(fired).toEqual(['a/morning', 'a/evening']);
+    expect(fired).toStrictEqual(['a/morning', 'a/evening']);
   });
 
   it('fires every registered automation whose cron matches the minute', async () => {
@@ -114,7 +114,7 @@ describe('InProcessScheduler.tick', () => {
     ]);
     s.tick();
     await settle();
-    expect(fired.sort()).toEqual(['a/one', 'b/two']);
+    expect(fired.sort()).toStrictEqual(['a/one', 'b/two']);
   });
 });
 
@@ -155,8 +155,8 @@ describe('condition-trigger watches', () => {
     // 08:00 — the cron fires AND the */10 gate opens; the condition trigger
     // sits at index 1 of manifest.triggers (after the cron).
     s.tick();
-    expect(fires).toEqual(['studio/chaser']);
-    expect(evals).toEqual([['studio/chaser', 1]]);
+    expect(fires).toStrictEqual(['studio/chaser']);
+    expect(evals).toStrictEqual([['studio/chaser', 1]]);
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     // 08:05 — neither.
@@ -168,7 +168,7 @@ describe('condition-trigger watches', () => {
     clock = at(8, 10);
     s.tick();
     expect(fires).toHaveLength(1);
-    expect(evals).toEqual([
+    expect(evals).toStrictEqual([
       ['studio/chaser', 1],
       ['studio/chaser', 1],
     ]);
@@ -186,16 +186,16 @@ describe('condition-trigger watches', () => {
     // Strip the cron so only the condition trigger remains (index 0).
     const only: Row = { ...r, triggers: [r.triggers[1]!] };
     await s.register(only);
-    expect(await s.list()).toEqual(['studio/chaser']);
+    await expect(s.list()).resolves.toStrictEqual(['studio/chaser']);
     s.tick();
-    expect(evals).toEqual([0]);
+    expect(evals).toStrictEqual([0]);
     await new Promise<void>((resolve) => setImmediate(resolve));
     clock = at(9, 3);
     s.tick();
-    expect(evals).toEqual([0]);
+    expect(evals).toStrictEqual([0]);
     clock = at(9, 5);
     s.tick();
-    expect(evals).toEqual([0, 0]);
+    expect(evals).toStrictEqual([0, 0]);
   });
 
   it('without an evaluator, condition triggers never gate open', async () => {
@@ -252,10 +252,10 @@ describe('InProcessScheduler.nudge', () => {
     s.nudge(['business.invoice']);
     s.nudge(['business.invoice']);
     s.nudge(['business.invoice']);
-    expect(evals).toEqual([]);
+    expect(evals).toStrictEqual([]);
     await vi.advanceTimersByTimeAsync(15);
 
-    expect(evals).toEqual([['studio/invoices', 0]]);
+    expect(evals).toStrictEqual([['studio/invoices', 0]]);
   });
 
   it('bypasses the minute gate while leaving condition triggers poll-only', async () => {
@@ -275,7 +275,7 @@ describe('InProcessScheduler.nudge', () => {
     evals.length = 0;
 
     s.tick();
-    expect(evals).toEqual([
+    expect(evals).toStrictEqual([
       ['studio/data', 0],
       ['studio/condition', 0],
     ]);
@@ -283,7 +283,7 @@ describe('InProcessScheduler.nudge', () => {
     // nudgeDelayMs: 0 still schedules via setTimeout — advance the fake clock.
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(evals).toEqual([
+    expect(evals).toStrictEqual([
       ['studio/data', 0],
       ['studio/condition', 0],
       ['studio/data', 0],
@@ -299,11 +299,11 @@ describe('InProcessScheduler.nudge', () => {
       nudgeDelayMs: 0,
     });
     await s.reconcile([dataRow('studio/data', ['core.party'])]);
-    expect(evals).toEqual([['studio/data', 0]]);
+    expect(evals).toStrictEqual([['studio/data', 0]]);
 
     s.nudge(['core.party']);
     await vi.advanceTimersByTimeAsync(0);
-    expect(evals).toEqual([
+    expect(evals).toStrictEqual([
       ['studio/data', 0],
       ['studio/data', 0],
     ]);
@@ -323,14 +323,14 @@ describe('InProcessScheduler.nudge', () => {
     await expect(s.reconcile([dataRow('studio/data', ['core.party'])])).rejects.toThrow(
       'cursor unavailable',
     );
-    expect(await s.list()).toEqual([]);
+    await expect(s.list()).resolves.toStrictEqual([]);
 
     fail = false;
     await expect(s.reconcile([dataRow('studio/data', ['core.party'])])).resolves.toMatchObject({
       added: ['studio/data'],
     });
     expect(evals).toBe(2);
-    expect(await s.list()).toEqual(['studio/data']);
+    await expect(s.list()).resolves.toStrictEqual(['studio/data']);
   });
 
   it('serializes a doorbell that races the minute tick and performs one dirty rerun', async () => {
@@ -392,12 +392,12 @@ describe('InProcessScheduler.nudge', () => {
 
     s.tick();
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect({ cursor, fires }).toEqual({ cursor: 'prov-2', fires: 1 });
+    expect({ cursor, fires }).toStrictEqual({ cursor: 'prov-2', fires: 1 });
 
     clock = at(9, 1);
     s.tick();
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect({ cursor, fires }).toEqual({ cursor: 'prov-2', fires: 1 });
+    expect({ cursor, fires }).toStrictEqual({ cursor: 'prov-2', fires: 1 });
   });
 
   it('routes rejected off-cycle evaluations without rejecting the caller', async () => {
@@ -416,7 +416,7 @@ describe('InProcessScheduler.nudge', () => {
     expect(() => s.nudge()).not.toThrow();
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(errors).toEqual(['nudge failed']);
+    expect(errors).toStrictEqual(['nudge failed']);
   });
 });
 
@@ -433,17 +433,17 @@ describe('InProcessScheduler onTick hook (issue #351)', () => {
 
     s.tick();
     await settle();
-    expect(order).toEqual(['tick:8:0', 'fire:a/one']);
+    expect(order).toStrictEqual(['tick:8:0', 'fire:a/one']);
 
     // Same minute again — de-duped, no second tick or fire.
     s.tick();
     await settle();
-    expect(order).toEqual(['tick:8:0', 'fire:a/one']);
+    expect(order).toStrictEqual(['tick:8:0', 'fire:a/one']);
 
     clock = at(8, 1);
     s.tick();
     await settle();
-    expect(order).toEqual(['tick:8:0', 'fire:a/one', 'tick:8:1']);
+    expect(order).toStrictEqual(['tick:8:0', 'fire:a/one', 'tick:8:1']);
   });
 
   it('a throwing onTick routes to onError instead of crashing the timer loop', async () => {
@@ -486,7 +486,7 @@ describe('InProcessScheduler onTick hook (issue #351)', () => {
     await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
     await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
     await s.reconcile([]);
-    expect(transitions).toEqual([false, true]);
+    expect(transitions).toStrictEqual([false, true]);
   });
 
   it('onTick is optional — omitting it changes nothing about firing', async () => {
@@ -494,6 +494,6 @@ describe('InProcessScheduler onTick hook (issue #351)', () => {
     const s = new InProcessScheduler({ fire: (ref) => void fired.push(ref), now: () => at(8, 0) });
     await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
     expect(() => s.tick()).not.toThrow();
-    expect(fired).toEqual(['a/one']);
+    expect(fired).toStrictEqual(['a/one']);
   });
 });

@@ -149,15 +149,15 @@ export async function handleAutomationCreate(
       return {
         kind: 'condition',
         entity: t.entity,
-        ...(t.where !== undefined ? { where: t.where } : {}),
-        ...(t.every !== undefined ? { every: t.every } : {}),
+        ...(t.where === undefined ? {} : { where: t.where }),
+        ...(t.every === undefined ? {} : { every: t.every }),
       } as automation.Trigger;
     }
     if (t.kind === 'data') {
       return {
         kind: 'data',
         entities: t.entities,
-        ...(t.every !== undefined ? { every: t.every } : {}),
+        ...(t.every === undefined ? {} : { every: t.every }),
       } as automation.Trigger;
     }
     if (t.kind === 'event') {
@@ -165,8 +165,8 @@ export async function handleAutomationCreate(
         kind: 'event',
         connectorKind: t.connectorKind,
         event: t.event,
-        ...(t.filter !== undefined ? { filter: t.filter } : {}),
-        ...(t.every !== undefined ? { every: t.every } : {}),
+        ...(t.filter === undefined ? {} : { filter: t.filter }),
+        ...(t.every === undefined ? {} : { every: t.every }),
       } as automation.Trigger;
     }
     const expr = typeof t.expr === 'string' ? t.expr : '0 9 * * *';
@@ -174,7 +174,7 @@ export async function handleAutomationCreate(
     return {
       kind: 'cron',
       expr,
-      ...(tz !== undefined ? { tz } : {}),
+      ...(tz === undefined ? {} : { tz }),
     };
   });
   // A condition/data trigger's consented read runs under a requested vault
@@ -199,18 +199,18 @@ export async function handleAutomationCreate(
       ? { description: body.description }
       : {}),
     ...(typeof body.prompt === 'string' && body.prompt ? { prompt: body.prompt } : {}),
-    ...(triggers !== undefined ? { triggers } : {}),
+    ...(triggers === undefined ? {} : { triggers }),
     ...(Array.isArray(body.apps) ? { apps: body.apps.filter((a) => typeof a === 'string') } : {}),
     ...(typeof body.runner === 'string' && body.runner ? { runner: body.runner } : {}),
     ...(typeof body.model === 'string' && body.model ? { model: body.model } : {}),
-    ...(parseHistoryKeep(body.historyKeep) !== undefined
-      ? { historyKeep: parseHistoryKeep(body.historyKeep) }
-      : {}),
+    ...(parseHistoryKeep(body.historyKeep) === undefined
+      ? {}
+      : { historyKeep: parseHistoryKeep(body.historyKeep) }),
     ...(typeof body.onFailure === 'string' && body.onFailure ? { onFailure: body.onFailure } : {}),
     ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}),
-    ...(vaultInput !== undefined ? { vault: vaultInput } : {}),
-    ...(connectorInput !== undefined ? { connector: connectorInput } : {}),
-    ...(connectionsInput !== undefined ? { connections: connectionsInput } : {}),
+    ...(vaultInput === undefined ? {} : { vault: vaultInput }),
+    ...(connectorInput === undefined ? {} : { connector: connectorInput }),
+    ...(connectionsInput === undefined ? {} : { connections: connectionsInput }),
   });
   await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   await stageAndMaybePublish(opts, {
@@ -412,15 +412,15 @@ export async function handleAutomationUpdate(
         return {
           kind: 'condition',
           entity: t.entity,
-          ...(t.where !== undefined ? { where: t.where } : {}),
-          ...(t.every !== undefined ? { every: t.every } : {}),
+          ...(t.where === undefined ? {} : { where: t.where }),
+          ...(t.every === undefined ? {} : { every: t.every }),
         } as automation.Trigger;
       }
       if (t.kind === 'data') {
         return {
           kind: 'data',
           entities: t.entities,
-          ...(t.every !== undefined ? { every: t.every } : {}),
+          ...(t.every === undefined ? {} : { every: t.every }),
         } as automation.Trigger;
       }
       if (t.kind === 'event') {
@@ -428,8 +428,8 @@ export async function handleAutomationUpdate(
           kind: 'event',
           connectorKind: t.connectorKind,
           event: t.event,
-          ...(t.filter !== undefined ? { filter: t.filter } : {}),
-          ...(t.every !== undefined ? { every: t.every } : {}),
+          ...(t.filter === undefined ? {} : { filter: t.filter }),
+          ...(t.every === undefined ? {} : { every: t.every }),
         } as automation.Trigger;
       }
       const expr = typeof t.expr === 'string' ? t.expr : '0 9 * * *';
@@ -437,7 +437,7 @@ export async function handleAutomationUpdate(
       return {
         kind: 'cron',
         expr,
-        ...(tz !== undefined ? { tz } : {}),
+        ...(tz === undefined ? {} : { tz }),
       };
     });
   }
@@ -447,10 +447,10 @@ export async function handleAutomationUpdate(
   // `generated`, `enabled`, `history`) survive via the spread.
   const patched: Record<string, unknown> = {
     ...existing,
-    ...(nameInput !== undefined ? { name: nameInput } : {}),
-    ...(promptInput !== undefined ? { prompt: promptInput } : {}),
-    ...(triggers !== undefined ? { triggers } : {}),
-    ...(vaultInput !== undefined ? { vault: vaultInput } : {}),
+    ...(nameInput === undefined ? {} : { name: nameInput }),
+    ...(promptInput === undefined ? {} : { prompt: promptInput }),
+    ...(triggers === undefined ? {} : { triggers }),
+    ...(vaultInput === undefined ? {} : { vault: vaultInput }),
   };
   if (hasConnectionsKey) {
     if (connectionsInput === undefined) {

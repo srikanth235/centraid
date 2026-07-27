@@ -3,7 +3,7 @@
  * content item stays (it is deduped and may back other attachments). Same
  * handler shape across every app.
  */
-export default async ({ body, ctx }: HandlerArgs): Promise<ActionResult> => {
+export default async function detachHandler({ body, ctx }: HandlerArgs): Promise<ActionResult> {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
@@ -16,4 +16,4 @@ export default async ({ body, ctx }: HandlerArgs): Promise<ActionResult> => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

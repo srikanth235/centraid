@@ -38,8 +38,8 @@ export interface VaultSqlRows {
 
 export type VaultSqlResult = VaultSqlRows & { receiptId: string };
 
-const COMMENT_RE = /\/\*[\s\S]*?\*\//g;
-const LINE_COMMENT_RE = /--[^\n]*/g;
+const COMMENT_RE = /\/\*[\s\S]*?\*\//gu;
+const LINE_COMMENT_RE = /--[^\n]*/gu;
 
 /**
  * Lexical gate: one statement, read-shaped. Execution enforcement is
@@ -53,10 +53,10 @@ export function readOnlySqlRefusal(sql: string): string | undefined {
     .replace(COMMENT_RE, ' ')
     .replace(LINE_COMMENT_RE, ' ')
     .trim()
-    .replace(/;+\s*$/, '');
+    .replace(/;+\s*$/u, '');
   if (!stripped) return 'empty statement';
   if (stripped.includes(';')) return 'one statement per call — drop the extra ";"';
-  const first = stripped.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase();
+  const first = stripped.match(/^(?<keyword>[A-Za-z]+)/u)?.groups?.keyword?.toUpperCase();
   if (first !== 'SELECT' && first !== 'WITH' && first !== 'EXPLAIN') {
     return 'only SELECT / WITH … SELECT / EXPLAIN are allowed here';
   }
@@ -65,7 +65,7 @@ export function readOnlySqlRefusal(sql: string): string | undefined {
   // path. `replace(...)` the FUNCTION stays usable — only `REPLACE INTO`
   // (statement position handled by the first-token check) would write.
   if (
-    /\b(insert\s+into|update\s+\w+\s+set|delete\s+from|attach|detach|vacuum|reindex|pragma)\b/i.test(
+    /\b(?:insert\s+into|update\s+\w+\s+set|delete\s+from|attach|detach|vacuum|reindex|pragma)\b/iu.test(
       stripped,
     )
   ) {

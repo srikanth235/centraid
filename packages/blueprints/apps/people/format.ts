@@ -4,7 +4,7 @@
 // None hold or mutate app state. Split out of app.tsx so the orchestrator and
 // every component (Sidebar/Grid/List/Details/Journal/Activity) can call these
 // directly instead of threading them all as props.
-import type { AppData, Person, Reminder } from './types.ts';
+import type { AppData, Reminder } from './types.ts';
 
 // The per-contact palette (prototype). Avatar hues come from here or a name
 // hash; a list's chrome dot hashes its id into the same eight colours so a

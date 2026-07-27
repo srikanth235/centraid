@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 const storeMem = new Map<string, unknown>();
 const secureMem = new Map<string, string>();
 
-vi.mock('../storage', () => ({
+vi.mock(import('../storage'), () => ({
   Store: {
     get<T>(key: string, fallback: T): T {
       return storeMem.has(key) ? (storeMem.get(key) as T) : fallback;
@@ -21,7 +21,7 @@ vi.mock('../storage', () => ({
   },
 }));
 
-vi.mock('./secure-storage', () => ({
+vi.mock(import('./secure-storage'), () => ({
   async hydrateSecure(key: string, fallback = ''): Promise<string> {
     return secureMem.has(key) ? (secureMem.get(key) as string) : fallback;
   },
@@ -125,10 +125,10 @@ describe('Spaces registry', () => {
       endpointHint: 'hb',
     });
     await spaces.removeSpace(b.id);
-    expect(spaces.listSpaces().map((s) => s.id)).toEqual([a.id]);
+    expect(spaces.listSpaces().map((s) => s.id)).toStrictEqual([a.id]);
     expect(spaces.getActiveSpace()?.id).toBe(a.id);
     await spaces.removeSpace(a.id);
-    expect(spaces.listSpaces()).toEqual([]);
+    expect(spaces.listSpaces()).toStrictEqual([]);
     expect(spaces.getActiveSpace()).toBeUndefined();
     expect(spaces.getActiveVaultId()).toBe('');
   });

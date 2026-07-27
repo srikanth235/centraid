@@ -8,22 +8,22 @@ export type NewStoredIntent = Omit<ReplicaIntent, 'createdOrder'>;
  * DOM-free so every platform's queue and coordinator share one interface.
  */
 export interface IntentRecordStore {
-  add(intent: NewStoredIntent): Promise<ReplicaIntent>;
-  get(intentId: string): Promise<ReplicaIntent | undefined>;
-  list(states?: readonly IntentState[]): Promise<ReplicaIntent[]>;
-  claimNext(): Promise<ReplicaIntent | undefined>;
-  transition(
+  add: (intent: NewStoredIntent) => Promise<ReplicaIntent>;
+  get: (intentId: string) => Promise<ReplicaIntent | undefined>;
+  list: (states?: readonly IntentState[]) => Promise<ReplicaIntent[]>;
+  claimNext: () => Promise<ReplicaIntent | undefined>;
+  transition: (
     intentId: string,
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>,
-  ): Promise<ReplicaIntent>;
+  ) => Promise<ReplicaIntent>;
   /** Return the settled value while atomically removing its sensitive input. */
-  settle(
+  settle: (
     intentId: string,
     allowed: readonly IntentState[],
     patch: Partial<ReplicaIntent>,
-  ): Promise<ReplicaIntent>;
-  clear(): Promise<void>;
-  close(): void;
-  destroy(): Promise<void>;
+  ) => Promise<ReplicaIntent>;
+  clear: () => Promise<void>;
+  close: () => void;
+  destroy: () => Promise<void>;
 }

@@ -306,7 +306,7 @@ export default function AutomationViewRoute({
               decision,
               id,
               kind,
-              ...(alwaysAllow !== undefined ? { alwaysAllow } : {}),
+              ...(alwaysAllow === undefined ? {} : { alwaysAllow }),
             });
           } catch (err) {
             showToast(`Could not update: ${err instanceof Error ? err.message : String(err)}`);

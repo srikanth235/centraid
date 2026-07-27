@@ -256,7 +256,7 @@ export function outcomeMessage(outcome: VaultOutcome | null | undefined): string
     // already a full sentence with its own punctuation — don't double it up
     // ("...on your calendar..") the way the raw `name: column op value`
     // fallback needs its trailing period added.
-    return `The vault refused: ${detail}${/[.!?]$/.test(detail) ? '' : '.'}`;
+    return `The vault refused: ${detail}${/[.!?]$/u.test(detail) ? '' : '.'}`;
   }
   if (outcome?.status === 'denied') {
     return `Denied by consent${outcome.reason ? `: ${outcome.reason}` : '.'}`;
@@ -461,7 +461,7 @@ export function onFocusRefresh(
 ): () => void {
   let last = 0;
   const onFocus = () => {
-    const banner = document.getElementById('consentBanner');
+    const banner = document.querySelector('#consentBanner');
     const recovering = banner && !banner.hidden;
     const now = Date.now();
     if (!recovering && now - last < minIntervalMs) return;
@@ -488,7 +488,7 @@ export function observeWidth(
 ): () => void {
   const measure = () => {
     if (!el) return;
-    const forced = document.documentElement.getAttribute('data-app-width') === 'narrow';
+    const forced = document.documentElement.dataset.appWidth === 'narrow';
     onNarrow(forced || el.clientWidth < breakpoint);
   };
   measure();
@@ -1005,7 +1005,7 @@ export function emptyState(
 
 /** Render a `⟦hit⟧` search snippet into `target`, marking the hits. */
 export function snippetInto(target: HTMLElement, snippet: string | null | undefined): void {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  const parts = String(snippet ?? '').split(/[⟦⟧]/u);
   for (let i = 0; i < parts.length; i += 1) {
     if (!parts[i]) continue;
     if (i % 2 === 1) {
@@ -1127,24 +1127,24 @@ export function wireThemeToggle(
 // ============================================================================
 
 (function () {
-  var cfg = window.KIT_ASK || {};
+  const cfg = window.KIT_ASK || {};
 
   function el(html) {
-    var t = document.createElement('template');
+    const t = document.createElement('template');
     t.innerHTML = html.trim();
     return t.content.firstChild;
   }
   function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>]/g, function (c) {
+    return String(s == null ? '' : s).replace(/[&<>]/gu, (c) => {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
     });
   }
 
-  var HISTORY_ICON =
+  const HISTORY_ICON =
     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.2 2"/></svg>';
-  var CLIP_ICON =
+  const CLIP_ICON =
     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16.9 6.6 9 14.5a2.75 2.75 0 0 0 3.9 3.9l7.4-7.4a4.5 4.5 0 1 0-6.36-6.37L6.5 12.1"/></svg>';
-  var CHEVRON_ICON =
+  const CHEVRON_ICON =
     '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
 
   /** Default intro copy — shared by the first render and every "New conversation" reset. */
@@ -1156,8 +1156,8 @@ export function wireThemeToggle(
   }
 
   function panelHTML() {
-    var scope = esc(cfg.scope || 'this app');
-    var sugg = (cfg.suggest || [])
+    const scope = esc(cfg.scope || 'this app');
+    const sugg = (cfg.suggest || [])
       .map(function (s) {
         return '<button type="button" class="kit-ask-chip">' + esc(s) + '</button>';
       })
@@ -1223,24 +1223,24 @@ export function wireThemeToggle(
    * same thread (mirrors the id-provisioning contract in `makeVaultDriver`).
    */
   function makeConversationSession() {
-    var key = 'kitask:conversation:' + (appId() || location.pathname);
-    var cached = null;
+    const key = 'kitask:conversation:' + (appId() || location.pathname);
+    let cached = null;
     return {
-      get: function () {
+      get() {
         if (cached) return cached;
         try {
           cached = sessionStorage.getItem(key);
         } catch (_) {}
         return cached;
       },
-      set: function (v) {
+      set(v) {
         cached = v || null;
         try {
           if (cached) sessionStorage.setItem(key, cached);
           else sessionStorage.removeItem(key);
         } catch (_) {}
       },
-      clear: function () {
+      clear() {
         this.set(null);
       },
     };
@@ -1248,7 +1248,7 @@ export function wireThemeToggle(
 
   function init() {
     if (window.kitAsk) return; // once
-    var mount =
+    const mount =
       document.querySelector('[data-ask-mount]') ||
       document.querySelector('.head-tools') ||
       document.querySelector('.head') ||
@@ -1259,29 +1259,29 @@ export function wireThemeToggle(
     ) {
       mount.style.flexWrap = 'wrap';
     }
-    var btn = el(
+    const btn = el(
       '<button type="button" class="kit-ask-btn" id="kitAskBtn"><span class="kit-spark">✦</span> Ask</button>',
     );
     mount.appendChild(btn);
 
-    var ov = el(panelHTML());
+    const ov = el(panelHTML());
     document.body.appendChild(ov);
-    var panel = ov.querySelector('.kit-ask-panel');
-    var log = ov.querySelector('.kit-ask-log');
-    var historyBtn = ov.querySelector('.kit-ask-history-btn');
-    var historyView = ov.querySelector('.kit-ask-history');
-    var historyList = ov.querySelector('.kit-ask-history-list');
-    var historyNewBtn = ov.querySelector('.kit-ask-history-new');
-    var suggestRow = ov.querySelector('.kit-ask-suggest');
-    var pendingStrip = ov.querySelector('.kit-ask-pending');
-    var form = ov.querySelector('.kit-ask-compose');
-    var input = form.querySelector('.kit-ask-input');
-    var fileInput = form.querySelector('.kit-ask-file');
-    var attachBtn = form.querySelector('.kit-ask-attach');
-    var sendBtn = form.querySelector('.kit-ask-send');
-    var session = makeConversationSession();
-    var lastFocus = null;
-    var autoLoadAttempted = false;
+    const panel = ov.querySelector('.kit-ask-panel');
+    const log = ov.querySelector('.kit-ask-log');
+    const historyBtn = ov.querySelector('.kit-ask-history-btn');
+    const historyView = ov.querySelector('.kit-ask-history');
+    const historyList = ov.querySelector('.kit-ask-history-list');
+    const historyNewBtn = ov.querySelector('.kit-ask-history-new');
+    const suggestRow = ov.querySelector('.kit-ask-suggest');
+    const pendingStrip = ov.querySelector('.kit-ask-pending');
+    const form = ov.querySelector('.kit-ask-compose');
+    const input = form.querySelector('.kit-ask-input');
+    const fileInput = form.querySelector('.kit-ask-file');
+    const attachBtn = form.querySelector('.kit-ask-attach');
+    const sendBtn = form.querySelector('.kit-ask-send');
+    const session = makeConversationSession();
+    let lastFocus = null;
+    let autoLoadAttempted = false;
 
     // ---------- Busy state (a turn is in flight) ----------
     // `data-busy` on `.kit-ask-compose` is the e2e contract: 'true' from
@@ -1292,12 +1292,12 @@ export function wireThemeToggle(
     // spans the WHOLE turn, not just the pre-first-token gap. Also doubles
     // as the double-send guard: the send button (and model picker) are
     // disabled while busy.
-    var busy = false;
+    let busy = false;
     // The AbortController of the in-flight turn, so the Send button can double
     // as Stop while busy (issue #420 — the kit's Ask panel gains cancel).
-    var activeAbort = null;
-    var SEND_ARROW = '→';
-    var SEND_STOP = '■';
+    let activeAbort = null;
+    const SEND_ARROW = '→';
+    const SEND_STOP = '■';
     function setBusy(b) {
       busy = !!b;
       form.dataset.busy = busy ? 'true' : 'false';
@@ -1313,7 +1313,7 @@ export function wireThemeToggle(
     }
     // Intercept clicks while busy: cancel the turn rather than submit. Runs
     // before the form's submit handler; `preventDefault` stops the submit.
-    sendBtn.addEventListener('click', function (e) {
+    sendBtn.addEventListener('click', (e) => {
       if (busy) {
         e.preventDefault();
         if (activeAbort) activeAbort.abort();
@@ -1329,7 +1329,7 @@ export function wireThemeToggle(
       refreshGrantChip(ov.querySelector('[data-kit-grant]'));
       maybeAutoLoadStoredConversation();
       if (modelPicker) modelPicker.load();
-      setTimeout(function () {
+      setTimeout(() => {
         input && input.focus();
       }, 60);
     }
@@ -1339,13 +1339,13 @@ export function wireThemeToggle(
     }
     btn.addEventListener('click', open);
     ov.querySelector('.kit-ask-x').addEventListener('click', close);
-    ov.addEventListener('click', function (e) {
+    ov.addEventListener('click', (e) => {
       if (e.target === ov) close();
     });
-    document.addEventListener('keydown', function (e) {
+    document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !ov.hidden) close();
     });
-    ov.querySelectorAll('.kit-ask-chip').forEach(function (c) {
+    ov.querySelectorAll('.kit-ask-chip').forEach((c) => {
       c.addEventListener('click', function () {
         input.value = c.textContent;
         input.focus();
@@ -1362,12 +1362,12 @@ export function wireThemeToggle(
     // `open()` re-fetches, since the pref can change elsewhere (desktop
     // Settings → Agents) between opens.
     function initAskModelPicker() {
-      var wrap = form.querySelector('.kit-ask-model');
-      var modelBtn = form.querySelector('.kit-ask-model-btn');
-      var labelEl = form.querySelector('.kit-ask-model-label');
-      var menu = form.querySelector('.kit-ask-model-menu');
+      const wrap = form.querySelector('.kit-ask-model');
+      const modelBtn = form.querySelector('.kit-ask-model-btn');
+      const labelEl = form.querySelector('.kit-ask-model-label');
+      const menu = form.querySelector('.kit-ask-model-menu');
       if (!wrap || !modelBtn || !menu) return null;
-      var state = { loaded: false, current: null, defaultModel: '', catalog: [] };
+      const state = { loaded: false, current: null, defaultModel: '', catalog: [] };
 
       function renderLabel() {
         labelEl.textContent = modelLabel(state);
@@ -1389,7 +1389,7 @@ export function wireThemeToggle(
 
       function choose(modelId) {
         closeMenu();
-        var prev = state.current;
+        const prev = state.current;
         state.current = modelId; // optimistic
         renderLabel();
         fetch(appBase() + '_turn/model', {
@@ -1397,15 +1397,15 @@ export function wireThemeToggle(
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ model: modelId }),
         })
-          .then(function (r) {
+          .then((r) => {
             if (!r.ok) throw new Error('model update failed (' + r.status + ')');
             return r.json();
           })
-          .then(function (body) {
+          .then((body) => {
             Object.assign(state, normalizeModelState(body));
             renderLabel();
           })
-          .catch(function () {
+          .catch(() => {
             state.current = prev; // revert the optimistic label on failure
             renderLabel();
           });
@@ -1413,7 +1413,7 @@ export function wireThemeToggle(
 
       function renderMenu() {
         menu.innerHTML = '';
-        var useDefault = el(
+        const useDefault = el(
           '<button type="button" role="menuitemradio" class="kit-ask-model-item' +
             (!state.current ? ' is-active' : '') +
             '" aria-checked="' +
@@ -1422,14 +1422,14 @@ export function wireThemeToggle(
             esc(state.defaultModel || 'gateway default') +
             '</span></button>',
         );
-        useDefault.addEventListener('click', function () {
+        useDefault.addEventListener('click', () => {
           choose(null);
         });
         menu.appendChild(useDefault);
         if (state.catalog.length) menu.appendChild(el('<div class="kit-ask-model-divider"></div>'));
-        state.catalog.forEach(function (m) {
-          var active = m.id === state.current;
-          var item = el(
+        state.catalog.forEach((m) => {
+          let active = m.id === state.current;
+          let item = el(
             '<button type="button" role="menuitemradio" class="kit-ask-model-item' +
               (active ? ' is-active' : '') +
               '" aria-checked="' +
@@ -1453,7 +1453,7 @@ export function wireThemeToggle(
         document.addEventListener('keydown', onDocKey, true);
       }
 
-      modelBtn.addEventListener('click', function () {
+      modelBtn.addEventListener('click', () => {
         if (modelBtn.disabled) return;
         if (menu.hidden) openMenu();
         else closeMenu();
@@ -1461,22 +1461,22 @@ export function wireThemeToggle(
 
       return {
         /** Re-fetch the picker state (called on every panel `open()`). */
-        load: function () {
+        load() {
           return fetchJson(appBase() + '_turn/model').then(function (r) {
             if (r.ok && r.body) Object.assign(state, normalizeModelState(r.body));
             renderLabel();
           }, renderLabel);
         },
-        setDisabled: function (disabled) {
+        setDisabled(disabled) {
           modelBtn.disabled = !!disabled;
           if (disabled) closeMenu();
         },
       };
     }
-    var modelPicker = initAskModelPicker();
+    const modelPicker = initAskModelPicker();
 
     function bubble(cls, html) {
-      var m = el('<div class="kit-msg ' + cls + '"></div>');
+      const m = el('<div class="kit-msg ' + cls + '"></div>');
       m.innerHTML = html;
       log.appendChild(m);
       log.scrollTop = log.scrollHeight;
@@ -1489,7 +1489,7 @@ export function wireThemeToggle(
       return (
         '<div class="kit-ask-msg-atts">' +
         atts
-          .map(function (a) {
+          .map((a) => {
             return (
               '<span class="kit-ask-msg-att">' + CLIP_ICON + esc(a.filename || 'file') + '</span>'
             );
@@ -1499,7 +1499,7 @@ export function wireThemeToggle(
       );
     }
 
-    var api = {
+    const api = {
       open: open,
       close: close,
       /** append a user bubble (escaped); `atts` optionally renders attachment chips beneath it */
@@ -1512,7 +1512,7 @@ export function wireThemeToggle(
       },
       /** show a typing indicator; returns { done() } */
       typing: function () {
-        var t = el('<div class="kit-ask-typing"><i></i><i></i><i></i></div>');
+        let t = el('<div class="kit-ask-typing"><i></i><i></i><i></i></div>');
         log.appendChild(t);
         log.scrollTop = log.scrollHeight;
         return {
@@ -1531,7 +1531,7 @@ export function wireThemeToggle(
       /** a completed, receipted action (with optional Undo) */
       applied: function (o) {
         o = o || {};
-        var a = el(
+        let a = el(
           '<div class="kit-ask-applied"><span class="ck">✓</span><span class="ac-t">' +
             esc(o.title) +
             '<span class="ac-s">' +
@@ -1541,7 +1541,7 @@ export function wireThemeToggle(
             '</div>',
         );
         log.appendChild(a);
-        var u = a.querySelector('.ac-undo');
+        let u = a.querySelector('.ac-undo');
         if (u)
           u.addEventListener('click', function () {
             o.onUndo();
@@ -1562,14 +1562,14 @@ export function wireThemeToggle(
        */
       propose: function (o) {
         o = o || {};
-        var diff = o.diff
+        let diff = o.diff
           ? '<div class="kit-aa-diff"><span class="d1">' +
             esc(o.diff[0]) +
             '</span> → <span class="d2">' +
             esc(o.diff[1]) +
             '</span></div>'
           : '';
-        var card = el(
+        let card = el(
           '<div class="kit-ask-action"><span class="aa-label">Proposed write · needs your ok</span>' +
             '<div class="aa-title">' +
             esc(o.title) +
@@ -1589,7 +1589,7 @@ export function wireThemeToggle(
           card.classList.toggle('aa-busy', busy);
         }
         function note(text) {
-          var n =
+          let n =
             card.querySelector('.aa-note') || card.appendChild(el('<div class="aa-note"></div>'));
           n.textContent = text;
           log.scrollTop = log.scrollHeight;
@@ -1607,7 +1607,7 @@ export function wireThemeToggle(
           log.scrollTop = log.scrollHeight;
         }
         card.querySelector('.kit-aa-approve').addEventListener('click', function () {
-          var settled = o.onApprove ? o.onApprove() : undefined;
+          let settled = o.onApprove ? o.onApprove() : undefined;
           if (!settled || typeof settled.then !== 'function') return swapApplied();
           setBusy(true);
           settled.then(
@@ -1625,13 +1625,13 @@ export function wireThemeToggle(
             },
           );
         });
-        var edit = card.querySelector('.aa-edit');
+        let edit = card.querySelector('.aa-edit');
         if (edit)
           edit.addEventListener('click', function () {
             o.onEdit();
           });
         card.querySelector('.aa-discard').addEventListener('click', function () {
-          var settled = o.onDiscard ? o.onDiscard() : undefined;
+          let settled = o.onDiscard ? o.onDiscard() : undefined;
           if (!settled || typeof settled.then !== 'function') return card.remove();
           setBusy(true);
           settled.then(
@@ -1662,15 +1662,15 @@ export function wireThemeToggle(
     // Files picked/dropped/pasted upload immediately to the per-app
     // conversation blob CAS (issue #190); the strip tracks their upload
     // state until Send folds the resolved refs into the turn body.
-    var pending = []; // { cid, file, status: 'uploading'|'done'|'error', hash, mime, filename, sizeBytes, error }
-    var pendingSeq = 0;
-    var MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+    let pending = []; // { cid, file, status: 'uploading'|'done'|'error', hash, mime, filename, sizeBytes, error }
+    let pendingSeq = 0;
+    const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
     function renderPending() {
       pendingStrip.innerHTML = '';
       pendingStrip.hidden = pending.length === 0 || !historyView.hidden;
-      pending.forEach(function (p) {
-        var chip = el(
+      pending.forEach((p) => {
+        let chip = el(
           '<span class="kit-ask-pending-chip' +
             (p.status === 'uploading' ? ' is-uploading' : '') +
             (p.status === 'error' ? ' is-error' : '') +
@@ -1700,8 +1700,8 @@ export function wireThemeToggle(
     }
 
     function addFiles(files) {
-      Array.prototype.slice.call(files || []).forEach(function (file) {
-        var p = { cid: ++pendingSeq, file: file, status: 'uploading' };
+      Array.prototype.slice.call(files || []).forEach((file) => {
+        let p = { cid: ++pendingSeq, file: file, status: 'uploading' };
         pending.push(p);
         renderPending();
         if (file.size > MAX_UPLOAD_BYTES) {
@@ -1731,43 +1731,43 @@ export function wireThemeToggle(
 
     function typesHasFiles(dt) {
       if (!dt || !dt.types) return false;
-      for (var i = 0; i < dt.types.length; i++) {
+      for (let i = 0; i < dt.types.length; i++) {
         if (dt.types[i] === 'Files') return true;
       }
       return false;
     }
 
-    attachBtn.addEventListener('click', function () {
+    attachBtn.addEventListener('click', () => {
       fileInput.click();
     });
-    fileInput.addEventListener('change', function () {
+    fileInput.addEventListener('change', () => {
       addFiles(fileInput.files);
       fileInput.value = '';
     });
-    panel.addEventListener('dragover', function (e) {
+    panel.addEventListener('dragover', (e) => {
       if (!typesHasFiles(e.dataTransfer)) return;
       e.preventDefault();
       panel.classList.add('is-dragover');
     });
-    panel.addEventListener('dragleave', function (e) {
+    panel.addEventListener('dragleave', (e) => {
       if (e.target === panel) panel.classList.remove('is-dragover');
     });
-    panel.addEventListener('drop', function (e) {
+    panel.addEventListener('drop', (e) => {
       if (!typesHasFiles(e.dataTransfer)) return;
       e.preventDefault();
       panel.classList.remove('is-dragover');
-      var files = (e.dataTransfer && e.dataTransfer.files) || [];
+      let files = (e.dataTransfer && e.dataTransfer.files) || [];
       if (files.length) addFiles(files);
     });
-    input.addEventListener('paste', function (e) {
-      var files = (e.clipboardData && e.clipboardData.files) || [];
+    input.addEventListener('paste', (e) => {
+      let files = (e.clipboardData && e.clipboardData.files) || [];
       if (files.length) addFiles(files);
     });
 
     // ---------- Conversation history (issue #190 read side) ----------
 
     function setViewMode(mode) {
-      var isHistory = mode === 'history';
+      const isHistory = mode === 'history';
       historyView.hidden = !isHistory;
       log.hidden = isHistory;
       suggestRow.hidden = isHistory;
@@ -1788,11 +1788,11 @@ export function wireThemeToggle(
         historyNote('No past conversations');
         return;
       }
-      sessions.forEach(function (s) {
-        var title = s.title && String(s.title).trim() ? s.title : 'Conversation';
-        var turns = s.turnCount || 0;
-        var meta = (turns === 1 ? '1 turn' : turns + ' turns') + ' · ' + relTime(s.updatedAt);
-        var row = el(
+      sessions.forEach((s) => {
+        let title = s.title && String(s.title).trim() ? s.title : 'Conversation';
+        let turns = s.turnCount || 0;
+        let meta = (turns === 1 ? '1 turn' : turns + ' turns') + ' · ' + relTime(s.updatedAt);
+        let row = el(
           '<div class="kit-ask-history-row">' +
             '<button type="button" class="kit-ask-history-item" data-id="' +
             esc(s.id) +
@@ -1813,7 +1813,7 @@ export function wireThemeToggle(
 
     function loadHistoryList() {
       historyNote('Loading…');
-      fetchJson(conversationsBase()).then(function (r) {
+      fetchJson(conversationsBase()).then((r) => {
         if (!r.ok) {
           historyNote("Couldn't load past conversations.");
           return;
@@ -1824,7 +1824,7 @@ export function wireThemeToggle(
 
     function resetLogToIntro() {
       log.innerHTML = '';
-      var m = el('<div class="kit-msg ai"></div>');
+      const m = el('<div class="kit-msg ai"></div>');
       m.textContent = introText();
       log.appendChild(m);
     }
@@ -1832,20 +1832,20 @@ export function wireThemeToggle(
     /** Reconstruct the log from a loaded session's messages, collapsing a run of `tool` items into one muted note. */
     function renderTranscript(messages) {
       log.innerHTML = '';
-      var list = messages || [];
-      var i = 0;
+      const list = messages || [];
+      let i = 0;
       while (i < list.length) {
-        var payload = (list[i] && list[i].payload) || {};
+        const payload = (list[i] && list[i].payload) || {};
         if (payload.kind === 'user') {
           bubble('user', esc(payload.text || '') + attachmentChipsHtml(payload.attachments));
           i++;
         } else if (payload.kind === 'tool') {
-          var n = 0;
+          let n = 0;
           while (i < list.length && list[i].payload && list[i].payload.kind === 'tool') {
             n++;
             i++;
           }
-          var note = el('<div class="kit-ask-toolnote"></div>');
+          const note = el('<div class="kit-ask-toolnote"></div>');
           note.textContent = '⚙ used ' + n + (n === 1 ? ' tool' : ' tools');
           log.appendChild(note);
         } else {
@@ -1860,7 +1860,7 @@ export function wireThemeToggle(
 
     function openConversation(id) {
       historyNote('Loading…');
-      fetchJson(conversationPath(appId() || '', id)).then(function (r) {
+      fetchJson(conversationPath(appId() || '', id)).then((r) => {
         if (!r.ok) {
           if (r.status === 404) {
             loadHistoryList(); // a stale row — refresh the list in place
@@ -1876,7 +1876,7 @@ export function wireThemeToggle(
     }
 
     function deleteConversationRow(id) {
-      fetch(conversationPath(appId() || '', id), { method: 'DELETE' }).then(function () {
+      fetch(conversationPath(appId() || '', id), { method: 'DELETE' }).then(() => {
         if (session.get() === id) {
           session.clear();
           resetLogToIntro();
@@ -1885,7 +1885,7 @@ export function wireThemeToggle(
       });
     }
 
-    historyBtn.addEventListener('click', function () {
+    historyBtn.addEventListener('click', () => {
       if (historyView.hidden) {
         loadHistoryList();
         setViewMode('history');
@@ -1893,15 +1893,15 @@ export function wireThemeToggle(
         setViewMode('chat');
       }
     });
-    historyNewBtn.addEventListener('click', function () {
+    historyNewBtn.addEventListener('click', () => {
       session.clear();
       resetLogToIntro();
       clearPending();
       setViewMode('chat');
       input && input.focus();
     });
-    historyList.addEventListener('click', function (e) {
-      var del = e.target.closest('.kit-ask-history-del');
+    historyList.addEventListener('click', (e) => {
+      let del = e.target.closest('.kit-ask-history-del');
       if (del) {
         // Same two-click "arm then confirm" idiom as every other destructive
         // control in the kit — no native confirm() dialog.
@@ -1909,7 +1909,7 @@ export function wireThemeToggle(
         deleteConversationRow(del.getAttribute('data-id'));
         return;
       }
-      var item = e.target.closest('.kit-ask-history-item');
+      let item = e.target.closest('.kit-ask-history-item');
       if (item) openConversation(item.getAttribute('data-id'));
     });
 
@@ -1917,11 +1917,11 @@ export function wireThemeToggle(
     function maybeAutoLoadStoredConversation() {
       if (autoLoadAttempted) return;
       autoLoadAttempted = true;
-      var id = session.get();
+      const id = session.get();
       // "empty" == still just the intro bubble — a fresh page load, not a
       // conversation this panel has already rendered this session.
       if (!id || log.children.length > 1) return;
-      fetchJson(conversationPath(appId() || '', id)).then(function (r) {
+      fetchJson(conversationPath(appId() || '', id)).then((r) => {
         if (!r.ok) {
           if (r.status === 404) session.clear(); // stale id — a fresh vault, a restart
           return;
@@ -1930,17 +1930,17 @@ export function wireThemeToggle(
       });
     }
 
-    var handler = null;
-    form.addEventListener('submit', function (e) {
+    let handler = null;
+    form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (busy) return; // a turn is already in flight — guard double-sends
-      var uploaded = pending.filter(function (p) {
+      let uploaded = pending.filter(function (p) {
         return p.status === 'done';
       });
-      var refs = uploaded.map(function (p) {
+      let refs = uploaded.map(function (p) {
         return { hash: p.hash, mime: p.mime, filename: p.filename, sizeBytes: p.sizeBytes };
       });
-      var v = input.value.trim() || (refs.length ? '(attachment)' : '');
+      let v = input.value.trim() || (refs.length ? '(attachment)' : '');
       if (!v) return;
       api.user(v, refs.length ? refs : undefined);
       input.value = '';
@@ -1970,7 +1970,7 @@ export function wireThemeToggle(
 
   /** Base for app-scoped routes. Absolute when the bridge pinned an app id. */
   function appBase() {
-    var id = appId();
+    const id = appId();
     return id ? '/centraid/' + encodeURIComponent(id) + '/' : '';
   }
 
@@ -1985,9 +1985,9 @@ export function wireThemeToggle(
   }
 
   function fetchJson(url, opts) {
-    return fetch(url, opts).then(function (r) {
+    return fetch(url, opts).then((r) => {
       return r.text().then(function (t) {
-        var j = null;
+        let j = null;
         try {
           j = t ? JSON.parse(t) : null;
         } catch (_) {}
@@ -2002,9 +2002,9 @@ export function wireThemeToggle(
       method: 'POST',
       headers: { 'content-type': file.type || 'application/octet-stream' },
       body: file,
-    }).then(function (r) {
+    }).then((r) => {
       return r.text().then(function (t) {
-        var j = null;
+        let j = null;
         try {
           j = t ? JSON.parse(t) : null;
         } catch (_) {}
@@ -2024,7 +2024,7 @@ export function wireThemeToggle(
   function refreshGrantChip(chip) {
     if (!chip || !appId()) return;
     fetchJson(vaultStatusPath())
-      .then(function (s) {
+      .then((s) => {
         // The status route answers { vaultId, name, ownerPartyId, fresh } —
         // there is no `active` field (a resolvable vault always 200s, an
         // unresolvable one errors before this shape). Keying on a truthy
@@ -2035,23 +2035,23 @@ export function wireThemeToggle(
           return;
         }
         return fetchJson(vaultAppsPath()).then(function (a) {
-          var apps = (a.ok && a.body && a.body.apps) || [];
+          let apps = (a.ok && a.body && a.body.apps) || [];
           // `apps[].appId` is the internal consent_app UUID minted at
           // enrollment, not the manifest id `appId()` reads off the runtime
           // bridge — `name` is the field that carries the manifest id.
-          var mine = apps.filter(function (x) {
+          let mine = apps.filter(function (x) {
             return x.name === appId();
           })[0];
           if (!mine) {
             chip.textContent = 'not enrolled — vault calls deny';
             return;
           }
-          var grants = mine.grants || [];
+          let grants = mine.grants || [];
           if (!grants.length) {
             chip.textContent = 'no grant yet — writes deny or park';
             return;
           }
-          var verbs = {};
+          let verbs = {};
           grants.forEach(function (g) {
             (g.scopes || []).forEach(function (sc) {
               String(sc.verbs || '')
@@ -2061,11 +2061,11 @@ export function wireThemeToggle(
                 });
             });
           });
-          var list = Object.keys(verbs);
+          let list = Object.keys(verbs);
           chip.textContent = (list.length ? list.join(' + ') : 'granted') + ' · consent-gated';
         });
       })
-      .catch(function () {
+      .catch(() => {
         /* unreachable plane — leave the default label */
       });
   }
@@ -2099,7 +2099,7 @@ export function wireThemeToggle(
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({}),
-      }).then(function (r) {
+      }).then((r) => {
         if (!r.ok || !r.body || !r.body.id) {
           throw new Error('could not start a conversation (' + r.status + ')');
         }
@@ -2119,7 +2119,7 @@ export function wireThemeToggle(
      * promise — the id is never guessed client-side.
      */
     function ensureConversationId() {
-      var stored = session.get();
+      const stored = session.get();
       if (stored) return Promise.resolve(stored);
       return createConversation();
     }
@@ -2130,7 +2130,7 @@ export function wireThemeToggle(
      * the shared one (consent-cards.js, #420); the card chrome is `api.propose`.
      */
     function renderParked(invocationId) {
-      return fetchParkedEntry(invocationId, { fetchJson: fetchJson }).then(function (entry) {
+      return fetchParkedEntry(invocationId, { fetchJson }).then((entry) => {
         if (!entry) {
           api.ai(
             esc(
@@ -2139,7 +2139,7 @@ export function wireThemeToggle(
           );
           return;
         }
-        var d = describeParked(entry);
+        let d = describeParked(entry);
         api.propose({
           title: d.title,
           detail: d.detail,
@@ -2163,13 +2163,13 @@ export function wireThemeToggle(
       // still running mid-turn; `api.setBusy` is the fix, and doubles as the
       // double-send guard (see the submit handler). `signal` cancels the turn.
       api.setBusy(true);
-      var typing = api.typing();
-      var stream = null; // the streaming assistant bubble element
-      var streamText = ''; // accumulated raw answer text
-      var finalized = false;
+      const typing = api.typing();
+      let stream = null; // the streaming assistant bubble element
+      let streamText = ''; // accumulated raw answer text
+      let finalized = false;
       // One idempotency key per user send (issue #420), REUSED on the 404
       // re-mint retry below so a duplicate turn replays instead of re-running.
-      var idempotencyKey =
+      const idempotencyKey =
         typeof crypto !== 'undefined' && crypto.randomUUID
           ? crypto.randomUUID()
           : 'k-' + Date.now() + '-' + Math.random().toString(16).slice(2);
@@ -2190,10 +2190,10 @@ export function wireThemeToggle(
         ensureStream().textContent = streamText;
       }
       function finalizeRich(fullText) {
-        var full = fullText || streamText;
+        const full = fullText || streamText;
         if (!full) return;
         finalized = true;
-        var host = ensureStream();
+        const host = ensureStream();
         host.innerHTML = richAnswerHtml(full);
         hydrateRefs(host);
         wireCodeCopy(host);
@@ -2204,7 +2204,7 @@ export function wireThemeToggle(
             if (typeof ev.delta === 'string') append(ev.delta);
             return;
           case 'tool.result': {
-            var o = outcomeOf(ev.result);
+            const o = outcomeOf(ev.result);
             if (o && o.status === 'parked' && o.invocationId) renderParked(o.invocationId);
             else if (o && o.status === 'denied') {
               say(
@@ -2242,7 +2242,7 @@ export function wireThemeToggle(
        * `consumeSse` (#420), which also honors `signal` for clean cancel.
        */
       function runTurn(id, isRetry) {
-        var body = {
+        const body = {
           conversationId: id,
           message: text,
           register: 'ask',
@@ -2253,11 +2253,11 @@ export function wireThemeToggle(
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(body),
-          signal: signal,
-        }).then(function (res) {
+          signal,
+        }).then((res) => {
           if (!res.ok) {
             return res.text().then(function (t) {
-              var j = null;
+              let j = null;
               try {
                 j = t ? JSON.parse(t) : null;
               } catch (_) {}
@@ -2289,15 +2289,15 @@ export function wireThemeToggle(
         });
       }
       ensureConversationId()
-        .then(function (id) {
+        .then((id) => {
           return runTurn(id, false);
         })
-        .catch(function (err) {
+        .catch((err) => {
           // A user-initiated cancel surfaces as an AbortError — not a failure.
           if ((signal && signal.aborted) || (err && err.name === 'AbortError')) return;
           say("Couldn't reach the vault gateway — " + String((err && err.message) || err));
         })
-        .then(function () {
+        .then(() => {
           typing.done();
           // Stream ended with text but no `final` event (model stopped, or a
           // cancel mid-answer) — still upgrade the plain text to the rich render.
@@ -2313,8 +2313,8 @@ export function wireThemeToggle(
     if (d.applied) api.applied(d.applied);
     if (d.q) {
       api.user(d.q);
-      var t = api.typing();
-      setTimeout(function () {
+      const t = api.typing();
+      setTimeout(() => {
         t.done();
         if (d.a) api.ai(d.a);
         if (d.propose) api.propose(d.propose);
@@ -2478,7 +2478,7 @@ function normalizeWithMap(text) {
   let lastWasSpace = false;
   for (let i = 0; i < text.length; i += 1) {
     let ch = text[i];
-    if (/\s/.test(ch)) {
+    if (/\s/u.test(ch)) {
       if (lastWasSpace) continue;
       out += ' ';
       map.push(i);
@@ -2680,7 +2680,7 @@ export function attachMentionPopover(
     const at = upto.lastIndexOf('@');
     if (at === -1) return null;
     const before = at === 0 ? '' : upto[at - 1];
-    if (before && !/[\s(]/.test(before)) return null;
+    if (before && !/[\s(]/u.test(before)) return null;
     const token = upto.slice(at + 1);
     if (token.length > 40 || token.includes('\n')) return null;
     return { at, caret, token };
@@ -3078,7 +3078,7 @@ export function attachMentionField(
     textarea.focus();
     const pos = textarea.selectionStart ?? textarea.value.length;
     const prev = pos > 0 ? textarea.value[pos - 1] : '';
-    textarea.setRangeText(prev && !/[\s(]/.test(prev) ? ' @' : '@', pos, pos, 'end');
+    textarea.setRangeText(prev && !/[\s(]/u.test(prev) ? ' @' : '@', pos, pos, 'end');
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
   }
 

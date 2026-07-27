@@ -15,7 +15,7 @@ function hmac(key: Buffer | string, data: string): Buffer {
 
 function encodeQueryPart(value: string): string {
   return encodeURIComponent(value).replace(
-    /[!'()*]/g,
+    /[!'()*]/gu,
     (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
   );
 }
@@ -23,8 +23,8 @@ function encodeQueryPart(value: string): string {
 function amzDateOf(now: Date): string {
   return now
     .toISOString()
-    .replace(/[-:]/g, '')
-    .replace(/\.\d{3}/, '');
+    .replace(/[-:]/gu, '')
+    .replace(/\.\d{3}/u, '');
 }
 
 function scopeOf(dateStamp: string, region: string): string {
@@ -53,7 +53,7 @@ export function encodeKeyPath(key: string): string {
     .split('/')
     .map((seg) =>
       encodeURIComponent(seg).replace(
-        /[!'()*]/g,
+        /[!'()*]/gu,
         (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
       ),
     )

@@ -360,7 +360,7 @@ export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
     // `friendly` always emitted (curated name, else the humanized label);
     // `blurb` only when the kind is curated — never fabricated.
     friendly: entry.friendly,
-    ...(entry.blurb !== undefined ? { blurb: entry.blurb } : {}),
+    ...(entry.blurb === undefined ? {} : { blurb: entry.blurb }),
     hopDistance: hop.has(entry.physical) ? hop.get(entry.physical)! : null,
     selfRef: selfRefTables.has(entry.physical),
   }));

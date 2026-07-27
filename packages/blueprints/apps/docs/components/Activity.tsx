@@ -50,8 +50,8 @@ export function Activity({
       {events.map((ev, i) => (
         <div className={styles.activityItem} key={i}>
           <div className={styles.activityRail}>
-            <span className={styles.activityDot}></span>
-            {i < events.length - 1 ? <span className={styles.activityLine}></span> : null}
+            <span className={styles.activityDot} />
+            {i < events.length - 1 ? <span className={styles.activityLine} /> : null}
           </div>
           <div>
             <div className={styles.activityText}>

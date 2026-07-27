@@ -181,11 +181,13 @@ describe('replica invocation commit receipt', () => {
           )
           .get('invocation-reopen'),
       ).toMatchObject({ status: 'executed', receipt_id: expect.any(String) });
-      expect(
-        db.journal
+      // node:sqlite hands back null-prototype rows; spreading compares the column
+      // data (which is the contract) without asserting the driver's prototype.
+      expect({
+        ...db.journal
           .prepare(`SELECT count(*) AS n FROM agent_explanation WHERE invocation_id = ?`)
           .get('invocation-reopen'),
-      ).toEqual({ n: 1 });
+      }).toStrictEqual({ n: 1 });
       expect(readReplicaInvocationCommit(db.vault, 'invocation-reopen')).toBeUndefined();
     } finally {
       db?.close();
@@ -222,11 +224,11 @@ describe('replica invocation commit receipt', () => {
       db = undefined;
 
       db = openVaultDb({ dir });
-      expect(
-        db.journal
+      expect({
+        ...db.journal
           .prepare(`SELECT status FROM agent_command_invocation WHERE invocation_id = ?`)
           .get('invocation-intent-reopen'),
-      ).toEqual({ status: 'executed' });
+      }).toStrictEqual({ status: 'executed' });
       expect(readReplicaInvocationCommit(db.vault, 'invocation-intent-reopen')).toBeUndefined();
       expect(readReplicaIntentOutcome(db.vault, 'intent-reopen', 'device-1')?.status).toBe(
         'executed',
@@ -262,11 +264,11 @@ describe('replica invocation commit receipt', () => {
       db = undefined;
 
       db = openVaultDb({ dir });
-      expect(
-        db.journal
+      expect({
+        ...db.journal
           .prepare(`SELECT status FROM agent_command_invocation WHERE invocation_id = ?`)
           .get('invocation-revoked'),
-      ).toEqual({ status: 'executed' });
+      }).toStrictEqual({ status: 'executed' });
       expect(readReplicaInvocationCommit(db.vault, 'invocation-revoked')).toBeUndefined();
     } finally {
       db?.close();
@@ -285,11 +287,11 @@ describe('replica invocation commit receipt', () => {
     );
     expect(readReplicaInvocationCommit(db.vault, 'invocation-missing')).toBeDefined();
     expect(readReplicaInvocationCommit(db.vault, 'invocation-provable')).toBeUndefined();
-    expect(
-      db.journal
+    expect({
+      ...db.journal
         .prepare(`SELECT status FROM agent_command_invocation WHERE invocation_id = ?`)
         .get('invocation-provable'),
-    ).toEqual({ status: 'executed' });
+    }).toStrictEqual({ status: 'executed' });
     db.close();
   });
 
@@ -305,13 +307,13 @@ describe('replica invocation commit receipt', () => {
       expect(() => openVaultDb({ dir })).toThrow(ReplicaInvocationRepairError);
       const raw = new DatabaseSync(path.join(dir, 'vault.db'));
       try {
-        expect(
-          raw
+        expect({
+          ...raw
             .prepare(
               `SELECT journal_finalized_at FROM replica_invocation_commit WHERE invocation_id = ?`,
             )
             .get('invocation-unprovable'),
-        ).toEqual({ journal_finalized_at: null });
+        }).toStrictEqual({ journal_finalized_at: null });
       } finally {
         raw.close();
       }

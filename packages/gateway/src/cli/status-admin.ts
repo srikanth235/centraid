@@ -115,15 +115,15 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
   return {
     dataDir: resolved,
     exists: true,
-    ...(endpointId !== undefined ? { endpointId } : {}),
-    ...(vaultCount !== undefined ? { vaultCount } : {}),
+    ...(endpointId === undefined ? {} : { endpointId }),
+    ...(vaultCount === undefined ? {} : { vaultCount }),
   };
 }
 
 function describeService(service: ServiceStatusInfo): string {
   if (!service.installed) return `not installed (label ${service.label})`;
   const running = service.running ? 'running' : `installed, ${service.state ?? 'stopped'}`;
-  return `${running} (label ${service.label}${service.pid !== undefined ? `, pid ${service.pid}` : ''})`;
+  return `${running} (label ${service.label}${service.pid === undefined ? '' : `, pid ${service.pid}`})`;
 }
 
 export async function commandStatus(

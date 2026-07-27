@@ -429,8 +429,8 @@ export function Sections({
             {interactions.map((t, i) => (
               <div className={shared.activityItem} key={i}>
                 <div className={shared.activityRail}>
-                  <span className={shared.activityDot} style={{ background: color }}></span>
-                  <span className={shared.activityLine}></span>
+                  <span className={shared.activityDot} style={{ background: color }} />
+                  <span className={shared.activityLine} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

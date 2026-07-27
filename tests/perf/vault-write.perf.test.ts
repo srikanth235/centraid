@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { createTestVault } from '../helpers/factories.js';
 import { recordQualityResult } from '@centraid/test-kit/quality-result';
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 
 const OWNER = 'tests/perf/vault-write.perf.test.ts';
 
@@ -25,52 +25,54 @@ const LATENCY_BUDGET_MS = 6;
 const FSYNC_BUDGET = 3;
 const FSYNC_TRACE_WRITES = 500;
 
-test('journalled vault writes stay within the nightly latency and fsync budget', async () => {
-  // Measure latency against a REAL vault (createTestVault === openVaultDb +
-  // bootstrapVault, on-disk WAL + FULL) writing a canonical ontology table so
-  // the durable replica-protocol triggers fire in-transaction — a genuine
-  // journalled write, not a bare INSERT into an ad-hoc table.
-  const db = await createTestVault();
-  const statement = db.vault.prepare(
-    `INSERT INTO core_party
+describe('vault-write.perf', () => {
+  test('journalled vault writes stay within the nightly latency and fsync budget', async () => {
+    // Measure latency against a REAL vault (createTestVault === openVaultDb +
+    // bootstrapVault, on-disk WAL + FULL) writing a canonical ontology table so
+    // the durable replica-protocol triggers fire in-transaction — a genuine
+    // journalled write, not a bare INSERT into an ad-hoc table.
+    const db = await createTestVault();
+    const statement = db.vault.prepare(
+      `INSERT INTO core_party
        (party_id, kind, display_name, created_at, updated_at, ontology_version)
      VALUES (?, 'person', ?, ?, ?, '1.2')`,
-  );
-  const samples: number[] = [];
-  for (let index = 0; index < 250; index += 1) {
-    const started = performance.now();
-    db.vault.exec('BEGIN IMMEDIATE');
-    statement.run(`perf-${index}`, `Perf party ${index}`, index, index);
-    db.vault.exec('COMMIT');
-    samples.push(performance.now() - started);
-  }
-  samples.sort((left, right) => left - right);
-  const p95Ms = samples[Math.floor(samples.length * 0.95)] ?? Number.POSITIVE_INFINITY;
+    );
+    const samples: number[] = [];
+    for (let index = 0; index < 250; index += 1) {
+      const started = performance.now();
+      db.vault.exec('BEGIN IMMEDIATE');
+      statement.run(`perf-${index}`, `Perf party ${index}`, index, index);
+      db.vault.exec('COMMIT');
+      samples.push(performance.now() - started);
+    }
+    samples.sort((left, right) => left - right);
+    const p95Ms = samples[Math.floor(samples.length * 0.95)] ?? Number.POSITIVE_INFINITY;
 
-  const fsyncsPerWrite = await traceFsyncsPerWrite();
-  const passed =
-    p95Ms < LATENCY_BUDGET_MS && (fsyncsPerWrite === undefined || fsyncsPerWrite <= FSYNC_BUDGET);
-  await recordQualityResult({
-    lane: 'perf',
-    owner: OWNER,
-    name: 'Vault write p95 and fsync budget',
-    status: passed ? 'passed' : 'failed',
-    measurements: [
-      { name: 'p95 transaction latency', value: p95Ms, unit: 'ms', budget: LATENCY_BUDGET_MS },
-      ...(fsyncsPerWrite === undefined
-        ? []
-        : [
-            {
-              name: 'fsyncs per write',
-              value: fsyncsPerWrite,
-              unit: 'calls/write',
-              budget: FSYNC_BUDGET,
-            },
-          ]),
-    ],
+    const fsyncsPerWrite = await traceFsyncsPerWrite();
+    const passed =
+      p95Ms < LATENCY_BUDGET_MS && (fsyncsPerWrite === undefined || fsyncsPerWrite <= FSYNC_BUDGET);
+    await recordQualityResult({
+      lane: 'perf',
+      owner: OWNER,
+      name: 'Vault write p95 and fsync budget',
+      status: passed ? 'passed' : 'failed',
+      measurements: [
+        { name: 'p95 transaction latency', value: p95Ms, unit: 'ms', budget: LATENCY_BUDGET_MS },
+        ...(fsyncsPerWrite === undefined
+          ? []
+          : [
+              {
+                name: 'fsyncs per write',
+                value: fsyncsPerWrite,
+                unit: 'calls/write',
+                budget: FSYNC_BUDGET,
+              },
+            ]),
+      ],
+    });
+    expect(p95Ms).toBeLessThan(LATENCY_BUDGET_MS);
+    if (fsyncsPerWrite !== undefined) expect(fsyncsPerWrite).toBeLessThanOrEqual(FSYNC_BUDGET);
   });
-  expect(p95Ms).toBeLessThan(LATENCY_BUDGET_MS);
-  if (fsyncsPerWrite !== undefined) expect(fsyncsPerWrite).toBeLessThanOrEqual(FSYNC_BUDGET);
 });
 
 /**

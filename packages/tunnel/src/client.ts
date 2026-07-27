@@ -78,14 +78,14 @@ export interface TunnelClientOptions {
 export interface TunnelClient {
   /** This device's transport identity (base32 EndpointId). */
   endpointId: string;
-  secretKeyBytes(): Uint8Array;
+  secretKeyBytes: () => Uint8Array;
   /** Pair with a desktop using the QR payload's ticket + one-time code. */
-  pair(ticket: string, request: PairRequest): Promise<PairResponse>;
+  pair: (ticket: string, request: PairRequest) => Promise<PairResponse>;
   /** Redeem a gateway pairing ticket over `centraid/gw-pair/1` (issue #289). */
-  pairGateway(ticket: string, request: GatewayPairRequest): Promise<GatewayPairResponse>;
+  pairGateway: (ticket: string, request: GatewayPairRequest) => Promise<GatewayPairResponse>;
   /** Dial the desktop's/gateway's tunnel ALPN. */
-  connect(ticket: string): Promise<Connection>;
-  close(): Promise<void>;
+  connect: (ticket: string) => Promise<Connection>;
+  close: () => Promise<void>;
 }
 
 export async function createTunnelClient(options: TunnelClientOptions = {}): Promise<TunnelClient> {
@@ -162,7 +162,7 @@ export async function tunnelRequest(
 
 export interface LocalProxyHandle {
   port: number;
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 /**

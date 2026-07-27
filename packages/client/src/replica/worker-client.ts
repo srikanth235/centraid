@@ -34,26 +34,39 @@ import type {
   ReplicaWorkerOpenOptions,
 } from './types.js';
 
+/**
+ * The two-signature overload for `add`/`removeEventListener`, spelled as an
+ * intersection of function types. An intersection is exactly what a set of
+ * overload signatures means, so the contract is unchanged — but property style
+ * gets the parameters checked contravariantly instead of bivariantly.
+ */
+type ReplicaWorkerListenerRegistration = ((
+  type: 'message',
+  listener: (event: MessageEvent<ReplicaWorkerResponse>) => void,
+) => void) &
+  ((type: 'error', listener: (event: ErrorEvent) => void) => void);
+
 export interface ReplicaWorkerLike {
-  postMessage(message: ReplicaWorkerRequest): void;
-  addEventListener(
-    type: 'message',
-    listener: (event: MessageEvent<ReplicaWorkerResponse>) => void,
-  ): void;
-  addEventListener(type: 'error', listener: (event: ErrorEvent) => void): void;
-  removeEventListener(
-    type: 'message',
-    listener: (event: MessageEvent<ReplicaWorkerResponse>) => void,
-  ): void;
-  removeEventListener(type: 'error', listener: (event: ErrorEvent) => void): void;
-  terminate(): void;
+  postMessage: (message: ReplicaWorkerRequest) => void;
+  addEventListener: ReplicaWorkerListenerRegistration;
+  removeEventListener: ReplicaWorkerListenerRegistration;
+  terminate: () => void;
 }
 
 export type ReplicaWorkerFactory = () => ReplicaWorkerLike;
 
 interface PendingRpc {
-  resolve(value: unknown): void;
-  reject(error: unknown): void;
+  /**
+   * Type-erased on purpose: `#pending` is keyed by request id, and nothing in
+   * the type system correlates an id back to the `Op` that minted it, so the
+   * map cannot be homogeneously typed. The reply also crosses `postMessage`,
+   * where `ReplicaWorkerResponse['result']` is `unknown` by construction.
+   * Widening the parameter to `unknown` here is what lets `onMessage` hand a
+   * wire value to a resolver minted for a specific `Op`; the narrowing back is
+   * asserted once, in `rpc`, where the `Op` is still in scope.
+   */
+  resolve: (value: unknown) => void;
+  reject: (error: unknown) => void;
 }
 
 export class ReplicaWorkerClient implements ReplicaStore {
@@ -195,7 +208,10 @@ export class ReplicaWorkerClient implements ReplicaStore {
     if (this.#closed) return Promise.reject(new ReplicaClosedError());
     const id = this.#nextId++;
     return new Promise<ReplicaWorkerResults[Op]>((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
+      // The single id→`Op` erasure point (see `PendingRpc.resolve`). The worker
+      // answers request `id` with `ReplicaWorkerResults[Op]`, but that is a
+      // protocol guarantee rather than one TypeScript can carry through the map.
+      this.#pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
       // eslint-disable-next-line unicorn/require-post-message-target-origin -- (#406) Worker.postMessage has no targetOrigin overload; governance: allow-no-unjustified-suppressions Web Worker API false positive
       this.#worker.postMessage({ id, op, payload } as ReplicaWorkerRequest);
     });

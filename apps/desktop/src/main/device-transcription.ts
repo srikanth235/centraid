@@ -19,8 +19,8 @@ export interface DeviceTranscriptionInput {
 }
 
 function loopback(hostname: string): boolean {
-  const value = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  return value === 'localhost' || value === '::1' || /^127(?:\.\d{1,3}){3}$/.test(value);
+  const value = hostname.toLowerCase().replace(/^\[|\]$/gu, '');
+  return value === 'localhost' || value === '::1' || /^127(?:\.\d{1,3}){3}$/u.test(value);
 }
 
 /** Read an explicitly configured, loopback-only ASR endpoint. */

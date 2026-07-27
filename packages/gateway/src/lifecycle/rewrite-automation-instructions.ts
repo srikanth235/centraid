@@ -40,12 +40,8 @@ function rewriteUsageFields(usage: UsageEvent | undefined): {
 } {
   if (!usage) return {};
   const cost =
-    usage.costUsd !== undefined
-      ? {
-          costUsd: usage.costUsd,
-          costSource: usage.costSource ?? ('agent' as const),
-        }
-      : resolveItemCost({
+    usage.costUsd === undefined
+      ? resolveItemCost({
           model: usage.model,
           usage: {
             inputTokens: usage.inputTokens,
@@ -53,16 +49,20 @@ function rewriteUsageFields(usage: UsageEvent | undefined): {
             cacheReadTokens: usage.cacheReadTokens,
             cacheWriteTokens: usage.cacheWriteTokens,
           },
-        });
+        })
+      : {
+          costUsd: usage.costUsd,
+          costSource: usage.costSource ?? ('agent' as const),
+        };
   return {
-    ...(usage.model !== undefined ? { model: usage.model } : {}),
-    ...(usage.provider !== undefined ? { provider: usage.provider } : {}),
-    ...(usage.inputTokens !== undefined ? { inputTokens: usage.inputTokens } : {}),
-    ...(usage.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
-    ...(usage.cacheReadTokens !== undefined ? { cacheReadTokens: usage.cacheReadTokens } : {}),
-    ...(usage.cacheWriteTokens !== undefined ? { cacheWriteTokens: usage.cacheWriteTokens } : {}),
-    ...(cost.costUsd !== undefined ? { costUsd: cost.costUsd } : {}),
-    ...(cost.costSource !== undefined ? { costSource: cost.costSource } : {}),
+    ...(usage.model === undefined ? {} : { model: usage.model }),
+    ...(usage.provider === undefined ? {} : { provider: usage.provider }),
+    ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
+    ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
+    ...(usage.cacheReadTokens === undefined ? {} : { cacheReadTokens: usage.cacheReadTokens }),
+    ...(usage.cacheWriteTokens === undefined ? {} : { cacheWriteTokens: usage.cacheWriteTokens }),
+    ...(cost.costUsd === undefined ? {} : { costUsd: cost.costUsd }),
+    ...(cost.costSource === undefined ? {} : { costSource: cost.costSource }),
   };
 }
 
@@ -80,8 +80,8 @@ export function rewriteWorkOrder(current: string, steering: string): string {
 
 export function cleanRewrittenInstructions(raw: string): string | undefined {
   let text = raw.trim();
-  text = text.replace(/^```(?:markdown|md|text)?\s*/i, '').replace(/\s*```$/i, '');
-  text = text.replace(/^revised instructions\s*:\s*/i, '').trim();
+  text = text.replace(/^```(?:markdown|md|text)?\s*/iu, '').replace(/\s*```$/iu, '');
+  text = text.replace(/^revised instructions\s*:\s*/iu, '').trim();
   return text || undefined;
 }
 
@@ -182,9 +182,9 @@ export async function rewriteAutomationInstructions(
       kind: 'step',
       outputJson: JSON.stringify({
         text: 'Revised instructions',
-        ...(stopReason !== undefined ? { stopReason } : {}),
+        ...(stopReason === undefined ? {} : { stopReason }),
       }),
-      ...(rawJson !== undefined ? { rawJson } : {}),
+      ...(rawJson === undefined ? {} : { rawJson }),
       ok: true,
       startedAt,
       endedAt,
@@ -198,7 +198,7 @@ export async function rewriteAutomationInstructions(
       summary: 'Revised instructions',
       outputJson: JSON.stringify({
         prompt,
-        ...(stopReason !== undefined ? { stopReason } : {}),
+        ...(stopReason === undefined ? {} : { stopReason }),
       }),
     });
     return { revisionTurnId, prompt };
@@ -213,9 +213,9 @@ export async function rewriteAutomationInstructions(
       outputJson: JSON.stringify({
         error: message,
         ...(text ? { text } : {}),
-        ...(stopReason !== undefined ? { stopReason } : {}),
+        ...(stopReason === undefined ? {} : { stopReason }),
       }),
-      ...(rawJson !== undefined ? { rawJson } : {}),
+      ...(rawJson === undefined ? {} : { rawJson }),
       ok: false,
       error: message,
       startedAt,
@@ -229,9 +229,9 @@ export async function rewriteAutomationInstructions(
       ok: false,
       error: message,
       summary: 'Instruction revision failed',
-      ...(stopReason !== undefined
-        ? { outputJson: JSON.stringify({ stopReason, error: message }) }
-        : {}),
+      ...(stopReason === undefined
+        ? {}
+        : { outputJson: JSON.stringify({ stopReason, error: message }) }),
     });
     throw caught;
   }

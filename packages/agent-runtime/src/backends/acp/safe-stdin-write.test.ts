@@ -45,18 +45,18 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-describe('safeStdinWrite', () => {
+describe(safeStdinWrite, () => {
   test('writes the line when stdin is writable', () => {
     const stdin = makeFakeStdin();
     safeStdinWrite(stdin as never, '{"jsonrpc":"2.0"}\n');
-    expect(stdin.writes).toEqual(['{"jsonrpc":"2.0"}\n']);
+    expect(stdin.writes).toStrictEqual(['{"jsonrpc":"2.0"}\n']);
   });
 
   test('no-ops when stdin is missing or not writable', () => {
     expect(() => safeStdinWrite(undefined, 'x\n')).not.toThrow();
     const closed = makeFakeStdin({ writable: false });
     safeStdinWrite(closed as never, 'x\n');
-    expect(closed.writes).toEqual([]);
+    expect(closed.writes).toStrictEqual([]);
   });
 
   test('swallows EPIPE delivered via the write callback without throwing', async () => {
@@ -71,7 +71,7 @@ describe('safeStdinWrite', () => {
     });
     expect(() => safeStdinWrite(stdin as never, 'msg\n')).not.toThrow();
     await delay(10);
-    expect(writes).toEqual(['msg\n']);
+    expect(writes).toStrictEqual(['msg\n']);
   });
 
   test('swallows EPIPE emitted on the stream error event (the Vitest failure mode)', async () => {
@@ -86,7 +86,7 @@ describe('safeStdinWrite', () => {
       // Simulate Node's async EPIPE after the child dies mid-write.
       stdin.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }));
       await delay(10);
-      expect(uncaught).toEqual([]);
+      expect(uncaught).toStrictEqual([]);
     } finally {
       process.off('uncaughtException', onUncaught);
     }

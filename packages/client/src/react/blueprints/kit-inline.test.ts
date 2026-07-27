@@ -15,7 +15,7 @@ import { installInlineCentraid } from './centraid-inline.js';
 // gateway-client-core touches window.CentraidApi at module load; stub the whole
 // module (this suite exercises no gateway I/O — only the theme/onChange
 // surface). vitest hoists this above the imports at run time.
-vi.mock('../../gateway-client-core.js', () => ({
+vi.mock(import('../../gateway-client-core.js'), () => ({
   auth: vi.fn(async () => ({ baseUrl: 'https://gw.test', token: 'tok' })),
   authHeaders: () => ({}),
   doFetch: vi.fn(),
@@ -64,7 +64,7 @@ describe('kit-inline', () => {
     ]);
     await new Promise((resolve) => setTimeout(resolve, 5));
     expect(seen).toHaveLength(1);
-    expect(seen[0]?.tables).toEqual(['schedule.task']);
+    expect(seen[0]?.tables).toStrictEqual(['schedule.task']);
     stop();
   });
 

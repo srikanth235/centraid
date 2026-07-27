@@ -35,7 +35,7 @@ const zoneParts = (d: Date, timeZone: string): string => {
   return `${pick('year')}-${pick('month')}-${pick('day')} ${hour}:${pick('minute')}`;
 };
 
-describe('cronFieldMatch', () => {
+describe(cronFieldMatch, () => {
   it('matches a wildcard against any in-range value', () => {
     expect(cronFieldMatch('*', 0, 0, 59, {})).toBe(true);
     expect(cronFieldMatch('*', 59, 0, 59, {})).toBe(true);
@@ -82,16 +82,20 @@ describe('cronFieldMatch', () => {
   });
 });
 
-describe('cronNextRuns', () => {
+describe(cronNextRuns, () => {
   it('returns [] for an expression that is not exactly five fields', () => {
-    expect(cronNextRuns('0 9 * *', 3, at(2026, 1, 1, 0, 0))).toEqual([]);
-    expect(cronNextRuns('0 9 * * * *', 3, at(2026, 1, 1, 0, 0))).toEqual([]);
-    expect(cronNextRuns('', 3, at(2026, 1, 1, 0, 0))).toEqual([]);
+    expect(cronNextRuns('0 9 * *', 3, at(2026, 1, 1, 0, 0))).toStrictEqual([]);
+    expect(cronNextRuns('0 9 * * * *', 3, at(2026, 1, 1, 0, 0))).toStrictEqual([]);
+    expect(cronNextRuns('', 3, at(2026, 1, 1, 0, 0))).toStrictEqual([]);
   });
 
   it('lists the next daily fire times starting one minute after `from`', () => {
     const runs = cronNextRuns('0 9 * * *', 3, at(2026, 1, 1, 0, 0));
-    expect(runs.map(local)).toEqual(['2026-01-01 09:00', '2026-01-02 09:00', '2026-01-03 09:00']);
+    expect(runs.map(local)).toStrictEqual([
+      '2026-01-01 09:00',
+      '2026-01-02 09:00',
+      '2026-01-03 09:00',
+    ]);
   });
 
   it('reads the hour field as local time, matching the scheduler', () => {
@@ -106,12 +110,12 @@ describe('cronNextRuns', () => {
   it('skips the current minute (search begins at from + 1 minute)', () => {
     // Already 09:00 exactly → the next 09:00 is tomorrow, not right now.
     const runs = cronNextRuns('0 9 * * *', 1, at(2026, 1, 1, 9, 0));
-    expect(runs.map(local)).toEqual(['2026-01-02 09:00']);
+    expect(runs.map(local)).toStrictEqual(['2026-01-02 09:00']);
   });
 
   it('expands an every-15-minutes step', () => {
     const runs = cronNextRuns('*/15 * * * *', 4, at(2026, 1, 1, 8, 2));
-    expect(runs.map(local)).toEqual([
+    expect(runs.map(local)).toStrictEqual([
       '2026-01-01 08:15',
       '2026-01-01 08:30',
       '2026-01-01 08:45',
@@ -130,13 +134,17 @@ describe('cronNextRuns', () => {
 
   it('honours named weekday tokens', () => {
     const runs = cronNextRuns('0 9 * * MON', 2, at(2026, 1, 1, 0, 0));
-    expect(runs.map(day)).toEqual(['2026-01-05', '2026-01-12']);
+    expect(runs.map(day)).toStrictEqual(['2026-01-05', '2026-01-12']);
   });
 
   it('restricts a weekday range to Mon–Fri', () => {
     // 2026-01-01 is a Thursday, so: Thu, Fri, then skip the weekend to Mon.
     const runs = cronNextRuns('0 19 * * 1-5', 3, at(2026, 1, 1, 0, 0));
-    expect(runs.map(local)).toEqual(['2026-01-01 19:00', '2026-01-02 19:00', '2026-01-05 19:00']);
+    expect(runs.map(local)).toStrictEqual([
+      '2026-01-01 19:00',
+      '2026-01-02 19:00',
+      '2026-01-05 19:00',
+    ]);
   });
 
   it('same expression + same resolved tz yields identical absolute instants under two viewer host clocks', () => {
@@ -145,7 +153,7 @@ describe('cronNextRuns', () => {
     const from = new Date('2026-01-15T12:00:00.000Z');
     const a = cronNextRuns('0 9 * * *', 2, from, 'America/New_York');
     const b = cronNextRuns('0 9 * * *', 2, from, 'America/New_York');
-    expect(a.map((d) => d.getTime())).toEqual(b.map((d) => d.getTime()));
+    expect(a.map((d) => d.getTime())).toStrictEqual(b.map((d) => d.getTime()));
     expect(a).toHaveLength(2);
     // 09:00 America/New_York on those days.
     expect(zoneParts(a[0]!, 'America/New_York')).toMatch(/09:00$/);
@@ -163,7 +171,7 @@ describe('cronNextRuns', () => {
   });
 });
 
-describe('describeCron', () => {
+describe(describeCron, () => {
   it('returns a curated gloss for well-known expressions', () => {
     expect(describeCron('0 9 * * *')).toBe('Every day at 09:00');
     expect(describeCron('*/15 * * * *')).toBe('Every 15 minutes');
@@ -211,7 +219,7 @@ describe('resolveCronTimezone / isValidIanaTimeZone', () => {
   });
 });
 
-describe('cronRunLabel', () => {
+describe(cronRunLabel, () => {
   it('appends a short zone name when the schedule zone differs from the viewer', () => {
     const d = new Date('2026-01-15T14:00:00.000Z'); // 09:00 EST
     const label = cronRunLabel(d, {
@@ -236,7 +244,7 @@ describe('cronRunLabel', () => {
   });
 });
 
-describe('shortTimeZoneName', () => {
+describe(shortTimeZoneName, () => {
   it('returns a non-empty label for a known zone', () => {
     expect(shortTimeZoneName('America/New_York').length).toBeGreaterThan(0);
   });

@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import Logo from './Logo.js';
 
-describe('Logo', () => {
+describe(Logo, () => {
   it('draws the three-arc + core-dot mark at the given size', () => {
     const html = renderToStaticMarkup(<Logo size={48} />);
     expect(html).toContain('viewBox="0 0 240 240"');

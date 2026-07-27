@@ -374,10 +374,10 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     workspaceBody = <div className={atomsCss.empty}>Could not read files: {loadError}</div>;
   } else if (loaded && files.length === 0) {
     workspaceBody = <div className={atomsCss.empty}>Empty app.</div>;
-  } else if (!activeBuf) {
-    workspaceBody = <div className={atomsCss.empty}>No file open.</div>;
-  } else {
+  } else if (activeBuf) {
     workspaceBody = renderWorkspace();
+  } else {
+    workspaceBody = <div className={atomsCss.empty}>No file open.</div>;
   }
 
   return (
@@ -630,7 +630,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
             >
               Revert this file
             </button>
-            {!isRemote ? (
+            {isRemote ? null : (
               <button
                 type="button"
                 className={styles.overflowItem}
@@ -641,7 +641,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
               >
                 Open app folder
               </button>
-            ) : null}
+            )}
           </div>
         </div>
       </div>

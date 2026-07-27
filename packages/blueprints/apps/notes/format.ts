@@ -31,24 +31,34 @@ export function parseBlocks(body: unknown): Block[] {
   String(body ?? '')
     .split('\n')
     .forEach((line, i) => {
-      let m = /^\s*[-*] \[( |x|X)\]\s?(.*)$/.exec(line);
+      let m = /^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u.exec(line);
       if (m) {
-        out.push({ kind: 'check', checked: /x/i.test(m[1]!), text: m[2]!, line: i });
+        out.push({
+          kind: 'check',
+          checked: /x/iu.test(m.groups?.mark ?? ''),
+          text: m.groups?.text ?? '',
+          line: i,
+        });
         return;
       }
-      m = /^(#{1,3})\s+(.*)$/.exec(line);
+      m = /^(?<hashes>#{1,3})\s+(?<text>.*)$/u.exec(line);
       if (m) {
-        out.push({ kind: 'h', level: m[1]!.length, text: m[2]!, line: i });
+        out.push({
+          kind: 'h',
+          level: (m.groups?.hashes ?? '').length,
+          text: m.groups?.text ?? '',
+          line: i,
+        });
         return;
       }
-      m = /^\s*[-*]\s+(.*)$/.exec(line);
+      m = /^\s*[-*]\s+(?<text>.*)$/u.exec(line);
       if (m) {
-        out.push({ kind: 'li', text: m[1]!, line: i });
+        out.push({ kind: 'li', text: m.groups?.text ?? '', line: i });
         return;
       }
-      m = /^\s*\d+\.\s+(.*)$/.exec(line);
+      m = /^\s*\d+\.\s+(?<text>.*)$/u.exec(line);
       if (m) {
-        out.push({ kind: 'li', text: m[1]!, line: i });
+        out.push({ kind: 'li', text: m.groups?.text ?? '', line: i });
         return;
       }
       if (line.trim() === '') {
@@ -62,9 +72,9 @@ export function parseBlocks(body: unknown): Block[] {
 
 export function stripInline(text: unknown): string {
   return String(text ?? '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1');
+    .replace(/\*\*(?<bold>.+?)\*\*/gu, '$<bold>')
+    .replace(/\*(?<italic>.+?)\*/gu, '$<italic>')
+    .replace(/`(?<code>.+?)`/gu, '$<code>');
 }
 
 /** Open/total checkbox count across a body — drives the card progress bar
@@ -126,7 +136,7 @@ export function highlightSegments(text: unknown, term: unknown): Segment[] {
 
 /** Split a vault FTS `⟦hit⟧`-marked snippet into `[{ text, hit }]` segments. */
 export function snippetSegments(snippet: unknown): Segment[] {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  const parts = String(snippet ?? '').split(/[⟦⟧]/u);
   return parts.map((text, i) => ({ text, hit: i % 2 === 1 })).filter((s) => s.text !== '');
 }
 

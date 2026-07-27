@@ -210,11 +210,11 @@ export function formatBytes(bytes: number): string {
 /** Parses "12", "12 GB", "500mb" into bytes. `null` for anything unparseable
  *  — the limit inputs refuse rather than guess at a unit. */
 export function parseBytes(input: string, defaultUnit: 'MB' | 'GB' = 'GB'): number | null {
-  const match = /^\s*([0-9]+(?:\.[0-9]+)?)\s*(b|kb|mb|gb|tb)?\s*$/i.exec(input);
+  const match = /^\s*(?<amount>[0-9]+(?:\.[0-9]+)?)\s*(?<unit>b|kb|mb|gb|tb)?\s*$/iu.exec(input);
   if (!match) return null;
-  const value = Number(match[1]);
+  const value = Number(match.groups?.amount);
   if (!Number.isFinite(value) || value <= 0) return null;
-  const unit = (match[2] ?? defaultUnit).toUpperCase();
+  const unit = (match.groups?.unit ?? defaultUnit).toUpperCase();
   const scale: Record<string, number> = {
     B: 1,
     KB: 1024,

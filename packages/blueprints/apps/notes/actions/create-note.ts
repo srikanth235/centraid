@@ -5,7 +5,7 @@
  * the end of that notebook. The outcome passes through verbatim so the UI
  * can narrate what the consent plane decided.
  */
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function createNote({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
@@ -13,8 +13,8 @@ export default async ({ body, ctx }: HandlerArgs) => {
       input: {
         title: String(input.title ?? ''),
         body_text: String(input.body_text ?? ''),
-        ...(input.format != null ? { format: String(input.format) } : {}),
-        ...(input.notebook_id != null ? { notebook_id: String(input.notebook_id) } : {}),
+        ...(input.format == null ? {} : { format: String(input.format) }),
+        ...(input.notebook_id == null ? {} : { notebook_id: String(input.notebook_id) }),
       },
       purpose: 'dpv:ServiceProvision',
     });
@@ -23,4 +23,4 @@ export default async ({ body, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
   }
-};
+}

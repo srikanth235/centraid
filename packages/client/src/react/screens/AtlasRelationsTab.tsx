@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
+import { useCallback, useMemo, useState, type JSX } from 'react';
 import type { AtlasAuthoredLink, AtlasFkEdge, AtlasGraphPayload } from '../../gateway-client.js';
 import Icon from '../ui/Icon.js';
 import AtlasOrreryChart, { type AtlasHighlight, type Readout } from './AtlasOrreryChart.js';

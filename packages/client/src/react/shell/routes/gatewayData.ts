@@ -122,8 +122,8 @@ export function buildAlertHistoryRows(snapshot: GatewayRuntimeSnapshot): AlertHi
       kind: e.kind,
       kindLabel: alertKindLabel(e.kind),
       timeLabel: formatClock(e.at),
-      ...(e.detail !== undefined ? { detail: e.detail } : {}),
-      ...(e.durationMs !== undefined ? { durationLabel: formatDuration(e.durationMs) } : {}),
+      ...(e.detail === undefined ? {} : { detail: e.detail }),
+      ...(e.durationMs === undefined ? {} : { durationLabel: formatDuration(e.durationMs) }),
       previousSession: e.previousSession,
     }),
   );

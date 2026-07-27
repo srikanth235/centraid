@@ -25,7 +25,7 @@ import path from 'node:path';
 export const KEY_STORE_SECRET_BYTES = 32;
 export const KEY_STORE_ENVELOPE_MAGIC = 'CENTRAID-KEY-V1\n';
 
-const KEY_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const KEY_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
 const FILE_SCHEME = 'file-0600-v1';
 const AES_GCM_SCHEME = 'aes-256-gcm-v1';
 
@@ -36,8 +36,8 @@ interface KeyEnvelope {
 
 export interface KeyProtector {
   readonly scheme: string;
-  protect(secret: Buffer): Buffer;
-  unprotect(payload: Buffer): Buffer;
+  protect: (secret: Buffer) => Buffer;
+  unprotect: (payload: Buffer) => Buffer;
 }
 
 export interface KeyStoreOptions {
@@ -269,7 +269,7 @@ function parseEnvelope(file: string, raw: Buffer): KeyEnvelope {
 }
 
 function decodePayload(file: string, payload: string): Buffer {
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(payload)) {
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(payload)) {
     throw new KeyStoreError('corrupt', `key at ${file} has invalid base64 payload`);
   }
   return Buffer.from(payload, 'base64');

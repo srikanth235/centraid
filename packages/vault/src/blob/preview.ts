@@ -77,15 +77,15 @@ export interface PreviewOutput {
  * so a skipped item simply renders a placeholder.
  */
 export interface PreviewCodec {
-  downscale(
+  downscale: (
     source: Buffer,
     mediaType: string,
     maxEdge: number,
-  ): PreviewOutput | null | Promise<PreviewOutput | null>;
+  ) => PreviewOutput | null | Promise<PreviewOutput | null>;
   /** 64-bit dHash, encoded as 16 lowercase hexadecimal characters. */
-  perceptualHash(source: Buffer, mediaType: string): string | null | Promise<string | null>;
+  perceptualHash: (source: Buffer, mediaType: string) => string | null | Promise<string | null>;
   /** ThumbHash bytes as unpadded standard base64, or null for an undecodable input. */
-  thumbhash(source: Buffer, mediaType: string): string | null | Promise<string | null>;
+  thumbhash: (source: Buffer, mediaType: string) => string | null | Promise<string | null>;
 }
 
 /** What one backstop pass touched — folded into the sweep receipt. */

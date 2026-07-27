@@ -70,7 +70,7 @@ export function Details({
                 boxShadow: `0 8px 22px -6px color-mix(in oklab, ${color} 60%, transparent)`,
               }}
             >
-              <KitAvatar name={nameGuess} size="72px" color={color}></KitAvatar>
+              <KitAvatar name={nameGuess} size="72px" color={color} />
             </span>
           </div>
           <div className={styles.detailName}>{nameGuess}</div>

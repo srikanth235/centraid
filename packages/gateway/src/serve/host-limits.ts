@@ -59,7 +59,7 @@ function defaultReadText(path: string): string | null {
 
 /** Parse cgroup v2 `cpu.max` ("max" | "<quota> <period>") to fractional cores. */
 function parseCpuMaxV2(text: string): number | null {
-  const [quota, period] = text.trim().split(/\s+/);
+  const [quota, period] = text.trim().split(/\s+/u);
   if (quota === undefined || quota === 'max') return null;
   const q = Number(quota);
   const p = Number(period ?? '100000');

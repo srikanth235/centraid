@@ -73,9 +73,9 @@ export function ingressElement(record: {
     position: String(record.id),
     occurredAt: record.receivedAt,
     payload:
-      record.payloadJson !== undefined
-        ? parseIngressPayload(record.payloadJson)
-        : { payloadRef: record.payloadRef },
+      record.payloadJson === undefined
+        ? { payloadRef: record.payloadRef }
+        : parseIngressPayload(record.payloadJson),
   };
 }
 

@@ -64,8 +64,8 @@ export function tagNotation(label: string): string {
   return (
     label
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
+      .replace(/[^a-z0-9]+/gu, '-')
+      .replace(/^-+|-+$/gu, '')
       .slice(0, 64) || 'untitled'
   );
 }

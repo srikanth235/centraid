@@ -27,7 +27,7 @@ class FakeHistogram {
   }
 }
 
-describe('GatewayPerformanceMonitor', () => {
+describe(GatewayPerformanceMonitor, () => {
   afterEach(() => vi.useRealTimers());
 
   it('surfaces event-loop delay in milliseconds and the boot fsync sample', () => {
@@ -39,7 +39,7 @@ describe('GatewayPerformanceMonitor', () => {
       storageFsyncMs: 12.5,
     });
 
-    expect(monitor.snapshot()).toEqual({
+    expect(monitor.snapshot()).toStrictEqual({
       eventLoopLagP50Ms: 5,
       eventLoopLagP99Ms: 55,
       eventLoopLagMaxMs: 70,

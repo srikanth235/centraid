@@ -1,31 +1,31 @@
 import { describe, expect, test } from 'vitest';
 import { mergeAllowedHosts, parseAllowedHostsEnv } from './allowed-hosts.js';
 
-describe('parseAllowedHostsEnv', () => {
+describe(parseAllowedHostsEnv, () => {
   test('empty / missing env → []', () => {
-    expect(parseAllowedHostsEnv({})).toEqual([]);
-    expect(parseAllowedHostsEnv({ CENTRAID_ALLOWED_HOSTS: '' })).toEqual([]);
-    expect(parseAllowedHostsEnv({ CENTRAID_ALLOWED_HOSTS: '  ' })).toEqual([]);
+    expect(parseAllowedHostsEnv({})).toStrictEqual([]);
+    expect(parseAllowedHostsEnv({ CENTRAID_ALLOWED_HOSTS: '' })).toStrictEqual([]);
+    expect(parseAllowedHostsEnv({ CENTRAID_ALLOWED_HOSTS: '  ' })).toStrictEqual([]);
   });
 
   test('comma-separated hostnames, trimmed and lowercased', () => {
-    expect(parseAllowedHostsEnv({ CENTRAID_ALLOWED_HOSTS: ' Gateway.example ,API.local' })).toEqual(
-      ['gateway.example', 'api.local'],
-    );
+    expect(
+      parseAllowedHostsEnv({ CENTRAID_ALLOWED_HOSTS: ' Gateway.example ,API.local' }),
+    ).toStrictEqual(['gateway.example', 'api.local']);
   });
 });
 
-describe('mergeAllowedHosts', () => {
+describe(mergeAllowedHosts, () => {
   test('CLI wins order; env appended; duplicates dropped', () => {
     expect(
       mergeAllowedHosts(['GW.Local', 'other'], {
         CENTRAID_ALLOWED_HOSTS: 'other, third.example',
       }),
-    ).toEqual(['gw.local', 'other', 'third.example']);
+    ).toStrictEqual(['gw.local', 'other', 'third.example']);
   });
 
   test('env-only when CLI omitted', () => {
-    expect(mergeAllowedHosts(undefined, { CENTRAID_ALLOWED_HOSTS: 'a.example' })).toEqual([
+    expect(mergeAllowedHosts(undefined, { CENTRAID_ALLOWED_HOSTS: 'a.example' })).toStrictEqual([
       'a.example',
     ]);
   });

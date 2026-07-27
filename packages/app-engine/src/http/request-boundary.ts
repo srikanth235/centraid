@@ -34,14 +34,14 @@ export function hostnameFromHostHeader(
     if (end === -1) return undefined;
     const hostname = host.slice(0, end + 1);
     const rest = host.slice(end + 1);
-    if (rest !== '' && !/^:\d+$/.test(rest)) return undefined;
+    if (rest !== '' && !/^:\d+$/u.test(rest)) return undefined;
     return hostname.toLowerCase();
   }
 
   // hostname or hostname:port (IPv4 / DNS). Reject bare IPv6 without brackets
   // that still contains multiple colons — those must use the bracket form.
   const colon = host.lastIndexOf(':');
-  if (colon !== -1 && /^\d+$/.test(host.slice(colon + 1))) {
+  if (colon !== -1 && /^\d+$/u.test(host.slice(colon + 1))) {
     return host.slice(0, colon).toLowerCase();
   }
   if (host.includes(':')) return undefined;
@@ -125,7 +125,7 @@ export function hasBearerAuthIntent(
   accessControlRequestHeaders: string | string[] | undefined,
 ): boolean {
   const auth = Array.isArray(authorization) ? authorization[0] : authorization;
-  if (typeof auth === 'string' && /^Bearer\s+\S+/i.test(auth.trim())) return true;
+  if (typeof auth === 'string' && /^Bearer\s+\S+/iu.test(auth.trim())) return true;
 
   const acrh = Array.isArray(accessControlRequestHeaders)
     ? accessControlRequestHeaders.join(',')

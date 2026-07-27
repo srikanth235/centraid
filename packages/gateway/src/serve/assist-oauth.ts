@@ -82,7 +82,7 @@ export function validateAssistOAuthConfig(config: AssistOAuthConfig): AssistOAut
       `Centraid Assist Worker must be ${ASSIST_PRODUCTION_WORKER_ORIGIN} or the exact local-development origin ${ASSIST_DEVELOPMENT_WORKER_ORIGIN}`,
     );
   }
-  if (!/^[A-Za-z0-9._-]{8,256}\.apps\.googleusercontent\.com$/.test(config.googleClientId)) {
+  if (!/^[A-Za-z0-9._-]{8,256}\.apps\.googleusercontent\.com$/u.test(config.googleClientId)) {
     throw new Error('Centraid Assist Google client id is not a valid Web client id');
   }
   return Object.freeze({

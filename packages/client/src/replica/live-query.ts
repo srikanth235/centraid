@@ -6,8 +6,8 @@ export interface LiveQueryExecution<T> {
 }
 
 export interface LiveQueryObserver<T> {
-  next(value: T): void;
-  error?(error: unknown): void;
+  next: (value: T) => void;
+  error?: (error: unknown) => void;
 }
 
 export type LiveQuerySubscriber<T> = LiveQueryObserver<T> | ((value: T) => void);

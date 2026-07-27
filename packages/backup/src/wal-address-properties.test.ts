@@ -55,7 +55,7 @@ describe('WAL address property', () => {
     fc.assert(
       fc.property(segmentAddr, (addr) => {
         const key = walSegmentKey(addr);
-        expect(parseWalSegmentKey(key)).toEqual(addr);
+        expect(parseWalSegmentKey(key)).toStrictEqual(addr);
       }),
       { numRuns: 48, seed: 53250 },
     );
@@ -65,7 +65,10 @@ describe('WAL address property', () => {
     fc.assert(
       fc.property(closerAddr, (closer) => {
         const key = walGroupCloserKey(closer);
-        expect(parseWalCloserKey(key)).toEqual(closer);
+        // fast-check's shrinker can hand back a counterexample built with a
+        // null prototype; spreading both sides compares the address fields
+        // (the contract) without asserting either object's prototype.
+        expect({ ...parseWalCloserKey(key) }).toStrictEqual({ ...closer });
       }),
       { numRuns: 40, seed: 53251 },
     );
@@ -79,7 +82,7 @@ describe('WAL address property', () => {
         fc.integer({ min: 0, max: 9_999_999_999_999 }),
         (vaultGeneration, journalGeneration, tickMs) => {
           const key = walPairMarkerKey({ vaultGeneration, journalGeneration, tickMs });
-          expect(parseWalPairMarkerKey(key)).toEqual({
+          expect(parseWalPairMarkerKey(key)).toStrictEqual({
             vaultGeneration,
             journalGeneration,
             tickMs,

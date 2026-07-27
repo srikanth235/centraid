@@ -64,44 +64,44 @@ const RULES: readonly LintRule[] = [
     // `ctx.tool` (dot form, with optional whitespace before `(`) and the
     // bracket forms `ctx['tool'](` / `ctx["tool"](`. Uses the string-keeping
     // view so the bracketed string key isn't masked away.
-    re: /\bctx\s*(?:\.\s*tool|\[\s*['"]tool['"]\s*\])\s*\(/g,
+    re: /\bctx\s*(?:\.\s*tool|\[\s*['"]tool['"]\s*\])\s*\(/gu,
     message:
       'ctx.tool was removed: handlers do deterministic work with ctx.vault / ctx.fetch / ctx.state, and delegate judgment to ctx.agent.',
     target: 'withStrings',
   },
   {
     id: 'no-date-now',
-    re: /\bDate\.now\s*\(/g,
+    re: /\bDate\.now\s*\(/gu,
     message:
       'Date.now() reads the wall clock, so a re-run produces a different value. Use the fixed ctx.now fire instant, derive time windows from ctx.runs.last() / ctx.state, or read a timestamp off a ctx.vault result.',
   },
   {
     id: 'no-new-date',
-    re: /\bnew\s+Date\s*\(\s*\)/g,
+    re: /\bnew\s+Date\s*\(\s*\)/gu,
     message:
       'new Date() (no args) reads the wall clock — nondeterministic across re-runs. Use the fixed ctx.now fire instant or pass an explicit ms/ISO argument. (new Date(value) with an argument is fine.)',
   },
   {
     id: 'no-math-random',
-    re: /\bMath\.random\s*\(/g,
+    re: /\bMath\.random\s*\(/gu,
     message:
       'Math.random() is nondeterministic — each run produces a different value. Derive any needed variation from the run inputs (ctx.input, ctx.state, a ctx.vault result).',
   },
   {
     id: 'no-random-uuid',
-    re: /\brandomUUID\s*\(/g,
+    re: /\brandomUUID\s*\(/gu,
     message:
       'randomUUID() mints a fresh id on every run, so a re-run after a crash duplicates work under a new id. Derive ids deterministically from the run inputs, or have a ctx.vault write mint and return the id.',
   },
   {
     id: 'no-random-bytes',
-    re: /\b(?:getRandomValues|randomBytes|randomFillSync|randomInt)\s*\(/g,
+    re: /\b(?:getRandomValues|randomBytes|randomFillSync|randomInt)\s*\(/gu,
     message:
       'crypto randomness is nondeterministic — re-runs diverge. Use values derived from the run inputs instead.',
   },
   {
     id: 'no-performance-now',
-    re: /\bperformance\.now\s*\(/g,
+    re: /\bperformance\.now\s*\(/gu,
     message:
       'performance.now() reads a monotonic wall clock — nondeterministic across runs. Measure via ctx.runs timestamps instead.',
   },
@@ -110,20 +110,20 @@ const RULES: readonly LintRule[] = [
     // `ctx.fetch(...)` is exempt: it is the audited connector rail (ledgered,
     // broker-injected, host-pinned, read-only) — the very thing this rule
     // steers toward. Everything else spelling `fetch(` is ambient I/O.
-    re: /(?<!ctx\.)\bfetch\s*\(/g,
+    re: /(?<!ctx\.)\bfetch\s*\(/gu,
     message:
       'A raw fetch() is network I/O that bypasses the run ledger. READS ride ctx.fetch (connector fires, broker-injected and host-pinned) or a ctx.vault read; an external WRITE (send an email, call a mutating API) is staged, never sent: ctx.vault.invoke({ command: "outbox.stage", … }) parks it for the owner and the gateway executor performs the send (issue #306).',
   },
   {
     id: 'no-node-io-import',
-    re: /\b(?:from|require\s*\(\s*)\s*['"](?:node:)?(?:fs(?:\/promises)?|child_process|net|http|https|dns|dgram|tls|cluster)['"]/g,
+    re: /\b(?:from|require\s*\(\s*)\s*['"](?:node:)?(?:fs(?:\/promises)?|child_process|net|http|https|dns|dgram|tls|cluster)['"]/gu,
     message:
       'Direct node I/O modules (fs, child_process, net, http, …) bypass the run ledger — their effects are unrecorded. All I/O must go through the ctx.* rails (ctx.fetch / ctx.vault).',
     target: 'withStrings',
   },
   {
     id: 'no-process-ambient',
-    re: /\bprocess\.(?:env|hrtime|cwd|uptime|argv|pid|platform)\b/g,
+    re: /\bprocess\.(?:env|hrtime|cwd|uptime|argv|pid|platform)\b/gu,
     message:
       'Reading ambient process state (env, hrtime, cwd, argv, …) makes the handler depend on the host environment, not its run inputs. Pass configuration through the manifest / ctx.state instead.',
   },

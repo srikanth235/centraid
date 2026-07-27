@@ -4,7 +4,7 @@ import type { SchedulerLedgerSnapshot } from '@centraid/automation';
 
 const EMPTY: SchedulerLedgerSnapshot = { missed: [] };
 
-describe('createSchedulerHealthProbe', () => {
+describe(createSchedulerHealthProbe, () => {
   it('reports ok when every vault has ticked recently', async () => {
     const probe = createSchedulerHealthProbe({
       vaults: () => [

@@ -160,8 +160,8 @@ function slug(text: string): string {
     text
       .trim()
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '') || 'related'
+      .replace(/[^a-z0-9]+/gu, '-')
+      .replace(/^-|-$/gu, '') || 'related'
   );
 }
 
@@ -785,7 +785,7 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
       reminder_on?: boolean;
     };
     // Monica behavior: a birthday auto-creates its reminder.
-    const isBirthday = /birthday/i.test(input.label);
+    const isBirthday = /birthday/iu.test(input.label);
     const reminder = isBirthday ? 1 : input.reminder_on ? 1 : 0;
     const dateId = ctx.newId();
     ctx.db
@@ -806,7 +806,7 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
         .get(input.party_id) as { birth_date: string | null } | undefined;
       const existing = party?.birth_date ?? null;
       const yearPrefix =
-        existing && /^\d{4}-\d{2}-\d{2}$/.test(existing) ? existing.slice(0, 4) : '-';
+        existing && /^\d{4}-\d{2}-\d{2}$/u.test(existing) ? existing.slice(0, 4) : '-';
       const birthDate = `${yearPrefix}-${input.month_day}`;
       if (birthDate !== existing) {
         ctx.db

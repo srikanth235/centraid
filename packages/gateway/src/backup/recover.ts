@@ -258,7 +258,7 @@ export async function discoverRecovery(opts: {
     restoreCostClass: caps.backup?.restoreCostClass,
     lazyAvailable: caps.capabilities.includes('inventory'),
     compatible,
-    ...(incompatibleReason !== undefined ? { incompatibleReason } : {}),
+    ...(incompatibleReason === undefined ? {} : { incompatibleReason }),
   };
 }
 
@@ -293,9 +293,9 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
   const row = pickSnapshotRow(rows, input.at);
   if (!row) {
     throw new Error(
-      input.at !== undefined
-        ? `recover: no snapshot at or before ${new Date(input.at).toISOString()} for this vault`
-        : 'recover: this vault has no snapshot on the provider yet',
+      input.at === undefined
+        ? 'recover: this vault has no snapshot on the provider yet'
+        : `recover: no snapshot at or before ${new Date(input.at).toISOString()} for this vault`,
     );
   }
   // Compatibility gate from the registry row's appMeta ALONE — refuse a
@@ -338,7 +338,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       targetId: target.targetId,
       keyring: kit.keyring,
       vaultId: target.vaultId,
-      ...(input.at !== undefined ? { pointInTimeMs: input.at } : {}),
+      ...(input.at === undefined ? {} : { pointInTimeMs: input.at }),
       destDir: restoreWorkDir,
       current,
       // Defer any blob the remote CAS attests it holds; a blob the inventory

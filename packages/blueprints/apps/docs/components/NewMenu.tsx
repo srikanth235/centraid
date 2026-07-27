@@ -16,7 +16,7 @@ export function NewMenu({
         <Icon svg={I.upload!} />
         Upload files
       </button>
-      <div className={styles.menuSep}></div>
+      <div className={styles.menuSep} />
       <button type="button" className={styles.menuItem} role="menuitem" onClick={onNewFolder}>
         <Icon svg={I.folderPlus!} />
         New folder

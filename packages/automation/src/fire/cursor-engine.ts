@@ -296,13 +296,13 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       // retention remove ingress payloads before restart delivery.
       result = {
         elements: priorPending.elements,
-        ...(priorPending.targetPositionJson !== undefined
-          ? { positionJson: priorPending.targetPositionJson }
-          : {}),
+        ...(priorPending.targetPositionJson === undefined
+          ? {}
+          : { positionJson: priorPending.targetPositionJson }),
         skipped: priorPending.skipped,
-        ...(priorPending.windowFrom !== undefined ? { windowFrom: priorPending.windowFrom } : {}),
-        ...(priorPending.windowTo !== undefined ? { windowTo: priorPending.windowTo } : {}),
-        ...(priorPending.gapReason !== undefined ? { gapReason: priorPending.gapReason } : {}),
+        ...(priorPending.windowFrom === undefined ? {} : { windowFrom: priorPending.windowFrom }),
+        ...(priorPending.windowTo === undefined ? {} : { windowTo: priorPending.windowTo }),
+        ...(priorPending.gapReason === undefined ? {} : { gapReason: priorPending.gapReason }),
       };
     } else if (registration.trigger.kind === 'cron') {
       const schedules =
@@ -342,17 +342,17 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         triggerIndex: registration.triggerIndex,
         sourceKind: identity,
         ...(pending
-          ? cursor?.positionJson !== undefined
-            ? { positionJson: cursor.positionJson }
-            : {}
-          : targetPositionJson !== undefined
-            ? { positionJson: targetPositionJson }
-            : {}),
+          ? cursor?.positionJson === undefined
+            ? {}
+            : { positionJson: cursor.positionJson }
+          : targetPositionJson === undefined
+            ? {}
+            : { positionJson: targetPositionJson }),
         ...(pending ? { pendingJson: JSON.stringify(pending) } : {}),
-        ...(result.windowFrom !== undefined ? { windowFrom: result.windowFrom } : {}),
-        ...(result.windowTo !== undefined ? { windowTo: result.windowTo } : {}),
+        ...(result.windowFrom === undefined ? {} : { windowFrom: result.windowFrom }),
+        ...(result.windowTo === undefined ? {} : { windowTo: result.windowTo }),
         skipped,
-        ...(result.gapReason !== undefined ? { gapReason: result.gapReason } : {}),
+        ...(result.gapReason === undefined ? {} : { gapReason: result.gapReason }),
         updatedAt: at.getTime(),
       });
     };
@@ -366,13 +366,13 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       return;
     }
     const pending = (): PendingFireBatch => ({
-      ...(targetPositionJson !== undefined ? { targetPositionJson } : {}),
+      ...(targetPositionJson === undefined ? {} : { targetPositionJson }),
       elements,
       acknowledged: [...acknowledged],
       skipped,
-      ...(result.windowFrom !== undefined ? { windowFrom: result.windowFrom } : {}),
-      ...(result.windowTo !== undefined ? { windowTo: result.windowTo } : {}),
-      ...(result.gapReason !== undefined ? { gapReason: result.gapReason } : {}),
+      ...(result.windowFrom === undefined ? {} : { windowFrom: result.windowFrom }),
+      ...(result.windowTo === undefined ? {} : { windowTo: result.windowTo }),
+      ...(result.gapReason === undefined ? {} : { gapReason: result.gapReason }),
     });
     // Durable intent precedes any side effect. The committed source position
     // deliberately stays unchanged until all terminal turns are receipted.
@@ -386,9 +386,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         sourceKind: cursorSourceKind(registration.trigger),
         element,
         skipped,
-        ...(result.windowFrom !== undefined ? { windowFrom: result.windowFrom } : {}),
-        ...(result.windowTo !== undefined ? { windowTo: result.windowTo } : {}),
-        ...(result.gapReason !== undefined ? { gapReason: result.gapReason } : {}),
+        ...(result.windowFrom === undefined ? {} : { windowFrom: result.windowFrom }),
+        ...(result.windowTo === undefined ? {} : { windowTo: result.windowTo }),
+        ...(result.gapReason === undefined ? {} : { gapReason: result.gapReason }),
       };
       if (this.fireCursor) await this.fireCursor(fireInput);
       else if (registration.trigger.kind === 'cron') await this.fire(registration.ref);

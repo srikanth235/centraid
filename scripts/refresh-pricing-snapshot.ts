@@ -11,7 +11,6 @@
  */
 
 import { writeFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { filterLiteLLM } from '../packages/app-engine/src/pricing/filter.ts';
 
@@ -26,7 +25,7 @@ async function main(): Promise<void> {
   const count = Object.keys(models).length;
   if (count === 0) throw new Error('filter produced zero entries — refusing to overwrite');
 
-  const here = path.dirname(fileURLToPath(import.meta.url));
+  const here = import.meta.dirname;
   const out = path.join(
     here,
     '..',

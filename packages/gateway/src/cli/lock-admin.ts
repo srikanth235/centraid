@@ -31,7 +31,7 @@ export interface LockStatusDependencies {
 function holderPid(file: string): number | undefined {
   const result = spawnSync('lsof', ['-t', file], { encoding: 'utf8', timeout: 2_000 });
   if (result.status !== 0) return undefined;
-  const pid = Number(result.stdout.trim().split(/\s+/)[0]);
+  const pid = Number(result.stdout.trim().split(/\s+/u)[0]);
   return Number.isInteger(pid) && pid > 0 ? pid : undefined;
 }
 
@@ -75,17 +75,10 @@ export async function commandLockStatus(
       dataDir: config.dataDir,
       held: true,
       answering: true,
-      ...(pid !== undefined ? { holderPid: pid } : {}),
+      ...(pid === undefined ? {} : { holderPid: pid }),
       detail: 'gateway.db is held by the answering daemon',
     };
-  } else if (!existsSync(layout.gatewayDbFile)) {
-    status = {
-      dataDir: config.dataDir,
-      held: false,
-      answering: false,
-      detail: 'gateway.db does not exist; the lock is free',
-    };
-  } else {
+  } else if (existsSync(layout.gatewayDbFile)) {
     try {
       GatewayDatabase.open(config.dataDir, { lock: 'exclusive' }).close();
       status = {
@@ -107,6 +100,13 @@ export async function commandLockStatus(
           (pid !== undefined ? ` (OS holder pid ${pid})` : ''),
       };
     }
+  } else {
+    status = {
+      dataDir: config.dataDir,
+      held: false,
+      answering: false,
+      detail: 'gateway.db does not exist; the lock is free',
+    };
   }
   if (json) {
     process.stdout.write(`${JSON.stringify({ ok: true, ...status })}\n`);

@@ -94,7 +94,7 @@ export default function BuilderHistory({
               </p>
             </div>
             <div className={styles.actions}>
-              {!isCurrent ? (
+              {isCurrent ? null : (
                 <button
                   type="button"
                   className={cx(buttonCss.btn, controlsCss.soft, buttonCss.sm)}
@@ -102,7 +102,7 @@ export default function BuilderHistory({
                 >
                   Restore
                 </button>
-              ) : null}
+              )}
             </div>
           </div>
         );

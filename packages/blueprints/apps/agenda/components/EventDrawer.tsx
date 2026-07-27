@@ -24,8 +24,8 @@ const REPEAT_LABEL: Record<string, string> = {
 
 /** A short human label for a stored rrule's FREQ — "Repeats weekly" etc. */
 function repeatLabel(rrule?: string | null): string | null {
-  const match = /FREQ=([A-Z]+)/.exec(String(rrule ?? ''));
-  const freq = match?.[1];
+  const match = /FREQ=(?<freq>[A-Z]+)/u.exec(String(rrule ?? ''));
+  const freq = match?.groups?.freq;
   return freq ? (REPEAT_LABEL[freq] ?? 'Repeats') : null;
 }
 

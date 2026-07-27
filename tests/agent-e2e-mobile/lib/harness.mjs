@@ -18,12 +18,11 @@
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
 import { DISMISS_KEYBOARD_ONBOARDING, skipOnboarding } from './first-run.mjs';
 import { metroReachable, prewarmMetroBundle } from './metro.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const RUNS_DIR = path.join(__dirname, '..', 'runs');
 

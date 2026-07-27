@@ -28,10 +28,9 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { isInstrumentableSource } from './diff-coverage.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 
 /**
  * @param {string[]} argv Raw argv slice.
@@ -98,8 +97,8 @@ export function changedFiles(baseRef) {
  * @returns {string | null} e.g. "packages/gateway", or null.
  */
 export function workspaceDirOf(filePath) {
-  const m = /^((?:packages|apps)\/[^/]+)\//.exec(filePath);
-  return m ? m[1] : null;
+  const m = /^(?<workspaceDir>(?:packages|apps)\/[^/]+)\//u.exec(filePath);
+  return m?.groups?.workspaceDir ?? null;
 }
 
 /**
@@ -228,7 +227,7 @@ function main() {
 
 // Same invoke-guard as diff-coverage.mjs / ratchet-floors.mjs so the helpers
 // above are importable under vitest without triggering the full run.
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
 if (isMain) {
   process.exitCode = main();
 }

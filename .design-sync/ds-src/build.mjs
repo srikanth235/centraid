@@ -19,10 +19,9 @@
 // are build outputs (gitignored); the committed source is this generator, the
 // hand-authored `styles/bridge.css` + `styles/fonts.css`, and the fonts.
 import { writeFileSync, readFileSync, copyFileSync, mkdirSync, rmSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const repoRoot = resolve(here, '..', '..');
 const kitDir = resolve(repoRoot, 'packages/blueprints/kit');
 const stylesDir = resolve(here, 'styles');

@@ -391,12 +391,18 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
 
     // The full, unmodified kit — no exemptions. Both previously-confirmed
     // response-shape bugs (see module header) are fixed upstream.
-    for (const c of providerConformanceCases(makeHarness)) {
-      // Generous per-case timeout: the dev gateway's per-cell auth rate limit
-      // (60 req / 60 s, no Retry-After) can force the client to wait out a full
-      // window mid-case; the wire client's bounded backoff needs room to do so.
-      test(c.name, c.run, 90_000);
-    }
+    // Generous per-case timeout: the dev gateway's per-cell auth rate limit
+    // (60 req / 60 s, no Retry-After) can force the client to wait out a full
+    // window mid-case; the wire client's bounded backoff needs room to do so.
+    test.each(providerConformanceCases(makeHarness).map((c) => [c.name, c] as const))(
+      '%s',
+      async (_name, c) => {
+        await c.run();
+        // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496 E5).
+        expect(c.name.length).toBeGreaterThan(0);
+      },
+      90_000,
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -525,12 +531,12 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
         current: CURRENT,
       });
       expect(result.seq).toBe(1);
-      expect(result.entries.sort()).toEqual(entries.map((e) => e.path).sort());
+      expect(result.entries.sort()).toStrictEqual(entries.map((e) => e.path).sort());
       // The db bases restore + replay to logically-identical SQLite content
       // (WAL replay reopens/checkpoints the file, so the bytes need not match);
       // the opaque blobs restore byte-identical.
-      expect(readSqliteRows(path.join(destDir, 'vault.db'))).toEqual(['v1', 'v2', 'v3']);
-      expect(readSqliteRows(path.join(destDir, 'journal.db'))).toEqual(['j1']);
+      expect(readSqliteRows(path.join(destDir, 'vault.db'))).toStrictEqual(['v1', 'v2', 'v3']);
+      expect(readSqliteRows(path.join(destDir, 'journal.db'))).toStrictEqual(['j1']);
       for (const entry of entries.filter((e) => e.kind === 'blob')) {
         const original = await fs.readFile(entry.absolutePath);
         const restored = await fs.readFile(path.join(destDir, ...entry.path.split('/')));
@@ -539,8 +545,8 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       await fs.rm(destDir, { recursive: true, force: true });
 
       const verified = await verifySnapshot({ provider, targetId, keyring, vaultId: VAULT_ID });
-      expect(verified.missing).toEqual([]);
-      expect(verified.corrupt).toEqual([]);
+      expect(verified.missing).toStrictEqual([]);
+      expect(verified.corrupt).toStrictEqual([]);
     }, 90_000);
 
     test('c. deleting a chunk object directly against the real S3 server makes verifySnapshot report it missing', async () => {
@@ -673,15 +679,15 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     expect(info.id).toBe(targetId);
     expect(info.status).toBe('active');
     expect(info.currentGeneration).toBe(1);
-    expect(typeof info.usage.storedBytes).toBe('number');
-    expect(typeof info.usage.objectCount).toBe('number');
+    expect(info.usage.storedBytes).toBeTypeOf('number');
+    expect(info.usage.objectCount).toBeTypeOf('number');
 
     const { usage, accountStatus } = await provider.usage(targetId);
     expect(['ok', 'payment_due', 'suspended']).toContain(accountStatus);
-    expect(typeof usage.storedBytes).toBe('number');
-    expect(typeof usage.objectCount).toBe('number');
-    if (usage.quotaBytes !== undefined) {
-      expect(usage.quotaBytes).toBe(107_374_182_400); // pro tier: 100 GiB (packages/db migration 0012)
-    }
+    expect(usage.storedBytes).toBeTypeOf('number');
+    expect(usage.objectCount).toBeTypeOf('number');
+    // Either unreported, or exactly the pro tier's 100 GiB (packages/db
+    // migration 0012) — any other number means the quota wiring drifted.
+    expect([undefined, 107_374_182_400]).toContain(usage.quotaBytes);
   }, 90_000);
 });

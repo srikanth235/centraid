@@ -31,7 +31,7 @@ function JournalEntry({
           size="40px"
           color={color}
           onClick={() => j.party_id && onOpenDetails(j.party_id)}
-        ></KitAvatar>
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className={styles.dt}>
             {fmtJournalDate(j.date)} · {j.touch}
@@ -98,7 +98,7 @@ export function Journal({
           placeholder="Write a line…"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-        ></textarea>
+        />
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
           <button
             type="button"

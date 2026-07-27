@@ -25,7 +25,7 @@ function baseManifest(over: Record<string, unknown> = {}): Record<string, unknow
   };
 }
 
-describe('isValidCronExpression', () => {
+describe(isValidCronExpression, () => {
   it('accepts canonical 5-field expressions', () => {
     expect(isValidCronExpression('*/30 * * * *')).toBe(true);
     expect(isValidCronExpression('0 9 * * MON-FRI')).toBe(true);
@@ -41,7 +41,7 @@ describe('isValidCronExpression', () => {
   });
 });
 
-describe('isValidIanaTimeZone', () => {
+describe(isValidIanaTimeZone, () => {
   it('accepts known zones and rejects unknown ones', () => {
     expect(isValidIanaTimeZone('UTC')).toBe(true);
     expect(isValidIanaTimeZone('America/New_York')).toBe(true);
@@ -50,14 +50,14 @@ describe('isValidIanaTimeZone', () => {
   });
 });
 
-describe('validateManifest', () => {
+describe(validateManifest, () => {
   it('accepts a minimal valid manifest', () => {
     const m = validateManifest(baseManifest());
     expect(m.name).toBe('Daily digest');
     expect(m.version).toBe('0.1.0');
     expect(m.enabled).toBe(true);
-    expect(m.triggers.length).toBe(1);
-    expect(m.triggers[0]).toEqual({ kind: 'cron', expr: '0 9 * * *' });
+    expect(m.triggers).toHaveLength(1);
+    expect(m.triggers[0]).toStrictEqual({ kind: 'cron', expr: '0 9 * * *' });
   });
 
   it('reads a plural triggers list with multiple crons', () => {
@@ -67,14 +67,18 @@ describe('validateManifest', () => {
       { kind: 'cron', expr: '0 17 * * *' },
     ];
     const m = validateManifest(raw);
-    expect(m.triggers.length).toBe(2);
+    expect(m.triggers).toHaveLength(2);
   });
 
   it('accepts an optional IANA tz on a cron trigger', () => {
     const raw = baseManifest();
     raw.triggers = [{ kind: 'cron', expr: '0 9 * * *', tz: 'America/New_York' }];
     const m = validateManifest(raw);
-    expect(m.triggers[0]).toEqual({ kind: 'cron', expr: '0 9 * * *', tz: 'America/New_York' });
+    expect(m.triggers[0]).toStrictEqual({
+      kind: 'cron',
+      expr: '0 9 * * *',
+      tz: 'America/New_York',
+    });
   });
 
   it('rejects an unknown IANA tz at validation (not at fire time)', () => {
@@ -114,7 +118,7 @@ describe('validateManifest', () => {
   it('treats an empty triggers list as legal (manual fire only)', () => {
     const raw = baseManifest();
     raw.triggers = [];
-    expect(validateManifest(raw).triggers).toEqual([]);
+    expect(validateManifest(raw).triggers).toStrictEqual([]);
   });
 
   it('rejects more than one webhook trigger', () => {
@@ -141,7 +145,7 @@ describe('validateManifest', () => {
 
   it('carries the apps association list', () => {
     const m = validateManifest(baseManifest({ apps: ['todos', 'habits'] }));
-    expect(m.apps).toEqual(['todos', 'habits']);
+    expect(m.apps).toStrictEqual(['todos', 'habits']);
   });
 
   it('rejects a missing name', () => {
@@ -209,11 +213,11 @@ describe('validateManifest', () => {
     const raw = baseManifest();
     delete raw.history;
     const m: Manifest = validateManifest(raw);
-    expect(m.history.keep).toEqual({ count: 100 });
+    expect(m.history.keep).toStrictEqual({ count: 100 });
   });
 });
 
-describe('parseManifest', () => {
+describe(parseManifest, () => {
   it('round-trips a JSON string', () => {
     const m = parseManifest(JSON.stringify(baseManifest()));
     expect(m.name).toBe('Daily digest');
@@ -251,7 +255,7 @@ describe('condition triggers', () => {
         },
       ],
     });
-    expect(m.triggers[1]).toEqual({
+    expect(m.triggers[1]).toStrictEqual({
       kind: 'condition',
       entity: 'business.invoice',
       where: [
@@ -314,7 +318,7 @@ describe('data triggers', () => {
       ...base,
       triggers: [{ kind: 'data', entities: ['core.transaction'], every: '*/2 * * * *' }],
     });
-    expect(m.triggers[0]).toEqual({
+    expect(m.triggers[0]).toStrictEqual({
       kind: 'data',
       entities: ['core.transaction'],
       every: '*/2 * * * *',
@@ -378,7 +382,7 @@ describe('provider event triggers and cursor loop guard', () => {
           },
         ],
       }).triggers[0],
-    ).toEqual({
+    ).toStrictEqual({
       kind: 'event',
       connectorKind: 'pull.gmail',
       event: 'new-message',

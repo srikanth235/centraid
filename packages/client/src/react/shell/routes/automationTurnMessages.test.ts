@@ -13,7 +13,7 @@ import {
   startAutomationLiveItem,
 } from './automationLiveMessages.js';
 
-vi.mock('../../../gateway-client.js', () => ({}));
+vi.mock(import('../../../gateway-client.js'), () => ({}));
 
 const turn = (over: Partial<CentraidAutomationTurnRecord> = {}): CentraidAutomationTurnRecord =>
   ({
@@ -63,13 +63,19 @@ describe('automationTurnMessages cold projection', () => {
       item(5, 'tool', { callId: 'c', name: 'calendar.read', startedAt: 12 }),
     ]);
 
-    expect(messages.map((message) => message.kind)).toEqual(['user', 'tools', 'ai', 'tools', 'ai']);
+    expect(messages.map((message) => message.kind)).toStrictEqual([
+      'user',
+      'tools',
+      'ai',
+      'tools',
+      'ai',
+    ]);
     expect(messages.filter((message) => message.kind === 'tools')).toHaveLength(2);
     expect(
       messages
         .filter((message) => message.kind === 'ai' && !message.streaming)
         .map((message) => (message.kind === 'ai' && !message.streaming ? message.copyText : '')),
-    ).toEqual(['First answer', 'Second answer']);
+    ).toStrictEqual(['First answer', 'Second answer']);
   });
 
   it('renders a durable max_tokens stop reason as a distinct error bubble', () => {
@@ -79,7 +85,7 @@ describe('automationTurnMessages cold projection', () => {
         rawJson: '{"stopReason":"max_tokens"}',
       }),
     ]);
-    expect(messages).toEqual([
+    expect(messages).toStrictEqual([
       expect.objectContaining({ kind: 'ai', error: false, copyText: 'Partial answer' }),
       expect.objectContaining({
         kind: 'ai',
@@ -136,17 +142,23 @@ describe('automation turn live projection', () => {
     });
 
     const messages = automationLiveMessages(state);
-    expect(messages.map((message) => message.kind)).toEqual(['user', 'tools', 'ai', 'tools', 'ai']);
+    expect(messages.map((message) => message.kind)).toStrictEqual([
+      'user',
+      'tools',
+      'ai',
+      'tools',
+      'ai',
+    ]);
     expect(
       messages
         .filter((message) => message.kind === 'ai' && !message.streaming)
         .map((message) => (message.kind === 'ai' && !message.streaming ? message.copyText : '')),
-    ).toEqual(['First answer', 'Second answer']);
+    ).toStrictEqual(['First answer', 'Second answer']);
     expect(
       messages
         .filter((message) => message.kind === 'tools')
         .flatMap((message) => (message.kind === 'tools' ? message.calls : [])),
-    ).toEqual([
+    ).toStrictEqual([
       { tool: 'mail.read', state: 'run', meta: 'running…' },
       { tool: 'calendar.read', state: 'run', meta: 'running…' },
     ]);
@@ -176,7 +188,7 @@ describe('automation turn live projection', () => {
     });
 
     const messages = automationLiveMessages(state);
-    expect(messages.map((message) => message.kind)).toEqual(['user', 'ai', 'tools']);
+    expect(messages.map((message) => message.kind)).toStrictEqual(['user', 'ai', 'tools']);
     expect(messages.filter((message) => message.kind === 'ai')).toHaveLength(1);
   });
 
@@ -212,8 +224,8 @@ describe('automation turn live projection', () => {
       durationMs: 9,
     });
     const messages = automationLiveMessages(state);
-    expect(messages.map((message) => message.kind)).toEqual(['user', 'tools', 'ai', 'ai']);
-    expect(messages).toEqual(
+    expect(messages.map((message) => message.kind)).toStrictEqual(['user', 'tools', 'ai', 'ai']);
+    expect(messages).toStrictEqual(
       expect.arrayContaining([
         expect.objectContaining({ kind: 'tools', label: '1 tool' }),
         expect.objectContaining({ kind: 'ai', copyText: 'First answer' }),
@@ -237,7 +249,7 @@ describe('automation turn live projection', () => {
       rawJson: '{"stopReason":"max_turn_requests"}',
       durationMs: 25,
     });
-    expect(automationLiveMessages(state)).toEqual([
+    expect(automationLiveMessages(state)).toStrictEqual([
       expect.objectContaining({ kind: 'ai', copyText: 'Recovered answer' }),
       expect.objectContaining({
         kind: 'ai',
@@ -279,7 +291,7 @@ describe('compile-turn inbound bubble (#541)', () => {
       item(1, 'agent', { startedAt: 1, endedAt: 10, outputJson: '{"text":"Plan ready"}' }),
     ]);
     const user = messages.find((message) => message.kind === 'user');
-    expect(user).toEqual(
+    expect(user).toStrictEqual(
       expect.objectContaining({ kind: 'user', text: COMPILE_TURN_INBOUND_TEXT }),
     );
     expect(JSON.stringify(messages)).not.toContain('centraid-compiler');
@@ -289,7 +301,7 @@ describe('compile-turn inbound bubble (#541)', () => {
     const messages = automationTurnMessages(turn({ triggerKind: 'interactive' }), [
       item(0, 'message_in', { text: 'only flag movers over 5%' }),
     ]);
-    expect(messages[0]).toEqual(
+    expect(messages[0]).toStrictEqual(
       expect.objectContaining({ kind: 'user', text: 'only flag movers over 5%' }),
     );
   });
@@ -301,7 +313,7 @@ describe('compile-turn inbound bubble (#541)', () => {
     expect(automationTurnInboundText(turn({ triggerKind: 'compile' }), items)).toBe(
       COMPILE_TURN_INBOUND_TEXT,
     );
-    expect(automationTurnMessages(turn({ triggerKind: 'compile' }), items)[0]).toEqual(
+    expect(automationTurnMessages(turn({ triggerKind: 'compile' }), items)[0]).toStrictEqual(
       expect.objectContaining({ text: COMPILE_TURN_INBOUND_TEXT }),
     );
     expect(automationTurnInboundText(turn({ triggerKind: 'manual' }), items)).toBe(WORK_ORDER);
@@ -319,8 +331,8 @@ describe('compile-turn inbound bubble (#541)', () => {
     ]);
     // The tools row is inserted AHEAD of the agent bubble on flush, so index 1
     // changes identity — the ids must not.
-    expect(before.map((message) => message.msgId)).toEqual(['item-0:in', 'item-1:ai']);
-    expect(after.map((message) => message.msgId)).toEqual([
+    expect(before.map((message) => message.msgId)).toStrictEqual(['item-0:in', 'item-1:ai']);
+    expect(after.map((message) => message.msgId)).toStrictEqual([
       'item-0:in',
       'item-2:tools',
       'item-1:ai',

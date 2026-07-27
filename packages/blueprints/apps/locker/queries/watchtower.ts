@@ -8,7 +8,7 @@
 
 import { decorate, readTags, readStarred, readWatchtower, type RawItem } from './items.ts';
 
-export default async ({ ctx }: HandlerArgs) => {
+export default async function watchtowerHandler({ ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   try {
     const res = await ctx.vault.read({
@@ -43,4 +43,4 @@ export default async ({ ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

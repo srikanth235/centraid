@@ -33,7 +33,7 @@ function ToggleRow({
         aria-pressed={on}
         onClick={onClick}
       >
-        <i></i>
+        <i />
       </button>
     </div>
   );

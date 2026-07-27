@@ -46,7 +46,7 @@ export function extractPdfText(bytes: Buffer): string | null {
       // clean miss. A device/pdf.js enricher may still contribute later.
     }
   }
-  const text = parts.slice(0, MAX_TEXT_PARTS).join(' ').replace(/\s+/g, ' ').trim();
+  const text = parts.slice(0, MAX_TEXT_PARTS).join(' ').replace(/\s+/gu, ' ').trim();
   return text.length >= 16 ? text : null;
 }
 
@@ -72,7 +72,7 @@ function streamDictionary(bytes: Buffer, streamAt: number): StreamDictionary | n
 }
 
 function hasOnlyFlateFilter(dictionary: StreamDictionary): boolean {
-  return /\/Filter\s*(?:\/(?:FlateDecode|Fl)\b|\[\s*\/(?:FlateDecode|Fl)\s*\])/.test(
+  return /\/Filter\s*(?:\/(?:FlateDecode|Fl)\b|\[\s*\/(?:FlateDecode|Fl)\s*\])/u.test(
     dictionary.text,
   );
 }
@@ -82,9 +82,9 @@ function compressedStream(
   dictionary: StreamDictionary,
   dataStart: number,
 ): Buffer | null {
-  const lengthMatch = /\/Length\s+(\d+)\b/.exec(dictionary.text);
+  const lengthMatch = /\/Length\s+(?<streamLength>\d+)\b/u.exec(dictionary.text);
   if (lengthMatch) {
-    const length = Number(lengthMatch[1]);
+    const length = Number(lengthMatch.groups?.streamLength);
     if (Number.isSafeInteger(length) && length >= 0 && dataStart + length <= bytes.length) {
       return bytes.subarray(dataStart, dataStart + length);
     }
@@ -99,13 +99,15 @@ function compressedStream(
 
 function textShowingParts(raw: string): string[] {
   const parts: string[] = [];
-  for (const match of raw.matchAll(/\(((?:\\.|[^\\)])*)\)\s*Tj/g)) {
-    parts.push(decodePdfString(match[1] ?? ''));
+  for (const match of raw.matchAll(/\((?<literal>(?:\\.|[^\\)])*)\)\s*Tj/gu)) {
+    parts.push(decodePdfString(match.groups?.literal ?? ''));
     if (parts.length >= MAX_TEXT_PARTS) return parts;
   }
-  for (const match of raw.matchAll(/\[((?:\((?:\\.|[^\\)])*\)|[^\]])*)\]\s*TJ/g)) {
-    for (const value of (match[1] ?? '').matchAll(/\(((?:\\.|[^\\)])*)\)/g)) {
-      parts.push(decodePdfString(value[1] ?? ''));
+  for (const match of raw.matchAll(/\[(?<elements>(?:\((?:\\.|[^\\)])*\)|[^\]])*)\]\s*TJ/gu)) {
+    for (const value of (match.groups?.elements ?? '').matchAll(
+      /\((?<literal>(?:\\.|[^\\)])*)\)/gu,
+    )) {
+      parts.push(decodePdfString(value.groups?.literal ?? ''));
       if (parts.length >= MAX_TEXT_PARTS) return parts;
     }
   }
@@ -114,7 +116,7 @@ function textShowingParts(raw: string): string[] {
 
 function decodePdfString(value: string): string {
   return value
-    .replace(/\\([nrtbf()\\])/g, (_, char: string) =>
+    .replace(/\\(?<char>[nrtbf()\\])/gu, (_, char: string) =>
       char === 'n'
         ? '\n'
         : char === 'r'
@@ -125,5 +127,7 @@ function decodePdfString(value: string): string {
               ? ''
               : char,
     )
-    .replace(/\\(\d{1,3})/g, (_, octal: string) => String.fromCharCode(parseInt(octal, 8)));
+    .replace(/\\(?<octal>\d{1,3})/gu, (_, octal: string) =>
+      String.fromCharCode(parseInt(octal, 8)),
+    );
 }

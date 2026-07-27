@@ -85,7 +85,7 @@ export async function startTurnVaultTools(args: {
     // Stdio bridge: agent spawns proxy; proxy dials our loopback HTTP.
     const bearer =
       handle.server.headers.find((h) => h.name.toLowerCase() === 'authorization')?.value ?? '';
-    const token = bearer.replace(/^Bearer\s+/i, '');
+    const token = bearer.replace(/^Bearer\s+/iu, '');
     const stdio: AcpStdioMcpServer = {
       name: VAULT_MCP_SERVER_NAME,
       command: process.execPath,

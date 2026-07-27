@@ -87,10 +87,13 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
       // Attachment blob CAS (issue #190):
       //   POST /apps/<appId>/blobs            upload bytes → { hash, sizeBytes, url }
       //   GET  /apps/<appId>/blobs/<hash>     download bytes
-      const blobMatch = sub.match(/^\/apps\/([^/]+)\/blobs(?:\/([a-f0-9]{64}))?\/?$/);
-      if (blobMatch && blobMatch[1]) {
-        const appId = decodeURIComponent(blobMatch[1]);
-        const hash = blobMatch[2];
+      const blobMatch = sub.match(
+        /^\/apps\/(?<appId>[^/]+)\/blobs(?:\/(?<hash>[a-f0-9]{64}))?\/?$/u,
+      );
+      const blobAppId = blobMatch?.groups?.appId;
+      if (blobAppId) {
+        const appId = decodeURIComponent(blobAppId);
+        const hash = blobMatch?.groups?.hash;
         if (!hash && method === 'POST') {
           const bytes = await readRawBody(req);
           if (bytes.length === 0) {
@@ -128,15 +131,18 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
 
       // Per-turn message feedback (issue #420):
       //   PATCH /apps/<appId>/sessions/<id>/turns/<turnId>/feedback  body {feedback}
-      const fb = sub.match(/^\/apps\/([^/]+)\/sessions\/([^/]+)\/turns\/([^/]+)\/feedback\/?$/);
-      if (fb && fb[1] && fb[2] && fb[3]) {
+      const fb = sub.match(
+        /^\/apps\/(?<appId>[^/]+)\/sessions\/(?<sessionId>[^/]+)\/turns\/(?<turnId>[^/]+)\/feedback\/?$/u,
+      );
+      const fbGroups = fb?.groups;
+      if (fbGroups?.appId && fbGroups.sessionId && fbGroups.turnId) {
         if (method !== 'PATCH') {
           sendError(res, 405, 'method not allowed');
           return true;
         }
-        const fbAppId = decodeURIComponent(fb[1]);
-        const fbSessionId = decodeURIComponent(fb[2]);
-        const fbTurnId = decodeURIComponent(fb[3]);
+        const fbAppId = decodeURIComponent(fbGroups.appId);
+        const fbSessionId = decodeURIComponent(fbGroups.sessionId);
+        const fbTurnId = decodeURIComponent(fbGroups.turnId);
         const body = (await readJsonBody(req)) as { feedback?: unknown } | undefined;
         const raw = body?.feedback;
         const feedback = raw === 'up' || raw === 'down' ? raw : null;
@@ -154,14 +160,17 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
       // whether the turn finished server-side (its `turnCount` climbed) before
       // reloading the full transcript. Cheap — one conversations-row read, no
       // item reconstruction. Matched BEFORE the generic sessions/<id> route.
-      const statusMatch = sub.match(/^\/apps\/([^/]+)\/sessions\/([^/]+)\/status\/?$/);
-      if (statusMatch && statusMatch[1] && statusMatch[2]) {
+      const statusMatch = sub.match(
+        /^\/apps\/(?<appId>[^/]+)\/sessions\/(?<sessionId>[^/]+)\/status\/?$/u,
+      );
+      const statusGroups = statusMatch?.groups;
+      if (statusGroups?.appId && statusGroups.sessionId) {
         if (method !== 'GET') {
           sendError(res, 405, 'method not allowed');
           return true;
         }
-        const stAppId = decodeURIComponent(statusMatch[1]);
-        const stId = decodeURIComponent(statusMatch[2]);
+        const stAppId = decodeURIComponent(statusGroups.appId);
+        const stId = decodeURIComponent(statusGroups.sessionId);
         const meta = store.getSessionMeta(stAppId, stId);
         if (!meta) {
           sendError(res, 404, 'session not found');
@@ -174,13 +183,14 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
       // Conversation FTS search (issue #420) — matched BEFORE the generic
       // sessions/<id> route so "search" isn't read as a session id:
       //   GET /apps/<appId>/sessions/search?q=<query>&limit=<n>  → { results }
-      const searchMatch = sub.match(/^\/apps\/([^/]+)\/sessions\/search\/?$/);
-      if (searchMatch && searchMatch[1]) {
+      const searchMatch = sub.match(/^\/apps\/(?<appId>[^/]+)\/sessions\/search\/?$/u);
+      const searchAppIdRaw = searchMatch?.groups?.appId;
+      if (searchAppIdRaw) {
         if (method !== 'GET') {
           sendError(res, 405, 'method not allowed');
           return true;
         }
-        const searchAppId = decodeURIComponent(searchMatch[1]);
+        const searchAppId = decodeURIComponent(searchAppIdRaw);
         const q = url.searchParams.get('q') ?? '';
         const limitParam = Number(url.searchParams.get('limit'));
         const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 20;
@@ -189,13 +199,15 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
       }
 
       // /apps/<appId>/sessions  and  /apps/<appId>/sessions/<id>
-      const m = sub.match(/^\/apps\/([^/]+)\/sessions(?:\/([^/]+))?\/?$/);
-      if (!m || !m[1]) {
+      const m = sub.match(/^\/apps\/(?<appId>[^/]+)\/sessions(?:\/(?<sessionId>[^/]+))?\/?$/u);
+      const rawAppId = m?.groups?.appId;
+      if (!rawAppId) {
         sendError(res, 404, 'unknown conversation route');
         return true;
       }
-      const appId = decodeURIComponent(m[1]);
-      const id = m[2] ? decodeURIComponent(m[2]) : undefined;
+      const appId = decodeURIComponent(rawAppId);
+      const rawSessionId = m?.groups?.sessionId;
+      const id = rawSessionId ? decodeURIComponent(rawSessionId) : undefined;
 
       if (!id) {
         if (method === 'GET') {

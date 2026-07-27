@@ -11,9 +11,9 @@ import { listAutomationTurns, listAutomations } from '../../../gateway-client.js
 // buildOverviewData is pure; stub the gateway module so importing it doesn't
 // run gateway-client-core's load-time window.CentraidApi side-effect. `vi.mock`
 // is hoisted above these imports by vitest, so the stub is in place first.
-vi.mock('../../../gateway-client.js', () => ({
-  listAutomations: vi.fn(),
-  listAutomationTurns: vi.fn(),
+vi.mock(import('../../../gateway-client.js'), () => ({
+  listAutomations: vi.fn<typeof listAutomations>(),
+  listAutomationTurns: vi.fn<typeof listAutomationTurns>(),
 }));
 
 const row = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationRow =>
@@ -44,7 +44,7 @@ const entry = (over: Partial<AutomationFeedEntry['run']> = {}): AutomationFeedEn
   } as unknown as CentraidAutomationTurnRecord,
 });
 
-describe('buildOverviewData', () => {
+describe(buildOverviewData, () => {
   it('counts health buckets across rows', () => {
     const data = buildOverviewData(
       [row(), row({ id: 'x', ref: 'x/main', enabled: false })],
@@ -152,12 +152,12 @@ const viewRow = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationR
 
 const GATEWAY_ORIGIN = 'http://127.0.0.1:5173';
 
-describe('deriveAutomationHero', () => {
+describe(deriveAutomationHero, () => {
   it('derives the cron hero (eyebrow, icon, next runs off the expr)', () => {
     const hero = deriveAutomationHero(viewRow(), GATEWAY_ORIGIN);
     expect(hero.kindEyebrow).toBe('Cron schedule');
     expect(hero.heroIcon).toBe('Clock');
-    expect(hero.cronExprs).toEqual(['0 9 * * *']);
+    expect(hero.cronExprs).toStrictEqual(['0 9 * * *']);
     expect(hero.nextRuns).toHaveLength(3);
   });
 
@@ -167,7 +167,7 @@ describe('deriveAutomationHero', () => {
       GATEWAY_ORIGIN,
     );
     expect(hero.kindEyebrow).toBe('Webhook');
-    expect(hero.webhook).toEqual({ pending: true, url: null });
+    expect(hero.webhook).toStrictEqual({ pending: true, url: null });
   });
 
   it('derives an absolute webhook URL off the gateway origin once provisioned', () => {
@@ -175,7 +175,7 @@ describe('deriveAutomationHero', () => {
       viewRow({ triggers: [{ kind: 'webhook', id: 'abc123' } as never] }),
       GATEWAY_ORIGIN,
     );
-    expect(hero.webhook).toEqual({
+    expect(hero.webhook).toStrictEqual({
       pending: false,
       url: 'http://127.0.0.1:5173/_centraid-hook/abc123',
     });
@@ -221,7 +221,7 @@ describe('deriveAutomationHero', () => {
       }),
       GATEWAY_ORIGIN,
     );
-    expect(withEvery.dataDetail).toEqual({
+    expect(withEvery.dataDetail).toStrictEqual({
       entities: ['core.content_derivative', 'core.event'],
       everyLabel: 'Every 5m',
     });
@@ -231,7 +231,7 @@ describe('deriveAutomationHero', () => {
       viewRow({ triggers: [{ kind: 'data', entities: ['core.event'] } as never] }),
       GATEWAY_ORIGIN,
     );
-    expect(withoutEvery.dataDetail).toEqual({ entities: ['core.event'], everyLabel: null });
+    expect(withoutEvery.dataDetail).toStrictEqual({ entities: ['core.event'], everyLabel: null });
   });
 
   it('derives conditionDetail with a readable where clause for a structured condition', () => {
@@ -248,7 +248,7 @@ describe('deriveAutomationHero', () => {
       }),
       GATEWAY_ORIGIN,
     );
-    expect(hero.conditionDetail).toEqual({
+    expect(hero.conditionDetail).toStrictEqual({
       entity: 'core.event',
       whereText: JSON.stringify({ status: 'overdue' }, null, 2),
       everyLabel: 'Every 1h',
@@ -292,7 +292,7 @@ describe('deriveAutomationHero', () => {
   });
 });
 
-describe('collectAutomationRuns', () => {
+describe(collectAutomationRuns, () => {
   it('prefers the live automation name over the run-recorded name over the raw ref', async () => {
     vi.mocked(listAutomations).mockResolvedValue([row()] as unknown as CentraidAutomationRow[]);
     vi.mocked(listAutomationTurns).mockResolvedValue([
@@ -351,6 +351,6 @@ describe('collectAutomationRuns', () => {
     vi.mocked(listAutomationTurns).mockRejectedValue(new Error('500'));
     const { rows, entries } = await collectAutomationRuns();
     expect(rows).toHaveLength(1);
-    expect(entries).toEqual([]);
+    expect(entries).toStrictEqual([]);
   });
 });

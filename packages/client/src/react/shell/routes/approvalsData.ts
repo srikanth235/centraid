@@ -18,7 +18,7 @@ import type {
 
 /** Titlecase a snake/dot-separated key for the detail panel's field labels. */
 function labelFor(key: string): string {
-  return key.replace(/[_.]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return key.replace(/[_.]/gu, ' ').replace(/\b\w/gu, (c) => c.toUpperCase());
 }
 
 /** Render one artifact value readably — arrays join, objects pretty-print. */
@@ -143,7 +143,7 @@ export function humanizeActivityLabel(
     return decision === 'allow' ? 'Locker login revealed' : 'Locker reveal denied';
   }
   const bare = action.startsWith('act ') ? action.slice(4) : action;
-  const spaced = bare.replace(/[._]+/g, ' ').trim();
+  const spaced = bare.replace(/[._]+/gu, ' ').trim();
   if (spaced.length === 0) return action;
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }

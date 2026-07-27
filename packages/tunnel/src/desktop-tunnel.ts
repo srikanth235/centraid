@@ -74,14 +74,14 @@ export interface DesktopTunnelHandle {
   /** This desktop's stable transport identity (base32 EndpointId). */
   endpointId: string;
   /** Current dial ticket (recomputed — the addr can change with the network). */
-  ticket(): string;
+  ticket: () => string;
   /** Mint (or replace) the one-time pairing code and QR payload. */
-  beginPairing(ttlMs?: number): ActivePairing;
-  activePairing(): ActivePairing | undefined;
-  cancelPairing(): void;
+  beginPairing: (ttlMs?: number) => ActivePairing;
+  activePairing: () => ActivePairing | undefined;
+  cancelPairing: () => void;
   /** Remove a device from the allowlist and drop its live connections. */
-  revokeDevice(deviceId: string): PairedDevice | undefined;
-  close(): Promise<void>;
+  revokeDevice: (deviceId: string) => PairedDevice | undefined;
+  close: () => Promise<void>;
 }
 
 const DEFAULT_PAIRING_TTL_MS = 10 * 60 * 1000;

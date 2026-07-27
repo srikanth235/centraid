@@ -100,8 +100,8 @@ export function parseSchedulerLedgerSnapshot(
  * subset of `ConversationStore` so tests can satisfy it without casts.
  */
 export interface SchedulerLedgerKv {
-  stateGet(automationId: string, key: string): { valueJson: string } | undefined;
-  stateSet(automationId: string, key: string, valueJson: string, updatedAt: number): void;
+  stateGet: (automationId: string, key: string) => { valueJson: string } | undefined;
+  stateSet: (automationId: string, key: string, valueJson: string, updatedAt: number) => void;
 }
 
 /** `automation_state`-backed persistence for one vault's scheduler ledger. */
@@ -261,7 +261,7 @@ export function recordSchedulerTick(
               cronTimeZones: crons.map((t) => t.tz),
             };
           }),
-        ...(opts.graceMs !== undefined ? { graceMs: opts.graceMs } : {}),
+        ...(opts.graceMs === undefined ? {} : { graceMs: opts.graceMs }),
       });
       if (missed.length > 0) opts.ledger.recordMissed(missed);
     }

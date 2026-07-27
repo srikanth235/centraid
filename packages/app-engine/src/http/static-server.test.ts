@@ -614,7 +614,7 @@ describe('serveStatic — ETag / conditional revalidation (issue #356)', () => {
     const second = mockRes();
     await serveStatic(mockReq({ 'if-none-match': etag }), second.res, dir, 'app.js');
     expect(second.data.statusCode).toBe(304);
-    expect(second.data.body.length).toBe(0);
+    expect(second.data.body).toHaveLength(0);
     expect(second.data.headers['ETag']).toBe(etag);
     expect(second.data.headers['Cache-Control']).toBe('private, no-cache');
     expect(second.data.headers['X-Content-Type-Options']).toBe('nosniff');
@@ -831,7 +831,7 @@ describe('serveStatic — compression', () => {
     await serveStatic(mockReq({ 'accept-encoding': 'br' }), res, dir, 'pic.png');
     expect(data.headers['Content-Encoding']).toBeUndefined();
     expect(data.headers['Vary']).toBeUndefined();
-    expect(data.body.length).toBe(3000);
+    expect(data.body).toHaveLength(3000);
   });
 
   it('a 304 revalidation still 304s with Accept-Encoding present', async () => {
@@ -847,7 +847,7 @@ describe('serveStatic — compression', () => {
       'app.js',
     );
     expect(second.data.statusCode).toBe(304);
-    expect(second.data.body.length).toBe(0);
+    expect(second.data.body).toHaveLength(0);
   });
 });
 

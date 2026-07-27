@@ -32,8 +32,8 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
     const store = makeStore();
     const first = await store.add(newIntent());
     const again = await store.add(newIntent());
-    expect(again).toEqual(first);
-    expect(await store.list()).toHaveLength(1);
+    expect(again).toStrictEqual(first);
+    await expect(store.list()).resolves.toHaveLength(1);
   });
 
   test('add rejects a reused id carrying a different payload', async () => {
@@ -64,7 +64,7 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
     expect(claimed?.attempts).toBe(1);
     expect((await store.get('a'))?.state).toBe('sending');
     expect((await store.claimNext())?.intentId).toBe('b');
-    expect(await store.claimNext()).toBeUndefined();
+    await expect(store.claimNext()).resolves.toBeUndefined();
   });
 
   test('transition enforces the allowed states and clears reason on undefined', async () => {
@@ -97,9 +97,9 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
       output: { ok: true },
     });
     expect(settled.state).toBe('executed');
-    expect(settled.output).toEqual({ ok: true });
-    expect(await store.get('intent-1')).toBeUndefined();
-    expect(await store.list()).toHaveLength(0);
+    expect(settled.output).toStrictEqual({ ok: true });
+    await expect(store.get('intent-1')).resolves.toBeUndefined();
+    await expect(store.list()).resolves.toHaveLength(0);
   });
 
   test('list filters by state in createdOrder', async () => {
@@ -108,8 +108,11 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
     await store.add(newIntent({ intentId: 'b' }));
     await store.add(newIntent({ intentId: 'c' }));
     await store.claimNext(); // a -> sending
-    expect((await store.list(['queued'])).map((intent) => intent.intentId)).toEqual(['b', 'c']);
-    expect((await store.list(['sending'])).map((intent) => intent.intentId)).toEqual(['a']);
+    expect((await store.list(['queued'])).map((intent) => intent.intentId)).toStrictEqual([
+      'b',
+      'c',
+    ]);
+    expect((await store.list(['sending'])).map((intent) => intent.intentId)).toStrictEqual(['a']);
   });
 
   test('clear empties the store', async () => {
@@ -117,7 +120,7 @@ function runIntentStoreConformance(makeStore: () => IntentRecordStore): void {
     await store.add(newIntent({ intentId: 'a' }));
     await store.add(newIntent({ intentId: 'b' }));
     await store.clear();
-    expect(await store.list()).toHaveLength(0);
+    await expect(store.list()).resolves.toHaveLength(0);
   });
 }
 

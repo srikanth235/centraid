@@ -23,7 +23,7 @@ describe('encrypt/decrypt', () => {
     const key = new Uint8Array(32).fill(7);
     const plain = new TextEncoder().encode('the quick brown fox');
     const blob = encrypt(key, plain);
-    expect(blob.length).toBe(12 + plain.length + 16);
+    expect(blob).toHaveLength(12 + plain.length + 16);
     const back = decrypt(key, blob);
     expect(new TextDecoder().decode(back)).toBe('the quick brown fox');
   });
@@ -33,7 +33,7 @@ describe('encrypt/decrypt', () => {
     const plain = new TextEncoder().encode('same plaintext');
     const a = encrypt(key, plain);
     const b = encrypt(key, plain);
-    expect([...a]).not.toEqual([...b]);
+    expect([...a]).not.toStrictEqual([...b]);
     expect(new TextDecoder().decode(decrypt(key, a))).toBe('same plaintext');
     expect(new TextDecoder().decode(decrypt(key, b))).toBe('same plaintext');
   });
@@ -44,7 +44,9 @@ describe('encrypt/decrypt', () => {
     const tampered = new Uint8Array(blob);
     const midpoint = Math.floor(tampered.length / 2);
     tampered[midpoint] = (tampered[midpoint]! ^ 0xff) & 0xff;
-    expect(() => decrypt(key, tampered)).toThrow();
+    expect(() => decrypt(key, tampered)).toThrow(
+      /unsupported state or unable to authenticate data/i,
+    );
   });
 
   test('tamper (flip a tag byte) throws', () => {
@@ -53,19 +55,23 @@ describe('encrypt/decrypt', () => {
     const tampered = new Uint8Array(blob);
     const lastByte = tampered.length - 1;
     tampered[lastByte] = (tampered[lastByte]! ^ 0xff) & 0xff;
-    expect(() => decrypt(key, tampered)).toThrow();
+    expect(() => decrypt(key, tampered)).toThrow(
+      /unsupported state or unable to authenticate data/i,
+    );
   });
 
   test('wrong key throws', () => {
     const key = new Uint8Array(32).fill(1);
     const wrongKey = new Uint8Array(32).fill(2);
     const blob = encrypt(key, new TextEncoder().encode('secret'));
-    expect(() => decrypt(wrongKey, blob)).toThrow();
+    expect(() => decrypt(wrongKey, blob)).toThrow(
+      /unsupported state or unable to authenticate data/i,
+    );
   });
 
   test('truncated blob throws', () => {
     const key = new Uint8Array(32).fill(1);
-    expect(() => decrypt(key, new Uint8Array(10))).toThrow();
+    expect(() => decrypt(key, new Uint8Array(10))).toThrow('encrypted blob truncated');
   });
 });
 
@@ -75,20 +81,20 @@ describe('deriveNonce / encryptWithNonce (deterministic sealing — /1, issue #4
   test('deriveNonce yields 12 bytes and is deterministic for the same (key, info)', () => {
     const a = deriveNonce(key, 'centraid-backup:wal-nonce:vault:g:0:0:100');
     const b = deriveNonce(key, 'centraid-backup:wal-nonce:vault:g:0:0:100');
-    expect(a.length).toBe(12);
-    expect([...a]).toEqual([...b]);
+    expect(a).toHaveLength(12);
+    expect([...a]).toStrictEqual([...b]);
   });
 
   test('deriveNonce is info-sensitive — one character of drift means a fresh nonce', () => {
     const a = deriveNonce(key, 'centraid-backup:wal-nonce:vault:g:0:0:100');
     const b = deriveNonce(key, 'centraid-backup:wal-nonce:vault:g:0:0:101');
-    expect([...a]).not.toEqual([...b]);
+    expect([...a]).not.toStrictEqual([...b]);
   });
 
   test('deriveNonce is key-sensitive', () => {
     const otherKey = new Uint8Array(32).fill(0x12);
     const info = 'same info string';
-    expect([...deriveNonce(key, info)]).not.toEqual([...deriveNonce(otherKey, info)]);
+    expect([...deriveNonce(key, info)]).not.toStrictEqual([...deriveNonce(otherKey, info)]);
   });
 
   test('encryptWithNonce is fully deterministic and exposes the nonce as the first 12 bytes', () => {
@@ -98,9 +104,9 @@ describe('deriveNonce / encryptWithNonce (deterministic sealing — /1, issue #4
     const a = encryptWithNonce(key, nonce, plain, aad);
     const b = encryptWithNonce(key, nonce, plain, aad);
     // G7: a retried upload is byte-identical (idempotent PUTs).
-    expect([...a]).toEqual([...b]);
-    expect([...a.subarray(0, 12)]).toEqual([...nonce]);
-    expect(a.length).toBe(12 + plain.length + 16);
+    expect([...a]).toStrictEqual([...b]);
+    expect([...a.subarray(0, 12)]).toStrictEqual([...nonce]);
+    expect(a).toHaveLength(12 + plain.length + 16);
   });
 
   test('AAD roundtrip: decrypt succeeds only with the exact AAD it was sealed under', () => {
@@ -108,7 +114,7 @@ describe('deriveNonce / encryptWithNonce (deterministic sealing — /1, issue #4
     const plain = new TextEncoder().encode('wal segment bytes');
     const aad = new TextEncoder().encode('centraid-wal/1:vault-1:vault:g:0:0:17');
     const blob = encryptWithNonce(key, nonce, plain, aad);
-    expect([...decrypt(key, blob, aad)]).toEqual([...plain]);
+    expect([...decrypt(key, blob, aad)]).toStrictEqual([...plain]);
   });
 
   test('AAD mismatch throws — a swapped address must fail the tag check', () => {
@@ -117,12 +123,16 @@ describe('deriveNonce / encryptWithNonce (deterministic sealing — /1, issue #4
     const aad = new TextEncoder().encode('centraid-wal/1:vault-1:vault:g:0:0:17');
     const blob = encryptWithNonce(key, nonce, plain, aad);
     const otherAad = new TextEncoder().encode('centraid-wal/1:vault-1:vault:g:1:0:17');
-    expect(() => decrypt(key, blob, otherAad)).toThrow();
+    expect(() => decrypt(key, blob, otherAad)).toThrow(
+      /unsupported state or unable to authenticate data/i,
+    );
     // Dropping the AAD entirely must fail too.
-    expect(() => decrypt(key, blob)).toThrow();
+    expect(() => decrypt(key, blob)).toThrow(/unsupported state or unable to authenticate data/i);
     // And supplying an AAD for a blob sealed without one.
     const noAadBlob = encryptWithNonce(key, nonce, plain);
-    expect(() => decrypt(key, noAadBlob, aad)).toThrow();
+    expect(() => decrypt(key, noAadBlob, aad)).toThrow(
+      /unsupported state or unable to authenticate data/i,
+    );
   });
 
   test('encryptWithNonce rejects a nonce that is not 12 bytes', () => {
@@ -138,16 +148,16 @@ describe('HKDF derivation', () => {
     const dataKey1 = deriveDataKey(master, 'vault-a');
     const dataKey2 = deriveDataKey(master, 'vault-a');
     const dedupKey = deriveDedupKey(master, 'vault-a');
-    expect([...dataKey1]).toEqual([...dataKey2]);
-    expect([...dataKey1]).not.toEqual([...dedupKey]);
-    expect(dataKey1.length).toBe(32);
+    expect([...dataKey1]).toStrictEqual([...dataKey2]);
+    expect([...dataKey1]).not.toStrictEqual([...dedupKey]);
+    expect(dataKey1).toHaveLength(32);
   });
 
   test('different vaultId produces a different key (no cross-vault reuse)', () => {
     const master = new Uint8Array(32).fill(9);
     const keyA = deriveDataKey(master, 'vault-a');
     const keyB = deriveDataKey(master, 'vault-b');
-    expect([...keyA]).not.toEqual([...keyB]);
+    expect([...keyA]).not.toStrictEqual([...keyB]);
   });
 
   test('frozen HKDF vector — pins the exact info-string derivation', () => {
@@ -200,7 +210,7 @@ describe('keyring', () => {
     const file = path.join(dir, 'keyring.json');
     const created = await createKeyring(file);
     const loaded = await loadKeyring(file);
-    expect(loaded).toEqual(created);
+    expect(loaded).toStrictEqual(created);
   });
 
   test('saveKeyring is atomic and mode 0600', async () => {
@@ -220,7 +230,7 @@ describe('keyring', () => {
     await saveKeyring(file, keyring);
     const st = await fs.stat(file);
     expect(st.mode & 0o777).toBe(0o600);
-    expect(await loadKeyring(file)).toEqual(keyring);
+    await expect(loadKeyring(file)).resolves.toStrictEqual(keyring);
   });
 
   test('rotateKeyring adds a new epoch and makes it active, retaining the old one', async () => {
@@ -230,7 +240,7 @@ describe('keyring', () => {
     const rotated = await rotateKeyring(file);
     expect(rotated.active).toBe(2);
     expect(rotated.epochs).toHaveLength(2);
-    expect(rotated.epochs[0]).toEqual(original.epochs[0]);
+    expect(rotated.epochs[0]).toStrictEqual(original.epochs[0]);
     expect(rotated.epochs[1]!.epoch).toBe(2);
 
     // Old epoch's key is unchanged and still resolvable.
@@ -248,20 +258,20 @@ describe('keyring', () => {
     await rotateKeyring(file);
     const twiceRotated = await rotateKeyring(file);
     expect(twiceRotated.active).toBe(3);
-    expect(twiceRotated.epochs.map((e) => e.epoch)).toEqual([1, 2, 3]);
+    expect(twiceRotated.epochs.map((e) => e.epoch)).toStrictEqual([1, 2, 3]);
   });
 
   test('masterKeyForEpoch throws for an unknown epoch', async () => {
     const dir = await tempDir();
     const file = path.join(dir, 'keyring.json');
     const keyring = await createKeyring(file);
-    expect(() => masterKeyForEpoch(keyring, 999)).toThrow();
+    expect(() => masterKeyForEpoch(keyring, 999)).toThrow('keyring has no epoch 999');
   });
 
   test('loadKeyring rejects a malformed file', async () => {
     const dir = await tempDir();
     const file = path.join(dir, 'keyring.json');
     await fs.writeFile(file, JSON.stringify({ version: 1, active: 1, epochs: [] }));
-    await expect(loadKeyring(file)).rejects.toThrow();
+    await expect(loadKeyring(file)).rejects.toThrow('keyring: missing "epochs"');
   });
 });

@@ -43,7 +43,7 @@ export function replicaLocalSearchSpec(entity: string): ReplicaLocalSearchSpec {
 export function replicaFtsMatchExpression(query: string): string {
   if (typeof query !== 'string') throw new ReplicaProtocolError('Search query must be a string');
   const tokens = query
-    .split(/\s+/)
+    .split(/\s+/u)
     .map((token) => token.replaceAll('"', ''))
     .filter((token) => /[\p{L}\p{N}]/u.test(token))
     .slice(0, 16);

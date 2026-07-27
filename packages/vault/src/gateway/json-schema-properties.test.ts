@@ -13,7 +13,7 @@ describe('vault json-schema property', () => {
     const schema = { type: 'integer' };
     fc.assert(
       fc.property(fc.integer(), (n) => {
-        expect(validateJson(schema, n)).toEqual([]);
+        expect(validateJson(schema, n)).toStrictEqual([]);
       }),
       { numRuns: 32, seed: 53290 },
     );
@@ -40,7 +40,7 @@ describe('vault json-schema property', () => {
     };
     fc.assert(
       fc.property(fc.string({ minLength: 1, maxLength: 16 }), fc.integer(), (id, n) => {
-        expect(validateJson(schema, { id, n })).toEqual([]);
+        expect(validateJson(schema, { id, n })).toStrictEqual([]);
         expect(validateJson(schema, { n }).some((e) => e.includes('missing required'))).toBe(true);
         expect(
           validateJson(schema, { id, n, extra: true }).some((e) => e.includes('unexpected')),
@@ -54,7 +54,7 @@ describe('vault json-schema property', () => {
     const schema = { enum: ['a', 'b', 'c'] };
     fc.assert(
       fc.property(fc.constantFrom('a', 'b', 'c'), (v) => {
-        expect(validateJson(schema, v)).toEqual([]);
+        expect(validateJson(schema, v)).toStrictEqual([]);
       }),
       { numRuns: 16, seed: 53293 },
     );
@@ -73,7 +73,7 @@ describe('vault json-schema property', () => {
     fc.assert(
       fc.property(fc.jsonValue(), fc.jsonValue(), (c, other) => {
         const schema = { const: c };
-        expect(validateJson(schema, c)).toEqual([]);
+        expect(validateJson(schema, c)).toStrictEqual([]);
         fc.pre(JSON.stringify(c) !== JSON.stringify(other));
         expect(validateJson(schema, other).length).toBeGreaterThan(0);
       }),
@@ -82,17 +82,30 @@ describe('vault json-schema property', () => {
   });
 
   test('minimum/maximum bounds hold for numbers', () => {
+    // Accept and reject are separate properties so each assertion runs on every
+    // sample the property keeps, rather than one branch of an `if`.
     fc.assert(
       fc.property(
         fc.integer({ min: -100, max: 100 }),
         fc.integer({ min: -100, max: 100 }),
         fc.integer({ min: -200, max: 200 }),
         (lo, hi, n) => {
-          fc.pre(lo <= hi);
+          fc.pre(lo <= hi && n >= lo && n <= hi);
           const schema = { type: 'number', minimum: lo, maximum: hi };
-          const errors = validateJson(schema, n);
-          if (n >= lo && n <= hi) expect(errors).toEqual([]);
-          else expect(errors.length).toBeGreaterThan(0);
+          expect(validateJson(schema, n)).toStrictEqual([]);
+        },
+      ),
+      { numRuns: 48, seed: 53296 },
+    );
+    fc.assert(
+      fc.property(
+        fc.integer({ min: -100, max: 100 }),
+        fc.integer({ min: -100, max: 100 }),
+        fc.integer({ min: -200, max: 200 }),
+        (lo, hi, n) => {
+          fc.pre(lo <= hi && (n < lo || n > hi));
+          const schema = { type: 'number', minimum: lo, maximum: hi };
+          expect(validateJson(schema, n).length).toBeGreaterThan(0);
         },
       ),
       { numRuns: 48, seed: 53296 },
@@ -103,7 +116,7 @@ describe('vault json-schema property', () => {
     const schema = { type: 'array', items: { type: 'integer', minimum: 0 } };
     fc.assert(
       fc.property(fc.array(fc.integer({ min: 0, max: 100 }), { maxLength: 12 }), (arr) => {
-        expect(validateJson(schema, arr)).toEqual([]);
+        expect(validateJson(schema, arr)).toStrictEqual([]);
       }),
       { numRuns: 24, seed: 53297 },
     );
@@ -122,10 +135,15 @@ describe('vault json-schema property', () => {
   test('string minLength is enforced', () => {
     fc.assert(
       fc.property(fc.integer({ min: 0, max: 8 }), fc.string({ maxLength: 12 }), (minLength, s) => {
-        const schema = { type: 'string', minLength };
-        const errors = validateJson(schema, s);
-        if (s.length >= minLength) expect(errors).toEqual([]);
-        else expect(errors.length).toBeGreaterThan(0);
+        fc.pre(s.length >= minLength);
+        expect(validateJson({ type: 'string', minLength }, s)).toStrictEqual([]);
+      }),
+      { numRuns: 32, seed: 53299 },
+    );
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 8 }), fc.string({ maxLength: 12 }), (minLength, s) => {
+        fc.pre(s.length < minLength);
+        expect(validateJson({ type: 'string', minLength }, s).length).toBeGreaterThan(0);
       }),
       { numRuns: 32, seed: 53299 },
     );

@@ -17,10 +17,10 @@ import {
   readdirSync,
   existsSync,
 } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
 
-const here = dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const repoRoot = resolve(here, '..', '..');
 const uiDir = resolve(repoRoot, 'apps/desktop/src/renderer/react/ui');
 const srcDir = resolve(here, 'src');

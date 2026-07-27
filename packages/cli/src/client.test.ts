@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import http from 'node:http';
 import { GATEWAY_SCHEMA_EPOCH, GATEWAY_VERSION, ROUTES } from '@centraid/protocol';
 import { getHealth, handshake, listApps } from './client.ts';
@@ -69,26 +69,28 @@ function startMockGateway(): Promise<{
   });
 }
 
-test('CLI client handshake + list against a real HTTP gateway surface', async () => {
-  const gw = await startMockGateway();
-  try {
-    const hs = await handshake({ baseUrl: gw.url, token: gw.token });
-    expect(hs.ok).toBe(true);
-    if (!hs.ok) return;
-    expect(hs.info.version).toBe(GATEWAY_VERSION);
-    expect(hs.info.capabilities?.webSessions).toBe(true);
+describe('client', () => {
+  test('CLI client handshake + list against a real HTTP gateway surface', async () => {
+    const gw = await startMockGateway();
+    try {
+      const hs = await handshake({ baseUrl: gw.url, token: gw.token });
+      expect(hs.ok).toBe(true);
+      if (!hs.ok) return;
+      expect(hs.info.version).toBe(GATEWAY_VERSION);
+      expect(hs.info.capabilities?.webSessions).toBe(true);
 
-    const health = await getHealth({ baseUrl: gw.url, token: gw.token });
-    expect(health.status).toBe(200);
-    expect(health.body).toMatchObject({ ok: true });
+      const health = await getHealth({ baseUrl: gw.url, token: gw.token });
+      expect(health.status).toBe(200);
+      expect(health.body).toMatchObject({ ok: true });
 
-    const apps = await listApps({ baseUrl: gw.url, token: gw.token });
-    expect(apps.status).toBe(200);
-    expect(apps.body).toEqual([{ id: 'alpha' }]);
+      const apps = await listApps({ baseUrl: gw.url, token: gw.token });
+      expect(apps.status).toBe(200);
+      expect(apps.body).toStrictEqual([{ id: 'alpha' }]);
 
-    const denied = await listApps({ baseUrl: gw.url, token: 'wrong' });
-    expect(denied.status).toBe(401);
-  } finally {
-    await gw.close();
-  }
+      const denied = await listApps({ baseUrl: gw.url, token: 'wrong' });
+      expect(denied.status).toBe(401);
+    } finally {
+      await gw.close();
+    }
+  });
 });

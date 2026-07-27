@@ -419,9 +419,9 @@ export function isValidCronExpression(expr: string): boolean {
   if (typeof expr !== 'string') return false;
   const trimmed = expr.trim();
   if (!trimmed) return false;
-  const fields = trimmed.split(/\s+/);
+  const fields = trimmed.split(/\s+/u);
   if (fields.length !== 5) return false;
-  const fieldPattern = /^[0-9*,\-/?A-Za-z]+$/;
+  const fieldPattern = /^[0-9*,\-/?A-Za-z]+$/u;
   return fields.every((f) => fieldPattern.test(f));
 }
 
@@ -455,7 +455,7 @@ function optionalStringArray(value: unknown, field: string): readonly string[] |
 
 /** Webhook route slugs use the same filesystem-safe grammar as ids. */
 function isValidWebhookId(id: string): boolean {
-  return typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id);
+  return typeof id === 'string' && /^[A-Za-z0-9_-]+$/u.test(id);
 }
 
 function validateOneTrigger(raw: unknown, field: string): Trigger {
@@ -494,7 +494,7 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
         );
       }
     }
-    return { kind: 'cron', expr, ...(tz !== undefined ? { tz } : {}) };
+    return { kind: 'cron', expr, ...(tz === undefined ? {} : { tz }) };
   }
   if (t.kind === 'webhook') {
     // A pending webhook (`{ kind: 'webhook', pending: true }`) the
@@ -523,7 +523,7 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
   }
   if (t.kind === 'condition') {
     const entity = requireString(t.entity, `${field}.entity`);
-    if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(entity)) {
+    if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u.test(entity)) {
       throw new ManifestError(
         'invalid_trigger',
         `manifest.${field}.entity "${entity}" is not a <schema>.<table> entity name`,
@@ -568,7 +568,7 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
         return {
           column,
           op: c.op as ConditionOp,
-          ...(c.value !== undefined ? { value: c.value } : {}),
+          ...(c.value === undefined ? {} : { value: c.value }),
         } satisfies ConditionWhereClause;
       });
     }
@@ -576,7 +576,7 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
       kind: 'condition',
       entity,
       ...(where ? { where } : {}),
-      ...(every !== undefined ? { every } : {}),
+      ...(every === undefined ? {} : { every }),
     };
   }
   if (t.kind === 'data') {
@@ -590,7 +590,7 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
     const entities = t.entities.map((raw, i) => {
       const ef = `${field}.entities[${i}]`;
       const entity = requireString(raw, ef);
-      if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(entity)) {
+      if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u.test(entity)) {
         throw new ManifestError(
           'invalid_trigger',
           `manifest.${ef} "${entity}" is not a <schema>.<table> entity name`,
@@ -611,7 +611,7 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
         );
       }
     }
-    return { kind: 'data', entities, ...(every !== undefined ? { every } : {}) };
+    return { kind: 'data', entities, ...(every === undefined ? {} : { every }) };
   }
   if (t.kind === 'event') {
     const connectorKind = requireString(t.connectorKind, `${field}.connectorKind`);
@@ -668,13 +668,13 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
  */
 function resolveTriggers(r: Record<string, unknown>): readonly Trigger[] {
   let list: Trigger[];
-  if (r.triggers !== undefined) {
+  if (r.triggers === undefined) {
+    list = [];
+  } else {
     if (!Array.isArray(r.triggers)) {
       throw new ManifestError('invalid_trigger', 'manifest.triggers must be an array', 'triggers');
     }
     list = r.triggers.map((t, i) => validateOneTrigger(t, `triggers[${i}]`));
-  } else {
-    list = [];
   }
   if (list.filter((t) => t.kind === 'webhook').length > 1) {
     throw new ManifestError(
@@ -770,7 +770,7 @@ function validateRequires(raw: unknown): ManifestRequires {
       // Two forms: the raw UUID (`locker:<item_id>:<column>`) or a stable
       // alias that survives delete+recreate (`locker:@<alias>:<column>`,
       // issue #298 item 4).
-      if (!/^locker:(?:@[A-Za-z0-9._-]{1,64}|[^:@][^:]*):[a-z_]+$/.test(ref)) {
+      if (!/^locker:(?:@[A-Za-z0-9._-]{1,64}|[^:@][^:]*):[a-z_]+$/u.test(ref)) {
         throw new ManifestError(
           'invalid_field',
           `manifest.requires.secrets entry "${ref}" must be "locker:<item_id>:<column>" or "locker:@<alias>:<column>" (issues #293, #298)`,
@@ -808,8 +808,8 @@ function validateConnector(value: unknown): ConnectorSpec | undefined {
   return {
     kind,
     label,
-    ...(principal !== undefined ? { principal } : {}),
-    ...(connectionId !== undefined ? { connectionId } : {}),
+    ...(principal === undefined ? {} : { principal }),
+    ...(connectionId === undefined ? {} : { connectionId }),
   };
 }
 
@@ -955,13 +955,13 @@ function validateVault(raw: unknown): ManifestVault | undefined {
     }
     return {
       schema,
-      ...(table !== undefined ? { table } : {}),
+      ...(table === undefined ? {} : { table }),
       verbs: s.verbs as ManifestVaultScope['verbs'],
       ...(rowFilter ? { rowFilter } : {}),
       ...(fieldMask ? { fieldMask } : {}),
     } satisfies ManifestVaultScope;
   });
-  return { purpose, ...(why !== undefined ? { why } : {}), scopes };
+  return { purpose, ...(why === undefined ? {} : { why }), scopes };
 }
 
 function validateCostEstimate(raw: unknown): CostEstimate | undefined {
@@ -1105,13 +1105,13 @@ export function validateManifest(raw: unknown): Manifest {
   return {
     name,
     version,
-    ...(description !== undefined ? { description } : {}),
+    ...(description === undefined ? {} : { description }),
     enabled,
     prompt,
     triggers,
     requires,
     ...(connector ? { connector } : {}),
-    ...(connections !== undefined ? { connections } : {}),
+    ...(connections === undefined ? {} : { connections }),
     ...(vault ? { vault } : {}),
     ...(apps ? { apps } : {}),
     ...(costEstimate ? { costEstimate } : {}),

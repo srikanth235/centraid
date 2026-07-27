@@ -162,7 +162,7 @@ function assertNoLossNoDupes(harness: Harness): void {
 
   // Exactly one CAS object per sha — no duplicates.
   expect(harness.provider.cas.size).toBe(FILES.length);
-  expect(harness.gateway.completeLog.length).toBe(new Set(harness.gateway.completeLog).size);
+  expect(harness.gateway.completeLog).toHaveLength(new Set(harness.gateway.completeLog).size);
 
   // And the bytes are the bytes: unseal each object with the vault's reader.
   for (const file of FILES) {
@@ -180,185 +180,191 @@ function assertNoLossNoDupes(harness: Harness): void {
 }
 
 let harness: Harness | undefined;
-afterEach(() => {
-  harness?.dispose();
-  harness = undefined;
-});
-
-describe('durable upload queue under process death', () => {
-  it('settles cleanly with no kills (baseline)', async () => {
-    harness = new Harness();
-    await harness.enqueueAll();
-    const summary = await harness.drainer().drainOnce();
-    expect(summary.settled).toBe(FILES.length);
-    expect(summary.failed).toBe(0);
-    assertNoLossNoDupes(harness);
+describe('crash', () => {
+  afterEach(() => {
+    harness?.dispose();
+    harness = undefined;
   });
 
-  // The seeded sweep: kill at a random step, reconstruct from SQLite, repeat
-  // until everything settles. Steps include mid-PUT byte offsets, the gap
-  // between a stored PUT and its receipt, and the gap between a committed CAS
-  // object and its persisted receipt.
-  for (const seed of [1, 7, 42, 1337, 90_210]) {
-    it(`survives randomized kills and settles exactly once (seed ${seed})`, async () => {
+  describe('durable upload queue under process death', () => {
+    it('settles cleanly with no kills (baseline)', async () => {
       harness = new Harness();
       await harness.enqueueAll();
-      const next = rng(seed);
-      let rounds = 0;
-      for (; rounds < 200; rounds += 1) {
-        harness.killer.budget = Math.floor(next() * 25);
-        try {
-          await harness.drainer(1 + Math.floor(next() * 3)).drainOnce();
-        } catch (error) {
-          if (!(error instanceof UploadKillSignalError)) throw error;
-        }
-        harness.remount();
-        if (harness.store.pending().length === 0) break;
-      }
-      expect(rounds, 'queue never reached a settled state').toBeLessThan(200);
+      const summary = await harness.drainer().drainOnce();
+      expect(summary.settled).toBe(FILES.length);
+      expect(summary.failed).toBe(0);
       assertNoLossNoDupes(harness);
     });
-  }
 
-  // Exhaustive rather than random: kill at EVERY step index in turn. This is
-  // the strongest form of the property — no reachable seam is left untested.
-  it('survives a kill at every single step index', async () => {
-    for (let budget = 0; budget < 40; budget += 1) {
-      const local = new Harness();
-      try {
-        await local.enqueueAll();
-        local.killer.budget = budget;
-        try {
-          await local.drainer().drainOnce();
-        } catch (error) {
-          if (!(error instanceof UploadKillSignalError)) throw error;
+    // The seeded sweep: kill at a random step, reconstruct from SQLite, repeat
+    // until everything settles. Steps include mid-PUT byte offsets, the gap
+    // between a stored PUT and its receipt, and the gap between a committed CAS
+    // object and its persisted receipt.
+    it.each([1, 7, 42, 1337, 90_210])(
+      'survives randomized kills and settles exactly once (seed %i)',
+      async (seed) => {
+        harness = new Harness();
+        await harness.enqueueAll();
+        const next = rng(seed);
+        let rounds = 0;
+        for (; rounds < 200; rounds += 1) {
+          harness.killer.budget = Math.floor(next() * 25);
+          try {
+            await harness.drainer(1 + Math.floor(next() * 3)).drainOnce();
+          } catch (error) {
+            if (!(error instanceof UploadKillSignalError)) throw error;
+          }
+          harness.remount();
+          if (harness.store.pending().length === 0) break;
         }
-        // Unlimited budget from here: the queue must recover on its own.
-        local.killer.budget = Number.POSITIVE_INFINITY;
-        for (let round = 0; round < 10; round += 1) {
+        expect(rounds, 'queue never reached a settled state').toBeLessThan(200);
+        assertNoLossNoDupes(harness);
+      },
+    );
+
+    // Exhaustive rather than random: kill at EVERY step index in turn. This is
+    // the strongest form of the property — no reachable seam is left untested.
+    it('survives a kill at every single step index', async () => {
+      for (let budget = 0; budget < 40; budget += 1) {
+        const local = new Harness();
+        try {
+          await local.enqueueAll();
+          local.killer.budget = budget;
+          try {
+            await local.drainer().drainOnce();
+          } catch (error) {
+            if (!(error instanceof UploadKillSignalError)) throw error;
+          }
+          // Unlimited budget from here: the queue must recover on its own.
+          local.killer.budget = Number.POSITIVE_INFINITY;
+          for (let round = 0; round < 10; round += 1) {
+            local.remount();
+            if (local.store.pending().length === 0) break;
+            await local.drainer().drainOnce();
+          }
           local.remount();
-          if (local.store.pending().length === 0) break;
-          await local.drainer().drainOnce();
+          // Recovery is unbounded above: whatever step the kill landed on, the
+          // remounted queue must have drained itself to empty by now.
+          expect(local.store.pending(), `kill at step ${budget} left work behind`).toHaveLength(0);
+          assertNoLossNoDupes(local);
+        } finally {
+          local.dispose();
         }
-        local.remount();
-        assertNoLossNoDupes(local);
-      } finally {
-        local.dispose();
       }
-    }
-  });
+    });
 
-  it('replays the receipt when a PUT lands but recordPart never does', async () => {
-    // The interesting case, pinned deterministically rather than left to the
-    // sweep: stop exactly at the first `record`, when the provider holds the
-    // bytes and the queue has persisted the ETag.
-    harness = new Harness();
-    await harness.enqueueAll();
-    harness.killer.budget = 0;
-    const killAt = 'record:1';
-    // Walk the budget forward until the kill lands on the first recordPart.
-    let budget = 0;
-    for (; budget < 40; budget += 1) {
-      const probe = new Harness();
-      try {
-        await probe.enqueueAll();
-        probe.killer.budget = budget;
+    it('replays the receipt when a PUT lands but recordPart never does', async () => {
+      // The interesting case, pinned deterministically rather than left to the
+      // sweep: stop exactly at the first `record`, when the provider holds the
+      // bytes and the queue has persisted the ETag.
+      harness = new Harness();
+      await harness.enqueueAll();
+      harness.killer.budget = 0;
+      const killAt = 'record:1';
+      // Walk the budget forward until the kill lands on the first recordPart.
+      let budget = 0;
+      for (; budget < 40; budget += 1) {
+        const probe = new Harness();
         try {
-          await probe.drainer().drainOnce();
-        } catch (error) {
-          if (error instanceof UploadKillSignalError && error.at === killAt) break;
+          await probe.enqueueAll();
+          probe.killer.budget = budget;
+          try {
+            await probe.drainer().drainOnce();
+          } catch (error) {
+            if (error instanceof UploadKillSignalError && error.at === killAt) break;
+          }
+        } finally {
+          probe.dispose();
         }
-      } finally {
-        probe.dispose();
       }
-    }
-    expect(budget, 'no reachable kill point at the PUT/recordPart gap').toBeLessThan(40);
+      expect(budget, 'no reachable kill point at the PUT/recordPart gap').toBeLessThan(40);
 
-    harness.killer.budget = budget;
-    await expect(harness.drainer().drainOnce()).rejects.toThrow(UploadKillSignalError);
+      harness.killer.budget = budget;
+      await expect(harness.drainer().drainOnce()).rejects.toThrow(UploadKillSignalError);
 
-    // The ETag is on disk even though the gateway never acknowledged it.
-    harness.remount();
-    const item = harness.store.pending()[0]!;
-    const put = harness.store.parts(item.itemId).filter((part) => part.state === 'put');
-    expect(put.length, 'the PUT ETag was not durable before the receipt').toBeGreaterThan(0);
-
-    const putsBefore = harness.provider.putLog.length;
-    harness.killer.budget = Number.POSITIVE_INFINITY;
-    for (let round = 0; round < 10; round += 1) {
+      // The ETag is on disk even though the gateway never acknowledged it.
       harness.remount();
-      if (harness.store.pending().length === 0) break;
-      await harness.drainer().drainOnce();
-    }
-    harness.remount();
-    assertNoLossNoDupes(harness);
+      const item = harness.store.pending()[0]!;
+      const put = harness.store.parts(item.itemId).filter((part) => part.state === 'put');
+      expect(put.length, 'the PUT ETag was not durable before the receipt').toBeGreaterThan(0);
 
-    // The recovered part was NOT re-uploaded: the receipt was replayed from
-    // the durable ETag instead.
-    const reUploads = harness.provider.putLog
-      .slice(putsBefore)
-      .filter(
-        (entry) => entry.partNumber === put[0]!.partNumber && entry.tempId === 'direct-session-1',
-      );
-    expect(reUploads, 'a durable ETag should replay, not re-upload').toHaveLength(0);
-  });
-
-  it('replays a settled follow-up exactly once across a kill before the ledger clears', async () => {
-    harness = new Harness();
-    // One file plus its canonical follow-up; settle the bytes first.
-    await enqueueLocalFile(
-      { store: harness.store, openFile: harness.openFile, newId: () => 'item-1' },
-      { localUri: 'file://a.jpg', plaintextSize: FILES[0]!.bytes.byteLength },
-      (addressed) => ({
-        shape: 'docs',
-        action: 'upload',
-        input: { staged_sha: addressed.sha256, title: 'field notes' },
-      }),
-    );
-    await harness.drainer().drainOnce();
-    expect(harness.store.pendingFollowups(), 'bytes settled, follow-up armed').toHaveLength(1);
-
-    // A minimal replay a kill can interrupt between the canonical write and
-    // clearing the ledger row — the exact crash the intent id defends against.
-    const executed: string[] = [];
-    const created = new Set<string>();
-    const replayOnce = (killBeforeClear: boolean): void => {
-      for (const followup of harness!.store.pendingFollowups()) {
-        executed.push(followup.intentId);
-        created.add(followup.intentId); // idempotent: same intent, one document
-        if (killBeforeClear) throw new UploadKillSignalError('followup:clear');
-        harness!.store.clearFollowup(followup.followupId);
+      const putsBefore = harness.provider.putLog.length;
+      harness.killer.budget = Number.POSITIVE_INFINITY;
+      for (let round = 0; round < 10; round += 1) {
+        harness.remount();
+        if (harness.store.pending().length === 0) break;
+        await harness.drainer().drainOnce();
       }
-    };
+      harness.remount();
+      assertNoLossNoDupes(harness);
 
-    expect(() => replayOnce(true)).toThrow(UploadKillSignalError);
-    harness.remount();
-    // The row survived the kill; the second pass completes it.
-    expect(harness.store.pendingFollowups()).toHaveLength(1);
-    replayOnce(false);
-    harness.remount();
+      // The recovered part was NOT re-uploaded: the receipt was replayed from
+      // the durable ETag instead.
+      const reUploads = harness.provider.putLog
+        .slice(putsBefore)
+        .filter(
+          (entry) => entry.partNumber === put[0]!.partNumber && entry.tempId === 'direct-session-1',
+        );
+      expect(reUploads, 'a durable ETag should replay, not re-upload').toHaveLength(0);
+    });
 
-    expect(harness.store.pendingFollowups(), 'no loss: the ledger drains').toHaveLength(0);
-    expect(executed.length, 'the intent was attempted twice').toBe(2);
-    expect(created.size, 'but the canonical write is idempotent — created once').toBe(1);
-  });
+    it('replays a settled follow-up exactly once across a kill before the ledger clears', async () => {
+      harness = new Harness();
+      // One file plus its canonical follow-up; settle the bytes first.
+      await enqueueLocalFile(
+        { store: harness.store, openFile: harness.openFile, newId: () => 'item-1' },
+        { localUri: 'file://a.jpg', plaintextSize: FILES[0]!.bytes.byteLength },
+        (addressed) => ({
+          shape: 'docs',
+          action: 'upload',
+          input: { staged_sha: addressed.sha256, title: 'field notes' },
+        }),
+      );
+      await harness.drainer().drainOnce();
+      expect(harness.store.pendingFollowups(), 'bytes settled, follow-up armed').toHaveLength(1);
 
-  it('dedupes via alreadyPresent instead of transferring again', async () => {
-    harness = new Harness();
-    await harness.enqueueAll();
-    await harness.drainer().drainOnce();
-    const putsAfterFirst = harness.provider.putLog.length;
-    expect(putsAfterFirst).toBeGreaterThan(0);
+      // A minimal replay a kill can interrupt between the canonical write and
+      // clearing the ledger row — the exact crash the intent id defends against.
+      const executed: string[] = [];
+      const created = new Set<string>();
+      const replayOnce = (killBeforeClear: boolean): void => {
+        for (const followup of harness!.store.pendingFollowups()) {
+          executed.push(followup.intentId);
+          created.add(followup.intentId); // idempotent: same intent, one document
+          if (killBeforeClear) throw new UploadKillSignalError('followup:clear');
+          harness!.store.clearFollowup(followup.followupId);
+        }
+      };
 
-    // Re-enqueue the same bytes under a fresh item id; begin must short-circuit.
-    harness.remount();
-    await enqueueLocalFile(
-      { store: harness.store, openFile: harness.openFile, newId: () => 'item-dupe' },
-      { localUri: 'file://a.jpg', plaintextSize: FILES[0]!.bytes.byteLength },
-    );
-    // Same sha as an already-settled item, so the queue itself dedupes it.
-    expect(harness.store.pending()).toHaveLength(0);
-    expect(harness.provider.putLog.length).toBe(putsAfterFirst);
-    expect(harness.provider.cas.size).toBe(FILES.length);
+      expect(() => replayOnce(true)).toThrow(UploadKillSignalError);
+      harness.remount();
+      // The row survived the kill; the second pass completes it.
+      expect(harness.store.pendingFollowups()).toHaveLength(1);
+      replayOnce(false);
+      harness.remount();
+
+      expect(harness.store.pendingFollowups(), 'no loss: the ledger drains').toHaveLength(0);
+      expect(executed).toHaveLength(2);
+      expect(created.size, 'but the canonical write is idempotent — created once').toBe(1);
+    });
+
+    it('dedupes via alreadyPresent instead of transferring again', async () => {
+      harness = new Harness();
+      await harness.enqueueAll();
+      await harness.drainer().drainOnce();
+      const putsAfterFirst = harness.provider.putLog.length;
+      expect(putsAfterFirst).toBeGreaterThan(0);
+
+      // Re-enqueue the same bytes under a fresh item id; begin must short-circuit.
+      harness.remount();
+      await enqueueLocalFile(
+        { store: harness.store, openFile: harness.openFile, newId: () => 'item-dupe' },
+        { localUri: 'file://a.jpg', plaintextSize: FILES[0]!.bytes.byteLength },
+      );
+      // Same sha as an already-settled item, so the queue itself dedupes it.
+      expect(harness.store.pending()).toHaveLength(0);
+      expect(harness.provider.putLog).toHaveLength(putsAfterFirst);
+      expect(harness.provider.cas.size).toBe(FILES.length);
+    });
   });
 });

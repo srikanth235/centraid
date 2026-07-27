@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AutomationTurnStreamEvent } from '@centraid/app-engine';
 import { RunEventBus } from './run-event-bus.js';
 
-describe('RunEventBus', () => {
+describe(RunEventBus, () => {
   it('fans an event out only to subscribers of the matching runId', () => {
     const bus = new RunEventBus();
     const a: AutomationTurnStreamEvent[] = [];
@@ -13,8 +13,8 @@ describe('RunEventBus', () => {
     bus.publish('run-a', { type: 'turn.start', turnId: 'run-a' });
     bus.publish('run-b', { type: 'turn.end', turnId: 'run-b', ok: true });
 
-    expect(a).toEqual([{ type: 'turn.start', turnId: 'run-a' }]);
-    expect(b).toEqual([{ type: 'turn.end', turnId: 'run-b', ok: true }]);
+    expect(a).toStrictEqual([{ type: 'turn.start', turnId: 'run-a' }]);
+    expect(b).toStrictEqual([{ type: 'turn.end', turnId: 'run-b', ok: true }]);
   });
 
   it('publishing to a run with no subscribers is a no-op (events are ephemeral)', () => {
@@ -34,7 +34,7 @@ describe('RunEventBus', () => {
     unsub();
     expect(bus.subscriberCount('r')).toBe(0);
     bus.publish('r', { type: 'turn.end', turnId: 'r', ok: true });
-    expect(seen.length).toBe(1);
+    expect(seen).toHaveLength(1);
     // Idempotent.
     expect(() => unsub()).not.toThrow();
   });
@@ -47,7 +47,7 @@ describe('RunEventBus', () => {
     });
     bus.subscribe('r', (ev) => ok.push(ev));
     expect(() => bus.publish('r', { type: 'turn.start', turnId: 'r' })).not.toThrow();
-    expect(ok.length).toBe(1);
+    expect(ok).toHaveLength(1);
   });
 
   it('a subscriber that unsubscribes itself mid-fanout is handled (snapshot)', () => {
@@ -59,7 +59,7 @@ describe('RunEventBus', () => {
     });
     bus.subscribe('r', (ev) => seen.push(`second:${ev.type}`));
     bus.publish('r', { type: 'turn.start', turnId: 'r' });
-    expect(seen).toEqual(['first:turn.start', 'second:turn.start']);
+    expect(seen).toStrictEqual(['first:turn.start', 'second:turn.start']);
     expect(bus.subscriberCount('r')).toBe(1);
   });
 });

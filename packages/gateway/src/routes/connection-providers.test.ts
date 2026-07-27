@@ -27,7 +27,7 @@ describe('PROVIDER_PRESETS capabilities', () => {
       { templateId: 'github-pull', kind: 'pull.github' },
       { templateId: 'google-gmail-send', kind: 'pull.gmail' },
     ]);
-    expect(caps.syncs.map((s) => s.templateId)).toEqual(['github-pull']);
+    expect(caps.syncs.map((s) => s.templateId)).toStrictEqual(['github-pull']);
     expect(caps.actions.some((a) => a.templateId === 'google-gmail-send')).toBe(true);
     expect(caps.actions.some((a) => a.toolName === 'connector.pull_github.list')).toBe(true);
   });
@@ -47,6 +47,6 @@ describe('PROVIDER_PRESETS capabilities', () => {
 
   it('pins the GitLab token only to the API host the preset actually uses', () => {
     const gitlab = PROVIDER_PRESETS.find((preset) => preset.id === 'gitlab')!;
-    expect(gitlab.allowedHosts).toEqual(['gitlab.com']);
+    expect(gitlab.allowedHosts).toStrictEqual(['gitlab.com']);
   });
 });

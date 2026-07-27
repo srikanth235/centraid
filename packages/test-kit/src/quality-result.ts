@@ -19,7 +19,7 @@ export interface QualityResult {
 /** Emit one stable, report-consumable result while retaining a short local trend. */
 export async function recordQualityResult(result: QualityResult): Promise<void> {
   const directory = path.resolve('artifacts', result.lane);
-  const slug = result.owner.replaceAll(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '');
+  const slug = result.owner.replaceAll(/[^a-z0-9]+/giu, '-').replace(/^-|-$/gu, '');
   const file = path.join(directory, `${slug}.json`);
   await mkdir(directory, { recursive: true });
   let previous: { history?: Array<{ at: string; value: number }> } | undefined;

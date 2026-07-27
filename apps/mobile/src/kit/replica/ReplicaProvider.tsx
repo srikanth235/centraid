@@ -144,7 +144,7 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
     // native handle and change-feed stream instead of leaking them.
     let driver: Awaited<ReturnType<typeof openNativeReplicaDriver>> | undefined;
     let changeFeed: NativeVaultChangeFeed | undefined;
-    let networkSubscription: { remove(): void } | undefined;
+    let networkSubscription: { remove: () => void } | undefined;
     void (async () => {
       try {
         const identity = await resolveIdentity();

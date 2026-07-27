@@ -8,8 +8,8 @@ export const DATA_PLANE_PAIR_PATH = '/centraid/_gateway/tunnel/pair';
 
 export interface DataPlaneControlOptions {
   secret: string;
-  authorize(endpointId: string): { allowed: boolean; headers?: Record<string, string> };
-  pair(request: unknown, endpointId: string): unknown | Promise<unknown>;
+  authorize: (endpointId: string) => { allowed: boolean; headers?: Record<string, string> };
+  pair: (request: unknown, endpointId: string) => unknown | Promise<unknown>;
 }
 
 function matchesSecret(candidate: string | undefined, expected: string): boolean {

@@ -53,7 +53,7 @@ interface ContentRow {
   content_uri?: string | null;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function searchHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const term = String(input?.term ?? '').trim();
   if (!term) return { documents: [] };
@@ -174,4 +174,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { documents: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

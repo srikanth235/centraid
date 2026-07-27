@@ -14,7 +14,7 @@ import type { RegistryEntry } from '../types.js';
 export function isValidAppId(id: string): boolean {
   if (typeof id !== 'string' || id.length === 0) return false;
   if (id.startsWith('_')) return false;
-  return /^[A-Za-z0-9_-]+$/.test(id);
+  return /^[A-Za-z0-9_-]+$/u.test(id);
 }
 
 /**

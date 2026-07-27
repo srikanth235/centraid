@@ -106,7 +106,7 @@ export function insertableColumns(columns: BrowseColumn[]): BrowseColumn[] {
 
 /** A number input suits INTEGER/REAL affinity; everything else is text. */
 export function isNumericColumn(col: BrowseColumn): boolean {
-  return /INT|REAL|NUM|DEC|FLOA|DOUB/i.test(col.type);
+  return /INT|REAL|NUM|DEC|FLOA|DOUB/iu.test(col.type);
 }
 
 /** Human label for a dependent's mechanism badge in the delete dialog. */

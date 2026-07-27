@@ -43,8 +43,8 @@ export interface PaletteDeps {
 /** Flatten an FTS `snippet()` string to plain palette-sub text (drop `⟦`/`⟧`). */
 function snippetToText(snippet: string): string {
   return snippet
-    .replace(/[⟦⟧]/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[⟦⟧]/gu, '')
+    .replace(/\s+/gu, ' ')
     .trim();
 }
 

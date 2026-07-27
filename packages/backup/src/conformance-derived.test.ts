@@ -25,11 +25,9 @@ describe('providerDerivedConformanceCases (direct)', () => {
     expect(cases.length).toBeGreaterThanOrEqual(3);
   });
 
-  for (const c of cases) {
-    test(c.name, async () => {
-      await c.run();
-      // requireAssertions: capability-gated cases may no-op without expects.
-      expect(c.name.length).toBeGreaterThan(0);
-    });
-  }
+  test.each(cases.map((c) => [c.name, c] as const))('%s', async (_name, c) => {
+    await c.run();
+    // requireAssertions: capability-gated cases may no-op without expects.
+    expect(c.name.length).toBeGreaterThan(0);
+  });
 });

@@ -15,7 +15,7 @@ type Friendly = Record<string, string>;
 
 export function createLogic({ state, data, render, refresh }: LogicDeps) {
   function notice(text: string) {
-    const el = document.getElementById('noticeBanner');
+    const el = document.querySelector<HTMLElement>('#noticeBanner');
     if (!el) return;
     el.textContent = text;
     el.hidden = !text;
@@ -183,7 +183,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       state.search = '';
       state.searchResults = null;
     }
-    document.getElementById('shell')?.classList.remove('side-open');
+    document.querySelector('#shell')?.classList.remove('side-open');
     render();
   }
 

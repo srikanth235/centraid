@@ -99,7 +99,7 @@ function success(request: ReplicaWorkerRequest): ReplicaWorkerResponse {
   return { id: request.id, ok: true, result: undefined };
 }
 
-describe('ReplicaWorkerClient', () => {
+describe(ReplicaWorkerClient, () => {
   test('opens an injected worker and wraps unavailable fields with a sticky guard', async () => {
     const worker = new FakeWorker(success);
     const { client, status } = await ReplicaWorkerClient.connect(
@@ -162,7 +162,7 @@ describe('ReplicaWorkerClient', () => {
       () => worker,
     );
     const result = await client.readWire({ shapeId: 'shape', entity: 'core.note' });
-    expect(structuredClone(result).rows[0]).toEqual({
+    expect(structuredClone(result).rows[0]).toStrictEqual({
       rowId: 'note-1',
       values: { note_id: 'note-1', title: 'Local' },
       oversizedFields: ['body'],
@@ -190,7 +190,7 @@ describe('ReplicaWorkerClient', () => {
       ],
     );
 
-    expect(structuredClone(result).rows[0]?.values).toEqual({
+    expect(structuredClone(result).rows[0]?.values).toStrictEqual({
       note_id: 'note-2',
       title: 'Search result',
       _rank: -0.5,

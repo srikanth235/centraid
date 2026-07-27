@@ -139,12 +139,12 @@ export async function backupDeviceMedia(
               staged_sha: addressed.sha256,
               kind: input.kind,
               ...(input.capturedAt ? { captured_at: input.capturedAt } : {}),
-              ...(input.tzOffsetMin !== undefined ? { tz_offset_min: input.tzOffsetMin } : {}),
+              ...(input.tzOffsetMin === undefined ? {} : { tz_offset_min: input.tzOffsetMin }),
               ...(input.captureGroupId ? { capture_group_id: input.captureGroupId } : {}),
               ...(input.filename ? { title: input.filename } : {}),
               ...(input.width ? { width: input.width } : {}),
               ...(input.height ? { height: input.height } : {}),
-              ...(input.durationS !== undefined ? { duration_s: input.durationS } : {}),
+              ...(input.durationS === undefined ? {} : { duration_s: input.durationS }),
               ...(derivatives
                 ? { phash: derivatives.phash, thumbhash: derivatives.thumbhash }
                 : {}),

@@ -29,7 +29,7 @@ describe('backup crypto property', () => {
       fc.property(keyBytes, plainBytes, (key, plain) => {
         const blob = encrypt(key, plain);
         const back = decrypt(key, blob);
-        expect([...back]).toEqual([...plain]);
+        expect([...back]).toStrictEqual([...plain]);
       }),
       { numRuns: 40, seed: 53240 },
     );
@@ -47,8 +47,8 @@ describe('backup crypto property', () => {
           const aad = aadOpt === undefined ? undefined : new Uint8Array(aadOpt);
           const a = encryptWithNonce(key, nonce, plain, aad);
           const b = encryptWithNonce(key, nonce, plain, aad);
-          expect([...a]).toEqual([...b]);
-          expect([...decrypt(key, a, aad)]).toEqual([...plain]);
+          expect([...a]).toStrictEqual([...b]);
+          expect([...decrypt(key, a, aad)]).toStrictEqual([...plain]);
         },
       ),
       { numRuns: 32, seed: 53241 },
@@ -65,7 +65,9 @@ describe('backup crypto property', () => {
         tampered[idx] = (tampered[idx]! ^ 0xff) & 0xff;
         // If flip produced identical byte (impossible with XOR 0xff on byte), skip.
         if (tampered[idx] === blob[idx]) return;
-        expect(() => decrypt(key, tampered)).toThrow();
+        expect(() => decrypt(key, tampered)).toThrow(
+          /unsupported state or unable to authenticate data/i,
+        );
       }),
       { numRuns: 32, seed: 53242 },
     );
@@ -76,7 +78,9 @@ describe('backup crypto property', () => {
       fc.property(keyBytes, keyBytes, plainBytes, (key, wrong, plain) => {
         fc.pre([...key].some((b, i) => b !== wrong[i]));
         const blob = encrypt(key, plain);
-        expect(() => decrypt(wrong, blob)).toThrow();
+        expect(() => decrypt(wrong, blob)).toThrow(
+          /unsupported state or unable to authenticate data/i,
+        );
       }),
       { numRuns: 24, seed: 53243 },
     );
@@ -87,8 +91,8 @@ describe('backup crypto property', () => {
       fc.property(keyBytes, fc.string({ minLength: 1, maxLength: 64 }), (key, info) => {
         const a = deriveNonce(key, info);
         const b = deriveNonce(key, info);
-        expect(a.length).toBe(12);
-        expect([...a]).toEqual([...b]);
+        expect(a).toHaveLength(12);
+        expect([...a]).toStrictEqual([...b]);
       }),
       { numRuns: 32, seed: 53244 },
     );
@@ -102,7 +106,7 @@ describe('backup crypto property', () => {
         fc.string({ minLength: 1, maxLength: 32 }),
         (key, infoA, infoB) => {
           fc.pre(infoA !== infoB);
-          expect([...deriveNonce(key, infoA)]).not.toEqual([...deriveNonce(key, infoB)]);
+          expect([...deriveNonce(key, infoA)]).not.toStrictEqual([...deriveNonce(key, infoB)]);
         },
       ),
       { numRuns: 24, seed: 53245 },
@@ -114,9 +118,9 @@ describe('backup crypto property', () => {
       fc.property(keyBytes, fc.string({ minLength: 1, maxLength: 36 }), (master, vaultId) => {
         const data = deriveDataKey(master, vaultId);
         const dedup = deriveDedupKey(master, vaultId);
-        expect(data.length).toBe(32);
-        expect(dedup.length).toBe(32);
-        expect([...data]).not.toEqual([...dedup]);
+        expect(data).toHaveLength(32);
+        expect(dedup).toHaveLength(32);
+        expect([...data]).not.toStrictEqual([...dedup]);
       }),
       { numRuns: 24, seed: 53246 },
     );
@@ -126,7 +130,7 @@ describe('backup crypto property', () => {
     fc.assert(
       fc.property(keyBytes, fc.uint8Array({ minLength: 0, maxLength: 27 }), (key, truncatedArr) => {
         const truncated = new Uint8Array(truncatedArr);
-        expect(() => decrypt(key, truncated)).toThrow();
+        expect(() => decrypt(key, truncated)).toThrow('encrypted blob truncated');
       }),
       { numRuns: 24, seed: 53247 },
     );

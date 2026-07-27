@@ -31,10 +31,10 @@ export interface AttentionLineProps {
   approvals: number;
   /** Automation rows installed on the paired desktop. */
   automations: number;
-  onApprovals(): void;
-  onAutomations(): void;
+  onApprovals: () => void;
+  onAutomations: () => void;
   /** Route to Settings → pairing. */
-  onPair(): void;
+  onPair: () => void;
 }
 
 export default function AttentionLine({
@@ -148,7 +148,7 @@ function ChipCard({
   title: string;
   sub: string;
   count?: number;
-  onPress(): void;
+  onPress: () => void;
   styles: ReturnType<typeof makeStyles>;
   colors: ThemeColors;
 }): React.JSX.Element {
@@ -170,11 +170,11 @@ function ChipCard({
           {sub}
         </Text>
       </View>
-      {count !== undefined ? (
+      {count === undefined ? null : (
         <View style={[styles.badge, { backgroundColor: colors.accent }]}>
           <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
         </View>
-      ) : null}
+      )}
     </Pressable>
   );
 }
@@ -195,7 +195,7 @@ function BannerCard({
   title: string;
   copy: string;
   action: string;
-  onPress(): void;
+  onPress: () => void;
   styles: ReturnType<typeof makeStyles>;
   colors: ThemeColors;
 }): React.JSX.Element {

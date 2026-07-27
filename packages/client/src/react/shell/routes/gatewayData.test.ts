@@ -53,7 +53,7 @@ describe('formatting', () => {
   });
 });
 
-describe('availabilityPct', () => {
+describe(availabilityPct, () => {
   it('is undefined before the first probe', () => {
     expect(availabilityPct({ checksTotal: 0, checksFailed: 0 })).toBeUndefined();
   });
@@ -62,7 +62,7 @@ describe('availabilityPct', () => {
   });
 });
 
-describe('buildOutageRows', () => {
+describe(buildOutageRows, () => {
   it('orders newest first, ticks the ongoing outage against now, and flags alerts', () => {
     const rows = buildOutageRows(
       snapshot({
@@ -95,7 +95,7 @@ describe('alert presets', () => {
   });
 });
 
-describe('buildAlertHistoryRows', () => {
+describe(buildAlertHistoryRows, () => {
   it('orders newest first and carries detail/duration/previousSession through', () => {
     const rows = buildAlertHistoryRows(
       snapshot({
@@ -121,16 +121,16 @@ describe('buildAlertHistoryRows', () => {
   });
 
   it('is empty for a fresh session with no history', () => {
-    expect(buildAlertHistoryRows(snapshot({ alertHistory: [] }))).toEqual([]);
+    expect(buildAlertHistoryRows(snapshot({ alertHistory: [] }))).toStrictEqual([]);
   });
 
   it('falls back to an empty list for a snapshot fixture missing the field', () => {
     const { alertHistory: _drop, ...rest } = snapshot();
-    expect(buildAlertHistoryRows(rest as GatewayRuntimeSnapshot)).toEqual([]);
+    expect(buildAlertHistoryRows(rest as GatewayRuntimeSnapshot)).toStrictEqual([]);
   });
 });
 
-describe('alertKindLabel', () => {
+describe(alertKindLabel, () => {
   it('labels every event kind', () => {
     expect(alertKindLabel('down')).toBe('Gateway down');
     expect(alertKindLabel('recovered')).toBe('Recovered');

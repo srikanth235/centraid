@@ -2,7 +2,7 @@
 // into the CAS with a batch hold, publish claims them onto the message, and
 // discard releases the hold so the TTL sweep reclaims the bytes.
 
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { sweepBlobStaging } from '../blob/staging.js';
@@ -44,69 +44,75 @@ function mboxWithAttachment(): string {
   ].join('\n');
 }
 
-test('parseMbox walks MIME: plain body extracted, attachment decoded', () => {
-  const messages = parseMbox(mboxWithAttachment());
-  expect(messages).toHaveLength(1);
-  const msg = messages[0]!;
-  expect(msg.body).toBe('Here is the receipt you asked for.');
-  expect(msg.attachments).toHaveLength(1);
-  expect(msg.attachments[0]!.filename).toBe('receipt.png');
-  expect(msg.attachments[0]!.mediaType).toBe('image/png');
-  expect(msg.attachments[0]!.data.equals(PNG_BYTES)).toBe(true);
-});
+describe('mbox-attachments', () => {
+  let db: VaultDb;
+  let owner: Identity;
 
-let db: VaultDb;
-let owner: Identity;
+  beforeEach(() => {
+    db = openVaultDb();
+    const boot: BootstrapResult = bootstrapVault(db, { ownerName: 'Priya' });
+    owner = {
+      kind: 'owner-device',
+      callerId: boot.deviceId,
+      provAgentKind: 'owner',
+      partyId: boot.ownerPartyId,
+      mayAct: true,
+    };
+  });
 
-beforeEach(() => {
-  db = openVaultDb();
-  const boot: BootstrapResult = bootstrapVault(db, { ownerName: 'Priya' });
-  owner = {
-    kind: 'owner-device',
-    callerId: boot.deviceId,
-    provAgentKind: 'owner',
-    partyId: boot.ownerPartyId,
-    mayAct: true,
-  };
-});
+  test('parseMbox walks MIME: plain body extracted, attachment decoded', () => {
+    const messages = parseMbox(mboxWithAttachment());
+    expect(messages).toHaveLength(1);
+    const msg = messages[0]!;
+    expect(msg.body).toBe('Here is the receipt you asked for.');
+    expect(msg.attachments).toHaveLength(1);
+    expect(msg.attachments[0]!.filename).toBe('receipt.png');
+    expect(msg.attachments[0]!.mediaType).toBe('image/png');
+    expect(msg.attachments[0]!.data.equals(PNG_BYTES)).toBe(true);
+  });
 
-test('stage → publish: attachment bytes claim onto the message with an edge', () => {
-  const staged = stageFile(db, owner, { filename: 'mail.mbox', data: mboxWithAttachment() });
-  const sha = sha256OfBytes(PNG_BYTES);
-  // Staged with the batch hold — the review pause outlasts any TTL.
-  const hold = db.vault
-    .prepare('SELECT held_by_batch FROM blob_staging WHERE sha256 = ?')
-    .get(sha) as { held_by_batch: string | null };
-  expect(hold.held_by_batch).toBe(staged.batchId);
-  expect(sweepBlobStaging(db, { ttlHours: -1 }).expired).toEqual([]); // held = immune
+  test('stage → publish: attachment bytes claim onto the message with an edge', () => {
+    const staged = stageFile(db, owner, { filename: 'mail.mbox', data: mboxWithAttachment() });
+    const sha = sha256OfBytes(PNG_BYTES);
+    // Staged with the batch hold — the review pause outlasts any TTL.
+    const hold = db.vault
+      .prepare('SELECT held_by_batch FROM blob_staging WHERE sha256 = ?')
+      .get(sha) as { held_by_batch: string | null };
+    expect(hold.held_by_batch).toBe(staged.batchId);
+    expect(sweepBlobStaging(db, { ttlHours: -1 }).expired).toStrictEqual([]); // held = immune
 
-  const published = publishBatch(db, owner, staged.batchId, PUBLISHERS);
-  expect(published.created).toBe(1);
-  expect(published.failed).toEqual([]);
-  const message = db.vault
-    .prepare("SELECT message_id FROM social_message WHERE external_id = 'lamp-1@example.com'")
-    .get() as { message_id: string };
-  const attachment = db.vault
-    .prepare(
-      `SELECT a.content_id, c.content_uri, c.media_type, c.title
+    const published = publishBatch(db, owner, staged.batchId, PUBLISHERS);
+    expect(published.created).toBe(1);
+    expect(published.failed).toStrictEqual([]);
+    const message = db.vault
+      .prepare("SELECT message_id FROM social_message WHERE external_id = 'lamp-1@example.com'")
+      .get() as { message_id: string };
+    const attachment = db.vault
+      .prepare(
+        `SELECT a.content_id, c.content_uri, c.media_type, c.title
          FROM core_attachment a JOIN core_content_item c ON c.content_id = a.content_id
         WHERE a.target_type = 'social.message' AND a.target_id = ?`,
-    )
-    .get(message.message_id) as Record<string, string>;
-  expect(attachment.content_uri).toBe(blobUriFor(sha));
-  expect(attachment.media_type).toBe('image/png');
-  expect(attachment.title).toBe('receipt.png');
-  // Claimed: the staging row is gone, the bytes stay (a content item owns them).
-  expect(db.vault.prepare('SELECT count(*) AS n FROM blob_staging').get()).toEqual({ n: 0 });
-  expect(db.blobs.hasSync(sha)).toBe(true);
-});
+      )
+      .get(message.message_id) as Record<string, string>;
+    expect(attachment.content_uri).toBe(blobUriFor(sha));
+    expect(attachment.media_type).toBe('image/png');
+    expect(attachment.title).toBe('receipt.png');
+    // Claimed: the staging row is gone, the bytes stay (a content item owns them).
+    // node:sqlite hands back null-prototype rows; spreading compares the column
+    // data (which is the contract) without asserting the driver's prototype.
+    expect({ ...db.vault.prepare('SELECT count(*) AS n FROM blob_staging').get() }).toStrictEqual({
+      n: 0,
+    });
+    expect(db.blobs.hasSync(sha)).toBe(true);
+  });
 
-test('stage → discard: hold releases and the TTL sweep reclaims the bytes', () => {
-  const staged = stageFile(db, owner, { filename: 'mail.mbox', data: mboxWithAttachment() });
-  const sha = sha256OfBytes(PNG_BYTES);
-  discardBatch(db, owner, staged.batchId);
-  db.vault.prepare('UPDATE blob_staging SET staged_at = ?').run('2000-01-01T00:00:00.000Z');
-  const swept = sweepBlobStaging(db, {});
-  expect(swept.expired).toContain(sha);
-  expect(db.blobs.hasSync(sha)).toBe(false);
+  test('stage → discard: hold releases and the TTL sweep reclaims the bytes', () => {
+    const staged = stageFile(db, owner, { filename: 'mail.mbox', data: mboxWithAttachment() });
+    const sha = sha256OfBytes(PNG_BYTES);
+    discardBatch(db, owner, staged.batchId);
+    db.vault.prepare('UPDATE blob_staging SET staged_at = ?').run('2000-01-01T00:00:00.000Z');
+    const swept = sweepBlobStaging(db, {});
+    expect(swept.expired).toContain(sha);
+    expect(db.blobs.hasSync(sha)).toBe(false);
+  });
 });

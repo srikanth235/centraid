@@ -52,12 +52,12 @@ export function useAssistantScroll(
     if (!el || prevConvRef.current === conversationId) return;
     prevConvRef.current = conversationId;
     const saved = conversationId ? scrollPositions.get(conversationId) : undefined;
-    if (saved !== undefined) {
-      el.scrollTop = saved;
-      stuckRef.current = isAtBottom(el);
-    } else {
+    if (saved === undefined) {
       el.scrollTop = el.scrollHeight;
       stuckRef.current = true;
+    } else {
+      el.scrollTop = saved;
+      stuckRef.current = isAtBottom(el);
     }
     setShowJump(!isAtBottom(el));
   }, [conversationId, scrollRef]);

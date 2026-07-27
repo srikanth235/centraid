@@ -15,53 +15,55 @@ const tmpl = {
   integrations: ['gmail', 'slack'],
 } as unknown as TemplateEntry;
 
-beforeEach(() => {
-  document.body.innerHTML = '';
-});
-afterEach(() => {
-  document.body.innerHTML = '';
-});
-
-describe('openAutomationTemplatePreview', () => {
-  it('renders the drawer with name, trigger label, steps, and integration chips', () => {
-    openAutomationTemplatePreview(tmpl, () => {});
-    const drawer = document.querySelector('.auDrawer')!;
-    expect(drawer.textContent).toContain('Daily Digest');
-    expect(drawer.textContent).toContain('Every morning');
-    expect(drawer.textContent).toContain('Summarizes your inbox');
-    const chips = drawer.querySelectorAll('.auChip');
-    expect(chips).toHaveLength(2);
-    expect([...chips].map((c) => c.textContent)).toEqual(['gmail', 'slack']);
+describe('automationTemplatePreview', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
   });
 
-  it('fires onUse with the template and closes on "Use template"', () => {
-    const onUse = vi.fn();
-    openAutomationTemplatePreview(tmpl, onUse);
-    const useBtn = [...document.querySelectorAll('.auBtnPrimary')].find((b) =>
-      b.textContent?.includes('Use template'),
-    ) as HTMLButtonElement;
-    useBtn.click();
-    expect(onUse).toHaveBeenCalledWith(tmpl);
-    expect(document.querySelector('.auDrawer')).toBeNull();
-  });
+  describe(openAutomationTemplatePreview, () => {
+    it('renders the drawer with name, trigger label, steps, and integration chips', () => {
+      openAutomationTemplatePreview(tmpl, () => {});
+      const drawer = document.querySelector('.auDrawer')!;
+      expect(drawer.textContent).toContain('Daily Digest');
+      expect(drawer.textContent).toContain('Every morning');
+      expect(drawer.textContent).toContain('Summarizes your inbox');
+      const chips = drawer.querySelectorAll('.auChip');
+      expect(chips).toHaveLength(2);
+      expect([...chips].map((c) => c.textContent)).toStrictEqual(['gmail', 'slack']);
+    });
 
-  it('closes on Escape and backdrop click without firing onUse', () => {
-    const onUse = vi.fn();
-    openAutomationTemplatePreview(tmpl, onUse);
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect(document.querySelector('.auDrawer')).toBeNull();
+    it('fires onUse with the template and closes on "Use template"', () => {
+      const onUse = vi.fn();
+      openAutomationTemplatePreview(tmpl, onUse);
+      const useBtn = [...document.querySelectorAll('.auBtnPrimary')].find((b) =>
+        b.textContent?.includes('Use template'),
+      ) as HTMLButtonElement;
+      useBtn.click();
+      expect(onUse).toHaveBeenCalledWith(tmpl);
+      expect(document.querySelector('.auDrawer')).toBeNull();
+    });
 
-    openAutomationTemplatePreview(tmpl, onUse);
-    (document.querySelector('.auDrawerBackdrop') as HTMLElement).click();
-    expect(document.querySelector('.auDrawer')).toBeNull();
-    expect(onUse).not.toHaveBeenCalled();
-  });
+    it('closes on Escape and backdrop click without firing onUse', () => {
+      const onUse = vi.fn();
+      openAutomationTemplatePreview(tmpl, onUse);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(document.querySelector('.auDrawer')).toBeNull();
 
-  it('shows the default-tools line when there are no integrations', () => {
-    openAutomationTemplatePreview({ ...tmpl, integrations: [] } as TemplateEntry, () => {});
-    expect(document.querySelector('.auDrawer')!.textContent).toContain(
-      'Runs with the workspace default tools',
-    );
-    expect(document.querySelectorAll('.auChip')).toHaveLength(0);
+      openAutomationTemplatePreview(tmpl, onUse);
+      (document.querySelector('.auDrawerBackdrop') as HTMLElement).click();
+      expect(document.querySelector('.auDrawer')).toBeNull();
+      expect(onUse).not.toHaveBeenCalled();
+    });
+
+    it('shows the default-tools line when there are no integrations', () => {
+      openAutomationTemplatePreview({ ...tmpl, integrations: [] } as TemplateEntry, () => {});
+      expect(document.querySelector('.auDrawer')!.textContent).toContain(
+        'Runs with the workspace default tools',
+      );
+      expect(document.querySelectorAll('.auChip')).toHaveLength(0);
+    });
   });
 });

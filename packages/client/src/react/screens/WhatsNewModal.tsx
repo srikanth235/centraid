@@ -22,7 +22,7 @@ const X_SVG = (
 
 /** `v0.2.0` and `0.2.0` should compare equal — strip a leading `v`. */
 function sameVersion(tag: string, current: string): boolean {
-  const norm = (s: string): string => s.replace(/^v/i, '').trim();
+  const norm = (s: string): string => s.replace(/^v/iu, '').trim();
   return norm(tag) === norm(current) && current.length > 0;
 }
 

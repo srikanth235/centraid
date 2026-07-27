@@ -149,7 +149,7 @@ export function EditorView({
         source.toBlob(resolve, 'image/jpeg', 0.92),
       );
       if (!blob) throw new Error('Could not render the edit.');
-      const baseName = (asset.title || 'photo').replace(/\.[a-z0-9]+$/i, '');
+      const baseName = (asset.title || 'photo').replace(/\.[a-z0-9]+$/iu, '');
       const file = new File([blob], `${baseName}-edited.jpg`, { type: 'image/jpeg' });
       // An edit is a NEW asset beside the original, so it lands in the
       // original's scope (issue #599) — never in the chip selection, which
@@ -252,7 +252,7 @@ export function EditorView({
           {busy ? 'Saving…' : 'Save as new photo'}
         </button>
       </div>
-      <p className={`lightbox-note ${styles.note}`} ref={noteRef}></p>
+      <p className={`lightbox-note ${styles.note}`} ref={noteRef} />
       <p className={`kit-muted kit-small ${styles.hint}`}>
         Drag on the photo to crop. The original stays in your library unless you check “Also move
         the original to trash.”

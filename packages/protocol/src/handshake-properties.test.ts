@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { assert, describe, expect, test } from 'vitest';
 import { fc } from '@centraid/test-kit/fast-check';
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
@@ -63,7 +63,8 @@ describe('protocol handshake property', () => {
           minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
         });
         expect(result.ok).toBe(true);
-        if (result.ok) expect(result.info.version).toBe(version);
+        assert(result.ok);
+        expect(result.info.version).toBe(version);
       }),
       { numRuns: 32, seed: 53272 },
     );
@@ -76,7 +77,8 @@ describe('protocol handshake property', () => {
         (raw) => {
           const result = judgeGatewayInfo(raw);
           expect(result.ok).toBe(false);
-          if (!result.ok) expect(result.reason).toBe('malformed');
+          assert(!result.ok);
+          expect(result.reason).toBe('malformed');
         },
       ),
       { numRuns: 16, seed: 53273 },
@@ -99,7 +101,8 @@ describe('protocol handshake property', () => {
       minSupportedProtocol: 1,
     });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('protocol_mismatch');
+    assert(!result.ok);
+    expect(result.reason).toBe('protocol_mismatch');
   });
 
   test('schemaEpoch alone is accepted as protocolVersion fallback', () => {
@@ -110,7 +113,8 @@ describe('protocol handshake property', () => {
           schemaEpoch: epoch,
         });
         expect(result.ok).toBe(true);
-        if (result.ok) expect(result.info.protocolVersion).toBe(epoch);
+        assert(result.ok);
+        expect(result.info.protocolVersion).toBe(epoch);
       }),
       { numRuns: 8, seed: 53275 },
     );
@@ -119,7 +123,8 @@ describe('protocol handshake property', () => {
   test('missing protocol fields is malformed, not mismatch', () => {
     const result = judgeGatewayInfo({ version: '1.0.0' });
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe('malformed');
+    assert(!result.ok);
+    expect(result.reason).toBe('malformed');
   });
 
   test('optional instanceId/startedAt/uptimeMs are preserved only when typed correctly', () => {
@@ -138,11 +143,10 @@ describe('protocol handshake property', () => {
             uptimeMs,
           });
           expect(ok.ok).toBe(true);
-          if (ok.ok) {
-            expect(ok.info.instanceId).toBe(instanceId);
-            expect(ok.info.startedAt).toBe(startedAt);
-            expect(ok.info.uptimeMs).toBe(uptimeMs);
-          }
+          assert(ok.ok);
+          expect(ok.info.instanceId).toBe(instanceId);
+          expect(ok.info.startedAt).toBe(startedAt);
+          expect(ok.info.uptimeMs).toBe(uptimeMs);
           const stripped = judgeGatewayInfo({
             version: '1.0.0',
             protocolVersion: GATEWAY_PROTOCOL_VERSION,
@@ -152,11 +156,10 @@ describe('protocol handshake property', () => {
             uptimeMs: null,
           });
           expect(stripped.ok).toBe(true);
-          if (stripped.ok) {
-            expect(stripped.info.instanceId).toBeUndefined();
-            expect(stripped.info.startedAt).toBeUndefined();
-            expect(stripped.info.uptimeMs).toBeUndefined();
-          }
+          assert(stripped.ok);
+          expect(stripped.info.instanceId).toBeUndefined();
+          expect(stripped.info.startedAt).toBeUndefined();
+          expect(stripped.info.uptimeMs).toBeUndefined();
         },
       ),
       { numRuns: 24, seed: 53276 },
@@ -174,7 +177,8 @@ describe('protocol handshake property', () => {
             minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
           });
           expect(result.ok).toBe(false);
-          if (!result.ok) expect(result.reason).toBe('malformed');
+          assert(!result.ok);
+          expect(result.reason).toBe('malformed');
         },
       ),
       { numRuns: 16, seed: 53277 },

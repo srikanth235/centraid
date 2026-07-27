@@ -10,7 +10,7 @@ const ZERO_COUNTS: BlobCustodyCounts = {
 
 const NEVER_SWEPT = { lastCompletedAt: null, lastError: null, consecutiveFailures: 0 };
 
-describe('createBlobSweepHealthProbe', () => {
+describe(createBlobSweepHealthProbe, () => {
   it('reports ok, local-only-only, when no vault configures an s3 tier', async () => {
     const probe = createBlobSweepHealthProbe({
       vaults: () => [

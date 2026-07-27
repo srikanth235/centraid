@@ -87,7 +87,7 @@ export function createNativeImagePreviewCodec(): PreviewCodec {
           .raw()
           .toBuffer({ resolveWithObject: true });
         const bytes = rgbaToThumbHash(info.width, info.height, new Uint8Array(data));
-        return Buffer.from(bytes).toString('base64').replace(/=+$/, '');
+        return Buffer.from(bytes).toString('base64').replace(/=+$/u, '');
       } catch {
         return null;
       }

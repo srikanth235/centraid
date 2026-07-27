@@ -6,9 +6,8 @@
 // Usage: node scripts/perf/summarize.mjs [path-to-report.json]
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const reportPath =
   process.argv[2] ?? path.resolve(here, '../../apps/web/test-results/perf-waterfall-report.json');
 

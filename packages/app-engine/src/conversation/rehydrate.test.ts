@@ -188,7 +188,7 @@ describe('conversation rehydration (issue #438 wave 3)', () => {
     const remaining = f.journal
       .prepare(`SELECT id FROM turns WHERE conversation_id = 'c1' ORDER BY seq`)
       .all() as { id: string }[];
-    expect(remaining.map((r) => r.id)).toEqual(['t2']);
+    expect(remaining.map((r) => r.id)).toStrictEqual(['t2']);
 
     const after = await store.getSessionRehydrated(APP, 'c1');
     expect(after?.hasArchivedHistory).toBe(true);
@@ -196,7 +196,7 @@ describe('conversation rehydration (issue #438 wave 3)', () => {
     expect(after?.archiveUnavailable).toBeUndefined();
     // Same message count + same payloads (ignoring the fromArchive marker).
     expect(after?.messages.length).toBe(before?.messages.length);
-    expect(withoutMarker(after!.messages)).toEqual(withoutMarker(before!.messages));
+    expect(withoutMarker(after!.messages)).toStrictEqual(withoutMarker(before!.messages));
     // Archived turns carry the marker; the live head does not.
     const archivedText = after!.messages
       .filter((m) => (m.payload as { fromArchive?: boolean }).fromArchive)
@@ -263,7 +263,7 @@ describe('conversation rehydration (issue #438 wave 3)', () => {
     expect(after?.hasArchivedHistory).toBe(true);
     // The whole chat conversation was pruned → live rows are empty, but the read
     // does not throw: it degrades to the marker.
-    expect(after?.messages).toEqual([]);
+    expect(after?.messages).toStrictEqual([]);
   });
 
   it('unpruned archive row serves from live rows without fetching the blob', async () => {
@@ -288,7 +288,7 @@ describe('conversation rehydration (issue #438 wave 3)', () => {
     expect(after?.hasArchivedHistory).toBeUndefined(); // fast path — no pruned range
     expect(after?.archiveUnavailable).toBeUndefined();
     expect(after?.messages.length).toBe(2); // user + ai, from live rows
-    expect(f.reads).toEqual([]); // the blob reader was never called
+    expect(f.reads).toStrictEqual([]); // the blob reader was never called
   });
 
   it('GET session route surfaces the archive markers in the JSON body', async () => {

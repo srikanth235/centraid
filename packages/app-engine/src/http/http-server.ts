@@ -113,7 +113,7 @@ export interface RuntimeHttpServerHandle {
   /** Bearer token the renderer must send as `Authorization: Bearer <token>`. */
   token: string;
   /** Stop the server. Resolves once the listener is closed. */
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 const CONVERSATIONS_PREFIX = '/_centraid-conversations';
@@ -304,7 +304,7 @@ export async function startRuntimeHttpServer(
     delete req.headers[COMPANION_GRANTS_HEADER];
     delete req.headers[WEB_APP_HEADER];
     delete req.headers[WEB_SHELL_ORIGIN_HEADER];
-    const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/iu, '');
     const resolveAuthorization = (): BearerAuthorization | undefined => {
       if (opts.authorizeBearer || opts.authorizeRequest) {
         return raw

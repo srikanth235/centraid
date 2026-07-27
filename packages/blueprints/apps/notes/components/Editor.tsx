@@ -382,8 +382,8 @@ export function Editor({
   const toggleCheck = (lineIndex: number): void => {
     const lines = bodyRef.current.split('\n');
     if (lines[lineIndex] == null) return;
-    lines[lineIndex] = lines[lineIndex]!.replace(/\[( |x|X)\]/, (m) =>
-      /x/i.test(m) ? '[ ]' : '[x]',
+    lines[lineIndex] = lines[lineIndex]!.replace(/\[(?: |x|X)\]/u, (m) =>
+      /x/iu.test(m) ? '[ ]' : '[x]',
     );
     saveBodyNow(lines.join('\n'));
   };
@@ -435,16 +435,16 @@ export function Editor({
     if (pos !== el.selectionEnd) return;
     const before = el.value.slice(0, pos);
     const lineStart = before.lastIndexOf('\n') + 1;
-    const m = /^(\s*[-*] \[[ xX]\] )(.*)$/.exec(before.slice(lineStart));
+    const m = /^(?<marker>\s*[-*] \[[ xX]\] )(?<text>.*)$/u.exec(before.slice(lineStart));
     if (!m) return;
     e.preventDefault();
-    if (m[2] === '') {
+    if (m.groups?.text === '') {
       const next = el.value.slice(0, lineStart) + el.value.slice(pos);
       caretRef.current = lineStart;
       setBody(next);
       return;
     }
-    const insertion = `\n${m[1]!.replace(/\[[xX]\]/, '[ ]')}`;
+    const insertion = `\n${(m.groups?.marker ?? '').replace(/\[[xX]\]/u, '[ ]')}`;
     const next = el.value.slice(0, pos) + insertion + el.value.slice(pos);
     caretRef.current = pos + insertion.length;
     setBody(next);

@@ -19,9 +19,8 @@
 //   PWDEBUG=1 node scripts/perf/run-waterfall.mjs  # headed / inspector
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const here = import.meta.dirname;
 const webDir = path.resolve(here, '../../apps/web');
 
 const grepShell = process.argv.includes('--shell');

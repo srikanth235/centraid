@@ -313,21 +313,7 @@ export default function BackupCard({
           <div className={styles.loadError}>Couldn’t reach the gateway: {loadError}</div>
         ) : !status || !metrics ? (
           <div className={gwStyles.panelEmpty}>Checking backup status…</div>
-        ) : !hasBackups ? (
-          <>
-            <p className={styles.notConfigured}>
-              Your data isn’t backed up offsite yet. In Settings → Storage, connect your storage
-              provider and set this vault to Hosted. Until then, databases, code, and attachments
-              live only on this machine.
-            </p>
-            <RecoveryKitGate
-              configured={status.configured}
-              recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
-              onConfirm={onConfirmRecoveryKit}
-              onExport={onExportRecoveryKit}
-            />
-          </>
-        ) : (
+        ) : hasBackups ? (
           <>
             <BackupHealthMetrics metrics={metrics} now={now} />
 
@@ -408,6 +394,20 @@ export default function BackupCard({
                 ) : null}
               </div>
             </details>
+          </>
+        ) : (
+          <>
+            <p className={styles.notConfigured}>
+              Your data isn’t backed up offsite yet. In Settings → Storage, connect your storage
+              provider and set this vault to Hosted. Until then, databases, code, and attachments
+              live only on this machine.
+            </p>
+            <RecoveryKitGate
+              configured={status.configured}
+              recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
+              onConfirm={onConfirmRecoveryKit}
+              onExport={onExportRecoveryKit}
+            />
           </>
         )}
       </div>

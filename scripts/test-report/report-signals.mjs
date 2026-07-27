@@ -78,15 +78,15 @@ export function detectDefaultCiEnvGate(source) {
   if (typeof source !== 'string' || !source.trim()) return null;
   // describe.skipIf(process.env.FOO !== '1')
   const skipIfNeq = source.match(
-    /describe\.skipIf\(\s*process\.env\.([A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)/,
+    /describe\.skipIf\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)/u,
   );
-  if (skipIfNeq) return { env: skipIfNeq[1], kind: 'skipIf-env-not-1' };
+  if (skipIfNeq) return { env: skipIfNeq.groups?.env, kind: 'skipIf-env-not-1' };
   // describe.skipIf(!enabled) where enabled = process.env.X === '1' nearby
   const enabled =
-    source.match(/const\s+\w+\s*=\s*process\.env\.([A-Z0-9_]+)\s*===\s*['"]1['"]/) ||
-    source.match(/const\s+\w+\s*=\s*process\.env\.([A-Z0-9_]+)\s*===\s*['"]1['"]\s*\|\|/);
-  if (enabled && /describe\.skipIf\(\s*!?\w+\s*\)/.test(source)) {
-    return { env: enabled[1], kind: 'skipIf-enabled-flag' };
+    source.match(/const\s+\w+\s*=\s*process\.env\.(?<env>[A-Z0-9_]+)\s*===\s*['"]1['"]/u) ||
+    source.match(/const\s+\w+\s*=\s*process\.env\.(?<env>[A-Z0-9_]+)\s*===\s*['"]1['"]\s*\|\|/u);
+  if (enabled && /describe\.skipIf\(\s*!?\w+\s*\)/u.test(source)) {
+    return { env: enabled.groups?.env, kind: 'skipIf-enabled-flag' };
   }
   // if (process.env.FOO !== '1') { t.skip / test.skip / describe.skip / return }
   // Covers disk-full.integration.test.ts style: env check then t.skip in the
@@ -95,18 +95,20 @@ export function detectDefaultCiEnvGate(source) {
   const early =
     source.match(
       new RegExp(
-        String.raw`if\s*\(\s*process\.env\.([A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,200}?${skipCall}`,
+        String.raw`if\s*\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,200}?${skipCall}`,
+        'u',
       ),
     ) ||
     source.match(
       new RegExp(
-        String.raw`if\s*\(\s*process\.env\.([A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*${skipCall}`,
+        String.raw`if\s*\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*${skipCall}`,
+        'u',
       ),
     ) ||
     source.match(
-      /if\s*\(\s*process\.env\.([A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,200}?\breturn\b/,
+      /if\s*\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,200}?\breturn\b/u,
     );
-  if (early) return { env: early[1], kind: 'early-env-return' };
+  if (early) return { env: early.groups?.env, kind: 'early-env-return' };
   return null;
 }
 

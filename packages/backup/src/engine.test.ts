@@ -210,7 +210,7 @@ describe('createSnapshot / restoreSnapshot roundtrip', () => {
       current: CURRENT,
     });
     expect(result.seq).toBe(1);
-    expect(result.entries.sort()).toEqual(entries.map((e) => e.path).sort());
+    expect(result.entries.sort()).toStrictEqual(entries.map((e) => e.path).sort());
 
     for (const entry of entries) {
       const original = await fs.readFile(entry.absolutePath);
@@ -222,8 +222,8 @@ describe('createSnapshot / restoreSnapshot roundtrip', () => {
       await fs.readFile(path.join(destDir, 'RESTORE_QUARANTINE.json'), 'utf8'),
     );
     expect(marker.sourceSeq).toBe(1);
-    expect(marker.quarantine.sort()).toEqual(['automations', 'connections', 'outbox']);
-    expect(typeof marker.restoredAt).toBe('string');
+    expect(marker.quarantine.sort()).toStrictEqual(['automations', 'connections', 'outbox']);
+    expect(marker.restoredAt).toBeTypeOf('string');
   });
 
   test('incremental second snapshot after a 1-byte change uploads far fewer chunks than the first', async () => {
@@ -420,7 +420,7 @@ describe('createSnapshot / restoreSnapshot roundtrip', () => {
   });
 });
 
-describe('verifySnapshot', () => {
+describe(verifySnapshot, () => {
   test('detects a deliberately deleted chunk object', async () => {
     const { provider, targetId, keyring, entries } = await buildFixture();
     await createSnapshot({
@@ -500,8 +500,8 @@ describe('verifySnapshot', () => {
       vaultId: 'vault-1',
       sampleCount: 20,
     });
-    expect(result.missing).toEqual([]);
-    expect(result.corrupt).toEqual([]);
+    expect(result.missing).toStrictEqual([]);
+    expect(result.corrupt).toStrictEqual([]);
     expect(result.checkedObjects).toBeGreaterThan(0);
   });
 });
@@ -555,7 +555,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
     makeSqliteDbFile(path.join(sourceDir, 'journal.db'), ['j1']);
     // Closing the last connection checkpoints and deletes the WAL — the base
     // file is WAL-quiet, exactly the state the shipper snapshots from.
-    await expect(fs.access(path.join(sourceDir, 'vault.db-wal'))).rejects.toThrow();
+    await expect(fs.access(path.join(sourceDir, 'vault.db-wal'))).rejects.toThrow(/ENOENT/);
     await fs.writeFile(path.join(sourceDir, 'seal.key'), pseudoRandomBuffer(32, 5));
 
     const entries: SourceEntry[] = [
@@ -621,10 +621,10 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
     expect(result.walReplay!.perDb.vault.integrityCheck).toBe('ok');
     expect(result.walReplay!.perDb.journal.integrityCheck).toBe('ok');
     expect(result.walReplay!.perDb.vault.segmentsApplied).toBe(0);
-    expect(result.walReplay!.damaged).toEqual([]);
+    expect(result.walReplay!.damaged).toStrictEqual([]);
 
-    expect(readSqliteRows(path.join(destDir, 'vault.db'))).toEqual(['v1', 'v2', 'v3']);
-    expect(readSqliteRows(path.join(destDir, 'journal.db'))).toEqual(['j1']);
+    expect(readSqliteRows(path.join(destDir, 'vault.db'))).toStrictEqual(['v1', 'v2', 'v3']);
+    expect(readSqliteRows(path.join(destDir, 'journal.db'))).toStrictEqual(['j1']);
     const originalSeal = await fs.readFile(path.join(sourceDir, 'seal.key'));
     expect((await fs.readFile(path.join(destDir, 'seal.key'))).equals(originalSeal)).toBe(true);
   });
@@ -650,7 +650,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
     );
     const dbEntries = opened.entries.filter((e) => e.kind === 'db');
     expect(dbEntries).toHaveLength(2);
-    expect(dbEntries.map((e) => e.baseTickMs)).toEqual([BASE_TICK, BASE_TICK]);
+    expect(dbEntries.map((e) => e.baseTickMs)).toStrictEqual([BASE_TICK, BASE_TICK]);
   });
 
   test('a snapshot whose two db bases are from DIFFERENT ticks is REFUSED, not restored', async () => {
@@ -720,7 +720,9 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
       }),
     ).rejects.toThrow(/"vault\.db" hash mismatch/);
     // The restore aborted before completing: no quarantine marker was written.
-    await expect(fs.access(path.join(destDir, 'RESTORE_QUARANTINE.json'))).rejects.toThrow();
+    await expect(fs.access(path.join(destDir, 'RESTORE_QUARANTINE.json'))).rejects.toThrow(
+      /ENOENT/,
+    );
   });
 
   // ── the no-change test is over ENTRY METADATA, not just chunk bytes ───────
@@ -780,7 +782,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
       rolled.find((e) => e.path === 'vault.db')!.walGeneration,
     );
     // …and the unchanged bytes were still deduped: no chunk was re-uploaded.
-    expect(provider.lastStore!.putKeys.filter((k) => k.startsWith('chunks/'))).toEqual([]);
+    expect(provider.lastStore!.putKeys.filter((k) => k.startsWith('chunks/'))).toStrictEqual([]);
   });
 
   test('a same-stat base with DIFFERENT bytes is re-chunked, not reused (coarse mtime is not identity)', async () => {
@@ -822,7 +824,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
     await fs.rm(vaultDb, { force: true });
     makeSqliteDbFile(vaultDb, ['w1', 'w2', 'w3']);
     expect((await fs.stat(vaultDb)).size).toBe(sizeBefore); // same size, new bytes
-    expect(await fileSha256(vaultDb)).not.toBe(staleSha);
+    await expect(fileSha256(vaultDb)).resolves.not.toBe(staleSha);
     // Re-pin: the rewrite reset the mtime. Now BOTH bases present the identical
     // (size, mtime) stat — the coarse-mtime collision this guards against.
     for (const entry of entries) await fs.utimes(entry.absolutePath, pinned, pinned);
@@ -865,7 +867,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
       destDir,
       current: CURRENT,
     });
-    expect(await fileSha256(path.join(destDir, 'vault.db'))).toBe(
+    await expect(fileSha256(path.join(destDir, 'vault.db'))).resolves.toBe(
       await fileSha256(vaultDb), // the NEW base, not its same-stat predecessor
     );
   });
@@ -873,7 +875,7 @@ describe('/1 snapshots: db entries carry sha256 + walGeneration + baseTickMs', (
 
 describe('snapshot format gate', () => {
   test('v0 reads and writes only the current compressed snapshot format', () => {
-    expect(READABLE_SNAPSHOT_FORMATS).toEqual(['centraid-snapshot/2']);
+    expect(READABLE_SNAPSHOT_FORMATS).toStrictEqual(['centraid-snapshot/2']);
     expect(SNAPSHOT_FORMAT_V2).toBe('centraid-snapshot/2');
   });
 
@@ -1092,7 +1094,7 @@ describe('deterministic objects (G7 — idempotent uploads)', () => {
     const first = await snapshotIntoFreshProvider();
     const second = await snapshotIntoFreshProvider();
     expect(first.size).toBeGreaterThan(0);
-    expect([...second.keys()].sort()).toEqual([...first.keys()].sort());
+    expect([...second.keys()].sort()).toStrictEqual([...first.keys()].sort());
     for (const [key, bytes] of first) {
       // Not just the same ids — the ENCRYPTED bytes are identical, because
       // the nonce derives from the chunk's own keyed content hash. A crash
@@ -1260,8 +1262,8 @@ describe('entropy-gated compression (/2, #405 §1)', () => {
     }
 
     const verified = await verifySnapshot({ provider, targetId, keyring, vaultId: 'vault-1' });
-    expect(verified.missing).toEqual([]);
-    expect(verified.corrupt).toEqual([]);
+    expect(verified.missing).toStrictEqual([]);
+    expect(verified.corrupt).toStrictEqual([]);
   });
 
   test('chunk ids key off RAW plaintext — identical whether or not compression kicked in', async () => {
@@ -1329,7 +1331,7 @@ describe('entropy-gated compression (/2, #405 §1)', () => {
     );
     const blobEntry = opened.entries.find((e) => e.path === 'flat.bin')!;
     // Byte-identical ids — compression changed the stored bytes, never the id.
-    expect(blobEntry.chunks).toEqual(expectedIds);
+    expect(blobEntry.chunks).toStrictEqual(expectedIds);
 
     // And the stored object really was compressed (proving the id is
     // compression-independent, not "compression didn't run"): unseal it and

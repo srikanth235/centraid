@@ -28,8 +28,8 @@ const TINT: Record<Scheme, string> = {
 
 export interface SearchOverlayProps {
   items: readonly LauncherItem[];
-  onOpen(item: LauncherItem): void;
-  onClose(): void;
+  onOpen: (item: LauncherItem) => void;
+  onClose: () => void;
 }
 
 export default function SearchOverlay({

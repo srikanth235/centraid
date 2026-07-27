@@ -46,7 +46,7 @@ const {
   };
 });
 
-vi.mock('../../../gateway-client.js', () => ({
+vi.mock(import('../../../gateway-client.js'), () => ({
   listStorageConnections: () => listStorageConnections(),
   createStorageConnection: (...a: unknown[]) => gwCreateStorageConnection(...a),
   deleteStorageConnection: (...a: unknown[]) => gwDeleteStorageConnection(...a),
@@ -69,84 +69,86 @@ import {
   makeDeleteStorageConnection,
 } from './settingsStorageData.js';
 
-beforeEach(() => {
-  listStorageConnections.mockReset();
-  gwCreateStorageConnection.mockReset();
-  gwDeleteStorageConnection.mockReset();
-  getVaultBlobStore.mockReset();
-  attachVaultStorageConnection.mockReset();
-  detachVaultStorageConnection.mockReset();
-});
-
 describe('settingsStorageData', () => {
-  it('loadStorageConnectionsData maps rows', async () => {
-    listStorageConnections.mockResolvedValue([
-      { id: 'c1', name: 'Home', baseUrl: 'https://p' },
-      { id: 'c2', name: 'Other' },
-    ]);
-    await expect(loadStorageConnectionsData()).resolves.toEqual([
-      { id: 'c1', name: 'Home', baseUrl: 'https://p' },
-      { id: 'c2', name: 'Other' },
-    ]);
+  beforeEach(() => {
+    listStorageConnections.mockReset();
+    gwCreateStorageConnection.mockReset();
+    gwDeleteStorageConnection.mockReset();
+    getVaultBlobStore.mockReset();
+    attachVaultStorageConnection.mockReset();
+    detachVaultStorageConnection.mockReset();
   });
 
-  it('createStorageConnection maps recovery-kit and home-profile errors', async () => {
-    gwCreateStorageConnection.mockRejectedValueOnce(new RecoveryKitNotConfirmedError('kit'));
-    await expect(
-      createStorageConnection({ name: 'n', baseUrl: 'u', apiKey: 'k' }),
-    ).resolves.toEqual({
-      ok: false,
-      code: 'recovery_kit_not_confirmed',
-      message: 'kit',
+  describe('settingsStorageData', () => {
+    it('loadStorageConnectionsData maps rows', async () => {
+      listStorageConnections.mockResolvedValue([
+        { id: 'c1', name: 'Home', baseUrl: 'https://p' },
+        { id: 'c2', name: 'Other' },
+      ]);
+      await expect(loadStorageConnectionsData()).resolves.toStrictEqual([
+        { id: 'c1', name: 'Home', baseUrl: 'https://p' },
+        { id: 'c2', name: 'Other' },
+      ]);
     });
 
-    gwCreateStorageConnection.mockRejectedValueOnce(
-      new ProviderNotHomeProfileError('nope', ['cas', 'policy']),
-    );
-    const home = await createStorageConnection({ name: 'n', baseUrl: 'u', apiKey: 'k' });
-    expect(home.ok).toBe(false);
-    if (home.ok) return;
-    expect(home.message).toMatch(/cas, policy/);
+    it('createStorageConnection maps recovery-kit and home-profile errors', async () => {
+      gwCreateStorageConnection.mockRejectedValueOnce(new RecoveryKitNotConfirmedError('kit'));
+      await expect(
+        createStorageConnection({ name: 'n', baseUrl: 'u', apiKey: 'k' }),
+      ).resolves.toStrictEqual({
+        ok: false,
+        code: 'recovery_kit_not_confirmed',
+        message: 'kit',
+      });
 
-    gwCreateStorageConnection.mockResolvedValueOnce({ id: 'c1', name: 'n', baseUrl: 'u' });
-    await expect(
-      createStorageConnection({ name: 'n', baseUrl: 'u', apiKey: 'k' }),
-    ).resolves.toEqual({ ok: true, value: { id: 'c1', name: 'n', baseUrl: 'u' } });
-  });
+      gwCreateStorageConnection.mockRejectedValueOnce(
+        new ProviderNotHomeProfileError('nope', ['cas', 'policy']),
+      );
+      const home = await createStorageConnection({ name: 'n', baseUrl: 'u', apiKey: 'k' });
+      expect(home.ok).toBe(false);
+      if (home.ok) return;
+      expect(home.message).toMatch(/cas, policy/);
 
-  it('makeDeleteStorageConnection respects confirm cancel and deletes on confirm', async () => {
-    const del = makeDeleteStorageConnection(async () => false);
-    await del('c1', 'Home');
-    expect(gwDeleteStorageConnection).not.toHaveBeenCalled();
-
-    const del2 = makeDeleteStorageConnection(async () => true);
-    await del2('c1', 'Home');
-    expect(gwDeleteStorageConnection).toHaveBeenCalledWith('c1');
-  });
-
-  it('loadVaultBlobStoreData / attach / detach map fs vs s3', async () => {
-    getVaultBlobStore.mockResolvedValue({ kind: 'fs' });
-    await expect(loadVaultBlobStoreData()).resolves.toEqual({ kind: 'fs' });
-
-    getVaultBlobStore.mockResolvedValue({ kind: 's3', connectionId: 'c1' });
-    await expect(loadVaultBlobStoreData()).resolves.toEqual({
-      kind: 's3',
-      connectionId: 'c1',
+      gwCreateStorageConnection.mockResolvedValueOnce({ id: 'c1', name: 'n', baseUrl: 'u' });
+      await expect(
+        createStorageConnection({ name: 'n', baseUrl: 'u', apiKey: 'k' }),
+      ).resolves.toStrictEqual({ ok: true, value: { id: 'c1', name: 'n', baseUrl: 'u' } });
     });
 
-    attachVaultStorageConnection.mockResolvedValue({ kind: 's3', connectionId: 'c9' });
-    await expect(attachVaultConnection('c9')).resolves.toEqual({
-      ok: true,
-      value: { kind: 's3', connectionId: 'c9' },
+    it('makeDeleteStorageConnection respects confirm cancel and deletes on confirm', async () => {
+      const del = makeDeleteStorageConnection(async () => false);
+      await del('c1', 'Home');
+      expect(gwDeleteStorageConnection).not.toHaveBeenCalled();
+
+      const del2 = makeDeleteStorageConnection(async () => true);
+      await del2('c1', 'Home');
+      expect(gwDeleteStorageConnection).toHaveBeenCalledWith('c1');
     });
 
-    attachVaultStorageConnection.mockRejectedValue(new RecoveryKitNotConfirmedError('kit'));
-    await expect(attachVaultConnection('c9')).resolves.toMatchObject({
-      ok: false,
-      code: 'recovery_kit_not_confirmed',
-    });
+    it('loadVaultBlobStoreData / attach / detach map fs vs s3', async () => {
+      getVaultBlobStore.mockResolvedValue({ kind: 'fs' });
+      await expect(loadVaultBlobStoreData()).resolves.toStrictEqual({ kind: 'fs' });
 
-    detachVaultStorageConnection.mockResolvedValue({ kind: 'fs' });
-    await expect(detachVaultConnection()).resolves.toEqual({ kind: 'fs' });
+      getVaultBlobStore.mockResolvedValue({ kind: 's3', connectionId: 'c1' });
+      await expect(loadVaultBlobStoreData()).resolves.toStrictEqual({
+        kind: 's3',
+        connectionId: 'c1',
+      });
+
+      attachVaultStorageConnection.mockResolvedValue({ kind: 's3', connectionId: 'c9' });
+      await expect(attachVaultConnection('c9')).resolves.toStrictEqual({
+        ok: true,
+        value: { kind: 's3', connectionId: 'c9' },
+      });
+
+      attachVaultStorageConnection.mockRejectedValue(new RecoveryKitNotConfirmedError('kit'));
+      await expect(attachVaultConnection('c9')).resolves.toMatchObject({
+        ok: false,
+        code: 'recovery_kit_not_confirmed',
+      });
+
+      detachVaultStorageConnection.mockResolvedValue({ kind: 'fs' });
+      await expect(detachVaultConnection()).resolves.toStrictEqual({ kind: 'fs' });
+    });
   });
 });

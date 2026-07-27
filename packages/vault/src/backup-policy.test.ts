@@ -21,7 +21,7 @@ describe('BackupPolicy', () => {
   afterEach(() => db.close());
 
   it('resolves one complete default policy for a fresh vault', () => {
-    expect(readBackupPolicy(db.vault)).toEqual(DEFAULT_BACKUP_POLICY);
+    expect(readBackupPolicy(db.vault)).toStrictEqual(DEFAULT_BACKUP_POLICY);
   });
 
   it('updates all backup, custody, and byte-budget knobs in one settings document', () => {
@@ -52,7 +52,7 @@ describe('BackupPolicy', () => {
       walBaseRollBytes: 8_000,
       walBaseRollHours: 12,
     });
-    expect(readBackupPolicy(db.vault)).toEqual(policy);
+    expect(readBackupPolicy(db.vault)).toStrictEqual(policy);
   });
 
   it('uses null to restore defaults and clear optional knobs', () => {
@@ -95,12 +95,14 @@ describe('BackupPolicy', () => {
     const policy = updateBackupPolicy(db.vault, {
       directToColdOriginals: { enabled: false, minBytes: 1024, mimePrefixes: ['video/'] },
     });
-    expect(policy.directToColdOriginals).toEqual({
+    expect(policy.directToColdOriginals).toStrictEqual({
       enabled: false,
       minBytes: 1024,
       mimePrefixes: ['video/'],
     });
-    expect(readBackupPolicy(db.vault).directToColdOriginals).toEqual(policy.directToColdOriginals);
+    expect(readBackupPolicy(db.vault).directToColdOriginals).toStrictEqual(
+      policy.directToColdOriginals,
+    );
     // null clears it back to the default-ON (absent) state.
     expect(
       updateBackupPolicy(db.vault, { directToColdOriginals: null }).directToColdOriginals,
@@ -129,6 +131,6 @@ describe('BackupPolicy', () => {
     // A partial object is accepted; unspecified sub-fields fall back at read.
     expect(
       resolveBackupPolicy({ directToColdOriginals: { minBytes: 42 } }).directToColdOriginals,
-    ).toEqual({ minBytes: 42 });
+    ).toStrictEqual({ minBytes: 42 });
   });
 });

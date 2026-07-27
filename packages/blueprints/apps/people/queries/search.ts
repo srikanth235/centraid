@@ -57,7 +57,7 @@ interface RawScheme {
 const LIST_SCHEME_URI = 'https://centraid.dev/schemes/lists';
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 
-export default async ({ input, ctx }: HandlerArgs) => {
+export default async function searchHandler({ input, ctx }: HandlerArgs) {
   const purpose = 'dpv:ServiceProvision';
   const term = String(input?.term ?? '').trim();
   if (!term) return { people: [] };
@@ -164,4 +164,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { people: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

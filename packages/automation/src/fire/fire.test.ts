@@ -64,7 +64,7 @@ function stubDispatch(opened: OpenDispatchArgs[], closes: { n: number }) {
   };
 }
 
-describe('runFire', () => {
+describe(runFire, () => {
   let appsDir: string;
   let journalDbFile: string;
 
@@ -92,7 +92,7 @@ describe('runFire', () => {
 
     // The spine opened exactly one dispatch surface, with the resolved app
     // dir as workdir.
-    expect(opened.length).toBe(1);
+    expect(opened).toHaveLength(1);
     expect(opened[0]!.automationRef).toBe('notes/digest');
     expect(opened[0]!.workdir).toMatch(/notes[/\\]automations[/\\]digest$/);
     expect(closes.n).toBe(1);
@@ -159,7 +159,7 @@ describe('runFire', () => {
       { openDispatch: stubDispatch(opened, closes) },
     );
     expect(outcome.ok).toBe(true);
-    expect(outcome.output).toEqual({ now: new Date(record.startedAt).toISOString() });
+    expect(outcome.output).toStrictEqual({ now: new Date(record.startedAt).toISOString() });
   });
 
   it('emits a live turn stream: turn.start → item lifecycle per ctx call → turn.end', async () => {
@@ -209,13 +209,13 @@ describe('runFire', () => {
         (e as { ordinal: number }).ordinal,
         (e as { kind?: string }).kind,
       ]),
-    ).toEqual([
+    ).toStrictEqual([
       ['item.start', 0, 'agent'],
       ['item.end', 0, undefined],
     ]);
     const agentStart = lifecycle[0] as Extract<AutomationTurnStreamEvent, { type: 'item.start' }>;
     expect(agentStart.name).toBe('agent');
-    expect(agentStart.args).toEqual({ prompt: 'summarize' });
+    expect(agentStart.args).toStrictEqual({ prompt: 'summarize' });
   });
 
   it('streams ctx.agent token deltas as item.delta and persists the usage rollup', async () => {
@@ -356,11 +356,11 @@ describe('runFire', () => {
       .listItems(record.runId)
       .filter((item) => item.kind === 'tool')
       .sort((a, b) => (a.callId ?? '').localeCompare(b.callId ?? ''));
-    expect(tools.map((item) => [item.callId, item.outputJson])).toEqual([
+    expect(tools.map((item) => [item.callId, item.outputJson])).toStrictEqual([
       ['call-a', '"A"'],
       ['call-b', '"B"'],
     ]);
-    expect(tools.map((item) => JSON.parse(item.rawJson ?? '{}').toolCallId)).toEqual([
+    expect(tools.map((item) => JSON.parse(item.rawJson ?? '{}').toolCallId)).toStrictEqual([
       'call-a',
       'call-b',
     ]);
@@ -522,7 +522,9 @@ describe('runFire', () => {
     );
 
     expect(outcome.ok).toBe(false);
-    expect(opened.map((entry) => [entry.automationRef, entry.runnerKind, entry.model])).toEqual([
+    expect(
+      opened.map((entry) => [entry.automationRef, entry.runnerKind, entry.model]),
+    ).toStrictEqual([
       ['notes/main', 'codex', undefined],
       ['notes/recover', 'claude-code', 'recovery-model'],
     ]);

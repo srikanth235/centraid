@@ -8,9 +8,8 @@
  */
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, '../..');
 const e2ePath = path.join(root, '.github/workflows/e2e.yml');
 const removedPath = path.join(root, '.github/workflows/pairing-relay-e2e.yml');
 
@@ -100,17 +99,17 @@ if (mutationJobIdx === -1) {
   }
   // Prefer path: artifacts/ over path: artifacts/mutation/ so the mutation/
   // prefix survives download into the report job.
-  if (/path:\s*artifacts\/mutation\/?/.test(mutationChunk)) {
+  if (/path:\s*artifacts\/mutation\/?/u.test(mutationChunk)) {
     errors.push(
       'mutation-testing must upload path: artifacts/ (not artifacts/mutation/) so scores stay at artifacts/mutation/scores.json after merge-multiple download',
     );
   } else if (
-    !/path:\s*artifacts\/?\s*$/m.test(mutationChunk) &&
-    !/path:\s*artifacts\/\s*$/m.test(mutationChunk)
+    !/path:\s*artifacts\/?\s*$/mu.test(mutationChunk) &&
+    !/path:\s*artifacts\/\s*$/mu.test(mutationChunk)
   ) {
     // Accept `path: artifacts/` or `path: artifacts`
     if (
-      !/name:\s*nightly-evidence-mutation[\s\S]{0,200}?path:\s*artifacts\/?/.test(mutationChunk)
+      !/name:\s*nightly-evidence-mutation[\s\S]{0,200}?path:\s*artifacts\/?/u.test(mutationChunk)
     ) {
       errors.push(
         'mutation-testing must upload path: artifacts/ next to nightly-evidence-mutation (preserves mutation/ prefix for generate.mjs)',
@@ -121,9 +120,9 @@ if (mutationJobIdx === -1) {
 
 // Executable shell cross-workflow fetch — ban the retired pairing satellite.
 const shellBans = [
-  /gh\s+run\s+list[^\n]*pairing-relay-e2e/,
-  /gh\s+run\s+download/,
-  /pairing-relay-e2e\.yml/,
+  /gh\s+run\s+list[^\n]*pairing-relay-e2e/u,
+  /gh\s+run\s+download/u,
+  /pairing-relay-e2e\.yml/u,
 ];
 for (const ban of shellBans) {
   if (ban.test(e2eCode)) {

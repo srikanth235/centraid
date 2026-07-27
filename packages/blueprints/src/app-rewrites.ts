@@ -25,7 +25,7 @@ import path from 'node:path';
  * and the git-store file-map path (issue #141).
  */
 export function rewriteTitleInHtml(html: string, newName: string): string {
-  const re = /<title>[\s\S]*?<\/title>/i;
+  const re = /<title>[\s\S]*?<\/title>/iu;
   if (!re.test(html)) return html; // no <title> tag — leave the string untouched.
   // Callback form so $-sequences in `newName` aren't interpreted as
   // backreferences by `String.replace`. Regex has no /g so only the
