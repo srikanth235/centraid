@@ -92,13 +92,25 @@ export async function collectAutomationRuns(): Promise<{
   rows: CentraidAutomationRow[];
   entries: AutomationFeedEntry[];
 }> {
-  let autos: CentraidAutomationRow[] = [];
-  let runs: CentraidAutomationTurnRecord[] = [];
-  try {
-    [autos, runs] = await Promise.all([listAutomations(), listAutomationTurns({ limit: 100 })]);
-  } catch {
-    return { rows: [], entries: [] };
-  }
+  // The two calls fail DIFFERENTLY on purpose.
+  //
+  // The automation list is load-bearing: the overview cannot render without
+  // it, and an empty list is indistinguishable from "you have no automations".
+  // So a list failure THROWS and the overview paints its error card. This
+  // function used to swallow both — which was harmless while the overview
+  // fetched the list itself, and became a silent regression the moment it
+  // started sourcing rows from here: a 500 rendered the empty state over a
+  // broken gateway, with no error and no Retry.
+  //
+  // The run feed is decoration. Losing it should cost you the recent-activity
+  // rows, not the page, so it degrades to empty on its own.
+  //
+  // Callers for whom automations are themselves decoration (Home, Starred)
+  // catch the throw at their own call site and degrade the whole block.
+  const [autos, runs] = await Promise.all([
+    listAutomations(),
+    listAutomationTurns({ limit: 100 }).catch(() => [] as CentraidAutomationTurnRecord[]),
+  ]);
   const nameByRef = new Map(autos.map((a) => [a.ref, a.name]));
   return {
     rows: autos,

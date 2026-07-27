@@ -324,4 +324,25 @@ describe('collectAutomationRuns', () => {
     const { entries } = await collectAutomationRuns();
     expect(entries[0]?.automationName).toBe('gone-app/gone-auto');
   });
+
+  // The two calls fail differently, and the difference is load-bearing.
+  // This function once swallowed both, which was invisible while the overview
+  // fetched the list itself — and became a silent regression the moment the
+  // overview started sourcing rows from here: a 500 painted the empty state
+  // over a broken gateway, with no error card and no Retry (desktop e2e 8.2).
+  it('propagates a list failure — an empty list must not stand in for a broken gateway', async () => {
+    vi.mocked(listAutomations).mockRejectedValue(new Error('500'));
+    vi.mocked(listAutomationTurns).mockResolvedValue(
+      [] as unknown as CentraidAutomationTurnRecord[],
+    );
+    await expect(collectAutomationRuns()).rejects.toThrow('500');
+  });
+
+  it('degrades a run-feed failure to empty rather than losing the page', async () => {
+    vi.mocked(listAutomations).mockResolvedValue([row()] as unknown as CentraidAutomationRow[]);
+    vi.mocked(listAutomationTurns).mockRejectedValue(new Error('500'));
+    const { rows, entries } = await collectAutomationRuns();
+    expect(rows).toHaveLength(1);
+    expect(entries).toEqual([]);
+  });
 });

@@ -37,6 +37,7 @@ GitHub issue: [#569](https://github.com/srikanth235/centraid/issues/569)
 - `packages/client/src/cron.ts` — `cronNextRuns` matched fields in **UTC** while its only consumer formatted with `toLocaleTimeString` and the scheduler (`packages/automation/src/fire/cron-match.ts`) fires on the **local** calendar: `0 19 * * 1-5` advertised "12:30 AM" on IST for a 7 PM job. Now matches locally and steps by wall clock (correct across DST). `describeCron` no longer labels every gloss "UTC".
 - `packages/client/src/cron.test.ts` — rewritten TZ-independent (local components in, local fields asserted); an ISO literal only passed on a UTC runner.
 - `automationsData.ts` / `automationsOverviewLoad.ts` / `HomeRoute.tsx` / `StarredRoute.tsx` — `collectAutomationRuns` now returns the rows it already fetched, so the overview stops paying for `listAutomations()` twice per visit (it was called directly *and* inside the collector, both in one `Promise.all`).
+- **Regression caught by desktop e2e 8.2 and fixed in this PR.** The de-duplication above initially broke the overview's error path. `collectAutomationRuns` caught failures from *both* its calls and returned `{ rows: [], entries: [] }` — harmless while the overview fetched the list itself, fatal once the overview sourced rows from it: a 500 on `listAutomations` rendered the empty state over a broken gateway, with no error card and no Retry. The two calls now fail differently on purpose — the list is load-bearing and **throws** (the overview paints its error card), while the run feed is decoration and degrades to empty on its own. Home and Starred, for whom automations are themselves decoration, keep their own call-site `.catch()`. Covered by two new unit tests so the next regression fails in the client suite rather than in e2e.
 - `AutomationEditorScreen.module.css` — dropped `align-items: flex-start` from the header identity column. On a *column* flex container that sizes children shrink-to-fit on the cross axis, so `.headName` took its max-content width and its ellipsis never fired — a long name ran under the close button. The status pill, the one child that must hug its text, now opts out on its own.
 
 ### Checklist crosswalk
@@ -117,7 +118,7 @@ cd packages/client && bun run test     # 178 files / 1332 tests
 - `bun run format` — clean.
 - `bun run lint` — 2/2 tasks pass.
 - `bun run typecheck` — 32/32 packages pass (includes test files).
-- `packages/client` vitest — **178 files / 1332 tests pass**, including:
+- `packages/client` vitest — **178 files / 1334 tests pass**, including:
   - 10 `AutomationCompilePane` tests: streams a new attempt without navigating; cold-read fallback when the stream drops mid-turn; failure hands back to the instructions and offers no second editor; Test run gated on a successful compile; stale-plan verdict; create mode offers no compile controls; elapsed clock counts up under fake timers and disappears once settled; a foreign running compile marks the rail busy; nonce-driven compile does not fire on initial render.
   - 21 rewritten cron tests, TZ-independent, including a weekday-range case and one asserting the hour field is read as local time.
 - Driven end-to-end against a real gateway (rebuilt web bundle + `embed-web.mjs`, restarted daemon): created an automation, watched an 11m24s Codex compile land, then confirmed the settled state in the live DOM — verdict "Plan ready", elapsed clock absent, Test run un-gated, no failure block — and the run screen's empty state flipping to "No runs yet — Run now, or wait for the trigger."
@@ -185,6 +186,7 @@ A second candidate found independently during this audit — *"try creating a sa
 | claude-code-27820b68-407-1785124034-1 | claude-code | 27820b68-4072-40b8-8c99-6c935c72aad4 | #569 | claude-opus-5 | 6816 | 6411224 | 701052900 | 1612128 | 8030168 | 430.9339 | 6816 | 6411224 | 701052900 | 1612128 |  |
 | claude-code-27820b68-407-1785125648-1 | claude-code | 27820b68-4072-40b8-8c99-6c935c72aad4 | #569 | claude-opus-5 | 122 | 822185 | 15527067 | 56931 | 879238 | 14.3261 | 6938 | 7233409 | 716579967 | 1669059 |  |
 | claude-code-27820b68-407-1785125754-1 | claude-code | 27820b68-4072-40b8-8c99-6c935c72aad4 | #569 | claude-opus-5 | 20 | 25494 | 2970025 | 9786 | 35300 | 1.8891 | 6958 | 7258903 | 719549992 | 1678845 |  |
+| claude-code-27820b68-407-1785126872-1 | claude-code | 27820b68-4072-40b8-8c99-6c935c72aad4 | #569 | claude-opus-5 | 100 | 59736 | 15702529 | 24621 | 84457 | 8.8406 | 7058 | 7318639 | 735252521 | 1703466 |  |
 
 ### Steering
 
