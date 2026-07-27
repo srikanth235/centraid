@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@centraid/protocol": "workspace:*",
-    "tldts": "6.1.86"
+    "tldts": "7.4.9"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
