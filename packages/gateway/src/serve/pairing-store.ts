@@ -20,7 +20,6 @@ import {
   stageReservedFoundingVaults,
 } from './founding-reservations.js';
 
-export { FOUNDING_RESERVATION_TTL_MS } from './founding-reservations.js';
 export {
   encodePairingTicket,
   parseFoundingTicket,

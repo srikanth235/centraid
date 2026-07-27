@@ -52,11 +52,21 @@ if [[ ${#staged[@]} -eq 0 ]]; then
     directive_end
 fi
 
+# Pin the repo's own config. Bare oxlint auto-discovers upward from the cwd,
+# and a worktree under .claude/worktrees/ would otherwise pick up the PARENT
+# checkout's config — a different tree, possibly a different oxlint era, and
+# a parse error under this binary (#565). CI's static lane passes -c too, so
+# this also keeps the hook's verdict identical to the gate it stands in for.
+config_args=()
+if [[ -f "$REPO_ROOT/oxlint.config.mjs" ]]; then
+    config_args=(-c "$REPO_ROOT/oxlint.config.mjs")
+fi
+
 # oxlint's exit code is the verdict: non-zero means at least one error. Its
 # diagnostics go to stdout, so capture both and replay the diagnostics as
 # violation lines when it fails. A crash (config error, unreadable file) is
 # also non-zero and surfaces the same way rather than passing silently.
-output="$("$OXLINT" "${staged[@]}" 2>&1)"
+output="$("$OXLINT" "${config_args[@]}" "${staged[@]}" 2>&1)"
 status=$?
 
 if [[ $status -ne 0 ]]; then

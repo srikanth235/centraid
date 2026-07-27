@@ -120,6 +120,22 @@ platform- or emit-mode-specific, so no local gate could have caught them:
   `process.platform === 'darwin'` in `packages/gateway/src/cli/key-store.ts`
   (and `service-admin.ts`). It exists on a developer Mac and not on ubuntu.
   Added to the gateway workspace's `ignoreUnresolved` in `knip.json`.
+- **knip / `/sbin/mount`** — same class, surfaced after merging main:
+  `packages/gateway/src/serve/gateway-db.ts` probes mount tables via
+  `spawnSync('/sbin/mount')`. Added beside `/usr/bin/security` in the
+  gateway workspace's `ignoreUnresolved`. The merge also brought a dead
+  re-export of `FOUNDING_RESERVATION_TTL_MS` in
+  `packages/gateway/src/serve/pairing-store.ts` (zero importers; the value
+  is consumed via its direct import) — deleted.
+- **governance `lint-check` hook vs the moved oxlint config** — main's #576
+  added `.governance/packs/srikanth235/centraid/directives/lint-check/check.sh`,
+  which ran BARE `oxlint` on staged files. This branch moved the lint config
+  to `oxlint.config.mjs` and deleted `.oxlintrc.json`, so from a worktree
+  under `.claude/worktrees/` oxlint's upward config discovery escaped the
+  repo and parsed the PARENT checkout's stale `.oxlintrc.json`, dying on
+  `import/no-unresolved` (removed in oxlint 1.75). The hook now passes
+  `-c oxlint.config.mjs` when present — the same config CI's static lane
+  uses, so hook and gate agree.
 - **`@centraid/client` build (TS2742)** — vitest 4's inferred `vi.fn()` type
   names `@vitest/spy` through its install path, which declaration emit rejects
   as non-portable. `typecheck` runs `--noEmit` and never sees it; only
@@ -276,6 +292,7 @@ re-export specifiers (and the imports feeding only them) are now gone —
 `packages/client/src/react/blueprints/kit-inline.ts`,
 `packages/client/src/react/ui/index.ts`,
 `packages/design-tokens/src/themes/index.ts`,
+`.governance/packs/srikanth235/centraid/directives/lint-check/check.sh`,
 `packages/gateway/src/backup/backup-reconciliation.ts`,
 `packages/gateway/src/backup/backup-service.ts`,
 `packages/gateway/src/serve/pairing-store.ts`,
@@ -447,6 +464,9 @@ CI on the PR is the final gate.
 | claude-code-5686fd74-b3c-1785139176-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-opus-5 | 1128 | 1440742 | 139115145 | 339912 | 1781782 | 87.0657 | 1128 | 1440742 | 139115145 | 339912 |  |
 | claude-code-5686fd74-b3c-1785139267-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-opus-5 | 12 | 12452 | 2422555 | 2795 | 15259 | 1.3590 | 1140 | 1453194 | 141537700 | 342707 |  |
 | claude-code-5686fd74-b3c-1785140383-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-fable-5 | 94 | 234312 | 10954459 | 43056 | 277462 | 16.0371 | 1234 | 1687506 | 152492159 | 385763 | chore(ci): retrigger checks — the push event for 3fdf582b was dropped (#565) |
+| claude-code-5686fd74-b3c-1785142165-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-fable-5 | 378 | 736457 | 16185736 | 175813 | 912648 | 34.1859 | 1612 | 2423963 | 168677895 | 561576 |  |
+| claude-code-5686fd74-b3c-1785142317-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-fable-5 | 28 | 15264 | 2505262 | 13300 | 28592 | 3.3613 | 1640 | 2439227 | 171183157 | 574876 |  |
+| claude-code-5686fd74-b3c-1785142500-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-fable-5 | 18 | 28447 | 1708412 | 7422 | 35887 | 2.4353 | 1658 | 2467674 | 172891569 | 582298 |  |
 
 ### Steering
 
