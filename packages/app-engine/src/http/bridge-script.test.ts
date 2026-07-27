@@ -74,11 +74,22 @@ function testMessageChannel(): { parent: TestPort; child: TestPort } {
 
 afterEach(() => vi.useRealTimers());
 
+/**
+ * Strip the exact `<script>` / `</script>` wrapper `changeBridgeScript()` adds.
+ * A real parser is unnecessary here: the wrapper is literal and added by the
+ * same function, so anchored string checks are both correct and avoid brittle
+ * regex-based HTML filtering.
+ */
+function stripScriptTags(src: string): string {
+  if (src.startsWith('<script>') && src.endsWith('</script>')) {
+    return src.slice('<script>'.length, -'</script>'.length);
+  }
+  return src;
+}
+
 /** Load the bridge into a sandbox; returns the wired `centraid` API + fetch log. */
 function loadBridge(): { centraid: Centraid; calls: FetchCall[] } {
-  const src = changeBridgeScript()
-    .replace(/^<script>/, '')
-    .replace(/<\/script>$/, '');
+  const src = stripScriptTags(changeBridgeScript());
   const calls: FetchCall[] = [];
   const fetchMock = (url: string, init: FetchCall['init']): Promise<unknown> => {
     return new Promise((resolve, reject) => {
@@ -221,9 +232,7 @@ function loadChangeHandshake(autoAcknowledge: boolean): {
   parentPosts: unknown[];
   sendFromParent: (data: unknown) => void;
 } {
-  const src = changeBridgeScript()
-    .replace(/^<script>/, '')
-    .replace(/<\/script>$/, '');
+  const src = stripScriptTags(changeBridgeScript());
   const parentPosts: unknown[] = [];
   const messageListeners: Array<
     (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void
@@ -381,9 +390,7 @@ function loadReplicaBridge(
   setFetchError(error?: Error): void;
   sendFromParent(data: unknown): void;
 } {
-  const src = changeBridgeScript()
-    .replace(/^<script>/, '')
-    .replace(/<\/script>$/, '');
+  const src = stripScriptTags(changeBridgeScript());
   const messageListeners: Array<
     (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void
   > = [];
@@ -777,9 +784,7 @@ test('managed online-only writes fail with the network and never enter the shell
 });
 
 test('a remembered opaque app prewarms every declared query without evaluating it or leaking failures', async () => {
-  const src = changeBridgeScript()
-    .replace(/^<script>/, '')
-    .replace(/<\/script>$/, '');
+  const src = stripScriptTags(changeBridgeScript());
   const messageListeners: Array<
     (event: { source: unknown; data: unknown; ports?: TestPort[] }) => void
   > = [];

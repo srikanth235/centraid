@@ -1,6 +1,6 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { promises as fs, statSync } from 'node:fs';
+import { closeSync, fstatSync, openSync, promises as fs, statSync } from 'node:fs';
 import path from 'node:path';
 import { daemonKeyStore, headlessCredentialFile } from './key-store.js';
 
@@ -142,13 +142,22 @@ test('fallback credentials enforce 0600 mode and reject malformed key material',
   const credentialFile = headlessCredentialFile(keysDir, env);
   await fs.mkdir(path.dirname(credentialFile), { recursive: true });
   await fs.writeFile(credentialFile, `${Buffer.alloc(32, 3).toString('base64')}\n`, {
-    mode: 0o644,
+    mode: 0o600,
   });
+  await fs.chmod(credentialFile, 0o644);
   const store = daemonKeyStore(keysDir, { env });
   store.store('secret.bin', Buffer.alloc(32, 4));
-  expect(statSync(credentialFile).mode & 0o777).toBe(0o600);
 
-  await fs.writeFile(credentialFile, 'not-a-32-byte-key\n');
+  const fd = openSync(credentialFile, 'r');
+  let mode: number;
+  try {
+    mode = fstatSync(fd).mode & 0o777;
+  } finally {
+    closeSync(fd);
+  }
+  expect(mode).toBe(0o600);
+
+  await fs.writeFile(credentialFile, 'not-a-32-byte-key\n', { mode: 0o600 });
   expect(() => store.store('another.bin', Buffer.alloc(32, 5))).toThrow(
     /not a base64-encoded 32-byte key/,
   );

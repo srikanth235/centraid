@@ -143,6 +143,10 @@ export function recoveryKitFingerprint(document: RecoveryKitDocument): string {
       .sort((a, b) => a.epoch - b.epoch)
       .map((epoch) => ({
         epoch: epoch.epoch,
+        // lgtm[js/insufficient-password-hash]
+        // SHA-256 is used for a content fingerprint over public key-epoch material,
+        // not for password verification. The recovery kit's integrity relies on the
+        // authenticated wrap (scrypt + AES-256-GCM) and this fingerprint only disambiguates kits.
         keyHash: createHash('sha256').update(Buffer.from(epoch.key, 'base64')).digest('hex'),
       })),
     targets: [...document.targets]
@@ -151,11 +155,17 @@ export function recoveryKitFingerprint(document: RecoveryKitDocument): string {
         provider: target.provider,
         targetId: target.targetId,
         vaultId: target.vaultId,
+        // lgtm[js/insufficient-password-hash]
+        // SHA-256 fingerprints the optional seal key; the actual key is stored in
+        // the authenticated, scrypt-wrapped ciphertext. This is not password verification.
         sealkeyHash: target.sealKey
           ? createHash('sha256').update(Buffer.from(target.sealKey, 'base64')).digest('hex')
           : null,
       })),
   };
+  // lgtm[js/insufficient-password-hash]
+  // SHA-256 produces a stable kit capability fingerprint. The kit itself is
+  // protected by scrypt + AES-256-GCM; this hash is not used for password storage.
   return createHash('sha256').update(canonicalJson(preimage)).digest('hex');
 }
 

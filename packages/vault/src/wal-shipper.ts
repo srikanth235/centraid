@@ -888,8 +888,13 @@ export class WalShipper {
    */
   private capture(db: WalDbName, stream: DbStreamState, report: WalTickReport): CaptureResult {
     const walPath = this.walPath(db);
-    if (!existsSync(walPath)) return { kind: 'ok' };
-    const fd = openSync(walPath, 'r');
+    let fd: number;
+    try {
+      fd = openSync(walPath, 'r');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { kind: 'ok' };
+      throw err;
+    }
     let bytes: Buffer;
     let head: number;
     let headerStable = true;

@@ -186,7 +186,9 @@ function setCorsHeaders(
   if (decision.allowOrigin !== null) {
     res.setHeader('Access-Control-Allow-Origin', decision.allowOrigin);
   }
-  if (decision.credentials) {
+  // Never pair credentials with a wildcard origin. decideCors already enforces
+  // this, but the guard is explicit here so a future change cannot regress it.
+  if (decision.credentials && decision.allowOrigin !== null && decision.allowOrigin !== '*') {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
   res.setHeader('Vary', 'Origin');
@@ -306,16 +308,20 @@ export async function startRuntimeHttpServer(
     delete req.headers[WEB_SHELL_ORIGIN_HEADER];
     const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
     const resolveAuthorization = (): BearerAuthorization | undefined => {
-      if (opts.authorizeBearer || opts.authorizeRequest) {
-        return raw
-          ? opts.authorizeBearer
-            ? opts.authorizeBearer(raw)
-            : timingSafeEqual(raw, token)
-              ? { plane: 'admin' as const }
-              : undefined
-          : opts.authorizeRequest?.(req);
+      // Evaluate both possible credentials independently; never let the mere
+      // *presence* of an Authorization header decide which auth path is checked.
+      // Bearer is preferred when it resolves, otherwise a host-supplied cookie
+      // authorizer may still vouch for the request.
+      let bearerAuthz: BearerAuthorization | undefined;
+      if (raw) {
+        if (opts.authorizeBearer) {
+          bearerAuthz = opts.authorizeBearer(raw);
+        } else if (timingSafeEqual(raw, token)) {
+          bearerAuthz = { plane: 'admin' as const };
+        }
       }
-      return raw && timingSafeEqual(raw, token) ? { plane: 'admin' as const } : undefined;
+      const requestAuthz = opts.authorizeRequest?.(req);
+      return bearerAuthz ?? requestAuthz;
     };
     const authz = resolveAuthorization();
     if (!isPublic && !authz) {

@@ -15,9 +15,17 @@ const PART_BYTES = 16 * 1024 * 1024;
 const MULTIPART_AT = 32 * 1024 * 1024;
 const TEMP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
+function trimSlashes(input: string): string {
+  let start = 0;
+  while (start < input.length && input[start] === '/') start++;
+  let end = input.length - 1;
+  while (end >= start && input[end] === '/') end--;
+  return input.slice(start, end + 1);
+}
+
 /** Canonical path-style namespace advertised to trusted native carriers. */
 export function s3TemporaryUploadPrefix(input: { bucket: string; prefix?: string }): string {
-  const prefix = input.prefix ? `${input.prefix.replace(/^\/+|\/+$/g, '')}/` : '';
+  const prefix = input.prefix ? `${trimSlashes(input.prefix)}/` : '';
   return `/${encodeKeyPath(input.bucket)}/${encodeKeyPath(`${prefix}tmp/blobs/`)}`;
 }
 

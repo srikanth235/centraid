@@ -82,7 +82,9 @@ function main() {
         fs.mkdirSync(destDir, { recursive: true });
         for (const name of fs.readdirSync(fromDir)) {
           // crude glob: only * as suffix/prefix on basename
-          const re = new RegExp('^' + base.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+          const re = new RegExp(
+            '^' + base.replace(/[.+^${}()|[\]\\?]/g, '\\$&').replace(/\*/g, '.*') + '$',
+          );
           if (!re.test(name)) continue;
           fs.cpSync(path.join(fromDir, name), path.join(destDir, name), { recursive: true });
         }

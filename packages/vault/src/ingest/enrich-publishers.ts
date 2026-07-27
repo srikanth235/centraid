@@ -61,13 +61,20 @@ function ensureConcept(
 
 /** Lowercase-slug notation for a machine tag label. */
 export function tagNotation(label: string): string {
-  return (
-    label
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 64) || 'untitled'
-  );
+  let slug = '';
+  for (const ch of label.toLowerCase()) {
+    if (/[a-z0-9]/.test(ch)) {
+      slug += ch;
+    } else if (slug.length > 0 && slug[slug.length - 1] !== '-') {
+      slug += '-';
+    }
+  }
+  let start = 0;
+  while (start < slug.length && slug[start] === '-') start++;
+  let end = slug.length - 1;
+  while (end >= start && slug[end] === '-') end--;
+  slug = slug.slice(start, end + 1);
+  return slug.slice(0, 64) || 'untitled';
 }
 
 // ── knowledge.annotation (captions, summaries) ──────────────────────────

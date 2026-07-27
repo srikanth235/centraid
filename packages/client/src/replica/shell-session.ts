@@ -892,11 +892,17 @@ function normalizedGatewayUrl(value: string): string {
     const url = new URL(value);
     url.hash = '';
     url.search = '';
-    url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+    url.pathname = stripTrailingSlashes(url.pathname) || '/';
     return `url:${url.toString()}`;
   } catch {
-    return `url:${value.replace(/\/+$/, '')}`;
+    return `url:${stripTrailingSlashes(value)}`;
   }
+}
+
+function stripTrailingSlashes(pathname: string): string {
+  let end = pathname.length;
+  while (end > 0 && pathname.charCodeAt(end - 1) === 47 /* '/' */) end -= 1;
+  return pathname.slice(0, end);
 }
 
 function sameIdentity(left: ReplicaIdentity, right: ReplicaIdentity): boolean {

@@ -2,6 +2,7 @@ import {
   closeSync,
   fsyncSync,
   mkdirSync,
+  mkdtempSync,
   openSync,
   readFileSync,
   rmSync,
@@ -396,9 +397,9 @@ export class RemoteStreamIngress {
       if (!type.startsWith('image/')) return;
       const root =
         this.deps.dir === ':memory:'
-          ? path.join(os.tmpdir(), 'centraid-ingress-previews')
+          ? mkdtempSync(path.join(os.tmpdir(), 'centraid-ingress-previews-'))
           : path.join(this.deps.dir, 'blob-ingress-previews');
-      mkdirSync(root, { recursive: true });
+      if (this.deps.dir !== ':memory:') mkdirSync(root, { recursive: true });
       previewPath = path.join(root, `${row.session_id}.part`);
       closeSync(openSync(previewPath, 'a', 0o600));
       this.deps.state.setSessionTempPath(row.session_id, previewPath);
@@ -414,8 +415,20 @@ export class RemoteStreamIngress {
         closeSync(fd);
       }
     } catch {
-      rmSync(previewPath, { force: true });
+      this.removePreviewTemp(previewPath);
       this.deps.state.setSessionTempPath(row.session_id, null);
+    }
+  }
+
+  private removePreviewTemp(previewPath: string): void {
+    try {
+      rmSync(previewPath, { force: true });
+      const parent = path.dirname(previewPath);
+      if (path.basename(parent).startsWith('centraid-ingress-previews-')) {
+        rmSync(parent, { recursive: true, force: true });
+      }
+    } catch {
+      // Best-effort cleanup of a transient preview file.
     }
   }
 
@@ -432,7 +445,7 @@ export class RemoteStreamIngress {
     } catch {
       // Preview generation is a bounded best-effort contribution, not custody.
     } finally {
-      rmSync(row.temp_path, { force: true });
+      this.removePreviewTemp(row.temp_path);
       this.deps.state.setSessionTempPath(row.session_id, null);
     }
   }

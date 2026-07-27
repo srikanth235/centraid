@@ -18,9 +18,13 @@ if (!version) {
   console.error('usage: node scripts/release/changelog-to-github.mjs --version X.Y.Z');
   process.exit(2);
 }
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const text = readFileSync(path.resolve('CHANGELOG.md'), 'utf8');
 const re = new RegExp(
-  `^##\\s+\\[${version.replace(/\./g, '\\.')}\\][^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`,
+  `^##\\s+\\[${escapeRegExp(version)}\\][^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`,
   'm',
 );
 const m = text.match(re);

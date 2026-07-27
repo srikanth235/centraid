@@ -77,9 +77,7 @@ describe('serveStatic — CSP + nonce', () => {
     expect(csp).toBeTruthy();
     expect(csp).toContain("media-src 'self' data: blob:");
     expect(csp).toContain("worker-src 'self' blob:");
-    expect(csp).toMatch(
-      new RegExp(`script-src 'self' 'nonce-${inlineMatch![1]!.replace(/[/+=]/g, '\\$&')}'`),
-    );
+    expect(csp).toContain(`script-src 'self' 'nonce-${inlineMatch![1]}'`);
   });
 
   it('does not double-stamp when the inline script already has a nonce', async () => {

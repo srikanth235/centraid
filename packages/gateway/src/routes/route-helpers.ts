@@ -121,9 +121,17 @@ async function walkFileMap(root: string, rel: string, out: FileMapEntry[]): Prom
     if (!e.isFile()) continue;
     if (!EDITABLE_EXT.has(path.extname(e.name).toLowerCase())) continue;
     const abs = path.join(root, r);
-    const stat = await fs.stat(abs).catch(() => null);
-    if (!stat || stat.size > MAX_FILE_MAP_BYTES) continue;
-    out.push({ path: r, content: await fs.readFile(abs, 'utf8').catch(() => '') });
+    const fd = await fs.open(abs, 'r').catch(() => null);
+    if (!fd) continue;
+    try {
+      const stat = await fd.stat();
+      if (stat.size > MAX_FILE_MAP_BYTES) continue;
+      out.push({ path: r, content: await fd.readFile({ encoding: 'utf8' }) });
+    } catch {
+      // Unreadable files are silently skipped, matching the previous behavior.
+    } finally {
+      await fd.close();
+    }
   }
 }
 

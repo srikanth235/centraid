@@ -38,8 +38,44 @@ export interface VaultSqlRows {
 
 export type VaultSqlResult = VaultSqlRows & { receiptId: string };
 
-const COMMENT_RE = /\/\*[\s\S]*?\*\//g;
-const LINE_COMMENT_RE = /--[^\n]*/g;
+/** Remove `/* … * /` block comments without a backtracking regex. */
+function stripBlockComments(sql: string): string {
+  let out = '';
+  let i = 0;
+  while (i < sql.length) {
+    if (sql[i] === '/' && sql[i + 1] === '*') {
+      const end = sql.indexOf('*/', i + 2);
+      if (end === -1) {
+        // Unclosed block comment: leave the remainder untouched (matches
+        // the old regex behaviour of not matching an unclosed `/*`).
+        out += sql.slice(i);
+        break;
+      }
+      out += ' ';
+      i = end + 2;
+    } else {
+      out += sql[i];
+      i++;
+    }
+  }
+  return out;
+}
+
+/** Remove `-- …` line comments without a backtracking regex. */
+function stripLineComments(sql: string): string {
+  let out = '';
+  let i = 0;
+  while (i < sql.length) {
+    if (sql[i] === '-' && sql[i + 1] === '-') {
+      out += ' ';
+      while (i < sql.length && sql[i] !== '\n') i++;
+    } else {
+      out += sql[i];
+      i++;
+    }
+  }
+  return out;
+}
 
 /**
  * Lexical gate: one statement, read-shaped. Execution enforcement is
@@ -49,11 +85,10 @@ const LINE_COMMENT_RE = /--[^\n]*/g;
  * where query_only cannot be toggled) still refuses writes outright.
  */
 export function readOnlySqlRefusal(sql: string): string | undefined {
-  const stripped = sql
-    .replace(COMMENT_RE, ' ')
-    .replace(LINE_COMMENT_RE, ' ')
+  const stripped = stripLineComments(stripBlockComments(sql))
     .trim()
     .replace(/;+\s*$/, '');
+
   if (!stripped) return 'empty statement';
   if (stripped.includes(';')) return 'one statement per call — drop the extra ";"';
   const first = stripped.match(/^([A-Za-z]+)/)?.[1]?.toUpperCase();

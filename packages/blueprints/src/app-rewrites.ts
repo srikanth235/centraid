@@ -25,12 +25,16 @@ import path from 'node:path';
  * and the git-store file-map path (issue #141).
  */
 export function rewriteTitleInHtml(html: string, newName: string): string {
-  const re = /<title>[\s\S]*?<\/title>/i;
-  if (!re.test(html)) return html; // no <title> tag — leave the string untouched.
-  // Callback form so $-sequences in `newName` aren't interpreted as
-  // backreferences by `String.replace`. Regex has no /g so only the
-  // first <title> is rewritten.
-  return html.replace(re, () => `<title>${escapeHtml(newName)}</title>`);
+  const lower = html.toLowerCase();
+  const open = '<title>';
+  const close = '</title>';
+  const startIdx = lower.indexOf(open);
+  if (startIdx === -1) return html; // no <title> tag — leave the string untouched.
+  const endIdx = lower.indexOf(close, startIdx + open.length);
+  if (endIdx === -1) return html; // malformed tag — leave untouched.
+  // Replace only the first <title>...</title> (case-insensitive), keeping
+  // everything before/after verbatim. HTML-escape the new name.
+  return html.slice(0, startIdx + open.length) + escapeHtml(newName) + html.slice(endIdx);
 }
 
 /**

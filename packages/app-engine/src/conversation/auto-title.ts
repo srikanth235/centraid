@@ -74,10 +74,8 @@ export function cleanTitle(raw: string): string | undefined {
   // Keep only the first line — a stray explanation never becomes the title.
   const nl = t.indexOf('\n');
   if (nl >= 0) t = t.slice(0, nl).trim();
-  t = t
-    .replace(/\s+/g, ' ')
-    .replace(/[.,;:!?…]+$/u, '')
-    .trim();
+  t = collapseWhitespace(t).trim();
+  t = stripTrailingPunctuation(t);
   if (t.length === 0) return undefined;
   if (t.length <= MAX_TITLE_CHARS) return t;
   return `${t.slice(0, MAX_TITLE_CHARS - 1).trimEnd()}…`;
@@ -132,4 +130,27 @@ export async function generateConversationTitle(
 function excerpt(s: string, max: number): string {
   const flat = s.replace(/\s+/g, ' ').trim();
   return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
+}
+
+function collapseWhitespace(s: string): string {
+  let out = '';
+  let prevSpace = false;
+  for (const ch of s) {
+    const isSpace = /\s/.test(ch);
+    if (isSpace) {
+      if (!prevSpace) out += ' ';
+      prevSpace = true;
+    } else {
+      out += ch;
+      prevSpace = false;
+    }
+  }
+  return out;
+}
+
+function stripTrailingPunctuation(s: string): string {
+  const trailing = '.,;:!?…';
+  let end = s.length;
+  while (end > 0 && trailing.includes(s[end - 1]!)) end -= 1;
+  return s.slice(0, end);
 }

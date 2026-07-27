@@ -109,7 +109,16 @@ test('handler refreshes the cache from the remote URL on construction', async ()
   });
   // Fire-and-forget — poll until the remote fetch lands (no fixed sleep).
   await vi.waitFor(() => {
-    expect(calls.some((u) => u.startsWith('https://templates.example.test'))).toBe(true);
+    expect(
+      calls.some((u) => {
+        try {
+          const url = new URL(u);
+          return url.protocol === 'https:' && url.hostname === 'templates.example.test';
+        } catch {
+          return false;
+        }
+      }),
+    ).toBe(true);
   });
 });
 

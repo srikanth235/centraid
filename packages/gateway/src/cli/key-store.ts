@@ -2,8 +2,12 @@ import { aesGcmKeyProtector, KeyStore, type KeyProtector } from '@centraid/vault
 import { createHash, randomBytes } from 'node:crypto';
 import {
   chmodSync,
+  closeSync,
   existsSync,
+  fchmodSync,
+  fstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
   renameSync,
   statSync,
@@ -33,6 +37,9 @@ const warnedFallbacks = new Set<string>();
  * then failed to unwrap.
  */
 export function keychainAccountFor(keysDir: string, label = DEFAULT_LAUNCHD_LABEL): string {
+  // lgtm[js/insufficient-password-hash]
+  // SHA-256 is used here to derive a stable, non-secret keychain account name
+  // from the data-directory path. It is a filesystem identifier, not password storage.
   const id = createHash('sha256').update(path.resolve(keysDir)).digest('hex').slice(0, 16);
   return `${label}.${id}`;
 }
@@ -107,6 +114,9 @@ export function headlessCredentialFile(
               'centraid',
               'credentials',
             ));
+  // lgtm[js/insufficient-password-hash]
+  // SHA-256 derives a stable, non-secret filename from the data-directory path.
+  // This is a filesystem identifier, not password storage.
   const id = createHash('sha256').update(path.resolve(keysDir)).digest('hex');
   return path.join(root, `${id}.key`);
 }
@@ -133,12 +143,19 @@ function loadOrCreateFileCredential(file: string): Buffer {
       }
     }
   }
-  if ((statSync(file).mode & 0o777) !== 0o600) chmodSync(file, 0o600);
-  const key = Buffer.from(readFileSync(file, 'utf8').trim(), 'base64');
-  if (key.length !== 32) {
-    throw new Error(`KeyStore wrapping credential ${file} is not a base64-encoded 32-byte key`);
+  // Operate on the file descriptor so the stat/chmod/read all refer to the
+  // same open file, avoiding the path-based stat-then-read race.
+  const fd = openSync(file, 'r');
+  try {
+    if ((fstatSync(fd).mode & 0o777) !== 0o600) fchmodSync(fd, 0o600);
+    const key = Buffer.from(readFileSync(fd, 'utf8').trim(), 'base64');
+    if (key.length !== 32) {
+      throw new Error(`KeyStore wrapping credential ${file} is not a base64-encoded 32-byte key`);
+    }
+    return key;
+  } finally {
+    closeSync(fd);
   }
-  return key;
 }
 
 /**

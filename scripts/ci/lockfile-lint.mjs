@@ -8,13 +8,29 @@ import path from 'node:path';
 
 const root = process.cwd();
 const lock = readFileSync(path.join(root, 'bun.lock'), 'utf8');
-const allowedHost = /registry\.npmjs\.org|npm\.pkg\.github\.com|bun\.sh/;
+const allowedHost = /^(registry\.npmjs\.org|npm\.pkg\.github\.com|bun\.sh)$/;
 let failed = 0;
+
+function isGitHubHost(hostname) {
+  return (
+    hostname === 'github.com' ||
+    hostname.endsWith('.github.com') ||
+    hostname === 'githubusercontent.com' ||
+    hostname.endsWith('.githubusercontent.com')
+  );
+}
 
 // HTTP (non-TLS) package URLs
 const httpUrls = lock.match(/http:\/\/[^\s"']+/g) ?? [];
 for (const u of httpUrls) {
-  if (u.includes('localhost') || u.includes('127.0.0.1')) continue;
+  let url;
+  try {
+    url = new URL(u);
+  } catch {
+    continue;
+  }
+  const hostname = url.hostname.toLowerCase();
+  if (hostname === 'localhost' || hostname === '127.0.0.1') continue;
   console.error(`FAIL http (non-TLS) URL in lockfile: ${u}`);
   failed++;
 }
@@ -28,15 +44,17 @@ if (!/integrity|sha512-|sha256-/.test(lock)) {
 // Suspicious hosts outside allowlist (best-effort on https:// URLs)
 const httpsUrls = lock.match(/https:\/\/([^/\s"']+)/g) ?? [];
 for (const full of httpsUrls) {
-  const host = full.replace('https://', '');
-  if (
-    !allowedHost.test(host) &&
-    !host.includes('github.com') &&
-    !host.includes('githubusercontent.com')
-  ) {
+  let url;
+  try {
+    url = new URL(full);
+  } catch {
+    continue;
+  }
+  const hostname = url.hostname.toLowerCase();
+  if (!allowedHost.test(hostname) && !isGitHubHost(hostname)) {
     // Only warn on unknown package registries; many raw github tarballs are fine.
-    if (host.includes('registry') || host.includes('npm')) {
-      console.error(`FAIL disallowed registry host: ${host}`);
+    if (hostname.includes('registry') || hostname.includes('npm')) {
+      console.error(`FAIL disallowed registry host: ${hostname}`);
       failed++;
     }
   }

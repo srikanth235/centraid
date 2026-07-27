@@ -34,24 +34,24 @@ export const DESKTOP_ROOT = path.resolve(__dirname, '..', '..');
  */
 async function ensureSettingsSeed(userDataDir) {
   const settingsPath = path.join(userDataDir, 'centraid-settings.json');
-  const exists = await fs
-    .access(settingsPath)
-    .then(() => true)
-    .catch(() => false);
-  if (exists) return;
   await fs.mkdir(userDataDir, { recursive: true });
-  await fs.writeFile(
-    settingsPath,
-    JSON.stringify(
-      {
-        activeGatewayId: 'local',
-        onboardingCompletedAt: new Date().toISOString(),
-      },
-      null,
-      2,
-    ),
-    { mode: 0o600 },
-  );
+  try {
+    await fs.writeFile(
+      settingsPath,
+      JSON.stringify(
+        {
+          activeGatewayId: 'local',
+          onboardingCompletedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+      { mode: 0o600, flag: 'wx' },
+    );
+  } catch (err) {
+    if (err?.code !== 'EEXIST') throw err;
+    // File already exists; keep prior state for reused userData dirs.
+  }
 }
 
 /**

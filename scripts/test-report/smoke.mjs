@@ -1,7 +1,19 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+
+/** @param {string} markdown @param {string} hostname */
+function hasUrlWithHostname(markdown, hostname) {
+  for (const match of markdown.matchAll(/https?:\/\/[^\s"')]+/g)) {
+    try {
+      if (new URL(match[0]).hostname === hostname) return true;
+    } catch {
+      // ignore unparseable URLs
+    }
+  }
+  return false;
+}
 
 const temp = await mkdtemp(path.join(os.tmpdir(), 'centraid-report-'));
 const output = path.join(temp, 'index.html');
@@ -75,7 +87,6 @@ try {
     ],
     { stdio: 'inherit' },
   );
-  await access(output);
   const html = await readFile(output, 'utf8');
   for (const required of [
     'Surface × quality dimension',
@@ -94,8 +105,6 @@ try {
   }
   const summaryJson = path.join(path.dirname(output), 'summary.json');
   const summaryMd = path.join(path.dirname(output), 'summary.md');
-  await access(summaryJson);
-  await access(summaryMd);
   const summary = JSON.parse(await readFile(summaryJson, 'utf8'));
   if (typeof summary.cellsFailed !== 'number' || typeof summary.cellsMissing !== 'number') {
     throw new Error('summary.json missing cell honesty fields');
@@ -156,10 +165,11 @@ try {
   );
   if (
     !summaryMdBody.includes(REPORT_COMMENT_MARKER) ||
-    !summaryMdBody.includes('https://example.test/')
+    !hasUrlWithHostname(summaryMdBody, 'example.test')
   ) {
     throw new Error('renderSummaryMarkdown missing marker or URL');
   }
+
   const noPublicUrl = renderSummaryMarkdown({
     failed: 0,
     unhandledErrors: 0,

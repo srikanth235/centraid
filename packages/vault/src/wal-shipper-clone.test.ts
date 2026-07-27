@@ -78,7 +78,16 @@ test('the clone is byte-identical to the source, reflink or not', () => {
   const reflinked = cloneDbFile(src, dst);
 
   // Correctness of the copy is platform-independent; only its COST is not.
-  expect(statSync(dst).size).toBe(bytes.length);
-  expect(Buffer.compare(Buffer.from(bytes), readFileSync(dst))).toBe(0);
+  let dstBytes: Buffer;
+  try {
+    dstBytes = readFileSync(dst);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new Error(`clone destination missing: ${dst}`, { cause: err });
+    }
+    throw err;
+  }
+  expect(dstBytes.length).toBe(bytes.length);
+  expect(Buffer.compare(Buffer.from(bytes), dstBytes)).toBe(0);
   expect(typeof reflinked).toBe('boolean');
 });

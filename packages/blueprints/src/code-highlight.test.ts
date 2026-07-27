@@ -7,6 +7,45 @@ const PKG = path.resolve(import.meta.dirname, '..');
 const url = pathToFileURL(path.resolve(PKG, 'kit/code-highlight.js')).href;
 const { highlightCode, configFor } = await import(url);
 
+function stripHtmlTags(html: string): string {
+  let out = '';
+  let inTag = false;
+  for (let i = 0; i < html.length; i += 1) {
+    const ch = html[i]!;
+    if (ch === '<') {
+      inTag = true;
+      continue;
+    }
+    if (ch === '>' && inTag) {
+      inTag = false;
+      continue;
+    }
+    if (!inTag) out += ch;
+  }
+  return out;
+}
+
+function decodeDecimalEntities(html: string): string {
+  let out = '';
+  let i = 0;
+  while (i < html.length) {
+    if (html[i] === '&' && html[i + 1] === '#') {
+      const end = html.indexOf(';', i + 2);
+      if (end !== -1) {
+        const num = html.slice(i + 2, end);
+        if (/^\d+$/.test(num)) {
+          out += String.fromCharCode(Number(num));
+          i = end + 1;
+          continue;
+        }
+      }
+    }
+    out += html[i]!;
+    i += 1;
+  }
+  return out;
+}
+
 describe('highlightCode', () => {
   it('returns null for an unknown language (graceful plain fallback)', () => {
     expect(highlightCode('whatever', 'brainfuck')).toBeNull();
@@ -52,9 +91,7 @@ describe('highlightCode', () => {
     const src = `function go() { return \`a\${b}c\`; } // done`;
     const out = highlightCode(src, 'ts');
     // Strip the span tags — the remaining text (entities decoded) is the source.
-    const stripped = out
-      .replace(/<[^>]+>/g, '')
-      .replace(/&#(\d+);/g, (_m: string, n: string) => String.fromCharCode(Number(n)));
+    const stripped = decodeDecimalEntities(stripHtmlTags(out));
     expect(stripped).toBe(src);
   });
 });

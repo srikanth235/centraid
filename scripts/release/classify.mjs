@@ -25,14 +25,15 @@ for (let i = 0; i < args.length; i++) {
 
 const text = readFileSync(path.resolve(changelogPath), 'utf8');
 
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** @returns {{ heading: string, body: string } | null} Parsed changelog section or null. */
 function sectionFor(ver) {
   // ## [0.2.0] or ## Unreleased
   const re = ver
-    ? new RegExp(
-        `^##\\s+\\[?${ver.replace(/\./g, '\\.')}\\]?[^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`,
-        'm',
-      )
+    ? new RegExp(`^##\\s+\\[?${escapeRegExp(ver)}\\]?[^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`, 'm')
     : /^##\s+\[?Unreleased\]?[^\n]*\n([\s\S]*?)(?=^##\s+|$)/m;
   const m = text.match(re);
   if (!m) return null;

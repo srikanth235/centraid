@@ -14,7 +14,7 @@
  * Pure YAML touch: only rewrites `releaseDate` (ISO). Never renames latest → beta.
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -83,12 +83,17 @@ if (isMain()) {
     console.error('usage: restamp-rollout.mjs --hours N --yml <file> [--out <file>] [--dry-run]');
     process.exit(2);
   }
-  if (!existsSync(ymlPath)) {
-    console.error(`missing yml: ${ymlPath}`);
-    process.exit(1);
-  }
 
-  const src = readFileSync(ymlPath, 'utf8');
+  let src;
+  try {
+    src = readFileSync(ymlPath, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') {
+      console.error(`missing yml: ${ymlPath}`);
+      process.exit(1);
+    }
+    throw err;
+  }
   const { text, releaseDate } = restampReleaseDate(src, hours);
   const dest = outPath || ymlPath;
   if (!dryRun) writeFileSync(dest, text);

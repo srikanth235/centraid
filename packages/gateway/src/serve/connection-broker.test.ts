@@ -715,7 +715,7 @@ test('Gmail authorization captures the connect-time profile historyId baseline',
 test('a failed Gmail baseline degrades safely but is logged, never silently swallowed', async () => {
   const plane = openPlane(await tempDir());
   const fetchImpl = vi.fn(async (input: string | URL | Request) => {
-    if (String(input).includes('gmail.googleapis.com')) {
+    if (new URL(String(input)).hostname === 'gmail.googleapis.com') {
       // The profile call blows up: the connection still works (the first poll
       // re-baselines), but a swallowed fallible action must at least warn
       // (docs/coding-standards.md).

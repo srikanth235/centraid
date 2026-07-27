@@ -169,16 +169,31 @@ async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
  * Returns undefined when no semver is found.
  */
 export function parseSemver(text: string): SemVer | undefined {
-  // No leading `\b` — strings like `v1.2.3` have a word char before the
-  // digit, which would block the boundary. We still want `1.2.3` out of
-  // them.
-  const m = text.match(/(\d+)\.(\d+)\.(\d+)/);
-  if (!m) return undefined;
-  return {
-    major: Number(m[1]),
-    minor: Number(m[2]),
-    patch: Number(m[3]),
-  };
+  // Manual O(n) parser: find the first three dot-separated digit runs.
+  // Avoids the polynomial regex `\d+` on long digit strings.
+  const len = text.length;
+  let i = 0;
+  while (i < len) {
+    // Skip non-digits.
+    while (i < len && (text.charCodeAt(i) < 48 || text.charCodeAt(i) > 57)) i += 1;
+    if (i >= len) return undefined;
+    const majorStart = i;
+    while (i < len && text.charCodeAt(i) >= 48 && text.charCodeAt(i) <= 57) i += 1;
+    if (i >= len || text[i] !== '.') continue;
+    const major = Number(text.slice(majorStart, i));
+    i += 1;
+    const minorStart = i;
+    while (i < len && text.charCodeAt(i) >= 48 && text.charCodeAt(i) <= 57) i += 1;
+    if (i >= len || text[i] !== '.' || i === minorStart) continue;
+    const minor = Number(text.slice(minorStart, i));
+    i += 1;
+    const patchStart = i;
+    while (i < len && text.charCodeAt(i) >= 48 && text.charCodeAt(i) <= 57) i += 1;
+    if (i === patchStart) continue;
+    const patch = Number(text.slice(patchStart, i));
+    return { major, minor, patch };
+  }
+  return undefined;
 }
 
 export function compareSemver(a: SemVer, b: SemVer): number {

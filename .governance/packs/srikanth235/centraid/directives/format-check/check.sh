@@ -55,7 +55,7 @@ fi
 # oxfmt --check prints one offending path per line, then a summary. Match its
 # output back against the staged list so a path we never staged can't be
 # reported, and so the summary lines are ignored.
-output="$("$OXFMT" --check "${staged[@]}" 2>&1 || true)"
+output="$("$OXFMT" -c "$REPO_ROOT/oxfmt.config.mjs" --check "${staged[@]}" 2>&1 || true)"
 while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     # Strip oxfmt's trailing timing annotation, e.g. "path/to/file.ts (12ms)".

@@ -98,16 +98,102 @@ function compressedStream(
 }
 
 function textShowingParts(raw: string): string[] {
-  const parts: string[] = [];
-  for (const match of raw.matchAll(/\(((?:\\.|[^\\)])*)\)\s*Tj/g)) {
-    parts.push(decodePdfString(match[1] ?? ''));
-    if (parts.length >= MAX_TEXT_PARTS) return parts;
+  const parts = extractTjStrings(raw);
+  if (parts.length < MAX_TEXT_PARTS) {
+    parts.push(...extractTJArrayStrings(raw, MAX_TEXT_PARTS - parts.length));
   }
-  for (const match of raw.matchAll(/\[((?:\((?:\\.|[^\\)])*\)|[^\]])*)\]\s*TJ/g)) {
-    for (const value of (match[1] ?? '').matchAll(/\(((?:\\.|[^\\)])*)\)/g)) {
-      parts.push(decodePdfString(value[1] ?? ''));
-      if (parts.length >= MAX_TEXT_PARTS) return parts;
+  return parts;
+}
+
+/** Extract `( ... ) Tj` text-show operators without a backtracking regex. */
+function extractTjStrings(raw: string): string[] {
+  const parts: string[] = [];
+  let i = 0;
+  while (i < raw.length && parts.length < MAX_TEXT_PARTS) {
+    const open = raw.indexOf('(', i);
+    if (open < 0) break;
+    let j = open + 1;
+    let depth = 1;
+    while (j < raw.length && depth > 0) {
+      const ch = raw[j];
+      if (ch === '\\') {
+        j += 2;
+        continue;
+      }
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      j++;
     }
+    if (depth !== 0) break;
+    let k = j;
+    while (k < raw.length && /\s/.test(raw[k] ?? '')) k++;
+    if (
+      k + 1 < raw.length &&
+      raw[k] === 'T' &&
+      raw[k + 1] === 'j' &&
+      (k + 2 >= raw.length || /[^A-Za-z0-9]/.test(raw[k + 2] ?? ''))
+    ) {
+      parts.push(decodePdfString(raw.slice(open + 1, j - 1)));
+      i = k + 2;
+      continue;
+    }
+    i = open + 1;
+  }
+  return parts;
+}
+
+/** Extract `[ ( ... ) ( ... ) ] TJ` text-show array operators without a backtracking regex. */
+function extractTJArrayStrings(raw: string, limit: number): string[] {
+  const parts: string[] = [];
+  let i = 0;
+  while (i < raw.length && parts.length < limit) {
+    const open = raw.indexOf('[', i);
+    if (open < 0) break;
+    let j = open + 1;
+    let depth = 1;
+    while (j < raw.length && depth > 0) {
+      const ch = raw[j];
+      if (ch === '\\') {
+        j += 2;
+        continue;
+      }
+      if (ch === '(') {
+        let s = j + 1;
+        let d = 1;
+        while (s < raw.length && d > 0) {
+          const c2 = raw[s];
+          if (c2 === '\\') {
+            s += 2;
+            continue;
+          }
+          if (c2 === '(') d++;
+          else if (c2 === ')') d--;
+          s++;
+        }
+        if (d === 0) {
+          parts.push(decodePdfString(raw.slice(j + 1, s - 1)));
+          if (parts.length >= limit) return parts;
+        }
+        j = s;
+        continue;
+      }
+      if (ch === '[') depth++;
+      else if (ch === ']') depth--;
+      j++;
+    }
+    if (depth !== 0) break;
+    let k = j;
+    while (k < raw.length && /\s/.test(raw[k] ?? '')) k++;
+    if (
+      k + 1 < raw.length &&
+      raw[k] === 'T' &&
+      raw[k + 1] === 'J' &&
+      (k + 2 >= raw.length || /[^A-Za-z0-9]/.test(raw[k + 2] ?? ''))
+    ) {
+      i = k + 2;
+      continue;
+    }
+    i = open + 1;
   }
   return parts;
 }

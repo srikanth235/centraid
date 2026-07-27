@@ -122,8 +122,10 @@ export function makeConnectionsRouteHandler(
       const code = url.searchParams.get('code');
       const providerError = url.searchParams.get('error');
       if (providerError || !code) {
-        // Consume the state so a denied ceremony cannot be replayed.
-        if (state) broker.cancelAuthorization({ state });
+        // Consume the state so a denied ceremony cannot be replayed. Bound the
+        // user-supplied value before handing it to the broker; an empty/missing
+        // state is a no-op lookup rather than a conditional security decision.
+        broker.cancelAuthorization({ state: boundedString(state, 128) ?? '' });
         sendCeremonyHtml(
           res,
           false,

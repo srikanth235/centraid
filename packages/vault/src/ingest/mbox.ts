@@ -52,10 +52,18 @@ export function parseAddress(raw: string | undefined): {
   email: string | null;
 } {
   if (!raw) return { name: null, email: null };
-  const angled = raw.match(/^(.*?)<([^>]+)>/);
-  if (angled) {
-    const name = angled[1]?.trim().replace(/^"|"$/g, '') ?? '';
-    return { name: name || null, email: (angled[2] ?? '').trim().toLowerCase() || null };
+  const lt = raw.indexOf('<');
+  const gt = raw.indexOf('>', lt + 1);
+  if (lt >= 0 && gt > lt) {
+    const name = raw.slice(0, lt).trim().replace(/^"|"$/g, '');
+    return {
+      name: name || null,
+      email:
+        raw
+          .slice(lt + 1, gt)
+          .trim()
+          .toLowerCase() || null,
+    };
   }
   const bare = raw.trim();
   return bare.includes('@')
@@ -70,10 +78,25 @@ function isoDate(raw: string | undefined): string {
 
 /** Strip Re:/Fwd: chains and case — the thread grouping key. */
 export function threadKey(subject: string | null): string {
-  return (subject ?? '(no subject)')
-    .replace(/^(\s*(re|fwd?|aw)\s*:\s*)+/i, '')
-    .trim()
-    .toLowerCase();
+  let s = (subject ?? '(no subject)').trim();
+  const prefixes = ['re', 'fwd', 'fw', 'aw'];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const trimmed = s.trimStart();
+    const lower = trimmed.toLowerCase();
+    for (const p of prefixes) {
+      if (lower.startsWith(p)) {
+        let after = trimmed.slice(p.length).trimStart();
+        if (after.startsWith(':')) {
+          s = after.slice(1).trimStart();
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+  return s.toLowerCase();
 }
 
 /** `content-type: multipart/mixed; boundary="b1"` → `b1`, or null. */

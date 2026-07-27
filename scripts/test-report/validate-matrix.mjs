@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detectDefaultCiEnvGate } from './report-signals.mjs';
@@ -40,24 +40,23 @@ export async function validateMatrix(matrix, options = {}) {
         } else if (options.checkFiles !== false) {
           try {
             const ownerPath = path.join(options.root ?? root, cellOwner.owner);
-            await access(ownerPath);
+            const source = await readFile(ownerPath, 'utf8');
             // Solid/partial cells whose only owner is whole-file env-gated off
             // default CI claim coverage they never get on PR/nightly defaults.
             if (options.checkEnvGates !== false && !cellOwner.owner.endsWith('.mjs')) {
-              try {
-                const source = await readFile(ownerPath, 'utf8');
-                const gate = detectDefaultCiEnvGate(source);
-                if (gate) {
-                  errors.push(
-                    `${cellId} is ${status} but owner ${cellOwner.owner} is always env-gated off default CI (${gate.env} / ${gate.kind}); demote assessment or ungated the suite`,
-                  );
-                }
-              } catch {
-                // access already succeeded
+              const gate = detectDefaultCiEnvGate(source);
+              if (gate) {
+                errors.push(
+                  `${cellId} is ${status} but owner ${cellOwner.owner} is always env-gated off default CI (${gate.env} / ${gate.kind}); demote assessment or ungated the suite`,
+                );
               }
             }
-          } catch {
-            errors.push(`${cellId} owner does not exist: ${cellOwner.owner}`);
+          } catch (err) {
+            if (err?.code === 'ENOENT') {
+              errors.push(`${cellId} owner does not exist: ${cellOwner.owner}`);
+            } else {
+              errors.push(`${cellId} owner unreadable: ${cellOwner.owner}`);
+            }
           }
         }
       } else if (cellOwner !== null) {
@@ -115,7 +114,6 @@ export async function validateMatrix(matrix, options = {}) {
     if (options.checkFiles !== false) {
       try {
         const ownerPath = path.join(options.root ?? root, flow.owner);
-        await access(ownerPath);
         const source = await readFile(ownerPath, 'utf8');
         if (flow.minimumTests !== undefined && flow.minimumTests !== null) {
           const testCount = source.match(/\b(?:test|it)\s*\(/g)?.length ?? 0;
@@ -140,8 +138,12 @@ export async function validateMatrix(matrix, options = {}) {
             }
           }
         }
-      } catch {
-        errors.push(`${flow.id} owner does not exist: ${flow.owner}`);
+      } catch (err) {
+        if (err?.code === 'ENOENT') {
+          errors.push(`${flow.id} owner does not exist: ${flow.owner}`);
+        } else {
+          errors.push(`${flow.id} owner unreadable: ${flow.owner}`);
+        }
       }
     }
   }

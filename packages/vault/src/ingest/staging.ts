@@ -106,6 +106,9 @@ export function payloadHash(payload: Record<string, unknown>): string {
       .sort()
       .map((k) => [k, payload[k]]),
   );
+  // lgtm[js/insufficient-password-hash]
+  // SHA-256 is used for import content deduplication (sync_external_entity.content_hash).
+  // Payloads may include secrets, but this is a fingerprint, not password verification.
   return createHash('sha256').update(canonical).digest('hex').slice(0, 32);
 }
 
