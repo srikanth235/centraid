@@ -187,7 +187,7 @@ test('owner routes: list + create + rename/presentation; delete requires erase c
     endpointId: 'owner-device',
     vaultId: firstVaultId,
     label: 'Owner device',
-    trust: 'owner',
+    role: 'admin',
   });
   const handler = makeVaultRouteHandler(registry, { enrollments });
   const server = http.createServer((req, res) => {
@@ -221,7 +221,7 @@ test('owner routes: list + create + rename/presentation; delete requires erase c
   });
   expect(created.status).toBe(201);
   const family = (await created.json()) as { vaultId: string; name: string };
-  expect(enrollments.get('owner-device', family.vaultId)?.trust).toBe('owner');
+  expect(enrollments.get('owner-device', family.vaultId)?.role).toBe('admin');
   const listed = (await (await fetch(`${base}/vaults`)).json()) as { vaults: unknown[] };
   expect(listed.vaults).toHaveLength(2);
 

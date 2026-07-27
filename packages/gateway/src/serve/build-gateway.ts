@@ -531,8 +531,8 @@ function isFreshGatewayScopePath(pathname: string): boolean {
   return FRESH_GATEWAY_SCOPE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
-/** Shared device-tier gate, before any owner/app/action route can dispatch. */
-function readonlyRequestAllowed(req: IncomingMessage): boolean {
+/** Shared device-role gate, before any owner/app/action route can dispatch. */
+function readRoleRequestAllowed(req: IncomingMessage): boolean {
   const method = (req.method ?? 'GET').toUpperCase();
   let url = new URL(req.url ?? '/', 'http://gateway.local');
   if (url.pathname === '/centraid/_web/control') {
@@ -543,7 +543,7 @@ function readonlyRequestAllowed(req: IncomingMessage): boolean {
   if (method !== 'POST') return false;
   // A query invocation is a read; an action invocation is a write. The
   // app-scoped RPC routes carry the kind in the path (issue #505), so a
-  // read-only device may POST to `queries/<name>` but not `actions/<name>`.
+  // read-role device may POST to `queries/<name>` but not `actions/<name>`.
   // `_describe` moved to GET and is covered by the read-method branch above.
   if (
     /^\/centraid\/[^_/][^/]*\/queries\/[^/]+$/.test(url.pathname) ||
@@ -1317,7 +1317,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       vaultId: kitlessCreated.vaultId,
       label: options.hostDeviceEndpointId ? 'desktop host' : 'kitless gateway host',
       platform: 'loopback',
-      trust: 'owner',
+      role: 'admin',
     });
   }
   const directHostEndpointId = options.hostDeviceEndpointId;
@@ -3286,6 +3286,27 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     ) {
       return true;
     }
+    // The CLI lane into ticket minting is always open, by design: the landlord
+    // has shell access on this box, and `centraid-gateway pair` carries no
+    // device identity — which is precisely what the route's own host-custody
+    // check (`canMintPairingTicket` → `isDirectHostRequest`) exists to
+    // authorize. Demanding a proved device HERE made that hatch unreachable,
+    // so after founding a headless daemon could never enroll a SECOND device
+    // from the CLI. (The FIRST device never came through here — founding runs
+    // on `foundingHandler`, mounted outside this handler entirely.)
+    //
+    // Skipping ahead grants nothing. The bearer was already enforced upstream
+    // by `startRuntimeHttpServer` (this path is not in `publicPaths`), and the
+    // route still applies host-custody-or-vault-owner itself. `isDirectHostRequest`
+    // keeps the skip narrow: an iroh-forwarded request arrives on loopback too
+    // but carries device headers, so it falls through to the identity gate.
+    if (
+      url.pathname === '/centraid/_gateway/devices/ticket' &&
+      isDirectHostRequest(req) &&
+      (await prefixDispatch(req, res))
+    ) {
+      return true;
+    }
     if (vaultRegistry.isFresh()) {
       const method = req.method ?? 'GET';
       if (method === 'GET' && url.pathname === '/centraid/_vault/vaults') {
@@ -3346,10 +3367,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       });
     }
     const enrollment = foundingEnrollments.get(deviceKey, vaultId);
-    if (enrollment?.trust === 'readonly' && !readonlyRequestAllowed(req)) {
+    if (enrollment?.role === 'read' && !readRoleRequestAllowed(req)) {
       return sendJson(res, 403, {
-        error: 'readonly_device',
-        message: 'this device is enrolled read-only and cannot mutate the gateway',
+        error: 'read_role_device',
+        message: 'this device is enrolled at the read role and cannot mutate the gateway',
       });
     }
     if (enrollment?.grantProfile !== undefined) {

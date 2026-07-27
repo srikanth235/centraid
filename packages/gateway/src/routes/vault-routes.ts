@@ -197,10 +197,10 @@ export function makeVaultRouteHandler(
           deviceKey && options.enrollments
             ? options.enrollments.get(deviceKey, plane.boot.vaultId)
             : undefined;
-        if (enrollment?.trust !== 'owner') {
+        if (enrollment?.role !== 'admin') {
           return sendJson(res, 403, {
-            error: 'owner_required',
-            message: 'only an enrolled owner can erase this vault',
+            error: 'admin_required',
+            message: 'only an admin device can erase this vault',
           });
         }
         if (!options.gatewayDatabase || !options.keys || !options.recoveryKit) {
@@ -781,7 +781,7 @@ export function makeVaultRouteHandler(
       }
 
       // The cross-referencing shell surface (issue #272): the picker is an
-      // owner-trust search/browse, and link writes ride the owner-device
+      // admin-role search/browse, and link writes ride the owner-device
       // credential — the pick itself is the consent, scoped to one row.
       // Canonical domain entity types (`schema.table`) — the ontology model,
       // surfaced by the automation editor's @-tagging so the owner can reference
@@ -810,7 +810,7 @@ export function makeVaultRouteHandler(
       }
 
       // The Vault Atlas Browse tab (issue #441 Part B, B3): a vault-aware
-      // table editor. Reads are owner-trust census over the ontology; writes
+      // table editor. Reads are admin-role census over the ontology; writes
       // ride the journalled command pipeline (atlas.* commands) with the
       // owner-device credential so every edit is a receipted operator act and
       // ships in the replica change log. All under `/atlas/browse/...`.
@@ -1065,10 +1065,10 @@ async function handleVaultsRoute(
         deviceKey && currentVaultId && options.enrollments
           ? options.enrollments.get(deviceKey, currentVaultId)
           : undefined;
-      if (current?.trust !== 'owner' || !options.enrollments) {
+      if (current?.role !== 'admin' || !options.enrollments) {
         return sendJson(res, 403, {
-          error: 'owner_required',
-          message: 'only an enrolled owner can create another vault',
+          error: 'admin_required',
+          message: 'only an admin device can create another vault',
         });
       }
       const body = await readJson(req);
@@ -1084,7 +1084,7 @@ async function handleVaultsRoute(
           vaultId: created.vaultId,
           label: current.label,
           ...(current.platform ? { platform: current.platform } : {}),
-          trust: 'owner',
+          role: 'admin',
           rememberDevice: current.rememberDevice,
         });
       } catch (error) {

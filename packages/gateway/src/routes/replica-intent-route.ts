@@ -5,6 +5,7 @@ import {
   recordReplicaIntentOutcome,
   type ReplicaIntentOutcome,
 } from '@centraid/vault';
+import { canWrite } from '../serve/enrollment-store.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
 import { runWithReplicaIntent } from '../serve/replica-intent-context.js';
 import { readJson, sendJson } from './route-helpers.js';
@@ -172,8 +173,12 @@ export async function handleReplicaIntent(
     if (replicaOutcomeWire(existing)) return sendOutcome(res, existing);
   }
 
-  const deniedReason =
-    context.access.trust !== 'full' ? 'read-only devices cannot submit actions' : undefined;
+  // `canWrite` is the one predicate for "may this role mutate" — admin is
+  // write's superset, so a hand-rolled `!== 'write'` here silently denied
+  // every admin device, including the founding one.
+  const deniedReason = !canWrite(context.access.role)
+    ? 'read-only devices cannot submit actions'
+    : undefined;
   if (deniedReason) {
     try {
       const denied = recordReplicaIntentOutcome(context.plane.db.vault, {

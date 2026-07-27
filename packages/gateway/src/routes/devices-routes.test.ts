@@ -68,7 +68,7 @@ test('roster requires a proved identity and exposes only enrolled iroh rows', as
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner laptop',
-    trust: 'owner',
+    role: 'admin',
   });
   f.enrollments.enroll({
     endpointId: 'other-key',
@@ -88,25 +88,25 @@ test('roster requires a proved identity and exposes only enrolled iroh rows', as
         transport: 'iroh',
         vaultId: 'vault-a',
         current: true,
-        trust: 'owner',
+        role: 'admin',
       },
     ],
   });
 });
 
-test('owner mints a full-trust iroh ticket; ordinary devices cannot delegate', async () => {
+test('owner mints a full-role iroh ticket; ordinary devices cannot delegate', async () => {
   const f = await harness();
   f.enrollments.enroll({
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   f.enrollments.enroll({
     endpointId: 'full-key',
     vaultId: 'vault-a',
     label: 'Member',
-    trust: 'full',
+    role: 'write',
   });
   const body = JSON.stringify({ vaultId: 'vault-a' });
   const anonymous = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
@@ -135,8 +135,41 @@ test('owner mints a full-trust iroh ticket; ordinary devices cannot delegate', a
   expect(parsed.gw).toBe('endpoint-ticket');
   expect(f.tickets.redeem(parsed.t, parsed.s)).toMatchObject({
     vaultId: 'vault-a',
-    trust: 'full',
+    role: 'write',
   });
+});
+
+test('an owner may delegate owner role — a second admin device is grantable', async () => {
+  const f = await harness();
+  f.enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-a',
+    label: 'Owner',
+    role: 'admin',
+  });
+
+  const minted = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
+    method: 'POST',
+    headers: deviceHeaders('owner-key'),
+    body: JSON.stringify({ vaultId: 'vault-a', role: 'admin' }),
+  });
+  expect(minted.status).toBe(200);
+  const payload = (await minted.json()) as { ticket: string; role: string };
+  expect(payload.role).toBe('admin');
+  const parsed = parsePairingTicket(payload.ticket);
+  if (!parsed) throw new Error('ticket did not parse');
+  expect(f.tickets.redeem(parsed.t, parsed.s)).toMatchObject({
+    vaultId: 'vault-a',
+    role: 'admin',
+  });
+
+  const nonsense = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
+    method: 'POST',
+    headers: deviceHeaders('owner-key'),
+    body: JSON.stringify({ vaultId: 'vault-a', role: 'superuser' }),
+  });
+  expect(nonsense.status).toBe(400);
+  expect(await nonsense.json()).toMatchObject({ error: 'invalid_role' });
 });
 
 test('revocation cascades web sessions and closes the iroh transport', async () => {
@@ -145,13 +178,13 @@ test('revocation cascades web sessions and closes the iroh transport', async () 
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const member = f.enrollments.enroll({
     endpointId: 'member-key',
     vaultId: 'vault-a',
     label: 'Member',
-    trust: 'full',
+    role: 'write',
   });
   const tokenHash = hashControlToken('control-token');
   f.sessions.establish({
@@ -175,13 +208,13 @@ test('revocation cascades web sessions and closes the iroh transport', async () 
   expect(f.onEndpointRevoked).toHaveBeenCalledWith('member-key');
 });
 
-test('revoking the last owner requires typing the vault name exactly', async () => {
+test('revoking the last admin requires typing the vault name exactly', async () => {
   const f = await harness();
   const owner = f.enrollments.enroll({
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const url = `${f.base}/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}`;
 
@@ -190,19 +223,19 @@ test('revoking the last owner requires typing the vault name exactly', async () 
     headers: deviceHeaders(owner.endpointId),
   });
   expect(missing.status).toBe(409);
-  expect(await missing.json()).toMatchObject({ error: 'last_owner_confirmation_required' });
+  expect(await missing.json()).toMatchObject({ error: 'last_admin_confirmation_required' });
 
   const wrong = await fetch(url, {
     method: 'DELETE',
     headers: deviceHeaders(owner.endpointId),
-    body: JSON.stringify({ confirmLastOwner: 'personal' }),
+    body: JSON.stringify({ confirmLastAdmin: 'personal' }),
   });
   expect(wrong.status).toBe(409);
 
   const confirmed = await fetch(url, {
     method: 'DELETE',
     headers: deviceHeaders(owner.endpointId),
-    body: JSON.stringify({ confirmLastOwner: 'Personal' }),
+    body: JSON.stringify({ confirmLastAdmin: 'Personal' }),
   });
   expect(confirmed.status).toBe(200);
   expect(f.enrollments.listByVault('vault-a')).toEqual([]);
@@ -214,7 +247,7 @@ test('compute profile validates every capability and persists a valid update', a
     endpointId: 'device-key',
     vaultId: 'vault-a',
     label: 'Phone',
-    trust: 'full',
+    role: 'write',
   });
   const url = `${f.base}/centraid/_gateway/devices/${encodeURIComponent(device.enrollmentId)}/compute`;
 
@@ -267,13 +300,13 @@ test('DELETE of an already-revoked enrollment is idempotent, not an error', asyn
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const member = f.enrollments.enroll({
     endpointId: 'member-key',
     vaultId: 'vault-a',
     label: 'Member',
-    trust: 'full',
+    role: 'write',
   });
   const url = `${f.base}/centraid/_gateway/devices/${encodeURIComponent(member.enrollmentId)}`;
 
@@ -292,7 +325,7 @@ test('every devices route refuses a wrong method with 405', async () => {
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const cases: Array<[string, string]> = [
     ['/centraid/_gateway/devices', 'POST'],
@@ -316,13 +349,13 @@ test('an enrollment in a foreign vault 404s rather than leaking its existence', 
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const foreign = f.enrollments.enroll({
     endpointId: 'stranger-key',
     vaultId: 'vault-b',
     label: 'Stranger',
-    trust: 'owner',
+    role: 'admin',
   });
   for (const route of [
     `/centraid/_gateway/devices/${encodeURIComponent(foreign.enrollmentId)}`,
@@ -338,25 +371,25 @@ test('an enrollment in a foreign vault 404s rather than leaking its existence', 
   expect(f.enrollments.isEnrolled('stranger-key')).toBe(true);
 });
 
-test('a full-trust device cannot revoke a peer but may unpair itself', async () => {
+test('a full-role device cannot revoke a peer but may unpair itself', async () => {
   const f = await harness();
   f.enrollments.enroll({
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const member = f.enrollments.enroll({
     endpointId: 'member-key',
     vaultId: 'vault-a',
     label: 'Member',
-    trust: 'full',
+    role: 'write',
   });
   const peer = f.enrollments.enroll({
     endpointId: 'peer-key',
     vaultId: 'vault-a',
     label: 'Peer',
-    trust: 'full',
+    role: 'write',
   });
 
   // This is what stops a compromised `full` device from revoking its owner.
@@ -365,7 +398,7 @@ test('a full-trust device cannot revoke a peer but may unpair itself', async () 
     { method: 'DELETE', headers: deviceHeaders('member-key') },
   );
   expect(denied.status).toBe(403);
-  expect(await denied.json()).toMatchObject({ error: 'not_owner' });
+  expect(await denied.json()).toMatchObject({ error: 'not_admin' });
   expect(f.enrollments.isEnrolled('peer-key')).toBe(true);
 
   // Self-unpair by a non-owner stays allowed — leaving is always the device's
@@ -386,7 +419,7 @@ test('minting a ticket with no resolvable vault answers vault_required', async (
     endpointId: 'owner-key',
     vaultId: 'vault-b',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const anonymousVault = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
     method: 'POST',
@@ -400,7 +433,7 @@ test('minting a ticket with no resolvable vault answers vault_required', async (
     endpointId: 'lonely-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const unknownTarget = await fetch(`${noVaults.base}/centraid/_gateway/devices/ticket`, {
     method: 'POST',
@@ -417,7 +450,7 @@ test('a gateway with no iroh endpoint refuses to mint a dud ticket', async () =>
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
     method: 'POST',
@@ -434,7 +467,7 @@ test('a pre-founding gateway refuses ordinary pairing with uninitialized', async
     endpointId: 'owner-key',
     vaultId: 'vault-a',
     label: 'Owner',
-    trust: 'owner',
+    role: 'admin',
   });
   const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
     method: 'POST',

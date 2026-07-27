@@ -211,7 +211,12 @@ export function makeDaemonDevicePlane(input: {
       ownerPartyId: plane.boot.ownerPartyId,
       name: request.deviceName || `device ${endpointId.slice(0, 10)}…`,
       ...(request.platform ? { platform: request.platform } : {}),
-      trust: enrollment.trust === 'readonly' ? 'readonly' : 'full',
+      // Vocabulary boundary: the gateway's ROLE (admin/write/read) collapses
+      // to the vault's capability mirror (`consent_device.trust`, full/readonly),
+      // which only asks "may this device act". Admin's extra powers — minting
+      // tickets, revoking peers — are gateway-plane concerns the vault has no
+      // opinion about, so `admin` and `write` both land on `full`.
+      trust: enrollment.role === 'read' ? 'readonly' : 'full',
     });
     logger.info(
       `device plane: enrolled ${endpointId.slice(0, 10)}… into vault ${enrollment.vaultId}`,

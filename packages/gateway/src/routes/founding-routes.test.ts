@@ -118,7 +118,7 @@ test('founding ticket is single-outstanding and initialize enrolls one verified 
     fingerprint: string;
   };
   expect(registry.list()).toEqual([initialized.vault]);
-  expect(enrollments.get('founder-device', initialized.vault.vaultId)?.trust).toBe('owner');
+  expect(enrollments.get('founder-device', initialized.vault.vaultId)?.role).toBe('admin');
   expect(tickets.pendingFoundingVaults()).toEqual([]);
   expect(parseRecoveryKit(initialized.kit, 'correct horse battery staple').targets).toEqual([]);
   expect(JSON.stringify(initialized.kit)).not.toContain(

@@ -275,12 +275,12 @@ test('a zero-vault gateway restores through one founding capability and enrolls 
       vaultId: string;
       previews: { warmed: boolean; timeToUsableGridMs?: number };
     };
-    enrollment: { endpointId: string; trust: string };
+    enrollment: { endpointId: string; role: string };
   };
   expect(response.report.vaultId).toBe(a.vaultId);
   expect(response.enrollment).toMatchObject({
     endpointId: 'founder-device',
-    trust: 'owner',
+    role: 'admin',
   });
 
   // LIVE integration: the recovered vault is the only mounted vault and the
@@ -363,7 +363,7 @@ test('one founding restore adopts every backed-up vault and enrolls the owner in
   expect(restored.status).toBe(201);
   const body = (await restored.json()) as {
     reports: Array<{ vaultId: string }>;
-    enrollments: Array<{ vaultId: string; endpointId: string; trust: string }>;
+    enrollments: Array<{ vaultId: string; endpointId: string; role: string }>;
   };
   expect(body.reports.map((report) => report.vaultId).sort()).toEqual(a.vaultIds.toSorted());
   expect(body.enrollments).toHaveLength(2);
@@ -373,7 +373,7 @@ test('one founding restore adopts every backed-up vault and enrolls the owner in
         expect.objectContaining({
           vaultId,
           endpointId: 'multi-founder',
-          trust: 'owner',
+          role: 'admin',
         }),
       ),
     ),

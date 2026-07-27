@@ -114,7 +114,7 @@ async function fakePairDaemon(): Promise<typeof fetch> {
     const body = JSON.parse(String(init?.body ?? '{}')) as {
       vaultId?: string;
       ttlMinutes?: number;
-      trust?: 'owner' | 'full' | 'readonly';
+      role?: 'admin' | 'write' | 'read';
     };
     const registry = openVaultRegistry({
       rootDir: layout.vaultDir,
@@ -140,20 +140,20 @@ async function fakePairDaemon(): Promise<typeof fetch> {
           { status: 409 },
         );
       }
-      if (body.trust === 'owner') {
+      if (body.role === 'admin') {
         return Response.json(
           {
-            error: 'invalid_trust',
-            message: 'ordinary pairing grants full or readonly trust, never owner',
+            error: 'invalid_role',
+            message: 'ordinary pairing grants write or read role, never admin',
           },
           { status: 400 },
         );
       }
-      const trust = body.trust ?? 'full';
+      const role = body.role ?? 'write';
       const minted = PairingTicketStore.open(layout.gatewayDbFile).mint(
         vault.vaultId,
         (body.ttlMinutes ?? 15) * 60_000,
-        trust,
+        role,
       );
       return Response.json({
         ok: true,
@@ -169,7 +169,7 @@ async function fakePairDaemon(): Promise<typeof fetch> {
         vaultId: vault.vaultId,
         vaultName: vault.name,
         expiresAt: new Date(minted.expiresAt).toISOString(),
-        trust,
+        role,
       });
     } finally {
       registry.stop();
@@ -213,12 +213,12 @@ test('devices add / list / revoke, scoped by vault', async () => {
   ).rejects.toThrow(/no enrollment/);
 });
 
-test('last-owner revoke requires the vault name and SSH can restore an owner', async () => {
+test('last-admin revoke requires the vault name and SSH can restore an admin', async () => {
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
   const owner = lastJson(
     await capture(() =>
       commandDevices(
-        ['add', '--data-dir', dataDir, 'ep-owner', '--vault', 'Family', '--trust', 'owner'],
+        ['add', '--data-dir', dataDir, 'ep-owner', '--vault', 'Family', '--role', 'admin'],
         fail,
       ),
     ),
@@ -227,11 +227,11 @@ test('last-owner revoke requires the vault name and SSH can restore an owner', a
 
   await expect(
     capture(() => commandDevices(['revoke', '--data-dir', dataDir, enrollmentId], fail)),
-  ).rejects.toThrow(/last owner.*--confirm-last-owner "Family"/i);
+  ).rejects.toThrow(/last admin.*--confirm-last-admin "Family"/i);
 
   await capture(() =>
     commandDevices(
-      ['revoke', '--data-dir', dataDir, enrollmentId, '--confirm-last-owner', 'Family'],
+      ['revoke', '--data-dir', dataDir, enrollmentId, '--confirm-last-admin', 'Family'],
       fail,
     ),
   );
@@ -239,12 +239,12 @@ test('last-owner revoke requires the vault name and SSH can restore an owner', a
   const recovered = lastJson(
     await capture(() =>
       commandDevices(
-        ['add', '--data-dir', dataDir, 'ep-recovery', '--vault', 'Family', '--trust', 'owner'],
+        ['add', '--data-dir', dataDir, 'ep-recovery', '--vault', 'Family', '--role', 'admin'],
         fail,
       ),
     ),
   );
-  expect(recovered).toMatchObject({ endpointId: 'ep-recovery', trust: 'owner' });
+  expect(recovered).toMatchObject({ endpointId: 'ep-recovery', role: 'admin' });
 });
 
 test('devices admin rejects bad usage + unknown vault', async () => {
@@ -291,7 +291,7 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
 
   const text = await capture(() =>
     commandPair(
-      ['--data-dir', dataDir, '--vault', 'Family', '--ttl-minutes', '5', '--trust', 'readonly'],
+      ['--data-dir', dataDir, '--vault', 'Family', '--ttl-minutes', '5', '--role', 'read'],
       fail,
       daemon,
     ),
@@ -316,7 +316,7 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
     vaultName: 'Family',
   });
   expect(PairingTicketStore.open(layout.gatewayDbFile).redeem(payload.t, payload.s)).toMatchObject({
-    trust: 'readonly',
+    role: 'read',
   });
 });
 
@@ -364,7 +364,7 @@ test('pair --json emits one JSON line instead of the pasteable text block (issue
   expect(payload).toMatchObject({ kind: 'centraid-gw-pair', vaultName: 'Family' });
 });
 
-test('ordinary pair grants full even for the first device and refuses owner escalation', async () => {
+test('ordinary pair grants write even for the first device and refuses admin escalation', async () => {
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
   const daemon = await fakePairDaemon();
 
@@ -375,7 +375,7 @@ test('ordinary pair grants full even for the first device and refuses owner esca
       commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail, daemon),
     ),
   );
-  expect(first.trust).toBe('full');
+  expect(first.role).toBe('write');
 
   // Enroll a device so the vault is no longer empty.
   await capture(() =>
@@ -388,15 +388,15 @@ test('ordinary pair grants full even for the first device and refuses owner esca
       commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail, daemon),
     ),
   );
-  expect(second.trust).toBe('full');
+  expect(second.role).toBe('write');
 
   await expect(
     commandPair(
-      ['--data-dir', dataDir, '--vault', 'Family', '--trust', 'owner', '--json'],
+      ['--data-dir', dataDir, '--vault', 'Family', '--role', 'admin', '--json'],
       fail,
       daemon,
     ),
-  ).rejects.toThrow(/ordinary pairing grants full or readonly/i);
+  ).rejects.toThrow(/ordinary pairing grants write or read/i);
 });
 
 test('pair --json failure emits {ok:false,error,message} on stdout, then still fails the process', async () => {

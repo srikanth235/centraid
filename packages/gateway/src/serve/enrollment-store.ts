@@ -10,11 +10,27 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { GatewayDatabase } from './gateway-db.js';
 
-export type DeviceTrust = 'owner' | 'full' | 'readonly' | 'revoked';
-export type GrantableTrust = 'owner' | 'full' | 'readonly';
+/*
+ * ROLE is the authority a device is granted at pairing time — what it may DO.
+ * Keep it distinct from trust/identity, which is whether a device is WHO it
+ * claims (its proved iroh EndpointId). Both used to be called "trust"; see
+ * `docs/glossary.md` for the vocabulary and the forbidden synonyms.
+ *
+ *   admin — everything `write` may do, plus mint tickets, grant roles, revoke
+ *           devices. The founding device always lands here.
+ *   write — read the vault and change it. The default for every mint.
+ *   read  — read/query only; any mutation is refused at the gate.
+ *
+ * `revoked` is NOT a role. It is a tombstone state an enrollment is put into,
+ * never granted, never offered in a picker — hence its absence from
+ * `GrantableRole`, which is exactly the set a ticket may carry.
+ */
+export type DeviceRole = 'admin' | 'write' | 'read' | 'revoked';
+export type GrantableRole = 'admin' | 'write' | 'read';
 
-export function actingTrust(trust: DeviceTrust): boolean {
-  return trust === 'owner' || trust === 'full';
+/** The one predicate for "may this role mutate" — admin is write's superset. */
+export function canWrite(role: DeviceRole): boolean {
+  return role === 'admin' || role === 'write';
 }
 
 export interface DeviceEnrollment {
@@ -23,7 +39,7 @@ export interface DeviceEnrollment {
   vaultId: string;
   label: string;
   platform?: string;
-  trust: DeviceTrust;
+  role: DeviceRole;
   rememberDevice: boolean;
   grantProfile?: string[];
   compute?: DeviceComputeProfile;
@@ -61,7 +77,7 @@ interface EnrollmentRow {
   vault_id: string;
   label: string;
   platform: string | null;
-  trust: DeviceTrust;
+  role: DeviceRole;
   remember_device: number;
   grant_profile_json: string | null;
   compute_json: string | null;
@@ -96,7 +112,7 @@ function toEnrollment(row: EnrollmentRow): DeviceEnrollment {
     vaultId: row.vault_id,
     label: row.label,
     ...(row.platform !== null ? { platform: row.platform } : {}),
-    trust: row.trust,
+    role: row.role,
     rememberDevice: row.remember_device === 1,
     ...(Array.isArray(grantProfile) ? { grantProfile } : {}),
     ...(compute ? { compute } : {}),
@@ -123,7 +139,7 @@ export class EnrollmentStore {
     return (
       this.gatewayDatabase.db
         .prepare(
-          `SELECT enrollment_id, endpoint_id, vault_id, label, platform, trust,
+          `SELECT enrollment_id, endpoint_id, vault_id, label, platform, role,
                   remember_device, grant_profile_json, compute_json, checkpoint_json, added_at
              FROM devices ORDER BY added_at, enrollment_id`,
         )
@@ -144,7 +160,7 @@ export class EnrollmentStore {
       this.gatewayDatabase.db
         .prepare(
           `SELECT vault_id FROM devices
-            WHERE endpoint_id = ? AND trust != 'revoked'
+            WHERE endpoint_id = ? AND role != 'revoked'
             ORDER BY vault_id`,
         )
         .all(endpointId) as Array<{ vault_id: string }>
@@ -160,7 +176,7 @@ export class EnrollmentStore {
     vaultId: string;
     label: string;
     platform?: string;
-    trust?: GrantableTrust;
+    role?: GrantableRole;
     rememberDevice?: boolean;
     grantProfile?: string[];
   }): DeviceEnrollment {
@@ -173,14 +189,14 @@ export class EnrollmentStore {
     vaultId: string;
     label: string;
     platform?: string;
-    trust?: GrantableTrust;
+    role?: GrantableRole;
     rememberDevice?: boolean;
     grantProfile?: string[];
   }): DeviceEnrollment {
     const existing = this.get(input.endpointId, input.vaultId);
     if (existing) {
       const platform = input.platform !== undefined ? input.platform : (existing.platform ?? null);
-      const trust = input.trust ?? existing.trust;
+      const role = input.role ?? existing.role;
       const remember = input.rememberDevice ?? existing.rememberDevice;
       const grants =
         input.grantProfile !== undefined
@@ -193,17 +209,17 @@ export class EnrollmentStore {
       this.gatewayDatabase.db
         .prepare(
           `UPDATE devices
-              SET label = ?, platform = ?, trust = ?, remember_device = ?, grant_profile_json = ?
+              SET label = ?, platform = ?, role = ?, remember_device = ?, grant_profile_json = ?
             WHERE enrollment_id = ?`,
         )
-        .run(input.label, platform, trust, remember ? 1 : 0, grants, existing.enrollmentId);
+        .run(input.label, platform, role, remember ? 1 : 0, grants, existing.enrollmentId);
       return this.require(input.endpointId, input.vaultId);
     }
     const enrollmentId = crypto.randomUUID();
     this.gatewayDatabase.db
       .prepare(
         `INSERT INTO devices (
-          enrollment_id, endpoint_id, vault_id, label, platform, trust,
+          enrollment_id, endpoint_id, vault_id, label, platform, role,
           remember_device, grant_profile_json, added_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
@@ -213,7 +229,7 @@ export class EnrollmentStore {
         input.vaultId,
         input.label,
         input.platform ?? null,
-        input.trust ?? 'full',
+        input.role ?? 'write',
         input.rememberDevice === true ? 1 : 0,
         input.grantProfile ? JSON.stringify(input.grantProfile) : null,
         new Date().toISOString(),
@@ -224,7 +240,7 @@ export class EnrollmentStore {
   get(endpointId: string, vaultId: string): DeviceEnrollment | undefined {
     const row = this.gatewayDatabase.db
       .prepare(
-        `SELECT enrollment_id, endpoint_id, vault_id, label, platform, trust,
+        `SELECT enrollment_id, endpoint_id, vault_id, label, platform, role,
                 remember_device, grant_profile_json, compute_json, checkpoint_json, added_at
            FROM devices WHERE endpoint_id = ? AND vault_id = ?`,
       )
@@ -259,16 +275,16 @@ export class EnrollmentStore {
     return this.resetCheckpoint(endpointId, vaultId, cursor);
   }
 
-  setTrust(endpointId: string, vaultId: string, trust: DeviceTrust): DeviceEnrollment {
+  setRole(endpointId: string, vaultId: string, role: DeviceRole): DeviceEnrollment {
     return this.gatewayDatabase.transaction(() => {
       this.require(endpointId, vaultId);
       this.gatewayDatabase.db
         .prepare(
-          `UPDATE devices SET trust = ?, checkpoint_json =
+          `UPDATE devices SET role = ?, checkpoint_json =
             CASE WHEN ? = 'revoked' THEN NULL ELSE checkpoint_json END
            WHERE endpoint_id = ? AND vault_id = ?`,
         )
-        .run(trust, trust, endpointId, vaultId);
+        .run(role, role, endpointId, vaultId);
       return this.require(endpointId, vaultId);
     });
   }
@@ -281,7 +297,7 @@ export class EnrollmentStore {
     this.gatewayDatabase.db
       .prepare(
         `UPDATE devices SET compute_json = ?
-          WHERE enrollment_id = ? AND trust != 'revoked'`,
+          WHERE enrollment_id = ? AND role != 'revoked'`,
       )
       .run(JSON.stringify(compute), enrollmentId);
     const row = this.list().find((candidate) => candidate.enrollmentId === enrollmentId);
@@ -311,7 +327,7 @@ export class EnrollmentStore {
 
   private require(endpointId: string, vaultId: string): DeviceEnrollment {
     const enrollment = this.get(endpointId, vaultId);
-    if (!enrollment || enrollment.trust === 'revoked') {
+    if (!enrollment || enrollment.role === 'revoked') {
       throw new Error('device is not enrolled for this vault');
     }
     return enrollment;

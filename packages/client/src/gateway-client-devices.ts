@@ -63,6 +63,13 @@ export interface DeviceEnrichmentLease {
   attempt: number;
 }
 
+/**
+ * The roles the owner may grant when minting a ticket — the wire twin of the
+ * gateway's `GrantableRole` and of `centraid-gateway pair --role`. `revoked`
+ * is a state a device is put INTO, never a role handed out, so it is not here.
+ */
+export type GatewayDeviceRole = 'admin' | 'write' | 'read';
+
 /** One paired device (mirrors the gateway route's `DeviceDTO`). */
 export interface CentraidGatewayDevice {
   /** The revocation handle (the enrollment row id). */
@@ -78,8 +85,13 @@ export interface CentraidGatewayDevice {
   lastUsedAt?: string;
   /** True for the device making the request (never set for the admin caller). */
   current?: boolean;
-  /** Server-enforced device tier used to clamp replica shapes and intents. */
-  trust: 'full' | 'readonly' | 'revoked';
+  /**
+   * Server-enforced device role used to clamp replica shapes and intents.
+   * `admin` is `write` plus pairing/revocation authority — the founding device
+   * always holds it, so a roster type without it could not describe the one
+   * device every gateway has. `revoked` is a tombstone, never a granted role.
+   */
+  role: GatewayDeviceRole | 'revoked';
   /** Whether this device consented to durable OPFS/IndexedDB state. */
   rememberDevice: boolean;
   /** Server-enforced app allow-list for a constrained Companion device. */
@@ -118,17 +130,24 @@ export interface GatewayDeviceTicket {
   vaultName?: string;
   /** Ticket expiry, ISO-8601. */
   expiresAt: string;
+  /** The tier the redeeming device will be enrolled at. Echoed by the gateway. */
+  role: GatewayDeviceRole;
 }
 
 /**
  * Mint a device-pairing ticket from the app (the operator twin of
  * `centraid-gateway pair`). The gateway scopes it to the caller's plane and
  * defaults the target vault to the active `x-centraid-vault` when none is given.
+ *
+ * `role` picks the role the redeeming device lands at; omitted, the gateway
+ * defaults to `write`. Granting `admin` requires the caller already hold admin
+ * on that vault — the ticket leaves this machine, so the role travels with it.
  */
 export async function createGatewayDeviceTicket(input?: {
   vaultId?: string;
   ttlMinutes?: number;
   label?: string;
+  role?: GatewayDeviceRole;
 }): Promise<GatewayDeviceTicket> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, '/centraid/_gateway/devices/ticket', {

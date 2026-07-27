@@ -5,6 +5,7 @@ import { cx } from '../ui/cx.js';
 import { formatDuration } from '../shell/routes/gatewayData.js';
 import type {
   CentraidGatewayDevice,
+  GatewayDeviceRole,
   GatewayDeviceTicket,
   GatewayDeviceWorkDepth,
 } from '../../gateway-client.js';
@@ -42,7 +43,10 @@ export interface DevicesCardProps {
    * _gateway/devices/ticket`). Optional so a host that can't mint (or a test)
    * simply hides the "Pair a device" affordance.
    */
-  onCreateTicket?: (input?: { ttlMinutes?: number }) => Promise<GatewayDeviceTicket>;
+  onCreateTicket?: (input?: {
+    ttlMinutes?: number;
+    role?: GatewayDeviceRole;
+  }) => Promise<GatewayDeviceTicket>;
   onUpdateCompute?: (
     device: CentraidGatewayDevice,
     contributeWhileCharging: boolean,

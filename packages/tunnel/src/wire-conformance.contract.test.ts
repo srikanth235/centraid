@@ -126,7 +126,6 @@ const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
       deviceName: 'Pixel 9',
       platform: 'android',
       rememberDevice: true,
-      trust: 'full',
     },
   },
   {

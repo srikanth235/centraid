@@ -21,7 +21,7 @@ import {
   VaultRegistryError,
   type VaultRegistry,
 } from '../serve/vault-registry.js';
-import { EnrollmentStore, type GrantableTrust } from '../serve/enrollment-store.js';
+import { EnrollmentStore, type GrantableRole } from '../serve/enrollment-store.js';
 import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
 import { daemonLayoutFor } from './paths.js';
 import { daemonKeyStore } from './key-store.js';
@@ -43,9 +43,9 @@ interface DeviceArgs {
   vault?: string;
   label?: string;
   ttlMinutes?: number;
-  trust?: GrantableTrust;
-  /** Exact vault name required when the requested revoke removes its last owner. */
-  confirmLastOwner?: string;
+  role?: GrantableRole;
+  /** Exact vault name required when the requested revoke removes its last admin. */
+  confirmLastAdmin?: string;
   /** Emit machine-readable JSON instead of human text (issue #382, `pair` only). */
   json?: boolean;
   /**
@@ -94,16 +94,16 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
         out.ttlMinutes = n;
         break;
       }
-      case '--trust': {
-        const trust = next();
-        if (trust !== 'owner' && trust !== 'full' && trust !== 'readonly') {
-          fail('--trust must be "owner", "full", or "readonly"', 2);
+      case '--role': {
+        const role = next();
+        if (role !== 'admin' && role !== 'write' && role !== 'read') {
+          fail('--role must be "admin", "write", or "read"', 2);
         }
-        out.trust = trust;
+        out.role = role;
         break;
       }
-      case '--confirm-last-owner':
-        out.confirmLastOwner = next();
+      case '--confirm-last-admin':
+        out.confirmLastAdmin = next();
         break;
       case '--json':
         out.json = true;
@@ -203,7 +203,7 @@ export async function commandPair(
         body: JSON.stringify({
           ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
           ...(parsed.ttlMinutes !== undefined ? { ttlMinutes: parsed.ttlMinutes } : {}),
-          ...(parsed.trust !== undefined ? { trust: parsed.trust } : {}),
+          ...(parsed.role !== undefined ? { role: parsed.role } : {}),
         }),
       });
     } catch (error) {
@@ -220,7 +220,7 @@ export async function commandPair(
       vaultId?: string;
       vaultName?: string;
       expiresAt?: string;
-      trust?: GrantableTrust;
+      role?: GrantableRole;
     };
     if (
       !response.ok ||
@@ -229,7 +229,7 @@ export async function commandPair(
       typeof result.vaultId !== 'string' ||
       typeof result.vaultName !== 'string' ||
       typeof result.expiresAt !== 'string' ||
-      (result.trust !== 'owner' && result.trust !== 'full' && result.trust !== 'readonly')
+      (result.role !== 'admin' && result.role !== 'write' && result.role !== 'read')
     ) {
       localFail(
         result.message ?? `daemon refused pairing ticket (${result.error ?? response.status})`,
@@ -238,7 +238,7 @@ export async function commandPair(
     }
     const token = result.ticket;
     const vault = { vaultId: result.vaultId, name: result.vaultName };
-    const trust = result.trust;
+    const role = result.role;
     if (json) {
       process.stdout.write(
         `${JSON.stringify({
@@ -247,14 +247,14 @@ export async function commandPair(
           vaultId: vault.vaultId,
           vaultName: vault.name,
           expiresAt: result.expiresAt,
-          trust,
+          role,
         })}\n`,
       );
       return;
     }
     const lines = [
       `Pairing ticket for vault "${vault.name}" (${vault.vaultId})`,
-      `Trust: ${trust}`,
+      `Role: ${role}`,
       `Expires: ${result.expiresAt}`,
       '',
       'Desktop / PWA: paste this one-line ticket into "Add gateway":',
@@ -358,7 +358,7 @@ export async function commandDevices(
           endpointId,
           vaultId: vault.vaultId,
           label: parsed.label ?? `device ${endpointId.slice(0, 10)}…`,
-          ...(parsed.trust ? { trust: parsed.trust } : {}),
+          ...(parsed.role ? { role: parsed.role } : {}),
         });
         process.stdout.write(`${JSON.stringify(row)}\n`);
       } catch (err) {
@@ -390,28 +390,28 @@ export async function commandDevices(
       enableWalShipper: false,
     });
     try {
-      const lastOwners = candidates.filter(
+      const lastAdmins = candidates.filter(
         (row) =>
-          row.trust === 'owner' &&
-          devices.listByVault(row.vaultId).filter((candidate) => candidate.trust === 'owner')
+          row.role === 'admin' &&
+          devices.listByVault(row.vaultId).filter((candidate) => candidate.role === 'admin')
             .length === 1,
       );
-      if (lastOwners.length > 1) {
+      if (lastAdmins.length > 1) {
         fail(
-          'this endpoint is the last owner of multiple vaults; revoke each enrollment id separately',
+          'this endpoint is the last admin of multiple vaults; revoke each enrollment id separately',
           1,
         );
       }
-      const lastOwner = lastOwners[0];
-      if (lastOwner) {
+      const lastAdmin = lastAdmins[0];
+      if (lastAdmin) {
         const vaultName =
-          cleanupRegistry.get(lastOwner.vaultId)?.name ??
-          cleanupRegistry.list().find((vault) => vault.vaultId === lastOwner.vaultId)?.name ??
-          lastOwner.vaultId;
-        if (parsed.confirmLastOwner !== vaultName) {
+          cleanupRegistry.get(lastAdmin.vaultId)?.name ??
+          cleanupRegistry.list().find((vault) => vault.vaultId === lastAdmin.vaultId)?.name ??
+          lastAdmin.vaultId;
+        if (parsed.confirmLastAdmin !== vaultName) {
           fail(
-            `this is the last owner enrollment; pass --confirm-last-owner ${JSON.stringify(vaultName)}. ` +
-              'Losing it requires filesystem access and `centraid-gateway devices add --trust owner` to recover.',
+            `this is the last admin enrollment; pass --confirm-last-admin ${JSON.stringify(vaultName)}. ` +
+              'Losing it requires filesystem access and `centraid-gateway devices add --role admin` to recover.',
             1,
           );
         }

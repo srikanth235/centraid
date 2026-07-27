@@ -289,6 +289,15 @@
   flex-wrap: wrap;
   gap: 12px;
 }
+/* Full-basis so the hint claims its own line directly under the role group,
+   rather than competing with the lifetime presets for the same row. */
+.roleHint {
+  flex-basis: 100%;
+  margin: -4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
 .ttlGroup {
   display: inline-flex;
   border: 1px solid var(--line);

@@ -8,7 +8,7 @@
 
 import crypto from 'node:crypto';
 import path from 'node:path';
-import type { GrantableTrust, DeviceEnrollment, EnrollmentStore } from './enrollment-store.js';
+import type { GrantableRole, DeviceEnrollment, EnrollmentStore } from './enrollment-store.js';
 import { GatewayDatabase } from './gateway-db.js';
 import {
   clearReservedFoundingVaults,
@@ -34,7 +34,7 @@ interface TicketRow {
   kind: 'found' | 'enroll';
   secret_hash: string;
   vault_id: string | null;
-  trust: GrantableTrust | null;
+  role: GrantableRole | null;
   created_at: string;
   expires_at: number;
 }
@@ -62,9 +62,9 @@ export class PairingTicketStore {
   mint(
     vaultId: string,
     ttlMs = DEFAULT_TICKET_TTL_MS,
-    trust: GrantableTrust = 'full',
+    role: GrantableRole = 'write',
   ): { ticketId: string; secret: string; expiresAt: number } {
-    return this.insert('enroll', ttlMs, vaultId, trust);
+    return this.insert('enroll', ttlMs, vaultId, role);
   }
 
   /**
@@ -95,10 +95,10 @@ export class PairingTicketStore {
     });
   }
 
-  redeem(ticketId: string, secret: string): { vaultId: string; trust: GrantableTrust } | undefined {
+  redeem(ticketId: string, secret: string): { vaultId: string; role: GrantableRole } | undefined {
     const row = this.consume(ticketId, secret, 'enroll');
-    if (!row?.vault_id || !row.trust) return undefined;
-    return { vaultId: row.vault_id, trust: row.trust };
+    if (!row?.vault_id || !row.role) return undefined;
+    return { vaultId: row.vault_id, role: row.role };
   }
 
   redeemAndEnroll(
@@ -119,7 +119,7 @@ export class PairingTicketStore {
     }
     return this.gatewayDatabase.transaction(() => {
       const row = this.consumeWithinTransaction(ticketId, secret, 'enroll');
-      if (!row?.vault_id || !row.trust) return undefined;
+      if (!row?.vault_id || !row.role) return undefined;
       beforeEnroll?.();
       return enrollments.enrollWithinTransaction({
         endpointId: input.endpointId,
@@ -128,7 +128,7 @@ export class PairingTicketStore {
         ...(input.platform !== undefined ? { platform: input.platform } : {}),
         ...(input.rememberDevice !== undefined ? { rememberDevice: input.rememberDevice } : {}),
         ...(input.grantProfile !== undefined ? { grantProfile: input.grantProfile } : {}),
-        trust: row.trust,
+        role: row.role,
       });
     });
   }
@@ -186,7 +186,7 @@ export class PairingTicketStore {
           vaultId,
           label: input.label,
           ...(input.platform !== undefined ? { platform: input.platform } : {}),
-          trust: 'owner',
+          role: 'admin',
         }),
       );
     });
@@ -206,7 +206,7 @@ export class PairingTicketStore {
     return this.gatewayDatabase.transaction(() => {
       const row = this.gatewayDatabase.db
         .prepare(
-          `SELECT ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
+          `SELECT ticket_id, kind, secret_hash, vault_id, role, created_at, expires_at
              FROM tickets
             WHERE ticket_id = ? AND kind = 'found'`,
         )
@@ -278,7 +278,7 @@ export class PairingTicketStore {
           vaultId,
           label: input.label,
           ...(input.platform !== undefined ? { platform: input.platform } : {}),
-          trust: 'owner',
+          role: 'admin',
         }),
       );
       afterEnroll?.();
@@ -317,7 +317,7 @@ export class PairingTicketStore {
   validatesFounding(ticketId: string, secret: string): boolean {
     const row = this.gatewayDatabase.db
       .prepare(
-        `SELECT ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
+        `SELECT ticket_id, kind, secret_hash, vault_id, role, created_at, expires_at
            FROM tickets
           WHERE ticket_id = ? AND kind = 'found' AND expires_at > ?`,
       )
@@ -331,24 +331,24 @@ export class PairingTicketStore {
   listActive(): Array<{
     ticketId: string;
     vaultId: string;
-    trust: GrantableTrust;
+    role: GrantableRole;
     expiresAt: number;
   }> {
     const now = Date.now();
     return (
       this.gatewayDatabase.db
         .prepare(
-          `SELECT ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
+          `SELECT ticket_id, kind, secret_hash, vault_id, role, created_at, expires_at
              FROM tickets WHERE kind = 'enroll' AND expires_at > ? ORDER BY created_at`,
         )
         .all(now) as unknown as TicketRow[]
     ).flatMap((row) =>
-      row.vault_id && row.trust
+      row.vault_id && row.role
         ? [
             {
               ticketId: row.ticket_id,
               vaultId: row.vault_id,
-              trust: row.trust,
+              role: row.role,
               expiresAt: row.expires_at,
             },
           ]
@@ -360,10 +360,10 @@ export class PairingTicketStore {
     kind: 'found' | 'enroll',
     ttlMs: number,
     vaultId: string | null,
-    trust: GrantableTrust | null,
+    role: GrantableRole | null,
   ): { ticketId: string; secret: string; expiresAt: number } {
     return this.gatewayDatabase.transaction(() =>
-      this.insertWithinTransaction(kind, ttlMs, vaultId, trust),
+      this.insertWithinTransaction(kind, ttlMs, vaultId, role),
     );
   }
 
@@ -371,7 +371,7 @@ export class PairingTicketStore {
     kind: 'found' | 'enroll',
     ttlMs: number,
     vaultId: string | null,
-    trust: GrantableTrust | null,
+    role: GrantableRole | null,
   ): { ticketId: string; secret: string; expiresAt: number } {
     const ticketId = crypto.randomUUID();
     const secret = crypto.randomBytes(32).toString('base64url');
@@ -379,10 +379,10 @@ export class PairingTicketStore {
     this.gatewayDatabase.db
       .prepare(
         `INSERT INTO tickets (
-          ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
+          ticket_id, kind, secret_hash, vault_id, role, created_at, expires_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(ticketId, kind, hashSecret(secret), vaultId, trust, new Date().toISOString(), expiresAt);
+      .run(ticketId, kind, hashSecret(secret), vaultId, role, new Date().toISOString(), expiresAt);
     return { ticketId, secret, expiresAt };
   }
 
@@ -403,7 +403,7 @@ export class PairingTicketStore {
   ): TicketRow | undefined {
     const row = this.gatewayDatabase.db
       .prepare(
-        `SELECT ticket_id, kind, secret_hash, vault_id, trust, created_at, expires_at
+        `SELECT ticket_id, kind, secret_hash, vault_id, role, created_at, expires_at
            FROM tickets
           WHERE ticket_id = ? AND kind = ?`,
       )

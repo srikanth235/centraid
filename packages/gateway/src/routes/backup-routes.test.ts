@@ -49,7 +49,7 @@ const OWNER_HEADERS = {
 const ownerEnrollments = {
   get: (endpointId: string, vaultId: string) =>
     endpointId === OWNER_ENDPOINT && vaultId === 'v1'
-      ? { endpointId, vaultId, trust: 'owner' }
+      ? { endpointId, vaultId, role: 'admin' }
       : undefined,
 } as unknown as EnrollmentStore;
 

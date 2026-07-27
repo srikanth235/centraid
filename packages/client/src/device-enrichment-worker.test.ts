@@ -24,7 +24,7 @@ function device(optedIn = true, transcript = false): CentraidGatewayDevice {
     transport: 'iroh',
     vaultId: 'vault-1',
     current: true,
-    trust: 'full',
+    role: 'write',
     rememberDevice: true,
     compute: {
       contributeWhileCharging: optedIn,

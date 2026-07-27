@@ -714,6 +714,7 @@ export {
   releaseGatewayDeviceWork,
   stageGatewayDeviceWorkDerivative,
   type CentraidGatewayDevice,
+  type GatewayDeviceRole,
   type DeviceComputeCapabilities,
   type DeviceComputeProfile,
   type GatewayDeviceWorkDepth,

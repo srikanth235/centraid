@@ -41,6 +41,7 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **journal** | `journal.db` — audit/receipt stream **and** conversation ledger bands. | vault package + app-engine `gateway-db.ts` |
 | **replica** | Consent-scoped, read-mostly device copy; intents for offline writes; gateway is sole canonical writer. | `packages/vault` replica schema; `packages/client/src/replica/` |
 | **pairing** | One-time ticket ceremony that enrolls a device key to a vault over the tunnel. | `packages/gateway` pairing/enrollment stores; `packages/tunnel` |
+| **role** | The authority a device is granted at pairing — what it may **do**: `admin` / `write` / `read`. See [Device roles](#device-roles-gateway-pairing). | `DeviceRole` / `GrantableRole` / `canWrite()` in `enrollment-store.ts` |
 | **tunnel / relay** | Iroh QUIC device path; browsers are relay-only (no UDP). | `packages/tunnel`, `packages/tunnel/data-plane` |
 | **CAS / custody** | Content-addressed blob store; local-only vs remote-primary lifecycle. | `packages/vault` blob; backup package |
 | **skill** | Agent grounding unit (`SKILL.md`) loaded by the agent runtime. | `packages/gateway/src/skills` |
@@ -58,6 +59,29 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | **client package** | Shared React shell + browser-safe HTTP. `packages/client` |
 | **daemon** | Standalone `centraid-gateway` process under a `dataDir`. |
 
+## Device roles (gateway pairing)
+
+A device has two independent axes. Keep them in separate words:
+
+- **trust / identity** — is this device *who it claims*? Answered by its proved iroh EndpointId. Nothing to do with authority.
+- **role** — what may this device *do*? Granted at pairing time, revocable, per `(device, vault)`.
+
+| Role | Value | UI label | May do |
+| --- | --- | --- | --- |
+| admin | `admin` | Admin | Everything `write` may, **plus** mint pairing tickets, grant roles, revoke devices. The founding device always lands here. |
+| write | `write` | Read & write | Read the vault and change it. **The default for every mint**, CLI and UI. |
+| read | `read` | Read only | Read/query only; mutations refused at the gate. |
+
+`revoked` is **not a role** — it is a tombstone state an enrollment is put into. It is never granted, never offered in a picker, and deliberately absent from `GrantableRole`.
+
+Invariants:
+
+- The **founding ticket is CLI-only** (`centraid-gateway init-ticket`) and its device is always `admin`. Every vault therefore has ≥1 admin from the first moment.
+- The role **travels with the ticket** — chosen at mint, never negotiated at redemption. The joining device cannot name its own role.
+- Revoking the last admin of a vault requires an explicit confirmation (`--confirm-last-admin` / `confirmLastAdmin`).
+
+One deliberate mapping: the vault's `consent_device.trust` (`full`/`readonly`) is a **capability mirror**, not the role. `admin` and `write` both collapse to `full` there, because minting and revoking are gateway-plane concerns the vault has no opinion about.
+
 ## Forbidden / discouraged synonyms (broader)
 
 | Avoid | Prefer |
@@ -67,6 +91,10 @@ There is **no `run` layer** and no `run_nodes` table (collapsed in #190). Automa
 | "template app" after install | **app** (blueprint is the shipped source) |
 | "plugin" for declared handlers | **handler** / **query** / **action** |
 | "identity.sqlite" / multi-user gateway identity | vault owner *is* the user (#280) |
+| `owner` as a **device** role | **`admin`** — the owner is the human; a device is never the owner |
+| `full` as a device role | **`write`** — "full" is a lie once `admin` sits above it |
+| "trust" / "trust tier" for what a device may do | **role** — trust is proved identity, role is granted authority |
+| "token" for the pairing artifact | **ticket** — one-time, burns on redemption (#555 removed bearer redemption) |
 | `com.centraid.*` identifiers | **`dev.centraid.*`** ([identifiers.md](identifiers.md)) |
 
 ## Inconsistencies (known dual vocabulary)

@@ -102,13 +102,13 @@ test('device deletion cascades its durable browser sessions', async () => {
   opened.push(gateway);
   gateway.run(
     `INSERT INTO devices (
-      enrollment_id, endpoint_id, vault_id, label, trust, remember_device, added_at
+      enrollment_id, endpoint_id, vault_id, label, role, remember_device, added_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     'enrollment',
     'endpoint',
     'vault',
     'Laptop',
-    'full',
+    'write',
     1,
     new Date(0).toISOString(),
   );

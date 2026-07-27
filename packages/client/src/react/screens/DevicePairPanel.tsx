@@ -1,6 +1,6 @@
 import { useEffect, useState, type JSX } from 'react';
 import QRCode from 'qrcode';
-import type { GatewayDeviceTicket } from '../../gateway-client.js';
+import type { GatewayDeviceRole, GatewayDeviceTicket } from '../../gateway-client.js';
 import { formatClock, formatDuration } from '../shell/routes/gatewayData.js';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
@@ -10,7 +10,10 @@ import styles from './DevicesCard.module.css';
 
 export interface DevicePairPanelProps {
   now: number;
-  onCreateTicket: (input?: { ttlMinutes?: number }) => Promise<GatewayDeviceTicket>;
+  onCreateTicket: (input?: {
+    ttlMinutes?: number;
+    role?: GatewayDeviceRole;
+  }) => Promise<GatewayDeviceTicket>;
   onClose: () => void;
 }
 
@@ -20,6 +23,27 @@ const TTL_PRESETS: readonly { label: string; minutes: number }[] = [
   { label: '24 hours', minutes: 1440 },
 ];
 
+/*
+ * The role travels WITH the ticket, so it is chosen at mint time, not after
+ * the device connects. `write` is the default because a ticket leaves this
+ * machine — pasted into a browser, scanned by a phone — and whatever redeems
+ * it lands at the chosen role. Defaulting to Admin would make a casually
+ * paired phone able to mint further tickets and revoke this very device.
+ */
+const ROLE_PRESETS: readonly { label: string; role: GatewayDeviceRole; hint: string }[] = [
+  { label: 'Read only', role: 'read', hint: 'Can read your vault. Cannot change anything.' },
+  {
+    label: 'Read & write',
+    role: 'write',
+    hint: 'Can read and change your vault. The usual choice.',
+  },
+  {
+    label: 'Admin',
+    role: 'admin',
+    hint: 'Everything, plus pairing new devices and revoking existing ones — including this one.',
+  },
+];
+
 /** Owner-facing QR/paste material for one short-lived, single-use pairing ticket. */
 export default function DevicePairPanel({
   now,
@@ -27,6 +51,7 @@ export default function DevicePairPanel({
   onClose,
 }: DevicePairPanelProps): JSX.Element {
   const [minutes, setMinutes] = useState(15);
+  const [role, setRole] = useState<GatewayDeviceRole>('write');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<GatewayDeviceTicket | null>(null);
@@ -57,7 +82,7 @@ export default function DevicePairPanel({
     setBusy(true);
     setError(null);
     try {
-      setTicket(await onCreateTicket({ ttlMinutes: minutes }));
+      setTicket(await onCreateTicket({ ttlMinutes: minutes, role }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -80,9 +105,10 @@ export default function DevicePairPanel({
     return (
       <div className={styles.pair} data-testid="pair-panel">
         <div className={styles.pairLead}>
-          One-time ticket for <strong>{ticket.vaultName ?? 'your vault'}</strong>. Scan it in
-          Centraid Companion, or paste it into another device’s pairing dialog. It burns on first
-          use.
+          One-time ticket for <strong>{ticket.vaultName ?? 'your vault'}</strong>, granting{' '}
+          <strong>{ROLE_PRESETS.find((p) => p.role === ticket.role)?.label ?? ticket.role}</strong>.
+          Scan it in Centraid Companion, or paste it into another device’s pairing dialog. It burns
+          on first use.
         </div>
         <div className={styles.pairTicketSurface}>
           {qrSvg ? (
@@ -146,6 +172,21 @@ export default function DevicePairPanel({
         connects.
       </div>
       <div className={styles.pairForm}>
+        <fieldset className={styles.ttlGroup} aria-label="What this device may do">
+          {ROLE_PRESETS.map((preset) => (
+            <button
+              key={preset.role}
+              type="button"
+              className={cx(styles.ttlPreset, preset.role === role && styles.ttlPresetOn)}
+              aria-pressed={preset.role === role}
+              disabled={busy}
+              onClick={() => setRole(preset.role)}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </fieldset>
+        <p className={styles.roleHint}>{ROLE_PRESETS.find((p) => p.role === role)?.hint}</p>
         <fieldset className={styles.ttlGroup} aria-label="Ticket lifetime">
           {TTL_PRESETS.map((preset) => (
             <button

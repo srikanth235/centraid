@@ -158,19 +158,19 @@ test('enrollment: gateway.db replaces the old lock directory', async () => {
   expect(path.basename(store.gatewayDatabase.file)).toBe('gateway.db');
 });
 
-test('enrollment: remember, trust, and Companion grants persist across re-pair', async () => {
+test('enrollment: remember, role, and Companion grants persist across re-pair', async () => {
   const file = await tempFile('gateway.db');
   const store = EnrollmentStore.open(file);
   store.enroll({
     endpointId: 'ep-session',
     vaultId: 'v1',
     label: 'borrowed tablet',
-    trust: 'readonly',
+    role: 'read',
     rememberDevice: false,
     grantProfile: ['locker', 'notes'],
   });
   expect(EnrollmentStore.open(file).get('ep-session', 'v1')).toMatchObject({
-    trust: 'readonly',
+    role: 'read',
     rememberDevice: false,
     grantProfile: ['locker', 'notes'],
   });
@@ -229,11 +229,11 @@ test('pairing tickets: one-time, secret-checked, TTL-bound', async () => {
   expect(store.redeem(minted.ticketId, 'guessed')).toBeUndefined();
   expect(store.redeem(minted.ticketId, minted.secret)).toEqual({
     vaultId: 'v1',
-    trust: 'full',
+    role: 'write',
   });
 
   const second = store.mint('v2');
-  expect(store.redeem(second.ticketId, second.secret)).toEqual({ vaultId: 'v2', trust: 'full' });
+  expect(store.redeem(second.ticketId, second.secret)).toEqual({ vaultId: 'v2', role: 'write' });
   // …and it burned on success.
   expect(store.redeem(second.ticketId, second.secret)).toBeUndefined();
 

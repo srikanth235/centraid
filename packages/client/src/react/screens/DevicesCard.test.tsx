@@ -27,7 +27,7 @@ function device(over: Partial<CentraidGatewayDevice> = {}): CentraidGatewayDevic
     vaultName: 'Personal',
     addedAt: new Date(NOW - 86_400_000).toISOString(),
     lastUsedAt: new Date(NOW - 3_600_000).toISOString(),
-    trust: 'full',
+    role: 'write',
     rememberDevice: true,
     ...over,
   };
@@ -153,6 +153,7 @@ describe('DevicesCard', () => {
       vaultId: 'v1',
       vaultName: 'Personal',
       expiresAt: new Date(NOW + 900_000).toISOString(),
+      role: 'write',
     });
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -189,9 +190,64 @@ describe('DevicesCard', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(onCreateTicket).toHaveBeenCalledWith({ ttlMinutes: 15 });
+    // `write` is the default role, not `admin`: a ticket leaves this machine,
+    // so the safe tier is the one that ships unless the owner opts up.
+    expect(onCreateTicket).toHaveBeenCalledWith({ ttlMinutes: 15, role: 'write' });
     expect(container.textContent).toContain('CENTRAID-TICKET-XYZ');
     expect(container.textContent).toContain('Personal');
     expect(container.querySelector('img[alt="One-time Centraid pairing QR code"]')).toBeTruthy();
+  });
+
+  it('mints at the role the owner picked, not the default', async () => {
+    const onCreateTicket = vi.fn().mockResolvedValue({
+      ticket: 'CENTRAID-TICKET-ADMIN',
+      vaultId: 'v1',
+      vaultName: 'Personal',
+      expiresAt: new Date(NOW + 900_000).toISOString(),
+      role: 'admin',
+    });
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    await act(async () => {
+      root = createRoot(container as HTMLDivElement);
+      root.render(
+        <DevicesCard
+          now={NOW}
+          loadDevices={vi.fn().mockResolvedValue([])}
+          onRevokeDevice={() => Promise.resolve({ removed: true })}
+          onCreateTicket={onCreateTicket}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const pairBtn = [...container.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Pair a device'),
+    );
+    await act(async () => pairBtn!.click());
+
+    const adminBtn = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Admin',
+    );
+    expect(adminBtn).toBeTruthy();
+    await act(async () => adminBtn!.click());
+
+    const genBtn = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === 'Generate ticket',
+    );
+    await act(async () => {
+      genBtn!.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(onCreateTicket).toHaveBeenCalledWith({ ttlMinutes: 15, role: 'admin' });
+    // The issued ticket states the authority it carries, so the owner can see
+    // what they are about to hand over before they hand it over.
+    expect(container.textContent).toContain('Admin');
   });
 });

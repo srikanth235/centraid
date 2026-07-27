@@ -188,7 +188,7 @@ function installGatewaySchema(db: DatabaseSync): void {
       vault_id TEXT NOT NULL,
       label TEXT NOT NULL,
       platform TEXT,
-      trust TEXT NOT NULL CHECK (trust IN ('owner', 'full', 'readonly', 'revoked')),
+      role TEXT NOT NULL CHECK (role IN ('admin', 'write', 'read', 'revoked')),
       remember_device INTEGER NOT NULL CHECK (remember_device IN (0, 1)),
       grant_profile_json TEXT,
       compute_json TEXT,
@@ -212,13 +212,13 @@ function installGatewaySchema(db: DatabaseSync): void {
       kind TEXT NOT NULL CHECK (kind IN ('found', 'enroll')),
       secret_hash TEXT NOT NULL,
       vault_id TEXT,
-      trust TEXT,
+      role TEXT,
       created_at TEXT NOT NULL,
       expires_at INTEGER NOT NULL,
       CHECK (
-        (kind = 'found' AND vault_id IS NULL AND trust IS NULL) OR
+        (kind = 'found' AND vault_id IS NULL AND role IS NULL) OR
         (kind = 'enroll' AND vault_id IS NOT NULL AND
-          trust IN ('owner', 'full', 'readonly'))
+          role IN ('admin', 'write', 'read'))
       )
     ) STRICT;
     CREATE UNIQUE INDEX IF NOT EXISTS one_founding_ticket

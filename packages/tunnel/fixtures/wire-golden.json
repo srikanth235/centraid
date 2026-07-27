@@ -96,9 +96,9 @@
     {
       "name": "gatewayPairRequest",
       "note": "centraid/gw-pair/1 ticket redemption request (all fields).",
-      "json": "{\"ticketId\":\"tkt_1a2b\",\"secret\":\"s3cr3t-one-time\",\"deviceName\":\"Pixel 9\",\"platform\":\"android\",\"rememberDevice\":true,\"trust\":\"full\"}",
-      "jsonByteLength": 131,
-      "frameBase64": "AAAAg3sidGlja2V0SWQiOiJ0a3RfMWEyYiIsInNlY3JldCI6InMzY3IzdC1vbmUtdGltZSIsImRldmljZU5hbWUiOiJQaXhlbCA5IiwicGxhdGZvcm0iOiJhbmRyb2lkIiwicmVtZW1iZXJEZXZpY2UiOnRydWUsInRydXN0IjoiZnVsbCJ9"
+      "json": "{\"ticketId\":\"tkt_1a2b\",\"secret\":\"s3cr3t-one-time\",\"deviceName\":\"Pixel 9\",\"platform\":\"android\",\"rememberDevice\":true}",
+      "jsonByteLength": 116,
+      "frameBase64": "AAAAdHsidGlja2V0SWQiOiJ0a3RfMWEyYiIsInNlY3JldCI6InMzY3IzdC1vbmUtdGltZSIsImRldmljZU5hbWUiOiJQaXhlbCA5IiwicGxhdGZvcm0iOiJhbmRyb2lkIiwicmVtZW1iZXJEZXZpY2UiOnRydWV9"
     },
     {
       "name": "gatewayPairResponse",

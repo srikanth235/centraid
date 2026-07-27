@@ -28,7 +28,7 @@ import type { RouteHandler } from '../serve/build-gateway.js';
 import type {
   DeviceComputeCapabilities,
   DeviceComputeProfile,
-  DeviceTrust,
+  DeviceRole,
   EnrollmentStore,
   DeviceEnrollment,
 } from '../serve/enrollment-store.js';
@@ -57,7 +57,7 @@ interface DeviceDTO {
   addedAt?: string;
   lastUsedAt?: string;
   current?: boolean;
-  trust: DeviceTrust;
+  role: DeviceRole;
   rememberDevice: boolean;
   grantProfile?: string[];
   compute?: DeviceComputeProfile;
@@ -164,7 +164,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       if (!callerKey && !hostCustody) {
         return sendJson(res, 403, {
           error: 'device_identity_required',
-          message: 'pairing tickets require an enrolled owner or direct host custody',
+          message: 'pairing tickets require an enrolled admin device or direct host custody',
         });
       }
       const hostVaults = hostCustody ? (deps.vaultIds?.() ?? []) : [];
@@ -185,20 +185,30 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       ) {
         return sendJson(res, 404, { error: 'not_found' });
       }
-      // Minting a pairing ticket delegates enrollment, so only a proved owner
+      // Minting a pairing ticket delegates enrollment, so only a proved admin
       // of this exact vault may do it. There is no keyless loopback wildcard.
       if (
         !hostCustody &&
-        (!callerKey || deps.enrollments.get(callerKey, target)?.trust !== 'owner')
+        (!callerKey || deps.enrollments.get(callerKey, target)?.role !== 'admin')
       ) {
         return sendJson(res, 403, {
-          error: 'not_owner',
-          message: 'only the owner device can mint pairing tickets',
+          error: 'not_admin',
+          message: 'only an admin device can mint pairing tickets',
         });
       }
-      const trust = body.trust ?? 'full';
-      if (trust !== 'full' && trust !== 'readonly') {
-        return sendJson(res, 400, { error: 'invalid_trust' });
+      // `admin` is grantable here, not just `write`/`read`: the guard above
+      // already proved this caller is either direct host custody or an admin
+      // of THIS vault, and granting admin is the only way to have a second
+      // admin device (or to replace a lost one). The CLI validates
+      // `--role admin`, `GrantableRole` names it, and `tickets.mint` accepts
+      // it — rejecting it here was the odd one out.
+      //
+      // The default stays `write`: a ticket LEAVES this machine, and whatever
+      // redeems it lands at the role baked into it. Defaulting to admin would
+      // let a casually paired phone mint further tickets and revoke this device.
+      const role = body.role ?? 'write';
+      if (role !== 'admin' && role !== 'write' && role !== 'read') {
+        return sendJson(res, 400, { error: 'invalid_role' });
       }
       const ttlMs =
         typeof body.ttlMinutes === 'number' && body.ttlMinutes > 0
@@ -214,7 +224,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
             'gateway has no iroh endpoint identity yet — start the daemon so it mints its endpoint',
         });
       }
-      const minted = deps.tickets.mint(target, ttlMs, trust);
+      const minted = deps.tickets.mint(target, ttlMs, role);
       const token = encodePairingTicket({
         v: 1,
         kind: 'centraid-gw-pair',
@@ -230,7 +240,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
         vaultId: target,
         vaultName: deps.vaultName(target),
         expiresAt: new Date(minted.expiresAt).toISOString(),
-        trust,
+        role,
       });
     }
 
@@ -283,22 +293,22 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       return sendJson(res, 404, { error: 'not_found' });
     }
 
-    // A device may unpair itself; revoking a peer requires owner trust in this
-    // exact vault. This stops a compromised `full` device revoking its owner.
+    // A device may unpair itself; revoking a peer requires admin role in this
+    // exact vault. This stops a compromised `write` device revoking an admin.
     if (
       target &&
       callerKey !== target.endpointId &&
-      deps.enrollments.get(callerKey, target.vaultId)?.trust !== 'owner'
+      deps.enrollments.get(callerKey, target.vaultId)?.role !== 'admin'
     ) {
       return sendJson(res, 403, {
-        error: 'not_owner',
-        message: 'only the owner device can revoke another device',
+        error: 'not_admin',
+        message: 'only an admin device can revoke another device',
       });
     }
 
     if (
-      target?.trust === 'owner' &&
-      deps.enrollments.listByVault(target.vaultId).filter((row) => row.trust === 'owner').length ===
+      target?.role === 'admin' &&
+      deps.enrollments.listByVault(target.vaultId).filter((row) => row.role === 'admin').length ===
         1
     ) {
       let body: Record<string, unknown>;
@@ -308,12 +318,12 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
         body = {};
       }
       const vaultName = deps.vaultName(target.vaultId) ?? target.vaultId;
-      if (body.confirmLastOwner !== vaultName) {
+      if (body.confirmLastAdmin !== vaultName) {
         return sendJson(res, 409, {
-          error: 'last_owner_confirmation_required',
+          error: 'last_admin_confirmation_required',
           message:
-            `this is the last owner enrollment; type ${JSON.stringify(vaultName)} in ` +
-            'confirmLastOwner. Losing it requires filesystem access and the gateway CLI to recover.',
+            `this is the last admin enrollment; type ${JSON.stringify(vaultName)} in ` +
+            'confirmLastAdmin. Losing it requires filesystem access and the gateway CLI to recover.',
         });
       }
     }
@@ -357,7 +367,7 @@ function toDto(row: DeviceEnrollment, deps: DevicesRouteDeps, callerKey: string)
     ...(vaultName !== undefined ? { vaultName } : {}),
     addedAt: row.addedAt,
     current: row.endpointId === callerKey,
-    trust: row.trust,
+    role: row.role,
     rememberDevice: row.rememberDevice,
     ...(row.grantProfile !== undefined ? { grantProfile: [...row.grantProfile] } : {}),
     ...(row.compute ? { compute: row.compute } : {}),
