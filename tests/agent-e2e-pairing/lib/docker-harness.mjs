@@ -269,9 +269,19 @@ async function dockerNetworkCreate(name) {
   return subnet;
 }
 
-/** Poll `docker logs <name>` for the same readiness lines lib/harness.mjs's spawnDaemon waits for. */
+/**
+ * Poll `docker logs <name>` for the readiness lines lib/harness.mjs's
+ * spawnDaemon waits for.
+ *
+ * The daemon no longer prints a loopback bearer (`token:`) to stdout
+ * (issue #568 / cli.test.ts). This flow never dials the host HTTP surface —
+ * mint/list go through `docker exec … pair/devices` against the container
+ * data dir — so readiness is just listener + endpoint id. Pair tickets still
+ * embed a live EndpointTicket because the CLI mints through the running
+ * daemon once those lines appear.
+ */
 async function waitForGatewayReady(containerName, logFile, { timeoutMs = 90000 } = {}) {
-  const wanted = { url: undefined, token: undefined, endpointId: undefined };
+  const wanted = { url: undefined, endpointId: undefined };
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const { code: inspectCode, stdout: statusOut } = await run('docker', [
@@ -282,9 +292,8 @@ async function waitForGatewayReady(containerName, logFile, { timeoutMs = 90000 }
     ]);
     const logs = await sh('docker', ['logs', containerName]);
     wanted.url ??= logs.match(/listening on (http:\/\/[^\s]+)/)?.[1];
-    wanted.token ??= logs.match(/token: ([0-9a-f]+)/)?.[1];
     wanted.endpointId ??= logs.match(/endpoint: ([0-9a-f]{64})/)?.[1];
-    if (wanted.url && wanted.token && wanted.endpointId) {
+    if (wanted.url && wanted.endpointId) {
       await fs.writeFile(logFile, logs);
       return wanted;
     }

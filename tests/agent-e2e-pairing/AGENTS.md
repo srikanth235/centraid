@@ -74,8 +74,10 @@ running any part of the ceremony, rather than trusting the driver.
 ## Gotchas
 
 - The live `/centraid/_gateway/info` response publishes the refreshable
-  EndpointTicket only after iroh binds. The harness waits for that response;
-  do not add sleeps or read retired cache files.
+  EndpointTicket only after iroh binds, and only to an authenticated caller
+  (issue #568 item C — anonymous GETs omit it). The harness waits for that
+  field with the host-custody bearer; do not add sleeps or read retired cache
+  files, and do not scrape a retired `token:` stdout line for readiness.
 - The gateway's iroh endpoint binds with the production n0 relay/discovery
   config — there's no daemon-side knob to disable it. Only the device side
   disables relays and dials the ticket's direct loopback addresses, so the

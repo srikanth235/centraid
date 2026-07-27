@@ -55,13 +55,19 @@ export async function commandInitTicket(
     const port = parsed.port ?? config.port;
     if (!port) localFail('daemon needs a fixed loopback port for init-ticket', 1);
     const baseUrl = `http://127.0.0.1:${port}`;
-    const handshake = await handshakeGateway(baseUrl, undefined, fetchImpl);
+    // `endpointTicket` is auth-gated on `/_gateway/info` (#568 item C). Load the
+    // host-custody key first so the readiness handshake can present the landlord
+    // bearer; an anonymous GET would look like "endpoint not ready" forever.
+    const secret = daemonKeyStore(daemonLayoutFor(config.dataDir).keysDir).load('endpoint-key.bin');
+    if (!secret) {
+      localFail('daemon endpoint identity is not ready or belongs to another data directory', 1);
+    }
+    const landlordBearer = landlordBearerForEndpointSecret(secret);
+    const handshake = await handshakeGateway(baseUrl, landlordBearer, fetchImpl);
     if (!handshake.ok) {
       localFail(`daemon not running at ${baseUrl} — start it before minting a founding ticket`, 1);
     }
-    const secret = daemonKeyStore(daemonLayoutFor(config.dataDir).keysDir).load('endpoint-key.bin');
     if (
-      !secret ||
       handshake.info.endpointId !== endpointIdForSecret(secret) ||
       handshake.info.endpointTicket === undefined
     ) {
@@ -70,7 +76,7 @@ export async function commandInitTicket(
     const response = await fetchImpl(`${baseUrl}${ROUTES.gatewayFoundingTicket}`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${landlordBearerForEndpointSecret(secret)}`,
+        Authorization: `Bearer ${landlordBearer}`,
       },
     }).catch(() => localFail('daemon stopped before it could mint the founding ticket', 1));
     const body = (await response.json().catch(() => ({}))) as {

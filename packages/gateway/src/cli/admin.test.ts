@@ -19,6 +19,7 @@ import { DEVICE_HEADER, DEVICE_PROOF_HEADER, makeDaemonDevicePlane } from './end
 import { daemonLayoutFor } from './paths.ts';
 import { openVaultRegistry } from '../serve/vault-registry.ts';
 import { daemonKeyStore } from './key-store.ts';
+import { landlordBearerForEndpointSecret } from './landlord-auth.ts';
 import { EnrollmentStore } from '../serve/enrollment-store.ts';
 import { encodePairingTicket, PairingTicketStore } from '../serve/pairing-store.ts';
 
@@ -93,13 +94,17 @@ async function fakePairDaemon(): Promise<typeof fetch> {
       typeof input === 'string' || input instanceof URL ? input.toString() : input.url,
     );
     if (url.pathname === '/centraid/_gateway/info') {
+      // Mirror production #568 item C: dial tickets only for authenticated callers.
+      const headers = new Headers(init?.headers);
+      const authorized =
+        headers.get('authorization') === `Bearer ${landlordBearerForEndpointSecret(secret)}`;
       return Response.json(
         buildGatewayInfoPayload({
           instanceId: 'test-daemon',
           startedAt: Date.now(),
           uptimeMs: 1,
           endpointId,
-          endpointTicket: 'gw-ticket-base32',
+          ...(authorized ? { endpointTicket: 'gw-ticket-base32' } : {}),
         }),
       );
     }
@@ -259,6 +264,21 @@ test('devices admin rejects bad usage + unknown vault', async () => {
 // ── pair ──────────────────────────────────────────────────────────────
 
 test('pair needs the daemon endpoint identity, then mints a pasteable ticket', async () => {
+  // Host custody key is required before the daemon handshake (auth-gated
+  // endpointTicket, #568 item C) — empty data dir fails for that reason first.
+  await expect(
+    capture(() =>
+      commandPair(['--data-dir', dataDir], fail, async () => {
+        throw new Error('connection refused');
+      }),
+    ),
+  ).rejects.toThrow(/no gateway endpoint identity/);
+
+  const layout = daemonLayoutFor(dataDir);
+  // Bootstrap a vault the ticket can name.
+  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+  // Key present but daemon unreachable → "daemon not running".
+  new KeyStore(layout.keysDir).store('endpoint-key.bin', Buffer.alloc(32, 3));
   await expect(
     capture(() =>
       commandPair(['--data-dir', dataDir], fail, async () => {
@@ -267,9 +287,6 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
     ),
   ).rejects.toThrow(/daemon not running/);
 
-  const layout = daemonLayoutFor(dataDir);
-  // Bootstrap a vault the ticket can name.
-  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
   const daemon = await fakePairDaemon();
 
   const text = await capture(() =>

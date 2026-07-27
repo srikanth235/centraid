@@ -20,6 +20,7 @@ import { KeyStore } from '@centraid/vault';
 import { commandStatus } from './status-admin.ts';
 import { commandVault } from './vault-admin.ts';
 import { daemonLayoutFor } from './paths.ts';
+import { landlordBearerForEndpointSecret } from './landlord-auth.ts';
 
 class CliFailError extends Error {
   constructor(
@@ -93,16 +94,24 @@ test.skipIf(servicePlatform)(
     const secret = Buffer.alloc(32, 11);
     new KeyStore(layout.keysDir).store('endpoint-key.bin', secret);
     const endpointId = endpointIdForSecret(secret);
-    const liveFetch = (async (): Promise<Response> =>
-      Response.json(
+    const liveFetch = (async (
+      _input: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      // Mirror production #568 item C: dial tickets only for authenticated callers.
+      const headers = new Headers(init?.headers);
+      const authorized =
+        headers.get('authorization') === `Bearer ${landlordBearerForEndpointSecret(secret)}`;
+      return Response.json(
         buildGatewayInfoPayload({
           instanceId: 'daemon',
           startedAt: Date.now(),
           uptimeMs: 1,
           endpointId,
-          endpointTicket: 'gw-ticket-base32',
+          ...(authorized ? { endpointTicket: 'gw-ticket-base32' } : {}),
         }),
-      )) as typeof fetch;
+      );
+    }) as typeof fetch;
 
     const parsed = lastJson(
       await capture(() => commandStatus(['--data-dir', dataDir, '--json'], fail, liveFetch)),

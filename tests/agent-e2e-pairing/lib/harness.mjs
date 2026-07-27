@@ -153,9 +153,13 @@ async function spawnDaemon(
       if (endpointSecret) wanted.token = landlordBearerForEndpointSecret(endpointSecret);
     }
     if (wanted.url && wanted.token && wanted.endpointId) {
-      // Gateway info is intentionally public. Keep readiness independent of
-      // the host-custody bearer; protected CLI/routes exercise that separately.
-      const response = await fetch(`${wanted.url}/centraid/_gateway/info`);
+      // `/centraid/_gateway/info` is public for the version/schema handshake,
+      // but `endpointTicket` is auth-gated (issue #568 item C) so a browser
+      // loopback GET cannot mint dial material. Readiness must present the
+      // host-custody bearer that landlordBearerForEndpointSecret derived above.
+      const response = await fetch(`${wanted.url}/centraid/_gateway/info`, {
+        headers: { authorization: `Bearer ${wanted.token}` },
+      });
       if (!response.ok) {
         throw new Error(`gateway info returned ${response.status} before ready`);
       }
