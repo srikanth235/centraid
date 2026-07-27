@@ -16,7 +16,7 @@
 // accents, a prominent active card. Mechanics mirror the Space/Photos drawers (a
 // transparent Modal, an Animated slide, a fading scrim that closes on tap).
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -33,6 +33,7 @@ import { icons as ICON_SET, type IconName } from '@centraid/design-tokens';
 
 import Grabber from '../../kit/components/Grabber';
 import Icon from '../../kit/components/Icon';
+import { useAnimatedValue } from '../../kit/hooks/useAnimatedValue';
 import { family, radii, t, useTheme, type ThemeColors } from '../../kit/theme';
 import { listVaults, type VaultRow } from '../../lib/gateway';
 import { forgetSpace, switchSpace } from '../../lib/phone-link';
@@ -62,6 +63,17 @@ function iconOf(value: string | undefined): IconName {
   return value !== undefined && value in ICON_SET ? (value as IconName) : DEFAULT_ICON;
 }
 
+// Re-read the registry into the sheet's local mirrors. Outside the component so
+// both the subscription and the on-open refresh share one definition and the
+// effects stay plain external-system reads.
+function syncFromRegistry(
+  setSpaces: (next: Space[]) => void,
+  setActiveId: (next: string | undefined) => void,
+): void {
+  setSpaces([...listSpaces()]);
+  setActiveId(getActiveSpace()?.id);
+}
+
 export default function SpacesSwitcher({
   open,
   onClose,
@@ -70,8 +82,8 @@ export default function SpacesSwitcher({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const slide = useRef(new Animated.Value(SHEET_TRAVEL)).current;
-  const fade = useRef(new Animated.Value(0)).current;
+  const slide = useAnimatedValue(SHEET_TRAVEL);
+  const fade = useAnimatedValue(0);
 
   // Local mirrors of the registry, kept live via subscribeSpaces so a switch/add/
   // forget from within this sheet re-renders it immediately.
@@ -80,17 +92,12 @@ export default function SpacesSwitcher({
   const [addable, setAddable] = useState<AddableVault[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const sync = useCallback((): void => {
-    setSpaces([...listSpaces()]);
-    setActiveId(getActiveSpace()?.id);
-  }, []);
-
-  useEffect(() => subscribeSpaces(sync), [sync]);
+  useEffect(() => subscribeSpaces(() => syncFromRegistry(setSpaces, setActiveId)), []);
 
   // On open: animate in, and refresh the addable list from the active gateway.
   useEffect(() => {
     if (!open) return;
-    sync();
+    syncFromRegistry(setSpaces, setActiveId);
     slide.setValue(SHEET_TRAVEL);
     fade.setValue(0);
     Animated.parallel([
@@ -141,7 +148,7 @@ export default function SpacesSwitcher({
     return () => {
       cancelled = true;
     };
-  }, [open, sync, slide, fade]);
+  }, [open, slide, fade]);
 
   const runExclusive = useCallback(
     async (action: () => Promise<unknown>): Promise<void> => {

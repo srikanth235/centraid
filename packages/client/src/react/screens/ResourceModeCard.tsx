@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { cx } from '../ui/cx.js';
+import a11y from '../styles/a11y.module.css';
 import styles from './GatewayScreen.module.css';
 import buttonCss from '../ui/Button.module.css';
 import ResourceCompareDialog from './ResourceCompareDialog.js';
@@ -151,10 +152,15 @@ export default function ResourceModeCard({
   const pauseBusyRef = useRef(false);
   const pauseControlOn = Boolean(backgroundPause && onPause && onResume);
 
-  useEffect(() => {
-    if (pauseBusyRef.current) return;
-    if (backgroundPause) setPauseState(backgroundPause);
-  }, [backgroundPause]);
+  // A fresh server snapshot replaces the local one, unless a pause/resume is
+  // mid-flight (then the optimistic value stands and the snapshot is dropped —
+  // the next one supersedes it). Adjusted during render so the snapshot paints
+  // straight away; `pauseBusy` is the render-readable twin of `pauseBusyRef`.
+  const [seenBackgroundPause, setSeenBackgroundPause] = useState(backgroundPause);
+  if (seenBackgroundPause !== backgroundPause) {
+    setSeenBackgroundPause(backgroundPause);
+    if (!pauseBusy && backgroundPause) setPauseState(backgroundPause);
+  }
 
   const applyPause = async (durationMs?: number): Promise<void> => {
     if (!onPause || pauseBusy) return;
@@ -246,19 +252,22 @@ export default function ResourceModeCard({
 
       <div className={styles.resourceModes} role="radiogroup" aria-label="Resource mode">
         {MODES.map((m) => (
-          <button
+          <label
             key={m.id}
-            type="button"
-            role="radio"
-            aria-checked={mode === m.id}
-            disabled={busy}
             title={m.blurb}
             className={cx(styles.resourceModeBtn, mode === m.id && styles.resourceModeBtnActive)}
-            onClick={() => void select(m.id)}
           >
+            <input
+              type="radio"
+              className={a11y.srControl}
+              name="resource-mode"
+              checked={mode === m.id}
+              disabled={busy}
+              onChange={() => void select(m.id)}
+            />
             <span className={styles.resourceModeLabel}>{m.label}</span>
             <span className={styles.resourceModeHint}>{presetHint(m.id)}</span>
-          </button>
+          </label>
         ))}
       </div>
 
@@ -324,7 +333,7 @@ export default function ResourceModeCard({
               </button>
             </div>
           ) : showPauseChoices ? (
-            <div className={styles.resourcePauseChoices} role="group" aria-label="Pause duration">
+            <fieldset className={styles.resourcePauseChoices} aria-label="Pause duration">
               <span className={styles.resourcePauseChoicesLabel}>Pause for</span>
               <button
                 type="button"
@@ -350,7 +359,7 @@ export default function ResourceModeCard({
               >
                 Until I resume
               </button>
-            </div>
+            </fieldset>
           ) : (
             <button
               type="button"

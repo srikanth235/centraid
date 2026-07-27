@@ -26,26 +26,30 @@ export default function BuilderHistory({
   onRestored,
   showToast,
 }: BuilderHistoryProps): JSX.Element {
-  const [data, setData] = useState<Versions | null>(null);
-  const [error, setError] = useState(false);
   const [nonce, setNonce] = useState(0);
+  // The settled listing carries the (app, nonce) it was fetched for, so a
+  // switch or a restore-triggered refetch reads as "loading" during render
+  // instead of needing the effect to clear the previous result first.
+  const [settled, setSettled] = useState<{ key: string; result: Versions | 'error' } | null>(null);
+  const key = `${appId}\u0000${nonce}`;
+  const current = settled !== null && settled.key === key ? settled.result : null;
+  const data = current === 'error' ? null : current;
+  const error = current === 'error';
 
   useEffect(() => {
     if (!appId) return;
     let alive = true;
-    setData(null);
-    setError(false);
     listVersions({ id: appId })
       .then((r) => {
-        if (alive) setData(r);
+        if (alive) setSettled({ key, result: r });
       })
       .catch(() => {
-        if (alive) setError(true);
+        if (alive) setSettled({ key, result: 'error' });
       });
     return () => {
       alive = false;
     };
-  }, [appId, nonce]);
+  }, [appId, key]);
 
   if (!appId) return <div className={atomsCss.empty}>No app yet.</div>;
   if (error)

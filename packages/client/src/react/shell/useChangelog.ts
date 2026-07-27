@@ -12,37 +12,41 @@ export type ChangelogState =
  * The bridge method is optional (test harnesses mock a partial API) — its
  * absence surfaces as an error state, not a crash.
  */
-export function useChangelog(): { state: ChangelogState; reload: () => void } {
-  const [state, setState] = useState<ChangelogState>({ status: 'loading' });
+/** One fetch attempt, resolved to the settled state it should produce (a
+ *  missing bridge method resolves to the error state rather than throwing). */
+async function loadChangelog(): Promise<ChangelogState> {
+  const get = window.CentraidApi.getChangelog;
+  if (!get) return { status: 'error', message: 'Changelog is unavailable in this build.' };
+  try {
+    return { status: 'ready', result: await get() };
+  } catch (err: unknown) {
+    return {
+      status: 'error',
+      message: err instanceof Error ? err.message : 'Failed to load changelog.',
+    };
+  }
+}
 
-  const load = useCallback((alive: () => boolean) => {
-    setState({ status: 'loading' });
-    const get = window.CentraidApi.getChangelog;
-    if (!get) {
-      setState({ status: 'error', message: 'Changelog is unavailable in this build.' });
-      return;
-    }
-    get()
-      .then((result: CentraidChangelogResult) => {
-        if (alive()) setState({ status: 'ready', result });
-      })
-      .catch((err: unknown) => {
-        if (alive())
-          setState({
-            status: 'error',
-            message: err instanceof Error ? err.message : 'Failed to load changelog.',
-          });
-      });
-  }, []);
+const LOADING: ChangelogState = { status: 'loading' };
+
+export function useChangelog(): { state: ChangelogState; reload: () => void } {
+  // `attempt` is the retry counter; the settled state is stamped with the
+  // attempt that produced it, so a reload reads as `loading` during render
+  // rather than through a synchronous setState in the effect body.
+  const [attempt, setAttempt] = useState(0);
+  const [settled, setSettled] = useState<{ attempt: number; state: ChangelogState } | null>(null);
+  const state = settled !== null && settled.attempt === attempt ? settled.state : LOADING;
 
   useEffect(() => {
     let alive = true;
-    load(() => alive);
+    void loadChangelog().then((next) => {
+      if (alive) setSettled({ attempt, state: next });
+    });
     return () => {
       alive = false;
     };
-  }, [load]);
+  }, [attempt]);
 
-  const reload = useCallback(() => load(() => true), [load]);
+  const reload = useCallback(() => setAttempt((n) => n + 1), []);
   return { state, reload };
 }

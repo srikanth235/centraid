@@ -7,6 +7,8 @@
    shared.module.css. */
 
 .card {
+  /* Containing block for the .cardOpen overlay button. */
+  position: relative;
   break-inside: avoid;
   margin-bottom: 14px;
   border: 1px solid var(--line);
@@ -18,8 +20,14 @@
     border-color 0.16s var(--ease),
     box-shadow 0.16s var(--ease);
 }
+/* The whole-card "open note" target: a transparent `kit-stretch-btn` laid under
+   the pin button. It carries the card's radius so its focus outline follows the
+   rounded corner the article always had. */
+.cardOpen {
+  border-radius: var(--r-card);
+}
 .card:hover,
-.card:focus-visible {
+.card:has(.cardOpen:focus-visible) {
   border-color: var(--line-strong);
   box-shadow: var(--shadow-md);
 }
@@ -43,6 +51,8 @@
   overflow-wrap: anywhere;
 }
 .pinBtn {
+  /* Above the .cardOpen overlay, so the pin still gets the click. */
+  position: relative;
   flex-shrink: 0;
   width: 28px;
   height: 28px;

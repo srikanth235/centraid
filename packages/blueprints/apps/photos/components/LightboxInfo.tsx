@@ -78,7 +78,7 @@ export function LightboxInfo({
 
   useEffect(() => {
     renderFaces(facesHostRef.current!, asset.asset_id, noteRef.current!);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) this component remounts fresh per asset/refresh (keyed by renderSeq in the shell)
+    // (#360) this component remounts fresh per asset/refresh (keyed by renderSeq in the shell)
   }, []);
 
   return (

@@ -23,10 +23,18 @@ export function GridCard({
   const selected = selectedIds.has(p.party_id);
   return (
     <div className={styles.card} data-selected={String(selected)}>
+      {/* The whole card opens the profile. One stretched button carries that
+          (issue #573) instead of click handlers on the static top/body blocks —
+          the card's own select/star buttons sit above it. */}
+      <button
+        type="button"
+        className="kit-stretch-btn"
+        aria-label={`Open ${p.name}`}
+        onClick={() => onOpenDetails(p.party_id)}
+      />
       <div
         className={styles.cardTop}
         style={{ background: `color-mix(in oklab, ${color} 12%, transparent)` }}
-        onClick={() => onOpenDetails(p.party_id)}
       >
         <KitAvatar name={p.name} size="58px" color={color}></KitAvatar>
       </div>
@@ -64,7 +72,7 @@ export function GridCard({
           <path d="m12 3 2.6 5.6 6 .7-4.5 4.2 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"></path>
         </svg>
       </button>
-      <div className={styles.cardBody} onClick={() => onOpenDetails(p.party_id)}>
+      <div className={styles.cardBody}>
         <div className={styles.cardTitle}>{p.name}</div>
         <div className={styles.cardRole}>{p.role || ''}</div>
         <div className={styles.cardMeta}>

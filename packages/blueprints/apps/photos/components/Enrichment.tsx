@@ -69,8 +69,11 @@ export function EnrichmentPanel() {
       >
         <SparkleIcon />
       </button>
+      {/* Native <dialog>, never `showModal()` — `open` is mandatory (a <dialog>
+          without it is `display:none`); the popover keeps its own away-click
+          close and its `.kit-popover` box. */}
       {open ? (
-        <div className={`kit-popover ${styles.panel}`} role="dialog" aria-label="Face detection">
+        <dialog open className={`kit-popover ${styles.panel}`} aria-label="Face detection">
           {status == null ? (
             <p className="kit-muted kit-small">Checking…</p>
           ) : status.vaultDenied ? (
@@ -108,7 +111,7 @@ export function EnrichmentPanel() {
             </p>
           )}
           <p className="lightbox-note enrichment-note" ref={noteRef}></p>
-        </div>
+        </dialog>
       ) : null}
     </div>
   );

@@ -37,9 +37,10 @@ export function useSampleRows(
   logical: string | undefined,
   fetcher: SampleRowsFetcher | undefined,
 ): SampleResult | undefined {
-  // Per-mount cache. A ref (not state) because the cache identity must be stable
-  // across renders — only the resolved entry drives a re-render, via `tick`.
-  const cacheRef = useRef<Map<string, SampleResult>>(new Map());
+  // Per-mount cache. Held in state's lazy initialiser (not a ref) because the
+  // cache identity must be stable across renders AND be readable during render —
+  // only the resolved entry drives a re-render, via `tick`.
+  const [cache] = useState<Map<string, SampleResult>>(() => new Map());
   const [, setTick] = useState(0);
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -48,8 +49,6 @@ export function useSampleRows(
       mountedRef.current = false;
     };
   }, []);
-
-  const cache = cacheRef.current;
 
   useEffect(() => {
     if (!fetcher || logical === undefined) return;

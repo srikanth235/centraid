@@ -414,6 +414,9 @@
 
 /* Loading / error. */
 .loadingLabel {
+  /* An <output> (implicit role=status) replaced the div this was written for;
+     `display` keeps the block box the surrounding stack assumes. */
+  display: block;
   font-size: 13px;
   color: var(--ink-3);
 }

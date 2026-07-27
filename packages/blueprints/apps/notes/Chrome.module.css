@@ -94,6 +94,9 @@
 }
 .scrim {
   composes: kit-app-scrim from global;
+  /* Now a real <button> (kit-plain-btn) so the dismiss gesture is keyboard
+     reachable; keep the plain-div cursor it always had. */
+  cursor: default;
 }
 
 /* ---------- Main ---------- */
@@ -165,6 +168,9 @@
   composes: kit-app-ask-mount from global;
 }
 .banner {
+  /* The notice banner is an `<output>` (its native role IS status), which is
+     inline by default — the banner shape needs a block box. */
+  display: block;
   margin: 14px 22px 0;
 }
 

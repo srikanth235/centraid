@@ -73,10 +73,16 @@ export interface MessageCallbacks {
 /** A collapsible streaming reasoning row (issue #420, Wave 2). Open while the
  *  model reasons, auto-collapses once the answer starts, expandable after. */
 function ThinkingRow({ text, streaming }: { text: string; streaming: boolean }): JSX.Element {
-  const [open, setOpen] = useState(true);
-  useEffect(() => {
+  // Open while the model reasons; collapses the moment the answer starts. The
+  // collapse is an adjustment during render, not an effect, so a finished row
+  // never paints expanded for a frame — and a row mounted after the fact starts
+  // collapsed for the same reason.
+  const [open, setOpen] = useState(streaming);
+  const [seenStreaming, setSeenStreaming] = useState(streaming);
+  if (seenStreaming !== streaming) {
+    setSeenStreaming(streaming);
     if (!streaming) setOpen(false);
-  }, [streaming]);
+  }
   return (
     <div className={cx(styles.msg, styles.msgThinking)}>
       <details
@@ -321,10 +327,10 @@ export default function Message({
   if (m.kind === 'thinking') return <ThinkingRow text={m.text} streaming={m.streaming} />;
   if (m.kind === 'notice') {
     return (
-      <div className={styles.notice} data-level={m.level} role="status">
+      <output className={styles.notice} data-level={m.level}>
         <Icon name={m.level === 'warn' ? 'AlertTriangle' : 'AlertCircle'} size={14} />
         <span>{m.text}</span>
-      </div>
+      </output>
     );
   }
   if (m.streaming) {
@@ -334,10 +340,10 @@ export default function Message({
     if (m.catchingUp) {
       return (
         <div className={cx(styles.msg, styles.msgAi)}>
-          <div className={styles.catchUp} role="status">
+          <output className={styles.catchUp}>
             <span className={styles.cursor} />
             <span>Connection lost — catching up…</span>
-          </div>
+          </output>
         </div>
       );
     }

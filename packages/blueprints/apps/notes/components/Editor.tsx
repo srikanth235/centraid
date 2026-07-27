@@ -10,7 +10,7 @@
 // the overlay, switching notes) — the same registerFocus idiom
 // tasks/components/Capture.jsx uses, inverted for teardown instead of setup.
 import { useEffect, useRef, useState } from 'react';
-import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent } from 'react';
+import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react';
 import { relTime, renderAttachments } from '../kit.ts';
 import { deriveTitle, parseBlocks, stripInline } from '../format.ts';
 import { I } from '../icons.ts';
@@ -127,46 +127,77 @@ function Blocks({
       acc += line.length + 1;
     }
   }
+  // Caret offset for the END of a rendered line — what clicking that line has
+  // always placed the caret at.
+  const caretAt = (idx: number) => (lineOffsets[idx] ?? 0) + (body.split('\n')[idx] ?? '').length;
+  const lineLabel = (text: string) => `Edit ${stripInline(text).trim() || 'this line'}`;
+
+  // This preview is a rendered projection of the body, not a textbox: the
+  // container's fake `role="textbox"` is gone and every line is a real
+  // <button> carrying that line's caret offset, so the per-line click-to-edit
+  // survives. Those line buttons are deliberately `tabIndex={-1}` — the
+  // container used to be ONE tab stop whose Enter opened the editor at the end,
+  // and `.bodyTail` below is that same single tab stop. Turning each of a
+  // note's lines into its own tab stop would be a keyboard regression, not a
+  // fix; a keyboard user edits in the real <textarea>.
   return (
-    <div
-      className={styles.bodyRender}
-      tabIndex={0}
-      role="textbox"
-      aria-multiline="true"
-      aria-label="Note body — press Enter to edit"
-      onClick={(e: MouseEvent<HTMLDivElement>) => {
-        const target = e.target as HTMLElement;
-        if (target.closest(`.${styles.checkBox}`)) return;
-        const el = target.closest('[data-line]') as HTMLElement | null;
-        const idx = el ? Number(el.dataset.line) : blocks.length - 1;
-        const line = body.split('\n')[idx] ?? '';
-        onEnter((lineOffsets[idx] ?? 0) + line.length);
-      }}
-      onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
-        if (e.key === 'Enter' && e.target === e.currentTarget) {
-          e.preventDefault();
-          onEnter(null);
-        }
-      }}
-    >
+    <div className={styles.bodyRender}>
+      {/* Clicking anywhere the lines don't cover edits at the end of the note —
+          the old `blocks.length - 1` fallback — and, as the one tab stop here,
+          it carries the Enter-to-edit affordance the container's onKeyDown had. */}
+      <button
+        type="button"
+        className={`kit-stretch-btn ${styles.bodyTail}`}
+        aria-label="Edit note body"
+        onClick={() => onEnter(null)}
+      />
       {blocks.length === 0 ? <p className={styles.mdGap} /> : null}
       {blocks.map((b) => {
-        if (b.kind === 'gap') return <p key={b.line} className={styles.mdGap} data-line={b.line} />;
+        if (b.kind === 'gap')
+          return (
+            <button
+              key={b.line}
+              type="button"
+              className={`kit-plain-btn ${styles.mdGap} ${styles.blockLine}`}
+              data-line={b.line}
+              tabIndex={-1}
+              aria-label="Edit blank line"
+              onClick={() => onEnter(caretAt(b.line))}
+            />
+          );
         if (b.kind === 'h') {
           const Tag = `h${b.level + 2}` as 'h3' | 'h4' | 'h5';
+          // The heading element stays (its role is real); the click target is a
+          // full-bleed button inside it.
           return (
             <Tag key={b.line} className={MD_H_CLASS[b.level]} data-line={b.line}>
-              {stripInline(b.text)}
+              <button
+                type="button"
+                className={`kit-plain-btn ${styles.blockLine}`}
+                tabIndex={-1}
+                onClick={() => onEnter(caretAt(b.line))}
+              >
+                {stripInline(b.text)}
+              </button>
             </Tag>
           );
         }
         if (b.kind === 'check') {
+          // A <button> can't contain the checkbox <button>, so the line keeps
+          // its box and the edit target is a stretched overlay under it.
           return (
             <div
               key={b.line}
               className={b.checked ? `${styles.checkLine} ${styles.done}` : styles.checkLine}
               data-line={b.line}
             >
+              <button
+                type="button"
+                className={`kit-stretch-btn ${styles.lineOverlay}`}
+                tabIndex={-1}
+                aria-label={lineLabel(b.text)}
+                onClick={() => onEnter(caretAt(b.line))}
+              />
               <button
                 type="button"
                 className={styles.checkBox}
@@ -185,18 +216,32 @@ function Blocks({
         }
         if (b.kind === 'li') {
           return (
-            <div key={b.line} className={styles.mdLi} data-line={b.line}>
+            <button
+              key={b.line}
+              type="button"
+              className={`kit-plain-btn ${styles.mdLi} ${styles.blockLine}`}
+              data-line={b.line}
+              tabIndex={-1}
+              onClick={() => onEnter(caretAt(b.line))}
+            >
               <span className={styles.mdBullet} aria-hidden="true">
                 •
               </span>
               <span>{stripInline(b.text)}</span>
-            </div>
+            </button>
           );
         }
         return (
-          <p key={b.line} className={styles.mdP} data-line={b.line}>
+          <button
+            key={b.line}
+            type="button"
+            className={`kit-plain-btn ${styles.mdP} ${styles.blockLine}`}
+            data-line={b.line}
+            tabIndex={-1}
+            onClick={() => onEnter(caretAt(b.line))}
+          >
             {stripInline(b.text)}
-          </p>
+          </button>
         );
       })}
     </div>
@@ -244,7 +289,11 @@ export function Editor({
   const caretRef = useRef<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  async function performSave() {
+  // The editor's callbacks are consts declared in dependency order: `function`
+  // declarations that reference each other are hoisted, and the React compiler
+  // bails out of the whole component when it must rewrite a hoisted reference
+  // (#573).
+  const performSave = async (): Promise<void> => {
     if (savingRef.current) return savingRef.current;
     const p = (async () => {
       const snapTitle = titleRef.current;
@@ -267,7 +316,12 @@ export function Editor({
       const stillDirty = titleRef.current !== snapTitle || bodyRef.current !== snapBody;
       if (outcome?.status === 'executed') {
         setSaveState(stillDirty ? 'saving' : 'saved');
-        if (stillDirty) scheduleSave();
+        // Re-armed inline instead of through scheduleSave(): referring forward
+        // to it would reintroduce the hoisted-reference bail-out.
+        if (stillDirty) {
+          clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = window.setTimeout(performSave, 700);
+        }
       } else if (outcome?.status === 'parked') {
         setSaveState('pending');
       } else {
@@ -280,22 +334,22 @@ export function Editor({
     } finally {
       savingRef.current = null;
     }
-  }
+  };
 
-  function scheduleSave() {
+  const scheduleSave = (): void => {
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(performSave, 700);
-  }
+  };
 
-  async function flush() {
+  const flush = async (): Promise<void> => {
     clearTimeout(saveTimerRef.current);
     await performSave();
-  }
+  };
 
   useEffect(() => {
     registerFlush?.(flush);
     return () => clearTimeout(saveTimerRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#336) mount-once flush registration, deliberately []
+    // (#336) mount-once flush registration, deliberately []
   }, []);
 
   useEffect(() => {
@@ -308,41 +362,41 @@ export function Editor({
     }
   }, [bodyEditing]);
 
-  function setTitle(v: string) {
+  const setTitle = (v: string): void => {
     titleRef.current = v;
     setTitleState(v);
     scheduleSave();
-  }
-  function setBody(v: string) {
+  };
+  const setBody = (v: string): void => {
     bodyRef.current = v;
     setBodyState(v);
     scheduleSave();
-  }
-  function saveBodyNow(v: string) {
+  };
+  const saveBodyNow = (v: string): void => {
     bodyRef.current = v;
     setBodyState(v);
     clearTimeout(saveTimerRef.current);
     performSave();
-  }
+  };
 
-  function toggleCheck(lineIndex: number) {
+  const toggleCheck = (lineIndex: number): void => {
     const lines = bodyRef.current.split('\n');
     if (lines[lineIndex] == null) return;
     lines[lineIndex] = lines[lineIndex]!.replace(/\[( |x|X)\]/, (m) =>
       /x/i.test(m) ? '[ ]' : '[x]',
     );
     saveBodyNow(lines.join('\n'));
-  }
+  };
 
-  function enterEdit(pos: number | null) {
+  const enterEdit = (pos: number | null): void => {
     caretRef.current = pos;
     setBodyEditing(true);
-  }
-  function exitEdit() {
+  };
+  const exitEdit = (): void => {
     setBodyEditing(false);
-  }
+  };
 
-  function insertChecklist() {
+  const insertChecklist = (): void => {
     if (!bodyEditing) {
       const cur = bodyRef.current;
       const base = cur.length > 0 && !cur.endsWith('\n') ? `${cur}\n` : cur;
@@ -372,9 +426,9 @@ export function Editor({
     requestAnimationFrame(() => {
       textareaRef.current?.setSelectionRange(caret, caret);
     });
-  }
+  };
 
-  function handleBodyKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+  const handleBodyKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (e.key !== 'Enter' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
     const el = e.currentTarget;
     const pos = el.selectionStart;
@@ -394,7 +448,7 @@ export function Editor({
     const next = el.value.slice(0, pos) + insertion + el.value.slice(pos);
     caretRef.current = pos + insertion.length;
     setBody(next);
-  }
+  };
 
   const notebookId = note.notebook_ids?.[0] ?? '';
   const notebookLabel = note.notebook_names?.[0];
@@ -415,12 +469,12 @@ export function Editor({
             : `Edited ${relTime(note.updated_at ?? '')}`;
 
   return (
-    <div
-      className={styles.editorBackdrop}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <div className={styles.editorBackdrop}>
+      {/* The backdrop's dismiss-on-outside-click is a real button laid under the
+          panel (the panel is `position: relative`), so it has a keyboard
+          equivalent — this replaces the old `e.target === e.currentTarget`
+          guard on the backdrop div. */}
+      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
       <div className={pending ? `${styles.editor} kit-pending` : styles.editor}>
         <div className={styles.editorTop}>
           <button type="button" className="kit-icon-btn" aria-label="Back" onClick={onClose}>

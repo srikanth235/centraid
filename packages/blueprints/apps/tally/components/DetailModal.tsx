@@ -31,7 +31,7 @@ export function DetailModal({
 
   return (
     <ModalBackdrop onClose={onClose}>
-      <div className="kit-modal" style={{ maxWidth: '440px' }} onClick={(e) => e.stopPropagation()}>
+      <div className="kit-modal" style={{ maxWidth: '440px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '13px' }}>
           <span
             className={shared.excat}

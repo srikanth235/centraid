@@ -126,20 +126,24 @@ export default function SettingsLayoutScreen({
           </p>
         ) : null}
       </DrawerGroup>
+      {/* Each suggestion carries its zone as text, not just as `value`: a
+          value-only <option> has no accessible name, so a screen reader
+          announces an unlabelled list. Label and value are identical, which
+          is what the picker already showed. */}
       <datalist id="centraid-cron-timezones">
-        <option value="UTC" />
-        <option value="America/New_York" />
-        <option value="America/Chicago" />
-        <option value="America/Denver" />
-        <option value="America/Los_Angeles" />
-        <option value="America/Sao_Paulo" />
-        <option value="Europe/London" />
-        <option value="Europe/Paris" />
-        <option value="Europe/Berlin" />
-        <option value="Asia/Kolkata" />
-        <option value="Asia/Tokyo" />
-        <option value="Asia/Shanghai" />
-        <option value="Australia/Sydney" />
+        <option value="UTC">UTC</option>
+        <option value="America/New_York">America/New_York</option>
+        <option value="America/Chicago">America/Chicago</option>
+        <option value="America/Denver">America/Denver</option>
+        <option value="America/Los_Angeles">America/Los_Angeles</option>
+        <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+        <option value="Europe/London">Europe/London</option>
+        <option value="Europe/Paris">Europe/Paris</option>
+        <option value="Europe/Berlin">Europe/Berlin</option>
+        <option value="Asia/Kolkata">Asia/Kolkata</option>
+        <option value="Asia/Tokyo">Asia/Tokyo</option>
+        <option value="Asia/Shanghai">Asia/Shanghai</option>
+        <option value="Australia/Sydney">Australia/Sydney</option>
       </datalist>
     </>
   );

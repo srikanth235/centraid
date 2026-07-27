@@ -14,6 +14,8 @@
   animation: kit-fade 0.2s ease;
 }
 .editor {
+  /* Paints above the sibling `.kit-modal-scrim` dismiss button. */
+  position: relative;
   margin: auto;
   width: min(760px, 94vw);
   height: min(640px, 88vh);

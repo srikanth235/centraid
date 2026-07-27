@@ -83,6 +83,11 @@ const smallPlusGlyph = (
 );
 
 export function Chrome(props: ChromeProps): ReactNode {
+  // Callback refs come off `props` first: a ref read from the props object taints
+  // every later `props.*` read for the React compiler ("cannot access refs during
+  // render"), so they are destructured into plain locals here (#573).
+  const { themeButtonRef } = props;
+
   const shellClass = [
     styles.shell,
     props.narrow ? styles.isNarrow : '',
@@ -172,7 +177,16 @@ export function Chrome(props: ChromeProps): ReactNode {
         </div>
       </aside>
 
-      <div className={styles.scrim} onClick={props.onCloseSide} />
+      {/* The drawer scrim is the click target that closes the drawer, so it is
+          a real button (only rendered visible when narrow + open — the
+          kit-app-scrim rules keep it display:none otherwise). `kit-plain-btn`
+          strips the UA button box so it draws exactly the dim it always did. */}
+      <button
+        type="button"
+        className={`kit-plain-btn ${styles.scrim}`}
+        aria-label="Close menu"
+        onClick={props.onCloseSide}
+      />
 
       <main className={styles.main}>
         <div className={styles.topbar}>
@@ -239,7 +253,7 @@ export function Chrome(props: ChromeProps): ReactNode {
               </button>
             ) : null}
             <button
-              ref={props.themeButtonRef}
+              ref={themeButtonRef}
               type="button"
               className={styles.iconbtn}
               aria-label="Toggle light/dark"
@@ -259,10 +273,9 @@ export function Chrome(props: ChromeProps): ReactNode {
         ) : null}
         {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,
             never reconciled, so those DOM writes are never clobbered. */}
-        <div
+        <output
           id="noticeBanner"
           className={`${styles.banner} ${styles.notice}`}
-          role="status"
           aria-live="polite"
           hidden
         />

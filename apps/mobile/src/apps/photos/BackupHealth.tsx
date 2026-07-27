@@ -46,6 +46,21 @@ const DEFAULT_RULES: Rules = {
   selectedAlbums: [],
 };
 
+type PendingUpload = { plaintextSize: number; lastError?: string; filename?: string };
+
+// A one-shot read of the durable upload queue — an external system, opened and
+// closed around the read so the screen never holds the sqlite handle. Lives
+// outside the component so the effect that calls it stays a plain external read
+// rather than an in-body state update.
+function readPendingUploads(
+  gatewayBase: string,
+  setPending: (next: PendingUpload[]) => void,
+): void {
+  const queue = UploadQueue.open({ gatewayBaseUrl: gatewayBase, headers: authHeader });
+  setPending(queue.pending());
+  queue.close();
+}
+
 export default function BackupHealth({
   navigation,
 }: PhotosScreenProps<'BackupHealth'>): React.JSX.Element {
@@ -57,9 +72,7 @@ export default function BackupHealth({
   // Next equivalent short of walking every album, which this screen will not do.
   const [albums, setAlbums] = useState<Array<{ id: string; title: string }>>([]);
   const [albumError, setAlbumError] = useState<string>();
-  const [pending, setPending] = useState<
-    Array<{ plaintextSize: number; lastError?: string; filename?: string }>
-  >([]);
+  const [pending, setPending] = useState<PendingUpload[]>([]);
   const [storage, setStorage] = useState('Storage policy unavailable offline');
   const [running, setRunning] = useState(false);
   const [inCloudSkipped, setInCloudSkipped] = useState(0);
@@ -83,9 +96,7 @@ export default function BackupHealth({
   }, []);
   useEffect(() => {
     if (!gatewayBase) return;
-    const queue = UploadQueue.open({ gatewayBaseUrl: gatewayBase, headers: authHeader });
-    setPending(queue.pending());
-    queue.close();
+    readPendingUploads(gatewayBase, setPending);
     if (online)
       void fetch(`${gatewayBase}/centraid/_gateway/storage/status`, { headers: authHeader() })
         .then((response) => response.json())

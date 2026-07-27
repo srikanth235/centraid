@@ -39,31 +39,37 @@ export function Editor({
   onClose: () => void;
   onSave: (documentId: string, body: string) => Promise<VaultOutcome | undefined>;
 }) {
-  const [body, setBodyState] = useState('');
-  const [loadState, setLoadState] = useState<LoadState>('loading');
+  // The inline data: branch is synchronous, so it is decoded during the first
+  // render instead of in an effect — the effect below then only owns the async
+  // blob: fetch. Lazy useState reads content_uri exactly once at mount, which is
+  // the same "read once at open time" contract the file header describes (#573).
+  const [inline] = useState<{ state: LoadState; text: string } | null>(() => {
+    const uri = doc.content_uri;
+    if (typeof uri !== 'string' || !uri.startsWith('data:')) return null;
+    const text = decodeDataUri(uri);
+    return text == null ? { state: 'error', text: '' } : { state: 'ready', text };
+  });
+  const [body, setBodyState] = useState(inline?.text ?? '');
+  const [loadState, setLoadState] = useState<LoadState>(inline?.state ?? 'loading');
   const [saveState, setSaveState] = useState<SaveState>('');
-  const bodyRef = useRef('');
-  const lastSavedRef = useRef('');
+  const bodyRef = useRef(inline?.text ?? '');
+  const lastSavedRef = useRef(inline?.text ?? '');
   const saveTimerRef = useRef(0);
   const savingRef = useRef<Promise<void> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Only the async blob: route is loaded here — an inline data: body was already
+  // decoded above, during the first render.
   useEffect(() => {
+    if (inline) return undefined;
     function loaded(text: string) {
       bodyRef.current = text;
       lastSavedRef.current = text;
       setBodyState(text);
       setLoadState('ready');
     }
-    const uri = doc.content_uri;
-    if (typeof uri === 'string' && uri.startsWith('data:')) {
-      const text = decodeDataUri(uri);
-      if (text == null) setLoadState('error');
-      else loaded(text);
-      return;
-    }
     let cancelled = false;
-    fetch(uri!)
+    fetch(doc.content_uri!)
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.text();
@@ -77,14 +83,17 @@ export function Editor({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) doc is read once at mount by design (see file header): app.tsx keys this component by document_id, so re-firing when doc's content_uri changes mid-edit would reload over an in-flight draft instead of leaving the autosave in control
+    // (#360) doc is read once at mount by design (see file header): app.tsx keys this component by document_id, so re-firing when doc's content_uri changes mid-edit would reload over an in-flight draft instead of leaving the autosave in control
   }, []);
 
   useEffect(() => {
     if (loadState === 'ready') textareaRef.current?.focus();
   }, [loadState]);
 
-  async function performSave() {
+  // Declared as consts, in dependency order: `function` declarations that
+  // reference each other are hoisted, and the React compiler bails out of the
+  // whole component when it has to rewrite a hoisted reference (#573).
+  const performSave = async (): Promise<void> => {
     if (savingRef.current) return savingRef.current;
     const p = (async () => {
       const snap = bodyRef.current;
@@ -95,7 +104,13 @@ export function Editor({
       const stillDirty = bodyRef.current !== snap;
       if (outcome?.status === 'executed') {
         setSaveState(stillDirty ? 'saving' : 'saved');
-        if (stillDirty) scheduleSave();
+        // Re-armed inline rather than through scheduleSave(): a forward
+        // reference between the two trips the compiler's hoisted-context
+        // analysis and bails out the whole component; self-recursion doesn't.
+        if (stillDirty) {
+          clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = window.setTimeout(performSave, 700);
+        }
       } else if (outcome?.status === 'parked') {
         setSaveState('pending');
       } else {
@@ -108,29 +123,29 @@ export function Editor({
     } finally {
       savingRef.current = null;
     }
-  }
+  };
 
-  function scheduleSave() {
+  const scheduleSave = (): void => {
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(performSave, 700);
-  }
+  };
 
-  async function flush() {
+  const flush = async (): Promise<void> => {
     clearTimeout(saveTimerRef.current);
     await performSave();
-  }
+  };
 
   useEffect(() => {
     registerFlush?.(flush);
     return () => clearTimeout(saveTimerRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) registered once; this component remounts on document_id change (see file header), so the closed-over doc/onSave props flush() reads can never go stale without a fresh registration
+    // (#360) registered once; this component remounts on document_id change (see file header), so the closed-over doc/onSave props flush() reads can never go stale without a fresh registration
   }, []);
 
-  function setBody(v: string) {
+  const setBody = (v: string): void => {
     bodyRef.current = v;
     setBodyState(v);
     scheduleSave();
-  }
+  };
 
   const saveLabel =
     saveState === 'saving'
@@ -146,15 +161,15 @@ export function Editor({
               : '';
 
   return (
-    <div
-      className={styles.editorBackdrop}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
+    <div className={styles.editorBackdrop}>
+      {/* The backdrop's dismiss-on-outside-click is a real button laid under the
+          card (the card is `position: relative`), so it has a keyboard
+          equivalent — this replaces the old `e.target === e.currentTarget`
+          guard on the backdrop div. */}
+      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <dialog
+        open
         className={styles.editor}
-        role="dialog"
         aria-modal="true"
         aria-label={`Edit ${doc.title ?? 'document'}`}
       >
@@ -182,7 +197,7 @@ export function Editor({
             />
           )}
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

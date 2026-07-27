@@ -1,8 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit single cohesive screen (connect form + recovery-kit gate + per-vault hosted/local toggle) — one storage-connection flow, same call SettingsConnectionsScreen.tsx makes
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import { Button, IconButton } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
 import styles from './SettingsStorageScreen.module.css';
+import a11y from '../styles/a11y.module.css';
 import drawerGroupCss from '../styles/drawerGroup.module.css';
 import controlsCss from '../styles/controls.module.css';
 import inlineEmptyCss from '../styles/inlineEmpty.module.css';
@@ -82,7 +83,7 @@ function RecoveryKitGateDialog({
         if (event.key === 'Escape') onClose();
       }}
     >
-      <div className={modalCss.card} role="dialog" aria-label="Confirm your recovery kit">
+      <dialog open className={modalCss.card} aria-label="Confirm your recovery kit">
         <IconButton icon="X" ariaLabel="Close" className={modalCss.close} onClick={onClose} />
         <h3>Before this ships bytes off this machine</h3>
         <p className={styles.gateReason}>{gate.message}</p>
@@ -95,7 +96,7 @@ function RecoveryKitGateDialog({
         <div className={modalCss.actions}>
           <Button variant="primary" label="Close" onClick={onClose} />
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }
@@ -266,28 +267,28 @@ function VaultStorageChoice({
         role="radiogroup"
         aria-label="Where this vault is stored"
       >
-        <button
-          type="button"
-          role="radio"
-          aria-checked={!hosted}
-          className={styles.binaryOption}
-          data-active={String(!hosted)}
-          disabled={busy}
-          onClick={chooseDevice}
-        >
+        <label className={styles.binaryOption} data-active={String(!hosted)}>
+          <input
+            type="radio"
+            className={a11y.srControl}
+            name="vault-storage-location"
+            checked={!hosted}
+            disabled={busy}
+            onChange={chooseDevice}
+          />
           On this device
-        </button>
-        <button
-          type="button"
-          role="radio"
-          aria-checked={hosted}
-          className={styles.binaryOption}
-          data-active={String(hosted)}
-          disabled={hostedDisabled}
-          onClick={chooseHosted}
-        >
+        </label>
+        <label className={styles.binaryOption} data-active={String(hosted)}>
+          <input
+            type="radio"
+            className={a11y.srControl}
+            name="vault-storage-location"
+            checked={hosted}
+            disabled={hostedDisabled}
+            onChange={chooseHosted}
+          />
           Hosted
-        </button>
+        </label>
       </div>
       <p className={styles.attachStatus}>
         {hosted
@@ -323,18 +324,14 @@ export default function SettingsStorageScreen({
   const [gate, setGate] = useState<PendingGate | null>(null);
   const mountedRef = useRef(true);
 
-  const refresh = useMemo(
-    () => (): void => {
-      void loadConnections()
-        .then(setRows)
-        .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
-      void loadVaultBlobStore()
-        .then(setBlobStore)
-        .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#436) mirrors SettingsConnectionsScreen: track loader identities only
-    [loadConnections, loadVaultBlobStore],
-  );
+  const refresh = useCallback((): void => {
+    void loadConnections()
+      .then(setRows)
+      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
+    void loadVaultBlobStore()
+      .then(setBlobStore)
+      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
+  }, [loadConnections, loadVaultBlobStore, showToast]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -342,7 +339,6 @@ export default function SettingsStorageScreen({
     return () => {
       mountedRef.current = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#436) mount-once refresh keyed to loader identities, not refresh's own identity
   }, [loadConnections, loadVaultBlobStore]);
 
   const withBusy = (id: string, fn: () => Promise<void>): void => {

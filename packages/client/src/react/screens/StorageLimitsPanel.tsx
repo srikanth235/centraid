@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
 import buttonCss from '../ui/Button.module.css';
@@ -79,7 +79,12 @@ function LimitControl({
 
   // The server is the source of truth: a save elsewhere, or a rejected value,
   // resyncs the field rather than leaving a stale draft that looks committed.
-  useEffect(() => setDraft(value === null ? '' : formatBytes(value)), [value]);
+  // Adjusted during render, so the field never paints the stale draft once.
+  const [seenValue, setSeenValue] = useState(value);
+  if (seenValue !== value) {
+    setSeenValue(value);
+    setDraft(value === null ? '' : formatBytes(value));
+  }
 
   const commit = (bytes: number | null): void => {
     setBusy(true);

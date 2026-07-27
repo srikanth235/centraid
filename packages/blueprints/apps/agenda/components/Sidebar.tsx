@@ -66,7 +66,11 @@ export function MiniMonth({
           <span key={i}>{d}</span>
         ))}
       </div>
-      <div className={styles.miniGrid} role="grid" aria-label="Mini month">
+      {/* No `role="grid"`/`role="gridcell"`: this flat CSS grid has no
+          `role="row"` rows, so the grid semantics never reached a screen
+          reader (#573). Every day is already a real button that names its own
+          date. */}
+      <div className={styles.miniGrid}>
         {days.map((d) => {
           const key = localDayKey(d);
           const outside = d.getMonth() !== cursor.getMonth();
@@ -83,7 +87,6 @@ export function MiniMonth({
               key={key}
               type="button"
               className={styles.miniDay}
-              role="gridcell"
               data-today={String(isToday)}
               data-selected={String(isSelected)}
               data-outside={String(outside)}
@@ -113,7 +116,7 @@ export function CalendarList({
 }) {
   if (!calendars.length) return null;
   return (
-    <div className={styles.cals} role="group" aria-label="My calendars">
+    <fieldset className={styles.cals} aria-label="My calendars">
       {calendars.map((c) => {
         const shown = !hiddenCals.has(c.calendar_id);
         const color = colorForCalendar(c, c.calendar_id);
@@ -139,6 +142,6 @@ export function CalendarList({
           </button>
         );
       })}
-    </div>
+    </fieldset>
   );
 }

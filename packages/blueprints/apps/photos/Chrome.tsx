@@ -122,8 +122,15 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
           >
             {hamburgerGlyph}
           </button>
-          <label className={`kit-search ${styles.search}`} role="search">
-            {searchGlyph}
+          <search className={`kit-search ${styles.search}`}>
+            {/* The magnifier is the input's <label> (clicking it focuses the
+                field, as it did when the whole box was one <label>); it is
+                `display:contents`, so the flex row is unchanged and the svg is
+                still the direct flex child kit.css sizes. */}
+            <label className={styles.searchGlyph} htmlFor="searchInput">
+              {searchGlyph}
+              <span className="kit-sr-only">Search photos</span>
+            </label>
             <input
               id="searchInput"
               type="search"
@@ -140,9 +147,9 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
             >
               ×
             </button>
-          </label>
+          </search>
           <div className={styles.headerActions}>
-            <div className={styles.zoom} role="group" aria-label="Zoom">
+            <fieldset className={styles.zoom} aria-label="Zoom">
               <button
                 id="zoomOutBtn"
                 type="button"
@@ -159,7 +166,7 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
               >
                 {zoomInGlyph}
               </button>
-            </div>
+            </fieldset>
             {/* Face-proposer (issue #352) — its own self-contained React region,
                 rendered once into this slot at boot. */}
             <div id="enrichmentMount">{slots.enrichment}</div>
@@ -181,10 +188,11 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
             Ask the owner to approve this app&apos;s requested scopes in vault settings.
           </span>
         </div>
-        <div
+        {/* <output>'s implicit role IS `status`, so the live region survives the
+            tag swap; `.noticeBanner` restores the block box the <div> had. */}
+        <output
           id="noticeBanner"
-          className="kit-banner notice"
-          role="status"
+          className={`kit-banner notice ${styles.noticeBanner}`}
           aria-live="polite"
           hidden
         />
@@ -222,37 +230,36 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
         {slots.selectionBar}
       </div>
 
-      <input
-        id="fileInput"
-        type="file"
-        accept="image/*,video/*,audio/*"
-        multiple
-        hidden
-        aria-hidden="true"
-      />
+      {/* Never focusable and never shown — `hidden` already keeps it out of the
+          accessibility tree, so it carries no `aria-hidden`; upload.ts drives it
+          with `.click()`. */}
+      <input id="fileInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
 
       <div id="lightbox" className={styles.lightbox} hidden>
         {slots.lightbox}
       </div>
-      <div
+      {/* Native <dialog>, never `showModal()` — `open` is mandatory (a <dialog>
+          without it is `display:none`) and app.tsx keeps driving visibility
+          through the `hidden` attribute exactly as before. */}
+      <dialog
         id="slideshow"
+        open
         className={styles.slideshow}
-        role="dialog"
         aria-modal="true"
         aria-label="Slideshow"
         hidden
       >
         {slots.slideshow}
-      </div>
-      <div
+      </dialog>
+      <dialog
         id="picker"
+        open
         className={`kit-modal-back ${styles.picker}`}
-        role="dialog"
         aria-label="Add photos to album"
         hidden
       >
         {slots.picker}
-      </div>
+      </dialog>
       <div id="dropOverlay" className={`kit-drop ${styles.dropOverlay}`} aria-hidden="true" hidden>
         <div className="kit-drop-card">Drop to add to your library</div>
       </div>

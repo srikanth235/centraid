@@ -23,7 +23,9 @@
   box-shadow: 0 0 0 2px var(--sel);
 }
 .cardTop {
-  position: relative;
+  /* Deliberately NOT positioned: the card's stretched "Open <name>" button is
+     an earlier positioned sibling, and a positioned .cardTop would paint over
+     it and swallow the click (#573). Nothing inside it is absolute. */
   height: 96px;
   display: flex;
   align-items: center;

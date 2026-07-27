@@ -26,11 +26,15 @@ export interface PaletteConversationSearch {
   ensure(query: string): void;
   /** Drop the cache + any pending fetch (call when the palette closes). */
   reset(): void;
+  /** Rebind the "hits landed" callback. The palette's `refresh()` only exists
+   *  once the palette has mounted, which is after the source is created — the
+   *  shell hands it over here instead of the source reaching for it. */
+  setOnResults(fn: (() => void) | null): void;
 }
 
 export interface PaletteConversationSearchOptions {
   search: (query: string, limit?: number) => Promise<PaletteConversationHit[]>;
-  onResults: () => void;
+  onResults?: (() => void) | undefined;
   limit?: number;
   debounceMs?: number;
 }
@@ -44,6 +48,7 @@ export function createPaletteConversationSearch(
   const inFlight = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pendingQuery: string | undefined;
+  let onResults: (() => void) | null = opts.onResults ?? null;
   const debounceMs = opts.debounceMs ?? 150;
 
   const norm = (q: string): string => q.trim().toLowerCase();
@@ -63,7 +68,7 @@ export function createPaletteConversationSearch(
       })
       .finally(() => {
         inFlight.delete(key);
-        opts.onResults();
+        onResults?.();
       });
   };
 
@@ -90,6 +95,9 @@ export function createPaletteConversationSearch(
       pendingQuery = undefined;
       cache.clear();
       inFlight.clear();
+    },
+    setOnResults(fn: (() => void) | null): void {
+      onResults = fn;
     },
   };
 }

@@ -9,6 +9,8 @@
    class. */
 
 .row {
+  /* Containing block for the row's stretched "Open <name>" button (#573). */
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -26,6 +28,9 @@
   background: var(--sel);
 }
 .check {
+  /* Positioned so it paints (and is hit-tested) above the row's stretched
+     open button, which is an earlier positioned sibling (#573). */
+  position: relative;
   flex-shrink: 0;
   width: 20px;
   height: 20px;
@@ -122,6 +127,8 @@
   justify-content: flex-end;
 }
 .kebab {
+  /* Above the row's stretched open button — see .check (#573). */
+  position: relative;
   width: 30px;
   height: 30px;
   display: flex;

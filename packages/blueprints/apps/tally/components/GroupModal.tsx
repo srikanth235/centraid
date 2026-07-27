@@ -24,7 +24,7 @@ export function GroupModal({
 
   return (
     <ModalBackdrop onClose={onClose}>
-      <div className="kit-modal" style={{ maxWidth: '420px' }} onClick={(e) => e.stopPropagation()}>
+      <div className="kit-modal" style={{ maxWidth: '420px' }}>
         <h2>New group</h2>
         <input
           className={shared.in}

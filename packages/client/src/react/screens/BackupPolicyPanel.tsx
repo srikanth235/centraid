@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { formatBytes } from '../../format.js';
 import { formatDuration } from '../shell/routes/gatewayData.js';
 import { cx } from '../ui/cx.js';
@@ -107,7 +107,14 @@ export default function BackupPolicyPanel({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  useEffect(() => setCurrent(policy), [policy]);
+  // A fresh policy from the server replaces the locally saved one. Adjusted
+  // during render (the React "state derived from a prop" pattern), so the new
+  // payload paints immediately instead of one cascading render later.
+  const [seenPolicy, setSeenPolicy] = useState(policy);
+  if (seenPolicy !== policy) {
+    setSeenPolicy(policy);
+    setCurrent(policy);
+  }
 
   const update = async (patch: BackupPolicyPatchDTO): Promise<void> => {
     if (!onUpdate) return;

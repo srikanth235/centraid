@@ -34,7 +34,7 @@ import toastCss from '../../../styles/toast.module.css';
 // cloud-rail sub-section glyphs plus the topbar Refresh icon. Kept as string
 // builders so they can feed dangerouslySetInnerHTML, matching the vanilla
 // `innerHTML` shape byte-for-byte.
-const RefreshIcon = (size = 14): string =>
+const refreshIconSvg = (size = 14): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>`;
 const CloudOverviewIcon = (size = 14): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`;
@@ -136,9 +136,19 @@ export interface BuilderCloudProps {
 export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element {
   const [active, setActive] = useState<CloudSection>('overview');
 
-  // Overview — active version + count, plus the derived live URL.
-  const [versionsCache, setVersionsCache] = useState<VersionsCache>(undefined);
+  // Overview — active version + count, plus the derived live URL. The settled
+  // listing is stamped with the app it was fetched for, so "still pending for
+  // this app" is derived during render rather than pushed by the effect.
+  const [versionsFor, setVersionsFor] = useState<{
+    appId: string;
+    result: { activeVersion?: string; versions: CentraidVersionRecord[] };
+  } | null>(null);
   const [liveUrl, setLiveUrl] = useState<string | undefined>(undefined);
+  const versionsCache: VersionsCache = !appId
+    ? undefined
+    : versionsFor !== null && versionsFor.appId === appId
+      ? versionsFor.result
+      : 'pending';
 
   // Logs — newest-first, polled every 3s while the Logs section is visible.
   const [logsCache, setLogsCache] = useState<LogsCache>(undefined);
@@ -155,12 +165,8 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
 
   // ---- Overview: fetch versions once per app, then derive the live URL. ----
   useEffect(() => {
+    if (!appId) return;
     let cancelled = false;
-    if (!appId) {
-      setVersionsCache(undefined);
-      return;
-    }
-    setVersionsCache('pending');
     void (async () => {
       let result: { activeVersion?: string; versions: CentraidVersionRecord[] };
       try {
@@ -171,7 +177,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
         result = { versions: [] };
       }
       if (cancelled) return;
-      setVersionsCache(result);
+      setVersionsFor({ appId, result });
       if (result.activeVersion) {
         try {
           const r = await appLiveUrl({ id: appId });
@@ -205,12 +211,13 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
 
   useEffect(() => {
     if (active !== 'logs' || !appId) return;
-    void refreshLogs();
-    // Mirror the vanilla `cloudLogsPoll` / `stopCloudLogsPoll`: start a 3s
-    // interval on entry, clear it on section-switch / unmount. No leaks.
-    const handle = setInterval(() => {
+    // Mirror the vanilla `cloudLogsPoll` / `stopCloudLogsPoll`: one tick on
+    // entry, then a 3s interval, cleared on section-switch / unmount.
+    const tick = (): void => {
       void refreshLogs();
-    }, 3000);
+    };
+    tick();
+    const handle = setInterval(tick, 3000);
     return () => clearInterval(handle);
   }, [active, appId, refreshLogs]);
 
@@ -331,6 +338,10 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
       key={key}
       type="button"
       className={styles.railItem}
+      // The label ships inside the injected HTML, so it is invisible to
+      // static analysis and (with the glyph markup around it) to the name
+      // computation's mercy — name the control with the same words.
+      aria-label={label}
       data-testid="cloud-rail-item"
       data-active={String(active === key)}
       data-ready={String(ready)}
@@ -383,7 +394,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
                 className={cx(buttonCss.btn, buttonCss.ghost, styles.refreshBtn)}
                 title="Refresh logs"
                 onClick={() => void refreshLogs()}
-                dangerouslySetInnerHTML={{ __html: `${RefreshIcon(13)}<span>Refresh</span>` }}
+                dangerouslySetInnerHTML={{ __html: `${refreshIconSvg(13)}<span>Refresh</span>` }}
               />
             )}
             {active === 'automations' && (
@@ -393,7 +404,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
                 className={cx(buttonCss.btn, buttonCss.ghost, styles.refreshBtn)}
                 title="Refresh automations"
                 onClick={() => void refreshAutomations()}
-                dangerouslySetInnerHTML={{ __html: `${RefreshIcon(13)}<span>Refresh</span>` }}
+                dangerouslySetInnerHTML={{ __html: `${refreshIconSvg(13)}<span>Refresh</span>` }}
               />
             )}
           </div>
@@ -468,6 +479,8 @@ function Overview({
     <button
       className={styles.heroBtn}
       type="button"
+      // Same as the rail items: the label lives in the injected HTML.
+      aria-label={label}
       onClick={onClick}
       dangerouslySetInnerHTML={{ __html: `${glyph}<span>${label}</span>` }}
     />

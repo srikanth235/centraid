@@ -1,4 +1,4 @@
-import { type CSSProperties, type JSX, useEffect, useState } from 'react';
+import { type CSSProperties, type JSX, useState } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
@@ -83,12 +83,17 @@ export default function SettingsSpaceScreen({
 
   // Re-seed the form when the active vault itself changes (switching spaces
   // while this page is open) — a fresh identity, not a stale edit in flight.
-  useEffect(() => {
+  // Done during render (the React "adjust state when a prop changes" pattern)
+  // rather than in an effect, so the new space never paints through the old
+  // space's field values for a frame.
+  const [seeded, setSeeded] = useState(space);
+  if (seeded !== space) {
+    setSeeded(space);
     setName(space.name);
     setIcon(space.icon);
     setColor(space.color);
     setBlurb(space.blurb);
-  }, [space]);
+  }
 
   const dirty =
     name.trim() !== space.name ||

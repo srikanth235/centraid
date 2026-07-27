@@ -23,24 +23,24 @@ export default function TestConnectionModal({
   gatewayLabel,
   onClose,
 }: TestConnectionModalProps): JSX.Element {
-  const [report, setReport] = useState<ConnectivityReport | null>(null);
-  const [pending, setPending] = useState(true);
   const [attempt, setAttempt] = useState(0);
+  // The report is stamped with the (gateway, attempt) that produced it, so a
+  // retry reads as pending during render rather than needing the effect to
+  // clear the previous report first.
+  const [settled, setSettled] = useState<{ key: string; report: ConnectivityReport } | null>(null);
+  const key = `${gatewayId} ${attempt}`;
+  const report = settled !== null && settled.key === key ? settled.report : null;
+  const pending = report === null;
 
   useEffect(() => {
     let alive = true;
-    setPending(true);
-    setReport(null);
     void runConnectivityTest({ gatewayId, kind: 'gateway' }).then((r) => {
-      if (alive) {
-        setReport(r);
-        setPending(false);
-      }
+      if (alive) setSettled({ key, report: r });
     });
     return () => {
       alive = false;
     };
-  }, [gatewayId, attempt]);
+  }, [gatewayId, key]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -62,7 +62,7 @@ export default function TestConnectionModal({
         tabIndex={-1}
         onClick={onClose}
       />
-      <div className={spaceModalStyles.profModal} role="dialog" aria-modal="true">
+      <dialog open className={spaceModalStyles.profModal} aria-modal="true">
         <div className={spaceModalStyles.profModalHead}>
           <span
             className={spaceModalStyles.profModalHeadIcon}
@@ -100,7 +100,7 @@ export default function TestConnectionModal({
             Retry
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

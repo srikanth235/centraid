@@ -188,27 +188,34 @@ function FlowView({ automationRow }: { automationRow: CentraidAutomationRow }): 
 // ---------- Runs view ----------
 
 function RunsView({ appId }: { appId: string }): JSX.Element {
-  const [runs, setRuns] = useState<CentraidAutomationTurnRecord[] | null>(null);
-  const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [nonce, setNonce] = useState(0);
+  // Stamped with the (automation, nonce) it was fetched for so a switch or a
+  // post-run refetch reads as "loading" during render, without the effect
+  // having to clear the previous list first.
+  const [settled, setSettled] = useState<{
+    key: string;
+    result: CentraidAutomationTurnRecord[] | 'error';
+  } | null>(null);
+  const key = `${appId} ${nonce}`;
+  const current = settled !== null && settled.key === key ? settled.result : null;
+  const runs = current === 'error' ? null : current;
+  const failed = current === 'error';
 
   useEffect(() => {
     if (!appId) return;
     let alive = true;
-    setRuns(null);
-    setFailed(false);
     listAutomationTurns({ automationId: appId, limit: 20 })
       .then((r) => {
-        if (alive) setRuns(r);
+        if (alive) setSettled({ key, result: r });
       })
       .catch(() => {
-        if (alive) setFailed(true);
+        if (alive) setSettled({ key, result: 'error' });
       });
     return () => {
       alive = false;
     };
-  }, [appId, nonce]);
+  }, [appId, key]);
 
   // Fire the automation once now and poll the ledger for the finished record,
   // then refresh the list (builder.ts `runAutomationOnce`, minus the chat

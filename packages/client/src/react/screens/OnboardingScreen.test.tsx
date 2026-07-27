@@ -65,6 +65,16 @@ function click(el: Element | null | undefined): void {
   act(() => (el as HTMLButtonElement)?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 }
 
+// Swatches and method cards are native radios inside a styled <label> that
+// carries the visible text / state attributes (issue #573).
+function radioIn(el: Element | null | undefined): HTMLInputElement | null {
+  return el?.querySelector<HTMLInputElement>('input[type="radio"]') ?? null;
+}
+
+function radioLabelled(el: HTMLElement, text: string): HTMLInputElement | null {
+  return radioIn([...el.querySelectorAll('label')].find((l) => l.textContent?.includes(text)));
+}
+
 async function flush(times = 3): Promise<void> {
   for (let i = 0; i < times; i++) {
     await act(async () => {
@@ -87,8 +97,8 @@ describe('OnboardingScreen', () => {
 
   it('selects a swatch on click', () => {
     const el = mount({ onComplete: vi.fn() });
-    const swatch = el.querySelectorAll('.swatch')[3] as HTMLButtonElement;
-    click(swatch);
+    const swatch = el.querySelectorAll('.swatch')[3] as HTMLLabelElement;
+    click(radioIn(swatch));
     expect(swatch.dataset.selected).toBe('true');
     expect(el.querySelectorAll('[data-selected="true"]').length).toBe(1);
   });
@@ -98,7 +108,7 @@ describe('OnboardingScreen', () => {
     typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
     click(el.querySelector('.cta'));
     expect(el.textContent).toContain('Where does your');
-    expect(el.querySelectorAll('[role="radio"]').length).toBe(3);
+    expect(el.querySelectorAll('input[type="radio"]').length).toBe(3);
     expect(el.querySelector('.cta')).toBeNull();
   });
 
@@ -115,13 +125,10 @@ describe('OnboardingScreen', () => {
     const onComplete = vi.fn().mockResolvedValue(undefined);
     const el = mount({ onComplete });
     typeName(el.querySelector('.input') as HTMLInputElement, '  Grace  ');
-    const swatch = el.querySelectorAll('.swatch')[2] as HTMLButtonElement;
-    click(swatch);
+    const swatch = el.querySelectorAll('.swatch')[2] as HTMLLabelElement;
+    click(radioIn(swatch));
     click(el.querySelector('.cta'));
-    const thisMac = [...el.querySelectorAll('[role="radio"]')].find((r) =>
-      r.textContent?.includes('This Mac'),
-    );
-    click(thisMac);
+    click(radioLabelled(el, 'This Mac'));
     await flush(4);
     expect(onComplete).toHaveBeenCalledWith({
       avatarColor: '#E36AD2',
@@ -149,10 +156,7 @@ describe('OnboardingScreen', () => {
     typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
     click(el.querySelector('.cta'));
 
-    const gatewayCard = [...el.querySelectorAll('[role="radio"]')].find((r) =>
-      r.textContent?.includes('Existing gateway'),
-    );
-    click(gatewayCard);
+    click(radioLabelled(el, 'Existing gateway'));
     await flush();
     const textarea = el.querySelector('textarea') as HTMLTextAreaElement;
     const setter = Object.getOwnPropertyDescriptor(
@@ -186,10 +190,7 @@ describe('OnboardingScreen', () => {
     const el = mount({ onComplete });
     typeName(el.querySelector('.input') as HTMLInputElement, 'X');
     click(el.querySelector('.cta'));
-    const thisMac = [...el.querySelectorAll('[role="radio"]')].find((r) =>
-      r.textContent?.includes('This Mac'),
-    );
-    click(thisMac);
+    click(radioLabelled(el, 'This Mac'));
     await flush(4);
     expect(el.querySelector('.error')?.textContent).toContain('nope');
   });

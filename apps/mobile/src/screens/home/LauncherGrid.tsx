@@ -14,7 +14,12 @@
 
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  type SharedValue,
+} from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import AppIcon from '../../kit/components/AppIcon';
 import { family, useTheme, type ThemeColors } from '../../kit/theme';
@@ -22,6 +27,27 @@ import type { LauncherItem } from './catalog';
 
 // Quick, lightly-damped spring — a firm press-in, an unfussy release.
 const PRESS_SPRING = { damping: 14, mass: 0.5, stiffness: 240 } as const;
+
+// Built outside the tile: driving a shared value from a closure created in a
+// render body is exactly what the React compiler flags, and the compiler only
+// analyses components and hooks. A lowercase module-level factory taking the
+// shared value explicitly is legal and runtime-identical.
+function buildPressHandlers(
+  scale: SharedValue<number>,
+  installed: boolean,
+): { pressIn(): void; pressOut(): void } {
+  return {
+    pressIn: () => {
+      scale.value = withSpring(0.94, PRESS_SPRING);
+      // Only installed tiles launch on tap, so only they earn the confirming
+      // tick; an uninstalled tile just routes to pairing and stays silent.
+      if (installed) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    },
+    pressOut: () => {
+      scale.value = withSpring(1, PRESS_SPRING);
+    },
+  };
+}
 
 export interface LauncherGridProps {
   items: readonly LauncherItem[];
@@ -54,15 +80,7 @@ function LauncherTile({
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
-  const pressIn = (): void => {
-    scale.value = withSpring(0.94, PRESS_SPRING);
-    // Only installed tiles launch on tap, so only they earn the confirming tick;
-    // an uninstalled tile just routes to pairing and stays silent.
-    if (installed) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-  const pressOut = (): void => {
-    scale.value = withSpring(1, PRESS_SPRING);
-  };
+  const { pressIn, pressOut } = buildPressHandlers(scale, installed);
 
   // The column width lives on the plain wrapper View so the four-up grid always
   // honors the `25%`; the Pressable sizes to its content and is centered in the

@@ -113,7 +113,7 @@ export default function AppInfoModal({
   return (
     <>
       <div className={modalCss.backdrop} role="presentation" onClick={onClose} />
-      <div className={cx(modalCss.card, styles.card)} role="dialog" aria-label={`${app.name} info`}>
+      <dialog open className={cx(modalCss.card, styles.card)} aria-label={`${app.name} info`}>
         <button
           type="button"
           className={cx(buttonCss.icon, modalCss.close)}
@@ -164,7 +164,7 @@ export default function AppInfoModal({
             Done
           </button>
         </div>
-      </div>
+      </dialog>
     </>
   );
 }

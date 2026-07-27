@@ -111,7 +111,13 @@ export function Stage({ asset, onDims }: { asset: Asset; onDims: (w: number, h: 
           controls
           preload="metadata"
           aria-label={asset.title ?? 'Audio'}
-        ></audio>
+        >
+          {/* The vault has no caption sidecar for media assets yet, so there is
+              nothing to point `src` at — this is the wiring point for when it
+              does. Muting instead would be dishonest: this is a real player the
+              user presses play on. */}
+          <track kind="captions" />
+        </audio>
       </div>
     );
   }
@@ -203,7 +209,15 @@ export function LightboxShell({
   const [editing, setEditing] = useState(false);
   const [infoOpen, setInfoOpen] = useState(true);
   const [probed, setProbed] = useState<Dims | null>(null);
-  useEffect(() => setProbed(null), [asset.asset_id]);
+  // Dims probed off the previous asset are dropped during the render that first
+  // sees a new asset_id (React's "adjust state when a prop changes" pattern),
+  // not one commit later from an effect — an effect would paint the old
+  // dimensions against the new photo for a frame (#573).
+  const [probedFor, setProbedFor] = useState(asset.asset_id);
+  if (probedFor !== asset.asset_id) {
+    setProbedFor(asset.asset_id);
+    setProbed(null);
+  }
   const displayAsset = withProbedDims(asset, probed);
   return (
     <div className={styles.lightbox}>
@@ -300,7 +314,10 @@ export function LightboxShell({
       </div>
 
       <div className={styles.body}>
-        <div className={styles.stagewrap} onClick={(e) => e.stopPropagation()}>
+        {/* No backdrop-shield onClick here: `#lightbox`'s native close listener
+            already gates on `e.target === e.currentTarget` (see lightbox.tsx),
+            so a click on this region never reached it in the first place. */}
+        <div className={styles.stagewrap}>
           {editing ? (
             <EditorView
               key={asset.asset_id}
@@ -344,7 +361,7 @@ export function LightboxShell({
           )}
         </div>
         {!editing && infoOpen ? (
-          <aside className={styles.info} onClick={(e) => e.stopPropagation()}>
+          <aside className={styles.info}>
             <LightboxInfo
               key={renderSeq}
               asset={displayAsset}

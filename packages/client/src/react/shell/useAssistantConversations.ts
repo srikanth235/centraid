@@ -14,20 +14,32 @@ export interface AssistantConversationsController {
 // conversations (issue: sidebar-as-conversation-list). Owned by App.tsx so
 // it survives AssistantRoute unmounting (navigating away and back shouldn't
 // re-fetch), mirroring useShellApps' ownership of the Apps list.
+/** The list fetch, with the "a failed list reads as empty" rule applied once
+ *  for both entry points (the mount effect and the imperative `refresh`). */
+async function loadAssistantConversations(): Promise<CentraidConversationSummary[]> {
+  try {
+    return await listConversations(ASSISTANT_APP_ID);
+  } catch {
+    return [];
+  }
+}
+
 export function useAssistantConversations(): AssistantConversationsController {
   const [conversations, setConversations] = useState<CentraidConversationSummary[]>([]);
 
   const refresh = useCallback(async () => {
-    try {
-      setConversations(await listConversations(ASSISTANT_APP_ID));
-    } catch {
-      setConversations([]);
-    }
+    setConversations(await loadAssistantConversations());
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    let alive = true;
+    void loadAssistantConversations().then((next) => {
+      if (alive) setConversations(next);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return { conversations, refresh };
 }

@@ -17,6 +17,9 @@
   animation: kit-fade 0.18s ease;
 }
 .detail {
+  /* Paints above the backdrop's `.kit-modal-scrim` close button, which is an
+     absolutely-positioned earlier sibling. */
+  position: relative;
   width: min(440px, 94vw);
   height: 100vh;
   display: flex;

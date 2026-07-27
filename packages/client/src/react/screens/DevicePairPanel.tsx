@@ -31,19 +31,18 @@ export default function DevicePairPanel({
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<GatewayDeviceTicket | null>(null);
   const [copied, setCopied] = useState(false);
-  const [qrSvg, setQrSvg] = useState<string | null>(null);
+  // The rendered QR is stored WITH the ticket it encodes, so "no ticket" and
+  // "a newer ticket than the last render" both read as "no QR yet" during
+  // render — no effect has to blank it out.
+  const [qr, setQr] = useState<{ ticket: GatewayDeviceTicket; svg: string } | null>(null);
+  const qrSvg = qr !== null && ticket !== null && qr.ticket === ticket ? qr.svg : null;
 
   useEffect(() => {
+    if (!ticket) return;
     let live = true;
-    if (!ticket) {
-      setQrSvg(null);
-      return () => {
-        live = false;
-      };
-    }
     void QRCode.toString(ticket.ticket, { type: 'svg', width: 176, margin: 1 }).then(
       (svg) => {
-        if (live) setQrSvg(svg);
+        if (live) setQr({ svg, ticket });
       },
       (err: unknown) => {
         if (live) setError(err instanceof Error ? err.message : String(err));
@@ -118,8 +117,9 @@ export default function DevicePairPanel({
               type="button"
               className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
               onClick={() => {
+                // Dropping the ticket drops its QR too — `qrSvg` is derived
+                // from the pair, so there is nothing else to clear.
                 setTicket(null);
-                setQrSvg(null);
                 setCopied(false);
               }}
             >
@@ -146,7 +146,7 @@ export default function DevicePairPanel({
         connects.
       </div>
       <div className={styles.pairForm}>
-        <div className={styles.ttlGroup} role="group" aria-label="Ticket lifetime">
+        <fieldset className={styles.ttlGroup} aria-label="Ticket lifetime">
           {TTL_PRESETS.map((preset) => (
             <button
               key={preset.minutes}
@@ -159,7 +159,7 @@ export default function DevicePairPanel({
               {preset.label}
             </button>
           ))}
-        </div>
+        </fieldset>
         <div className={styles.pairActions}>
           <button
             type="button"

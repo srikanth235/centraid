@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { Image } from 'expo-image';
@@ -93,6 +93,114 @@ function rowsFor(sections: PhotoSection[], columns: number, width: number): Time
   });
 }
 
+// Hit-test a gesture point (relative to the list view) to the asset under it.
+// Shared by tap-to-open and long-press drag-select so both agree on geometry.
+function assetAt(
+  rows: TimelineRow[],
+  rowTops: number[],
+  scrollY: number,
+  x: number,
+  y: number,
+): PhotoAsset | undefined {
+  const cursor = scrollY + y;
+  // Binary search for the row whose band contains the cursor.
+  let lo = 0;
+  let hi = rows.length - 1;
+  let rowIndex = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const top = rowTops[mid]!;
+    const bottom = top + rowHeightOf(rows[mid]!);
+    if (cursor < top) hi = mid - 1;
+    else if (cursor >= bottom) lo = mid + 1;
+    else {
+      rowIndex = mid;
+      break;
+    }
+  }
+  const row = rowIndex >= 0 ? rows[rowIndex] : undefined;
+  if (!row || row.type !== 'assets') return undefined;
+  let position = Math.max(0, x);
+  let assetIndex = 0;
+  for (let index = 0; index < row.widths.length; index += 1) {
+    if (position <= row.widths[index]!) {
+      assetIndex = index;
+      break;
+    }
+    position -= row.widths[index]! + 2;
+    assetIndex = Math.min(index + 1, row.assets.length - 1);
+  }
+  return row.assets[assetIndex];
+}
+
+/** Selection with `id` flipped in or out — never mutates the input set. */
+function toggleSelection(current: Set<string>, id: string): Set<string> {
+  const next = new Set(current);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return next;
+}
+
+// Built outside any component on purpose. `Gesture.Pinch()` & friends are
+// capitalised factories whose builder chain then *mutates* the object — a shape
+// the React compiler rejects inside a render body. The compiler only analyses
+// components and hooks, so a lowercase module-level helper is legal and runtime-
+// identical; the Reanimated babel plugin still workletises the handler bodies
+// (it keys off the `.onEnd`/`.onStart`/`.onUpdate` chain, not the enclosing
+// function). Everything the handlers close over is passed in explicitly.
+//
+// Exclusive(drag, tap): a held gesture becomes a drag-select, a quick release a
+// tap — never both. Pinch (two fingers) runs simultaneously with either.
+function buildTimelineGestures(
+  columns: number,
+  onColumns: (next: number) => void,
+  onTap: (x: number, y: number) => void,
+  onDrag: (x: number, y: number) => void,
+): ReturnType<typeof Gesture.Simultaneous> {
+  const pinch = Gesture.Pinch().onEnd(({ scale }) => {
+    const next =
+      scale > 1.15 ? Math.max(2, columns - 1) : scale < 0.86 ? Math.min(7, columns + 1) : columns;
+    if (next !== columns) runOnJS(onColumns)(next);
+  });
+  const tap = Gesture.Tap().onEnd((event, success) => {
+    if (success) runOnJS(onTap)(event.x, event.y);
+  });
+  // Select on long-press *activation* (onStart), not touch-begin (onBegin): the
+  // latter fired on every touch-down — including quick taps — and fought the tap
+  // gesture. The drag only starts after the 220ms hold, so onStart is the moment
+  // the first cell is grabbed; onUpdate extends the selection as the finger moves.
+  const drag = Gesture.Pan()
+    .activateAfterLongPress(220)
+    .onStart(({ x, y }) => runOnJS(onDrag)(x, y))
+    .onUpdate(({ x, y }) => runOnJS(onDrag)(x, y));
+  return Gesture.Simultaneous(pinch, Gesture.Exclusive(drag, tap));
+}
+
+// The gesture layer is its own component so its handlers arrive as props. The
+// timeline's tap/drag handlers necessarily read live refs (the scroll offset,
+// the in-flight selection); handing them across a JSX boundary lets this
+// component treat them as ordinary values and build the gesture from them, so
+// no render body ever touches a ref — and nothing has to be suppressed.
+function TimelineGestureLayer({
+  columns,
+  onColumns,
+  onTap,
+  onDrag,
+  children,
+}: {
+  columns: number;
+  onColumns(next: number): void;
+  onTap(x: number, y: number): void;
+  onDrag(x: number, y: number): void;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <GestureDetector gesture={buildTimelineGestures(columns, onColumns, onTap, onDrag)}>
+      {children}
+    </GestureDetector>
+  );
+}
+
 const AssetCell = memo(function AssetCell({
   asset,
   height,
@@ -165,8 +273,14 @@ export default function PhotoTimeline({
   const [scrubLabel, setScrubLabel] = useState('');
   const list = useRef<FlashListRef<TimelineRow>>(null);
   const scrollOffset = useRef(0);
+  // Latest-value mirrors, written from an effect rather than during render:
+  // writing a ref while rendering is not safe under concurrent React (the render
+  // may be thrown away), and the gesture callbacks that read them can only fire
+  // after the commit that the effect follows.
   const selectionRef = useRef(selection);
-  selectionRef.current = selection;
+  useEffect(() => {
+    selectionRef.current = selection;
+  }, [selection]);
   const rows = useMemo(() => rowsFor(sections, columns, width), [columns, sections, width]);
   const monthHeaderIndices = useMemo(
     () => rows.flatMap((row, index) => (row.type === 'month' ? [index] : [])),
@@ -175,115 +289,49 @@ export default function PhotoTimeline({
   // Prefix-summed row tops, so a drag maps a y-offset to its row by binary
   // search instead of re-walking every row's height on each pan event.
   const rowTops = useMemo(() => {
+    const tops: number[] = [];
     let cursor = 0;
-    return rows.map((row) => {
-      const top = cursor;
+    for (const row of rows) {
+      tops.push(cursor);
       cursor += rowHeightOf(row);
-      return top;
-    });
+    }
+    return tops;
   }, [rows]);
   const selecting = selection.size > 0;
-
-  const pinch = useMemo(
-    () =>
-      Gesture.Pinch().onEnd(({ scale }) => {
-        const next =
-          scale > 1.15
-            ? Math.max(2, columns - 1)
-            : scale < 0.86
-              ? Math.min(7, columns + 1)
-              : columns;
-        if (next !== columns) runOnJS(setColumns)(next);
-      }),
-    [columns],
-  );
 
   // Stable identities so the memoized AssetCell isn't invalidated every render
   // by a fresh closure. onOpen is read through a ref so a parent passing an
   // inline arrow doesn't defeat the memo either.
   const onOpenRef = useRef(onOpen);
-  onOpenRef.current = onOpen;
+  useEffect(() => {
+    onOpenRef.current = onOpen;
+  }, [onOpen]);
   const handleOpen = useCallback((asset: PhotoAsset): void => onOpenRef.current(asset), []);
   const toggle = useCallback(
     (asset: PhotoAsset): void => {
       void Haptics.selectionAsync();
-      const next = new Set(selectionRef.current);
-      if (next.has(asset.id)) next.delete(asset.id);
-      else next.add(asset.id);
-      onSelectionChange(next);
+      onSelectionChange(toggleSelection(selectionRef.current, asset.id));
     },
     [onSelectionChange],
   );
 
-  // Hit-test a gesture point (relative to the list view) to the asset under it.
-  // Shared by tap-to-open and long-press drag-select so both agree on geometry.
-  const assetAt = (x: number, y: number): PhotoAsset | undefined => {
-    const cursor = scrollOffset.current + y;
-    // Binary search for the row whose band contains the cursor.
-    let lo = 0;
-    let hi = rows.length - 1;
-    let rowIndex = -1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >> 1;
-      const top = rowTops[mid]!;
-      const bottom = top + rowHeightOf(rows[mid]!);
-      if (cursor < top) hi = mid - 1;
-      else if (cursor >= bottom) lo = mid + 1;
-      else {
-        rowIndex = mid;
-        break;
-      }
-    }
-    const row = rowIndex >= 0 ? rows[rowIndex] : undefined;
-    if (!row || row.type !== 'assets') return undefined;
-    let position = Math.max(0, x);
-    let assetIndex = 0;
-    for (let index = 0; index < row.widths.length; index += 1) {
-      if (position <= row.widths[index]!) {
-        assetIndex = index;
-        break;
-      }
-      position -= row.widths[index]! + 2;
-      assetIndex = Math.min(index + 1, row.assets.length - 1);
-    }
-    return row.assets[assetIndex];
-  };
-
   const dragSelect = (x: number, y: number): void => {
-    const asset = assetAt(x, y);
+    const asset = assetAt(rows, rowTops, scrollOffset.current, x, y);
     if (!asset || selectionRef.current.has(asset.id)) return;
     void Haptics.selectionAsync();
     const next = addDragSelection(selectionRef.current, asset.id);
+    // Written straight through so the next onUpdate of the same drag sees it —
+    // the parent's re-render is a commit away and would drop intermediate cells.
     selectionRef.current = next;
     onSelectionChange(next);
   };
 
-  // Quick tap: open the photo (or toggle it while multi-selecting). This MUST be
-  // a gesture, not just the cell's <Pressable onPress>: the ancestor Pan below
-  // claims the whole touch sequence on iOS, so the JS-responder-based Pressable
-  // never receives the tap. Routing tap through the same gesture system that
-  // owns long-press is what makes a plain tap register at all.
   const tapAsset = (x: number, y: number): void => {
-    const asset = assetAt(x, y);
+    const asset = assetAt(rows, rowTops, scrollOffset.current, x, y);
     if (!asset) return;
     if (selectionRef.current.size > 0) toggle(asset);
     else handleOpen(asset);
   };
-
-  const tap = Gesture.Tap().onEnd((event, success) => {
-    if (success) runOnJS(tapAsset)(event.x, event.y);
-  });
-  // Select on long-press *activation* (onStart), not touch-begin (onBegin): the
-  // latter fired on every touch-down — including quick taps — and fought the tap
-  // gesture. The drag only starts after the 220ms hold, so onStart is the moment
-  // the first cell is grabbed; onUpdate extends the selection as the finger moves.
-  const drag = Gesture.Pan()
-    .activateAfterLongPress(220)
-    .onStart(({ x, y }) => runOnJS(dragSelect)(x, y))
-    .onUpdate(({ x, y }) => runOnJS(dragSelect)(x, y));
-  // Exclusive(drag, tap): a held gesture becomes a drag-select, a quick release a
-  // tap — never both. Pinch (two fingers) runs simultaneously with either.
-  const gestures = Gesture.Simultaneous(pinch, Gesture.Exclusive(drag, tap));
 
   const scrub = (pageY: number): void => {
     const ratio = Math.max(0, Math.min(1, (pageY - 100) / Math.max(1, height - 180)));
@@ -297,7 +345,12 @@ export default function PhotoTimeline({
   };
 
   return (
-    <GestureDetector gesture={gestures}>
+    <TimelineGestureLayer
+      columns={columns}
+      onColumns={setColumns}
+      onTap={tapAsset}
+      onDrag={dragSelect}
+    >
       <View style={styles.fill}>
         <FlashList
           ref={list}
@@ -366,7 +419,7 @@ export default function PhotoTimeline({
           </View>
         ) : null}
       </View>
-    </GestureDetector>
+    </TimelineGestureLayer>
   );
 }
 

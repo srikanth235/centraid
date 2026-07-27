@@ -46,14 +46,18 @@ export function ListRow({
   const m = typeMeta(doc.media_type);
   const selected = selectedIds.has(doc.document_id);
   return (
-    <div
-      className={styles.row}
-      data-selected={String(selected)}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest('button, a, input')) return;
-        onOpenDetails(doc.document_id);
-      }}
-    >
+    <div className={styles.row} data-selected={String(selected)}>
+      {/* The row can't be a <button> (it holds the select / preview / title /
+          actions buttons), so the "open details" gesture is a stretched overlay
+          button laid under them. The old `closest('button, a, input')` guard is
+          gone: every control now sits above this overlay, so their clicks never
+          reach it. */}
+      <button
+        type="button"
+        className={`kit-stretch-btn ${styles.rowOpen}`}
+        aria-label={`Open ${doc.title ?? 'Untitled'} details`}
+        onClick={() => onOpenDetails(doc.document_id)}
+      />
       <Checkbox
         cls={styles.check!}
         selected={selected}

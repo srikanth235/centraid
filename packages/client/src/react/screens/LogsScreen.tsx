@@ -92,7 +92,14 @@ export default function LogsScreen({
   const [entries, setEntries] = useState<LogEntryDTO[]>([]);
   const [status, setStatus] = useState<StreamStatus>('connecting');
   const [filter, setFilter] = useState<LevelFilter>('all');
-  const [query, setQuery] = useState('');
+  // The search box is a controlled field whose baseline is the incoming jump
+  // request: the typed value only wins while it belongs to the CURRENT nonce.
+  // A fresh jump (new nonce) therefore re-applies its text even when the text
+  // is unchanged, without an effect that would paint the stale value first.
+  const [typed, setTyped] = useState<{ nonce: number | undefined; text: string } | null>(null);
+  const query =
+    typed !== null && typed.nonce === focusQuery?.nonce ? typed.text : (focusQuery?.text ?? '');
+  const setQuery = (text: string): void => setTyped({ nonce: focusQuery?.nonce, text });
   const [follow, setFollow] = useState(true);
   const [copied, setCopied] = useState(false);
   const [exportState, setExportState] = useState<
@@ -102,18 +109,13 @@ export default function LogsScreen({
     | { kind: 'error'; message: string }
   >({ kind: 'idle' });
 
-  useEffect(() => {
-    if (focusQuery) setQuery(focusQuery.text);
-    // Only the nonce identifies a fresh jump request — a repeat click with
-    // the same text still needs to reapply (and re-focus the search box).
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#350) nonce-only dep is intentional, see comment above
-  }, [focusQuery?.nonce]);
-
   // The stream's resume cursor + the follow flag live in refs so the
   // long-lived stream effect never restarts on render-state changes.
   const lastSeqRef = useRef(0);
   const followRef = useRef(true);
-  followRef.current = follow;
+  useEffect(() => {
+    followRef.current = follow;
+  }, [follow]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // Guards the export flow's deferred `setExportState({kind: 'idle'})`
   // against firing after unmount (e.g. the user leaves the Logs tab right

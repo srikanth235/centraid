@@ -190,12 +190,10 @@ export function EventDrawer({
   const repeats = repeatLabel(ev.rrule);
 
   return (
-    <div
-      className={styles.drawerBackdrop}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <div className={styles.drawerBackdrop}>
+      {/* Click-outside-to-close, as a real button under the drawer (#573) —
+          the drawer is positioned, so it paints above this. */}
+      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
       <div className={pending ? `${styles.drawer} kit-pending` : styles.drawer}>
         <div
           className={styles.drawerBar}
@@ -286,9 +284,7 @@ export function EventDrawer({
             </button>
           </div>
           {formNotice ? (
-            <p className={`${shared.formNotice} muted small`} role="status">
-              {formNotice}
-            </p>
+            <output className={`${shared.formNotice} muted small`}>{formNotice}</output>
           ) : null}
 
           <div className="ag-eyebrow-label">Activity</div>

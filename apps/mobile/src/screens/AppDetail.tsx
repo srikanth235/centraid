@@ -17,6 +17,46 @@ import { INJECTED_JS } from '../lib/bridge/injected';
 import { CENTRAID_HANDSHAKE, type BridgeRequest } from '../lib/bridge/protocol';
 import type { AppDetailScreenProps } from '../navigation';
 
+type BaseResolveSetters = {
+  setBaseUrl(next: string | undefined): void;
+  setNoGateway(next: boolean): void;
+  setLoadError(next: string | undefined): void;
+  setLoading(next: boolean): void;
+};
+
+/**
+ * Reset the WebView's load state and resolve the gateway base (tunnel first),
+ * returning the effect cleanup that disarms the in-flight resolve.
+ *
+ * Lives outside the component: it closes over nothing but `useState` setters,
+ * which makes it independently testable and keeps the reset out of the effect
+ * body that schedules it.
+ */
+function startBaseResolve(setters: BaseResolveSetters): () => void {
+  let cancelled = false;
+  setters.setBaseUrl(undefined);
+  setters.setNoGateway(false);
+  setters.setLoadError(undefined);
+  setters.setLoading(true);
+  resolveGatewayBase()
+    .then((base) => {
+      if (cancelled) return;
+      if (base) setters.setBaseUrl(base);
+      else {
+        setters.setNoGateway(true);
+        setters.setLoading(false);
+      }
+    })
+    .catch((err: unknown) => {
+      if (cancelled) return;
+      setters.setLoadError(err instanceof Error ? err.message : String(err));
+      setters.setLoading(false);
+    });
+  return () => {
+    cancelled = true;
+  };
+}
+
 /**
  * Renders a Centraid app inside a WebView. The native shell owns the
  * titlebar + back button; the app's UI runs in the WebView, loaded
@@ -53,31 +93,15 @@ export default function AppDetailScreen({
   const [baseUrl, setBaseUrl] = useState<string | undefined>(undefined);
   const [noGateway, setNoGateway] = useState(false);
 
+  // Every member is a `useState` setter, so the bundle is stable for the
+  // component's lifetime — memoized once so the effect below can depend on it.
+  const setters = useMemo<BaseResolveSetters>(
+    () => ({ setBaseUrl, setNoGateway, setLoadError, setLoading }),
+    [],
+  );
+
   // Resolve the gateway base (tunnel first) each time we mount or retry.
-  useEffect(() => {
-    let cancelled = false;
-    setBaseUrl(undefined);
-    setNoGateway(false);
-    setLoadError(undefined);
-    setLoading(true);
-    resolveGatewayBase()
-      .then((base) => {
-        if (cancelled) return;
-        if (base) setBaseUrl(base);
-        else {
-          setNoGateway(true);
-          setLoading(false);
-        }
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : String(err));
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [appId, reloadKey]);
+  useEffect(() => startBaseResolve(setters), [appId, reloadKey, setters]);
 
   const handleNavStateChange = useCallback((event: WebViewNavigation): void => {
     setCanGoBack(event.canGoBack);

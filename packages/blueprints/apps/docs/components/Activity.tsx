@@ -34,7 +34,7 @@ export function Activity({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) loadActivity is a stable prop; Details.tsx keys this component by doc.document_id, so a real document change already remounts it fresh instead of re-running this effect
+    // (#360) loadActivity is a stable prop; Details.tsx keys this component by doc.document_id, so a real document change already remounts it fresh instead of re-running this effect
   }, [documentId]);
 
   if (events === null) return <div className={styles.activityStatus}>Loading activity…</div>;

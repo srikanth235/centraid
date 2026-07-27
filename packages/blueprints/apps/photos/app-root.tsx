@@ -9,7 +9,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useReducer,
   useRef,
   useState,
   type FC,
@@ -64,11 +63,14 @@ const KitSkeleton = 'kit-skeleton' as unknown as FC<{ rows?: number }>;
 type SlotKey = keyof ChromeSlots;
 
 export function Root({ rootRef }: InlineAppProps): ReactElement {
-  const [, bump] = useReducer((n: number) => n + 1, 0);
   const [narrow, setNarrow] = useState(false);
   const [ready, setReady] = useState(false);
   const rootElRef = useRef<HTMLDivElement | null>(null);
-  const slots = useRef<ChromeSlots>({
+  // Slots are state, not a mutated ref: the render reads them, so a ref would be
+  // a value React cannot see change (#573). Each slot render replaces the map
+  // instead of writing into it, which is also what schedules the re-paint —
+  // batching still folds a burst of slot renders into one commit.
+  const [slots, setSlots] = useState<ChromeSlots>({
     sidebar: null,
     toolbar: null,
     main: null,
@@ -112,8 +114,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
     // ---- slot roots ----
     const setSlot = (key: SlotKey, node: ReactNode): void => {
-      slots.current[key] = node;
-      bump();
+      setSlots((prev) => ({ ...prev, [key]: node }));
     };
     const mk = (key: SlotKey) => ({ render: (node: ReactNode) => setSlot(key, node) });
     const toolbarRoot = mk('toolbar');
@@ -757,7 +758,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       paneObserver?.disconnect();
       libraryLiveUnsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once boot, stable via refs (#505)
+    // mount-once boot, stable via refs (#505)
   }, []);
 
   return (
@@ -771,7 +772,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       className={styles.appRoot}
       style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
     >
-      <Chrome narrow={narrow} ready={ready} slots={slots.current} />
+      <Chrome narrow={narrow} ready={ready} slots={slots} />
     </div>
   );
 }

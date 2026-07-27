@@ -56,6 +56,21 @@ function clickByText(el: HTMLElement, text: string): void {
   btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 }
 
+// The mode chips are native radios inside styled <label>s (issue #573): the
+// <input> carries the checked state, the wrapping <label> the visible text.
+function radioByText(el: HTMLElement, text: string): HTMLInputElement {
+  const label = [...el.querySelectorAll('label')].find((l) => l.textContent?.includes(text));
+  const input = label?.querySelector<HTMLInputElement>('input[type="radio"]');
+  if (!input) throw new Error(`no radio labelled "${text}"`);
+  return input;
+}
+
+function checkedRadioText(el: HTMLElement): string | undefined {
+  return (
+    el.querySelector('input[type="radio"]:checked')?.closest('label')?.textContent ?? undefined
+  );
+}
+
 describe('parseResourceModePref', () => {
   it('reads the durable prefs key and defaults to auto', () => {
     expect(parseResourceModePref({ [RESOURCE_MODE_PREF_KEY]: 'conserve' })).toBe('conserve');
@@ -75,8 +90,7 @@ describe('ResourceModeCard', () => {
     expect(el.textContent).toContain('Conserve');
     expect(el.textContent).toContain('Balanced');
     expect(el.textContent).toContain('Performance');
-    const selected = el.querySelector('[role="radio"][aria-checked="true"]');
-    expect(selected?.textContent).toContain('Conserve');
+    expect(checkedRadioText(el)).toContain('Conserve');
   });
 
   it('saves a new mode through the bridge', async () => {
@@ -85,10 +99,8 @@ describe('ResourceModeCard', () => {
       loadMode: vi.fn().mockResolvedValue('auto'),
       saveMode,
     });
-    const performance = [...el.querySelectorAll('[role="radio"]')].find((b) =>
-      b.textContent?.includes('Performance'),
-    ) as HTMLButtonElement;
-    await act(async () => performance.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const performance = radioByText(el, 'Performance');
+    await act(async () => performance.click());
     expect(saveMode).toHaveBeenCalledWith('performance');
     expect(el.textContent).toContain('Applies fully on the next gateway restart');
   });
@@ -108,7 +120,7 @@ describe('ResourceModeCard', () => {
       await Promise.resolve();
     });
     expect(loadMode).toHaveBeenCalledTimes(1);
-    expect(el.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain('Auto');
+    expect(checkedRadioText(el)).toContain('Auto');
   });
 
   it('ignores a late loadMode resolve while a save is in flight', async () => {
@@ -129,32 +141,24 @@ describe('ResourceModeCard', () => {
 
     const el = await mount({ loadMode, saveMode });
     // Initial load still pending — selection starts before it settles.
-    const performance = [...el.querySelectorAll('[role="radio"]')].find((b) =>
-      b.textContent?.includes('Performance'),
-    ) as HTMLButtonElement;
-    await act(async () => performance.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const performance = radioByText(el, 'Performance');
+    await act(async () => performance.click());
     expect(saveMode).toHaveBeenCalledWith('performance');
-    expect(el.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain(
-      'Performance',
-    );
+    expect(checkedRadioText(el)).toContain('Performance');
 
     // Stale GET returns Auto; must not snap the radio back mid-save.
     await act(async () => {
       resolveLoad('auto');
       await Promise.resolve();
     });
-    expect(el.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain(
-      'Performance',
-    );
+    expect(checkedRadioText(el)).toContain('Performance');
 
     await act(async () => {
       resolveSave();
       await Promise.resolve();
     });
     expect(el.textContent).toContain('Applies fully on the next gateway restart');
-    expect(el.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain(
-      'Performance',
-    );
+    expect(checkedRadioText(el)).toContain('Performance');
   });
 });
 
@@ -208,7 +212,7 @@ describe('ResourceModeCard — L1 budget summary + L2 disclosure', () => {
     // Compare works off static presets, so its opener is always present.
     expect(el.querySelector('[data-testid="resource-compare-open"]')).not.toBeNull();
     // The card still renders its mode chips.
-    expect(el.querySelectorAll('[role="radio"]')).toHaveLength(4);
+    expect(el.querySelectorAll('input[type="radio"]')).toHaveLength(4);
   });
 });
 
@@ -231,8 +235,8 @@ describe('ResourceModeCard — compare modes dialog', () => {
 
     const perf = el.querySelector(
       '[data-testid="resource-compare-mode-performance"]',
-    ) as HTMLButtonElement;
-    await act(async () => perf.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    ) as HTMLInputElement;
+    await act(async () => perf.click());
     const apply = el.querySelector('[data-testid="resource-compare-apply"]') as HTMLButtonElement;
     await act(async () => apply.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 

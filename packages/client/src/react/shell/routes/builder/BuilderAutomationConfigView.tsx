@@ -75,17 +75,23 @@ function ActivityCard({
   automationRef: string;
   triggers: CentraidAutomationManifest['triggers'];
 }): JSX.Element {
-  const [lastRun, setLastRun] = useState<CentraidAutomationTurnRecord[] | null | 'error'>(null);
+  // Stamped with the automation it was fetched for so switching automations
+  // reads as "loading" during render rather than via a synchronous reset.
+  const [settled, setSettled] = useState<{
+    automationRef: string;
+    result: CentraidAutomationTurnRecord[] | 'error';
+  } | null>(null);
+  const lastRun: CentraidAutomationTurnRecord[] | null | 'error' =
+    settled !== null && settled.automationRef === automationRef ? settled.result : null;
 
   useEffect(() => {
     let alive = true;
-    setLastRun(null);
     listAutomationTurns({ automationId: automationRef, limit: 1 })
       .then((r) => {
-        if (alive) setLastRun(r);
+        if (alive) setSettled({ automationRef, result: r });
       })
       .catch(() => {
-        if (alive) setLastRun('error');
+        if (alive) setSettled({ automationRef, result: 'error' });
       });
     return () => {
       alive = false;
@@ -142,9 +148,16 @@ export default function ConfigView({
   // turn; a save made here needs its own optimistic-then-confirmed state so
   // the pane reflects it immediately without touching that wiring. Reset
   // whenever the prop identity changes (a genuine upstream refresh landed).
-  const [manifestOverride, setManifestOverride] = useState<CentraidAutomationManifest | null>(null);
-  useEffect(() => setManifestOverride(null), [automationRow]);
-  const m = manifestOverride ?? automationRow.manifest;
+  // The override records which row it was written against, so a new prop
+  // identity drops it during render instead of through a reset effect.
+  const [manifestOverride, setManifestOverride] = useState<{
+    row: CentraidAutomationRow;
+    manifest: CentraidAutomationManifest;
+  } | null>(null);
+  const m =
+    manifestOverride !== null && manifestOverride.row === automationRow
+      ? manifestOverride.manifest
+      : automationRow.manifest;
   const enabled = automationRow.enabled === true;
 
   const [editing, setEditing] = useState<{ mode: 'add' } | { mode: 'edit'; index: number } | null>(
@@ -180,7 +193,7 @@ export default function ConfigView({
       });
       await publish({ id: automationRow.ownerApp });
       const fresh = await readAutomation({ automationId: automationRow.ref });
-      setManifestOverride(fresh?.manifest ?? nextManifest);
+      setManifestOverride({ row: automationRow, manifest: fresh?.manifest ?? nextManifest });
       setEditing(null);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));

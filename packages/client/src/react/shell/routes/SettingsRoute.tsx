@@ -177,7 +177,6 @@ export default function SettingsRoute({
       offVault?.();
       offGateway?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#382) mount-once subscription, refreshSpace is stable via setState's functional form
   }, []);
   const saveActiveSpace = (data: {
     name: string;

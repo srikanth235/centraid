@@ -32,6 +32,9 @@
   z-index: 44;
   background: rgba(15, 18, 26, 0.28);
   animation: fade 0.2s ease;
+  /* Now a real <button> (kit-plain-btn) so the dismiss gesture is keyboard
+     reachable; keep the plain-div cursor it always had. */
+  cursor: default;
 }
 .details {
   position: fixed;

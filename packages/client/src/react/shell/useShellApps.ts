@@ -20,6 +20,76 @@ async function activeVaultKey(): Promise<string> {
   }
 }
 
+/** What a reconcile pass produces; `null` means the listing itself failed. */
+interface ShellAppsSnapshot {
+  userApps: UserAppMeta[];
+  drafts: DraftAppMeta[];
+}
+
+/** The reconcile pass, shared by the mount effect and the imperative
+ *  `refresh()` so neither has to call the other. Pure of React: it reads and
+ *  rewrites the Store, and hands back the next lists for the caller to apply. */
+async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
+  const projs = await listApps().catch(() => null);
+  if (projs === null) return null;
+  const liveIds = new Set(projs.map((p) => p.id));
+  // Read the current pins straight from the Store so the reconcile doesn't need
+  // userApps in any dep list (avoids a stale-closure re-fetch loop).
+  let pins = Store.get<UserAppMeta[]>('home.userApps', []);
+  // Vault switch: park the outgoing vault's pins and pull the incoming
+  // vault's set BEFORE the orphan prune below — otherwise every pin of the
+  // old vault looks deleted against the new vault's listing and the prune
+  // destroys them permanently (the "installed app demoted to DRAFT" bug).
+  const vid = await activeVaultKey();
+  const pinsVault = Store.get<string | null>('home.userApps.vault', null);
+  if (pinsVault !== null && pinsVault !== vid) {
+    const byVault = Store.get<Record<string, UserAppMeta[]>>('home.userApps.byVault', {});
+    byVault[pinsVault] = pins;
+    Store.set('home.userApps.byVault', byVault);
+    pins = byVault[vid] ?? [];
+    Store.set('home.userApps', pins);
+  }
+  if (pinsVault !== vid) Store.set('home.userApps.vault', vid);
+  // Prune orphan pins (app deleted out-of-band), then overlay tile identity
+  // AND name/description — the gateway listing is the source of truth for
+  // both (a rename via updateAppMeta only lands on the server; without
+  // this overlay the Home tile's cached pin keeps showing the stale name
+  // forever, since setUserApps() is never otherwise called after a rename).
+  const reconciled = pins
+    .filter((a) => liveIds.has(a.id) || (a.centraidAppId != null && liveIds.has(a.centraidAppId)))
+    .map((a) => {
+      const row = projs.find((p) => p.id === a.id || p.id === a.centraidAppId);
+      if (!row) return a;
+      const vis = tileVisualFromListing(row);
+      return {
+        ...a,
+        ...(vis ? { iconKey: vis.iconKey, colorKey: vis.colorKey, color: vis.color } : {}),
+        ...(row.name ? { name: row.name } : {}),
+        ...(row.description !== undefined ? { desc: row.description } : {}),
+      };
+    });
+  if (reconciled.length !== pins.length) Store.set('home.userApps', reconciled);
+
+  const knownIds = new Set(reconciled.map((a) => a.id));
+  const drafts = projs
+    .filter((p) => p.kind !== 'automation')
+    .filter((p) => !knownIds.has(p.id))
+    .map((p) => {
+      const vis = tileVisualFromListing(p);
+      return {
+        __draft: true,
+        color: vis?.color ?? colorForIcon('Sparkle'),
+        colorKey: vis?.colorKey ?? 'violet',
+        desc: p.description || 'Draft — not yet published',
+        hasIndex: !!p.hasIndex,
+        iconKey: vis?.iconKey ?? 'Sparkle',
+        id: p.id,
+        name: p.name || p.id,
+      } as DraftAppMeta;
+    });
+  return { userApps: reconciled, drafts };
+}
+
 export interface ShellAppsController {
   userApps: UserAppMeta[];
   drafts: DraftAppMeta[];
@@ -46,77 +116,28 @@ export function useShellApps(): ShellAppsController {
     setUserAppsState(next);
   }, []);
 
-  const refresh = useCallback(async () => {
-    let projs: Awaited<ReturnType<typeof listApps>>;
-    try {
-      projs = await listApps();
-    } catch {
+  const apply = useCallback((snapshot: ShellAppsSnapshot | null) => {
+    if (snapshot === null) {
       setDrafts([]);
       return;
     }
-    const liveIds = new Set(projs.map((p) => p.id));
-    // Read the current pins straight from the Store so refresh() doesn't need
-    // userApps in its dep list (avoids a stale-closure re-fetch loop).
-    let pins = Store.get<UserAppMeta[]>('home.userApps', []);
-    // Vault switch: park the outgoing vault's pins and pull the incoming
-    // vault's set BEFORE the orphan prune below — otherwise every pin of the
-    // old vault looks deleted against the new vault's listing and the prune
-    // destroys them permanently (the "installed app demoted to DRAFT" bug).
-    const vid = await activeVaultKey();
-    const pinsVault = Store.get<string | null>('home.userApps.vault', null);
-    if (pinsVault !== null && pinsVault !== vid) {
-      const byVault = Store.get<Record<string, UserAppMeta[]>>('home.userApps.byVault', {});
-      byVault[pinsVault] = pins;
-      Store.set('home.userApps.byVault', byVault);
-      pins = byVault[vid] ?? [];
-      Store.set('home.userApps', pins);
-    }
-    if (pinsVault !== vid) Store.set('home.userApps.vault', vid);
-    // Prune orphan pins (app deleted out-of-band), then overlay tile identity
-    // AND name/description — the gateway listing is the source of truth for
-    // both (a rename via updateAppMeta only lands on the server; without
-    // this overlay the Home tile's cached pin keeps showing the stale name
-    // forever, since setUserApps() is never otherwise called after a rename).
-    const reconciled = pins
-      .filter((a) => liveIds.has(a.id) || (a.centraidAppId != null && liveIds.has(a.centraidAppId)))
-      .map((a) => {
-        const row = projs.find((p) => p.id === a.id || p.id === a.centraidAppId);
-        if (!row) return a;
-        const vis = tileVisualFromListing(row);
-        return {
-          ...a,
-          ...(vis ? { iconKey: vis.iconKey, colorKey: vis.colorKey, color: vis.color } : {}),
-          ...(row.name ? { name: row.name } : {}),
-          ...(row.description !== undefined ? { desc: row.description } : {}),
-        };
-      });
-    if (reconciled.length !== pins.length) Store.set('home.userApps', reconciled);
-    setUserAppsState(reconciled);
-
-    const knownIds = new Set(reconciled.map((a) => a.id));
-    setDrafts(
-      projs
-        .filter((p) => p.kind !== 'automation')
-        .filter((p) => !knownIds.has(p.id))
-        .map((p) => {
-          const vis = tileVisualFromListing(p);
-          return {
-            __draft: true,
-            color: vis?.color ?? colorForIcon('Sparkle'),
-            colorKey: vis?.colorKey ?? 'violet',
-            desc: p.description || 'Draft — not yet published',
-            hasIndex: !!p.hasIndex,
-            iconKey: vis?.iconKey ?? 'Sparkle',
-            id: p.id,
-            name: p.name || p.id,
-          } as DraftAppMeta;
-        }),
-    );
+    setUserAppsState(snapshot.userApps);
+    setDrafts(snapshot.drafts);
   }, []);
 
+  const refresh = useCallback(async () => {
+    apply(await reconcileShellApps());
+  }, [apply]);
+
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    let alive = true;
+    void reconcileShellApps().then((snapshot) => {
+      if (alive) apply(snapshot);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [apply]);
 
   return { userApps, drafts, refresh, setUserApps };
 }

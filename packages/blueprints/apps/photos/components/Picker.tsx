@@ -48,7 +48,7 @@ export function PickerView({
 }) {
   const n = picked.size;
   return (
-    <div className={`kit-modal ${styles.panel}`} onClick={(e) => e.stopPropagation()}>
+    <div className={`kit-modal ${styles.panel}`}>
       <h2 className={styles.head}>Add to “{album.title ?? 'Album'}”</h2>
       <div className={styles.grid}>
         {candidates.length === 0 ? (

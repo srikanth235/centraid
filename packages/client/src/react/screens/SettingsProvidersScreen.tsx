@@ -17,6 +17,30 @@ const POLL_MS = 800;
 const POLL_WINDOW_MS = 30_000;
 
 /**
+ * The status poll's self-rescheduling timer. It lives at module scope, taking
+ * the refs and loaders it needs as arguments, because a recursive function
+ * declared inside the component body reads as a render value that depends on
+ * itself — which is neither memoizable nor analysable.
+ */
+function schedulePoll(
+  timerRef: { current: ReturnType<typeof setTimeout> | null },
+  deadlineRef: { current: number },
+  loadStatus: () => Promise<AgentsStatusDTO>,
+  onStatus: (s: AgentsStatusDTO) => void,
+): void {
+  if (timerRef.current) clearTimeout(timerRef.current);
+  timerRef.current = setTimeout(() => {
+    void loadStatus().then((s) => {
+      // Poll only fills in loading model lists — keep the user's
+      // optimistic runner/model selection, don't reapply from the server.
+      onStatus(s);
+      if (s.anyLoading && Date.now() < deadlineRef.current)
+        schedulePoll(timerRef, deadlineRef, loadStatus, onStatus);
+    });
+  }, POLL_MS);
+}
+
+/**
  * The routing lanes. Each resolves independently to an (agent, model) pair —
  * a lane left unset inherits the default lane. Before per-subsystem runners
  * these were model-only overrides hanging off one globally-active agent.
@@ -142,15 +166,7 @@ export default function SettingsProvidersScreen({
   }, []);
 
   const poll = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      void loadStatus().then((s) => {
-        // Poll only fills in loading model lists — keep the user's
-        // optimistic runner/model selection, don't reapply from the server.
-        setStatus(s);
-        if (s.anyLoading && Date.now() < deadlineRef.current) poll();
-      });
-    }, POLL_MS);
+    schedulePoll(timerRef, deadlineRef, loadStatus, setStatus);
   }, [loadStatus]);
 
   useEffect(() => {

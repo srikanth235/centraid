@@ -98,13 +98,12 @@ export function EditorView({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) one-shot load; the rotation-driven redraw is the effect below
+    // (#360) one-shot load; the rotation-driven redraw is the effect below
   }, []);
 
   useEffect(() => {
     draw();
-    setCrop(null); // a rectangle drawn against the OLD orientation no longer lines up
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) draw() closes over the current rotation/refs each render
+    // (#360) draw() closes over the current rotation/refs each render
   }, [rotation]);
 
   function fractionAt(e: { clientX: number; clientY: number }) {
@@ -210,7 +209,13 @@ export function EditorView({
           type="button"
           className="kit-btn"
           disabled={busy}
-          onClick={() => setRotation((r) => (r + 90) % 360)}
+          onClick={() => {
+            setRotation((r) => (r + 90) % 360);
+            // A rectangle drawn against the OLD orientation no longer lines up.
+            // Cleared here, with the rotation, rather than from the redraw
+            // effect — rotating is the only thing that invalidates a crop (#573).
+            setCrop(null);
+          }}
         >
           ⟳ Rotate
         </button>

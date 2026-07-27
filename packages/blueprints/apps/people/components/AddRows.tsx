@@ -25,30 +25,30 @@ function AddRow({
   onCommit: () => void;
   children: ReactNode;
 }) {
+  // A real <form>: Enter inside any field commits it through native implicit
+  // submission (issue #573), which is what the hand-rolled Enter keydown on the
+  // wrapping div did — and the "+" is the form's submit button.
   return (
-    <div
+    <form
       className={styles.noteadd}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          onCommit();
-        }
+      onSubmit={(e) => {
+        e.preventDefault();
+        onCommit();
       }}
     >
       {children}
       <button
-        type="button"
+        type="submit"
         className={shared.miniBtn}
         aria-label="Add"
         style={{
           background: canCommit ? 'var(--accd)' : 'color-mix(in oklab, var(--ink) 8%, transparent)',
           color: canCommit ? '#fff' : 'var(--ink-3)',
         }}
-        onClick={onCommit}
       >
         <Icon svg={I.plus} />
       </button>
-    </div>
+    </form>
   );
 }
 

@@ -28,6 +28,15 @@ export function ListRow({
   const selected = selectedIds.has(p.party_id);
   return (
     <div className={styles.row} data-selected={String(selected)}>
+      {/* The whole row opens the profile. One stretched button carries that
+          (issue #573) instead of a click handler on each static cell — the
+          row's own controls (select, avatar, kebab) sit above it. */}
+      <button
+        type="button"
+        className="kit-stretch-btn"
+        aria-label={`Open ${p.name}`}
+        onClick={() => onOpenDetails(p.party_id)}
+      />
       <button
         type="button"
         className={styles.check}
@@ -41,7 +50,7 @@ export function ListRow({
         {selected ? <Icon svg={I.check} /> : null}
       </button>
       <KitAvatar
-        style={{ cursor: 'pointer' }}
+        style={{ cursor: 'pointer', position: 'relative' }}
         name={p.name}
         size="34px"
         color={color}
@@ -50,7 +59,7 @@ export function ListRow({
           onOpenDetails(p.party_id);
         }}
       ></KitAvatar>
-      <div className={styles.rowMain} onClick={() => onOpenDetails(p.party_id)}>
+      <div className={styles.rowMain}>
         <div className={styles.rowTitle}>
           {p.name}
           {p.starred ? (
@@ -64,12 +73,8 @@ export function ListRow({
           <Snippet snippet={p.snippet} className={styles.rowRole} />
         ) : null}
       </div>
-      <span className={`${styles.cell} ${styles.list}`} onClick={() => onOpenDetails(p.party_id)}>
-        {listName(data, p.list_id ?? null)}
-      </span>
-      <span className={`${styles.cell} ${styles.last}`} onClick={() => onOpenDetails(p.party_id)}>
-        {shortFmt(daysSince(p))}
-      </span>
+      <span className={`${styles.cell} ${styles.list}`}>{listName(data, p.list_id ?? null)}</span>
+      <span className={`${styles.cell} ${styles.last}`}>{shortFmt(daysSince(p))}</span>
       <span className={`${styles.cell} ${styles.status}`}>
         <span className="kit-dotmini" style={{ background: st.color }}></span>
         {st.label}

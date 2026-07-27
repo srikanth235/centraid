@@ -5,6 +5,7 @@ import { Icon } from '../ui/index.js';
 import type { SettingsAppearanceBridgeProps, SettingsTileVariant } from '../screen-contracts.js';
 import { DrawerGroup, DrawerRow, Switch } from './settings-controls.js';
 import styles from './SettingsAppearanceScreen.module.css';
+import a11y from '../styles/a11y.module.css';
 import segCss from '../styles/seg.module.css';
 import swatchCss from '../styles/swatch.module.css';
 import linkBtnCss from '../styles/linkBtn.module.css';
@@ -78,17 +79,20 @@ export default function SettingsAppearanceScreen({
               const p = themePreview(preset.name);
               const active = preset.name === curTheme;
               return (
-                <button
+                <label
                   key={preset.name}
-                  type="button"
                   className={styles.themeCard}
                   data-name={preset.name}
                   data-active={String(active)}
-                  aria-checked={active}
-                  aria-label={preset.label}
-                  role="radio"
-                  onClick={() => pickTheme(preset.name)}
                 >
+                  <input
+                    type="radio"
+                    className={a11y.srControl}
+                    name="settings-theme"
+                    aria-label={preset.label}
+                    checked={active}
+                    onChange={() => pickTheme(preset.name)}
+                  />
                   <div className={styles.themeCardPreview} style={{ background: p.bg }}>
                     <span className={styles.themeCardBar} style={{ background: p.elev }} />
                     <span className={styles.themeCardDot} style={{ background: p.accent }} />
@@ -97,7 +101,7 @@ export default function SettingsAppearanceScreen({
                     <span className={styles.themeCardLabel}>{preset.label}</span>
                     <span className={styles.themeCardKind}>{preset.kind}</span>
                   </div>
-                </button>
+                </label>
               );
             })}
           </div>
@@ -133,22 +137,24 @@ export default function SettingsAppearanceScreen({
         >
           <div className={swatchCss.swatches} role="radiogroup" aria-label="Accent">
             {ACCENTS.map((a) => (
-              <button
+              <label
                 key={a.key}
-                type="button"
                 className={swatchCss.swatch}
-                role="radio"
-                aria-checked={a.key === curAccent}
-                aria-label={a.name}
                 data-active={String(a.key === curAccent)}
-                onClick={() => {
-                  setCurAccent(a.key);
-                  onSetAccent(a.key);
-                }}
               >
+                <input
+                  type="radio"
+                  className={a11y.srControl}
+                  name="settings-accent"
+                  checked={a.key === curAccent}
+                  onChange={() => {
+                    setCurAccent(a.key);
+                    onSetAccent(a.key);
+                  }}
+                />
                 <span className={styles.swatchChip} style={{ background: a.color }} />
                 <span className={styles.swatchName}>{a.name}</span>
-              </button>
+              </label>
             ))}
           </div>
         </DrawerRow>

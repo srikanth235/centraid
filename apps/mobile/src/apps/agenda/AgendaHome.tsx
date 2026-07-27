@@ -65,18 +65,18 @@ export default function AgendaHome({
     );
   }, [agenda.events, hiddenCalendars, query]);
   const agendaRows = useMemo<AgendaRow[]>(() => {
+    const rows: AgendaRow[] = [];
     let previous = '';
-    return visibleEvents.flatMap((event) => {
+    for (const event of visibleEvents) {
       const date = new Date(event.start);
       const day = date.toDateString();
-      const rows: AgendaRow[] = [];
       if (day !== previous) {
         previous = day;
         rows.push({ kind: 'day', key: `day:${day}`, date });
       }
       rows.push({ kind: 'event', key: event.instanceKey, event });
-      return rows;
-    });
+    }
+    return rows;
   }, [visibleEvents]);
 
   const create = async (): Promise<void> => {

@@ -36,12 +36,16 @@ export function ExplistSkeleton({ rows }: { rows: number }) {
   );
 }
 
-// The backdrop closes on its own click; the modal card itself must stop that
-// click from bubbling back here (each modal wraps its card with its own
-// stopPropagation handler), matching the old imperative wiring 1:1.
+// Dismiss-on-outside-click. The click used to live on the backdrop div itself
+// (which no keyboard could reach, and which every card had to shield with its
+// own stopPropagation); it is a real "Close" button laid under the card
+// instead — `.kit-modal` is `position: relative`, so it paints above the scrim
+// and clicks inside it never reach the scrim at all. Same gesture, same
+// handler, now reachable by tab + Enter/Space (issue #573).
 export function ModalBackdrop({ onClose, children }: { onClose: () => void; children: ReactNode }) {
   return (
-    <div className="kit-modal-back" onClick={onClose}>
+    <div className="kit-modal-back">
+      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
       {children}
     </div>
   );

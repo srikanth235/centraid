@@ -33,7 +33,10 @@ export default function AlbumDetail({
   const [renameOpen, setRenameOpen] = useState(false);
   const [name, setName] = useState('');
   const [keepOriginals, setKeepOriginals] = useState(false);
-  const [pinsReady, setPinsReady] = useState(false);
+  // Which album's "keep originals" pin has finished hydrating. Derived rather
+  // than a second boolean so switching albums can't leave a stale `true` behind
+  // (and so nothing has to be reset synchronously from the effect below).
+  const [pinsHydratedFor, setPinsHydratedFor] = useState<string>();
   const album = collections.rows.find((row) => row.collection_id === route.params.albumId);
   const ids = new Set(
     entries.rows
@@ -42,12 +45,13 @@ export default function AlbumDetail({
   );
   const assets = timeline.assets.filter((asset) => asset.assetId && ids.has(asset.assetId));
   useEffect(() => {
-    setPinsReady(false);
+    const albumId = route.params.albumId;
     void Store.hydrate<string[]>(KEEP_ORIGINALS_KEY, []).then((albumIds) => {
-      setKeepOriginals(albumIds.includes(route.params.albumId));
-      setPinsReady(true);
+      setKeepOriginals(albumIds.includes(albumId));
+      setPinsHydratedFor(albumId);
     });
   }, [route.params.albumId]);
+  const pinsReady = pinsHydratedFor === route.params.albumId;
   const toggleKeepOriginals = (next: boolean): void => {
     if (!pinsReady) return;
     const current = Store.get<string[]>(KEEP_ORIGINALS_KEY, []);

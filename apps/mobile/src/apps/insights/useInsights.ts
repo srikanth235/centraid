@@ -42,49 +42,53 @@ function messageOf(reason: unknown): string {
     : 'Unavailable on this gateway.';
 }
 
+// The loader lives outside the hook: it closes over nothing but the (stable)
+// state setter, so it needs no `useCallback` identity dance, it is testable on
+// its own, and the effects below are plainly async kick-offs rather than
+// something that could set state during the effect body.
+async function loadInsights(setState: (next: InsightsState) => void): Promise<void> {
+  const base = await resolveGatewayBase().catch(() => undefined);
+  if (!base) {
+    setState({ kind: 'no-gateway' });
+    return;
+  }
+  // Load both in parallel; a failure of one must not sink the other.
+  const [healthRes, summaryRes] = await Promise.allSettled([
+    fetchGatewayHealth(),
+    fetchInsightsSummary(WINDOW_DAYS),
+  ]);
+  const health = healthRes.status === 'fulfilled' ? healthRes.value : undefined;
+  const summary = summaryRes.status === 'fulfilled' ? summaryRes.value : undefined;
+  // Both failing is a real error (the gateway is reachable but answering
+  // nothing useful) — surface it rather than an empty page.
+  if (!health && !summary) {
+    setState({ kind: 'error', message: messageOf((healthRes as PromiseRejectedResult).reason) });
+    return;
+  }
+  setState({
+    kind: 'ready',
+    health,
+    summary,
+    healthError: healthRes.status === 'rejected' ? messageOf(healthRes.reason) : undefined,
+    summaryError: summaryRes.status === 'rejected' ? messageOf(summaryRes.reason) : undefined,
+  });
+}
+
 export function useInsights(): UseInsights {
   const [state, setState] = useState<InsightsState>({ kind: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (): Promise<void> => {
-    const base = await resolveGatewayBase().catch(() => undefined);
-    if (!base) {
-      setState({ kind: 'no-gateway' });
-      return;
-    }
-    // Load both in parallel; a failure of one must not sink the other.
-    const [healthRes, summaryRes] = await Promise.allSettled([
-      fetchGatewayHealth(),
-      fetchInsightsSummary(WINDOW_DAYS),
-    ]);
-    const health = healthRes.status === 'fulfilled' ? healthRes.value : undefined;
-    const summary = summaryRes.status === 'fulfilled' ? summaryRes.value : undefined;
-    // Both failing is a real error (the gateway is reachable but answering
-    // nothing useful) — surface it rather than an empty page.
-    if (!health && !summary) {
-      setState({ kind: 'error', message: messageOf((healthRes as PromiseRejectedResult).reason) });
-      return;
-    }
-    setState({
-      kind: 'ready',
-      health,
-      summary,
-      healthError: healthRes.status === 'rejected' ? messageOf(healthRes.reason) : undefined,
-      summaryError: summaryRes.status === 'rejected' ? messageOf(summaryRes.reason) : undefined,
-    });
-  }, []);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadInsights(setState);
+  }, []);
   // Switching the active Space re-points usage at a different vault — reload.
-  useEffect(() => subscribeSpaces(() => void load()), [load]);
+  useEffect(() => subscribeSpaces(() => void loadInsights(setState)), []);
 
   const refresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);
-    await load();
+    await loadInsights(setState);
     setRefreshing(false);
-  }, [load]);
+  }, []);
 
   return { state, refreshing, refresh };
 }

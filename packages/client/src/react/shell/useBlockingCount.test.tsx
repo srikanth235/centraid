@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -23,7 +23,13 @@ afterEach(() => {
 
 let count = 0;
 function Harness(): null {
-  count = useBlockingCount();
+  const value = useBlockingCount();
+  // Published from a commit-time effect, not the render body — assigning to an
+  // outer binding during render is a side effect (`act()` flushes this before
+  // the assertions run, so every test still reads the latest value).
+  useEffect(() => {
+    count = value;
+  });
   return null;
 }
 async function mount(): Promise<void> {

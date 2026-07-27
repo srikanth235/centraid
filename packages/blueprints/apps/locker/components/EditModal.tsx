@@ -140,13 +140,14 @@ export function EditModal({
   };
 
   return (
-    <div
-      className="kit-modal-back"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="kit-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="kit-modal-back">
+      {/* Dismiss-on-outside-click: a real "Close" button laid under the card
+          (`.kit-modal` is `position: relative`) instead of a click handler on
+          the backdrop that only a mouse could reach. It replaces both the
+          `e.target === e.currentTarget` guard and the card's stopPropagation —
+          clicks inside the card never reach the scrim now (issue #573). */}
+      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <div className="kit-modal">
         <h2>{mode === 'edit' ? 'Edit item' : 'New item'}</h2>
 
         {mode === 'new' ? (
@@ -192,6 +193,10 @@ export function EditModal({
         ))}
 
         {type === 'login' ? (
+          // The title/hint used to be wrapped in a <span> flex item; they are
+          // direct children of the label now (the label is a two-column grid,
+          // see EditModal.module.css) so the label's own text is its accessible
+          // name rather than sitting two elements deep (issue #573).
           <label className={styles.matchPolicy}>
             <input
               type="checkbox"
@@ -200,10 +205,8 @@ export function EditModal({
                 setUrlMatchPolicy(event.target.checked ? 'exact-host' : 'registrable-domain')
               }
             />
-            <span>
-              <strong>Match only this exact host</strong>
-              <small>Otherwise Companion matches the site's registrable domain.</small>
-            </span>
+            <strong>Match only this exact host</strong>
+            <small>Otherwise Companion matches the site's registrable domain.</small>
           </label>
         ) : null}
 

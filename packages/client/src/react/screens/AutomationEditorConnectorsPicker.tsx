@@ -182,12 +182,20 @@ export function AutomationEditorConnectorsPicker({
   const [busyKind, setBusyKind] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
 
-  useEffect(() => {
+  // Closing discards the sheet's transient state. Done during render (the React
+  // "adjust state when a prop changes" pattern) so a reopen never flashes the
+  // previous filter.
+  const [seenOpen, setSeenOpen] = useState(open);
+  if (seenOpen !== open) {
+    setSeenOpen(open);
     if (!open) {
       setConnectingKind(null);
       setFilter('');
-      return;
     }
+  }
+
+  useEffect(() => {
+    if (!open) return;
     const id = window.requestAnimationFrame(() => searchRef.current?.focus());
     return () => window.cancelAnimationFrame(id);
   }, [open]);
@@ -264,9 +272,9 @@ export function AutomationEditorConnectorsPicker({
   };
 
   return (
-    <div
+    <dialog
+      open
       className={styles.connPicker}
-      role="dialog"
       aria-modal="false"
       aria-labelledby={titleId}
       data-testid="automation-connectors-picker"
@@ -370,9 +378,8 @@ export function AutomationEditorConnectorsPicker({
                   </span>
                 </button>
                 {hasAccountChoice ? (
-                  <div
+                  <fieldset
                     className={styles.connAccountList}
-                    role="group"
                     aria-label={`Choose ${item.name} account`}
                   >
                     {bindingDangling ? (
@@ -420,7 +427,7 @@ export function AutomationEditorConnectorsPicker({
                         </button>
                       );
                     })}
-                  </div>
+                  </fieldset>
                 ) : null}
                 <div className={styles.connPickerActions}>
                   {hasAccountChoice ? null : health === 'ok' ? null : health === 'needs-auth' &&
@@ -455,6 +462,6 @@ export function AutomationEditorConnectorsPicker({
           })
         )}
       </div>
-    </div>
+    </dialog>
   );
 }

@@ -35,9 +35,8 @@ export function TablePicker({
           <button
             key={t.logical}
             type="button"
-            role="option"
             className={cx(styles.pickOption, selected === t.logical && styles.pickOptionActive)}
-            aria-selected={selected === t.logical}
+            aria-current={selected === t.logical ? 'true' : undefined}
             data-testid="atlas-browse-table-option"
             data-logical={t.logical}
             data-pack-kind={kind}
@@ -76,7 +75,11 @@ export function TablePicker({
             aria-label="Filter tables"
           />
         </div>
-        <div className={styles.pickList} role="listbox" aria-label="Vault tables">
+        {/* Buttons in a panel, not a listbox: the pack headings, the machinery
+            divider and the empty state are not `option`s, so the listbox role
+            described a widget this never was. The chosen table is the one
+            carrying `aria-current`. */}
+        <div className={styles.pickList}>
           {options(grouped.ontology, 'ontology')}
           {grouped.machinery.length > 0 ? (
             <div className={styles.pickDivider} data-testid="atlas-browse-machinery-divider">

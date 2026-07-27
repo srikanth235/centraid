@@ -16,7 +16,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS, useSharedValue } from 'react-native-reanimated';
+import { runOnJS, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { useFocusEffect } from '@react-navigation/native';
 import type { AppMetaResolved } from '@centraid/design-tokens';
 
@@ -58,6 +58,68 @@ type HomeState =
   | { kind: 'ready'; apps: AppMetaResolved[]; automations: number }
   | { kind: 'error'; message: string };
 
+// The loader lives outside the component: it closes over nothing but the two
+// (stable) state setters, so it needs no `useCallback` identity dance and the
+// effects below read as plain async kick-offs.
+async function loadHome(
+  setState: (next: HomeState) => void,
+  setApprovals: (next: number) => void,
+): Promise<void> {
+  try {
+    const base = await resolveGatewayBase();
+    if (!base) {
+      setState({ kind: 'no-gateway' });
+      setApprovals(0);
+      return;
+    }
+    const rows = await listAppRegistry();
+    const apps = rows
+      .filter(isOpenableApp)
+      .map(resolveAppMeta)
+      .filter((app) => !NATIVE_APP_IDS.has(app.id));
+    const automations = rows.filter((row) => row.kind === 'automation').length;
+    setState({ apps, automations, kind: 'ready' });
+    // Approvals are secondary — never fail the whole load over them.
+    try {
+      setApprovals((await listParked()).length);
+    } catch {
+      setApprovals(0);
+    }
+  } catch (error) {
+    setState({
+      kind: 'error',
+      message:
+        error instanceof GatewayError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'Could not load apps.',
+    });
+    setApprovals(0);
+  }
+}
+
+// Left-edge swipe opens the drawer. `activeOffsetX` demands horizontal intent
+// and `failOffsetY` bows out to vertical grid scroll, so the gesture only wins
+// on a deliberate rightward drag; the edge guard keeps it off in-content swipes.
+// Built outside the component because `Gesture.Pan()` is a capitalised factory
+// whose builder chain mutates the object, and the handlers drive a shared value
+// — both shapes the React compiler rejects inside a render body.
+function buildEdgeSwipeGesture(
+  edgeStartX: SharedValue<number>,
+  onOpenMenu: (open: boolean) => void,
+): ReturnType<typeof Gesture.Pan> {
+  return Gesture.Pan()
+    .activeOffsetX(18)
+    .failOffsetY([-16, 16])
+    .onBegin((event) => {
+      edgeStartX.value = event.x;
+    })
+    .onStart(() => {
+      if (edgeStartX.value <= EDGE_ZONE) runOnJS(onOpenMenu)(true);
+    });
+}
+
 export default function HomeScreen({ navigation }: HomeScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -72,59 +134,24 @@ export default function HomeScreen({ navigation }: HomeScreenProps): React.JSX.E
     color: getProfileColor(),
   }));
 
-  const load = useCallback(async (): Promise<void> => {
-    try {
-      const base = await resolveGatewayBase();
-      if (!base) {
-        setState({ kind: 'no-gateway' });
-        setApprovals(0);
-        return;
-      }
-      const rows = await listAppRegistry();
-      const apps = rows
-        .filter(isOpenableApp)
-        .map(resolveAppMeta)
-        .filter((app) => !NATIVE_APP_IDS.has(app.id));
-      const automations = rows.filter((row) => row.kind === 'automation').length;
-      setState({ apps, automations, kind: 'ready' });
-      // Approvals are secondary — never fail the whole load over them.
-      try {
-        setApprovals((await listParked()).length);
-      } catch {
-        setApprovals(0);
-      }
-    } catch (error) {
-      setState({
-        kind: 'error',
-        message:
-          error instanceof GatewayError
-            ? error.message
-            : error instanceof Error
-              ? error.message
-              : 'Could not load apps.',
-      });
-      setApprovals(0);
-    }
-  }, []);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadHome(setState, setApprovals);
+  }, []);
   // Switching / adding / forgetting a Space re-points the whole app at a new
   // vault — reload the grid so it reflects the now-active space's apps.
-  useEffect(() => subscribeSpaces(() => void load()), [load]);
+  useEffect(() => subscribeSpaces(() => void loadHome(setState, setApprovals)), []);
   useFocusEffect(
     useCallback(() => {
-      void load();
+      void loadHome(setState, setApprovals);
       setProfile({ name: getProfileName(), color: getProfileColor() });
-    }, [load]),
+    }, []),
   );
 
   const onRefresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);
-    await load();
+    await loadHome(setState, setApprovals);
     setRefreshing(false);
-  }, [load]);
+  }, []);
 
   const remoteApps = state.kind === 'ready' ? state.apps : NO_APPS;
   const items = useMemo(() => buildLauncherItems(remoteApps), [remoteApps]);
@@ -178,23 +205,8 @@ export default function HomeScreen({ navigation }: HomeScreenProps): React.JSX.E
 
   const openMenu = useCallback(() => setMenuOpen(true), []);
 
-  // Left-edge swipe opens the drawer. `activeOffsetX` demands horizontal intent
-  // and `failOffsetY` bows out to vertical grid scroll, so the gesture only wins
-  // on a deliberate rightward drag; the edge guard keeps it off in-content swipes.
   const edgeStartX = useSharedValue(0);
-  const edgeSwipe = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX(18)
-        .failOffsetY([-16, 16])
-        .onBegin((event) => {
-          edgeStartX.value = event.x;
-        })
-        .onStart(() => {
-          if (edgeStartX.value <= EDGE_ZONE) runOnJS(setMenuOpen)(true);
-        }),
-    [edgeStartX],
-  );
+  const edgeSwipe = useMemo(() => buildEdgeSwipeGesture(edgeStartX, setMenuOpen), [edgeStartX]);
 
   return (
     <GestureDetector gesture={edgeSwipe}>

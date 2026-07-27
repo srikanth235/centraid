@@ -241,8 +241,12 @@ describe('AtlasScreen — Kinds census', () => {
         ?.textContent;
     expect(value()).toBe('214');
 
-    const bytesBtn = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Bytes');
-    await click(bytesBtn);
+    // The metric toggle is a native radio group: the visible text is on the
+    // <label>, the control is the radio inside it.
+    const bytesRadio = [...el.querySelectorAll('label')]
+      .find((l) => l.textContent === 'Bytes')
+      ?.querySelector<HTMLInputElement>('input[type="radio"]');
+    await click(bytesRadio);
     expect(value()).toContain('MB'); // 2,000,000 B → "1.9 MB"
     expect(value()).not.toBe('214');
   });

@@ -45,6 +45,11 @@ const brandGlyph = (
 );
 
 export function Chrome(props: ChromeProps): ReactNode {
+  // Callback refs come off `props` first: a ref read from the props object taints
+  // every later `props.*` read for the React compiler ("cannot access refs during
+  // render"), so they are destructured into plain locals here (#573).
+  const { searchRef, themeButtonRef } = props;
+
   const shellClass = [
     styles.shell,
     props.narrow ? styles.isNarrow : '',
@@ -105,7 +110,15 @@ export function Chrome(props: ChromeProps): ReactNode {
         <div className={styles.sideFoot}>{props.sidebarFoot}</div>
       </aside>
 
-      <div className={styles.scrim} onClick={props.onCloseSide} />
+      {/* The drawer's dismiss-on-outside-click target is a real button
+          (kit-modal-scrim strips the UA button box; `.scrim` still owns the
+          show/hide + dim), so it is keyboard-reachable. */}
+      <button
+        type="button"
+        className={`kit-modal-scrim ${styles.scrim}`}
+        aria-label="Close menu"
+        onClick={props.onCloseSide}
+      />
 
       <main className={styles.main}>
         <div className={styles.topbar}>
@@ -148,7 +161,7 @@ export function Chrome(props: ChromeProps): ReactNode {
                 <path d="m21 21-4.3-4.3" />
               </svg>
               <input
-                ref={props.searchRef}
+                ref={searchRef}
                 type="search"
                 placeholder="Find tasks ( / )"
                 aria-label="Search tasks"
@@ -158,7 +171,7 @@ export function Chrome(props: ChromeProps): ReactNode {
               />
             </label>
             <button
-              ref={props.themeButtonRef}
+              ref={themeButtonRef}
               type="button"
               className="kit-icon-btn"
               aria-label="Toggle light/dark"
@@ -177,11 +190,12 @@ export function Chrome(props: ChromeProps): ReactNode {
           </div>
         ) : null}
         {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,
-            never reconciled, so those DOM writes are never clobbered. */}
-        <div
+            never reconciled, so those DOM writes are never clobbered.
+            <output>'s implicit role IS `status`, so the live region survives the
+            tag swap; `.banner` gains the block box the <div> had. */}
+        <output
           id="noticeBanner"
           className={`kit-banner notice ${styles.banner}`}
-          role="status"
           aria-live="polite"
           hidden
         />

@@ -79,16 +79,19 @@ function typeInto(el: HTMLInputElement | HTMLTextAreaElement, value: string): vo
   });
 }
 
-function radios(el: HTMLElement, name: string): HTMLButtonElement[] {
-  return [...el.querySelectorAll<HTMLButtonElement>('[role="radio"]')].filter((b) =>
-    b.textContent?.includes(name),
-  );
+// Every radio in the flow is a native <input type="radio"> wrapped in the
+// styled <label> that carries the visible text (issue #573).
+function radios(el: HTMLElement, name: string): HTMLInputElement[] {
+  return [...el.querySelectorAll('label')]
+    .filter((l) => l.textContent?.includes(name))
+    .map((l) => l.querySelector<HTMLInputElement>('input[type="radio"]'))
+    .filter((i): i is HTMLInputElement => i !== null);
 }
 
 describe('ConnectFlow', () => {
   it('renders all three method cards by default', () => {
     const el = mount({ context: 'onboarding', onDone: vi.fn() });
-    expect(el.querySelectorAll('[role="radio"]').length).toBe(3);
+    expect(el.querySelectorAll('input[type="radio"]').length).toBe(3);
     expect(el.textContent).toContain('This Mac');
     expect(el.textContent).toContain('Existing gateway');
     expect(el.textContent).toContain('Over SSH');
@@ -96,7 +99,7 @@ describe('ConnectFlow', () => {
 
   it('a switcher ConnectFlowModal-style caller can omit the "This Mac" card', () => {
     const el = mount({ context: 'switcher', methods: ['gateway', 'ssh'], onDone: vi.fn() });
-    expect(el.querySelectorAll('[role="radio"]').length).toBe(2);
+    expect(el.querySelectorAll('input[type="radio"]').length).toBe(2);
     expect(el.textContent).not.toContain('This Mac');
   });
 
@@ -130,9 +133,7 @@ describe('ConnectFlow', () => {
     const el = mount({ context: 'switcher', onDone });
     click(radios(el, 'This Mac')[0]);
     await flush(3);
-    const workRow = [...el.querySelectorAll('[role="radio"]')].find((r) =>
-      r.textContent?.includes('Work'),
-    );
+    const workRow = radios(el, 'Work')[0];
     click(workRow);
     const connectBtn = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Connect');
     click(connectBtn);
@@ -153,9 +154,7 @@ describe('ConnectFlow', () => {
     const el = mount({ context: 'switcher', onDone: vi.fn() });
     click(radios(el, 'This Mac')[0]);
     await flush(3);
-    const createRow = [...el.querySelectorAll('[role="radio"]')].find((r) =>
-      r.textContent?.includes('Create new space'),
-    );
+    const createRow = radios(el, 'Create new space')[0];
     click(createRow);
     typeInto(el.querySelector('input[placeholder="Space name"]') as HTMLInputElement, 'Play');
     const connectBtn = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Connect');
@@ -266,9 +265,7 @@ describe('ConnectFlow', () => {
 
     click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Continue'));
     await flush();
-    const remoteRow = [...el.querySelectorAll('[role="radio"]')].find((r) =>
-      r.textContent?.includes('Remote space'),
-    );
+    const remoteRow = radios(el, 'Remote space')[0];
     click(remoteRow);
     click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Connect'));
     await flush(3);

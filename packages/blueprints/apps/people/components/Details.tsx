@@ -48,8 +48,13 @@ export function Details({
   const dp = person;
   return (
     <>
-      <div className={styles.detailsBackdrop} onClick={onClose}></div>
-      <aside className={styles.details} role="dialog" aria-modal="true" aria-label="Profile">
+      <button
+        type="button"
+        className={`kit-plain-btn ${styles.detailsBackdrop}`}
+        aria-label="Close"
+        onClick={onClose}
+      />
+      <dialog open className={styles.details} aria-modal="true" aria-label="Profile">
         <div className={styles.detailsHead}>
           <span className={styles.lbl}>Profile</span>
           <button type="button" className={styles.detailsX} aria-label="Close" onClick={onClose}>
@@ -83,7 +88,7 @@ export function Details({
             </button>
           ) : null}
         </div>
-      </aside>
+      </dialog>
     </>
   );
 }

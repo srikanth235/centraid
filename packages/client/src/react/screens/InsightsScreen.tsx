@@ -156,7 +156,7 @@ export default function InsightsScreen({
           </span>
           <h1>Insights</h1>
         </div>
-        <div className={styles.filters} role="group" aria-label="Time window">
+        <fieldset className={styles.filters} aria-label="Time window">
           {WINDOW_OPTIONS.map((d) => (
             <button
               key={d}
@@ -168,7 +168,7 @@ export default function InsightsScreen({
               {d}d
             </button>
           ))}
-        </div>
+        </fieldset>
       </div>
 
       <div className={styles.hero} data-testid="insights-hero">

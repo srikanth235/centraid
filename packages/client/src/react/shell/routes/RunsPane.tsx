@@ -9,25 +9,37 @@ import styles from './RunsPane.module.css';
 // runs double as replay fixtures). Rendered into the host div AppSettingsPanel
 // hands `onMountRuns`.
 export default function RunsPane({ automationId }: { automationId: string }): JSX.Element {
-  const [runs, setRuns] = useState<CentraidAutomationTurnRecord[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  // Stamped with the (automation, nonce) it was fetched for so a switch or a
+  // pin-triggered refetch reads as "loading" during render — no effect has to
+  // clear the previous result first.
+  const [settled, setSettled] = useState<{
+    key: string;
+    result: CentraidAutomationTurnRecord[] | { error: string };
+  } | null>(null);
+  const key = `${automationId} ${nonce}`;
+  const current = settled !== null && settled.key === key ? settled.result : null;
+  const runs = Array.isArray(current) ? current : null;
+  const error = current !== null && !Array.isArray(current) ? current.error : null;
 
   useEffect(() => {
     let alive = true;
-    setRuns(null);
-    setError(null);
     listAutomationTurns({ automationId, limit: 25 })
       .then((r) => {
-        if (alive) setRuns(r);
+        if (alive) setSettled({ key, result: r });
       })
       .catch((err: unknown) => {
-        if (alive) setError(err instanceof Error ? err.message : String(err));
+        if (alive) {
+          setSettled({
+            key,
+            result: { error: err instanceof Error ? err.message : String(err) },
+          });
+        }
       });
     return () => {
       alive = false;
     };
-  }, [automationId, nonce]);
+  }, [automationId, key]);
 
   const togglePin = (run: CentraidAutomationTurnRecord): void => {
     void pinAutomationTurn({ turnId: run.turnId, pinned: !run.pinned })

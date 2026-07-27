@@ -341,11 +341,7 @@ export default function BuilderChatPane({
           <Message key={i} m={m} onToggleGroup={onToggleGroup} />
         ))}
         {snap.generating && snap.progress && (
-          <div
-            className={styles.abProgress}
-            role="status"
-            aria-label={`${snap.progress.verb} — running`}
-          >
+          <output className={styles.abProgress} aria-label={`${snap.progress.verb} — running`}>
             <span className={styles.abProgressDots} aria-hidden="true">
               {[0, 1, 2, 3].map((i) => (
                 <i key={i} data-on={i < snap.progress!.filled ? 'true' : undefined} />
@@ -363,7 +359,7 @@ export default function BuilderChatPane({
             <button type="button" className={styles.abProgressCancel} onClick={onCancel}>
               Cancel
             </button>
-          </div>
+          </output>
         )}
       </div>
       <div className={styles.chatInputWrap}>

@@ -39,10 +39,9 @@ export function useReplicaQuery(appId: string, request: NativeReadRequest): Repl
   }, []);
 
   const refresh = useCallback(async () => {
-    if (!session) {
-      if (mounted.current) setLoading(false);
-      return;
-    }
+    // Nothing to read without a session; `loading` is derived from the session's
+    // presence below, so there is no state to settle here either.
+    if (!session) return;
     const ticket = (sequence.current += 1);
     const current = (): boolean => mounted.current && ticket === sequence.current;
     try {
@@ -59,8 +58,10 @@ export function useReplicaQuery(appId: string, request: NativeReadRequest): Repl
   }, [appId, request, session]);
 
   useEffect(() => {
-    void refresh();
     if (!session) return;
+    void (async () => {
+      await refresh();
+    })();
     return session.subscribe(appId, () => void refresh());
   }, [appId, refresh, session]);
 
@@ -70,7 +71,8 @@ export function useReplicaQuery(appId: string, request: NativeReadRequest): Repl
 
   return {
     rows,
-    loading,
+    // Without a session there is nothing in flight — never report "loading".
+    loading: session !== undefined && loading,
     ...(error ? { error } : {}),
     refresh,
   };

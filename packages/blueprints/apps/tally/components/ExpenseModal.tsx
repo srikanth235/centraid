@@ -125,7 +125,7 @@ export function ExpenseModal({
 
   return (
     <ModalBackdrop onClose={onClose}>
-      <div className={`kit-modal ${styles.wide}`} onClick={(e) => e.stopPropagation()}>
+      <div className={`kit-modal ${styles.wide}`}>
         <h2>{exp.mode === 'edit' ? 'Edit expense' : 'Add an expense'}</h2>
         <input
           className={shared.in}

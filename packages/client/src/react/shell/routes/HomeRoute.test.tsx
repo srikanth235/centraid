@@ -229,7 +229,7 @@ describe('HomeRoute installed-app context menu', () => {
       clickMenuItem('App info');
       await flush();
     });
-    const dialog = document.querySelector('[role="dialog"]')!;
+    const dialog = document.querySelector('dialog')!;
     expect(dialog.textContent).toContain('App info');
     expect(dialog.textContent).toContain('Requested access');
     expect(dialog.textContent).toContain('Shows your photo library.');
@@ -249,7 +249,7 @@ describe('HomeRoute installed-app context menu', () => {
       clickMenuItem('App info');
       await flush();
     });
-    const automate = [...document.querySelectorAll('[role="dialog"] button')].find(
+    const automate = [...document.querySelectorAll('dialog button')].find(
       (b) => b.textContent === 'Automate media',
     ) as HTMLButtonElement;
     expect(automate).toBeTruthy();
@@ -259,6 +259,6 @@ describe('HomeRoute installed-app context menu', () => {
     });
     expect(navigate).toHaveBeenCalledWith({ kind: 'automation-editor', watchEntity: 'media' });
     // The modal closes on navigate.
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.querySelector('dialog')).toBeNull();
   });
 });

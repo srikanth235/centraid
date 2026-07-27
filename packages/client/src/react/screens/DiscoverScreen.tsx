@@ -248,7 +248,7 @@ export default function DiscoverScreen({
             ))}
           </div>
           <span className={libCss.hsecSpacer} />
-          <div className={libCss.libLayout} role="group" aria-label="Layout">
+          <fieldset className={libCss.libLayout} aria-label="Layout">
             <button
               type="button"
               className={libCss.libLayoutBtn}
@@ -271,7 +271,7 @@ export default function DiscoverScreen({
             >
               <RowsGlyph />
             </button>
-          </div>
+          </fieldset>
         </div>
         <div className={styles.cats}>
           {shown.length === 0 ? (

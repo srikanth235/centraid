@@ -126,7 +126,7 @@ export default function SpaceModal({
         tabIndex={-1}
         onClick={onCancel}
       />
-      <div className={styles.profModal} role="dialog" aria-modal="true">
+      <dialog open className={styles.profModal} aria-modal="true">
         <div className={styles.profModalHead}>
           <span
             className={styles.profModalHeadIcon}
@@ -249,7 +249,7 @@ export default function SpaceModal({
             {mode === 'add' ? 'Create profile' : 'Save changes'}
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

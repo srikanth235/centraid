@@ -23,9 +23,14 @@ function ToggleRow({
   return (
     <div className={styles.toggleRow} style={last ? { borderBottom: 'none' } : undefined}>
       <span style={{ font: 'var(--t-body)', fontSize: '13.5px' }}>{label}</span>
+      {/* The switch draws nothing but its knob, so the visible row label is
+          also its accessible name; `aria-pressed` reports the on/off state the
+          `.on` class draws (issue #573). */}
       <button
         type="button"
         className={on ? `${styles.switch} ${styles.on}` : styles.switch}
+        aria-label={label}
+        aria-pressed={on}
         onClick={onClick}
       >
         <i></i>
@@ -59,13 +64,14 @@ export function Generator({
 }) {
   const st = strength(genValue);
   return (
-    <div
-      className="kit-modal-back"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="kit-modal" style={{ maxWidth: '420px' }} onClick={(e) => e.stopPropagation()}>
+    <div className="kit-modal-back">
+      {/* Dismiss-on-outside-click: a real "Close" button laid under the card
+          (`.kit-modal` is `position: relative`) instead of a click handler on
+          the backdrop that only a mouse could reach. It replaces both the
+          `e.target === e.currentTarget` guard and the card's stopPropagation —
+          clicks inside the card never reach the scrim now (issue #573). */}
+      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <div className="kit-modal" style={{ maxWidth: '420px' }}>
         <h2>Password generator</h2>
 
         <div className={shared.genrow}>

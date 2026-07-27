@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single state/reducer hook for the whole builder surface; the actions and the state they mutate need to stay next to each other to review safely
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   createApp,
   createConversation,
@@ -49,6 +49,98 @@ export interface UseBuilderInput {
 }
 
 type SyncState = 'editing' | 'publishing' | 'idle-live' | 'idle-draft';
+
+/** The mutable facts the status chip + primary button are derived from. */
+interface StatusFacts {
+  isAutomation: boolean;
+  publishing: boolean;
+  generating: boolean;
+  automationBusy: boolean;
+  automationEnabled: boolean;
+  lastPublishedVersionId: string | undefined;
+  appVersionCount: number;
+  appLastEditedAt: number | undefined;
+}
+
+type StatusView = Pick<
+  BuilderViewModel,
+  'statusState' | 'statusText' | 'primaryLabel' | 'primaryKind' | 'primaryDisabled'
+>;
+
+/** Pure so the initial snapshot and every repaint share one definition. */
+function deriveStatus(f: StatusFacts, now: number): StatusView {
+  const statusState: SyncState = f.publishing
+    ? 'publishing'
+    : f.generating
+      ? 'editing'
+      : f.lastPublishedVersionId || (f.isAutomation && f.automationEnabled)
+        ? 'idle-live'
+        : 'idle-draft';
+
+  let statusText: string;
+  if (f.isAutomation) {
+    statusText = f.generating
+      ? 'Editing…'
+      : f.automationBusy
+        ? 'Working…'
+        : f.automationEnabled
+          ? 'Enabled'
+          : 'Draft';
+  } else if (f.publishing) {
+    statusText = 'Publishing…';
+  } else if (f.generating) {
+    statusText = 'Editing…';
+  } else if (f.lastPublishedVersionId) {
+    const parts = ['Live'];
+    if (f.appVersionCount > 0) parts.push(`v${f.appVersionCount}`);
+    if (f.appLastEditedAt) parts.push(`edited ${relTime(f.appLastEditedAt, now)}`);
+    statusText = parts.join(' · ');
+  } else {
+    statusText = 'Draft';
+  }
+
+  return {
+    statusState,
+    statusText,
+    primaryLabel: f.isAutomation ? (f.automationEnabled ? 'Disable' : 'Enable') : 'Publish',
+    primaryKind: f.isAutomation ? (f.automationEnabled ? 'disable' : 'enable') : 'publish',
+    primaryDisabled: f.publishing || f.automationBusy,
+  };
+}
+
+/** The part of the view model that mirrors the mutable model; refreshed by
+ *  `bump()` because render may not read the refs that hold it. */
+type BuilderSnapshot = StatusView &
+  Pick<
+    BuilderViewModel,
+    | 'appId'
+    | 'projName'
+    | 'tab'
+    | 'chatView'
+    | 'previewDevice'
+    | 'generating'
+    | 'automationRow'
+    | 'flashSections'
+    | 'historyToggleActive'
+    | 'chatSnapshot'
+  >;
+
+const NO_FLASH_SECTIONS: ReadonlySet<string> = new Set();
+
+/** Per-section fingerprints of an automation manifest — a diff against the
+ *  previous fetch is what flashes the changed config cards. */
+const configSectionSignatures = (
+  m: CentraidAutomationManifest,
+): Record<'what' | 'when' | 'behavior' | 'apps', string> => ({
+  what: m.prompt ?? '',
+  when: JSON.stringify(m.triggers ?? []),
+  behavior: JSON.stringify({
+    model: m.requires.model ?? null,
+    keep: m.history.keep,
+    onFailure: m.onFailure ?? null,
+  }),
+  apps: JSON.stringify(m.apps ?? []),
+});
 
 export interface BuilderViewModel {
   appId: string | undefined;
@@ -107,16 +199,53 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const projColor = appContext?.color || (window.ICON_PALETTE?.rose ?? '#5847e0');
   const projIcon: IconNameType = appContext?.iconKey || 'Sparkle';
 
+  const initialProjName = appContext?.name || (isNewBuild ? 'New app' : 'Untitled');
+  const initialTab: Tab = isAutomation ? 'config' : 'preview';
+
   // ── Repaint plumbing ──────────────────────────────────────────────────────
-  const [, bump] = useReducer((n: number) => n + 1, 0);
+  // `view` is the published snapshot of the ref-held model below (render may
+  // not read refs); `bump()` republishes it and is the repaint funnel.
+  const [view, setView] = useState<BuilderSnapshot>(() => ({
+    appId: input.initialAppId,
+    projName: initialProjName,
+    tab: initialTab,
+    chatView: 'chat',
+    previewDevice: 'mobile',
+    generating: false,
+    automationRow: undefined,
+    flashSections: NO_FLASH_SECTIONS,
+    historyToggleActive: false,
+    chatSnapshot: {
+      view: 'chat',
+      messages: [],
+      generating: false,
+      progress: null,
+      suggestions: BUILDER_SUGGESTIONS,
+      composerDisabled: !input.initialAppId,
+      historyNonce: 0,
+    },
+    ...deriveStatus(
+      {
+        isAutomation,
+        publishing: false,
+        generating: false,
+        automationBusy: false,
+        automationEnabled: false,
+        lastPublishedVersionId: undefined,
+        appVersionCount: 0,
+        appLastEditedAt: undefined,
+      },
+      0,
+    ),
+  }));
   const [reloadNonce, setReloadNonce] = useState(0);
   const chatUpdater = useRef<((s: BuilderChatSnapshot) => void) | null>(null);
 
   // ── State (refs = SSE-synchronous source of truth) ────────────────────────
   const appId = useRef<string | undefined>(input.initialAppId);
   const chat = useRef<ConversationMsg[]>([]);
-  const projName = useRef(appContext?.name || (isNewBuild ? 'New app' : 'Untitled'));
-  const tab = useRef<Tab>(isAutomation ? 'config' : 'preview');
+  const projName = useRef(initialProjName);
+  const tab = useRef<Tab>(initialTab);
   const chatView = useRef<ChatView>('chat');
   const previewDevice = useRef<DeviceKey>('mobile');
   const generating = useRef(false);
@@ -148,10 +277,46 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     };
   }, []);
 
+  const snapshotView = useCallback(
+    (): BuilderSnapshot => ({
+      appId: appId.current,
+      projName: projName.current,
+      tab: tab.current,
+      chatView: chatView.current,
+      previewDevice: previewDevice.current,
+      generating: generating.current,
+      automationRow: automationRow.current,
+      flashSections: flashSections.current,
+      historyToggleActive: chatView.current === 'history',
+      chatSnapshot: buildChatSnapshot(),
+      ...deriveStatus(
+        {
+          isAutomation,
+          publishing: publishing.current,
+          generating: generating.current,
+          automationBusy: automationBusy.current,
+          automationEnabled: automationRow.current?.enabled === true,
+          lastPublishedVersionId: lastPublishedVersionId.current,
+          appVersionCount: appVersionCount.current,
+          appLastEditedAt: appLastEditedAt.current,
+        },
+        Date.now(),
+      ),
+    }),
+    [buildChatSnapshot, isAutomation],
+  );
+  // Held in a ref so `bump` keeps an empty dependency list — every action
+  // below closes over it exactly as it did over the old reducer dispatch.
+  const snapshotViewRef = useRef(snapshotView);
+  useEffect(() => {
+    snapshotViewRef.current = snapshotView;
+  }, [snapshotView]);
+  const bump = useCallback((): void => setView(snapshotViewRef.current()), []);
+
   const renderChat = useCallback((): void => {
     chatUpdater.current?.(buildChatSnapshot());
     bump();
-  }, [buildChatSnapshot]);
+  }, [buildChatSnapshot, bump]);
 
   const pushMessage = useCallback(
     (m: ConversationMsg): number => {
@@ -192,7 +357,31 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     currentAiMsgIndex.current = -1;
   }, [updateMessage]);
 
-  const refreshAutomationRow = useRef<() => Promise<void>>(async () => {});
+  // ── Automation ────────────────────────────────────────────────────────────
+  const refreshAutomationRow = useCallback(async (): Promise<void> => {
+    if (!appId.current) return;
+    const before = automationRow.current
+      ? configSectionSignatures(automationRow.current.manifest)
+      : undefined;
+    try {
+      const all = await listAutomations();
+      const row = all.find((r) => r.ownerApp === appId.current);
+      if (row) automationRow.current = row;
+    } catch {
+      /* keep last good */
+    }
+    if (automationRow.current) {
+      projName.current = automationRow.current.manifest.name || automationRow.current.id;
+      if (before) {
+        const after = configSectionSignatures(automationRow.current.manifest);
+        flashSections.current = new Set();
+        for (const k of ['what', 'when', 'behavior', 'apps'] as const) {
+          if (before[k] !== after[k]) flashSections.current.add(k);
+        }
+      }
+    }
+    bump();
+  }, [bump]);
 
   const finishAgentTurn = useCallback((): void => {
     generating.current = false;
@@ -200,12 +389,12 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     closeThinking();
     renderChat();
     if (isAutomation) {
-      if (previewReloadPending.current) void refreshAutomationRow.current();
+      if (previewReloadPending.current) void refreshAutomationRow();
     } else if (previewReloadPending.current && tab.current === 'preview') {
       bumpPreview();
     }
     previewReloadPending.current = false;
-  }, [closeAi, closeThinking, renderChat, isAutomation, bumpPreview]);
+  }, [closeAi, closeThinking, renderChat, isAutomation, bumpPreview, refreshAutomationRow]);
 
   const announceMintedWebhooks = useCallback(
     (minted: CentraidMintedWebhook[]): void => {
@@ -416,46 +605,6 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     [ensureConversation, finishAgentTurn, handleStreamEvent, pushMessage, renderChat],
   );
 
-  // ── Automation ────────────────────────────────────────────────────────────
-  const configSectionSignatures = (
-    m: CentraidAutomationManifest,
-  ): Record<'what' | 'when' | 'behavior' | 'apps', string> => ({
-    what: m.prompt ?? '',
-    when: JSON.stringify(m.triggers ?? []),
-    behavior: JSON.stringify({
-      model: m.requires.model ?? null,
-      keep: m.history.keep,
-      onFailure: m.onFailure ?? null,
-    }),
-    apps: JSON.stringify(m.apps ?? []),
-  });
-
-  refreshAutomationRow.current = useCallback(async (): Promise<void> => {
-    if (!appId.current) return;
-    const before = automationRow.current
-      ? configSectionSignatures(automationRow.current.manifest)
-      : undefined;
-    try {
-      const all = await listAutomations();
-      const row = all.find((r) => r.ownerApp === appId.current);
-      if (row) automationRow.current = row;
-    } catch {
-      /* keep last good */
-    }
-    if (automationRow.current) {
-      projName.current = automationRow.current.manifest.name || automationRow.current.id;
-      if (before) {
-        const after = configSectionSignatures(automationRow.current.manifest);
-        flashSections.current = new Set();
-        for (const k of ['what', 'when', 'behavior', 'apps'] as const) {
-          if (before[k] !== after[k]) flashSections.current.add(k);
-        }
-      }
-    }
-    bump();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) mount-once load, deliberately []
-  }, []);
-
   const handleToggleEnabled = useCallback(async (): Promise<void> => {
     const row = automationRow.current;
     if (!appId.current || automationBusy.current || !row) return;
@@ -467,14 +616,14 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       const t0 = row.manifest.triggers[0];
       const sched = !t0 ? 'manual' : t0.kind === 'cron' ? describeCron(t0.expr) : 'Webhook';
       showToast(next ? `Enabled · ${sched}` : 'Disabled — schedule stopped');
-      await refreshAutomationRow.current();
+      await refreshAutomationRow();
     } catch (err) {
       showToast(`Could not ${next ? 'enable' : 'disable'}: ${String(err)}`);
     } finally {
       automationBusy.current = false;
       bump();
     }
-  }, [showToast]);
+  }, [bump, refreshAutomationRow, showToast]);
 
   // ── Publish ───────────────────────────────────────────────────────────────
   const handlePublish = useCallback(async (): Promise<void> => {
@@ -546,7 +695,16 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       publishing.current = false;
       bump();
     }
-  }, [bumpPreview, initialPrompt, onAddToHome, pushMessage, renderChat, showToast, updateMessage]);
+  }, [
+    bump,
+    bumpPreview,
+    initialPrompt,
+    onAddToHome,
+    pushMessage,
+    renderChat,
+    showToast,
+    updateMessage,
+  ]);
 
   // ── Bootstrap (once) ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -554,7 +712,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       if (isAutomation && appId.current) {
         chat.current = [];
         renderChat();
-        await refreshAutomationRow.current();
+        await refreshAutomationRow();
         chat.current = chat.current.concat([
           {
             kind: 'ai',
@@ -629,7 +787,6 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     return () => {
       agentAbort.current?.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) mount-once chat kickoff, deliberately []
   }, []);
 
   // ── View actions ──────────────────────────────────────────────────────────
@@ -652,16 +809,22 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     [renderChat],
   );
 
-  const setTabCb = useCallback((t: Tab): void => {
-    tab.current = t;
-    bump();
-  }, []);
+  const setTabCb = useCallback(
+    (t: Tab): void => {
+      tab.current = t;
+      bump();
+    },
+    [bump],
+  );
 
-  const setPreviewDeviceCb = useCallback((d: DeviceKey): void => {
-    if (previewDevice.current === d) return;
-    previewDevice.current = d;
-    bump();
-  }, []);
+  const setPreviewDeviceCb = useCallback(
+    (d: DeviceKey): void => {
+      if (previewDevice.current === d) return;
+      previewDevice.current = d;
+      bump();
+    },
+    [bump],
+  );
 
   const commitRename = useCallback(
     (raw: string): void => {
@@ -679,7 +842,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         onMetaChange?.({ appId: appId.current, name: next });
       }
     },
-    [isAutomation, onMetaChange, showToast],
+    [bump, isAutomation, onMetaChange, showToast],
   );
 
   const onRestored = useCallback(
@@ -688,7 +851,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       if (tab.current === 'preview') bumpPreview();
       bump();
     },
-    [bumpPreview],
+    [bump, bumpPreview],
   );
 
   const registerChatUpdater = useCallback(
@@ -699,67 +862,13 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     [buildChatSnapshot],
   );
 
-  // ── Derived status ────────────────────────────────────────────────────────
-  const statusState: SyncState = publishing.current
-    ? 'publishing'
-    : generating.current
-      ? 'editing'
-      : lastPublishedVersionId.current || (isAutomation && automationRow.current?.enabled)
-        ? 'idle-live'
-        : 'idle-draft';
-
-  let statusText: string;
-  if (isAutomation) {
-    statusText = generating.current
-      ? 'Editing…'
-      : automationBusy.current
-        ? 'Working…'
-        : automationRow.current?.enabled
-          ? 'Enabled'
-          : 'Draft';
-  } else if (publishing.current) {
-    statusText = 'Publishing…';
-  } else if (generating.current) {
-    statusText = 'Editing…';
-  } else if (lastPublishedVersionId.current) {
-    const parts = ['Live'];
-    if (appVersionCount.current > 0) parts.push(`v${appVersionCount.current}`);
-    if (appLastEditedAt.current)
-      parts.push(`edited ${relTime(appLastEditedAt.current, Date.now())}`);
-    statusText = parts.join(' · ');
-  } else {
-    statusText = 'Draft';
-  }
-
-  const enabled = automationRow.current?.enabled === true;
-  const primaryLabel = isAutomation ? (enabled ? 'Disable' : 'Enable') : 'Publish';
-  const primaryKind: 'publish' | 'enable' | 'disable' = isAutomation
-    ? enabled
-      ? 'disable'
-      : 'enable'
-    : 'publish';
-
   return {
-    appId: appId.current,
-    projName: projName.current,
+    ...view,
     projColor: projColor as string,
     projIcon,
     isAutomation,
     isUpdateMode,
-    tab: tab.current,
-    chatView: chatView.current,
-    previewDevice: previewDevice.current,
-    generating: generating.current,
-    automationRow: automationRow.current,
-    flashSections: flashSections.current,
-    statusText,
-    statusState,
-    primaryLabel,
-    primaryKind,
-    primaryDisabled: publishing.current || automationBusy.current,
-    historyToggleActive: chatView.current === 'history',
     reloadNonce,
-    chatSnapshot: buildChatSnapshot(),
     registerChatUpdater,
     sendUserPrompt,
     uploadChatAttachment,

@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Connectors gallery surface; splitting would fragment one visual unit
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import { Button, Icon } from '../ui/index.js';
 import { relativeTime } from '../format.js';
@@ -150,6 +150,52 @@ const HEALTH_LABEL: Record<ConnectionHealth, string> = {
 const POLL_MS = 2000;
 const POLL_WINDOW_MS = 45_000;
 const ASSIST_PWA_ORIGIN = 'https://app.centraid.dev';
+
+/**
+ * Poll a connection until it stops reporting `needs-auth` (or the window
+ * closes). Module scope, taking its refs/loaders as arguments: a
+ * self-rescheduling function declared inside the component body reads as a
+ * render value that depends on itself, and its `Date.now()` reads as an impure
+ * call during render.
+ */
+function pollUntilAuthorized(
+  connectionId: string,
+  io: {
+    pollTimer: { current: ReturnType<typeof setTimeout> | null };
+    pollDeadline: { current: number };
+    loadConnections: () => Promise<ConnectionRowDTO[]>;
+    onRows: (rows: ConnectionRowDTO[]) => void;
+    onSettled: (connectionId: string) => void;
+  },
+): void {
+  const { pollTimer, pollDeadline, loadConnections, onRows, onSettled } = io;
+  pollDeadline.current = Date.now() + POLL_WINDOW_MS;
+  const tick = (): void => {
+    void loadConnections()
+      .then((freshRows) => {
+        onRows(freshRows);
+        const row = freshRows.find((r) => r.connectionId === connectionId);
+        const done = !row || row.health !== 'needs-auth';
+        if (done) {
+          onSettled(connectionId);
+          return;
+        }
+        // Keep the explicit "Still waiting…" state after the polling
+        // window. The ceremony itself remains gateway-TTL-bound, and the
+        // owner can retry or use the manual return-link fallback.
+        if (Date.now() >= pollDeadline.current) return;
+        pollTimer.current = setTimeout(tick, POLL_MS);
+      })
+      .catch(() => {
+        // A transient gateway read must neither erase the visible list nor
+        // masquerade as a deleted/healthy connection and stop polling.
+        if (Date.now() < pollDeadline.current) {
+          pollTimer.current = setTimeout(tick, POLL_MS);
+        }
+      });
+  };
+  pollTimer.current = setTimeout(tick, POLL_MS);
+}
 
 function assertAssistWebOrigin(): void {
   if (window.location.origin !== ASSIST_PWA_ORIGIN) {
@@ -877,15 +923,11 @@ export default function SettingsConnectionsScreen({
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollDeadline = useRef(0);
 
-  const refresh = useMemo(
-    () => (): void => {
-      void loadConnections()
-        .then(setRows)
-        .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#330) refresh tracks loadConnections only
-    [loadConnections],
-  );
+  const refresh = useCallback((): void => {
+    void loadConnections()
+      .then(setRows)
+      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
+  }, [loadConnections, showToast]);
 
   useEffect(() => {
     refresh();
@@ -900,7 +942,6 @@ export default function SettingsConnectionsScreen({
     return () => {
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#524) mount-once load
   }, [loadConnections, loadProviders, loadOAuthCallbackUri]);
 
   useEffect(() => {
@@ -969,36 +1010,18 @@ export default function SettingsConnectionsScreen({
   };
 
   const pollAfterAuthorize = (connectionId: string): void => {
-    pollDeadline.current = Date.now() + POLL_WINDOW_MS;
-    const tick = (): void => {
-      void loadConnections()
-        .then((freshRows) => {
-          setRows(freshRows);
-          const row = freshRows.find((r) => r.connectionId === connectionId);
-          const done = !row || row.health !== 'needs-auth';
-          if (done) {
-            setAuthorizingIds((s) => {
-              const n = new Set(s);
-              n.delete(connectionId);
-              return n;
-            });
-            return;
-          }
-          // Keep the explicit "Still waiting…" state after the polling
-          // window. The ceremony itself remains gateway-TTL-bound, and the
-          // owner can retry or use the manual return-link fallback.
-          if (Date.now() >= pollDeadline.current) return;
-          pollTimer.current = setTimeout(tick, POLL_MS);
-        })
-        .catch(() => {
-          // A transient gateway read must neither erase the visible list nor
-          // masquerade as a deleted/healthy connection and stop polling.
-          if (Date.now() < pollDeadline.current) {
-            pollTimer.current = setTimeout(tick, POLL_MS);
-          }
-        });
-    };
-    pollTimer.current = setTimeout(tick, POLL_MS);
+    pollUntilAuthorized(connectionId, {
+      loadConnections,
+      onRows: setRows,
+      onSettled: (id) =>
+        setAuthorizingIds((s) => {
+          const n = new Set(s);
+          n.delete(id);
+          return n;
+        }),
+      pollDeadline,
+      pollTimer,
+    });
   };
 
   const onAuthorize = (row: ConnectionRowDTO): void => {
@@ -1276,9 +1299,9 @@ export default function SettingsConnectionsScreen({
             if (e.target === e.currentTarget) setSheet({ kind: 'closed' });
           }}
         >
-          <div
+          <dialog
+            open
             className={styles.sheet}
-            role="dialog"
             aria-modal="true"
             aria-labelledby="connector-sheet-title"
             data-testid="connector-sheet"
@@ -1610,7 +1633,7 @@ export default function SettingsConnectionsScreen({
                 </div>
               </>
             )}
-          </div>
+          </dialog>
         </div>
       ) : null}
     </div>
