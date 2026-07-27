@@ -48,7 +48,7 @@ COPY --from=build /runtime/ /app/
 # a bit-for-bit match; allow lock refresh for this install-only stage.
 RUN rm -f bun.lock && bun install --production
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 
 ARG VERSION=0.1.0
 ARG REVISION=unknown
