@@ -25,6 +25,27 @@ function pathsFor(root: string) {
   };
 }
 
+async function seedFreshPricingCache(root: string): Promise<void> {
+  // The live pricing warmer is deliberately background/non-blocking. Pin the
+  // same fresh cache in both fixture roots so this layout test measures
+  // desktop/headless ownership rather than racing an unrelated network fetch
+  // (or letting that fetch write after teardown).
+  const cacheDir = path.join(root, 'cache');
+  await fs.mkdir(cacheDir, { recursive: true });
+  await fs.writeFile(
+    path.join(cacheDir, 'model-pricing.json'),
+    `${JSON.stringify({
+      fetchedAt: new Date().toISOString(),
+      models: {
+        'fixture-model': {
+          input_cost_per_token: 1e-6,
+          output_cost_per_token: 2e-6,
+        },
+      },
+    })}\n`,
+  );
+}
+
 async function treeShape(root: string, relative = ''): Promise<string[]> {
   const entries = await fs.readdir(path.join(root, relative), { withFileTypes: true });
   const result: string[] = [];
@@ -58,6 +79,7 @@ test('actual Electron embed and headless daemon produce identical complete trees
   const desktopRoot = await tempDir('desktop-embedded-layout-');
   const headlessRoot = await tempDir('headless-layout-');
   roots.push(desktopRoot, headlessRoot);
+  await Promise.all([seedFreshPricingCache(desktopRoot), seedFreshPricingCache(headlessRoot)]);
   const protector = aesGcmKeyProtector(Buffer.alloc(32, 0x42));
   const desktop = await startDesktopEmbeddedGateway({
     dataDir: desktopRoot,
@@ -88,6 +110,7 @@ test('actual Electron embed and headless daemon produce identical complete trees
 test('actual Electron embed can complete the direct-host founding ceremony', async () => {
   const root = await tempDir('desktop-embedded-founding-');
   roots.push(root);
+  await seedFreshPricingCache(root);
   const gateway = await startDesktopEmbeddedGateway({
     dataDir: root,
     paths: pathsFor(root),

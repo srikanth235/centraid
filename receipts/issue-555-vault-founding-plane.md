@@ -106,7 +106,7 @@ Issue #555 replaces implicit vault bootstrap and split gateway/device state with
 - The web PWA E2E harness persists that same EndpointId + endpoint-ticket contract and adapts only its transport boundary to the loopback control proxy, keeping browser behavior coverage aligned without reviving the retired direct connection shape.
 - Secret custody is centralized through `KeyStore`. Endpoint identity, per-vault sealing keys, the backup keyring, and connection sealing material live under `keys/`; desktop custody uses `safeStorage`, headless custody uses the documented 0600 fallback, and copied data directories cannot be opened under another device's custody key. The container now persists the external wrapping credential in an independently mounted `/config` custody volume alongside the wrapped `/data` volume.
 - Founding create and restore share one zero-vault authorization boundary. Reservation state is crash-recoverable, ticket redemption and first-owner enrollment commit atomically, and concurrent redemption is enforced by SQLite rowcount.
-- Desktop and phone use the same ordered, non-skippable ceremony: password, wrapped-kit delivery, re-selection and cryptographic verification, explicit loss consent, then entry. The desktop loopback embed can mint and consume its direct-host founding envelope, recovery-kit Blob URLs remain alive long enough for Electron to download them, and the E2E fixture exercises the real ceremony in an isolated gateway root. VPS-with-phone founding is covered without a desktop.
+- Desktop and phone use the same ordered, non-skippable ceremony: password, wrapped-kit delivery, re-selection and cryptographic verification, explicit loss consent, then entry. The desktop loopback embed can mint and consume its direct-host founding envelope, recovery-kit Blob URLs remain alive long enough for Electron to download them, and the E2E fixture exercises the real ceremony in an isolated gateway root. The complete-tree fixtures seed the same fresh pricing cache on both sides, so the unrelated background catalog refresh cannot race the snapshot or write after teardown. VPS-with-phone founding is covered without a desktop.
 - Erase is a crash-safe transition back to the uninitialized layout. It bumps backup fencing, removes all vault references and custody material, preserves gateway identity, severs prior enrollments, and supports restoring on the same host.
 - Authorization fails closed around concrete per-vault enrollments. Ordinary pairing grants `full`, founding grants the first `owner`, last-owner revocation requires typed confirmation, and CLI recovery is tested.
 
@@ -451,7 +451,6 @@ Issue #555 replaces implicit vault bootstrap and split gateway/device state with
 - `packages/gateway/src/serve/secret-log.smoke.test.ts`
 - `packages/gateway/src/serve/serve-device-tokens.test.ts`
 - `packages/gateway/src/serve/serve-git-store.test.ts`
-- `packages/gateway/src/serve/serve-layout-parity.test.ts` (retired after parity moved to the production desktop embed)
 - `packages/gateway/src/serve/serve-multiclient.test.ts`
 - `packages/gateway/src/serve/serve-scheduler-reconcile.test.ts`
 - `packages/gateway/src/serve/serve-vault-addressing.test.ts`
@@ -583,6 +582,7 @@ The GitHub Actions result is recorded on the PR after publication.
 ## Decisions
 
 - Issue #555 deliberately requires a sequential state that cannot coexist in the final tree: Phase 0 must land the live-lease repair and its regression separately, while Phase 1 must delete both the lease and that test because WAL ownership becomes unconditional. The branch follows that specification literally in commit `d194e2d6`; the complete ordered diff, not only the final snapshot, is therefore the evidence for checklist items 1–2.
+- The intermediate `packages/gateway/src/serve/serve-layout-parity.test.ts` exercised a synthetic parity harness while the production desktop embed coverage was being built, then was retired once `apps/desktop/src/main/embedded-gateway-layout.test.ts` owned the complete-tree assertion. It remains named here because it exists in the ordered branch history, while the changed-file inventory intentionally describes the 311-path final diff.
 - `gateway.db` is both the durable gateway-state authority and the exclusive process lock; vault enumeration remains rooted in the filesystem.
 - EndpointId and concrete per-vault enrollments replace URL identity, durable pairing tickets, bearer devices, and wildcard authority.
 - `KeyStore` is the gateway secret-custody seam. Headless retains a 0600-file boundary; the desktop embed wraps the at-rest key through `safeStorage`.
@@ -592,7 +592,7 @@ The GitHub Actions result is recorded on the PR after publication.
 
 Overall: PASS — fresh-context final post-gate audit of the committed and working-tree change set.
 
-1. PASS — `## What changed` faithfully covers the complete committed and working-tree change set, including the final desktop, web, WAL-performance, and container-custody repairs. The changed-file inventory exactly matches all 311 final-diff paths. The audit also accurately distinguishes Phase 0 commit `d194e2d6`, which lands the WAL re-arm repair and real lease-conflict regression, from Phase 1's specified removal of the lease model and that test.
+1. PASS — `## What changed` faithfully covers the complete committed and working-tree change set, including the final desktop, web, WAL-performance, container-custody, and deterministic pricing-cache fixture repairs. The changed-file inventory exactly matches all 311 final-diff paths. The audit also accurately distinguishes Phase 0 commit `d194e2d6`, which lands the WAL re-arm repair and real lease-conflict regression, from Phase 1's specified removal of the lease model and that test.
 2. PASS — all 92 checked items are realized in the ordered branch plus working-tree diff. The auditor specifically confirmed vaultless `gateway.db` locking, founding and restore, `KeyStore` custody, device-local iroh connections, erase, fail-closed enrollment, and issue #555's deliberate Phase 0 → Phase 1 test-retirement sequence.
 3. PASS — exact normalized comparison with canonical GitHub issue #555: 92 issue checklist items versus 92 receipt items, with identical text and order and no diff.
 
@@ -621,6 +621,8 @@ Populated by the governance commit hook.
 | codex-019f9e70-525-1785108755-1 | codex | 019f9e70-5250-7862-b42f-4db4a9d7686c | #555 | gpt-5.6-sol | 198009 | 0 | 4647424 | 10442 | 208451 | 1.8135 | 7430694 | 0 | 318483456 | 812017 | fix(ci): align founding journey with shared setup (#555) -m governance: allow-to |
 | codex-019f9e70-525-1785108800-1 | codex | 019f9e70-5250-7862-b42f-4db4a9d7686c | #555 | gpt-5.6-sol | 2446 | 0 | 197888 | 432 | 2878 | 0.0621 | 7433140 | 0 | 318681344 | 812449 | fix(ci): align founding journey with shared setup (#555) -m governance: allow-to |
 | codex-019f9e70-525-1785113470-1 | codex | 019f9e70-5250-7862-b42f-4db4a9d7686c | #555 | gpt-5.6-sol | 851884 | 0 | 36322304 | 77513 | 929397 | 12.3730 | 8285024 | 0 | 355003648 | 889962 | fix(ci): close founding-plane CI gaps (#555) |
+| codex-019f9e70-525-1785118519-1 | codex | 019f9e70-5250-7862-b42f-4db4a9d7686c | #555 | gpt-5.6-sol | 334841 | 0 | 10266112 | 13763 | 348604 | 3.6101 | 8619865 | 0 | 365269760 | 903725 | fix(test): stabilize embedded layout parity (#555) |
+| codex-019f9e70-525-1785118618-1 | codex | 019f9e70-5250-7862-b42f-4db4a9d7686c | #555 | gpt-5.6-sol | 7806 | 0 | 1290496 | 980 | 8786 | 0.3568 | 8627671 | 0 | 366560256 | 904705 | fix(test): stabilize embedded layout parity (#555) |
 
 ### Steering
 
