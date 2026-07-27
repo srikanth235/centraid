@@ -266,7 +266,7 @@ jobs:
       - run: bun run coverage
       # #532 — changed-line coverage vs origin/main must be ≥80% (or approvedDeviation).
       - name: Fetch origin/main for diff coverage
-        run: git fetch --no-tags --depth=1 origin main 2>/dev/null || true
+        run: git fetch --no-tags origin main 2>/dev/null || true
       - name: Diff coverage on changed lines
         run: bun run test:diff-coverage
       - name: Generate test-health report
