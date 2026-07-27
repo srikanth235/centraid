@@ -21,7 +21,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import * as MediaLibrary from 'expo-media-library';
+// The SDK-57 root entry is the class-based Next API. Every function this file
+// calls still exists there as a typed re-export, but those throw at runtime --
+// the working implementations live behind the '/legacy' subpath.
+import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
 

@@ -10,7 +10,10 @@
 // session exposes `read`/`subscribe` directly) so it needs no React tree of its
 // own and survives screen mount/unmount — the hook API is unchanged.
 
-import * as MediaLibrary from 'expo-media-library';
+// The SDK-57 root entry is the class-based Next API. Every function this file
+// calls still exists there as a typed re-export, but those throw at runtime --
+// the working implementations live behind the '/legacy' subpath.
+import * as MediaLibrary from 'expo-media-library/legacy';
 import type { ReplicaRow } from '@centraid/client/replica/native';
 
 import { authHeader } from '../../lib/gateway';

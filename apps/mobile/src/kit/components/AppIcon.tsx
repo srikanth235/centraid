@@ -73,7 +73,7 @@ export default function AppIcon({ name, size = 62 }: AppIconProps): React.JSX.El
 
 const styles = StyleSheet.create({
   debossLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

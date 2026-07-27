@@ -542,7 +542,7 @@ const makeStyles = (colors: ThemeColors) =>
       maxHeight: '86%',
       paddingTop: 6,
     },
-    scrim: { backgroundColor: 'rgba(0,0,0,.42)', ...StyleSheet.absoluteFillObject },
+    scrim: { backgroundColor: 'rgba(0,0,0,.42)', ...StyleSheet.absoluteFill },
     title: {
       color: colors.ink,
       fontFamily: family.serif,

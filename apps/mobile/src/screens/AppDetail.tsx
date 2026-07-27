@@ -41,7 +41,11 @@ export default function AppDetailScreen({
   // built-in catalog doesn't know — we only have the id at this layer.
   const meta = useMemo(() => resolveAppMeta({ id: appId }), [appId]);
 
-  const webViewRef = useRef<WebView | null>(null);
+  // react-native-webview 14.0.1 declares `class WebView<P = undefined>` extending
+  // `Component<WebViewProps & P>`. Under strictNullChecks `WebViewProps & undefined`
+  // collapses to `never`, so every prop is rejected. Supplying `object` for P restores
+  // the v13 default (`{}`). Drop the type argument once upstream fixes the default.
+  const webViewRef = useRef<WebView<object> | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | undefined>(undefined);
@@ -167,7 +171,7 @@ export default function AppDetailScreen({
       ) : (
         <View style={styles.webWrap}>
           {baseUrl ? (
-            <WebView
+            <WebView<object>
               key={reloadKey}
               ref={webViewRef}
               source={{ uri: appLiveUrl(baseUrl, appId) }}

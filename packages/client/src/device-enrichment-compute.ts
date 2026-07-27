@@ -77,7 +77,9 @@ async function extractPdfText(source: Blob): Promise<string | null> {
     return null;
   } finally {
     try {
-      await pdfDocument?.destroy();
+      // pdfjs 6 dropped `PDFDocumentProxy.destroy()`; the worker teardown it
+      // used to delegate to now lives on the owning loading task.
+      await pdfDocument?.loadingTask.destroy();
     } catch {
       // A captured text layer remains valid when worker cleanup fails.
     }

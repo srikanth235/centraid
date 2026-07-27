@@ -55,9 +55,12 @@ export function useAppearance(): Appearance {
 
 // Fold the preference over the live OS scheme into the single scheme the theme
 // resolver consumes. 'system' → follow the OS; otherwise the pinned choice wins.
+// RN 0.86 changed `useColorScheme()` to return 'unspecified' where it used to
+// return null. Both mean "the OS states no preference" and fall through to the
+// light default below; null/undefined stay accepted for non-hook callers.
 export function resolveScheme(
   pref: Appearance,
-  osScheme: 'light' | 'dark' | null | undefined,
+  osScheme: 'light' | 'dark' | 'unspecified' | null | undefined,
 ): Scheme {
   if (pref === 'light' || pref === 'dark') return pref;
   return osScheme === 'dark' ? 'dark' : 'light';

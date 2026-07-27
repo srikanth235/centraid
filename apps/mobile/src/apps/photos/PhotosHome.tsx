@@ -5,7 +5,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import * as MediaLibrary from 'expo-media-library';
+// The SDK-57 root entry is the class-based Next API. Every function this file
+// calls still exists there as a typed re-export, but those throw at runtime --
+// the working implementations live behind the '/legacy' subpath.
+import * as MediaLibrary from 'expo-media-library/legacy';
 import { File } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 
@@ -440,9 +443,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     opacity: 0.9,
   },
-  heroImage: { ...StyleSheet.absoluteFillObject },
+  heroImage: { ...StyleSheet.absoluteFill },
   heroShade: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(10,14,24,.28)',
   },
   heroTitle: {

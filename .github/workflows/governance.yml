@@ -11,6 +11,18 @@ permissions:
 
 jobs:
   governance:
+    # Dependabot authors commits mechanically: no receipt, no issue, no waiver
+    # line in the body — so directives like `commit-issue-receipt-match` are
+    # structurally unsatisfiable on its PRs. Gate at the JOB level, never with a
+    # workflow-level trigger filter: `governance` is a required check in the
+    # `main-protection` ruleset, and a skipped job still reports a check run
+    # (conclusion `skipped`, which rulesets treat as satisfied) whereas a
+    # workflow that never runs leaves the required check pending forever.
+    # Anchored on the PR author rather than `github.actor` so a human re-run of
+    # a Dependabot PR does not silently re-enable the gate. On `push` to main
+    # the `pull_request` context is null, so the expression is true and
+    # governance runs as normal.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
