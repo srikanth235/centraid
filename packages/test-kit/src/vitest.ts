@@ -55,8 +55,33 @@ const nodePreset = {
   },
 } satisfies ProjectConfig;
 
+// Vitest 4 transforms jsdom projects through Vite's `client` environment, whose
+// `noExternal: true` makes it try to *bundle* every import. Vite knows
+// `node:sqlite` is a Node builtin and refuses ("Cannot bundle Node.js
+// built-in"); older builtins like `node:crypto` and `node:fs` slip through
+// because Vitest's own externalization list predates it.
+//
+// jsdom projects here deliberately reach for it: the client replica-store
+// conformance suites run one corpus against both drivers (sqlite-wasm, the real
+// web engine, which needs jsdom; and node:sqlite, the CI stand-in for op-sqlite,
+// which cannot load under vitest on macOS), and desktop's main-process tests
+// pull it in transitively through `@centraid/vault`. Handing the builtin back to
+// Node keeps those on jsdom instead of forcing a split into node projects.
+//
+// A `pre` plugin rather than `resolve.builtins` or `test.server.deps.external`:
+// neither of those reaches the client environment's resolver — both were tried
+// and had no effect.
+const externalizeNodeSqlite = {
+  name: 'centraid:external-node-sqlite',
+  enforce: 'pre' as const,
+  resolveId(id: string) {
+    return id === 'node:sqlite' ? { id, external: true } : null;
+  },
+};
+
 const jsdomPreset = {
   esbuild: { jsx: 'automatic' as const },
+  plugins: [externalizeNodeSqlite],
   test: {
     environment: 'jsdom',
     css: { modules: { classNameStrategy: 'non-scoped' as const } },
