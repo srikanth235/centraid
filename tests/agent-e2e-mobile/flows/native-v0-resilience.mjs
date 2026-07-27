@@ -11,7 +11,7 @@ await runFlow('native-v0-resilience', async (ctx) => {
   //   Photos  → "Search photos and moments" (PhotosHome.tsx)
   //   Docs    → "Add document or folder"    (DocsHome.tsx)
   //   Agenda  → "Create event"              (AgendaHome.tsx)
-  //   Settings→ "Gateway link"              (Settings screen)
+  //   Settings→ "Desktop link"              (Settings.tsx section eyebrow)
   // Covers dismiss via HomeKey ("Back to your apps"); Settings uses "Back to home".
   await ctx.run(
     `appId: ${ctx.state.appId}
@@ -62,7 +62,7 @@ await runFlow('native-v0-resilience', async (ctx) => {
     timeout: 15000
 - tapOn: "Settings"
 - extendedWaitUntil:
-    visible: "Gateway link"
+    visible: "Desktop link"
     timeout: 15000
 - tapOn: "Back to home"
 - extendedWaitUntil:

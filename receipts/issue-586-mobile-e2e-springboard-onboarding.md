@@ -21,7 +21,8 @@ first-run skip waits for Skip for now on both platforms:
 
 configureGateway / home-loads / template-gate use springboard markers:
 
-- `tests/agent-e2e-mobile/lib/harness.mjs` — readiness marker **"YOUR APPS"**; after Save asserts not **"Connect your computer"**.
+- `tests/agent-e2e-mobile/lib/harness.mjs` — readiness **"YOUR APPS"**; Settings **"Desktop link"** + expand **"Gateway connection"**; after Save not **"Connect your computer. Pair desktop"**.
+- `tests/agent-e2e-mobile/flows/home-loads.mjs` — pairing banner a11y label **"Connect your computer. Pair desktop"**.
 - `tests/agent-e2e-mobile/flows/template-gate.mjs` — post-relaunch wait on YOUR APPS.
 - `tests/agent-e2e-mobile/flows/home-loads.md` — docs match current product.
 

@@ -362,10 +362,18 @@ ${skipOnboarding(state.platform, FIRST_LAUNCH_TIMEOUT_MS)}- extendedWaitUntil:
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 # Glass dock Settings slot (springboard — no tab bar). Label is unique on Home.
 - tapOn: "Settings"
+# Settings section eyebrow (Settings.tsx / SettingsSection) — source label is
+# "Desktop link" (CSS uppercase is visual only). Not "Gateway link".
 - extendedWaitUntil:
-    visible: "Gateway link"
+    visible: "Desktop link"
     timeout: 15000
-- tapOn: "Advanced (developer)"
+# Expand Advanced: the row's accessibilityLabel/text is "Gateway connection"
+# (not the section eyebrow "Advanced (developer)").
+- scrollUntilVisible:
+    element:
+      text: "Gateway connection"
+    direction: DOWN
+- tapOn: "Gateway connection"
 - extendedWaitUntil:
     visible: "Gateway URL"
     timeout: 10000
@@ -407,8 +415,8 @@ ${tokenSteps}- hideKeyboard
 - extendedWaitUntil:
     visible: "${HOME_RAIL_LABEL}"
     timeout: 30000
-# Attention-line pairing card title (AttentionLine.tsx) — gone once a gateway URL is set.
-- assertNotVisible: "Connect your computer"
+# Attention-line BannerCard a11y label (collapsed title + action) — gone once a URL is set.
+- assertNotVisible: "Connect your computer. Pair desktop"
 `,
       'configure-gateway',
     );

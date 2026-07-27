@@ -29,22 +29,14 @@ ${skipOnboarding(ctx.state.platform, FIRST_LAUNCH_TIMEOUT_MS)}- extendedWaitUnti
     'home-fresh',
   );
 
-  // The pairing card sits below the fold on a phone-sized screen, and on a
-  // fresh install (no gateway) it must offer pairing. Scroll it into view rather
-  // than asserting on the off-screen node: Maestro will happily match an element
-  // hidden behind the tab bar, which is how the old flow "passed" while the
-  // pairing button was in fact untappable. Card title is "Connect your computer"
-  // and the action is "Pair desktop" (Home.tsx).
+  // Attention-line pairing banner (AttentionLine.tsx BannerCard). The Pressable
+  // collapses its children into one accessibilityLabel
+  // `"Connect your computer. Pair desktop"`, so matching the bare title text
+  // fails on iOS even when the card is on screen (CI run 30262656256).
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-- scrollUntilVisible:
-    element:
-      text: "Connect your computer"
-    direction: DOWN
-    visibilityPercentage: 100
-- assertVisible: "Connect your computer"
-- assertVisible: "Pair desktop"
+- assertVisible: "Connect your computer. Pair desktop"
 - takeScreenshot: home-fresh-pairing
 `,
     'home-fresh-pairing',
