@@ -360,6 +360,7 @@ and records no non-steering event.
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | codex-019fa35f-701-1785178303-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 5396701 | 0 | 274497280 | 591396 | 5988097 | 90.9870 | 5396701 | 0 | 274497280 | 591396 | feat(agent-runtime): unify ACP routing and failover (#567) |
+| codex-019fa35f-701-1785179351-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 171149 | 0 | 8233984 | 15319 | 186468 | 2.7162 | 5567850 | 0 | 282731264 | 606715 | test(gateway): materialize assistant attachment fixture (#567) |
 
 ### Steering
 

@@ -159,14 +159,22 @@ test('_turn threads valid attachment refs to the runner as resolved blob paths a
   const base = await bootstrap(runner);
   const session = store.createSession(ASSISTANT_APP_ID);
 
-  const hash = 'a'.repeat(64);
+  const uploaded = await store.uploadBlob(ASSISTANT_APP_ID, Buffer.from('attachment-bytes'));
+  const hash = uploaded.hash;
   const res = await fetch(`${base}/centraid/_vault/assistant/_turn`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       conversationId: session.id,
       message: 'see attached',
-      attachments: [{ hash, mime: 'image/png', filename: 'shot.png', sizeBytes: 42 }],
+      attachments: [
+        {
+          hash,
+          mime: 'image/png',
+          filename: 'shot.png',
+          sizeBytes: uploaded.sizeBytes,
+        },
+      ],
     }),
   });
   expect(res.status).toBe(200);
@@ -184,7 +192,13 @@ test('_turn threads valid attachment refs to the runner as resolved blob paths a
     attachments?: Array<{ hash: string; mime: string; sizeBytes: number; filename?: string }>;
   };
   expect(user.attachments).toEqual([
-    { hash, mime: 'image/png', sizeBytes: 42, filename: 'shot.png', url: expect.any(String) },
+    {
+      hash,
+      mime: 'image/png',
+      sizeBytes: uploaded.sizeBytes,
+      filename: 'shot.png',
+      url: expect.any(String),
+    },
   ]);
 });
 
