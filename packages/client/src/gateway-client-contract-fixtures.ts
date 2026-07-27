@@ -6,10 +6,16 @@
 // — imported by gateway-client-automations.contract.test.ts /
 // gateway-client-vault.contract.test.ts, never shipped.
 
-import { beforeEach, vi } from 'vitest';
+import { beforeEach, type Mock, vi } from 'vitest';
 
-export const getGatewayAuth = vi.fn();
-export const fetchMock = vi.fn();
+// Annotated rather than inferred. Under vitest 4 the inferred `vi.fn()` type
+// names `@vitest/spy` through its install path, which declaration emit rejects
+// as non-portable (TS2742) — `tsc --noEmit` never sees it, so this only breaks
+// the package build. Naming `Mock` from 'vitest' keeps the emitted `.d.ts`
+// pointing at a real specifier, and sourcing both signatures from what they
+// stand in for keeps them honest.
+export const getGatewayAuth: Mock<typeof window.CentraidApi.getGatewayAuth> = vi.fn();
+export const fetchMock: Mock<typeof responseFor> = vi.fn();
 
 /**
  * Per-test toggles the mock gateway reads. `installGatewayContractHarness()`

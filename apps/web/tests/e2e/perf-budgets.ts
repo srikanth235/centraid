@@ -83,16 +83,45 @@ export interface PerfBudgets {
 // See the report table in the task summary / scripts/perf/README.md. Headroom
 // rationale is inline on each number.
 // -----------------------------------------------------------------------------
+// Re-baselined 2026-07-27 for Vite 8 (#565). Vite 8 moved the bundler to
+// rolldown, which splits the shell into more, smaller chunks than Vite 7 did.
+//
+// Measured on the SAME e2e harness, main (051658de, Vite 7) vs this branch:
+//
+//   requests   8 -> 15          (+7)
+//   transfer   402,997 B -> 390,074 B   (-3.2%)
+//
+// Read that honestly: this is nearly double the request count for a ~3% byte
+// saving. It is NOT a byte win. (The 1,041,444 B figure in the old comment
+// below predated the brotli precompression added by #460 on 2026-07-19, so
+// comparing against it overstates the improvement — the like-for-like number
+// is 402,997 B.)
+//
+// Accepted here because the extra requests are small (jsx-runtime 9 KB,
+// shell-session 15 KB, and six chunks under 2.5 KB), they are multiplexed on
+// one HTTP/2 connection, and finer chunks mean a release re-fetches less. The
+// cost is real on a high-latency link, and tuning rolldown chunking to claw
+// the count back is tracked separately rather than blocking a dependency bump.
+//
+// `maxRequests` therefore rises — the ratchet calls that a widen, hence the
+// approvedDeviation below. `maxTransferBytes` tightens 1,250,000 -> 470,000 in
+// the same edit, which is a genuine tightening against both measurements. The
+// request ceiling is not pinned at exactly 15: a little headroom keeps normal
+// churn from reddening the build while a real re-fragmentation still trips it.
+export const approvedDeviation =
+  'Vite 8 (rolldown) re-baseline in #565. Like-for-like vs main (051658de): cold shell requests 8 -> 15, transfer 402,997 -> 390,074 B (-3.2%). Nearly double the requests for a marginal byte saving, accepted because the added chunks are small and HTTP/2-multiplexed; chunking tuning tracked separately. maxRequests widens to 18; maxTransferBytes tightens 1,250,000 -> 470,000 in the same change.';
+
 export const perfBudgets: PerfBudgets = {
   shell: {
-    // MEASURED cold shell (same-origin, 4173): 6 requests (index.html,
-    // index-*.js, boot-*.js, tokens/css chunks). Ceiling = measured + headroom
+    // MEASURED cold shell (same-origin, 4173): 15 requests under Vite 8
+    // (index.html, index-*.js, src-*.js, the css chunk, and the boot-time
+    // dynamic chunks rolldown now splits out). Ceiling = measured + headroom
     // for a chunk the bundler may split out. If bundling REDUCES this, tighten.
-    maxRequests: 10,
-    // MEASURED cold same-origin shell transfer ~1,041,444 B (boot-*.js
-    // dominates: 708 KB raw). Ceiling = measured + ~20%. The bundling
-    // workstream should push this DOWN — re-measure and tighten when it lands.
-    maxTransferBytes: 1_250_000,
+    maxRequests: 18,
+    // MEASURED cold same-origin shell transfer 390,074 B under Vite 8, down
+    // from ~1,041,444 B under Vite 7. Ceiling = measured + ~20%. If a future
+    // bundling change pushes this down again, re-measure and tighten.
+    maxTransferBytes: 470_000,
     // MEASURED warm/cold ratio ~0.0 (served from cache). 0.15 leaves room for
     // an unavoidable no-store fetch or two while still proving the shell cache.
     maxWarmToColdByteRatio: 0.15,

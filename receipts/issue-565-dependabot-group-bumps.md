@@ -110,6 +110,52 @@ and `@centraid/desktop`'s main-process tests (transitively, via
 resolve plugin; `resolve.builtins` and `test.server.deps.external` were tried
 first and neither reaches that environment's resolver.
 
+### Three failures only CI could catch
+
+Three gates passed locally and failed on the runner. All three are
+platform- or emit-mode-specific, so no local gate could have caught them:
+
+- **knip / `/usr/bin/security`** — knip 6 resolves binary paths handed to
+  `spawnSync`. That path is the macOS Keychain CLI, reached only under
+  `process.platform === 'darwin'` in `packages/gateway/src/cli/key-store.ts`
+  (and `service-admin.ts`). It exists on a developer Mac and not on ubuntu.
+  Added to the gateway workspace's `ignoreUnresolved` in `knip.json`.
+- **`@centraid/client` build (TS2742)** — vitest 4's inferred `vi.fn()` type
+  names `@vitest/spy` through its install path, which declaration emit rejects
+  as non-portable. `typecheck` runs `--noEmit` and never sees it; only
+  `tsc -p tsconfig.build.json` does, which is why it surfaced inside the
+  gateway Docker build. Both mocks in
+  `packages/client/src/gateway-client-contract-fixtures.ts` are now annotated
+  with `Mock<...>` from 'vitest', with signatures sourced from what they stand
+  in for so they cannot drift.
+- **`web-e2e` cold-shell request budget** — see below.
+
+### Vite 8 cold-shell budget re-baseline
+
+Vite 8 moved the bundler to rolldown, which splits the shell into more, smaller
+chunks. Like-for-like on the same harness, main (`051658de`) vs this branch:
+
+| | main (Vite 7) | this branch (Vite 8) |
+| --- | --- | --- |
+| cold shell requests | 8 | 15 |
+| cold shell transfer | 402,997 B | 390,074 B (−3.2%) |
+
+That is nearly double the request count for a marginal byte saving — not a win.
+Accepted rather than blocking the bump: the seven added chunks are small
+(`jsx-runtime` 9 KB, `shell-session` 15 KB, six under 2.5 KB), they multiplex on
+one HTTP/2 connection, and finer chunks make a release re-fetch less. Tuning
+rolldown chunking to claw the count back is follow-up work.
+
+In `apps/web/tests/e2e/perf-budgets.ts`, `maxRequests` goes 10 → 18 (a widen,
+so it carries the `approvedDeviation` the ratchet documents for a deliberate
+re-baseline) while `maxTransferBytes` tightens 1,250,000 → 470,000 in the same
+edit.
+
+**Correction to the file's own history:** the previous comment's 1,041,444 B
+baseline was measured 2026-07-14, *before* #460 added brotli precompression on
+2026-07-19. Comparing Vite 8 against it overstates the result by ~60 points.
+402,997 B is the like-for-like number, and the comment now says so.
+
 ### Files touched
 
 **Lint/format config migration** — `oxlint.config.mjs` and `oxfmt.config.mjs`
@@ -356,6 +402,7 @@ CI on the PR is the final gate.
 | claude-code-91b540ed-688-1785133360-1 | claude-code | 91b540ed-688c-4f97-b5cc-58377ec29378 | #565 | claude-opus-5 | 4 | 10116 | 260090 | 1646 | 11766 | 0.2344 | 1499 | 864763 | 149560120 | 392833 |  |
 | claude-code-91b540ed-688-1785134031-1 | claude-code | 91b540ed-688c-4f97-b5cc-58377ec29378 | #565 | claude-opus-5 | 54 | 58464 | 4105930 | 31742 | 90260 | 3.2122 | 1553 | 923227 | 153666050 | 424575 |  |
 | claude-code-91b540ed-688-1785134117-1 | claude-code | 91b540ed-688c-4f97-b5cc-58377ec29378 | #565 | claude-opus-5 | 14 | 11435 | 1167995 | 7142 | 18591 | 0.8341 | 1567 | 934662 | 154834045 | 431717 |  |
+| claude-code-91b540ed-688-1785135833-1 | claude-code | 91b540ed-688c-4f97-b5cc-58377ec29378 | #565 | claude-opus-5 | 382 | 197014 | 43691889 | 111997 | 309393 | 25.8791 | 1949 | 1131676 | 198525934 | 543714 |  |
 
 ### Steering
 

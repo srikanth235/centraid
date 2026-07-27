@@ -25,7 +25,8 @@
     },
     "packages/gateway": {
       "entry": ["src/index.ts", "src/cli/cli.ts", "scripts/*.mjs"],
-      "project": ["src/**/*.{ts,tsx}", "scripts/*.mjs"]
+      "project": ["src/**/*.{ts,tsx}", "scripts/*.mjs"],
+      "ignoreUnresolved": ["/usr/bin/security"]
     },
     "packages/protocol": {
       "entry": ["src/index.ts"],
