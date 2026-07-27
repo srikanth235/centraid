@@ -36,6 +36,10 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'tag',
     'collection',
     'collection_entry',
+    // Share-by-placement provenance (issue #599). Registered so a merged
+    // multi-scope app view can read the audience + who-placed-it badge for a
+    // projected row like any other table.
+    'share_origin',
   ],
   consent: [
     'app',

@@ -125,6 +125,10 @@ export const ATLAS_KIND_FRIENDLY: Readonly<Record<string, { name: string; blurb:
   'core.tag': { name: 'Tags', blurb: 'Labels you put on things.' },
   'core.collection': { name: 'Collections', blurb: "Groups of things you've gathered." },
   'core.collection_entry': { name: 'Collection items', blurb: "What's inside each collection." },
+  'core.share_origin': {
+    name: 'Shared with here',
+    blurb: 'Where an item placed in this space came from, and who placed it.',
+  },
   // health
   'health.vital': { name: 'Vitals', blurb: 'Body readings — heart rate, weight, and more.' },
   'health.workout': { name: 'Workouts', blurb: "Exercise sessions you've logged." },

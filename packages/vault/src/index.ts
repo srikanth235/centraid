@@ -19,6 +19,7 @@ export {
   VaultBlobHashMismatchError,
   VaultBlobRemoteUnavailableError,
   VaultBlobSessionError,
+  VaultShareError,
   DiskFullTracker,
   sharedDiskFullTracker,
   type DiskFullEvent,
@@ -34,7 +35,27 @@ export {
   type BlobRange,
   type BlobStat,
 } from './blob/store.js';
-export { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
+export {
+  FsBlobStore,
+  MemoryBlobStore,
+  type BlobLinkOutcome,
+  type LocalBlobStore,
+} from './blob/local.js';
+// Issue #599 decision 11: share-by-placement. The gateway's cross-vault share
+// plane calls these; they sit outside the per-vault handler path by design.
+export {
+  shareToVault,
+  unshareFromVault,
+  readShareOrigin,
+  type ShareVaultRef,
+  type ShareToVaultInput,
+  type ShareToVaultResult,
+  type UnshareFromVaultInput,
+  type UnshareFromVaultResult,
+  type ShareOriginRecord,
+} from './share/placement.js';
+export { isShareableItemType, type ShareableItemType } from './share/closure.js';
+export { type BlobPlacement, type BlobPlacementMode } from './share/blobs.js';
 export {
   S3BlobStore,
   MULTIPART_THRESHOLD_BYTES,

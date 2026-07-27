@@ -142,6 +142,23 @@ export class VaultBlobRemoteUnavailableError extends Error {
   }
 }
 
+/**
+ * A share-by-placement projection (issue #599 decision 11) could not be
+ * carried out: the item does not exist in the origin vault, its bytes are not
+ * readable there, or the requested item kind is not shareable at v0. Raised
+ * BEFORE anything is written to the audience vault wherever the fact is
+ * knowable up front, so the gateway can surface a refusal instead of a
+ * half-placed item.
+ */
+export class VaultShareError extends Error {
+  readonly code = 'share_placement_failed';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'VaultShareError';
+  }
+}
+
 /** One recorded disk-full event — what the gateway's `disk` health probe surfaces. */
 export interface DiskFullEvent {
   /** ISO timestamp the event was recorded. */

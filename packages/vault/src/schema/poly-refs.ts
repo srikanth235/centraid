@@ -88,6 +88,12 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
     note: 'Curation membership says nothing once the row is gone (issue #274).',
   },
   {
+    table: 'core_share_origin',
+    pairs: [{ typeCol: 'item_type', idCol: 'item_id' }],
+    policy: 'delete',
+    note: 'Share-by-placement provenance (issue #599 decision 11): the record of where a PROJECTED row came from. Once that row is purged out of the audience vault there is nothing left to attribute, exactly like a tag — and a stale record would keep an audience badge claiming a shared item that no longer exists.',
+  },
+  {
     table: 'core_attachment',
     pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
     policy: 'delete',

@@ -17,7 +17,7 @@ import { BLOB_TRANSFER_DDL } from './blob-transfer.js';
 import { ENRICH_DDL } from './enrich.js';
 import { CONSENT_DDL, CONSENT_INSTALL_MEMORY_DDL } from './consent.js';
 import { APP_EXT_DDL } from './ext.js';
-import { CORE_DDL, LINK_ANCHOR_DDL } from './core.js';
+import { CORE_DDL, LINK_ANCHOR_DDL, SHARE_ORIGIN_DDL } from './core.js';
 import { FTS_DDL } from './fts.js';
 import { HEALTH_DDL, FINANCE_DDL, SCHEDULE_DDL } from './domains-health-finance-schedule.js';
 import { HOME_DDL, BUSINESS_DDL } from './domains-home-business.js';
@@ -59,6 +59,7 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   [
     CORE_DDL,
     LINK_ANCHOR_DDL,
+    SHARE_ORIGIN_DDL,
     CONSENT_DDL,
     CONSENT_INSTALL_MEMORY_DDL,
     SEED_DDL,
