@@ -27,7 +27,6 @@ let handle: GatewayServeHandle;
 function pathsUnder(dir: string): GatewayPaths {
   return {
     vaultDir: path.join(dir, 'vault'),
-    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 /** The ACTIVE vault's per-app data dir (#280 — apps live inside the vault). */
@@ -54,9 +53,7 @@ async function listSessions(): Promise<string[]> {
 
 beforeEach(async () => {
   dataDir = await tempDir(`gw-lifecycle-${crypto.randomUUID()}-`);
-  handle = await serve({
-    paths: pathsUnder(dataDir),
-  });
+  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
 });
 
 afterEach(async () => {

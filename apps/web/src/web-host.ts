@@ -24,7 +24,6 @@ import {
   requestPersistentStorage,
   watchServiceWorkerUpdates,
 } from './sw-lifecycle.js';
-import { testUrl } from './connectivity.js';
 
 const GATEWAY_EVENT = 'gateway-changed';
 const VAULT_EVENT = 'vault-changed';
@@ -41,8 +40,7 @@ function settings(): CentraidSettings {
     activeGatewayLabel: connection.label,
     activeProfileDisplayName: connection.displayName,
     activeProfileAvatarColor: connection.avatarColor,
-    gatewayUrl: connection.baseUrl,
-    ...(connection.token ? { gatewayToken: connection.token } : {}),
+    gatewayUrl: window.location.origin,
     ...(connection.vaultId ? { activeVaultId: connection.vaultId } : {}),
     ...patch,
   };
@@ -126,29 +124,24 @@ export function installWebHost(): void {
       const connection = loadConnection();
       const gatewayId = webGatewayId(connection);
       return {
-        baseUrl: connection.baseUrl || window.location.origin,
+        baseUrl: window.location.origin,
         ...(gatewayId ? { gatewayId } : {}),
-        ...(connection.token ? { token: connection.token } : {}),
         ...(connection.vaultId ? { vaultId: connection.vaultId } : {}),
-        ...(connection.control ? { webControl: true } : {}),
-        ...(connection.transport === 'iroh' ? { iroh: true } : {}),
+        ...(connection.endpointId ? { iroh: true } : {}),
         rememberDevice: connection.rememberDevice === true,
       };
     },
     listGateways: async () => {
       const connection = loadConnection();
-      return connection.baseUrl || connection.transport === 'iroh'
+      return connection.endpointId
         ? [
             {
-              id: 'web',
+              id: connection.endpointId,
               kind: 'remote' as const,
               label: connection.label,
               displayName: connection.displayName,
               avatarColor: connection.avatarColor,
-              transport: connection.transport === 'iroh' ? ('iroh' as const) : ('direct' as const),
-              ...(connection.transport === 'iroh'
-                ? { endpointId: connection.endpointId }
-                : { url: connection.baseUrl }),
+              endpointId: connection.endpointId,
               createdAt: new Date(0).toISOString(),
             },
           ]
@@ -157,20 +150,15 @@ export function installWebHost(): void {
     setActiveGateway: async () => settings(),
     addGateway: async (input: {
       label: string;
-      url?: string;
-      token: string;
+      endpointId: string;
+      relayHint?: string;
       rememberDevice?: boolean;
     }) => {
       const previousGatewayId = webGatewayId(loadConnection());
       const next = saveConnection({
-        baseUrl: input.url ?? '',
         label: input.label,
-        token: input.token,
-        transport: 'direct',
         endpointTicket: undefined,
-        endpointId: undefined,
-        gatewayId: undefined,
-        control: false,
+        endpointId: input.endpointId,
         rememberDevice: input.rememberDevice === true,
       });
       if (!next.rememberDevice) purgeTunnelCaches();
@@ -184,37 +172,22 @@ export function installWebHost(): void {
         ...(!next.rememberDevice && gatewayId ? { purgeReplicaGatewayId: gatewayId } : {}),
       });
       return {
-        id: 'web',
+        id: input.endpointId,
         kind: 'remote' as const,
         label: next.label,
         displayName: next.displayName,
         avatarColor: next.avatarColor,
-        transport: 'direct' as const,
-        url: next.baseUrl,
+        endpointId: input.endpointId,
         createdAt: new Date().toISOString(),
       };
     },
     removeGateway: async () => {
-      // Server-side logout (issue #376): a control cookie is HttpOnly, so
-      // clearing localStorage alone leaves the session valid on the gateway.
-      // Fire a best-effort DELETE to drop it; never block or fail removal.
       const prev = loadConnection();
       const removedGatewayId = webGatewayId(prev);
-      if (prev.control && prev.baseUrl) {
-        void fetch(new URL('/centraid/_web/control', `${prev.baseUrl.replace(/\/+$/, '')}/`), {
-          method: 'DELETE',
-          credentials: 'include',
-        }).catch(() => undefined);
-      }
       saveConnection({
-        baseUrl: '',
-        token: undefined,
         vaultId: undefined,
-        transport: undefined,
         endpointTicket: undefined,
         endpointId: undefined,
-        gatewayId: undefined,
-        control: false,
         rememberDevice: false,
       });
       // The tunnel caches may hold this gateway/vault's assets and blobs; drop
@@ -235,15 +208,9 @@ export function installWebHost(): void {
       saveConnection(input);
       return (await api.listGateways())[0]!;
     },
-    updateGatewayToken: async ({ token }: { id: string; token: string }) => {
-      saveConnection({ token });
-      return { ok: true as const };
-    },
     redeemGatewayPairing: async (input: {
       ticket: string;
       label?: string;
-      mode?: 'auto' | 'iroh' | 'http';
-      url?: string;
       rememberDevice?: boolean;
     }) => {
       const previous = loadConnection();
@@ -262,111 +229,29 @@ export function installWebHost(): void {
           message: 'This pairing ticket has expired.',
         };
       }
-      const mode = input.mode === 'http' || (input.mode !== 'iroh' && input.url) ? 'http' : 'iroh';
-      if (mode === 'http' && !input.url)
-        return {
-          ok: false as const,
-          error: 'invalid_input' as const,
-          message: 'Enter the gateway URL for direct browser pairing.',
-        };
       try {
-        if (mode === 'iroh') {
-          if (!decoded.gw || !decoded.ticketId || !decoded.secret) {
-            return {
-              ok: false as const,
-              error: 'invalid_ticket' as const,
-              message: 'This ticket is missing Iroh pairing details.',
-            };
-          }
-          const { response, endpointId } = await pairGatewayOverIroh({
-            endpointTicket: decoded.gw,
-            ticketId: decoded.ticketId,
-            secret: decoded.secret,
-            deviceName: input.label ?? 'Web browser',
-            rememberDevice: input.rememberDevice ?? false,
-          });
-          if (!response.ok || !response.vaultId) {
-            throw new Error(response.error ?? 'Gateway rejected the pairing ticket.');
-          }
-          const next = saveConnection({
-            baseUrl: '',
-            token: undefined,
-            control: false,
-            transport: 'iroh',
-            endpointTicket: decoded.gw,
-            endpointId,
-            gatewayId: response.gatewayId,
-            vaultId: response.vaultId,
-            label: input.label ?? response.gatewayName ?? 'Web gateway',
-            rememberDevice: input.rememberDevice ?? false,
-          });
-          if (input.rememberDevice !== true) purgeTunnelCaches();
-          saveSettingsPatch({ onboardingCompletedAt: new Date().toISOString() });
-          if (input.rememberDevice) void requestPersistentStorage();
-          const gatewayId = webGatewayId(next);
-          publish(GATEWAY_EVENT, {
-            activeGatewayId: 'web',
-            ...(gatewayId ? { gatewayId } : {}),
-            ...(previousGatewayId && previousGatewayId !== gatewayId
-              ? { removedGatewayId: previousGatewayId }
-              : {}),
-            ...(input.rememberDevice !== true && gatewayId
-              ? { purgeReplicaGatewayId: gatewayId }
-              : {}),
-          });
-          publish(VAULT_EVENT, {
-            activeGatewayId: 'web',
-            ...(gatewayId ? { gatewayId } : {}),
-            activeVaultId: response.vaultId,
-          });
+        if (!decoded.gw || !decoded.ticketId || !decoded.secret) {
           return {
-            ok: true as const,
-            gatewayId: 'web',
-            vaultId: response.vaultId,
-            vaultName: response.vaultName ?? decoded.vaultName ?? 'Vault',
+            ok: false as const,
+            error: 'invalid_ticket' as const,
+            message: 'This ticket is missing Iroh pairing details.',
           };
         }
-        const response = await fetch(
-          new URL('/centraid/_gateway/pair', `${input.url!.replace(/\/+$/, '')}/`),
-          {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              ticket: input.ticket,
-              deviceLabel: input.label ?? 'Web browser',
-              platform: 'web',
-              rememberDevice: input.rememberDevice ?? false,
-            }),
-          },
-        );
-        const body = (await response.json()) as {
-          ok?: boolean;
-          deviceToken?: string;
-          vaultId?: string;
-          vaultName?: string;
-        };
-        if (!response.ok || !body.ok || !body.deviceToken || !body.vaultId)
-          throw new Error(`Gateway returned HTTP ${response.status}`);
-        const control = await fetch(
-          new URL('/centraid/_web/control', `${input.url!.replace(/\/+$/, '')}/`),
-          {
-            method: 'POST',
-            credentials: 'include',
-            headers: { Authorization: `Bearer ${body.deviceToken}` },
-          },
-        );
-        if (!control.ok)
-          throw new Error(`Could not establish browser session (HTTP ${control.status})`);
+        const { response } = await pairGatewayOverIroh({
+          endpointTicket: decoded.gw,
+          ticketId: decoded.ticketId,
+          secret: decoded.secret,
+          deviceName: input.label ?? 'Web browser',
+          rememberDevice: input.rememberDevice ?? false,
+        });
+        if (!response.ok || !response.vaultId || !response.gatewayId) {
+          throw new Error(response.error ?? 'Gateway rejected the pairing ticket.');
+        }
         const next = saveConnection({
-          baseUrl: input.url!,
-          token: undefined,
-          control: true,
-          transport: 'direct',
-          endpointTicket: undefined,
-          endpointId: undefined,
-          gatewayId: undefined,
-          vaultId: body.vaultId,
-          label: input.label ?? 'Web gateway',
+          endpointTicket: decoded.gw,
+          endpointId: response.gatewayId,
+          vaultId: response.vaultId,
+          label: input.label ?? response.gatewayName ?? 'Web gateway',
           rememberDevice: input.rememberDevice ?? false,
         });
         if (input.rememberDevice !== true) purgeTunnelCaches();
@@ -386,13 +271,13 @@ export function installWebHost(): void {
         publish(VAULT_EVENT, {
           activeGatewayId: 'web',
           ...(gatewayId ? { gatewayId } : {}),
-          activeVaultId: body.vaultId,
+          activeVaultId: response.vaultId,
         });
         return {
           ok: true as const,
-          gatewayId: 'web',
-          vaultId: body.vaultId,
-          vaultName: body.vaultName ?? decoded.vaultName ?? 'Vault',
+          gatewayId: response.gatewayId,
+          vaultId: response.vaultId,
+          vaultName: response.vaultName ?? decoded.vaultName ?? 'Vault',
         };
       } catch (error) {
         return {
@@ -403,7 +288,6 @@ export function installWebHost(): void {
       }
     },
     testGatewayConnection: async (input: CentraidTestConnectionInput) => {
-      if (input.kind === 'url') return testUrl(input.url, input.token);
       if (input.kind === 'ticket') {
         const decoded = decodeTicket(input.ticket);
         return decoded
@@ -431,7 +315,7 @@ export function installWebHost(): void {
       }
       if (input.kind === 'gateway') {
         const connection = loadConnection();
-        if (connection.transport === 'iroh') {
+        if (connection.endpointId) {
           try {
             await gatewayJson('/centraid/_gateway/info');
             return {
@@ -456,7 +340,13 @@ export function installWebHost(): void {
             };
           }
         }
-        return testUrl(connection.baseUrl, connection.token);
+        return {
+          ok: false,
+          error: 'unreachable',
+          stages: [
+            { id: 'reach' as const, label: 'Reach gateway over Iroh', status: 'fail' as const },
+          ],
+        };
       }
       return {
         ok: false,

@@ -54,23 +54,6 @@ describe('connectGateway', () => {
     expect(result).toMatchObject({ label: 'your vault', ok: true });
   });
 
-  it('ticket-url: redeems with url + mode:http', async () => {
-    redeemGatewayPairing.mockResolvedValue({
-      gatewayId: 'gw1',
-      ok: true,
-      vaultId: 'v1',
-      vaultName: 'Office',
-    });
-    await connectGateway({ kind: 'ticket-url', ticket: 't', url: 'https://gw.example' });
-    expect(redeemGatewayPairing).toHaveBeenCalledWith({
-      label: undefined,
-      mode: 'http',
-      rememberDevice: false,
-      ticket: 't',
-      url: 'https://gw.example',
-    });
-  });
-
   it('ticket flows map a stable error code through friendlyGatewayError', async () => {
     redeemGatewayPairing.mockResolvedValue({
       error: 'ticket_expired',

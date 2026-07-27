@@ -49,69 +49,28 @@ export interface SettingsStorageBridgeProps {
   loadConnections: () => Promise<StorageConnectionRowDTO[]>;
   createConnection: (
     input: StorageConnectionFormInput,
-    opts?: { force?: boolean },
   ) => Promise<StorageMutationResult<StorageConnectionRowDTO>>;
   deleteConnection: (id: string, name: string) => Promise<void>;
   testConnection: (id: string) => Promise<StorageTestResult>;
-  /** POSTs the shared recovery-kit confirm endpoint. May itself fail (e.g.
-   *  the gateway has no backup block configured, so there's nothing to
-   *  confirm through it) — the gate dialog surfaces that inline rather than
-   *  crashing, and "proceed anyway" stays available either way. */
-  confirmRecoveryKit: () => Promise<{ confirmedAt: number }>;
   loadVaultBlobStore: () => Promise<VaultBlobStoreDTO>;
   attachVaultConnection: (
     connectionId: string,
-    opts?: { force?: boolean },
   ) => Promise<StorageMutationResult<VaultBlobStoreDTO>>;
   detachVaultConnection: () => Promise<VaultBlobStoreDTO>;
   showToast: (message: string) => void;
 }
 
-/** A pending gated mutation — re-invoked by the dialog's two action paths. */
 interface PendingGate {
   message: string;
-  run: (opts?: { force?: boolean }) => Promise<void>;
 }
 
 function RecoveryKitGateDialog({
   gate,
-  confirmRecoveryKit,
   onClose,
 }: {
   gate: PendingGate;
-  confirmRecoveryKit: () => Promise<{ confirmedAt: number }>;
   onClose: () => void;
 }): JSX.Element {
-  const [busy, setBusy] = useState<'confirm' | 'force' | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const confirmAndRetry = async (): Promise<void> => {
-    setBusy('confirm');
-    setError(null);
-    try {
-      await confirmRecoveryKit();
-      await gate.run();
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const proceedAnyway = async (): Promise<void> => {
-    setBusy('force');
-    setError(null);
-    try {
-      await gate.run({ force: true });
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(null);
-    }
-  };
-
   return (
     <div
       className={modalCss.backdrop}
@@ -128,26 +87,13 @@ function RecoveryKitGateDialog({
         <h3>Before this ships bytes off this machine</h3>
         <p className={styles.gateReason}>{gate.message}</p>
         <p>
-          Hosted storage is ciphertext without the seal key that made it — if it's ever lost,
-          everything stored offsite becomes unrecoverable. Export the recovery kit once (
-          <code>centraid-gateway backup kit</code>, or <code>key export</code>) and store it
-          somewhere offline before continuing.
+          Hosted storage is ciphertext without the seal key that made it — if it's ever lost, the
+          backed-up vaults stored offsite become unrecoverable. Local-only vaults are not included.
+          Open the Storage page, export a password-wrapped recovery kit, re-select that exact file,
+          and complete the loss-consent check before continuing.
         </p>
-        {error ? <div className={styles.gateError}>{error}</div> : null}
         <div className={modalCss.actions}>
-          <Button
-            variant="ghost"
-            label={busy === 'force' ? 'Proceeding…' : 'Proceed anyway'}
-            disabled={busy !== null}
-            onClick={() => void proceedAnyway()}
-            title="Skip the confirmation and continue anyway — only do this if you've already exported the kit through another gateway or CLI session."
-          />
-          <Button
-            variant="primary"
-            label={busy === 'confirm' ? 'Confirming…' : "I've saved my recovery kit"}
-            disabled={busy !== null}
-            onClick={() => void confirmAndRetry()}
-          />
+          <Button variant="primary" label="Close" onClick={onClose} />
         </div>
       </div>
     </div>
@@ -359,7 +305,6 @@ export default function SettingsStorageScreen({
   createConnection,
   deleteConnection,
   testConnection,
-  confirmRecoveryKit,
   loadVaultBlobStore,
   attachVaultConnection,
   detachVaultConnection,
@@ -414,11 +359,8 @@ export default function SettingsStorageScreen({
       });
   };
 
-  const runCreate = async (
-    input: StorageConnectionFormInput,
-    opts?: { force?: boolean },
-  ): Promise<void> => {
-    const result = await createConnection(input, opts);
+  const runCreate = async (input: StorageConnectionFormInput): Promise<void> => {
+    const result = await createConnection(input);
     if (result.ok) {
       setWizardOpen(false);
       setFormError(null);
@@ -426,7 +368,7 @@ export default function SettingsStorageScreen({
       return;
     }
     if (result.code === 'recovery_kit_not_confirmed') {
-      setGate({ message: result.message, run: (o) => runCreate(input, o) });
+      setGate({ message: result.message });
       return;
     }
     throw new Error(result.message);
@@ -458,14 +400,14 @@ export default function SettingsStorageScreen({
     withBusy(row.id, () => deleteConnection(row.id, row.name));
   };
 
-  const runAttach = async (connectionId: string, opts?: { force?: boolean }): Promise<void> => {
-    const result = await attachVaultConnection(connectionId, opts);
+  const runAttach = async (connectionId: string): Promise<void> => {
+    const result = await attachVaultConnection(connectionId);
     if (result.ok) {
       if (mountedRef.current) setBlobStore(result.value);
       return;
     }
     if (result.code === 'recovery_kit_not_confirmed') {
-      setGate({ message: result.message, run: (o) => runAttach(connectionId, o) });
+      setGate({ message: result.message });
       return;
     }
     throw new Error(result.message);
@@ -556,13 +498,7 @@ export default function SettingsStorageScreen({
         />
       </div>
 
-      {gate ? (
-        <RecoveryKitGateDialog
-          gate={gate}
-          confirmRecoveryKit={confirmRecoveryKit}
-          onClose={() => setGate(null)}
-        />
-      ) : null}
+      {gate ? <RecoveryKitGateDialog gate={gate} onClose={() => setGate(null)} /> : null}
     </div>
   );
 }

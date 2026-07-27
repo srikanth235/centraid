@@ -3,7 +3,6 @@
 // scatter the single source of fixture truth. See receipts/issue-225-desktop-e2e-suite.md.
 import { _electron, test, type ElectronApplication, type Page } from '@playwright/test';
 import { promises as fs } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
@@ -20,10 +19,9 @@ const __dirname = path.dirname(__filename);
  *   - App *code* lives in the gateway's git store; the renderer is a thin
  *     HTTP client that talks to the ACTIVE gateway directly (Bearer token).
  *   - `settings.json` no longer carries a gateway URL/token — those are
- *     derived from the active gateway profile under
- *     `<userData>/gateways/<id>/`. So to point the app at our mock we seed a
- *     *remote* gateway profile whose `url` is the mock, set it active, and
- *     mark onboarding complete.
+ *     derived from the active EndpointId-keyed row in the main-process-owned
+ *     `<userData>/connections.json`. The Electron test entry maps that
+ *     EndpointId to the loopback mock in memory; no URL/token is persisted.
  *   - Apps/automations/turns/templates all come from the gateway over HTTP,
  *     so the mock is the single source of fixture data — `gateway.state` is
  *     mutable and every test shapes it before (or during) the run.
@@ -631,109 +629,22 @@ export interface TestEnv {
   userData: string;
   gatewayId: string;
   appsDir: string;
+  gatewayProxies: Record<string, string>;
 }
 
 export async function makeEnv(): Promise<TestEnv> {
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-e2e-'));
   const userData = path.join(workspace, 'userData');
   await fs.mkdir(userData, { recursive: true });
-  const gatewayId = crypto.randomUUID();
-  const appsDir = path.join(userData, 'gateways', gatewayId, 'apps');
+  const gatewayId = crypto.randomBytes(32).toString('hex');
+  // Mock-owned app files are fixture data, not desktop connection state.
+  const appsDir = path.join(workspace, 'mock-apps');
   await fs.mkdir(appsDir, { recursive: true });
-  return { workspace, userData, gatewayId, appsDir };
+  return { workspace, userData, gatewayId, appsDir, gatewayProxies: {} };
 }
 
 export async function cleanupEnv(env: TestEnv): Promise<void> {
-  // Detached gateway children OUTLIVE the Electron process on purpose (#468
-  // H1: quit skips them so pairing keeps working with the window closed).
-  // Under e2e that means `centraid-gateway serve --data-dir <userData>/...`
-  // is still running, reparented to init, renewing its instance lease every
-  // 60s INTO THE DIRECTORY WE ARE ABOUT TO DELETE. A renew that lands mid-`rm`
-  // recreates `gateways/<id>/vault/` under a directory the walk has already
-  // emptied, and the removal dies with ENOTEMPTY; a renew that lands just
-  // after leaves silent debris in $TMPDIR instead. Same race, two faces.
-  //
-  // So stop the child before removing its data dir. Not a workaround for the
-  // rm — the process really is still alive and really is still writing.
-  await stopDetachedGateways(env);
   await fs.rm(env.workspace, { recursive: true, force: true });
-}
-
-/** How long a detached gateway child gets to honour SIGTERM before SIGKILL. */
-const DETACHED_STOP_TIMEOUT_MS = 5_000;
-
-/**
- * Stop every detached gateway child rooted in this test's workspace.
- *
- * The desktop records each spawned child in `<dataDir>/gateway.status.json`
- * and the gateway itself writes `<dataDir>/vault/gateway.lease`; both carry a
- * pid. We read both, then REFUSE to signal any pid whose live command line
- * does not mention this workspace — pids are recycled, and a fixture that
- * SIGKILLs a stranger is far worse than a leaked temp directory.
- */
-async function stopDetachedGateways(env: TestEnv): Promise<void> {
-  const gatewaysDir = path.join(env.userData, 'gateways');
-  const entries = await fs.readdir(gatewaysDir, { withFileTypes: true }).catch(() => []);
-  const pids = new Set<number>();
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const dir = path.join(gatewaysDir, entry.name);
-    for (const file of [
-      path.join(dir, 'gateway.status.json'),
-      path.join(dir, 'vault', 'gateway.lease'),
-    ]) {
-      const pid = await readPid(file);
-      if (pid !== undefined) pids.add(pid);
-    }
-  }
-  // macOS hands tests `/var/folders/...` but `ps` reports the resolved
-  // `/private/var/folders/...`, so match on either spelling.
-  const real = await fs.realpath(env.workspace).catch(() => env.workspace);
-  const names = [...new Set([env.workspace, real])];
-  await Promise.all([...pids].map((pid) => stopIfOurs(pid, names)));
-}
-
-async function readPid(file: string): Promise<number | undefined> {
-  try {
-    const parsed = JSON.parse(await fs.readFile(file, 'utf8')) as { pid?: unknown };
-    return typeof parsed.pid === 'number' && parsed.pid > 0 ? parsed.pid : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/** True only when `pid` is alive AND its command line names one of `names`. */
-function ownsWorkspace(pid: number, names: string[]): boolean {
-  const probe = spawnSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' });
-  const command = probe.stdout ?? '';
-  return names.some((name) => command.includes(name));
-}
-
-async function stopIfOurs(pid: number, names: string[]): Promise<void> {
-  if (!ownsWorkspace(pid, names)) return;
-  try {
-    process.kill(pid, 'SIGTERM');
-  } catch {
-    return; // already gone
-  }
-  const deadline = Date.now() + DETACHED_STOP_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return; // exited
-    }
-  }
-  process.stderr.write(
-    `\n[desktop-e2e] detached gateway pid ${pid} ignored SIGTERM for ` +
-      `${DETACHED_STOP_TIMEOUT_MS}ms; escalating to SIGKILL.\n\n`,
-  );
-  try {
-    process.kill(pid, 'SIGKILL');
-  } catch {
-    // Raced us to exit.
-  }
 }
 
 /**
@@ -767,32 +678,37 @@ export async function seedRemoteGateway(
   );
 }
 
+/** Re-open device onboarding without disturbing the founded gateway/vault. */
+export async function markOnboardingPending(env: TestEnv): Promise<void> {
+  const file = path.join(env.userData, 'centraid-settings.json');
+  const settings = JSON.parse(await fs.readFile(file, 'utf8')) as Record<string, unknown>;
+  delete settings.onboardingCompletedAt;
+  await fs.writeFile(file, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+}
+
 /** Seed an additional paired remote profile without changing the active gateway. */
 export async function seedRemoteGatewayProfile(
   env: TestEnv,
   gateway: { url: string },
   opts: { id?: string; label?: string } = {},
 ): Promise<string> {
-  const id = opts.id ?? crypto.randomUUID();
+  const id = opts.id ?? crypto.randomBytes(32).toString('hex');
   const label = opts.label ?? 'E2E Gateway';
-  const gwDir = path.join(env.userData, 'gateways', id);
-  await fs.mkdir(gwDir, { recursive: true });
-  await fs.writeFile(
-    path.join(gwDir, 'profile.json'),
-    JSON.stringify(
-      {
-        id,
-        kind: 'remote',
-        label,
-        displayName: label,
-        url: gateway.url,
-        createdAt: '2024-01-01T00:00:00.000Z',
-      },
-      null,
-      2,
-    ) + '\n',
-    { mode: 0o600 },
-  );
+  const file = path.join(env.userData, 'connections.json');
+  const profiles = JSON.parse(await fs.readFile(file, 'utf8').catch(() => '[]')) as Array<
+    Record<string, unknown>
+  >;
+  profiles.push({
+    id,
+    kind: 'remote',
+    label,
+    displayName: label,
+    endpointId: id,
+    rememberDevice: false,
+    createdAt: '2024-01-01T00:00:00.000Z',
+  });
+  await fs.writeFile(file, `${JSON.stringify(profiles, null, 2)}\n`, { mode: 0o600 });
+  env.gatewayProxies[id] = gateway.url;
   return id;
 }
 
@@ -812,7 +728,16 @@ export async function launchApp(env: TestEnv): Promise<{ app: ElectronApplicatio
   const entry = path.join(__dirname, 'electron-entry.mjs');
   const app = await _electron.launch({
     args: [entry, `--user-data-dir=${env.userData}`],
-    env: { ...process.env, NODE_ENV: 'test' },
+    env: {
+      ...process.env,
+      NODE_ENV: 'test',
+      // The local gateway moved out of Electron userData in #555. Keep every
+      // E2E worker's real gateway state inside its disposable workspace so it
+      // cannot contend with the developer's/service's canonical gateway.db.
+      CENTRAID_DATA_DIR: path.join(env.workspace, 'gateway-data'),
+      CENTRAID_EMBEDDED_GATEWAY: '1',
+      CENTRAID_E2E_IROH_PROXY_MAP: JSON.stringify(env.gatewayProxies),
+    },
   });
   const page = await app.firstWindow();
   page.on('pageerror', (error) => {

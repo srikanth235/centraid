@@ -18,7 +18,7 @@
 //                   (default: /centraid/_vault/vaults)
 //
 // JSON out (stdout, one line):
-//   { paired, vaultId, vaultName, probeStatus, replayRefused, replayError,
+//   { paired, vaultId, vaultName, probeStatus, enrollment, replayRefused, replayError,
 //     path: { isRelay, isIp, remoteAddr, rttMs } | null, error? }
 
 import { createTunnelClient, tunnelRequest } from '@centraid/tunnel';
@@ -86,6 +86,7 @@ async function main() {
     vaultId: null,
     vaultName: null,
     probeStatus: null,
+    enrollment: null,
     replayRefused: null,
     replayError: null,
     path: null,
@@ -113,6 +114,15 @@ async function main() {
       const probe = await tunnelRequest(connection, { method: 'GET', target });
       out.probeStatus = probe.status;
       log(`tunneled probe ${target} → ${probe.status}`);
+      const roster = await tunnelRequest(connection, {
+        method: 'GET',
+        target: '/centraid/_gateway/devices',
+      });
+      if (roster.status === 200) {
+        const devices = JSON.parse(roster.body.toString('utf8')).devices ?? [];
+        out.enrollment = devices.find((row) => row.endpointId === device.endpointId) ?? null;
+      }
+      log(`gateway.db roster → ${roster.status}`);
       // Read paths AFTER the request has actually round-tripped data, so
       // path selection (direct vs relay) has settled rather than reporting
       // a pre-handshake candidate.

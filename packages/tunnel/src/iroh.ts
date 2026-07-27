@@ -124,6 +124,11 @@ export interface IrohApi {
     fromString(s: string): EndpointId;
     fromBytes(bytes: Array<number>): EndpointId;
   };
+  EndpointAddr: new (
+    id: EndpointId,
+    relayUrl?: string | null,
+    addresses?: Array<string> | null,
+  ) => EndpointAddr;
   SecretKey: {
     generate(): SecretKey;
     fromBytes(bytes: Array<number>): SecretKey;

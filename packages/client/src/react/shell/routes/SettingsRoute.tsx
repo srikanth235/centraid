@@ -8,6 +8,7 @@ import SettingsAppearanceScreen from '../../screens/SettingsAppearanceScreen.js'
 import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
 import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
 import SettingsSpaceScreen from '../../screens/SettingsSpaceScreen.js';
+import { openPrompt } from '../prompt.js';
 import SettingsStorageScreen from '../../screens/SettingsStorageScreen.js';
 import { useShellActions } from '../actions.js';
 import { PageEmpty, PageLoading } from '../status.js';
@@ -23,7 +24,6 @@ import {
 } from './settingsProvidersData.js';
 import {
   attachVaultConnection,
-  confirmStorageRecoveryKit,
   createStorageConnection,
   detachVaultConnection,
   loadVaultBlobStoreData,
@@ -200,15 +200,14 @@ export default function SettingsRoute({
     if (activeSpace.status !== 'ready' || !activeSpace.data) return;
     const { vaultId, name } = activeSpace.data;
     void (async () => {
-      const ok = await confirm({
-        title: 'Delete this space?',
-        message: `Delete "${name}"? Its vault and everything in it are removed. This can’t be undone.`,
-        confirmLabel: 'Delete',
-        danger: true,
+      const typed = await openPrompt({
+        title: `Type ${JSON.stringify(name)} to erase this space`,
+        placeholder: name,
+        confirmLabel: 'Erase permanently',
       });
-      if (!ok) return;
+      if (typed !== name) return;
       try {
-        await deleteSpace(vaultId);
+        await deleteSpace(vaultId, typed);
         showToast(`Deleted · ${name}`);
         navigate({ kind: 'home' });
       } catch (err) {
@@ -313,7 +312,6 @@ export default function SettingsRoute({
                 createConnection={createStorageConnection}
                 deleteConnection={deleteStorageConnectionGated}
                 testConnection={testStorageConnection}
-                confirmRecoveryKit={confirmStorageRecoveryKit}
                 loadVaultBlobStore={loadVaultBlobStoreData}
                 attachVaultConnection={attachVaultConnection}
                 detachVaultConnection={detachVaultConnection}

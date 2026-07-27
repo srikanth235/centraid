@@ -6,6 +6,7 @@
  */
 
 import { loadConfigFile, validateConfig, DaemonConfigError, type DaemonConfig } from './config.js';
+import { DEFAULT_GATEWAY_PORT, platformDefaultDataDir } from './data-dir.js';
 
 export interface ConfigSource {
   configPath?: string;
@@ -15,7 +16,9 @@ export interface ConfigSource {
 export async function resolveDaemonConfig(
   source: ConfigSource,
   fail: (message: string, code?: number) => never,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<DaemonConfig> {
+  const environmentDir = env.CENTRAID_DATA_DIR?.trim() || undefined;
   let cfg: DaemonConfig;
   if (source.configPath) {
     try {
@@ -24,11 +27,12 @@ export async function resolveDaemonConfig(
       if (err instanceof DaemonConfigError) fail(err.message, 2);
       throw err;
     }
-  } else if (source.dataDir) {
-    cfg = validateConfig({ dataDir: source.dataDir });
   } else {
-    fail('one of --config or --data-dir is required', 2);
+    cfg = validateConfig({
+      dataDir: source.dataDir ?? environmentDir ?? platformDefaultDataDir({ env }),
+    });
   }
-  if (source.dataDir) cfg.dataDir = source.dataDir;
+  cfg.dataDir = source.dataDir ?? environmentDir ?? cfg.dataDir;
+  cfg.port ??= DEFAULT_GATEWAY_PORT;
   return cfg;
 }

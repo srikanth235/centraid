@@ -26,7 +26,8 @@ import {
   createGrant,
   ensureAgentEnrolled,
   ensureAppEnrolled,
-  ensureVaultBootstrapped,
+  bootstrapVault,
+  recoverVaultBootstrap,
   GatewayError,
   listActiveAgentGrants,
   listActiveGrants,
@@ -108,6 +109,7 @@ import {
   type BlobStoreSettings,
   type S3Credentials,
   type PreviewCodec,
+  type KeyStore,
   runJournalArchival,
   blobCustodyProven,
   WalShipper,
@@ -201,6 +203,10 @@ export interface VaultPlaneOptions {
   logger: RuntimeLogger;
   /** Owner display name used only on first boot. */
   ownerName?: string;
+  /** Explicit creation gate. Recovery-only opens leave an empty database uninitialized. */
+  bootstrap?: boolean;
+  /** Shared host custody store for this vault's sealing key. */
+  keyStore?: KeyStore;
   /** Pre-minted vault id used only on first boot (multi-vault hosts name the dir after it). */
   vaultId?: string;
   /** Owner-facing vault name used only on first boot. */
@@ -211,21 +217,16 @@ export interface VaultPlaneOptions {
   walTickMs?: number;
   /** Disable WAL ownership for short-lived admin/read-only registry opens. */
   enableWalShipper?: boolean;
+  /**
+   * Whether this gateway currently has a backup destination. This gates only
+   * the capture clock: WAL ownership and the shipper object remain
+   * unconditional while the process owns the vault.
+   */
+  walCaptureConfigured?: () => boolean;
   /** WAL shipper overrides (tests: thresholds, clock). */
   walShipper?: Partial<Omit<WalShipperOptions, 'db' | 'log'>>;
-  /** Whether an offsite backup backend currently consumes the WAL stream. */
-  walCaptureEnabled?: () => boolean;
-  /**
-   * Whether the gateway instance lease (issue #351 tier 1) is CURRENTLY
-   * conflicted — a fresh foreign lease means a second gateway process may
-   * legitimately be live against this same vault root. Read fresh on every
-   * blob sweep tick (issue #367 §C6) to gate the orphan-delete phase of
-   * `BlobCustody.reconcile()` — deleting a remote object this process
-   * doesn't recognize would be a real data-loss risk if the OTHER instance
-   * just wrote it. Defaults to "never conflicted" (single-instance hosts,
-   * tests).
-   */
-  leaseConflicted?: () => boolean;
+  /** Fail-safe blob-GC gate for network filesystems where cross-host locking is uncertain. */
+  skipOrphanDelete?: () => boolean;
   /**
    * Resolve S3 credentials for a vault's remote blob tier (issue #367 §C3):
    * the gateway-level `StorageConnectionStore` wires this to
@@ -425,19 +426,19 @@ export class VaultPlane {
   readonly quarantine: QuarantineStatus | null;
   /**
    * The WAL segment shipper (issue #408) — always constructed for a
-   * file-backed vault so a backend configured later can begin without a
-   * remount. While backup is unconfigured, capture is dormant and a bounded
-   * SQLite autocheckpoint replaces it; when configured, capture follows the
-   * declared RPO and the BackupService drains the resulting stream.
+   * file-backed vault as soon as this process owns the WAL lifecycle.
+   * gateway.db's lifetime lock makes that ownership unconditional. The
+   * capture clock still sleeps until a backup destination exists, preserving
+   * the low-end no-unconfigured-spool contract.
    */
-  readonly walShipper: WalShipper | undefined;
+  walShipper: WalShipper | undefined;
   private readonly logger: RuntimeLogger;
   private readonly sweepIntervalMs: number;
   private readonly walTickOverrideMs: number | undefined;
-  private readonly walCaptureEnabled: () => boolean;
-  private readonly leaseConflicted: () => boolean;
-  /** Whether this process is allowed to capture or checkpoint these WALs. */
-  private readonly ownsWalLifecycle: boolean;
+  private readonly skipOrphanDelete: () => boolean;
+  private readonly walLifecycleEnabled: boolean;
+  private readonly walCaptureConfigured: () => boolean;
+  private readonly walShipperOptions: NonNullable<VaultPlaneOptions['walShipper']>;
   private readonly shouldDeferBackgroundWork: () => boolean;
   /** Resource-actuals hooks (#528 Phase C) — accounting only, never gates. */
   private readonly onSweepPass: ((info: { durationMs: number }) => void) | undefined;
@@ -493,7 +494,7 @@ export class VaultPlane {
   constructor(options: VaultPlaneOptions) {
     this.logger = options.logger;
     this.sweepIntervalMs = options.sweepIntervalMs ?? 60 * 60 * 1000;
-    this.leaseConflicted = options.leaseConflicted ?? (() => false);
+    this.skipOrphanDelete = options.skipOrphanDelete ?? (() => false);
     this.shouldDeferBackgroundWork = options.shouldDeferBackgroundWork ?? (() => false);
     this.onSweepPass = options.onSweepPass;
     this.onReplicationPass = options.onReplicationPass;
@@ -512,6 +513,7 @@ export class VaultPlane {
     // failing writes.
     this.db = openVaultDb({
       dir: options.dir,
+      ...(options.keyStore ? { keyStore: options.keyStore } : {}),
       s3Credentials: options.s3Credentials ?? defaultEnvS3Credentials,
       // Preview backstop codec (issue #405 §2) — forwarded only when the host
       // wired one; a codec-less open just never runs the backstop.
@@ -522,11 +524,24 @@ export class VaultPlane {
         : {}),
       ...(options.synchronous ? { synchronous: options.synchronous } : {}),
     });
-    this.boot = ensureVaultBootstrapped(this.db, {
-      ownerName: options.ownerName ?? 'Owner',
-      ...(options.vaultId ? { vaultId: options.vaultId } : {}),
-      ...(options.vaultName ? { vaultName: options.vaultName } : {}),
-    });
+    const recovered = recoverVaultBootstrap(this.db);
+    if (recovered) {
+      this.boot = recovered;
+    } else if (options.bootstrap) {
+      this.boot = {
+        ...bootstrapVault(this.db, {
+          ownerName: options.ownerName ?? 'Owner',
+          ...(options.vaultId ? { vaultId: options.vaultId } : {}),
+          ...(options.vaultName ? { vaultName: options.vaultName } : {}),
+        }),
+        fresh: true,
+      };
+    } else {
+      this.db.close();
+      throw new Error(
+        `vault at ${options.dir} is uninitialized; creation requires the gateway founding gate`,
+      );
+    }
     this.displayName = this.boot.displayName;
     this.gateway = options.onProvenanceCommitted
       ? createGateway(this.db, {
@@ -587,33 +602,43 @@ export class VaultPlane {
     // wal-ship state, so its first tick mints a fresh generation — which is
     // exactly the restore-takeover stream break FORMAT.md rule 6 requires.
     this.walTickOverrideMs = options.walTickMs;
-    this.walCaptureEnabled = options.walCaptureEnabled ?? (() => true);
-    this.ownsWalLifecycle =
-      options.enableWalShipper !== false && !(options.leaseConflicted?.() ?? false);
+    this.walLifecycleEnabled = options.enableWalShipper !== false;
+    this.walCaptureConfigured = options.walCaptureConfigured ?? (() => true);
+    this.walShipperOptions = options.walShipper ?? {};
+    this.walShipper = this.createWalShipperIfOwner();
+  }
+
+  /** Whether this process is currently allowed to capture or checkpoint these WALs. */
+  private ownsWalLifecycle(): boolean {
+    return this.walLifecycleEnabled;
+  }
+
+  private createWalShipperIfOwner(): WalShipper | undefined {
+    if (!this.ownsWalLifecycle()) return undefined;
     try {
-      if (!this.ownsWalLifecycle) {
-        this.walShipper = undefined;
-      } else {
-        this.walShipper = new WalShipper({
-          db: this.db,
-          walSizeThresholdBytes: () => readBackupPolicy(this.db.vault).walBaseRollBytes,
-          baseIntervalMs: () => readBackupPolicy(this.db.vault).walBaseRollHours * 60 * 60 * 1000,
-          log: {
-            info: (m) => this.logger.info(m),
-            warn: (m) => this.logger.warn(m),
-          },
-          ...options.walShipper,
-        });
-      }
+      return new WalShipper({
+        db: this.db,
+        walSizeThresholdBytes: () => readBackupPolicy(this.db.vault).walBaseRollBytes,
+        baseIntervalMs: () => readBackupPolicy(this.db.vault).walBaseRollHours * 60 * 60 * 1000,
+        log: {
+          info: (m) => this.logger.info(m),
+          warn: (m) => this.logger.warn(m),
+        },
+        ...this.walShipperOptions,
+      });
     } catch (err) {
       // In-memory vaults (tests) have no files to ship.
-      this.walShipper = undefined;
       if (this.dir !== ':memory:') {
         this.logger.warn(
           `vault plane: wal shipper unavailable: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
+      return undefined;
     }
+  }
+
+  private ensureWalShipper(): void {
+    this.walShipper ??= this.createWalShipperIfOwner();
   }
 
   /** The owner-device credential the host acts with (confirm/revoke/sweep). */
@@ -1893,10 +1918,11 @@ export class VaultPlane {
    */
   walTick(): void {
     if (this.closed) return;
-    // Admin registries and a lease-conflicted second gateway may open the
-    // databases, but must never capture, checkpoint, or mutate shipper state.
-    if (!this.ownsWalLifecycle) return;
-    if (!this.walCaptureEnabled()) return;
+    // Read-only maintenance registries may open the databases, but must never
+    // capture, checkpoint, or mutate shipper state.
+    if (!this.ownsWalLifecycle()) return;
+    if (!this.walCaptureConfigured()) return;
+    this.ensureWalShipper();
     if (!this.walShipper) {
       // No shipper (its construction failed on a file-backed vault) — but
       // `wal_autocheckpoint = 0` is set on every connection regardless, so
@@ -1951,14 +1977,14 @@ export class VaultPlane {
   }
 
   private scheduleWalCapture(): void {
-    if (this.closed || !this.ownsWalLifecycle) return;
-    if (!this.walCaptureEnabled()) {
+    if (this.closed || !this.walLifecycleEnabled) return;
+    if (!this.walCaptureConfigured()) {
       this.setFallbackAutocheckpoint(true);
       return;
     }
     this.walTimer = setTimeout(() => {
       this.walTimer = undefined;
-      if (!this.walCaptureEnabled()) {
+      if (!this.walCaptureConfigured()) {
         this.setFallbackAutocheckpoint(true);
         return;
       }
@@ -1988,17 +2014,20 @@ export class VaultPlane {
   }
 
   private armWalCapture(): void {
-    if (this.closed || !this.ownsWalLifecycle) return;
-    if (!this.walCaptureEnabled()) {
+    if (this.closed || !this.walLifecycleEnabled) return;
+    if (!this.walCaptureConfigured()) {
       this.setFallbackAutocheckpoint(true);
       return;
     }
-    this.setFallbackAutocheckpoint(false);
-    this.firstWalTick = setImmediate(() => {
-      this.firstWalTick = undefined;
-      this.walTick();
-    });
-    this.firstWalTick.unref();
+    if (this.ownsWalLifecycle()) {
+      this.ensureWalShipper();
+      this.setFallbackAutocheckpoint(false);
+      this.firstWalTick = setImmediate(() => {
+        this.firstWalTick = undefined;
+        this.walTick();
+      });
+      this.firstWalTick.unref();
+    }
     this.scheduleWalCapture();
   }
 
@@ -2007,7 +2036,7 @@ export class VaultPlane {
   start(): void {
     this.runSweep();
     this.scheduleSweep();
-    if (!this.ownsWalLifecycle) return;
+    if (!this.walLifecycleEnabled) return;
     // Issue #411 action 3: defer the first configured capture off the mount critical
     // path. On a fresh vault the first tick mints the generation base — a
     // TRUNCATE checkpoint + reflink base clone + fsync + sha256 (~150-200 ms
@@ -2211,7 +2240,7 @@ export class VaultPlane {
     void Promise.all([this.resolveSnapshotBlobRoots(), this.resolveOrphanGraceWindowMs()])
       .then(([roots, graceWindowMs]) =>
         this.gateway.sweepBlobs(this.ownerCredential, {
-          skipOrphanDelete: this.leaseConflicted() || roots === 'unavailable',
+          skipOrphanDelete: this.skipOrphanDelete() || roots === 'unavailable',
           ...(roots !== 'unavailable' && roots ? { extraLiveRoots: roots } : {}),
           ...(graceWindowMs !== undefined ? { graceWindowMs } : {}),
         }),
@@ -2302,7 +2331,7 @@ export class VaultPlane {
     if (this.sweepTimer) clearTimeout(this.sweepTimer);
     if (this.walTimer) clearTimeout(this.walTimer);
     if (this.firstWalTick) clearImmediate(this.firstWalTick);
-    if (this.walShipper && this.walCaptureEnabled()) {
+    if (this.ownsWalLifecycle() && this.walShipper && this.walCaptureConfigured()) {
       // Shipper-owned shutdown (issue #408): run optimize + a final ship +
       // TRUNCATE inside the shipper (invariant I2 — it is the only
       // checkpointer), then close the handles without a second optimize
@@ -2319,12 +2348,7 @@ export class VaultPlane {
       this.db.close({ skipOptimize: true });
       return;
     }
-    // An unconfigured plane still constructs the shipper so live backup can
-    // be enabled without a remount, but closing that dormant object would run
-    // `checkpointNow()` and manufacture a local backup stream during shutdown.
-    // With no consumer there is no stream to preserve: use the ordinary safe
-    // checkpoint/close path instead, leaving `wal-ship/` untouched.
-    if (this.ownsWalLifecycle) {
+    if (this.ownsWalLifecycle() && this.walCaptureConfigured()) {
       try {
         this.gateway.checkpoint(this.ownerCredential);
       } catch (err) {
@@ -2333,8 +2357,11 @@ export class VaultPlane {
         );
       }
     }
-    // A non-owner must not run optimize/checkpoint work during close either.
-    this.db.close({ skipOptimize: !this.ownsWalLifecycle });
+    // An unconfigured owner relies on ordinary SQLite close-checkpointing:
+    // there is no backup stream to preserve, and a forced TRUNCATE here can
+    // block behind the separately memoized conversation-ledger handle. A
+    // non-owner must not run optimize/checkpoint work during close either.
+    this.db.close({ skipOptimize: !this.ownsWalLifecycle() });
   }
 }
 

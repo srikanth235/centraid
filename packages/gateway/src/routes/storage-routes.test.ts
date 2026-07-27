@@ -1,9 +1,9 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * HTTP-level coverage for the storage-connection routes (issue #367 §C1):
- * CRUD against a REAL `StorageConnectionStore` (real sealed JSON file on
- * disk, real AES-256-GCM), the recovery-kit confirmation gate + `force`
- * override (§C10), and the per-vault status shape (§C7).
+ * CRUD against a REAL `StorageConnectionStore` (gateway.db plus real
+ * AES-256-GCM sealing), the non-bypassable recovery-kit confirmation gate,
+ * and the per-vault status shape (§C7).
  */
 
 import { afterEach, expect, test, vi } from 'vitest';
@@ -45,7 +45,14 @@ function startHandlerServer(handler: RouteHandler): Promise<string> {
       resolve(`http://127.0.0.1:${port}`);
     });
   });
-} /**
+}
+
+async function markKitVerified(store: RecoveryKitStateStore): Promise<void> {
+  await store.begin('test-kit-fingerprint');
+  expect(await store.verify('test-kit-fingerprint')).toBeTruthy();
+}
+
+/**
  * Minimal fake storage provider — serves just the discovery document
  * (`GET /v1/storage/provider`, PROTOCOL.md) the home-profile gate (#436 §1)
  * reads on create/test. `home: true` advertises the `home` profile with the
@@ -126,7 +133,7 @@ function vaultsFrom(planes: VaultPlane[]): VaultRegistry {
   return { planesList: () => planes } as unknown as VaultRegistry;
 }
 
-test('POST create refuses without a confirmed recovery kit; {force:true} bypasses; connection never carries secrets back', async () => {
+test('POST create refuses without a verified recovery kit and force cannot bypass it', async () => {
   const dir = await tempDir();
   const storageConnections = await openStorageConnectionStore(dir);
   const recoveryKit = new RecoveryKitStateStore(dir);
@@ -157,29 +164,17 @@ test('POST create refuses without a confirmed recovery kit; {force:true} bypasse
     method: 'POST',
     body: JSON.stringify({ ...body, force: true }),
   });
-  expect(forced.status).toBe(201);
-  const forcedJson = (await forced.json()) as {
-    connection: Record<string, unknown>;
-    recoveryKitConfirmed: boolean;
-  };
-  expect(forcedJson.recoveryKitConfirmed).toBe(false); // still unconfirmed — force only bypassed the refusal
-  expect(forcedJson.connection.kind).toBe('provider');
-  expect(forcedJson.connection.baseUrl).toBe(provider);
-  // Never a secret field, sealed or not.
-  const asString = JSON.stringify(forcedJson.connection);
-  expect(asString).not.toContain(apiKey);
-  expect('apiKey' in forcedJson.connection).toBe(false);
-
-  // The sealed sidecar on disk never carries the plaintext api key either.
-  const rawFile = await fs.readFile(path.join(dir, 'connections.json'), 'utf8');
-  expect(rawFile).not.toContain(apiKey);
+  expect(forced.status).toBe(409);
+  expect(await forced.json()).toMatchObject({ error: 'recovery_kit_not_confirmed' });
+  expect((await storageConnections.list()).length).toBe(0);
+  expect(await fs.readFile(path.join(dir, 'gateway.db'), 'utf8')).not.toContain(apiKey);
 });
 
 test('confirmed recovery kit: create proceeds without force; list/get/patch/delete round-trip', async () => {
   const dir = await tempDir();
   const storageConnections = await openStorageConnectionStore(dir);
   const recoveryKit = new RecoveryKitStateStore(dir);
-  await recoveryKit.confirm();
+  await markKitVerified(recoveryKit);
   const onConnectionsChanged = vi.fn(async () => undefined);
   const base = await startHandlerServer(
     makeStorageRouteHandler({
@@ -295,7 +290,7 @@ test('create is rejected when the provider does not advertise the home profile (
   const dir = await tempDir();
   const storageConnections = await openStorageConnectionStore(dir);
   const recoveryKit = new RecoveryKitStateStore(dir);
-  await recoveryKit.confirm();
+  await markKitVerified(recoveryKit);
   const apiKey = 'sk-not-home';
   const provider = await startFakeProviderServer({ apiKey, home: false });
   const base = await startHandlerServer(
@@ -322,7 +317,7 @@ test('only one home connection can exist at a time (#436 §7)', async () => {
   const dir = await tempDir();
   const storageConnections = await openStorageConnectionStore(dir);
   const recoveryKit = new RecoveryKitStateStore(dir);
-  await recoveryKit.confirm();
+  await markKitVerified(recoveryKit);
   const base = await startHandlerServer(
     makeStorageRouteHandler({
       storageConnections,
@@ -368,7 +363,7 @@ test('GET usage: a provider connection with no target yet reports providerReport
   const dir = await tempDir();
   const storageConnections = await openStorageConnectionStore(dir);
   const recoveryKit = new RecoveryKitStateStore(dir);
-  await recoveryKit.confirm();
+  await markKitVerified(recoveryKit);
   const apiKey = 'sk-usage';
   const provider = await startFakeProviderServer({ apiKey, home: true });
   const base = await startHandlerServer(

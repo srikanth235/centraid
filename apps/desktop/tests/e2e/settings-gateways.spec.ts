@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import {
   appEntry,
   cleanupEnv,
@@ -196,6 +198,22 @@ test('13.2 — desktop exposes pairing-only gateway enrollment', async () => {
     expect(await page.evaluate(() => typeof window.CentraidApi.addGateway)).toBe('undefined');
     const gateways = await page.evaluate(() => window.CentraidApi.listGateways());
     expect(gateways.some((entry) => entry.id === env.gatewayId)).toBe(true);
+    const rows = JSON.parse(
+      await fs.readFile(path.join(env.userData, 'connections.json'), 'utf8'),
+    ) as Array<Record<string, unknown>>;
+    expect(rows.find((row) => row.id === env.gatewayId)).toMatchObject({
+      endpointId: env.gatewayId,
+    });
+    expect(JSON.stringify(rows)).not.toMatch(/"(?:url|token|transport)"/);
+    await expect(fs.access(path.join(env.userData, 'gateways'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+    const rendererConnectionState = await page.evaluate(() =>
+      Object.keys(localStorage).filter(
+        (key) => key.startsWith('centraid.v1.') && /gateway|connection|credential|token/i.test(key),
+      ),
+    );
+    expect(rendererConnectionState).toEqual([]);
   } finally {
     await closeApp(app);
   }
@@ -251,7 +269,7 @@ test('13.7 — a remote gateway can be removed; the local one cannot', async () 
   }
 });
 
-test('13.5 + 13.6 — a paired remote gateway can be renamed and have its token rotated', async () => {
+test('13.5 + 13.6 — a paired remote gateway can be renamed without creating address credentials', async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
@@ -267,15 +285,15 @@ test('13.5 + 13.6 — a paired remote gateway can be renamed and have its token 
     }>;
     expect(list.find((g) => g.id === id)?.label).toBe('New Label');
 
-    // Rotating the token round-trips through the keychain without error.
-    const rotateErr = await page.evaluate(
-      (gid) =>
-        window.CentraidApi.updateGatewayToken({ id: gid, token: 'rotated-secret' })
-          .then(() => null)
-          .catch((e: Error) => String(e?.message ?? e)),
+    const rows = JSON.parse(
+      await fs.readFile(path.join(env.userData, 'connections.json'), 'utf8'),
+    ) as Array<Record<string, unknown>>;
+    expect(rows.find((row) => row.id === id)).toMatchObject({
       id,
-    );
-    expect(rotateErr).toBeNull();
+      endpointId: id,
+      label: 'New Label',
+    });
+    expect(JSON.stringify(rows)).not.toMatch(/"(?:url|token|transport)"/);
   } finally {
     await closeApp(app);
   }

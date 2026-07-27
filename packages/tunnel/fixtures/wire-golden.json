@@ -81,10 +81,10 @@
     },
     {
       "name": "pairResponseOk",
-      "note": "centraid/pair/1 desktop→phone success.",
-      "json": "{\"ok\":true,\"deviceId\":\"dev_7f3a\",\"desktopName\":\"studio-mini\"}",
-      "jsonByteLength": 61,
-      "frameBase64": "AAAAPXsib2siOnRydWUsImRldmljZUlkIjoiZGV2XzdmM2EiLCJkZXNrdG9wTmFtZSI6InN0dWRpby1taW5pIn0="
+      "note": "centraid/pair/1 desktop→phone success; gatewayId is the durable EndpointId.",
+      "json": "{\"ok\":true,\"gatewayId\":\"gw_endpoint_9c8d\",\"deviceId\":\"dev_7f3a\",\"desktopName\":\"studio-mini\"}",
+      "jsonByteLength": 92,
+      "frameBase64": "AAAAXHsib2siOnRydWUsImdhdGV3YXlJZCI6Imd3X2VuZHBvaW50XzljOGQiLCJkZXZpY2VJZCI6ImRldl83ZjNhIiwiZGVza3RvcE5hbWUiOiJzdHVkaW8tbWluaSJ9"
     },
     {
       "name": "pairResponseError",

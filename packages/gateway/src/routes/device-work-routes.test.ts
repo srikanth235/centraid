@@ -35,6 +35,7 @@ async function fixture(options: { capability?: 'poster' | 'transcript' } = {}): 
   const dir = await tempDir(`device-work-${crypto.randomUUID()}-`);
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   const plane = openVaultPlane({
+    bootstrap: true,
     dir: path.join(dir, 'vault'),
     logger: silentLogger,
     ownerName: 'Priya',
@@ -42,7 +43,7 @@ async function fixture(options: { capability?: 'poster' | 'transcript' } = {}): 
   cleanups.push(() => plane.stop());
   const vaultId = plane.boot.vaultId;
   const deviceKey = 'http:worker-device';
-  const enrollments = EnrollmentStore.open(path.join(dir, 'devices.json'));
+  const enrollments = EnrollmentStore.open(path.join(dir, 'gateway.db'));
   const enrolled = enrollments.enroll({ endpointId: deviceKey, vaultId, label: 'Worker' });
   enrollments.setCompute(enrolled.enrollmentId, {
     contributeWhileCharging: true,

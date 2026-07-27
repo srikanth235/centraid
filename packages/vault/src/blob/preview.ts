@@ -20,7 +20,7 @@
 // jpeg-js/pngjs implementation (packages/gateway/src/preview) and hands it in
 // via VaultDb.previewCodec. This file is the dependency-free orchestration —
 // it decides WHAT is missing and stages the results through the existing
-// staging/promote path (variant/variant_of), so dedup, custody and
+// ingest/promote path (variant/variant_of), so dedup, custody and
 // replication all "just work" with no new plumbing.
 
 import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from '@centraid/blob-format';

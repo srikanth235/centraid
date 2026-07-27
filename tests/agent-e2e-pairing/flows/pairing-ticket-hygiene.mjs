@@ -4,7 +4,8 @@ import { runFlow, parseTicket } from '../lib/harness.mjs';
 await runFlow('pairing-ticket-hygiene', async (ctx) => {
   const device = await ctx.newDevice();
 
-  // 1. Wrong secret burns the ticket for good.
+  // 1. Wrong secret is refused without burning the grant. This prevents an
+  // attacker from invalidating a user's ticket by guessing once.
   const a = (await ctx.mintTicket()).payload;
   const wrong = await device.pairGateway(a.gw, {
     ticketId: a.t,
@@ -13,14 +14,33 @@ await runFlow('pairing-ticket-hygiene', async (ctx) => {
     platform: 'agent-e2e',
   });
   if (wrong.ok) throw new Error('wrong secret redeemed');
-  const burned = await device.pairGateway(a.gw, {
+  const redeemed = await device.pairGateway(a.gw, {
     ticketId: a.t,
     secret: a.s,
     deviceName: 'mallory-retry',
     platform: 'agent-e2e',
   });
-  if (burned.ok) throw new Error('ticket survived a wrong-secret attempt');
-  ctx.note('wrong secret refused AND burned the ticket for the right secret');
+  if (!redeemed.ok)
+    throw new Error(`correct secret did not survive wrong guess: ${redeemed.error}`);
+  const replay = await device.pairGateway(a.gw, {
+    ticketId: a.t,
+    secret: a.s,
+    deviceName: 'mallory-replay',
+    platform: 'agent-e2e',
+  });
+  if (replay.ok) throw new Error('successful redemption did not consume the ticket');
+  ctx.note('wrong secret refused without burning; successful redemption consumed the ticket');
+  const roster = await ctx.requestJson(device, 'GET', '/centraid/_gateway/devices');
+  const enrollment = roster.json?.devices?.find((row) => row.endpointId === device.endpointId);
+  if (!enrollment) throw new Error('redeemed device missing from gateway.db-backed roster');
+  const revoked = await ctx.requestJson(
+    device,
+    'DELETE',
+    `/centraid/_gateway/devices/${encodeURIComponent(enrollment.deviceId)}`,
+  );
+  if (revoked.response.status !== 200 || revoked.json?.removed !== true) {
+    throw new Error(`self-revoke failed: ${JSON.stringify(revoked.json)}`);
+  }
 
   // 2. Expired tickets never redeem.
   const b = (await ctx.mintTicket({ ttlMinutes: 0.001 })).payload; // 60ms
@@ -34,9 +54,7 @@ await runFlow('pairing-ticket-hygiene', async (ctx) => {
   if (stale.ok) throw new Error('expired ticket redeemed');
   ctx.note('expired ticket refused despite the correct secret');
 
-  // Through all of it: no enrollment, no tunnel.
-  const listed = (await ctx.cli(['devices', 'list'])).stdout.trim();
-  if (listed !== '') throw new Error(`devices list should be empty, got:\n${listed}`);
+  // Through expiry and after revocation: no attacker enrollment, no tunnel.
   await ctx.expectTunnelRefused(device);
   ctx.note('prober never enrolled; QUIC layer refuses its tunnel');
 
@@ -49,5 +67,8 @@ await runFlow('pairing-ticket-hygiene', async (ctx) => {
   }
   if (parsed) throw new Error('garbage parsed as a ticket');
 
-  return { pass: true, notes: 'wrong-secret burn, expiry, and QUIC refusal all hold' };
+  return {
+    pass: true,
+    notes: 'wrong-secret non-burning refusal, one-shot redemption, expiry, and QUIC refusal hold',
+  };
 });

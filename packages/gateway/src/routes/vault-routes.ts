@@ -48,6 +48,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { ROUTES } from '@centraid/protocol';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { GrantRequest, OutboxItemSummary, VaultPlane } from '../serve/vault-plane.js';
 import type { AnchorSelector } from '../serve/vault-picker.js';
@@ -79,11 +80,14 @@ import {
   updateBlobStoreSettings,
   updateBackupPolicy,
   updateEnrichSettings,
+  type KeyStore,
   type EnrichTier,
 } from '@centraid/vault';
 import { readJson, sendJson } from './route-helpers.js';
 import type { StorageConnectionStore } from '../backup/storage-connections.js';
 import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import type { EnrollmentStore } from '../serve/enrollment-store.js';
+import type { GatewayDatabase } from '../serve/gateway-db.js';
 import { ensureProviderCasTarget } from '../backup/storage-credentials.js';
 import { COMPANION_MODULES, companionModuleState } from './companion-grants.js';
 
@@ -91,9 +95,9 @@ const PREFIX = '/centraid/_vault';
 
 export interface VaultRouteOptions {
   /**
-   * Device-plane ACL (issue #289 phase 2). When set, the vault list is
-   * filtered to the calling device's enrollments. Absent → the transport
-   * is implicitly enrolled in every vault (loopback embed).
+   * Device-plane ACL (issue #289 phase 2). Production always supplies it;
+   * direct route-unit harnesses may omit it while providing their own vault
+   * context.
    */
   deviceAccess?: DeviceAccess;
   /**
@@ -123,10 +127,20 @@ export interface VaultRouteOptions {
   /**
    * Recovery-kit confirmation gate (issue #367 §C10): attaching a
    * `connectionId` to `blob_store` (enabling a CAS remote tier) is refused
-   * with `409 recovery_kit_not_confirmed` unless either the operator has
-   * confirmed the recovery kit, or the request carries `{force: true}`.
+   * with `409 recovery_kit_not_confirmed` until the operator has exported,
+   * re-selected, and verified the current recovery kit.
    */
   recoveryKit?: RecoveryKitStateStore;
+  /** Device relation used for owner checks and erase cascade. */
+  enrollments?: EnrollmentStore;
+  /** Gateway state transaction owner for erase. */
+  gatewayDatabase?: GatewayDatabase;
+  /** Crypto-erase custody seam. */
+  keys?: KeyStore;
+  /** Provider generation fence that must land before an offsite-backed erase. */
+  fenceVaultForErase?: (vaultId: string) => Promise<void>;
+  /** Crash-injection seam after durable state commit and before file unlink. */
+  afterEraseStateCommitted?: (vaultId: string) => void;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -174,6 +188,80 @@ export function makeVaultRouteHandler(
     }
 
     try {
+      if (url.pathname === ROUTES.vaultErase) {
+        if (method !== 'POST') {
+          return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
+        }
+        const deviceKey = vaultContext()?.deviceKey;
+        const enrollment =
+          deviceKey && options.enrollments
+            ? options.enrollments.get(deviceKey, plane.boot.vaultId)
+            : undefined;
+        if (enrollment?.trust !== 'owner') {
+          return sendJson(res, 403, {
+            error: 'owner_required',
+            message: 'only an enrolled owner can erase this vault',
+          });
+        }
+        if (!options.gatewayDatabase || !options.keys || !options.recoveryKit) {
+          return sendJson(res, 503, {
+            error: 'erase_unavailable',
+            message: 'this gateway host has no erase custody wiring',
+          });
+        }
+        const body = await readJson(req);
+        if (body.name !== plane.name) {
+          return sendJson(res, 409, {
+            error: 'typed_name_required',
+            message: `type the vault name exactly (${JSON.stringify(plane.name)}) to erase it`,
+          });
+        }
+        const kit = await options.recoveryKit.status();
+        if (kit.confirmedAt === null) {
+          return sendJson(res, 409, {
+            error: 'recovery_kit_not_verified',
+            message: 'verify and retain the recovery kit before erasing this vault',
+          });
+        }
+        const vaultId = plane.boot.vaultId;
+        await options.fenceVaultForErase?.(vaultId);
+        options.gatewayDatabase.transaction(() => {
+          options
+            .gatewayDatabase!.db.prepare(
+              `INSERT INTO erase_intents (vault_id, created_at) VALUES (?, ?)
+               ON CONFLICT(vault_id) DO NOTHING`,
+            )
+            .run(vaultId, new Date().toISOString());
+          // `devices` is the parent of web_sessions; the FK cascade makes a
+          // formerly paired device lose every route to this erased vault.
+          options
+            .gatewayDatabase!.db.prepare('DELETE FROM devices WHERE vault_id = ?')
+            .run(vaultId);
+          options
+            .gatewayDatabase!.db.prepare('DELETE FROM tickets WHERE vault_id = ?')
+            .run(vaultId);
+          options
+            .gatewayDatabase!.db.prepare('DELETE FROM backup_targets WHERE vault_id = ?')
+            .run(vaultId);
+          options
+            .gatewayDatabase!.db.prepare('DELETE FROM cas_reconciliations WHERE vault_id = ?')
+            .run(vaultId);
+        });
+        options.afterEraseStateCommitted?.(vaultId);
+        vaults.delete(vaultId);
+        options.keys.destroy(`${vaultId}.sealkey`);
+        options.gatewayDatabase.transaction(() => {
+          options
+            .gatewayDatabase!.db.prepare('DELETE FROM erase_intents WHERE vault_id = ?')
+            .run(vaultId);
+        });
+        return sendJson(res, 200, {
+          ok: true,
+          erasedVaultId: vaultId,
+          status: vaults.isFresh() ? 'uninitialized' : 'ready',
+        });
+      }
+
       if (method === 'GET' && (segments.length === 0 || segments[0] === 'status')) {
         return sendJson(res, 200, {
           vaultId: plane.boot.vaultId,
@@ -184,7 +272,7 @@ export function makeVaultRouteHandler(
       }
 
       if (segments[0] === 'vaults') {
-        return handleVaultsRoute(vaults, visibleVaults, req, res, method, segments);
+        return handleVaultsRoute(vaults, visibleVaults, options, req, res, method, segments);
       }
 
       // Byte-custody settings (issue #296, extended #367 §C1/§C4/§C10):
@@ -310,14 +398,12 @@ export function makeVaultRouteHandler(
             const status = await options.recoveryKit?.status();
             recoveryKitConfirmed =
               status?.confirmedAt !== null && status?.confirmedAt !== undefined;
-            const force = body.force === true;
-            if (options.recoveryKit && !recoveryKitConfirmed && !force) {
+            if (options.recoveryKit && !recoveryKitConfirmed) {
               return sendJson(res, 409, {
                 error: 'recovery_kit_not_confirmed',
                 recoveryKitConfirmed: false,
                 message:
-                  'confirm you have exported and safely stored the recovery kit before enabling ' +
-                  'a remote storage tier (or resend with {force: true} to bypass)',
+                  'export, re-select, and verify the recovery kit before enabling a remote storage tier',
               });
             }
             // A provider connection's S3 coordinates aren't known until a
@@ -382,10 +468,23 @@ export function makeVaultRouteHandler(
           });
           if (Object.keys(policyPatch).length > 0) updateBackupPolicy(plane.db.vault, policyPatch);
           if (attachingRemote) plane.db.blobTransfers.kickOutbox();
+          const remoteWithoutBackup =
+            attachingRemote &&
+            options.gatewayDatabase !== undefined &&
+            options.gatewayDatabase.db
+              .prepare('SELECT 1 AS present FROM backup_targets WHERE vault_id = ?')
+              .get(plane.boot.vaultId) === undefined;
           return sendJson(res, 200, {
             blob_store: readBlobStoreSettings(plane.db.vault),
             media_location: mediaLocationPolicy(plane.db),
             ...(recoveryKitConfirmed !== undefined ? { recoveryKitConfirmed } : {}),
+            ...(remoteWithoutBackup
+              ? {
+                  warning:
+                    'Remote CAS is storing offsite bytes without a backup target; ' +
+                    'the recovery kit cannot restore those bytes.',
+                }
+              : {}),
           });
         }
       }
@@ -942,14 +1041,13 @@ export function makeVaultRouteHandler(
 }
 
 /**
- * The vault-list sub-surface: list the caller's vaults + owner updates
- * (rename / presentation). Create/delete are ADMIN acts on the gateway
- * host (#289) — a POST/DELETE here answers 405 so a stale client fails
- * loudly rather than silently.
+ * The vault-list sub-surface: list the caller's vaults + owner acts. A proved
+ * owner may found another local vault; erase has its own typed-name ceremony.
  */
 async function handleVaultsRoute(
   vaults: VaultRegistry,
   visibleVaults: () => VaultInfo[],
+  options: VaultRouteOptions,
   req: IncomingMessage,
   res: ServerResponse,
   method: string,
@@ -960,14 +1058,47 @@ async function handleVaultsRoute(
       return sendJson(res, 200, { vaults: visibleVaults() });
     }
 
-    if (
-      (method === 'POST' && segments.length === 1) ||
-      (method === 'DELETE' && segments.length === 2)
-    ) {
+    if (method === 'POST' && segments.length === 1) {
+      const deviceKey = vaultContext()?.deviceKey;
+      const currentVaultId = vaultContext()?.vaultId;
+      const current =
+        deviceKey && currentVaultId && options.enrollments
+          ? options.enrollments.get(deviceKey, currentVaultId)
+          : undefined;
+      if (current?.trust !== 'owner' || !options.enrollments) {
+        return sendJson(res, 403, {
+          error: 'owner_required',
+          message: 'only an enrolled owner can create another vault',
+        });
+      }
+      const body = await readJson(req);
+      if (body.name !== undefined && typeof body.name !== 'string') {
+        return sendJson(res, 400, { error: 'bad_request', message: 'name must be a string' });
+      }
+      const created = vaults.create(
+        typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined,
+      );
+      try {
+        options.enrollments.enroll({
+          endpointId: current.endpointId,
+          vaultId: created.vaultId,
+          label: current.label,
+          ...(current.platform ? { platform: current.platform } : {}),
+          trust: 'owner',
+          rememberDevice: current.rememberDevice,
+        });
+      } catch (error) {
+        vaults.delete(created.vaultId);
+        options.keys?.destroy(`${created.vaultId}.sealkey`);
+        throw error;
+      }
+      return sendJson(res, 201, created);
+    }
+
+    if (method === 'DELETE' && segments.length === 2) {
       return sendJson(res, 405, {
-        error: 'admin_plane',
-        message:
-          'vault create/delete are admin acts — run `centraid-gateway vault …` on the gateway host',
+        error: 'erase_ceremony_required',
+        message: `POST ${ROUTES.vaultErase} with the exact vault name`,
       });
     }
 
@@ -1051,7 +1182,7 @@ async function runBrowseWrite(
 
 function sendRegistryError(res: ServerResponse, err: unknown): boolean {
   if (err instanceof VaultRegistryError) {
-    const status = err.code === 'vault_not_found' ? 404 : err.code === 'vault_last' ? 409 : 400;
+    const status = err.code === 'vault_not_found' ? 404 : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
   }
   return sendJson(res, 500, {

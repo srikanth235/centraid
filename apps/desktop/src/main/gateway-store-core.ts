@@ -6,8 +6,6 @@
  * I/O and Electron wiring stay in `gateway-store.ts`.
  */
 
-import type { GatewayTransport } from './transport.js';
-
 export type GatewayKind = 'local' | 'remote';
 
 export interface GatewayProfileShape {
@@ -16,10 +14,9 @@ export interface GatewayProfileShape {
   readonly label: string;
   readonly displayName?: string;
   readonly avatarColor?: string;
-  readonly transport?: GatewayTransport;
-  readonly url?: string;
-  readonly endpointTicket?: string;
   readonly endpointId?: string;
+  /** Refreshable address cache; never connection identity. */
+  readonly relayHint?: string;
   readonly rememberDevice?: boolean;
   readonly ssh?: { destination: string; dataDir?: string; remoteCli?: string };
   readonly createdAt: string;
@@ -75,15 +72,18 @@ export function isValidSshBlock(
   return true;
 }
 
-export const GATEWAY_ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/i;
+export const ENDPOINT_ID_RE = /^[0-9a-f]{64}$/;
 
-/** True when a gateway id is a well-formed slug (not the content of a path). */
+/**
+ * A connection identity is either the primordial local gateway or a real
+ * 32-byte iroh public key rendered as its 64-character EndpointId.
+ */
 export function isValidGatewayId(id: string): boolean {
-  return GATEWAY_ID_RE.test(id);
+  return id === 'local' || ENDPOINT_ID_RE.test(id);
 }
 
 /**
- * Normalize a raw `profile.json` object into a populated profile, or
+ * Normalize a raw `connections.json` row into a populated profile, or
  * `undefined` when required fields are missing/wrong. Applies read-time
  * defaults for `displayName` and `avatarColor`.
  */
@@ -94,6 +94,7 @@ export function normalizeProfile(
   if (!parsed || typeof parsed !== 'object') return undefined;
   if (parsed.id !== id) return undefined;
   if (parsed.kind !== 'local' && parsed.kind !== 'remote') return undefined;
+  if (!isValidGatewayId(parsed.id)) return undefined;
   if (typeof parsed.label !== 'string' || parsed.label.length === 0) return undefined;
   if (typeof parsed.createdAt !== 'string') return undefined;
   const displayName =
@@ -103,24 +104,26 @@ export function normalizeProfile(
   const avatarColor = isValidAvatarColor(parsed.avatarColor)
     ? parsed.avatarColor
     : defaultAvatarColor(parsed.id);
-  const transport =
-    parsed.transport === 'local' || parsed.transport === 'iroh' || parsed.transport === 'direct'
-      ? parsed.transport
-      : undefined;
   const ssh = isValidSshBlock(parsed.ssh) ? parsed.ssh : undefined;
+  if (
+    parsed.kind === 'remote' &&
+    (typeof parsed.endpointId !== 'string' ||
+      parsed.endpointId.length === 0 ||
+      parsed.id !== parsed.endpointId)
+  ) {
+    return undefined;
+  }
   return {
     id: parsed.id,
     kind: parsed.kind,
     label: parsed.label,
     displayName,
     avatarColor,
-    ...(transport ? { transport } : {}),
-    ...(typeof parsed.url === 'string' && parsed.url.length > 0 ? { url: parsed.url } : {}),
-    ...(typeof parsed.endpointTicket === 'string' && parsed.endpointTicket.length > 0
-      ? { endpointTicket: parsed.endpointTicket }
-      : {}),
     ...(typeof parsed.endpointId === 'string' && parsed.endpointId.length > 0
       ? { endpointId: parsed.endpointId }
+      : {}),
+    ...(typeof parsed.relayHint === 'string' && parsed.relayHint.length > 0
+      ? { relayHint: parsed.relayHint }
       : {}),
     rememberDevice: parsed.rememberDevice === true,
     ...(ssh ? { ssh } : {}),
@@ -149,45 +152,35 @@ export type AddGatewayFieldError =
   | {
       ok: true;
       label: string;
-      url?: string;
-      endpointTicket?: string;
-      transport: 'iroh' | 'direct';
+      endpointId: string;
+      relayHint?: string;
       displayName: string;
     };
 
 export function validateAddGatewayFields(input: {
   label: string;
-  url?: string;
-  endpointTicket?: string;
+  endpointId: string;
+  relayHint?: string;
   displayName?: string;
 }): AddGatewayFieldError {
   const label = input.label.trim();
   if (!label)
     return { ok: false, code: 'invalid_input', message: 'Gateway label cannot be empty.' };
-  const url = input.url?.trim();
-  const endpointTicket = input.endpointTicket?.trim();
-  if (!url && !endpointTicket) {
+  const endpointId = input.endpointId.trim();
+  if (!endpointId || !isValidGatewayId(endpointId)) {
     return {
       ok: false,
       code: 'invalid_input',
-      message: 'A gateway needs either a URL or an iroh endpoint.',
+      message: 'A gateway needs a valid iroh EndpointId.',
     };
   }
-  if (url && endpointTicket) {
-    return {
-      ok: false,
-      code: 'invalid_input',
-      message: 'A gateway is reached by URL or by iroh, not both.',
-    };
-  }
-  const transport: 'iroh' | 'direct' = endpointTicket ? 'iroh' : 'direct';
+  const relayHint = input.relayHint?.trim();
   const displayName = input.displayName?.trim() || label;
   return {
     ok: true,
     label,
-    ...(url ? { url } : {}),
-    ...(endpointTicket ? { endpointTicket } : {}),
-    transport,
+    endpointId,
+    ...(relayHint ? { relayHint } : {}),
     displayName,
   };
 }

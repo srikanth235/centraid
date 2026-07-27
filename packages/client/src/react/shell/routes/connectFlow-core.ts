@@ -7,11 +7,8 @@
  *     test (it's always reachable); the flow skips straight to picking or
  *     creating a vault on it.
  *   - `gateway` — an existing gateway elsewhere, reached ONLY by a pairing
- *     ticket (iroh discovery by default, or the "Connect by URL" advanced
- *     panel redeeming the same ticket over HTTP for the `direct` transport
- *     tier). The manual URL + admin-token paste was retired in issue #505
- *     phase 7 together with the shared gateway-wide bearer — every gateway is
- *     added through the pairing ceremony, which mints a per-device token.
+ *     ticket over iroh. URL pairing and per-device bearers were retired in
+ *     issue #555; the QUIC identity is the enrollment credential.
  *   - `ssh`    — drive a remote `centraid-gateway` CLI over SSH (issue #382
  *     design doc "SSH support (v0 scope = admin channel)").
  *
@@ -73,12 +70,9 @@ export interface ConnectFlowState {
   step: ConnectStep;
   method: ConnectMethod | null;
 
-  // "gateway" method details — a pairing ticket, optionally redeemed over an
-  // explicit URL (the `direct` transport tier) via the advanced panel.
+  // "gateway" method details — one iroh pairing ticket.
   ticket: string;
   label: string;
-  advancedOpen: boolean;
-  url: string;
   /** Explicit consent for a durable replica, intent queue, and media cache. */
   rememberDevice: boolean;
 
@@ -103,7 +97,6 @@ export interface ConnectFlowState {
 
 export function createInitialConnectFlowState(): ConnectFlowState {
   return {
-    advancedOpen: false,
     commitError: null,
     committing: false,
     label: '',
@@ -118,7 +111,6 @@ export function createInitialConnectFlowState(): ConnectFlowState {
     testError: null,
     testing: false,
     ticket: '',
-    url: '',
     vaultChoice: null,
   };
 }
@@ -126,7 +118,6 @@ export function createInitialConnectFlowState(): ConnectFlowState {
 export type ConnectFlowTextField =
   | 'ticket'
   | 'label'
-  | 'url'
   | 'sshDestination'
   | 'sshDataDir'
   | 'newVaultName';
@@ -135,7 +126,6 @@ export type ConnectFlowEvent =
   | { type: 'selectMethod'; method: ConnectMethod }
   | { type: 'back' }
   | { type: 'setField'; field: ConnectFlowTextField; value: string }
-  | { type: 'setAdvancedOpen'; open: boolean }
   | { type: 'setRememberDevice'; value: boolean }
   | { type: 'startTest' }
   | { type: 'testSettled'; report: ConnectivityReport }
@@ -182,8 +172,6 @@ export function connectFlowReducer(
     }
     case 'setField':
       return { ...state, [event.field]: event.value };
-    case 'setAdvancedOpen':
-      return { ...state, advancedOpen: event.open };
     case 'setRememberDevice':
       return { ...state, rememberDevice: event.value };
     case 'startTest':

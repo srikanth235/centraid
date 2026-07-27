@@ -1,9 +1,6 @@
 // Pure phase-helper unit tests for recover() (issue #545 B7).
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+import { expect, test } from 'vitest';
 import type { RecoveryKitTarget, SnapshotRow, WalReplayOutcome } from '@centraid/backup';
 import {
   buildProviderFromTarget,
@@ -12,13 +9,7 @@ import {
   recoveredAsOfMs,
   selectTarget,
   walReplayTruncated,
-  placeSealKey,
 } from './recover-internals.js';
-
-const cleanups: Array<() => Promise<void>> = [];
-afterEach(async () => {
-  while (cleanups.length > 0) await cleanups.pop()?.();
-});
 
 function target(over: Partial<RecoveryKitTarget> = {}): RecoveryKitTarget {
   return {
@@ -131,51 +122,4 @@ test('currentVersions reports gateway + ontology ceilings', () => {
   expect(versions.gatewayVersion.length).toBeGreaterThan(0);
   expect(versions.ontologyVersion).toBe('1.4');
   expect(Number(versions.vaultUserVersion)).toBeGreaterThan(0);
-});
-
-test('placeSealKey moves restored seal.key into the sibling keys custody path', async () => {
-  const root = await tempDir('recover-seal-');
-  cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
-  const vaultDir = path.join(root, 'vaults', 'v1');
-  await fs.mkdir(vaultDir, { recursive: true });
-  await fs.writeFile(path.join(vaultDir, 'seal.key'), 'sealed-dek');
-  const logs: string[] = [];
-  await placeSealKey(vaultDir, { info: (m) => logs.push(String(m)) });
-  const dest = path.join(root, 'keys', 'v1.seal.key');
-  // sealKeyFileFor may use a different layout — assert the restored file is gone
-  // and some keys sibling received it.
-  expect(await fs.stat(path.join(vaultDir, 'seal.key')).catch(() => null)).toBeNull();
-  // Find the moved key under the parent tree.
-  async function findSeal(dir: string): Promise<string | null> {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const full = path.join(dir, entry.name);
-      if (entry.isFile() && (entry.name.includes('seal') || entry.name.endsWith('.key'))) {
-        return full;
-      }
-      if (entry.isDirectory()) {
-        const nested = await findSeal(full);
-        if (nested) return nested;
-      }
-    }
-    return null;
-  }
-  const found = await findSeal(root);
-  expect(found, 'seal key should land under the custody tree').toBeTruthy();
-  expect(await fs.readFile(found!, 'utf8')).toBe('sealed-dek');
-  // Prefer the canonical keys path when the layout matches.
-  if (await fs.stat(dest).catch(() => null)) {
-    expect(found).toBe(dest);
-  }
-  expect(logs.some((l) => l.includes('placed the restored seal key'))).toBe(true);
-});
-
-test('placeSealKey is a no-op when the snapshot carried no seal.key', async () => {
-  const root = await tempDir('recover-noseal-');
-  cleanups.push(() => fs.rm(root, { recursive: true, force: true }));
-  const logs: string[] = [];
-  await placeSealKey(root, { info: (m) => logs.push(String(m)) });
-  expect(logs).toEqual([]);
-  const entries = await fs.readdir(root);
-  expect(entries).toEqual([]);
 });

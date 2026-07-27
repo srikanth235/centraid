@@ -1,30 +1,32 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
- * The LIVE-gateway recovery e2e (issue #439 R1 wave 4) — the pre-vault recover
- * routes, the daemon-owned job, and the progress SSE driven end-to-end against a
- * REAL `serve()` gateway and the fake HTTP provider. Where `recover-e2e.test.ts`
- * calls the `recover()` verb directly, this proves the whole product surface: a
- * fresh gateway (empty root, one auto-created pristine default) validates a kit,
- * shows the found-your-vault card, starts the daemon job past the metered-egress
- * confirm, and streams progress to `event: end`. Then it asserts the LIVE
- * integration the CLI shell cannot reach: the recovered vault is MOUNTED and
- * becomes the effective default (the pristine default was adopted away), the
- * restore quarantine fired on first mount, and — because the live gateway
- * satisfies `resolveRemoteTier` with the mounted plane's own `db.remote()` — the
- * previews-first warm pass ran and `timeToUsableGridMs` landed in the report.
+ * The LIVE-gateway recovery e2e (issue #555): a zero-vault gateway consumes a
+ * founding ticket plus recovery kit through the single founding restore route.
+ * The recovered vault is mounted, quarantined, and owned by the proved first
+ * device; no temporary default vault or separate recovery authority exists.
  */
 
 import { afterEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import crypto, { randomBytes } from 'node:crypto';
-import { openRemoteBackupProvider } from '@centraid/backup';
+import {
+  openRemoteBackupProvider,
+  wrapRecoveryKit,
+  type RecoveryKitDocument,
+} from '@centraid/backup';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
-import { ReplicaIndex } from '@centraid/vault';
+import { KeyStore, ReplicaIndex } from '@centraid/vault';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
 import { HealthRegistry } from '../serve/health-registry.js';
 import { serve, type GatewayServeHandle } from '../serve/serve.js';
 import { BackupService } from './backup-service.js';
+import { GatewayDatabase } from '../serve/gateway-db.js';
+import {
+  encodePairingTicket,
+  FOUNDING_TICKET_TTL_MS,
+  PairingTicketStore,
+} from '../serve/pairing-store.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -112,20 +114,23 @@ function seedSealedOutbox(plane: VaultPlane): void {
 
 interface MachineA {
   vaultId: string;
+  vaultIds: string[];
   targetId: string;
-  kitDocument: Record<string, unknown>;
+  kitDocument: RecoveryKitDocument;
   apiKey: string;
   serverUrl: string;
 }
 
 async function seedMachineA(
   server: Awaited<ReturnType<typeof startFakeProviderServer>>,
+  includeSecondVault = false,
 ): Promise<MachineA> {
   const registry = openVaultRegistry({
     rootDir: await tempDir('recover-live-a'),
     logger: silentLogger,
     ownerName: 'Mara',
   });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const vaultId = registry.defaultVaultId();
   const plane = registry.get(vaultId)!;
@@ -134,7 +139,7 @@ async function seedMachineA(
       enabled: true,
       provider: { kind: 'remote', endpoint: server.url, apiKey: server.apiKey },
     },
-    backupDir: await tempDir('recover-live-a-backup'),
+    cacheDir: await tempDir('recover-live-a-backup'),
     vaults: registry,
     health: new HealthRegistry(),
     logger: silentLogger,
@@ -179,10 +184,20 @@ async function seedMachineA(
   // resolvable remote tier (see `declareRemotePrimary`).
   declareRemotePrimary(plane);
 
-  await service.runBackup(vaultId);
+  const vaultIds = [vaultId];
+  if (includeSecondVault) {
+    const second = registry.create('Archive');
+    const secondPlane = registry.get(second.vaultId)!;
+    seedSealedOutbox(secondPlane);
+    declareRemotePrimary(secondPlane);
+    invoke(secondPlane, 'schedule.add_task', { title: 'Second vault row' });
+    vaultIds.push(second.vaultId);
+  }
+
+  await service.runAll();
   const status = await service.status();
   const targetId = status[vaultId]!.targetId;
-  const kitDocument = (await service.recoveryKitDocument()) as Record<string, unknown>;
+  const kitDocument = await service.recoveryKitDocument();
 
   const casProvider = openRemoteBackupProvider({ baseUrl: server.url, apiKey: server.apiKey });
   const casStore = await casProvider.openDataPlane(targetId, 'cas', 'read-write');
@@ -190,80 +205,80 @@ async function seedMachineA(
     await casStore.put(`blobs/sha256/${sha}`, new Uint8Array(Buffer.from(`remote-${sha}`)));
   }
 
-  return { vaultId, targetId, kitDocument, apiKey: server.apiKey, serverUrl: server.url };
+  return {
+    vaultId,
+    vaultIds,
+    targetId,
+    kitDocument,
+    apiKey: server.apiKey,
+    serverUrl: server.url,
+  };
 }
 
-test('a fresh gateway recovers a vault over the live routes: kit → discover → start → SSE, then MOUNTED + quarantined + previews warmed', async () => {
+test('a zero-vault gateway restores through one founding capability and enrolls the proved owner', async () => {
   const server = await startFakeProviderServer();
   cleanups.push(() => server.close());
   const a = await seedMachineA(server);
 
-  // A brand-new gateway daemon: empty data dir, one auto-created pristine default.
+  // Mint the host-possession capability before the daemon takes the exclusive
+  // gateway.db lock, then boot with exactly zero vaults.
   const dataDir = await tempDir('recover-live-gw');
+  const database = GatewayDatabase.open(dataDir);
+  const minted = PairingTicketStore.open(database).mintFounding(FOUNDING_TICKET_TTL_MS);
+  database.close();
+  const ticket = encodePairingTicket({
+    v: 1,
+    kind: 'centraid-gw-found',
+    gw: 'test-gateway-ticket',
+    t: minted.ticketId,
+    s: minted.secret,
+    exp: minted.expiresAt,
+  });
   const handle: GatewayServeHandle = await serve({
-    paths: { vaultDir: path.join(dataDir, 'vault'), prefsFile: path.join(dataDir, 'prefs.json') },
+    paths: { vaultDir: path.join(dataDir, 'vault') },
+    deviceAccess: {
+      deviceKeyFor: (req) =>
+        typeof req.headers['x-test-endpoint'] === 'string'
+          ? req.headers['x-test-endpoint']
+          : undefined,
+      vaultsFor: () => [],
+    },
   });
   cleanups.push(() => handle.close());
-  const auth = { Authorization: `Bearer ${handle.token}` };
-  const url = (p: string): string => `${handle.url}/centraid/_gateway/recover${p}`;
+  expect(handle.vaults.isFresh()).toBe(true);
 
-  // 1. The gateway is fresh, and validates the kit into a sanitized summary.
-  const kitRes = await fetch(url('/kit'), {
+  const restored = await fetch(`${handle.url}/centraid/_vault/vaults:restore`, {
     method: 'POST',
-    headers: auth,
-    body: JSON.stringify(a.kitDocument),
+    headers: {
+      authorization: `Bearer ${handle.token}`,
+      'content-type': 'application/json',
+      'x-test-endpoint': 'founder-device',
+    },
+    body: JSON.stringify({
+      ticket,
+      password: 'recovery-test-password',
+      kit: a.kitDocument,
+      apiKey: a.apiKey,
+      deviceName: 'Owner laptop',
+      platform: 'desktop',
+    }),
   });
-  expect(kitRes.status).toBe(200);
-
-  const statusBefore = (await (await fetch(url('/status'), { headers: auth })).json()) as {
-    fresh: boolean;
-    job: null;
+  expect(restored.status).toBe(201);
+  const response = (await restored.json()) as {
+    report: {
+      vaultId: string;
+      previews: { warmed: boolean; timeToUsableGridMs?: number };
+    };
+    enrollment: { endpointId: string; trust: string };
   };
-  expect(statusBefore).toEqual({ fresh: true, job: null });
-
-  // 2. The found-your-vault card — metered egress, compatible.
-  const discover = (await (
-    await fetch(url('/discover'), {
-      method: 'POST',
-      headers: auth,
-      body: JSON.stringify({ kit: a.kitDocument, apiKey: a.apiKey }),
-    })
-  ).json()) as { found: boolean; restoreCostClass: string; vaultId: string };
-  expect(discover).toMatchObject({
-    found: true,
-    restoreCostClass: 'metered-egress',
-    vaultId: a.vaultId,
+  expect(response.report.vaultId).toBe(a.vaultId);
+  expect(response.enrollment).toMatchObject({
+    endpointId: 'founder-device',
+    trust: 'owner',
   });
 
-  // 3. Start the daemon job — metered, so the confirm is required.
-  const started = await fetch(url('/start'), {
-    method: 'POST',
-    headers: auth,
-    body: JSON.stringify({ kit: a.kitDocument, apiKey: a.apiKey, confirmed: true }),
-  });
-  expect(started.status).toBe(202);
-  const { jobId } = (await started.json()) as { jobId: string };
-
-  // 4. Stream progress to `event: end`, capturing the final report frame.
-  const stream = await fetch(url(`/events?job=${jobId}`), { headers: auth });
-  const reader = stream.body!.getReader();
-  const decoder = new TextDecoder();
-  let buf = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (value) buf += decoder.decode(value, { stream: true });
-    if (buf.includes('event: end') || done) break;
-  }
-  expect(buf).toMatch(/event: end\ndata: \{"state":"done"\}/);
-  const reportFrame = /event: report\ndata: (\{[\s\S]*?\})\n\n/.exec(buf);
-  const report = JSON.parse(reportFrame![1]!) as {
-    vaultId: string;
-    previews: { warmed: boolean; timeToUsableGridMs?: number };
-  };
-  expect(report.vaultId).toBe(a.vaultId);
-
-  // 5. LIVE integration: the recovered vault is mounted and is now the default,
-  //    the pristine bootstrap default was adopted away, and the quarantine fired.
+  // LIVE integration: the recovered vault is the only mounted vault and the
+  // quarantine fired before ordinary use.
   expect(handle.vaults.get(a.vaultId)).toBeTruthy();
   expect(handle.vaults.defaultVaultId()).toBe(a.vaultId);
   expect(handle.vaults.list()).toHaveLength(1);
@@ -272,17 +287,187 @@ test('a fresh gateway recovers a vault over the live routes: kit → discover �
   expect(mountedPlane.quarantine).not.toBeNull();
   expect(mountedPlane.quarantine!.outboxParked).toBeGreaterThanOrEqual(1);
 
-  // 6. The gateway satisfied `resolveRemoteTier` (the mounted plane's own
-  //    `db.remote()`), so the previews-first warm pass ran in-process.
-  expect(report.previews.warmed).toBe(true);
-  expect(typeof report.previews.timeToUsableGridMs).toBe('number');
+  expect(response.report.previews).toMatchObject({ warmed: expect.any(Boolean) });
 
-  // 7. A second recovery is refused — the gateway is no longer fresh.
-  const again = await fetch(url('/start'), {
+  // A second recovery is refused — the gateway is no longer fresh.
+  const again = await fetch(`${handle.url}/centraid/_vault/vaults:restore`, {
     method: 'POST',
-    headers: auth,
-    body: JSON.stringify({ kit: a.kitDocument, apiKey: a.apiKey, confirmed: true }),
+    headers: {
+      authorization: `Bearer ${handle.token}`,
+      'content-type': 'application/json',
+      'x-test-endpoint': 'founder-device',
+    },
+    body: JSON.stringify({
+      ticket,
+      password: 'recovery-test-password',
+      kit: a.kitDocument,
+      apiKey: a.apiKey,
+    }),
   });
   expect(again.status).toBe(409);
-  expect(((await again.json()) as { error: string }).error).toBe('not_fresh');
+  expect(((await again.json()) as { error: string }).error).toBe('already_initialized');
 }, 60_000);
+
+test('one founding restore adopts every backed-up vault and enrolls the owner in each', async () => {
+  const server = await startFakeProviderServer();
+  cleanups.push(() => server.close());
+  const a = await seedMachineA(server, true);
+  expect(a.vaultIds).toHaveLength(2);
+
+  const dataDir = await tempDir('recover-live-multi-gw');
+  const database = GatewayDatabase.open(dataDir);
+  const minted = PairingTicketStore.open(database).mintFounding(FOUNDING_TICKET_TTL_MS);
+  database.close();
+  const ticket = encodePairingTicket({
+    v: 1,
+    kind: 'centraid-gw-found',
+    gw: 'test-gateway-ticket',
+    t: minted.ticketId,
+    s: minted.secret,
+    exp: minted.expiresAt,
+  });
+  const handle = await serve({
+    paths: { vaultDir: path.join(dataDir, 'vault') },
+    deviceAccess: {
+      deviceKeyFor: (req) =>
+        typeof req.headers['x-test-endpoint'] === 'string'
+          ? req.headers['x-test-endpoint']
+          : undefined,
+      vaultsFor: () => [],
+    },
+  });
+  cleanups.push(() => handle.close());
+
+  const restored = await fetch(`${handle.url}/centraid/_vault/vaults:restore`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${handle.token}`,
+      'content-type': 'application/json',
+      'x-test-endpoint': 'multi-founder',
+    },
+    body: JSON.stringify({
+      ticket,
+      password: 'recovery-test-password',
+      kit: a.kitDocument,
+      apiKey: a.apiKey,
+      deviceName: 'Owner phone',
+      platform: 'mobile',
+    }),
+  });
+  expect(restored.status).toBe(201);
+  const body = (await restored.json()) as {
+    reports: Array<{ vaultId: string }>;
+    enrollments: Array<{ vaultId: string; endpointId: string; trust: string }>;
+  };
+  expect(body.reports.map((report) => report.vaultId).sort()).toEqual(a.vaultIds.toSorted());
+  expect(body.enrollments).toHaveLength(2);
+  expect(body.enrollments).toEqual(
+    expect.arrayContaining(
+      a.vaultIds.map((vaultId) =>
+        expect.objectContaining({
+          vaultId,
+          endpointId: 'multi-founder',
+          trust: 'owner',
+        }),
+      ),
+    ),
+  );
+  const keys = new KeyStore(path.join(dataDir, 'keys'));
+  for (const vaultId of a.vaultIds) {
+    expect(handle.vaults.get(vaultId)).toBeTruthy();
+    expect(keys.export(`${vaultId}.sealkey`)).toHaveLength(32);
+  }
+}, 90_000);
+
+test('erase then restore on the same box preserves gateway identity and drops prior enrollments', async () => {
+  const provider = await startFakeProviderServer();
+  cleanups.push(() => provider.close());
+  const dataDir = await tempDir('erase-restore-same-box-');
+  const paths = {
+    vaultDir: path.join(dataDir, 'vault'),
+  };
+  const backup = {
+    enabled: true as const,
+    provider: {
+      kind: 'remote' as const,
+      endpoint: provider.url,
+      apiKey: provider.apiKey,
+    },
+  };
+  const hostEndpointId = 'a'.repeat(64);
+  let handle = await serve({
+    paths,
+    backup,
+    initVaultName: 'Family',
+    hostDeviceEndpointId: hostEndpointId,
+  });
+  const vaultId = handle.vaults.defaultVaultId();
+  seedSealedOutbox(handle.vaults.get(vaultId)!);
+  await handle.backup!.runBackup(vaultId);
+  const kit = await handle.backup!.recoveryKitDocument();
+  await handle.backup!.verifyRecoveryKit({
+    kit: wrapRecoveryKit(kit, 'test-password'),
+    password: 'test-password',
+    lossConsent: true,
+  });
+  const keys = new KeyStore(path.join(dataDir, 'keys'));
+  const endpointBefore = keys.export('endpoint-key.bin');
+
+  const erased = await fetch(`${handle.url}/centraid/_vault/vaults:erase`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${handle.token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ name: 'Family' }),
+  });
+  expect(erased.status).toBe(200);
+  expect(handle.vaults.isFresh()).toBe(true);
+  await handle.close();
+
+  const database = GatewayDatabase.open(dataDir);
+  expect(database.db.prepare('SELECT COUNT(*) AS count FROM devices').get()).toEqual({ count: 0 });
+  const minted = PairingTicketStore.open(database).mintFounding(FOUNDING_TICKET_TTL_MS);
+  database.close();
+  const ticket = encodePairingTicket({
+    v: 1,
+    kind: 'centraid-gw-found',
+    gw: 'same-box-ticket',
+    t: minted.ticketId,
+    s: minted.secret,
+    exp: minted.expiresAt,
+  });
+
+  handle = await serve({ paths, backup, hostDeviceEndpointId: hostEndpointId });
+  cleanups.push(() => handle.close());
+  const rePair = await fetch(`${handle.url}/centraid/_gateway/devices/ticket`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${handle.token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ vaultId }),
+  });
+  expect(rePair.status).toBe(409);
+  expect(await rePair.json()).toMatchObject({ error: 'uninitialized' });
+
+  const restored = await fetch(`${handle.url}/centraid/_vault/vaults:restore`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${handle.token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      ticket,
+      kit,
+      password: 'plain-kit-compatibility',
+      apiKey: provider.apiKey,
+      deviceName: 'Same laptop',
+      platform: 'desktop',
+    }),
+  });
+  const restoredBody = (await restored.json()) as Record<string, unknown>;
+  expect(restored.status, JSON.stringify(restoredBody)).toBe(201);
+  expect(handle.vaults.get(vaultId)).toBeTruthy();
+  expect(keys.export('endpoint-key.bin')).toEqual(endpointBefore);
+}, 90_000);

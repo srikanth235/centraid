@@ -18,8 +18,8 @@ await mkdir(dataDir, { recursive: true });
 const gateway = await buildGateway({
   paths: {
     vaultDir: path.join(dataDir, 'vault'),
-    prefsFile: path.join(dataDir, 'prefs.json'),
   },
+  initVaultName: 'Mobile E2E',
 });
 await gateway.start(`http://127.0.0.1:${port}`);
 

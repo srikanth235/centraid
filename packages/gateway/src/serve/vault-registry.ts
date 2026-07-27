@@ -20,7 +20,7 @@
  * HTTP); rename/presentation are owner acts on an enrolled vault.
  */
 
-import { mkdirSync, readdirSync, rmSync, existsSync } from 'node:fs';
+import { readdirSync, rmSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import {
   uuidv7,
@@ -28,6 +28,7 @@ import {
   type BlobStoreSettings,
   type S3Credentials,
   type PreviewCodec,
+  type KeyStore,
 } from '@centraid/vault';
 import type { RuntimeLogger, VaultBridge, VaultWorkspace } from '@centraid/app-engine';
 import { openVaultPlane, VaultPlane, type InstallScopeBlock } from './vault-plane.js';
@@ -78,16 +79,18 @@ export interface VaultRegistryOptions {
    */
   cacheRootDir?: string;
   logger: RuntimeLogger;
+  /** Shared host custody store for every vault sealing key. */
+  keyStore?: KeyStore;
   /** Owner display name used when bootstrapping fresh vaults. */
   ownerName?: string;
   /** Sweep cadence forwarded to every plane. */
   sweepIntervalMs?: number;
   /** False for admin/read-only opens that must never own or checkpoint WALs. */
   enableWalShipper?: boolean;
-  /** Forwarded live backup-configuration gate for each plane's WAL capture clock. */
-  walCaptureEnabled?: () => boolean;
-  /** Forwarded to every plane (issue #367 §C6) — see `VaultPlaneOptions.leaseConflicted`. */
-  leaseConflicted?: () => boolean;
+  /** Forwarded backup-destination predicate; it gates capture, never ownership. */
+  walCaptureConfigured?: () => boolean;
+  /** Fail-safe blob-GC gate for network filesystems. */
+  skipOrphanDelete?: () => boolean;
   /** Forwarded to every plane (issue #367 §C3) — see `VaultPlaneOptions.s3Credentials`. */
   s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
   /** Forwarded to every plane (issue #405 §2) — see `VaultPlaneOptions.previewCodec`. */
@@ -123,7 +126,7 @@ export interface VaultInfo {
 /** A refused registry act (delete the last vault, unknown id, …). */
 export class VaultRegistryError extends Error {
   constructor(
-    readonly code: 'vault_not_found' | 'vault_last' | 'bad_name',
+    readonly code: 'vault_not_found' | 'bad_name',
     message: string,
   ) {
     super(message);
@@ -136,10 +139,11 @@ export class VaultRegistry {
   private readonly cacheRootDir: string;
   private readonly logger: RuntimeLogger;
   private readonly ownerName: string | undefined;
+  private readonly keyStore: KeyStore | undefined;
   private readonly sweepIntervalMs: number | undefined;
   private readonly enableWalShipper: boolean;
-  private readonly walCaptureEnabled: (() => boolean) | undefined;
-  private readonly leaseConflicted: (() => boolean) | undefined;
+  private readonly walCaptureConfigured: (() => boolean) | undefined;
+  private readonly skipOrphanDelete: (() => boolean) | undefined;
   private readonly s3Credentials:
     | ((settings: BlobStoreSettings) => Promise<S3Credentials>)
     | undefined;
@@ -157,14 +161,6 @@ export class VaultRegistry {
   private readonly journalLimitBytes: (() => number | null) | undefined;
   private readonly planes = new Map<string, VaultPlane>();
   private readonly mountListeners = new Set<(plane: VaultPlane) => void>();
-  /**
-   * Vault ids THIS registry auto-created on an empty root at construction
-   * (issue #439 R1) — never an admin `create(name)`. The airtight signal
-   * `adopt()` uses to know a sibling default is provably pristine (minted by
-   * us, never served a request) and safe to remove so a recovered vault can
-   * stand alone.
-   */
-  private readonly autoCreatedDefaults = new Set<string>();
   /** Directories already MOUNTED — lets `scan()` skip them cheaply on rescan. */
   private readonly scannedDirs = new Set<string>();
   /** Directories that failed to mount, keyed by dir (issue #351 — never silently dropped). */
@@ -179,11 +175,12 @@ export class VaultRegistry {
       options.cacheRootDir ??
       path.join(path.dirname(this.rootDir), `${path.basename(this.rootDir)}-cache`);
     this.logger = options.logger;
+    this.keyStore = options.keyStore;
     this.ownerName = options.ownerName;
     this.sweepIntervalMs = options.sweepIntervalMs;
     this.enableWalShipper = options.enableWalShipper ?? true;
-    this.walCaptureEnabled = options.walCaptureEnabled;
-    this.leaseConflicted = options.leaseConflicted;
+    this.walCaptureConfigured = options.walCaptureConfigured;
+    this.skipOrphanDelete = options.skipOrphanDelete;
     this.s3Credentials = options.s3Credentials;
     this.previewCodec = options.previewCodec;
     this.onProvenanceCommitted = options.onProvenanceCommitted;
@@ -193,21 +190,18 @@ export class VaultRegistry {
     this.onSweepPass = options.onSweepPass;
     this.onReplicationPass = options.onReplicationPass;
     this.journalLimitBytes = options.journalLimitBytes;
-    mkdirSync(this.rootDir, { recursive: true });
+    // Zero-vault boot does not materialize `vault/`; the first create or
+    // restore owns that transition.
+    if (!existsSync(this.rootDir)) return;
     if (existsSync(path.join(this.rootDir, 'vault.db'))) {
       // Pre-multi-vault layout (v0: no data migrations) — the files stay put
-      // but are not mounted; a fresh default vault is bootstrapped beside them.
+      // but are not mounted.
       this.logger.warn(
         `vault registry: ignoring legacy single-vault files at ${this.rootDir} — ` +
           'vaults now live one directory per vault',
       );
     }
     this.scan();
-    if (this.planes.size === 0) {
-      // Record the bootstrap default as auto-created — the ONLY id `adopt()`
-      // may later remove to let a recovered vault stand alone (issue #439 R1).
-      this.autoCreatedDefaults.add(this.create().vaultId);
-    }
   }
 
   /**
@@ -222,6 +216,7 @@ export class VaultRegistry {
    * failed dir stays eligible for retry on every call, subject to backoff.
    */
   private scan(): void {
+    if (!existsSync(this.rootDir)) return;
     const nowMs = Date.now();
     for (const entry of readdirSync(this.rootDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
@@ -300,42 +295,35 @@ export class VaultRegistry {
   }
 
   /**
-   * True when this gateway holds nothing but pristine auto-created default(s)
-   * — the airtight "fresh gateway" signal wave 4's `/recover/start` gate reads
-   * (issue #439 R1) to refuse recovery over a gateway that already carries user
-   * content. Reuses the SAME `autoCreatedDefaults` provenance `adopt()` trusts:
-   * a vault is fresh only if THIS registry minted it on an empty root at
-   * construction (so it has provably never served a request); a vault the
-   * operator created, one that carries data, or a recovered/adopted vault makes
-   * this false. Conservative in the safe direction — it can only ever return
-   * false (refuse) for a gateway whose default was re-mounted from disk on a
-   * later boot rather than freshly bootstrapped, never true for one with real
-   * content. `recover()`'s own fresh-directory + keyring guards are the true
-   * safety net; this gate is the friendly pre-flight the UI reads.
+   * Whether the gateway is unfounded. The filesystem registry is the only
+   * authority; there is deliberately no `vaults` table to disagree with it.
+   * A vault directory that failed to mount is still a vault for this gate:
+   * corruption or a missing custody key must never make an existing gateway
+   * look fresh and permit a second founding ceremony over its data.
    */
   isFresh(): boolean {
-    const ids = [...this.planes.keys()];
-    return ids.length > 0 && ids.every((id) => this.autoCreatedDefaults.has(id));
+    if (this.planes.size > 0) return false;
+    if (!existsSync(this.rootDir)) return true;
+    return !readdirSync(this.rootDir, { withFileTypes: true }).some(
+      (entry) =>
+        entry.isDirectory() &&
+        !entry.name.startsWith('.') &&
+        existsSync(path.join(this.rootDir, entry.name, 'vault.db')),
+    );
+  }
+
+  /** Canonical registry root for the zero-vault founding restore verb. */
+  rootPath(): string {
+    return this.rootDir;
   }
 
   /**
    * Adopt a recovered vault directory as a live vault (issue #439 R1 — the
    * live-gateway path wave 4's `/recover` routes call after `recover()` has
    * renamed its staging dir into place). The directory `<root>/<vaultId>` MUST
-   * already exist on disk; this mounts it (`scan`) and, when this registry
-   * bootstrapped a pristine default onto an empty root, removes that default so
-   * the recovered vault stands alone.
-   *
-   * "Effective default" — what `defaultVaultId()` returns — is purely the
-   * oldest vaultId (UUIDv7 encodes creation time), and a recovered vault was
-   * minted on the ORIGINAL machine before this blank gateway existed, so it is
-   * always older than a just-auto-created default and wins that ordering on its
-   * own. The removal below is therefore cleanliness, not correctness, and it is
-   * gated on an AIRTIGHT signal: the sibling is one THIS registry auto-created
-   * on an empty root (`autoCreatedDefaults`) and so has provably never held user
-   * content (adopt runs during recovery, before the gateway serves a request).
-   * A vault the operator created by hand, or any vault carrying data, is never
-   * touched — recovery must never delete something with user content.
+   * already exist on disk; this mounts it (`scan`). The shared founding gate
+   * enforces zero vaults before recovery starts, so no cleanup heuristic is
+   * needed here.
    */
   adopt(vaultId: string): VaultInfo {
     this.scan();
@@ -345,21 +333,6 @@ export class VaultRegistry {
         'vault_not_found',
         `adopt: no vault mounted at "${vaultId}" — is its directory in place under the root?`,
       );
-    }
-    // Collect the pristine auto-created siblings up front (a fresh array from
-    // `list()`), THEN delete — never mutate `this.planes` mid-iteration.
-    const pristineSiblings = this.list()
-      .map((info) => info.vaultId)
-      .filter((id) => id !== vaultId && this.autoCreatedDefaults.has(id));
-    for (const id of pristineSiblings) {
-      // `delete()` refuses the last vault; the recovered plane keeps size >= 2,
-      // so removing a provably-pristine auto default here is always allowed.
-      if (this.planes.size <= 1) break;
-      this.logger.info(
-        `vault registry: adopt(${vaultId}) — removing the pristine auto-created default ` +
-          `${id} so the recovered vault is the effective default`,
-      );
-      this.delete(id);
     }
     return this.info(plane);
   }
@@ -371,11 +344,13 @@ export class VaultRegistry {
       // dir keys per-vault without needing the bootstrapped id up front.
       cacheDir: path.join(this.cacheRootDir, path.basename(dir)),
       logger: this.logger,
+      ...(this.keyStore ? { keyStore: this.keyStore } : {}),
       ...(this.ownerName ? { ownerName: this.ownerName } : {}),
+      ...(boot.vaultId ? { bootstrap: true } : {}),
       ...(this.sweepIntervalMs !== undefined ? { sweepIntervalMs: this.sweepIntervalMs } : {}),
       enableWalShipper: this.enableWalShipper,
-      ...(this.walCaptureEnabled ? { walCaptureEnabled: this.walCaptureEnabled } : {}),
-      ...(this.leaseConflicted ? { leaseConflicted: this.leaseConflicted } : {}),
+      ...(this.walCaptureConfigured ? { walCaptureConfigured: this.walCaptureConfigured } : {}),
+      ...(this.skipOrphanDelete ? { skipOrphanDelete: this.skipOrphanDelete } : {}),
       ...(this.s3Credentials ? { s3Credentials: this.s3Credentials } : {}),
       ...(this.previewCodec ? { previewCodec: this.previewCodec } : {}),
       ...(this.onProvenanceCommitted ? { onProvenanceCommitted: this.onProvenanceCommitted } : {}),
@@ -454,12 +429,21 @@ export class VaultRegistry {
   }
 
   /** Create (and mount) a fresh vault. ADMIN act — CLI/host only, never HTTP. */
-  create(name?: string): VaultInfo {
+  create(name?: string, reservedVaultId?: string): VaultInfo {
     const trimmed = name?.trim();
     if (trimmed !== undefined && trimmed.length === 0) {
       throw new VaultRegistryError('bad_name', 'a vault name cannot be empty');
     }
-    const vaultId = uuidv7();
+    const vaultId = reservedVaultId ?? uuidv7();
+    if (
+      reservedVaultId !== undefined &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(reservedVaultId)
+    ) {
+      throw new VaultRegistryError(
+        'bad_name',
+        'a reserved founding vault id must be a canonical UUIDv7',
+      );
+    }
     const dir = path.join(this.rootDir, vaultId);
     const plane = this.openPlane(dir, {
       vaultId,
@@ -471,6 +455,38 @@ export class VaultRegistry {
     this.notifyMounted(plane);
     this.logger.info(`vault registry: created vault ${plane.boot.vaultId} ("${plane.name}")`);
     return this.info(plane);
+  }
+
+  /**
+   * Remove an uncommitted founding artifact without touching its remote
+   * backup. Unlike owner deletion this is local rollback, so purging provider
+   * objects here would destroy the only recovery source after a failed restore.
+   */
+  discardPendingFoundingVault(vaultId: string): void {
+    const plane = this.planes.get(vaultId);
+    if (plane) {
+      plane.stop();
+      this.planes.delete(vaultId);
+      this.scannedDirs.delete(plane.dir);
+      this.failedMountsByDir.delete(plane.dir);
+    }
+    const vaultDir = path.resolve(this.rootDir, vaultId);
+    const cacheDir = path.resolve(this.cacheRootDir, vaultId);
+    if (
+      path.dirname(vaultDir) !== path.resolve(this.rootDir) ||
+      path.dirname(cacheDir) !== path.resolve(this.cacheRootDir)
+    ) {
+      throw new VaultRegistryError('bad_name', 'invalid pending founding vault id');
+    }
+    rmSync(vaultDir, { recursive: true, force: true });
+    rmSync(cacheDir, { recursive: true, force: true });
+    if (existsSync(this.rootDir) && readdirSync(this.rootDir).length === 0) {
+      rmSync(this.rootDir, { recursive: true, force: true });
+    }
+    if (existsSync(this.cacheRootDir) && readdirSync(this.cacheRootDir).length === 0) {
+      rmSync(this.cacheRootDir, { recursive: true, force: true });
+    }
+    this.logger.info(`vault registry: discarded uncommitted founding vault ${vaultId}`);
   }
 
   /** Rename one vault (owner act on its own `core_vault` row). */
@@ -499,26 +515,15 @@ export class VaultRegistry {
    * tier purged best-effort (issue #296 — deleting a vault must not leave
    * the owner's bytes billing in a bucket forever; a crash here costs
    * orphan objects, which any later reconcile against the empty set finds).
-   * ADMIN act — CLI/host only, never HTTP. The LAST vault is protected so
-   * a gateway always has something to serve.
+   * ADMIN act — CLI/host only, never HTTP. Deleting the last vault returns
+   * the gateway to the legal uninitialized state.
    *
-   * The seal key in the `keys/` sibling is DELIBERATELY left behind (issue
-   * #298 item 2): a directory backup taken before this delete stays
-   * restorable only while its key survives. Key material leaves the box
-   * through the receipted `key export` gesture, never as a side effect.
-   * Corollary for any FUTURE gesture that renames or duplicates the vault
-   * DIRECTORY (none exists today — rename is display-name-only): it must
-   * move/copy `sealKeyFileFor(dir)` in the same step, or the custody check
-   * in openVaultDb refuses the next open (issue #298 item 1).
+   * This registry owns content deletion only. The erase ceremony's durable
+   * state machine owns crypto-erasure through KeyStore after its gateway rows
+   * commit; restore rollback callers likewise destroy keys explicitly.
    */
   delete(vaultId: string): void {
     const plane = this.require(vaultId);
-    if (this.planes.size === 1) {
-      throw new VaultRegistryError(
-        'vault_last',
-        'cannot delete the last vault — a gateway always hosts at least one',
-      );
-    }
     // The remote tier resolves synchronously inside purgeRemote — BEFORE
     // stop() closes the db handles — and the deletes then run detached:
     // remote latency must not block the admin act.
@@ -531,6 +536,12 @@ export class VaultRegistry {
     // Drop the vault's disposable runner cache too (it lives outside the
     // vault dir, so the rmSync above doesn't reach it).
     rmSync(plane.cacheDir, { recursive: true, force: true });
+    if (existsSync(this.rootDir) && readdirSync(this.rootDir).length === 0) {
+      rmSync(this.rootDir, { recursive: true, force: true });
+    }
+    if (existsSync(this.cacheRootDir) && readdirSync(this.cacheRootDir).length === 0) {
+      rmSync(this.cacheRootDir, { recursive: true, force: true });
+    }
     void purge
       .then((shas) => {
         if (shas.length > 0) {

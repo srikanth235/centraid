@@ -25,7 +25,6 @@ export const Channel = {
   GATEWAYS_REMOVE: 'centraid:gateways:remove',
   GATEWAYS_RENAME: 'centraid:gateways:rename',
   GATEWAYS_UPDATE_METADATA: 'centraid:gateways:update-metadata',
-  GATEWAYS_UPDATE_TOKEN: 'centraid:gateways:update-token',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
   GATEWAY_PAIR_REDEEM: 'centraid:gateways:pair-redeem',

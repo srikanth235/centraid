@@ -102,7 +102,8 @@ async function runInternal() {
   let handle;
   try {
     handle = await serve({
-      paths: { vaultDir: path.join(root, 'vault'), prefsFile: path.join(root, 'prefs.json') },
+      paths: { vaultDir: path.join(root, 'vault') },
+      initVaultName: 'Low-end benchmark',
       logger: quietLogger(),
       token: 'centraid-low-end-benchmark-token',
     });

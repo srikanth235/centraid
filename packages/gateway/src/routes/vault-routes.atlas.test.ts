@@ -37,6 +37,7 @@ async function startHandlerServer(
 async function setup(): Promise<{ base: string; plane: VaultPlane }> {
   const dir = await tempDir();
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const plane = registry.current();
   const base = await startHandlerServer(makeVaultRouteHandler(registry));

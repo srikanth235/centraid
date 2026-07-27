@@ -11,20 +11,16 @@
  *     `CENTRAID_GATEWAY_TOKEN` env so it can reach the loopback listener.
  *   - SIGINT / SIGTERM graceful shutdown
  *
- * v0 PoC scope per centraid#131: loopback or LAN bind, no TLS. The shared
- * gateway-wide admin token is RETIRED (issue #505 phase 7): admin capability
- * is now a per-device, revocable `owner` enrollment trust tier granted through
- * the pairing ceremony, and the landlord's trust anchor is OS filesystem
- * access to `--data-dir` (every `vault`/`pair`/`devices`/`key` subcommand
- * operates on those files directly, never over HTTP). Per-device HTTP tokens
- * (issue #376, minted by `POST /centraid/_gateway/pair`) remain the TENANT
- * plane for the `direct` transport tier, confined to their device's vault
- * enrollments. TLS termination stays a documented out-of-scope follow-up
- * (front with Caddy / Tailscale Funnel / Cloudflare Tunnel).
+ * v0 PoC scope per centraid#131: loopback or LAN bind, no TLS. Shared and
+ * per-device HTTP credentials are retired. Remote access is iroh-only and
+ * every request carries a cryptographically proved EndpointId resolved
+ * through persisted vault enrollments. Filesystem maintenance commands take
+ * gateway.db's exclusive lock and therefore refuse while the daemon runs.
+ * TLS termination stays a documented out-of-scope follow-up.
  *
  * Subcommands:
  *   centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]
- *   centraid-gateway vault <list|create|rename|delete> --data-dir <path> …   (admin plane, #289)
+ *   centraid-gateway vault <list|create|rename|delete> --data-dir <path> …   (offline maintenance)
  *   centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>] [--json]
  *   centraid-gateway devices <list|add|revoke> --data-dir <path> …
  *   centraid-gateway key <status|export|restore|rotate> --data-dir <path> …  (custody, #298)
@@ -39,11 +35,9 @@
  * output is unchanged.
  */
 
-import { promises as fs, readFileSync, realpathSync } from 'node:fs';
+import { promises as fs, realpathSync } from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import type { BearerAuthorization } from '@centraid/app-engine';
 import type { GatewayEndpointHandle } from '@centraid/tunnel';
 import { serve } from '../serve/serve.js';
 import { assistOAuthFromEnvironment } from '../serve/assist-oauth.js';
@@ -58,9 +52,16 @@ import { commandBackup } from './backup-admin.js';
 import { commandRecover } from './recover-admin.js';
 import { commandService } from './service-admin.js';
 import { commandStatus } from './status-admin.js';
+import { commandInitTicket } from './founding-admin.js';
+import { commandLockStatus } from './lock-admin.js';
+import { kitlessHostIdentity } from '../serve/host-identity.js';
 import { makeDaemonDevicePlane } from './endpoint-host.js';
 import { mergeAllowedHosts } from './allowed-hosts.js';
-import { parseServeArgsPure, timingSafeTokenEqual, type ParsedServe } from './cli-serve-args.js';
+import { parseServeArgsPure, type ParsedServe } from './cli-serve-args.js';
+import { GatewayDatabase } from '../serve/gateway-db.js';
+import { WebControlSessionStore } from '../serve/web-session-store.js';
+import { daemonKeyStore } from './key-store.js';
+import { landlordBearerForEndpointSecret } from './landlord-auth.js';
 
 const PKG_VERSION = '0.1.0';
 
@@ -89,7 +90,7 @@ function usage(): never {
   process.stderr.write(
     [
       'Usage:',
-      '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>] [--allowed-host <name>]…',
+      '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--init-vault <name>] [--host <h>] [--port <p>] [--allowed-host <name>]…',
       '  centraid-gateway vault list --data-dir <path> [--json]',
       '  centraid-gateway vault create --data-dir <path> [--name <name>] [--json]',
       '  centraid-gateway vault rename --data-dir <path> <vaultId> <name>',
@@ -99,8 +100,6 @@ function usage(): never {
       '  centraid-gateway devices add --data-dir <path> <endpoint-id> --vault <name-or-id> [--label <l>]',
       '  centraid-gateway devices revoke --data-dir <path> <enrollment-or-endpoint-id>',
       '  centraid-gateway key status  --data-dir <path> --vault <name-or-id>',
-      '  centraid-gateway key export  --data-dir <path> --vault <name-or-id> --out <file>',
-      '  centraid-gateway key restore --data-dir <path> --vault <name-or-id> --from <file>',
       '  centraid-gateway key rotate  --data-dir <path> --vault <name-or-id>',
       '  centraid-gateway backup status  [--config <path> | --data-dir <path>]',
       '  centraid-gateway backup run     [--config <path> | --data-dir <path>] [--vault <id>]',
@@ -108,31 +107,24 @@ function usage(): never {
       '  centraid-gateway backup verify  [--config <path> | --data-dir <path>] [--vault <id>]',
       '  centraid-gateway backup restore [--config <path> | --data-dir <path>] --vault <id> --dest <dir> [--seq <n>]',
       '  centraid-gateway backup kit     [--config <path> | --data-dir <path>] --out <file>',
-      '  centraid-gateway recover --kit <file> --api-key <key> --data-dir <path> [--at <iso>] [--full] [--vault <id>] [--yes]',
+      '  centraid-gateway recover --kit <file> --password-file <file> --api-key <key> --data-dir <path> [--at <iso>] [--full] [--vault <id>] [--yes]',
       '  centraid-gateway service install   [--data-dir <path> | --config <path>] [--host <h>] [--port <p>] [--dry-run] [--label <id>]',
       '  centraid-gateway service uninstall [--dry-run] [--label <id>]',
       '  centraid-gateway service status    [--dry-run] [--label <id>]',
       '  centraid-gateway status [--data-dir <path> | --config <path>] [--label <id>] [--json]',
+      '  centraid-gateway lock-status [--data-dir <path> | --config <path>] [--json]',
       '  centraid-gateway --version',
       '  centraid-gateway --help',
       '',
-      'vault/pair/devices/key are the ADMIN plane (issue #289): vault',
-      'lifecycle, pairing tickets, device enrollment and seal-key custody',
-      'are landlord acts guarded by shell access to this box — they never',
-      'ride HTTP. key export/restore are the recovery story for sealed',
-      'secrets (issue #298): copying a vault directory carries ciphertext',
-      'only; the key travels ONLY through these receipted gestures.',
+      'vault/pair/devices/key are stopped-daemon maintenance commands:',
+      "mutations take gateway.db's exclusive lock and refuse while the",
+      'daemon is running. Recovery uses only a password-wrapped recovery kit;',
+      'no command emits a raw vault key.',
       '',
-      'There is NO shared gateway-wide admin token (issue #505 phase 7):',
-      'admin capability is a per-device, revocable `owner` enrollment trust',
-      'tier. `pair` grants `owner` to the FIRST device paired into a vault',
-      '(the landlord device); later pairings default to `full`; `--trust`',
-      'overrides. pair --qr prints a UTF-8 block QR of the one-line ticket',
-      'for phones over SSH. A ticket minted by `pair` also redeems over plain HTTP (POST',
-      '/centraid/_gateway/pair, issue #376) for a device that cannot dial',
-      'the iroh endpoint directly — it enrolls the caller and mints it a',
-      "per-device HTTP bearer token, confined to that device's vaults the",
-      'same way an iroh-proved caller is.',
+      'There is no shared gateway-wide credential and no direct HTTP pairing.',
+      'Owner capability is a per-device, revocable enrollment trust tier.',
+      '`pair --qr` prints a UTF-8 block QR of the one-line iroh ticket for',
+      'phones over SSH; redemption proves the joining device EndpointId.',
       '',
       'backup is the offsite engine (PROTOCOL.md/FORMAT.md), config from the',
       'same --config/--data-dir resolution `serve` uses (its JSON config',
@@ -140,7 +132,7 @@ function usage(): never {
       'swaps the live vault; kit emits live key material, store it offline.',
       '',
       'recover (issue #439) is the recovery VERB for a blank machine: with',
-      'nothing but the recovery kit (--kit) and the provider api-key',
+      'nothing but the recovery kit (--kit), its password file, and provider api-key',
       '(--api-key), it restores the vault into --data-dir, seeds a fenced',
       'backup state so the old machine is superseded, and adopts the result as',
       'a live vault (its quarantine fires on first mount). Lazy by default;',
@@ -196,6 +188,7 @@ async function commandServe(args: string[]): Promise<void> {
   const layout = daemonLayoutFor(config.dataDir);
 
   await fs.mkdir(config.dataDir, { recursive: true });
+  const gatewayDatabase = GatewayDatabase.open(config.dataDir, { lock: 'exclusive' });
 
   // Ephemeral per-boot loopback secret (issue #505 phase 7). This is the
   // bearer the in-process iroh endpoint host forwards with when it hands a
@@ -203,13 +196,12 @@ async function commandServe(args: string[]): Promise<void> {
   // carry the per-boot device proof header, so the real per-device identity is
   // what `composedHandler` scopes on (this bearer only unlocks the loopback
   // door). It is MINTED FRESH each boot, never written to disk, never printed —
-  // the retired `token.bin` shared admin plane is gone. A parent that spawns
+  // the retired `token.bin` shared bearer plane is gone. A parent that spawns
   // this daemon (the desktop's detached gateway) may pin a known value via
   // `CENTRAID_GATEWAY_TOKEN` so it can reach the loopback listener itself.
-  const loopbackSecret =
-    process.env.CENTRAID_GATEWAY_TOKEN?.trim() || crypto.randomBytes(32).toString('hex');
   const dataPlaneSecret = process.env.CENTRAID_DATA_PLANE_SECRET;
   const dataPlaneHttpUrl = process.env.CENTRAID_DATA_PLANE_HTTP_URL;
+  const desktopEndpointId = process.env.CENTRAID_DESKTOP_ENDPOINT_ID?.trim() || undefined;
 
   // Device plane (issue #289): enrollment-scoped vault resolution for
   // requests arriving over the iroh endpoint. Constructed before serve()
@@ -220,33 +212,39 @@ async function commandServe(args: string[]): Promise<void> {
     warn: (msg: string) => process.stderr.write(`[centraid-gateway] ${msg}\n`),
     error: (msg: string) => process.stderr.write(`[centraid-gateway] ${msg}\n`),
   };
+  const keyStore = daemonKeyStore(layout.keysDir, {
+    warn: (message) => logger.warn(message),
+  });
+  const loopbackSecret =
+    process.env.CENTRAID_GATEWAY_TOKEN?.trim() ||
+    landlordBearerForEndpointSecret(keyStore.loadOrCreate('endpoint-key.bin'));
+  const hostEndpointId =
+    desktopEndpointId ??
+    (parsed.initVaultName
+      ? kitlessHostIdentity(keyStore.loadOrCreate('endpoint-key.bin'))
+      : undefined);
   let vaultsRef: import('../serve/vault-registry.js').VaultRegistry | undefined;
   const devicePlane = makeDaemonDevicePlane({
     layout,
+    gatewayDatabase,
     vaults: () => vaultsRef,
     logger,
+    keyStore,
     ...(dataPlaneSecret ? { controlSecret: dataPlaneSecret } : {}),
+    ...(hostEndpointId ? { loopbackEndpointId: hostEndpointId } : {}),
   });
 
-  // Bearer authorization (issue #376 + #505 phase 7). The ephemeral loopback
-  // secret unlocks the loopback listener as the `admin` plane — used only by
-  // the in-process endpoint-host forwarder (whose requests also carry the
-  // device proof header, so `composedHandler` still scopes them to the proved
-  // device). A presented `cdt_...` per-device token resolves through
-  // `DeviceTokenStore` to its device key and is confined to that device's
-  // enrollments (the `direct` transport tier). There is no durable, on-disk
-  // admin bearer any device could hold.
-  const authorizeBearer = (bearer: string): BearerAuthorization | undefined => {
-    if (timingSafeTokenEqual(bearer, loopbackSecret)) return { plane: 'admin' };
-    const device = devicePlane.pairing.deviceTokens.authorize(bearer);
-    return device ? { plane: 'device', deviceKey: device.deviceKey } : undefined;
-  };
+  // The ephemeral secret opens only the process-local HTTP listener. Device
+  // authorization still resolves through a real EndpointId enrollment: iroh
+  // proof normally, or the spawning desktop's OS-custodied identity.
   const webRoot = await bundledWebRoot();
   let endpoint: GatewayEndpointHandle | undefined;
   const allowedHosts = mergeAllowedHosts(parsed.allowedHosts);
   const handle = await serve({
     assistOAuth: assistOAuthFromEnvironment(process.env),
     paths: layout,
+    gatewayDatabase,
+    ...(parsed.initVaultName ? { initVaultName: parsed.initVaultName } : {}),
     ...(config.host !== undefined ? { host: config.host } : {}),
     ...(config.port !== undefined ? { port: config.port } : {}),
     ...(allowedHosts.length > 0 ? { allowedHosts } : {}),
@@ -255,6 +253,9 @@ async function commandServe(args: string[]): Promise<void> {
     token: loopbackSecret,
     logTag: 'centraid-gateway',
     deviceAccess: devicePlane.deviceAccess,
+    canMintFoundingTicket: devicePlane.canMintFoundingTicket,
+    keyStore,
+    ...(hostEndpointId ? { hostDeviceEndpointId: hostEndpointId } : {}),
     dataPlaneControl: devicePlane.dataPlaneControl,
     ...(dataPlaneSecret && dataPlaneHttpUrl
       ? {
@@ -267,27 +268,15 @@ async function commandServe(args: string[]): Promise<void> {
       : {}),
     devicePairing: {
       ...devicePlane.pairing,
-      // The gateway's iroh EndpointTicket for a HTTP-minted pairing ticket's
-      // `gw` field. Read lazily from the endpoint state file (written by
-      // `startEndpoint`) at mint time, well after boot — so it need not have
-      // run yet when we wire this getter.
-      endpointTicket: () => {
-        try {
-          const raw = readFileSync(layout.endpointStateFile, 'utf8');
-          const parsed = JSON.parse(raw) as { ticket?: unknown };
-          return typeof parsed.ticket === 'string' ? parsed.ticket : undefined;
-        } catch {
-          return undefined;
-        }
-      },
+      endpointId: () => endpoint?.endpointId,
+      endpointTicket: () => endpoint?.ticket(),
       onEndpointRevoked: (endpointId) => endpoint?.revokeEndpoint(endpointId),
     },
-    authorizeBearer,
     // Durable PWA control sessions (issue #376): persist control cookies so
     // a web pairing survives a restart, and propagate `devices revoke` to
     // live cookies via the SAME enrollment store the endpoint admits from.
     webSessions: {
-      controlsFile: layout.webSessionsFile,
+      controlStore: WebControlSessionStore.open(gatewayDatabase),
       isDeviceValid: (key) => devicePlane.pairing.enrollments.isEnrolled(key),
     },
     ...(webRoot
@@ -310,8 +299,8 @@ async function commandServe(args: string[]): Promise<void> {
   vaultsRef = handle.vaults;
 
   // The iroh endpoint (issue #289 phase 3): the gateway's permanent
-  // identity + the first-class remote transport. Best-effort — an HTTP-only
-  // daemon still serves loopback/`direct` clients.
+  // identity + the only remote transport. Best-effort so the loopback
+  // maintenance surface can still start when iroh is temporarily unavailable.
   endpoint =
     config.endpoint === false
       ? undefined
@@ -371,6 +360,9 @@ async function main(): Promise<void> {
     case 'pair':
       await commandPair(rest, fail);
       return;
+    case 'init-ticket':
+      await commandInitTicket(rest, fail);
+      return;
     case 'devices':
       await commandDevices(rest, fail);
       return;
@@ -388,6 +380,9 @@ async function main(): Promise<void> {
       return;
     case 'status':
       await commandStatus(rest, fail);
+      return;
+    case 'lock-status':
+      await commandLockStatus(rest, fail);
       return;
     default:
       fail(`unknown subcommand "${sub}"`, 2);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
-import { formatClock, formatDuration } from '../shell/routes/gatewayData.js';
+import { formatDuration } from '../shell/routes/gatewayData.js';
 import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
 import gwStyles from './GatewayScreen.module.css';
@@ -19,6 +19,7 @@ import BackupInventoryPanel, {
   type BackupReconciliationDTO,
   type ProviderPolicyStatusDTO,
 } from './BackupInventoryPanel.js';
+import RecoveryKitGate from './RecoveryKitGate.js';
 
 // Gateway → Backups: the owner surface over the offsite backup engine. This
 // card now renders EXACTLY the five metrics of the §6 contract (issue #436)
@@ -80,9 +81,15 @@ export interface BackupCardProps {
   onVerifyBucket?: (
     vaultId: string,
   ) => Promise<{ vaultId: string; reconciliation: BackupReconciliationDTO }>;
-  onExportRecoveryKit?: () => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
-  /** POSTs `_gateway/backup/kit-confirmed` — the recovery-kit gate's confirm button. */
-  onConfirmRecoveryKit: () => Promise<{ confirmedAt: number }>;
+  onExportRecoveryKit?: (input: {
+    password: string;
+  }) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
+  /** Verifies the re-selected wrapped file, password, and explicit loss consent. */
+  onConfirmRecoveryKit: (input: {
+    kit: unknown;
+    password: string;
+    lossConsent: true;
+  }) => Promise<{ confirmedAt: number }>;
   /** Navigates to Settings → Storage (the head's "Manage" link). */
   onOpenSettings?: () => void;
 }
@@ -99,85 +106,6 @@ function ageLabel(iso: string | undefined, now: number): string {
   const at = Date.parse(iso);
   if (Number.isNaN(at)) return 'never';
   return `${formatDuration(Math.max(0, now - at))} ago`;
-}
-
-function RecoveryKitGate({
-  configured,
-  recoveryKit,
-  onConfirm,
-  onExport,
-}: {
-  configured: boolean;
-  recoveryKit: RecoveryKitStatusDTO;
-  onConfirm: () => Promise<{ confirmedAt: number }>;
-  onExport?: () => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
-}): JSX.Element {
-  const [confirmedAt, setConfirmedAt] = useState(recoveryKit.confirmedAt);
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // The server is the source of truth (a poll can also observe a
-  // confirmation made from elsewhere) — resync local state whenever the
-  // parent's status refresh lands a new value.
-  useEffect(() => setConfirmedAt(recoveryKit.confirmedAt), [recoveryKit.confirmedAt]);
-
-  const confirm = async (): Promise<void> => {
-    setConfirming(true);
-    setError(null);
-    try {
-      if (onExport) {
-        const exported = await onExport();
-        if (!exported.ok) {
-          if (exported.canceled) return;
-          throw new Error(exported.error ?? 'Recovery kit export failed');
-        }
-      }
-      const result = await onConfirm();
-      setConfirmedAt(result.confirmedAt);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setConfirming(false);
-    }
-  };
-
-  if (confirmedAt != null) {
-    return (
-      <div className={styles.sealConfirmed} data-testid="recovery-kit-confirmed">
-        <Icon name="CheckCircle" size={13} />
-        <span>Recovery kit confirmed {formatClock(confirmedAt * 1000)}</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className={styles.sealNudge} data-testid="recovery-kit-gate">
-      <Icon name="Key" size={13} />
-      <div className={styles.sealNudgeBody}>
-        <span>
-          Save this recovery kit somewhere offline. It is the only way to decrypt a backup on a new
-          machine.
-        </span>
-        {configured ? (
-          <>
-            <button
-              type="button"
-              className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft, styles.sealConfirmBtn)}
-              disabled={confirming}
-              onClick={() => void confirm()}
-            >
-              {confirming
-                ? 'Exporting…'
-                : onExport
-                  ? 'Export recovery kit'
-                  : "I've saved my recovery kit"}
-            </button>
-            {error ? <div className={styles.runError}>{error}</div> : null}
-          </>
-        ) : null}
-      </div>
-    </div>
-  );
 }
 
 const DEFAULT_POLICY: BackupPolicyDTO = {

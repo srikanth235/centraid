@@ -10,7 +10,6 @@
 import { handshakeGateway } from './version-handshake.js';
 import { fetchGatewayVaults } from './gateway-vaults-core.js';
 import { resolveGateway } from './gateway-store.js';
-import { assertDirectUrlAllowed, TransportGuardError } from './transport.js';
 import { sshStatus, sshVaultList, sshVersion, type SshHostProfile } from './ssh-host.js';
 import {
   assembleReport,
@@ -29,22 +28,12 @@ import {
 export type { ConnectivityReport } from './gateway-connectivity-core.js';
 
 export type TestConnectionInput =
-  | { kind: 'url'; url: string; token?: string }
   | { kind: 'ticket'; ticket: string }
   | { kind: 'ssh'; destination: string; dataDir?: string }
   | { kind: 'gateway'; gatewayId: string };
 
-/** Run the url/gateway ladder (reach → identify → auth → vaults) against a
- *  resolved base URL + token. Shared by `kind:'url'` and `kind:'gateway'`
- *  (the latter resolves its URL/token from the profile store first). */
+/** Run the known-gateway ladder against its local iroh proxy. */
 async function testUrl(url: string, token: string | undefined): Promise<ConnectivityReport> {
-  try {
-    assertDirectUrlAllowed(url);
-  } catch (err) {
-    const message = err instanceof TransportGuardError ? err.message : String(err);
-    return assembleReport(reachGuardFailureStages(message), { error: 'guard_rejected' });
-  }
-
   const handshake = await handshakeGateway(url, token);
   const identity = foldUrlIdentityStages(handshake);
   const authStage = identity.stages.find((st) => st.id === 'auth');
@@ -107,9 +96,6 @@ export async function testGatewayConnection(
 ): Promise<ConnectivityReport> {
   try {
     switch (input.kind) {
-      case 'url':
-        return await testUrl(input.url, input.token);
-
       case 'ticket':
         return buildTicketReport(input.ticket);
 

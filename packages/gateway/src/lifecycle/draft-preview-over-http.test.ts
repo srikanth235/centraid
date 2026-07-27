@@ -26,7 +26,6 @@ let handle: GatewayServeHandle;
 function pathsUnder(dir: string): GatewayPaths {
   return {
     vaultDir: path.join(dir, 'vault'),
-    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -76,7 +75,7 @@ afterEach(async () => {
 });
 
 test('serves a staged draft (static + handlers) while live keeps the published version', async () => {
-  handle = await serve({ paths: pathsUnder(dataDir) });
+  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
   const store = await handle.appsStore();
   await seedApp(store, 'app');
   await handle.syncApps();
@@ -123,7 +122,7 @@ test('serves a staged draft (static + handlers) while live keeps the published v
 });
 
 test('an unknown draft session yields 503 (no live fallback)', async () => {
-  handle = await serve({ paths: pathsUnder(dataDir) });
+  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
   await seedApp(await handle.appsStore(), 'app');
   await handle.syncApps();
 

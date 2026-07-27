@@ -13,6 +13,18 @@ import { negotiateEncoding } from '@centraid/app-engine';
 /** Default request-body cap (1 MiB) for JSON + draft-file bodies. */
 export const DEFAULT_MAX_BODY_BYTES = 1 * 1024 * 1024;
 
+/** Whether the peer socket itself is loopback (Host/X-Forwarded-For do not count). */
+export function isLoopbackRequest(req: IncomingMessage): boolean {
+  const address = req.socket.remoteAddress;
+  if (!address) return false;
+  return (
+    address === '::1' ||
+    address === '127.0.0.1' ||
+    address.startsWith('127.') ||
+    address.startsWith('::ffff:127.')
+  );
+}
+
 /** A `{path, content}` pair — the file-map shape the scaffolders emit. */
 export interface FileMapEntry {
   path: string;

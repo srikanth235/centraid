@@ -1,29 +1,25 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
- * The admin plane (issue #289): `centraid-gateway vault|devices|pair` +
- * the daemon device plane. These are landlord acts guarded by shell
- * access, so they operate on `--data-dir` files directly and never ride
- * HTTP — the tests call the command functions the CLI dispatches to and
- * assert on their stdout + the files they write.
+ * Stopped-daemon filesystem maintenance (issue #289):
+ * `centraid-gateway vault|devices|pair` plus the daemon device plane. The
+ * tests call the command functions the CLI dispatches to and assert on their
+ * stdout and gateway.db rows.
  */
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { promises as fs, readFileSync } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import http from 'node:http';
 import crypto from 'node:crypto';
+import { buildGatewayInfoPayload } from '@centraid/protocol';
+import { endpointIdForSecret } from '@centraid/tunnel';
+import { KeyStore } from '@centraid/vault';
 import { commandVault } from './vault-admin.ts';
 import { commandDevices, commandPair } from './device-admin.ts';
-import {
-  DEVICE_HEADER,
-  DEVICE_PROOF_HEADER,
-  makeDaemonDevicePlane,
-  watchEnrollmentRevocations,
-} from './endpoint-host.ts';
+import { DEVICE_HEADER, DEVICE_PROOF_HEADER, makeDaemonDevicePlane } from './endpoint-host.ts';
 import { daemonLayoutFor } from './paths.ts';
 import { openVaultRegistry } from '../serve/vault-registry.ts';
 import { EnrollmentStore } from '../serve/enrollment-store.ts';
-import { DeviceTokenStore } from '../serve/device-token-store.ts';
-import { PairingTicketStore } from '../serve/pairing-store.ts';
+import { encodePairingTicket, PairingTicketStore } from '../serve/pairing-store.ts';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 // The slowest file in the suite: every test bootstraps a real vault/daemon
@@ -86,6 +82,91 @@ function lastJson(text: string): Record<string, unknown> {
   return JSON.parse(lines[lines.length - 1]!) as Record<string, unknown>;
 }
 
+async function fakePairDaemon(): Promise<typeof fetch> {
+  const layout = daemonLayoutFor(dataDir);
+  const secret = Buffer.alloc(32, 7);
+  new KeyStore(layout.keysDir).store('endpoint-key.bin', secret);
+  const endpointId = endpointIdForSecret(secret);
+  return (async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = new URL(
+      typeof input === 'string' || input instanceof URL ? input.toString() : input.url,
+    );
+    if (url.pathname === '/centraid/_gateway/info') {
+      return Response.json(
+        buildGatewayInfoPayload({
+          instanceId: 'test-daemon',
+          startedAt: Date.now(),
+          uptimeMs: 1,
+          endpointId,
+          endpointTicket: 'gw-ticket-base32',
+        }),
+      );
+    }
+    if (url.pathname !== '/centraid/_gateway/devices/ticket') {
+      return Response.json({ error: 'not_found' }, { status: 404 });
+    }
+    const body = JSON.parse(String(init?.body ?? '{}')) as {
+      vaultId?: string;
+      ttlMinutes?: number;
+      trust?: 'owner' | 'full' | 'readonly';
+    };
+    const registry = openVaultRegistry({
+      rootDir: layout.vaultDir,
+      logger: silentLogger,
+      enableWalShipper: false,
+    });
+    try {
+      const vaults = registry.list();
+      const vault =
+        vaults.find((row) => row.vaultId === body.vaultId || row.name === body.vaultId) ??
+        vaults[0];
+      if (!vault) {
+        return Response.json(
+          {
+            error: 'uninitialized',
+            message:
+              'gateway has no vault yet — run `centraid-gateway init-ticket` and complete founding first',
+          },
+          { status: 409 },
+        );
+      }
+      if (body.trust === 'owner') {
+        return Response.json(
+          {
+            error: 'invalid_trust',
+            message: 'ordinary pairing grants full or readonly trust, never owner',
+          },
+          { status: 400 },
+        );
+      }
+      const trust = body.trust ?? 'full';
+      const minted = PairingTicketStore.open(layout.pairingTicketsFile).mint(
+        vault.vaultId,
+        (body.ttlMinutes ?? 15) * 60_000,
+        trust,
+      );
+      return Response.json({
+        ok: true,
+        ticket: encodePairingTicket({
+          v: 1,
+          kind: 'centraid-gw-pair',
+          gw: 'gw-ticket-base32',
+          t: minted.ticketId,
+          s: minted.secret,
+          vaultName: vault.name,
+          exp: minted.expiresAt,
+        }),
+        vaultId: vault.vaultId,
+        vaultName: vault.name,
+        expiresAt: new Date(minted.expiresAt).toISOString(),
+        trust,
+      });
+    } finally {
+      registry.stop();
+    }
+  }) as typeof fetch;
+}
+
 // ── devices admin ─────────────────────────────────────────────────────
 
 test('devices add / list / revoke, scoped by vault', async () => {
@@ -122,54 +203,38 @@ test('devices add / list / revoke, scoped by vault', async () => {
   ).rejects.toThrow(/no enrollment/);
 });
 
-// Bootstraps two full vaults then polls up to 10s (vi.waitFor below) for the
-// revoked device key to drop its HTTP token — the slowest case in the file.
-// Inherits the file-level 60s budget above; it previously carried its own 15s
-// override, which capped it BELOW what a slow-disk runner needs and was one of
-// the two timeouts in nightly run 29733737906.
-test("devices revoke cascades into that device key's HTTP token (issue #376)", async () => {
+test('last-owner revoke requires the vault name and SSH can restore an owner', async () => {
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
-  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Other'], fail));
-  const layout = daemonLayoutFor(dataDir);
-  const deviceTokens = DeviceTokenStore.open(layout.deviceTokensFile);
-  const { token } = deviceTokens.mint({ deviceKey: 'http:device-1', label: 'phone' });
+  const owner = lastJson(
+    await capture(() =>
+      commandDevices(
+        ['add', '--data-dir', dataDir, 'ep-owner', '--vault', 'Family', '--trust', 'owner'],
+        fail,
+      ),
+    ),
+  );
+  const enrollmentId = owner.enrollmentId as string;
 
-  // Two enrollments for the SAME device key, in different vaults.
+  await expect(
+    capture(() => commandDevices(['revoke', '--data-dir', dataDir, enrollmentId], fail)),
+  ).rejects.toThrow(/last owner.*--confirm-last-owner "Family"/i);
+
   await capture(() =>
     commandDevices(
-      ['add', '--data-dir', dataDir, 'http:device-1', '--vault', 'Family', '--label', 'phone'],
+      ['revoke', '--data-dir', dataDir, enrollmentId, '--confirm-last-owner', 'Family'],
       fail,
     ),
   );
-  await capture(() =>
-    commandDevices(
-      ['add', '--data-dir', dataDir, 'http:device-1', '--vault', 'Other', '--label', 'phone'],
-      fail,
+
+  const recovered = lastJson(
+    await capture(() =>
+      commandDevices(
+        ['add', '--data-dir', dataDir, 'ep-recovery', '--vault', 'Family', '--trust', 'owner'],
+        fail,
+      ),
     ),
   );
-
-  const familyRow = JSON.parse(
-    (
-      await capture(() =>
-        commandDevices(['list', '--data-dir', dataDir, '--vault', 'Family'], fail),
-      )
-    )
-      .trim()
-      .split('\n')[0]!,
-  ) as { enrollmentId: string };
-
-  // Revoking ONE enrollment (by its row id) leaves the other — the token
-  // that key holds must survive.
-  await capture(() =>
-    commandDevices(['revoke', '--data-dir', dataDir, familyRow.enrollmentId], fail),
-  );
-  expect(DeviceTokenStore.open(layout.deviceTokensFile).authorize(token)).toEqual({
-    deviceKey: 'http:device-1',
-  });
-
-  // Revoking by KEY removes every remaining enrollment — the token dies too.
-  await capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'http:device-1'], fail));
-  expect(DeviceTokenStore.open(layout.deviceTokensFile).authorize(token)).toBeUndefined();
+  expect(recovered).toMatchObject({ endpointId: 'ep-recovery', trust: 'owner' });
 });
 
 test('devices admin rejects bad usage + unknown vault', async () => {
@@ -189,25 +254,24 @@ test('devices admin rejects bad usage + unknown vault', async () => {
 // ── pair ──────────────────────────────────────────────────────────────
 
 test('pair needs the daemon endpoint identity, then mints a pasteable ticket', async () => {
-  // No endpoint.json yet → the CLI tells the operator to start the daemon once.
-  await expect(capture(() => commandPair(['--data-dir', dataDir], fail))).rejects.toThrow(
-    /start the daemon once/,
-  );
+  await expect(
+    capture(() =>
+      commandPair(['--data-dir', dataDir], fail, async () => {
+        throw new Error('connection refused');
+      }),
+    ),
+  ).rejects.toThrow(/daemon not running/);
 
-  // Simulate a booted daemon having published its identity.
   const layout = daemonLayoutFor(dataDir);
-  await fs.mkdir(dataDir, { recursive: true });
-  await fs.writeFile(
-    layout.endpointStateFile,
-    JSON.stringify({ endpointId: 'gw-endpoint', ticket: 'gw-ticket-base32' }),
-  );
   // Bootstrap a vault the ticket can name.
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+  const daemon = await fakePairDaemon();
 
   const text = await capture(() =>
     commandPair(
       ['--data-dir', dataDir, '--vault', 'Family', '--ttl-minutes', '5', '--trust', 'readonly'],
       fail,
+      daemon,
     ),
   );
   expect(text).toMatch(/Pairing ticket for vault "Family"/);
@@ -235,16 +299,11 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
 });
 
 test('pair --qr prints a terminal QR of the same pasteable ticket', async () => {
-  const layout = daemonLayoutFor(dataDir);
-  await fs.mkdir(dataDir, { recursive: true });
-  await fs.writeFile(
-    layout.endpointStateFile,
-    JSON.stringify({ endpointId: 'gw-endpoint', ticket: 'gw-ticket-base32' }),
-  );
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+  const daemon = await fakePairDaemon();
 
   const text = await capture(() =>
-    commandPair(['--data-dir', dataDir, '--vault', 'Family', '--qr'], fail),
+    commandPair(['--data-dir', dataDir, '--vault', 'Family', '--qr'], fail, daemon),
   );
   expect(text).toMatch(/Pairing ticket for vault "Family"/);
   expect(text).toMatch(/Phone: scan this QR/);
@@ -264,16 +323,11 @@ test('pair --qr prints a terminal QR of the same pasteable ticket', async () => 
 });
 
 test('pair --json emits one JSON line instead of the pasteable text block (issue #382)', async () => {
-  const layout = daemonLayoutFor(dataDir);
-  await fs.mkdir(dataDir, { recursive: true });
-  await fs.writeFile(
-    layout.endpointStateFile,
-    JSON.stringify({ endpointId: 'gw-endpoint', ticket: 'gw-ticket-base32' }),
-  );
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+  const daemon = await fakePairDaemon();
 
   const line = await capture(() =>
-    commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail),
+    commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail, daemon),
   );
   const parsed = lastJson(line);
   expect(parsed.ok).toBe(true);
@@ -288,40 +342,39 @@ test('pair --json emits one JSON line instead of the pasteable text block (issue
   expect(payload).toMatchObject({ kind: 'centraid-gw-pair', vaultName: 'Family' });
 });
 
-test('pair grants owner to the first device in a vault and full thereafter (issue #505)', async () => {
-  const layout = daemonLayoutFor(dataDir);
-  await fs.mkdir(dataDir, { recursive: true });
-  await fs.writeFile(
-    layout.endpointStateFile,
-    JSON.stringify({ endpointId: 'gw-endpoint', ticket: 'gw-ticket-base32' }),
-  );
+test('ordinary pair grants full even for the first device and refuses owner escalation', async () => {
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+  const daemon = await fakePairDaemon();
 
-  // No enrollments yet → the first pairing is the landlord device (owner) —
-  // the per-device, revocable replacement for the retired shared admin token.
+  // Founding is the only path to owner. Ordinary pairing is never sensitive
+  // to whether this happens to be the first enrollment row.
   const first = lastJson(
-    await capture(() => commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail)),
+    await capture(() =>
+      commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail, daemon),
+    ),
   );
-  expect(first.trust).toBe('owner');
+  expect(first.trust).toBe('full');
 
   // Enroll a device so the vault is no longer empty.
   await capture(() =>
     commandDevices(['add', '--data-dir', dataDir, 'ep-first', '--vault', 'Family'], fail),
   );
 
-  // A later pairing defaults to full, not owner.
+  // A later pairing also defaults to full.
   const second = lastJson(
-    await capture(() => commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail)),
+    await capture(() =>
+      commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail, daemon),
+    ),
   );
   expect(second.trust).toBe('full');
 
-  // `--trust owner` still overrides explicitly.
-  const explicit = lastJson(
-    await capture(() =>
-      commandPair(['--data-dir', dataDir, '--vault', 'Family', '--trust', 'owner', '--json'], fail),
+  await expect(
+    commandPair(
+      ['--data-dir', dataDir, '--vault', 'Family', '--trust', 'owner', '--json'],
+      fail,
+      daemon,
     ),
-  );
-  expect(explicit.trust).toBe('owner');
+  ).rejects.toThrow(/ordinary pairing grants full or readonly/i);
 });
 
 test('pair --json failure emits {ok:false,error,message} on stdout, then still fails the process', async () => {
@@ -332,9 +385,11 @@ test('pair --json failure emits {ok:false,error,message} on stdout, then still f
     return true;
   }) as typeof process.stdout.write;
   try {
-    await expect(commandPair(['--data-dir', dataDir, '--json'], fail)).rejects.toThrow(
-      CliFailError,
-    );
+    await expect(
+      commandPair(['--data-dir', dataDir, '--json'], fail, async () => {
+        throw new Error('connection refused');
+      }),
+    ).rejects.toThrow(CliFailError);
   } finally {
     process.stdout.write = original;
   }
@@ -348,6 +403,7 @@ test('pair --json failure emits {ok:false,error,message} on stdout, then still f
 test('device plane: deviceKeyFor trusts only the in-process proof header', async () => {
   const layout = daemonLayoutFor(dataDir);
   await fs.mkdir(dataDir, { recursive: true });
+  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
 
   // Enroll a device out of band, then check the deviceAccess resolution.
   const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: silentLogger });
@@ -376,47 +432,7 @@ test('device plane: deviceKeyFor trusts only the in-process proof header', async
   registry.stop();
 });
 
-// Bootstraps a registry + watches revocations; fsync-bound like the
-// vault/device admin tests above, so it inherits the file-level 60s budget
-// rather than carrying a smaller override of its own.
-test('device plane: SSH CLI revocation closes the native relay endpoint', async () => {
-  const layout = daemonLayoutFor(dataDir);
-  await fs.mkdir(dataDir, { recursive: true });
-  const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: silentLogger });
-  const vaultId = registry.defaultVaultId();
-  const enrollments = EnrollmentStore.open(layout.devicesFile);
-  enrollments.enroll({ endpointId: 'ep-live-cli', vaultId, label: 'live CLI device' });
-  const revoked: string[] = [];
-  const watcher = watchEnrollmentRevocations({
-    file: layout.devicesFile,
-    enrollments,
-    onRevoked: (endpointId) => {
-      revoked.push(endpointId);
-    },
-    logger: silentLogger,
-  });
-  try {
-    await capture(() => commandDevices(['revoke', '--data-dir', dataDir, 'ep-live-cli'], fail));
-    // fs.watch settle is 10ms + OS notification lag; under parallel package
-    // load the debounce can miss a single tick. Poll longer and poke mtime
-    // if the first window is quiet (still proves the watch path, not a mock).
-    await vi.waitFor(
-      async () => {
-        if (revoked.length === 0) {
-          const now = Date.now() / 1000;
-          await fs.utimes(layout.devicesFile, now, now);
-        }
-        expect(revoked).toEqual(['ep-live-cli']);
-      },
-      { timeout: 20_000, interval: 50 },
-    );
-  } finally {
-    await watcher.close();
-    registry.stop();
-  }
-});
-
-test('device plane: an unenrolled endpoint start still writes endpoint identity', async () => {
+test('device plane: an unenrolled endpoint derives identity from the custody key', async () => {
   const layout = daemonLayoutFor(dataDir);
   await fs.mkdir(dataDir, { recursive: true });
   const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: silentLogger });
@@ -426,17 +442,18 @@ test('device plane: an unenrolled endpoint start still writes endpoint identity'
     logger: silentLogger,
     relays: 'disabled',
   });
-  // Relays disabled keeps the endpoint offline; it still mints its identity
-  // and publishes endpoint.json for the pair CLI.
+  plane.pairing.tickets.mintFounding();
+  expect(registry.isFresh()).toBe(true);
+  expect(plane.dataPlaneControl.authorize('first-device')).toMatchObject({ allowed: true });
+  // Relays disabled keeps the endpoint offline; identity remains derivable
+  // from the custody key without a stale address cache.
   const handle = await plane.startEndpoint({ baseUrl: 'http://127.0.0.1:1', token: 't' });
   try {
     expect(handle?.endpointId).toBeTruthy();
-    const state = JSON.parse(readFileSync(layout.endpointStateFile, 'utf8')) as {
-      endpointId: string;
-      ticket: string;
-    };
-    expect(state.endpointId).toBe(handle!.endpointId);
-    expect(state.ticket).toBeTruthy();
+    const secret = new KeyStore(layout.keysDir).load('endpoint-key.bin');
+    expect(secret).not.toBeNull();
+    expect(endpointIdForSecret(secret!)).toBe(handle!.endpointId);
+    expect(handle!.ticket()).toBeTruthy();
   } finally {
     await handle?.close();
     registry.stop();

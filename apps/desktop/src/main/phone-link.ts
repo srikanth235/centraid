@@ -11,18 +11,18 @@
 // desktop, not with remote gateways). The gateway keeps binding 127.0.0.1
 // and its HTTP surface is untouched.
 
-import crypto from 'node:crypto';
-import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import {
   DeviceStore,
+  loadEndpointSecret,
   startPreferredDesktopTunnel,
   type DesktopTunnelHandle,
   type PairedDevice,
 } from '@centraid/tunnel';
 import QRCode from 'qrcode';
+import { deviceIrohKeyPersistence } from './gateway-secrets.js';
 import { loadSettings } from './settings.js';
 
 export const PHONE_PAIRED_CHANNEL = 'centraid:phone:paired';
@@ -52,19 +52,6 @@ function phoneLinkDir(): string {
   return path.join(app.getPath('userData'), 'phone-link');
 }
 
-function readOrMintSecretKey(file: string): Uint8Array {
-  try {
-    const bytes = fs.readFileSync(file);
-    if (bytes.length === 32) return Uint8Array.from(bytes);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-  }
-  const key = crypto.randomBytes(32);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, key, { mode: 0o600 });
-  return Uint8Array.from(key);
-}
-
 function deviceStore(): DeviceStore {
   store ??= DeviceStore.open(path.join(phoneLinkDir(), 'devices.json'));
   return store;
@@ -80,7 +67,12 @@ export async function ensurePhoneLink(): Promise<DesktopTunnelHandle> {
   if (starting) return starting;
   starting = (async () => {
     const started = await startPreferredDesktopTunnel({
-      secretKey: readOrMintSecretKey(path.join(phoneLinkDir(), 'key.bin')),
+      secretKey: loadEndpointSecret({
+        persistence: deviceIrohKeyPersistence('phone-link'),
+        onCorrupt: 'remint',
+        label: 'desktop phone-link device key',
+        warn: (message) => console.warn(`phone link: ${message}`),
+      }),
       deviceStore: deviceStore(),
       desktopName: os.hostname().replace(/\.local$/, ''),
       upstream: async () => {

@@ -4,8 +4,8 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * now proves what FORMAT.md warns about: a restore whose sealed columns cannot
  * be opened is "a placebo". A real backup of a vault with a sealed secret is
  * restored into a scratch dir, and the standing verification asserts the
- * `seal.key` entry is present AND matches the vault's stamped fingerprint — the
- * same proof the vault's own open path enforces (`resolveSealKey`).
+ * recovery-kit/KeyStore DEK matches the vault's stamped fingerprint — the same
+ * proof the vault's own open path enforces (`resolveSealKey`).
  *
  *   - a genuinely sealed vault verifies clean (the key unseals), and
  *   - a vault whose stamped fingerprint no longer matches the restored key FAILS
@@ -36,7 +36,7 @@ interface Machine {
   vaultId: string;
 }
 
-/** A real vault with a SEALED secret (mints seal.key + stamps a fingerprint),
+/** A real vault with a SEALED secret (mints its KeyStore DEK + stamps a fingerprint),
  *  wired to a real BackupService over the fake HTTP provider. */
 async function makeSealedMachine(
   server: Awaited<ReturnType<typeof startFakeProviderServer>>,
@@ -48,6 +48,7 @@ async function makeSealedMachine(
     logger: silentLogger,
     ownerName: 'Mara',
   });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const vaultId = registry.defaultVaultId();
   const plane = registry.get(vaultId)!;
@@ -56,7 +57,7 @@ async function makeSealedMachine(
       enabled: true,
       provider: { kind: 'remote', endpoint: server.url, apiKey: server.apiKey },
     },
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health: new HealthRegistry(),
     logger: silentLogger,
@@ -78,7 +79,7 @@ test('restore-verify passes when the restored seal key unseals the vault', async
   cleanups.push(() => server.close());
   const m = await makeSealedMachine(server);
   await m.service.runBackup(m.vaultId);
-  // The scratch restore carries seal.key and it matches the stamped fingerprint.
+  // Restore verification supplies the KeyStore DEK and matches the fingerprint.
   await expect(m.service.runRestoreVerify(m.vaultId)).resolves.toBeUndefined();
 });
 

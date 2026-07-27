@@ -20,7 +20,7 @@
  * `resourceUsage.backgroundTimerFiresLastHour` (Phase C). Target: ≤ 120
  * background timer fires/hour while idle. Audited gateway timer inventory —
  * all already adaptive/unref'd, no fix needed: outbox drain (60s idle,
- * adaptive), instance-lease renew (60s), backup retention (1h) + WAL drain
+ * adaptive), backup retention (1h) + WAL drain
  * (RPO-derived), vault + outbox sweeps (1–2h), SSE heartbeats (15–30s per
  * OPEN stream only, unref'd). No standing sub-minute wakeup exists at idle.
  *

@@ -42,11 +42,10 @@ import path from 'node:path';
  *                  derivative, and archived journal/conversation segment.
  *   apps         — `apps/`: per-app data directories.
  *   code         — `code/`: the app code store (a bare git repo + worktrees).
- *   backup       — `backupDir`: keyring, engine state, and staging.
  *   logs         — `logsDir`: rotated JSONL gateway logs.
- *   cache        — `cacheDir`: runner scratch. Derived; safe to wipe.
+ *   cache        — runner scratch and reusable backup code bundles. Derived;
+ *                  safe to wipe.
  *   templates    — `templatesCacheDir`: the pulled template cache.
- *   storage      — `storageDir`: connection records + the recovery-kit flag.
  */
 export type LocalComponentId =
   | 'ledger'
@@ -54,11 +53,9 @@ export type LocalComponentId =
   | 'attachments'
   | 'apps'
   | 'code'
-  | 'backup'
   | 'logs'
   | 'cache'
-  | 'templates'
-  | 'storage';
+  | 'templates';
 
 export interface LocalComponentUsage {
   component: LocalComponentId;

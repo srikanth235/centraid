@@ -162,6 +162,7 @@ export async function startNativeDesktopTunnel(
           options.onPaired?.(device);
           response = {
             ok: true,
+            gatewayId: relay!.endpointId,
             deviceId: device.deviceId,
             desktopName: options.desktopName ?? 'Centraid Desktop',
           };

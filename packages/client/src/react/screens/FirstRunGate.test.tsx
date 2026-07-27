@@ -3,11 +3,9 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import FirstRunGate, { type FirstRunGateProps } from './FirstRunGate.js';
 
-// FirstRunGate pulls in OnboardingScreen (→ ConnectFlow → gateway-client) and
-// RecoverScreen (→ gateway-client-recover), both of which reach
-// gateway-client-core's module-load window.CentraidApi listeners. `vi.hoisted`
-// is lifted above the import above, so this stub is in place before that graph
-// evaluates while the import stays lint-clean.
+// FirstRunGate pulls in OnboardingScreen (→ ConnectFlow → gateway-client),
+// which reaches gateway-client-core's module-load window.CentraidApi listeners.
+// `vi.hoisted` is lifted above the import, so this stub is installed first.
 vi.hoisted(() => {
   (window as unknown as { CentraidApi: Record<string, unknown> }).CentraidApi = {
     onGatewayChanged: () => () => undefined,
@@ -19,13 +17,12 @@ vi.hoisted(() => {
 function makeProps(over: Partial<FirstRunGateProps> = {}): FirstRunGateProps {
   return {
     onOnboardingComplete: vi.fn(),
-    onRecoveryComplete: vi.fn(),
-    recover: {
-      validateKit: vi.fn().mockResolvedValue({ ok: true, createdAt: '', targets: [] }),
-      discover: vi.fn(),
-      start: vi.fn(),
-      status: vi.fn().mockResolvedValue({ fresh: true, job: null }),
-      streamEvents: vi.fn().mockReturnValue(new Promise<void>(() => undefined)),
+    onFoundingComplete: vi.fn(),
+    gatewayStatus: 'uninitialized',
+    founding: {
+      initialize: vi.fn(),
+      verify: vi.fn(),
+      restore: vi.fn(),
     },
     ...over,
   };
@@ -68,32 +65,40 @@ function clickIncludes(el: HTMLElement, text: string): void {
 describe('FirstRunGate', () => {
   it('offers exactly the two first-run choices', async () => {
     const el = await mount(makeProps());
-    expect(el.textContent).toContain('Start fresh');
-    expect(el.textContent).toContain('Recover my vault');
+    expect(el.textContent).toContain('Create vault');
+    expect(el.textContent).toContain('Restore vault');
     expect(el.textContent).toContain('Starting fresh, or bringing a vault back');
   });
 
-  it('"Start fresh" opens the existing onboarding identity step', async () => {
+  it('"Create vault" opens the founding ceremony', async () => {
     const el = await mount(makeProps());
-    clickIncludes(el, 'Start fresh');
+    clickIncludes(el, 'Create vault');
     await flush();
-    expect(el.textContent).toContain('Make yourself');
+    expect(el.textContent).toContain('Create your vault');
+    expect(el.textContent).toContain('Recovery-kit password');
   });
 
-  it('"Recover my vault" opens the recovery kit step', async () => {
+  it('"Restore vault" opens the restore peer of the same ceremony', async () => {
     const el = await mount(makeProps());
-    clickIncludes(el, 'Recover my vault');
+    clickIncludes(el, 'Restore vault');
     await flush();
-    expect(el.textContent).toContain('Recover your');
-    expect(el.querySelector('.textarea')).toBeTruthy();
+    expect(el.textContent).toContain('Restore your vault');
+    expect(el.textContent).toContain('Storage-provider key');
   });
 
-  it('"Back" from the recovery flow returns to the choice', async () => {
+  it('"Back" from founding returns to the choice', async () => {
     const el = await mount(makeProps());
-    clickIncludes(el, 'Recover my vault');
+    clickIncludes(el, 'Restore vault');
     await flush();
     clickIncludes(el, 'Back');
     await flush();
     expect(el.textContent).toContain('Starting fresh, or bringing a vault back');
+  });
+
+  it('never shows Create / Restore for an already-founded gateway', async () => {
+    const el = await mount(makeProps({ gatewayStatus: 'ready' }));
+    expect(el.textContent).toContain('Make yourself');
+    expect(el.textContent).not.toContain('Create vault');
+    expect(el.textContent).not.toContain('Restore vault');
   });
 });

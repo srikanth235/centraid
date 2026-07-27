@@ -11,6 +11,7 @@ import http from 'node:http';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
 import { makeVaultRouteHandler } from './vault-routes.js';
+import { GatewayDatabase } from '../serve/gateway-db.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
@@ -105,6 +106,7 @@ function rawOf(plane: VaultPlane, itemId: string): { requestBody: string; status
 async function setup(): Promise<{ base: string; plane: VaultPlane }> {
   const dir = await tempDir();
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const plane = registry.current();
   configureConnection(plane);
@@ -139,6 +141,40 @@ test('remote CAS configuration refuses encryption opt-out for BYO S3 too', async
     ).settings_json,
   ) as Record<string, unknown>;
   expect(settings['blob_store']).toBeUndefined();
+});
+
+test('enabling remote CAS without a backup target names the recovery consequence', async () => {
+  const vaultRoot = await tempDir('remote-without-backup-vault-');
+  const dataDir = await tempDir('remote-without-backup-gateway-');
+  const registry = openVaultRegistry({
+    rootDir: vaultRoot,
+    logger: silentLogger,
+    ownerName: 'Priya',
+  });
+  registry.create('Personal');
+  cleanups.push(() => registry.stop());
+  const database = GatewayDatabase.open(dataDir);
+  cleanups.push(() => database.close());
+  const base = await startHandlerServer(
+    makeVaultRouteHandler(registry, { gatewayDatabase: database }),
+  );
+
+  const response = await fetch(`${base}/centraid/_vault/blob-store`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      blob_store: {
+        kind: 's3',
+        endpoint: 'https://s3.example.test',
+        bucket: 'private-bucket',
+      },
+    }),
+  });
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    warning: expect.stringMatching(/offsite bytes.*recovery kit cannot restore/i),
+  });
 });
 
 test('GET /outbox and GET /blocking surface canEdit true for gmail.send, false for an unregistered verb', async () => {

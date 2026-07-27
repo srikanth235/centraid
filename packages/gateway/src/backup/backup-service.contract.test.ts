@@ -1,9 +1,4 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
-// `BackupService` (PROTOCOL.md/FORMAT.md wiring): a real `VaultRegistry` +
-// `LocalBackupProvider` over temp dirs, with an INJECTED `assembleEntries`
-// seam standing in for the real pinned-base/blob-walk/git-bundle assembly.
-// The shipper bases remain real; the extra fixture gives these service tests
-// one deterministic source they can mutate without duplicating capture tests.
 
 import { afterEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
@@ -11,13 +6,16 @@ import path from 'node:path';
 import {
   BackupProviderError,
   openLocalBackupProvider,
+  wrapRecoveryKit,
   WAL_DB_FILES,
   type BackupProvider,
 } from '@centraid/backup';
 import {
   updateBackupPolicy,
   updateBlobStoreSettings,
+  KeyStore,
   ReplicaIndex,
+  sealKeyFileFor,
   type BackupPolicyPatch,
 } from '@centraid/vault';
 import { openVaultRegistry, type VaultRegistry } from '../serve/vault-registry.js';
@@ -34,6 +32,7 @@ afterEach(async () => {
 });
 function openRegistry(rootDir: string): VaultRegistry {
   const registry = openVaultRegistry({ rootDir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Test vault');
   cleanups.push(() => registry.stop());
   return registry;
 }
@@ -49,15 +48,12 @@ interface Harness {
   backupDir: string;
 }
 
-/**
- * Wraps a real provider so its `registerSnapshot` throws `conflict_generation`
- * from the SECOND call onward — standing in for "another machine already
- * took over this target at the provider" without depending on
- * `LocalBackupProvider`'s per-instance registry cache (which never observes
- * a second same-process instance's disk writes; that staleness is a real
- * property of the local provider across OS processes, not something this
- * unit test should have to fight to exercise our own fencing logic).
- */
+async function verifyExportedKit(h: Harness) {
+  const kit = wrapRecoveryKit(await h.service.recoveryKitDocument(), 'test-password');
+  return h.service.verifyRecoveryKit({ kit, password: 'test-password', lossConsent: true });
+}
+
+/** Make the second snapshot registration simulate a provider takeover. */
 function conflictAfterFirstCall(real: BackupProvider): BackupProvider {
   let calls = 0;
   return {
@@ -108,7 +104,7 @@ async function harness(
   const realProvider = openLocalBackupProvider({ rootDir: providerDir });
   const service = new BackupService({
     config,
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health,
     logger: silentLogger,
@@ -182,11 +178,28 @@ test('first run creates a target, mints a keyring, and registers a snapshot', as
   expect(status?.lastError).toBeUndefined();
   expect(status?.providerPolicy?.status).toBe('synced');
 
-  await expect(fs.access(path.join(h.backupDir, 'keyring.json'))).resolves.toBeUndefined();
+  const keys = new KeyStore(path.dirname(sealKeyFileFor(h.registry.current().dir)));
+  expect(keys.export('keyring.key')).not.toBeNull();
+  await expect(fs.access(path.join(h.backupDir, 'keys'))).rejects.toMatchObject({
+    code: 'ENOENT',
+  });
 
   const snap = await h.health.snapshot();
   const backups = snap.components.find((c) => c.component === 'backups');
   expect(backups?.status).toBe('ok');
+});
+
+test('erase fencing advances the provider generation before local state is removed', async () => {
+  const h = await harness();
+  await h.service.runBackup(h.vaultId);
+  const target = (await h.service.status())[h.vaultId]!;
+  expect(target.generation).toBe(1);
+
+  await h.service.fenceVaultForErase(h.vaultId);
+
+  const provider = openLocalBackupProvider({ rootDir: h.providerDir });
+  expect((await provider.getTarget(target.targetId)).currentGeneration).toBe(2);
+  expect((await h.service.status())[h.vaultId]?.generation).toBe(2);
 });
 
 test('a local policy change is pushed and its provider echo is persisted', async () => {
@@ -236,10 +249,11 @@ test('remote-primary CAS is reconciled and persisted on policy cadence without a
       }),
     }),
   );
+  const health = new HealthRegistry();
   const service = new BackupService({
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
-    health: new HealthRegistry(),
+    health,
     logger: silentLogger,
     now: () => clock.now,
     casReconcile,
@@ -253,6 +267,11 @@ test('remote-primary CAS is reconciled and persisted on policy cadence without a
     status: 'ok',
     backup: { configured: false },
     cas: { configured: true, source: 'bucket' },
+  });
+  const snapshot = await health.snapshot();
+  expect(snapshot.components.find((component) => component.component === 'backups')).toMatchObject({
+    status: 'degraded',
+    detail: expect.stringMatching(/offsite bytes.*recovery kit cannot restore/i),
   });
 
   await service.tick();
@@ -278,7 +297,7 @@ test('CAS-only authenticated corruption remains an error through the health prob
   new ReplicaIndex(plane.db.vault).mark(corrupt, 10);
   const health = new HealthRegistry();
   const service = new BackupService({
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health,
     logger: silentLogger,
@@ -427,42 +446,26 @@ test('verify-only staleness (backup fresh, verify old) degrades without erroring
   expect(backups?.detail).toMatch(/verification is stale/);
 });
 
-// ── Recovery-kit confirmation gate (issue #351 wave 4 / #367) ───────────
-
 test('recoveryKitStatus starts unconfirmed', async () => {
   const h = await harness();
-  expect(await h.service.recoveryKitStatus()).toEqual({ confirmedAt: null });
-});
-
-test('confirmRecoveryKit stamps the current clock (epoch seconds) and persists it', async () => {
-  const h = await harness();
-  h.clock.now = Date.UTC(2026, 6, 11, 12, 0, 0);
-
-  const result = await h.service.confirmRecoveryKit();
-  expect(result).toEqual({ confirmedAt: Math.floor(h.clock.now / 1000) });
   expect(await h.service.recoveryKitStatus()).toEqual({
-    confirmedAt: Math.floor(h.clock.now / 1000),
+    confirmedAt: null,
+    kitFingerprint: expect.any(String),
   });
 });
 
-test('confirming again refreshes the timestamp rather than erroring', async () => {
+test('re-selecting and decrypting the exported kit stamps the current clock and persists it', async () => {
   const h = await harness();
   h.clock.now = Date.UTC(2026, 6, 11, 12, 0, 0);
-  await h.service.confirmRecoveryKit();
-
-  h.clock.now += 60_000;
-  const second = await h.service.confirmRecoveryKit();
-  expect(second.confirmedAt).toBe(Math.floor(h.clock.now / 1000));
-});
-
-test('confirmRecoveryKit does not disturb existing per-vault target state', async () => {
-  const h = await harness();
-  await h.service.runBackup(h.vaultId);
-  const beforeTargets = await h.service.status();
-
-  await h.service.confirmRecoveryKit();
-
-  expect(await h.service.status()).toEqual(beforeTargets);
+  const result = await verifyExportedKit(h);
+  expect(result).toEqual({
+    confirmedAt: Math.floor(h.clock.now / 1000),
+    kitFingerprint: expect.any(String),
+  });
+  expect(await h.service.recoveryKitStatus()).toMatchObject({
+    confirmedAt: Math.floor(h.clock.now / 1000),
+    kitFingerprint: expect.any(String),
+  });
 });
 
 test('the hourly scheduler skips its tick while host power-context posture defers (#528 Phase D)', async () => {
@@ -473,24 +476,19 @@ test('the hourly scheduler skips its tick while host power-context posture defer
     const registry = openRegistry(vaultRoot);
     let defer = true;
     const service = new BackupService({
-      backupDir,
+      cacheDir: backupDir,
       vaults: registry,
       health: new HealthRegistry(),
       logger: silentLogger,
       shouldDeferPosture: () => defer,
     });
     cleanups.push(() => service.stop());
-    // The retention/reconciliation pass is `tick()`; the posture gate lives in
-    // the scheduler that would call it. Spying lets us assert the gate without
-    // driving a full provider round-trip.
     const tick = vi.spyOn(service, 'tick').mockResolvedValue(undefined);
 
     service.start();
-    // Fire the initial jittered timeout (≤ ~1.1h) and the first hourly interval.
     await vi.advanceTimersByTimeAsync(3 * 60 * 60 * 1000);
     expect(tick).not.toHaveBeenCalled();
 
-    // Posture clears — the next scheduled pass runs.
     defer = false;
     await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
     expect(tick).toHaveBeenCalled();

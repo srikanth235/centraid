@@ -2,7 +2,8 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { promises as fs, readFileSync } from 'node:fs';
+import { promises as fs } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import {
   WebControlSessionStore,
   hashControlToken,
@@ -22,8 +23,15 @@ afterEach(async () => {
 });
 
 function rows(): Array<Record<string, unknown>> {
-  return (JSON.parse(readFileSync(file, 'utf8')) as { controls: Array<Record<string, unknown>> })
-    .controls;
+  const db = new DatabaseSync(path.join(dir, 'gateway.db'), { readOnly: true });
+  const result = db
+    .prepare(
+      `SELECT token_hash AS tokenHash, expires_at AS expiresAt
+         FROM web_sessions ORDER BY created_at`,
+    )
+    .all() as Array<Record<string, unknown>>;
+  db.close();
+  return result;
 }
 
 test('a persisted control session is found by a fresh store on the same file (restart)', () => {
@@ -31,7 +39,7 @@ test('a persisted control session is found by a fresh store on the same file (re
   const first = WebControlSessionStore.open(file);
   first.establish({ tokenHash: hash, vaultId: 'v1', shellOrigin: 'http://shell' });
 
-  // Only the SHA-256 hash lands on disk, never the raw token.
+  // Only the SHA-256 hash lands in gateway.db, never the raw token.
   expect(rows()[0]?.tokenHash).toBe(hash);
   expect(JSON.stringify(rows())).not.toContain('cookie-token');
 

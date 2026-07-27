@@ -57,7 +57,13 @@ export interface PairRequest {
 }
 
 export type PairResponse =
-  | { ok: true; deviceId: string; desktopName: string }
+  | {
+      ok: true;
+      /** Durable gateway identity. Dial tickets and relay hints are refreshable addresses only. */
+      gatewayId: string;
+      deviceId: string;
+      desktopName: string;
+    }
   | { ok: false; error: 'invalid_code' | 'expired_code' | 'bad_request' };
 
 /** The JSON the desktop encodes into the "Connect phone" QR. */

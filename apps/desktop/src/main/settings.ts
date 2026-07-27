@@ -9,17 +9,17 @@ import { mergePersistedSettings } from './settings-merge.js';
 /**
  * Persisted desktop settings live at `<userData>/centraid-settings.json`
  * with mode `0600`. After issue #109 it carries only UI preferences and
- * a pointer at the active gateway — connection state (gateway URL,
- * token, workspace path) is per-gateway and lives under
- * `<userData>/gateways/<id>/` (URLs / labels) and the OS keychain
- * (tokens). See `gateway-store.ts`.
+ * a pointer at the active gateway — connection state is per-gateway and lives
+ * in one `connections.json`; device identity and the detached daemon's
+ * loopback secret stay in the OS keychain. See `gateway-store.ts`.
  *
  * Two shapes coexist here:
  *   - **Persisted form** (`PersistedSettings`): exactly what's
  *     serialized. Just the active gateway pointer + UI-level prefs.
  *   - **Effective form** (`DesktopSettings`, returned by `loadSettings`):
  *     the persisted fields, plus everything derived from the active
- *     gateway — `gatewayUrl`, `gatewayToken`. App *code* now
+ *     gateway — a loopback `gatewayUrl`/`gatewayToken` for local runtime
+ *     plumbing, or an iroh EndpointId for a remote connection. App *code* now
  *     lives in the gateway's git store (issue #137), so there is no
  *     `workspaceDir`; `appsDir` holds only per-app data.
  *     Every IPC handler that needs to act against the active gateway
@@ -39,8 +39,7 @@ export interface PersistedSettings {
    * keyed by gateway id. The server no longer holds an active-vault
    * pointer — the client owns it and sends it as `x-centraid-vault`.
    * Switching vaults is a pure client-side pointer flip; a missing entry
-   * means "let the gateway pick" (the device's sole enrollment, or the
-   * default vault for the shared-bearer local transport).
+   * means "let the gateway pick" from the device's proved enrollments.
    */
   activeVaultByGateway?: Record<string, string>;
   /**
@@ -114,12 +113,10 @@ export interface DesktopSettings {
    * `x-centraid-vault` header on every request.
    */
   activeVaultId?: string;
-  /** Derived — `<userData>/gateways/<active>/apps/` (per-app data storage). */
   /**
    * Derived — kind of the active gateway. `'local'` means the
-   * in-process runtime owns the URL/token; `'remote'` means the URL
-   * comes from the active gateway's `profile.json` and the token
-   * comes from the OS keychain.
+   * desktop runtime owns the loopback listener; `'remote'` means the
+   * connection is addressed by its persisted iroh EndpointId.
    */
   activeGatewayKind: 'local' | 'remote';
   /** Derived — the active gateway's user-facing label. */
@@ -386,9 +383,8 @@ export async function setActiveVaultId(vaultId: string | undefined): Promise<Des
 
 /**
  * Where remote-fetched template copies are cached for a given gateway.
- * Per-gateway (issue #109) so the gateway directory is the complete
- * record of that gateway's local state — `rm -rf gateways/<id>/` wipes
- * everything including downloaded templates. Today the
+ * The cache is gateway-data disposable state, outside Electron userData.
+ * Today the
  * `remoteTemplatesUrl` setting is single-valued (one feed per machine),
  * so the cache content will usually be identical across gateways —
  * the per-gateway slot future-proofs per-gateway template feeds at

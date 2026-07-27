@@ -22,7 +22,6 @@ let handle: GatewayServeHandle;
 function pathsUnder(dir: string): GatewayPaths {
   return {
     vaultDir: path.join(dir, 'vault'),
-    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -85,6 +84,7 @@ beforeEach(async () => {
   // and hang on agentless CI/local hosts. Inject a failing runTurn so the
   // compile path still exercises ledger finish + HTTP 202 without ACP.
   handle = await serve({
+    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     runTurn: async () => {
       throw new Error('compiler unavailable');

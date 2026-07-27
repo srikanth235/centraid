@@ -25,8 +25,14 @@ async function mount(props: {
   loadUsage?: () => Promise<UsageInput | null>;
   streamCustody?: (onChange: () => void, signal: AbortSignal) => Promise<void>;
   onRunNow: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
-  onConfirmRecoveryKit?: () => Promise<{ confirmedAt: number }>;
-  onExportRecoveryKit?: () => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
+  onConfirmRecoveryKit?: (input: {
+    kit: unknown;
+    password: string;
+    lossConsent: true;
+  }) => Promise<{ confirmedAt: number }>;
+  onExportRecoveryKit?: (input: {
+    password: string;
+  }) => Promise<{ ok: boolean; canceled?: boolean; error?: string }>;
   onUpdatePolicy?: (
     vaultId: string,
     patch: BackupPolicyPatchDTO,
@@ -62,6 +68,24 @@ async function mount(props: {
 
 const neverRun = (): Promise<{ accepted: boolean }> => new Promise(() => {});
 const neverConfirmKit = (): Promise<{ confirmedAt: number }> => new Promise(() => {});
+
+function setInputValue(input: HTMLInputElement, value: string): void {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+async function selectRecoveryKit(el: HTMLDivElement, kit: unknown): Promise<void> {
+  const fileInput = el.querySelector('input[type="file"]') as HTMLInputElement;
+  const contents = JSON.stringify(kit);
+  const file = new File([contents], 'centraid-recovery-kit.json', {
+    type: 'application/json',
+  });
+  Object.defineProperty(file, 'text', { value: async () => contents });
+  Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+  fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 const POLICY: BackupPolicyDTO = {
   rpoSeconds: 60,
@@ -263,7 +287,7 @@ describe('BackupCard — configured', () => {
     expect(el.textContent).toContain('raw bucket check');
   });
 
-  it('renders per-vault ages, flags a never-backed-up vault, and shows the seal-key nudge', async () => {
+  it('renders per-vault ages, flags a never-backed-up vault, and states recovery scope', async () => {
     const status: BackupStatusDTO = {
       configured: true,
       vaults: [
@@ -282,7 +306,8 @@ describe('BackupCard — configured', () => {
     expect(el.textContent).toContain('verified 1d 1h ago');
     expect(el.textContent).toContain('Side');
     expect(el.textContent).toContain('backed up never');
-    expect(el.textContent).toContain('only way to decrypt');
+    expect(el.textContent).toContain('unlocks backed-up vaults');
+    expect(el.textContent).toContain('local-only vaults are not included');
     const warn = el.querySelector('[data-emphasis="warn"]');
     expect(warn?.textContent).toContain('never');
   });
@@ -371,7 +396,7 @@ describe('BackupCard — configured', () => {
 });
 
 describe('BackupCard — recovery-kit gate', () => {
-  it('shows the confirm button when configured and never confirmed', async () => {
+  it('requires a password before a configured gateway can export its wrapped kit', async () => {
     const status: BackupStatusDTO = {
       configured: true,
       vaults: [{ vaultId: 'v1', name: 'Main' }],
@@ -380,10 +405,12 @@ describe('BackupCard — recovery-kit gate', () => {
     const el = await mount({ loadStatus: vi.fn().mockResolvedValue(status), onRunNow: neverRun });
     expect(el.querySelector('[data-testid="recovery-kit-gate"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="recovery-kit-confirmed"]')).toBeNull();
-    const confirmBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes("I've saved my recovery kit"),
-    );
-    expect(confirmBtn).toBeDefined();
+    expect(el.textContent).toContain('Recovery-kit password');
+    const exportButton = [...el.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Export wrapped recovery kit'),
+    ) as HTMLButtonElement;
+    expect(exportButton).toBeDefined();
+    expect(exportButton.disabled).toBe(true);
   });
 
   it('renders the quiet confirmed state with the date when already confirmed', async () => {
@@ -405,7 +432,7 @@ describe('BackupCard — recovery-kit gate', () => {
     ).toBe(false);
   });
 
-  it('clicking the confirm button POSTs and flips to the confirmed state', async () => {
+  it('verifies the re-selected wrapped kit and flips to the confirmed state', async () => {
     const status: BackupStatusDTO = {
       configured: true,
       vaults: [{ vaultId: 'v1', name: 'Main' }],
@@ -413,27 +440,47 @@ describe('BackupCard — recovery-kit gate', () => {
     };
     const confirmedAt = Math.floor(NOW / 1000);
     const onConfirmRecoveryKit = vi.fn().mockResolvedValue({ confirmedAt });
+    const onExportRecoveryKit = vi.fn().mockResolvedValue({ ok: true });
     const el = await mount({
       loadStatus: vi.fn().mockResolvedValue(status),
       onRunNow: neverRun,
       onConfirmRecoveryKit,
+      onExportRecoveryKit,
     });
 
-    const confirmBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes("I've saved my recovery kit"),
+    const password = el.querySelector('input[type="password"]') as HTMLInputElement;
+    await act(async () => {
+      setInputValue(password, 'correct horse');
+      const exportButton = [...el.querySelectorAll('button')].find((button) =>
+        button.textContent?.includes('Export wrapped recovery kit'),
+      ) as HTMLButtonElement;
+      exportButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => selectRecoveryKit(el, { format: 'centraid-recovery-kit/2' }));
+    const consent = el.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    const verifyButton = [...el.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Verify selected recovery kit'),
     ) as HTMLButtonElement;
     await act(async () => {
-      confirmBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      consent.click();
+      verifyButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    expect(onConfirmRecoveryKit).toHaveBeenCalledTimes(1);
+    expect(onExportRecoveryKit).toHaveBeenCalledWith({ password: 'correct horse' });
+    expect(onConfirmRecoveryKit).toHaveBeenCalledWith({
+      kit: { format: 'centraid-recovery-kit/2' },
+      password: 'correct horse',
+      lossConsent: true,
+    });
     expect(el.querySelector('[data-testid="recovery-kit-confirmed"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="recovery-kit-gate"]')).toBeNull();
   });
 
-  it('exports through the native save flow before confirming custody', async () => {
+  it('exports through the native save flow before offering verification', async () => {
     const status: BackupStatusDTO = {
       configured: true,
       vaults: [{ vaultId: 'v1', name: 'Main' }],
@@ -447,43 +494,60 @@ describe('BackupCard — recovery-kit gate', () => {
       onExportRecoveryKit,
       onConfirmRecoveryKit,
     });
+    const password = el.querySelector('input[type="password"]') as HTMLInputElement;
     const exportBtn = [...el.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Export recovery kit'),
+      button.textContent?.includes('Export wrapped recovery kit'),
     ) as HTMLButtonElement;
     await act(async () => {
+      setInputValue(password, 'correct horse');
       exportBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(onExportRecoveryKit).toHaveBeenCalledTimes(1);
-    expect(onConfirmRecoveryKit).toHaveBeenCalledTimes(1);
-    expect(el.querySelector('[data-testid="recovery-kit-confirmed"]')).not.toBeNull();
+    expect(onExportRecoveryKit).toHaveBeenCalledWith({ password: 'correct horse' });
+    expect(onConfirmRecoveryKit).not.toHaveBeenCalled();
+    expect(el.textContent).toContain('Re-select the saved file');
   });
 
-  it('surfaces a confirm failure inline without crashing the card', async () => {
+  it('surfaces a verification failure inline without crashing the card', async () => {
     const status: BackupStatusDTO = {
       configured: true,
       vaults: [{ vaultId: 'v1', name: 'Main' }],
       recoveryKit: { confirmedAt: null },
     };
     const onConfirmRecoveryKit = vi.fn().mockRejectedValue(new Error('gateway unreachable'));
+    const onExportRecoveryKit = vi.fn().mockResolvedValue({ ok: true });
     const el = await mount({
       loadStatus: vi.fn().mockResolvedValue(status),
       onRunNow: neverRun,
       onConfirmRecoveryKit,
+      onExportRecoveryKit,
     });
 
-    const confirmBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes("I've saved my recovery kit"),
+    const password = el.querySelector('input[type="password"]') as HTMLInputElement;
+    await act(async () => {
+      setInputValue(password, 'correct horse');
+      const exportButton = [...el.querySelectorAll('button')].find((button) =>
+        button.textContent?.includes('Export wrapped recovery kit'),
+      ) as HTMLButtonElement;
+      exportButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => selectRecoveryKit(el, { format: 'centraid-recovery-kit/2' }));
+    const consent = el.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    const verifyButton = [...el.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Verify selected recovery kit'),
     ) as HTMLButtonElement;
     await act(async () => {
-      confirmBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      consent.click();
+      verifyButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await Promise.resolve();
       await Promise.resolve();
     });
 
     expect(el.textContent).toContain('gateway unreachable');
-    // Still gated — the failed confirm didn't flip the state.
+    // Still gated — the failed verification didn't flip the state.
     expect(el.querySelector('[data-testid="recovery-kit-gate"]')).not.toBeNull();
   });
 

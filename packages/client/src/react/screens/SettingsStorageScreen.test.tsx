@@ -21,7 +21,6 @@ function makeProps(over: Partial<SettingsStorageBridgeProps> = {}): SettingsStor
     createConnection: vi.fn().mockResolvedValue({ ok: true, value: makeRow() }),
     deleteConnection: vi.fn().mockResolvedValue(undefined),
     testConnection: vi.fn().mockResolvedValue({ ok: true, detail: 'signed request accepted' }),
-    confirmRecoveryKit: vi.fn().mockResolvedValue({ confirmedAt: 1_700_000_000 }),
     loadVaultBlobStore: vi.fn().mockResolvedValue({ kind: 'fs' }),
     attachVaultConnection: vi
       .fn()
@@ -155,10 +154,11 @@ describe('SettingsStorageScreen — hosted provider', () => {
       await Promise.resolve();
     });
 
-    expect(props.createConnection).toHaveBeenCalledWith(
-      { name: 'Hosted storage', baseUrl: 'https://storage.example.com', apiKey: 'sekret-key' },
-      undefined,
-    );
+    expect(props.createConnection).toHaveBeenCalledWith({
+      name: 'Hosted storage',
+      baseUrl: 'https://storage.example.com',
+      apiKey: 'sekret-key',
+    });
     expect(el.querySelector('.wizard')).toBeNull(); // closed on success
   });
 
@@ -216,56 +216,22 @@ describe('SettingsStorageScreen — recovery-kit gate', () => {
     return el;
   }
 
-  it('shows the gate on refusal, then "I\'ve saved my recovery kit" confirms and retries', async () => {
-    const createConnection = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: false,
-        code: 'recovery_kit_not_confirmed',
-        message: 'confirm you have exported the recovery kit',
-      })
-      .mockResolvedValueOnce({ ok: true, value: makeRow() });
+  it('shows a hard gate that directs the owner to the real Storage ceremony', async () => {
+    const createConnection = vi.fn().mockResolvedValue({
+      ok: false,
+      code: 'recovery_kit_not_confirmed',
+      message: 'confirm you have exported the recovery kit',
+    });
     const props = makeProps({ createConnection, loadConnections: vi.fn().mockResolvedValue([]) });
     const el = await openFormAndSubmit(props);
 
     const dialog = el.querySelector('[role="dialog"]');
     expect(dialog).toBeTruthy();
     expect(dialog?.textContent).toContain('confirm you have exported the recovery kit');
-
-    const confirmBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes("I've saved my recovery kit"),
-    ) as HTMLButtonElement;
-    await act(async () => confirmBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(props.confirmRecoveryKit).toHaveBeenCalledTimes(1);
-    expect(createConnection).toHaveBeenCalledTimes(2);
-    expect(createConnection.mock.calls[1]?.[1]).toBeUndefined(); // retried WITHOUT force
-    expect(el.querySelector('[role="dialog"]')).toBeNull();
-  });
-
-  it('"Proceed anyway" retries with {force: true} and never calls confirmRecoveryKit', async () => {
-    const createConnection = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: false, code: 'recovery_kit_not_confirmed', message: 'nope' })
-      .mockResolvedValueOnce({ ok: true, value: makeRow() });
-    const props = makeProps({ createConnection, loadConnections: vi.fn().mockResolvedValue([]) });
-    const el = await openFormAndSubmit(props);
-
-    const proceedBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Proceed anyway'),
-    ) as HTMLButtonElement;
-    await act(async () => proceedBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(props.confirmRecoveryKit).not.toHaveBeenCalled();
-    expect(createConnection).toHaveBeenCalledTimes(2);
-    expect(createConnection.mock.calls[1]?.[1]).toEqual({ force: true });
-    expect(el.querySelector('[role="dialog"]')).toBeNull();
+    expect(dialog?.textContent).toContain('Open the Storage page');
+    expect(dialog?.textContent).not.toContain('Proceed anyway');
+    expect(dialog?.textContent).not.toContain("I've saved my recovery kit");
+    expect(createConnection).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -297,7 +263,7 @@ describe('SettingsStorageScreen — per-vault hosted/local choice', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(props.attachVaultConnection).toHaveBeenCalledWith('c1', undefined);
+    expect(props.attachVaultConnection).toHaveBeenCalledWith('c1');
   });
 
   it('clicking "On this device" while hosted detaches', async () => {

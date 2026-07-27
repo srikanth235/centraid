@@ -138,18 +138,25 @@ describe('exportGatewayDiagnostics', () => {
 describe('exportGatewayRecoveryKit', () => {
   it('fetches the key-bearing document from the backup endpoint and saves it', async () => {
     let requested = '';
+    let requestInit: RequestInit | undefined;
     const writes: Array<{ path: string; data: string }> = [];
-    const kit = { version: 1, kind: 'centraid-recovery-kit', targets: [] };
+    const kit = { format: 'centraid-recovery-kit/2', wrapped: 'ciphertext' };
     const result = await exportGatewayRecoveryKit(
       makeDeps({
-        fetchImpl: async (url) => {
+        fetchImpl: async (url, init) => {
           requested = url.toString();
+          requestInit = init;
           return Response.json(kit);
         },
         writeFile: async (path, data) => void writes.push({ path, data }),
       }),
+      { password: 'correct horse' },
     );
     expect(requested).toBe('http://127.0.0.1:4000/centraid/_gateway/backup/kit');
+    expect(requestInit).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ password: 'correct horse' }),
+    });
     expect(result).toEqual({ ok: true, path: '/tmp/centraid-recovery-kit.json' });
     expect(writes).toEqual([
       { path: '/tmp/centraid-recovery-kit.json', data: JSON.stringify(kit, null, 2) },

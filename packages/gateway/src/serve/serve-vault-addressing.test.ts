@@ -30,7 +30,6 @@ let vaultB: string;
 function pathsUnder(dir: string): GatewayPaths {
   return {
     vaultDir: path.join(dir, 'vault'),
-    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -52,6 +51,7 @@ const DEVICE_HEADER = 'x-test-device';
 beforeEach(async () => {
   dataDir = await tempDir(`addr-gateway-${crypto.randomUUID()}-`);
   handle = await serve({
+    initVaultName: "Owner's vault",
     paths: pathsUnder(dataDir),
     // A fake device transport: the test names its device in a header the
     // way the iroh forwarder stamps the QUIC-proved EndpointId.
@@ -60,7 +60,12 @@ beforeEach(async () => {
         const v = req.headers[DEVICE_HEADER];
         return typeof v === 'string' ? v : undefined;
       },
-      vaultsFor: (deviceKey) => (deviceKey === 'family-phone' ? [vaultB] : []),
+      vaultsFor: (deviceKey) =>
+        deviceKey === 'family-phone'
+          ? [vaultB]
+          : deviceKey === 'owner-laptop'
+            ? [vaultA, vaultB]
+            : [],
     },
   });
   vaultA = handle.vaults.defaultVaultId();
@@ -73,7 +78,7 @@ beforeEach(async () => {
     await seedApp(await handle.appsStore(), 'app-b');
   });
   await handle.syncApps(vaultB);
-});
+}, 30_000);
 
 afterEach(async () => {
   await handle.close().catch(() => undefined);
@@ -82,7 +87,11 @@ afterEach(async () => {
 
 function get(pathname: string, headers: Record<string, string> = {}): Promise<Response> {
   return fetch(`${handle.url}${pathname}`, {
-    headers: { Authorization: `Bearer ${handle.token}`, ...headers },
+    headers: {
+      Authorization: `Bearer ${handle.token}`,
+      [DEVICE_HEADER]: 'owner-laptop',
+      ...headers,
+    },
   });
 }
 
@@ -110,10 +119,10 @@ test('two clients address two vaults concurrently — disjoint app worlds, no sw
   expect(defaulted.vaultId).toBe(vaultA);
 });
 
-test('an unknown vault header fails loudly, never falls back', async () => {
+test('an un-enrolled vault header fails closed, never falls back', async () => {
   const res = await get('/centraid/_apps', { 'x-centraid-vault': 'nope' });
-  expect(res.status).toBe(404);
-  expect(await res.json()).toMatchObject({ error: 'vault_not_found' });
+  expect(res.status).toBe(403);
+  expect(await res.json()).toMatchObject({ error: 'vault_not_enrolled' });
 });
 
 test('a device is confined to its enrollments (issue #289 phase 2)', async () => {
@@ -142,9 +151,9 @@ test('a device is confined to its enrollments (issue #289 phase 2)', async () =>
   ).json()) as { vaults: Array<{ vaultId: string }> };
   expect(listed.vaults.map((v) => v.vaultId)).toEqual([vaultB]);
 
-  // The shared-bearer transport (no device key) still sees everything.
-  const all = (await (await get('/centraid/_vault/vaults')).json()) as {
-    vaults: Array<{ vaultId: string }>;
-  };
+  // The owner device is explicitly enrolled in both vaults.
+  const all = (await (
+    await get('/centraid/_vault/vaults', { [DEVICE_HEADER]: 'owner-laptop' })
+  ).json()) as { vaults: Array<{ vaultId: string }> };
   expect(all.vaults.map((v) => v.vaultId).sort()).toEqual([vaultA, vaultB].sort());
 });

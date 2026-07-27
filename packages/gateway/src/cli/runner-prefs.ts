@@ -3,7 +3,7 @@
  * config file.
  *
  * Without this, the runtime's per-turn prefs loader would see an empty
- * prefs.json and fall back to "codex with whatever's on $PATH" —
+ * gateway preferences and fall back to "codex with whatever's on $PATH" —
  * which is fine for a default but doesn't pick up the daemon operator's
  * configured binPath / extra args.
  *

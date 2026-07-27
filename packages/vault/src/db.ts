@@ -1,15 +1,5 @@
-// The physical layout from §03, extended by issue #296: vault.db holds all
-// eleven schemas (model rows, engine-enforced FKs, one ACID boundary);
-// journal.db holds the append-only audit stream (receipts, provenance,
-// invocations, checks, evidence, explanations) PLUS the runtime's
-// conversation-ledger band (the old standalone transcripts.db folded in —
-// see journal.ts for the band split); and the `blobs/` sibling holds
-// content-addressed bytes for everything that is not inline text
-// (issue #296 — export = copy two files and a directory, verify hashes).
-//
-// Only the gateway holds these handles — apps, agents and generated views
-// never see a connection (§10). Everything outside this package should go
-// through createGateway().
+// One vault owns vault.db, journal.db, and blobs/. Only the gateway holds
+// these handles; apps, agents, and generated views never see a connection.
 
 import { mkdirSync, statfsSync } from 'node:fs';
 import path from 'node:path';
@@ -33,6 +23,7 @@ import { asVaultDiskFullError } from './errors.js';
 import { initializeReplicaProtocol } from './replica/change-log.js';
 import { repairReplicaInvocationCommits } from './replica/invocation-commits.js';
 import { registerContentTextFn } from './schema/fts.js';
+import type { KeyStore } from './schema/key-store.js';
 import { JOURNAL_MIGRATIONS, migrate, migrateVault } from './schema/migrate.js';
 import { ephemeralSealKey, resolveSealKey, sealKeyFileFor } from './schema/sealed.js';
 
@@ -48,6 +39,8 @@ export interface VaultDb {
    * ciphertext only. In-memory vaults get an ephemeral key.
    */
   sealKey: Buffer;
+  /** Host-selected custody store that owns the on-disk seal-key envelope. */
+  keyStore?: KeyStore;
   /**
    * Blob custody (issue #296): the always-present local CAS plus the
    * settings-declared remote tier. The remote resolves lazily from
@@ -55,16 +48,7 @@ export interface VaultDb {
    * backends needs no reopen.
    */
   blobs: BlobCustody;
-  /**
-   * The settings-declared remote CAS tier, resolved fresh on every call from
-   * the SAME cached closure `blobs`/`blobTransfers` use (issue #439 R2). A
-   * lazy-by-default restore asks this "does the vault have a durable remote CAS
-   * tier?" so the gateway can prefer the previews-first lazy path WITHOUT
-   * rebuilding S3 config from settings + credentials by hand. `null` when the
-   * vault has no s3-kind `blob_store` or no resolvable credential — the signal
-   * to fall back to a FULL restore (the snapshot is the only copy). Constructing
-   * the tier makes no network call; only a store operation does.
-   */
+  /** Current remote CAS tier, or null when full restore is required. */
   remote(): RemoteTier | null;
   /** Persistent resumable ingress + continuous pending-offsite drain (#414). */
   blobTransfers: BlobTransferCoordinator;
@@ -151,6 +135,12 @@ export interface BlobStoreSettings {
 export interface OpenVaultOptions {
   /** Directory for vault.db + journal.db. Omit for in-memory (tests). */
   dir?: string;
+  /**
+   * Host-selected custody store for this vault's DEK. Gateway hosts must pass
+   * the same store used for endpoint, backup, and connection secrets so an
+   * OS-protected data directory never falls back to the headless file scheme.
+   */
+  keyStore?: KeyStore;
   /** Override the seal key (custody managed by the caller). */
   sealKey?: Buffer;
   /** Override the local blob tier (tests inject a MemoryBlobStore). */
@@ -320,7 +310,9 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   // DEK that would turn every sealed cell into GCM garbage at reveal time.
   const sealKey =
     options.sealKey ??
-    (dir === undefined ? ephemeralSealKey() : resolveSealKey(vault, sealKeyFileFor(dir)));
+    (dir === undefined
+      ? ephemeralSealKey()
+      : resolveSealKey(vault, sealKeyFileFor(dir), options.keyStore));
   const blobContentKeys = new BlobContentKeyRegistry(vault, sealKey);
 
   // One remote per settings snapshot — rebuilt only when the bag changes.
@@ -454,6 +446,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     journal,
     dir: dir ?? ':memory:',
     sealKey,
+    ...(options.keyStore ? { keyStore: options.keyStore } : {}),
     blobs: new BlobCustody(local, remoteTier, blobCache, (sha) => desiredStoreForSha(vault, sha)),
     // Narrow read-only accessor onto the cached remote-tier closure (issue #439
     // R2) — the lazy-by-default restore's "durable remote CAS tier?" oracle.

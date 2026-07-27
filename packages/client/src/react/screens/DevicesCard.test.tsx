@@ -22,7 +22,7 @@ function device(over: Partial<CentraidGatewayDevice> = {}): CentraidGatewayDevic
     endpointId: 'http:abc',
     label: 'Priya’s browser',
     platform: 'web',
-    transport: 'http',
+    transport: 'iroh',
     vaultId: 'v1',
     vaultName: 'Personal',
     addedAt: new Date(NOW - 86_400_000).toISOString(),

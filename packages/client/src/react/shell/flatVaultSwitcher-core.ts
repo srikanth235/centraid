@@ -14,16 +14,15 @@
  */
 
 /** Minimal shape of a gateway profile this module needs (subset of
- *  `CentraidGatewayProfile`). `transport`/`hasSsh` feed the grouped
+ *  `CentraidGatewayProfile`). `hasSsh` feeds the grouped
  *  switcher's transport badge + "can this gateway create a vault from here"
  *  capability (issue #382) — both optional since older profiles predate
- *  `transport` and `hasSsh` is a brand-new field the backend half of #382
+ *  `hasSsh` is a brand-new field the backend half of #382
  *  adds to `listGateways`'s DTO. */
 export interface FlatSwitcherGateway {
   gatewayId: string;
   gatewayLabel: string;
   gatewayKind: 'local' | 'remote';
-  transport?: 'local' | 'iroh' | 'direct';
   hasSsh?: boolean;
 }
 
@@ -188,8 +187,7 @@ export interface GroupedSwitcherGateway {
 
 function transportBadgeFor(gw: FlatSwitcherGateway): SwitcherTransportBadge {
   if (gw.gatewayKind === 'local') return 'This Mac';
-  if (gw.transport === 'direct') return 'URL';
-  if (gw.hasSsh && gw.transport === undefined) return 'SSH';
+  if (gw.hasSsh) return 'SSH';
   return 'iroh';
 }
 

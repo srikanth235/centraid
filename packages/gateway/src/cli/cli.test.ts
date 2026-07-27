@@ -9,6 +9,7 @@ import { validateConfig, DaemonConfigError } from './config.ts';
 import { buildPrefsPatch, seedRunnerPrefs } from './runner-prefs.ts';
 import type { PrefsStore } from '@centraid/app-engine';
 import { daemonLayoutFor } from './paths.ts';
+import { platformDefaultDataDir } from './data-dir.ts';
 import { isProcessMainModule, parseServeArgsPure, timingSafeTokenEqual } from './cli.ts';
 // Also name the pure helper module so cold-spot reachability is unambiguous.
 import { parseServeArgsPure as pureFromHelper } from './cli-serve-args.ts';
@@ -39,6 +40,8 @@ test('parseServeArgsPure accepts host/port/data-dir/allowed-host flags', () => {
     'gateway.local',
     '--allowed-host',
     'other.local',
+    '--init-vault',
+    'Kit-less test vault',
     '--config',
     '/tmp/cfg.json',
   ]);
@@ -49,9 +52,26 @@ test('parseServeArgsPure accepts host/port/data-dir/allowed-host flags', () => {
       host: '0.0.0.0',
       port: 8765,
       allowedHosts: ['gateway.local', 'other.local'],
+      initVaultName: 'Kit-less test vault',
       configPath: '/tmp/cfg.json',
     },
   });
+});
+
+test('platform default data dir stays outside app userData conventions', () => {
+  expect(platformDefaultDataDir({ platform: 'darwin', homeDir: '/Users/alice', env: {} })).toBe(
+    '/Users/alice/Library/Application Support/centraid/gateway',
+  );
+  expect(platformDefaultDataDir({ platform: 'linux', homeDir: '/home/alice', env: {} })).toBe(
+    '/home/alice/.local/share/centraid/gateway',
+  );
+  expect(
+    platformDefaultDataDir({
+      platform: 'win32',
+      homeDir: 'C:\\Users\\alice',
+      env: { LOCALAPPDATA: 'D:\\Local' },
+    }),
+  ).toBe(path.join('D:\\Local', 'Centraid', 'gateway'));
 });
 
 test('parseServeArgsPure rejects bad port, missing values, and unknown flags', () => {
@@ -154,8 +174,8 @@ test('seedRunnerPrefs calls setPrefs even on empty config so a removed runner is
 
 test('daemonLayoutFor resolves relative paths to absolute', () => {
   const layout = daemonLayoutFor('./relative');
-  expect(path.isAbsolute(layout.prefsFile)).toBeTruthy();
-  expect(layout.prefsFile.endsWith(path.join('relative', 'prefs.json'))).toBeTruthy();
+  expect(path.isAbsolute(layout.gatewayDbFile)).toBeTruthy();
+  expect(layout.gatewayDbFile.endsWith(path.join('relative', 'gateway.db'))).toBeTruthy();
 });
 
 test('daemonLayoutFor mounts the vault plane at <dataDir>/vault', () => {

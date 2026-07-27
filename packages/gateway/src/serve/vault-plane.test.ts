@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
-import { ensureAppEnrolled, uuidv7 } from '@centraid/vault';
+import { KeyStore, aesGcmKeyProtector, ensureAppEnrolled, uuidv7 } from '@centraid/vault';
 import { Dispatcher, Registry } from '@centraid/app-engine';
 import { openVaultPlane, type VaultPlane } from './vault-plane.js';
 import { openVaultRegistry } from './vault-registry.js';
@@ -27,14 +27,80 @@ async function directoryBytes(dir: string): Promise<number> {
 }
 
 function openPlane(dir: string): VaultPlane {
-  const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
+  const plane = openVaultPlane({ bootstrap: true, dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());
   return plane;
 }
 
-test("a WAL-disabled admin plane never checkpoints another process's stream on stop", async () => {
+test('a protector-backed gateway reopens real sealed rows while a copied data dir cannot', async () => {
+  const root = await tempDir('protected-vault-plane-');
+  const vaultRoot = path.join(root, 'vault');
+  const masterKey = Buffer.alloc(32, 0x31);
+  const keyStore = new KeyStore(path.join(root, 'keys'), {
+    protector: aesGcmKeyProtector(masterKey),
+  });
+  let registry = openVaultRegistry({
+    rootDir: vaultRoot,
+    keyStore,
+    logger: silentLogger,
+    ownerName: 'Priya',
+  });
+  const created = registry.create('Protected');
+  let plane = registry.get(created.vaultId)!;
+  const added = plane.gateway.invoke(plane.ownerCredential, {
+    command: 'locker.add_item',
+    input: {
+      type: 'login',
+      title: 'example.com',
+      username: 'priya',
+      password: 'protector-backed-secret',
+      url: 'https://example.com',
+    },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(added.status).toBe('executed');
+  const itemId = (added as { output: { item_id: string } }).output.item_id;
+  expect(await fs.readFile(keyStore.file(`${created.vaultId}.sealkey`), 'utf8')).toContain(
+    '"scheme":"aes-256-gcm-v1"',
+  );
+  registry.stop();
+
+  registry = openVaultRegistry({
+    rootDir: vaultRoot,
+    keyStore: new KeyStore(path.join(root, 'keys'), {
+      protector: aesGcmKeyProtector(masterKey),
+    }),
+    logger: silentLogger,
+  });
+  plane = registry.get(created.vaultId)!;
+  expect(
+    plane.gateway.reveal(plane.ownerCredential, {
+      entity: 'locker.item',
+      entityId: itemId,
+      columns: ['password'],
+      purpose: 'dpv:ServiceProvision',
+    }).values,
+  ).toEqual({ password: 'protector-backed-secret' });
+  registry.stop();
+
+  const copied = await tempDir('copied-protected-vault-plane-');
+  await fs.cp(root, copied, { recursive: true });
+  const foreign = openVaultRegistry({
+    rootDir: path.join(copied, 'vault'),
+    keyStore: new KeyStore(path.join(copied, 'keys'), {
+      protector: aesGcmKeyProtector(Buffer.alloc(32, 0x72)),
+    }),
+    logger: silentLogger,
+  });
+  expect(foreign.list()).toEqual([]);
+  expect(foreign.failedMounts()[0]?.message).toMatch(/authentication failed/);
+  foreign.stop();
+});
+
+test("a WAL-disabled vault plane never checkpoints another process's stream on stop", async () => {
   const dir = await tempDir();
   const plane = openVaultPlane({
+    bootstrap: true,
     dir,
     logger: silentLogger,
     ownerName: 'Priya',
@@ -54,18 +120,20 @@ test("a WAL-disabled admin plane never checkpoints another process's stream on s
   expect(checkpoints).toBe(0);
 });
 
-test('WAL capture sleeps without backup and re-arms immediately when configured', async () => {
+test('WAL ownership stays unconditional while capture follows backup configuration', async () => {
   const dir = await tempDir();
   let backupConfigured = false;
   const plane = openVaultPlane({
+    bootstrap: true,
     dir,
     logger: silentLogger,
     ownerName: 'Priya',
-    walCaptureEnabled: () => backupConfigured,
+    walCaptureConfigured: () => backupConfigured,
   });
   cleanups.push(() => plane.stop());
-  const tick = vi.spyOn(plane.walShipper!, 'tick');
-  const close = vi.spyOn(plane.walShipper!, 'close');
+  const shipper = plane.walShipper!;
+  const tick = vi.spyOn(shipper, 'tick');
+  const close = vi.spyOn(shipper, 'close');
   const autocheckpointPages = () =>
     [plane.db.vault, plane.db.journal].map((db) => {
       const row = db.prepare('PRAGMA wal_autocheckpoint').get() as Record<string, number>;
@@ -75,64 +143,24 @@ test('WAL capture sleeps without backup and re-arms immediately when configured'
   plane.start();
   await new Promise<void>((resolve) => setImmediate(resolve));
   expect(tick).not.toHaveBeenCalled();
+  expect(plane.walShipper).toBe(shipper);
   expect(autocheckpointPages().every((pages) => (pages ?? 0) > 0)).toBe(true);
 
   backupConfigured = true;
   plane.rescheduleWalCapture();
   await new Promise<void>((resolve) => setImmediate(resolve));
-  expect(tick).toHaveBeenCalledTimes(1);
+  expect(tick).toHaveBeenCalledOnce();
+  expect(plane.walShipper).toBe(shipper);
   expect(autocheckpointPages()).toEqual([0, 0]);
 
   backupConfigured = false;
   plane.rescheduleWalCapture();
+  expect(plane.walShipper).toBe(shipper);
   expect(autocheckpointPages().every((pages) => (pages ?? 0) > 0)).toBe(true);
-
   const shipBytesBeforeStop = await directoryBytes(path.join(dir, 'wal-ship'));
   plane.stop();
   expect(close).not.toHaveBeenCalled();
   expect(await directoryBytes(path.join(dir, 'wal-ship'))).toBe(shipBytesBeforeStop);
-});
-
-test('re-enabling capture after fallback autocheckpoint mints a coordinated generation', async () => {
-  const dir = await tempDir();
-  let backupConfigured = true;
-  const plane = openVaultPlane({
-    dir,
-    logger: silentLogger,
-    ownerName: 'Priya',
-    walCaptureEnabled: () => backupConfigured,
-  });
-  cleanups.push(() => plane.stop());
-
-  plane.start();
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  const before = plane.walShipper!.status().dbs;
-  expect(before.vault?.generation).toMatch(/^[0-9a-f]{32}$/);
-  expect(before.journal?.generation).toMatch(/^[0-9a-f]{32}$/);
-
-  backupConfigured = false;
-  plane.rescheduleWalCapture();
-  // Force the production fallback's ordinary SQLite checkpoint transition
-  // with one page so this regression does not need to write 64 MiB.
-  plane.db.vault.exec('PRAGMA wal_autocheckpoint = 1');
-  plane.db.vault.exec(
-    'CREATE TABLE fallback_checkpoint_probe (id INTEGER PRIMARY KEY, value TEXT NOT NULL)',
-  );
-  plane.db.vault
-    .prepare('INSERT INTO fallback_checkpoint_probe (value) VALUES (?)')
-    .run('folded while backup was disabled');
-
-  backupConfigured = true;
-  plane.rescheduleWalCapture();
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  const after = plane.walShipper!.status();
-  expect(after.dbs.vault?.generation).not.toBe(before.vault?.generation);
-  expect(after.dbs.journal?.generation).not.toBe(before.journal?.generation);
-  expect(after.dbs.vault?.generation).toMatch(/^[0-9a-f]{32}$/);
-  expect(after.dbs.journal?.generation).toMatch(/^[0-9a-f]{32}$/);
-  expect(after.dbs.vault?.basePending).toBe(true);
-  expect(after.dbs.journal?.basePending).toBe(true);
-  expect(after.foreignCheckpointCount).toBeGreaterThan(0);
 });
 
 function seedCalendar(plane: VaultPlane): string {
@@ -604,7 +632,7 @@ test('the agent plane mirrors the widening park (issue #308 A3)', async () => {
 
 test('the plane survives a restart: same identity, grants intact, ctx.vault still works', async () => {
   const dir = await tempDir();
-  const first = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
+  const first = openVaultPlane({ bootstrap: true, dir, logger: silentLogger, ownerName: 'Priya' });
   expect(first.boot.fresh).toBe(true);
   // Enroll with a medium ceiling so the reopened plane executes directly.
   ensureAppEnrolled(first.db, 'planner', { riskCeiling: 'medium' });
@@ -646,6 +674,7 @@ test('owner routes: status, apps, grant, parked confirm, revoke', async () => {
   const dir = await tempDir();
   // The route handler speaks to the registry; the acts land on its active plane.
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const plane = registry.current();
   const calendarId = seedCalendar(plane);
@@ -1144,6 +1173,7 @@ test('cross-referencing (issue #272): shell pick → owner link → app resolves
 test('owner routes (issue #272): picker searches, POST links asserts, DELETE ends', async () => {
   const dir = await tempDir();
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const plane = registry.current();
   const purpose = 'dpv:ServiceProvision';

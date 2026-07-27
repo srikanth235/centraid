@@ -610,7 +610,6 @@ async function verifyProbeExceptionsRemoved(fwName, subnets) {
  *   ctx.mintTicket(opts)        — pair → { raw, payload }
  *   ctx.runDevice(opts)         — run lib/device-redeem.mjs in a fresh container on netB;
  *                                  opts: { ticket, probeTarget }; returns the parsed JSON line
- *   ctx.readGatewayFile(rel)    — parse a JSON file under the gateway's data dir
  *   ctx.note(msg)                — observation preserved in verdict.md
  */
 export async function runFlow(slug, fn) {
@@ -883,7 +882,8 @@ export async function runFlow(slug, fn) {
       'bash',
       '-c',
       `apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq git >/dev/null 2>&1 && ` +
-        `exec node ${GATEWAY_CLI_REL} serve --data-dir ${GW_DATA_DIR}`,
+        `exec node ${GATEWAY_CLI_REL} serve --data-dir ${GW_DATA_DIR} ` +
+        `--init-vault 'Pairing E2E'`,
     ]);
     state.gateway = await waitForGatewayReady(gwName, path.join(runDir, 'gateway.log'));
     console.log(
@@ -957,10 +957,6 @@ export async function runFlow(slug, fn) {
         }
         return parsed;
       },
-      readGatewayFile: async (rel) => {
-        const stdout = await sh('docker', ['exec', gwName, 'cat', `${GW_DATA_DIR}/${rel}`]);
-        return JSON.parse(stdout);
-      },
       note: (m) => {
         notes.push(m);
         console.log(`  note    : ${m}`);
@@ -977,18 +973,12 @@ export async function runFlow(slug, fn) {
     const { stdout: finalLogs } = await run('docker', ['logs', gwName]);
     if (finalLogs) await fs.writeFile(path.join(runDir, 'gateway.log'), finalLogs).catch(() => {});
     if (error) {
-      for (const rel of ['devices.json', 'pairing-tickets.json', 'endpoint.json']) {
-        const { code, stdout } = await run('docker', [
-          'exec',
-          gwName,
-          'cat',
-          `${GW_DATA_DIR}/${rel}`,
-        ]);
-        if (code === 0) {
-          await fs.mkdir(path.join(runDir, 'workspace'), { recursive: true }).catch(() => {});
-          await fs.writeFile(path.join(runDir, 'workspace', rel), stdout).catch(() => {});
-        }
-      }
+      await fs.mkdir(path.join(runDir, 'workspace'), { recursive: true }).catch(() => {});
+      await run('docker', [
+        'cp',
+        `${gwName}:${GW_DATA_DIR}/gateway.db`,
+        path.join(runDir, 'workspace', 'gateway.db'),
+      ]);
     }
     await shQuiet('docker', ['rm', '-f', gwName]);
     // Sweep any device containers that survived a mid-run crash (docker run

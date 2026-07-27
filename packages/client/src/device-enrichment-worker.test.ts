@@ -21,7 +21,7 @@ function device(optedIn = true, transcript = false): CentraidGatewayDevice {
     deviceId: 'enrollment-1',
     endpointId: 'http:laptop',
     label: 'Laptop',
-    transport: 'http',
+    transport: 'iroh',
     vaultId: 'vault-1',
     current: true,
     trust: 'full',

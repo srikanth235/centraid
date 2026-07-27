@@ -1,12 +1,12 @@
 /*
- * `centraid-gateway vault …` — the ADMIN plane for vault lifecycle
- * (issue #289).
+ * `centraid-gateway vault …` — the stopped-daemon filesystem maintenance
+ * surface for vault lifecycle (issue #289).
  *
  * Vault create/delete left the HTTP surface: they are landlord acts,
  * guarded by having shell access to the box — a family member's device can
- * never delete a sibling's vault because no route exists. The daemon picks
- * up a newly created vault on the first request that names it (the
- * registry rescans on miss); deletion is safest with the daemon stopped.
+ * never delete a sibling's vault because no unauthenticated route exists.
+ * Mutations take gateway.db's exclusive lock and therefore refuse while the
+ * daemon is running.
  *
  *   centraid-gateway vault list   --data-dir <path> [--json]
  *   centraid-gateway vault create --data-dir <path> [--name <name>] [--json]
@@ -20,6 +20,7 @@
  */
 
 import { openVaultRegistry, VaultRegistryError, type VaultInfo } from '../serve/vault-registry.js';
+import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
 import { daemonLayoutFor } from './paths.js';
 import { jsonFail, runJson, type Fail } from './json-cli.js';
 
@@ -83,6 +84,15 @@ export async function commandVault(
     const parsed = parseVaultArgs(rest, localFail);
     if (!parsed.dataDir) localFail('--data-dir is required', 2);
     const layout = daemonLayoutFor(parsed.dataDir);
+    let mutationLock: GatewayDatabase | undefined;
+    if (action !== 'list') {
+      try {
+        mutationLock = GatewayDatabase.open(parsed.dataDir, { lock: 'exclusive' });
+      } catch (error) {
+        if (error instanceof GatewayLockError) localFail(error.message, 1);
+        throw error;
+      }
+    }
     const registry = openVaultRegistry({
       rootDir: layout.vaultDir,
       logger: quietLogger,
@@ -133,6 +143,7 @@ export async function commandVault(
       throw err;
     } finally {
       registry.stop();
+      mutationLock?.close();
     }
   });
 }

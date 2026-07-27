@@ -3,8 +3,7 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * `centraid-gateway backup …` (PROTOCOL.md/FORMAT.md CLI surface): status,
  * run, list, verify, restore, kit — constructed from the same `--config`
  * resolution `serve` uses. Exercises the real `LocalBackupProvider` and a
- * real vault dir (the registry auto-bootstraps a default vault on first
- * open, same as `serve` would), so this is closer to an integration test
+ * real explicitly-created vault dir, so this is closer to an integration test
  * than the unit-level `backup-service.test.ts`.
  */
 
@@ -13,8 +12,15 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs, existsSync } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { SNAPSHOT_FORMAT_V2, openLocalBackupProvider, type BackupProvider } from '@centraid/backup';
+import {
+  SNAPSHOT_FORMAT_V2,
+  openLocalBackupProvider,
+  parseRecoveryKit,
+  type BackupProvider,
+} from '@centraid/backup';
 import { openVaultRegistry } from '../serve/vault-registry.js';
+import { GatewayDatabase } from '../serve/gateway-db.js';
+import { KeyStore } from '@centraid/vault';
 import { commandBackup } from './backup-admin.js';
 import { daemonLayoutFor } from './paths.js';
 
@@ -80,13 +86,19 @@ beforeEach(async () => {
       },
     }),
   );
-  // Discover the auto-bootstrapped default vault the same way `serve`
-  // would (opening the registry mints one on a fresh root), then close it
-  // so `commandBackup` (which opens its own) doesn't collide.
+  // CLI tests opt into a vault explicitly; a virgin gateway is legal.
+  const layout = daemonLayoutFor(dataDir);
+  const database = GatewayDatabase.open(dataDir);
+  database.close();
+  const keyStore = new KeyStore(layout.keysDir);
+  keyStore.loadOrCreate('endpoint-key.bin');
   const registry = openVaultRegistry({
-    rootDir: daemonLayoutFor(dataDir).vaultDir,
+    rootDir: layout.vaultDir,
+    cacheRootDir: layout.cacheDir,
+    keyStore,
     logger: silentLogger,
   });
+  registry.create('Backup fixture');
   vaultId = registry.defaultVaultId();
   registry.stop();
 });
@@ -143,6 +155,8 @@ test('restore materializes into a fresh --dest with a quarantine marker, never t
 test('kit emits the recovery keyring with a store-offline warning on stderr', async () => {
   await capture(() => commandBackup(['run', '--config', configPath], fail));
   const kitFile = path.join(dataDir, 'kit.json');
+  const passwordFile = path.join(dataDir, 'kit-password.txt');
+  await fs.writeFile(passwordFile, 'correct horse battery staple\n', { mode: 0o600 });
   const originalErr = process.stderr.write.bind(process.stderr);
   const errChunks: string[] = [];
   process.stderr.write = ((chunk: unknown): boolean => {
@@ -150,16 +164,21 @@ test('kit emits the recovery keyring with a store-offline warning on stderr', as
     return true;
   }) as typeof process.stderr.write;
   try {
-    await commandBackup(['kit', '--config', configPath, '--out', kitFile], fail);
+    await commandBackup(
+      ['kit', '--config', configPath, '--out', kitFile, '--password-file', passwordFile],
+      fail,
+    );
   } finally {
     process.stderr.write = originalErr;
   }
   expect(existsSync(kitFile)).toBe(true);
-  const kit = JSON.parse(await fs.readFile(kitFile, 'utf8')) as {
+  const wrapped = JSON.parse(await fs.readFile(kitFile, 'utf8')) as {
     kind: string;
-    keyring: { epochs: unknown[] };
-    targets: { vaultId: string }[];
+    keyring?: unknown;
   };
+  expect(wrapped.kind).toBe('centraid-recovery-kit-wrapped');
+  expect(wrapped.keyring).toBeUndefined();
+  const kit = parseRecoveryKit(wrapped, 'correct horse battery staple');
   expect(kit.kind).toBe('centraid-recovery-kit');
   expect(kit.keyring.epochs.length).toBeGreaterThan(0);
   expect(kit.targets.some((t) => t.vaultId === vaultId)).toBe(true);

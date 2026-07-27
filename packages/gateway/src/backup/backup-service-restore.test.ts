@@ -47,6 +47,7 @@ async function harness(
     logger: silentLogger,
     ownerName: 'Priya',
   });
+  registry.create('Personal');
   cleanups.push(() => registry.stop());
   const vaultId = registry.defaultVaultId();
 
@@ -58,7 +59,7 @@ async function harness(
   const realProvider = openLocalBackupProvider({ rootDir: providerDir });
   const service = new BackupService({
     config,
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health: new HealthRegistry(),
     logger: silentLogger,

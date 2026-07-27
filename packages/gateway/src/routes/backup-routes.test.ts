@@ -5,14 +5,53 @@ import type { RouteHandler } from '../serve/build-gateway.js';
 import type { BackupService } from '../backup/backup-service.js';
 import type { BackupTargetState } from '../backup/backup-state.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
+import type { EnrollmentStore } from '../serve/enrollment-store.js';
+import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { makeBackupRouteHandler, type BackupStatusBody } from './backup-routes.js';
 import { bootstrapVault, openVaultDb } from '@centraid/vault';
+import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
+import {
+  parseRecoveryKit,
+  recoveryKitFingerprint,
+  wrapRecoveryKit,
+  type RecoveryKitDocument,
+} from '@centraid/backup';
 
 /** Loosened GET-body shape for tests that only assert a slice of it. */
 type BackupStatusBodyForTest = Pick<BackupStatusBody, 'recoveryKit'>;
 
 const servers: http.Server[] = [];
 const vaultDbs: ReturnType<typeof openVaultDb>[] = [];
+const OWNER_ENDPOINT = 'owner-endpoint';
+const KIT_PASSWORD = 'correct horse battery staple';
+const KIT_DOCUMENT: RecoveryKitDocument = {
+  version: 1,
+  kind: 'centraid-recovery-kit',
+  createdAt: '2026-07-27T00:00:00.000Z',
+  keyring: {
+    version: 1,
+    active: 1,
+    epochs: [
+      {
+        epoch: 1,
+        key: Buffer.alloc(32, 0x33).toString('base64'),
+        createdAt: '2026-07-27T00:00:00.000Z',
+      },
+    ],
+  },
+  targets: [],
+};
+const OWNER_HEADERS = {
+  'content-type': 'application/json',
+  [AUTHED_DEVICE_HEADER]: OWNER_ENDPOINT,
+};
+
+const ownerEnrollments = {
+  get: (endpointId: string, vaultId: string) =>
+    endpointId === OWNER_ENDPOINT && vaultId === 'v1'
+      ? { endpointId, vaultId, trust: 'owner' }
+      : undefined,
+} as unknown as EnrollmentStore;
 
 function startHandlerServer(handler: RouteHandler): Promise<string> {
   const server = http.createServer((req, res) => {
@@ -54,6 +93,11 @@ function fakeVaults(planes: Array<{ vaultId: string; name: string }>): VaultRegi
   return {
     planesList: () => mounted,
     get: (vaultId: string) => mounted.find((plane) => plane.boot.vaultId === vaultId),
+    current: () => {
+      const current = mounted[0];
+      if (!current) throw new Error('no mounted vault');
+      return current;
+    },
   } as unknown as VaultRegistry;
 }
 
@@ -65,12 +109,12 @@ function fakeBackupService(opts: {
   running?: Set<string> | boolean;
   runAll?: () => Promise<void>;
   verifyAll?: () => Promise<void>;
-  recoveryKitDocument?: () => Promise<Record<string, unknown>>;
+  recoveryKitDocument?: () => Promise<RecoveryKitDocument>;
   recoveryKitConfirmedAt?: number | null;
 }): BackupService {
   const targets = opts.targets ?? {};
   const running = opts.running ?? false;
-  let confirmedAt = opts.recoveryKitConfirmedAt ?? null;
+  const confirmedAt = opts.recoveryKitConfirmedAt ?? null;
   return {
     status: async () => targets,
     isRunning: (vaultId?: string) => {
@@ -79,14 +123,8 @@ function fakeBackupService(opts: {
     },
     runAll: opts.runAll ?? (async () => undefined),
     verifyAll: opts.verifyAll ?? (async () => undefined),
-    recoveryKitDocument:
-      opts.recoveryKitDocument ??
-      (async () => ({ version: 1, kind: 'centraid-recovery-kit', targets: [] })),
+    recoveryKitDocument: opts.recoveryKitDocument ?? (async () => KIT_DOCUMENT),
     recoveryKitStatus: async () => ({ confirmedAt }),
-    confirmRecoveryKit: async () => {
-      confirmedAt = 1_752_235_200; // fixed stub "now" — the route just echoes it back
-      return { confirmedAt };
-    },
   } as unknown as BackupService;
 }
 
@@ -268,16 +306,45 @@ describe('makeBackupRouteHandler — POST /centraid/_gateway/backup/verify', () 
   });
 });
 
-describe('makeBackupRouteHandler — GET /centraid/_gateway/backup/kit', () => {
-  it('returns the live recovery document only when a backup service exists', async () => {
-    const kit = { version: 1, kind: 'centraid-recovery-kit', targets: [] };
-    const backupService = fakeBackupService({ recoveryKitDocument: async () => kit });
+describe('makeBackupRouteHandler — POST /centraid/_gateway/backup/kit', () => {
+  it('returns only a passphrase-wrapped live recovery document to an owner', async () => {
+    const backupService = fakeBackupService({
+      recoveryKitDocument: async () => KIT_DOCUMENT,
+    });
     const url = await startHandlerServer(
-      makeBackupRouteHandler({ backupService, vaults: fakeVaults([]) }),
+      makeBackupRouteHandler({
+        backupService,
+        vaults: fakeVaults([{ vaultId: 'v1', name: 'Main' }]),
+        enrollments: ownerEnrollments,
+      }),
     );
-    const res = await fetch(`${url}/centraid/_gateway/backup/kit`);
+    const res = await fetch(`${url}/centraid/_gateway/backup/kit`, {
+      method: 'POST',
+      headers: OWNER_HEADERS,
+      body: JSON.stringify({ password: KIT_PASSWORD }),
+    });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual(kit);
+    const wrapped = await res.json();
+    expect(JSON.stringify(wrapped)).not.toContain(KIT_DOCUMENT.keyring.epochs[0]!.key);
+    expect(parseRecoveryKit(wrapped, KIT_PASSWORD)).toEqual(KIT_DOCUMENT);
+  });
+
+  it('refuses a caller without a proved owner enrollment', async () => {
+    const backupService = fakeBackupService({
+      recoveryKitDocument: async () => KIT_DOCUMENT,
+    });
+    const url = await startHandlerServer(
+      makeBackupRouteHandler({
+        backupService,
+        vaults: fakeVaults([{ vaultId: 'v1', name: 'Main' }]),
+      }),
+    );
+    const res = await fetch(`${url}/centraid/_gateway/backup/kit`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: KIT_PASSWORD }),
+    });
+    expect(res.status).toBe(403);
   });
 });
 
@@ -304,9 +371,21 @@ describe('makeBackupRouteHandler — GET /centraid/_gateway/backup — recoveryK
 });
 
 describe('makeBackupRouteHandler — POST /centraid/_gateway/backup/kit-confirmed', () => {
+  const wrapped = wrapRecoveryKit(KIT_DOCUMENT, KIT_PASSWORD);
+  const fingerprint = recoveryKitFingerprint(KIT_DOCUMENT);
+
   it('refuses with 409 + a clear body when not configured', async () => {
-    const url = await startHandlerServer(makeBackupRouteHandler({ vaults: fakeVaults([]) }));
-    const res = await fetch(`${url}/centraid/_gateway/backup/kit-confirmed`, { method: 'POST' });
+    const url = await startHandlerServer(
+      makeBackupRouteHandler({
+        vaults: fakeVaults([{ vaultId: 'v1', name: 'Main' }]),
+        enrollments: ownerEnrollments,
+      }),
+    );
+    const res = await fetch(`${url}/centraid/_gateway/backup/kit-confirmed`, {
+      method: 'POST',
+      headers: OWNER_HEADERS,
+      body: JSON.stringify({ kit: wrapped, password: KIT_PASSWORD, lossConsent: true }),
+    });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string; message: string };
     expect(body.error).toBe('not_configured');
@@ -314,20 +393,56 @@ describe('makeBackupRouteHandler — POST /centraid/_gateway/backup/kit-confirme
   });
 
   it('confirms the kit and echoes the new confirmedAt', async () => {
-    const backupService = fakeBackupService({});
+    const backupService = fakeBackupService({ recoveryKitConfirmedAt: 1_752_235_200 });
+    const recoveryKitStore = {
+      verify: vi.fn(async (actual: string) =>
+        actual === fingerprint ? { confirmedAt: 1_752_235_200, kitFingerprint: actual } : undefined,
+      ),
+      status: async () => ({ confirmedAt: 1_752_235_200, kitFingerprint: fingerprint }),
+    } as unknown as RecoveryKitStateStore;
     const url = await startHandlerServer(
-      makeBackupRouteHandler({ backupService, vaults: fakeVaults([]) }),
+      makeBackupRouteHandler({
+        backupService,
+        recoveryKitStore,
+        enrollments: ownerEnrollments,
+        vaults: fakeVaults([{ vaultId: 'v1', name: 'Main' }]),
+      }),
     );
-    const res = await fetch(`${url}/centraid/_gateway/backup/kit-confirmed`, { method: 'POST' });
+    const res = await fetch(`${url}/centraid/_gateway/backup/kit-confirmed`, {
+      method: 'POST',
+      headers: OWNER_HEADERS,
+      body: JSON.stringify({ kit: wrapped, password: KIT_PASSWORD, lossConsent: true }),
+    });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean; confirmedAt: number };
     expect(body.ok).toBe(true);
     expect(body.confirmedAt).toBe(1_752_235_200);
+    expect(recoveryKitStore.verify).toHaveBeenCalledWith(fingerprint);
 
     // The next GET reflects the confirmation.
     const statusRes = await fetch(`${url}/centraid/_gateway/backup`);
     const status = (await statusRes.json()) as BackupStatusBodyForTest;
     expect(status.recoveryKit).toEqual({ confirmedAt: 1_752_235_200 });
+  });
+
+  it('cannot skip exact-file verification or loss consent', async () => {
+    const recoveryKitStore = {
+      verify: vi.fn(),
+    } as unknown as RecoveryKitStateStore;
+    const url = await startHandlerServer(
+      makeBackupRouteHandler({
+        recoveryKitStore,
+        enrollments: ownerEnrollments,
+        vaults: fakeVaults([{ vaultId: 'v1', name: 'Main' }]),
+      }),
+    );
+    const res = await fetch(`${url}/centraid/_gateway/backup/kit-confirmed`, {
+      method: 'POST',
+      headers: OWNER_HEADERS,
+      body: JSON.stringify({ kit: wrapped, password: KIT_PASSWORD }),
+    });
+    expect(res.status).toBe(409);
+    expect(recoveryKitStore.verify).not.toHaveBeenCalled();
   });
 
   it('answers 405 for non-POST', async () => {

@@ -28,6 +28,8 @@ const REPLICA_APP_PATHS = new Set([
 ]);
 
 export interface WebAppSessionsOptions {
+  /** Shared gateway.db-backed store. */
+  controlStore?: WebControlSessionStore;
   /**
    * Persist CONTROL sessions to this JSON file so they survive a gateway
    * restart (and the 12h→30d sliding window). Omitted → in-memory only
@@ -40,9 +42,8 @@ export interface WebAppSessionsOptions {
    * live control/app cookie whose device enrollment was revoked
    * (`centraid-gateway devices revoke`) stops authorizing immediately
    * instead of riding its TTL. Given the session's `deviceKey`, return
-   * `false` once the device is no longer enrolled. Sessions with no
-   * `deviceKey` (admin/shared-bearer plane) skip this — the admin plane is
-   * the landlord.
+   * `false` once the device is no longer enrolled. Legacy sessions without a
+   * `deviceKey` never authorize: a web cookie cannot manufacture an identity.
    */
   isDeviceValid?: (deviceKey: string) => boolean;
   /** Clock seam (tests). Defaults to `Date.now`. */
@@ -135,7 +136,8 @@ export class WebAppSessions {
   private readonly now: () => number;
 
   constructor(options: WebAppSessionsOptions = {}) {
-    this.controlStore = WebControlSessionStore.open(options.controlsFile, options.now);
+    this.controlStore =
+      options.controlStore ?? WebControlSessionStore.open(options.controlsFile, options.now);
     if (options.isDeviceValid) this.isDeviceValid = options.isDeviceValid;
     this.now = options.now ?? Date.now;
   }
@@ -143,7 +145,7 @@ export class WebAppSessions {
   /**
    * Revocation propagation (issue #376): a session bound to a device key is
    * dead the moment that key's enrollment is revoked. Sessions without a
-   * device key (admin/shared-bearer plane) are never revoked here.
+   * device key fail closed in `authorize()`.
    */
   private revoked(deviceKey: string | undefined): boolean {
     return deviceKey !== undefined && this.isDeviceValid !== undefined
@@ -257,9 +259,7 @@ export class WebAppSessions {
       // call from the web shell would be swallowed as a control-session logout.
       if (!target) {
         if ((req.method ?? 'GET').toUpperCase() === 'DELETE') {
-          return control.deviceKey
-            ? { plane: 'device', deviceKey: control.deviceKey }
-            : { plane: 'admin' };
+          return control.deviceKey ? { plane: 'device', deviceKey: control.deviceKey } : undefined;
         }
         return undefined;
       }
@@ -268,9 +268,7 @@ export class WebAppSessions {
       this.controlStore.touch(control.tokenHash);
       req.url = target;
       req.headers[VAULT_HEADER] = control.vaultId;
-      return control.deviceKey
-        ? { plane: 'device', deviceKey: control.deviceKey }
-        : { plane: 'admin' };
+      return control.deviceKey ? { plane: 'device', deviceKey: control.deviceKey } : undefined;
     }
     let session: ActiveSession | undefined;
     for (const [cookieName, token] of presented) {
@@ -313,9 +311,7 @@ export class WebAppSessions {
     req.headers[VAULT_HEADER] = session.vaultId;
     req.headers[WEB_APP_HEADER] = session.appId;
     req.headers[WEB_SHELL_ORIGIN_HEADER] = session.shellOrigin;
-    return session.deviceKey
-      ? { plane: 'device', deviceKey: session.deviceKey }
-      : { plane: 'admin' };
+    return session.deviceKey ? { plane: 'device', deviceKey: session.deviceKey } : undefined;
   }
 
   private redeem(req: IncomingMessage, res: ServerResponse): Promise<true> {

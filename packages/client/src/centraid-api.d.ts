@@ -40,8 +40,8 @@ export interface CentraidPublishResult {
 
 export interface CentraidSettings {
   /**
-   * Active gateway id — `'local'` (always present) or a UUID for a
-   * remote gateway. Switching this is the multi-gateway "log in to
+   * Active gateway id — `'local'` (always present) or the durable iroh
+   * EndpointId of a remote gateway. Switching this is the multi-gateway "log in to
    * another workspace" action (issue #109). Use `setActiveGateway`
    * on the API rather than patching this through `saveSettings`.
    */
@@ -63,8 +63,9 @@ export interface CentraidSettings {
    */
   activeProfileAvatarColor: string;
   /**
-   * Effective base URL for the active gateway. Local = the in-process
-   * runtime's URL; remote = the active gateway's `profile.url`. Read-only.
+   * Ephemeral loopback URL for the active gateway transport. Local points at
+   * the embedded/detached daemon; remote points at the device's iroh proxy.
+   * The durable profile is keyed by EndpointId and stores no URL. Read-only.
    */
   gatewayUrl: string;
   /** Effective bearer token; companion to `gatewayUrl`. Read-only. */
@@ -263,16 +264,10 @@ export interface CentraidGatewayProfile {
    * always populated on receive.
    */
   avatarColor: string;
-  /**
-   * Transport tier (issue #289): `local` (in-process), `iroh` (EndpointId
-   * over the QUIC tunnel), or `direct` (URL + token). Absent on pre-#289
-   * profiles — derived from kind + url.
-   */
-  transport?: 'local' | 'iroh' | 'direct';
-  /** Defined for `direct` remote gateways only. */
-  url?: string;
-  /** The gateway's iroh EndpointId (`iroh` transport) — shown for `devices add`. */
+  /** Stable gateway identity. Required for every remote connection. */
   endpointId?: string;
+  /** Refreshable relay-address cache; never connection identity. */
+  relayHint?: string;
   /** Explicit pairing consent for durable replica, outbox, and media caches. */
   rememberDevice?: boolean;
   /**
@@ -281,7 +276,7 @@ export interface CentraidGatewayProfile {
    * ssh-routed vault create). Independent of `transport`. Its presence is
    * the "can create a vault here" signal for a remote gateway: the
    * switcher/ConnectFlow derive that capability as `kind === 'local' ||
-   * Boolean(ssh)` — a plain `direct`/`iroh` profile with no `ssh` block
+   * Boolean(ssh)` — a remote profile with no `ssh` block
    * still refuses vault create/delete (server-side admin act only).
    */
   ssh?: { destination: string; dataDir?: string; remoteCli?: string };
@@ -330,7 +325,6 @@ export type CentraidListGatewayVaultsResult =
  * resolves the already-known profile's own credential).
  */
 export type CentraidTestConnectionInput =
-  | { kind: 'url'; url: string; token?: string }
   | { kind: 'ticket'; ticket: string }
   | { kind: 'ssh'; destination: string; dataDir?: string }
   | { kind: 'gateway'; gatewayId: string };
@@ -728,29 +722,11 @@ interface CentraidApi {
   // ----- Gateways (issue #109) -----
   /** List every gateway profile (local + remote). Sorted local-first. */
   listGateways(): Promise<CentraidGatewayProfile[]>;
-  /**
-   * Register a `direct`-tier remote gateway from a URL + per-device token
-   * (the PWA web-host path, issue #505 phase 7). The token is the per-device
-   * token minted by the pairing ceremony — NOT a shared admin token (retired).
-   * The Electron desktop no longer exposes this bridge: it adds gateways only
-   * through the pairing ceremony (`redeemGatewayPairing`), which registers the
-   * profile in-process.
-   */
+  /** Register an iroh connection by stable EndpointId. */
   addGateway(input: {
     label: string;
-    /**
-     * `direct` transport — an https/http URL + per-device token. Plain http://
-     * to a public host is refused (issue #289): the bearer would travel in
-     * cleartext. Omit when adding an `iroh` gateway.
-     */
-    url?: string;
-    /**
-     * `iroh` transport — the gateway's EndpointTicket (EndpointId + relay
-     * hint), redeemed from a pairing ticket. Omit for a `direct` gateway.
-     */
-    endpointTicket?: string;
-    endpointId?: string;
-    token: string;
+    endpointId: string;
+    relayHint?: string;
     displayName?: string;
     avatarColor?: string;
     rememberDevice?: boolean;
@@ -776,16 +752,6 @@ interface CentraidApi {
     displayName?: string;
     avatarColor?: string;
   }): Promise<CentraidGatewayProfile>;
-  /**
-   * Rotate a remote gateway's keychain-stored bearer token. The
-   * plaintext crosses the bridge exactly once on this call (mirroring
-   * `addGateway`) and never returns. Pass an empty string to clear.
-   * No-op for the primordial local gateway (its token is minted per
-   * launch by the in-process runtime). When the rotated profile is
-   * the active one the main process drops its HTTP-client auth caches
-   * before resolving so subsequent IPCs see the new token.
-   */
-  updateGatewayToken(input: { id: string; token: string }): Promise<{ ok: true }>;
   /**
    * Switch the active gateway. The renderer should treat the response
    * as the new authoritative settings and drop gateway-scoped state
@@ -813,8 +779,7 @@ interface CentraidApi {
   }>;
   /**
    * Redeem a pairing ticket minted by `centraid-gateway pair --vault <name>`
-   * (issue #376). Default `mode: 'auto'` picks the `http` transport when
-   * `url` is set, else `iroh`. On success the paired gateway AND the vault
+   * over the iroh pairing plane (issue #376). On success the paired gateway AND the vault
    * it enrolled into are both active — treat the result like a combined
    * `setActiveGateway` + `setActiveVault` and drop gateway/vault-scoped
    * state; the same `onGatewayChanged` / `onVaultChanged` broadcasts fire.
@@ -825,9 +790,6 @@ interface CentraidApi {
     ticket: string;
     /** Optional profile label; falls back to the gateway/vault's own name. */
     label?: string;
-    mode?: 'auto' | 'iroh' | 'http';
-    /** Required for (and only meaningful with) the `http` transport. */
-    url?: string;
     /** Explicit consent for a durable replica, outbox, and preview cache. */
     rememberDevice?: boolean;
   }): Promise<CentraidRedeemGatewayPairingResult>;
@@ -884,10 +846,10 @@ interface CentraidApi {
   exportGatewayDiagnostics(): Promise<
     { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
   >;
-  /** Export the live backup keyring + target map through a native 0600 file save. */
-  exportGatewayRecoveryKit(): Promise<
-    { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
-  >;
+  /** Export a passphrase-wrapped recovery kit through a native 0600 file save. */
+  exportGatewayRecoveryKit(input: {
+    password: string;
+  }): Promise<{ ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }>;
   /**
    * Switch the vault this client addresses on the active gateway (issue
    * #289). A pure client-side pointer flip — no server call, no re-root:
@@ -908,7 +870,7 @@ interface CentraidApi {
    * remote gateway. Clears the client's active-vault pointer first if it
    * names the vault being deleted.
    */
-  deleteVault(input: { vaultId: string }): Promise<{ deleted: true }>;
+  deleteVault(input: { vaultId: string; name: string }): Promise<{ deleted: true }>;
   /**
    * Notify-only (issue #382 follow-up): call after a metadata-only
    * `updateVault()` HTTP call succeeds (rename/retheme) so every window's

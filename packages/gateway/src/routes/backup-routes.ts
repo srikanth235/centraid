@@ -20,6 +20,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
+import { parseRecoveryKit, recoveryKitFingerprint, wrapRecoveryKit } from '@centraid/backup';
 import {
   BackupPolicyError,
   readBackupPolicy,
@@ -32,6 +34,7 @@ import type { RouteHandler } from '../serve/build-gateway.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import type { BackupService, HomeDiscovery, RecoveryKitState } from '../backup/backup-service.js';
 import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
+import type { EnrollmentStore } from '../serve/enrollment-store.js';
 import type { ProviderPolicySyncState } from '../backup/backup-provider-observability.js';
 import type { BackupReconciliationState } from '../backup/backup-reconciliation.js';
 import { readJson, sendError, sendJson } from './route-helpers.js';
@@ -85,7 +88,27 @@ export interface BackupRouteDeps {
    * desktop embed) instead of only bypassed with force.
    */
   recoveryKitStore?: RecoveryKitStateStore;
+  /** Real per-vault enrollments used to keep live key export owner-only. */
+  enrollments?: EnrollmentStore;
   vaults: VaultRegistry;
+}
+
+function ownerRequired(req: IncomingMessage, deps: BackupRouteDeps, res: ServerResponse): boolean {
+  const raw = req.headers[AUTHED_DEVICE_HEADER];
+  const endpointId = Array.isArray(raw) ? raw[0] : raw;
+  const vaultId = deps.vaults.current().boot.vaultId;
+  if (
+    typeof endpointId !== 'string' ||
+    !deps.enrollments ||
+    deps.enrollments.get(endpointId, vaultId)?.trust !== 'owner'
+  ) {
+    sendJson(res, 403, {
+      error: 'owner_required',
+      message: 'only an owner device can export or verify live recovery key material',
+    });
+    return false;
+  }
+  return true;
 }
 
 async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
@@ -342,14 +365,26 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
     }
 
     if (url.pathname === BACKUP_KIT_PATH) {
-      if ((req.method ?? 'GET') !== 'GET') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+      if ((req.method ?? 'GET') !== 'POST') {
+        return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
       }
+      if (!ownerRequired(req, deps, res)) return true;
       if (!deps.backupService) {
         return sendJson(res, 409, { error: 'not_configured', message: 'backup is not configured' });
       }
       try {
-        return sendJson(res, 200, await deps.backupService.recoveryKitDocument());
+        const body = await readJson(req);
+        if (typeof body.password !== 'string' || body.password.length === 0) {
+          return sendJson(res, 400, {
+            error: 'password_required',
+            message: 'a recovery-kit password is required',
+          });
+        }
+        return sendJson(
+          res,
+          200,
+          wrapRecoveryKit(await deps.backupService.recoveryKitDocument(), body.password),
+        );
       } catch (err) {
         return sendError(res, err);
       }
@@ -359,14 +394,29 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
       if ((req.method ?? 'GET') !== 'POST') {
         return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
       }
-      const { backupService, recoveryKitStore } = deps;
+      if (!ownerRequired(req, deps, res)) return true;
+      const { recoveryKitStore } = deps;
       try {
-        if (backupService) {
-          const recoveryKit = await backupService.confirmRecoveryKit();
-          return sendJson(res, 200, { ok: true, ...recoveryKit });
+        const body = await readJson(req);
+        if (body.lossConsent !== true) {
+          return sendJson(res, 409, {
+            error: 'loss_consent_required',
+            message: 'confirm that losing this file and password makes backups unrecoverable',
+          });
         }
+        if (typeof body.password !== 'string' || body.password.length === 0) {
+          return sendJson(res, 400, { error: 'password_required' });
+        }
+        const document = parseRecoveryKit(body.kit, body.password);
+        const fingerprint = recoveryKitFingerprint(document);
         if (recoveryKitStore) {
-          const recoveryKit = await recoveryKitStore.confirm();
+          const recoveryKit = await recoveryKitStore.verify(fingerprint);
+          if (!recoveryKit) {
+            return sendJson(res, 409, {
+              error: 'kit_mismatch',
+              message: 'the selected recovery kit is stale or belongs to another gateway',
+            });
+          }
           return sendJson(res, 200, { ok: true, ...recoveryKit });
         }
         return sendJson(res, 409, {

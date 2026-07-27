@@ -92,7 +92,7 @@ export function resealVaultKey(db: VaultDb, now: string = new Date().toISOString
   // Sidecar first: if we crash mid-sweep, the old key is still the stamped
   // one and the stale sidecar is ignored; after commit, the sidecar IS the
   // stamped key and `resolveSealKey` promotes it.
-  if (keyFile) writeSealKeyFile(`${keyFile}.next`, newKey);
+  if (keyFile) writeSealKeyFile(`${keyFile}.next`, newKey, db.keyStore);
 
   let resealedCells = 0;
   let resealedStaged = 0;

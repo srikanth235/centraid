@@ -33,9 +33,10 @@
 // only, and the product says so out loud when the key is absent at open.
 
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { renameSync } from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+import { KeyStore } from './key-store.js';
 
 /**
  * The registry: logical entity → its sealed columns. Sealing is per-column —
@@ -166,34 +167,36 @@ export function ephemeralSealKey(): Buffer {
  * Load the vault's DEK, or null when no key file exists. A present-but-wrong
  * file (bad length) always throws — that is corruption, never a fresh vault.
  */
-export function loadSealKey(file: string): Buffer | null {
-  try {
-    const key = readFileSync(file);
-    if (key.length === KEY_BYTES) return key;
-    throw new Error(`seal key at ${file} is ${key.length} bytes, expected ${KEY_BYTES}`);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    return null;
-  }
+export function loadSealKey(file: string, keyStore?: KeyStore): Buffer | null {
+  return keyStoreForFile(file, keyStore).load(path.basename(file));
 }
 
 /** Persist a DEK at `file` (0600, parent dirs created). */
-export function writeSealKeyFile(file: string, key: Buffer): void {
-  mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(file, key, { mode: 0o600 });
+export function writeSealKeyFile(file: string, key: Buffer, keyStore?: KeyStore): void {
+  keyStoreForFile(file, keyStore).store(path.basename(file), key);
 }
 
 /** Mint (0600) a fresh DEK at `file`. Creation is deliberate, never a fallback. */
-export function createSealKey(file: string): Buffer {
-  const key = randomBytes(KEY_BYTES);
-  writeSealKeyFile(file, key);
-  return key;
+export function createSealKey(file: string, keyStore?: KeyStore): Buffer {
+  return keyStoreForFile(file, keyStore).create(path.basename(file));
 }
 
-/** Deterministic key path for a vault directory: the `keys/` sibling. */
+/** Deterministic key path for `<dataDir>/vault/<id>`: `<dataDir>/keys/<id>.sealkey`. */
 export function sealKeyFileFor(vaultDir: string): string {
-  const parent = path.dirname(path.resolve(vaultDir));
-  return path.join(parent, 'keys', `${path.basename(path.resolve(vaultDir))}.sealkey`);
+  const resolved = path.resolve(vaultDir);
+  const vaultRoot = path.dirname(resolved);
+  const dataRoot = path.basename(vaultRoot) === 'vault' ? path.dirname(vaultRoot) : vaultRoot;
+  return path.join(dataRoot, 'keys', `${path.basename(resolved)}.sealkey`);
+}
+
+function keyStoreForFile(file: string, keyStore?: KeyStore): KeyStore {
+  const expectedDir = path.dirname(path.resolve(file));
+  if (keyStore && keyStore.dir !== expectedDir) {
+    throw new Error(
+      `seal key custody store ${keyStore.dir} does not own ${path.resolve(file)} (expected ${expectedDir})`,
+    );
+  }
+  return keyStore ?? new KeyStore(expectedDir);
 }
 
 /**
@@ -267,12 +270,12 @@ export function stampSealKeyFingerprint(vault: DatabaseSync, key: Buffer): void 
  *   matches, completing the rotation crash-safely.
  * - No stamp → the vault never sealed anything; load-or-mint as before.
  */
-export function resolveSealKey(vault: DatabaseSync, file: string): Buffer {
+export function resolveSealKey(vault: DatabaseSync, file: string, keyStore?: KeyStore): Buffer {
   const expected = readSealKeyFingerprint(vault);
-  const key = loadSealKey(file);
-  if (expected === null) return key ?? createSealKey(file);
+  const key = loadSealKey(file, keyStore);
+  if (expected === null) return key ?? createSealKey(file, keyStore);
   if (key && sealKeyFingerprint(key) === expected) return key;
-  const next = loadSealKey(`${file}.next`);
+  const next = loadSealKey(`${file}.next`, keyStore);
   if (next && sealKeyFingerprint(next) === expected) {
     renameSync(`${file}.next`, file); // finish the interrupted rotation
     return next;

@@ -53,8 +53,8 @@ export function decodePairingTicket(raw: string): PairingTicketPayload | undefin
 
 /**
  * Client-side fast-feedback expiry check. The gateway re-checks on
- * redemption regardless (the ticket store burns on any redemption attempt),
- * so this only exists to fail a stale paste instantly, before ever dialing.
+ * redemption regardless, so this only exists to fail a stale paste instantly,
+ * before ever dialing.
  */
 export function isTicketExpired(
   payload: Pick<PairingTicketPayload, 'exp'>,
@@ -77,11 +77,10 @@ export type RedeemGatewayPairingResult =
 
 type FoldedPairing =
   | {
+      gatewayId: string;
       vaultId: string;
       vaultName: string;
       gatewayName?: string;
-      deviceToken?: string;
-      deviceKey?: string;
     }
   | { error: RedeemPairingErrorCode; message: string };
 
@@ -95,6 +94,7 @@ type FoldedPairing =
 export function foldIrohPairResponse(response: {
   ok: boolean;
   error?: string;
+  gatewayId?: string;
   gatewayName?: string;
   vaultId?: string;
   vaultName?: string;
@@ -111,49 +111,14 @@ export function foldIrohPairResponse(response: {
   if (!response.vaultId) {
     return { error: 'bad_response', message: 'Gateway did not return a vault id.' };
   }
+  if (!response.gatewayId) {
+    return { error: 'bad_response', message: 'Gateway did not return its EndpointId.' };
+  }
   return {
+    gatewayId: response.gatewayId,
     vaultId: response.vaultId,
     vaultName: response.vaultName ?? '',
     ...(response.gatewayName ? { gatewayName: response.gatewayName } : {}),
-  };
-}
-
-/**
- * Fold a `POST /centraid/_gateway/pair` HTTP response (the direct/Tailscale
- * pairing path) into the same shape as {@link foldIrohPairResponse}. Success
- * is `{ok:true, deviceToken, deviceKey?, vaultId, vaultName}`; rejection is
- * `403 {ok:false, error:'ticket_invalid'|'ticket_expired'}`.
- */
-export function foldHttpPairResponse(status: number, body: unknown): FoldedPairing {
-  if (status === 403) {
-    const errorField =
-      body && typeof body === 'object' ? (body as Record<string, unknown>).error : undefined;
-    if (errorField === 'ticket_expired') {
-      return { error: 'ticket_expired', message: 'This pairing code has expired.' };
-    }
-    return { error: 'invalid_ticket', message: 'That pairing code is not valid.' };
-  }
-  if (status !== 200) {
-    return { error: 'unreachable', message: `HTTP ${status}` };
-  }
-  if (!body || typeof body !== 'object') {
-    return { error: 'bad_response', message: 'Gateway returned a malformed pairing response.' };
-  }
-  const b = body as Record<string, unknown>;
-  if (b.ok !== true) {
-    return { error: 'invalid_ticket', message: 'That pairing code is not valid.' };
-  }
-  if (typeof b.deviceToken !== 'string' || b.deviceToken.length === 0) {
-    return { error: 'bad_response', message: 'Gateway did not return a device token.' };
-  }
-  if (typeof b.vaultId !== 'string' || b.vaultId.length === 0) {
-    return { error: 'bad_response', message: 'Gateway did not return a vault id.' };
-  }
-  return {
-    deviceToken: b.deviceToken,
-    ...(typeof b.deviceKey === 'string' ? { deviceKey: b.deviceKey } : {}),
-    vaultId: b.vaultId,
-    vaultName: typeof b.vaultName === 'string' ? b.vaultName : '',
   };
 }
 
@@ -169,11 +134,9 @@ export function isFoldError(
  * should reuse rather than duplicate. Pure so the "don't duplicate on
  * re-redeem" behavior is testable without touching disk.
  */
-export function findReusableProfile<
-  P extends { transport?: 'local' | 'iroh' | 'direct'; endpointTicket?: string; url?: string },
->(profiles: readonly P[], key: { endpointTicket: string } | { url: string }): P | undefined {
-  if ('endpointTicket' in key) {
-    return profiles.find((p) => p.transport === 'iroh' && p.endpointTicket === key.endpointTicket);
-  }
-  return profiles.find((p) => p.transport === 'direct' && p.url === key.url);
+export function findReusableProfile<P extends { endpointId?: string }>(
+  profiles: readonly P[],
+  endpointId: string,
+): P | undefined {
+  return profiles.find((profile) => profile.endpointId === endpointId);
 }

@@ -78,6 +78,8 @@ test('service install --dry-run on linux prints the systemd unit and the enable 
   );
   expect(out).toContain('[Unit]');
   expect(out).toContain('Restart=on-failure');
+  expect(out).toContain('LoadCredentialEncrypted=centraid-keystore:');
+  expect(out).toContain('systemd-creds encrypt --user -');
   expect(out).toContain('systemctl --user daemon-reload');
   expect(out).toContain('systemctl --user enable --now centraid-gateway.service');
   await expect(
@@ -119,10 +121,11 @@ test('service install rejects an unsupported platform', async () => {
   ).rejects.toThrow(/not supported on "win32"/);
 });
 
-test('service install requires --data-dir or --config', async () => {
+test('service install without flags uses the shared platform default data dir', async () => {
   stubPlatform('darwin');
-  await expect(commandService(['install', '--dry-run'], fail)).rejects.toThrow(
-    /requires --data-dir or --config/,
+  await commandService(['install', '--dry-run'], fail);
+  expect(writes.join('')).toContain(
+    path.join(fakeHome, 'Library', 'Application Support', 'centraid', 'gateway'),
   );
 });
 

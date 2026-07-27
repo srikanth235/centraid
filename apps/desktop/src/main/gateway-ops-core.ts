@@ -43,11 +43,16 @@ async function fetchJsonText(
   requestPath: string,
   label: string,
   fetchImpl: typeof fetch,
+  init: RequestInit = {},
 ): Promise<DiagnosticsFetchResult> {
   let res: Response;
   try {
     res = await fetchImpl(new URL(requestPath, `${baseUrl}/`).toString(), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      ...init,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init.headers,
+      },
     });
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
@@ -118,15 +123,22 @@ export async function exportGatewayDiagnostics(
 /** Fetch and save the active gateway's recovery kit through a native dialog. */
 export async function exportGatewayRecoveryKit(
   deps: ExportDiagnosticsDeps,
+  input: { password: string },
 ): Promise<ExportDiagnosticsResult> {
   const settings = await deps.loadSettings();
   if (!settings.gatewayUrl) return { ok: false, error: 'No active gateway to export from.' };
+  if (!input.password) return { ok: false, error: 'A recovery-kit password is required.' };
   const fetched = await fetchJsonText(
     settings.gatewayUrl,
     settings.gatewayToken,
     RECOVERY_KIT_PATH,
     'recovery kit',
     deps.fetchImpl ?? fetch,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: input.password }),
+    },
   );
   if (!fetched.ok) return { ok: false, error: fetched.error };
   const { canceled, filePath } = await deps.showSaveDialog('centraid-recovery-kit.json');

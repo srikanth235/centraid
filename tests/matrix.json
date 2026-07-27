@@ -302,7 +302,7 @@
     "gateway.offline": null,
     "gateway.compat": null,
     "gateway.journey": {
-      "owner": "apps/desktop/tests/e2e/settings-gateways.spec.ts",
+      "owner": "tests/agent-e2e-pairing/flows/vps-phone-founding.mjs",
       "tier": "e2e"
     },
     "app-engine.correctness": {
@@ -445,7 +445,7 @@
     },
     "desktop.scalability": null,
     "desktop.security": {
-      "owner": "apps/desktop/src/main/transport.test.ts",
+      "owner": "apps/desktop/src/main/gateway-pairing-core.test.ts",
       "tier": "unit"
     },
     "desktop.offline": null,
@@ -1263,6 +1263,14 @@
       "dimension": "journey",
       "tier": "e2e",
       "owner": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs"
+    },
+    {
+      "id": "gateway-founding-journey",
+      "name": "Empty VPS → first phone owner + verified wrapped recovery kit",
+      "surface": "gateway",
+      "dimension": "journey",
+      "tier": "e2e",
+      "owner": "tests/agent-e2e-pairing/flows/vps-phone-founding.mjs"
     },
     {
       "id": "pairing-real-journey",

@@ -134,12 +134,13 @@ test('lazy restore: a library bigger than local disk restores previews-first —
     logger: silentLogger,
     ownerName: 'Mara',
   });
+  registry.create('Personal');
   const vaultId = registry.defaultVaultId();
   const plane = registry.get(vaultId)!;
   const health = new HealthRegistry();
   const service = new BackupService({
     config,
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health,
     logger: silentLogger,
@@ -269,11 +270,12 @@ test('remote-primary snapshot restores from provider bytes plus only the durable
     logger: silentLogger,
     ownerName: 'Mara',
   });
+  registry.create('Personal');
   const vaultId = registry.defaultVaultId();
   const plane = registry.get(vaultId)!;
   const service = new BackupService({
     config: { enabled: true, provider: { kind: 'local', dir: providerDir } },
-    backupDir,
+    cacheDir: backupDir,
     vaults: registry,
     health: new HealthRegistry(),
     logger: silentLogger,

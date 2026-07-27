@@ -11,7 +11,13 @@ import { expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { createKeyring, parseRecoveryKit, writeRecoveryKit } from './index.js';
+import {
+  createKeyring,
+  parseRecoveryKit,
+  recoveryKitFingerprint,
+  wrapRecoveryKit,
+  writeRecoveryKit,
+} from './index.js';
 
 async function tempFile(name: string): Promise<string> {
   const dir = await tempDir(`recovery-kit-${crypto.randomUUID()}-`);
@@ -35,6 +41,63 @@ test('round-trips a kit written by writeRecoveryKit', async () => {
   expect(doc.targets).toEqual([
     { provider: 'https://home.example', targetId: 't-1', vaultId: 'v-1', label: 'ab12' },
   ]);
+});
+
+test('password wrap round-trips keyring + per-target seal key and rejects a wrong password', async () => {
+  const keyring = await createKeyring(await tempFile('keyring.json'));
+  const plain = {
+    version: 1 as const,
+    kind: 'centraid-recovery-kit' as const,
+    createdAt: new Date(0).toISOString(),
+    keyring,
+    targets: [
+      {
+        provider: 'https://home.example',
+        targetId: 't-1',
+        vaultId: 'v-1',
+        label: 'cosmetic label',
+        sealKey: Buffer.alloc(32, 9).toString('base64'),
+      },
+    ],
+  };
+  const wrapped = wrapRecoveryKit(plain, 'correct horse battery staple');
+
+  expect(wrapped).toMatchObject({ kdf: 'scrypt', N: 2 ** 17, r: 8, p: 1 });
+  expect(JSON.stringify(wrapped)).not.toContain(keyring.epochs[0]!.key);
+  expect(parseRecoveryKit(wrapped, 'correct horse battery staple')).toEqual(plain);
+  expect(() => parseRecoveryKit(wrapped, 'wrong')).toThrow(/wrong password or corrupt/);
+});
+
+test('fingerprint ignores labels and createdAt but changes with recovery material', async () => {
+  const keyring = await createKeyring(await tempFile('keyring.json'));
+  const base = {
+    version: 1 as const,
+    kind: 'centraid-recovery-kit' as const,
+    createdAt: 'one',
+    keyring,
+    targets: [
+      {
+        provider: 'https://home.example',
+        targetId: 't-1',
+        vaultId: 'v-1',
+        label: 'first',
+        sealKey: Buffer.alloc(32, 1).toString('base64'),
+      },
+    ],
+  };
+  expect(
+    recoveryKitFingerprint({
+      ...base,
+      createdAt: 'two',
+      targets: [{ ...base.targets[0]!, label: 'renamed' }],
+    }),
+  ).toBe(recoveryKitFingerprint(base));
+  expect(
+    recoveryKitFingerprint({
+      ...base,
+      targets: [{ ...base.targets[0]!, sealKey: Buffer.alloc(32, 2).toString('base64') }],
+    }),
+  ).not.toBe(recoveryKitFingerprint(base));
 });
 
 test('rejects a document that is not a centraid recovery kit', () => {

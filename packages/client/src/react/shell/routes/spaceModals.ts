@@ -5,7 +5,7 @@ import type { SpaceModalCommit } from './SpaceModal.js';
 // flows. The modal chrome is the React <SpaceModal>; App.tsx (switcher "New
 // space…") and SettingsRoute.tsx (the active-vault Space page, issue #382)
 // own the modal state and call these helpers on submit. Vault create/delete
-// are admin acts over the IPC bridge (local gateway only); metadata rides
+// are owner acts over the IPC bridge (local gateway only); metadata rides
 // updateVault.
 
 /** Create a space and make it the addressed vault (re-scopes Home). */
@@ -36,6 +36,6 @@ export async function saveSpace(id: string, data: SpaceModalCommit): Promise<voi
   await window.CentraidApi.notifyVaultMetadataChanged();
 }
 
-export async function deleteSpace(id: string): Promise<void> {
-  await window.CentraidApi.deleteVault({ vaultId: id });
+export async function deleteSpace(id: string, name: string): Promise<void> {
+  await window.CentraidApi.deleteVault({ vaultId: id, name });
 }

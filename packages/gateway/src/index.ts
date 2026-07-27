@@ -132,3 +132,4 @@ export {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_SCHEMA_EPOCH,
 } from './version.js';
+export { platformDefaultDataDir, type DefaultDataDirOptions } from './cli/data-dir.js';

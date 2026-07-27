@@ -35,7 +35,7 @@ Note: renderer/GPU crash coverage is still incomplete (issue #468 K12) — do no
 | Context | Path |
 | --- | --- |
 | Agent pairing e2e run | `tests/agent-e2e-pairing/runs/<runId>/gateway.log` |
-| On FAIL, workspace kept | `…/runs/<runId>/workspace/…` (`devices.json`, `pairing-tickets.json`, `endpoint.json`) |
+| On FAIL, workspace kept | `…/runs/<runId>/workspace/…` (`gateway.db`, `keys/`, `vault/`) |
 
 ## CI
 
@@ -62,7 +62,7 @@ Failure-ratio/429/5xx alert setup and incident handling are in
 | Path | Role |
 | --- | --- |
 | `vault.db` / `journal.db` | Data + audit/ledger — query with tools, do not treat as greppable logs |
-| `prefs.json` / settings JSON | Config ([config-ownership.md](config-ownership.md)) |
+| `gateway.db` preferences / settings | Config ([config-ownership.md](config-ownership.md)) |
 | Browser devtools console | Ephemeral client noise; useful but not canonical |
 
 ## Related

@@ -1,34 +1,13 @@
 /*
- * `centraid-gateway service install|uninstall|status` — an OS service unit
- * for the headless daemon (issue #351 wave 4). Waves 1-3 gave the daemon
- * supervised restart, health probes, and an instance lease; this closes
- * the last gap the audit named: "ships with no service unit" — nothing
- * brings it back after a reboot or a crash unless the operator hand-rolls
- * one.
- *
- *   centraid-gateway service install   [--data-dir <path> | --config <path>] [--host <h>] [--port <p>] [--dry-run] [--label <id>]
- *   centraid-gateway service uninstall [--dry-run] [--label <id>]
- *   centraid-gateway service status    [--dry-run] [--label <id>]
- *
- * macOS: a LaunchAgent plist at ~/Library/LaunchAgents/<label>.plist,
- * bootstrapped into `gui/$UID`. Linux: a systemd user unit at
- * ~/.config/systemd/user/<label>.service, enabled into `default.target`.
- * Both point at the CURRENT node binary + this CLI's compiled entry with
- * absolute paths, and redirect stdout/stderr into the same `gateway-logs/`
- * directory `serve` itself writes its persisted log ring under (issue
- * #351's other durability leg) — a post-mortem finds both in one place.
- *
- * `install` needs `--data-dir`/`--config` (same resolution `serve` uses)
- * because the generated unit's argv is `serve --data-dir <path>` (or
- * `--config <path>`) — the service has to know what to run. `uninstall`
- * and `status` only need the label; they never touch dataDir.
- *
- * `--dry-run` never writes a file or shells out — it prints exactly what
- * would be written/run so an operator (or a test) can review it first.
+ * `centraid-gateway service install|uninstall|status` owns the launchd and
+ * systemd user-service lifecycle (#351). Generated units use absolute paths,
+ * share gateway-logs/, and carry the issue #555 KeyStore credential. Dry-run
+ * prints every write/command without mutating the host.
  */
 
 import { promises as fs } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,8 +20,10 @@ import {
   buildSystemdUnit,
   launchAgentPlistPath,
   systemdUnitPath,
+  systemdCredentialPath,
   type ServiceUnitSpec,
 } from './service-unit.js';
+import { aesGcmKeyProtector, KeyStore } from '@centraid/vault';
 
 type Fail = (message: string, code?: number) => never;
 
@@ -118,32 +99,91 @@ function buildServeArgs(parsed: ServiceArgs, resolvedDataDir: string): string[] 
   return args;
 }
 
-async function buildSpec(parsed: ServiceArgs, fail: Fail): Promise<ServiceUnitSpec> {
-  if (!parsed.dataDir && !parsed.configPath) {
-    fail('service install requires --data-dir or --config, same as `serve`', 2);
-  }
+interface PreparedServiceSpec {
+  unit: ServiceUnitSpec;
+  keyCredential?:
+    | { kind: 'systemd'; path: string; encoded: string; keysDir: string }
+    | { kind: 'keychain'; service: string; account: string; encoded: string; keysDir: string };
+}
+
+async function buildSpec(parsed: ServiceArgs, fail: Fail): Promise<PreparedServiceSpec> {
   const config = await resolveDaemonConfig(
     { configPath: parsed.configPath, dataDir: parsed.dataDir },
     fail,
   );
   const layout = daemonLayoutFor(config.dataDir);
   const logsDir = layout.logsDir ?? path.join(path.resolve(config.dataDir), 'gateway-logs');
-  return {
+  const env: Record<string, string> = {
+    ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+    ...(process.env.CENTRAID_DESKTOP_ENDPOINT_ID?.trim()
+      ? { CENTRAID_DESKTOP_ENDPOINT_ID: process.env.CENTRAID_DESKTOP_ENDPOINT_ID.trim() }
+      : {}),
+  };
+  const encoded =
+    process.env.CENTRAID_KEYSTORE_MASTER_KEY?.trim() || randomBytes(32).toString('base64');
+  const label =
+    parsed.label ??
+    (process.platform === 'darwin' ? DEFAULT_LAUNCHD_LABEL : DEFAULT_SYSTEMD_UNIT_NAME);
+  const keyCredential =
+    process.platform === 'linux'
+      ? ({
+          kind: 'systemd',
+          path: systemdCredentialPath(os.homedir(), parsed.label ?? DEFAULT_SYSTEMD_UNIT_NAME),
+          encoded,
+          keysDir: layout.keysDir,
+        } as const)
+      : process.platform === 'darwin'
+        ? ({
+            kind: 'keychain',
+            service: 'dev.centraid.gateway.keystore',
+            account: label,
+            encoded,
+            keysDir: layout.keysDir,
+          } as const)
+        : undefined;
+  if (keyCredential?.kind === 'systemd') {
+    env.CENTRAID_KEYSTORE_CREDENTIAL_ENCRYPTED = keyCredential.path;
+  } else if (keyCredential?.kind === 'keychain') {
+    env.CENTRAID_KEYSTORE_KEYCHAIN_SERVICE = keyCredential.service;
+    env.CENTRAID_KEYSTORE_KEYCHAIN_ACCOUNT = keyCredential.account;
+  }
+  const unit: ServiceUnitSpec = {
     nodeBin: process.execPath,
     cliEntry: resolveCliEntry(),
     args: buildServeArgs(parsed, config.dataDir),
     stdoutLog: path.join(logsDir, 'service-stdout.log'),
     stderrLog: path.join(logsDir, 'service-stderr.log'),
     workingDirectory: path.resolve(config.dataDir),
-    // When the desktop app runs `service install`, it spawns its own
-    // `process.execPath` — which is the ELECTRON binary, not node — so that
-    // path lands in `nodeBin`. Baking `ELECTRON_RUN_AS_NODE=1` into the unit
-    // makes launchd/systemd run the Electron binary as plain node (executing
-    // cli.js) instead of launching the full desktop app on every KeepAlive
-    // respawn. Real-node installs never set electron in `process.versions`,
-    // so the flag is omitted and the unit env stays empty.
-    ...(process.versions.electron ? { env: { ELECTRON_RUN_AS_NODE: '1' } } : {}),
+    // Electron installs need ELECTRON_RUN_AS_NODE; real Node installs omit it.
+    ...(Object.keys(env).length > 0 ? { env } : {}),
+    ...(keyCredential?.kind === 'systemd'
+      ? {
+          encryptedCredential: {
+            id: 'centraid-keystore',
+            path: keyCredential.path,
+          },
+        }
+      : {}),
   };
+  return { unit, ...(keyCredential ? { keyCredential } : {}) };
+}
+
+async function adoptKeyStoreCredential(
+  fail: Fail,
+  credential: NonNullable<PreparedServiceSpec['keyCredential']>,
+): Promise<void> {
+  const wrappingKey = Buffer.from(credential.encoded, 'base64');
+  if (wrappingKey.length !== 32) {
+    fail('KeyStore wrapping credential must be one base64-encoded 32-byte key', 2);
+  }
+  const protectedStore = new KeyStore(credential.keysDir, {
+    protector: aesGcmKeyProtector(wrappingKey),
+  });
+  const entries = await fs.readdir(credential.keysDir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isFile() || entry.name.includes('.tmp')) continue;
+    protectedStore.export(entry.name);
+  }
 }
 
 function printWouldWrite(unitPath: string, content: string): void {
@@ -154,8 +194,13 @@ function printWouldRun(commands: string[]): void {
   for (const cmd of commands) process.stdout.write(`# would run: ${cmd}\n`);
 }
 
-function run(fail: Fail, command: string, args: string[]): { code: number; output: string } {
-  const result = spawnSync(command, args, { encoding: 'utf8' });
+function run(
+  fail: Fail,
+  command: string,
+  args: string[],
+  input?: string,
+): { code: number; output: string } {
+  const result = spawnSync(command, args, { encoding: 'utf8', ...(input ? { input } : {}) });
   if (result.error) {
     fail(`failed to run "${command} ${args.join(' ')}": ${result.error.message}`, 1);
   }
@@ -172,19 +217,40 @@ function guiTarget(): string {
 // ---- macOS / launchd -------------------------------------------------
 
 async function launchdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
-  const spec = await buildSpec(parsed, fail);
+  const prepared = await buildSpec(parsed, fail);
+  const spec = prepared.unit;
   const label = parsed.label ?? DEFAULT_LAUNCHD_LABEL;
   const home = os.homedir();
   const plistPath = launchAgentPlistPath(home, label);
   const plist = buildLaunchdPlist(label, spec);
+  const credentialCommand =
+    prepared.keyCredential?.kind === 'keychain'
+      ? `security add-generic-password -U -a ${prepared.keyCredential.account} -s ${prepared.keyCredential.service} -w <redacted>`
+      : undefined;
   const bootstrapCmd = `launchctl bootstrap ${guiTarget()} ${plistPath}`;
 
   if (parsed.dryRun) {
     printWouldWrite(plistPath, plist);
-    printWouldRun([bootstrapCmd]);
+    printWouldRun([...(credentialCommand ? [credentialCommand] : []), bootstrapCmd]);
     return;
   }
 
+  if (prepared.keyCredential?.kind === 'keychain') {
+    const stored = run(fail, '/usr/bin/security', [
+      'add-generic-password',
+      '-U',
+      '-a',
+      prepared.keyCredential.account,
+      '-s',
+      prepared.keyCredential.service,
+      '-w',
+      prepared.keyCredential.encoded,
+    ]);
+    if (stored.code !== 0) {
+      fail(`could not store service KeyStore credential: ${stored.output.trim()}`, 1);
+    }
+    await adoptKeyStoreCredential(fail, prepared.keyCredential);
+  }
   await fs.mkdir(path.dirname(plistPath), { recursive: true });
   await fs.mkdir(path.dirname(spec.stdoutLog), { recursive: true });
   await fs.writeFile(plistPath, plist, 'utf8');
@@ -322,12 +388,16 @@ function launchdStatus(parsed: ServiceArgs, fail: Fail): void {
 // ---- Linux / systemd --------------------------------------------------
 
 async function systemdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
-  const spec = await buildSpec(parsed, fail);
+  const prepared = await buildSpec(parsed, fail);
+  const spec = prepared.unit;
   const unitName = parsed.label ?? DEFAULT_SYSTEMD_UNIT_NAME;
   const home = os.homedir();
   const unitPath = systemdUnitPath(home, unitName);
   const unit = buildSystemdUnit(spec);
   const commands = [
+    ...(prepared.keyCredential?.kind === 'systemd'
+      ? [`systemd-creds encrypt --user - ${prepared.keyCredential.path}`]
+      : []),
     'systemctl --user daemon-reload',
     `systemctl --user enable --now ${unitName}.service`,
   ];
@@ -340,6 +410,19 @@ async function systemdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
 
   await fs.mkdir(path.dirname(unitPath), { recursive: true });
   await fs.mkdir(path.dirname(spec.stdoutLog), { recursive: true });
+  if (prepared.keyCredential?.kind === 'systemd') {
+    await fs.mkdir(path.dirname(prepared.keyCredential.path), { recursive: true });
+    const encrypted = run(
+      fail,
+      'systemd-creds',
+      ['encrypt', '--user', '-', prepared.keyCredential.path],
+      `${prepared.keyCredential.encoded}\n`,
+    );
+    if (encrypted.code !== 0) {
+      fail(`systemd-creds encrypt failed: ${encrypted.output.trim()}`, 1);
+    }
+    await adoptKeyStoreCredential(fail, prepared.keyCredential);
+  }
   await fs.writeFile(unitPath, unit, 'utf8');
 
   const reload = run(fail, 'systemctl', ['--user', 'daemon-reload']);

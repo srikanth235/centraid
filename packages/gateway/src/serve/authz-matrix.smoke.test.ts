@@ -17,12 +17,16 @@ let dataDir: string;
 let handle: GatewayServeHandle;
 
 function pathsUnder(dir: string): GatewayPaths {
-  return { vaultDir: path.join(dir, 'vault'), prefsFile: path.join(dir, 'prefs.json') };
+  return { vaultDir: path.join(dir, 'vault') };
 }
 
 beforeEach(async () => {
   dataDir = await tempDir(`authz-smoke-${crypto.randomUUID()}-`);
-  handle = await serve({ paths: pathsUnder(dataDir), token: ADMIN });
+  handle = await serve({
+    initVaultName: "Owner's vault",
+    paths: pathsUnder(dataDir),
+    token: ADMIN,
+  });
 });
 
 afterEach(async () => {

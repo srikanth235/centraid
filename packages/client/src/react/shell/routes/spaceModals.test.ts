@@ -61,7 +61,7 @@ describe('spaceModals', () => {
   });
 
   it('deleteSpace removes the vault', async () => {
-    await deleteSpace('v1');
-    expect(deleteVault).toHaveBeenCalledWith({ vaultId: 'v1' });
+    await deleteSpace('v1', 'Personal');
+    expect(deleteVault).toHaveBeenCalledWith({ vaultId: 'v1', name: 'Personal' });
   });
 });

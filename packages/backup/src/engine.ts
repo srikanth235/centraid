@@ -122,6 +122,8 @@ export interface CreateSnapshotOptions {
   entries: SourceEntry[];
   generation: number;
   appMeta: Record<string, string>;
+  /** Register even when entries match, used for an explicit fencing generation bump. */
+  forceRegistration?: boolean;
   log?: EngineLogger;
 }
 
@@ -320,7 +322,7 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
       return prior !== undefined && canonicalJson(prior) === canonicalJson(entry);
     });
 
-  if (chunkIndexIdentical && entriesIdentical) {
+  if (!opts.forceRegistration && chunkIndexIdentical && entriesIdentical) {
     log.info('createSnapshot: no change since previous snapshot — skipping registration');
     return null;
   }
@@ -872,6 +874,8 @@ export interface RecoveryKitTarget {
   targetId: string;
   vaultId: string;
   label: string;
+  /** Per-vault DEK, base64. Present only in a wrapped owner-held kit. */
+  sealKey?: string;
 }
 
 export interface WriteRecoveryKitOptions {

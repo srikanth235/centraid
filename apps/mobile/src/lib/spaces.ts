@@ -16,9 +16,9 @@
 // the replica"; the readers are unchanged. This module owns those keys; the
 // tunnel/replica restart lives in phone-link/ReplicaProvider, which subscribe.
 //
-// Nothing here is a security boundary: tickets + the device secret live in
-// secure-storage; vault addressing and per-device enrollment are enforced by the
-// gateway. This is a preference layer that decides *which* door to knock on.
+// Nothing here is a security boundary: refreshable endpoint hints + the device
+// secret live in secure storage; durable identity is the gateway EndpointId in
+// each row. Vault addressing and enrollment are enforced by the gateway.
 
 import { hydrateSecure, setSecure } from './secure-storage';
 import { Store } from '../storage';
@@ -29,7 +29,10 @@ import { Store } from '../storage';
 // ReplicaProvider (replica identity) read them as "the active connection"; the
 // registry now writes them from whichever Space is active. Kept as the exact
 // same key strings so an already-paired install keeps its tunnel + replica DB.
-export const LINK_TICKET_KEY = 'phoneLink.ticket'; // secure
+// Persisted key names retain "ticket" for migration compatibility, but their
+// value is only an EndpointTicket dial hint. One-time pairing/founding
+// capabilities (`t` + `s`) are never stored.
+export const LINK_ENDPOINT_HINT_KEY = 'phoneLink.ticket'; // secure
 export const LINK_DESKTOP_NAME_KEY = 'phoneLink.desktopName';
 export const LINK_DEVICE_ID_KEY = 'phoneLink.deviceId';
 export const LINK_SECRET_KEY = 'phoneLink.secretKey'; // secure, device-wide (one EndpointId, many desktops)
@@ -40,15 +43,15 @@ export const LAST_BASE = 'replica.lastBase';
 // --- Registry storage keys (new) ---
 const REGISTRY_KEY = 'spaces.registry'; // Space[] (no secrets)
 const ACTIVE_ID_KEY = 'spaces.activeId'; // string
-const ticketKeyFor = (id: string): string => `spaces.ticket.${id}`; // secure, per Space
+const endpointHintKeyFor = (id: string): string => `spaces.ticket.${id}`; // secure, per Space
 
 /**
  * One (gateway, vault) tuple the phone remembers. Presentation
  * (`vaultName`/`color`/`icon`) is cached from `listVaults()` so an inactive
  * Space — one on a gateway we're not currently tunnelled to — still renders a
  * real label instead of a bare id. `ticket` is NOT stored here; it lives in
- * secure-storage under `ticketKeyFor(id)` (empty for a manual-URL dev Space,
- * which authenticates with a token, not a pairing ticket).
+ * secure-storage under `endpointHintKeyFor(id)` (empty for a manual-URL dev
+ * Space). It is refreshable address cache, never the gateway's identity.
  */
 export interface Space {
   /** Stable, minted once. Not derived from vault id, so a vault can be filled in later. */
@@ -64,14 +67,14 @@ export interface Space {
   icon?: string;
 }
 
-/** Fields a caller supplies to record/refresh a Space (ticket kept out of the row). */
+/** Fields a caller supplies to record/refresh a Space (dial hint kept out of the row). */
 export interface SpaceInput {
   gatewayId: string;
   desktopName: string;
   deviceId: string;
   vaultId: string;
-  /** Pairing ticket for this gateway; '' for a manual-URL dev Space. */
-  ticket: string;
+  /** Refreshable EndpointTicket; '' for a manual-URL dev Space. */
+  endpointHint: string;
   vaultName?: string;
   color?: string;
   icon?: string;
@@ -113,13 +116,13 @@ function mintId(): string {
 
 /**
  * Copy the active Space into the single-slot keys the tunnel + replica read.
- * Async because a not-yet-hydrated Space's ticket must come off secure-storage
+ * Async because a not-yet-hydrated Space's endpoint hint must come off secure-storage
  * first. `LAST_BASE` is deliberately untouched — the tunnel port/base is a live,
  * per-process value resolved by phone-link, not a per-Space fact.
  */
 async function projectActiveSlot(space: Space): Promise<void> {
-  const ticket = await hydrateSecure(ticketKeyFor(space.id), '');
-  await setSecure(LINK_TICKET_KEY, ticket);
+  const endpointHint = await hydrateSecure(endpointHintKeyFor(space.id), '');
+  await setSecure(LINK_ENDPOINT_HINT_KEY, endpointHint);
   Store.set<string>(LINK_DESKTOP_NAME_KEY, space.desktopName);
   Store.set<string>(LINK_DEVICE_ID_KEY, space.deviceId);
   Store.set<string>(LAST_GATEWAY, space.gatewayId);
@@ -128,7 +131,7 @@ async function projectActiveSlot(space: Space): Promise<void> {
 
 /** Clear the active slot when no Space is active (e.g. the last one is forgotten). */
 async function clearActiveSlot(): Promise<void> {
-  await setSecure(LINK_TICKET_KEY, '');
+  await setSecure(LINK_ENDPOINT_HINT_KEY, '');
   Store.set<string>(LINK_DESKTOP_NAME_KEY, '');
   Store.set<string>(LINK_DEVICE_ID_KEY, '');
   Store.set<string>(LAST_VAULT, '');
@@ -143,15 +146,15 @@ async function clearActiveSlot(): Promise<void> {
  * re-key to a fresh, empty replica DB.
  */
 async function migrateLegacySlot(): Promise<void> {
-  const [ticket, desktopName, deviceId, gatewayId, vaultId] = await Promise.all([
-    hydrateSecure(LINK_TICKET_KEY, ''),
+  const [endpointHint, desktopName, deviceId, gatewayId, vaultId] = await Promise.all([
+    hydrateSecure(LINK_ENDPOINT_HINT_KEY, ''),
     Store.hydrate<string>(LINK_DESKTOP_NAME_KEY, ''),
     Store.hydrate<string>(LINK_DEVICE_ID_KEY, ''),
     Store.hydrate<string>(LAST_GATEWAY, ''),
     Store.hydrate<string>(LAST_VAULT, ''),
   ]);
-  // Nothing to carry forward: no pairing ticket AND no resolved vault.
-  if (!ticket && !vaultId) return;
+  // Nothing to carry forward: no endpoint hint AND no resolved vault.
+  if (!endpointHint && !vaultId) return;
   const gw = gatewayId || desktopName || 'desktop';
   const space: Space = {
     id: mintId(),
@@ -162,7 +165,7 @@ async function migrateLegacySlot(): Promise<void> {
   };
   registry = [space];
   activeId = space.id;
-  if (ticket) await setSecure(ticketKeyFor(space.id), ticket);
+  if (endpointHint) await setSecure(endpointHintKeyFor(space.id), endpointHint);
   persist();
 }
 
@@ -216,7 +219,8 @@ export function subscribeSpaces(callback: () => void): () => void {
 /**
  * Record a tuple and make it active. Upserts by (gateway, vault) content so
  * re-adding the same tuple refreshes it in place rather than duplicating. The
- * ticket is written to secure-storage; the row (minus ticket) to the registry.
+ * endpoint hint is written to secure-storage; the row itself contains only
+ * durable identity and presentation.
  * Does NOT restart the tunnel or replica — the caller (phone-link) orchestrates
  * that after this resolves, and subscribers react to the emit.
  */
@@ -235,7 +239,9 @@ export async function addSpace(input: SpaceInput): Promise<Space> {
   };
   registry = existing ? registry.map((s) => (s.id === space.id ? space : s)) : [...registry, space];
   activeId = space.id;
-  if (input.ticket) await setSecure(ticketKeyFor(space.id), input.ticket);
+  if (input.endpointHint) {
+    await setSecure(endpointHintKeyFor(space.id), input.endpointHint);
+  }
   await projectActiveSlot(space);
   persist();
   emit();
@@ -244,9 +250,8 @@ export async function addSpace(input: SpaceInput): Promise<Space> {
 
 /**
  * Add a vault the ACTIVE gateway already exposes as its own Space, and make it
- * active. Reuses the active gateway's identity + pairing ticket (a device is
- * enrolled once per gateway; the ticket is per-gateway, shared across its
- * vaults), so switching to the new Space keeps the same tunnel — only the vault
+ * active. Reuses the active gateway's identity + refreshable EndpointTicket,
+ * so switching to the new Space keeps the same tunnel — only the vault
  * header + replica key change. When there is no active Space (manual-URL dev),
  * it records a ticket-less Space under a 'manual' gateway.
  */
@@ -258,13 +263,13 @@ export async function addActiveGatewayVault(vault: {
 }): Promise<Space> {
   await hydrateSpaces();
   const active = getActiveSpace();
-  const ticket = await hydrateSecure(LINK_TICKET_KEY, '');
+  const endpointHint = await hydrateSecure(LINK_ENDPOINT_HINT_KEY, '');
   return addSpace({
     gatewayId: active?.gatewayId ?? 'manual',
     desktopName: active?.desktopName ?? '',
     deviceId: active?.deviceId ?? '',
     vaultId: vault.vaultId,
-    ticket,
+    endpointHint,
     vaultName: vault.vaultName,
     color: vault.color,
     icon: vault.icon,
@@ -289,15 +294,13 @@ export async function setActiveSpace(id: string): Promise<Space | undefined> {
 
 /**
  * Forget a tuple on THIS device — the vault stays on the gateway. Deletes its
- * ticket and row; if it was active, falls back to another Space (or none). When
- * the forgotten Space is the last one for its gateway, its pairing ticket is
- * gone, so the gateway is effectively un-paired here too.
+ * endpoint hint and row; if it was active, falls back to another Space (or none).
  */
 export async function removeSpace(id: string): Promise<void> {
   await hydrateSpaces();
   const wasActive = activeId === id;
   registry = registry.filter((s) => s.id !== id);
-  await setSecure(ticketKeyFor(id), '');
+  await setSecure(endpointHintKeyFor(id), '');
   if (wasActive) {
     const next = registry[0];
     if (next) {

@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { installHarnessControlTransport } from './control-transport.js';
 
 const API_URL = 'http://127.0.0.1:48765';
 const ADMIN_TOKEN = 'centraid-web-e2e-token';
+const GATEWAY_ENDPOINT_ID = 'web-e2e-gateway';
+const GATEWAY_ENDPOINT_TICKET = 'web-e2e-control-transport';
 
 test('boots as a PWA, establishes a cookie control session, and runs an isolated app', async ({
   page,
@@ -12,6 +15,7 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
       gatewayResponses.push({ url: response.url(), status: response.status() });
     }
   });
+  await installHarnessControlTransport(page, API_URL);
   await page.goto('/');
 
   const control = await page.evaluate(
@@ -33,21 +37,17 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
   expect(controlCookie).toMatchObject({ httpOnly: true, sameSite: 'Strict' });
 
   await page.evaluate(
-    ({ apiUrl, vault }) => {
-      // `loadConnection` reads sessionStorage BEFORE localStorage, and the
-      // boot-time /web-config.json bootstrap in main.ts writes a baseUrl-only
-      // record there (rememberDevice defaults false). Drop it, or it shadows
-      // this one across the reload and `vaultId`/`control` never land.
+    ({ endpointId, endpointTicket, vault }) => {
       sessionStorage.removeItem('centraid.web.v1.connection');
       localStorage.setItem(
         'centraid.web.v1.connection',
         JSON.stringify({
-          baseUrl: apiUrl,
+          endpointId,
+          endpointTicket,
           label: 'Browser E2E',
           displayName: 'Web owner',
           avatarColor: '#6f5bf6',
           vaultId: vault,
-          control: true,
           rememberDevice: true,
         }),
       );
@@ -64,14 +64,20 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
         }),
       );
     },
-    { apiUrl: API_URL, vault: vaultId },
+    {
+      endpointId: GATEWAY_ENDPOINT_ID,
+      endpointTicket: GATEWAY_ENDPOINT_TICKET,
+      vault: vaultId,
+    },
   );
   await page.reload();
 
   await expect(page.evaluate(() => window.CentraidApi.getGatewayAuth())).resolves.toMatchObject({
-    baseUrl: API_URL,
+    baseUrl: 'http://127.0.0.1:4173',
+    gatewayId: GATEWAY_ENDPOINT_ID,
     vaultId,
-    webControl: true,
+    iroh: true,
+    rememberDevice: true,
   });
 
   const appsProbe = await page.evaluate(async (apiUrl) => {

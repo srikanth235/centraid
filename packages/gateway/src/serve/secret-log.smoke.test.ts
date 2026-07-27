@@ -22,7 +22,6 @@ let handle: GatewayServeHandle;
 function pathsUnder(dir: string, logs: string): GatewayPaths {
   return {
     vaultDir: path.join(dir, 'vault'),
-    prefsFile: path.join(dir, 'prefs.json'),
     logsDir: logs,
   };
 }
@@ -46,7 +45,11 @@ beforeEach(async () => {
   dataDir = await tempDir(`secret-log-${crypto.randomUUID()}-`);
   logsDir = path.join(dataDir, 'gateway-logs');
   await fs.mkdir(logsDir, { recursive: true });
-  handle = await serve({ paths: pathsUnder(dataDir, logsDir), token: ADMIN });
+  handle = await serve({
+    initVaultName: "Owner's vault",
+    paths: pathsUnder(dataDir, logsDir),
+    token: ADMIN,
+  });
 });
 
 afterEach(async () => {

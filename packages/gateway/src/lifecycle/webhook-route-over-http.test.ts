@@ -24,7 +24,6 @@ let handle: GatewayServeHandle;
 function pathsUnder(dir: string): GatewayPaths {
   return {
     vaultDir: path.join(dir, 'vault'),
-    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -127,7 +126,7 @@ async function createWebhookAutomation(
 
 beforeEach(async () => {
   dataDir = await tempDir(`gw-webhook-${crypto.randomUUID()}-`);
-  handle = await serve({ paths: pathsUnder(dataDir) });
+  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
 });
 
 afterEach(async () => {

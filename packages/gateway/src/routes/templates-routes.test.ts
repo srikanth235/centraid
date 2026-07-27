@@ -21,7 +21,6 @@ let handle: GatewayServeHandle;
 function pathsUnder(dir: string): GatewayPaths {
   return {
     vaultDir: path.join(dir, 'vault'),
-    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -35,7 +34,7 @@ afterEach(async () => {
 });
 
 test('GET /centraid/_templates returns stripped bundled metadata behind auth', async () => {
-  handle = await serve({ paths: pathsUnder(dataDir) });
+  handle = await serve({ initVaultName: "Owner's vault", paths: pathsUnder(dataDir) });
 
   // No bearer → 401.
   const unauth = await fetch(`${handle.url}/centraid/_templates`);

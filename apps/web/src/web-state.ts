@@ -1,25 +1,19 @@
 const PREFIX = 'centraid.web.v1.';
 
 export interface WebConnection {
-  baseUrl: string;
-  transport?: 'direct' | 'iroh';
-  /** Iroh EndpointTicket; contains dial information, never the one-time pairing secret. */
+  /** Refreshable iroh dial cache; never used as connection identity. */
   endpointTicket?: string;
+  /** Stable sovereign gateway EndpointId and connection identity. */
   endpointId?: string;
-  /** Sovereign gateway EndpointId returned by Iroh pairing. */
-  gatewayId?: string;
-  token?: string;
   vaultId?: string;
   label: string;
   displayName: string;
   avatarColor: string;
-  control?: boolean;
   /** Explicit durable-storage consent from pairing. */
   rememberDevice?: boolean;
 }
 
 const DEFAULT_CONNECTION: WebConnection = {
-  baseUrl: '',
   label: 'Web gateway',
   displayName: 'Centraid',
   avatarColor: '#6f5bf6',
@@ -52,19 +46,7 @@ export function saveConnection(patch: Partial<WebConnection>): WebConnection {
 
 /** Stable replica identity for the sovereign gateway behind a web transport. */
 export function webGatewayId(connection: WebConnection): string | undefined {
-  if (connection.transport === 'iroh' && (connection.gatewayId || connection.endpointTicket)) {
-    return `iroh:${connection.gatewayId ?? connection.endpointTicket}`;
-  }
-  if (!connection.baseUrl) return undefined;
-  try {
-    const url = new URL(connection.baseUrl);
-    url.hash = '';
-    url.search = '';
-    url.pathname = url.pathname.replace(/\/+$/, '') || '/';
-    return `direct:${url.toString()}`;
-  } catch {
-    return `direct:${connection.baseUrl.replace(/\/+$/, '')}`;
-  }
+  return connection.endpointId;
 }
 
 export function loadSettingsPatch(): Record<string, unknown> {
@@ -81,32 +63,13 @@ export function saveSettingsPatch(patch: Record<string, unknown>): Record<string
   return next;
 }
 
-export function gatewayHeaders(connection = loadConnection()): Record<string, string> {
-  const headers: Record<string, string> = {};
-  if (connection.token) headers.Authorization = `Bearer ${connection.token}`;
-  if (connection.vaultId) headers['x-centraid-vault'] = connection.vaultId;
-  return headers;
-}
-
 export async function gatewayFetch(pathname: string, init: RequestInit = {}): Promise<Response> {
   const connection = loadConnection();
-  if (connection.transport === 'iroh') {
-    if (!window.CentraidIroh) throw new Error('Iroh browser transport is not installed.');
-    return window.CentraidIroh.fetch(pathname, init);
+  if (!connection.endpointId || !connection.endpointTicket) {
+    throw new Error('No gateway is connected.');
   }
-  if (!connection.baseUrl) throw new Error('No gateway is connected.');
-  const headers = new Headers(init.headers);
-  for (const [name, value] of Object.entries(gatewayHeaders(connection))) {
-    if (!headers.has(name)) headers.set(name, value);
-  }
-  const requestPath = connection.control
-    ? `/centraid/_web/control?path=${encodeURIComponent(pathname)}`
-    : pathname;
-  return fetch(new URL(requestPath, `${connection.baseUrl.replace(/\/+$/, '')}/`), {
-    ...init,
-    credentials: 'include',
-    headers,
-  });
+  if (!window.CentraidIroh) throw new Error('Iroh browser transport is not installed.');
+  return window.CentraidIroh.fetch(pathname, init);
 }
 
 export async function gatewayJson<T>(pathname: string, init: RequestInit = {}): Promise<T> {

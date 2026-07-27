@@ -687,6 +687,7 @@ export * from './gateway-client-logs.js';
 // `gateway-client-backup.ts`. Re-exported here so the Gateway page's
 // Backup card imports it from the same barrel.
 export * from './gateway-client-backup.js';
+export * from './gateway-client-founding.js';
 
 // The gateway-level storage-connection surface (issue #367 §C1/§D) lives in
 // `gateway-client-storage.ts`. Re-exported here so the Gateway page's

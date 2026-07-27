@@ -34,18 +34,15 @@ vi.mock('./generated/centraid_web_iroh.js', () => ({
 
 vi.mock('./web-state.js', () => ({
   loadConnection: vi.fn(() => ({
-    baseUrl: '',
-    transport: 'iroh' as const,
     endpointTicket: 'ticket-abc',
-    endpointId: 'endpoint-web-1',
-    gatewayId: 'gw-1',
+    endpointId: 'gw-1',
     vaultId: 'vault-1',
     label: 'Web',
     displayName: 'Web',
     avatarColor: '#6f5bf6',
     rememberDevice: true,
   })),
-  webGatewayId: vi.fn(() => 'iroh:gw-1'),
+  webGatewayId: vi.fn(() => 'gw-1'),
 }));
 
 import {
@@ -68,11 +65,8 @@ beforeEach(() => {
   purgeIrohDeviceState();
   wasm.BrowserEndpoint.spawn.mockImplementation(async () => new wasm.BrowserEndpoint());
   (loadConnection as ReturnType<typeof vi.fn>).mockReturnValue({
-    baseUrl: '',
-    transport: 'iroh',
     endpointTicket: 'ticket-abc',
-    endpointId: 'endpoint-web-1',
-    gatewayId: 'gw-1',
+    endpointId: 'gw-1',
     vaultId: 'vault-1',
     label: 'Web',
     displayName: 'Web',
@@ -144,8 +138,6 @@ describe('pairGatewayOverIroh', () => {
 describe('irohFetch', () => {
   test('throws when no iroh connection is configured', async () => {
     (loadConnection as ReturnType<typeof vi.fn>).mockReturnValue({
-      baseUrl: 'https://example.test',
-      transport: 'direct',
       label: 'Web',
       displayName: 'Web',
       avatarColor: '#6f5bf6',

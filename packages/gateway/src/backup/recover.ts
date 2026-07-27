@@ -39,20 +39,21 @@ import {
   materializeSnapshotBlobs,
   parseRecoveryKit,
   restoreSnapshot,
-  saveKeyring,
+  validateKeyring,
   type BackupProvider,
   type Keyring,
   type RecoveryKitTarget,
   type SnapshotRow,
 } from '@centraid/backup';
-import type { RemoteTier } from '@centraid/vault';
+import { KeyStore, type RemoteTier } from '@centraid/vault';
+import { GatewayDatabase } from '../serve/gateway-db.js';
+import { deriveBackupSourceInstanceId } from './backup-state.js';
 import {
   buildProviderFromTarget,
   collectRemoteCasShas,
   currentVersions,
   invalidateRestoredReplica,
   pickSnapshotRow,
-  placeSealKey,
   recoveredAsOfMs,
   rehydrateCodeStore,
   seedFencedBackupState,
@@ -92,12 +93,20 @@ export interface RecoverAdoptContext {
 export interface RecoverInput {
   /** The recovery-kit document, already JSON-parsed (validated by `parseRecoveryKit`). */
   kitDocument: unknown;
+  /** Password for a wrapped recovery kit. Plain legacy kits need no password. */
+  password?: string;
   /** The provider api-key — deliberately NOT in the kit (FORMAT.md); supplied out-of-band. */
   apiKey: string;
   /** Vault registry root (`<dataDir>/vault`) the recovered vault is adopted into. */
   vaultRoot: string;
-  /** Backup-engine state dir (`<dataDir>/backup`) — keyring + fenced target state land here. */
-  backupDir: string;
+  /** Gateway control store receiving the recovered target's fenced state. */
+  gatewayDatabase?: GatewayDatabase;
+  /** Gateway key custody receiving the keyring and per-vault sealing key. */
+  keyStore?: KeyStore;
+  /** Stable HMAC-derived backup writer identity. */
+  sourceInstanceId?: string;
+  /** Gateway data root when it cannot be derived from `vaultRoot`. */
+  dataDir?: string;
   /** Point-in-time recovery (issue #408): newest snapshot at/before this instant + WAL replay to it. Epoch ms. */
   at?: number;
   /** Force a FULL restore — materialize every blob (the `--full` override); no inventory skip-set. */
@@ -209,12 +218,13 @@ export interface RecoveryDiscovery {
 
 export async function discoverRecovery(opts: {
   kitDocument: unknown;
+  password?: string;
   apiKey: string;
   vaultId?: string;
   at?: number;
   provider?: BackupProvider;
 }): Promise<RecoveryDiscovery> {
-  const kit = parseRecoveryKit(opts.kitDocument);
+  const kit = parseRecoveryKit(opts.kitDocument, opts.password);
   const target = selectTarget(kit.targets, opts.vaultId);
   const provider = opts.provider ?? buildProviderFromTarget(target, opts.apiKey);
   const caps = await provider.capabilities();
@@ -252,6 +262,14 @@ export async function discoverRecovery(opts: {
 }
 
 export async function recover(input: RecoverInput): Promise<RecoverReport> {
+  const dataDir = input.dataDir
+    ? path.resolve(input.dataDir)
+    : path.dirname(path.resolve(input.vaultRoot));
+  const gatewayDatabase = input.gatewayDatabase ?? GatewayDatabase.open(dataDir);
+  const keyStore = input.keyStore ?? new KeyStore(path.join(dataDir, 'keys'));
+  const sourceInstanceId =
+    input.sourceInstanceId ??
+    deriveBackupSourceInstanceId(keyStore.loadOrCreate('endpoint-key.bin'));
   const now = input.now ?? Date.now;
   const log: ReconcileLogger = {
     info: (m) => input.log?.info?.(m),
@@ -264,7 +282,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
 
   // ── discovering ──────────────────────────────────────────────────────
   emit('discovering');
-  const kit = parseRecoveryKit(input.kitDocument);
+  const kit = parseRecoveryKit(input.kitDocument, input.password);
   const target = selectTarget(kit.targets, input.vaultId);
   const provider = input.provider ?? buildProviderFromTarget(target, input.apiKey);
   const caps = await provider.capabilities();
@@ -306,12 +324,12 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       `recover: "${finalDir}" already exists — refusing to recover over an existing vault directory`,
     );
   }
-  // Stage INSIDE the vault root (same filesystem ⇒ the adopt below is an atomic
+  // Restore INSIDE the vault root (same filesystem ⇒ the adopt below is an atomic
   // rename). The dot prefix keeps `VaultRegistry.scan()` from mounting the
   // half-written dir mid-restore (see vault-registry.ts).
-  const stagingDir = path.join(
+  const restoreWorkDir = path.join(
     input.vaultRoot,
-    `.recover-staging-${randomBytes(8).toString('hex')}`,
+    `.recover-work-${randomBytes(8).toString('hex')}`,
   );
   try {
     const restore = await restoreSnapshot({
@@ -320,7 +338,7 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       keyring: kit.keyring,
       vaultId: target.vaultId,
       ...(input.at !== undefined ? { pointInTimeMs: input.at } : {}),
-      destDir: stagingDir,
+      destDir: restoreWorkDir,
       current,
       // Defer any blob the remote CAS attests it holds; a blob the inventory
       // does NOT name is materialized (the snapshot is its only copy). A `--full`
@@ -330,14 +348,15 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
     });
     emit('replaying');
     // The restored replica index attests capture-time durability, not now.
-    invalidateRestoredReplica(stagingDir);
+    invalidateRestoredReplica(restoreWorkDir);
 
     // ── fencing ────────────────────────────────────────────────────────
     emit('fencing');
     const targetInfo = await provider.getTarget(target.targetId);
     const fencedGeneration = targetInfo.currentGeneration + 1;
     await seedFencedBackupState({
-      backupDir: input.backupDir,
+      gatewayDatabase,
+      sourceInstanceId,
       vaultId: target.vaultId,
       target,
       fencedGeneration,
@@ -345,21 +364,35 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       now,
     });
     // The recovered gateway must hold the SAME keyring to read these snapshots
-    // and to keep backing up under the same key. Refuse to clobber an existing
-    // one — recovery is a blank-machine act.
-    const keyringPath = path.join(input.backupDir, 'keyring.json');
-    if (existsSync(keyringPath)) {
+    // and to keep backing up under the same key. Recovery can preserve endpoint
+    // identity, but it may never overwrite an existing backup keyring.
+    const existingKeyring = keyStore.export('keyring.key');
+    if (existingKeyring) {
+      const existing = validateKeyring(JSON.parse(existingKeyring.toString('utf8')));
+      if (JSON.stringify(existing) !== JSON.stringify(kit.keyring)) {
+        throw new Error(
+          'recover: gateway custody contains a different backup keyring; refusing to overwrite live key material',
+        );
+      }
+    } else {
+      keyStore.import('keyring.key', Buffer.from(JSON.stringify(kit.keyring), 'utf8'));
+    }
+    if (typeof target.sealKey !== 'string' || target.sealKey.length === 0) {
       throw new Error(
-        `recover: a keyring already exists at ${keyringPath} — this machine is not blank; ` +
-          'refusing to overwrite live key material',
+        `recover: the recovery-kit target for vault "${target.vaultId}" has no sealing key`,
       );
     }
-    await saveKeyring(keyringPath, kit.keyring);
+    const sealKey = Buffer.from(target.sealKey, 'base64');
+    if (sealKey.length !== 32) {
+      throw new Error(
+        `recover: the recovery-kit target for vault "${target.vaultId}" has an invalid sealing key`,
+      );
+    }
+    keyStore.import(`${target.vaultId}.sealkey`, sealKey);
 
     // ── adopting ───────────────────────────────────────────────────────
     emit('adopting');
-    await fs.rename(stagingDir, finalDir);
-    await placeSealKey(finalDir, log);
+    await fs.rename(restoreWorkDir, finalDir);
     // Turn the restored `apps.bundle` back into the live bare code store
     // (issue #517) — without this the vault mounts with data but no app code.
     await rehydrateCodeStore(finalDir, log);
@@ -417,9 +450,9 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       quarantine: ['outbox', 'automations', 'connections'],
     };
   } catch (err) {
-    // Never leave staging scratch behind (the final dir, if the rename
+    // Never leave restore scratch behind (the final dir, if the rename
     // already ran, is a real vault and is left in place).
-    await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+    await fs.rm(restoreWorkDir, { recursive: true, force: true }).catch(() => undefined);
     throw err;
   }
 }

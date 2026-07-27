@@ -1,8 +1,5 @@
 /*
- * The owner's two local-disk limits (issue #544), persisted at
- * `<storageDir>/storage-limits.json`. Same atomic-write shape as
- * `recovery-kit-state.ts` / `storage-connections.ts`, and it lives beside them
- * because this is gateway plumbing, not vault content.
+ * The owner's two local-disk limits (issue #544), persisted in gateway.db.
  *
  * Two limits, two DELIBERATELY different enforcement models:
  *
@@ -29,8 +26,7 @@
 
 /* eslint-disable max-classes-per-file -- the typed refusal error is colocated with the store that throws it (#247) */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { GatewayDatabase } from './gateway-db.js';
 
 /** Default warn threshold as a percentage of `totalLimitBytes`. */
 export const DEFAULT_WARN_AT_PERCENT = 80;
@@ -70,46 +66,23 @@ export class StorageLimitsError extends Error {
   }
 }
 
-function limitsFile(dir: string): string {
-  return path.join(dir, 'storage-limits.json');
-}
-
-/** A stored file is trusted only as far as it parses — anything malformed
- *  falls back to the field default rather than propagating a bad limit into
- *  the archival trigger. */
-function coerce(raw: Partial<StorageLimits>): StorageLimits {
-  const positiveOrNull = (value: unknown): number | null =>
-    typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
-  const warn =
-    typeof raw.warnAtPercent === 'number' &&
-    Number.isFinite(raw.warnAtPercent) &&
-    raw.warnAtPercent > 0 &&
-    raw.warnAtPercent <= 100
-      ? raw.warnAtPercent
-      : DEFAULT_WARN_AT_PERCENT;
-  return {
-    totalLimitBytes: positiveOrNull(raw.totalLimitBytes),
-    warnAtPercent: warn,
-    journalLimitBytes: positiveOrNull(raw.journalLimitBytes),
-  };
-}
-
 export async function loadStorageLimits(dir: string): Promise<StorageLimits> {
+  const database = GatewayDatabase.open(dir);
   try {
-    const raw = await fs.readFile(limitsFile(dir), 'utf8');
-    return coerce(JSON.parse(raw) as Partial<StorageLimits>);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    return { ...DEFAULT_STORAGE_LIMITS };
+    return await new StorageLimitsStore(database).load();
+  } finally {
+    database.close();
   }
 }
 
 export async function saveStorageLimits(dir: string, limits: StorageLimits): Promise<void> {
-  await fs.mkdir(dir, { recursive: true });
-  const file = limitsFile(dir);
-  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmp, `${JSON.stringify(limits, null, 2)}\n`, { mode: 0o600 });
-  await fs.rename(tmp, file);
+  const database = GatewayDatabase.open(dir);
+  try {
+    const store = new StorageLimitsStore(database);
+    await store.update(limits);
+  } finally {
+    database.close();
+  }
 }
 
 /** The write shape: every field optional, `null` clears that limit. */
@@ -202,11 +175,14 @@ export function evaluateStorageLimit(
 export class StorageLimitsStore {
   private cached: StorageLimits | null = null;
 
-  constructor(private readonly dir: string) {}
+  constructor(private readonly source: string | GatewayDatabase) {}
 
   async load(): Promise<StorageLimits> {
     if (this.cached) return this.cached;
-    const limits = await loadStorageLimits(this.dir);
+    const limits =
+      this.source instanceof GatewayDatabase
+        ? this.loadFromDatabase()
+        : await loadStorageLimits(this.source);
     this.cached = limits;
     return limits;
   }
@@ -226,8 +202,45 @@ export class StorageLimitsStore {
 
   async update(patch: StorageLimitsPatch): Promise<StorageLimits> {
     const next = applyLimitsPatch(await this.load(), patch);
-    await saveStorageLimits(this.dir, next);
+    if (this.source instanceof GatewayDatabase) {
+      this.source.db
+        .prepare(
+          `INSERT INTO storage_limits (
+            singleton, total_limit_bytes, warn_at_percent, journal_limit_bytes
+          ) VALUES (1, ?, ?, ?)
+          ON CONFLICT(singleton) DO UPDATE SET
+            total_limit_bytes = excluded.total_limit_bytes,
+            warn_at_percent = excluded.warn_at_percent,
+            journal_limit_bytes = excluded.journal_limit_bytes`,
+        )
+        .run(next.totalLimitBytes, next.warnAtPercent, next.journalLimitBytes);
+    } else {
+      await saveStorageLimits(this.source, next);
+    }
     this.cached = next;
     return next;
+  }
+
+  private loadFromDatabase(): StorageLimits {
+    if (!(this.source instanceof GatewayDatabase)) return { ...DEFAULT_STORAGE_LIMITS };
+    const row = this.source.db
+      .prepare(
+        `SELECT total_limit_bytes, warn_at_percent, journal_limit_bytes
+           FROM storage_limits WHERE singleton = 1`,
+      )
+      .get() as
+      | {
+          total_limit_bytes: number | null;
+          warn_at_percent: number;
+          journal_limit_bytes: number | null;
+        }
+      | undefined;
+    return row
+      ? {
+          totalLimitBytes: row.total_limit_bytes,
+          warnAtPercent: row.warn_at_percent,
+          journalLimitBytes: row.journal_limit_bytes,
+        }
+      : { ...DEFAULT_STORAGE_LIMITS };
   }
 }

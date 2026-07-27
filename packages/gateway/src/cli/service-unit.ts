@@ -40,6 +40,8 @@ export interface ServiceUnitSpec {
    * window open and shut. Empty/omitted → no environment block is emitted.
    */
   env?: Record<string, string>;
+  /** systemd credential id/path for the KeyStore wrapping key. */
+  encryptedCredential?: { id: string; path: string };
 }
 
 export function launchAgentPlistPath(
@@ -54,6 +56,14 @@ export function systemdUnitPath(
   unitName: string = DEFAULT_SYSTEMD_UNIT_NAME,
 ): string {
   return path.join(homeDir, '.config', 'systemd', 'user', `${unitName}.service`);
+}
+
+/** Durable encrypted credential blob; safe to retain across service uninstall. */
+export function systemdCredentialPath(
+  homeDir: string,
+  unitName: string = DEFAULT_SYSTEMD_UNIT_NAME,
+): string {
+  return path.join(homeDir, '.config', 'centraid', 'credentials', `${unitName}.keystore.cred`);
 }
 
 function xmlEscape(value: string): string {
@@ -143,6 +153,13 @@ export function buildSystemdUnit(
     '[Service]',
     'Type=simple',
     ...envLines,
+    ...(spec.encryptedCredential
+      ? [
+          `LoadCredentialEncrypted=${spec.encryptedCredential.id}:${systemdQuote(
+            spec.encryptedCredential.path,
+          )}`,
+        ]
+      : []),
     `ExecStart=${execStart}`,
     `WorkingDirectory=${spec.workingDirectory}`,
     'Restart=on-failure',

@@ -285,7 +285,7 @@ async function requestParts(init: RequestInit): Promise<{
 
 export async function irohFetch(pathname: string, init: RequestInit = {}): Promise<Response> {
   const connection = loadConnection();
-  if (connection.transport !== 'iroh' || !connection.endpointTicket) {
+  if (!connection.endpointId || !connection.endpointTicket) {
     throw new Error('No Iroh gateway is connected.');
   }
   const node = await endpoint();
@@ -315,7 +315,7 @@ export async function irohFetch(pathname: string, init: RequestInit = {}): Promi
 
 async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
   const connection = loadConnection();
-  if (connection.transport !== 'iroh' || !connection.endpointTicket) {
+  if (!connection.endpointId || !connection.endpointTicket) {
     throw new Error('No Iroh gateway is connected.');
   }
   const headers = { ...message.headers };

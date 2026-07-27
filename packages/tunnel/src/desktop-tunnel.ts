@@ -234,6 +234,7 @@ class DesktopTunnel {
     this.options.onPaired?.(device);
     return {
       ok: true,
+      gatewayId: this.endpoint.id().toString(),
       deviceId: device.deviceId,
       desktopName: this.options.desktopName ?? 'Centraid Desktop',
     };

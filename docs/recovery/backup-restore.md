@@ -11,9 +11,14 @@ When backup, restore, or blank-machine `recover` strands mid-flight. Product pat
 | **Fencing** | Successful recover adopts with generation bump so the old machine's next register fails (no split-brain) |
 | Keys | Sealing keys / recovery kit are outside casual vault copy — need the kit + provider credentials |
 
+The recovery-kit passphrase wrap is **load-bearing key custody**, not a
+convenience. The kit contains the backup keyring and backed-up vault DEKs;
+without its password those keys remain unavailable even when the wrapped file
+and provider objects are both present.
+
 ## Symptoms
 
-- Restore job stuck in `fetching` / `replaying`
+- Founding restore stuck in `fetching` / `replaying`
 - `recover` failed after partial download
 - Two machines both think they are primary
 - PITR / WAL replay error
@@ -31,8 +36,8 @@ When backup, restore, or blank-machine `recover` strands mid-flight. Product pat
 
 Phases (conceptually): `discovering → fetching → replaying → fencing → adopting → warming`.
 
-1. Read gateway logs + any recover progress SSE/UI state.
-2. If failure was before **adopting**, retry `recover` with the recovery kit; partial cache may be reused depending on implementation — if unsure, clear the recover staging dir documented by the CLI error, not the provider's remote objects.
+1. Read gateway logs and the founding UI error.
+2. If failure was before **adopting**, retry the zero-vault restore with the recovery kit. Remove only the specifically named disposable cache/scratch path when instructed; never remove provider objects or the live vault root.
 3. If failure was **during/after fencing**, treat as high risk of split-brain:
    - Do not start the old machine's gateway against the same vault without maintainer guidance.
    - Prefer completing recover on the new machine; old machine should see registration **409** / fence errors — that is success of fencing.

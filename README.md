@@ -153,14 +153,20 @@ npm install --prefix $env:USERPROFILE\.centraid @centraid/gateway
 
 ### Pair clients after install (VPS / headless)
 
-Gateway must be serving so `endpoint.json` exists, then mint a one-time ticket:
+Start the gateway, then either found its first vault or pair into an existing one:
 
 ```sh
-# Create a vault if needed, then mint a ticket (desktop paste):
-centraid-gateway vault create --data-dir "$DATA_DIR" --name Family
+# Zero-vault VPS: host possession mints a 10-minute founding capability.
+centraid-gateway init-ticket --data-dir "$DATA_DIR" --qr
+# The phone scans it, chooses Create or Restore, saves and re-opens the
+# recovery kit, and becomes the first owner.
+
+# Already founded: mint an ordinary enrollment ticket.
 centraid-gateway pair --data-dir "$DATA_DIR" --vault Family
-# Phone-friendly: same ticket + UTF-8 block QR over SSH:
 centraid-gateway pair --data-dir "$DATA_DIR" --vault Family --qr
+
+# Automation-only bootstrap (explicitly KIT-LESS):
+centraid-gateway serve --data-dir "$DATA_DIR" --init-vault Family
 ```
 
 | Client | How to enroll |
@@ -176,19 +182,23 @@ Gateway-only image (control-plane HTTP). Build from the monorepo root:
 
 ```sh
 docker build -t centraid-gateway .
-# Durable vault/data — required for real use (bare runs lose /data with the container).
-# Named volume (recommended; works with non-root uid 10001):
+# Durable vault/data and the independent wrapping credential are both required
+# for real use (bare runs lose them with the container).
+# Named volumes (recommended; work with non-root uid 10001):
 docker volume create centraid-data
+docker volume create centraid-custody
 docker run --rm -p 8787:8787 \
   -v centraid-data:/data \
+  -v centraid-custody:/config \
   -e CENTRAID_ALLOWED_HOSTS=gateway.example \
   centraid-gateway
 # Host bind-mount: chown for uid 10001 (or chmod a+rwx for local smoke only):
-#   mkdir -p "$HOME/centraid-data" && chown 10001:10001 "$HOME/centraid-data"
-#   docker run ... -v "$HOME/centraid-data:/data" ...
+#   mkdir -p "$HOME/centraid-data" "$HOME/centraid-custody"
+#   chown 10001:10001 "$HOME/centraid-data" "$HOME/centraid-custody"
+#   docker run ... -v "$HOME/centraid-data:/data" -v "$HOME/centraid-custody:/config" ...
 ```
 
-- **Data durability:** always use a **named volume** or bind-mount at `/data`. The image declares `VOLUME /data` but anonymous volumes are easy to lose on recreate.
+- **Data and custody durability:** always use independent **named volumes** or bind-mounts at `/data` and `/config`. `/data` holds the wrapped gateway state; `/config` holds the external `0600` wrapping credential. Back them up separately—the data volume alone cannot decrypt `keys/`. The image declares both volumes, but anonymous volumes are easy to lose on recreate.
 - **User:** process runs as UID/GID `10001`. Named volumes are created with compatible ownership; host bind-mounts need `chown 10001:10001` (or world-writable only for local smoke).
 - **Host allowlist:** loopback `Host` values always work. For a public hostname in `Host`, set `CENTRAID_ALLOWED_HOSTS` or pass `--allowed-host` via a custom entrypoint. See [SECURITY.md](SECURITY.md) (control-plane subsection).
 - **Tunnel:** the image **builds the native iroh relay** (`packages/tunnel/native`) into `centraid-tunnel-native.<platform>-<arch>.node`. Remote devices dial over QUIC; Docker sets `CENTRAID_REQUIRE_NATIVE_TUNNEL=1` so a missing cargo toolchain fails the image build.

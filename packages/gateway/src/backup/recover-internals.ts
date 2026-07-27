@@ -19,15 +19,11 @@ import {
   type SnapshotRow,
   type WalReplayOutcome,
 } from '@centraid/backup';
-import {
-  bumpReplicaEpoch,
-  ONTOLOGY_VERSION,
-  sealKeyFileFor,
-  VAULT_MIGRATIONS,
-} from '@centraid/vault';
+import { bumpReplicaEpoch, ONTOLOGY_VERSION, VAULT_MIGRATIONS } from '@centraid/vault';
 import { run } from '../worktree-store/git.js';
 import { GATEWAY_VERSION } from '../version.js';
 import { loadBackupState, saveBackupState } from './backup-state.js';
+import type { GatewayDatabase } from '../serve/gateway-db.js';
 import { warmPreviewTinies } from './restore-warm.js';
 import type { PreviewsRecoverOutcome, RecoverAdoptContext, RecoverInput } from './recover.js';
 
@@ -115,25 +111,6 @@ export async function collectRemoteCasShas(
 }
 
 /**
- * Move the restored seal key into custody position (issue #439 R1). The snapshot
- * carries the vault's sealed-columns DEK as a `seal.key` entry that restore
- * materializes at `<vaultDir>/seal.key`, but `openVaultDb` resolves it from the
- * `keys/` SIBLING of the vault dir (`sealKeyFileFor`, issue #298). Without this
- * relocation a recovered vault with ANY sealed secret would brick on first
- * mount (`SealKeyError('missing')`) — the very "placebo restore" FORMAT.md warns
- * about. A vault with no sealed columns ships no `seal.key`, so this is a no-op
- * for it (`existsSync` guard).
- */
-export async function placeSealKey(vaultDir: string, log: EngineLogger): Promise<void> {
-  const restored = path.join(vaultDir, 'seal.key');
-  if (!existsSync(restored)) return;
-  const dest = sealKeyFileFor(vaultDir);
-  await fs.mkdir(path.dirname(dest), { recursive: true });
-  await fs.rename(restored, dest);
-  log.info?.(`recover: placed the restored seal key at ${dest}`);
-}
-
-/**
  * Rehydrate the app code store from the restored git bundle (issue #517). The
  * snapshot carries the vault's bare code repo as a `git bundle --all` that
  * `restoreSnapshot` materializes at `<vaultDir>/apps.bundle`, but the runtime
@@ -162,7 +139,7 @@ export async function rehydrateCodeStore(vaultDir: string, log: EngineLogger): P
   if (!existsSync(bundle)) return;
   // `<vaultDir>/code` is `VaultPlane.codeStoreRoot`; `apps.git` under it is the
   // bare repo `WorktreeStore` opens (both layout constants are private to their
-  // owners, so they are spelled out here the way `placeSealKey` spells `seal.key`).
+  // owners, so they are spelled out here beside the KeyStore import path).
   const bareDir = path.join(vaultDir, 'code', 'apps.git');
   await fs.mkdir(path.dirname(bareDir), { recursive: true });
   await run(['clone', '--bare', bundle, bareDir], { cwd: vaultDir });
@@ -272,14 +249,15 @@ export async function warmOrSkip(
  * desktop) sets it through its own adopt wiring.
  */
 export async function seedFencedBackupState(opts: {
-  backupDir: string;
+  gatewayDatabase: GatewayDatabase;
+  sourceInstanceId: string;
   vaultId: string;
   target: RecoveryKitTarget;
   fencedGeneration: number;
   lastSeq: number;
   now: () => number;
 }): Promise<void> {
-  const state = await loadBackupState(opts.backupDir);
+  const state = await loadBackupState(opts.gatewayDatabase, opts.sourceInstanceId);
   const stamp = new Date(opts.now()).toISOString();
   state.targets[opts.vaultId] = {
     targetId: opts.target.targetId,
@@ -291,5 +269,5 @@ export async function seedFencedBackupState(opts: {
     firstBackupAt: stamp,
     lastBackupAt: stamp,
   };
-  await saveBackupState(opts.backupDir, state);
+  await saveBackupState(opts.gatewayDatabase, state);
 }

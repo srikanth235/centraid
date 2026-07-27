@@ -3,22 +3,17 @@
 import { runFlow } from '../lib/harness.mjs';
 
 await runFlow('device-pairing-lifecycle', async (ctx) => {
-  // 1. A named vault to pair into (the daemon already bootstrapped a default).
-  const created = JSON.parse(
-    (await ctx.cli(['vault', 'create', '--name', 'Family'])).stdout.trim().split('\n').at(-1),
-  );
-  if (!created.vaultId)
-    throw new Error(`vault create returned no vaultId: ${JSON.stringify(created)}`);
-  ctx.note(`created vault Family (${created.vaultId})`);
-
-  // 2. Mint the pasteable ticket for it.
-  const { payload } = await ctx.mintTicket({ vault: 'Family' });
-  if (payload.vaultName !== 'Family') throw new Error(`ticket names vault "${payload.vaultName}"`);
+  // 1. The harness explicitly initializes one named vault at daemon boot.
+  // Mint the pasteable ticket for it through the live daemon.
+  const { payload } = await ctx.mintTicket({ vault: 'Pairing E2E' });
+  if (payload.vaultName !== 'Pairing E2E') {
+    throw new Error(`ticket names vault "${payload.vaultName}"`);
+  }
   if (payload.exp <= Date.now()) throw new Error('ticket minted already expired');
   if (!payload.gw || !payload.t || !payload.s) throw new Error('ticket missing gw/t/s');
   ctx.note(`minted ticket ${payload.t} (expires ${new Date(payload.exp).toISOString()})`);
 
-  // 3. A never-seen device redeems it.
+  // 2. A never-seen device redeems it.
   const device = await ctx.newDevice();
   const paired = await device.pairGateway(payload.gw, {
     ticketId: payload.t,
@@ -27,7 +22,7 @@ await runFlow('device-pairing-lifecycle', async (ctx) => {
     platform: 'agent-e2e',
   });
   if (!paired.ok) throw new Error(`redeem failed: ${JSON.stringify(paired)}`);
-  if (paired.vaultId !== created.vaultId || paired.vaultName !== 'Family') {
+  if (!paired.vaultId || paired.vaultName !== 'Pairing E2E') {
     throw new Error(`pair response names the wrong vault: ${JSON.stringify(paired)}`);
   }
   if (!paired.version || typeof paired.schemaEpoch !== 'number') {
@@ -35,28 +30,22 @@ await runFlow('device-pairing-lifecycle', async (ctx) => {
   }
   ctx.note(`device ${device.endpointId.slice(0, 10)}… enrolled (gateway v${paired.version})`);
 
-  // 4. The enrollment is visible to the admin CLI and on disk.
-  const listed = (await ctx.cli(['devices', 'list', '--vault', 'Family'])).stdout
-    .trim()
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line));
-  if (!listed.some((row) => row.endpointId === device.endpointId)) {
+  // 3. The durable gateway.db enrollment is visible to the admin CLI.
+  const roster = await ctx.requestJson(device, 'GET', '/centraid/_gateway/devices');
+  if (roster.response.status !== 200) {
+    throw new Error(`devices roster returned ${roster.response.status}`);
+  }
+  const enrolled = roster.json.devices.find((row) => row.endpointId === device.endpointId);
+  if (!enrolled || enrolled.vaultId !== paired.vaultId || enrolled.platform !== 'agent-e2e') {
     throw new Error(`devices list does not show ${device.endpointId}`);
   }
-  const onDisk = (await ctx.readJson('devices.json')).enrollments.find(
-    (row) => row.endpointId === device.endpointId,
-  );
-  if (!onDisk || onDisk.vaultId !== created.vaultId || onDisk.platform !== 'agent-e2e') {
-    throw new Error(`devices.json row wrong: ${JSON.stringify(onDisk)}`);
-  }
 
-  // 5. Enrollment admits the tunnel.
+  // 4. Enrollment admits the tunnel.
   const probe = await ctx.request(device, '/centraid/_vault/vaults');
   if (probe.status !== 200) throw new Error(`tunneled probe → ${probe.status}`);
   ctx.note('enrolled device tunnels: GET /centraid/_vault/vaults → 200');
 
-  // 6. The ticket burned on success.
+  // 5. The ticket burned on success.
   const replay = await device.pairGateway(payload.gw, {
     ticketId: payload.t,
     secret: payload.s,
@@ -66,7 +55,7 @@ await runFlow('device-pairing-lifecycle', async (ctx) => {
   if (replay.ok) throw new Error('replayed ticket redeemed twice');
   ctx.note(`replay refused (${replay.error})`);
 
-  // 7. Restart: permanent identity + persisted enrollment.
+  // 6. Restart: permanent identity + persisted enrollment.
   const endpointBefore = ctx.gateway.endpointId;
   await ctx.restartGateway();
   if (ctx.gateway.endpointId !== endpointBefore) {
@@ -76,8 +65,15 @@ await runFlow('device-pairing-lifecycle', async (ctx) => {
   if (probeAfter.status !== 200) throw new Error(`post-restart probe → ${probeAfter.status}`);
   ctx.note('daemon restarted: same EndpointId, device still enrolled, tunnel works');
 
-  // 8. Revocation shuts the door.
-  await ctx.cli(['devices', 'revoke', device.endpointId]);
+  // 7. Revocation shuts the door.
+  const revoked = await ctx.requestJson(
+    device,
+    'DELETE',
+    `/centraid/_gateway/devices/${encodeURIComponent(enrolled.deviceId)}`,
+  );
+  if (revoked.response.status !== 200 || revoked.json.removed !== true) {
+    throw new Error(`self-revoke failed: ${JSON.stringify(revoked.json)}`);
+  }
   await ctx.expectTunnelRefused(device);
   ctx.note('revoked device refused at the QUIC layer');
 

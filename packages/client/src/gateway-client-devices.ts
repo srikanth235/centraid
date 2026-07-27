@@ -71,7 +71,7 @@ export interface CentraidGatewayDevice {
   endpointId: string;
   label: string;
   platform?: string;
-  transport: 'iroh' | 'http';
+  transport: 'iroh';
   vaultId: string;
   vaultName?: string;
   addedAt?: string;

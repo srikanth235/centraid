@@ -20,7 +20,7 @@ afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()?.();
 });
 function openPlane(dir: string): VaultPlane {
-  const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
+  const plane = openVaultPlane({ bootstrap: true, dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());
   return plane;
 }

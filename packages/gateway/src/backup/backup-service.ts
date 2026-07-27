@@ -8,19 +8,23 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import {
   BackupProviderError,
-  createKeyring,
   createSnapshot,
-  loadKeyring,
   openLocalBackupProvider,
   openManifest,
   openRemoteBackupProvider,
+  parseRecoveryKit,
   restoreSnapshot,
+  recoveryKitFingerprint,
+  wrapRecoveryKit,
   verifySnapshot,
+  validateKeyring,
   type BackupProvider,
   type Keyring,
+  type RecoveryKitDocument,
   type Retention,
   type RestoreResult,
   type SnapshotRow,
@@ -36,6 +40,8 @@ import {
   jitterDelayMs,
   readBackupPolicy,
   readBlobStoreSettings,
+  KeyStore,
+  sealKeyFileFor,
   verifyRestoredPair,
   type BackupPolicy,
   type RemoteTier,
@@ -45,14 +51,14 @@ import type { RuntimeLogger } from '@centraid/app-engine';
 import { type BackupConfig, type BackupProviderConfig } from './backup-config.js';
 import { discardWalFiles, drainWalFiles, pruneWalGenerations, walPairKey } from './wal-uploader.js';
 import {
+  deriveBackupSourceInstanceId,
   loadBackupState,
   opaqueLabel,
   saveBackupState,
   type BackupState,
   type BackupTargetState,
-  type RecoveryKitState,
 } from './backup-state.js';
-import type { RecoveryKitStateStore } from './recovery-kit-state.js';
+import { RecoveryKitStateStore, type RecoveryKitState } from './recovery-kit-state.js';
 import { assembleSourceEntries, type AssembleOptions } from './backup-sources.js';
 import type { HealthRegistry } from '../serve/health-registry.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
@@ -61,7 +67,7 @@ import type { StorageConnectionStore } from './storage-connections.js';
 import { GATEWAY_VERSION } from '../version.js';
 import { resolveBackupBackend } from './backup-backend.js';
 import { evaluateBackupHealth } from './backup-health.js';
-import { recoveryKitDocument, writeBackupRecoveryKit } from './backup-recovery-kit.js';
+import { recoveryKitDocument } from './backup-recovery-kit.js';
 import {
   inspectProviderPolicy,
   providerPolicyFor,
@@ -79,6 +85,7 @@ import {
   runCasOnlyReconciliation,
 } from './backup-cas-reconciliation.js';
 import { snapshotReferencedBlobShas } from './snapshot-blob-roots.js';
+import { GatewayDatabase } from '../serve/gateway-db.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -132,8 +139,11 @@ export function buildBackupProvider(config: BackupProviderConfig): BackupProvide
 export interface BackupServiceOptions {
   /** Static daemon/CLI configuration. When omitted, the active provider storage connection is resolved live. */
   config?: BackupConfig;
-  /** `<dataDir>/backup` — holds `keyring.json`, `state.json`, `code-bundle/`. */
-  backupDir: string;
+  /** Disposable backup working/cache directory (bundles and restore scratch). */
+  cacheDir: string;
+  gatewayDatabase?: GatewayDatabase;
+  keyStore?: KeyStore;
+  sourceInstanceId?: string;
   vaults: VaultRegistry;
   health: HealthRegistry;
   logger: RuntimeLogger;
@@ -267,18 +277,20 @@ const HOME_DISCOVERY_TTL_MS = 5 * 60 * 1000;
 export class BackupService {
   private homeDiscoveryCache: { at: number; value: HomeDiscovery } | undefined;
   private readonly config: BackupConfig | undefined;
-  private readonly backupDir: string;
+  private readonly cacheDir: string;
   private readonly vaults: VaultRegistry;
   private readonly health: HealthRegistry;
   private readonly logger: RuntimeLogger;
   private readonly now: () => number;
   private readonly provider: BackupProvider | undefined;
   private readonly storageConnections: StorageConnectionStore | undefined;
-  private readonly keyringPath: string;
+  private readonly gatewayDatabase: GatewayDatabase;
+  private readonly keyStore: KeyStore;
+  private readonly sourceInstanceId: string;
   private readonly assembleEntries: (opts: AssembleOptions) => Promise<SourceEntry[]>;
   private readonly snapshot: typeof createSnapshot;
   private readonly casReconcile: typeof runCasOnlyReconciliation;
-  private readonly recoveryKit: RecoveryKitStateStore | undefined;
+  private readonly recoveryKit: RecoveryKitStateStore;
   private readonly onDrainAccounted:
     | ((info: { bytesUploaded: number; durationMs: number }) => void)
     | undefined;
@@ -303,7 +315,7 @@ export class BackupService {
 
   constructor(opts: BackupServiceOptions) {
     this.config = opts.config;
-    this.backupDir = opts.backupDir;
+    this.cacheDir = opts.cacheDir;
     this.vaults = opts.vaults;
     this.health = opts.health;
     this.logger = opts.logger;
@@ -311,11 +323,23 @@ export class BackupService {
     this.provider =
       opts.provider ?? (this.config ? buildBackupProvider(this.config.provider) : undefined);
     this.storageConnections = opts.storageConnections;
-    this.keyringPath = this.config?.keyringPath ?? path.join(this.backupDir, 'keyring.json');
+    this.gatewayDatabase = opts.gatewayDatabase ?? GatewayDatabase.open(this.cacheDir);
+    const firstPlane = this.vaults.planesList()[0];
+    this.keyStore =
+      opts.keyStore ??
+      new KeyStore(
+        firstPlane
+          ? path.dirname(sealKeyFileFor(firstPlane.dir))
+          : path.join(this.cacheDir, 'keys'),
+      );
+    this.sourceInstanceId =
+      opts.sourceInstanceId ??
+      deriveBackupSourceInstanceId(this.keyStore.loadOrCreate('endpoint-key.bin'));
     this.assembleEntries = opts.assembleEntries ?? assembleSourceEntries;
     this.snapshot = opts.snapshot ?? createSnapshot;
     this.casReconcile = opts.casReconcile ?? runCasOnlyReconciliation;
-    this.recoveryKit = opts.recoveryKit;
+    this.recoveryKit =
+      opts.recoveryKit ?? new RecoveryKitStateStore(this.gatewayDatabase, this.now);
     this.onDrainAccounted = opts.onDrainAccounted;
     this.shouldDeferPosture = opts.shouldDeferPosture ?? (() => false);
 
@@ -360,7 +384,7 @@ export class BackupService {
   }
 
   private async probe(): Promise<{ status: 'ok' | 'degraded' | 'error'; detail?: string }> {
-    const state = await loadBackupState(this.backupDir);
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     const backend = await this.backend();
     const backup = backend
       ? evaluateBackupHealth({
@@ -371,6 +395,15 @@ export class BackupService {
       : { status: 'ok' as const, detail: 'backup is not configured' };
     const casErrors: string[] = [];
     const casWarnings: string[] = [];
+    for (const plane of this.vaults.planesList()) {
+      const vaultId = plane.boot.vaultId;
+      if (readBlobStoreSettings(plane.db.vault).kind === 's3' && !state.targets[vaultId]) {
+        casWarnings.push(
+          `${vaultId}: remote CAS stores offsite bytes but has no backup target; ` +
+            'the recovery kit cannot restore those bytes',
+        );
+      }
+    }
     for (const [vaultId, reconciliation] of Object.entries(state.casReconciliations)) {
       const detail =
         `${vaultId}: remote CAS inventory ${reconciliation.status} — ` +
@@ -411,13 +444,24 @@ export class BackupService {
 
   private async ensureKeyring(): Promise<Keyring> {
     if (this.keyring) return this.keyring;
-    try {
-      this.keyring = await loadKeyring(this.keyringPath);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-      this.keyring = await createKeyring(this.keyringPath);
-      this.logger.info(`backup: minted a fresh keyring at ${this.keyringPath}`);
+    const existing = this.keyStore.export('keyring.key');
+    if (existing) {
+      this.keyring = validateKeyring(JSON.parse(existing.toString('utf8')));
+      return this.keyring;
     }
+    this.keyring = {
+      version: 1,
+      active: 1,
+      epochs: [
+        {
+          epoch: 1,
+          key: randomBytes(32).toString('base64'),
+          createdAt: new Date(this.now()).toISOString(),
+        },
+      ],
+    };
+    this.keyStore.import('keyring.key', Buffer.from(JSON.stringify(this.keyring), 'utf8'));
+    this.logger.info(`backup: minted a fresh wrapped keyring in ${this.keyStore.dir}`);
     return this.keyring;
   }
 
@@ -457,13 +501,13 @@ export class BackupService {
       checkedAt: new Date(this.now()).toISOString(),
     };
     await this.enqueue(async () => {
-      const state = await loadBackupState(this.backupDir);
+      const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
       const target = state.targets[vaultId];
       if (!target) return;
       const backend = await this.backend();
       if (!backend) {
         target.providerPolicy = result;
-        await saveBackupState(this.backupDir, state);
+        await saveBackupState(this.gatewayDatabase, state);
         return;
       }
       this.assertTargetBackend(target, backend);
@@ -474,14 +518,14 @@ export class BackupService {
         checkedAt: new Date(this.now()).toISOString(),
       });
       target.providerPolicy = result;
-      await saveBackupState(this.backupDir, state);
+      await saveBackupState(this.gatewayDatabase, state);
     });
     await this.refreshWalSchedule();
     return result;
   }
 
   private async syncEnabledPolicies(): Promise<void> {
-    const state = await loadBackupState(this.backupDir);
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     for (const plane of this.vaults.planesList()) {
       const vaultId = plane.boot.vaultId;
       if (!state.targets[vaultId]) continue;
@@ -504,7 +548,7 @@ export class BackupService {
     plane.snapshotBlobRoots = async (): Promise<ReadonlySet<string>> => {
       const backend = await this.backend();
       if (!backend) return new Set<string>();
-      const state = await loadBackupState(this.backupDir);
+      const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
       const target = state.targets[vaultId];
       // No target ⇒ no registered snapshots for this vault ⇒ no roots to pin.
       if (!target) return new Set<string>();
@@ -569,7 +613,7 @@ export class BackupService {
       this.logger.warn(`backup: unknown vault "${vaultId}" — skipped`);
       return;
     }
-    const state = await loadBackupState(this.backupDir);
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     let target = state.targets[vaultId];
     if (target?.fenced) {
       this.logger.warn(
@@ -585,7 +629,7 @@ export class BackupService {
         'backup destination changed; refusing to reuse the prior target automatically';
       target.lastError = message;
       state.targets[vaultId] = target;
-      await saveBackupState(this.backupDir, state);
+      await saveBackupState(this.gatewayDatabase, state);
       this.health.reportError('backups', `vault ${vaultId}: ${message}`);
       throw new Error(message);
     }
@@ -605,7 +649,7 @@ export class BackupService {
       };
       createdTarget = true;
       state.targets[vaultId] = target;
-      await saveBackupState(this.backupDir, state);
+      await saveBackupState(this.gatewayDatabase, state);
     }
     // Pin this vault's blob sweep to its retained-snapshot GC roots (issue
     // #436 §6) the moment a target exists — before the first snapshot lands, so
@@ -624,7 +668,7 @@ export class BackupService {
         checkedAt: new Date(this.now()).toISOString(),
       });
       state.targets[vaultId] = target;
-      await saveBackupState(this.backupDir, state);
+      await saveBackupState(this.gatewayDatabase, state);
     }
 
     // Capture NOW: on a fresh vault this mints the first generations (and
@@ -638,7 +682,7 @@ export class BackupService {
     if (!shipper) {
       target.lastError = 'backup: WAL shipper is unavailable';
       state.targets[vaultId] = target;
-      await saveBackupState(this.backupDir, state);
+      await saveBackupState(this.gatewayDatabase, state);
       throw new Error(target.lastError);
     }
     if (shipper.discardedStreams().length > 0 || !shipper.basesCoordinated()) {
@@ -696,7 +740,7 @@ export class BackupService {
         for (const base of bases) pins[base.generation] ??= keyring.active;
       }
       state.targets[vaultId] = target;
-      await saveBackupState(this.backupDir, state);
+      await saveBackupState(this.gatewayDatabase, state);
     }
 
     // The newest pair marker THIS provider has confirmed accepting for the
@@ -709,7 +753,7 @@ export class BackupService {
     // in a PERSISTENT per-vault dir (never wiped) so it survives between ticks
     // and only re-bundles when the store's refs move. Everything else is read in
     // place — there is no ephemeral staging dir.
-    const bundleDir = path.join(this.backupDir, 'code-bundle', vaultId);
+    const bundleDir = path.join(this.cacheDir, 'code-bundle', vaultId);
     try {
       const entries = await this.assembleEntries({
         plane,
@@ -733,7 +777,7 @@ export class BackupService {
       if (row) target.lastSeq = row.seq;
       delete target.lastError;
       state.targets[vaultId] = target;
-      await saveBackupState(this.backupDir, state);
+      await saveBackupState(this.gatewayDatabase, state);
       if (shipper) {
         // A registered manifest anchors the current bases — the shipper may
         // now treat those generations as restorable. `basePending` is what
@@ -790,7 +834,7 @@ export class BackupService {
         }
         if (pinsDirty) {
           state.targets[vaultId] = target;
-          await saveBackupState(this.backupDir, state);
+          await saveBackupState(this.gatewayDatabase, state);
         }
         // Client-side GC of segment objects for generations nothing
         // references anymore (best-effort — never fails the backup run).
@@ -823,7 +867,7 @@ export class BackupService {
           }
           if (target.walGenerationEpochs || target.walMarkerTips) {
             state.targets[vaultId] = target;
-            await saveBackupState(this.backupDir, state);
+            await saveBackupState(this.gatewayDatabase, state);
           }
         } catch (err) {
           this.logger.warn(
@@ -845,14 +889,14 @@ export class BackupService {
         target.lastError =
           'another machine has taken over this vault (conflict_generation) — backups stopped';
         state.targets[vaultId] = target;
-        await saveBackupState(this.backupDir, state);
+        await saveBackupState(this.gatewayDatabase, state);
         this.health.reportError('backups', `vault ${vaultId}: ${target.lastError}`);
         return;
       }
       const message = err instanceof Error ? err.message : String(err);
       target.lastError = message;
       state.targets[vaultId] = target;
-      await saveBackupState(this.backupDir, state);
+      await saveBackupState(this.gatewayDatabase, state);
       this.health.reportError('backups', `vault ${vaultId}: backup failed: ${message}`);
       throw err;
     }
@@ -894,7 +938,7 @@ export class BackupService {
   ): Promise<void> {
     const st = shipper.status();
     if (st.foreignCheckpointCount === 0) return; // nothing ever detected
-    const fresh = await loadBackupState(this.backupDir);
+    const fresh = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     const target = fresh.targets[vaultId];
     if (!target) return; // no target yet — nothing to hang the signal on
     if (
@@ -911,7 +955,7 @@ export class BackupService {
         reason: st.lastForeignCheckpoint.reason,
       };
     }
-    await saveBackupState(this.backupDir, fresh);
+    await saveBackupState(this.gatewayDatabase, fresh);
   }
 
   private appMetaFor(plane: VaultPlane, sourceInstanceId: string): Record<string, string> {
@@ -945,7 +989,7 @@ export class BackupService {
   /** Manual integrity check for every vault that already has a snapshot. */
   async verifyAll(): Promise<void> {
     this.assertRunning();
-    const state = await loadBackupState(this.backupDir);
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     for (const plane of this.vaults.planesList()) {
       if (state.targets[plane.boot.vaultId]) await this.runVerify(plane.boot.vaultId);
     }
@@ -954,7 +998,7 @@ export class BackupService {
   private async doRunVerify(vaultId: string): Promise<VerifySnapshotResult | undefined> {
     const backend = await this.backend();
     if (!backend) throw new Error('backup is not configured — add a provider backup connection');
-    const state = await loadBackupState(this.backupDir);
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     const target = state.targets[vaultId];
     if (!target) {
       this.logger.warn(`backup verify: vault ${vaultId} has no backup target yet — skipped`);
@@ -984,13 +1028,13 @@ export class BackupService {
         );
       }
       state.targets[vaultId] = target;
-      await saveBackupState(this.backupDir, state);
+      await saveBackupState(this.gatewayDatabase, state);
       return result;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       target.lastVerifyError = `verify failed: ${message}`;
       state.targets[vaultId] = target;
-      await saveBackupState(this.backupDir, state);
+      await saveBackupState(this.gatewayDatabase, state);
       this.health.reportError('backups', `vault ${vaultId}: verify failed: ${message}`);
       throw err;
     }
@@ -1026,7 +1070,7 @@ export class BackupService {
   ): Promise<BackupReconciliationState | undefined> {
     const plane = this.vaults.get(vaultId);
     if (!plane) throw new Error(`backup: unknown vault "${vaultId}"`);
-    const state = await loadBackupState(this.backupDir);
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     const target = state.targets[vaultId];
     const backend = await this.backend();
     const checkedAt = new Date(this.now()).toISOString();
@@ -1089,7 +1133,7 @@ export class BackupService {
       }
       state.casReconciliations[vaultId] = summary;
     }
-    await saveBackupState(this.backupDir, state);
+    await saveBackupState(this.gatewayDatabase, state);
     const detail =
       `vault ${vaultId}: inventory ${summary.status} — ` +
       `${summary.cas.missing.count} CAS missing, ${summary.backup.missing.count} backup missing, ` +
@@ -1126,7 +1170,7 @@ export class BackupService {
   private async doRunRestoreVerify(vaultId: string): Promise<void> {
     const backend = await this.backend();
     if (!backend) throw new Error('backup is not configured — add a provider backup connection');
-    const state = await loadBackupState(this.backupDir);
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     const target = state.targets[vaultId];
     if (!target || target.lastSeq === undefined) {
       this.logger.info(`backup restore-verify: vault ${vaultId} has no snapshot yet — skipped`);
@@ -1134,7 +1178,7 @@ export class BackupService {
     }
     this.assertTargetBackend(target, backend);
     const keyring = await this.ensureKeyring();
-    const destDir = path.join(this.backupDir, 'restore-verify', `${vaultId}-${this.now()}`);
+    const destDir = path.join(this.cacheDir, 'restore-verify', `${vaultId}-${this.now()}`);
     try {
       const result = await restoreSnapshot({
         provider: backend.provider,
@@ -1149,7 +1193,7 @@ export class BackupService {
         },
         log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
       });
-      const report = verifyRestoredPair(destDir);
+      const report = verifyRestoredPair(destDir, this.keyStore.export(`${vaultId}.sealkey`));
       const problems: string[] = [];
       if (report.vault.integrity !== 'ok') problems.push(`vault: ${report.vault.integrity}`);
       if (report.journal.integrity !== 'ok') problems.push(`journal: ${report.journal.integrity}`);
@@ -1211,7 +1255,7 @@ export class BackupService {
       if (dangling > 0) target.lastRestoreVerifyDangling = dangling;
       else delete target.lastRestoreVerifyDangling;
       state.targets[vaultId] = target;
-      await saveBackupState(this.backupDir, state);
+      await saveBackupState(this.gatewayDatabase, state);
       // Exactly ONE terminal health report per outcome: an ok pushed after a
       // degrade erases the degrade, so the run's whole verdict is decided
       // here and reported once.
@@ -1238,7 +1282,7 @@ export class BackupService {
       // failure would show green health over provably damaged backups.
       target.lastRestoreVerifyError = message;
       state.targets[vaultId] = target;
-      await saveBackupState(this.backupDir, state).catch(() => undefined);
+      await saveBackupState(this.gatewayDatabase, state).catch(() => undefined);
       this.health.reportError('backups', `vault ${vaultId}: restore-verify failed: ${message}`);
       throw err;
     } finally {
@@ -1375,7 +1419,7 @@ export class BackupService {
             continue;
           }
         }
-        let state = await loadBackupState(this.backupDir);
+        let state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
         let target = state.targets[vaultId];
         if (target?.fenced) continue;
         const needsRegistration = !target || shipper.pendingBases().length > 0;
@@ -1393,7 +1437,7 @@ export class BackupService {
                   `${err instanceof Error ? err.message : String(err)}`,
               );
             });
-            state = await loadBackupState(this.backupDir);
+            state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
             target = state.targets[vaultId];
           }
         }
@@ -1425,7 +1469,7 @@ export class BackupService {
           // Merge into a FRESH state read: the drain's uploads take long
           // enough that saving the pass's opening snapshot could clobber
           // fields other runs persisted meanwhile.
-          const freshState = await loadBackupState(this.backupDir);
+          const freshState = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
           const freshTarget = freshState.targets[vaultId];
           if (freshTarget) {
             freshTarget.lastWalDrainAt = new Date(this.now()).toISOString();
@@ -1441,7 +1485,7 @@ export class BackupService {
             for (const [pair, tickMs] of Object.entries(result.markerTips)) {
               tips[pair] = Math.max(tips[pair] ?? -1, tickMs);
             }
-            await saveBackupState(this.backupDir, freshState);
+            await saveBackupState(this.gatewayDatabase, freshState);
           }
         }
         if (result.uploaded > 0) {
@@ -1509,7 +1553,9 @@ export class BackupService {
   async refreshWalSchedule(): Promise<void> {
     const configured = (await this.backend()) !== undefined;
     const now = this.now();
-    const state = configured ? await loadBackupState(this.backupDir) : undefined;
+    const state = configured
+      ? await loadBackupState(this.gatewayDatabase, this.sourceInstanceId)
+      : undefined;
     const policies = configured
       ? this.vaults.planesList().map((plane) => {
           const vaultId = plane.boot.vaultId;
@@ -1582,7 +1628,7 @@ export class BackupService {
     for (const plane of this.vaults.planesList()) {
       const vaultId = plane.boot.vaultId;
       const policy = readBackupPolicy(plane.db.vault);
-      let state = await loadBackupState(this.backupDir);
+      let state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
       let target = state.targets[vaultId];
       if (target?.fenced) continue;
       // Keep the plane's blob sweep pinned to the retained-snapshot GC roots
@@ -1595,7 +1641,7 @@ export class BackupService {
           this.now() - Date.parse(target.lastBackupAt) >= policy.snapshotIntervalHours * HOUR_MS;
         if (backupDue) {
           await this.runBackup(vaultId);
-          state = await loadBackupState(this.backupDir);
+          state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
           target = state.targets[vaultId];
         }
         const verifyDue =
@@ -1625,7 +1671,7 @@ export class BackupService {
           });
         }
       }
-      state = await loadBackupState(this.backupDir);
+      state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
       target = state.targets[vaultId];
       const remoteCas = readBlobStoreSettings(plane.db.vault).kind === 's3';
       const latestReconciliation =
@@ -1645,13 +1691,13 @@ export class BackupService {
   // ── CLI-facing reads ─────────────────────────────────────────────────
 
   async status(): Promise<Record<string, BackupTargetState>> {
-    const state = await loadBackupState(this.backupDir);
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     return state.targets;
   }
 
   /** Latest persisted remote-CAS inventory for vaults without a backup target. */
   async casReconciliationStatus(): Promise<Record<string, BackupReconciliationState>> {
-    const state = await loadBackupState(this.backupDir);
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     return state.casReconciliations;
   }
 
@@ -1662,20 +1708,104 @@ export class BackupService {
    * to gate the S3-storage enable flow, so it isn't backup-card-specific.
    */
   async recoveryKitStatus(): Promise<RecoveryKitState> {
-    if (this.recoveryKit) return this.recoveryKit.status();
-    const state = await loadBackupState(this.backupDir);
-    return state.recoveryKit;
+    const status = await this.recoveryKit.status();
+    const backend = await this.backend();
+    if (!backend) return status;
+    const document = await this.currentRecoveryKitDocument(backend.label);
+    const fingerprint = recoveryKitFingerprint(document);
+    return status.kitFingerprint === fingerprint ? status : this.recoveryKit.begin(fingerprint);
   }
 
-  /** Set the recovery-kit confirmation to now (epoch seconds). One-way —
-   *  confirming again just refreshes the timestamp. */
-  async confirmRecoveryKit(): Promise<RecoveryKitState> {
-    if (this.recoveryKit) return this.recoveryKit.confirm();
-    const state = await loadBackupState(this.backupDir);
-    const recoveryKit: RecoveryKitState = { confirmedAt: Math.floor(this.now() / 1000) };
-    state.recoveryKit = recoveryKit;
-    await saveBackupState(this.backupDir, state);
-    return recoveryKit;
+  /**
+   * Confirm only a wrapped kit that the operator re-selected and decrypted.
+   * There is deliberately no no-argument acknowledgement path.
+   */
+  async verifyRecoveryKit(input: {
+    kit: unknown;
+    password: string;
+    lossConsent: true;
+  }): Promise<RecoveryKitState> {
+    if (input.lossConsent !== true) throw new Error('recovery-kit loss consent is required');
+    const document = parseRecoveryKit(input.kit, input.password);
+    const fingerprint = recoveryKitFingerprint(document);
+    const state = await this.recoveryKit.verify(fingerprint);
+    if (!state) throw new Error('selected recovery kit is stale or belongs to another gateway');
+    return state;
+  }
+
+  /** Rotate the backup epoch in KeyStore custody and invalidate the exported kit once. */
+  async rotateKeyEpoch(): Promise<Keyring> {
+    const current = await this.ensureKeyring();
+    const epoch = Math.max(...current.epochs.map((entry) => entry.epoch)) + 1;
+    const rotated: Keyring = {
+      version: 1,
+      active: epoch,
+      epochs: [
+        ...current.epochs,
+        {
+          epoch,
+          key: randomBytes(32).toString('base64'),
+          createdAt: new Date(this.now()).toISOString(),
+        },
+      ],
+    };
+    this.keyStore.import('keyring.key', Buffer.from(JSON.stringify(rotated), 'utf8'));
+    this.keyring = rotated;
+    await this.recoveryKitStatus();
+    return rotated;
+  }
+
+  /**
+   * Advance the provider generation before local crypto-erase. Re-registering
+   * the newest authenticated manifest is a zero-egress fencing write: any
+   * superseded writer is rejected before this machine forgets the target.
+   */
+  async fenceVaultForErase(vaultId: string): Promise<void> {
+    const backend = await this.backend();
+    if (!backend) return;
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+    const target = state.targets[vaultId];
+    if (!target) return;
+    this.assertTargetBackend(target, backend);
+    const plane = this.vaults.get(vaultId);
+    if (!plane) throw new Error(`backup: cannot fence unknown vault "${vaultId}" before erase`);
+    plane.walTick();
+    const shipper = plane.walShipper;
+    if (!shipper || shipper.discardedStreams().length > 0 || !shipper.basesCoordinated()) {
+      throw new Error(`backup: cannot fence vault "${vaultId}" with an uncoordinated WAL base`);
+    }
+    const targetInfo = await backend.provider.getTarget(target.targetId);
+    const generation = Math.max(target.generation, targetInfo.currentGeneration) + 1;
+    const bundleDir = path.join(this.cacheDir, 'code-bundle', vaultId);
+    const walTipTickMs = this.confirmedMarkerTip(shipper, target);
+    const entries = await this.assembleEntries({
+      plane,
+      bundleDir,
+      ...(walTipTickMs !== undefined ? { walTipTickMs } : {}),
+      log: {
+        info: (message) => this.logger.info(message),
+        warn: (message) => this.logger.warn(message),
+      },
+    });
+    const row = await this.snapshot({
+      provider: backend.provider,
+      targetId: target.targetId,
+      keyring: await this.ensureKeyring(),
+      vaultId,
+      entries,
+      generation,
+      appMeta: this.appMetaFor(plane, state.sourceInstanceId),
+      forceRegistration: true,
+      log: {
+        info: (message) => this.logger.info(message),
+        warn: (message) => this.logger.warn(message),
+      },
+    });
+    if (!row) throw new Error(`backup: provider did not register erase fence for "${vaultId}"`);
+    target.generation = generation;
+    target.lastSeq = row.seq;
+    state.targets[vaultId] = target;
+    await saveBackupState(this.gatewayDatabase, state);
   }
 
   async listSnapshots(vaultId: string, opts?: { includePruned?: boolean }): Promise<SnapshotRow[]> {
@@ -1810,25 +1940,45 @@ export class BackupService {
     };
   }
 
-  async writeKit(destFile: string): Promise<void> {
+  async writeKit(destFile: string, password: string): Promise<void> {
     const backend = await this.backend();
     if (!backend) throw new Error('backup is not configured — add a provider backup connection');
-    const keyring = await this.ensureKeyring();
-    const state = await loadBackupState(this.backupDir);
-    await writeBackupRecoveryKit({ keyring, state, provider: backend.label, destFile });
+    const document = await this.currentRecoveryKitDocument(backend.label);
+    const wrapped = wrapRecoveryKit(document, password);
+    await fs.writeFile(destFile, `${JSON.stringify(wrapped, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    const fingerprint = recoveryKitFingerprint(document);
+    const status = await this.recoveryKit.status();
+    if (status.kitFingerprint !== fingerprint) await this.recoveryKit.begin(fingerprint);
   }
 
   /** Recovery-kit document for owner-facing HTTP export. Contains live key material. */
-  async recoveryKitDocument(): Promise<Record<string, unknown>> {
+  async recoveryKitDocument(): Promise<RecoveryKitDocument> {
     const backend = await this.backend();
     if (!backend) throw new Error('backup is not configured — add a provider backup connection');
+    const document = await this.currentRecoveryKitDocument(backend.label);
+    const fingerprint = recoveryKitFingerprint(document);
+    const status = await this.recoveryKit.status();
+    if (status.kitFingerprint !== fingerprint) await this.recoveryKit.begin(fingerprint);
+    return document;
+  }
+
+  private async currentRecoveryKitDocument(provider: string): Promise<RecoveryKitDocument> {
     const keyring = await this.ensureKeyring();
-    const state = await loadBackupState(this.backupDir);
-    return recoveryKitDocument({ keyring, state, provider: backend.label, now: this.now() });
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+    return recoveryKitDocument({
+      keyring,
+      state,
+      provider,
+      now: this.now(),
+      keyStore: this.keyStore,
+    });
   }
 
   private async requireTarget(vaultId: string): Promise<BackupTargetState> {
-    const state = await loadBackupState(this.backupDir);
+    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
     const target = state.targets[vaultId];
     if (!target) throw new Error(`backup: vault "${vaultId}" has no backup target yet`);
     return target;
