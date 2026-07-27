@@ -2,6 +2,8 @@
 
 GitHub issue: [#567](https://github.com/srikanth235/centraid/issues/567)
 
+<!-- governance: allow-receipt-per-issue remove the exact generated fixture set introduced by accidental local test commit 9eb2d35b; those paths are absent from the PR net diff -->
+
 ## Checklist
 
 - [x] Five child issues filed (one per phase) linking back here, each with its own receipt; this issue holds the crosswalk — superseded by the owner's explicit instruction to delete the child issues and deliver all five phases in this one #567 PR and receipt
@@ -329,6 +331,12 @@ Observed live results:
   `listen EPERM 127.0.0.1`; the same suites passed in the earlier unrestricted
   checkpoint before the final UI-only corrections. The authoritative final
   full-suite and coverage counts will be recorded from GitHub Actions.
+- The first GitHub Actions run stopped during setup because a local coverage
+  fixture accidentally created commit `9eb2d35b` with 70 generated `apps/`
+  files. Those files changed the frozen workspace graph, and the unaccounted
+  commit also failed governance. The corrective commit removes exactly that
+  generated fixture set and records the incident here; no production
+  implementation changed.
 - GitHub Actions status is pending on the umbrella PR after push.
 
 ## Audit
@@ -361,6 +369,9 @@ and records no non-steering event.
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 | codex-019fa35f-701-1785178303-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 5396701 | 0 | 274497280 | 591396 | 5988097 | 90.9870 | 5396701 | 0 | 274497280 | 591396 | feat(agent-runtime): unify ACP routing and failover (#567) |
 | codex-019fa35f-701-1785179351-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 171149 | 0 | 8233984 | 15319 | 186468 | 2.7162 | 5567850 | 0 | 282731264 | 606715 | test(gateway): materialize assistant attachment fixture (#567) |
+| codex-019fa35f-701-1785180075-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 179234 | 0 | 4605184 | 6949 | 186183 | 1.7036 | 5747084 | 0 | 287336448 | 613664 | chore(test): remove generated fixture apps (#567) |
+| codex-019fa35f-701-1785180136-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 12508 | 0 | 381696 | 863 | 13371 | 0.1396 | 5759592 | 0 | 287718144 | 614527 | chore(test): remove generated fixture apps (#567) |
+| codex-019fa35f-701-1785180193-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 14704 | 0 | 426752 | 712 | 15416 | 0.1541 | 5774296 | 0 | 288144896 | 615239 | chore(test): remove generated fixture apps (#567) |
 
 ### Steering
 
