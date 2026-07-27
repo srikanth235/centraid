@@ -11,10 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-// The SDK-57 root entry is the class-based Next API. Every function this file
-// calls still exists there as a typed re-export, but those throw at runtime --
-// the working implementations live behind the '/legacy' subpath.
-import * as MediaLibrary from 'expo-media-library/legacy';
+import * as MediaLibrary from 'expo-media-library';
 import { Image } from 'expo-image';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -25,6 +22,7 @@ import { sha256OfFile } from '../../lib/upload/enqueue';
 import { expoFileSource } from '../../lib/upload/expo-native';
 import { createNativeDigest } from '../../lib/upload/native-digest';
 import type { PhotosScreenProps } from '../../navigation';
+import { IN_CLOUD_MESSAGE, InCloudOriginalError, openDeviceOriginal } from './device-media';
 import { usePhotoTimeline } from './timeline-source';
 import { imageSource } from './media-source';
 import { revalidateBackedUp, selectFreeUpCandidates, type DeviceByteProbe } from './free-up-space';
@@ -127,10 +125,15 @@ export default function PhotosLibrary({
   // Re-hash the CURRENT bytes of one device copy. A photo edited in place after
   // backup keeps its ph:// id but holds new bytes; this is what catches that.
   const probeDeviceBytes: DeviceByteProbe = async (localId) => {
-    const info = await MediaLibrary.getAssetInfoAsync(localId, { shouldDownloadFromNetwork: true });
-    const uri = info.localUri ?? info.uri;
-    if (!uri) return null;
-    return sha256OfFile(expoFileSource, uri, createNativeDigest);
+    try {
+      const original = await openDeviceOriginal(localId);
+      return await sha256OfFile(expoFileSource, original.uri, createNativeDigest);
+    } catch (reason) {
+      if (!(reason instanceof InCloudOriginalError)) throw reason;
+      // Reported as its own outcome below. Calling it "already gone" would be a
+      // lie about a photo that is very much still there, just not here.
+      return 'in-cloud';
+    }
   };
   const confirmFreeSpace = async (): Promise<void> => {
     setFreeing(true);
@@ -138,15 +141,23 @@ export default function PhotosLibrary({
       // Revalidate at delete time, never trusting the settle-time map alone.
       const result = await revalidateBackedUp(freeCandidates, probeDeviceBytes);
       if (result.deletableLocalIds.length)
-        await MediaLibrary.deleteAssetsAsync(result.deletableLocalIds);
+        await MediaLibrary.Asset.delete(
+          result.deletableLocalIds.map((localId) => new MediaLibrary.Asset(localId)),
+        );
       const lines = [
         `${result.deletableLocalIds.length} originals removed (${(result.eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB).`,
       ];
       if (result.changedCount)
         lines.push(`${result.changedCount} changed since backup — kept on device.`);
       if (result.missingCount) lines.push(`${result.missingCount} already gone.`);
+      if (result.inCloudCount)
+        lines.push(
+          `${result.inCloudCount} ${IN_CLOUD_MESSAGE} — their bytes could not be checked, so they were kept.`,
+        );
       Alert.alert(
-        result.changedCount || result.missingCount ? 'Freed with exclusions' : 'Space freed',
+        result.changedCount || result.missingCount || result.inCloudCount
+          ? 'Freed with exclusions'
+          : 'Space freed',
         lines.join('\n'),
       );
     } catch (error) {

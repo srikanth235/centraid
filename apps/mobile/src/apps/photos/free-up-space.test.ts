@@ -68,6 +68,16 @@ describe('free-up-space eligibility', () => {
     expect(result.missingCount).toBe(1);
   });
 
+  test('an iCloud-only original is reported apart from a missing one', async () => {
+    const result = await revalidateBackedUp(
+      [{ assetId: 'a', localIds: ['cloud', 'gone'], sha256: 'sha-a', fileSize: 5 }],
+      async (localId) => (localId === 'cloud' ? 'in-cloud' : null),
+    );
+    expect(result.deletableLocalIds).toEqual([]);
+    expect(result.inCloudCount).toBe(1);
+    expect(result.missingCount).toBe(1);
+  });
+
   test('a probe failure is treated as missing, never as deletable', async () => {
     const result = await revalidateBackedUp(
       [{ assetId: 'a', localIds: ['boom'], sha256: 'sha-a', fileSize: 5 }],

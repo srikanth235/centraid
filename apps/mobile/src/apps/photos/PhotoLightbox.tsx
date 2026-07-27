@@ -21,10 +21,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-// The SDK-57 root entry is the class-based Next API. Every function this file
-// calls still exists there as a typed re-export, but those throw at runtime --
-// the working implementations live behind the '/legacy' subpath.
-import * as MediaLibrary from 'expo-media-library/legacy';
+import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
 
@@ -35,6 +32,7 @@ import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
 import type { PhotosScreenProps } from '../../navigation';
 import type { PhotoAsset } from './timeline-model';
+import { InCloudOriginalError, openDeviceOriginal } from './device-media';
 import { imageSource, videoSource } from './media-source';
 import { styles } from './PhotoLightbox.styles';
 import { usePhotoTimeline } from './timeline-source';
@@ -210,7 +208,7 @@ export default function PhotoLightbox({
   const exportAsset = async (save: boolean): Promise<void> => {
     if (!current) return;
     let uri = current.originalUri;
-    if (!uri.startsWith('file:')) {
+    if (uri.startsWith('http:') || uri.startsWith('https:')) {
       const name =
         current.filename ??
         `${current.contentId ?? current.id}.${current.kind === 'video' ? 'mp4' : 'jpg'}`;
@@ -220,10 +218,25 @@ export default function PhotoLightbox({
           idempotent: true,
         })
       ).uri;
+    } else if (!uri.startsWith('file:')) {
+      // A device-only original is addressed by its media-store id (`ph://` on
+      // iOS, `content://` on Android), which is not a readable file — sharing
+      // or saving needs the full-quality bytes resolved first.
+      uri = (await openDeviceOriginal(current.localId ?? uri)).uri;
     }
-    if (save) await MediaLibrary.saveToLibraryAsync(uri);
+    if (save) await MediaLibrary.Asset.create(uri);
     else if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
     else await Share.share({ url: uri });
+  };
+
+  /** Export never fails quietly: an iCloud-only original says exactly that. */
+  const runExport = (save: boolean): void => {
+    void exportAsset(save).catch((reason: unknown) => {
+      Alert.alert(
+        reason instanceof InCloudOriginalError ? 'Original is in iCloud' : 'Export failed',
+        reason instanceof Error ? reason.message : String(reason),
+      );
+    });
   };
 
   // Until the shared timeline has loaded the requested row we hold on a black
@@ -298,10 +311,10 @@ export default function PhotoLightbox({
           >
             <Feather name="heart" size={23} color={current.favorite ? '#ff625f' : '#fff'} />
           </Pressable>
-          <Pressable onPress={() => void exportAsset(false)}>
+          <Pressable onPress={() => runExport(false)}>
             <Feather name="share" size={23} color="#fff" />
           </Pressable>
-          <Pressable onPress={() => void exportAsset(true)}>
+          <Pressable onPress={() => runExport(true)}>
             <Feather name="download" size={23} color="#fff" />
           </Pressable>
           <Pressable
