@@ -17,19 +17,27 @@
  *     can trust `x-centraid-device` came from the QUIC handshake and not
  *     from a client header.
  *
- * The proof matters because the HTTP listener also accepts the ephemeral
- * per-boot loopback secret directly (issue #505 phase 7): without it, a
- * holder could stamp an arbitrary device key and dodge the per-vault ACL.
- * The sole non-iroh identity lane is an explicitly injected desktop
- * EndpointId, accepted only from a kernel-observed loopback peer; it still
- * resolves through persisted per-vault enrollment rows.
+ * The proof matters because the HTTP listener also accepts the loopback
+ * landlord bearer directly (issue #505 phase 7): without it, a holder could
+ * stamp an arbitrary device key and dodge the per-vault ACL. The sole
+ * non-iroh identity lane is an explicitly injected desktop EndpointId,
+ * accepted only from a kernel-observed loopback peer; it still resolves
+ * through persisted per-vault enrollment rows.
+ *
+ * Loopback is not an identity (issue #568 items A/B). Every forwarder —
+ * this one, the Rust byte relay, and the desktop phone tunnel — hands a
+ * REMOTE peer to 127.0.0.1, so each also stamps `TUNNEL_FORWARDED_HEADER`
+ * and `canMintFoundingTicket` refuses anything carrying it.
  */
 
 import crypto from 'node:crypto';
 import os from 'node:os';
 import {
+  DEVICE_IDENTITY_HEADER,
+  DEVICE_PROOF_HEADER as TUNNEL_DEVICE_PROOF_HEADER,
   loadEndpointSecret,
   startGatewayEndpoint,
+  TUNNEL_FORWARDED_HEADER,
   type GatewayEndpointHandle,
   type GatewayPairRequest,
   type GatewayPairResponse,
@@ -47,13 +55,18 @@ import {
   GATEWAY_VERSION,
 } from '../version.js';
 import type { DataPlaneControlOptions } from '../routes/data-plane-control.js';
-import { isLoopbackRequest } from '../routes/route-helpers.js';
+import { isDirectHostRequest, isLoopbackRequest } from '../routes/route-helpers.js';
 import type { DaemonLayout } from './paths.js';
 import type { GatewayDatabase } from '../serve/gateway-db.js';
 import { KeyStore } from '@centraid/vault';
 
-export const DEVICE_HEADER = 'x-centraid-device';
-export const DEVICE_PROOF_HEADER = 'x-centraid-device-proof';
+/**
+ * The transport owns these names (`@centraid/tunnel`'s protocol module) —
+ * every forwarder, JS or Rust, strips a client copy before stamping its own.
+ * Re-exported here because the HTTP side is where they are consumed.
+ */
+export const DEVICE_HEADER = DEVICE_IDENTITY_HEADER;
+export const DEVICE_PROOF_HEADER = TUNNEL_DEVICE_PROOF_HEADER;
 const COMPANION_MODULES = new Set(['locker', 'tasks', 'notes', 'docs', 'agenda', 'people']);
 
 function companionGrantProfile(value: unknown): string[] | undefined | null {
@@ -68,7 +81,12 @@ function companionGrantProfile(value: unknown): string[] | undefined | null {
 export interface DaemonDevicePlane {
   /** Wire into `serve()` so requests resolve their vault by enrollment. */
   deviceAccess: DeviceAccess;
-  /** Direct authenticated host request, never an iroh-forwarded request. */
+  /**
+   * Direct authenticated host request: a loopback peer carrying none of the
+   * markings a forwarder stamps. Every forwarder in the product — the iroh
+   * endpoint, the Rust byte relay, and the desktop phone tunnel — delivers a
+   * remote peer to 127.0.0.1, so loopback alone proves nothing (#568 A/B).
+   */
   canMintFoundingTicket(req: IncomingMessage): boolean;
   /** Bind the endpoint once the HTTP listener is up. */
   startEndpoint(upstream: {
@@ -113,18 +131,27 @@ export function makeDaemonDevicePlane(input: {
   const { layout, logger } = input;
   const keyStore =
     input.keyStore ?? new KeyStore(layout.keysDir, { warn: (message) => logger.warn(message) });
-  const enrollments = EnrollmentStore.open(input.gatewayDatabase ?? layout.devicesFile);
-  const tickets = PairingTicketStore.open(input.gatewayDatabase ?? layout.pairingTicketsFile);
+  const enrollments = EnrollmentStore.open(input.gatewayDatabase ?? layout.gatewayDbFile);
+  const tickets = PairingTicketStore.open(input.gatewayDatabase ?? layout.gatewayDbFile);
   const knownEndpointIds = new Set(enrollments.listFresh().map((row) => row.endpointId));
   // Per-boot proof shared only between the endpoint's forwarder and the
   // HTTP layer's device resolution — never persisted, never on the wire
   // outside this process.
   const deviceProof = crypto.randomBytes(32).toString('hex');
+  /** What every forwarder stamps: the proved identity + the forwarded mark. */
+  const forwardedIdentityHeaders = (endpointId: string): Record<string, string> => ({
+    [DEVICE_HEADER]: endpointId,
+    [DEVICE_PROOF_HEADER]: deviceProof,
+    [TUNNEL_FORWARDED_HEADER]: '1',
+  });
   const controlSecret = input.controlSecret ?? crypto.randomBytes(32).toString('hex');
   let liveEndpointId: string | undefined;
   const authorizeEndpoint = (endpointId: string): boolean =>
     enrollments.isEnrolled(endpointId) ||
-    (input.vaults()?.isFresh() === true && tickets.hasActiveFounding());
+    // Fresh gateway + an unexpired founding QR: the ceremony has to be
+    // dialable before any enrollment exists. Keyed to the ticket's own ten
+    // minutes, not the two-hour restore reservation (issue #568 item C).
+    (input.vaults()?.isFresh() === true && tickets.hasOpenFoundingWindow());
 
   const deviceAccess: DeviceAccess = {
     deviceKeyFor: (req: IncomingMessage): string | undefined => {
@@ -146,10 +173,7 @@ export function makeDaemonDevicePlane(input: {
     },
     vaultsFor: (deviceKey: string): string[] => enrollments.vaultsFor(deviceKey),
   };
-  const canMintFoundingTicket = (req: IncomingMessage): boolean =>
-    isLoopbackRequest(req) &&
-    req.headers[DEVICE_HEADER] === undefined &&
-    req.headers[DEVICE_PROOF_HEADER] === undefined;
+  const canMintFoundingTicket = isDirectHostRequest;
 
   const pairDevice = (candidate: unknown, endpointId: string): GatewayPairResponse => {
     const request = candidate as Partial<GatewayPairRequest> | null;
@@ -213,14 +237,7 @@ export function makeDaemonDevicePlane(input: {
       if (allowed) knownEndpointIds.add(endpointId);
       return {
         allowed,
-        ...(allowed
-          ? {
-              headers: {
-                [DEVICE_HEADER]: endpointId,
-                [DEVICE_PROOF_HEADER]: deviceProof,
-              },
-            }
-          : {}),
+        ...(allowed ? { headers: forwardedIdentityHeaders(endpointId) } : {}),
       };
     },
     pair: pairDevice,
@@ -249,10 +266,7 @@ export function makeDaemonDevicePlane(input: {
         upstream: () => upstream,
         authorize: authorizeEndpoint,
         pair: pairDevice,
-        requestHeaders: (endpointId) => ({
-          [DEVICE_HEADER]: endpointId,
-          [DEVICE_PROOF_HEADER]: deviceProof,
-        }),
+        requestHeaders: forwardedIdentityHeaders,
         nativeControl: { secret: controlSecret },
         ...(input.relays ? { relays: input.relays } : {}),
       });

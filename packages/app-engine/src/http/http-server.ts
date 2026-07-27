@@ -128,6 +128,16 @@ const USER_STORE_PREFIX = '/_centraid-user';
  * to trust.
  */
 export const AUTHED_DEVICE_HEADER = 'x-centraid-authed-device';
+/**
+ * Internal, server-stamped marker naming the plane a presented credential
+ * resolved to (issue #568 item C). Same trust rules as
+ * `AUTHED_DEVICE_HEADER`: deleted from every inbound request before auth
+ * runs, set only by `route()` on success. Public paths do not REQUIRE a
+ * credential, but when one is presented and valid this still records it —
+ * that is how a public handshake route can withhold a secret from an
+ * anonymous caller while still answering it.
+ */
+export const AUTHED_PLANE_HEADER = 'x-centraid-authed-plane';
 const WEB_APP_HEADER = 'x-centraid-web-app';
 const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
 
@@ -290,34 +300,35 @@ export async function startRuntimeHttpServer(
     // before auth runs; only the `authorizeBearer` branch below re-sets it,
     // and only after verifying the bearer names a device token (#376).
     delete req.headers[AUTHED_DEVICE_HEADER];
+    delete req.headers[AUTHED_PLANE_HEADER];
     delete req.headers[COMPANION_GRANTS_HEADER];
     delete req.headers[WEB_APP_HEADER];
     delete req.headers[WEB_SHELL_ORIGIN_HEADER];
     const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-    if (!isPublic) {
+    const resolveAuthorization = (): BearerAuthorization | undefined => {
       if (opts.authorizeBearer || opts.authorizeRequest) {
-        const authz = raw
+        return raw
           ? opts.authorizeBearer
             ? opts.authorizeBearer(raw)
             : timingSafeEqual(raw, token)
               ? { plane: 'admin' as const }
               : undefined
           : opts.authorizeRequest?.(req);
-        if (!authz) {
-          res.statusCode = 401;
-          res.setHeader('Content-Type', 'application/json; charset=utf-8');
-          res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));
-          return;
-        }
-        if (authz.plane === 'device') {
-          req.headers[AUTHED_DEVICE_HEADER] = authz.deviceKey;
-        }
-      } else if (!raw || !timingSafeEqual(raw, token)) {
-        res.statusCode = 401;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));
-        return;
       }
+      return raw && timingSafeEqual(raw, token) ? { plane: 'admin' as const } : undefined;
+    };
+    const authz = resolveAuthorization();
+    if (!isPublic && !authz) {
+      res.statusCode = 401;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));
+      return;
+    }
+    // Stamped on public paths too: a handshake route stays reachable while
+    // still telling an authenticated caller apart from an anonymous one.
+    if (authz) {
+      req.headers[AUTHED_PLANE_HEADER] = authz.plane;
+      if (authz.plane === 'device') req.headers[AUTHED_DEVICE_HEADER] = authz.deviceKey;
     }
     if (conversationHandler && (req.url ?? '').startsWith(CONVERSATIONS_PREFIX)) {
       const handled = await conversationHandler(req, res);

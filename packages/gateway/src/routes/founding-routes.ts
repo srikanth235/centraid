@@ -92,6 +92,10 @@ function rollbackFoundingVaults(
     deps.tickets.gatewayDatabase.run('DELETE FROM cas_reconciliations WHERE vault_id = ?', vaultId);
   }
   deps.tickets.clearReservedFoundingVaults(reservation, vaultIds);
+  // Hand the founding slot back: nothing was consumed, so the same QR must
+  // stay usable for a retry rather than wedging `mintFounding` for the
+  // reservation's full TTL (issue #568 item K).
+  deps.tickets.releaseFounding(reservation);
 }
 
 export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler {
@@ -131,6 +135,15 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
         });
       }
       const minted = deps.tickets.mintFounding(FOUNDING_TICKET_TTL_MS);
+      if (!minted) {
+        // A ceremony already holds the one founding slot. Replacing its
+        // ticket would roll back an in-flight restore (issue #568 item K).
+        return sendJson(res, 409, {
+          error: 'founding_in_progress',
+          message:
+            'a founding ceremony is already running on this gateway; wait for it to finish or fail before minting another ticket',
+        });
+      }
       return sendJson(res, 200, {
         ok: true,
         ticket: encodePairingTicket({
@@ -224,6 +237,7 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
           throw new Error('recovery kit has no backed-up vaults');
         }
       } catch (error) {
+        deps.tickets.releaseFounding(reservation);
         return sendJson(res, 400, {
           error: 'restore_failed',
           message: error instanceof Error ? error.message : String(error),
@@ -231,12 +245,14 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
       }
       const pendingVaultIds = kit.targets.map((target) => target.vaultId);
       if (!foundingVaultIdsAreSafe(deps.vaults.rootPath(), pendingVaultIds)) {
+        deps.tickets.releaseFounding(reservation);
         return sendJson(res, 409, {
           error: 'restore_target_conflict',
           message: 'one or more recovery-kit vault ids are invalid or already exist locally',
         });
       }
       if (!deps.tickets.stageReservedFoundingVaults(reservation, pendingVaultIds)) {
+        deps.tickets.releaseFounding(reservation);
         return sendJson(res, 409, { error: 'founding_ticket_raced' });
       }
       const reports: RecoverReport[] = [];
@@ -315,6 +331,7 @@ export function makeFoundingRouteHandler(deps: FoundingRouteDeps): RouteHandler 
 
     const vaultId = uuidv7();
     if (!deps.tickets.stageReservedFoundingVaults(reservation, [vaultId])) {
+      deps.tickets.releaseFounding(reservation);
       return sendJson(res, 409, { error: 'founding_ticket_raced' });
     }
     let created: ReturnType<VaultRegistry['create']> | undefined;

@@ -23,6 +23,27 @@ export const PAIR_ALPN = 'centraid/pair/1';
 export const TUNNEL_AUTH_MODE_HEADER = 'x-centraid-tunnel-auth-mode';
 export const TUNNEL_AUTH_WEB_SESSION = 'web-session';
 
+/*
+ * Loopback is not an identity (issue #568 item A).
+ *
+ * Every forwarder in this repo delivers a REMOTE peer to a loopback HTTP
+ * listener, so the socket address proves nothing about who is calling. The
+ * three headers below are the wire contract that lets the HTTP layer tell
+ * a real host request from a forwarded one. Each forwarder MUST delete any
+ * client-supplied copy before it stamps its own.
+ */
+/** EndpointId the QUIC handshake proved. Stamped only by an identity-bearing forwarder. */
+export const DEVICE_IDENTITY_HEADER = 'x-centraid-device';
+/** In-process proof that `DEVICE_IDENTITY_HEADER` came from the forwarder, not the client. */
+export const DEVICE_PROOF_HEADER = 'x-centraid-device-proof';
+/**
+ * Stamped by every forwarder, including the ones that cannot prove a device
+ * identity (the desktop phone tunnel forwards under the host's own bearer).
+ * Its presence disqualifies a request from host-only capabilities such as
+ * minting a founding ticket.
+ */
+export const TUNNEL_FORWARDED_HEADER = 'x-centraid-tunnel-forwarded';
+
 /** QUIC close code for a tunnel connection from an endpoint not in the allowlist. */
 export const CLOSE_UNAUTHORIZED = 401n;
 

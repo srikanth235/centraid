@@ -236,3 +236,136 @@ test('a crash after erase state commit is completed before the next registry mou
   await expect(fs.access(path.join(layout.vaultDir, vault.vaultId))).rejects.toThrow();
   expect(keys.export(`${vault.vaultId}.sealkey`)).toBeNull();
 });
+
+/*
+ * Every erase REFUSAL path (issue #568 item L).
+ *
+ * #555's safety argument for putting erase in Settings rather than behind a
+ * CLI was typed-name confirmation plus a guaranteed recovery kit. Until now
+ * neither guard had a test proving it refuses — only production grep hits —
+ * so a regression that turned any of these into a 200 would have shipped
+ * green. Erase is irreversible; each of these is the last thing standing
+ * between a mistaken click and a destroyed vault.
+ */
+async function eraseFixture(
+  options: { trust?: 'owner' | 'full'; custody?: boolean } = {},
+): Promise<{
+  base: string;
+  vaultName: string;
+  recoveryKit: RecoveryKitStateStore;
+  erase: (body: unknown) => Promise<Response>;
+  eraseWithMethod: (method: string) => Promise<Response>;
+  deleteVault: () => Promise<Response>;
+}> {
+  const dataDir = await tempDir('vault-erase-refusal-');
+  cleanups.push(() => fs.rm(dataDir, { recursive: true, force: true }));
+  const layout = daemonLayoutFor(dataDir);
+  const database = GatewayDatabase.open(dataDir);
+  cleanups.push(() => database.close());
+  const keys = new KeyStore(layout.keysDir);
+  keys.store('endpoint-key.bin', randomBytes(32));
+  const registry = openVaultRegistry({
+    rootDir: layout.vaultDir,
+    cacheRootDir: layout.cacheDir,
+    logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+  });
+  cleanups.push(() => registry.stop());
+  const vault = registry.create('Family');
+  const enrollments = EnrollmentStore.open(database);
+  enrollments.enroll({
+    endpointId: 'caller-device',
+    vaultId: vault.vaultId,
+    label: 'Caller',
+    trust: options.trust ?? 'owner',
+  });
+  const recoveryKit = new RecoveryKitStateStore(database);
+  const handler = makeVaultRouteHandler(registry, {
+    enrollments,
+    // `custody: false` models a host wired without erase custody — the
+    // gateway must refuse rather than half-erase.
+    ...(options.custody === false ? {} : { gatewayDatabase: database, keys, recoveryKit }),
+  });
+  const server = http.createServer((req, res) => {
+    void runWithVaultContext({ vaultId: vault.vaultId, deviceKey: 'caller-device' }, () =>
+      handler(req, res).then((handled) => {
+        if (!handled) {
+          res.statusCode = 404;
+          res.end();
+        }
+      }),
+    );
+  });
+  cleanups.push(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return {
+    base,
+    vaultName: vault.name,
+    recoveryKit,
+    erase: (body: unknown) =>
+      fetch(`${base}/centraid/_vault/vaults:erase`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    eraseWithMethod: (method: string) => fetch(`${base}/centraid/_vault/vaults:erase`, { method }),
+    deleteVault: () =>
+      fetch(`${base}/centraid/_vault/vaults/${vault.vaultId}`, { method: 'DELETE' }),
+  };
+}
+
+test('erase refuses a non-owner caller', async () => {
+  const fixture = await eraseFixture({ trust: 'full' });
+  const response = await fixture.erase({ name: fixture.vaultName });
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({ error: 'owner_required' });
+});
+
+test('erase refuses a host with no custody wiring', async () => {
+  const fixture = await eraseFixture({ custody: false });
+  const response = await fixture.erase({ name: fixture.vaultName });
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ error: 'erase_unavailable' });
+});
+
+test('erase refuses a wrong, missing, or near-miss typed name', async () => {
+  const fixture = await eraseFixture();
+  await markKitVerified(fixture.recoveryKit);
+  const bodies: unknown[] = [
+    {},
+    { name: '' },
+    { name: 'family' },
+    { name: ' Family' },
+    { name: 'Family ' },
+    { name: 'Personal' },
+  ];
+  for (const body of bodies) {
+    const response = await fixture.erase(body);
+    expect(response.status, JSON.stringify(body)).toBe(409);
+    expect(await response.json()).toMatchObject({ error: 'typed_name_required' });
+  }
+});
+
+test('erase refuses while the recovery kit is unverified', async () => {
+  const fixture = await eraseFixture();
+  // Begun but never verified — the ceremony's own half-open state.
+  await fixture.recoveryKit.begin('unverified-fingerprint');
+  const response = await fixture.erase({ name: fixture.vaultName });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: 'recovery_kit_not_verified' });
+});
+
+test('a generic vault DELETE is refused and redirected to the erase ceremony', async () => {
+  const fixture = await eraseFixture();
+  await markKitVerified(fixture.recoveryKit);
+  const response = await fixture.deleteVault();
+  expect(response.status).toBe(405);
+  expect(await response.json()).toMatchObject({ error: 'erase_ceremony_required' });
+});
+
+test('erase refuses a non-POST method before any guard runs', async () => {
+  const fixture = await eraseFixture();
+  const response = await fixture.eraseWithMethod('GET');
+  expect(response.status).toBe(405);
+  expect(await response.json()).toMatchObject({ error: 'method_not_allowed' });
+});

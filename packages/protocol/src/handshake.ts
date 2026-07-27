@@ -53,10 +53,18 @@ export interface GatewayInfo {
   /** COMPAT(#555): stable gateway transport identity, independent of its address. */
   endpointId?: string;
   /**
-   * COMPAT(#555): current dial address. Hosts expose this only to loopback
-   * callers; clients must never persist it as gateway identity.
+   * COMPAT(#555): current dial address. Hosts expose it ONLY to a caller that
+   * presented a valid credential (#568 item C — a loopback socket is not an
+   * authentication factor); clients must never persist it as gateway identity.
    */
   endpointTicket?: string;
+  /**
+   * COMPAT(#568): the founding ceremony created its vault but the recovery
+   * kit is not verified yet, so `status` still reads `uninitialized` while
+   * create and restore would both 409. Clients offer "I already have my kit
+   * — verify it" instead of a dead-end choice screen. Older gateways omit it.
+   */
+  foundingPending?: boolean;
 }
 
 export type HandshakeResult =
@@ -212,6 +220,7 @@ export function buildGatewayInfoPayload(input: {
   status?: 'uninitialized' | 'ready';
   endpointId?: string;
   endpointTicket?: string;
+  foundingPending?: boolean;
   capabilities?: GatewayCapabilities;
 }): GatewayInfo {
   return {
@@ -225,6 +234,7 @@ export function buildGatewayInfoPayload(input: {
     status: input.status ?? 'ready',
     ...(input.endpointId !== undefined ? { endpointId: input.endpointId } : {}),
     ...(input.endpointTicket !== undefined ? { endpointTicket: input.endpointTicket } : {}),
+    ...(input.foundingPending ? { foundingPending: true } : {}),
     capabilities: input.capabilities ?? { ...DEFAULT_GATEWAY_CAPABILITIES },
   };
 }

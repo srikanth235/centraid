@@ -31,6 +31,14 @@
 // restorable ONLY through the explicit, receipted `key export` / `key
 // restore` admin gestures — copying the vault directory backs up ciphertext
 // only, and the product says so out loud when the key is absent at open.
+//
+// AMENDED by #555 (recorded in docs/decisions.md, "#298 erase amendment";
+// noted here per #568 item J). #298's "leave the seal key behind" posture no
+// longer holds for a completed vault ERASE: erase crypto-erases the vault's
+// DEK, so the key is deliberately NOT retained on the erased host. Recovery
+// after erase runs through a previously exported, password-wrapped recovery
+// kit plus a provider snapshot. The `key export` / `key restore` gestures
+// above still govern the ordinary, non-erase custody lifecycle.
 
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 import { renameSync } from 'node:fs';

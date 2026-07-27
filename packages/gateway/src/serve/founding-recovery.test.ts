@@ -27,7 +27,7 @@ test('boot removes a process-crashed founding vault before registry scan and pre
   const keys = new KeyStore(layout.keysDir);
   const database = GatewayDatabase.open(dataDir);
   const tickets = PairingTicketStore.open(database);
-  const minted = tickets.mintFounding();
+  const minted = tickets.mintFounding()!;
   const reservation = tickets.reserveFounding(minted.ticketId, minted.secret);
   expect(reservation).toBeDefined();
 
@@ -74,7 +74,7 @@ test('boot removes a process-crashed founding vault before registry scan and pre
     restarted.db.prepare('SELECT 1 FROM backup_targets WHERE vault_id = ?').get(vaultId),
   ).toBeUndefined();
   expect(restartedTickets.pendingFoundingVaults()).toEqual([]);
-  expect(restartedTickets.hasActiveFounding()).toBe(true);
+  expect(restartedTickets.hasOpenFoundingWindow()).toBe(true);
 
   const recoveredRegistry = openVaultRegistry({
     rootDir: layout.vaultDir,
