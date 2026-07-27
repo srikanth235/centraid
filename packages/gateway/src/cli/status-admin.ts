@@ -24,6 +24,7 @@ import { handshakeGateway } from '@centraid/protocol';
 import { endpointIdForSecret } from '@centraid/tunnel';
 import { daemonLayoutFor } from './paths.js';
 import { daemonKeyStore } from './key-store.js';
+import { landlordBearerForEndpointSecret } from './landlord-auth.js';
 import { resolveDaemonConfig } from './resolve-config.js';
 import { openVaultRegistry } from '../serve/vault-registry.js';
 import { queryServiceStatus, type ServiceStatusInfo } from './service-admin.js';
@@ -147,7 +148,17 @@ export async function commandStatus(
     );
     const dataDir = buildDataDirSummary(config.dataDir);
     if (config.port !== undefined && config.port !== 0) {
-      const live = await handshakeGateway(`http://127.0.0.1:${config.port}`, undefined, fetchImpl);
+      // Live dial tickets are auth-gated (#568 item C). Present the host
+      // custody bearer when we have the key so `status` can report them;
+      // without a key, an anonymous handshake still answers "is the daemon up".
+      const endpointSecret = daemonKeyStore(daemonLayoutFor(config.dataDir).keysDir).load(
+        'endpoint-key.bin',
+      );
+      const live = await handshakeGateway(
+        `http://127.0.0.1:${config.port}`,
+        endpointSecret ? landlordBearerForEndpointSecret(endpointSecret) : undefined,
+        fetchImpl,
+      );
       dataDir.daemonRunning = live.ok;
       if (
         live.ok &&

@@ -66,10 +66,14 @@ function daemonFetch(
     );
     calls.push({ init, url });
     if (url.pathname === ROUTES.gatewayInfo) {
+      // Mirror production #568 item C: dial tickets only for authenticated callers.
+      const headers = new Headers(init?.headers);
+      const authorized =
+        headers.get('authorization') === `Bearer ${landlordBearerForEndpointSecret(secret)}`;
       return Response.json(
         buildGatewayInfoPayload({
           endpointId: endpointIdForSecret(secret),
-          endpointTicket: 'live-endpoint-ticket',
+          ...(authorized ? { endpointTicket: 'live-endpoint-ticket' } : {}),
           instanceId: 'daemon',
           startedAt: Date.now(),
           uptimeMs: 10,

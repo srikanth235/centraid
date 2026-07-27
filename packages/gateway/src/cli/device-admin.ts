@@ -160,13 +160,9 @@ export async function commandPair(
       localFail('daemon port is not addressable — configure a fixed loopback port', 1);
     }
     const baseUrl = `http://127.0.0.1:${port}`;
-    const handshake = await handshakeGateway(baseUrl, undefined, fetchImpl);
-    if (!handshake.ok) {
-      localFail(
-        `daemon not running at ${baseUrl} — start \`centraid-gateway serve\` (${handshake.detail})`,
-        1,
-      );
-    }
+    // `endpointTicket` is auth-gated on `/_gateway/info` (#568 item C). Load the
+    // host-custody key first so the readiness handshake can present the landlord
+    // bearer; an anonymous GET would look like "iroh not ready" forever.
     const endpointSecret = daemonKeyStore(daemonLayoutFor(config.dataDir).keysDir).load(
       'endpoint-key.bin',
     );
@@ -178,6 +174,13 @@ export async function commandPair(
     }
     const endpointId = endpointIdForSecret(endpointSecret);
     const landlordBearer = landlordBearerForEndpointSecret(endpointSecret);
+    const handshake = await handshakeGateway(baseUrl, landlordBearer, fetchImpl);
+    if (!handshake.ok) {
+      localFail(
+        `daemon not running at ${baseUrl} — start \`centraid-gateway serve\` (${handshake.detail})`,
+        1,
+      );
+    }
     if (
       handshake.info.endpointId !== endpointId ||
       typeof handshake.info.endpointTicket !== 'string'
