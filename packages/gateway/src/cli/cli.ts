@@ -4,11 +4,14 @@
  *
  * The same `serve()` the Electron desktop embeds, wrapped with:
  *   - JSON config file (`--config <path>`)
- *   - an ephemeral per-boot loopback secret (issue #505 phase 7) — the
- *     bearer the in-process iroh endpoint host forwards with, minted fresh
- *     each boot, NEVER written to disk and NEVER printed. A parent process
- *     that spawns this daemon (the desktop) may pin it via the
- *     `CENTRAID_GATEWAY_TOKEN` env so it can reach the loopback listener.
+ *   - a loopback bearer DERIVED FROM CUSTODY (issue #568 item J corrects the
+ *     #505 phase 7 description): `HMAC(endpoint-key.bin,
+ *     "centraid/landlord-http/v1")`. It is never written to disk as a token
+ *     and never printed, but it is STABLE for the life of the endpoint
+ *     identity and is not rotated — any local process that can open the
+ *     gateway's KeyStore reproduces it, which is how the CLI and the desktop
+ *     reach a daemon they did not spawn. A parent that DOES spawn this daemon
+ *     may pin a per-launch value via the `CENTRAID_GATEWAY_TOKEN` env.
  *   - SIGINT / SIGTERM graceful shutdown
  *
  * v0 PoC scope per centraid#131: loopback or LAN bind, no TLS. Shared and
@@ -190,15 +193,18 @@ async function commandServe(args: string[]): Promise<void> {
   await fs.mkdir(config.dataDir, { recursive: true });
   const gatewayDatabase = GatewayDatabase.open(config.dataDir, { lock: 'exclusive' });
 
-  // Ephemeral per-boot loopback secret (issue #505 phase 7). This is the
-  // bearer the in-process iroh endpoint host forwards with when it hands a
+  // Loopback bearer (issue #505 phase 7, corrected by #568 item J). This is
+  // the bearer the in-process iroh endpoint host forwards with when it hands a
   // proved iroh request to the loopback HTTP listener; forwarded requests also
   // carry the per-boot device proof header, so the real per-device identity is
   // what `composedHandler` scopes on (this bearer only unlocks the loopback
-  // door). It is MINTED FRESH each boot, never written to disk, never printed —
-  // the retired `token.bin` shared bearer plane is gone. A parent that spawns
-  // this daemon (the desktop's detached gateway) may pin a known value via
-  // `CENTRAID_GATEWAY_TOKEN` so it can reach the loopback listener itself.
+  // door). It is NOT per-boot: `landlordBearerForEndpointSecret` derives it
+  // from the KeyStore-custodied endpoint key, so it is stable for the life of
+  // that identity and is never rotated — that stability is what lets the CLI
+  // and the desktop reach a daemon they did not spawn. The retired `token.bin`
+  // shared bearer plane is gone. A parent that DOES spawn this daemon (the
+  // desktop's detached gateway) may pin a per-launch value via
+  // `CENTRAID_GATEWAY_TOKEN`.
   const dataPlaneSecret = process.env.CENTRAID_DATA_PLANE_SECRET;
   const dataPlaneHttpUrl = process.env.CENTRAID_DATA_PLANE_HTTP_URL;
   const desktopEndpointId = process.env.CENTRAID_DESKTOP_ENDPOINT_ID?.trim() || undefined;

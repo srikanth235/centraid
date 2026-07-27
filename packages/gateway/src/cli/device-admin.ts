@@ -323,6 +323,7 @@ export async function commandDevices(
       if (parsed.vault !== undefined) {
         const registry = openVaultRegistry({
           rootDir: layout.vaultDir,
+          keyStore: daemonKeyStore(layout.keysDir),
           logger: quietLogger,
           enableWalShipper: false,
         });
@@ -344,6 +345,7 @@ export async function commandDevices(
       }
       const registry = openVaultRegistry({
         rootDir: layout.vaultDir,
+        keyStore: daemonKeyStore(layout.keysDir),
         logger: quietLogger,
         enableWalShipper: false,
       });
@@ -376,6 +378,11 @@ export async function commandDevices(
     // offline intent outcome is device-scoped and must not survive unpairing.
     const cleanupRegistry = openVaultRegistry({
       rootDir: layout.vaultDir,
+      // Without the daemon's protector every `keys/<id>.sealkey` fails to
+      // unwrap, the registry swallows the mount into `failedMountsByDir`, and
+      // this loop would silently skip the vault-local data erasure that
+      // revocation exists to perform (issue #568 item D).
+      keyStore: daemonKeyStore(layout.keysDir),
       logger: quietLogger,
       enableWalShipper: false,
     });

@@ -5,7 +5,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { StorageConnectionStore } from '../backup/storage-connections.js';
-import { GatewayDatabase, GatewayLockError } from './gateway-db.js';
+import {
+  darwinNetworkFileSystem,
+  GatewayDatabase,
+  GatewayLockError,
+  parseDarwinFileSystemType,
+} from './gateway-db.js';
 import { openVaultRegistry } from './vault-registry.js';
 
 const opened: GatewayDatabase[] = [];
@@ -200,4 +205,41 @@ test('the real gateway tree and every database table contain no raw or base64 ke
       expect(bytes.toString('utf8')).not.toContain(secret.toString('base64'));
     }
   }
+});
+
+/*
+ * Issue #568 item I. The previous darwin probe shelled out to
+ * `/usr/bin/stat -f '%T'`, which is the `ls -F` type indicator, not a
+ * filesystem type — it exited 0 with a value nothing could match and, worse,
+ * suppressed the `statfsSync` fallback. These cover the replacement, which
+ * reads the mount table's `f_fstypename` the way `/sbin/mount` prints it.
+ */
+const MOUNT_TABLE = [
+  '/dev/disk3s1s1 on / (apfs, sealed, local, read-only, journaled)',
+  '/dev/disk3s5 on /System/Volumes/Data (apfs, local, journaled, nobrowse)',
+  '//guest@nas._smb._tcp.local/media on /Volumes/media (smbfs, nodev, nosuid, mounted by srikanth)',
+  'nas:/export/backups on /Volumes/backups (nfs, nodev, nosuid)',
+  'map auto_home on /System/Volumes/Data/home (autofs, automounted, nobrowse)',
+].join('\n');
+
+test('darwin filesystem detection reads the mount table type, longest mount point wins', () => {
+  expect(parseDarwinFileSystemType(MOUNT_TABLE, '/Users/srikanth/gw-data')).toBe('apfs');
+  expect(parseDarwinFileSystemType(MOUNT_TABLE, '/Volumes/media/gw-data')).toBe('smbfs');
+  expect(parseDarwinFileSystemType(MOUNT_TABLE, '/Volumes/backups')).toBe('nfs');
+  // `/System/Volumes/Data/home` must not lose to the shorter `/` or
+  // `/System/Volumes/Data` prefixes.
+  expect(parseDarwinFileSystemType(MOUNT_TABLE, '/System/Volumes/Data/home/x')).toBe('autofs');
+});
+
+test('darwin network detection answers true on remote mounts and false on local ones', () => {
+  const read = (): string => MOUNT_TABLE;
+  expect(darwinNetworkFileSystem('/Volumes/media/gw-data', read)).toBe(true);
+  expect(darwinNetworkFileSystem('/Volumes/backups/gw-data', read)).toBe(true);
+  expect(darwinNetworkFileSystem('/Users/srikanth/gw-data', read)).toBe(false);
+});
+
+test('an unreadable mount table stays undefined so the statfs fallback still runs', () => {
+  expect(darwinNetworkFileSystem('/anywhere', () => undefined)).toBeUndefined();
+  // A path under no listed mount point is equally inconclusive.
+  expect(darwinNetworkFileSystem('relative/not/absolute', () => MOUNT_TABLE)).toBeUndefined();
 });

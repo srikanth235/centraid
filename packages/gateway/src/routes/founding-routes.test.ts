@@ -96,7 +96,7 @@ test('founding ticket is single-outstanding and initialize enrolls one verified 
   });
   expect(crashedResponse.status).toBe(500);
   expect(registry.isFresh()).toBe(true);
-  expect(tickets.hasActiveFounding()).toBe(true);
+  expect(tickets.hasOpenFoundingWindow()).toBe(true);
   expect(tickets.pendingFoundingVaults()).toEqual([]);
   expect(enrollments.list()).toEqual([]);
 

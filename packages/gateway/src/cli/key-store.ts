@@ -23,7 +23,21 @@ const SYSTEMD_CREDENTIAL_ID = 'centraid-keystore';
 const MACOS_KEYCHAIN_SERVICE = 'dev.centraid.gateway.keystore';
 const warnedFallbacks = new Set<string>();
 
-function credentialWrappingKey(env: NodeJS.ProcessEnv): string | undefined {
+/**
+ * macOS Keychain account for one data directory's keys (issue #568 item E).
+ *
+ * Keyed by `keysDir` the same way `headlessCredentialFile` is: a single
+ * account name shared by every install meant that `service install` for one
+ * data dir overwrote (`security add-generic-password -U`) the credential
+ * another data dir's keys were wrapped under, and every key in that tree
+ * then failed to unwrap.
+ */
+export function keychainAccountFor(keysDir: string, label = DEFAULT_LAUNCHD_LABEL): string {
+  const id = createHash('sha256').update(path.resolve(keysDir)).digest('hex').slice(0, 16);
+  return `${label}.${id}`;
+}
+
+function credentialWrappingKey(keysDir: string, env: NodeJS.ProcessEnv): string | undefined {
   const direct = env.CENTRAID_KEYSTORE_MASTER_KEY?.trim();
   if (direct) return direct;
   const credentialsDir = env.CREDENTIALS_DIRECTORY?.trim();
@@ -54,7 +68,7 @@ function credentialWrappingKey(env: NodeJS.ProcessEnv): string | undefined {
       Boolean(env.CENTRAID_KEYSTORE_KEYCHAIN_SERVICE?.trim()) ||
       Boolean(env.CENTRAID_KEYSTORE_KEYCHAIN_ACCOUNT?.trim());
     const service = env.CENTRAID_KEYSTORE_KEYCHAIN_SERVICE?.trim() || MACOS_KEYCHAIN_SERVICE;
-    const account = env.CENTRAID_KEYSTORE_KEYCHAIN_ACCOUNT?.trim() || DEFAULT_LAUNCHD_LABEL;
+    const account = env.CENTRAID_KEYSTORE_KEYCHAIN_ACCOUNT?.trim() || keychainAccountFor(keysDir);
     const result = spawnSync(
       '/usr/bin/security',
       ['find-generic-password', '-w', '-s', service, '-a', account],
@@ -127,6 +141,22 @@ function loadOrCreateFileCredential(file: string): Buffer {
   return key;
 }
 
+/**
+ * The external 0600 host credential `daemonKeyStore` falls back to, base64,
+ * creating it when absent (issue #568 item E).
+ *
+ * `service install` uses this instead of minting `randomBytes(32)`: a
+ * headless `serve` has already wrapped every key under this credential, so a
+ * fresh random key could not decrypt a single one of them — adoption would
+ * throw AFTER the poisoned value had been committed to OS custody. Handing
+ * the service the credential the keys are ALREADY wrapped under makes the
+ * install idempotent and leaves a readable fallback if OS custody is later
+ * cleared.
+ */
+export function hostCredentialKey(keysDir: string, env: NodeJS.ProcessEnv = process.env): string {
+  return loadOrCreateFileCredential(headlessCredentialFile(keysDir, env)).toString('base64');
+}
+
 function lazyAesProtector(loadKey: () => Buffer): KeyProtector {
   return {
     scheme: 'aes-256-gcm-v1',
@@ -144,7 +174,7 @@ export function daemonKeyStore(
   } = {},
 ): KeyStore {
   const env = options.env ?? process.env;
-  const encoded = credentialWrappingKey(env);
+  const encoded = credentialWrappingKey(keysDir, env);
   const wrappingKey = encoded ? Buffer.from(encoded, 'base64') : undefined;
   if (wrappingKey && wrappingKey.length !== 32) {
     throw new Error('KeyStore wrapping credential must be one base64-encoded 32-byte key');

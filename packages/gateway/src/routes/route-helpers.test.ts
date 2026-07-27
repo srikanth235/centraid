@@ -14,7 +14,14 @@ import {
   readBody,
   readJson,
   fileExists,
+  isDirectHostRequest,
+  isLoopbackRequest,
 } from './route-helpers.js';
+import {
+  DEVICE_IDENTITY_HEADER,
+  DEVICE_PROOF_HEADER,
+  TUNNEL_FORWARDED_HEADER,
+} from '@centraid/tunnel';
 
 function tmp(): string {
   return tempDirSync('centraid-route-helpers-');
@@ -157,5 +164,60 @@ describe('fileExists', () => {
     await writeFileMap(dir, [{ path: 'a.txt', content: 'x' }]);
     expect(await fileExists(join(dir, 'a.txt'))).toBe(true);
     expect(await fileExists(join(dir, 'nope.txt'))).toBe(false);
+  });
+});
+
+/*
+ * `isDirectHostRequest` — the real host-only capability gate (issue #568
+ * items A/B). The founding tests stub `canMintFoundingTicket: () => true`, so
+ * without this nothing exercises the predicate the product actually installs.
+ *
+ * The organising rule: LOOPBACK IS NOT AN IDENTITY. Every forwarder in the
+ * product — the daemon's iroh endpoint, the Rust byte relay, and the desktop
+ * phone tunnel — delivers a REMOTE peer to 127.0.0.1, and each marks the hop
+ * on the way through. A host-only capability needs a loopback socket AND the
+ * absence of every marking.
+ */
+function fakeRequest(
+  remoteAddress: string | undefined,
+  headers: Record<string, string> = {},
+): IncomingMessage {
+  return { socket: { remoteAddress }, headers } as unknown as IncomingMessage;
+}
+
+describe('isDirectHostRequest', () => {
+  it('accepts a bare loopback peer on every loopback address form', () => {
+    for (const address of ['127.0.0.1', '127.0.0.53', '::1', '::ffff:127.0.0.1']) {
+      expect(isDirectHostRequest(fakeRequest(address)), address).toBe(true);
+    }
+  });
+
+  it('refuses a non-loopback peer', () => {
+    expect(isDirectHostRequest(fakeRequest('10.0.0.4'))).toBe(false);
+    expect(isDirectHostRequest(fakeRequest(undefined))).toBe(false);
+  });
+
+  it('refuses a loopback peer carrying ANY forwarder marking', () => {
+    // The iroh forwarder stamps the proved identity + proof…
+    expect(
+      isDirectHostRequest(fakeRequest('127.0.0.1', { [DEVICE_IDENTITY_HEADER]: 'remote-peer' })),
+    ).toBe(false);
+    expect(
+      isDirectHostRequest(fakeRequest('127.0.0.1', { [DEVICE_PROOF_HEADER]: 'per-boot-proof' })),
+    ).toBe(false);
+    // …and the desktop phone tunnel, which has no device key to stamp, marks
+    // the hop instead. This is the header that closes item A: a QR-paired
+    // phone reaches 127.0.0.1 carrying the host's admin bearer.
+    expect(isDirectHostRequest(fakeRequest('127.0.0.1', { [TUNNEL_FORWARDED_HEADER]: '1' }))).toBe(
+      false,
+    );
+  });
+
+  it('is strictly stronger than the bare-loopback gate it replaced', () => {
+    // The pre-#566 gate that `buildGateway` still fell back to for the
+    // embedded desktop (item B) said yes to exactly this request.
+    const forwarded = fakeRequest('127.0.0.1', { [TUNNEL_FORWARDED_HEADER]: '1' });
+    expect(isLoopbackRequest(forwarded)).toBe(true);
+    expect(isDirectHostRequest(forwarded)).toBe(false);
   });
 });

@@ -126,11 +126,15 @@ void (async (): Promise<void> => {
     }).catch(() => undefined);
     shellRoot.render(wrap(<App />));
   };
-  const renderFirstRun = (gatewayStatus: 'uninitialized' | 'ready' | 'unreachable'): void => {
+  const renderFirstRun = (
+    gatewayStatus: 'uninitialized' | 'ready' | 'unreachable',
+    foundingPending = false,
+  ): void => {
     shellRoot.render(
       wrap(
         <FirstRunGate
           gatewayStatus={gatewayStatus}
+          foundingPending={foundingPending}
           founding={{
             initialize: initializeGatewayVault,
             verify: verifyGatewayFoundingKit,
@@ -147,11 +151,9 @@ void (async (): Promise<void> => {
               avatarColor,
             }).catch(() => undefined);
             resetGatewayAuthCache();
-            const status = await getGatewayFoundingStatus()
-              .then((result) => result.status)
-              .catch(() => 'unreachable' as const);
-            if (status === 'uninitialized') {
-              renderFirstRun(status);
+            const founding = await getGatewayFoundingStatus().catch(() => undefined);
+            if (founding?.status === 'uninitialized') {
+              renderFirstRun('uninitialized', founding.foundingPending === true);
               return;
             }
             await enterApp();
@@ -160,10 +162,8 @@ void (async (): Promise<void> => {
       ),
     );
   };
-  const initialStatus = await getGatewayFoundingStatus()
-    .then((result) => result.status)
-    .catch(() => 'unreachable' as const);
-  renderFirstRun(initialStatus);
+  const initial = await getGatewayFoundingStatus().catch(() => undefined);
+  renderFirstRun(initial?.status ?? 'unreachable', initial?.foundingPending === true);
 })();
 
 const READY_LOG = '[react] renderer ready — App on #root; open %s for the component gallery';

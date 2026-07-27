@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { GatewayEndpointHandle } from './gateway-endpoint.js';
 import type { ActivePairing, DesktopTunnelHandle, DesktopTunnelOptions } from './desktop-tunnel.js';
 import type { PairQrPayload, PairRequest, PairResponse } from './protocol.js';
+import { TUNNEL_FORWARDED_HEADER } from './protocol.js';
 
 interface NativeRelay {
   readonly endpointId: string;
@@ -134,6 +135,10 @@ export async function startNativeDesktopTunnel(
           : undefined;
         sendControlJson(res, 200, {
           allowed,
+          // The desktop relay carries a paired phone, not the host itself, so
+          // it marks the hop as forwarded (issue #568 item A). The Rust relay
+          // drops any client copy of the identity headers on the same pass.
+          ...(allowed ? { headers: { [TUNNEL_FORWARDED_HEADER]: '1' } } : {}),
           ...(upstream ? { upstreamUrl: upstream.baseUrl, upstreamToken: upstream.token } : {}),
         });
         return;

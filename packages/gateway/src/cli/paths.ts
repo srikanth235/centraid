@@ -3,6 +3,11 @@
  * the same tree. gateway.db is control state + process lock; keys/ is
  * custody; vault/ is sovereign state; cache/ is disposable; gateway-logs/
  * is diagnostics. A zero-vault gateway does not create vault/ or cache/.
+ *
+ * The `devicesFile` / `pairingTicketsFile` / `webSessionsFile` aliases were
+ * removed in #568 item J: all three resolved to `gateway.db`, so their names
+ * described a loose-JSON layout that has not existed since #555. Callers name
+ * `gatewayDbFile` (or pass the open `GatewayDatabase`) directly.
  */
 
 import path from 'node:path';
@@ -13,10 +18,6 @@ export interface DaemonLayout extends GatewayPaths {
   gatewayDbFile: string;
   keysDir: string;
   cacheDir: string;
-  /** Compatibility aliases into gateway.db; no loose JSON file is created. */
-  devicesFile: string;
-  pairingTicketsFile: string;
-  webSessionsFile: string;
   /** KeyStore envelope for the gateway's persistent iroh identity. */
   endpointKeyFile: string;
 }
@@ -37,9 +38,6 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     // post-#280, each vault's whole app world.
     vaultDir: path.join(abs, 'vault'),
     logsDir: path.join(abs, 'gateway-logs'),
-    devicesFile: path.join(abs, 'gateway.db'),
-    pairingTicketsFile: path.join(abs, 'gateway.db'),
-    webSessionsFile: path.join(abs, 'gateway.db'),
     endpointKeyFile: path.join(abs, 'keys', 'endpoint-key.bin'),
   };
 }

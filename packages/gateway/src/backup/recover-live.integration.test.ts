@@ -12,7 +12,7 @@ import crypto, { randomBytes } from 'node:crypto';
 import {
   openRemoteBackupProvider,
   wrapRecoveryKit,
-  type RecoveryKitDocument,
+  type WrappedRecoveryKitDocument,
 } from '@centraid/backup';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
 import { KeyStore, ReplicaIndex } from '@centraid/vault';
@@ -116,7 +116,7 @@ interface MachineA {
   vaultId: string;
   vaultIds: string[];
   targetId: string;
-  kitDocument: RecoveryKitDocument;
+  kitDocument: WrappedRecoveryKitDocument;
   apiKey: string;
   serverUrl: string;
 }
@@ -197,7 +197,13 @@ async function seedMachineA(
   await service.runAll();
   const status = await service.status();
   const targetId = status[vaultId]!.targetId;
-  const kitDocument = await service.recoveryKitDocument();
+  // #568 item J: `parseRecoveryKit` no longer accepts an unwrapped document
+  // (it silently ignored the password), so every restore drives the wrapped
+  // kit the owner actually downloads.
+  const kitDocument = wrapRecoveryKit(
+    await service.recoveryKitDocument(),
+    'recovery-test-password',
+  );
 
   const casProvider = openRemoteBackupProvider({ baseUrl: server.url, apiKey: server.apiKey });
   const casStore = await casProvider.openDataPlane(targetId, 'cas', 'read-write');
@@ -224,7 +230,7 @@ test('a zero-vault gateway restores through one founding capability and enrolls 
   // gateway.db lock, then boot with exactly zero vaults.
   const dataDir = await tempDir('recover-live-gw');
   const database = GatewayDatabase.open(dataDir);
-  const minted = PairingTicketStore.open(database).mintFounding(FOUNDING_TICKET_TTL_MS);
+  const minted = PairingTicketStore.open(database).mintFounding(FOUNDING_TICKET_TTL_MS)!;
   database.close();
   const ticket = encodePairingTicket({
     v: 1,
@@ -316,7 +322,7 @@ test('one founding restore adopts every backed-up vault and enrolls the owner in
 
   const dataDir = await tempDir('recover-live-multi-gw');
   const database = GatewayDatabase.open(dataDir);
-  const minted = PairingTicketStore.open(database).mintFounding(FOUNDING_TICKET_TTL_MS);
+  const minted = PairingTicketStore.open(database).mintFounding(FOUNDING_TICKET_TTL_MS)!;
   database.close();
   const ticket = encodePairingTicket({
     v: 1,
@@ -427,7 +433,7 @@ test('erase then restore on the same box preserves gateway identity and drops pr
 
   const database = GatewayDatabase.open(dataDir);
   expect(database.db.prepare('SELECT COUNT(*) AS count FROM devices').get()).toEqual({ count: 0 });
-  const minted = PairingTicketStore.open(database).mintFounding(FOUNDING_TICKET_TTL_MS);
+  const minted = PairingTicketStore.open(database).mintFounding(FOUNDING_TICKET_TTL_MS)!;
   database.close();
   const ticket = encodePairingTicket({
     v: 1,
@@ -459,8 +465,8 @@ test('erase then restore on the same box preserves gateway identity and drops pr
     },
     body: JSON.stringify({
       ticket,
-      kit,
-      password: 'plain-kit-compatibility',
+      kit: wrapRecoveryKit(kit, 'test-password'),
+      password: 'test-password',
       apiKey: provider.apiKey,
       deviceName: 'Same laptop',
       platform: 'desktop',

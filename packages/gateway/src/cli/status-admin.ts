@@ -94,6 +94,9 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
   let vaultCount: number | undefined;
   try {
     const registry = openVaultRegistry({
+      // Same custody the daemon uses, or every vault fails to mount and
+      // `status` reports a gateway with zero vaults (issue #568 item D).
+      keyStore: daemonKeyStore(layout.keysDir),
       rootDir: layout.vaultDir,
       logger: quietLogger,
       enableWalShipper: false,

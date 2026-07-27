@@ -5,6 +5,7 @@ import { KeyStore } from '@centraid/vault';
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { GatewayDatabase } from '../serve/gateway-db.js';
+import { commandDevices } from './device-admin.js';
 import { commandLockStatus } from './lock-admin.js';
 import { daemonLayoutFor } from './paths.js';
 import { commandVault } from './vault-admin.js';
@@ -42,11 +43,46 @@ test('mutating CLI refuses the daemon lock while read-only vault list succeeds',
     await expect(
       commandVault(['create', '--data-dir', dataDir, '--name', 'Blocked'], fail),
     ).rejects.toThrow(/running daemon|another Centraid gateway/i);
+    // `vault list` answers from the on-disk vault registry and never issues a
+    // `gateway.db` read — it is unaffected by the lock BY CONSTRUCTION, which
+    // is why it cannot stand in for the read-only-open behaviour asserted in
+    // the next test (issue #568 item H).
     await expect(
       capture(() => commandVault(['list', '--data-dir', dataDir, '--json'], fail)),
     ).resolves.toContain('"vaults":[]');
   } finally {
     held.close();
+  }
+});
+
+test('a read-only gateway.db verb reports the holder instead of a raw SQLite error', async () => {
+  const dataDir = await tempDir('gateway-cli-readonly-lock-');
+  roots.push(dataDir);
+  const held = GatewayDatabase.open(dataDir, { lock: 'exclusive' });
+  try {
+    // The open itself succeeds against an EXCLUSIVE lock — no page is touched
+    // until the first SELECT — so `open()` must probe, or every read-only verb
+    // dies with `ERR_SQLITE_ERROR: database is locked` and a stack trace.
+    expect(() => GatewayDatabase.open(dataDir, { lock: 'read-only' })).toThrow(
+      /another Centraid gateway|database is locked/i,
+    );
+    await expect(commandDevices(['list', '--data-dir', dataDir], fail)).rejects.toThrow(
+      /the running daemon owns the device registry/i,
+    );
+  } finally {
+    held.close();
+  }
+});
+
+test('a read-only open reads a real table when nothing holds the lock', async () => {
+  const dataDir = await tempDir('gateway-cli-readonly-open-');
+  roots.push(dataDir);
+  GatewayDatabase.open(dataDir, { lock: 'shared' }).close();
+  const readOnly = GatewayDatabase.open(dataDir, { lock: 'read-only' });
+  try {
+    expect(readOnly.db.prepare('SELECT COUNT(*) AS n FROM tickets').get()).toMatchObject({ n: 0 });
+  } finally {
+    readOnly.close();
   }
 });
 

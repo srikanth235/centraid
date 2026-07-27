@@ -209,7 +209,7 @@ import {
   type ResourceMode,
 } from './resource-mode.js';
 import { logsEventsSubscriberCount, makeLogsRouteHandler } from '../routes/logs-routes.js';
-import { isLoopbackRequest, sendJson } from '../routes/route-helpers.js';
+import { isDirectHostRequest, isLoopbackRequest, sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
 import { BackupService } from '../backup/backup-service.js';
 import type { BackupConfig } from '../backup/backup-config.js';
@@ -502,6 +502,34 @@ export function replicaDispatchOutcome(result: ToolResult): ReplicaIntentDispatc
 // `startRuntimeHttpServer` does.
 const CONVERSATIONS_PREFIX = '/_centraid-conversations';
 const USER_STORE_PREFIX = '/_centraid-user';
+
+/**
+ * The gateway-scope surface a FRESH gateway answers, before any vault or
+ * device enrollment exists (issue #568 item C).
+ *
+ * This is a closed allowlist on purpose, not an accident of dispatch order:
+ * during the founding window the QUIC listener admits an unknown EndpointId
+ * (see `PairingTicketStore.hasOpenFoundingWindow`), so everything reachable
+ * here is reachable by whoever holds the founding QR.
+ *
+ *  - `_gateway/health` — the installer/first-run shell polls readiness.
+ *  - `_logs`           — a failed founding is undiagnosable without them.
+ *  - `_templates`      — the create flow picks a starting blueprint.
+ *  - `_agents`         — the create flow reads the runner catalog.
+ *
+ * Anything not listed 409s `uninitialized`. Adding a prefix here publishes
+ * it to the founding window; do it deliberately or not at all.
+ */
+const FRESH_GATEWAY_SCOPE_PREFIXES = [
+  '/centraid/_gateway/health',
+  '/centraid/_logs',
+  '/centraid/_templates',
+  '/centraid/_agents',
+] as const;
+
+function isFreshGatewayScopePath(pathname: string): boolean {
+  return FRESH_GATEWAY_SCOPE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
 
 /** Shared device-tier gate, before any owner/app/action route can dispatch. */
 function readonlyRequestAllowed(req: IncomingMessage): boolean {
@@ -1272,6 +1300,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         : undefined));
   const embeddedAccess: DeviceAccess | undefined = embeddedEndpointId
     ? {
+        // Deliberately `isLoopbackRequest`, not `isDirectHostRequest`: the
+        // desktop phone tunnel forwards a paired phone under the host bearer
+        // and has no device key of its own, so tightening this would sever
+        // phone-link entirely. Host-ONLY capabilities use the stricter gate
+        // (`canMintFoundingTicket` below); ordinary vault access does not.
         deviceKeyFor: (req) => (isLoopbackRequest(req) ? embeddedEndpointId : undefined),
         vaultsFor: (endpointId) => foundingEnrollments.vaultsFor(endpointId),
       }
@@ -1298,7 +1331,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     ...(options.canMintFoundingTicket
       ? { canMintFoundingTicket: options.canMintFoundingTicket }
       : options.hostDeviceEndpointId
-        ? { canMintFoundingTicket: (req: IncomingMessage) => isLoopbackRequest(req) }
+        ? // Loopback is not an identity (issue #568 item B): a bare
+          // `isLoopbackRequest` admits anything a forwarder delivered to
+          // 127.0.0.1, which is exactly the pre-#566 gate this replaced.
+          { canMintFoundingTicket: isDirectHostRequest }
         : {}),
     ...(effectiveDeviceAccess ? { deviceAccess: effectiveDeviceAccess } : {}),
     ...(options.devicePairing?.endpointTicket
@@ -2929,6 +2965,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         instanceId,
         status: () =>
           vaultRegistry.isFresh() || recoveryKit.ceremonyIncomplete() ? 'uninitialized' : 'ready',
+        // Tells an interrupted ceremony apart from a never-started one, so the
+        // first-run screen can offer "verify my kit" instead of a Create /
+        // Restore choice where both branches 409 (issue #568 item G).
+        foundingPending: () => !vaultRegistry.isFresh() && recoveryKit.ceremonyIncomplete(),
         ...(options.devicePairing?.endpointId
           ? { endpointId: options.devicePairing.endpointId }
           : {}),
@@ -3251,12 +3291,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       if (method === 'GET' && url.pathname === '/centraid/_automations') {
         return sendJson(res, 200, { rows: [], errors: [] });
       }
-      const gatewayLevel =
-        url.pathname.startsWith('/centraid/_gateway/health') ||
-        url.pathname.startsWith('/centraid/_logs') ||
-        url.pathname.startsWith('/centraid/_templates') ||
-        url.pathname.startsWith('/centraid/_agents');
-      if (gatewayLevel && (await prefixDispatch(req, res))) return true;
+      if (isFreshGatewayScopePath(url.pathname) && (await prefixDispatch(req, res))) return true;
       return sendJson(res, 409, {
         error: 'uninitialized',
         message: 'this gateway has no vault; initialize or restore one first',

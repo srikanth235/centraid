@@ -158,7 +158,6 @@ export {
   createSnapshot,
   restoreSnapshot,
   verifySnapshot,
-  writeRecoveryKit,
 } from './engine.js';
 export type {
   CreateSnapshotOptions,
@@ -170,10 +169,11 @@ export type {
   SourceEntry,
   VerifySnapshotOptions,
   VerifySnapshotResult,
-  WriteRecoveryKitOptions,
 } from './engine.js';
 
-// Recovery kit reader (issue #439 R1) — the counterpart to `writeRecoveryKit`.
+// Recovery kit reader + password wrapper (issue #439 R1, #555). The plaintext
+// `writeRecoveryKit` emitter was removed in #568 item J — a kit is always
+// password-wrapped now, and the reader refuses anything else.
 export {
   parseRecoveryKit,
   recoveryKitFingerprint,

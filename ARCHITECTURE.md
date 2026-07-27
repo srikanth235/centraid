@@ -130,6 +130,32 @@ Each gateway host derives its own paths and passes absolute slots to the gateway
 - **Every host (desktop embed, CLI, and OS service)** uses the same platform-default `dataDir`, outside Electron `userData`: `gateway.db`, `keys/`, `vault/`, `cache/`, and `gateway-logs/`. `gateway.db` is both the full gateway-state database and the exclusive process lock; it holds preferences, enrollments, tickets, web sessions, backup fencing, recovery-kit confirmation, storage connections, and limits. `keys/` is the only gateway secret directory and every entry is a self-describing `KeyStore` envelope (endpoint identity, backup keyring, storage-credential key, and independent per-vault DEKs). `vault/<vaultId>/` contains sovereign vault content only: `vault.db`, `journal.db`, blobs, app data, and the code store. `cache/` is disposable. A zero-vault gateway creates neither `vault/` nor `cache/`.
 - **Desktop device state** remains under Electron `userData`, separate from gateway state: one main-process-owned `connections.json` keyed by stable gateway EndpointId and one `safeStorage` ciphertext containing per-connection device secrets. A remote-only connection creates no local gateway directory. Relay hints are refreshable address cache, never identity.
 
+### At-rest formats (issue #555)
+
+What each on-disk slot actually is, and what protects it. The column that
+matters when reasoning about a stolen disk or a copied directory is the last
+one: *what a copy without custody yields*.
+
+| Slot | Format | Protected by | A copy without custody yields |
+| --- | --- | --- | --- |
+| `gateway.db` | SQLite, `journal_mode=DELETE`, mode `0600`, exclusive process lock for its lifetime | Filesystem permissions + the OS user boundary | **Plaintext gateway state** — enrollments, tickets, prefs, backup fencing. No key material: sealed columns store ciphertext only |
+| `keys/<name>` | `KeyStore` envelope: the `CENTRAID-KEY-V1` magic line then `{scheme, payload}` JSON, mode `0600` | `scheme` — `aes-256-gcm-v1` (a wrapping key held by OS custody) or `file-0600-v1` (permissions only, legacy/adoption) | Ciphertext under `aes-256-gcm-v1`; **the raw secret** under `file-0600-v1` |
+| ↳ `endpoint-key.bin` | 32-byte iroh identity secret in that envelope | Same | The gateway's permanent identity **and**, because the loopback landlord bearer is `HMAC(endpoint-key.bin, …)`, lasting loopback HTTP admin |
+| ↳ `keyring.key` | Backup keyring JSON (every epoch's master key) in that envelope | Same | The ability to read every snapshot this gateway ever wrote |
+| ↳ `<vaultId>.sealkey` | Per-vault DEK (independent per vault) in that envelope | Same | The ability to unseal that vault's sealed columns |
+| `vault/<id>/vault.db` | SQLite; ordinary columns plaintext, **declared sealed columns AES-256-GCM** with the vault DEK and a structural AAD | The DEK in `keys/` | Everything except the sealed columns — those stay ciphertext |
+| `vault/<id>/journal.db` | SQLite: conversation ledger band + append-only audit band | Filesystem permissions | Plaintext ledger + audit rows |
+| `vault/<id>/` blobs | Content-addressed files under the local CAS | Filesystem permissions | Plaintext bytes |
+| Provider snapshots / WAL | Chunked, **sealed with the backup keyring** before leaving the host | `keyring.key` | Ciphertext. This is why the provider is never trusted with plaintext |
+| Recovery kit | `centraid-recovery-kit-wrapped`: scrypt(N=2¹⁷) + AES-256-GCM over the canonical document | Its **password**, held only by the owner | Ciphertext. The kit carries the keyring and per-vault DEKs, so its password is load-bearing custody, not a formality |
+
+Two consequences worth stating out loud. First, the **provider API key is
+deliberately absent from the kit** (`FORMAT.md`) — reaching the provider and
+decrypting what is there are separate capabilities. Second, at-rest wrapping
+does not bound a **local** attacker: spawned coding-agent runners execute at the
+owner's uid and can read `keys/` regardless of scheme. The OS user boundary is
+the primary local boundary; see [SECURITY.md](SECURITY.md).
+
 Those slots are also the **accounting** vocabulary the owner sees. `packages/gateway/src/serve/local-usage.ts` walks per-vault `ledger`, `vault-db`, `attachments`, `apps`, and `code`, plus gateway-wide `cache`, `logs`, and `templates`; there are no synthetic `backup` or `storage` directories. `GET /centraid/_gateway/storage/local` serves that alongside the volume's `statfs`. Owner-set storage limits live in `gateway.db`.
 
 App-engine owns the conversation-ledger band of the per-vault `journal.db` (`packages/app-engine/src/stores/gateway-db.ts`): conversations, turns, items, attachments, automation KV, and the `run_summary` VIEW that feeds Insights — derived from the ledger tables, no write-through (the old per-app `runtime.sqlite` and central `analytics.sqlite` became a standalone `transcripts.db` in #280, then folded into `journal.db`). The band is ensured idempotently on open and never touches `PRAGMA user_version`. So the ledger does not grow without bound, the vault-plane daily block runs a **digest → archive → prune** pass (#438): idle conversations and aged turn-ranges of eternal automation threads serialize to gzip(JSON) segments through the vault's local CAS (indexed in `conversation_archive`, rolled into `conversation_digest`), raw rows delete only behind a custody latch with `auto_vacuum=INCREMENTAL` reclaiming the pages, and archive-segment shas join the CAS GC roots so a pruned segment is pinned as the only durable copy. Insights unions live `run_summary` with the digests, so pruning stays invisible; reopening a pruned conversation lazily rehydrates the sealed segments read-only. That pass is time-gated by default (once a day, a 90-day window), and **size-gated** when the owner sets `journalLimitBytes`: over the limit the daily gate is bypassed and the window narrows a rung per sweep — 90 → 30 → 14 → 7 days, with 7 a hard floor so archival never reaches inside the window being worked in (`packages/gateway/src/serve/journal-limit.ts`, issue #544). The vault package owns its own files' DDL: `vault.db` (all ontology schemas, one ACID boundary) and `journal.db`'s audit band (the append-only receipt/provenance stream, versioned by the vault's ladder).

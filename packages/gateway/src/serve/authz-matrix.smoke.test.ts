@@ -95,6 +95,48 @@ const CASES: Array<{
     // Auth must succeed; body may still 4xx for missing SQL — never 401/403/5xx.
     expect: (s) => s !== 401 && s !== 403 && s < 500,
   },
+  /*
+   * `publicPaths` regression guard (issue #568 item L). Only the handshake
+   * route is bearer-free; the founding verbs and the pairing-ticket mint are
+   * capability-granting and must 401 without a credential. Re-adding any of
+   * them to `serve()`'s `publicPaths` now fails CI here rather than shipping
+   * an anonymous path to a founding ticket.
+   */
+  {
+    name: 'no bearer → 401 on founding ticket mint',
+    route: '/centraid/_gateway/founding/ticket',
+    method: 'POST',
+    expect: 401,
+  },
+  {
+    name: 'no bearer → 401 on vaults:initialize',
+    route: '/centraid/_vault/vaults:initialize',
+    method: 'POST',
+    expect: 401,
+  },
+  {
+    name: 'no bearer → 401 on vaults:initialize/verify',
+    route: '/centraid/_vault/vaults:initialize/verify',
+    method: 'POST',
+    expect: 401,
+  },
+  {
+    name: 'no bearer → 401 on vaults:restore',
+    route: '/centraid/_vault/vaults:restore',
+    method: 'POST',
+    expect: 401,
+  },
+  {
+    name: 'no bearer → 401 on the device pairing-ticket mint',
+    route: '/centraid/_gateway/devices/ticket',
+    method: 'POST',
+    expect: 401,
+  },
+  {
+    name: 'gateway info stays public (the pre-pairing handshake)',
+    route: '/centraid/_gateway/info',
+    expect: 200,
+  },
 ];
 
 test.each(CASES)('authz smoke: $name', async (c) => {
@@ -107,4 +149,38 @@ test.each(CASES)('authz smoke: $name', async (c) => {
   } else {
     expect(status).toBe(c.expect);
   }
+});
+
+/*
+ * Issue #568 item C. `/centraid/_gateway/info` is public so a client can read
+ * the version/schema handshake before it can pair — but `endpointTicket` is
+ * this gateway's iroh DIAL ticket, and the founding window admits an
+ * unenrolled EndpointId. A browser fetch to `http://127.0.0.1:<port>` from any
+ * page the owner visits IS a loopback socket, a plain GET needs no preflight,
+ * and `decideCors` answers a foreign origin `*` — so loopback cannot be the
+ * gate. Only a presented credential may see it.
+ */
+test('gateway info withholds the endpoint ticket from an unauthenticated caller', async () => {
+  const anonymous = await fetch(`${handle.url}/centraid/_gateway/info`);
+  expect(anonymous.status).toBe(200);
+  const anonymousBody = (await anonymous.json()) as Record<string, unknown>;
+  // The handshake still answers: version + protocol are what a client needs
+  // before it can pair at all.
+  expect(anonymousBody.protocolVersion).toEqual(expect.any(Number));
+  expect(anonymousBody).not.toHaveProperty('endpointTicket');
+
+  const authenticated = await fetch(`${handle.url}/centraid/_gateway/info`, {
+    headers: { Authorization: `Bearer ${ADMIN}` },
+  });
+  expect(authenticated.status).toBe(200);
+  const authenticatedBody = (await authenticated.json()) as Record<string, unknown>;
+  expect(authenticatedBody.protocolVersion).toEqual(anonymousBody.protocolVersion);
+
+  // A WRONG bearer is not a credential: it must be treated as anonymous on a
+  // public path, never as "close enough because it is loopback".
+  const wrong = await fetch(`${handle.url}/centraid/_gateway/info`, {
+    headers: { Authorization: 'Bearer not-the-admin-token' },
+  });
+  expect(wrong.status).toBe(200);
+  expect(await wrong.json()).not.toHaveProperty('endpointTicket');
 });

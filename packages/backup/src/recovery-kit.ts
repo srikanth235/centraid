@@ -185,11 +185,22 @@ export function wrapRecoveryKit(
 }
 
 /**
- * Parse a plain legacy document or unwrap the owner-held password document.
- * Wrapped kits require their password; authentication failures stay loud.
+ * Unwrap the owner-held password document. Authentication failures stay loud.
+ *
+ * There is no unwrapped acceptance path (issue #568 item J). Accepting a plain
+ * document also SILENTLY IGNORED the supplied password, so every caller that
+ * treats "parse succeeded" as "the owner knows the password" —
+ * `vaults:restore`, `vaults:initialize/verify`, and the kit-confirmed
+ * transition — had a password-free branch. v0 carries no back-compat
+ * obligation, so the branch is gone rather than gated.
  */
-export function parseRecoveryKit(value: unknown, passphrase?: string): RecoveryKitDocument {
-  if (!isWrappedKit(value)) return parsePlainRecoveryKit(value);
+export function parseRecoveryKit(value: unknown, passphrase: string): RecoveryKitDocument {
+  if (!isWrappedKit(value)) {
+    throw new Error(
+      'recovery kit: expected a password-wrapped kit ' +
+        `("${WRAPPED_KIT_KIND}"); unwrapped kits are not accepted`,
+    );
+  }
   for (const field of ['N', 'r', 'p'] as const) {
     if (typeof value[field] !== 'number' || !Number.isSafeInteger(value[field])) {
       throw new Error(`recovery kit: wrapped header has invalid "${field}"`);
@@ -201,7 +212,7 @@ export function parseRecoveryKit(value: unknown, passphrase?: string): RecoveryK
       throw new Error(`recovery kit: wrapped header is missing "${field}"`);
     }
   }
-  if (passphrase === undefined) throw new Error('recovery kit: password is required');
+  if (passphrase.length === 0) throw new Error('recovery kit: password is required');
   try {
     const salt = Buffer.from(value['salt'] as string, 'base64');
     const key = deriveWrapKey(passphrase, salt, {

@@ -296,7 +296,7 @@ test('founding redemption rolls back on an injected crash and uses the deleted r
   cleanups.push(() => gateway.close());
   const tickets = PairingTicketStore.open(gateway);
   const enrollments = EnrollmentStore.open(gateway);
-  const founding = tickets.mintFounding();
+  const founding = tickets.mintFounding()!;
 
   expect(() =>
     tickets.redeemFoundingAndEnroll(
@@ -309,7 +309,7 @@ test('founding redemption rolls back on an injected crash and uses the deleted r
       },
     ),
   ).toThrow('injected crash');
-  expect(tickets.hasActiveFounding()).toBe(true);
+  expect(tickets.hasOpenFoundingWindow()).toBe(true);
   expect(enrollments.list()).toEqual([]);
 
   const raced = await Promise.all([
@@ -352,4 +352,68 @@ test('the pasteable ticket round-trips and rejects foreign payloads', () => {
       Buffer.from(JSON.stringify({ v: 1, kind: 'centraid-pair' })).toString('base64url'),
     ),
   ).toBeUndefined();
+});
+
+/*
+ * Issue #568 item K: a second founding mint must not destroy an in-flight
+ * restore.
+ *
+ * `mintFounding` used to `DELETE FROM tickets WHERE kind = 'found'`
+ * unconditionally. `founding_ticket_reservations` cascades on that delete, so
+ * a host who re-opened the QR while a single-vault restore was still
+ * downloading (before `onAdopted` flips `isFresh()`) silently dropped the
+ * in-flight reservation's row. The commit then saw `changes !== 1`, and
+ * `rollbackFoundingVaults` `rmSync`'d a FULLY RESTORED vault and destroyed its
+ * sealing key.
+ *
+ * `one_founding_ticket` allows only one row, so the fix is to refuse the mint
+ * while a reservation is live and hand the slot back on failure.
+ */
+test('a second founding mint cannot destroy an in-flight restore', async () => {
+  const file = await tempFile('gateway.db');
+  const gateway = GatewayDatabase.open(path.dirname(file));
+  cleanups.push(() => gateway.close());
+  const tickets = PairingTicketStore.open(gateway);
+  const enrollments = EnrollmentStore.open(gateway);
+
+  const founding = tickets.mintFounding()!;
+  // The restore begins: reserve, then stage the vault ids it is about to
+  // materialize. Everything after this point models the download window.
+  const reservation = tickets.reserveFounding(founding.ticketId, founding.secret)!;
+  expect(tickets.stageReservedFoundingVaults(reservation, ['restored-vault'])).toBe(true);
+
+  // The host re-opens the QR mid-restore. It must be refused, not served by
+  // replacing the row the running ceremony depends on.
+  expect(tickets.mintFounding()).toBeUndefined();
+  expect(tickets.pendingFoundingVaults()).toEqual([
+    { reservationId: reservation, vaultIds: ['restored-vault'] },
+  ]);
+
+  // …and the restore still commits: one owner enrollment, ticket consumed.
+  const enrolled = tickets.redeemReservedFoundingAndEnrollMany(reservation, enrollments, {
+    endpointId: 'founder-device',
+    vaultIds: ['restored-vault'],
+    label: 'Founder laptop',
+  });
+  expect(enrolled).toHaveLength(1);
+  expect(enrollments.list().map((row) => row.vaultId)).toEqual(['restored-vault']);
+  expect(tickets.hasOpenFoundingWindow()).toBe(false);
+});
+
+test('a founding reservation released after a failed attempt frees the slot', async () => {
+  const file = await tempFile('gateway.db');
+  const gateway = GatewayDatabase.open(path.dirname(file));
+  cleanups.push(() => gateway.close());
+  const tickets = PairingTicketStore.open(gateway);
+
+  const founding = tickets.mintFounding()!;
+  const reservation = tickets.reserveFounding(founding.ticketId, founding.secret)!;
+  expect(tickets.mintFounding()).toBeUndefined();
+
+  // A restore that dies on a wrong password must not wedge the ceremony for
+  // the reservation's full two hours.
+  tickets.releaseFounding(reservation);
+  const second = tickets.mintFounding();
+  expect(second).toBeTruthy();
+  expect(second!.ticketId).not.toBe(founding.ticketId);
 });

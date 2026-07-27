@@ -15,6 +15,13 @@ export interface FirstRunGateProps {
   onFoundingComplete: () => Promise<void> | void;
   founding: FoundingScreenBridge;
   gatewayStatus: 'uninitialized' | 'ready' | 'unreachable';
+  /**
+   * The gateway created its vault but never verified the kit (issue #568
+   * item G). Without this the choice screen is a dead end after a restart:
+   * Create 409s `already_initialized`, Restore 409s, and erase 409s
+   * `recovery_kit_not_verified` — only `vaults:initialize/verify` moves.
+   */
+  foundingPending?: boolean;
 }
 
 export default function FirstRunGate({
@@ -22,13 +29,16 @@ export default function FirstRunGate({
   onFoundingComplete,
   founding,
   gatewayStatus,
+  foundingPending = false,
 }: FirstRunGateProps): JSX.Element {
-  const [mode, setMode] = useState<'choice' | 'create' | 'restore'>('choice');
+  const [mode, setMode] = useState<'choice' | 'create' | 'restore' | 'verify'>(
+    foundingPending ? 'verify' : 'choice',
+  );
 
   if (gatewayStatus !== 'uninitialized') {
     return <OnboardingScreen onComplete={onOnboardingComplete} />;
   }
-  if (mode === 'create' || mode === 'restore') {
+  if (mode === 'create' || mode === 'restore' || mode === 'verify') {
     return (
       <FoundingScreen
         {...founding}
@@ -61,6 +71,15 @@ export default function FirstRunGate({
             <span className={styles.choiceBtnTitle}>Restore vault</span>
             <span className={styles.choiceBtnSub}>
               Bring backed-up vaults back from your recovery kit.
+            </span>
+          </button>
+          {/* Always offered, not only when the gateway reports the pending
+              ceremony: an older gateway omits `foundingPending`, and the user
+              who closed the app mid-ceremony still needs a way back in. */}
+          <button type="button" className={styles.choiceBtn} onClick={() => setMode('verify')}>
+            <span className={styles.choiceBtnTitle}>I already have my kit</span>
+            <span className={styles.choiceBtnSub}>
+              Finish an interrupted setup by verifying the kit this gateway downloaded.
             </span>
           </button>
         </div>

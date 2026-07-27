@@ -37,7 +37,14 @@ export type {
   GatewayPairRequest,
   GatewayPairResponse,
 } from './gateway-endpoint.js';
-export { parsePairQrPayload, PAIR_ALPN, TUNNEL_ALPN } from './protocol.js';
+export {
+  DEVICE_IDENTITY_HEADER,
+  DEVICE_PROOF_HEADER,
+  parsePairQrPayload,
+  PAIR_ALPN,
+  TUNNEL_ALPN,
+  TUNNEL_FORWARDED_HEADER,
+} from './protocol.js';
 export type {
   HeaderMap,
   PairQrPayload,

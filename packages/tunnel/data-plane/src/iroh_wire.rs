@@ -9,6 +9,11 @@ use crate::MAX_HEADER_FRAME_BYTES;
 const AUTH_MODE_HEADER: &str = "x-centraid-tunnel-auth-mode";
 const AUTH_WEB_SESSION: &str = "web-session";
 pub(crate) const RELAY_PROOF_HEADER: &str = "x-centraid-data-plane-relay";
+/// Identity headers only a forwarder may stamp (issue #568 item A). A client
+/// copy is dropped before `Authorization::headers` re-inserts the proved one,
+/// so loopback delivery never lets a remote peer claim a device identity.
+const DEVICE_IDENTITY_HEADER: &str = "x-centraid-device";
+const DEVICE_PROOF_HEADER: &str = "x-centraid-device-proof";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -100,6 +105,8 @@ pub(crate) fn request_headers(
             || name.eq_ignore_ascii_case(AUTH_MODE_HEADER)
             || name.eq_ignore_ascii_case("host")
             || name.eq_ignore_ascii_case(RELAY_PROOF_HEADER)
+            || name.eq_ignore_ascii_case(DEVICE_IDENTITY_HEADER)
+            || name.eq_ignore_ascii_case(DEVICE_PROOF_HEADER)
         {
             continue;
         }
@@ -196,5 +203,45 @@ mod tests {
             headers.get(reqwest::header::AUTHORIZATION).unwrap(),
             "Bearer owner-token"
         );
+    }
+
+    /// Issue #568 item A: loopback is not an identity. A client copy of the
+    /// device identity headers never survives the relay; only the authorizer's
+    /// proved values reach the gateway.
+    #[test]
+    fn relay_drops_client_supplied_device_identity_headers() {
+        let wire = HashMap::from([
+            (
+                DEVICE_IDENTITY_HEADER.to_owned(),
+                WireHeaderValue::One("forged-endpoint".to_owned()),
+            ),
+            (
+                DEVICE_PROOF_HEADER.to_owned(),
+                WireHeaderValue::One("forged-proof".to_owned()),
+            ),
+        ]);
+
+        let unauthenticated = Authorization {
+            allowed: true,
+            headers: HashMap::new(),
+            upstream_url: None,
+            upstream_token: None,
+        };
+        let headers = request_headers(&wire, &unauthenticated, "owner-token").unwrap();
+        assert!(!headers.contains_key(DEVICE_IDENTITY_HEADER));
+        assert!(!headers.contains_key(DEVICE_PROOF_HEADER));
+
+        let proved = Authorization {
+            allowed: true,
+            headers: HashMap::from([
+                (DEVICE_IDENTITY_HEADER.to_owned(), "proved".to_owned()),
+                (DEVICE_PROOF_HEADER.to_owned(), "real-proof".to_owned()),
+            ]),
+            upstream_url: None,
+            upstream_token: None,
+        };
+        let headers = request_headers(&wire, &proved, "owner-token").unwrap();
+        assert_eq!(headers.get(DEVICE_IDENTITY_HEADER).unwrap(), "proved");
+        assert_eq!(headers.get(DEVICE_PROOF_HEADER).unwrap(), "real-proof");
     }
 }
