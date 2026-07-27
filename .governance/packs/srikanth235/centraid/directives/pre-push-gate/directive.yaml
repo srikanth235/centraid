@@ -1,0 +1,22 @@
+# pre-push-gate — the PR gate runs at push time, not from memory.
+category: Repo hygiene
+recommended: true
+summary: |
+  Every push that creates or updates a ref runs `bun run check:pr`, the
+  local superset of the CI `static` job. Deletes and no-op pushes are
+  exempt.
+
+  AGENTS.md has said "before every `git push` to a PR, agents must run
+  `bun run check:pr`" for several releases. It is a good rule enforced by
+  attention, which is to say not enforced: #568 shipped a red CI precisely
+  because a gate lived in prose rather than in a hook. The gates are already
+  written and already fast; this directive is only the wiring that makes
+  running them the default instead of the diligent thing.
+
+  Budget is roughly 90s of static gates plus whatever `test:affected` has
+  not already cached, measured against a 12.3-minute CI round trip. If that
+  trade is wrong for a particular push — a WIP branch, a docs typo, a
+  throwaway spike — `SKIP_CHECK_PR=1 git push` opts out of this directive
+  alone, and CI still enforces.
+surface: repo-state
+hook: pre-push

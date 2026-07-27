@@ -113,6 +113,82 @@ More traps: [traps/worktrees.md](traps/worktrees.md). Multi-agent rules: [multi-
 
 If a local `.claude/launch.json` exists (may be gitignored), treat it as the **named service list** for Claude/desktop launch integrations (ports, cwd, commands). Keep it in sync when you add a long-lived dev process. If absent, the table above is the source of truth until someone adds the file.
 
+## The local gate loop
+
+Three tiers, each with a cost budget, each enforced by a hook. Nothing here is
+something you have to remember to run.
+
+| Tier | When | Cost | What runs |
+| --- | --- | --- | --- |
+| 0 | pre-commit | ~36s (see below) | Governance directives, plus `oxfmt` and `oxlint` **on staged files only** |
+| 1 | pre-push | ~90s + affected tests + diff coverage | `bun run check:pr` — the local superset of the CI `static` job |
+| 2 | before requesting merge | minutes | `bun run check:pr:full`, mutation, anything needing Linux or a container |
+
+**Tier 0 is over budget and the reason is upstream.** The target is 2s. The
+gates this repo owns hit it easily — staged-file `oxfmt` 0.16s, staged-file
+`oxlint` 0.09s, every repo-local directive under 0.5s. The 36s is two vendored
+`governance-kit` directives that are repo-wide by construction: `repo-hygiene`
+(18.7s, `git grep` + `git ls-files` across the tree) and `receipt-per-issue`
+(13.2s, re-reads the receipt corpus). Both carry digests in `.governance/packs.lock`
+and `managed-tree-integrity` exists to stop them being hand-edited, so scoping
+them to the staged set is an upstream change. Until then, `git commit` costs
+about half a minute; `SKIP_GOVERNANCE=1` is the pressure valve for a rapid
+commit loop, and CI still enforces.
+
+**Why these tiers and not others (#576).** A CI round trip is 12.3 minutes of
+wall clock. Local gates do not shrink that — a green PR takes 12.3 minutes no
+matter what runs here — so the only thing a local gate buys is not paying those
+12.3 minutes twice. That makes the rule arithmetic: a gate earns its slot if it
+fails more often than `local_cost / 738s`. `oxlint` at 1.7s needs a 0.2% hit
+rate; `knip` at 28.8s needs 3.9%; a full instrumented `coverage` run at 418s
+needs 57%, which is why it is scoped rather than run whole.
+
+Tier 0 is scoped to **staged files** on purpose. A repo-wide gate at commit time
+fires on debt in files you never opened, and a gate that fires for someone
+else's mess is one people learn to bypass.
+
+### Escape hatches
+
+```sh
+SKIP_CHECK_PR=1 git push     # skip the pre-push check:pr gate only
+SKIP_GOVERNANCE=1 git push   # skip every governance hook
+git push --no-verify         # skip all hooks entirely
+```
+
+All three are legitimate for a WIP branch or a spike, and all three leave CI as
+the enforcing copy. A gate with no exit is a gate people disable permanently.
+
+### Diff coverage
+
+`check:diff-coverage` scores changed lines against an instrumented run, scoped
+to the packages the diff touches (`vitest.diff-coverage.config.ts`). A diff with
+no instrumentable source in it — docs, config, workflow, tests-only — skips the
+run entirely. The repo-wide `bun run coverage` in the CI `verify` job stays
+authoritative: it enforces the seeded floors and catches a file covered only by
+another package's tests, which a scoped run cannot see.
+
+### What deliberately does not run locally
+
+The strace fsync perf gate, the actionlint container, cargo data-plane, the wasm
+toolchain, e2e browsers, `gateway-package`, and `dependency-review`. All are
+platform-specific, container-bound, or rarely red — running them locally costs
+minutes and lowers the odds of a red CI by almost nothing. `bun run lint:actions`
+works if you have actionlint installed.
+
+### How CI is shaped
+
+`ci.yml` is the **only** workflow listening on `pull_request`, and `release.yml`
+the only one on `push: tags` (#557, enforced by `lint:workflow-pins`). Every PR
+gate is a job there, rolling up into one required `check` aggregator. Lanes the
+diff does not touch report `skipped`, which `check` treats as satisfied;
+`cancelled` is a failure. This is why the one-workflow rule is mechanical: a
+lane in its own path-filtered workflow reports no status on unrelated PRs, so it
+can never be a required check.
+
+`static` runs the lint/typecheck gates plus matrix and ratchet. `verify` runs
+build, native tunnel, data-plane, gateway perf, coverage, and diff-coverage.
+Neither runs `test:affected` — full package vitest lives under `verify`.
+
 ## Tools only via repo scripts
 
 Never raw `npx vitest`, `npx tsc`, etc. Use:
