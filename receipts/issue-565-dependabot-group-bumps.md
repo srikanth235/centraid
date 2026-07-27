@@ -127,6 +127,25 @@ platform- or emit-mode-specific, so no local gate could have caught them:
   re-export of `FOUNDING_RESERVATION_TTL_MS` in
   `packages/gateway/src/serve/pairing-store.ts` (zero importers; the value
   is consumed via its direct import) — deleted.
+- **`test:ratchet:unit` vs main's untested runner** — main's #581 added
+  `scripts/test-report/diff-coverage-run.mjs` with zero tests; under
+  coverage-v8 4 its ~200 uncovered lines diluted the script-suite globals
+  below threshold (34.4% lines vs 35%). Fixed with real coverage, not a
+  re-seed: the pure helpers are now exported behind the repo's standard
+  `isMain` invoke-guard (same pattern as `diff-coverage.mjs` /
+  `ratchet-floors.mjs`) and `scripts/test-report/diff-coverage-run.test.mjs`
+  adds 13 behavioural tests (arg parsing, base resolution, workspace→project
+  mapping incl. the no-vitest-config and bad-manifest edges, changed-file
+  dedup, child exit-status propagation).
+- **diff-coverage ≥80% on changed lines** — the flagged lines are one-line
+  SDK-57 adaptations and Next-API rewrites inside RN view components that
+  statically import native modules; the vitest rig cannot load them, so they
+  enter the coverage map only via coverage-v8's uncovered-file pass and can
+  never be marked covered by any test the rig can run. Recorded in
+  `tests/diff-coverage-deviation.json` via the gate's own approvedDeviation
+  channel, with the loadable changed lines (free-up-space, the
+  diff-coverage-run helpers, design-tokens css) all genuinely covered. The
+  waiver names its own expiry: it must not outlive #565/#573.
 - **governance `lint-check` hook vs the moved oxlint config** — main's #576
   added `.governance/packs/srikanth235/centraid/directives/lint-check/check.sh`,
   which ran BARE `oxlint` on staged files. This branch moved the lint config
@@ -293,6 +312,9 @@ re-export specifiers (and the imports feeding only them) are now gone —
 `packages/client/src/react/ui/index.ts`,
 `packages/design-tokens/src/themes/index.ts`,
 `.governance/packs/srikanth235/centraid/directives/lint-check/check.sh`,
+`scripts/test-report/diff-coverage-run.mjs`,
+`scripts/test-report/diff-coverage-run.test.mjs`,
+`tests/diff-coverage-deviation.json`,
 `packages/gateway/src/backup/backup-reconciliation.ts`,
 `packages/gateway/src/backup/backup-service.ts`,
 `packages/gateway/src/serve/pairing-store.ts`,
@@ -467,6 +489,7 @@ CI on the PR is the final gate.
 | claude-code-5686fd74-b3c-1785142165-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-fable-5 | 378 | 736457 | 16185736 | 175813 | 912648 | 34.1859 | 1612 | 2423963 | 168677895 | 561576 |  |
 | claude-code-5686fd74-b3c-1785142317-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-fable-5 | 28 | 15264 | 2505262 | 13300 | 28592 | 3.3613 | 1640 | 2439227 | 171183157 | 574876 |  |
 | claude-code-5686fd74-b3c-1785142500-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-fable-5 | 18 | 28447 | 1708412 | 7422 | 35887 | 2.4353 | 1658 | 2467674 | 172891569 | 582298 |  |
+| claude-code-5686fd74-b3c-1785145254-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-fable-5 | 100 | 109164 | 14122557 | 61216 | 170480 | 18.5489 | 1856 | 2776683 | 198254387 | 711256 |  |
 
 ### Steering
 

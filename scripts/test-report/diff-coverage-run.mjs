@@ -37,7 +37,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
  * @param {string[]} argv Raw argv slice.
  * @returns {{ base: string | null; dependents: boolean }} Parsed options.
  */
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const out = { base: /** @type {string | null} */ (null), dependents: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--base' && argv[i + 1]) out.base = argv[++i];
@@ -69,7 +69,7 @@ function git(args) {
  * @param {string | null} explicit Explicit --base value.
  * @returns {string | null} A resolvable ref, or null.
  */
-function resolveBase(explicit) {
+export function resolveBase(explicit) {
   if (explicit) return explicit;
   for (const candidate of ['origin/main', 'main', 'origin/master', 'master']) {
     if (git(['rev-parse', '--verify', candidate]).trim()) return candidate;
@@ -83,7 +83,7 @@ function resolveBase(explicit) {
  * @param {string} baseRef Base ref.
  * @returns {string[]} Repo-relative paths, deduped.
  */
-function changedFiles(baseRef) {
+export function changedFiles(baseRef) {
   const names = [
     ...git(['diff', '--name-only', `${baseRef}...HEAD`]).split('\n'),
     ...git(['diff', '--name-only']).split('\n'),
@@ -97,7 +97,7 @@ function changedFiles(baseRef) {
  * @param {string} filePath Repo-relative path.
  * @returns {string | null} e.g. "packages/gateway", or null.
  */
-function workspaceDirOf(filePath) {
+export function workspaceDirOf(filePath) {
   const m = /^((?:packages|apps)\/[^/]+)\//.exec(filePath);
   return m ? m[1] : null;
 }
@@ -106,7 +106,7 @@ function workspaceDirOf(filePath) {
  * @param {string} dir Workspace directory.
  * @returns {string | null} The package name vitest uses as its project name.
  */
-function projectNameOf(dir) {
+export function projectNameOf(dir) {
   const manifest = path.join(root, dir, 'package.json');
   if (!existsSync(manifest)) return null;
   // A workspace with no vitest config contributes no project to the root run,
@@ -150,7 +150,7 @@ function dependentsOf(baseRef) {
  * @param {string[]} args Arguments.
  * @returns {number} Exit status.
  */
-function run(command, args) {
+export function run(command, args) {
   const res = spawnSync(command, args, { cwd: root, stdio: 'inherit' });
   return res.status ?? 1;
 }
@@ -226,4 +226,9 @@ function main() {
   return run('node', ['scripts/test-report/diff-coverage.mjs', '--base', baseRef]);
 }
 
-process.exitCode = main();
+// Same invoke-guard as diff-coverage.mjs / ratchet-floors.mjs so the helpers
+// above are importable under vitest without triggering the full run.
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  process.exitCode = main();
+}
