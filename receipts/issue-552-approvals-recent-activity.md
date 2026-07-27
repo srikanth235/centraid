@@ -48,7 +48,7 @@ Receipt written; Conventional Commit with `(#552)`.
 
 ### Approvals screen UI
 
-- `packages/client/src/react/screens/ApprovalsScreen.tsx` — decision badge/icon/accent, risk marker, actor KindBadge, grant/owner attribution + Revoke grant, expand detail with full object id and absolute time, Denied/All filter, See all.
+- `packages/client/src/react/screens/ApprovalsScreen.tsx` — decision badge/icon/accent, risk marker, actor KindBadge, grant/owner attribution + Revoke grant, expand detail with full object id and absolute time, Denied/All filter, See all. Decision accent CSS-module classes coerced for `noUncheckedIndexedAccess` (web typecheck).
 - `packages/client/src/react/screens/ApprovalsScreen.module.css` — decision accents, risk rail, `×N` marker, filter chips, attribution copy.
 - `packages/client/src/react/screens/ApprovalsScreen.test.tsx` — decision badge, risk present/absent, actor KindBadge per kind, standing-grant revoke click, collapse marker, filter/expand/see-all.
 - `packages/client/src/react/shell/routes/ApprovalsRoute.tsx` — review limit 20 → 200 on See all; `collapseAdjacentActivity` after map; wires `onSeeAllActivity` / `activityTruncated`.

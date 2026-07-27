@@ -537,15 +537,19 @@ function activityDecisionVisual(decision: string): {
   accentClass: string;
   badge: string;
 } {
+  // CSS-module class names are `string | undefined` under noUncheckedIndexedAccess.
+  const allow = styles.decisionAllow ?? '';
+  const deny = styles.decisionDeny ?? '';
+  const parked = styles.decisionParked ?? '';
   switch (decision) {
     case 'allow':
-      return { icon: 'CheckCircle', accentClass: styles.decisionAllow, badge: 'Allowed' };
+      return { icon: 'CheckCircle', accentClass: allow, badge: 'Allowed' };
     case 'deny':
-      return { icon: 'X', accentClass: styles.decisionDeny, badge: 'Denied' };
+      return { icon: 'X', accentClass: deny, badge: 'Denied' };
     case 'parked':
-      return { icon: 'Clock', accentClass: styles.decisionParked, badge: 'Parked' };
+      return { icon: 'Clock', accentClass: parked, badge: 'Parked' };
     default:
-      return { icon: 'Clock', accentClass: styles.decisionParked, badge: decision };
+      return { icon: 'Clock', accentClass: parked, badge: decision };
   }
 }
 
