@@ -20,7 +20,7 @@ import { dropAppSession, ensureAppSession } from './gateway-client-editing.js';
  * some requested grant, or there is nothing for the trigger to evaluate.
  */
 export type CentraidCreateTrigger =
-  | { kind: 'cron'; expr: string }
+  | { kind: 'cron'; expr: string; tz?: string }
   | { kind: 'webhook' }
   | { kind: 'condition'; entity: string; where?: unknown; every?: string }
   | { kind: 'data'; entities: string[]; every?: string }

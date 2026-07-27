@@ -8,6 +8,7 @@ import {
   isDeniedTriggerCursorEntity,
   type Trigger,
 } from '../manifest/manifest.js';
+import { resolveCronTimezone } from '../cron-timezone.js';
 
 export const DEFAULT_TRIGGER_CATCH_UP_CAP = 50;
 
@@ -109,13 +110,32 @@ export interface VaultCursorEngineOptions {
   onTick?: (at: Date) => void;
   onDormancyChange?: (dormant: boolean, at: Date) => void | Promise<void>;
   catchUpCap?: number;
+  /**
+   * Gateway-wide default cron timezone (issue #570 tier 2). Read on each
+   * register/reconcile so a prefs change applies on the next reconcile without
+   * restarting the engine. Absent or invalid → host-local for triggers that
+   * also omit `tz`.
+   */
+  defaultCronTimeZone?: () => string | undefined;
 }
+
+/** One cron expression plus its resolved match zone (undefined = host-local). */
+export type CronSchedule = {
+  readonly expr: string;
+  readonly timeZone?: string;
+};
 
 export interface CursorRegistration {
   ref: string;
   triggerIndex: number;
   trigger: Trigger;
-  /** Every cron expression this registration schedules (cron registrations only). */
+  /**
+   * Every cron schedule this registration fires (cron registrations only).
+   * Each entry carries the expression plus the zone resolved at registration
+   * time (trigger `tz` → gateway default → host-local).
+   */
+  cronSchedules?: readonly CronSchedule[];
+  /** @deprecated Prefer `cronSchedules`; kept for signature hashing callers. */
   cronExprs?: readonly string[];
 }
 
@@ -125,17 +145,23 @@ export interface CursorRegistration {
  * the first cron index. An automation declaring both a daily 08:00 expression
  * and a half-hourly one is one schedule with two expressions, so 08:00 fires
  * it exactly once.
+ *
+ * `defaultTimeZone` is the gateway-wide default (tier 2). Per-trigger `tz`
+ * wins when set; absent both tiers, schedules match host-local.
  */
-export function registrationsFor(row: Row): CursorRegistration[] {
+export function registrationsFor(row: Row, defaultTimeZone?: string | null): CursorRegistration[] {
   for (const trigger of row.triggers) assertTriggerCursorAllowed(trigger);
-  const cronExprs = row.triggers.flatMap((trigger) =>
-    trigger.kind === 'cron' ? [trigger.expr] : [],
-  );
+  const cronSchedules: CronSchedule[] = row.triggers.flatMap((trigger) => {
+    if (trigger.kind !== 'cron') return [];
+    const timeZone = resolveCronTimezone(trigger.tz, defaultTimeZone);
+    return [{ expr: trigger.expr, ...(timeZone !== undefined ? { timeZone } : {}) }];
+  });
+  const cronExprs = cronSchedules.map((s) => s.expr);
   const firstCron = row.triggers.findIndex((trigger) => trigger.kind === 'cron');
   return row.triggers.flatMap((trigger, triggerIndex): CursorRegistration[] => {
     if (trigger.kind !== 'cron') return [{ ref: row.ref, triggerIndex, trigger }];
     if (triggerIndex !== firstCron) return [];
-    return [{ ref: row.ref, triggerIndex, trigger, cronExprs }];
+    return [{ ref: row.ref, triggerIndex, trigger, cronSchedules, cronExprs }];
   });
 }
 

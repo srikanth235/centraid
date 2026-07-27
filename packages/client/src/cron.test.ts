@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { cronFieldMatch, cronNextRuns, describeCron } from './cron.js';
+import {
+  cronFieldMatch,
+  cronNextRuns,
+  cronRunLabel,
+  describeCron,
+  isValidIanaTimeZone,
+  resolveCronTimezone,
+  shortTimeZoneName,
+} from './cron.js';
 
 // Cron is evaluated against the LOCAL calendar (the basis the scheduler in
 // `packages/automation/src/fire/cron-match.ts` matches on), so these assert on
@@ -11,6 +19,21 @@ const at = (y: number, mo: number, d: number, h: number, mi: number): Date =>
 const local = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 const day = (d: Date): string => local(d).slice(0, 10);
+const zoneParts = (d: Date, timeZone: string): string => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(d);
+  const pick = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  let hour = pick('hour');
+  if (hour === '24') hour = '00';
+  return `${pick('year')}-${pick('month')}-${pick('day')} ${hour}:${pick('minute')}`;
+};
 
 describe('cronFieldMatch', () => {
   it('matches a wildcard against any in-range value', () => {
@@ -115,6 +138,29 @@ describe('cronNextRuns', () => {
     const runs = cronNextRuns('0 19 * * 1-5', 3, at(2026, 1, 1, 0, 0));
     expect(runs.map(local)).toEqual(['2026-01-01 19:00', '2026-01-02 19:00', '2026-01-05 19:00']);
   });
+
+  it('same expression + same resolved tz yields identical absolute instants under two viewer host clocks', () => {
+    // Absolute `from` in UTC — wall-clock next-run in America/New_York must not
+    // depend on the process host zone (the two "viewers").
+    const from = new Date('2026-01-15T12:00:00.000Z');
+    const a = cronNextRuns('0 9 * * *', 2, from, 'America/New_York');
+    const b = cronNextRuns('0 9 * * *', 2, from, 'America/New_York');
+    expect(a.map((d) => d.getTime())).toEqual(b.map((d) => d.getTime()));
+    expect(a).toHaveLength(2);
+    // 09:00 America/New_York on those days.
+    expect(zoneParts(a[0]!, 'America/New_York')).toMatch(/09:00$/);
+    expect(zoneParts(a[1]!, 'America/New_York')).toMatch(/09:00$/);
+    // And the absolute instants are stable (not viewer-local).
+    expect(a[0]!.toISOString()).toBe(b[0]!.toISOString());
+  });
+
+  it('fires at the trigger zone wall clock, not the host zone', () => {
+    // 09:00 America/Los_Angeles — assert the zone wall clock, not host getters.
+    const from = new Date('2026-06-01T00:00:00.000Z');
+    const runs = cronNextRuns('0 9 * * *', 1, from, 'America/Los_Angeles');
+    expect(runs).toHaveLength(1);
+    expect(zoneParts(runs[0]!, 'America/Los_Angeles')).toMatch(/09:00$/);
+  });
 });
 
 describe('describeCron', () => {
@@ -142,5 +188,56 @@ describe('describeCron', () => {
 
   it('falls back to the raw expression when it cannot be glossed', () => {
     expect(describeCron('5 4 1,15 * 3')).toBe('Cron: 5 4 1,15 * 3');
+  });
+
+  it('labels an explicit zone on daily glosses', () => {
+    expect(describeCron('0 9 * * *', 'America/New_York')).toMatch(/Every day at 09:00 \(.+\)/);
+  });
+});
+
+describe('resolveCronTimezone / isValidIanaTimeZone', () => {
+  it('accepts known IANA names and rejects unknown ones', () => {
+    expect(isValidIanaTimeZone('America/New_York')).toBe(true);
+    expect(isValidIanaTimeZone('UTC')).toBe(true);
+    expect(isValidIanaTimeZone('Not/A_Zone')).toBe(false);
+    expect(isValidIanaTimeZone('')).toBe(false);
+  });
+
+  it('resolves trigger → gateway default → host-local', () => {
+    expect(resolveCronTimezone('Asia/Kolkata', 'America/New_York')).toBe('Asia/Kolkata');
+    expect(resolveCronTimezone(undefined, 'America/New_York')).toBe('America/New_York');
+    expect(resolveCronTimezone(undefined, undefined)).toBeUndefined();
+    expect(resolveCronTimezone('Not/A_Zone', 'UTC')).toBe('UTC');
+  });
+});
+
+describe('cronRunLabel', () => {
+  it('appends a short zone name when the schedule zone differs from the viewer', () => {
+    const d = new Date('2026-01-15T14:00:00.000Z'); // 09:00 EST
+    const label = cronRunLabel(d, {
+      timeZone: 'America/New_York',
+      viewerTimeZone: 'Asia/Kolkata',
+      now: new Date('2026-01-15T05:00:00.000Z'),
+    });
+    expect(label).toMatch(/Today,/);
+    // Zone short name appears when viewer ≠ schedule.
+    expect(label).toMatch(/\b(EST|EDT|GMT[-+]\d+|America\/New_York|New York)\b/);
+  });
+
+  it('omits the zone label when viewer and schedule zones match', () => {
+    const d = new Date('2026-01-15T14:00:00.000Z');
+    const label = cronRunLabel(d, {
+      timeZone: 'America/New_York',
+      viewerTimeZone: 'America/New_York',
+      now: new Date('2026-01-15T05:00:00.000Z'),
+    });
+    expect(label).toMatch(/^Today,/);
+    expect(label).not.toMatch(/\sEST$/);
+  });
+});
+
+describe('shortTimeZoneName', () => {
+  it('returns a non-empty label for a known zone', () => {
+    expect(shortTimeZoneName('America/New_York').length).toBeGreaterThan(0);
   });
 });

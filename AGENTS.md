@@ -57,6 +57,7 @@ The runtime stack is [Bun](https://bun.sh) (package manager, pinned in `packageM
 | [docs/dev-environment.md](docs/dev-environment.md) | Worktrees, ports, named services, launch.json, product CLI |
 | [docs/multi-agent.md](docs/multi-agent.md) | Parallel-agent norms + supervision caps |
 | [docs/refactors/](docs/refactors/) | Multi-session plan format + progress logs |
+| [docs/cron-timezone.md](docs/cron-timezone.md) | Cron IANA zones, resolution tiers, DST gap/overlap policy (#570) |
 | [docs/traps/](docs/traps/) | One doc per known footgun |
 | [docs/recovery/](docs/recovery/) | Exact recovery steps (release, backup, **vault erase + restore-after-erase**, pairing, Assist OAuth) |
 | [docs/plans/](docs/plans/) | Design/measurement plans (examples for refactors) |

@@ -160,7 +160,13 @@ const PERIOD_MS = 60_000;
 export interface ComputeMissedWindowsOptions {
   readonly lastTickAt: Date;
   readonly now: Date;
-  readonly entries: readonly { readonly ref: string; readonly crons: readonly string[] }[];
+  readonly entries: readonly {
+    readonly ref: string;
+    /** Cron expressions (host-local unless paired with `cronTimeZones`). */
+    readonly crons: readonly string[];
+    /** Parallel resolved IANA zones (or undefined host-local) per `crons` entry. */
+    readonly cronTimeZones?: readonly (string | undefined)[];
+  }[];
   /**
    * Minimum gap to treat as a real outage rather than jitter or a fast
    * restart. Defaults to 3 scheduler periods (3 min) — comfortably above
@@ -193,7 +199,7 @@ export function computeMissedWindows(opts: ComputeMissedWindowsOptions): MissedW
     // automation, not a full scan when the automation fires often.
     for (let t = floorToMinute(scanStartMs) + PERIOD_MS; t < nowMinuteMs; t += PERIOD_MS) {
       const candidate = new Date(t);
-      if (entry.crons.some((expr) => cronMatches(expr, candidate))) {
+      if (entry.crons.some((expr, i) => cronMatches(expr, candidate, entry.cronTimeZones?.[i]))) {
         scheduledForMs = t;
         break;
       }
@@ -247,7 +253,14 @@ export function recordSchedulerTick(
         now: opts.now,
         entries: opts.automations
           .filter((a) => a.enabled)
-          .map((a) => ({ ref: a.ref, crons: cronTriggersOf(a.triggers).map((t) => t.expr) })),
+          .map((a) => {
+            const crons = cronTriggersOf(a.triggers);
+            return {
+              ref: a.ref,
+              crons: crons.map((t) => t.expr),
+              cronTimeZones: crons.map((t) => t.tz),
+            };
+          }),
         ...(opts.graceMs !== undefined ? { graceMs: opts.graceMs } : {}),
       });
       if (missed.length > 0) opts.ledger.recordMissed(missed);

@@ -19,6 +19,7 @@ const api = vi.hoisted(() => ({
   createAutomation: vi.fn(),
   deleteAutomation: vi.fn(),
   getBlocking: vi.fn(),
+  getUserPrefs: vi.fn(),
   listAgents: vi.fn(),
   listOutboxGrants: vi.fn(),
   listTemplates: vi.fn(),
@@ -162,6 +163,7 @@ beforeEach(() => {
   });
   api.deleteAutomation.mockReset().mockResolvedValue({ ok: true });
   api.getBlocking.mockReset().mockResolvedValue({});
+  api.getUserPrefs.mockReset().mockResolvedValue({});
   api.listAgents.mockReset().mockResolvedValue([{ agentId: 'agent-1', hostKey: 'daily' }]);
   api.listOutboxGrants.mockReset().mockResolvedValue([]);
   api.listTemplates.mockReset().mockResolvedValue([{ id: 'template-1', name: 'Template' }]);
