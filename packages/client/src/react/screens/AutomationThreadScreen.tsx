@@ -8,6 +8,7 @@ import styles from './AutomationThreadScreen.module.css';
 import Message, { type MessageCallbacks } from './AssistantMessage.js';
 import type {
   AsstMsgDTO,
+  AuPlanStatusDTO,
   AuStatusKind,
   AutomationThreadBridgeProps,
   AutomationThreadData,
@@ -19,19 +20,27 @@ import type {
   ThreadRunDTO,
 } from '../screen-contracts.js';
 
-// The automation thread — "the automation IS a conversation" (Automations UI
-// revamp, receipts/issue-387-automations-ui-revamp.md; chat rendering +
-// steering composer, receipts/issue-539-automations-chat-thread.md). Replaces
-// AutomationViewScreen at the `automation-view` route. Header (identity +
-// trigger chips + enable/run/edit/delete), an inline consent strip
-// (parked/outbox/grants — consent is reviewed here, never begged at runtime),
-// then the thread itself: every fire is a chat turn on a flight-recorder spine
-// (oldest→newest, date-grouped) — the run summary is the message, telemetry
-// sits in a quiet footer, and a failed run speaks as an error you can retry in
-// place. A steering composer at the foot routes a reply through the existing
-// conversational-revision path (`onSendMessage`). Purely presentational: the
-// route wrapper (`AutomationViewRoute.tsx`) owns IO, confirm dialogs, toasts,
-// and navigation.
+// The RUN SCREEN — one of the two automation surfaces, and the one that
+// changes nothing.
+//
+// It answers exactly two questions: what has this automation DONE, and what
+// can you tell me about it. Every fire is a turn on a flight-recorder spine
+// (oldest→newest, date-grouped); the run summary is the message, telemetry
+// sits in a quiet footer, a failed run speaks as an error, and the composer
+// asks questions ABOUT those runs.
+//
+// What deliberately is NOT here, and why:
+//   - compile turns: they are the compiler's working, not executions. They
+//     used to sit in this list as "Compile" cards among real runs.
+//   - "Retry compile": compiling is the compiler's job; the plan banner links
+//     there instead of doing it from here.
+//   - "Apply to future runs": a reply that silently rewrote the standing
+//     instructions was authoring performed from the reading surface. The
+//     composer is read-only now, and the rewrite path lives in the compiler.
+// Anything the reader wants to CHANGE resolves to one call: `onOpenCompiler`.
+//
+// Purely presentational: the route wrapper (`AutomationViewRoute.tsx`) owns
+// IO, confirm dialogs, toasts, and navigation.
 
 /**
  * `AutomationThreadData` plus two additive, OPTIONAL route-derived fields —
@@ -388,6 +397,9 @@ function GrantsLine({
 function nodeIconFor(run: ThreadRunDTO): IconName {
   if (run.status === 'running') return 'Loader';
   if (run.status === 'fail') return 'AlertTriangle';
+  // An ask is the reader's own question sitting in the history — it must not
+  // wear an execution's trigger glyph.
+  if (run.entryKind === 'ask') return 'Send';
   const origin = run.originLabel.toLowerCase();
   if (origin.includes('manual')) return 'Play';
   if (origin.includes('webhook')) return 'Webhook';
@@ -436,6 +448,9 @@ function RunTurn({
   const running = run.status === 'running';
   const failed = run.status === 'fail';
   const hasTrace = messages !== undefined;
+  // "Run again" re-fires the automation. Offering it on an ask would re-run
+  // the automation in answer to a question — never what the reader meant.
+  const rerunnable = run.entryKind === 'run';
   const messageCallbacks: MessageCallbacks = {
     hydrateRefs: () => undefined,
     wireCodeCopy: () => undefined,
@@ -447,7 +462,12 @@ function RunTurn({
     onPagerNav: () => undefined,
   };
   return (
-    <article className={styles.turn} data-run-status={run.status} data-testid="run-entry">
+    <article
+      className={styles.turn}
+      data-run-status={run.status}
+      data-entry-kind={run.entryKind}
+      data-testid={run.entryKind === 'ask' ? 'ask-entry' : 'run-entry'}
+    >
       <span
         className={styles.node}
         data-run-status={run.status}
@@ -460,7 +480,7 @@ function RunTurn({
         <span className={styles.turnOrigin}>{run.originLabel}</span>
         <span className={styles.turnTime}>{time}</span>
         <span className={styles.turnHeadSpacer} />
-        {!running ? (
+        {!running && rerunnable ? (
           <button type="button" className={styles.turnRerun} disabled={rerunBusy} onClick={onRerun}>
             <Icon name="Refresh" size={12} />
             <span>Run again</span>
@@ -495,14 +515,16 @@ function RunTurn({
         <div className={styles.turnError}>
           <div className={styles.turnErrorBody}>{run.summary}</div>
           <div className={styles.turnErrorActions}>
-            <button
-              type="button"
-              className={cx(au.auBtn, au.auBtnPrimary, styles.turnErrorBtn)}
-              disabled={rerunBusy}
-              onClick={onRerun}
-            >
-              Try again
-            </button>
+            {rerunnable ? (
+              <button
+                type="button"
+                className={cx(au.auBtn, au.auBtnPrimary, styles.turnErrorBtn)}
+                disabled={rerunBusy}
+                onClick={onRerun}
+              >
+                Try again
+              </button>
+            ) : null}
             <button
               type="button"
               className={cx(au.auBtn, au.auBtnGhost, styles.turnErrorBtn)}
@@ -608,52 +630,90 @@ function RunTurn({
   );
 }
 
-// The steering composer. Replying is how you refine an automation now: with
-// "Apply to future runs" on, the message is a standing instruction the
-// schedule keeps; off, it's a one-off note framed for this thread only. Both
-// route through the existing conversational-revision path (`onSendMessage`).
+/**
+ * The plan banner — the ONLY thing the run screen says about compilation, and
+ * it says it without offering to do anything about it.
+ *
+ * A `ready` plan is silent: a working automation should not carry a status
+ * bar. Compiling, failed, and never-compiled each explain what that means for
+ * the runs below, and hand off to the compiler. This replaced a "Retry
+ * compile" button that let you kick the compiler from the surface that has no
+ * way to show you whether it worked.
+ */
+function PlanBanner({
+  plan,
+  onOpenCompiler,
+}: {
+  plan: AuPlanStatusDTO;
+  onOpenCompiler: () => void;
+}): JSX.Element | null {
+  if (plan.state === 'ready') return null;
+  return (
+    <div className={styles.planBanner} data-state={plan.state} data-testid="plan-banner">
+      <span className={styles.planIc} aria-hidden="true" data-spin={plan.state === 'compiling'}>
+        <Icon
+          name={
+            plan.state === 'compiling'
+              ? 'Loader'
+              : plan.state === 'failed'
+                ? 'AlertTriangle'
+                : 'Braces'
+          }
+          size={14}
+        />
+      </span>
+      <div className={styles.planBody}>
+        <div className={styles.planTitle}>{plan.label}</div>
+        {plan.detail ? <p className={styles.planDetail}>{plan.detail}</p> : null}
+      </div>
+      {plan.state !== 'compiling' ? (
+        <button
+          type="button"
+          className={cx(au.auBtn, au.auBtnGhost, styles.planBtn)}
+          data-testid="plan-open-compiler"
+          onClick={onOpenCompiler}
+        >
+          <span>Open compiler</span>
+          <Icon name="ArrowRight" size={13} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The question composer. Read-only by construction: it asks about the runs
+ * above and never writes to the automation. The hint line is load-bearing —
+ * it tells a reader who arrived wanting to change something exactly where to
+ * go, which is the affordance the old "Apply to future runs" toggle was
+ * standing in for.
+ */
 function Composer({
   busy,
   onSend,
+  onOpenCompiler,
 }: {
   busy: boolean;
-  onSend: (text: string, applyFuture: boolean) => void;
+  onSend: (text: string) => void;
+  onOpenCompiler: () => void;
 }): JSX.Element {
   const [draft, setDraft] = useState('');
-  const [applyFuture, setApplyFuture] = useState(true);
   const trimmed = draft.trim();
   const submit = (e: FormEvent): void => {
     e.preventDefault();
     if (!trimmed) return;
-    onSend(trimmed, applyFuture);
+    onSend(trimmed);
     setDraft('');
   };
   return (
     <form className={styles.composerWrap} onSubmit={submit}>
-      <div className={styles.steerRow}>
-        <button
-          type="button"
-          className={cx(styles.steerToggle, applyFuture && styles.steerToggleOn)}
-          aria-pressed={applyFuture}
-          disabled={busy}
-          onClick={() => setApplyFuture((v) => !v)}
-        >
-          <span className={styles.steerSwitch} aria-hidden="true" />
-          <span>Apply to future runs</span>
-        </button>
-        <span className={styles.steerHint}>
-          {applyFuture
-            ? 'Becomes a standing instruction the schedule keeps.'
-            : "One-off — won't change the schedule."}
-        </span>
-      </div>
       <div className={styles.composer}>
         <input
           className={styles.composerInput}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Steer this automation, or ask a follow-up…"
-          aria-label="Message this automation"
+          placeholder="Ask about these runs — what failed, what changed, why…"
+          aria-label="Ask about this automation's runs"
           disabled={busy}
         />
         <button
@@ -665,6 +725,13 @@ function Composer({
           <Icon name="Send" size={15} />
         </button>
       </div>
+      <p className={styles.composerHint}>
+        Answers only — nothing here changes the automation.{' '}
+        <button type="button" className={styles.composerLink} onClick={onOpenCompiler}>
+          Open the compiler
+        </button>{' '}
+        to change what it does.
+      </p>
     </form>
   );
 }
@@ -674,13 +741,12 @@ export default function AutomationThreadScreen({
   loadTurnTrace,
   watchTurn,
   onBack,
-  onEdit,
-  onRetryCompile,
+  onOpenCompiler,
   onOpenRun,
   onRunNow,
   onToggleEnabled,
   onDecideConsent,
-  onSendMessage,
+  onAskAboutRuns,
   onCopyWebhook,
   onRotateWebhook,
   onDelete,
@@ -909,6 +975,7 @@ export default function AutomationThreadScreen({
             runs: [
               {
                 runId: turnId,
+                entryKind: 'run',
                 status: 'running',
                 originLabel: 'Manual',
                 startedAt,
@@ -948,7 +1015,7 @@ export default function AutomationThreadScreen({
       if (ok) void reload();
     });
   };
-  const doSend = (text: string, applyFuture: boolean): void => {
+  const doSend = (text: string): void => {
     setSending(true);
     setPendingTrace([
       { kind: 'user', text },
@@ -956,7 +1023,7 @@ export default function AutomationThreadScreen({
     ]);
     const controller = new AbortController();
     streamControllersRef.current.set('composer', controller);
-    void onSendMessage(text, applyFuture, setPendingTrace, controller.signal)
+    void onAskAboutRuns(text, setPendingTrace, controller.signal)
       .then(async (turnId) => {
         if (!turnId || controller.signal.aborted) return;
         await reload();
@@ -996,11 +1063,11 @@ export default function AutomationThreadScreen({
               </div>
             ) : null}
           </div>
-          {/* Header stays quiet in the happy path: the compile state already
-              shows as its own turn in the thread (Compiling… / Plan ready /
-              Compile failed → Retry button), and enable/disable lives in the
-              ⋯ menu. Only "Paused" is worth a persistent header badge, since
-              nothing else signals a stopped automation at a glance. */}
+          {/* Header stays quiet in the happy path: compile state lives in the
+              plan banner below (and its remedies live in the compiler), and
+              enable/disable is in the ⋯ menu. Only "Paused" earns a persistent
+              header badge, since nothing else signals a stopped automation at
+              a glance. */}
           {header.statusKind === 'paused' ? (
             <span
               className={au.auStatus}
@@ -1014,24 +1081,17 @@ export default function AutomationThreadScreen({
               <span>{header.statusLabel}</span>
             </span>
           ) : null}
-          <div className={au.auActions}>
-            {header.statusLabel === 'Compile failed' ? (
-              <button
-                type="button"
-                className={cx(au.auBtn, au.auBtnGhost)}
-                disabled={busy}
-                onClick={() => {
-                  setBusy(true);
-                  void onRetryCompile().finally(() => {
-                    setBusy(false);
-                    void reload();
-                  });
-                }}
-              >
-                <Icon name="Refresh" size={14} />
-                <span>Retry compile</span>
-              </button>
-            ) : null}
+          <div className={cx(au.auActions, styles.headActions)}>
+            <button
+              type="button"
+              className={cx(au.auBtn, au.auBtnGhost)}
+              data-testid="open-compiler"
+              onClick={onOpenCompiler}
+              title="Edit and recompile this automation"
+            >
+              <Icon name="Braces" size={14} />
+              <span>Compiler</span>
+            </button>
             <button
               type="button"
               className={cx(au.auBtn, au.auBtnPrimary)}
@@ -1063,11 +1123,11 @@ export default function AutomationThreadScreen({
                     data-testid="automation-menu-edit"
                     onClick={() => {
                       setMenuOpen(false);
-                      onEdit();
+                      onOpenCompiler();
                     }}
                   >
                     <Icon name="Pencil" size={15} />
-                    <span>Edit setup</span>
+                    <span>Edit &amp; compile</span>
                   </button>
                   <button
                     type="button"
@@ -1110,6 +1170,8 @@ export default function AutomationThreadScreen({
         />
       </div>
 
+      <PlanBanner plan={d.plan} onOpenCompiler={onOpenCompiler} />
+
       {hasPending ? (
         <div className={styles.consentStrip}>
           {consent.parked.map((item) => (
@@ -1147,7 +1209,11 @@ export default function AutomationThreadScreen({
               <Icon name="Activity" size={22} />
             </span>
             <div className={styles.emptyTitle}>No runs yet</div>
-            <p className={styles.emptyHint}>Run now, or wait for the trigger.</p>
+            <p className={styles.emptyHint}>
+              {d.plan.state === 'ready'
+                ? 'Run now, or wait for the trigger.'
+                : 'Nothing has run yet — this automation needs a working plan first.'}
+            </p>
           </div>
         ) : (
           groups.map((g) => (
@@ -1198,7 +1264,9 @@ export default function AutomationThreadScreen({
         ) : null}
       </div>
 
-      {d.automationTurns ? <Composer busy={sending} onSend={doSend} /> : null}
+      {d.automationTurns ? (
+        <Composer busy={sending} onSend={doSend} onOpenCompiler={onOpenCompiler} />
+      ) : null}
     </div>
   );
 }

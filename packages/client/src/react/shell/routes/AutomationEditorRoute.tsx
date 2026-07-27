@@ -30,6 +30,7 @@ import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
 import { openWebhookReveal } from '../webhookReveal.js';
 import { buildAutomationAgentEditorData } from './automationEditorAgentData.js';
+import { loadCompileAttempts, loadTurnSteps, watchTurnSteps } from './automationCompileData.js';
 import { buildCreateAutomationEditorData } from './automationEditorCreateData.js';
 import { loadAutomationEditorData } from './automationEditorData.js';
 import { deriveAutomationHero } from './automationsData.js';
@@ -182,7 +183,13 @@ export default function AutomationEditorRoute({
     <PageScroll>
       <AutomationEditorScreen
         loadData={async (): Promise<AutomationEditorData> => {
-          const loaded = await loadAutomationEditorData({ automationId });
+          // `refIdRef` first: after a create-mode save the automation exists
+          // but the route prop is still undefined, and reloading against the
+          // prop alone would bounce the form back to create mode instead of
+          // handing the owner a live compile rail.
+          const loaded = await loadAutomationEditorData({
+            automationId: refIdRef.current ?? automationId,
+          });
           rowRef.current = loaded.row;
           refIdRef.current = loaded.row?.ref ?? automationId ?? null;
           if (!loaded.row) {
@@ -291,17 +298,27 @@ export default function AutomationEditorRoute({
         }}
         onCompile={async (enableOnSuccess) => {
           const ref = refIdRef.current;
-          if (!ref) return false;
+          if (!ref) return null;
           try {
-            await compileAutomation({ automationId: ref, enableOnSuccess });
-            showToast('Compiling plan…');
-            navigate({ automationId: ref, kind: 'automation-view' });
-            return true;
+            // Returns the turn id and STAYS. The old version navigated to the
+            // run screen, which is why a compile failure was only ever visible
+            // as a red card in a list of runs it did not belong in.
+            const { compileTurnId } = await compileAutomation({
+              automationId: ref,
+              enableOnSuccess,
+            });
+            return compileTurnId;
           } catch (err) {
             showToast(`Could not compile: ${err instanceof Error ? err.message : String(err)}`);
-            return false;
+            return null;
           }
         }}
+        loadCompileAttempts={async () => {
+          const ref = refIdRef.current;
+          return ref ? loadCompileAttempts(ref).catch(() => []) : [];
+        }}
+        loadTurnSteps={loadTurnSteps}
+        watchTurnSteps={watchTurnSteps}
         onSearchEntities={async (term) => {
           // Anchor-grade references come first: the opaque token resolves
           // through core_link_anchor and compiles to a row + field mask.
@@ -353,29 +370,19 @@ export default function AutomationEditorRoute({
           if (!ref) return { manifest: null, handler: null };
           return readAutomationSource(ref);
         }}
-        onOpenBuilder={(seedMessage) => {
-          // The builder route keys on the BARE app id (`row.id`), not the
-          // compound `ref` — useBuilder compares it against `row.ownerApp`
-          // and URL-encodes it as one path segment, so a ref's `/` 500s the
-          // session route.
-          const id = rowRef.current?.id;
-          if (!id) return;
-          navigate({
-            automationId: id,
-            kind: 'automation-builder',
-            ...(seedMessage ? { seedMessage } : {}),
-          });
-        }}
-        onRunNow={async () => {
+        onTestRun={async () => {
           const ref = refIdRef.current;
-          if (!ref) return false;
+          if (!ref) return null;
           try {
+            // A test run stays on the compile screen so its steps land in the
+            // same rail as the compile that produced the plan. Navigating to
+            // the run viewer is an explicit "Full trace" click, not a side
+            // effect of pressing Test.
             const { turnId } = await runAutomationNow({ automationId: ref });
-            navigate({ automationId: ref, kind: 'run-view', runId: turnId });
-            return true;
+            return turnId;
           } catch (err) {
             showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
-            return false;
+            return null;
           }
         }}
         onToggleEnabled={async (next) => {
@@ -407,6 +414,10 @@ export default function AutomationEditorRoute({
         onOpenRun={(runId) => {
           const ref = refIdRef.current;
           if (ref) navigate({ automationId: ref, kind: 'run-view', runId });
+        }}
+        onOpenRuns={() => {
+          const ref = refIdRef.current;
+          if (ref) navigate({ automationId: ref, kind: 'automation-view' });
         }}
         onCopyWebhook={(url) =>
           void navigator.clipboard

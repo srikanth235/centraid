@@ -3,7 +3,6 @@ import type { AppearancePrefs } from '../../../app-shell-context.js';
 import {
   deleteApp,
   deleteAutomation,
-  listAutomations,
   renameInstalledApp,
   runAutomationNow,
   updateAppMeta,
@@ -18,7 +17,7 @@ import PageScroll from '../PageScroll.js';
 import { PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
 import AppInfoModal from './AppInfoModal.js';
-import { collectAutomationRuns } from './automationsData.js';
+import { collectAutomationRuns, type AutomationFeedEntry } from './automationsData.js';
 import { loadAppTemplates } from './templatesData.js';
 import {
   attentionCount,
@@ -51,9 +50,14 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const [infoApp, setInfoApp] = useState<AppMetaResolvedType | null>(null);
 
   const feed = useAsyncData(async () => {
-    const [rows, entries, appTemplates] = await Promise.all([
-      listAutomations().catch(() => [] as CentraidAutomationRow[]),
-      collectAutomationRuns().catch(() => []),
+    // `collectAutomationRuns` returns the automation rows it already fetched.
+    // Asking for `listAutomations()` alongside it pulled the same list twice on
+    // every Home visit — two round trips for one answer.
+    const [runs, appTemplates] = await Promise.all([
+      collectAutomationRuns().catch(() => ({
+        rows: [] as CentraidAutomationRow[],
+        entries: [] as AutomationFeedEntry[],
+      })),
       // Bundled app-template ids are RESERVED (issue #434) and an installed
       // bundled app keeps its blueprint id — so an app whose id is in this set
       // is a bundled install (serves in place), which gets Uninstall + App
@@ -61,7 +65,11 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       // Delete. Best-effort: an empty set degrades every app to code-store.
       loadAppTemplates().catch(() => []),
     ]);
-    return { rows, entries, bundledIds: new Set(appTemplates.map((t) => t.id)) };
+    return {
+      rows: runs.rows,
+      entries: runs.entries,
+      bundledIds: new Set(appTemplates.map((t) => t.id)),
+    };
   });
 
   const bundledIds: ReadonlySet<string> =

@@ -18,7 +18,6 @@ const api = vi.hoisted(() => ({
   listAutomationTurns: vi.fn(),
   readAutomationTurnExpanded: vi.fn(),
   readGatewayCapabilities: vi.fn(),
-  reviseAutomation: vi.fn(),
   rotateAutomationWebhookSecret: vi.fn(),
   runAutomationNow: vi.fn(),
   setAutomationEnabled: vi.fn(),
@@ -157,7 +156,6 @@ beforeEach(() => {
     items: [item],
   });
   api.readGatewayCapabilities.mockReset().mockResolvedValue({ automationTurns: true });
-  api.reviseAutomation.mockReset().mockResolvedValue({ compileTurnId: 'compile-1' });
   api.rotateAutomationWebhookSecret.mockReset().mockResolvedValue({
     webhook: { id: 'hook-1', secret: 'secret-2', url: 'https://gateway.test/hook-1' },
   });
@@ -260,8 +258,7 @@ describe('AutomationViewRoute', () => {
     });
 
     bridge.onBack();
-    bridge.onEdit();
-    await expect(bridge.onRetryCompile()).resolves.toBe(true);
+    bridge.onOpenCompiler();
     bridge.onOpenRun('turn-1');
     await expect(bridge.loadTurnTrace('turn-1')).resolves.toEqual([{ kind: 'ai', text: 'cold' }]);
 
@@ -285,10 +282,9 @@ describe('AutomationViewRoute', () => {
 
     const conversationalMessages: unknown[] = [];
     await expect(
-      bridge.onSendMessage(
+      bridge.onAskAboutRuns(
         'What happened?',
-        false,
-        (messages) => conversationalMessages.push(messages),
+        (messages: unknown) => conversationalMessages.push(messages),
         new AbortController().signal,
       ),
     ).resolves.toBe('turn-3');
@@ -300,20 +296,9 @@ describe('AutomationViewRoute', () => {
     );
     expect(conversationalMessages.length).toBeGreaterThan(1);
 
-    const revisionMessages: unknown[] = [];
-    await expect(
-      bridge.onSendMessage(
-        'Use shorter summaries',
-        true,
-        (messages) => revisionMessages.push(messages),
-        new AbortController().signal,
-      ),
-    ).resolves.toBe('compile-1');
-    expect(api.reviseAutomation).toHaveBeenCalledWith({
-      automationId: 'daily/daily',
-      message: 'Use shorter summaries',
-    });
-    expect(revisionMessages.length).toBeGreaterThan(0);
+    // The run screen cannot revise or compile: those endpoints are not reachable
+    // from this route at all any more (they live on the editor route).
+    expect(api.compileAutomation).not.toHaveBeenCalled();
 
     await expect(bridge.onRotateWebhook()).resolves.toBe(true);
     await expect(bridge.onDelete()).resolves.toBe(true);
@@ -326,10 +311,9 @@ describe('AutomationViewRoute', () => {
     await expect(bridge.loadData()).resolves.toBeNull();
     await expect(bridge.onRunNow()).resolves.toBeNull();
     await expect(bridge.onToggleEnabled(true)).resolves.toBe(false);
-    await expect(bridge.onRetryCompile()).resolves.toBe(false);
     await expect(bridge.onDelete()).resolves.toBe(false);
     await expect(
-      bridge.onSendMessage('hello', false, vi.fn(), new AbortController().signal),
+      bridge.onAskAboutRuns('hello', vi.fn(), new AbortController().signal),
     ).resolves.toBeNull();
   });
 });

@@ -22,15 +22,18 @@ function makeProps(over: Partial<AutomationEditorBridgeProps> = {}): AutomationE
   return {
     loadData: vi.fn().mockResolvedValue(makeData()),
     onCancel: vi.fn(),
-    onCompile: vi.fn().mockResolvedValue(true),
+    onCompile: vi.fn().mockResolvedValue(null),
     onCopyWebhook: vi.fn(),
     onDecideConsent: vi.fn().mockResolvedValue(true),
     onDelete: vi.fn().mockResolvedValue(false),
-    onOpenBuilder: vi.fn(),
     onOpenRun: vi.fn(),
+    onOpenRuns: vi.fn(),
+    loadCompileAttempts: vi.fn().mockResolvedValue([]),
+    loadTurnSteps: vi.fn().mockResolvedValue([]),
+    watchTurnSteps: vi.fn().mockResolvedValue({ settled: true, ok: true }),
+    onTestRun: vi.fn().mockResolvedValue(null),
     onReadSource: vi.fn().mockResolvedValue({ handler: null, manifest: null }),
     onRotateWebhook: vi.fn().mockResolvedValue(true),
-    onRunNow: vi.fn().mockResolvedValue(true),
     onSearchEntities: vi.fn().mockResolvedValue([]),
     onSave: vi.fn().mockResolvedValue(true),
     onToggleEnabled: vi.fn().mockResolvedValue(true),
@@ -73,12 +76,6 @@ function setValue(el: HTMLInputElement | HTMLTextAreaElement, value: string): vo
   });
 }
 
-function tab(el: HTMLElement, label: string): HTMLButtonElement {
-  return [...el.querySelectorAll('[role="tab"]')].find(
-    (b) => b.textContent === label,
-  ) as HTMLButtonElement;
-}
-
 function button(el: HTMLElement, label: string): HTMLButtonElement {
   return [...el.querySelectorAll('button')].find(
     (b) => b.textContent === label,
@@ -103,12 +100,14 @@ describe('AutomationEditorScreen — create mode', () => {
     const props = makeProps();
     const el = await mount(props);
 
-    // Same column layout as edit: head, Name, Instructions, Triggers, tabs.
+    // Same workbench layout as edit: head, Name, Instructions, Triggers,
+    // Notifications — plus the compile rail, which explains itself in create
+    // mode rather than offering buttons for an automation that doesn't exist.
     expect(el.querySelector('[data-mode="create"]')).toBeTruthy();
     expect(el.textContent).toContain('New Automation');
     expect(el.textContent).toContain('Draft');
     expect(el.textContent).toContain('Triggers');
-    expect(el.textContent).toContain('Without a trigger, this only runs when you press Run now');
+    expect(el.textContent).toContain('Without a trigger, this only runs when you fire it by hand');
     // Connectors live on the Instructions toolbar, not as a bottom tab.
     expect(
       [...el.querySelectorAll('button')].some((b) => b.textContent?.includes('Connectors')),
@@ -116,15 +115,12 @@ describe('AutomationEditorScreen — create mode', () => {
     expect(el.textContent).not.toContain('Behavior');
     expect(el.textContent).not.toContain('Model · Auto');
     expect(el.textContent).toContain('Notifications');
-    expect(el.textContent).toContain('Plan');
     expect(el.textContent).not.toContain('Skills');
-    // Bottom tabs are Notifications + Plan only.
-    const tabLabels = [...el.querySelectorAll('[role="tab"]')].map((b) => b.textContent);
-    expect(tabLabels).toEqual(['Notifications', 'Plan']);
-    // Create has no Run now / delete chrome.
-    expect(
-      [...el.querySelectorAll('button')].find((b) => b.textContent === 'Run now'),
-    ).toBeUndefined();
+    // Create mode: the rail states the plan's absence and offers no compile or
+    // test button, because there is nothing on the gateway to compile yet.
+    expect(el.querySelector('[data-testid="compile-verdict"]')?.textContent).toBe('Not compiled');
+    expect(el.querySelector('[data-testid="compile-now"]')).toBeNull();
+    expect(el.querySelector('[data-testid="compile-test-run"]')).toBeNull();
 
     const nameInput = el.querySelector('input[placeholder="My Automation"]') as HTMLInputElement;
     const instructionsField = el.querySelector('textarea') as HTMLTextAreaElement;
@@ -147,10 +143,7 @@ describe('AutomationEditorScreen — create mode', () => {
     const cronInput = el.querySelector('input[placeholder="0 7 * * *"]') as HTMLInputElement;
     setValue(cronInput, '0 8 * * MON');
 
-    // Notifications live in the same tab as edit (select, not a separate card).
-    await act(async () =>
-      tab(el, 'Notifications').dispatchEvent(new MouseEvent('click', { bubbles: true })),
-    );
+    // Notifications is a plain section now (select, not a separate card).
     const notifySelect = el.querySelector(
       'select[aria-label="Notification preference"]',
     ) as HTMLSelectElement;
@@ -167,8 +160,10 @@ describe('AutomationEditorScreen — create mode', () => {
       name: 'Weekly digest',
       triggers: [{ expr: '0 8 * * MON', kind: 'cron' }],
     });
-    expect(props.onOpenBuilder).not.toHaveBeenCalled();
     expect(props.onCompile).toHaveBeenCalledWith(true);
+    // Save compiles WITHOUT leaving: the compile rail is still on screen, so a
+    // failure has somewhere to be read.
+    expect(el.querySelector('[data-testid="automation-compile-pane"]')).not.toBeNull();
   });
 
   it('only offers Schedule and Data change as addable triggers', async () => {
@@ -227,13 +222,16 @@ describe('AutomationEditorScreen — edit mode', () => {
     });
   }
 
-  it('shows identity chrome, Run now, and saves name/instructions/triggers', async () => {
+  it('shows identity chrome, the compile rail, and saves name/instructions/triggers', async () => {
     const props = makeProps({ loadData: vi.fn().mockResolvedValue(editData()) });
     const el = await mount(props);
 
     expect(el.textContent).toContain('Daily issues');
     expect(el.textContent).toContain('Active');
-    expect(button(el, 'Run now')).toBeTruthy();
+    // Firing the plan lives in the compile rail as "Test run", next to the
+    // compile that produced it — not as a third "Run now" in the header.
+    expect(button(el, 'Run now')).toBeUndefined();
+    expect(el.querySelector('[data-testid="compile-test-run"]')).toBeTruthy();
 
     const nameInput = el.querySelector('input[placeholder="My Automation"]') as HTMLInputElement;
     setValue(nameInput, 'Daily issues v2');
@@ -288,9 +286,8 @@ describe('AutomationEditorScreen — edit mode', () => {
     expect(el.querySelector('[role="switch"]')).toBeTruthy();
     expect(el.textContent).not.toContain('Writes park for your review');
 
-    await act(async () =>
-      tab(el, 'Notifications').dispatchEvent(new MouseEvent('click', { bubbles: true })),
-    );
+    // Notifications is a plain section now — the Plan tab it used to sit
+    // beside moved into the compile rail, leaving nothing to tab between.
     expect(el.textContent).toContain('automation-a/notify-owner');
     expect(el.querySelector('select[aria-label="Notification preference"]')).toBeTruthy();
 

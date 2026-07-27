@@ -24,6 +24,7 @@ import {
 } from '../../../gateway-client.js';
 import type {
   AuConsentDTO,
+  AuPlanStatusDTO,
   AuStatusKind,
   AutomationThreadData,
   AutomationThreadHeaderDTO,
@@ -153,12 +154,69 @@ function buildThreadRun(run: CentraidAutomationTurnRecord): ThreadRunDTO {
     dateGroup: dateGroupLabel(run.startedAt),
     durationMs: run.endedAt !== undefined ? run.endedAt - run.startedAt : null,
     endedAt: run.endedAt ?? null,
+    entryKind: run.triggerKind === 'interactive' ? 'ask' : 'run',
     originLabel: triggerOriginLabel(run).label,
     runId: run.turnId,
     startedAt: run.startedAt,
     status,
     summary: run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
   };
+}
+
+/**
+ * What the run screen may say about the compiled plan.
+ *
+ * The latest compile turn is the whole story: in flight ⇒ the plan is being
+ * rebuilt, failed ⇒ executions are running against a stale plan (or none),
+ * ok ⇒ nothing to report. `never` is a real state, not an error — an
+ * automation that has been saved but never compiled cannot run at all, and
+ * saying so here is kinder than an empty run list.
+ *
+ * Deliberately inert: no turn id, no retry handle. Every remedy the banner
+ * offers is a link to the compiler screen, which owns compiling.
+ */
+function buildPlanStatus(
+  compiles: readonly CentraidAutomationTurnRecord[],
+  hasRun: boolean,
+): AuPlanStatusDTO {
+  const latest = compiles[0];
+  if (!latest) {
+    return hasRun
+      ? { detail: null, label: 'Plan ready', state: 'ready' }
+      : {
+          detail: 'This automation has never been compiled, so it has nothing to run yet.',
+          label: 'No plan yet',
+          state: 'never',
+        };
+  }
+  if (latest.endedAt === undefined) {
+    return {
+      detail: 'Building a new plan from the instructions.',
+      label: 'Compiling…',
+      state: 'compiling',
+    };
+  }
+  if (!latest.ok) {
+    return {
+      detail: latest.error ?? 'The compiler could not turn these instructions into a plan.',
+      label: 'Compile failed',
+      state: 'failed',
+    };
+  }
+  return {
+    detail: `Compiled ${relativeCompileTime(latest.startedAt)}.`,
+    label: 'Plan ready',
+    state: 'ready',
+  };
+}
+
+function relativeCompileTime(startedAt: number): string {
+  const mins = Math.round((Date.now() - startedAt) / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
 }
 
 /**
@@ -180,21 +238,22 @@ export async function loadAutomationThreadData(input: {
   if (!row) return null;
 
   const hero = deriveAutomationHero(row, input.gatewayOrigin);
-  const latestCompile = runs.find((run) => run.triggerKind === 'compile');
-  const statusKind = latestCompile
-    ? latestCompile.endedAt === undefined
-      ? 'running'
-      : latestCompile.ok
-        ? 'success'
-        : 'failed'
-    : (auStatusForRow(row.enabled, runs.length > 0) as AuStatusKind);
-  const statusLabel = latestCompile
-    ? latestCompile.endedAt === undefined
-      ? 'Compiling…'
-      : latestCompile.ok
-        ? 'Plan ready'
-        : 'Compile failed'
-    : AU_STATUS_LABEL[statusKind];
+  // The one place the two surfaces are cut apart. A compile turn is the
+  // COMPILER working, not the automation running: it never belongs in the run
+  // history, where it used to sit as a "Compile" card among real executions.
+  // It is distilled into `plan` (an inert status the run screen may report and
+  // must not act on) and otherwise handed to the compiler screen, which reads
+  // the same turns as steps via automationCompileData.ts.
+  const compiles = runs
+    .filter((run) => run.triggerKind === 'compile')
+    .sort((a, b) => b.startedAt - a.startedAt);
+  const threadTurns = runs.filter((run) => run.triggerKind !== 'compile');
+  const executions = threadTurns.filter((run) => run.triggerKind !== 'interactive');
+  // Header status now reports the AUTOMATION, not its last compile — the plan
+  // banner carries compile state, and duplicating it in the header badge is
+  // what made "Compile failed" read like a run outcome.
+  const statusKind = auStatusForRow(row.enabled, executions.length > 0) as AuStatusKind;
+  const statusLabel = AU_STATUS_LABEL[statusKind];
 
   const header: AutomationThreadHeaderDTO = {
     description: row.manifest.description ?? null,
@@ -228,7 +287,8 @@ export async function loadAutomationThreadData(input: {
         grants,
       ),
       header,
-      runs: runs
+      plan: buildPlanStatus(compiles, executions.length > 0),
+      runs: threadTurns
         .slice()
         .sort((a, b) => b.startedAt - a.startedAt)
         .map(buildThreadRun),

@@ -315,7 +315,7 @@ describe('AutomationEditorRoute', () => {
     );
     expect(helpers.openWebhookReveal).toHaveBeenCalled();
 
-    await expect(bridge.onCompile(true)).resolves.toBe(true);
+    await expect(bridge.onCompile(true)).resolves.toBe('compile-1');
     await expect(bridge.onSearchEntities('invoice')).resolves.toHaveLength(3);
     await expect(bridge.loadEntityTypes?.()).resolves.toContain('business.invoice');
     const catalog = await bridge.loadConnectorCatalog?.();
@@ -340,8 +340,11 @@ describe('AutomationEditorRoute', () => {
       handler: 'export default {}',
     });
 
-    bridge.onOpenBuilder('tighten the prompt');
-    await expect(bridge.onRunNow()).resolves.toBe(true);
+    // A test run returns its turn id and stays put — no navigation.
+    await expect(bridge.onTestRun()).resolves.toBe('turn-1');
+    // No `onAssist`: the compile screen exposes exactly one editable surface
+    // (the instructions field), so there is no conversational edit path here.
+    expect('onAssist' in bridge).toBe(false);
     await expect(bridge.onToggleEnabled(false)).resolves.toBe(true);
     await expect(bridge.onDecideConsent('outbox', 'item-1', 'approve', true)).resolves.toBe(true);
     bridge.onOpenRun('turn-1');
@@ -350,11 +353,6 @@ describe('AutomationEditorRoute', () => {
     await expect(bridge.onRotateWebhook()).resolves.toBe(true);
     await expect(bridge.onDelete()).resolves.toBe(true);
 
-    expect(actions.navigate).toHaveBeenCalledWith({
-      automationId: 'daily',
-      kind: 'automation-builder',
-      seedMessage: 'tighten the prompt',
-    });
     expect(actions.navigate).toHaveBeenCalledWith({ kind: 'automations' });
   });
 

@@ -13,17 +13,25 @@ import type {
 import { Button, Icon, IconButton } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
 import au from '../styles/automation.module.css';
-import inlineEmptyCss from '../styles/inlineEmpty.module.css';
+import AutomationCompilePane from './AutomationCompilePane.js';
 import { AutomationEditorConnectorsPicker } from './AutomationEditorConnectorsPicker.js';
 import { AutomationEditorAgentPicker } from './AutomationEditorAgentPicker.js';
 import styles from './AutomationEditorScreen.module.css';
 
-// Automation editor — shared create/edit form (Automations UI revamp, see
-// receipts/issue-387-automations-ui-revamp.md). Name, Instructions (manifest
-// `prompt` — the source of intent the compiler compiles) with a Connectors
-// catalog picker on the toolbar, Schedule/Data triggers only, and
-// Notifications / Plan tabs. Connector OAuth + API-key attach reuses the
-// same gateway flows as Settings → Connectors.
+// The COMPILE SCREEN — one of the two automation surfaces, and the only one
+// that may change an automation.
+//
+// Left column: the source of intent (Name, Instructions, Triggers,
+// Connectors, Notifications) — and, at its foot, the save bar that commits it.
+// Right column: the compiler's readout (AutomationCompilePane) — compile in
+// place, watch the steps, read the failure, test the plan.
+//
+// One writer, one field. INSTRUCTIONS is the only prose surface in the product
+// that changes what an automation does; the rail reports on it and never
+// edits it, and the run screen neither edits nor compiles. That is the whole
+// division. Compiling used to be a side effect of Save that navigated straight
+// to the run screen, which is why a failed compile had nowhere to be read —
+// Save now compiles WITHOUT leaving, and the rail owns the loop.
 
 type TriggerKind = 'cron' | 'webhook' | 'condition' | 'data' | 'event';
 /** One row of a condition trigger's `where` builder. `value` is the raw text
@@ -42,13 +50,6 @@ type TriggerDraft = {
   event: string;
   filterRepo: string;
 };
-type TabId = 'notifications' | 'plan';
-
-const TABS: readonly { id: TabId; label: string }[] = [
-  { id: 'notifications', label: 'Notifications' },
-  { id: 'plan', label: 'Plan' },
-];
-
 // Mirrors packages/automation/src/manifest/manifest.ts `CONDITION_OPS` — kept
 // in sync by hand since the renderer bundle doesn't pull in the automation
 // runtime package (main-process-only dependency today), same as
@@ -307,21 +308,21 @@ function NotificationsPanel({
 }): JSX.Element {
   return (
     <div className={styles.notifPanel}>
-      <label className={styles.subField}>
-        <span className={styles.microLabel}>Failed runs</span>
-        <select
-          className={styles.notifySelect}
-          value={notifyMode}
-          aria-label="Notification preference"
-          onChange={(e) => onNotifyMode(e.target.value as NotifyMode)}
-        >
-          {NOTIFY_OPTIONS.map((opt) => (
-            <option key={opt.id} value={opt.id}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      {/* No eyebrow label here: the section heading right above already says
+          "Notifications — what happens when a run fails". A third restatement
+          on the control itself was pure line noise. */}
+      <select
+        className={styles.notifySelect}
+        value={notifyMode}
+        aria-label="Notification preference"
+        onChange={(e) => onNotifyMode(e.target.value as NotifyMode)}
+      >
+        {NOTIFY_OPTIONS.map((opt) => (
+          <option key={opt.id} value={opt.id}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
       <p className={styles.notifLine}>
         {onFailure ? (
           <>
@@ -342,124 +343,6 @@ function NotificationsPanel({
   );
 }
 
-// Minimal, dependency-free tokenizer — enough to give the read-only plan
-// viewer life without pulling in a highlighter. Anything it doesn't match
-// renders as plain text, so mis-tokenizing only ever means "less colour".
-const CODE_TOKEN =
-  /(\/\/[^\n]*)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(-?\b\d+(?:\.\d+)?\b)|(\b(?:const|let|var|function|return|if|else|for|of|in|await|async|import|export|from|new|class|extends|try|catch|throw|typeof|true|false|null|undefined)\b)/g;
-
-function highlightLine(line: string): (string | JSX.Element)[] {
-  const out: (string | JSX.Element)[] = [];
-  let last = 0;
-  let key = 0;
-  for (const m of line.matchAll(CODE_TOKEN)) {
-    const idx = m.index ?? 0;
-    if (idx > last) out.push(line.slice(last, idx));
-    const cls = m[1] ? styles.tkCom : m[2] ? styles.tkStr : m[3] ? styles.tkNum : styles.tkKw;
-    out.push(
-      <span key={key++} className={cls}>
-        {m[0]}
-      </span>,
-    );
-    last = idx + m[0].length;
-  }
-  if (last < line.length) out.push(line.slice(last));
-  return out;
-}
-
-function PlanPanel({
-  mode,
-  source,
-  file,
-  onFile,
-}: {
-  mode: 'create' | 'edit';
-  source: { manifest: string | null; handler: string | null } | null;
-  file: 'handler' | 'manifest';
-  onFile: (f: 'handler' | 'manifest') => void;
-}): JSX.Element {
-  const [copied, setCopied] = useState(false);
-  if (mode === 'create') {
-    return (
-      <div className={inlineEmptyCss.inlineEmpty}>
-        <p>
-          The compiler turns your instructions into a deterministic plan when you create the
-          automation. Its <code>handler.js</code> and <code>automation.json</code> will show here.
-        </p>
-      </div>
-    );
-  }
-  if (!source) {
-    return (
-      <div className={inlineEmptyCss.inlineEmpty}>
-        <p>Loading compiled plan…</p>
-      </div>
-    );
-  }
-  const code = file === 'handler' ? source.handler : source.manifest;
-  const lang = file === 'handler' ? 'JavaScript' : 'JSON';
-  const copy = (): void => {
-    if (!code) return;
-    void navigator.clipboard.writeText(code).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    });
-  };
-  const lines = (code ?? '').split('\n');
-  return (
-    <div className={styles.codeViewer}>
-      <div className={styles.codeChrome}>
-        <div className={styles.codeTabs} role="tablist" aria-label="Compiled files">
-          {(['handler', 'manifest'] as const).map((f) => (
-            <button
-              key={f}
-              type="button"
-              role="tab"
-              aria-selected={file === f}
-              className={cx(styles.tab, styles.codeTab)}
-              data-active={String(file === f)}
-              onClick={() => onFile(f)}
-            >
-              {f === 'handler' ? 'handler.js' : 'automation.json'}
-            </button>
-          ))}
-        </div>
-        <div className={styles.codeMeta}>
-          <span className={styles.codeLang}>{lang}</span>
-          <button
-            type="button"
-            className={styles.codeCopy}
-            disabled={!code}
-            onClick={copy}
-            title="Copy to clipboard"
-          >
-            <Icon name="Copy" size={12} />
-            <span>{copied ? 'Copied' : 'Copy'}</span>
-          </button>
-        </div>
-      </div>
-      {code ? (
-        <div className={styles.codeBody}>
-          <pre className={styles.codePre}>
-            {lines.map((ln, i) => (
-              <div key={i} className={styles.codeLine}>
-                <span className={styles.codeGutter} aria-hidden="true">
-                  {i + 1}
-                </span>
-                <code className={styles.codeText}>{ln ? highlightLine(ln) : '\u00A0'}</code>
-              </div>
-            ))}
-          </pre>
-        </div>
-      ) : (
-        <div className={styles.codeEmpty}>
-          <p>Not compiled yet — save the automation to compile its plan.</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function AutomationEditorScreen({
   loadData,
   onSave,
@@ -471,10 +354,15 @@ export default function AutomationEditorScreen({
   beginAuthorize,
   showToast,
   onReadSource,
-  onRunNow,
+  loadCompileAttempts,
+  loadTurnSteps,
+  watchTurnSteps,
+  onTestRun,
   onToggleEnabled,
   onCopyWebhook,
   onRotateWebhook,
+  onOpenRun,
+  onOpenRuns,
   onDelete,
   onCancel,
 }: AutomationEditorBridgeProps): JSX.Element {
@@ -490,14 +378,11 @@ export default function AutomationEditorScreen({
     Array<{ type: string; id: string; title: string | null; subtitle: string | null }>
   >([]);
   const [enabled, setEnabled] = useState(false);
-  const [tab, setTab] = useState<TabId>('notifications');
-  const [source, setSource] = useState<{ manifest: string | null; handler: string | null } | null>(
-    null,
-  );
-  const [sourceFile, setSourceFile] = useState<'handler' | 'manifest'>('handler');
   const [saving, setSaving] = useState(false);
-  const [running, setRunning] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  /** Bumped after a successful save so the compile rail compiles what was
+   *  just persisted. See `AutomationCompilePane`'s `compileNonce`. */
+  const [compileNonce, setCompileNonce] = useState(0);
   const [toggleBusy, setToggleBusy] = useState(false);
   const [regenBusy, setRegenBusy] = useState(false);
   const [addTriggerOpen, setAddTriggerOpen] = useState(false);
@@ -601,22 +486,6 @@ export default function AutomationEditorScreen({
   useEffect(() => {
     if (instructionsRef.current) autogrow(instructionsRef.current);
   }, [instructions]);
-
-  // Lazy-load the compiled plan the first time the Plan tab is opened.
-  useEffect(() => {
-    if (tab !== 'plan' || source) return;
-    let active = true;
-    void onReadSource()
-      .then((s) => {
-        if (active) setSource(s);
-      })
-      .catch(() => {
-        if (active) setSource({ handler: null, manifest: null });
-      });
-    return () => {
-      active = false;
-    };
-  }, [tab, source, onReadSource]);
 
   useEffect(() => {
     if (!mention || mention.query.length < 1) {
@@ -803,20 +672,26 @@ export default function AutomationEditorScreen({
       });
       if (ok) {
         baselineInstructionsRef.current = instructions;
-        if (d.mode === 'create' || changed) await onCompile(d.mode === 'create');
+        // Save no longer navigates. A create always needs its first compile;
+        // an edit only when the instructions actually changed (renaming or
+        // retiming a trigger does not invalidate the compiled handler). The
+        // rail takes it from here — the owner stays on this screen and
+        // watches, which is the whole point of the split.
+        if (d.mode === 'create') {
+          // The automation exists on the gateway now — reload so the form
+          // leaves create mode and the rail becomes live. Compiling is left
+          // to the rail's own nonce below, after the reload settles.
+          await reload();
+          setCompileNonce((n) => n + 1);
+        } else if (changed) {
+          setCompileNonce((n) => n + 1);
+        }
       }
     } catch {
       // Validation errors are rendered next to their field.
     } finally {
       setSaving(false);
     }
-  };
-
-  const doRun = (): void => {
-    setRunning(true);
-    void onRunNow().then((started) => {
-      if (!started) setRunning(false);
-    });
   };
 
   const doDelete = (): void => {
@@ -1351,7 +1226,10 @@ export default function AutomationEditorScreen({
       <textarea
         ref={instructionsRef}
         className={styles.textarea}
-        rows={6}
+        // `rows` is the FLOOR `autogrow` can shrink to: a textarea's
+        // scrollHeight never drops below its row count, so rows={6} pinned a
+        // two-line instruction to a six-line well of empty space.
+        rows={3}
         value={instructions}
         onChange={onInstructionsChange}
         placeholder="Read my unread emails and summarize…"
@@ -1484,6 +1362,8 @@ export default function AutomationEditorScreen({
     </div>
   );
 
+  const dirty = instructions !== baselineInstructionsRef.current;
+
   return (
     <div className={styles.page} data-testid="automation-editor" data-mode={d.mode}>
       <div className={styles.head} data-hue={hue}>
@@ -1496,7 +1376,7 @@ export default function AutomationEditorScreen({
               {name.trim() || (isCreate ? 'New Automation' : d.name)}
             </div>
             <span
-              className={au.auStatus}
+              className={cx(au.auStatus, styles.headStatus)}
               data-tone={isCreate ? 'draft' : enabled ? 'active' : 'paused'}
             >
               <span className={au.auStatusIc} aria-hidden="true">
@@ -1526,14 +1406,10 @@ export default function AutomationEditorScreen({
                   <span className={styles.switchTrack} aria-hidden="true" />
                 </span>
               </label>
-              <Button
-                variant="soft"
-                size="sm"
-                icon="Play"
-                label={running ? 'Starting…' : 'Run now'}
-                disabled={running}
-                onClick={doRun}
-              />
+              {/* No "Run now" here. Firing the plan is a COMPILE-LOOP act on
+                  this screen ("Test run", in the rail, next to the compile
+                  that produced the plan) and a history act on the run screen.
+                  A third copy in the header only blurred which one you got. */}
               <IconButton
                 icon="Trash"
                 ariaLabel="Delete automation"
@@ -1546,113 +1422,131 @@ export default function AutomationEditorScreen({
         </div>
       </div>
 
-      <label className={styles.field}>
-        <span className={styles.fieldLabel}>Name</span>
-        <input
-          ref={nameInputRef}
-          className={styles.input}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="My Automation"
-          aria-label="Name"
-          required
-        />
-      </label>
+      {/* The workbench: intent on the left, the compiler's readout on the
+          right. The left column is the ONLY editable surface on this screen,
+          which is why its save bar lives INSIDE it rather than spanning the
+          whole workbench — the buttons belong under the form they commit, not
+          stranded out past the rail. Below the breakpoint the rail simply
+          stacks under the form and the loop reads top-to-bottom. */}
+      <div className={styles.workbench}>
+        <div className={styles.source}>
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Name</span>
+            <input
+              ref={nameInputRef}
+              className={styles.input}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My Automation"
+              aria-label="Name"
+              required
+            />
+          </label>
 
-      {instructionsBlock}
+          {instructionsBlock}
 
-      <section className={styles.section}>
-        <div className={styles.sectionHeading}>
-          <div>
-            <h2 className={styles.sectionTitle}>Triggers</h2>
-            <p className={styles.sectionHint}>
-              Optional. Without a trigger, this only runs when you press Run now.
-            </p>
-          </div>
-          {addTriggerMenu}
-        </div>
-        {triggers.length === 0 ? (
-          <div className={styles.triggerEmptyCard}>
-            <p className={styles.triggerEmpty}>
-              Manual only for now — add a schedule or watch vault data to run automatically.
-            </p>
-            <div className={styles.triggerEmptyActions}>
-              <button
-                type="button"
-                className={styles.triggerEmptyBtn}
-                onClick={() => setTriggers((t) => [...t, draftTrigger('cron')])}
-              >
-                + Schedule
-              </button>
-              <button
-                type="button"
-                className={styles.triggerEmptyBtn}
-                onClick={() => setTriggers((t) => [...t, draftTrigger('data')])}
-              >
-                + Data change
-              </button>
+          <section className={styles.section}>
+            <div className={styles.sectionHeading}>
+              <div>
+                <h2 className={styles.sectionTitle}>Triggers</h2>
+                <p className={styles.sectionHint}>
+                  Optional. Without a trigger, this only runs when you fire it by hand.
+                </p>
+              </div>
+              {addTriggerMenu}
             </div>
-          </div>
-        ) : null}
-        {renderTriggerRows()}
-      </section>
+            {triggers.length === 0 ? (
+              <div className={styles.triggerEmptyCard}>
+                <p className={styles.triggerEmpty}>
+                  Manual only for now — add a schedule or watch vault data to run automatically.
+                </p>
+                <div className={styles.triggerEmptyActions}>
+                  <button
+                    type="button"
+                    className={styles.triggerEmptyBtn}
+                    onClick={() => setTriggers((t) => [...t, draftTrigger('cron')])}
+                  >
+                    + Schedule
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.triggerEmptyBtn}
+                    onClick={() => setTriggers((t) => [...t, draftTrigger('data')])}
+                  >
+                    + Data change
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {renderTriggerRows()}
+          </section>
 
-      <section className={styles.section}>
-        <nav className={styles.tabs} role="tablist" aria-label="Automation details">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.id}
-              className={styles.tab}
-              data-active={String(tab === t.id)}
-              onClick={() => setTab(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </nav>
-        <div className={styles.tabPanel}>
-          {tab === 'notifications' ? (
+          <section className={styles.section}>
+            <div className={styles.sectionHeading}>
+              <div>
+                <h2 className={styles.sectionTitle}>Notifications</h2>
+                <p className={styles.sectionHint}>What happens when a run fails.</p>
+              </div>
+            </div>
             <NotificationsPanel
               onFailure={d.onFailure ?? null}
               model={d.model ?? null}
               notifyMode={notifyMode}
               onNotifyMode={setNotifyMode}
             />
-          ) : null}
-          {tab === 'plan' ? (
-            <PlanPanel mode={d.mode} source={source} file={sourceFile} onFile={setSourceFile} />
-          ) : null}
-        </div>
-      </section>
+          </section>
 
-      <div className={styles.footer}>
-        <p className={styles.footerHint}>
-          {!name.trim()
-            ? 'Name required to save'
-            : isCreate
-              ? 'Creates a draft plan from your instructions'
-              : 'Saves name, instructions, and triggers'}
-        </p>
-        <div className={styles.footerActions}>
-          <Button variant="ghost" label="Cancel" onClick={onCancel} />
-          <Button
-            variant="primary"
-            label={
-              isCreate
-                ? saving
-                  ? 'Creating…'
-                  : 'Create automation'
-                : saving
-                  ? 'Saving…'
-                  : 'Save changes'
-            }
-            disabled={!name.trim() || saving}
-            onClick={() => void doSave()}
-          />
+          <div className={styles.footer}>
+            <p className={styles.footerHint}>
+              {!name.trim()
+                ? 'Name required to save'
+                : isCreate
+                  ? 'Saves, then compiles your instructions into a plan'
+                  : dirty
+                    ? 'Saves and recompiles — the instructions changed'
+                    : 'Saves name, triggers, and connectors'}
+            </p>
+            <div className={styles.footerActions}>
+              <Button variant="ghost" label="Cancel" onClick={onCancel} />
+              <Button
+                variant="primary"
+                label={
+                  isCreate
+                    ? saving
+                      ? 'Creating…'
+                      : 'Create automation'
+                    : saving
+                      ? 'Saving…'
+                      : dirty
+                        ? 'Save & recompile'
+                        : 'Save changes'
+                }
+                disabled={!name.trim() || saving}
+                onClick={() => void doSave()}
+              />
+            </div>
+          </div>
         </div>
+
+        <AutomationCompilePane
+          mode={d.mode}
+          dirty={dirty}
+          compileNonce={compileNonce}
+          onCompile={() => onCompile(!enabled)}
+          onTestRun={onTestRun}
+          onEditInstructions={() => {
+            const el = instructionsRef.current;
+            if (!el) return;
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.focus();
+          }}
+          loadAttempts={loadCompileAttempts}
+          loadTurnSteps={loadTurnSteps}
+          watchTurnSteps={watchTurnSteps}
+          onReadSource={onReadSource}
+          onOpenRun={onOpenRun}
+          onOpenRuns={onOpenRuns}
+        />
       </div>
     </div>
   );

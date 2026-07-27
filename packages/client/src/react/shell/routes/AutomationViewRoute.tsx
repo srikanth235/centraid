@@ -1,21 +1,14 @@
 import { type JSX, useRef } from 'react';
-import type { TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
 import {
   auth,
-  compileAutomation,
   deleteAutomation,
   listAutomationTurns,
-  readAutomationTurnExpanded,
   readGatewayCapabilities,
-  reviseAutomation,
   rotateAutomationWebhookSecret,
   runAutomationNow,
   setAutomationEnabled,
   streamAutomationConversationTurn,
-  streamAutomationTurn,
-  type AutomationTurnStreamEvent,
 } from '../../../gateway-client.js';
-import type { AsstMsgDTO } from '../../screen-contracts.js';
 import AutomationThreadScreen, {
   type AutomationThreadDataEx,
 } from '../../screens/AutomationThreadScreen.js';
@@ -24,102 +17,21 @@ import PageScroll from '../PageScroll.js';
 import { openWebhookReveal } from '../webhookReveal.js';
 import { deriveAutomationHero } from './automationsData.js';
 import { decideConsentItem, loadAutomationThreadData } from './automationThreadData.js';
-import { automationTurnInboundText, automationTurnMessages } from './automationTurnMessages.js';
+import { loadTurnTrace, watchTurnMessages } from './automationTurnWatch.js';
 import {
   automationLiveMessages,
   createAutomationLiveTrace,
-  createAutomationLiveTraceFromItems,
-  finishAutomationLiveItem,
-  finishAutomationLiveTrace,
-  reduceAutomationItemEvent,
   reduceAutomationTurnEvent,
-  startAutomationLiveItem,
 } from './automationLiveMessages.js';
 
-async function loadTrace(turnId: string): Promise<AsstMsgDTO[]> {
-  const expanded = await readAutomationTurnExpanded({ turnId });
-  return expanded.turn ? automationTurnMessages(expanded.turn, expanded.items) : [];
-}
-
-/**
- * Result of one live watch. `settled` is what the *ledger* says: `false`
- * means the stream closed (or the gateway refused the join) while the turn is
- * still open, so the caller must rejoin rather than leave a turn spinning
- * forever. `ok` is the turn's outcome once settled.
- */
-interface WatchOutcome {
-  settled: boolean;
-  ok: boolean;
-}
-
-async function watchNativeTrace(
-  turnId: string,
-  onMessages: (messages: AsstMsgDTO[]) => void,
-  signal: AbortSignal,
-): Promise<WatchOutcome> {
-  const initial = await readAutomationTurnExpanded({ turnId }).catch(() => ({
-    turn: null,
-    items: [] as CentraidAutomationItem[],
-  }));
-  if (initial.turn) onMessages(automationTurnMessages(initial.turn, initial.items));
-  const inbound = automationTurnInboundText(initial.turn, initial.items);
-  let live = createAutomationLiveTraceFromItems(inbound, initial.items);
-  let ended = false;
-  let terminalOk: boolean | undefined;
-  const apply = (event: AutomationTurnStreamEvent): void => {
-    if (event.type === 'item.start') {
-      live = startAutomationLiveItem(live, {
-        itemId: event.itemId,
-        ordinal: event.ordinal,
-        kind: event.kind,
-        ...(event.name ? { name: event.name } : {}),
-        ...(event.callId ? { callId: event.callId } : {}),
-      });
-      onMessages(automationLiveMessages(live));
-    } else if (event.type === 'item.delta') {
-      live = reduceAutomationItemEvent(live, {
-        itemId: event.itemId,
-        ordinal: event.ordinal,
-        event: event.event as TurnStreamEvent,
-      });
-      onMessages(automationLiveMessages(live));
-    } else if (event.type === 'item.end') {
-      live = finishAutomationLiveItem(live, event);
-      onMessages(automationLiveMessages(live));
-    } else if (event.type === 'turn.end') {
-      ended = true;
-      terminalOk = event.ok;
-      live = finishAutomationLiveTrace(live, event.ok ? undefined : event.error);
-    }
-  };
-  await streamAutomationTurn(turnId, apply, signal);
-  if (signal.aborted) return { settled: false, ok: false };
-  // The ledger is authoritative for completion, usage, errors, and cold/live
-  // parity. Re-read once after turn.end (or an unexpectedly closed stream) —
-  // this is the ONLY authoritative re-read of the watch, so callers must not
-  // issue a second one.
-  const final = await readAutomationTurnExpanded({ turnId });
-  if (final.turn) {
-    onMessages(automationTurnMessages(final.turn, final.items));
-    return { settled: final.turn.endedAt !== undefined, ok: final.turn.ok };
-  }
-  if (ended) onMessages(automationLiveMessages(live));
-  return { settled: ended, ok: terminalOk ?? false };
-}
-
-// React-owned automation thread — replaces the old single-view
-// (AutomationViewScreen, now deleted) at the `automation-view` route
-// (Automations UI revamp, see receipts/issue-387-automations-ui-revamp.md). `loadData` composes
-// `loadAutomationThreadData` (row + runs + consent, pre-filtered to this
-// automation's actor) with two small additive fetches that plug documented
-// gaps in `AutomationThreadData` — see `AutomationThreadDataEx`'s doc
-// comment in the screen file: a `triggerDetail` block (raw cron expr /
-// data-condition entity+cadence, derived via the already-exported
-// `deriveAutomationHero` — no new endpoint) and a `runTokens` map (per-run
-// token counts, from a `listAutomationTurns` call the data layer already
-// makes internally). The row is held in a ref, same shape as the old
-// wrapper, so delete/run/toggle/rotate/edit/send actions can read its
-// ref/name without re-fetching.
+// The RUN SCREEN's route wrapper. It wires exactly the reading surface:
+// history, consent decisions, run-now, pause, delete, and a read-only ask.
+// Notably ABSENT is compile — `compileAutomation` is imported only by the
+// editor route now, which is the mechanical half of the "compiling is the
+// compiler's job" split. `loadData`
+// composes `loadAutomationThreadData` (row + executions + plan status +
+// consent, with compile turns already filtered out) with two small additive
+// fetches that plug documented DTO gaps — see `AutomationThreadDataEx`.
 export default function AutomationViewRoute({
   automationId,
 }: {
@@ -161,29 +73,17 @@ export default function AutomationViewRoute({
           };
         }}
         onBack={() => navigate({ kind: 'automations' })}
-        onEdit={() => {
+        onOpenCompiler={() => {
           const row = rowRef.current;
           if (row) navigate({ kind: 'automation-editor', automationId: row.ref });
-        }}
-        onRetryCompile={async () => {
-          const row = rowRef.current;
-          if (!row) return false;
-          try {
-            await compileAutomation({ automationId: row.ref, enableOnSuccess: !row.enabled });
-            showToast('Compiling plan…');
-            return true;
-          } catch (err) {
-            showToast(`Could not compile: ${err instanceof Error ? err.message : String(err)}`);
-            return false;
-          }
         }}
         onOpenRun={(runId) => {
           const row = rowRef.current;
           if (row) navigate({ automationId: row.ref, kind: 'run-view', runId });
         }}
-        loadTurnTrace={loadTrace}
+        loadTurnTrace={loadTurnTrace}
         watchTurn={async (turnId, onMessages, signal) =>
-          (await watchNativeTrace(turnId, onMessages, signal)).settled
+          (await watchTurnMessages(turnId, onMessages, signal)).settled
         }
         onCopyWebhook={(url) =>
           void navigator.clipboard
@@ -251,23 +151,15 @@ export default function AutomationViewRoute({
             return false;
           }
         }}
-        onSendMessage={async (text, applyFuture, onMessages, signal) => {
+        onAskAboutRuns={async (text, onMessages, signal) => {
           const row = rowRef.current;
           if (!row) return null;
           try {
-            if (applyFuture) {
-              onMessages([
-                { kind: 'user', text },
-                { kind: 'ai', streaming: true, text: 'Revising standing instructions…' },
-              ]);
-              const { compileTurnId } = await reviseAutomation({
-                automationId: row.ref,
-                message: text,
-              });
-              const { ok } = await watchNativeTrace(compileTurnId, onMessages, signal);
-              showToast(ok ? 'Standing instructions updated' : 'Could not revise instructions');
-              return compileTurnId;
-            }
+            // One conversational turn against the automation's own thread, and
+            // nothing else. The `applyFuture` branch that used to live here
+            // rewrote the standing instructions and kicked a compile from the
+            // run screen. Changing what an automation does happens in exactly
+            // one place now: the instructions field on the compile screen.
             let live = createAutomationLiveTrace(text);
             onMessages(automationLiveMessages(live));
             const result = await streamAutomationConversationTurn(
@@ -280,7 +172,7 @@ export default function AutomationViewRoute({
               signal,
             );
             if (result.turnId && !signal.aborted) {
-              onMessages(await loadTrace(result.turnId));
+              onMessages(await loadTurnTrace(result.turnId));
             }
             return result.turnId ?? null;
           } catch (err) {
@@ -297,7 +189,7 @@ export default function AutomationViewRoute({
                   feedback: null,
                 },
               ]);
-              showToast(`Could not update: ${message}`);
+              showToast(`Could not answer: ${message}`);
             }
             return null;
           }

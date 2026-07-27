@@ -221,6 +221,82 @@ describe('loadAutomationThreadData', () => {
     expect(result?.data.runs[0]?.summary).toBe('boom');
     expect(result?.data.runs[0]?.dateGroup).toBe('Today');
     expect(result?.data.runs[1]?.status).toBe('ok');
+    expect(result?.data.runs.every((r) => r.entryKind === 'run')).toBe(true);
+  });
+
+  // The load-bearing half of the run-screen / compile-screen split: a compile
+  // turn is the COMPILER working and must never appear in the run history. It
+  // is distilled into an inert `plan` status instead.
+  it('keeps compile turns out of the run history and reports them as plan status', async () => {
+    vi.mocked(readAutomation).mockResolvedValue(row());
+    const now = Date.now();
+    vi.mocked(listAutomationTurns).mockResolvedValue([
+      {
+        automationId: 'digest/main',
+        endedAt: now - 9000,
+        ok: true,
+        pinned: false,
+        turnId: 'r-exec',
+        startedAt: now - 10_000,
+        summary: 'ok',
+        triggerKind: 'scheduled',
+      },
+      {
+        automationId: 'digest/main',
+        endedAt: now - 1000,
+        ok: false,
+        error: 'handler.js failed to parse',
+        pinned: false,
+        turnId: 'c-1',
+        startedAt: now - 2000,
+        triggerKind: 'compile',
+      },
+      {
+        automationId: 'digest/main',
+        endedAt: now,
+        ok: true,
+        pinned: false,
+        turnId: 'ask-1',
+        startedAt: now - 100,
+        summary: 'It failed because…',
+        triggerKind: 'interactive',
+      },
+    ] as unknown as CentraidAutomationTurnRecord[]);
+    vi.mocked(getBlocking).mockResolvedValue(blocking());
+    vi.mocked(listOutboxGrants).mockResolvedValue([]);
+    vi.mocked(listAgents).mockResolvedValue([]);
+
+    const result = await loadAutomationThreadData({
+      automationId: 'digest/main',
+      gatewayOrigin: 'http://127.0.0.1:5173',
+    });
+
+    expect(result?.data.runs.map((r) => r.runId)).toEqual(['ask-1', 'r-exec']);
+    // An interactive turn is the owner asking, not the automation firing.
+    expect(result?.data.runs.find((r) => r.runId === 'ask-1')?.entryKind).toBe('ask');
+    expect(result?.data.runs.find((r) => r.runId === 'r-exec')?.entryKind).toBe('run');
+    expect(result?.data.plan).toEqual({
+      detail: 'handler.js failed to parse',
+      label: 'Compile failed',
+      state: 'failed',
+    });
+    // The header reports the AUTOMATION, not its last compile.
+    expect(result?.data.header.statusLabel).not.toBe('Compile failed');
+  });
+
+  it('calls a never-compiled automation out rather than showing an empty history', async () => {
+    vi.mocked(readAutomation).mockResolvedValue(row({ enabled: false }));
+    vi.mocked(listAutomationTurns).mockResolvedValue([]);
+    vi.mocked(getBlocking).mockResolvedValue(blocking());
+    vi.mocked(listOutboxGrants).mockResolvedValue([]);
+    vi.mocked(listAgents).mockResolvedValue([]);
+
+    const result = await loadAutomationThreadData({
+      automationId: 'digest/main',
+      gatewayOrigin: 'http://127.0.0.1:5173',
+    });
+    expect(result?.data.plan.state).toBe('never');
+    expect(result?.data.runs).toEqual([]);
   });
 });
 
