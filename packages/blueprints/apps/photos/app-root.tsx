@@ -4,6 +4,22 @@
 // node-side `./queries/*` handler modules. The shell's InlineAppModule
 // descriptor imports `Root` and `PHOTOS_READ_TABLES_LIST` from here and adds
 // the query wiring; there is deliberately no parallel served-system-app entry.
+//
+// MULTI-SCOPE (issue #599). This app mounts over N scopes at once — the
+// member's own library plus every audience they belong to — and paints them as
+// ONE timeline. The per-scope pages, the merge, and every rule about which
+// scope gets re-read when live in library-store.ts. What stays here is the
+// rendering, the chip selection, and the two projections that are NOT merged:
+//
+//  * ALBUMS, PLACES and TRASH stay OWN-SCOPE. A collection id, a place id and a
+//    trash shelf are per-scope facts: an album id minted in one scope means
+//    nothing in another — or, worse, means something else, since ids collide
+//    across scopes by design. Album MEMBERSHIP is therefore computed against
+//    own-scope assets only; matching `album_ids` over the MERGED list would let
+//    a colliding id from an audience pull a stranger's photo into the member's
+//    album, which is the exact failure mode #599 warns about.
+//  * The TIMELINE is merged, deduped and horizon-bounded (merge.ts), then
+//    filtered by the selected chip (null = "All").
 
 import {
   useCallback,
@@ -15,18 +31,22 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
-import { debounce, observeWidth, readFailed, subscribeReadUpdates } from './kit.ts';
+import { assetKey } from './asset-key.ts';
+import { debounce, observeWidth, readFailed } from './kit.ts';
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from './constants.ts';
 import { $ } from './dom.ts';
 import { createDuplicates } from './duplicates.tsx';
 import { DEFAULT_ZOOM, gridWidthFallback, ZOOM_LEVELS } from './layout.ts';
 import { createLightbox } from './lightbox.tsx';
-import { notice } from './outcomes.ts';
+import { createLibraryStore } from './library-store.ts';
+import { createRefetchScheduler, readLibraryScopes, stopLiveReads } from './library-reads.ts';
+import { notice, setWriteTargetResolver } from './outcomes.ts';
+import { mountedScopes, ownScopeId, photoWriteTarget } from './scopes.ts';
 import { createPicker } from './picker.tsx';
 import { createSearch } from './search.ts';
 import { createSidebar } from './sidebar.tsx';
 import { createSlideshow } from './slideshow.tsx';
-import { runUpload, wireUpload } from './upload.ts';
+import { applyUploadTarget, runUpload, wireUpload } from './upload.ts';
 import { createVisibility } from './visibility.ts';
 import { AlbumGridView } from './components/AlbumGrid.tsx';
 import { EnrichmentPanel } from './components/Enrichment.tsx';
@@ -36,6 +56,7 @@ import { TimelineBody } from './components/Timeline.tsx';
 import { ToolbarView } from './components/Toolbar.tsx';
 import { Chrome, type ChromeSlots } from './Chrome.tsx';
 import type { Album, Asset, LibraryData, MemoryCard, Place } from './types.ts';
+import type { InlineScope } from '../inline-types.ts';
 import type { InlineAppProps } from '../inline-types.ts';
 import styles from './Chrome.module.css';
 
@@ -137,29 +158,66 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     let searchResults: Asset[] | null = null;
     let selectMode = false;
     let batchBusy = false;
+    // Selection is held as COMPOSITE keys (asset-key.ts), not bare asset ids:
+    // the merged timeline can show two scopes' rows that share an `asset_id`,
+    // and a bare-id set would tick both and send a batch to the wrong one
+    // (issue #599).
     let selectAnchor: string | null = null;
     const selectedIds = new Set<string>();
     let zoomIndex = DEFAULT_ZOOM;
     let paneWidth = gridWidthFallback(typeof window !== 'undefined' ? window.innerWidth : 1280);
-    let libraryWindow = 500;
     let libraryTruncated = false;
     let lastFreshLoadAt = 0;
-    let libraryLiveUnsubscribe: () => void = () => {};
-    let libraryLiveOwnsData = false;
-    let libraryRefreshSeq = 0;
+    let recordNextLoad = false;
     let albumMenuOpen = false;
 
+    // ---- scopes (issue #599) ----
+    // Read live on every call: the shell hydrates audiences AFTER first paint by
+    // pushing into the same array, so a captured snapshot would miss them.
+    const scopesNow = (): InlineScope[] => mountedScopes();
+    const ownId = (): string => ownScopeId(scopesNow());
+    /** Merged assets restricted to the member's own scope — see the header. */
+    let ownAssets: Asset[] = [];
+    /** The selected chip, or null for "All" (every scope, merged). */
+    let selectedScopeId: string | null = null;
+    /** The audience name a tile is shown from; null for the member's own. */
+    const scopeLabel = (scopeId: string | null | undefined): string | null => {
+      if (!scopeId || scopeId === ownId()) return null;
+      return scopesNow().find((scope) => scope.id === scopeId)?.label ?? null;
+    };
+    // Where a CREATING write lands. `own` ignores the chip (albums, tags and
+    // places are own-scope surfaces); `new` follows it, which is what makes
+    // "Add media" while looking at Family put the photo in Family.
+    setWriteTargetResolver((kind) => photoWriteTarget(kind, selectedScopeId, scopesNow()));
+
     // ---- data ----
-    function applyLibraryData(
-      data: LibraryData | undefined,
-      { record = true }: { record?: boolean } = {},
-    ): void {
+    // One page per mounted scope plus the merged timeline over them. Every
+    // refetch decision (which scope, how deep) lives in the store; this closure
+    // only says what to paint when the store has new data.
+    const store = createLibraryStore({
+      // The third argument is the live-read push channel: on a single-scope
+      // host whose `read` carries a subscription, a fresh projection lands
+      // without any refetch at all.
+      readScopes: (scopeIds, input) =>
+        readLibraryScopes(scopeIds, input, (scopeId, data) => store.applyScopeData(scopeId, data)),
+      scopeIds: () => scopesNow().map((scope) => scope.id),
+      ownScopeId: ownId,
+      readTables: PHOTOS_READ_TABLES,
+      // Per-KEY debounce: the key is what keeps a busy audience from coalescing
+      // with the member's own burst — two scopes changing at once must produce
+      // two one-scope refetches, not one all-scope one.
+      schedule: createRefetchScheduler(debounce),
+      onData: () => applyStore(),
+    });
+
+    /** Repaint from whatever the store now holds. */
+    function applyStore(): void {
       if (disposed) return;
-      if (readErrorShown) {
-        notice('');
-        readErrorShown = false;
-      }
-      const denied = data?.vaultDenied;
+      const own = store.own();
+      // A consent denial and a read failure are OWN-scope outcomes: they are
+      // about the member's own library, which is the thing the banners name. An
+      // audience that failed simply contributes no photos this round.
+      const denied = own.denied;
       $('consentBanner').hidden = !denied;
       $('live').hidden = Boolean(denied);
       $('sidebarMount').hidden = Boolean(denied);
@@ -167,16 +225,28 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         $('consentDetail').textContent = denied.message ?? '';
         return;
       }
-      if (data?.error) {
+      if (own.error) {
         readFailed($('noticeBanner'));
         readErrorShown = true;
         return;
       }
-      assets = data?.assets ?? [];
-      albums = data?.albums ?? [];
-      places = data?.places ?? [];
-      trash = data?.trash ?? [];
-      libraryTruncated = Boolean(data?.truncated);
+      if (readErrorShown) {
+        notice('');
+        readErrorShown = false;
+      }
+      const view = store.merged();
+      // `MergedAsset` and `Asset` describe the same query row from two sides —
+      // see the same cast's note in library-store.ts.
+      const merged = view.assets as unknown as Asset[];
+      const own_ = ownId();
+      ownAssets = merged.filter((asset) => (asset.scope_id ?? '') === own_);
+      assets = selectedScopeId
+        ? merged.filter((asset) => asset.scope_id === selectedScopeId)
+        : merged;
+      libraryTruncated = view.truncated;
+      albums = own.albums;
+      places = own.places;
+      trash = own.trash;
       if (selectedAlbum === TRASH && trash.length === 0) selectedAlbum = null;
       if (
         selectedAlbum &&
@@ -189,10 +259,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       ) {
         selectedAlbum = null;
       }
-      for (const id of [...selectedIds]) {
-        if (!assets.some((a) => a.asset_id === id)) selectedIds.delete(id);
+      for (const key of [...selectedIds]) {
+        if (!assets.some((a) => assetKey(a) === key)) selectedIds.delete(key);
       }
-      if (record) lastFreshLoadAt = Date.now();
+      if (recordNextLoad) lastFreshLoadAt = Date.now();
+      recordNextLoad = true;
       sidebar.renderSidebar();
       renderToolbarBar();
       renderMain();
@@ -200,44 +271,24 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       lightbox.renderIfOpen();
     }
 
-    async function refresh(opts?: { record?: boolean }): Promise<void> {
-      const seq = ++libraryRefreshSeq;
-      const record = opts?.record !== false;
-      let data: LibraryData;
-      try {
-        const read = window.centraid.read<LibraryData>({
-          query: 'library',
-          input: { limit: libraryWindow },
-        });
-        libraryLiveUnsubscribe();
-        const subscription = subscribeReadUpdates<LibraryData>(read, (value) => {
-          if (seq === libraryRefreshSeq) applyLibraryData(value, { record: true });
-        });
-        libraryLiveOwnsData = subscription.managed;
-        libraryLiveUnsubscribe = subscription.unsubscribe;
-        data = await read;
-      } catch {
-        if (seq !== libraryRefreshSeq) return;
-        libraryLiveUnsubscribe();
-        libraryLiveUnsubscribe = () => {};
-        libraryLiveOwnsData = false;
-        readFailed($('noticeBanner'));
-        readErrorShown = true;
-        return;
-      }
-      if (disposed || seq !== libraryRefreshSeq) return;
-      applyLibraryData(data, { record });
+    /** Re-read every scope — the explicit, post-write and window-focus path. */
+    async function refresh(): Promise<void> {
+      await store.refreshAll();
     }
 
     function albumAssets(): Asset[] {
       if (!selectedAlbum) return assets;
+      // Favorites and tags are per-asset facts that travel with the row, so they
+      // read the merged (chip-filtered) list. Album membership is an ID match
+      // against an own-scope collection, so it reads own-scope assets only —
+      // see the header note on colliding ids.
       if (selectedAlbum === FAVORITES) return assets.filter((a) => a.favorite);
       if (selectedAlbum === TRASH) return trash;
       if (typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')) {
         const label = selectedAlbum.slice(4);
         return assets.filter((a) => a.tags?.some((t) => t.label === label));
       }
-      return assets.filter((a) => a.album_ids?.includes(selectedAlbum!));
+      return ownAssets.filter((a) => a.album_ids?.includes(selectedAlbum!));
     }
 
     const { visibleAssets, findAsset } = createVisibility({
@@ -261,13 +312,16 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           title: 'Favorites',
           sub: `${favs.length} photo${favs.length === 1 ? '' : 's'}`,
           coverUri: first.thumb_uri ?? first.content_uri ?? null,
+          // The cover is one real asset's bytes; the card carries the scope
+          // they must be fetched in (issue #599).
+          coverScopeId: first.scope_id,
           newestAt: first.taken_at ?? '',
           onOpen: () => navigateTo(FAVORITES),
         });
       }
       const albumCards = albums
         .map((album): MemoryCard | null => {
-          const members = assets.filter((a) => (a.album_ids ?? []).includes(album.album_id));
+          const members = ownAssets.filter((a) => (a.album_ids ?? []).includes(album.album_id));
           if (members.length === 0) return null;
           const newest = members.reduce((a, b) =>
             String(a.taken_at ?? '') > String(b.taken_at ?? '') ? a : b,
@@ -277,6 +331,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             title: album.title ?? 'Album',
             sub: `${members.length} photo${members.length === 1 ? '' : 's'}`,
             coverUri: newest.thumb_uri ?? newest.content_uri ?? null,
+            coverScopeId: newest.scope_id,
             newestAt: newest.taken_at ?? '',
             onOpen: () => navigateTo(album.album_id),
           };
@@ -287,6 +342,16 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     }
 
     // ---- navigation ----
+    /**
+     * Pick a scope chip (null = "All"). A pure re-projection of data already
+     * held: no scope is re-read, and the write target moves with it, so "Add
+     * media" starts pointing at the audience the member is now looking at.
+     */
+    function selectScope(scopeId: string | null): void {
+      selectedScopeId = scopeId;
+      applyStore();
+    }
+
     function navigateTo(id: string | null): void {
       if (selectedAlbum === DUPLICATES && id !== DUPLICATES) duplicates.invalidate();
       selectedAlbum = id;
@@ -330,6 +395,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     function renderToolbarBar(): void {
       const { title, sub } = toolbarTitleSub();
       const inAlbum = albums.some((a) => a.album_id === selectedAlbum);
+      // "Add media" reflects the current write target: looking at an audience
+      // this member may only read, the disk-upload entry points go disabled and
+      // say why rather than accepting files and narrating a refusal.
+      applyUploadTarget();
       toolbarRoot.render(
         <ToolbarView
           title={title}
@@ -345,6 +414,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           }
           selectMode={selectMode}
           onToggleSelect={() => (selectMode ? exitSelectMode() : enterSelectMode())}
+          scopes={scopesNow()}
+          ownScopeId={ownId()}
+          selectedScopeId={selectedScopeId}
+          onSelectScope={selectScope}
         />,
       );
     }
@@ -361,7 +434,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       if (selectedAlbum === ALBUMS) {
         empty.hidden = true;
         const enriched = albums.map((album) => {
-          const members = assets.filter((a) => (a.album_ids ?? []).includes(album.album_id));
+          const members = ownAssets.filter((a) => (a.album_ids ?? []).includes(album.album_id));
           return {
             ...album,
             count: members.length,
@@ -415,8 +488,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             refresh={refresh}
             selectedAlbum={selectedAlbum}
             searchQuery={searchQuery}
-            libraryWindow={libraryWindow}
+            libraryWindow={shown.length}
             truncated={libraryTruncated}
+            scopeLabel={scopeLabel}
             selectMode={selectMode}
             selectedIds={selectedIds}
             onEnterSelectMode={enterSelectMode}
@@ -424,8 +498,10 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
             onOpen={lightbox.openLightbox}
             onShowMore={async (e) => {
               e.currentTarget.disabled = true;
-              libraryWindow += 500;
-              await refresh();
+              // Only the scopes sitting AT the merged horizon are re-queried,
+              // each from its own keyset cursor, and the page APPENDS — the
+              // settled scopes are not touched (issue #599, library-store.ts).
+              await store.showMore();
             }}
           />
         </>,
@@ -451,28 +527,28 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       renderMain();
       renderSelectionBar();
     }
-    function toggleSelect(assetId: string, shiftKey?: boolean): void {
+    function toggleSelect(key: string, shiftKey?: boolean): void {
       if (batchBusy) return;
       const list = visibleAssets();
-      if (shiftKey && selectAnchor && selectAnchor !== assetId) {
-        const a = list.findIndex((x) => x.asset_id === selectAnchor);
-        const b = list.findIndex((x) => x.asset_id === assetId);
+      if (shiftKey && selectAnchor && selectAnchor !== key) {
+        const a = list.findIndex((x) => assetKey(x) === selectAnchor);
+        const b = list.findIndex((x) => assetKey(x) === key);
         if (a >= 0 && b >= 0) {
-          const on = !selectedIds.has(assetId);
+          const on = !selectedIds.has(key);
           for (let i = Math.min(a, b); i <= Math.max(a, b); i += 1) {
-            const id = list[i]!.asset_id;
-            if (on) selectedIds.add(id);
-            else selectedIds.delete(id);
+            const inRange = assetKey(list[i]!);
+            if (on) selectedIds.add(inRange);
+            else selectedIds.delete(inRange);
           }
-          selectAnchor = assetId;
+          selectAnchor = key;
           renderMain();
           renderSelectionBar();
           return;
         }
       }
-      if (selectedIds.has(assetId)) selectedIds.delete(assetId);
-      else selectedIds.add(assetId);
-      selectAnchor = assetId;
+      if (selectedIds.has(key)) selectedIds.delete(key);
+      else selectedIds.add(key);
+      selectAnchor = key;
       renderMain();
       renderSelectionBar();
     }
@@ -574,7 +650,14 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     // ---- region factories (constructed once, exactly like app.tsx Boot) ----
     setSlot('enrichment', <EnrichmentPanel />);
 
-    const duplicates = createDuplicates({ gridRoot: mainRoot, refresh });
+    const duplicates = createDuplicates({
+      gridRoot: mainRoot,
+      refresh,
+      ownScope: () => {
+        const target = photoWriteTarget('own', selectedScopeId, scopesNow());
+        return target.disabled ? null : target.scopeId;
+      },
+    });
     const slideshow = createSlideshow({ slideshowRoot });
     const lightbox = createLightbox({
       lightboxRoot,
@@ -588,7 +671,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const { openPicker, closePicker } = createPicker({
       pickerRoot,
       getAlbums: () => albums,
-      getAssets: () => assets,
+      getAssets: () => ownAssets,
       getSelectedAlbum: () => selectedAlbum,
       refresh,
     });
@@ -596,6 +679,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       sidebarRoot,
       getAlbums: () => albums,
       getAssets: () => assets,
+      getOwnAssets: () => ownAssets,
       getTrash: () => trash,
       getSelectedAlbum: () => selectedAlbum,
       setSelectedAlbum: (id) => {
@@ -671,7 +755,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       if (lastFreshLoadAt && Date.now() - lastFreshLoadAt < FOCUS_STALE_MS) return;
       void refresh();
     };
-    const onDataChangeDebounced = debounce(() => void refresh(), 200);
 
     // Capture the element references at wire-time. Cleanup runs on unmount AFTER
     // React has already removed these nodes, so a fresh `$(…)` (getElementById)
@@ -693,15 +776,11 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     slideshowBtn.addEventListener('click', onSlideshowBtn);
     window.addEventListener('keydown', onKeydown);
     window.addEventListener('focus', onFocus);
-    const stopChange = window.centraid.onChange?.((detail) => {
-      if (libraryLiveOwnsData) return;
-      const tables = detail?.tables;
-      if (!Array.isArray(tables) || tables.length === 0) {
-        onDataChangeDebounced();
-        return;
-      }
-      if (tables.some((t) => PHOTOS_READ_TABLES.has(t))) onDataChangeDebounced();
-    });
+    // The store decides the SMALLEST refetch a burst justifies: the tagged
+    // scope alone, a newly hydrated scope alone, or — only when the host cannot
+    // say which scope burst — all of them. It also owns the table gate and the
+    // per-scope debounce, so nothing about that reasoning lives here (#599).
+    const stopChange = window.centraid.onChange?.((detail) => store.handleChange(detail));
 
     // The grid's real width drives the justified timeline (read off #grid, not
     // #scrollPane whose clientWidth includes its own padding).
@@ -733,14 +812,17 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     // ---- first paint ----
     renderZoomButtons();
     mainRoot.render(<KitSkeleton rows={6} />);
-    void refresh({ record: false });
+    // The first load does not count as "fresh" for the focus-staleness check —
+    // the same one-shot exemption the pre-#599 `refresh({record:false})` had.
+    void store.refreshAll();
 
     return () => {
       // A read may resolve after React removes Chrome's DOM. Fence its
       // continuation before removing listeners so it cannot mutate detached
       // slots or call the id-based helpers against a now-empty document.
       disposed = true;
-      libraryRefreshSeq += 1;
+      store.dispose();
+      stopLiveReads();
       searchInput.removeEventListener('input', onSearchInput);
       searchInput.removeEventListener('keydown', onSearchKeyDown);
       searchClearBtn.removeEventListener('click', onSearchClear);
@@ -756,7 +838,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       stopChange?.();
       stopWidth();
       paneObserver?.disconnect();
-      libraryLiveUnsubscribe();
     };
     // mount-once boot, stable via refs (#505)
   }, []);

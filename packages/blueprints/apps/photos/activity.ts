@@ -25,6 +25,6 @@ export function buildActivity(asset: Asset): ActivityItem[] {
   if (tags.length > 0) {
     activity.push({ text: `Tagged ${tags.map((t) => t.label).join(', ')}`, date: dateLabel });
   }
-  activity.push({ text: 'Uploaded to your vault', date: dateLabel });
+  activity.push({ text: 'Uploaded to your library', date: dateLabel });
   return activity;
 }

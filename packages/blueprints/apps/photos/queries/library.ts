@@ -28,6 +28,19 @@
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
  *
+ * KEYSET CURSOR (issue #599). Growing `limit` re-reads the whole window every
+ * time, which is fine for one scope and quadratic for N merged ones, so the
+ * window also takes a cursor: `input.before` is an ISO timestamp and admits
+ * only assets with `captured_at` strictly older than it. The page reports
+ * `tail` — the `taken_at` of its LAST (oldest) live asset, null when the page
+ * is empty — which is what the caller passes back as the next `before`, and
+ * what the multi-scope merge (../merge.ts) needs to compute a shared safe
+ * horizon across scopes. Absent `before`, every existing caller keeps the
+ * exact `limit`/`truncated` window behaviour it had. Note the cursor filters
+ * on `captured_at`, so undated assets (NULL `captured_at`, which SQL
+ * comparisons exclude) live only in the uncursored first window — the same
+ * tail bucket the merge treats separately.
+ *
  * @type {import('@centraid/app-engine').QueryHandler}
  */
 import { readAssetJoins, readPlaces, srcOf } from './_shared.ts';
@@ -67,6 +80,15 @@ interface RawCollection {
 export default async ({ input, ctx }: HandlerArgs) => {
   const purpose = 'dpv:ServiceProvision';
   const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
+  // The keyset cursor: a non-empty ISO timestamp, or nothing at all. An
+  // absent/blank cursor must add no clause, so the uncursored window is
+  // byte-identical to what it was before the cursor landed.
+  const before = typeof input?.before === 'string' && input.before !== '' ? input.before : null;
+  const liveWhere = [
+    { column: 'deleted_at', op: 'is-null' },
+    { column: 'archived_at', op: 'is-null' },
+    ...(before ? [{ column: 'captured_at', op: 'lt', value: before }] : []),
+  ];
   try {
     const [liveAssets, trashedAssets, albums, places] = await Promise.all([
       // The live window, newest capture first. SQLite ORDER BY … DESC puts
@@ -76,11 +98,9 @@ export default async ({ input, ctx }: HandlerArgs) => {
         entity: 'media.media_asset',
         // Live timeline excludes archived assets (issue #419): archive hides
         // from the timeline without trashing, so an archived photo is neither
-        // here nor in the trash shelf.
-        where: [
-          { column: 'deleted_at', op: 'is-null' },
-          { column: 'archived_at', op: 'is-null' },
-        ],
+        // here nor in the trash shelf. `liveWhere` also carries the optional
+        // keyset cursor (`input.before`).
+        where: liveWhere,
         orderBy: { column: 'captured_at', dir: 'desc' },
         limit: window,
         purpose,
@@ -205,6 +225,9 @@ export default async ({ input, ctx }: HandlerArgs) => {
     // A full live window means there may be older photos beyond it — the
     // UI offers "Show more" (a re-read with a larger window).
     const truncated = liveRows.length >= window;
+    // The cursor for the NEXT page: the oldest live asset's timestamp after the
+    // newest-first sort. Null on an empty page (nothing left to page from).
+    const tail = live.length > 0 ? (live[live.length - 1]!.taken_at ?? null) : null;
     return {
       assets: live,
       albums: albumRows,
@@ -212,9 +235,10 @@ export default async ({ input, ctx }: HandlerArgs) => {
       trash,
       truncated,
       window,
+      tail,
     };
   } catch (err) {
-    const empty = { assets: [], albums: [], places: [], trash: [] };
+    const empty = { assets: [], albums: [], places: [], trash: [], tail: null };
     // Only a consent deny is "ask the owner for access". Every other failure
     // (VAULT_ERROR, VAULT_UNAVAILABLE, a protocol error from the replica
     // bridge) is ours, and saying "no vault access yet" about it sends the

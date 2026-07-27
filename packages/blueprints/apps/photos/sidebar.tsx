@@ -17,6 +17,7 @@ export function createSidebar({
   sidebarRoot,
   getAlbums,
   getAssets,
+  getOwnAssets,
   getTrash,
   getSelectedAlbum,
   setSelectedAlbum,
@@ -27,6 +28,15 @@ export function createSidebar({
   sidebarRoot: Root;
   getAlbums: () => Album[];
   getAssets: () => Asset[];
+  /**
+   * The member's OWN photos (issue #599). Album membership and the storage
+   * line read this rather than the merged list: an album id only means
+   * something inside the scope that minted it, and "how much am I storing" is
+   * a question about the member's own space, not about what an audience shares
+   * with them. The shelf COUNTS below keep reading the merged list, so each
+   * count matches what clicking that shelf actually shows.
+   */
+  getOwnAssets: () => Asset[];
   getTrash: () => Asset[];
   getSelectedAlbum: () => string | null;
   setSelectedAlbum: (id: string | null) => void;
@@ -70,13 +80,14 @@ export function createSidebar({
   function renderSidebar() {
     const rawAlbums = getAlbums();
     const assets = getAssets();
+    const own = getOwnAssets();
     if (renamingAlbumForId && !rawAlbums.some((a) => a.album_id === renamingAlbumForId)) {
       renamingAlbumForId = null;
     }
     // Mini cover thumb + live count per album, computed off the loaded
     // window (same reach every other album-scoped view already has).
     const albums: Album[] = rawAlbums.map((album) => {
-      const members = assets.filter((a) => (a.album_ids ?? []).includes(album.album_id));
+      const members = own.filter((a) => (a.album_ids ?? []).includes(album.album_id));
       const cover = members[0];
       return {
         ...album,
@@ -87,11 +98,11 @@ export function createSidebar({
     const tagOptions = [
       ...new Set(assets.flatMap((a) => (a.tags ?? []).map((t) => t.label))),
     ].sort();
-    const bytes = assets.reduce((sum, a) => sum + (a.byte_size ?? 0), 0);
+    const bytes = own.reduce((sum, a) => sum + (a.byte_size ?? 0), 0);
     const storageLabel =
-      assets.length === 0
+      own.length === 0
         ? 'Nothing uploaded yet'
-        : `${fmtBytes(bytes)} across ${assets.length} photo${assets.length === 1 ? '' : 's'}`;
+        : `${fmtBytes(bytes)} across ${own.length} photo${own.length === 1 ? '' : 's'}`;
 
     sidebarRoot.render(
       <SidebarView

@@ -127,6 +127,7 @@ import { PairingTicketStore } from './pairing-store.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
 import { makeMembersRouteHandler } from '../routes/members-routes.js';
+import { makeScopesRouteHandler, SCOPES_PATH } from '../routes/scopes-routes.js';
 import { makeShareRouteHandler, SHARE_PATH } from '../routes/share-routes.js';
 import { makeDeviceWorkRouteHandler } from '../routes/device-work-routes.js';
 import { companionRequestAllowed } from './companion-access.js';
@@ -1851,6 +1852,46 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     await reconcileScheduler(id);
   };
 
+  /**
+   * Install a BUNDLED app into an EXPLICIT vault (issue #599 Phase 4) — the
+   * auto-mount seam behind `/centraid/_vault/scopes`: an app a member already
+   * uses follows them into an audience vault they were added to.
+   *
+   * Same machinery as the `installBundledApp` lifecycle seam, with one
+   * critical difference: that seam closes over the AMBIENT request vault,
+   * while this one is handed a vault id. Everything vault-sensitive therefore
+   * runs inside `runWithVaultContext(vaultId, …)` — `registry.ensureUploaded`
+   * resolves `appsDir()` off the ambient scope, so calling it unscoped would
+   * install into whatever vault the caller happened to be on. Idempotent, and
+   * fail-soft: a refusal or failure resolves `false` rather than throwing, so
+   * the listing degrades to `installed: false` instead of a 500.
+   */
+  const ensureBundledAppInstalled = async (vaultId: string, appId: string): Promise<boolean> => {
+    if (!bundledAppIds.has(appId)) return false;
+    const plane = vaultRegistry.get(vaultId);
+    if (!plane) return false;
+    if (plane.installedAppIds().has(appId)) return true;
+    try {
+      // Mount the target vault's host first: the registry's providers read the
+      // ambient workspace, and the mount is cached per vault.
+      await hostFor(plane);
+      return await runWithVaultContext({ vaultId }, async () => {
+        const meta = await readBundledAppMeta(bundledAppDir(appId));
+        plane.installApp(appId, meta.name);
+        await requireRuntime().registry.ensureUploaded(appId);
+        await grantDeclaredBundledScopes(plane, appId);
+        await prewarmApp(appId, bundledAppDir(appId));
+        return true;
+      });
+    } catch (err) {
+      logger.warn(
+        `scopes: auto-install of "${appId}" into vault ${vaultId} failed: ` +
+          (err instanceof Error ? err.message : String(err)),
+      );
+      return false;
+    }
+  };
+
   // Drop an app from the registry AND delete its wrapper dir under the
   // request's vault (`<apps>/<id>/` — logs, settings, blobs), then run the
   // vault-side uninstall cascade (§11: revoke + retire enrollment — the
@@ -3303,6 +3344,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     ...(options.canMintFoundingTicket ? { isHostCustody: options.canMintFoundingTicket } : {}),
   });
 
+  // Deliberately NOT in `routeEntries` either, for the same reason as the
+  // share plane: the scopes listing spans every vault the caller holds a role
+  // in, so it is dispatched outside the per-vault scope (see its call site).
+  const scopesHandler = makeScopesRouteHandler({
+    enrollments: foundingEnrollments,
+    listVaults: () => vaultRegistry.list(),
+    installedApps: (vaultId) => vaultRegistry.get(vaultId)?.installedAppIds(),
+    ensureAppInstalled: ensureBundledAppInstalled,
+    ...(options.canMintFoundingTicket ? { isHostCustody: options.canMintFoundingTicket } : {}),
+  });
+
   const composedHandler: RouteHandler = async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     // The Rust-owned iroh relay calls this metadata-only control surface
@@ -3342,6 +3394,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       const method = req.method ?? 'GET';
       if (method === 'GET' && url.pathname === '/centraid/_vault/vaults') {
         return sendJson(res, 200, { vaults: [] });
+      }
+      // A fresh gateway has no vault, so a member holds a role in none: the
+      // honest answer is an empty scope list, not a 409 (same reasoning as
+      // `/centraid/_vault/vaults` above).
+      if (method === 'GET' && url.pathname === SCOPES_PATH) {
+        return sendJson(res, 200, { scopes: [] });
       }
       if (method === 'GET' && url.pathname === '/centraid/_apps') {
         return sendJson(res, 200, []);
@@ -3392,6 +3450,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // not get a chance to refuse the request over a vault it never uses. The
     // route resolves and authorizes both vaults itself, from `member_roles`.
     if (url.pathname.startsWith(SHARE_PATH) && (await shareHandler(req, res))) return true;
+    // Same placement, same reason (issue #599 Phase 4): the scopes listing
+    // answers "which vaults may I work in", which is by definition not one
+    // vault, so it must run before the `x-centraid-vault` resolution below.
+    if (url.pathname === SCOPES_PATH && (await scopesHandler(req, res))) return true;
     if (requested !== undefined && !enrolled.includes(requested)) {
       return sendJson(res, 403, {
         error: 'vault_not_enrolled',

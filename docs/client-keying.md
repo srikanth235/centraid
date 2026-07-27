@@ -13,6 +13,7 @@ Which UI/query state is keyed on which durable axis. Issue #504 batch 1.
 | **Gateway instance** | Live process | `instanceId` from `/centraid/_gateway/info` |
 | **Conversation id** | Ledger scope | Conversation list + turn pages |
 | **App id + vault** | Generated app / grants | App session, replica scope |
+| **Scope SET** | Which scopes an inline app is mounted over | `InlineAppRoute` mount key (issue #599) |
 
 ## Rules
 
@@ -20,6 +21,14 @@ Which UI/query state is keyed on which durable axis. Issue #504 batch 1.
 2. Directory- or vault-path-backed state must not be keyed only on display name.
 3. Gateway-owned live streams key on conversation/turn ids from the wire, not local ephemeral UUIDs invented client-side for the same entity.
 4. When unsure, prefer coarser keys (vault + surface) over fine keys that churn every navigation.
+5. **A multi-scope mount keys on the whole scope SET, not the focused scope** (issue #599).
+   An inline app can be mounted over several scopes at once — the member's own
+   plus every audience they belong to (`GET /_vault/scopes`). The mount owns one
+   replica lease per scope and one `window.centraid` built from that exact set,
+   so the set is a real key axis: `appId : attempt : <sorted scope ids>`. Derive
+   it with `scopeSetKey` so ordering never churns the key, and never key such a
+   mount on "the active vault" — that pointer moving is not a reason to
+   re-mount, while a scope joining or leaving the set is.
 
 ## Related
 

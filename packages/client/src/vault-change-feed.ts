@@ -24,6 +24,13 @@ type Subscriber = {
   attachVersion: number;
   feed?: VaultFeed;
   listener: (message: VaultChangeMessage) => void;
+  /**
+   * The scope this subscriber is PINNED to. A multi-scope mount (issue #599)
+   * holds one replica session per scope, and each session's feed must follow
+   * that session — not the shell's ambient "focused vault" pointer. Only an
+   * unpinned (ambient) subscriber is re-bound when the pointer moves.
+   */
+  scope?: GatewayAuth;
 };
 
 const MIN_RECONNECT_MS = 1_000;
@@ -322,7 +329,7 @@ function feedFor(gatewayAuth: GatewayAuth): VaultFeed {
 async function attach(subscriber: Subscriber): Promise<void> {
   const version = ++subscriber.attachVersion;
   try {
-    const gatewayAuth = await auth();
+    const gatewayAuth = subscriber.scope ?? (await auth());
     if (!subscriber.active || version !== subscriber.attachVersion) return;
     const feed = feedFor(gatewayAuth);
     subscriber.feed = feed;
@@ -338,16 +345,35 @@ function detach(subscriber: Subscriber): void {
   subscriber.feed = undefined;
 }
 
+/**
+ * The focused-scope pointer moved. Only AMBIENT subscribers follow it: a
+ * subscriber pinned to an explicit scope belongs to a replica session that is
+ * still mounted, and tearing its stream down would silently stop delivering
+ * changes for every scope but the focused one (issue #599).
+ */
 function rescopeSubscribers(): void {
   for (const subscriber of subscribers) {
+    if (subscriber.scope) continue;
     detach(subscriber);
     void attach(subscriber);
   }
 }
 
-/** Subscribe a shell consumer; every consumer in one gateway/vault shares one HTTP stream. */
-export function subscribeVaultChanges(listener: (message: VaultChangeMessage) => void): () => void {
-  const subscriber: Subscriber = { active: true, attachVersion: 0, listener };
+/**
+ * Subscribe a shell consumer; every consumer in one gateway/vault shares one
+ * HTTP stream. Pass `scope` to pin the subscription to one gateway/vault
+ * instead of following the shell's ambient focused-scope pointer.
+ */
+export function subscribeVaultChanges(
+  listener: (message: VaultChangeMessage) => void,
+  scope?: GatewayAuth,
+): () => void {
+  const subscriber: Subscriber = {
+    active: true,
+    attachVersion: 0,
+    listener,
+    ...(scope ? { scope } : {}),
+  };
   subscribers.add(subscriber);
   void attach(subscriber);
   return () => {
@@ -359,19 +385,26 @@ export function subscribeVaultChanges(listener: (message: VaultChangeMessage) =>
 }
 
 /** Resume a feed after bootstrap commits its stable snapshot cursor. */
-export async function resumeVaultChanges(cursor: VaultChangeCursor): Promise<void> {
-  const gatewayAuth = await auth();
+export async function resumeVaultChanges(
+  cursor: VaultChangeCursor,
+  scope?: GatewayAuth,
+): Promise<void> {
+  const gatewayAuth = scope ?? (await auth());
   const key = scopeKey(gatewayAuth);
   storeCursor(key, cursor);
   feeds.get(key)?.resume(cursor);
 }
 
 /**
- * Attest the catalog persisted for the active gateway/vault on every SSE reconnect.
- * `undefined` means no local catalog is available yet; `[]` attests an empty catalog.
+ * Attest the catalog persisted for one gateway/vault on every SSE reconnect.
+ * `undefined` means no local catalog is available yet; `[]` attests an empty
+ * catalog. Without `scope` this addresses the ambient focused scope.
  */
-export async function setVaultChangeShapeIds(shapeIds?: readonly string[]): Promise<void> {
-  const gatewayAuth = await auth();
+export async function setVaultChangeShapeIds(
+  shapeIds?: readonly string[],
+  scope?: GatewayAuth,
+): Promise<void> {
+  const gatewayAuth = scope ?? (await auth());
   const key = scopeKey(gatewayAuth);
   if (shapeIds === undefined) shapeIdsByScope.delete(key);
   else shapeIdsByScope.set(key, normalizeShapeIds(shapeIds));

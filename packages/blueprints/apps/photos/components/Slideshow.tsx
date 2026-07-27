@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FC } from 'react';
 import { isRenderableUri, isVideoAsset } from '../format.ts';
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PauseIcon, PlayIcon } from '../icons.tsx';
+import { scopeAttr } from '../scopes.ts';
 import type { Asset } from '../types.ts';
 import styles from './Slideshow.module.css';
 
@@ -98,10 +99,13 @@ export function SlideshowView({
           native close listener already gates on `e.target === e.currentTarget`
           (see slideshow.tsx), so a click on either never reached it. */}
       <img
-        key={asset.asset_id}
+        key={`${asset.scope_id ?? ''}:${asset.asset_id}`}
         className={styles.image}
         src={asset.content_uri ?? undefined}
         alt={asset.title ?? 'Photo'}
+        /* A slideshow steps through the merged list, so consecutive slides can
+           come from different scopes; each names its own (issue #599). */
+        data-scope={scopeAttr(asset.scope_id)}
       />
       {navs.map(([variant, delta, Glyph, name]) => (
         <button

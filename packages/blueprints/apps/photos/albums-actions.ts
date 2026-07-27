@@ -3,8 +3,17 @@
 // each still needs a couple of app.tsx-owned setters/orchestrators, passed in
 // per call exactly like every other action module here.
 import { toast } from './kit.ts';
-import { act, narrate } from './outcomes.ts';
+import { act, narrate, writeTarget } from './outcomes.ts';
 import type { Album } from './types.ts';
+
+// Albums are a per-scope collection this app only ever authors in the member's
+// OWN space (issue #599): a collection id means nothing outside the scope that
+// minted it, and there is no cross-scope album. So all three commands resolve
+// through the `own` write target rather than following the chip selection.
+const ownScope = (): string | null => {
+  const target = writeTarget('own');
+  return target.disabled ? null : target.scopeId;
+};
 
 export async function submitNewAlbum(
   title: string,
@@ -20,7 +29,7 @@ export async function submitNewAlbum(
     setSelectedAlbum: (id: string | null) => void;
   },
 ): Promise<void> {
-  const outcome = await act('create-album', { title });
+  const outcome = await act('create-album', { title }, ownScope());
   setNewAlbumOpen(false);
   if (narrate(outcome)) {
     const albumId = outcome?.output?.album_id;
@@ -44,7 +53,7 @@ export async function submitRenameAlbum(
     setRenamingAlbumForId: (id: string | null) => void;
   },
 ): Promise<void> {
-  const outcome = await act('rename-album', { album_id: album.album_id, title });
+  const outcome = await act('rename-album', { album_id: album.album_id, title }, ownScope());
   setRenamingAlbumForId(null);
   if (narrate(outcome)) await refresh();
   else renderToolbar();
@@ -57,7 +66,7 @@ export async function deleteAlbumConfirmed(
     setSelectedAlbum,
   }: { refresh: () => Promise<void>; setSelectedAlbum: (id: string | null) => void },
 ): Promise<void> {
-  const outcome = await act('delete-album', { album_id: album.album_id });
+  const outcome = await act('delete-album', { album_id: album.album_id }, ownScope());
   if (narrate(outcome)) {
     setSelectedAlbum(null);
     toast('Album deleted — its photos stay in your library.');

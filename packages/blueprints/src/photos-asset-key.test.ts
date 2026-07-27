@@ -1,0 +1,240 @@
+// Cross-scope asset identity in Photos (issue #599, apps/photos/asset-key.ts).
+//
+// `asset_id` is minted per vault, so two mounted scopes can legitimately carry
+// the SAME id for two unrelated photos. Everything in the UI that means "this
+// exact row" — the selection set, the lightbox lookup, a batch command's
+// target — therefore keys on the pair `(scope_id, asset_id)`. These tests use a
+// deliberately colliding id and prove that a command aimed at one scope touches
+// ONLY that scope.
+//
+// LAYOUT NOTE. Apps import the kit as a SIBLING (`./kit.ts`) even though at
+// rest it lives in `kit/` — the gateway serves it from a shared dir, and
+// app-boot-harness.ts reproduces that with symlinks into a mirrored tree.
+// These modules are unit-testable without a booted app, so the same trick is
+// applied in miniature: the real sources are copied into a temp dir beside two
+// stubs (`kit.ts`, `outcomes.ts`) and imported from there. The modules UNDER
+// TEST are byte-identical copies, so this is still testing the real code — only
+// the two effect boundaries are replaced.
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+
+interface ActCall {
+  action: string;
+  input: Record<string, unknown>;
+  scope: string | null | undefined;
+}
+
+interface PhotosAsset {
+  asset_id: string;
+  content_id: string;
+  scope_id?: string | null;
+  title?: string | null;
+  taken_at?: string | null;
+  [key: string]: unknown;
+}
+
+// The loaded modules' surfaces, declared locally: a `typeof import(...)` of an
+// app file would pull `apps/` into this package's `src`-rooted program (the
+// same reason photos-library-store.test.ts declares its own `Store`).
+interface AssetKeyModule {
+  assetKey(asset: { asset_id: string; scope_id?: string | null }): string;
+  assetRefKey(scopeId: string | null | undefined, assetId: string): string;
+  parseAssetKey(key: string): { scopeId: string; assetId: string };
+  scopeOfKey(key: string): string | null;
+}
+interface VisibilityModule {
+  createVisibility(getters: {
+    getAssets: () => PhotosAsset[];
+    getTrash: () => PhotosAsset[];
+    getAlbumAssets: () => PhotosAsset[];
+    getSearchResults: () => PhotosAsset[] | null;
+    getSearchQuery: () => string;
+    getSelectedAlbum: () => string | null;
+  }): {
+    visibleAssets(): PhotosAsset[];
+    findAsset(key: string): PhotosAsset | undefined;
+  };
+}
+interface BatchCallbacks {
+  refresh: () => Promise<void>;
+  setBarBusy: (on: boolean) => void;
+  exitSelectMode: () => void;
+}
+interface SelectionActionsModule {
+  runBatchDelete(
+    keys: string[],
+    progressEl: HTMLElement | null,
+    callbacks: BatchCallbacks,
+  ): Promise<void>;
+  runBatchRestore(keys: string[], callbacks: Pick<BatchCallbacks, 'refresh'>): Promise<void>;
+}
+
+const PHOTOS = path.resolve(import.meta.dirname, '../apps/photos');
+const COPIED = [
+  'asset-key.ts',
+  'constants.ts',
+  'format.ts',
+  'types.ts',
+  'visibility.ts',
+  'selection-actions.ts',
+];
+
+const dir = mkdtempSync(path.join(os.tmpdir(), 'photos-asset-key-'));
+mkdirSync(dir, { recursive: true });
+for (const file of COPIED) copyFileSync(path.join(PHOTOS, file), path.join(dir, file));
+
+// The kit surface these two modules actually touch. `format.ts` wants three
+// formatting helpers; `selection-actions.ts` wants `toast`.
+writeFileSync(
+  path.join(dir, 'kit.ts'),
+  `export const BLOB_ROUTE = '/centraid/_vault/blobs';
+export const fmtBytes = (n: number): string => String(n);
+export const localDayKey = (at: string | Date): string =>
+  (at instanceof Date ? at.toISOString() : String(at)).slice(0, 10);
+export const toast = (): void => undefined;
+`,
+);
+// The command boundary, recording instead of dispatching. Every assertion below
+// is about WHAT the real batch code asked for and IN WHICH SCOPE.
+writeFileSync(
+  path.join(dir, 'outcomes.ts'),
+  `const sink = globalThis as unknown as { __photosActs: unknown[] };
+sink.__photosActs = sink.__photosActs ?? [];
+export const act = (action: string, input: unknown, scope?: string | null) => {
+  sink.__photosActs.push({ action, input, scope });
+  return Promise.resolve({ status: 'executed' });
+};
+export const narrate = (): boolean => false;
+export const writeTarget = () => ({ disabled: false, scopeId: 'vault-own', label: 'Library' });
+`,
+);
+
+const load = <T>(file: string): Promise<T> =>
+  import(pathToFileURL(path.join(dir, file)).href) as Promise<T>;
+
+const { assetKey, assetRefKey, parseAssetKey, scopeOfKey } =
+  await load<AssetKeyModule>('asset-key.ts');
+const { createVisibility } = await load<VisibilityModule>('visibility.ts');
+const { runBatchDelete, runBatchRestore } =
+  await load<SelectionActionsModule>('selection-actions.ts');
+
+const acts = (globalThis as unknown as { __photosActs: ActCall[] }).__photosActs;
+
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+/** THE collision: one id, two scopes, two entirely different photos. */
+const COLLIDING = 'asset-1';
+const ownRow: PhotosAsset = {
+  asset_id: COLLIDING,
+  content_id: 'c-own',
+  scope_id: 'vault-own',
+  title: 'My birthday',
+  taken_at: '2026-05-01T10:00:00Z',
+};
+const familyRow: PhotosAsset = {
+  asset_id: COLLIDING,
+  content_id: 'c-family',
+  scope_id: 'vault-family',
+  title: 'Reunion',
+  taken_at: '2026-04-01T10:00:00Z',
+};
+const rows = [ownRow, familyRow];
+
+function visibility() {
+  return createVisibility({
+    getAssets: () => rows,
+    getTrash: () => [],
+    getAlbumAssets: () => rows,
+    getSearchResults: () => null,
+    getSearchQuery: () => '',
+    getSelectedAlbum: () => null,
+  });
+}
+
+const noopBatch = {
+  refresh: () => Promise.resolve(),
+  setBarBusy: () => undefined,
+  exitSelectMode: () => undefined,
+};
+const progress = { textContent: '' } as unknown as HTMLElement;
+
+beforeEach(() => {
+  acts.length = 0;
+});
+
+describe('assetKey', () => {
+  it('separates two scopes carrying the same asset id', () => {
+    expect(assetKey(ownRow)).not.toBe(assetKey(familyRow));
+  });
+
+  it('round-trips through parseAssetKey', () => {
+    expect(parseAssetKey(assetKey(familyRow))).toEqual({
+      scopeId: 'vault-family',
+      assetId: COLLIDING,
+    });
+  });
+
+  it('treats the solo scope as ambient, so a single-scope mount is unchanged', () => {
+    const solo = assetRefKey('', 'asset-9');
+    expect(parseAssetKey(solo)).toEqual({ scopeId: '', assetId: 'asset-9' });
+    expect(scopeOfKey(solo)).toBeNull();
+    expect(scopeOfKey(assetKey(familyRow))).toBe('vault-family');
+  });
+
+  it('reads a bare asset id as the ambient scope rather than throwing', () => {
+    expect(parseAssetKey('asset-9')).toEqual({ scopeId: '', assetId: 'asset-9' });
+  });
+});
+
+describe('findAsset', () => {
+  it('resolves a colliding id to the scope that was asked for', () => {
+    const { findAsset } = visibility();
+    expect(findAsset(assetKey(familyRow))?.content_id).toBe('c-family');
+    expect(findAsset(assetKey(ownRow))?.content_id).toBe('c-own');
+  });
+
+  it('does not match a row from another scope with the same id', () => {
+    const { findAsset } = visibility();
+    expect(findAsset(assetRefKey('vault-grandma', COLLIDING))).toBeUndefined();
+  });
+});
+
+describe('visibleAssets', () => {
+  it('keeps both colliding rows instead of collapsing them into one tile', () => {
+    const shown = visibility().visibleAssets();
+    expect(shown).toHaveLength(2);
+    expect(shown.map((a) => a.content_id).sort()).toEqual(['c-family', 'c-own']);
+  });
+});
+
+describe('batch commands', () => {
+  it('deletes only the scope named in the key, never its colliding twin', async () => {
+    await runBatchDelete([assetKey(familyRow)], progress, noopBatch);
+    expect(acts).toEqual([
+      { action: 'delete-asset', input: { asset_id: COLLIDING }, scope: 'vault-family' },
+    ]);
+  });
+
+  it('addresses each key at its own scope across a mixed selection', async () => {
+    await runBatchDelete([assetKey(ownRow), assetKey(familyRow)], progress, noopBatch);
+    expect(acts.map((call) => call.scope)).toEqual(['vault-own', 'vault-family']);
+    // The payload still carries the BARE id: a vault only ever sees ids from
+    // its own scope, so the pairing is a client-side identity, not wire shape.
+    expect(new Set(acts.map((call) => call.input.asset_id))).toEqual(new Set([COLLIDING]));
+  });
+
+  it('restores into the scope the row was trashed from', async () => {
+    await runBatchRestore([assetKey(familyRow)], { refresh: () => Promise.resolve() });
+    expect(acts).toEqual([
+      { action: 'restore', input: { asset_id: COLLIDING }, scope: 'vault-family' },
+    ]);
+  });
+
+  it('addresses a solo-scope key at the ambient scope', async () => {
+    await runBatchDelete([assetRefKey('', COLLIDING)], progress, noopBatch);
+    expect(acts).toEqual([{ action: 'delete-asset', input: { asset_id: COLLIDING }, scope: null }]);
+  });
+});

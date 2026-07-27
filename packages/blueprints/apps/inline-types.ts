@@ -45,6 +45,23 @@ export interface InlineQueryModule {
   default: InlineQueryRun;
 }
 
+/**
+ * One mounted scope of a multi-scope app (issue #599). The shell mounts a
+ * multi-scope app over N scopes at once — the member's own scope plus any
+ * shared audience scopes they belong to — and hands the app this descriptor
+ * per scope. `label` is the ONLY string an app may render for a scope
+ * ("Library", "Family"): app-facing copy never names the underlying storage.
+ * `canWrite` is the shell's answer to "may this member add here?", already
+ * resolved from the member's role — apps disable, never guess.
+ */
+export interface InlineScope {
+  id: string;
+  label: string;
+  color?: string;
+  icon?: string;
+  canWrite: boolean;
+}
+
 /** Props the shell passes the app's `Root`. */
 export interface InlineAppProps {
   /** The element the shell applies data-app-* knobs to; `Root` reads them here. */
@@ -60,5 +77,11 @@ export interface InlineAppModule {
   queries: Record<string, InlineQueryModule>;
   /** Ask-panel config, if the app mounts one. */
   kitAsk?: InlineKitAsk;
+  /**
+   * Opt in to N-scope mounting (issue #599). When set, the shell mounts this
+   * app over every scope the member can see and runs `queries` once per scope;
+   * apps without the flag keep the single-scope contract unchanged.
+   */
+  multiScope?: true;
   Root: ComponentType<InlineAppProps>;
 }

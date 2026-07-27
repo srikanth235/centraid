@@ -10,12 +10,14 @@
 // CSS split: React-owned classes live in Timeline.module.css; the tile's
 // imperatively-injected media guts (ph-tile-ph/video-badge/duration/
 // is-placeholder from media.ts) stay GLOBAL — see that module's header.
+import { assetKey } from '../asset-key.ts';
 import { restoreAsset, toggleFavorite } from '../assets-actions.ts';
 import { cls, dayKey, fmtDay, fmtMonth } from '../format.ts';
 import { CheckIcon, HeartIcon } from '../icons.tsx';
 import { justify } from '../layout.ts';
 import { mountMedia } from '../media.ts';
 import { act, narrate } from '../outcomes.ts';
+import { canWriteScope, scopeAttr } from '../scopes.ts';
 import { Fragment } from 'react';
 import type { MouseEvent } from 'react';
 import type { Asset } from '../types.ts';
@@ -29,8 +31,15 @@ interface TileCommon {
   refresh: () => Promise<void>;
   selectMode: boolean;
   onEnterSelectMode: () => void;
-  onToggleSelect: (assetId: string, shiftKey?: boolean) => void;
-  onOpen: (assetId: string) => void;
+  /** Both take the COMPOSITE key (asset-key.ts), never a bare `asset_id`. */
+  onToggleSelect: (key: string, shiftKey?: boolean) => void;
+  onOpen: (key: string) => void;
+  /**
+   * The human name of the audience a tile is shown FROM (issue #599), or null
+   * when it is the member's own — which is every tile on a single-scope mount,
+   * so nothing about the grid changes for a member with one library.
+   */
+  scopeLabel: (scopeId: string | null | undefined) => string | null;
 }
 
 function Tile({
@@ -46,12 +55,22 @@ function Tile({
   onEnterSelectMode,
   onToggleSelect,
   onOpen,
+  scopeLabel,
 }: TileCommon & { asset: Asset; width: number; height: number; selected: boolean }) {
+  const badge = scopeLabel(asset.scope_id);
+  // A photo shown from a read-only audience can be looked at, not changed
+  // (issue #599) — so the controls that would write are disabled here rather
+  // than firing and narrating the shell's refusal.
+  const canWrite = canWriteScope(asset.scope_id);
   return (
     <div
       className={cls(styles.tile, selected && styles.selected, isTrash && styles.trash)}
       style={{ width: `${width}px`, height: `${height}px` }}
       data-asset-id={asset.asset_id}
+      /* The scope these bytes belong to — see fillTileMedia's note. Stamped on
+         the tile as well as the media element so every future child of a tile
+         inherits it through the authorizer's nearest-ancestor lookup. */
+      data-scope={scopeAttr(asset.scope_id)}
     >
       {/* The media fill (thumb or placeholder) and any video glyph are drawn
           imperatively by mountMedia/fillTileMedia (media.ts). */}
@@ -65,11 +84,17 @@ function Tile({
         ref={(el) => mountMedia(el, asset)}
         onClick={() => {
           if (isTrash) return;
-          if (selectMode) onToggleSelect(asset.asset_id);
-          else onOpen(asset.asset_id);
+          if (selectMode) onToggleSelect(assetKey(asset));
+          else onOpen(assetKey(asset));
         }}
       ></button>
       <span className={styles.tileScrim} aria-hidden="true" />
+      {badge ? (
+        // Only tiles from somewhere else are labelled: the member's own photos
+        // are the unmarked default, so a one-library member sees no badge at
+        // all and a merged timeline reads as "mine, plus these".
+        <span className={styles.tileScope}>{badge}</span>
+      ) : null}
       {!isTrash ? (
         <button
           type="button"
@@ -78,7 +103,7 @@ function Tile({
           onClick={(e) => {
             e.stopPropagation();
             if (!selectMode) onEnterSelectMode();
-            onToggleSelect(asset.asset_id);
+            onToggleSelect(assetKey(asset));
           }}
         >
           {selected ? <CheckIcon size={12} /> : null}
@@ -88,6 +113,7 @@ function Tile({
         <button
           type="button"
           className={styles.tileHeart}
+          disabled={!canWrite}
           aria-pressed={asset.favorite ? 'true' : 'false'}
           aria-label={asset.favorite ? 'Remove from favorites' : 'Add to favorites'}
           onClick={(e) => {
@@ -102,14 +128,16 @@ function Tile({
         <button
           type="button"
           className={styles.tileRemove}
+          disabled={!canWrite}
           title="Remove from album"
           aria-label="Remove from album"
           onClick={async (e) => {
             e.stopPropagation();
-            const outcome = await act('remove-from-album', {
-              album_id: albumId,
-              asset_id: asset.asset_id,
-            });
+            const outcome = await act(
+              'remove-from-album',
+              { album_id: albumId, asset_id: asset.asset_id },
+              asset.scope_id,
+            );
             if (narrate(outcome)) await refresh();
           }}
         >
@@ -132,7 +160,9 @@ function Tile({
             onClick={async (e) => {
               e.stopPropagation();
               e.currentTarget.disabled = true;
-              if (!(await restoreAsset(asset.asset_id, refresh))) e.currentTarget.disabled = false;
+              if (!(await restoreAsset(asset.asset_id, refresh, { scope: asset.scope_id }))) {
+                e.currentTarget.disabled = false;
+              }
             }}
           >
             Restore
@@ -152,11 +182,15 @@ function Row({
     <div className={styles.row}>
       {tiles.map((t) => (
         <Tile
-          key={t.asset.asset_id}
+          // Scope-qualified: two scopes can legitimately hand the merged list
+          // the same asset id (ids are per-scope, issue #599), and a bare id
+          // key would make React reuse one tile's DOM — and its already loaded
+          // bytes — for the other scope's photo.
+          key={`${t.asset.scope_id ?? ''}:${t.asset.asset_id}`}
           asset={t.asset}
           width={t.width}
           height={t.height}
-          selected={selectedIds.has(t.asset.asset_id)}
+          selected={selectedIds.has(assetKey(t.asset))}
           {...rest}
         />
       ))}
@@ -177,6 +211,7 @@ export function TimelineBody({
   onEnterSelectMode,
   onToggleSelect,
   onOpen,
+  scopeLabel,
   truncated,
   libraryWindow: windowSize,
   selectedAlbum: selected,
@@ -224,6 +259,7 @@ export function TimelineBody({
     onEnterSelectMode,
     onToggleSelect,
     onOpen,
+    scopeLabel,
   };
   return (
     <>

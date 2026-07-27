@@ -13,12 +13,18 @@ import type { DuplicateCluster } from './types.ts';
 
 type Root = { render: (node: ReactNode) => void };
 
+// Duplicates stay OWN-SCOPE (issue #599): near-duplicate clusters are computed
+// by a query that walks one scope's assets, and "which copy do I keep?" is only
+// a meaningful question inside the space the member controls. The shelf's one
+// write therefore lands in the member's own scope, which `ownScope` resolves.
 export function createDuplicates({
   gridRoot,
   refresh,
+  ownScope,
 }: {
   gridRoot: Root;
   refresh: () => Promise<void>;
+  ownScope: () => string | null;
 }) {
   let clusters: DuplicateCluster[] | null = null; // null = not yet loaded
   let loading = false;
@@ -37,7 +43,7 @@ export function createDuplicates({
         }}
         onTrashSelected={async () => {
           const ids = [...selected];
-          await trashDuplicateAssets(ids, { refresh });
+          await trashDuplicateAssets(ids, { refresh, scope: ownScope() });
           const trashedIds = new Set(ids);
           clusters = (clusters ?? [])
             .map((c) => ({ ...c, assets: c.assets.filter((a) => !trashedIds.has(a.asset_id)) }))

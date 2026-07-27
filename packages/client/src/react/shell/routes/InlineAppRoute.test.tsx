@@ -52,6 +52,25 @@ const fakeSession = {
 };
 vi.mock('../../../replica/shell-session.js', () => ({
   getReplicaShellSession: vi.fn(async () => fakeSession),
+  acquireReplicaShellSession: vi.fn(async () => ({
+    session: fakeSession,
+    release: () => undefined,
+  })),
+}));
+// The scope set is resolved over HTTP (issue #599); this route's suite is about
+// mounting, so it gets one ready scope rather than a gateway round-trip.
+vi.mock('./useAppScopes.js', () => ({
+  useAppScopes: () => ({
+    status: 'ready',
+    data: [
+      {
+        scope: { id: 'vault-own', label: 'Library', canWrite: true },
+        identity: { gatewayId: 'gw', vaultId: 'vault-own' },
+      },
+    ],
+  }),
+  scopeSetKey: (scopes: { identity: { vaultId: string } }[]) =>
+    scopes.map((entry) => entry.identity.vaultId).join(','),
 }));
 
 const app = {
