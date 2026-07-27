@@ -8,7 +8,7 @@ import { EnrollmentStore } from '../serve/enrollment-store.js';
 import { GatewayDatabase } from '../serve/gateway-db.js';
 import { PairingTicketStore, parsePairingTicket } from '../serve/pairing-store.js';
 import { hashControlToken, WebControlSessionStore } from '../serve/web-session-store.js';
-import { makeDevicesRouteHandler } from './devices-routes.js';
+import { makeDevicesRouteHandler, type DevicesRouteDeps } from './devices-routes.js';
 
 const servers: http.Server[] = [];
 const databases: GatewayDatabase[] = [];
@@ -20,7 +20,9 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) await fs.rm(dir, { recursive: true, force: true });
 });
 
-async function harness(): Promise<{
+async function harness(
+  overrides: Partial<Pick<DevicesRouteDeps, 'endpointTicket' | 'isUninitialized'>> = {},
+): Promise<{
   base: string;
   enrollments: EnrollmentStore;
   tickets: PairingTicketStore;
@@ -41,6 +43,7 @@ async function harness(): Promise<{
     vaultName: (vaultId) => (vaultId === 'vault-a' ? 'Personal' : undefined),
     endpointTicket: () => 'endpoint-ticket',
     onEndpointRevoked,
+    ...overrides,
   });
   const server = http.createServer((req, res) => void handler(req, res));
   servers.push(server);
@@ -245,4 +248,199 @@ test('compute profile validates every capability and persists a valid update', a
     contributeWhileCharging: true,
     capabilities,
   });
+});
+
+/*
+ * Branch coverage the #566 rewrite dropped (issue #568 item L).
+ *
+ * `devices-routes.test.ts` shrank from 18 tests to 5, leaving these live
+ * branches unexercised: DELETE idempotency, the 405s, the foreign-vault 404,
+ * peer-delete 403, self-unpair by a non-owner, `vault_required`, the
+ * no-endpoint 409, and the `uninitialized` 409. Each is a refusal or a
+ * safe-default that would fail silently — every one returns a plausible-
+ * looking status, so nothing downstream would notice a regression.
+ */
+
+test('DELETE of an already-revoked enrollment is idempotent, not an error', async () => {
+  const f = await harness();
+  f.enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-a',
+    label: 'Owner',
+    trust: 'owner',
+  });
+  const member = f.enrollments.enroll({
+    endpointId: 'member-key',
+    vaultId: 'vault-a',
+    label: 'Member',
+    trust: 'full',
+  });
+  const url = `${f.base}/centraid/_gateway/devices/${encodeURIComponent(member.enrollmentId)}`;
+
+  const first = await fetch(url, { method: 'DELETE', headers: deviceHeaders('owner-key') });
+  expect(first.status).toBe(200);
+  // A client retrying after a dropped response must not see a 404 or a 500 —
+  // the row is already gone and that IS the requested end state.
+  const again = await fetch(url, { method: 'DELETE', headers: deviceHeaders('owner-key') });
+  expect(again.status).toBe(200);
+  expect(f.enrollments.isEnrolled('member-key')).toBe(false);
+});
+
+test('every devices route refuses a wrong method with 405', async () => {
+  const f = await harness();
+  const owner = f.enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-a',
+    label: 'Owner',
+    trust: 'owner',
+  });
+  const cases: Array<[string, string]> = [
+    ['/centraid/_gateway/devices', 'POST'],
+    ['/centraid/_gateway/devices/ticket', 'GET'],
+    [`/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}`, 'PATCH'],
+    [`/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}/compute`, 'POST'],
+  ];
+  for (const [route, method] of cases) {
+    const response = await fetch(`${f.base}${route}`, {
+      method,
+      headers: deviceHeaders('owner-key'),
+    });
+    expect(response.status, `${method} ${route}`).toBe(405);
+    expect(await response.json()).toMatchObject({ error: 'method_not_allowed' });
+  }
+});
+
+test('an enrollment in a foreign vault 404s rather than leaking its existence', async () => {
+  const f = await harness();
+  f.enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-a',
+    label: 'Owner',
+    trust: 'owner',
+  });
+  const foreign = f.enrollments.enroll({
+    endpointId: 'stranger-key',
+    vaultId: 'vault-b',
+    label: 'Stranger',
+    trust: 'owner',
+  });
+  for (const route of [
+    `/centraid/_gateway/devices/${encodeURIComponent(foreign.enrollmentId)}`,
+    `/centraid/_gateway/devices/${encodeURIComponent(foreign.enrollmentId)}/compute`,
+  ]) {
+    const response = await fetch(`${f.base}${route}`, {
+      method: route.endsWith('/compute') ? 'PUT' : 'DELETE',
+      headers: deviceHeaders('owner-key'),
+      ...(route.endsWith('/compute') ? { body: JSON.stringify({}) } : {}),
+    });
+    expect(response.status, route).toBe(404);
+  }
+  expect(f.enrollments.isEnrolled('stranger-key')).toBe(true);
+});
+
+test('a full-trust device cannot revoke a peer but may unpair itself', async () => {
+  const f = await harness();
+  f.enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-a',
+    label: 'Owner',
+    trust: 'owner',
+  });
+  const member = f.enrollments.enroll({
+    endpointId: 'member-key',
+    vaultId: 'vault-a',
+    label: 'Member',
+    trust: 'full',
+  });
+  const peer = f.enrollments.enroll({
+    endpointId: 'peer-key',
+    vaultId: 'vault-a',
+    label: 'Peer',
+    trust: 'full',
+  });
+
+  // This is what stops a compromised `full` device from revoking its owner.
+  const denied = await fetch(
+    `${f.base}/centraid/_gateway/devices/${encodeURIComponent(peer.enrollmentId)}`,
+    { method: 'DELETE', headers: deviceHeaders('member-key') },
+  );
+  expect(denied.status).toBe(403);
+  expect(await denied.json()).toMatchObject({ error: 'not_owner' });
+  expect(f.enrollments.isEnrolled('peer-key')).toBe(true);
+
+  // Self-unpair by a non-owner stays allowed — leaving is always the device's
+  // own call.
+  const selfUnpair = await fetch(
+    `${f.base}/centraid/_gateway/devices/${encodeURIComponent(member.enrollmentId)}`,
+    { method: 'DELETE', headers: deviceHeaders('member-key') },
+  );
+  expect(selfUnpair.status).toBe(200);
+  expect(f.enrollments.isEnrolled('member-key')).toBe(false);
+});
+
+test('minting a ticket with no resolvable vault answers vault_required', async () => {
+  const f = await harness();
+  // Enrolled in a vault the handler's `vaultName` does not know, and no
+  // explicit target — nothing to scope the ticket to.
+  f.enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-b',
+    label: 'Owner',
+    trust: 'owner',
+  });
+  const anonymousVault = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
+    method: 'POST',
+    headers: deviceHeaders('owner-key'),
+    body: JSON.stringify({}),
+  });
+  expect(anonymousVault.status).toBe(404);
+
+  const noVaults = await harness();
+  noVaults.enrollments.enroll({
+    endpointId: 'lonely-key',
+    vaultId: 'vault-a',
+    label: 'Owner',
+    trust: 'owner',
+  });
+  const unknownTarget = await fetch(`${noVaults.base}/centraid/_gateway/devices/ticket`, {
+    method: 'POST',
+    headers: deviceHeaders('lonely-key'),
+    body: JSON.stringify({ vaultId: 'no-such-vault' }),
+  });
+  expect(unknownTarget.status).toBe(400);
+  expect(await unknownTarget.json()).toMatchObject({ error: 'vault_required' });
+});
+
+test('a gateway with no iroh endpoint refuses to mint a dud ticket', async () => {
+  const f = await harness({ endpointTicket: () => undefined });
+  f.enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-a',
+    label: 'Owner',
+    trust: 'owner',
+  });
+  const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
+    method: 'POST',
+    headers: deviceHeaders('owner-key'),
+    body: JSON.stringify({ vaultId: 'vault-a' }),
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: 'no_iroh_endpoint' });
+});
+
+test('a pre-founding gateway refuses ordinary pairing with uninitialized', async () => {
+  const f = await harness({ isUninitialized: () => true });
+  f.enrollments.enroll({
+    endpointId: 'owner-key',
+    vaultId: 'vault-a',
+    label: 'Owner',
+    trust: 'owner',
+  });
+  const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
+    method: 'POST',
+    headers: deviceHeaders('owner-key'),
+    body: JSON.stringify({ vaultId: 'vault-a' }),
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: 'uninitialized' });
 });

@@ -39,7 +39,7 @@ export interface ConditionWhereClauseLike {
 }
 
 export type EditableTrigger =
-  | { kind: 'cron'; expr: string }
+  | { kind: 'cron'; expr: string; tz?: string }
   | { kind: 'webhook'; pending: true }
   | { kind: 'data'; entities: string[]; every?: string }
   | { kind: 'condition'; entity: string; where?: ConditionWhereClauseLike[]; every?: string };

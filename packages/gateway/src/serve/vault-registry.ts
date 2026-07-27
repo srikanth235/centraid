@@ -15,9 +15,14 @@
  * request (tests, boot paths that predate scoping) `current()` falls back
  * to the default vault — the oldest one.
  *
- * Vault lifecycle is split across two planes (issue #289): create/delete are
- * ADMIN acts (the server CLI, guarded by shell access — they no longer ride
- * HTTP); rename/presentation are owner acts on an enrolled vault.
+ * Vault lifecycle is split by AUTHORITY, not by transport (issue #289,
+ * corrected in #568 item J). `create` and `delete` are ADMIN acts, but they
+ * are no longer CLI-only: the founding plane (`founding-routes.ts`) creates
+ * the zero→one vault over HTTP against a one-time host-possession ticket, and
+ * the erase ceremony (`vault-routes.ts`) deletes over HTTP behind the owner
+ * enrollment + typed-name + verified-kit guards. What has not changed is that
+ * neither is reachable by an ordinary enrolled device on ordinary authority.
+ * `rename`/presentation remain plain owner acts on an enrolled vault.
  */
 
 import { readdirSync, rmSync, existsSync } from 'node:fs';
@@ -428,7 +433,11 @@ export class VaultRegistry {
     return [...this.planes.keys()].sort().map((id) => this.planes.get(id)!);
   }
 
-  /** Create (and mount) a fresh vault. ADMIN act — CLI/host only, never HTTP. */
+  /**
+   * Create (and mount) a fresh vault. ADMIN act: the CLI, or the founding
+   * plane redeeming a host-possession ticket over HTTP (#568 item J — this
+   * is no longer CLI-only). Never reachable on ordinary device authority.
+   */
   create(name?: string, reservedVaultId?: string): VaultInfo {
     const trimmed = name?.trim();
     if (trimmed !== undefined && trimmed.length === 0) {
@@ -515,8 +524,10 @@ export class VaultRegistry {
    * tier purged best-effort (issue #296 — deleting a vault must not leave
    * the owner's bytes billing in a bucket forever; a crash here costs
    * orphan objects, which any later reconcile against the empty set finds).
-   * ADMIN act — CLI/host only, never HTTP. Deleting the last vault returns
-   * the gateway to the legal uninitialized state.
+   * ADMIN act: the CLI, or the erase ceremony over HTTP behind the owner
+   * enrollment, typed-name confirmation, and verified-kit guards (#568 item
+   * J — this is no longer CLI-only). Deleting the last vault returns the
+   * gateway to the legal uninitialized state.
    *
    * This registry owns content deletion only. The erase ceremony's durable
    * state machine owns crypto-erasure through KeyStore after its gateway rows

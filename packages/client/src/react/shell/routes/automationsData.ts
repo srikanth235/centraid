@@ -12,7 +12,7 @@ import {
   relativeTime,
   triggersSummary,
 } from '../../../app-format.js';
-import { cronNextRuns } from '../../../cron.js';
+import { cronNextRuns, cronRunLabel, resolveCronTimezone } from '../../../cron.js';
 import { listAutomationTurns, listAutomations } from '../../../gateway-client.js';
 import type {
   AuOverviewData,
@@ -187,9 +187,11 @@ export function buildOverviewData(
             : 'Compile failed'
         : AU_STATUS_LABEL[statusKind];
       const cronTrig = r.triggers.find(
-        (t): t is { kind: 'cron'; expr: string } => t.kind === 'cron',
+        (t): t is { kind: 'cron'; expr: string; tz?: string } => t.kind === 'cron',
       );
-      const nextRun = cronTrig ? cronNextRuns(cronTrig.expr, 1)[0] : undefined;
+      const cronTz = cronTrig ? resolveCronTimezone(cronTrig.tz) : undefined;
+      const nextRun = cronTrig ? cronNextRuns(cronTrig.expr, 1, new Date(), cronTz)[0] : undefined;
+      const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       return {
         attentionCount: attentionByRef?.get(r.ref) ?? 0,
         glyphIcon: glyphForId(r.id),
@@ -206,7 +208,11 @@ export function buildOverviewData(
             : (last.run.error ?? 'Failed')
           : null,
         name: r.name,
-        nextRunLabel: nextRun ? relativeRunLabel(nextRun) : null,
+        nextRunLabel: nextRun
+          ? cronTz
+            ? cronRunLabel(nextRun, { timeZone: cronTz, viewerTimeZone: viewerTz })
+            : relativeRunLabel(nextRun)
+          : null,
         ref: r.ref,
         statusKind,
         statusLabel,
@@ -269,11 +275,21 @@ export function deriveAutomationHero(
 ): AutomationHeroDTO {
   const hasWebhook = row.triggers.some((t) => t.kind === 'webhook');
   const hasCron = row.triggers.some((t) => t.kind === 'cron');
-  const cronExprs = row.triggers
-    .filter((t): t is { kind: 'cron'; expr: string } => t.kind === 'cron')
-    .map((t) => t.expr);
+  const cronTriggers = row.triggers.filter(
+    (t): t is { kind: 'cron'; expr: string; tz?: string } => t.kind === 'cron',
+  );
+  const cronExprs = cronTriggers.map((t) => t.expr);
+  const firstCron = cronTriggers[0];
+  const cronTz = firstCron ? resolveCronTimezone(firstCron.tz) : undefined;
+  const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const nextRuns =
-    hasCron && cronExprs[0] ? cronNextRuns(cronExprs[0], 3).map((dt) => relativeRunLabel(dt)) : [];
+    hasCron && cronExprs[0]
+      ? cronNextRuns(cronExprs[0], 3, new Date(), cronTz).map((dt) =>
+          cronTz
+            ? cronRunLabel(dt, { timeZone: cronTz, viewerTimeZone: viewerTz })
+            : relativeRunLabel(dt),
+        )
+      : [];
 
   let webhook: AutomationHeroDTO['webhook'] = null;
   if (hasWebhook) {

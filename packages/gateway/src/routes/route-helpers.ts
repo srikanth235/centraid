@@ -9,6 +9,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { createBrotliCompress, createGzip, constants } from 'node:zlib';
 import { negotiateEncoding } from '@centraid/app-engine';
+import {
+  DEVICE_IDENTITY_HEADER,
+  DEVICE_PROOF_HEADER,
+  TUNNEL_FORWARDED_HEADER,
+} from '@centraid/tunnel';
 
 /** Default request-body cap (1 MiB) for JSON + draft-file bodies. */
 export const DEFAULT_MAX_BODY_BYTES = 1 * 1024 * 1024;
@@ -22,6 +27,24 @@ export function isLoopbackRequest(req: IncomingMessage): boolean {
     address === '127.0.0.1' ||
     address.startsWith('127.') ||
     address.startsWith('::ffff:127.')
+  );
+}
+
+/**
+ * The host itself made this request — a kernel-observed loopback peer that
+ * no forwarder produced (issue #568 items A/B).
+ *
+ * Loopback alone is NOT an identity: the daemon's iroh forwarder, the Rust
+ * byte relay, and the desktop phone tunnel all deliver REMOTE peers to
+ * 127.0.0.1. Each stamps its markings on the way through, so a host-only
+ * capability asks for a loopback socket AND the absence of every marking.
+ */
+export function isDirectHostRequest(req: IncomingMessage): boolean {
+  return (
+    isLoopbackRequest(req) &&
+    req.headers[DEVICE_IDENTITY_HEADER] === undefined &&
+    req.headers[DEVICE_PROOF_HEADER] === undefined &&
+    req.headers[TUNNEL_FORWARDED_HEADER] === undefined
   );
 }
 

@@ -25,6 +25,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { endpointIdForSecret } from '@centraid/tunnel';
+import { landlordBearerForDataDir } from '@centraid/gateway';
 import {
   buildDetachedSpawnOptions,
   decideControl,
@@ -149,6 +150,18 @@ async function probeGatewayAuthenticated(
   } catch {
     return false;
   }
+}
+
+/** First candidate bearer the live gateway accepts, or `undefined`. */
+async function firstWorkingToken(
+  url: string,
+  candidates: ReadonlyArray<string | undefined>,
+): Promise<string | undefined> {
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (await probeGatewayAuthenticated(url, candidate)) return candidate;
+  }
+  return undefined;
 }
 
 export interface EnsureDetachedOptions {
@@ -393,7 +406,17 @@ export async function ensureDetachedGateway(
     options.gatewayWrappingKey ?? getOrCreateGatewayWrappingKey(LOCAL_GATEWAY_ID);
   const existingToken = readLocalLoopbackToken(LOCAL_GATEWAY_ID);
   const lock = lockSnapshot(dataDir, cliPath, nodeBin, gatewayWrappingKey);
-  const credentialedProbeOk = await probeGatewayAuthenticated(candidateUrl, existingToken);
+  // A gateway the user installed as an OS service was not spawned by this
+  // desktop, so it never received `CENTRAID_GATEWAY_TOKEN` and derives its
+  // landlord bearer from the endpoint key instead. The desktop holds the same
+  // custody credential, so try the derived bearer as well — otherwise opting
+  // into the service produces a permanent `'foreign'` refusal on every
+  // subsequent launch (issue #568 item F).
+  const controlToken = await firstWorkingToken(candidateUrl, [
+    existingToken,
+    landlordBearerForDataDir(dataDir, { masterKey: gatewayWrappingKey }),
+  ]);
+  const credentialedProbeOk = controlToken !== undefined;
   const publicProbeOk = await probeGatewayInfo(candidateUrl);
   const decision: ControlDecision = decideControl({
     lockHeld: lock.held,
@@ -415,10 +438,10 @@ export async function ensureDetachedGateway(
     );
   }
 
-  if (decision === 'own' && existingToken) {
+  if (decision === 'own' && controlToken) {
     return makeHandle({
       url: candidateUrl,
-      token: existingToken,
+      token: controlToken,
       pid: lock.holderPid ?? 0,
       host,
       port,

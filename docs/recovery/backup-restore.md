@@ -14,7 +14,13 @@ When backup, restore, or blank-machine `recover` strands mid-flight. Product pat
 The recovery-kit passphrase wrap is **load-bearing key custody**, not a
 convenience. The kit contains the backup keyring and backed-up vault DEKs;
 without its password those keys remain unavailable even when the wrapped file
-and provider objects are both present.
+and provider objects are both present. An UNWRAPPED kit is not accepted at all
+(issue #568) — accepting one also ignored the supplied password, which made
+possession of the plaintext file sufficient on three routes.
+
+For an erase that stranded, or a restore that follows a completed erase, see
+[vault-erase.md](vault-erase.md) — erase destroys the vault DEK, so its
+recovery story is materially different from an ordinary restore.
 
 ## Symptoms
 

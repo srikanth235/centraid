@@ -28,7 +28,8 @@ import {
   BackupProviderError,
   openRemoteBackupProvider,
   SNAPSHOT_FORMAT_V2,
-  type RecoveryKitDocument,
+  wrapRecoveryKit,
+  type WrappedRecoveryKitDocument,
 } from '@centraid/backup';
 import { startFakeProviderServer } from '@centraid/backup/dist/testing/fake-provider-server.js';
 import { FsBlobStore, KeyStore, ReplicaIndex } from '@centraid/vault';
@@ -42,6 +43,9 @@ import { daemonLayoutFor } from '../cli/paths.js';
 import { recover } from './recover.js';
 
 vi.setConfig({ testTimeout: 30_000 });
+
+/** #568 item J: every recovery kit is password-wrapped; there is no plain path. */
+const KIT_PASSWORD = 'correct horse battery staple';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
 
@@ -112,7 +116,7 @@ interface MachineA {
   vaultId: string;
   targetId: string;
   oldGeneration: number;
-  kitDocument: RecoveryKitDocument;
+  kitDocument: WrappedRecoveryKitDocument;
   originals: string[];
   thumbs: string[];
   itemId: string;
@@ -223,7 +227,9 @@ async function seedMachineA(
   const status = await service.status();
   const targetId = status[vaultId]!.targetId;
   const oldGeneration = status[vaultId]!.generation;
-  const kitDocument = await service.recoveryKitDocument();
+  // #568 item J: a kit is always password-wrapped, so the recovery path
+  // takes the wrapped document plus its password — there is no plain branch.
+  const kitDocument = wrapRecoveryKit(await service.recoveryKitDocument(), KIT_PASSWORD);
 
   // Replicate originals[0] + originals[1] into the provider's cas store (the
   // durable copy a hosted vault keeps), directly via the cas data plane. The
@@ -261,6 +267,7 @@ test('a blank machine recovers a whole vault from nothing but the kit and the ap
   const layout = daemonLayoutFor(dataDir);
   const report = await recover({
     kitDocument: a.kitDocument,
+    password: KIT_PASSWORD,
     apiKey: a.apiKey,
     vaultRoot: layout.vaultDir,
     dataDir: layout.dataDir,
@@ -419,6 +426,7 @@ test('recovery refuses a snapshot written by newer software BEFORE any byte is f
   await expect(
     recover({
       kitDocument: a.kitDocument,
+      password: KIT_PASSWORD,
       apiKey: a.apiKey,
       vaultRoot: layout.vaultDir,
       dataDir: layout.dataDir,
@@ -449,6 +457,7 @@ test('adopt-time reconcile re-pins a replicated blob the provider dropped, and u
   const layout = daemonLayoutFor(dataDir);
   const report = await recover({
     kitDocument: a.kitDocument,
+    password: KIT_PASSWORD,
     apiKey: a.apiKey,
     vaultRoot: layout.vaultDir,
     dataDir: layout.dataDir,

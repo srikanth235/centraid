@@ -21,6 +21,7 @@
 
 import { openVaultRegistry, VaultRegistryError, type VaultInfo } from '../serve/vault-registry.js';
 import { GatewayDatabase, GatewayLockError } from '../serve/gateway-db.js';
+import { daemonKeyStore } from './key-store.js';
 import { daemonLayoutFor } from './paths.js';
 import { jsonFail, runJson, type Fail } from './json-cli.js';
 
@@ -94,6 +95,11 @@ export async function commandVault(
       }
     }
     const registry = openVaultRegistry({
+      // The daemon always writes sealing keys through a protector, so a
+      // protector-less store cannot unwrap them: mounts fail, `list()`
+      // returns `[]`, and every verb here reports an empty gateway
+      // (issue #568 item D).
+      keyStore: daemonKeyStore(layout.keysDir),
       rootDir: layout.vaultDir,
       logger: quietLogger,
       enableWalShipper: false,

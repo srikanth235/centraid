@@ -60,6 +60,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
   private readonly onDormancyChange?: VaultCursorEngineOptions['onDormancyChange'];
   private readonly nudgeDelayMs: number;
   private readonly catchUpCap: number;
+  private readonly defaultCronTimeZone?: () => string | undefined;
   private boundary?: ReturnType<typeof setTimeout>;
   private interval?: ReturnType<typeof setInterval>;
   private nudgeTimer?: ReturnType<typeof setTimeout>;
@@ -77,6 +78,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     this.now = options.now ?? (() => new Date());
     this.onError = options.onError;
     this.onTick = options.onTick;
+    this.defaultCronTimeZone = options.defaultCronTimeZone;
     this.onDormancyChange = options.onDormancyChange;
     this.nudgeDelayMs = options.nudgeDelayMs ?? 25;
     this.catchUpCap = options.catchUpCap ?? DEFAULT_TRIGGER_CATCH_UP_CAP;
@@ -89,7 +91,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       // Disabling drops registrations but deliberately keeps the stored
       // cursors: re-enabling resumes from the recorded position instead of
       // bootstrapping past everything that happened while it was off.
-      for (const registration of registrationsFor(row)) {
+      for (const registration of registrationsFor(row, this.defaultCronTimeZone?.())) {
         this.registrations.set(this.key(row.ref, registration.triggerIndex), registration);
       }
     }
@@ -115,7 +117,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     for (const row of rows) {
       // A disabled row is still validated: its triggers must stay legal for
       // the cursors that survive the disable.
-      const registrations = registrationsFor(row);
+      const registrations = registrationsFor(row, this.defaultCronTimeZone?.());
       if (!row.enabled) continue;
       for (const registration of registrations) {
         next.set(this.key(row.ref, registration.triggerIndex), registration);
@@ -164,6 +166,8 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       // A cron reader owns its whole (cursor, now] window. Processing it on
       // every wake-minute is what catches a 09:00 due instant when the host
       // resumes at 10:00; current-minute matching would defer it for a day.
+      // Non-cron gated readers (condition/data/event) match their gate on
+      // host-local wall clock — only pure cron triggers carry a zone.
       if (registration.trigger.kind === 'cron' || (expr !== undefined && cronMatches(expr, at))) {
         this.processSafely(registration, at);
       }
@@ -301,7 +305,10 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         ...(priorPending.gapReason !== undefined ? { gapReason: priorPending.gapReason } : {}),
       };
     } else if (registration.trigger.kind === 'cron') {
-      result = readCronCursor(registration.cronExprs ?? [registration.trigger.expr], cursor, at);
+      const schedules =
+        registration.cronSchedules ??
+        (registration.cronExprs ?? [registration.trigger.expr]).map((expr) => ({ expr }));
+      result = readCronCursor(schedules, cursor, at);
     } else if (this.readCursor) {
       result = await this.readCursor({
         automationRef: registration.ref,
@@ -449,16 +456,22 @@ export class VaultCursorEngine implements LocalCursorScheduler {
   private signatureByRef(rows: ReadonlyMap<string, CursorRegistration>): Map<string, string> {
     const grouped = new Map<
       string,
-      Array<{ index: number; trigger: Trigger; cronExprs?: readonly string[] }>
+      Array<{
+        index: number;
+        trigger: Trigger;
+        cronExprs?: readonly string[];
+        cronSchedules?: CursorRegistration['cronSchedules'];
+      }>
     >();
     for (const registration of rows.values()) {
       const list = grouped.get(registration.ref) ?? [];
       list.push({
         index: registration.triggerIndex,
         trigger: registration.trigger,
-        // Collapsed cron expressions are part of the definition: editing the
-        // second cron of an automation must still read as "updated".
+        // Collapsed cron expressions + zones are part of the definition:
+        // editing the second cron or its timezone must still read as "updated".
         ...(registration.cronExprs ? { cronExprs: registration.cronExprs } : {}),
+        ...(registration.cronSchedules ? { cronSchedules: registration.cronSchedules } : {}),
       });
       grouped.set(registration.ref, list);
     }

@@ -13,9 +13,10 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { AUTHED_PLANE_HEADER } from '@centraid/app-engine';
 import { ROUTES, buildGatewayInfoPayload, type GatewayCapabilities } from '@centraid/protocol';
 import type { RouteHandler } from '../serve/build-gateway.js';
-import { isLoopbackRequest, sendJson } from './route-helpers.js';
+import { sendJson } from './route-helpers.js';
 
 const INFO_PATH = ROUTES.gatewayInfo;
 
@@ -26,10 +27,35 @@ export interface GatewayInfoRouteOptions {
   capabilities?: GatewayCapabilities;
   /** Read live because the first vault may be founded after process boot. */
   status?: () => 'uninitialized' | 'ready';
+  /**
+   * A vault exists but its recovery kit is unverified, so `status` still
+   * reads `uninitialized` while create/restore would 409 (issue #568 item G).
+   */
+  foundingPending?: () => boolean;
   /** Stable identity can be derived before the endpoint joins the network. */
   endpointId?: () => string | undefined;
-  /** Current relay/address data. Never publish this beyond the local host. */
+  /**
+   * Current relay/address data — a dial ticket for this gateway's iroh
+   * endpoint. Served ONLY to a caller that presented a valid credential
+   * (issue #568 item C).
+   *
+   * The route itself is public because a client must read the version /
+   * schema handshake before it can pair, and `isLoopbackRequest` is not a
+   * substitute for authentication: a browser fetch to `http://127.0.0.1:<port>`
+   * from any page the owner happens to visit is a loopback socket, needs no
+   * preflight for a plain GET, and `decideCors` answers it `*`.
+   */
   endpointTicket?: () => string | undefined;
+}
+
+/**
+ * Did the HTTP layer resolve a credential for this request? `publicPaths`
+ * skips the 401, not the evaluation — `AUTHED_PLANE_HEADER` is stamped by
+ * `startRuntimeHttpServer` and stripped from every inbound request first,
+ * so a client cannot forge it.
+ */
+function isAuthenticated(req: IncomingMessage): boolean {
+  return typeof req.headers[AUTHED_PLANE_HEADER] === 'string';
 }
 
 export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): RouteHandler {
@@ -43,7 +69,7 @@ export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): R
       return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
     }
     const endpointId = options.endpointId?.();
-    const endpointTicket = isLoopbackRequest(req) ? options.endpointTicket?.() : undefined;
+    const endpointTicket = isAuthenticated(req) ? options.endpointTicket?.() : undefined;
     return sendJson(
       res,
       200,
@@ -52,6 +78,7 @@ export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): R
         startedAt,
         uptimeMs: Date.now() - startedAt,
         status: options.status?.() ?? 'ready',
+        ...(options.foundingPending?.() ? { foundingPending: true } : {}),
         ...(endpointId !== undefined ? { endpointId } : {}),
         ...(endpointTicket !== undefined ? { endpointTicket } : {}),
         ...(options.capabilities ? { capabilities: options.capabilities } : {}),

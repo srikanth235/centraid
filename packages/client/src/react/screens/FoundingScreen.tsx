@@ -31,7 +31,13 @@ export interface FoundingScreenBridge {
 }
 
 export interface FoundingScreenProps extends FoundingScreenBridge {
-  mode: 'create' | 'restore';
+  /**
+   * `verify` resumes an interrupted ceremony (issue #568 item G): the vault
+   * and its kit already exist on the gateway, only the re-select proof is
+   * missing, so it renders the same verify step `create` reaches after the
+   * kit downloads — without needing the in-memory `created` result.
+   */
+  mode: 'create' | 'restore' | 'verify';
   onComplete: () => Promise<void> | void;
   onBack: () => void;
 }
@@ -109,8 +115,14 @@ export default function FoundingScreen(props: FoundingScreenProps): JSX.Element 
     }
   };
 
+  const verifying = props.mode === 'verify' || (props.mode === 'create' && created !== undefined);
+
   const verify = async (): Promise<void> => {
     if (selectedKit === undefined || !lossConsent) return;
+    if (!password) {
+      setError('Enter the password you chose for this recovery kit.');
+      return;
+    }
     setBusy(true);
     setError(undefined);
     try {
@@ -154,64 +166,76 @@ export default function FoundingScreen(props: FoundingScreenProps): JSX.Element 
       <div className={styles.card} data-theme="dark">
         <div className={styles.eyebrow}>CENTRAID · VAULT FOUNDING</div>
         <h1 className={styles.title}>
-          {props.mode === 'create' ? 'Create your vault.' : 'Restore your vault.'}
+          {verifying
+            ? 'Verify your recovery kit.'
+            : props.mode === 'restore'
+              ? 'Restore your vault.'
+              : 'Create your vault.'}
         </h1>
-        {props.mode === 'create' ? (
-          created ? (
-            <>
-              <p className={styles.sub}>
-                The wrapped kit was downloaded. Re-select that exact file to prove it is readable.
-              </p>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="application/json,.json"
-                onChange={(event) => void chooseFile(event.currentTarget.files?.[0])}
-              />
-              <p className={styles.sub}>{selectedName || 'No file selected yet.'}</p>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={lossConsent}
-                  onChange={(event) => setLossConsent(event.currentTarget.checked)}
-                />{' '}
-                I understand that losing this file or password makes backed-up vaults unrecoverable.
-              </label>
-              <Button
-                label={busy ? 'Verifying…' : 'Verify and enter'}
-                disabled={busy || selectedKit === undefined || !lossConsent}
-                onClick={() => void verify()}
-              />
-            </>
-          ) : (
-            <>
-              <label>
-                Vault name
-                <input value={name} onChange={(event) => setName(event.currentTarget.value)} />
-              </label>
+        {verifying ? (
+          <>
+            <p className={styles.sub}>
+              {props.mode === 'verify'
+                ? 'This gateway already created its vault — only the recovery-kit check is left. Select the kit file it downloaded and enter its password.'
+                : 'The wrapped kit was downloaded. Re-select that exact file to prove it is readable.'}
+            </p>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => void chooseFile(event.currentTarget.files?.[0])}
+            />
+            <p className={styles.sub}>{selectedName || 'No file selected yet.'}</p>
+            {props.mode === 'verify' ? (
               <label>
                 Recovery-kit password
                 <input
                   type="password"
-                  autoComplete="new-password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(event) => setPassword(event.currentTarget.value)}
                 />
               </label>
-              <label>
-                Founding ticket (leave empty on this gateway host)
-                <textarea
-                  value={ticket}
-                  onChange={(event) => setTicket(event.currentTarget.value)}
-                />
-              </label>
-              <Button
-                label={busy ? 'Creating…' : 'Create vault and download kit'}
-                disabled={busy || !password}
-                onClick={() => void create()}
+            ) : null}
+            <label>
+              <input
+                type="checkbox"
+                checked={lossConsent}
+                onChange={(event) => setLossConsent(event.currentTarget.checked)}
+              />{' '}
+              I understand that losing this file or password makes backed-up vaults unrecoverable.
+            </label>
+            <Button
+              label={busy ? 'Verifying…' : 'Verify and enter'}
+              disabled={busy || selectedKit === undefined || !lossConsent || !password}
+              onClick={() => void verify()}
+            />
+          </>
+        ) : props.mode === 'create' ? (
+          <>
+            <label>
+              Vault name
+              <input value={name} onChange={(event) => setName(event.currentTarget.value)} />
+            </label>
+            <label>
+              Recovery-kit password
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(event) => setPassword(event.currentTarget.value)}
               />
-            </>
-          )
+            </label>
+            <label>
+              Founding ticket (leave empty on this gateway host)
+              <textarea value={ticket} onChange={(event) => setTicket(event.currentTarget.value)} />
+            </label>
+            <Button
+              label={busy ? 'Creating…' : 'Create vault and download kit'}
+              disabled={busy || !password}
+              onClick={() => void create()}
+            />
+          </>
         ) : (
           <>
             <input

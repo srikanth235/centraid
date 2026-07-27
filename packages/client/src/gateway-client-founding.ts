@@ -12,6 +12,12 @@ import { auth, authHeaders, doFetch, readJson } from './gateway-client-core.js';
 export interface FoundingStatus {
   status: 'uninitialized' | 'ready';
   endpointId?: string;
+  /**
+   * The vault exists but its recovery kit was never verified — the ceremony
+   * was interrupted between the kit download and the re-select (issue #568
+   * item G). Create and restore both 409 in this state; only verify moves.
+   */
+  foundingPending?: boolean;
 }
 
 export interface FoundingInitializeResult {
@@ -39,13 +45,15 @@ export async function getGatewayFoundingStatus(): Promise<FoundingStatus> {
     method: 'GET',
     headers: authHeaders(token),
   });
-  const body = await readJson<{ status?: unknown; endpointId?: unknown }>(
-    res,
-    'read gateway founding status',
-  );
+  const body = await readJson<{
+    status?: unknown;
+    endpointId?: unknown;
+    foundingPending?: unknown;
+  }>(res, 'read gateway founding status');
   return {
     status: body.status === 'uninitialized' ? 'uninitialized' : 'ready',
     ...(typeof body.endpointId === 'string' ? { endpointId: body.endpointId } : {}),
+    ...(body.foundingPending === true ? { foundingPending: true } : {}),
   };
 }
 

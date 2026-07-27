@@ -121,24 +121,108 @@ export function buildGrantRow(row: OutboxGrant): ApprovalsGrantRowDTO {
   };
 }
 
-export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
-  const isLockerReveal = row.action === 'reveal' && row.objectType === 'locker.item';
-  const fillContext = row.context?.kind === 'fill' ? row.context : undefined;
+/**
+ * Humanize a review-feed verb for the activity row label (issue #552).
+ * Locker reveal/fill copy is special-cased; everything else strips the
+ * `act ` prefix and sentence-cases separators so unmapped verbs still read
+ * as English (`act sync.remove_connection` → `Sync remove connection`).
+ */
+export function humanizeActivityLabel(
+  action: string,
+  decision: string,
+  objectType: string,
+  context: ReviewEntry['context'],
+): string {
+  const isLockerReveal = action === 'reveal' && objectType === 'locker.item';
+  const fillContext = context?.kind === 'fill' ? context : undefined;
   const isFill = isLockerReveal && fillContext !== undefined;
-  const label = isFill
-    ? row.decision === 'allow'
-      ? 'Locker filled a login'
-      : 'Locker fill denied'
-    : isLockerReveal
-      ? row.decision === 'allow'
-        ? 'Locker login revealed'
-        : 'Locker reveal denied'
-      : row.action;
+  if (isFill) {
+    return decision === 'allow' ? 'Locker filled a login' : 'Locker fill denied';
+  }
+  if (isLockerReveal) {
+    return decision === 'allow' ? 'Locker login revealed' : 'Locker reveal denied';
+  }
+  const bare = action.startsWith('act ') ? action.slice(4) : action;
+  const spaced = bare.replace(/[._]+/g, ' ').trim();
+  if (spaced.length === 0) return action;
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Truncate a long object id for the compact detail line. */
+export function truncateObjectId(id: string, max = 12): string {
+  if (id.length <= max) return id;
+  return `${id.slice(0, Math.max(4, max - 1))}…`;
+}
+
+/**
+ * Compact detail for an activity row: fill origin, or
+ * `objectType · truncatedObjectId` when an id is present, else objectType.
+ */
+export function formatActivityDetail(
+  objectType: string,
+  objectId: string | null,
+  context: ReviewEntry['context'],
+  action: string,
+): string {
+  const isLockerReveal = action === 'reveal' && objectType === 'locker.item';
+  const fillContext = context?.kind === 'fill' ? context : undefined;
+  if (isLockerReveal && fillContext) return fillContext.origin;
+  if (objectId) return `${objectType} · ${truncateObjectId(objectId)}`;
+  return objectType;
+}
+
+/** Map one wire `ReviewEntry` to the screen's activity row DTO (issue #552). */
+export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
+  const label = humanizeActivityLabel(row.action, row.decision, row.objectType, row.context);
+  const detail = formatActivityDetail(row.objectType, row.objectId, row.context, row.action);
+  const attribution: ApprovalsActivityRowDTO['attribution'] =
+    row.grantId != null && row.grantId.length > 0
+      ? 'grant'
+      : row.decision === 'allow'
+        ? 'owner'
+        : null;
   return {
     receiptId: row.receiptId,
     label,
-    detail: isFill ? fillContext.origin : row.objectType,
+    detail,
+    objectId: row.objectId,
+    objectType: row.objectType,
     occurredAgo: relativeTime(row.occurredAt),
+    occurredAt: row.occurredAt,
     decision: row.decision,
+    risk: row.risk,
+    actor: row.actor ?? row.actorKind,
+    actorKind: row.actorKind,
+    grantId: row.grantId,
+    attribution,
+    count: 1,
+    action: row.action,
   };
+}
+
+/**
+ * Collapse adjacent consecutive activity rows that share verb + object +
+ * decision into one row with a `×N` marker (issue #552). Non-adjacent
+ * repeats do not collapse. Pure adjacency — no time window.
+ */
+export function collapseAdjacentActivity(
+  rows: readonly ApprovalsActivityRowDTO[],
+): ApprovalsActivityRowDTO[] {
+  if (rows.length === 0) return [];
+  const out: ApprovalsActivityRowDTO[] = [];
+  for (const row of rows) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      prev.action === row.action &&
+      prev.objectType === row.objectType &&
+      prev.objectId === row.objectId &&
+      prev.decision === row.decision
+    ) {
+      out[out.length - 1] = { ...prev, count: prev.count + 1 };
+    } else {
+      out.push({ ...row, count: 1 });
+    }
+  }
+  return out;
 }

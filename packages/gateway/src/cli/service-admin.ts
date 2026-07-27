@@ -7,7 +7,6 @@
 
 import { promises as fs } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,9 +22,13 @@ import {
   systemdCredentialPath,
   type ServiceUnitSpec,
 } from './service-unit.js';
-import { aesGcmKeyProtector, KeyStore } from '@centraid/vault';
+import { hostCredentialKey, keychainAccountFor } from './key-store.js';
+import { adoptKeyStoreCredential, type ServiceKeyCredential } from './service-credential.js';
 
 type Fail = (message: string, code?: number) => never;
+
+/** Stand-in for the real wrapping key under `--dry-run`; never leaves memory. */
+const DRY_RUN_CREDENTIAL = Buffer.alloc(32).toString('base64');
 
 interface ServiceArgs {
   configPath?: string;
@@ -101,9 +104,7 @@ function buildServeArgs(parsed: ServiceArgs, resolvedDataDir: string): string[] 
 
 interface PreparedServiceSpec {
   unit: ServiceUnitSpec;
-  keyCredential?:
-    | { kind: 'systemd'; path: string; encoded: string; keysDir: string }
-    | { kind: 'keychain'; service: string; account: string; encoded: string; keysDir: string };
+  keyCredential?: ServiceKeyCredential;
 }
 
 async function buildSpec(parsed: ServiceArgs, fail: Fail): Promise<PreparedServiceSpec> {
@@ -119,8 +120,16 @@ async function buildSpec(parsed: ServiceArgs, fail: Fail): Promise<PreparedServi
       ? { CENTRAID_DESKTOP_ENDPOINT_ID: process.env.CENTRAID_DESKTOP_ENDPOINT_ID.trim() }
       : {}),
   };
+  // Never a fresh `randomBytes(32)`: a headless `serve` has already wrapped
+  // every key under the external host credential, and handing the service a
+  // key that cannot decrypt them poisons custody (issue #568 item E). The
+  // desktop path still wins via `CENTRAID_KEYSTORE_MASTER_KEY`.
+  // `--dry-run` promises zero host mutation, and `hostCredentialKey` creates
+  // the fallback file on first call — so keep the placeholder there (every
+  // dry-run print redacts the value anyway).
   const encoded =
-    process.env.CENTRAID_KEYSTORE_MASTER_KEY?.trim() || randomBytes(32).toString('base64');
+    process.env.CENTRAID_KEYSTORE_MASTER_KEY?.trim() ||
+    (parsed.dryRun ? DRY_RUN_CREDENTIAL : hostCredentialKey(layout.keysDir));
   const label =
     parsed.label ??
     (process.platform === 'darwin' ? DEFAULT_LAUNCHD_LABEL : DEFAULT_SYSTEMD_UNIT_NAME);
@@ -136,7 +145,10 @@ async function buildSpec(parsed: ServiceArgs, fail: Fail): Promise<PreparedServi
         ? ({
             kind: 'keychain',
             service: 'dev.centraid.gateway.keystore',
-            account: label,
+            // Per data directory, not per label: one shared account name let
+            // an install for one data dir overwrite (`-U`) the credential
+            // another data dir's keys were wrapped under (#568 item E).
+            account: keychainAccountFor(layout.keysDir, label),
             encoded,
             keysDir: layout.keysDir,
           } as const)
@@ -166,24 +178,6 @@ async function buildSpec(parsed: ServiceArgs, fail: Fail): Promise<PreparedServi
       : {}),
   };
   return { unit, ...(keyCredential ? { keyCredential } : {}) };
-}
-
-async function adoptKeyStoreCredential(
-  fail: Fail,
-  credential: NonNullable<PreparedServiceSpec['keyCredential']>,
-): Promise<void> {
-  const wrappingKey = Buffer.from(credential.encoded, 'base64');
-  if (wrappingKey.length !== 32) {
-    fail('KeyStore wrapping credential must be one base64-encoded 32-byte key', 2);
-  }
-  const protectedStore = new KeyStore(credential.keysDir, {
-    protector: aesGcmKeyProtector(wrappingKey),
-  });
-  const entries = await fs.readdir(credential.keysDir, { withFileTypes: true }).catch(() => []);
-  for (const entry of entries) {
-    if (!entry.isFile() || entry.name.includes('.tmp')) continue;
-    protectedStore.export(entry.name);
-  }
 }
 
 function printWouldWrite(unitPath: string, content: string): void {
@@ -236,6 +230,13 @@ async function launchdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
   }
 
   if (prepared.keyCredential?.kind === 'keychain') {
+    // Adopt FIRST, commit the Keychain entry LAST (issue #568 item E).
+    // `add-generic-password -U` overwrites in place, so a credential written
+    // before validation and then rejected by adoption leaves the poisoned
+    // value behind — and `cli/key-store.ts` finds it on every darwin boot
+    // thereafter, making every key in the data dir undecryptable. Failing
+    // here leaves custody exactly as it was found.
+    await adoptKeyStoreCredential(fail, prepared.keyCredential);
     const stored = run(fail, '/usr/bin/security', [
       'add-generic-password',
       '-U',
@@ -249,7 +250,6 @@ async function launchdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
     if (stored.code !== 0) {
       fail(`could not store service KeyStore credential: ${stored.output.trim()}`, 1);
     }
-    await adoptKeyStoreCredential(fail, prepared.keyCredential);
   }
   await fs.mkdir(path.dirname(plistPath), { recursive: true });
   await fs.mkdir(path.dirname(spec.stdoutLog), { recursive: true });
@@ -411,6 +411,9 @@ async function systemdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
   await fs.mkdir(path.dirname(unitPath), { recursive: true });
   await fs.mkdir(path.dirname(spec.stdoutLog), { recursive: true });
   if (prepared.keyCredential?.kind === 'systemd') {
+    // Same ordering rule as the launchd path (#568 item E): prove the
+    // credential reads this data dir's keys before committing it anywhere.
+    await adoptKeyStoreCredential(fail, prepared.keyCredential);
     await fs.mkdir(path.dirname(prepared.keyCredential.path), { recursive: true });
     const encrypted = run(
       fail,
@@ -421,7 +424,6 @@ async function systemdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
     if (encrypted.code !== 0) {
       fail(`systemd-creds encrypt failed: ${encrypted.output.trim()}`, 1);
     }
-    await adoptKeyStoreCredential(fail, prepared.keyCredential);
   }
   await fs.writeFile(unitPath, unit, 'utf8');
 

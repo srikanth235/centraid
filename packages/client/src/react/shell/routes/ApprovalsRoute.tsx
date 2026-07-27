@@ -16,11 +16,16 @@ import { useAsyncData } from '../useAsyncData.js';
 import {
   buildGrantRow,
   buildActivityRow,
+  collapseAdjacentActivity,
   buildNeedsAuthRow,
   buildOutboxRow,
   buildParkedRow,
   buildScopeRequestRow,
 } from './approvalsData.js';
+
+/** Initial review-feed page size; "See all" raises the in-place cap (issue #552). */
+const REVIEW_LIMIT_DEFAULT = 20;
+const REVIEW_LIMIT_SEE_ALL = 200;
 
 // React-owned Approvals route (issues #306/#308) — the desktop UI over the
 // vault's outbox/blocking/scope-request/grant surface, which shipped with no
@@ -35,15 +40,16 @@ export default function ApprovalsRoute(): JSX.Element {
   // Bumping this forces useAsyncData to re-fetch — there's no gateway push
   // channel for the vault plane yet, so every decision reloads explicitly.
   const [refreshTick, setRefreshTick] = useState(0);
+  const [reviewLimit, setReviewLimit] = useState(REVIEW_LIMIT_DEFAULT);
 
   const state = useAsyncData(async () => {
     const [blocking, grants, review] = await Promise.all([
       getBlocking(),
       listOutboxGrants(),
-      getReview(),
+      getReview(reviewLimit),
     ]);
     return { blocking, grants, review };
-  }, [refreshTick]);
+  }, [refreshTick, reviewLimit]);
 
   const reload = (): void => setRefreshTick((t) => t + 1);
 
@@ -175,6 +181,10 @@ export default function ApprovalsRoute(): JSX.Element {
   }
 
   const { blocking, grants, review } = state.data;
+  const activity = collapseAdjacentActivity(review.map(buildActivityRow));
+  // Truncated when the wire returned a full page at the current limit —
+  // "See all" raises the cap in place (no separate audit-log screen).
+  const activityTruncated = review.length >= reviewLimit && reviewLimit < REVIEW_LIMIT_SEE_ALL;
   return (
     <PageScroll>
       <ApprovalsScreen
@@ -183,7 +193,8 @@ export default function ApprovalsRoute(): JSX.Element {
         parked={blocking.parked.map(buildParkedRow)}
         scopeRequests={blocking.scopeRequests.map(buildScopeRequestRow)}
         grants={grants.filter((g) => g.revokedAt === null).map(buildGrantRow)}
-        activity={review.map(buildActivityRow)}
+        activity={activity}
+        activityTruncated={activityTruncated}
         busyId={busyId}
         onApproveOutbox={handleApproveOutbox}
         onDenyOutbox={handleDenyOutbox}
@@ -191,6 +202,7 @@ export default function ApprovalsRoute(): JSX.Element {
         onConfirmParked={handleConfirmParked}
         onDecideScopeRequest={handleDecideScopeRequest}
         onRevokeGrant={handleRevokeGrant}
+        onSeeAllActivity={() => setReviewLimit(REVIEW_LIMIT_SEE_ALL)}
       />
     </PageScroll>
   );

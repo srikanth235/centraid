@@ -168,6 +168,19 @@ export interface ReviewEntry {
   risk: string | null;
   invocationId: string | null;
   actorId: string | null;
+  /**
+   * Refined actor kind (`app` / `agent` / `assistant` / `owner`) — same path
+   * as outbox (VaultPlane.refineActorKind). Null when no actor is on the
+   * receipt (issue #552).
+   */
+  actorKind: string | null;
+  /** Display name for the actor when the gateway resolved one. */
+  actor: string | null;
+  /**
+   * Standing outbox grant that auto-allowed this receipt, when present —
+   * drives "Auto-allowed by standing grant" + inline Revoke (issue #552).
+   */
+  grantId: string | null;
   context: { kind: 'fill'; origin: string } | null;
 }
 

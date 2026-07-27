@@ -36,6 +36,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
   assertCompatibleAppMeta,
+  canonicalJson,
   materializeSnapshotBlobs,
   parseRecoveryKit,
   restoreSnapshot,
@@ -93,8 +94,8 @@ export interface RecoverAdoptContext {
 export interface RecoverInput {
   /** The recovery-kit document, already JSON-parsed (validated by `parseRecoveryKit`). */
   kitDocument: unknown;
-  /** Password for a wrapped recovery kit. Plain legacy kits need no password. */
-  password?: string;
+  /** Password for the recovery kit. Required — every kit is wrapped (#568 J). */
+  password: string;
   /** The provider api-key — deliberately NOT in the kit (FORMAT.md); supplied out-of-band. */
   apiKey: string;
   /** Vault registry root (`<dataDir>/vault`) the recovered vault is adopted into. */
@@ -218,7 +219,7 @@ export interface RecoveryDiscovery {
 
 export async function discoverRecovery(opts: {
   kitDocument: unknown;
-  password?: string;
+  password: string;
   apiKey: string;
   vaultId?: string;
   at?: number;
@@ -369,7 +370,12 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
     const existingKeyring = keyStore.export('keyring.key');
     if (existingKeyring) {
       const existing = validateKeyring(JSON.parse(existingKeyring.toString('utf8')));
-      if (JSON.stringify(existing) !== JSON.stringify(kit.keyring)) {
+      // Canonical, not `JSON.stringify`: the custody file preserves the
+      // insertion order it was written with, while a kit's keyring comes back
+      // from `canonicalJson` inside the password wrap with keys sorted. Raw
+      // stringify compares FORMATTING and would refuse an identical keyring —
+      // which is every restore-after-erase (issue #568, surfaced by item J).
+      if (canonicalJson(existing) !== canonicalJson(kit.keyring)) {
         throw new Error(
           'recover: gateway custody contains a different backup keyring; refusing to overwrite live key material',
         );

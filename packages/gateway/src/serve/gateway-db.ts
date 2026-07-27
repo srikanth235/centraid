@@ -76,6 +76,13 @@ export class GatewayDatabase {
         chmodSync(file, 0o600);
       }
       if (lockMode === 'exclusive') acquireExclusiveLifetimeLock(db, file);
+      // A `read-only` open against an EXCLUSIVE-locked database SUCCEEDS —
+      // the constructor and the pragmas above never touch a page, so the
+      // lock is not observed until the first real read. Probe here so the
+      // caller's `GatewayLockError` handling gets its chance, instead of a
+      // raw `ERR_SQLITE_ERROR: database is locked` escaping from whatever
+      // SELECT happens to run first (issue #568 item H).
+      if (lockMode === 'read-only') db.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get();
       return new GatewayDatabase(
         file,
         db,
@@ -293,16 +300,62 @@ function isBusy(error: unknown): boolean {
   return code === 'ERR_SQLITE_ERROR' && /busy|locked/i.test(error.message);
 }
 
+/** Remote filesystem names as BSD `statfs.f_fstypename` reports them. */
+const DARWIN_NETWORK_FS_TYPES = new Set(['nfs', 'smbfs', 'afpfs', 'webdav', 'ftpfs']);
+
+/**
+ * macOS has no filesystem magic to read: `statfsSync().type` is a BSD
+ * `f_type` index, not a Linux magic number. The filesystem NAME lives in
+ * `statfs.f_fstypename`, which `/sbin/mount` prints per mount point.
+ *
+ * The previous attempt shelled out to `/usr/bin/stat -f '%T'` — but BSD
+ * `stat -f` takes a FORMAT STRING and `%T` is the `ls -F` type indicator
+ * (`@`, `/`, empty), never a filesystem type. It exited 0 with a value the
+ * regex could not match, and that success also short-circuited the Linux
+ * `statfsSync` fallback, so darwin detection was a guaranteed `false`
+ * (issue #568 item I).
+ */
+export function parseDarwinFileSystemType(mountOutput: string, root: string): string | undefined {
+  // `mount` lines read: `<source> on <mount point> (<fstype>, <opts…>)`.
+  let best: { mountPoint: string; type: string } | undefined;
+  for (const line of mountOutput.split('\n')) {
+    const match = /^.* on (.+) \(([^,)]+)[,)]/.exec(line.trim());
+    const mountPoint = match?.[1];
+    const type = match?.[2];
+    if (!mountPoint || !type) continue;
+    const contains =
+      root === mountPoint || root.startsWith(mountPoint === '/' ? '/' : `${mountPoint}${path.sep}`);
+    if (!contains) continue;
+    // Longest matching mount point wins — `/Volumes/share` beats `/`.
+    if (!best || mountPoint.length > best.mountPoint.length) best = { mountPoint, type };
+  }
+  return best?.type.trim().toLowerCase();
+}
+
+/** True/false when the mount table answered; `undefined` when it could not. */
+export function darwinNetworkFileSystem(
+  root: string,
+  readMountTable: () => string | undefined = defaultMountTable,
+): boolean | undefined {
+  const output = readMountTable();
+  if (output === undefined) return undefined;
+  const type = parseDarwinFileSystemType(output, root);
+  return type === undefined ? undefined : DARWIN_NETWORK_FS_TYPES.has(type);
+}
+
+function defaultMountTable(): string | undefined {
+  const result = spawnSync('/sbin/mount', [], { encoding: 'utf8', timeout: 2_000 });
+  return result.status === 0 && typeof result.stdout === 'string' ? result.stdout : undefined;
+}
+
 function detectNetworkFileSystem(root: string): boolean {
   try {
     if (process.platform === 'darwin') {
-      const result = spawnSync('/usr/bin/stat', ['-f', '%T', root], {
-        encoding: 'utf8',
-        timeout: 2_000,
-      });
-      if (result.status === 0) {
-        return /^(?:nfs|smbfs|afpfs|webdav)$/i.test(result.stdout.trim());
-      }
+      const remote = darwinNetworkFileSystem(root);
+      // Fall through to `statfsSync` when the mount table is unreadable
+      // rather than early-returning `false` — an undetected remote mount is
+      // the failure mode this whole probe exists to prevent.
+      if (remote !== undefined) return remote;
     }
     const type = Number(statfsSync(root).type);
     // Linux NFS, SMB/CIFS. ZFS is intentionally local: treating its magic as

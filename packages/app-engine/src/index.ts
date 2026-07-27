@@ -82,6 +82,7 @@ export { RUNNER_KINDS, isRunnerKind } from './conversation/turn.js';
 export {
   startRuntimeHttpServer,
   AUTHED_DEVICE_HEADER,
+  AUTHED_PLANE_HEADER,
   type RuntimeHttpServerOptions,
   type RuntimeHttpServerHandle,
   type BearerAuthorization,

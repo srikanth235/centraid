@@ -4,6 +4,7 @@ import {
   isDeniedTriggerCursorEntity,
   isPendingWebhookTrigger,
   isValidCronExpression,
+  isValidIanaTimeZone,
   parseManifest,
   validateManifest,
   type Manifest,
@@ -40,6 +41,15 @@ describe('isValidCronExpression', () => {
   });
 });
 
+describe('isValidIanaTimeZone', () => {
+  it('accepts known zones and rejects unknown ones', () => {
+    expect(isValidIanaTimeZone('UTC')).toBe(true);
+    expect(isValidIanaTimeZone('America/New_York')).toBe(true);
+    expect(isValidIanaTimeZone('Not/A_Real_Zone')).toBe(false);
+    expect(isValidIanaTimeZone('')).toBe(false);
+  });
+});
+
 describe('validateManifest', () => {
   it('accepts a minimal valid manifest', () => {
     const m = validateManifest(baseManifest());
@@ -58,6 +68,26 @@ describe('validateManifest', () => {
     ];
     const m = validateManifest(raw);
     expect(m.triggers.length).toBe(2);
+  });
+
+  it('accepts an optional IANA tz on a cron trigger', () => {
+    const raw = baseManifest();
+    raw.triggers = [{ kind: 'cron', expr: '0 9 * * *', tz: 'America/New_York' }];
+    const m = validateManifest(raw);
+    expect(m.triggers[0]).toEqual({ kind: 'cron', expr: '0 9 * * *', tz: 'America/New_York' });
+  });
+
+  it('rejects an unknown IANA tz at validation (not at fire time)', () => {
+    const raw = baseManifest();
+    raw.triggers = [{ kind: 'cron', expr: '0 9 * * *', tz: 'Not/A_Real_Zone' }];
+    expect(() => validateManifest(raw)).toThrow(ManifestError);
+    expect(() => validateManifest(raw)).toThrow(/not a known IANA timezone/);
+  });
+
+  it('rejects an empty tz string', () => {
+    const raw = baseManifest();
+    raw.triggers = [{ kind: 'cron', expr: '0 9 * * *', tz: '   ' }];
+    expect(() => validateManifest(raw)).toThrow(/non-empty IANA timezone/);
   });
 
   it('accepts a webhook trigger with an id + secret hash', () => {

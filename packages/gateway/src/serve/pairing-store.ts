@@ -10,6 +10,17 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import type { GrantableTrust, DeviceEnrollment, EnrollmentStore } from './enrollment-store.js';
 import { GatewayDatabase } from './gateway-db.js';
+import {
+  clearReservedFoundingVaults,
+  FOUNDING_RESERVATION_TTL_MS,
+  foundingSlotIsReserved,
+  pendingFoundingVaults,
+  releaseFounding,
+  reserveFoundingWithinTransaction,
+  stageReservedFoundingVaults,
+} from './founding-reservations.js';
+
+export { FOUNDING_RESERVATION_TTL_MS } from './founding-reservations.js';
 export {
   encodePairingTicket,
   parseFoundingTicket,
@@ -18,8 +29,6 @@ export {
 
 export const DEFAULT_TICKET_TTL_MS = 15 * 60 * 1000;
 export const FOUNDING_TICKET_TTL_MS = 10 * 60 * 1000;
-/** A started restore may legitimately outlive the QR ticket's mint window. */
-export const FOUNDING_RESERVATION_TTL_MS = 2 * 60 * 60 * 1000;
 
 interface TicketRow {
   ticket_id: string;
@@ -59,12 +68,29 @@ export class PairingTicketStore {
     return this.insert('enroll', ttlMs, vaultId, trust);
   }
 
-  mintFounding(ttlMs = FOUNDING_TICKET_TTL_MS): {
-    ticketId: string;
-    secret: string;
-    expiresAt: number;
-  } {
+  /**
+   * Mint the single founding capability, superseding any earlier one.
+   *
+   * Returns `undefined` when the existing ticket carries a LIVE reservation
+   * (issue #568 item K). A reservation means a ceremony is in flight — its
+   * holder may be minutes into a multi-gigabyte restore — and
+   * `founding_ticket_reservations` cascades on ticket delete, so replacing
+   * the row would make the commit's `changes !== 1` check fail and send
+   * `rollbackFoundingVaults` to `rmSync` a fully restored vault along with
+   * its sealing key. `one_founding_ticket` allows only one row, so refusing
+   * is the only safe answer; the reservation's own TTL bounds the wait.
+   * Superseding an UNRESERVED ticket is still the point of this verb: the
+   * host asked for a new QR.
+   */
+  mintFounding(ttlMs = FOUNDING_TICKET_TTL_MS):
+    | {
+        ticketId: string;
+        secret: string;
+        expiresAt: number;
+      }
+    | undefined {
     return this.gatewayDatabase.transaction(() => {
+      if (foundingSlotIsReserved(this.gatewayDatabase)) return undefined;
       this.gatewayDatabase.db.prepare("DELETE FROM tickets WHERE kind = 'found'").run();
       return this.insertWithinTransaction('found', ttlMs, null, null);
     });
@@ -192,107 +218,30 @@ export class PairingTicketStore {
       if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
         return undefined;
       }
-      const now = Date.now();
-      const existing = this.gatewayDatabase.db
-        .prepare(
-          `SELECT reservation_id, secret_hash, reserved_until
-             FROM founding_ticket_reservations
-            WHERE ticket_id = ?`,
-        )
-        .get(ticketId) as
-        | { reservation_id: string; secret_hash: string; reserved_until: number }
-        | undefined;
-      if (existing) {
-        return existing.secret_hash === row.secret_hash && existing.reserved_until > now
-          ? existing.reservation_id
-          : undefined;
-      }
-      if (row.expires_at <= now) return undefined;
-      const reservationId = crypto.randomUUID();
-      const inserted = this.gatewayDatabase.db
-        .prepare(
-          `INSERT OR IGNORE INTO founding_ticket_reservations (
-             ticket_id, reservation_id, secret_hash, reserved_at, reserved_until
-           ) VALUES (?, ?, ?, ?, ?)`,
-        )
-        .run(ticketId, reservationId, row.secret_hash, now, now + ttlMs);
-      return inserted.changes === 1 ? reservationId : undefined;
+      return reserveFoundingWithinTransaction(this.gatewayDatabase, {
+        ticketId,
+        secretHash: row.secret_hash,
+        expiresAt: row.expires_at,
+        ttlMs,
+      });
     });
   }
 
-  /**
-   * Persist the exact filesystem identities a founding reservation is about
-   * to create or restore. Boot removes these local artifacts if the process
-   * dies before the ticket-delete + enrollment transaction commits.
-   */
+  /** See `founding-reservations.ts` — the reservation table owns these. */
   stageReservedFoundingVaults(reservationId: string, vaultIds: readonly string[]): boolean {
-    const encoded = JSON.stringify([...new Set(vaultIds)]);
-    if (vaultIds.length === 0 || encoded === '[]') return false;
-    return this.gatewayDatabase.transaction(() => {
-      const row = this.gatewayDatabase.db
-        .prepare(
-          `SELECT pending_vault_ids_json
-             FROM founding_ticket_reservations
-            WHERE reservation_id = ? AND reserved_until > ?`,
-        )
-        .get(reservationId, Date.now()) as { pending_vault_ids_json: string | null } | undefined;
-      if (!row) return false;
-      if (row.pending_vault_ids_json !== null && row.pending_vault_ids_json !== encoded) {
-        return false;
-      }
-      this.gatewayDatabase.db
-        .prepare(
-          `UPDATE founding_ticket_reservations
-              SET pending_vault_ids_json = ?
-            WHERE reservation_id = ?`,
-        )
-        .run(encoded, reservationId);
-      return true;
-    });
+    return stageReservedFoundingVaults(this.gatewayDatabase, reservationId, vaultIds);
+  }
+
+  releaseFounding(reservationId: string): void {
+    releaseFounding(this.gatewayDatabase, reservationId);
   }
 
   clearReservedFoundingVaults(reservationId: string, vaultIds: readonly string[]): void {
-    this.gatewayDatabase.db
-      .prepare(
-        `UPDATE founding_ticket_reservations
-            SET pending_vault_ids_json = NULL
-          WHERE reservation_id = ? AND pending_vault_ids_json = ?`,
-      )
-      .run(reservationId, JSON.stringify([...new Set(vaultIds)]));
+    clearReservedFoundingVaults(this.gatewayDatabase, reservationId, vaultIds);
   }
 
-  pendingFoundingVaults(): Array<{
-    reservationId: string;
-    vaultIds: string[];
-  }> {
-    return (
-      this.gatewayDatabase.db
-        .prepare(
-          `SELECT reservation_id, pending_vault_ids_json
-             FROM founding_ticket_reservations
-            WHERE pending_vault_ids_json IS NOT NULL
-            ORDER BY reserved_at, reservation_id`,
-        )
-        .all() as Array<{
-        reservation_id: string;
-        pending_vault_ids_json: string;
-      }>
-    ).map((row) => {
-      const parsed: unknown = JSON.parse(row.pending_vault_ids_json);
-      if (
-        !Array.isArray(parsed) ||
-        parsed.length === 0 ||
-        parsed.some((vaultId) => typeof vaultId !== 'string')
-      ) {
-        throw new Error(
-          `invalid pending founding vault list for reservation ${row.reservation_id}`,
-        );
-      }
-      return {
-        reservationId: row.reservation_id,
-        vaultIds: [...new Set(parsed)],
-      };
-    });
+  pendingFoundingVaults(): Array<{ reservationId: string; vaultIds: string[] }> {
+    return pendingFoundingVaults(this.gatewayDatabase);
   }
 
   redeemReservedFoundingAndEnrollMany(
@@ -338,17 +287,26 @@ export class PairingTicketStore {
     });
   }
 
-  hasActiveFounding(): boolean {
+  /**
+   * Is the admit-anyone founding window open? (issue #568 item C.)
+   *
+   * A fresh gateway has no enrollments, so the QUIC listener must admit an
+   * unknown EndpointId for the founding ceremony to be reachable at all.
+   * That window is deliberately keyed to `FOUNDING_TICKET_TTL_MS` — the ten
+   * minutes the QR is valid for — and NOT to `FOUNDING_RESERVATION_TTL_MS`.
+   * The reservation exists to keep ONE already-admitted caller's slow
+   * restore alive; stretching admission to two hours would widen the blast
+   * radius of a leaked dial ticket twelvefold for no ceremony benefit.
+   */
+  hasOpenFoundingWindow(): boolean {
     const row = this.gatewayDatabase.db
       .prepare(
         `SELECT 1 AS active
-           FROM tickets t
-           LEFT JOIN founding_ticket_reservations r ON r.ticket_id = t.ticket_id
-          WHERE t.kind = 'found'
-            AND (t.expires_at > ? OR r.reserved_until > ?)
+           FROM tickets
+          WHERE kind = 'found' AND expires_at > ?
           LIMIT 1`,
       )
-      .get(Date.now(), Date.now()) as { active: number } | undefined;
+      .get(Date.now()) as { active: number } | undefined;
     return row?.active === 1;
   }
 

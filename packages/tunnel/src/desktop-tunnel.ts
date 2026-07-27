@@ -9,6 +9,12 @@
  *  - `centraid/pair/1`: any endpoint may connect, but must present the
  *    one-time pairing code from the "Connect phone" QR; success stores the
  *    phone's EndpointId in the allowlist.
+ *
+ * This forwarder has no device key to stamp — it authenticates the phone at
+ * the QUIC layer and then speaks to the gateway as the HOST, under the host
+ * bearer. It therefore strips any client-supplied identity header and marks
+ * every hop with `TUNNEL_FORWARDED_HEADER`, so the gateway's host-only
+ * capabilities do not mistake 127.0.0.1 for the owner (issue #568 item A).
  */
 
 import crypto from 'node:crypto';
@@ -26,12 +32,15 @@ import type {
 import {
   alpnBytes,
   CLOSE_UNAUTHORIZED,
+  DEVICE_IDENTITY_HEADER,
+  DEVICE_PROOF_HEADER,
   encodeHeaderFrame,
   PAIR_ALPN,
   readBodyToEnd,
   readHeaderFrame,
   sanitizeHeaders,
   TUNNEL_ALPN,
+  TUNNEL_FORWARDED_HEADER,
 } from './protocol.js';
 
 export interface TunnelUpstream {
@@ -303,6 +312,15 @@ class DesktopTunnel {
     }
     const base = new URL(upstream.baseUrl);
     const headers = sanitizeHeaders(header.headers ?? {});
+    // Loopback is not an identity (issue #568 item A). This forwarder carries
+    // a paired PHONE to the desktop's loopback gateway under the host bearer,
+    // so it cannot prove a device identity — but it must not let the phone
+    // claim one either. Strip any client copy of the identity headers, then
+    // mark the hop as forwarded so host-only capabilities (founding-ticket
+    // minting) refuse it rather than reading 127.0.0.1 as "the owner".
+    delete headers[DEVICE_IDENTITY_HEADER];
+    delete headers[DEVICE_PROOF_HEADER];
+    headers[TUNNEL_FORWARDED_HEADER] = '1';
     headers.host = base.host;
     headers.authorization = `Bearer ${upstream.token}`;
     if (body.length > 0) headers['content-length'] = String(body.length);

@@ -20,23 +20,28 @@
  * non-match for that field, so an unparseable expression simply never fires
  * rather than firing at the wrong time — fail-safe by construction.
  *
- * Matching is against the *local* wall clock, matching the prior OS-scheduler
- * (launchd/systemd) behavior.
+ * Matching is against wall-clock fields in `timeZone` when provided (IANA),
+ * otherwise the *host local* wall clock (launchd/systemd inheritance, issue
+ * #570). DST gap minutes never exist as wall-clock fields → they never match
+ * (skip). Overlap minutes are deduped by wall-clock key in the cursor reader.
  */
-export function cronMatches(expr: string, date: Date): boolean {
+import { wallClockFields } from '../cron-timezone.js';
+
+export function cronMatches(expr: string, date: Date, timeZone?: string): boolean {
   const fields = expr.trim().split(/\s+/);
   if (fields.length !== 5) return false;
   const [minute, hour, dom, month, dow] = fields as [string, string, string, string, string];
+  const wall = wallClockFields(date, timeZone);
 
-  if (!matchField(minute, date.getMinutes(), 0, 59)) return false;
-  if (!matchField(hour, date.getHours(), 0, 23)) return false;
-  if (!matchField(month, date.getMonth() + 1, 1, 12)) return false;
+  if (!matchField(minute, wall.minute, 0, 59)) return false;
+  if (!matchField(hour, wall.hour, 0, 23)) return false;
+  if (!matchField(month, wall.month, 1, 12)) return false;
 
   const domStar = isWildcard(dom);
   const dowStar = isWildcard(dow);
-  const domMatch = matchField(dom, date.getDate(), 1, 31);
+  const domMatch = matchField(dom, wall.day, 1, 31);
   // cron day-of-week: 0 and 7 both mean Sunday.
-  const weekday = date.getDay();
+  const weekday = wall.weekday;
   const dowMatch = matchField(dow, weekday, 0, 7) || (weekday === 0 && matchField(dow, 7, 0, 7));
 
   if (domStar && dowStar) return true;

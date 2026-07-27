@@ -866,7 +866,12 @@ function sampleWithoutReplacement<T>(items: readonly T[], count: number): T[] {
 }
 
 // ---------------------------------------------------------------------------
-// writeRecoveryKit
+// Recovery-kit target rows
+//
+// `writeRecoveryKit` (a plaintext kit emitter) was deleted in issue #568 item
+// J: it had zero production callers after #555 moved kit authorship to
+// `wrapRecoveryKit`, and keeping a plaintext writer alive alongside a reader
+// that now REFUSES unwrapped kits would have been a live footgun.
 // ---------------------------------------------------------------------------
 
 export interface RecoveryKitTarget {
@@ -876,25 +881,4 @@ export interface RecoveryKitTarget {
   label: string;
   /** Per-vault DEK, base64. Present only in a wrapped owner-held kit. */
   sealKey?: string;
-}
-
-export interface WriteRecoveryKitOptions {
-  keyring: Keyring;
-  targets: RecoveryKitTarget[];
-  destFile: string;
-}
-
-/** Emit the recovery kit (FORMAT.md § Recovery kit) — live key material, handle accordingly. */
-export async function writeRecoveryKit(opts: WriteRecoveryKitOptions): Promise<void> {
-  const kit = {
-    version: 1,
-    kind: 'centraid-recovery-kit',
-    createdAt: new Date().toISOString(),
-    keyring: opts.keyring,
-    targets: opts.targets,
-  };
-  await fs.mkdir(path.dirname(opts.destFile), { recursive: true });
-  const tmp = `${opts.destFile}.${process.pid}.${Date.now()}.tmp`;
-  await fs.writeFile(tmp, `${canonicalJson(kit)}\n`, { mode: 0o600 });
-  await fs.rename(tmp, opts.destFile);
 }

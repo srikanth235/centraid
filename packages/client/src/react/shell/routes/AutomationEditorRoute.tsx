@@ -13,6 +13,7 @@ import {
   rotateAutomationWebhookSecret,
   runAutomationNow,
   setAutomationEnabled,
+  getUserPrefs,
   listVaultEntityTypes,
   searchVaultAnchors,
   searchVaultEntities,
@@ -49,7 +50,7 @@ function triggerToDto(t: CentraidAutomationRow['triggers'][number]): AuEditorTri
     case 'webhook':
       return { id: t.id ?? null, kind: 'webhook', pending: !!t.pending };
     case 'cron':
-      return { expr: t.expr, kind: 'cron' };
+      return { expr: t.expr, kind: 'cron', ...(t.tz ? { tz: t.tz } : {}) };
     case 'data':
       return {
         entities: [...t.entities],
@@ -193,27 +194,40 @@ export default function AutomationEditorRoute({
           rowRef.current = loaded.row;
           refIdRef.current = loaded.row?.ref ?? automationId ?? null;
           if (!loaded.row) {
-            const [templates, agentStatus] = await Promise.all([
+            const [templates, agentStatus, prefs] = await Promise.all([
               templateId ? listTemplates() : Promise.resolve([]),
               loadProviders(),
+              getUserPrefs().catch(() => ({}) as Record<string, unknown>),
             ]);
             const template = templates.find((entry) => entry.id === templateId);
-            return buildCreateAutomationEditorData({
-              agent: buildAutomationAgentEditorData(agentStatus),
-              ...(template ? { template } : {}),
-              ...(watchEntity ? { watchEntity } : {}),
-              instructions: loaded.instructions,
-              name: loaded.name,
-            });
+            const defaultCronTimeZone =
+              typeof prefs['automation.cron.defaultTimezone'] === 'string'
+                ? prefs['automation.cron.defaultTimezone']
+                : null;
+            return {
+              ...buildCreateAutomationEditorData({
+                agent: buildAutomationAgentEditorData(agentStatus),
+                ...(template ? { template } : {}),
+                ...(watchEntity ? { watchEntity } : {}),
+                instructions: loaded.instructions,
+                name: loaded.name,
+              }),
+              defaultCronTimeZone,
+            };
           }
-          const [{ baseUrl }, blocking, grants, agents, agentStatus] = await Promise.all([
+          const [{ baseUrl }, blocking, grants, agents, agentStatus, prefs] = await Promise.all([
             auth(),
             getBlocking(),
             listOutboxGrants(),
             listAgents(),
             loadProviders(),
+            getUserPrefs().catch(() => ({}) as Record<string, unknown>),
           ]);
           const hero = deriveAutomationHero(loaded.row, baseUrl);
+          const defaultCronTimeZone =
+            typeof prefs['automation.cron.defaultTimezone'] === 'string'
+              ? prefs['automation.cron.defaultTimezone']
+              : null;
           return {
             automationId: loaded.row.ref,
             connectors: loaded.connectors,
@@ -222,6 +236,7 @@ export default function AutomationEditorRoute({
               blocking,
               grants,
             ),
+            defaultCronTimeZone,
             enabled: loaded.row.enabled,
             instructions: loaded.instructions,
             mode: 'edit',

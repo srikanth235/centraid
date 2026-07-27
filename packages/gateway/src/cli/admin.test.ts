@@ -18,6 +18,7 @@ import { commandDevices, commandPair } from './device-admin.ts';
 import { DEVICE_HEADER, DEVICE_PROOF_HEADER, makeDaemonDevicePlane } from './endpoint-host.ts';
 import { daemonLayoutFor } from './paths.ts';
 import { openVaultRegistry } from '../serve/vault-registry.ts';
+import { daemonKeyStore } from './key-store.ts';
 import { EnrollmentStore } from '../serve/enrollment-store.ts';
 import { encodePairingTicket, PairingTicketStore } from '../serve/pairing-store.ts';
 
@@ -112,6 +113,10 @@ async function fakePairDaemon(): Promise<typeof fetch> {
     };
     const registry = openVaultRegistry({
       rootDir: layout.vaultDir,
+      // The daemon this stands in for opens custody the same way; a bare
+      // KeyStore cannot unwrap a protected sealkey and would mount nothing
+      // (issue #568 item D).
+      keyStore: daemonKeyStore(layout.keysDir),
       logger: silentLogger,
       enableWalShipper: false,
     });
@@ -140,7 +145,7 @@ async function fakePairDaemon(): Promise<typeof fetch> {
         );
       }
       const trust = body.trust ?? 'full';
-      const minted = PairingTicketStore.open(layout.pairingTicketsFile).mint(
+      const minted = PairingTicketStore.open(layout.gatewayDbFile).mint(
         vault.vaultId,
         (body.ttlMinutes ?? 15) * 60_000,
         trust,
@@ -293,9 +298,9 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
     gw: 'gw-ticket-base32',
     vaultName: 'Family',
   });
-  expect(
-    PairingTicketStore.open(layout.pairingTicketsFile).redeem(payload.t, payload.s),
-  ).toMatchObject({ trust: 'readonly' });
+  expect(PairingTicketStore.open(layout.gatewayDbFile).redeem(payload.t, payload.s)).toMatchObject({
+    trust: 'readonly',
+  });
 });
 
 test('pair --qr prints a terminal QR of the same pasteable ticket', async () => {
@@ -406,9 +411,13 @@ test('device plane: deviceKeyFor trusts only the in-process proof header', async
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
 
   // Enroll a device out of band, then check the deviceAccess resolution.
-  const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: silentLogger });
+  const registry = openVaultRegistry({
+    rootDir: layout.vaultDir,
+    keyStore: daemonKeyStore(layout.keysDir),
+    logger: silentLogger,
+  });
   const vaultId = registry.defaultVaultId();
-  EnrollmentStore.open(layout.devicesFile).enroll({
+  EnrollmentStore.open(layout.gatewayDbFile).enroll({
     endpointId: 'ep-known',
     vaultId,
     label: 'known',
@@ -435,7 +444,11 @@ test('device plane: deviceKeyFor trusts only the in-process proof header', async
 test('device plane: an unenrolled endpoint derives identity from the custody key', async () => {
   const layout = daemonLayoutFor(dataDir);
   await fs.mkdir(dataDir, { recursive: true });
-  const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: silentLogger });
+  const registry = openVaultRegistry({
+    rootDir: layout.vaultDir,
+    keyStore: daemonKeyStore(layout.keysDir),
+    logger: silentLogger,
+  });
   const plane = makeDaemonDevicePlane({
     layout,
     vaults: () => registry,

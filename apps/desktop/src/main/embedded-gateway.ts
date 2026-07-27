@@ -1,6 +1,7 @@
 import {
   assistOAuthFromEnvironment,
   createWasmImagePreviewCodec,
+  isDirectHostRequest,
   serve,
   type GatewayPaths,
   type GatewayServeHandle,
@@ -37,6 +38,10 @@ export async function startDesktopEmbeddedGateway(
     keyStore: options.keyStore,
     token: options.token,
     hostDeviceEndpointId: options.ownerEndpointId,
+    // The desktop runs a phone tunnel against this same loopback listener
+    // (issue #568 item B), so the founding gate must be the hardened
+    // predicate rather than `buildGateway`'s bare-loopback fallback.
+    canMintFoundingTicket: isDirectHostRequest,
     ...(options.initVaultName ? { initVaultName: options.initVaultName } : {}),
     ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
     ...(options.logTag ? { logTag: options.logTag } : {}),

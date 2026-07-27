@@ -20,9 +20,12 @@
  * + validation-code union live in `manifest-errors.ts`.
  */
 
+import { isValidIanaTimeZone } from '../cron-timezone.js';
 import { ManifestError } from './manifest-errors.js';
 import { validateOutputSchema, type OutputSchema } from './manifest-output.js';
 import { isValidRef } from './ref.js';
+
+export { isValidIanaTimeZone } from '../cron-timezone.js';
 
 export { ManifestError, type ManifestValidationCode } from './manifest-errors.js';
 export { type OutputSchema } from './manifest-output.js';
@@ -124,7 +127,17 @@ export interface GeneratedMeta {
  * registers it). An automation may carry many cron triggers but at
  * most one webhook.
  */
-export type CronTrigger = { readonly kind: 'cron'; readonly expr: string };
+/**
+ * A wall-clock schedule. `expr` is the 5-field cron; optional `tz` is an IANA
+ * zone name (issue #570). Absent `tz` means host-local (pre-#570 behavior),
+ * unless a gateway-wide default timezone is configured.
+ */
+export type CronTrigger = {
+  readonly kind: 'cron';
+  readonly expr: string;
+  /** Optional IANA timezone (e.g. `America/New_York`). Validated at write. */
+  readonly tz?: string;
+};
 export type WebhookTrigger = {
   readonly kind: 'webhook';
   /** Generated route slug — the path segment under `/_centraid-hook/`. */
@@ -458,7 +471,25 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
         `${field}.expr`,
       );
     }
-    return { kind: 'cron', expr };
+    let tz: string | undefined;
+    if (t.tz !== undefined) {
+      if (typeof t.tz !== 'string' || !t.tz.trim()) {
+        throw new ManifestError(
+          'invalid_trigger',
+          `manifest.${field}.tz must be a non-empty IANA timezone name when set`,
+          `${field}.tz`,
+        );
+      }
+      tz = t.tz.trim();
+      if (!isValidIanaTimeZone(tz)) {
+        throw new ManifestError(
+          'invalid_trigger',
+          `manifest.${field}.tz "${tz}" is not a known IANA timezone`,
+          `${field}.tz`,
+        );
+      }
+    }
+    return { kind: 'cron', expr, ...(tz !== undefined ? { tz } : {}) };
   }
   if (t.kind === 'webhook') {
     // A pending webhook (`{ kind: 'webhook', pending: true }`) the

@@ -133,3 +133,10 @@ export {
   GATEWAY_SCHEMA_EPOCH,
 } from './version.js';
 export { platformDefaultDataDir, type DefaultDataDirOptions } from './cli/data-dir.js';
+// How the desktop reaches a daemon it did not spawn — an OS-service install
+// derives its loopback bearer from custody rather than an env pin (#568 F).
+export { landlordBearerForDataDir } from './cli/landlord-auth.js';
+// Host-only capability gate (issue #568 items A/B). Embedders wire this into
+// `serve({canMintFoundingTicket})` so the founding ceremony refuses anything a
+// forwarder delivered to loopback.
+export { isDirectHostRequest } from './routes/route-helpers.js';
