@@ -1,5 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { compileAttemptOf, compileStepOf, compileSteps } from './automationCompileData.js';
+import {
+  compileAttemptOf,
+  compileStepOf,
+  compileSteps,
+  loadCompileAttempts,
+  loadTurnSteps,
+  watchTurnSteps,
+} from './automationCompileData.js';
+import {
+  listAutomationTurns,
+  readAutomationTurnExpanded,
+  streamAutomationTurn,
+} from '../../../gateway-client.js';
 
 // `automationCompileData.ts` imports the gateway-client barrel; stub it so
 // pulling the module in doesn't run gateway-client-core's load-time
@@ -80,7 +92,7 @@ describe('compileAttemptOf', () => {
     expect(attempt.endedAt).toBeNull();
   });
 
-  it('carries the failure text the fix-it assistant is seeded with', () => {
+  it('carries the failure text verbatim for the rail to render', () => {
     const attempt = compileAttemptOf({
       turnId: 'c-1',
       startedAt: Date.now(),
@@ -90,5 +102,101 @@ describe('compileAttemptOf', () => {
       pinned: false,
     } as unknown as CentraidAutomationTurnRecord);
     expect(attempt).toMatchObject({ status: 'fail', error: 'handler.js: unexpected token' });
+  });
+});
+
+const turn = (over: Partial<CentraidAutomationTurnRecord> = {}): CentraidAutomationTurnRecord =>
+  ({
+    turnId: 'c-1',
+    startedAt: 1000,
+    endedAt: 2000,
+    ok: true,
+    triggerKind: 'compile',
+    pinned: false,
+    ...over,
+  }) as unknown as CentraidAutomationTurnRecord;
+
+describe('loadCompileAttempts', () => {
+  it('keeps only compile turns — a real run is not a compile attempt', async () => {
+    vi.mocked(listAutomationTurns).mockResolvedValue([
+      turn({ turnId: 'c-1', startedAt: 1000 }),
+      turn({ turnId: 'r-1', startedAt: 2000, triggerKind: 'scheduled' }),
+    ] as never);
+    const attempts = await loadCompileAttempts('digest/main');
+    expect(attempts.map((a) => a.turnId)).toEqual(['c-1']);
+  });
+
+  it('orders newest first, so the rail opens on the attempt that matters', async () => {
+    vi.mocked(listAutomationTurns).mockResolvedValue([
+      turn({ turnId: 'old', startedAt: 1000 }),
+      turn({ turnId: 'new', startedAt: 9000 }),
+    ] as never);
+    const attempts = await loadCompileAttempts('digest/main');
+    expect(attempts.map((a) => a.turnId)).toEqual(['new', 'old']);
+  });
+});
+
+describe('loadTurnSteps', () => {
+  it('reads one turn cold and projects its items to ordered steps', async () => {
+    vi.mocked(readAutomationTurnExpanded).mockResolvedValue({
+      turn: turn(),
+      items: [item({ itemId: 'b', ordinal: 1 }), item({ itemId: 'a', ordinal: 0 })],
+    } as never);
+    const steps = await loadTurnSteps('c-1');
+    expect(steps.map((s) => s.itemId)).toEqual(['a', 'b']);
+  });
+});
+
+describe('watchTurnSteps', () => {
+  it('paints the ledger first, folds live events, then trusts the final read', async () => {
+    // A turn that is already underway when the rail attaches: the cold read
+    // seeds the list so the owner never sees an empty rail for a compile that
+    // has been running for minutes.
+    vi.mocked(readAutomationTurnExpanded)
+      .mockResolvedValueOnce({ turn: turn(), items: [item({ itemId: 'a', ordinal: 0 })] } as never)
+      .mockResolvedValueOnce({
+        turn: turn({ endedAt: 5000, ok: true }),
+        items: [item({ itemId: 'a', ordinal: 0 }), item({ itemId: 'b', ordinal: 1 })],
+      } as never);
+    vi.mocked(streamAutomationTurn).mockImplementation((async (
+      _id: string,
+      apply: (e: unknown) => void,
+    ) => {
+      apply({ type: 'item.start', itemId: 'b', ordinal: 1, kind: 'tool', name: 'typecheck' });
+      apply({ type: 'item.end', itemId: 'b', ordinal: 1, ok: true, durationMs: 120 });
+      apply({ type: 'turn.end', ok: true });
+    }) as never);
+
+    const seen: number[] = [];
+    const outcome = await watchTurnSteps(
+      'c-1',
+      (s) => seen.push(s.length),
+      new AbortController().signal,
+    );
+
+    expect(seen[0]).toBe(1); // cold paint before any event
+    expect(seen).toContain(2); // the streamed step landed
+    expect(outcome).toEqual({ settled: true, ok: true });
+  });
+
+  it('reports unsettled on abort rather than claiming the compile finished', async () => {
+    const controller = new AbortController();
+    vi.mocked(readAutomationTurnExpanded).mockResolvedValue({ turn: null, items: [] } as never);
+    vi.mocked(streamAutomationTurn).mockImplementation((async () => {
+      controller.abort();
+    }) as never);
+    const outcome = await watchTurnSteps('c-1', () => undefined, controller.signal);
+    // An aborted watch must never be read as a settled turn — the rail would
+    // stop following a compile that is still running.
+    expect(outcome).toEqual({ settled: false, ok: false });
+  });
+
+  it('survives a cold read that fails, so a stream can still drive the rail', async () => {
+    vi.mocked(readAutomationTurnExpanded)
+      .mockRejectedValueOnce(new Error('500'))
+      .mockResolvedValueOnce({ turn: turn({ endedAt: 5000, ok: false }), items: [] } as never);
+    vi.mocked(streamAutomationTurn).mockImplementation((async () => undefined) as never);
+    const outcome = await watchTurnSteps('c-1', () => undefined, new AbortController().signal);
+    expect(outcome).toEqual({ settled: true, ok: false });
   });
 });

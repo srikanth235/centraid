@@ -58,6 +58,7 @@ Full paths touched: `packages/client/src/cron.ts`, `packages/client/src/cron.tes
 `packages/client/src/react/screens/AutomationCompilePane.module.css`,
 `packages/client/src/react/screens/AutomationCompilePane.test.tsx`,
 `packages/client/src/react/screens/AutomationCompileArtifacts.tsx`,
+`packages/client/src/react/screens/AutomationCompileArtifacts.test.tsx`,
 `packages/client/src/react/screens/AutomationEditorScreen.tsx`,
 `packages/client/src/react/screens/AutomationEditorScreen.module.css`,
 `packages/client/src/react/screens/AutomationEditorScreen.test.tsx`,
@@ -118,7 +119,8 @@ cd packages/client && bun run test     # 178 files / 1332 tests
 - `bun run format` — clean.
 - `bun run lint` — 2/2 tasks pass.
 - `bun run typecheck` — 32/32 packages pass (includes test files).
-- `packages/client` vitest — **178 files / 1334 tests pass**, including:
+- `bun run test:diff-coverage` — **89.5% ≥ 80%** (861/962 changed instrumentable lines) after covering the extracted artifacts viewer and the compile data layer's async paths. The first push measured 77.3% and failed the `verify` gate.
+- `packages/client` vitest — **179 files / 1346 tests pass**, including:
   - 10 `AutomationCompilePane` tests: streams a new attempt without navigating; cold-read fallback when the stream drops mid-turn; failure hands back to the instructions and offers no second editor; Test run gated on a successful compile; stale-plan verdict; create mode offers no compile controls; elapsed clock counts up under fake timers and disappears once settled; a foreign running compile marks the rail busy; nonce-driven compile does not fire on initial render.
   - 21 rewritten cron tests, TZ-independent, including a weekday-range case and one asserting the hour field is read as local time.
 - Driven end-to-end against a real gateway (rebuilt web bundle + `embed-web.mjs`, restarted daemon): created an automation, watched an 11m24s Codex compile land, then confirmed the settled state in the live DOM — verdict "Plan ready", elapsed clock absent, Test run un-gated, no failure block — and the run screen's empty state flipping to "No runs yet — Run now, or wait for the trigger."
@@ -187,6 +189,7 @@ A second candidate found independently during this audit — *"try creating a sa
 | claude-code-27820b68-407-1785125648-1 | claude-code | 27820b68-4072-40b8-8c99-6c935c72aad4 | #569 | claude-opus-5 | 122 | 822185 | 15527067 | 56931 | 879238 | 14.3261 | 6938 | 7233409 | 716579967 | 1669059 |  |
 | claude-code-27820b68-407-1785125754-1 | claude-code | 27820b68-4072-40b8-8c99-6c935c72aad4 | #569 | claude-opus-5 | 20 | 25494 | 2970025 | 9786 | 35300 | 1.8891 | 6958 | 7258903 | 719549992 | 1678845 |  |
 | claude-code-27820b68-407-1785126872-1 | claude-code | 27820b68-4072-40b8-8c99-6c935c72aad4 | #569 | claude-opus-5 | 100 | 59736 | 15702529 | 24621 | 84457 | 8.8406 | 7058 | 7318639 | 735252521 | 1703466 |  |
+| claude-code-27820b68-407-1785128219-1 | claude-code | 27820b68-4072-40b8-8c99-6c935c72aad4 | #569 | claude-opus-5 | 70 | 346129 | 11904539 | 18835 | 365034 | 8.5868 | 7128 | 7664768 | 747157060 | 1722301 |  |
 
 ### Steering
 
