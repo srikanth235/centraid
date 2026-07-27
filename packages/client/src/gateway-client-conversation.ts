@@ -1,4 +1,6 @@
 /*
+ * governance: allow-repo-hygiene file-size-limit (#567) one browser-safe conversation transport owns the route DTOs and SSE parser together so wire additions cannot drift between request and stream handling
+ *
  * Renderer-side unified chat transport over direct HTTP (issue #141,
  * Phase 3). The chat panel used to relay through the desktop main process
  * (`main/chat.ts` + the `centraid:chat:*` IPC); it now talks to the gateway
@@ -99,6 +101,8 @@ export interface StreamTurnInput {
    * onto the vault register. Absent = builder chat (unchanged).
    */
   register?: 'ask' | 'build';
+  /** Per-conversation runner selection; does not mutate the device default. */
+  runnerKind?: string;
   model?: string;
   thinking?: string;
   /** Files uploaded ahead of the turn (issue #190). */
@@ -112,6 +116,12 @@ export interface StreamTurnInput {
    * replays the already-recorded turn instead of double-running it.
    */
   idempotencyKey?: string;
+  /** Explicit owner approval for this conversation × provider egress boundary. */
+  providerConsent?: string;
+  /** Explicit owner-selected extra workspace roots for this conversation turn. */
+  additionalDirectories?: string[];
+  /** Centraid-owned primary workspace selector (the host resolves the path). */
+  workspaceKind?: 'vault-data' | 'app' | 'draft';
 }
 
 /** Result of a driven turn: whether the stream ended cleanly server-side. */
@@ -227,11 +237,17 @@ export async function streamTurn(
       conversationId: input.conversationId,
       message: input.message,
       ...(input.register ? { register: input.register } : {}),
+      ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+      ...(input.providerConsent ? { providerConsent: input.providerConsent } : {}),
+      ...(input.additionalDirectories !== undefined
+        ? { additionalDirectories: input.additionalDirectories }
+        : {}),
+      ...(input.workspaceKind ? { workspaceKind: input.workspaceKind } : {}),
     }),
     signal,
     'chat',
@@ -272,11 +288,17 @@ export async function streamAssistantTurn(
     JSON.stringify({
       conversationId: input.conversationId,
       message: input.message,
+      ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+      ...(input.providerConsent ? { providerConsent: input.providerConsent } : {}),
+      ...(input.additionalDirectories !== undefined
+        ? { additionalDirectories: input.additionalDirectories }
+        : {}),
+      ...(input.workspaceKind ? { workspaceKind: input.workspaceKind } : {}),
     }),
     signal,
     'assistant',
@@ -386,6 +408,11 @@ export async function loadConversation(
     hasArchivedHistory?: boolean;
     archivedTurnCount?: number;
     archiveUnavailable?: boolean;
+    workspace?: {
+      primaryKind: 'vault-data' | 'app' | 'draft';
+      additionalDirectories: string[];
+      updatedAt: number;
+    };
   }
 > {
   const { baseUrl, token } = await auth();

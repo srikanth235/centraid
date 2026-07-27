@@ -53,6 +53,11 @@ export interface ManifestRequires {
    */
   readonly model?: string;
   /**
+   * ACP semantic `thought_level` pin. Open string by design: each runner
+   * advertises its own values and the runtime never translates across rungs.
+   */
+  readonly thoughtLevel?: string;
+  /**
    * Sealed Locker cells this connector's `ctx.fetch` may reference (issue
    * #293 decision 8), as `locker:<item_id>:<column>` or the rotation-stable
    * `locker:@<alias>:<column>` (issue #298 item 4). The allowlist for
@@ -748,6 +753,17 @@ function validateRequires(raw: unknown): ManifestRequires {
     }
     model = req.model;
   }
+  let thoughtLevel: string | undefined;
+  if (req.thoughtLevel !== undefined) {
+    if (typeof req.thoughtLevel !== 'string' || req.thoughtLevel.length === 0) {
+      throw new ManifestError(
+        'invalid_field',
+        'manifest.requires.thoughtLevel must be a non-empty string',
+        'requires.thoughtLevel',
+      );
+    }
+    thoughtLevel = req.thoughtLevel;
+  }
   const secrets = optionalStringArray(req.secrets, 'requires.secrets');
   if (secrets) {
     for (const ref of secrets) {
@@ -767,6 +783,8 @@ function validateRequires(raw: unknown): ManifestRequires {
   if (mcps) (requires as { mcps: readonly string[] }).mcps = mcps;
   if (runner !== undefined) (requires as { runner: string }).runner = runner;
   if (model !== undefined) (requires as { model: string }).model = model;
+  if (thoughtLevel !== undefined)
+    (requires as { thoughtLevel: string }).thoughtLevel = thoughtLevel;
   if (secrets) (requires as { secrets: readonly string[] }).secrets = secrets;
   return requires;
 }

@@ -23,6 +23,7 @@ function makeData(over: Partial<AuOverviewData> = {}): AuOverviewData {
         lastRunSummary: 'Emailed your morning digest',
         nextRunLabel: 'Tomorrow, 8:00 AM',
         attentionCount: 0,
+        recentFailover: true,
         statusKind: 'active',
         statusLabel: 'Active',
       },
@@ -149,6 +150,7 @@ describe('AutomationsOverviewScreen', () => {
     const digestRow = rows.find((r) => r.textContent?.includes('Daily Digest'));
     expect(digestRow?.querySelector('.attentionBadge')).toBeNull();
     expect((digestRow as HTMLElement).dataset.attention).toBeUndefined();
+    expect(digestRow?.querySelector('.failoverBadge')?.textContent).toBe('Fallback');
   });
 
   it('renders the recent-activity feed grouped by date', async () => {

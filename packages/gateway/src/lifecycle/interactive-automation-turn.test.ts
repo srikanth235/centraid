@@ -1,5 +1,5 @@
 import { tempDir } from '@centraid/test-kit/temp-dir';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
@@ -83,6 +83,14 @@ function seed(journalDbFile: string, withHandle: boolean): void {
 async function runHarness(input: {
   withHandle: boolean;
   emit?: (turn: ConversationTurnInput) => void;
+  prepareArtifacts?: (
+    dir: string,
+  ) => Promise<
+    Pick<
+      Parameters<typeof runInteractiveAutomationTurn>[0],
+      'artifactRoots' | 'uploadInlineArtifact'
+    >
+  >;
 }): Promise<{
   received: ConversationTurnInput;
   stream: TurnStreamEvent[];
@@ -93,6 +101,7 @@ async function runHarness(input: {
   dirs.push(dir);
   const journalDbFile = path.join(dir, 'journal.db');
   seed(journalDbFile, input.withHandle);
+  const artifactOptions = (await input.prepareArtifacts?.(dir)) ?? {};
   let received!: ConversationTurnInput;
   const runner: ConversationRunner = {
     run: async (turn) => {
@@ -116,6 +125,7 @@ async function runHarness(input: {
     conversationLocks: new Map(),
     onEvent: (event) => stream.push(event),
     onTurnEvent: (event) => bus.push(event),
+    ...artifactOptions,
   });
   return {
     received,
@@ -218,7 +228,7 @@ describe('runInteractiveAutomationTurn', () => {
     expect(resumed.received.permissionPolicy).toBe('deny');
     expect(resumed.received.runnerKind).toBe('codex');
     expect(resumed.received.model).toBe('gpt-test');
-    expect(resumed.store.getConversation('brief/main::runner:codex')).toMatchObject({
+    expect(resumed.store.getConversation('brief/main')).toMatchObject({
       adapterKind: 'codex',
       adapterSessionId: 'cached-2',
     });
@@ -293,5 +303,192 @@ describe('runInteractiveAutomationTurn', () => {
       }),
     ]);
     out.store.close();
+  });
+
+  it('persists trusted tool locations and inline artifacts while rejecting escaped paths', async () => {
+    let trustedPath = '';
+    let escapedPath = '';
+    const uploadInlineArtifact = vi.fn(async (bytes: Uint8Array) => ({
+      hash: `inline-${Buffer.from(bytes).toString('hex')}`,
+      sizeBytes: bytes.byteLength,
+    }));
+    const out = await runHarness({
+      withHandle: false,
+      prepareArtifacts: async (dir) => {
+        const trustedRoot = path.join(dir, 'workspace');
+        trustedPath = path.join(trustedRoot, 'report.txt');
+        escapedPath = path.join(dir, 'outside.txt');
+        await fs.mkdir(trustedRoot, { recursive: true });
+        await Promise.all([
+          fs.writeFile(trustedPath, 'trusted report'),
+          fs.writeFile(escapedPath, 'must not attach'),
+        ]);
+        return { artifactRoots: [trustedRoot], uploadInlineArtifact };
+      },
+      emit: (turn) => {
+        turn.onEvent({
+          type: 'tool.start',
+          toolCallId: 'artifact-call',
+          toolName: 'write_report',
+        });
+        turn.onEvent({
+          type: 'tool.result',
+          toolCallId: 'artifact-call',
+          toolName: 'write_report',
+          ok: true,
+          result: { written: true },
+          locations: [{ path: trustedPath }, { path: escapedPath }],
+          artifacts: [
+            {
+              dataBase64: Buffer.from('inline artifact').toString('base64'),
+              mime: 'text/plain',
+              filename: 'inline.txt',
+            },
+          ],
+        });
+        turn.onEvent({ type: 'final', text: 'Artifacts ready.' });
+      },
+    });
+    const tool = out.store
+      .listItems('interactive-1')
+      .find((item) => item.kind === 'tool' && item.callId === 'artifact-call');
+    expect(tool).toBeDefined();
+    const attachments = out.store.listAttachmentsForItem(tool!.itemId);
+    const [canonicalTrustedPath, canonicalEscapedPath] = await Promise.all([
+      fs.realpath(trustedPath),
+      fs.realpath(escapedPath),
+    ]);
+    expect(attachments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          filename: 'report.txt',
+          mime: 'application/octet-stream',
+          source: 'agent',
+          workspacePath: canonicalTrustedPath,
+        }),
+        expect.objectContaining({
+          filename: 'inline.txt',
+          hash: `inline-${Buffer.from('inline artifact').toString('hex')}`,
+          mime: 'text/plain',
+          source: 'agent',
+        }),
+      ]),
+    );
+    expect(attachments).toHaveLength(2);
+    expect(
+      attachments.some((attachment) => attachment.workspacePath === canonicalEscapedPath),
+    ).toBe(false);
+    expect(uploadInlineArtifact).toHaveBeenCalledOnce();
+    out.store.close();
+  });
+
+  it('keeps one automation conversation and routes A→B→A through per-runner watermarks', async () => {
+    const dir = await tempDir('interactive-automation-switch-');
+    dirs.push(dir);
+    const journalDbFile = path.join(dir, 'journal.db');
+    seed(journalDbFile, true);
+    const calls: ConversationTurnInput[] = [];
+    const runner: ConversationRunner = {
+      run: async (turn) => {
+        calls.push(turn);
+        const isB = turn.runnerKind === 'claude-code';
+        turn.onEvent({ type: 'final', text: isB ? 'B durable answer' : 'A return answer' });
+        return {
+          adapterKind: isB ? 'claude-code' : 'codex',
+          adapterSessionId: isB ? 'session-b' : 'cached-1',
+          hydrated: true,
+          hydrationTokens: turn.hydrationContext?.estimatedTokens,
+        };
+      },
+    };
+    const common = {
+      row: row(dir),
+      journalDbFile,
+      runnerSessionDir: path.join(dir, 'sessions'),
+      runner,
+      abortSignal: new AbortController().signal,
+      conversationLocks: new Map<string, Promise<void>>(),
+      onEvent: () => undefined,
+    };
+
+    await runInteractiveAutomationTurn({
+      ...common,
+      turnId: 'interactive-b',
+      message: 'Ask B',
+      runnerKind: 'claude-code',
+    });
+    await runInteractiveAutomationTurn({
+      ...common,
+      turnId: 'interactive-a-return',
+      message: 'Return to A',
+      runnerKind: 'codex',
+    });
+
+    expect(calls[0]?.prevAdapterSessionId).toBeUndefined();
+    expect(calls[0]?.hydrationContext?.prompt).toContain('Found two important changes.');
+    expect(calls[1]?.prevAdapterSessionId).toBe('cached-1');
+    expect(calls[1]?.hydrationContext?.prompt).toContain('B durable answer');
+    expect(calls[1]?.hydrationContext?.prompt).not.toContain('Found two important changes.');
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    expect(store.listTurns('brief/main').map((turn) => turn.turnId)).toEqual([
+      'prior',
+      'interactive-b',
+      'interactive-a-return',
+    ]);
+    expect(store.getHarnessBinding('brief/main', 'claude-code')?.acpSessionId).toBe('session-b');
+    expect(store.getHarnessBinding('brief/main', 'codex')?.acpSessionId).toBe('cached-1');
+    expect(store.getTurn('interactive-b')?.hydrationTokens).toBeGreaterThan(0);
+    store.close();
+  });
+
+  it('rolls back turn completion when the binding and watermark cannot commit', async () => {
+    const dir = await tempDir('interactive-automation-atomic-');
+    dirs.push(dir);
+    const journalDbFile = path.join(dir, 'journal.db');
+    seed(journalDbFile, false);
+    const noteTurn = vi
+      .spyOn(ConversationStore.prototype, 'noteTurn')
+      .mockImplementationOnce(() => {
+        throw new Error('binding write failed');
+      });
+    const runner: ConversationRunner = {
+      run: async (turn) => {
+        turn.onEvent({ type: 'final', text: 'Must not commit separately.' });
+        return {
+          adapterKind: 'codex',
+          adapterSessionId: 'atomic-session',
+          hydrated: true,
+          hydrationTokens: 12,
+        };
+      },
+    };
+
+    await expect(
+      runInteractiveAutomationTurn({
+        row: row(dir),
+        turnId: 'interactive-atomic',
+        message: 'Commit atomically',
+        journalDbFile,
+        runnerSessionDir: path.join(dir, 'sessions'),
+        runner,
+        runnerKind: 'codex',
+        abortSignal: new AbortController().signal,
+        conversationLocks: new Map(),
+        onEvent: () => undefined,
+      }),
+    ).rejects.toThrow('binding write failed');
+    noteTurn.mockRestore();
+
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    const turn = store.getTurn('interactive-atomic');
+    expect(turn?.endedAt).toBeUndefined();
+    expect(turn?.hydrationTokens).toBeUndefined();
+    expect(store.getHarnessBinding('brief/main', 'codex')).toBeUndefined();
+    const items = store.listItems('interactive-atomic');
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ kind: 'message_in' });
+    expect(items[1]).toMatchObject({ kind: 'agent' });
+    expect(items[1]?.endedAt).toBeUndefined();
+    store.close();
   });
 });

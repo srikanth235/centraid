@@ -34,11 +34,17 @@ import {
   activeAttemptOf,
   hydrateMessages,
   msgToDTO,
+  toolOutputText,
   type AsstMsg,
   type AsstToolCall,
   type PendingAttachment,
 } from './assistantTranscript.js';
-import { loadProviders, setSubsystemModel } from './settingsProvidersData.js';
+import {
+  loadProviders,
+  resolveReportedRunnerKind,
+  setSubsystemConfigPin,
+  setSubsystemModel,
+} from './settingsProvidersData.js';
 
 type ReadyAttachment = PendingAttachment & { ref: ConversationAttachmentRef };
 
@@ -62,6 +68,12 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     busy: false,
     abort: null as AbortController | null,
     disposed: false,
+    context: null as { used: number; size: number } | null,
+    runnerKind: null as AgentRunnerKind | null,
+    selectedModel: '',
+    selectedEffort: '',
+    workspaceKind: 'vault-data' as 'vault-data' | 'app' | 'draft',
+    additionalDirectories: [] as string[],
     /** Server turn count of the open thread — the reconnect catch-up baseline. */
     turnCount: 0,
   });
@@ -98,6 +110,11 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         ...(a.previewUrl ? { previewUrl: a.previewUrl } : {}),
         ...(a.errorText ? { errorText: a.errorText } : {}),
       })),
+      ...(m.current.context ? { context: m.current.context } : {}),
+      workspaceKind: m.current.workspaceKind,
+      ...(m.current.additionalDirectories.length
+        ? { additionalDirectories: [...m.current.additionalDirectories] }
+        : {}),
     };
   };
   const push = (): void => updateRef.current?.(buildSnapshot());
@@ -116,6 +133,11 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         ...(loaded.archiveUnavailable ? { archiveUnavailable: true } : {}),
       });
       m.current.turnCount = loaded.turnCount;
+      if (loaded.adapterKind) m.current.runnerKind = loaded.adapterKind;
+      if (loaded.workspace) {
+        m.current.workspaceKind = loaded.workspace.primaryKind;
+        m.current.additionalDirectories = [...loaded.workspace.additionalDirectories];
+      }
       push();
     } catch {
       /* keep the live model if the reload fails */
@@ -130,6 +152,10 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     m.current.msgs = [];
     m.current.pendingAttachments = [];
     m.current.turnCount = 0;
+    m.current.context = null;
+    m.current.runnerKind = null;
+    m.current.workspaceKind = 'vault-data';
+    m.current.additionalDirectories = [];
     push();
     if (!id) return;
     try {
@@ -140,6 +166,11 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         ...(loaded.archiveUnavailable ? { archiveUnavailable: true } : {}),
       });
       m.current.turnCount = loaded.turnCount;
+      if (loaded.adapterKind) m.current.runnerKind = loaded.adapterKind;
+      if (loaded.workspace) {
+        m.current.workspaceKind = loaded.workspace.primaryKind;
+        m.current.additionalDirectories = [...loaded.workspace.additionalDirectories];
+      }
     } catch (err) {
       if (m.current.disposed) return;
       m.current.msgs = [{ kind: 'ai', text: `Failed to load: ${String(err)}`, error: true }];
@@ -197,15 +228,34 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
   };
 
   // Composer model picker — reuses the Settings → Models → Agents data path.
-  const loadModelPicker = async (): Promise<AsstModelPickerDTO> => {
-    const status = await loadProviders();
-    modelPickerRunnerRef.current = status.selectedKind;
-    const card = status.cards.find((c) => c.kind === status.selectedKind);
-    const models = card?.models ?? [];
-    const defaultId = status.savedModelByKind[status.selectedKind] ?? '';
+  const pickerFromStatus = (
+    status: Awaited<ReturnType<typeof loadProviders>>,
+    requestedRunner?: AgentRunnerKind | null,
+  ): AsstModelPickerDTO => {
+    const runnerKind = resolveReportedRunnerKind(status, requestedRunner, 'assistant');
+    m.current.runnerKind = runnerKind;
+    modelPickerRunnerRef.current = runnerKind;
+    const card = status.cards.find((c) => c.kind === runnerKind);
+    const models = card?.modelConfigurable ? card.models : [];
+    const defaultId = status.savedModelByKind[runnerKind] ?? '';
     const defaultModel =
       models.find((mm) => mm.id === defaultId) ?? models.find((mm) => mm.default) ?? models[0];
+    const effortOption = card?.configOptions?.find((option) => option.category === 'thought_level');
+    const defaultEffort =
+      status.defaultConfigPinsByKind[runnerKind]?.thought_level ?? effortOption?.currentValue ?? '';
+    m.current.selectedModel = status.subsystemModelByKind[runnerKind]?.assistant ?? '';
+    m.current.selectedEffort =
+      status.subsystemConfigPinsByKind[runnerKind]?.assistant?.thought_level ?? '';
     return {
+      runners: status.cards.map((runner) => ({
+        kind: runner.kind,
+        title: runner.title,
+        connected: runner.connected,
+        sessionReady: runner.sessionReady,
+        hint: runner.subtitle,
+      })),
+      selectedRunnerKind: runnerKind,
+      workspaceKinds: ['vault-data'],
       connected: card?.connected ?? false,
       models: models.map((mm) => ({
         id: mm.id,
@@ -213,12 +263,49 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         ...(mm.default ? { default: true } : {}),
       })),
       defaultModelName: defaultModel?.name ?? defaultModel?.id ?? 'gateway default',
-      selectedModelId: status.subsystemModelByKind[status.selectedKind]?.assistant ?? '',
+      selectedModelId: m.current.selectedModel,
+      efforts: effortOption?.values ?? [],
+      defaultEffortName:
+        effortOption?.values.find((value) => value.value === defaultEffort)?.name ?? defaultEffort,
+      selectedEffortId: m.current.selectedEffort,
+      supportsAdditionalDirectories: card?.additionalDirectories === true,
+      supportsAttachments: card?.supportsAttachments === true,
+      supportsContext: card?.supportsContext === true,
     };
   };
 
-  const setModel = (modelId: string): void =>
+  const loadModelPicker = async (): Promise<AsstModelPickerDTO> =>
+    pickerFromStatus(await loadProviders(), m.current.runnerKind);
+
+  const setModel = (modelId: string): void => {
+    m.current.selectedModel = modelId;
     setSubsystemModel(modelPickerRunnerRef.current, 'assistant', modelId);
+  };
+
+  const setEffort = (effort: string): void => {
+    m.current.selectedEffort = effort;
+    setSubsystemConfigPin(modelPickerRunnerRef.current, 'assistant', 'thought_level', effort);
+  };
+
+  const setRunner = async (runnerKind: AgentRunnerKind): Promise<AsstModelPickerDTO> => {
+    const previous = m.current.runnerKind;
+    const status = await loadProviders({ refresh: true });
+    const target = status.cards.find((card) => card.kind === runnerKind);
+    if (!target?.sessionReady) {
+      showToast(target?.subtitle ?? `${runnerKind} did not complete its session preflight.`);
+      return pickerFromStatus(status, previous);
+    }
+    m.current.runnerKind = runnerKind;
+    m.current.context = null;
+    if (!target.supportsAttachments) {
+      for (const attachment of m.current.pendingAttachments) {
+        if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+      }
+      m.current.pendingAttachments = [];
+    }
+    push();
+    return pickerFromStatus(status, runnerKind);
+  };
 
   const removePendingAttachment = (localId: string): void => {
     const gone = m.current.pendingAttachments.find((a) => a.localId === localId);
@@ -243,6 +330,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     idempotencyKey: string;
     appendUser: boolean;
     removeFromIndex?: number;
+    providerConsent?: string;
   }): Promise<void> => {
     const conversationId = m.current.currentId;
     if (!conversationId) return;
@@ -253,7 +341,6 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       m.current.msgs.push({
         kind: 'user',
         text: opts.text,
-        createdAt: Date.now(),
         ...(opts.attachments.length
           ? {
               attachments: opts.attachments.map((a) => ({
@@ -291,6 +378,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     };
     const byCall = new Map<string, AsstToolCall>();
     let errored = false;
+    let requiredProvider: string | undefined;
     // Whether the stream produced ANY turn activity before it (maybe) dropped —
     // distinguishes a mid-turn connection loss (catch up from the ledger) from a
     // request that never started (plain failure → resend). Issue #420.
@@ -300,9 +388,12 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       if (m.current.disposed || m.current.currentId !== conversationId) return;
       if (event.type !== 'error' && event.type !== 'aborted') sawActivity = true;
       switch (event.type) {
+        case 'consent.required':
+          requiredProvider = event.provider;
+          return;
         case 'notice': {
-          // A non-fatal runner notice (e.g. codex can't read PDF attachments).
-          // Live-only — not persisted, so it won't replay on reload.
+          // A non-fatal runner notice. The SSE path renders immediately and
+          // the ledger copy restores it after reload.
           m.current.msgs.push({ kind: 'notice', level: event.level, text: event.message });
           push();
           return;
@@ -333,10 +424,17 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
             ...(outputTokens !== undefined ? { outputTokens } : {}),
             ...(costUsd !== undefined ? { costUsd, estimated: true } : {}),
             ...(event.model ? { model: event.model } : {}),
+            ...(event.effort ? { effort: event.effort } : {}),
           };
           push();
           return;
         }
+        case 'context':
+          if (event.used !== undefined && event.size !== undefined) {
+            m.current.context = { used: event.used, size: event.size };
+            push();
+          }
+          return;
         case 'tool.start': {
           collapseThinking();
           const call: AsstToolCall = {
@@ -361,6 +459,18 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           const result = event.result as { totalRows?: number; durationMs?: number } | undefined;
           if (result && typeof result.totalRows === 'number') call.totalRows = result.totalRows;
           if (result && typeof result.durationMs === 'number') call.durationMs = result.durationMs;
+          const outputText = toolOutputText(event.result);
+          if (outputText) call.outputText = outputText;
+          const artifacts = [
+            ...(event.locations ?? []).map((location) => ({
+              label: location.path.split(/[\\/]/).at(-1) ?? location.path,
+              workspacePath: location.path,
+            })),
+            ...(event.artifacts ?? []).map((artifact) => ({
+              label: artifact.filename ?? 'Agent artifact',
+            })),
+          ];
+          if (artifacts.length) call.artifacts = artifacts;
           push();
           return;
         }
@@ -401,6 +511,12 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           idempotencyKey: opts.idempotencyKey,
           ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
           ...(opts.attachments.length ? { attachments: opts.attachments.map((a) => a.ref) } : {}),
+          ...(opts.providerConsent ? { providerConsent: opts.providerConsent } : {}),
+          ...(m.current.runnerKind ? { runnerKind: m.current.runnerKind } : {}),
+          ...(m.current.selectedModel ? { model: m.current.selectedModel } : {}),
+          ...(m.current.selectedEffort ? { thinking: m.current.selectedEffort } : {}),
+          workspaceKind: m.current.workspaceKind,
+          additionalDirectories: m.current.additionalDirectories,
         },
         onEvent,
         m.current.abort.signal,
@@ -411,6 +527,27 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     }
 
     if (m.current.disposed || m.current.currentId !== conversationId) return;
+    if (requiredProvider) {
+      setBusy(false);
+      const approved = window.confirm(
+        `Allow this conversation to be sent to ${requiredProvider}? This can include your message, attachments, conversation handoff, and vault tool results.`,
+      );
+      if (approved) {
+        await runTurn({
+          ...opts,
+          appendUser: false,
+          providerConsent: requiredProvider,
+        });
+      } else {
+        m.current.msgs.push({
+          kind: 'notice',
+          level: 'info',
+          text: `Nothing was sent to ${requiredProvider}.`,
+        });
+        push();
+      }
+      return;
+    }
     for (const msg of m.current.msgs) {
       if (msg.kind === 'thinking' && msg.streaming) msg.streaming = false;
     }
@@ -717,6 +854,24 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         }}
         onAttachFiles={attachFiles}
         onRemovePendingAttachment={removePendingAttachment}
+        onAddWorkspace={() => {
+          void openPrompt({
+            title: 'Add a scoped workspace folder',
+            placeholder: '/absolute/path/to/folder',
+            confirmLabel: 'Share folder',
+          }).then((directory) => {
+            const trimmed = directory?.trim();
+            if (!trimmed || m.current.additionalDirectories.includes(trimmed)) return;
+            m.current.additionalDirectories.push(trimmed);
+            push();
+          });
+        }}
+        onRemoveWorkspace={(directory) => {
+          m.current.additionalDirectories = m.current.additionalDirectories.filter(
+            (current) => current !== directory,
+          );
+          push();
+        }}
         hydrateRefs={(node) => hydrateRefs(node)}
         wireCodeCopy={(node) => wireCodeCopy(node)}
         loadAttachmentImage={loadAttachmentImage}
@@ -727,6 +882,12 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         onPagerNav={pagerNav}
         loadModelPicker={loadModelPicker}
         onSetModel={setModel}
+        onSetEffort={setEffort}
+        onSetRunner={setRunner}
+        onSetWorkspaceKind={(workspaceKind) => {
+          m.current.workspaceKind = workspaceKind;
+          push();
+        }}
       />
     </div>
   );

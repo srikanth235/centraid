@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#567) one fire-spine suite shares the real worker, stable automation conversation, audit store, failover notice, and onFailure fixtures
 import { tempDir } from '@centraid/test-kit/temp-dir';
 /*
  * Automation fire spine (issue #147, Concern 2). The per-fire orchestration
@@ -12,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
+  ConversationHistoryStore,
   ConversationStore,
   makeJournalDbProvider,
   setPricingCatalog,
@@ -94,6 +96,52 @@ describe('runFire', () => {
     expect(opened[0]!.automationRef).toBe('notes/digest');
     expect(opened[0]!.workdir).toMatch(/notes[/\\]automations[/\\]digest$/);
     expect(closes.n).toBe(1);
+  });
+
+  it('persists a failover boundary as a transcript notice that survives reload', async () => {
+    await writeAutomation(appsDir, 'notes', 'digest', manifest());
+    const notice = 'codex failed at the automation fire boundary (quota). Continuing with copilot.';
+    const { record } = await runFire(
+      {
+        automationRef: 'notes/digest',
+        appsDir,
+        journalDbFile,
+        runId: 'failover-attempt',
+        runnerKind: 'copilot',
+        note: notice,
+        failoverNotice: notice,
+      },
+      { openDispatch: stubDispatch([], { n: 0 }) },
+    );
+
+    const journal = makeJournalDbProvider(journalDbFile);
+    const store = new ConversationStore(journal);
+    expect(store.listItems(record.runId)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'step',
+          name: 'notice:warn:failover',
+          outputJson: JSON.stringify({ text: notice }),
+        }),
+      ]),
+    );
+    store.close();
+
+    const history = new ConversationHistoryStore(() => ({
+      vaultId: 'vault-test',
+      ownerPartyId: '',
+      appsDir,
+      journal,
+      journalDbFile,
+      runnerSessionDir: path.join(appsDir, 'runner-sessions'),
+    }));
+    expect(history.getSession('notes', 'notes/digest')?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({ kind: 'notice', level: 'warn', text: notice }),
+        }),
+      ]),
+    );
   });
 
   it('injects one fire-start instant as deterministic ctx.now', async () => {
@@ -237,7 +285,7 @@ describe('runFire', () => {
     expect(agentNode!.costUsd).toBe(0.005);
     expect(agentNode!.costSource).toBe('agent');
     const run = store.getTurn(record.runId);
-    expect(run?.conversationId).toBe('notes/ask::runner:codex');
+    expect(run?.conversationId).toBe('notes/ask');
     expect(run?.totalInputTokens).toBe(12);
     expect(run?.totalOutputTokens).toBe(3);
     store.close();
@@ -479,10 +527,8 @@ describe('runFire', () => {
       ['notes/recover', 'claude-code', 'recovery-model'],
     ]);
     const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
-    expect(store.getConversation('notes/main::runner:codex')?.adapterKind).toBe('codex');
-    expect(store.getConversation('notes/recover::runner:claude-code')?.adapterKind).toBe(
-      'claude-code',
-    );
+    expect(store.getConversation('notes/main')?.adapterKind).toBe('codex');
+    expect(store.getConversation('notes/recover')?.adapterKind).toBe('claude-code');
     store.close();
     expect(closes.n).toBe(2);
   });

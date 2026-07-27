@@ -181,6 +181,45 @@ test('tool result extracts diff content blocks', () => {
   expect(events.some((e) => e.type === 'phase' && e.phase === 'diff')).toBe(true);
 });
 
+test('tool result preserves renderable content and terminal output as CAS candidates', () => {
+  const { mapper, events } = harness();
+  mapper.handleSessionUpdate({
+    update: {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'terminal-1',
+      title: 'shell',
+      status: 'completed',
+      rawOutput: { exitCode: 0 },
+      locations: [{ path: '/workspace/report.txt', line: 7 }],
+      content: [
+        { type: 'content', content: 'human-readable result' },
+        { type: 'terminal', terminalId: 'term-1', output: 'build passed' },
+      ],
+    },
+  });
+  const result = events.find(
+    (event): event is Extract<TurnStreamEvent, { type: 'tool.result' }> =>
+      event.type === 'tool.result',
+  );
+  expect(result?.locations).toEqual([{ path: '/workspace/report.txt', line: 7 }]);
+  expect(result?.result).toMatchObject({
+    exitCode: 0,
+    content: [
+      'human-readable result',
+      { type: 'terminal', terminalId: 'term-1', output: 'build passed' },
+    ],
+  });
+  expect(
+    result?.artifacts?.map((artifact) => ({
+      filename: artifact.filename,
+      text: Buffer.from(artifact.dataBase64, 'base64').toString('utf8'),
+    })),
+  ).toEqual([
+    { filename: 'tool-output.txt', text: 'human-readable result' },
+    { filename: 'terminal-output.txt', text: 'build passed' },
+  ]);
+});
+
 test('usage_update folds tokens and cost, surfaced via usage()', () => {
   const { mapper } = harness();
   mapper.handleSessionUpdate({

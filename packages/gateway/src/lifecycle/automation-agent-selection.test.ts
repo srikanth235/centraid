@@ -9,6 +9,8 @@ describe('resolveAutomationAgentSelection', () => {
     'model.codex.automations': 'codex-auto',
     'model.claude-code.automations': 'claude-auto',
     'model.claude-code.default': 'claude-default',
+    'config.claude-code.default.thought_level': 'medium',
+    'config.claude-code.automations.thought_level': 'high',
   };
 
   it('gives valid manifest runner/model pins priority over subsystem prefs', () => {
@@ -18,7 +20,11 @@ describe('resolveAutomationAgentSelection', () => {
         prefs,
         'codex',
       ),
-    ).toEqual({ runner: 'claude-code', model: 'claude-explicit' });
+    ).toEqual({
+      runner: 'claude-code',
+      model: 'claude-explicit',
+      configPins: { thought_level: 'high' },
+    });
   });
 
   it('falls back from an unregistered open key and scopes model prefs to that fallback', () => {
@@ -32,7 +38,18 @@ describe('resolveAutomationAgentSelection', () => {
     expect(resolveAutomationAgentSelection({ runner: 'claude-code' }, prefs, 'codex')).toEqual({
       runner: 'claude-code',
       model: 'claude-auto',
+      configPins: { thought_level: 'high' },
     });
+  });
+
+  it('gives a manifest thought-level pin priority over prefs', () => {
+    expect(
+      resolveAutomationAgentSelection(
+        { runner: 'claude-code', thoughtLevel: 'max' },
+        prefs,
+        'codex',
+      ),
+    ).toMatchObject({ configPins: { thought_level: 'max' } });
   });
 
   it('keeps an explicit automation model ahead of rewrite and catalog defaults', () => {

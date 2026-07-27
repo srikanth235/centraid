@@ -146,7 +146,14 @@ function ToolsMsg({
   calls,
 }: {
   label: string;
-  calls: { tool: string; sql?: string; state: string; meta: string }[];
+  calls: {
+    tool: string;
+    sql?: string;
+    state: string;
+    meta: string;
+    outputText?: string;
+    artifacts?: Array<{ label: string; hash?: string; workspacePath?: string }>;
+  }[];
 }): JSX.Element {
   return (
     <div className={styles.msg}>
@@ -156,6 +163,24 @@ function ToolsMsg({
           {calls.map((c, i) => (
             <div key={i} className={styles.tool} data-state={c.state}>
               {c.sql ? <pre className={asstPreCss.asstPre}>{c.sql}</pre> : <span>{c.tool}</span>}
+              {c.outputText ? <pre className={asstPreCss.asstPre}>{c.outputText}</pre> : null}
+              {c.artifacts?.length ? (
+                <div className={styles.toolArtifacts}>
+                  {c.artifacts.map((artifact, artifactIndex) => (
+                    <span
+                      key={`${artifact.label}-${artifactIndex}`}
+                      className={styles.toolArtifact}
+                      title={
+                        artifact.workspacePath ??
+                        (artifact.hash ? `sha256 ${artifact.hash}` : artifact.label)
+                      }
+                    >
+                      <Icon name="FileEdit" size={12} />
+                      {artifact.label}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <div className={styles.toolMeta}>{c.meta}</div>
             </div>
           ))}

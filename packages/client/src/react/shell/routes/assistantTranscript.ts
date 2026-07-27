@@ -15,6 +15,28 @@ export interface AsstToolCall {
   totalRows?: number;
   durationMs?: number;
   errorText?: string;
+  outputText?: string;
+  artifacts?: Array<{ label: string; hash?: string; workspacePath?: string }>;
+}
+
+export function toolOutputText(result: unknown): string | undefined {
+  if (!result || typeof result !== 'object') {
+    return typeof result === 'string' && result.trim() ? result : undefined;
+  }
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return undefined;
+  const parts = content.flatMap((entry) => {
+    if (typeof entry === 'string') return [entry];
+    if (!entry || typeof entry !== 'object') return [];
+    const record = entry as Record<string, unknown>;
+    if (record.type === 'text' && typeof record.text === 'string') return [record.text];
+    if (record.type === 'terminal') {
+      if (typeof record.output === 'string') return [record.output];
+      if (typeof record.text === 'string') return [record.text];
+    }
+    return [];
+  });
+  return parts.length ? parts.join('\n') : undefined;
 }
 export interface AsstAttachment {
   hash: string;
@@ -34,7 +56,7 @@ export type AsstMsg =
   | { kind: 'user'; text: string; attachments?: AsstAttachment[]; createdAt?: number }
   /** Live-only streaming reasoning row (issue #420, Wave 2). */
   | { kind: 'thinking'; text: string; streaming?: boolean }
-  /** Live-only runner notice (issue #420, Wave 6) — e.g. dropped-PDF warning. */
+  /** Durable runner notice (issue #420, Wave 6) — e.g. dropped-PDF warning. */
   | { kind: 'notice'; level: 'warn' | 'info'; text: string }
   | {
       kind: 'ai';
@@ -150,6 +172,12 @@ export function hydrateMessages(
         msg.activeAttempt = msg.attempts.length - 1;
       }
       out.push(msg);
+    } else if (payload.kind === 'notice') {
+      out.push({
+        kind: 'notice',
+        level: payload.level,
+        text: payload.text,
+      });
     } else if (payload.kind === 'tool') {
       const call: AsstToolCall = {
         id: payload.id ?? String(out.length),
@@ -157,6 +185,18 @@ export function hydrateMessages(
         ...(payload.sql ? { sql: payload.sql } : {}),
         state: payload.state === 'ok' ? 'ok' : 'error',
         ...(payload.state !== 'ok' && payload.errorText ? { errorText: payload.errorText } : {}),
+        ...(payload.result && toolOutputText(payload.result)
+          ? { outputText: toolOutputText(payload.result)! }
+          : {}),
+        ...(payload.artifacts?.length
+          ? {
+              artifacts: payload.artifacts.map((artifact) => ({
+                label: artifact.filename ?? artifact.workspacePath ?? 'Agent artifact',
+                ...(artifact.hash ? { hash: artifact.hash } : {}),
+                ...(artifact.workspacePath ? { workspacePath: artifact.workspacePath } : {}),
+              })),
+            }
+          : {}),
       };
       const result = payload.result as { totalRows?: number; durationMs?: number } | undefined;
       if (result && typeof result.totalRows === 'number') call.totalRows = result.totalRows;
@@ -207,8 +247,14 @@ export function msgToDTO(msg: AsstMsg, isLastAnswer: boolean): AsstMsgDTO {
           c.state === 'error'
             ? (c.errorText ?? 'failed')
             : c.state === 'ok'
-              ? `${c.totalRows ?? '?'} rows${c.durationMs ? ` · ${c.durationMs}ms` : ''}`
+              ? `${c.totalRows ?? '?'} rows${c.durationMs ? ` · ${c.durationMs}ms` : ''}${
+                  c.artifacts?.length
+                    ? ` · ${c.artifacts.length} artifact${c.artifacts.length === 1 ? '' : 's'}`
+                    : ''
+                }`
               : 'running…',
+        ...(c.outputText ? { outputText: c.outputText } : {}),
+        ...(c.artifacts?.length ? { artifacts: c.artifacts } : {}),
       })),
     };
   }

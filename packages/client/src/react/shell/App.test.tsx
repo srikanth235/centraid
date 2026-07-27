@@ -28,6 +28,7 @@ vi.mock('../../gateway-client.js', () => ({
       bySource: [],
       byRunner: [],
       byModel: [],
+      byEffort: [],
       recent: [],
       windowDays: 30,
       generatedAt: 0,

@@ -21,6 +21,7 @@ import type {
   InsightsActivityRow,
   InsightsAttention,
   InsightsDailyPoint,
+  InsightsEffortRow,
   InsightsKpis,
   InsightsModelRow,
   InsightsPeakDay,
@@ -67,6 +68,7 @@ export class InsightsStore {
       failed: number | null;
       failed_cost: number | null;
       tokens: number | null;
+      hydration_tokens: number | null;
       cost: number | null;
       unpriced: number | null;
       unreported: number | null;
@@ -79,6 +81,7 @@ export class InsightsStore {
       generations: number | null;
       retries: number | null;
       tokens: number | null;
+      hydration_tokens: number | null;
       cost: number | null;
     };
 
@@ -94,6 +97,7 @@ export class InsightsStore {
 
     const kpis: InsightsKpis = {
       totalTokens: (k.tokens ?? 0) + (kd.tokens ?? 0),
+      hydrationTokens: (k.hydration_tokens ?? 0) + (kd.hydration_tokens ?? 0),
       totalCostUsd,
       agentReportedCostUsd,
       estimatedCostUsd,
@@ -123,6 +127,7 @@ export class InsightsStore {
       costUsd: round(r.cost ?? 0),
     }));
     const byModel = foldByModel(stmts, since);
+    const byEffort = foldByEffort(stmts, since);
     const recent = foldRecent(stmts, since, recentLimit);
     const peakDay = buildPeakDay(stmts, since, daily);
     const attention = buildAttention(bySource, totalCostUsd);
@@ -135,6 +140,7 @@ export class InsightsStore {
       bySource,
       byRunner,
       byModel,
+      byEffort,
       recent,
       ...(peakDay ? { peakDay } : {}),
       ...(attention ? { attention } : {}),
@@ -262,6 +268,34 @@ function foldByModel(stmts: InsightsPreparedStatements, since: number): Insights
     .map(([model, g]) => ({ model, runs: g.runs, tokens: g.tokens, costUsd: round(g.cost) }));
 }
 
+function foldByEffort(stmts: InsightsPreparedStatements, since: number): InsightsEffortRow[] {
+  const groups = new Map<string, { runs: number; tokens: number; cost: number }>();
+  const add = (effort: string, runs: number, tokens: number, cost: number): void => {
+    const g = groups.get(effort) ?? { runs: 0, tokens: 0, cost: 0 };
+    g.runs += runs;
+    g.tokens += tokens;
+    g.cost += cost;
+    groups.set(effort, g);
+  };
+  for (const r of stmts.byEffort.all(since) as Array<{
+    effort: string;
+    runs: number;
+    tokens: number | null;
+    cost: number | null;
+  }>)
+    add(r.effort, r.runs, r.tokens ?? 0, r.cost ?? 0);
+  for (const r of stmts.byEffortDigest.all(since) as Array<{
+    effort: string;
+    runs: number;
+    tokens: number | null;
+    cost: number | null;
+  }>)
+    add(r.effort, r.runs, r.tokens ?? 0, r.cost ?? 0);
+  return [...groups.entries()]
+    .sort(([, a], [, b]) => b.cost - a.cost || b.tokens - a.tokens)
+    .map(([effort, g]) => ({ effort, runs: g.runs, tokens: g.tokens, costUsd: round(g.cost) }));
+}
+
 function foldRecent(
   stmts: InsightsPreparedStatements,
   since: number,
@@ -279,7 +313,9 @@ function foldRecent(
       automation_ref: string | null;
       model: string | null;
       provider: string | null;
+      effort: string | null;
       tokens: number | null;
+      hydration_tokens: number | null;
       cost: number | null;
     }>
   ).map((r) => ({
@@ -291,9 +327,11 @@ function foldRecent(
     ok: r.ok !== 0,
     startedAt: r.started_at,
     tokens: r.tokens ?? 0,
+    hydrationTokens: r.hydration_tokens ?? 0,
     costUsd: round(r.cost ?? 0),
     ...(r.provider ? { provider: r.provider } : {}),
     ...(r.model ? { model: r.model } : {}),
+    ...(r.effort ? { effort: r.effort } : {}),
   }));
 }
 

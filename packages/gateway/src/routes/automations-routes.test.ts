@@ -130,6 +130,7 @@ test('GET turns includes an in-flight fire in both thread and global feeds', asy
   const store = new ConversationStore(makeJournalDbProvider(path.join(dir, 'journal.db')));
   const ref = 'brief/brief';
   const conversationId = store.ensureAutomationConversation(ref, 'brief', 'Brief');
+  store.noteTurn(conversationId, '', { kind: 'copilot', sessionId: 'copilot-session' });
   store.insertTurn({
     turnId: `${ref}:100:aaaaaaaa`,
     conversationId,
@@ -148,11 +149,15 @@ test('GET turns includes an in-flight fire in both thread and global feeds', asy
 
   const r = await call('GET', `/centraid/_automations/turns?ref=${encodeURIComponent(ref)}`);
   expect(r.status).toBe(200);
-  const turns = (r.body as { turns: Array<{ turnId: string; endedAt?: number; ok: boolean }> })
-    .turns;
+  const turns = (
+    r.body as {
+      turns: Array<{ turnId: string; endedAt?: number; ok: boolean; adapterKind?: string }>;
+    }
+  ).turns;
   expect(turns.map((x) => x.turnId)).toEqual([`${ref}:100:aaaaaaaa`, `${ref}:50:bbbbbbbb`]);
   expect(turns[0]?.endedAt).toBeUndefined(); // in-flight → renders as "running"
   expect(turns[1]?.endedAt).toBe(60);
+  expect(turns.map((turn) => turn.adapterKind)).toEqual(['copilot', 'copilot']);
   // No ref filter → the fleet activity feed also sees the in-flight turn.
   const all = await call('GET', '/centraid/_automations/turns?limit=10');
   const allRuns = (all.body as { turns: Array<{ turnId: string }> }).turns;

@@ -29,6 +29,8 @@ export type TurnStreamEvent =
       result?: unknown;
       errorText?: string;
       diffs?: Array<{ path?: string; oldText?: string; newText?: string }>;
+      locations?: Array<{ path: string; line?: number }>;
+      artifacts?: Array<{ dataBase64: string; mime: string; filename?: string }>;
       rawJson?: string;
     }
   | {
@@ -38,8 +40,21 @@ export type TurnStreamEvent =
       plan?: Array<{ content: string; status?: string; priority?: string }>;
     }
   | { type: 'final'; text: string; stopReason?: string; rawJson?: string }
-  | { type: 'error'; message: string; stopReason?: string; rawJson?: string }
+  | {
+      type: 'error';
+      message: string;
+      failureClass?: 'spawn' | 'auth' | 'init' | 'timeout' | 'quota' | 'wedge' | 'exit' | 'unknown';
+      stopReason?: string;
+      rawJson?: string;
+    }
   | { type: 'aborted' }
+  | {
+      type: 'consent.required';
+      consentKind: 'provider-egress';
+      provider: string;
+      reason: 'direct' | 'ladder';
+      message: string;
+    }
   /** Non-fatal, human-readable notice (issue #420) — e.g. a runner that can't
    *  read PDF attachments. Rendered in the transcript, never persisted. */
   | { type: 'notice'; level: 'warn' | 'info'; code?: string; message: string }
@@ -47,6 +62,8 @@ export type TurnStreamEvent =
       type: 'usage';
       model?: string;
       provider?: string;
+      /** ACP-confirmed semantic thought_level; absent when unsupported/unconfirmed. */
+      effort?: string;
       inputTokens?: number;
       outputTokens?: number;
       cacheReadTokens?: number;
@@ -55,6 +72,8 @@ export type TurnStreamEvent =
       costUsd?: number;
       costSource?: 'agent' | 'estimated';
     }
+  /** COMPAT additive (#567): live context-window usage may move non-monotonically. */
+  | { type: 'context'; used?: number; size?: number }
   | {
       type: 'webhooks';
       minted: Array<{

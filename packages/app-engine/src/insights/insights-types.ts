@@ -6,6 +6,8 @@
 export interface InsightsKpis {
   /** input + output + cache read + cache write over the window. */
   totalTokens: number;
+  /** Estimated handoff prompt tokens, a subset marker separate from usage. */
+  hydrationTokens: number;
   /**
    * Sum of known costs — a floor when unpricedRuns > 0.
    * agentReportedCostUsd + estimatedCostUsd (+ digest totals).
@@ -63,6 +65,14 @@ export interface InsightsModelRow {
   costUsd: number;
 }
 
+export interface InsightsEffortRow {
+  /** ACP semantic thought_level confirmed by the runner. */
+  effort: string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
+}
+
 export interface InsightsActivityRow {
   runId: string;
   kind: string;
@@ -72,9 +82,12 @@ export interface InsightsActivityRow {
   ok: boolean;
   startedAt: number;
   tokens: number;
+  /** Estimated canonical-ledger prompt tokens injected for this run. */
+  hydrationTokens: number;
   costUsd: number;
   provider?: string;
   model?: string;
+  effort?: string;
 }
 
 export interface InsightsPeakDay {
@@ -107,6 +120,7 @@ export interface InsightsSummary {
   bySource: InsightsSourceRow[];
   byRunner: InsightsRunnerRow[];
   byModel: InsightsModelRow[];
+  byEffort: InsightsEffortRow[];
   recent: InsightsActivityRow[];
   peakDay?: InsightsPeakDay;
   attention?: InsightsAttention;

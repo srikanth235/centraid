@@ -20,6 +20,7 @@
 
 import path from 'node:path';
 import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
   appendLogs,
@@ -133,6 +134,16 @@ export interface RunHandlerOptions {
   agentDispatcher: AgentDispatcher;
   /** Per-app conversation-ledger store for audit + ctx.state + ctx.runs. */
   runsStore: ConversationStore;
+  /**
+   * Host-owned binding/watermark update. Runs synchronously in the exact
+   * transaction that settles this handler turn.
+   */
+  finalizeTurn?: (
+    store: ConversationStore,
+    conversationId: string,
+    turnId: string,
+    ok: boolean,
+  ) => void;
   /** Fixed harness owner for this automation conversation. */
   runnerKind?: string;
   /** Effective model when a usage event omits its model id. */
@@ -155,6 +166,8 @@ export interface RunHandlerOptions {
   triggerOrigin?: AutomationTriggerOrigin;
   /** Human-readable trigger-gap/cursor note stored on the turn. */
   note?: string;
+  /** Durable reader-facing boundary notice when this is a failover attempt. */
+  failoverNotice?: string;
   input?: unknown;
   parentRunId?: string;
   outputSchema?: OutputSchema;
@@ -600,9 +613,9 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     emit,
   };
 
-  // Every fire appends to the automation's harness-owned conversation.
-  // Switching harness selects a new conversation; history still joins all
-  // of them through the stable `<appId>/<id>` automation ref.
+  // Every fire appends to the automation's stable canonical conversation.
+  // Harness sessions are per-runner resume bindings beneath this identity,
+  // so A → B → A never forks execution history.
   const slash = audit.automationId.indexOf('/');
   const appId = slash > 0 ? audit.automationId.slice(0, slash) : undefined;
   const execConversationId = audit.store.ensureAutomationConversation(
@@ -634,6 +647,22 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       startedAt,
     });
     audit.ordinal = 1;
+  }
+  if (opts.failoverNotice) {
+    const at = Date.now();
+    audit.store.insertItem({
+      itemId: randomUUID(),
+      turnId: audit.runId,
+      ordinal: audit.ordinal,
+      kind: 'step',
+      name: 'notice:warn:failover',
+      outputJson: JSON.stringify({ text: opts.failoverNotice }),
+      ok: true,
+      startedAt: at,
+      endedAt: at,
+      durationMs: 0,
+    });
+    audit.ordinal += 1;
   }
   // `turn.start` opens the live stream; a viewer that joins later replays it
   // from the ledger instead. Guarded — a wedged sink must not fail the run.
@@ -791,16 +820,30 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         outcome.logs = outcome.logs.map((l) => ({ ...l, msg: scrub(l.msg) }));
         for (const entry of persistedEntries) entry.msg = scrub(entry.msg);
       }
-      audit.store.finishTurn({
-        turnId: audit.runId,
-        endedAt: Date.now(),
-        ok: outcome.ok,
-        ...(outcome.error ? { error: outcome.error } : {}),
-        ...(outcome.summary ? { summary: outcome.summary } : {}),
-        ...(outcome.output !== undefined
-          ? { outputJson: truncateForAudit(outcome.output) ?? '' }
-          : {}),
-      });
+      try {
+        audit.store.runInTransaction(() => {
+          audit.store.finishTurn({
+            turnId: audit.runId,
+            endedAt: Date.now(),
+            ok: outcome.ok,
+            ...(outcome.error ? { error: outcome.error } : {}),
+            ...(outcome.summary ? { summary: outcome.summary } : {}),
+            ...(outcome.output !== undefined
+              ? { outputJson: truncateForAudit(outcome.output) ?? '' }
+              : {}),
+          });
+          opts.finalizeTurn?.(audit.store, execConversationId, audit.runId, outcome.ok);
+        });
+      } catch (error) {
+        outcome = {
+          ...outcome,
+          ok: false,
+          error:
+            error instanceof Error
+              ? `turn finalization failed: ${error.message}`
+              : `turn finalization failed: ${String(error)}`,
+        };
+      }
       try {
         emit({
           type: 'turn.end',

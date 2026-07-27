@@ -10,7 +10,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { makeConversationRunnerCore } from './runner-core.js';
-import type { ConversationTurnInput } from './runner.js';
+import type { ConversationTurnInput, TurnStreamEvent } from './runner.js';
 import type { Dispatcher } from '../handlers/dispatcher.js';
 import type { ModelSubsystem } from '../stores/prefs-store.js';
 import type { RunnerPrefs, TurnConfig, TurnInput, TurnResult } from './turn.js';
@@ -141,6 +141,44 @@ describe('makeConversationRunnerCore — per-subsystem prefs loading', () => {
   });
 });
 
+describe('makeConversationRunnerCore — hydration accounting', () => {
+  it('returns the estimated tokens of the plan the backend actually consumed', async () => {
+    const runner = makeConversationRunnerCore({
+      prefsLoader: async () => ({ kind: 'codex' }),
+      getDispatcher: () => dispatcher,
+      resolveCwd: (input) => input.dataDir,
+      runTurn: async () => ({
+        adapterKind: 'codex',
+        sessionId: 'fresh',
+        hydrated: true,
+        hydrationKind: 'recovery',
+      }),
+    });
+    const result = await runner.run(
+      turnInput({
+        prevAdapterKind: 'codex',
+        prevAdapterSessionId: 'expired',
+        hydrationContext: {
+          prompt: 'delta',
+          includedTurns: 1,
+          omittedTurns: 0,
+          estimatedTokens: 10,
+        },
+        recoveryHydrationContext: {
+          prompt: 'full',
+          includedTurns: 4,
+          omittedTurns: 0,
+          estimatedTokens: 40,
+        },
+      }),
+    );
+    expect(result).toMatchObject({
+      hydrated: true,
+      hydrationTokens: 40,
+    });
+  });
+});
+
 describe('makeConversationRunnerCore — session resume gating', () => {
   it('resumes when the previous turn used the same runner kind', async () => {
     const { runner, seen } = build({
@@ -216,5 +254,196 @@ describe('makeConversationRunnerCore — session resume gating', () => {
     await runner.run(turnInput());
 
     expect(seen[0]!.prevSessionId).toBeUndefined();
+  });
+});
+
+describe('makeConversationRunnerCore — turn-boundary failover', () => {
+  it('settles a failed turn without replaying it through the next provider', async () => {
+    const seen: Array<{ input: TurnInput; config: TurnConfig }> = [];
+    const events: TurnStreamEvent[] = [];
+    const runner = makeConversationRunnerCore({
+      subsystem: 'assistant',
+      prefsLoader: async (_subsystem, kind) =>
+        kind === 'claude-code'
+          ? { kind, configPins: { thought_level: 'high' } }
+          : { kind: 'codex', configPins: { thought_level: 'xhigh' } },
+      runnerLadder: () => ['codex', 'claude-code'],
+      getDispatcher: () => dispatcher,
+      resolveCwd: (input) => input.dataDir,
+      runTurn: async (input, config) => {
+        seen.push({ input, config });
+        if (config.prefs.kind === 'codex') {
+          input.onEvent({
+            type: 'error',
+            message: 'quota exceeded',
+            failureClass: 'quota',
+          });
+          return { adapterKind: 'codex' };
+        }
+        input.onEvent({ type: 'final', text: 'fallback answer' });
+        return { adapterKind: 'claude-code', sessionId: 'claude-1', hydrated: true };
+      },
+    });
+
+    const result = await runner.run(
+      turnInput({
+        prevAdapterKind: 'codex',
+        prevAdapterSessionId: 'codex-1',
+        model: 'gpt-codex',
+        configPins: { model: 'gpt-codex', thought_level: 'xhigh' },
+        hydrationContext: {
+          prompt: 'LEDGER',
+          includedTurns: 3,
+          omittedTurns: 0,
+          estimatedTokens: 12,
+        },
+        onEvent: (event) => events.push(event),
+      }),
+    );
+
+    expect(seen.map((entry) => entry.config.prefs.kind)).toEqual(['codex']);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'error', failureClass: 'quota' }),
+    );
+    expect(result).toMatchObject({ adapterKind: 'codex' });
+  });
+
+  it('does not retry after meaningful output has begun', async () => {
+    const kinds: RunnerPrefs['kind'][] = [];
+    const events: TurnStreamEvent[] = [];
+    const runner = makeConversationRunnerCore({
+      subsystem: 'assistant',
+      prefsLoader: async (_subsystem, kind) => ({ kind: kind ?? 'codex' }),
+      runnerLadder: () => ['codex', 'claude-code'],
+      getDispatcher: () => dispatcher,
+      resolveCwd: (input) => input.dataDir,
+      runTurn: async (turn, config) => {
+        kinds.push(config.prefs.kind);
+        turn.onEvent({ type: 'assistant.delta', delta: 'partial' });
+        turn.onEvent({ type: 'error', message: 'agent exited', failureClass: 'exit' });
+        return { adapterKind: config.prefs.kind };
+      },
+    });
+
+    await runner.run(turnInput({ onEvent: (event) => events.push(event) }));
+    expect(kinds).toEqual(['codex']);
+    expect(events.map((event) => event.type)).toEqual(['assistant.delta', 'error']);
+  });
+
+  it('skips a runner whose workspace breaker is open', async () => {
+    const kinds: RunnerPrefs['kind'][] = [];
+    const runner = makeConversationRunnerCore({
+      subsystem: 'assistant',
+      prefsLoader: async (_subsystem, kind) => ({ kind: kind ?? 'codex' }),
+      runnerLadder: () => ['codex', 'claude-code'],
+      runnerHealth: {
+        canAttempt: (_scope, kind) =>
+          kind === 'codex'
+            ? { allowed: false, failureClass: 'auth', breakerUntil: Date.now() + 1_000 }
+            : { allowed: true },
+        reportFailure: () => undefined,
+        reportOk: () => undefined,
+        reportPreflightOk: () => undefined,
+        list: () => [],
+      },
+      getDispatcher: () => dispatcher,
+      resolveCwd: (input) => input.dataDir,
+      runTurn: async (_turn, config) => {
+        kinds.push(config.prefs.kind);
+        return { adapterKind: config.prefs.kind };
+      },
+    });
+
+    await runner.run(turnInput());
+    expect(kinds).toEqual(['claude-code']);
+  });
+});
+
+describe('makeConversationRunnerCore — provider egress consent', () => {
+  it('implicitly grants the initial choice and gates an attended cross-provider switch', async () => {
+    const grants = new Set<string>();
+    const runTurn = vi.fn(async (): Promise<TurnResult> => ({ adapterKind: 'codex' }));
+    const events: TurnStreamEvent[] = [];
+    const runner = makeConversationRunnerCore({
+      subsystem: 'assistant',
+      prefsLoader: async () => ({ kind: 'codex' }),
+      providerEgressConsent: {
+        has: (conversationId, runnerKind) => grants.has(`${conversationId}:${runnerKind}`),
+        grant: (conversationId, runnerKind) => grants.add(`${conversationId}:${runnerKind}`),
+        revoke: (conversationId, runnerKind) => grants.delete(`${conversationId}:${runnerKind}`),
+      },
+      getDispatcher: () => dispatcher,
+      resolveCwd: (input) => input.dataDir,
+      runTurn,
+    });
+
+    await runner.run(turnInput({ onEvent: (event) => events.push(event) }));
+    expect(runTurn).toHaveBeenCalledTimes(1);
+    expect(grants.has('conv-1:codex')).toBe(true);
+
+    await runner.run(
+      turnInput({
+        runnerKind: 'claude-code',
+        prevAdapterKind: 'codex',
+        onEvent: (event) => events.push(event),
+      }),
+    );
+    expect(runTurn).toHaveBeenCalledTimes(1);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'consent.required',
+        consentKind: 'provider-egress',
+        provider: 'claude-code',
+      }),
+    );
+
+    await runner.run(
+      turnInput({
+        runnerKind: 'claude-code',
+        prevAdapterKind: 'codex',
+        providerConsent: 'claude-code',
+        onEvent: (event) => events.push(event),
+      }),
+    );
+    expect(runTurn).toHaveBeenCalledTimes(2);
+    expect(grants.has('conv-1:claude-code')).toBe(true);
+  });
+
+  it('treats an explicitly configured ladder rung as recorded subsystem consent', async () => {
+    const granted: Array<[string, RunnerPrefs['kind'], string]> = [];
+    const runTurn = vi.fn(
+      async (_input: TurnInput, config: TurnConfig): Promise<TurnResult> => ({
+        adapterKind: config.prefs.kind,
+      }),
+    );
+    const runner = makeConversationRunnerCore({
+      subsystem: 'assistant',
+      prefsLoader: async (_subsystem, kind) => ({ kind: kind ?? 'codex' }),
+      runnerLadder: () => ['codex', 'claude-code'],
+      runnerHealth: {
+        canAttempt: (_scope, kind) =>
+          kind === 'codex' ? { allowed: false, failureClass: 'auth' } : { allowed: true },
+        reportFailure: () => undefined,
+        reportOk: () => undefined,
+        reportPreflightOk: () => undefined,
+        list: () => [],
+      },
+      providerEgressConsent: {
+        has: (conversationId, kind) =>
+          granted.some(([savedConversation, savedKind]) => {
+            return savedConversation === conversationId && savedKind === kind;
+          }),
+        grant: (conversationId, kind, source) => granted.push([conversationId, kind, source]),
+        revoke: () => undefined,
+      },
+      getDispatcher: () => dispatcher,
+      resolveCwd: (input) => input.dataDir,
+      runTurn,
+    });
+
+    await runner.run(turnInput({ prevAdapterKind: 'codex' }));
+    expect(runTurn).toHaveBeenCalledTimes(1);
+    expect(runTurn.mock.calls[0]![1].prefs.kind).toBe('claude-code');
+    expect(granted).toContainEqual(['conv-1', 'claude-code', 'ladder']);
   });
 });

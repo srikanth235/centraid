@@ -128,12 +128,34 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
     controller = new AbortController();
     const assistantEl = { el: null as HTMLElement | null };
     try {
-      await streamTurn(
-        appId,
-        { conversationId, message, register: 'ask' },
-        onEvent(assistantEl),
-        controller.signal,
-      );
+      let providerConsent: string | undefined;
+      for (;;) {
+        let requiredProvider: string | undefined;
+        await streamTurn(
+          appId,
+          {
+            conversationId,
+            message,
+            register: 'ask',
+            ...(providerConsent ? { providerConsent } : {}),
+          },
+          (event) => {
+            if (event.type === 'consent.required') requiredProvider = event.provider;
+            else onEvent(assistantEl)(event);
+          },
+          controller.signal,
+        );
+        if (!requiredProvider) break;
+        if (
+          !window.confirm(
+            `Allow this conversation to be sent to ${requiredProvider}? This can include vault tool results.`,
+          )
+        ) {
+          line('kit-ask-note', `Nothing was sent to ${requiredProvider}.`);
+          break;
+        }
+        providerConsent = requiredProvider;
+      }
     } catch (error) {
       line('kit-ask-err', error instanceof Error ? error.message : String(error));
     }

@@ -10,6 +10,7 @@ import {
   probeCliAvailability,
   runPreflight,
 } from './preflight.ts';
+import { FAKE_AGENT } from './backends/acp/test-fixtures.js';
 import { writeCatalogEntry } from './models/catalog.ts';
 import { agentSpawnEnv, sanitizeAgentPath } from './spawn-env.ts';
 
@@ -71,6 +72,20 @@ test('preflight surfaces versionAtLeast when version parses', async () => {
   expect(status.ok).toBe(true);
   expect(status.versionAtLeast).toBe(undefined);
   expect(status.minVersion).toBe(minVersionString('codex'));
+});
+
+test('session-ready preflight rejects an installed but unauthenticated ACP runner', async () => {
+  const status = await runPreflight(
+    {
+      kind: 'acp',
+      binPath: FAKE_AGENT,
+      extraArgs: ['--mode=auth'],
+    },
+    { requireSessionReady: true },
+  );
+  expect(status.ok).toBe(false);
+  expect(status.reason).toMatch(/not authenticated/i);
+  expect(status.hint).toMatch(/set|configure|install|sign/i);
 });
 
 test('attaches an empty model list when no catalog path is set (no seed)', async () => {

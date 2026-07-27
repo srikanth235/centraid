@@ -62,6 +62,29 @@ test('resume via session/load reuses the id and swallows replayed history', asyn
   expect(types(events).at(-1)).toBe('final');
 });
 
+test('expired resume handle self-heals with a fresh hydrated session', async () => {
+  const dir = await tempDir('acp-self-heal-');
+  const promptMarker = path.join(dir, 'prompt');
+  const { events, result } = await runFake({
+    extraArgs: ['--mode=resume', '--fail-resume', `--prompt-marker=${promptMarker}`],
+    prevSessionId: 'expired-1',
+    hydrationContext: 'DELTA_ONLY_CONTEXT',
+    recoveryHydrationContext: 'CANONICAL_LEDGER_FROM_ZERO',
+  });
+
+  expect(result.sessionId).toBe('sess-1');
+  expect(result.hydrated).toBe(true);
+  expect(notices(events)).toContain('session_resume_self_heal');
+  expect(notices(events)).toContain('session_hydrated');
+  expect(deltas(events)).toBe('Hello world');
+  const prompt = JSON.parse(await fs.readFile(promptMarker, 'utf8')) as Array<{
+    type: string;
+    text?: string;
+  }>;
+  expect(prompt.some((block) => block.text === 'CANONICAL_LEDGER_FROM_ZERO')).toBe(true);
+  expect(prompt.some((block) => block.text === 'DELTA_ONLY_CONTEXT')).toBe(false);
+});
+
 test('cancellation mid-stream sends session/cancel and emits aborted', async () => {
   const dir = await tempDir('acp-cancel-');
   const cancelMarker = path.join(dir, 'cancel');
@@ -82,6 +105,7 @@ test('spawn/nonzero-exit failure surfaces an error event', async () => {
   const { events } = await runFake({ extraArgs: ['--mode=exit'] });
   const err = events.find((e) => e.type === 'error');
   expect(err && err.type === 'error').toBe(true);
+  expect(err && err.type === 'error' && err.failureClass).toBe('exit');
 });
 
 test('no configured binary reports an actionable error (custom acp kind)', async () => {
@@ -100,6 +124,7 @@ test('no configured binary reports an actionable error (custom acp kind)', async
   expect(result.sessionId).toBeUndefined();
   const err = events.find((e) => e.type === 'error');
   expect(err && err.type === 'error' && /binary/i.test(err.message)).toBe(true);
+  expect(err && err.type === 'error' && err.failureClass).toBe('spawn');
 });
 
 // ---- auth handshake -------------------------------------------------------
@@ -118,6 +143,16 @@ test('AUTH_REQUIRED becomes an actionable message, not a raw RPC error', async (
   // The raw JSON-RPC wording never reaches the transcript.
   expect(message).not.toContain('acp rpc');
   expect(message).not.toContain('-32000');
+  expect(err && err.type === 'error' && err.failureClass).toBe('auth');
+});
+
+test('prompt idle watchdog classifies a wedged agent', async () => {
+  const { events } = await runFake({
+    extraArgs: ['--mode=wedge'],
+    config: { promptIdleTimeoutMs: 25 },
+  });
+  const err = events.find((event) => event.type === 'error');
+  expect(err && err.type === 'error' && err.failureClass).toBe('wedge');
 });
 
 // ---- stopReason / continuity / policy / permissions -----------------------
@@ -176,6 +211,9 @@ test('permission auto-allow emits an audit notice', async () => {
   expect(plan && plan.type === 'phase' && plan.plan?.length).toBe(2);
   const toolResult = events.find((e) => e.type === 'tool.result');
   expect(toolResult && toolResult.type === 'tool.result' && toolResult.diffs?.[0]?.path).toBe(
+    'notes.txt',
+  );
+  expect(toolResult && toolResult.type === 'tool.result' && toolResult.locations?.[0]?.path).toBe(
     'notes.txt',
   );
 });

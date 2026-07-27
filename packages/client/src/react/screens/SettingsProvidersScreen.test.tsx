@@ -10,7 +10,11 @@ function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
     anyLoading: false,
     savedModelByKind: { codex: 'gpt-5' },
     subsystemModelByKind: { codex: { assistant: 'gpt-5-mini' } },
+    defaultConfigPinsByKind: {},
+    subsystemConfigPinsByKind: {},
+    diagnosticsJson: '{}',
     subsystemRunnerByKey: {},
+    subsystemRunnerLadders: {},
     cards: [
       {
         kind: 'codex',
@@ -18,6 +22,7 @@ function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
         accent: '#10b981',
         subtitle: 'codex 1.2.3',
         connected: true,
+        sessionReady: true,
         modelsLoading: false,
         models: [
           { id: 'gpt-5', name: 'GPT-5', tier: 'smart', default: true },
@@ -30,6 +35,7 @@ function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
         accent: '#a855f7',
         subtitle: 'claude CLI not found on PATH',
         connected: false,
+        sessionReady: false,
         modelsLoading: false,
         models: [],
       },
@@ -63,8 +69,11 @@ function makeProps(over: Partial<SettingsProvidersBridgeProps> = {}): SettingsPr
     refreshModels: vi.fn().mockResolvedValue(makeStatus()),
     activateRunner: vi.fn().mockResolvedValue(true),
     setAgentModel: vi.fn(),
+    setAgentConfigPin: vi.fn(),
     setSubsystemModel: vi.fn(),
-    setSubsystemRunner: vi.fn(),
+    setSubsystemConfigPin: vi.fn(),
+    setSubsystemRunner: vi.fn().mockResolvedValue(true),
+    setSubsystemRunnerLadder: vi.fn(),
     ...over,
   };
 }
@@ -77,6 +86,7 @@ afterEach(() => {
   container?.remove();
   container = null;
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 async function mount(props: SettingsProvidersBridgeProps): Promise<HTMLDivElement> {
   container = document.createElement('div');
@@ -165,6 +175,17 @@ describe('SettingsProvidersScreen', () => {
     expect(props.setSubsystemRunner).toHaveBeenCalledWith('builder', '');
   });
 
+  it('requires explicit confirmation before adding ordered failover membership', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const props = makeProps({
+      loadStatus: vi.fn().mockResolvedValue(makeStatusBothConnected()),
+    });
+    const el = await mount(props);
+    await pick(sel(el, 'Add fallback agent for Assistant'), 'claude-code');
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith('assistant', ['claude-code']);
+  });
+
   it('names what an inheriting lane resolves to rather than saying "use default"', async () => {
     const el = await mount(makeProps());
     // Agent inherit option names the default agent…
@@ -246,6 +267,41 @@ describe('SettingsProvidersScreen', () => {
     expect(props.setAgentModel).toHaveBeenCalledWith('codex', 'gpt-5-mini');
   });
 
+  it('shows and saves effort only when the capability probe offers it', async () => {
+    const withEffort = makeStatus({
+      cards: makeStatus().cards.map((card) =>
+        card.kind === 'codex'
+          ? {
+              ...card,
+              configOptions: [
+                {
+                  id: 'thought',
+                  category: 'thought_level',
+                  type: 'select',
+                  currentValue: 'medium',
+                  values: [
+                    { value: 'medium', name: 'Medium' },
+                    { value: 'high', name: 'High' },
+                  ],
+                },
+              ],
+            }
+          : card,
+      ),
+    });
+    const props = makeProps({ loadStatus: vi.fn().mockResolvedValue(withEffort) });
+    const el = await mount(props);
+    await pick(sel(el, 'Effort for Assistant'), 'high');
+    expect(props.setSubsystemConfigPin).toHaveBeenCalledWith(
+      'codex',
+      'assistant',
+      'thought_level',
+      'high',
+    );
+    await pick(sel(el, 'Default effort for Codex'), 'high');
+    expect(props.setAgentConfigPin).toHaveBeenCalledWith('codex', 'thought_level', 'high');
+  });
+
   it('no longer exposes a per-agent tool listing — Connections owns that', async () => {
     const el = await mount(makeProps());
     expect(el.querySelector('.toolsToggle')).toBeNull();
@@ -257,7 +313,7 @@ describe('SettingsProvidersScreen', () => {
     const props = makeProps();
     const el = await mount(props);
     const buttons = [...el.querySelectorAll('.actionsRow .btn')] as HTMLButtonElement[];
-    expect(buttons.length).toBe(1);
+    expect(buttons.length).toBe(2);
     await act(async () => buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.refreshModels).toHaveBeenCalledTimes(1);
   });

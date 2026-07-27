@@ -1,6 +1,6 @@
 /*
- * What an ACP session advertises about itself, and the two things we pin on
- * it: the permission mode and the model.
+ * What an ACP session advertises about itself, and the category-keyed
+ * configuration pins we apply to it.
  *
  * Session wire shapes (verified against the public ACP spec):
  *   - handshake: `initialize` { protocolVersion: 1, clientCapabilities,
@@ -11,7 +11,7 @@
  *     `session/update` then resolves null (only when the agent advertised
  *     `loadSession`).
  *
- * Model selection (verified against `@agentclientprotocol/sdk` 1.2.1's
+ * Config selection (verified against `@agentclientprotocol/sdk` 1.2.1's
  * generated schema, not guessed): ACP has no per-prompt model field. An agent
  * instead advertises `configOptions` on the `session/new` / `session/load`
  * RESULT, and the client pins one with the `session/set_config_option`
@@ -20,9 +20,10 @@
  * option whose `id` is `"model"` or whose `category` is `"model"`; its
  * `options` are `{ value, name }` pairs (or groups of them) carrying CONCRETE
  * provider model ids. We only ever echo values the agent itself offered, so
- * no provider ids are hardcoded here. When the agent advertises no model
- * option, or offers nothing matching the request, we emit a `notice` rather
- * than silently ignoring the pin.
+ * no provider ids are hardcoded here. Options are identified by semantic
+ * `category`, never adapter-specific ids (`reasoning_effort` vs `effort`).
+ * When the agent advertises no requested category, or offers nothing matching
+ * the request, we emit a `notice` rather than silently ignoring the pin.
  */
 
 import type { TurnStreamEvent } from '@centraid/app-engine';
@@ -87,6 +88,21 @@ export function readConfigOptions(result: SessionSetupResult | undefined): Sessi
   return Array.isArray(raw) ? raw.filter(isObject) : [];
 }
 
+/**
+ * Read a `config_option_update` session notification. Adapters have shipped
+ * both the plural whole-array shape and a singular option shape; normalize
+ * them here so the turn orchestrator never grows adapter branches.
+ */
+export function readConfigOptionUpdate(params: unknown): SessionConfigOption[] | undefined {
+  if (!isObject(params) || !isObject(params.update)) return undefined;
+  const update = params.update;
+  if (update.sessionUpdate !== 'config_option_update') return undefined;
+  const plural = update.configOptions;
+  if (Array.isArray(plural)) return plural.filter(isObject);
+  const singular = update.configOption ?? update.option;
+  return isObject(singular) ? [singular] : undefined;
+}
+
 /** Does the agent advertise `modeId` among its available session modes? */
 export function modeAvailable(modes: SessionModes | undefined, modeId: string): boolean {
   if (!modes) return false;
@@ -96,21 +112,34 @@ export function modeAvailable(modes: SessionModes | undefined, modeId: string): 
   return list.some((m) => isObject(m) && m.id === modeId);
 }
 
-/** One concrete model the agent offers on its `model` select option. */
-export interface OfferedModel {
+/** One concrete value the agent offers on a select config option. */
+export interface OfferedConfigValue {
   value: string;
   name?: string;
 }
 
-/** The agent's model selector, identified by id or semantic category. */
-function findModelOption(options: SessionConfigOption[]): SessionConfigOption | undefined {
-  return options.find((o) => o.id === 'model' || o.category === 'model');
+/** Backward-compatible semantic alias for model catalog callers. */
+export type OfferedModel = OfferedConfigValue;
+
+/** Find one config selector by ACP semantic category. */
+export function findConfigOption(
+  options: SessionConfigOption[],
+  category: string,
+): SessionConfigOption | undefined {
+  return options.find(
+    (option) =>
+      option.category === category ||
+      // ACP's model option historically shipped with id="model" before the
+      // semantic category field became universal. This is the one spec-level
+      // compatibility alias; thought_level remains category-only.
+      (category === 'model' && option.id === 'model'),
+  );
 }
 
 /** Flatten `SessionConfigSelectOptions` — either a flat list or groups of one. */
-function flattenSelectOptions(raw: unknown): OfferedModel[] {
+export function flattenSelectOptions(raw: unknown): OfferedConfigValue[] {
   if (!Array.isArray(raw)) return [];
-  const out: OfferedModel[] = [];
+  const out: OfferedConfigValue[] = [];
   for (const entry of raw) {
     if (!isObject(entry)) continue;
     if (Array.isArray(entry.options)) {
@@ -139,10 +168,10 @@ function flattenSelectOptions(raw: unknown): OfferedModel[] {
  * in exactly one place.
  */
 export function readOfferedModels(configOptions: SessionConfigOption[]): {
-  models: OfferedModel[];
+  models: OfferedConfigValue[];
   currentValue?: string;
 } {
-  const option = findModelOption(configOptions);
+  const option = findConfigOption(configOptions, 'model');
   if (!option) return { models: [] };
   return {
     models: flattenSelectOptions(option.options),
@@ -188,7 +217,7 @@ export async function pinModel(args: {
   requested?: string;
   resolveModel?: (model: string) => string;
 }): Promise<string | undefined> {
-  const option = findModelOption(args.configOptions);
+  const option = findConfigOption(args.configOptions, 'model');
   const current = typeof option?.currentValue === 'string' ? option.currentValue : undefined;
 
   if (!args.requested) return current;
@@ -221,12 +250,17 @@ export async function pinModel(args: {
   if (value === current) return current;
 
   try {
-    await args.request(SET_CONFIG_OPTION, {
+    const result = await args.request<SessionSetupResult>(SET_CONFIG_OPTION, {
       sessionId: args.sessionId,
       configId: option.id,
       value,
     });
-    return value;
+    const returned = readConfigOptions(result);
+    const confirmed = findConfigOption(
+      returned.length > 0 ? returned : args.configOptions,
+      'model',
+    );
+    return confirmed?.currentValue === value ? value : undefined;
   } catch {
     // The agent rejected the pin (stale option list, provider hiccup). The
     // turn is still runnable on its default — say so instead of failing it.
@@ -237,6 +271,79 @@ export async function pinModel(args: {
       message:
         `This runner refused the selected model (${args.requested}) — ` +
         `it used its own default instead.`,
+    });
+    return current;
+  }
+}
+
+/**
+ * Pin ACP's well-known `thought_level` category after the model. Values are
+ * adapter vocabulary and therefore exact/case-insensitive only — unlike model
+ * aliases, effort values are never substring-translated.
+ */
+export async function pinThoughtLevel(args: {
+  request: <T = unknown>(method: string, params: unknown) => Promise<T>;
+  emit: (event: TurnStreamEvent) => void;
+  sessionId: string;
+  configOptions: SessionConfigOption[];
+  requested?: string;
+}): Promise<string | undefined> {
+  const option = findConfigOption(args.configOptions, 'thought_level');
+  const current = typeof option?.currentValue === 'string' ? option.currentValue : undefined;
+  if (!args.requested) return current;
+  if (!option) {
+    args.emit({
+      type: 'notice',
+      level: 'warn',
+      code: 'thought_level_unsupported',
+      message: `This runner does not advertise an effort control — the selected effort (${args.requested}) was ignored.`,
+    });
+    return current;
+  }
+
+  const needle = args.requested.trim().toLowerCase();
+  const selected = flattenSelectOptions(option.options).find(
+    (entry) =>
+      entry.value === args.requested ||
+      entry.value.toLowerCase() === needle ||
+      entry.name?.toLowerCase() === needle,
+  )?.value;
+  if (!selected) {
+    args.emit({
+      type: 'notice',
+      level: 'warn',
+      code: 'thought_level_not_offered',
+      message: `This runner does not offer the selected effort (${args.requested}) for its active model — it used its own default instead.`,
+    });
+    return current;
+  }
+  if (selected === current) return current;
+
+  try {
+    const result = await args.request<SessionSetupResult>(SET_CONFIG_OPTION, {
+      sessionId: args.sessionId,
+      configId: option.id,
+      value: selected,
+    });
+    const returned = readConfigOptions(result);
+    const confirmed = findConfigOption(
+      returned.length > 0 ? returned : args.configOptions,
+      'thought_level',
+    );
+    if (confirmed?.currentValue === selected) return selected;
+    args.emit({
+      type: 'notice',
+      level: 'info',
+      code: 'thought_level_unconfirmed',
+      message: `The runner accepted the effort request but did not confirm the active value, so Centraid will record effort as unknown.`,
+    });
+    return undefined;
+  } catch {
+    args.emit({
+      type: 'notice',
+      level: 'warn',
+      code: 'thought_level_not_offered',
+      message: `This runner refused the selected effort (${args.requested}) — it used its own default instead.`,
     });
     return current;
   }

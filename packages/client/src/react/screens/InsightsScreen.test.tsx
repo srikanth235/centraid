@@ -8,6 +8,7 @@ const summary: InsightsSummary = {
   generatedAt: 0,
   kpis: {
     totalTokens: 128_000,
+    hydrationTokens: 1_024,
     totalCostUsd: 3.4,
     agentReportedCostUsd: 2.1,
     estimatedCostUsd: 1.3,
@@ -31,6 +32,7 @@ const summary: InsightsSummary = {
   ],
   byRunner: [{ provider: 'claude-code', runs: 7, tokens: 11_000, costUsd: 2.5 }],
   byModel: [{ model: 'claude-opus-4-8', runs: 7, tokens: 11_000, costUsd: 1.1 }],
+  byEffort: [{ effort: 'high', runs: 4, tokens: 7000, costUsd: 0.8 }],
   recent: [
     {
       runId: 'r1',
@@ -39,8 +41,10 @@ const summary: InsightsSummary = {
       ok: true,
       startedAt: 0,
       tokens: 500,
+      hydrationTokens: 512,
       costUsd: 0.05,
       provider: 'claude-code',
+      effort: 'high',
     },
     {
       runId: 'r2',
@@ -50,6 +54,7 @@ const summary: InsightsSummary = {
       ok: false,
       startedAt: 0,
       tokens: 200,
+      hydrationTokens: 0,
       costUsd: 0.02,
     },
   ],
@@ -76,6 +81,7 @@ const empty: InsightsSummary = {
   kpis: {
     ...summary.kpis,
     totalTokens: 0,
+    hydrationTokens: 0,
     totalCostUsd: 0,
     agentReportedCostUsd: 0,
     estimatedCostUsd: 0,
@@ -89,6 +95,7 @@ const empty: InsightsSummary = {
   bySource: [],
   byRunner: [],
   byModel: [],
+  byEffort: [],
   recent: [],
   peakDay: undefined,
   attention: undefined,

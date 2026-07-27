@@ -1,7 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#539) single cohesive screen component (header/consent-strip/chat-turn spine/steering composer of one thread surface); splitting would fragment one visual unit
 import {
   type Dispatch,
-  type FormEvent,
   type JSX,
   type SetStateAction,
   useCallback,
@@ -15,12 +14,16 @@ import { cx } from '../ui/cx.js';
 import au from '../styles/automation.module.css';
 import styles from './AutomationThreadScreen.module.css';
 import Message, { type MessageCallbacks } from './AssistantMessage.js';
+import ChatComposer from './ChatComposer.js';
+import { EffortPicker, ModelPicker, RunnerPicker } from './AssistantScreen.js';
 import type {
+  AsstModelPickerDTO,
   AsstMsgDTO,
   AuPlanStatusDTO,
   AuStatusKind,
   AutomationThreadBridgeProps,
   AutomationThreadData,
+  BuilderAttachmentRef,
   ConsentDecision,
   ConsentKind,
   GrantDTO,
@@ -80,6 +83,8 @@ export interface AutomationThreadDataEx extends AutomationThreadData {
     conditionDetail: { entity: string; everyLabel: string | null; whereText: string } | null;
   };
   runTokens?: Record<string, number>;
+  /** Capability-backed attended runner controls for the Q&A conversation. */
+  runnerConfig?: AsstModelPickerDTO;
 }
 
 export interface AutomationThreadScreenProps extends Omit<AutomationThreadBridgeProps, 'loadData'> {
@@ -102,6 +107,12 @@ const STATUS_ICON: Record<AuStatusKind, IconName> = {
  * told about rather than a spinner that never resolves.
  */
 const WATCH_REJOIN_DELAYS_MS = [500, 1500, 4000, 10_000];
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function withoutId(current: ReadonlySet<string>, id: string): ReadonlySet<string> {
   if (!current.has(id)) return current;
@@ -472,6 +483,7 @@ function RunTurn({
   onOpen,
   onRerun,
   rerunBusy,
+  loadAttachmentImage,
 }: {
   run: ThreadRunDTO;
   tokens?: number;
@@ -486,6 +498,7 @@ function RunTurn({
   onOpen: () => void;
   onRerun: () => void;
   rerunBusy: boolean;
+  loadAttachmentImage?: (hash: string, mime: string) => Promise<string>;
 }): JSX.Element {
   const time = new Date(run.startedAt).toLocaleTimeString(undefined, {
     hour: 'numeric',
@@ -500,7 +513,9 @@ function RunTurn({
   const messageCallbacks: MessageCallbacks = {
     hydrateRefs: () => undefined,
     wireCodeCopy: () => undefined,
-    loadAttachmentImage: () => Promise.reject(new Error('automation attachments unavailable')),
+    loadAttachmentImage:
+      loadAttachmentImage ??
+      (() => Promise.reject(new Error('automation attachments unavailable'))),
     onCopyMessage: (text) => void navigator.clipboard?.writeText(text),
     onFeedback: () => undefined,
     onRegenerate: () => undefined,
@@ -737,48 +752,222 @@ function PlanBanner({
 function Composer({
   busy,
   onSend,
+  onStop,
   onOpenCompiler,
+  picker,
+  context,
+  onUploadAttachment,
+  onSetRunner,
+  onRunnerSwitch,
 }: {
   busy: boolean;
-  onSend: (text: string) => void;
+  onSend: (
+    text: string,
+    options: {
+      attachments?: BuilderAttachmentRef[];
+      runnerKind?: string;
+      model?: string;
+      thinking?: string;
+    },
+  ) => void;
+  onStop: () => void;
   onOpenCompiler: () => void;
+  picker?: AsstModelPickerDTO;
+  context?: { used: number; size: number };
+  onUploadAttachment?: (file: File) => Promise<BuilderAttachmentRef>;
+  onSetRunner?: (runnerKind: string) => Promise<AsstModelPickerDTO>;
+  onRunnerSwitch?: () => void;
 }): JSX.Element {
   const [draft, setDraft] = useState('');
+  const [pickerOverride, setPickerOverride] = useState<AsstModelPickerDTO | undefined>(undefined);
+  const [pickerLoaded, setPickerLoaded] = useState(true);
+  const [pending, setPending] = useState<
+    Array<{
+      localId: string;
+      filename: string;
+      sizeBytes: number;
+      state: 'uploading' | 'ready' | 'error';
+      ref?: BuilderAttachmentRef;
+    }>
+  >([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const activePicker = pickerOverride ?? picker;
   const trimmed = draft.trim();
-  const submit = (e: FormEvent): void => {
-    e.preventDefault();
-    if (!trimmed) return;
-    onSend(trimmed);
+  const ready = pending.flatMap((attachment) =>
+    attachment.state === 'ready' && attachment.ref ? [attachment.ref] : [],
+  );
+  const submit = (): void => {
+    if (!trimmed && ready.length === 0) return;
+    if (pending.some((attachment) => attachment.state === 'uploading')) return;
+    onSend(trimmed, {
+      ...(ready.length ? { attachments: ready } : {}),
+      ...(activePicker?.selectedRunnerKind ? { runnerKind: activePicker.selectedRunnerKind } : {}),
+      ...(activePicker?.selectedModelId ? { model: activePicker.selectedModelId } : {}),
+      ...(activePicker?.selectedEffortId ? { thinking: activePicker.selectedEffortId } : {}),
+    });
     setDraft('');
+    setPending([]);
+  };
+  const attachFiles = (files: File[]): void => {
+    if (!onUploadAttachment) return;
+    for (const file of files) {
+      const localId = crypto.randomUUID();
+      setPending((current) => [
+        ...current,
+        {
+          localId,
+          filename: file.name,
+          sizeBytes: file.size,
+          state: 'uploading',
+        },
+      ]);
+      void onUploadAttachment(file).then(
+        (ref) =>
+          setPending((current) =>
+            current.map((attachment) =>
+              attachment.localId === localId ? { ...attachment, state: 'ready', ref } : attachment,
+            ),
+          ),
+        () =>
+          setPending((current) =>
+            current.map((attachment) =>
+              attachment.localId === localId ? { ...attachment, state: 'error' } : attachment,
+            ),
+          ),
+      );
+    }
+  };
+  const selectRunner = (runnerKind: string): void => {
+    if (!onSetRunner) return;
+    setPickerLoaded(false);
+    void onSetRunner(runnerKind)
+      .then((next) => {
+        const changed =
+          next.selectedRunnerKind === runnerKind &&
+          activePicker?.selectedRunnerKind !== next.selectedRunnerKind;
+        setPickerOverride(next);
+        if (changed) onRunnerSwitch?.();
+        if (!next.supportsAttachments) setPending([]);
+      })
+      .finally(() => setPickerLoaded(true));
   };
   return (
-    <form className={styles.composerWrap} onSubmit={submit}>
-      <div className={styles.composer}>
-        <input
-          className={styles.composerInput}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Ask about these runs — what failed, what changed, why…"
-          aria-label="Ask about this automation's runs"
-          disabled={busy}
-        />
-        <button
-          type="submit"
-          className={styles.composerSend}
-          aria-label="Send"
-          disabled={!trimmed || busy}
-        >
-          <Icon name="Send" size={15} />
-        </button>
-      </div>
-      <p className={styles.composerHint}>
-        Answers only — nothing here changes the automation.{' '}
-        <button type="button" className={styles.composerLink} onClick={onOpenCompiler}>
-          Open the compiler
-        </button>{' '}
-        to change what it does.
-      </p>
-    </form>
+    <div className={styles.composerWrap}>
+      <ChatComposer
+        value={draft}
+        onChange={setDraft}
+        onSend={submit}
+        onStop={onStop}
+        busy={busy}
+        canSend={
+          (Boolean(trimmed) || ready.length > 0) &&
+          !pending.some((attachment) => attachment.state === 'uploading')
+        }
+        placeholder="Ask about these runs — what failed, what changed, why…"
+        ariaLabel="Ask about this automation's runs"
+        context={activePicker?.supportsContext ? context : undefined}
+        above={
+          pending.length ? (
+            <div className={styles.attachRow}>
+              {pending.map((attachment) => (
+                <div
+                  key={attachment.localId}
+                  className={styles.attachChip}
+                  data-state={attachment.state}
+                >
+                  <span>{attachment.filename}</span>
+                  <span>
+                    {attachment.state === 'uploading' ? '…' : formatBytes(attachment.sizeBytes)}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${attachment.filename}`}
+                    onClick={() =>
+                      setPending((current) =>
+                        current.filter((entry) => entry.localId !== attachment.localId),
+                      )
+                    }
+                  >
+                    <Icon name="X" size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null
+        }
+        leading={
+          activePicker?.supportsAttachments && onUploadAttachment ? (
+            <>
+              <button
+                type="button"
+                className={styles.attachButton}
+                aria-label="Attach files"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Icon name="Paperclip" size={15} />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  if (files.length) attachFiles(files);
+                  event.target.value = '';
+                }}
+              />
+            </>
+          ) : undefined
+        }
+        model={
+          activePicker ? (
+            <>
+              <RunnerPicker
+                picker={activePicker}
+                loaded={pickerLoaded}
+                busy={busy}
+                onSelect={selectRunner}
+              />
+              <ModelPicker
+                picker={activePicker}
+                loaded={pickerLoaded}
+                busy={busy}
+                onSelect={(model) =>
+                  setPickerOverride(
+                    activePicker ? { ...activePicker, selectedModelId: model } : undefined,
+                  )
+                }
+              />
+            </>
+          ) : undefined
+        }
+        effort={
+          activePicker ? (
+            <EffortPicker
+              picker={activePicker}
+              loaded={pickerLoaded}
+              busy={busy}
+              onSelect={(effort) =>
+                setPickerOverride(
+                  activePicker ? { ...activePicker, selectedEffortId: effort } : undefined,
+                )
+              }
+            />
+          ) : undefined
+        }
+        hint={
+          <>
+            Answers only — nothing here changes the automation. Switching agents uses a bounded
+            handoff and may ask for provider consent.{' '}
+            <button type="button" className={styles.composerLink} onClick={onOpenCompiler}>
+              Open the compiler
+            </button>{' '}
+            to change what it does.
+          </>
+        }
+      />
+    </div>
   );
 }
 
@@ -793,6 +982,9 @@ export default function AutomationThreadScreen({
   onToggleEnabled,
   onDecideConsent,
   onAskAboutRuns,
+  onUploadAttachment,
+  loadAttachmentImage,
+  onSetRunner,
   onCopyWebhook,
   onRotateWebhook,
   onDelete,
@@ -810,6 +1002,7 @@ export default function AutomationThreadScreen({
   /** Running turns whose live stream is gone and stayed gone after rejoins. */
   const [lostWatches, setLostWatches] = useState<ReadonlySet<string>>(new Set());
   const [pendingTrace, setPendingTrace] = useState<AsstMsgDTO[] | null>(null);
+  const [composerContext, setComposerContext] = useState<{ used: number; size: number }>();
   const watchedTurnsRef = useRef(new Set<string>());
   const streamControllersRef = useRef(new Map<string, AbortController>());
   const [regenBusy, setRegenBusy] = useState(false);
@@ -1047,15 +1240,42 @@ export default function AutomationThreadScreen({
       if (ok) void reload();
     });
   };
-  const doSend = (text: string): void => {
+  const doSend = (
+    text: string,
+    options: {
+      attachments?: BuilderAttachmentRef[];
+      runnerKind?: string;
+      model?: string;
+      thinking?: string;
+    },
+  ): void => {
     setSending(true);
     setPendingTrace([
-      { kind: 'user', text },
+      {
+        kind: 'user',
+        text,
+        ...(options.attachments?.length
+          ? {
+              attachments: options.attachments.map((attachment) => ({
+                ...attachment,
+                filename: attachment.filename ?? 'attachment',
+              })),
+            }
+          : {}),
+      },
       { kind: 'ai', streaming: true, text: '' },
     ]);
     const controller = new AbortController();
     streamControllersRef.current.set('composer', controller);
-    void onAskAboutRuns(text, setPendingTrace, controller.signal)
+    void onAskAboutRuns(
+      text,
+      {
+        ...options,
+        onContext: setComposerContext,
+      },
+      setPendingTrace,
+      controller.signal,
+    )
       .then(async (turnId) => {
         if (!turnId || controller.signal.aborted) return;
         await reload();
@@ -1266,6 +1486,7 @@ export default function AutomationThreadScreen({
                   rerunBusy={busy || running}
                   onOpen={() => onOpenRun(run.runId)}
                   onRerun={doRun}
+                  loadAttachmentImage={loadAttachmentImage}
                 />
               ))}
             </div>
@@ -1281,8 +1502,9 @@ export default function AutomationThreadScreen({
                 cb={{
                   hydrateRefs: () => undefined,
                   wireCodeCopy: () => undefined,
-                  loadAttachmentImage: () =>
-                    Promise.reject(new Error('automation attachments unavailable')),
+                  loadAttachmentImage:
+                    loadAttachmentImage ??
+                    (() => Promise.reject(new Error('automation attachments unavailable'))),
                   onCopyMessage: (text) => void navigator.clipboard?.writeText(text),
                   onFeedback: () => undefined,
                   onRegenerate: () => undefined,
@@ -1296,7 +1518,17 @@ export default function AutomationThreadScreen({
       </div>
 
       {d.automationTurns ? (
-        <Composer busy={sending} onSend={doSend} onOpenCompiler={onOpenCompiler} />
+        <Composer
+          busy={sending}
+          onSend={doSend}
+          onStop={() => streamControllersRef.current.get('composer')?.abort()}
+          onOpenCompiler={onOpenCompiler}
+          picker={d.runnerConfig}
+          context={composerContext}
+          onUploadAttachment={onUploadAttachment}
+          onSetRunner={onSetRunner}
+          onRunnerSwitch={() => setComposerContext(undefined)}
+        />
       ) : null}
     </div>
   );

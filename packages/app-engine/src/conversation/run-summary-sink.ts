@@ -43,12 +43,16 @@ export interface RunSummary {
   readonly retryOf?: string;
   /** Dominant model of the run (the one with the most tokens), if any. */
   readonly model?: string;
+  /** Dominant ACP-confirmed thought_level of the run, if any. */
+  readonly effort?: string;
   readonly startedAt: number;
   readonly endedAt?: number;
   readonly totalInputTokens?: number;
   readonly totalOutputTokens?: number;
   readonly totalCacheReadTokens?: number;
   readonly totalCacheWriteTokens?: number;
+  /** Estimated canonical-ledger prompt tokens injected on a handoff turn. */
+  readonly hydrationTokens?: number;
   readonly totalCostUsd?: number;
   readonly stepCount?: number;
   readonly toolCount?: number;

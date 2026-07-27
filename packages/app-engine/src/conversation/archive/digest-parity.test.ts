@@ -42,18 +42,20 @@ function seedFinishedTurn(
     retryOf?: string | null;
     input: number;
     output: number;
+    hydration?: number;
     cost: number;
     steps: number;
     tools: number;
     model: string;
+    effort?: string;
   },
 ): void {
   journal
     .prepare(
       `INSERT INTO turns (id, conversation_id, seq, trigger, retry_of, ok, started_at, ended_at,
          total_input_tokens, total_output_tokens, total_cache_read_tokens, total_cache_write_tokens,
-         total_cost_usd, step_count, tool_count)
-       VALUES (?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)`,
+         hydration_tokens, total_cost_usd, step_count, tool_count)
+       VALUES (?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
     )
     .run(
       a.turnId,
@@ -65,6 +67,7 @@ function seedFinishedTurn(
       a.startedAt + 1000,
       a.input,
       a.output,
+      a.hydration ?? null,
       a.cost,
       a.steps,
       a.tools,
@@ -73,10 +76,10 @@ function seedFinishedTurn(
   // test carries the bulk of the tokens; a decoy model carries fewer.
   journal
     .prepare(
-      `INSERT INTO items (id, turn_id, ordinal, kind, model, input_tokens, output_tokens, ok, started_at)
-       VALUES (?, ?, 0, 'step', ?, ?, ?, 1, ?)`,
+      `INSERT INTO items (id, turn_id, ordinal, kind, model, effort, input_tokens, output_tokens, ok, started_at)
+       VALUES (?, ?, 0, 'step', ?, ?, ?, ?, 1, ?)`,
     )
-    .run(`${a.turnId}-s0`, a.turnId, a.model, a.input, a.output, a.startedAt);
+    .run(`${a.turnId}-s0`, a.turnId, a.model, a.effort ?? null, a.input, a.output, a.startedAt);
   journal
     .prepare(
       `INSERT INTO items (id, turn_id, ordinal, kind, model, input_tokens, output_tokens, ok, started_at)
@@ -121,10 +124,12 @@ describe('digest parity with pre-archive rollups', () => {
       startedAt: daysAgo(150),
       input: 100,
       output: 50,
+      hydration: 18,
       cost: 0.02,
       steps: 2,
       tools: 1,
       model: 'sonnet',
+      effort: 'high',
     });
     seedFinishedTurn(journal, {
       turnId: 'd1',
@@ -137,6 +142,7 @@ describe('digest parity with pre-archive rollups', () => {
       steps: 3,
       tools: 0,
       model: 'opus',
+      effort: 'low',
       ok: false,
     });
     seedFinishedTurn(journal, {
@@ -233,6 +239,7 @@ describe('digest parity with pre-archive rollups', () => {
     const after = insights.summary(opts);
 
     expect(after.kpis.totalTokens).toBe(before.kpis.totalTokens);
+    expect(after.kpis.hydrationTokens).toBe(before.kpis.hydrationTokens);
     expect(after.kpis.totalCostUsd).toBe(before.kpis.totalCostUsd);
     expect(after.kpis.generations).toBe(before.kpis.generations);
     expect(after.kpis.retries).toBe(before.kpis.retries);
@@ -242,6 +249,9 @@ describe('digest parity with pre-archive rollups', () => {
       [...rows].sort((a, b) => `${a.key ?? a.model}`.localeCompare(`${b.key ?? b.model}`));
     expect(norm(after.bySource)).toEqual(norm(before.bySource));
     expect(norm(after.byModel)).toEqual(norm(before.byModel));
+    const normEffort = <T extends { effort: string }>(rows: T[]): T[] =>
+      [...rows].sort((a, b) => a.effort.localeCompare(b.effort));
+    expect(normEffort(after.byEffort)).toEqual(normEffort(before.byEffort));
     journal.close();
   });
 });

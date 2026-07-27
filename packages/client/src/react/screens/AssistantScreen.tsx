@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#567) the Assistant screen is one stateful composition over the shared composer/status primitives; splitting its bridge state would duplicate fallible control coordination
 import { useEffect, useRef, useState, type JSX } from 'react';
 import type {
   AsstModelPickerDTO,
@@ -11,38 +12,60 @@ import Message, { type MessageCallbacks } from './AssistantMessage.js';
 import { useAssistantScroll } from './useAssistantScroll.js';
 import { clearDraft, loadDraft, saveDraft } from './assistantDrafts.js';
 import { useComposerAutocomplete } from './ComposerAutocomplete.js';
+import ChatComposer from './ChatComposer.js';
 
 const NO_ENTITIES = async (): Promise<never[]> => [];
 
 const EMPTY_MODEL_PICKER: AsstModelPickerDTO = {
+  runners: [],
+  selectedRunnerKind: '',
+  workspaceKinds: ['vault-data'],
   connected: false,
   models: [],
   defaultModelName: '',
   selectedModelId: '',
+  efforts: [],
+  defaultEffortName: '',
+  selectedEffortId: '',
 };
 
-// Attach-clip glyph — not in @centraid/design-tokens' icon set, so a small local SVG.
-function PaperclipGlyph(): JSX.Element {
+export function RunnerPicker({
+  picker,
+  loaded,
+  busy,
+  onSelect,
+}: {
+  picker: AsstModelPickerDTO;
+  loaded: boolean;
+  busy: boolean;
+  onSelect: (kind: string) => void;
+}): JSX.Element | null {
+  if (picker.runners.length === 0) return null;
   return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21.44 11.05l-9.19 9.19a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.5 3.5 0 0 1 4.95 4.95l-9.2 9.19a1.5 1.5 0 0 1-2.12-2.12l8.49-8.48" />
-    </svg>
+    <label className={styles.effortPicker}>
+      <span className={styles.srOnly}>Assistant runner</span>
+      <select
+        aria-label="Assistant runner"
+        title="Switching agents creates a bounded context handoff and may require provider consent."
+        value={picker.selectedRunnerKind}
+        disabled={!loaded || busy}
+        onChange={(event) => onSelect(event.target.value)}
+      >
+        {picker.runners.map((runner) => (
+          <option key={runner.kind} value={runner.kind} title={runner.hint}>
+            {runner.title}
+            {!runner.sessionReady ? ' — setup or sign-in needed' : ''}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
 /**
  * Inline composer model picker (subsystem `assistant`, active runner).
  */
-function ModelPicker({
+export function ModelPicker({
   picker,
   loaded,
   onSelect,
@@ -52,7 +75,7 @@ function ModelPicker({
   loaded: boolean;
   onSelect: (modelId: string) => void;
   busy: boolean;
-}): JSX.Element {
+}): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -72,6 +95,7 @@ function ModelPicker({
     };
   }, [open]);
 
+  if (picker.models.length === 0) return null;
   const selected = picker.models.find((m) => m.id === picker.selectedModelId);
   const label = !loaded
     ? 'Model'
@@ -92,7 +116,8 @@ function ModelPicker({
         aria-label="Assistant model"
         aria-haspopup="menu"
         aria-expanded={open}
-        disabled={!loaded || busy}
+        disabled={!loaded || busy || picker.modelLocked}
+        title={picker.modelLocked ? 'Pinned by this automation manifest' : undefined}
         onClick={() => setOpen((o) => !o)}
       >
         <span className={styles.modelBtnLabel}>{label}</span>
@@ -134,6 +159,39 @@ function ModelPicker({
   );
 }
 
+export function EffortPicker({
+  picker,
+  loaded,
+  onSelect,
+  busy,
+}: {
+  picker: AsstModelPickerDTO;
+  loaded: boolean;
+  onSelect: (effort: string) => void;
+  busy: boolean;
+}): JSX.Element | null {
+  if (picker.efforts.length === 0) return null;
+  return (
+    <label className={styles.effortPicker}>
+      <span className={styles.srOnly}>Assistant effort</span>
+      <select
+        aria-label="Assistant effort"
+        value={picker.selectedEffortId}
+        disabled={!loaded || busy || picker.effortLocked}
+        title={picker.effortLocked ? 'Pinned by this automation manifest' : undefined}
+        onChange={(event) => onSelect(event.target.value)}
+      >
+        <option value="">{`Default · ${picker.defaultEffortName || 'agent effort'}`}</option>
+        {picker.efforts.map((effort) => (
+          <option key={effort.value} value={effort.value}>
+            {effort.name ?? effort.value}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -155,6 +213,8 @@ export default function AssistantScreen({
   onStop,
   onAttachFiles,
   onRemovePendingAttachment,
+  onAddWorkspace,
+  onRemoveWorkspace,
   hydrateRefs,
   wireCodeCopy,
   loadAttachmentImage,
@@ -165,6 +225,9 @@ export default function AssistantScreen({
   onPagerNav,
   loadModelPicker,
   onSetModel,
+  onSetEffort,
+  onSetRunner,
+  onSetWorkspaceKind,
   searchEntities,
   slashCommands,
   onRunSlash,
@@ -239,6 +302,17 @@ export default function AssistantScreen({
     setModelPicker((p) => ({ ...p, selectedModelId: modelId }));
     onSetModel(modelId);
   };
+  const selectEffort = (effort: string): void => {
+    setModelPicker((picker) => ({ ...picker, selectedEffortId: effort }));
+    onSetEffort(effort);
+  };
+  const selectRunner = (runnerKind: string): void => {
+    setModelPickerLoaded(false);
+    void onSetRunner(runnerKind).then((picker) => {
+      setModelPicker(picker);
+      setModelPickerLoaded(true);
+    });
+  };
 
   const messageCallbacks: MessageCallbacks = {
     hydrateRefs,
@@ -303,8 +377,10 @@ export default function AssistantScreen({
             onDrop={(e) => {
               e.preventDefault();
               setDragOver(false);
-              const files = Array.from(e.dataTransfer.files ?? []);
-              if (files.length) onAttachFiles(files);
+              if (modelPicker.supportsAttachments) {
+                const files = Array.from(e.dataTransfer.files ?? []);
+                if (files.length) onAttachFiles(files);
+              }
             }}
           >
             {snap.pendingAttachments.length > 0 ? (
@@ -336,68 +412,136 @@ export default function AssistantScreen({
                 ))}
               </div>
             ) : null}
+            {snap.additionalDirectories?.length ? (
+              <div className={styles.attachRow} aria-label="Shared workspace folders">
+                {snap.additionalDirectories.map((directory) => (
+                  <div key={directory} className={styles.attachChip} title={directory}>
+                    <Icon name="Folder" size={12} />
+                    <span className={styles.attachName}>
+                      {directory.split(/[\\/]/).filter(Boolean).at(-1) ?? directory}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.attachRemove}
+                      aria-label={`Stop sharing ${directory}`}
+                      onClick={() => onRemoveWorkspace?.(directory)}
+                    >
+                      <Icon name="X" size={10} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {autocomplete.popover}
-            <textarea
-              ref={taRef}
-              className={styles.input}
-              rows={1}
-              placeholder="Ask your vault anything…  (@ to mention, / for commands)"
-              data-busy={snap.busy ? '' : undefined}
+            <ChatComposer
+              embedded
+              textareaRef={taRef}
               value={draft}
-              onChange={(e) => autocomplete.onChange(e)}
-              onKeyDown={(e) => {
+              onChange={(_value, event) => autocomplete.onChange(event)}
+              onSend={send}
+              onStop={onStop}
+              busy={snap.busy}
+              canSend={
+                draft.trim().length > 0 ||
+                snap.pendingAttachments.some((attachment) => attachment.state === 'ready')
+              }
+              placeholder="Ask your vault anything…  (@ to mention, / for commands)"
+              ariaLabel="Ask your vault"
+              onKeyDown={(event) => {
                 // The autocomplete menu gets first crack at Arrow/Enter/Tab/Esc.
-                if (autocomplete.onKeyDown(e)) return;
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  send();
-                }
+                if (autocomplete.onKeyDown(event)) event.preventDefault();
               }}
               onBlur={() => autocomplete.close()}
-              onPaste={(e) => {
-                const files = Array.from(e.clipboardData?.files ?? []);
-                if (files.length) onAttachFiles(files);
+              onPaste={(event) => {
+                if (modelPicker.supportsAttachments) {
+                  const files = Array.from(event.clipboardData?.files ?? []);
+                  if (files.length) onAttachFiles(files);
+                }
               }}
-            />
-            <div className={styles.controls}>
-              <div className={styles.controlsLeft}>
-                <button
-                  type="button"
-                  className={styles.attachBtn}
-                  aria-label="Attach files"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <PaperclipGlyph />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  hidden
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files ?? []);
-                    if (files.length) onAttachFiles(files);
-                    e.target.value = '';
-                  }}
-                />
-              </div>
-              <div className={styles.controlsRight}>
-                <ModelPicker
+              context={modelPicker.supportsContext ? snap.context : undefined}
+              leading={
+                <>
+                  {modelPicker.supportsAttachments ? (
+                    <>
+                      <button
+                        type="button"
+                        className={styles.attachBtn}
+                        aria-label="Attach files"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Icon name="Paperclip" size={16} strokeWidth={1.7} />
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        hidden
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files ?? []);
+                          if (files.length) onAttachFiles(files);
+                          e.target.value = '';
+                        }}
+                      />
+                    </>
+                  ) : null}
+                  {modelPicker.supportsAdditionalDirectories ? (
+                    <button
+                      type="button"
+                      className={styles.attachBtn}
+                      aria-label="Add scoped workspace folder"
+                      title="Share an additional folder with this agent"
+                      disabled={snap.busy}
+                      onClick={() => onAddWorkspace?.()}
+                    >
+                      <Icon name="Folder" size={16} />
+                    </button>
+                  ) : null}
+                </>
+              }
+              model={
+                <>
+                  <RunnerPicker
+                    picker={modelPicker}
+                    loaded={modelPickerLoaded}
+                    busy={snap.busy}
+                    onSelect={selectRunner}
+                  />
+                  <ModelPicker
+                    picker={modelPicker}
+                    loaded={modelPickerLoaded}
+                    busy={snap.busy}
+                    onSelect={selectModel}
+                  />
+                  {modelPicker.workspaceKinds.length ? (
+                    <label className={styles.effortPicker}>
+                      <span className={styles.srOnly}>Assistant workspace</span>
+                      <select
+                        aria-label="Assistant workspace"
+                        value={snap.workspaceKind ?? modelPicker.workspaceKinds[0]}
+                        disabled={snap.busy}
+                        onChange={(event) =>
+                          onSetWorkspaceKind?.(event.target.value as 'vault-data' | 'app' | 'draft')
+                        }
+                      >
+                        {modelPicker.workspaceKinds.map((kind) => (
+                          <option key={kind} value={kind}>
+                            {kind}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                </>
+              }
+              effort={
+                <EffortPicker
                   picker={modelPicker}
                   loaded={modelPickerLoaded}
                   busy={snap.busy}
-                  onSelect={selectModel}
+                  onSelect={selectEffort}
                 />
-                <button
-                  type="button"
-                  className={styles.send}
-                  aria-label={snap.busy ? 'Stop' : 'Send'}
-                  onClick={() => (snap.busy ? onStop() : send())}
-                >
-                  {snap.busy ? '■' : '↑'}
-                </button>
-              </div>
-            </div>
+              }
+            />
           </div>
         </div>
       </section>

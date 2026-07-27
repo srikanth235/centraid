@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
 import { AUTH_REQUIRED_CODE, AcpRpcError } from './json-rpc.js';
-import { authRequiredMessage, classifyAgentFailure } from './agent-errors.js';
+import {
+  authRequiredMessage,
+  classifyAgentFailure,
+  classifyAgentFailureDetail,
+} from './agent-errors.js';
 import type { AcpTurnConfig } from './types.js';
 
 const config: AcpTurnConfig = {
@@ -28,6 +32,16 @@ test('internal error with auth-ish text becomes actionable', () => {
   );
   expect(msg).toMatch(/sign-in|provider|configure/i);
   expect(msg).toContain('goose configure');
+});
+
+test('internal error classifies an expired OAuth authentication failure as auth', () => {
+  expect(
+    classifyAgentFailureDetail(
+      new AcpRpcError(-32603, 'Failed to authenticate: OAuth session expired'),
+      '',
+      config,
+    ).failureClass,
+  ).toBe('auth');
 });
 
 test('unrelated errors keep message + stderr tail', () => {
@@ -67,4 +81,16 @@ test('internal error without auth-ish text falls through to raw message', () => 
   expect(msg).toContain('disk full');
   expect(msg).toContain('ENOSPC');
   expect(msg).not.toMatch(/sign-in|provider setup/i);
+});
+
+test.each([
+  ['rate limit quota exceeded', 'quota'],
+  ['prompt idle watchdog timed out (wedge)', 'wedge'],
+  ['initialize timed out', 'timeout'],
+  ['spawn ENOENT', 'spawn'],
+  ['agent exited with signal', 'exit'],
+] as const)('classifies %s as %s', (message, failureClass) => {
+  expect(classifyAgentFailureDetail(new Error(message), '', config).failureClass).toBe(
+    failureClass,
+  );
 });

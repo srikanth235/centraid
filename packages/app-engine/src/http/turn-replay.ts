@@ -33,6 +33,7 @@ export function buildReplayEvents(recorded: RecordedTurnReplay): TurnStreamEvent
     events.push({
       type: 'usage',
       ...(recorded.usage.model !== undefined ? { model: recorded.usage.model } : {}),
+      ...(recorded.usage.effort !== undefined ? { effort: recorded.usage.effort } : {}),
       ...(recorded.usage.inputTokens !== undefined
         ? { inputTokens: recorded.usage.inputTokens }
         : {}),

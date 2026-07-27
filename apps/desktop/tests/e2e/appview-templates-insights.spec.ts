@@ -408,6 +408,7 @@ test('11.1 — Insights renders the spend hero', async () => {
     ],
     byRunner: [{ provider: 'claude-code', runs: 7, tokens: 12345, costUsd: 1.23 }],
     byModel: [{ model: 'tier-deep', runs: 7, tokens: 12345, costUsd: 1.23 }],
+    byEffort: [{ effort: 'high', runs: 7, tokens: 12345, costUsd: 1.23 }],
     recent: [],
   };
   const { app, page } = await launchApp(env);

@@ -554,12 +554,26 @@ export async function streamAutomationConversationTurn(
   message: string,
   onEvent: (event: TurnStreamEvent) => void,
   signal: AbortSignal,
+  providerConsent?: string,
+  turn?: {
+    attachments?: Array<{ hash: string; mime: string; sizeBytes: number; filename?: string }>;
+    runnerKind?: string;
+    model?: string;
+    thinking?: string;
+  },
 ): Promise<{ turnId?: string; ended: boolean }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_automations/turn?ref=${enc(automationId)}`, {
     method: 'POST',
     headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({
+      message,
+      ...(providerConsent ? { providerConsent } : {}),
+      ...(turn?.attachments?.length ? { attachments: turn.attachments } : {}),
+      ...(turn?.runnerKind ? { runnerKind: turn.runnerKind } : {}),
+      ...(turn?.model ? { model: turn.model } : {}),
+      ...(turn?.thinking ? { thinking: turn.thinking } : {}),
+    }),
     signal,
   });
   if (!res.ok || !res.body) {

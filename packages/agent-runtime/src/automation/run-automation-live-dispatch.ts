@@ -28,13 +28,31 @@ import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import * as automation from '@centraid/automation';
-import type { RunnerKind } from '../types.js';
+import type {
+  AgentFailureClass,
+  ProviderConsentSource,
+  ProviderEgressConsentController,
+  RunnerHealthController,
+  RunnerKind,
+  RunnerPrefs,
+  TurnStreamEvent,
+} from '@centraid/app-engine';
+import {
+  compileHydrationPlan,
+  ConversationStore,
+  hydrationMessagesFromLedger,
+  makeJournalDbProvider,
+} from '@centraid/app-engine';
 import { getRunnerBackend } from '../registry.js';
 
 export interface LiveDispatchOptions {
   /** The automation app directory — also the agent's cwd. */
   workdir: string;
   runId: string;
+  /** Stable automation conversation identity (`<appId>/<automationId>`). */
+  automationRef: string;
+  /** Canonical per-vault ledger holding runner bindings and hydration watermarks. */
+  journalDbFile: string;
   runner: RunnerKind;
   /**
    * Model id/alias for `ctx.agent` calls (manifest `requires.model`, or the
@@ -42,14 +60,71 @@ export interface LiveDispatchOptions {
    * Undefined means "no override" — the backend's own default applies.
    */
   model?: string;
+  /** Semantic ACP configuration pins, keyed by capability category. */
+  configPins?: Readonly<Record<string, string>>;
+  /** Load launch settings/default config for this fire's selected runner. */
+  runnerPrefsFor?: (runner: RunnerKind) => Promise<RunnerPrefs | undefined>;
+  runnerHealth?: RunnerHealthController;
+  runnerHealthContext?: string;
+  providerEgressConsent?: ProviderEgressConsentController;
+  consentSource?: ProviderConsentSource;
+  /** Resolve historical upload hashes into the owning automation's blob CAS. */
+  hydrationAttachmentPath?: (hash: string) => string;
   onLog: (level: 'info' | 'warn' | 'error', msg: string) => void;
 }
 
 export interface LiveDispatch {
   agentDispatcher: automation.AgentDispatcher;
+  finalizeTurn(store: ConversationStore, conversationId: string, turnId: string, ok: boolean): void;
   /** Tear down the scratch dir (only ever created if an attachment was
    *  staged). Safe to call once. */
   close(): Promise<void>;
+}
+
+const AGENT_FAILURE_PREFIX = 'centraid-agent-failure:';
+
+export interface AutomationAgentFailure {
+  runner: RunnerKind;
+  failureClass: AgentFailureClass;
+  message: string;
+}
+
+/** Preserve typed runner failure metadata through the handler worker boundary. */
+export function parseAutomationAgentFailure(
+  error: string | undefined,
+): AutomationAgentFailure | undefined {
+  if (!error) return undefined;
+  const at = error.indexOf(AGENT_FAILURE_PREFIX);
+  if (at < 0) return undefined;
+  try {
+    // Handler workers preserve the original error text but append their own
+    // stack after a newline. The structured marker is deliberately one
+    // JSON-encoded line (embedded newlines in `message` are escaped), so only
+    // parse that line instead of letting a worker stack suppress failover.
+    const payload = error
+      .slice(at + AGENT_FAILURE_PREFIX.length)
+      .split(/\r?\n/, 1)[0]
+      ?.trim();
+    const parsed = JSON.parse(payload ?? '') as {
+      runner?: unknown;
+      failureClass?: unknown;
+      message?: unknown;
+    };
+    if (
+      typeof parsed.runner !== 'string' ||
+      typeof parsed.failureClass !== 'string' ||
+      typeof parsed.message !== 'string'
+    ) {
+      return undefined;
+    }
+    return parsed as AutomationAgentFailure;
+  } catch {
+    return undefined;
+  }
+}
+
+function agentFailureError(failure: AutomationAgentFailure): Error {
+  return new Error(`${AGENT_FAILURE_PREFIX}${JSON.stringify(failure)}`);
 }
 
 /**
@@ -62,6 +137,34 @@ export interface LiveDispatch {
 export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<LiveDispatch> {
   const scratchDir = path.join(opts.workdir, '.automation-scratch', opts.runId);
   let scratchReady = false;
+  const runsStore = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
+  const lockToken = randomUUID();
+  if (!runsStore.acquireTurnLock(opts.automationRef, lockToken)) {
+    runsStore.close();
+    throw new Error(`automation conversation "${opts.automationRef}" already has a running turn`);
+  }
+  const lockLeaseHeartbeat = setInterval(
+    () => runsStore.refreshTurnLock(opts.automationRef, lockToken),
+    60_000,
+  );
+  lockLeaseHeartbeat.unref?.();
+  let latestAdapter:
+    | {
+        kind: string;
+        sessionId?: string;
+        usageSnapshot?: import('@centraid/app-engine').AdapterUsageSnapshot;
+        hydrated?: boolean;
+      }
+    | undefined;
+  let observedAdapter:
+    | {
+        kind: string;
+        sessionId?: string;
+        usageSnapshot?: import('@centraid/app-engine').AdapterUsageSnapshot;
+        hydrated?: boolean;
+      }
+    | undefined;
+  let hydrationTokens = 0;
   const ensureScratch = async (): Promise<void> => {
     if (scratchReady) return;
     await fs.mkdir(scratchDir, { recursive: true });
@@ -101,36 +204,187 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   // `acp` kind has no default binary and therefore surfaces a clear `error`
   // event, raised below.
   const agentDispatcher: automation.AgentDispatcher = async (call, ctx): Promise<unknown> => {
-    const effectivePrompt = await stageAttachments(call);
-    let finalText = '';
-    let errorMessage: string | undefined;
-    await getRunnerBackend(opts.runner).runTurn(
-      {
-        cwd: opts.workdir,
-        message: effectivePrompt,
-        extraSystemPrompt: '',
-        ...(opts.model ? { model: opts.model } : {}),
-        abortSignal: ctx.abortSignal,
-        onEvent: (ev) => {
-          if (ev.type === 'final') finalText = ev.text;
-          else if (ev.type === 'error') errorMessage = ev.message;
-          call.onEvent?.(ev);
-        },
-      },
-      { prefs: { kind: opts.runner } },
-    );
-    if (errorMessage && !finalText) {
-      throw new Error(`ctx.agent (${opts.runner}) failed: ${errorMessage}`);
+    const runner = opts.runner;
+    if (
+      opts.providerEgressConsent &&
+      !opts.providerEgressConsent.has(opts.automationRef, runner, 'automations')
+    ) {
+      opts.providerEgressConsent.grant(
+        opts.automationRef,
+        runner,
+        opts.consentSource ?? 'direct',
+        'automations',
+      );
     }
-    return automation.coerceAgentAnswer(finalText, call.json);
+    const effectivePrompt = await stageAttachments(call);
+    const scope = opts.runnerHealthContext ?? opts.workdir;
+    const breaker = opts.runnerHealth?.canAttempt(scope, runner);
+    if (breaker && !breaker.allowed) {
+      throw agentFailureError({
+        runner,
+        failureClass: breaker.failureClass ?? 'unknown',
+        message: `Runner breaker is open${breaker.breakerUntil ? ` until ${new Date(breaker.breakerUntil).toISOString()}` : ''}.`,
+      });
+    }
+    const loaded = (await opts.runnerPrefsFor?.(runner)) ?? { kind: runner };
+    const prefs: RunnerPrefs = loaded.kind === runner ? loaded : { kind: runner };
+    let finalText = '';
+    let failure: Extract<TurnStreamEvent, { type: 'error' }> | undefined;
+    const binding =
+      latestAdapter?.sessionId === undefined
+        ? runsStore.getHarnessBinding(opts.automationRef, runner)
+        : undefined;
+    const resumeSessionId = latestAdapter?.sessionId ?? binding?.acpSessionId;
+    const resumeUsage = latestAdapter?.usageSnapshot ?? binding?.usageSnapshot;
+    const completedTurns = runsStore.listTurns(opts.automationRef);
+    const hydrationMessages =
+      latestAdapter === undefined
+        ? hydrationMessagesFromLedger(
+            completedTurns,
+            (turnId) => runsStore.listItems(turnId),
+            (itemId) => runsStore.listAttachmentsForItem(itemId),
+            binding?.hydratedThroughSeq ?? -1,
+          )
+        : [];
+    const recoveryMessages =
+      latestAdapter === undefined && binding
+        ? hydrationMessagesFromLedger(
+            completedTurns,
+            (turnId) => runsStore.listItems(turnId),
+            (itemId) => runsStore.listAttachmentsForItem(itemId),
+          )
+        : [];
+    const hydrationPlan =
+      hydrationMessages.length > 0
+        ? compileHydrationPlan(hydrationMessages, { includeAttachmentReferences: true })
+        : undefined;
+    const recoveryHydrationPlan =
+      recoveryMessages.length > 0
+        ? compileHydrationPlan(recoveryMessages, { includeAttachmentReferences: true })
+        : undefined;
+    let result:
+      | {
+          sessionId?: string;
+          adapterKind: string;
+          usageSnapshot?: import('@centraid/app-engine').AdapterUsageSnapshot;
+          hydrated?: boolean;
+          hydrationKind?: 'handoff' | 'recovery';
+        }
+      | undefined;
+    try {
+      result = await getRunnerBackend(runner).runTurn(
+        {
+          conversationId: opts.automationRef,
+          cwd: opts.workdir,
+          message: effectivePrompt,
+          extraSystemPrompt: '',
+          ...(opts.model ? { model: opts.model } : {}),
+          ...((opts.configPins ?? prefs.configPins)
+            ? { configPins: opts.configPins ?? prefs.configPins }
+            : {}),
+          abortSignal: ctx.abortSignal,
+          ...(resumeSessionId ? { prevSessionId: resumeSessionId } : {}),
+          ...(resumeUsage ? { prevUsageSnapshot: resumeUsage } : {}),
+          ...(hydrationPlan
+            ? {
+                hydrationContext: hydrationPlan.prompt,
+                forceHydration: true,
+              }
+            : {}),
+          ...(opts.hydrationAttachmentPath && hydrationPlan?.attachments.length
+            ? {
+                hydrationAttachments: hydrationPlan.attachments.map((attachment) => ({
+                  path: opts.hydrationAttachmentPath!(attachment.hash),
+                  mime: attachment.mime,
+                  ...(attachment.filename ? { filename: attachment.filename } : {}),
+                })),
+              }
+            : {}),
+          ...(recoveryHydrationPlan
+            ? { recoveryHydrationContext: recoveryHydrationPlan.prompt }
+            : {}),
+          ...(opts.hydrationAttachmentPath && recoveryHydrationPlan?.attachments.length
+            ? {
+                recoveryHydrationAttachments: recoveryHydrationPlan.attachments.map(
+                  (attachment) => ({
+                    path: opts.hydrationAttachmentPath!(attachment.hash),
+                    mime: attachment.mime,
+                    ...(attachment.filename ? { filename: attachment.filename } : {}),
+                  }),
+                ),
+              }
+            : {}),
+          onEvent: (event) => {
+            if (event.type === 'final') finalText = event.text;
+            if (event.type === 'error') failure = event;
+            call.onEvent?.(event);
+          },
+        },
+        { prefs },
+      );
+    } catch (error) {
+      failure = {
+        type: 'error',
+        message: error instanceof Error ? error.message : String(error),
+        failureClass: 'unknown',
+      };
+    }
+    if (result) {
+      observedAdapter = {
+        kind: result.adapterKind,
+        ...(result.sessionId ? { sessionId: result.sessionId } : {}),
+        ...(result.usageSnapshot ? { usageSnapshot: result.usageSnapshot } : {}),
+        ...(result.hydrated ? { hydrated: true } : {}),
+      };
+      if (result.hydrated) {
+        hydrationTokens +=
+          result.hydrationKind === 'recovery'
+            ? (recoveryHydrationPlan?.estimatedTokens ?? 0)
+            : (hydrationPlan?.estimatedTokens ?? 0);
+      }
+    }
+    if (!failure) {
+      if (result) {
+        latestAdapter = observedAdapter;
+      }
+      opts.runnerHealth?.reportOk(scope, runner);
+      return automation.coerceAgentAnswer(finalText, call.json);
+    }
+    const typedFailure: AutomationAgentFailure = {
+      runner,
+      failureClass: failure.failureClass ?? 'unknown',
+      message: failure.message,
+    };
+    opts.runnerHealth?.reportFailure(
+      scope,
+      runner,
+      typedFailure.failureClass,
+      typedFailure.message,
+    );
+    throw agentFailureError(typedFailure);
   };
 
   let closed = false;
   return {
     agentDispatcher,
+    finalizeTurn(store, conversationId, turnId, ok): void {
+      if (hydrationTokens > 0) {
+        store.setTurnHydrationTokens(turnId, hydrationTokens);
+      }
+      if (ok) store.noteTurn(conversationId, '', latestAdapter);
+      else store.noteFailedTurn(conversationId, '', observedAdapter);
+    },
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
+      try {
+        // Turn settlement owns binding/watermark finalization transactionally
+        // through `finalizeTurn`; close only releases process-local resources.
+      } finally {
+        clearInterval(lockLeaseHeartbeat);
+        runsStore.releaseTurnLock(opts.automationRef, lockToken);
+        runsStore.close();
+      }
       // Only ever created if an attachment was staged — the rm is a no-op
       // otherwise, so a tool-free / attachment-free fire touches no disk here.
       if (scratchReady) {

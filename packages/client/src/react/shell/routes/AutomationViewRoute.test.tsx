@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#567) one Automation Q&A route suite shares the mocked bridge and persistence fixture across runner, model, effort, attachment, consent, and reload cases
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -34,6 +35,7 @@ const helpers = vi.hoisted(() => ({
   finishLiveItem: vi.fn(),
   finishLiveTrace: vi.fn(),
   loadThread: vi.fn(),
+  loadProviders: vi.fn(),
   openWebhookReveal: vi.fn(),
   reduceItem: vi.fn(),
   reduceTurn: vi.fn(),
@@ -74,8 +76,12 @@ vi.mock('./automationLiveMessages.js', () => ({
   startAutomationLiveItem: helpers.startLiveItem,
 }));
 vi.mock('../webhookReveal.js', () => ({ openWebhookReveal: helpers.openWebhookReveal }));
+vi.mock('./settingsProvidersData.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./settingsProvidersData.js')>()),
+  loadProviders: helpers.loadProviders,
+}));
 
-const { default: AutomationViewRoute } = await import('./AutomationViewRoute.js');
+const { automationPicker, default: AutomationViewRoute } = await import('./AutomationViewRoute.js');
 
 function automationRow(): CentraidAutomationRow {
   const triggers: CentraidAutomationManifest['triggers'] = [{ kind: 'cron', expr: '0 9 * * *' }];
@@ -230,6 +236,39 @@ beforeEach(() => {
       runs: [],
     },
   });
+  helpers.loadProviders.mockReset().mockResolvedValue({
+    selectedKind: 'codex',
+    anyLoading: false,
+    savedModelByKind: {},
+    subsystemModelByKind: {},
+    defaultConfigPinsByKind: {},
+    subsystemConfigPinsByKind: {},
+    diagnosticsJson: '{}',
+    subsystemRunnerByKey: { automations: 'codex' },
+    subsystemRunnerLadders: {},
+    cards: [
+      {
+        kind: 'codex',
+        title: 'Codex',
+        accent: '#10b981',
+        subtitle: 'ready',
+        connected: true,
+        sessionReady: true,
+        modelsLoading: false,
+        models: [],
+      },
+      {
+        kind: 'copilot',
+        title: 'Copilot',
+        accent: '#111827',
+        subtitle: 'ready',
+        connected: true,
+        sessionReady: true,
+        modelsLoading: false,
+        models: [],
+      },
+    ],
+  });
   helpers.openWebhookReveal.mockReset().mockResolvedValue(undefined);
   helpers.reduceItem.mockReset().mockReturnValue({ trace: 'delta' });
   helpers.reduceTurn.mockReset().mockReturnValue({ trace: 'conversation' });
@@ -249,6 +288,140 @@ afterEach(() => {
 });
 
 describe('AutomationViewRoute', () => {
+  it('drops provider-specific manifest pins after an attended cross-provider switch', () => {
+    const status = {
+      selectedKind: 'codex',
+      anyLoading: false,
+      savedModelByKind: {},
+      subsystemModelByKind: { copilot: { automations: 'copilot-default' } },
+      defaultConfigPinsByKind: {},
+      subsystemConfigPinsByKind: {
+        copilot: { automations: { thought_level: 'medium' } },
+      },
+      diagnosticsJson: '{}',
+      subsystemRunnerByKey: { automations: 'codex' },
+      subsystemRunnerLadders: {},
+      cards: [
+        {
+          kind: 'codex',
+          title: 'Codex',
+          accent: '#10b981',
+          subtitle: 'ready',
+          connected: true,
+          sessionReady: true,
+          modelConfigurable: true,
+          modelsLoading: false,
+          models: [{ id: 'gpt-a' }],
+          configOptions: [
+            {
+              id: 'thought',
+              category: 'thought_level',
+              type: 'select',
+              values: [{ value: 'high' }],
+            },
+          ],
+        },
+        {
+          kind: 'copilot',
+          title: 'Copilot',
+          accent: '#111827',
+          subtitle: 'ready',
+          connected: true,
+          sessionReady: true,
+          modelConfigurable: true,
+          modelsLoading: false,
+          models: [{ id: 'copilot-default' }],
+          configOptions: [
+            {
+              id: 'thought',
+              category: 'thought_level',
+              type: 'select',
+              values: [{ value: 'medium' }],
+            },
+          ],
+        },
+      ],
+    } satisfies import('../../screen-contracts.js').AgentsStatusDTO;
+    expect(
+      automationPicker(status, 'codex', {
+        runner: 'codex',
+        model: 'gpt-a',
+        thoughtLevel: 'high',
+      }),
+    ).toMatchObject({
+      selectedModelId: 'gpt-a',
+      selectedEffortId: 'high',
+      modelLocked: true,
+      effortLocked: true,
+    });
+    expect(
+      automationPicker(status, 'copilot', {
+        runner: 'codex',
+        model: 'gpt-a',
+        thoughtLevel: 'high',
+      }),
+    ).toMatchObject({
+      selectedRunnerKind: 'copilot',
+      selectedModelId: 'copilot-default',
+      selectedEffortId: 'medium',
+    });
+    expect(
+      automationPicker(status, 'copilot', {
+        runner: 'codex',
+        model: 'gpt-a',
+        thoughtLevel: 'high',
+      }),
+    ).not.toMatchObject({ modelLocked: true, effortLocked: true });
+  });
+
+  it('resolves an unregistered manifest runner to a reported fallback and keeps its pins', () => {
+    const status = {
+      selectedKind: 'codex',
+      anyLoading: false,
+      savedModelByKind: {},
+      subsystemModelByKind: {},
+      defaultConfigPinsByKind: {},
+      subsystemConfigPinsByKind: {},
+      diagnosticsJson: '{}',
+      subsystemRunnerByKey: { automations: 'codex' },
+      subsystemRunnerLadders: {},
+      cards: [
+        {
+          kind: 'codex',
+          title: 'Codex',
+          accent: '#10b981',
+          subtitle: 'ready',
+          connected: true,
+          sessionReady: true,
+          modelConfigurable: true,
+          modelsLoading: false,
+          models: [{ id: 'gpt-a' }],
+          configOptions: [
+            {
+              id: 'thought',
+              category: 'thought_level',
+              type: 'select',
+              values: [{ value: 'high' }],
+            },
+          ],
+        },
+      ],
+    } satisfies import('../../screen-contracts.js').AgentsStatusDTO;
+    expect(
+      automationPicker(status, 'future-runner', {
+        runner: 'future-runner',
+        model: 'gpt-a',
+        thoughtLevel: 'high',
+      }),
+    ).toMatchObject({
+      selectedRunnerKind: 'codex',
+      selectedModelId: 'gpt-a',
+      selectedEffortId: 'high',
+      modelLocked: true,
+      effortLocked: true,
+    });
+  });
+
   it('loads the thread and drives lifecycle, cold/live trace, and steering actions', async () => {
     const bridge = await mount();
     await expect(bridge.loadData()).resolves.toMatchObject({
@@ -284,6 +457,7 @@ describe('AutomationViewRoute', () => {
     await expect(
       bridge.onAskAboutRuns(
         'What happened?',
+        {},
         (messages: unknown) => conversationalMessages.push(messages),
         new AbortController().signal,
       ),
@@ -293,6 +467,8 @@ describe('AutomationViewRoute', () => {
       'What happened?',
       expect.any(Function),
       expect.any(AbortSignal),
+      undefined,
+      {},
     );
     expect(conversationalMessages.length).toBeGreaterThan(1);
 
@@ -305,6 +481,14 @@ describe('AutomationViewRoute', () => {
     expect(actions.navigate).toHaveBeenCalledWith({ kind: 'automations' });
   });
 
+  it('restores the persisted conversation runner ahead of subsystem defaults', async () => {
+    api.listAutomationTurns.mockResolvedValueOnce([{ ...turn, adapterKind: 'copilot' }]);
+    const bridge = await mount();
+    await expect(bridge.loadData()).resolves.toMatchObject({
+      runnerConfig: { selectedRunnerKind: 'copilot' },
+    });
+  });
+
   it('returns null when the automation disappears and guards actions before load', async () => {
     helpers.loadThread.mockResolvedValueOnce(null);
     const bridge = await mount();
@@ -313,7 +497,7 @@ describe('AutomationViewRoute', () => {
     await expect(bridge.onToggleEnabled(true)).resolves.toBe(false);
     await expect(bridge.onDelete()).resolves.toBe(false);
     await expect(
-      bridge.onAskAboutRuns('hello', vi.fn(), new AbortController().signal),
+      bridge.onAskAboutRuns('hello', {}, vi.fn(), new AbortController().signal),
     ).resolves.toBeNull();
   });
 });

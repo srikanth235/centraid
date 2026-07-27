@@ -32,16 +32,21 @@ import type { Dispatcher } from '../handlers/dispatcher.js';
 import type { ModelSubsystem } from '../stores/prefs-store.js';
 import type { RunKind } from './schema.js';
 import type {
+  AgentFailureClass,
   ConversationRunner,
   ConversationTurnInput,
   ConversationTurnResult,
+  TurnStreamEvent,
 } from './runner.js';
+import type { RunnerHealthController } from './runner-health.js';
+import type { ProviderEgressConsentController } from './provider-egress-consent.js';
 import type {
   RunnerKind,
   RunnerPrefs,
   RunTurnFn,
   ToolContext,
   TurnInput,
+  TurnResult,
   VaultInvokeRunner,
   VaultContentRunner,
   VaultSqlRunner,
@@ -115,7 +120,7 @@ export interface ConversationRunnerCoreOptions {
    * the data-only backend leaves it false (cwd is the live data dir, no
    * draft to override to).
    */
-  cwdIsDraftWorktree?: boolean;
+  cwdIsDraftWorktree?: boolean | ((input: ConversationTurnInput, cwd: string) => boolean);
   /**
    * The vault-assistant register (issue: shell-level vault Q&A). When set,
    * each turn's `ToolContext` carries this owner-side `vault_sql` runner and
@@ -139,6 +144,27 @@ export interface ConversationRunnerCoreOptions {
    * data chat leaves it unset (the route defaults to `'chat'`) — issue #181.
    */
   runKind?: RunKind;
+  /**
+   * Ordered turn-boundary failover candidates. The selected runner remains
+   * first; hosts commonly resolve this from `runner.ladder.<subsystem>`.
+   */
+  runnerLadder?: (
+    subsystem: ModelSubsystem | undefined,
+    primary: RunnerKind,
+  ) => Promise<readonly RunnerKind[]> | readonly RunnerKind[];
+  /** Persistent workspace-scoped breaker controller. */
+  runnerHealth?: RunnerHealthController;
+  /** Stable health scope. Defaults to the resolved cwd. */
+  runnerHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
+  /** Hard conversation × provider egress gate. */
+  providerEgressConsent?: ProviderEgressConsentController;
+  /** Host alert seam for unattended/manual boundary failover selection. */
+  onFailover?: (event: {
+    conversationId: string;
+    subsystem?: ModelSubsystem;
+    from: RunnerKind;
+    to: RunnerKind;
+  }) => void;
 }
 
 /**
@@ -153,6 +179,8 @@ export function makeConversationRunnerCore(
 
   return {
     ...(opts.runKind ? { runKind: opts.runKind } : {}),
+    resolveRunnerKind: async (): Promise<RunnerKind | undefined> =>
+      (await opts.prefsLoader(opts.subsystem))?.kind,
     async run(input: ConversationTurnInput): Promise<ConversationTurnResult> {
       const loadedPrefs = input.runnerKind
         ? await opts.prefsLoader(opts.subsystem, input.runnerKind)
@@ -169,70 +197,239 @@ export function makeConversationRunnerCore(
       // another runner's launch settings. Keep the requested kind but discard
       // that mismatched binary/args; registry defaults are safer than launching
       // runner A through runner B's executable.
-      const prefs: RunnerPrefs =
+      const primaryPrefs: RunnerPrefs =
         input.runnerKind && loadedPrefs.kind !== input.runnerKind
           ? { kind: input.runnerKind }
           : loadedPrefs;
 
       const cwd = await opts.resolveCwd(input);
-      const turnCtx: TurnContext = { input, prefs, cwd };
-
-      const extraSystemPrompt = opts.buildExtraSystemPrompt
-        ? await opts.buildExtraSystemPrompt(turnCtx)
-        : input.extraSystemPrompt;
-
-      // Resume only when the previous turn used the same runner kind — a
-      // mid-session runner switch starts a fresh conversation. Now that
-      // `prefsLoader` resolves this register's runner per turn, re-pinning
-      // just this subsystem (`runner.<subsystem>`) invalidates the session
-      // exactly like flipping the default agent always has: the session id
-      // is the OTHER backend's and would be meaningless to resume against.
-      const resumeId =
-        input.prevAdapterKind === prefs.kind ? input.prevAdapterSessionId : undefined;
-      const resumeUsage =
-        resumeId && input.prevAdapterKind === prefs.kind
-          ? input.prevAdapterUsageSnapshot
-          : undefined;
-
       const toolContext: ToolContext = {
         appId: input.appId,
         dispatcher: opts.getDispatcher(),
         turnId: randomUUID(),
-        ...(opts.cwdIsDraftWorktree ? { overrideCodeDir: cwd } : {}),
+        ...(typeof opts.cwdIsDraftWorktree === 'function'
+          ? opts.cwdIsDraftWorktree(input, cwd)
+            ? { overrideCodeDir: cwd }
+            : {}
+          : opts.cwdIsDraftWorktree
+            ? { overrideCodeDir: cwd }
+            : {}),
         ...(opts.vaultSql ? { vaultSql: opts.vaultSql() } : {}),
         ...(opts.vaultInvoke ? { vaultInvoke: opts.vaultInvoke() } : {}),
         ...(opts.vaultContent ? { vaultContent: opts.vaultContent() } : {}),
       };
+      const configuredLadder = opts.runnerLadder
+        ? await opts.runnerLadder(opts.subsystem, primaryPrefs.kind)
+        : [primaryPrefs.kind];
+      const ladder: RunnerKind[] = [];
+      for (const kind of [primaryPrefs.kind, ...configuredLadder]) {
+        if (!ladder.includes(kind)) ladder.push(kind);
+      }
+      const healthContext = opts.runnerHealthContext?.(input, cwd) ?? cwd;
+      let lastError: Extract<TurnStreamEvent, { type: 'error' }> | undefined;
+      let lastResult: TurnResult | undefined;
+      let completedCtx: TurnContext | undefined;
+      const activeAdapterKind = input.activeAdapterKind ?? input.prevAdapterKind;
 
-      const turnInput: TurnInput = {
-        cwd,
-        message: input.message,
-        ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-        extraSystemPrompt,
-        toolContext,
-        abortSignal: input.abortSignal,
-        onEvent: input.onEvent,
-        ...(opts.extraPath ? { extraPath: opts.extraPath } : {}),
-        ...(input.model ? { model: input.model } : {}),
-        ...(input.permissionPolicy ? { permissionPolicy: input.permissionPolicy } : {}),
-        ...(resumeId ? { prevSessionId: resumeId } : {}),
-        ...(resumeUsage ? { prevUsageSnapshot: resumeUsage } : {}),
-      };
+      for (let rung = 0; rung < ladder.length; rung += 1) {
+        const kind = ladder[rung]!;
+        const consentSource = rung === 0 ? 'direct' : 'ladder';
+        if (
+          opts.providerEgressConsent &&
+          !opts.providerEgressConsent.has(input.conversationId, kind, opts.subsystem)
+        ) {
+          if (
+            consentSource === 'ladder' ||
+            activeAdapterKind === undefined ||
+            activeAdapterKind === kind ||
+            input.providerConsent === kind
+          ) {
+            // Initial use is implicit in choosing the surface. A ladder rung
+            // is authorized by its explicit Settings membership (D13).
+            // Only an attended cross-provider switch needs the one-time gate.
+            opts.providerEgressConsent.grant(
+              input.conversationId,
+              kind,
+              consentSource,
+              opts.subsystem,
+            );
+          }
+        }
+        if (
+          opts.providerEgressConsent &&
+          !opts.providerEgressConsent.has(input.conversationId, kind, opts.subsystem)
+        ) {
+          input.onEvent({
+            type: 'consent.required',
+            consentKind: 'provider-egress',
+            provider: kind,
+            reason: consentSource,
+            message:
+              consentSource === 'ladder'
+                ? `${kind} is the next failover provider. Allow this conversation to be sent to it?`
+                : `Allow this conversation to be sent to ${kind}?`,
+          });
+          return { adapterKind: primaryPrefs.kind };
+        }
+        const breaker = opts.runnerHealth?.canAttempt(healthContext, kind);
+        if (breaker && !breaker.allowed) {
+          input.onEvent({
+            type: 'notice',
+            level: 'warn',
+            code: 'runner_breaker_open',
+            message:
+              `${kind} is temporarily paused for this workspace after a ` +
+              `${breaker.failureClass ?? 'runner'} failure; trying the next configured agent.`,
+          });
+          continue;
+        }
+        if (rung > 0) {
+          input.onEvent({
+            type: 'notice',
+            level: 'warn',
+            code: 'runner_failover',
+            message:
+              `${ladder[0]} is unavailable at the turn boundary. Using ${kind}; ` +
+              'provider-specific model and effort pins were cleared.',
+          });
+          opts.onFailover?.({
+            conversationId: input.conversationId,
+            ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
+            from: ladder[0]!,
+            to: kind,
+          });
+        }
 
-      const result = await runTurn(turnInput, { prefs });
+        const loaded =
+          kind === primaryPrefs.kind
+            ? primaryPrefs
+            : ((await opts.prefsLoader(opts.subsystem, kind)) ?? { kind });
+        const prefs: RunnerPrefs = loaded.kind === kind ? loaded : { kind };
+        const turnCtx: TurnContext = { input, prefs, cwd };
+        const extraSystemPrompt = opts.buildExtraSystemPrompt
+          ? await opts.buildExtraSystemPrompt(turnCtx)
+          : input.extraSystemPrompt;
 
-      if (opts.onTurnComplete) {
+        // Resume only against the backend that minted the opaque session id.
+        const resumeId =
+          input.prevAdapterKind === prefs.kind ? input.prevAdapterSessionId : undefined;
+        const resumeUsage =
+          resumeId && input.prevAdapterKind === prefs.kind
+            ? input.prevAdapterUsageSnapshot
+            : undefined;
+        // The ledger may carry a delta even when this runner resumes its own
+        // ACP session (A → B → A). A supplied hydration plan is therefore an
+        // explicit instruction, not merely a runner-kind mismatch heuristic.
+        const forceHydration = input.hydrationContext !== undefined;
+
+        // Explicit model/config pins belong to the selected provider. A
+        // failover rung gets only its own persisted defaults; carrying a Codex
+        // model or thought level into Claude is both meaningless and unsafe.
+        const configPins: Record<string, string> = {
+          ...prefs.configPins,
+          ...(rung === 0 ? input.configPins : {}),
+          ...(rung === 0 && input.model ? { model: input.model } : {}),
+          ...(rung === 0 && input.thinking ? { thought_level: input.thinking } : {}),
+        };
+        let failure: Extract<TurnStreamEvent, { type: 'error' }> | undefined;
+        const onEvent = (event: TurnStreamEvent): void => {
+          if (event.type === 'error') {
+            failure = event;
+            return;
+          }
+          input.onEvent(event);
+        };
+        const turnInput: TurnInput = {
+          conversationId: input.conversationId,
+          cwd,
+          message: input.message,
+          ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+          extraSystemPrompt,
+          toolContext,
+          abortSignal: input.abortSignal,
+          onEvent,
+          ...(opts.extraPath ? { extraPath: opts.extraPath } : {}),
+          ...(rung === 0 && input.model ? { model: input.model } : {}),
+          ...(Object.keys(configPins).length > 0 ? { configPins } : {}),
+          ...(input.permissionPolicy ? { permissionPolicy: input.permissionPolicy } : {}),
+          ...(input.additionalDirectories?.length
+            ? { additionalDirectories: input.additionalDirectories }
+            : {}),
+          ...(resumeId ? { prevSessionId: resumeId } : {}),
+          ...(resumeUsage ? { prevUsageSnapshot: resumeUsage } : {}),
+          ...(input.hydrationContext
+            ? {
+                hydrationContext: input.hydrationContext.prompt,
+                ...(forceHydration ? { forceHydration: true } : {}),
+              }
+            : {}),
+          ...(input.hydrationAttachments?.length
+            ? { hydrationAttachments: input.hydrationAttachments }
+            : {}),
+          ...(input.recoveryHydrationContext
+            ? { recoveryHydrationContext: input.recoveryHydrationContext.prompt }
+            : {}),
+          ...(input.recoveryHydrationAttachments?.length
+            ? { recoveryHydrationAttachments: input.recoveryHydrationAttachments }
+            : {}),
+        };
+
         try {
-          await opts.onTurnComplete(turnCtx);
+          lastResult = await runTurn(turnInput, { prefs });
+        } catch (error) {
+          failure = {
+            type: 'error',
+            message: error instanceof Error ? error.message : String(error),
+            failureClass: 'unknown',
+          };
+        }
+
+        if (!failure) {
+          opts.runnerHealth?.reportOk(healthContext, kind);
+          completedCtx = turnCtx;
+          break;
+        }
+
+        const failureClass: AgentFailureClass = failure.failureClass ?? 'unknown';
+        opts.runnerHealth?.reportFailure(healthContext, kind, failureClass, failure.message);
+        lastError = failure;
+        // A failed turn is never silently replayed through another stateful
+        // session. The breaker affects the next turn boundary, where the next
+        // ladder rung is selected before any prompt is sent.
+        input.onEvent(failure);
+        break;
+      }
+
+      if (!completedCtx && !lastResult) {
+        const unavailable: Extract<TurnStreamEvent, { type: 'error' }> = lastError ?? {
+          type: 'error',
+          message: 'Every configured agent is temporarily unavailable for this workspace.',
+          failureClass: 'unknown',
+        };
+        if (!lastError) input.onEvent(unavailable);
+        return { adapterKind: primaryPrefs.kind };
+      }
+
+      if (completedCtx && opts.onTurnComplete) {
+        try {
+          await opts.onTurnComplete(completedCtx);
         } catch {
           /* post-turn hook is best-effort — never fails the turn */
         }
       }
 
+      const result = lastResult ?? { adapterKind: completedCtx?.prefs.kind ?? primaryPrefs.kind };
+      const hydrationTokens = result.hydrated
+        ? result.hydrationKind === 'recovery'
+          ? input.recoveryHydrationContext?.estimatedTokens
+          : input.hydrationContext?.estimatedTokens
+        : undefined;
       return {
         adapterKind: result.adapterKind,
         ...(result.sessionId ? { adapterSessionId: result.sessionId } : {}),
         ...(result.usageSnapshot ? { adapterUsageSnapshot: result.usageSnapshot } : {}),
+        ...(result.hydrated ? { hydrated: true } : {}),
+        ...(hydrationTokens !== undefined ? { hydrationTokens } : {}),
       };
     },
   };

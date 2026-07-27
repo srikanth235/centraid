@@ -18,15 +18,21 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { promises as fs } from 'node:fs';
 import {
   ASSISTANT_APP_ID,
   driveTurnOverSse,
   isValidConversationId,
+  isRunnerKind,
+  parseAdditionalDirectories,
+  parseWorkspaceKind,
   parseTurnAttachmentRefs,
   resolveTurnAttachments,
+  validateTurnAttachmentRefs,
   type ConversationHistoryStore,
   type ConversationRunner,
   type ModelSubsystem,
+  type RunnerKind,
   type TurnAttachmentRef,
   type TurnLimiter,
 } from '@centraid/app-engine';
@@ -51,7 +57,11 @@ export interface AssistantRouteOptions {
    * `model.<runnerKind>.default` prefs → nothing. Optional so hermetic
    * tests can omit it (falls through to the raw body value).
    */
-  resolveModel?: (subsystem: ModelSubsystem, explicit?: string) => Promise<string | undefined>;
+  resolveModel?: (
+    subsystem: ModelSubsystem,
+    explicit?: string,
+    requestedRunner?: RunnerKind,
+  ) => Promise<string | undefined>;
   /**
    * Fire-and-forget LLM auto-title hook (issue #420). Wired by the gateway to a
    * cheap-tier one-shot inference; the driver fires it once, after the first
@@ -123,7 +133,11 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
         // Attachments uploaded ahead of the turn (issue #190), mirroring the
         // per-app `_turn` route exactly: the bytes already live in the
         // `_assistant` blob CAS (`POST /_centraid-conversations/apps/_assistant/blobs`).
-        const attachmentRefs: TurnAttachmentRef[] = parseTurnAttachmentRefs(body.attachments);
+        const attachmentRefs: TurnAttachmentRef[] = validateTurnAttachmentRefs(
+          opts.conversationStore,
+          ASSISTANT_APP_ID,
+          parseTurnAttachmentRefs(body.attachments),
+        );
         const turnAttachments = resolveTurnAttachments(
           opts.conversationStore,
           ASSISTANT_APP_ID,
@@ -131,13 +145,69 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
         );
 
         const explicitModel = typeof body.model === 'string' ? body.model : undefined;
+        const runnerKind = isRunnerKind(body.runnerKind) ? body.runnerKind : undefined;
+        if (body.runnerKind !== undefined && !runnerKind) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'runnerKind must name a registered runner.',
+          });
+        }
+        const providerConsent = isRunnerKind(body.providerConsent)
+          ? body.providerConsent
+          : undefined;
+        if (body.providerConsent !== undefined && !providerConsent) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'providerConsent must name a registered runner.',
+          });
+        }
+        const requestedWorkspaceKind = parseWorkspaceKind(body.workspaceKind);
+        if (body.workspaceKind !== undefined && !requestedWorkspaceKind) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'workspaceKind must be one of vault-data, app, or draft.',
+          });
+        }
+        const savedWorkspace = opts.conversationStore.getWorkspaceSelection(
+          ASSISTANT_APP_ID,
+          conversationId,
+        );
+        const workspaceKind = requestedWorkspaceKind ?? savedWorkspace?.primaryKind ?? 'vault-data';
+        if (workspaceKind !== 'vault-data') {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: `The ${workspaceKind} workspace is unavailable in the vault assistant.`,
+          });
+        }
+        const workspaceDirectory = await fs.realpath(plane.dir);
+        let additionalDirectories = savedWorkspace?.additionalDirectories ?? [];
+        if (body.additionalDirectories !== undefined) {
+          try {
+            additionalDirectories = await parseAdditionalDirectories(body.additionalDirectories);
+          } catch (err) {
+            return sendJson(res, 400, {
+              error: 'bad_request',
+              message: err instanceof Error ? err.message : 'Invalid additional directory.',
+            });
+          }
+        }
+        additionalDirectories = additionalDirectories.filter(
+          (directory) => directory !== workspaceDirectory,
+        );
+        opts.conversationStore.setWorkspaceSelection(
+          ASSISTANT_APP_ID,
+          conversationId,
+          workspaceKind,
+          additionalDirectories,
+        );
         const model = opts.resolveModel
-          ? await opts.resolveModel('assistant', explicitModel)
+          ? await opts.resolveModel('assistant', explicitModel, runnerKind)
           : explicitModel;
 
         const resume = opts.conversationStore.getAdapterResumeState(
           ASSISTANT_APP_ID,
           conversationId,
+          runnerKind,
         );
         await driveTurnOverSse({
           req,
@@ -147,6 +217,8 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           message,
           idempotencyKey: typeof body.idempotencyKey === 'string' ? body.idempotencyKey : undefined,
           dataDir: assistantCwd(opts.vaults),
+          workspaceKind,
+          workspaceDirectory,
           extraSystemPrompt,
           runner: opts.runner,
           ...(opts.limiter ? { limiter: opts.limiter() } : {}),
@@ -155,7 +227,10 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           conversationLocks: opts.conversationLocks,
           banner: `assistant vault ${plane.boot.vaultId} session ${conversationId}`,
           model,
+          ...(runnerKind ? { runnerKind } : {}),
           thinking: typeof body.thinking === 'string' ? body.thinking : undefined,
+          ...(providerConsent ? { providerConsent } : {}),
+          ...(additionalDirectories.length ? { additionalDirectories } : {}),
           ...(typeof body.retryOf === 'string' && body.retryOf ? { retryOf: body.retryOf } : {}),
           prevAdapterSessionId: resume?.sessionId,
           prevAdapterKind: resume?.kind,

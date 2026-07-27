@@ -3,10 +3,19 @@
  * Pure attachment parsing / lock serialization — no live HTTP or runner.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { tempDir } from '@centraid/test-kit/temp-dir';
+import { ConversationHistoryStore } from '../conversation/history.js';
+import type { ConversationRunner, ConversationTurnInput } from '../conversation/runner.js';
+import { makeJournalDbProvider } from '../stores/gateway-db.js';
 import {
+  driveTurnOverSse,
   parseTurnAttachmentRefs,
   resolveTurnAttachments,
+  validateTurnAttachmentRefs,
   withConversationLock,
 } from './turn-sse.js';
 
@@ -41,17 +50,24 @@ describe('resolveTurnAttachments', () => {
     expect(resolveTurnAttachments({ blobPathFor: () => '/never' } as never, 'app', [])).toEqual([]);
   });
 
-  it('maps each ref through conversationStore.blobPathFor', () => {
+  it('maps only real, size-matched CAS refs through conversationStore.blobPathFor', async () => {
+    const dir = await tempDir('centraid-turn-attachments-');
+    await fs.writeFile(path.join(dir, HASH), 'png');
+    await fs.writeFile(path.join(dir, 'cd'.repeat(32)), 'text');
     const store = {
-      blobPathFor: (appId: string, hash: string) => `/blobs/${appId}/${hash}`,
+      blobPathFor: (_appId: string, hash: string) => path.join(dir, hash),
     };
-    const out = resolveTurnAttachments(store as never, 'notes', [
-      { hash: HASH, mime: 'image/png', filename: 'p.png' },
-      { hash: 'cd'.repeat(32), mime: 'text/plain' },
-    ]);
+    const refs = [
+      { hash: HASH, mime: 'image/png', filename: 'p.png', sizeBytes: 3 },
+      { hash: 'cd'.repeat(32), mime: 'text/plain', sizeBytes: 4 },
+      { hash: 'ef'.repeat(32), mime: 'text/plain', sizeBytes: 1 },
+      { hash: HASH, mime: 'image/png', filename: 'wrong.png', sizeBytes: 99 },
+    ];
+    expect(validateTurnAttachmentRefs(store as never, 'notes', refs)).toEqual(refs.slice(0, 2));
+    const out = resolveTurnAttachments(store as never, 'notes', refs);
     expect(out).toEqual([
-      { path: `/blobs/notes/${HASH}`, mime: 'image/png', filename: 'p.png' },
-      { path: `/blobs/notes/${'cd'.repeat(32)}`, mime: 'text/plain' },
+      { path: path.join(dir, HASH), mime: 'image/png', filename: 'p.png' },
+      { path: path.join(dir, 'cd'.repeat(32)), mime: 'text/plain' },
     ]);
   });
 });
@@ -106,5 +122,93 @@ describe('withConversationLock', () => {
     expect(started.sort()).toEqual(['a', 'b']);
     releaseA();
     await expect(Promise.all([a, b])).resolves.toEqual([1, 2]);
+  });
+});
+
+describe('driveTurnOverSse recovery hydration', () => {
+  it('includes the sequence-zero turn when an existing runner handle self-heals', async () => {
+    const dir = await tempDir('centraid-turn-recovery-');
+    const appsDir = path.join(dir, 'apps');
+    const appDir = path.join(appsDir, 'notes');
+    const journalDbFile = path.join(dir, 'journal.db');
+    const runnerSessionDir = path.join(dir, 'runner-sessions');
+    await fs.mkdir(appDir, { recursive: true });
+    const journal = makeJournalDbProvider(journalDbFile);
+    const history = new ConversationHistoryStore(() => ({
+      vaultId: 'vault-test',
+      ownerPartyId: 'owner',
+      appsDir,
+      journal,
+      journalDbFile,
+      runnerSessionDir,
+    }));
+    const conversation = history.createSession('notes');
+    history.recordTurn('notes', {
+      conversationId: conversation.id,
+      userMessage: 'sequence-zero question',
+      startedAt: 1,
+      endedAt: 2,
+      ok: true,
+      finalText: 'sequence-zero answer',
+      nodes: [
+        {
+          kind: 'step',
+          text: 'sequence-zero answer',
+          startedAt: 1,
+          endedAt: 2,
+        },
+      ],
+      adapter: { kind: 'codex', sessionId: 'codex-session' },
+    });
+
+    let captured: ConversationTurnInput | undefined;
+    const runner: ConversationRunner = {
+      async run(input) {
+        captured = input;
+        input.onEvent({ type: 'final', text: 'next answer' });
+        return { adapterKind: 'codex', adapterSessionId: 'codex-session' };
+      },
+    };
+    const requestListeners = new Map<string, (...args: unknown[]) => void>();
+    const req = {
+      on(event: string, listener: (...args: unknown[]) => void) {
+        requestListeners.set(event, listener);
+        return this;
+      },
+      off(event: string, listener: (...args: unknown[]) => void) {
+        if (requestListeners.get(event) === listener) requestListeners.delete(event);
+        return this;
+      },
+    } as unknown as IncomingMessage;
+    const res = {
+      writableEnded: false,
+      writeHead: vi.fn(),
+      write: vi.fn(() => true),
+      end(this: { writableEnded: boolean }) {
+        this.writableEnded = true;
+        return this;
+      },
+    } as unknown as ServerResponse;
+
+    await driveTurnOverSse({
+      req,
+      res,
+      appId: 'notes',
+      conversationId: conversation.id,
+      message: 'next question',
+      dataDir: appDir,
+      extraSystemPrompt: 'app context',
+      runner,
+      runnerKind: 'codex',
+      conversationStore: history,
+      conversationRunnerSessionDir: runnerSessionDir,
+      conversationLocks: new Map(),
+      banner: 'test',
+    });
+
+    expect(captured?.hydrationContext).toBeUndefined();
+    expect(captured?.recoveryHydrationContext).toMatchObject({ includedTurns: 1 });
+    expect(captured?.recoveryHydrationContext?.prompt).toContain('sequence-zero question');
+    expect(captured?.recoveryHydrationContext?.prompt).toContain('sequence-zero answer');
   });
 });

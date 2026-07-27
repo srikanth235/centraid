@@ -247,6 +247,23 @@ describe('automation turn live projection', () => {
       }),
     ]);
   });
+
+  it('replays a durable runner notice as a notice instead of an answer', () => {
+    const state = createAutomationLiveTraceFromItems('Run the brief.', [
+      item(1, 'step', {
+        name: 'notice:warn:attachment-unsupported',
+        outputJson: '{"text":"This runner cannot read PDF attachments."}',
+      }),
+    ]);
+    expect(automationLiveMessages(state)).toEqual([
+      expect.objectContaining({ kind: 'user', text: 'Run the brief.' }),
+      expect.objectContaining({
+        kind: 'notice',
+        level: 'warn',
+        text: 'This runner cannot read PDF attachments.',
+      }),
+    ]);
+  });
 });
 
 describe('compile-turn inbound bubble (#541)', () => {

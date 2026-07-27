@@ -194,6 +194,7 @@ export function buildOverviewData(
       const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       return {
         attentionCount: attentionByRef?.get(r.ref) ?? 0,
+        recentFailover: last?.run.turnId.includes(':failover:') ?? false,
         glyphIcon: glyphForId(r.id),
         hue: hueForId(r.id),
         id: r.id,

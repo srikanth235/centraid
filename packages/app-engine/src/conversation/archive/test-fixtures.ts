@@ -74,10 +74,12 @@ export interface SeedTurnArgs {
   retryOf?: string | null;
   inputTokens?: number;
   outputTokens?: number;
+  hydrationTokens?: number;
   costUsd?: number;
   stepCount?: number;
   toolCount?: number;
   model?: string;
+  effort?: string;
 }
 
 export function seedTurn(journal: DatabaseSync, a: SeedTurnArgs): void {
@@ -85,8 +87,8 @@ export function seedTurn(journal: DatabaseSync, a: SeedTurnArgs): void {
   journal
     .prepare(
       `INSERT INTO turns (id, conversation_id, seq, trigger, retry_of, ok, pinned, started_at, ended_at,
-         total_input_tokens, total_output_tokens, total_cost_usd, step_count, tool_count)
-       VALUES (?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         total_input_tokens, total_output_tokens, hydration_tokens, total_cost_usd, step_count, tool_count)
+       VALUES (?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       a.turnId,
@@ -99,6 +101,7 @@ export function seedTurn(journal: DatabaseSync, a: SeedTurnArgs): void {
       ended,
       a.inputTokens ?? 0,
       a.outputTokens ?? 0,
+      a.hydrationTokens ?? null,
       a.costUsd ?? 0,
       a.stepCount ?? 0,
       a.toolCount ?? 0,
@@ -112,13 +115,14 @@ export function seedTurn(journal: DatabaseSync, a: SeedTurnArgs): void {
   if (a.model !== undefined) {
     journal
       .prepare(
-        `INSERT INTO items (id, turn_id, ordinal, kind, model, input_tokens, output_tokens, cost_usd, ok, started_at)
-         VALUES (?, ?, 1, 'step', ?, ?, ?, ?, 1, ?)`,
+        `INSERT INTO items (id, turn_id, ordinal, kind, model, effort, input_tokens, output_tokens, cost_usd, ok, started_at)
+         VALUES (?, ?, 1, 'step', ?, ?, ?, ?, ?, 1, ?)`,
       )
       .run(
         `${a.turnId}-step`,
         a.turnId,
         a.model,
+        a.effort ?? null,
         a.inputTokens ?? 0,
         a.outputTokens ?? 0,
         a.costUsd ?? 0,

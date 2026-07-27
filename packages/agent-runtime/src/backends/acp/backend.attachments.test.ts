@@ -87,3 +87,44 @@ test('a PDF rides an embedded resource when the agent takes embedded context', a
   });
   expect(notices(events)).not.toContain('attachment_unsupported');
 });
+
+test('a switch re-attaches a prior image only when target B advertises image input', async () => {
+  const dir = await tempDir('acp-hydration-att-');
+  const png = path.join(dir, 'prior.png');
+  await fs.writeFile(png, Buffer.from('PRIOR-IMAGE'));
+
+  const capableMarker = path.join(dir, 'capable-prompt');
+  const capable = await promptBlocksFor({
+    extraArgs: ['--mode=normal', '--prompt-caps=image', `--prompt-marker=${capableMarker}`],
+    hydrationContext:
+      '[Centraid session handoff]\nUser: inspect this\nAttachments: prior.png (image/png)',
+    hydrationAttachments: [{ path: png, mime: 'image/png', filename: 'prior.png' }],
+    forceHydration: true,
+    promptMarker: capableMarker,
+  });
+  expect(capable.blocks).toContainEqual({
+    type: 'image',
+    data: Buffer.from('PRIOR-IMAGE').toString('base64'),
+    mimeType: 'image/png',
+  });
+
+  const textOnlyMarker = path.join(dir, 'text-only-prompt');
+  const textOnly = await promptBlocksFor({
+    extraArgs: ['--mode=normal', `--prompt-marker=${textOnlyMarker}`],
+    hydrationContext:
+      '[Centraid session handoff]\nUser: inspect this\nAttachments: prior.png (image/png)',
+    hydrationAttachments: [{ path: png, mime: 'image/png', filename: 'prior.png' }],
+    forceHydration: true,
+    promptMarker: textOnlyMarker,
+  });
+  expect(textOnly.blocks.some((block) => block.type === 'image')).toBe(false);
+  expect(textOnly.blocks.map((block) => block.text).join('\n')).toContain(
+    'Attachments: prior.png (image/png)',
+  );
+  expect(textOnly.events).toContainEqual(
+    expect.objectContaining({
+      type: 'notice',
+      code: 'hydration_attachment_described',
+    }),
+  );
+});

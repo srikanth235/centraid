@@ -809,7 +809,7 @@ export function automationTurnRecord(over: {
 }): Record<string, unknown> {
   return {
     turnId: over.turnId,
-    conversationId: `${over.automationId}::runner:codex`,
+    conversationId: over.automationId,
     seq: 0,
     automationId: over.automationId,
     triggerKind: over.triggerKind ?? 'manual',

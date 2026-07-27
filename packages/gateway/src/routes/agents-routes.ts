@@ -35,7 +35,12 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { RUNNER_BACKENDS, minVersionString, probeCliAvailability } from '@centraid/agent-runtime';
-import type { RunnerKind, RunnerModel, SurfaceStatus } from '@centraid/app-engine';
+import type {
+  RunnerHealthEntry,
+  RunnerKind,
+  RunnerModel,
+  SurfaceStatus,
+} from '@centraid/app-engine';
 import { sendJson } from './route-helpers.js';
 
 /**
@@ -78,6 +83,8 @@ export type ResolveAgentCapabilities = (
   refresh: boolean,
 ) => Promise<AgentAcpCapabilities | undefined>;
 
+export type ResolveAgentHealth = (kind: RunnerKind) => RunnerHealthEntry[];
+
 /**
  * ACP capability strip from a real `initialize` probe (optional; filled when
  * the host probes available agents — typically on `?refresh=1`).
@@ -91,8 +98,21 @@ export interface AgentAcpCapabilities {
   mcpHttp: boolean;
   mcpSse: boolean;
   modelConfigurable: boolean;
+  configOptions?: Array<{
+    id: string;
+    category: string;
+    type: string;
+    values: Array<{ value: string; name?: string }>;
+    currentValue?: string;
+  }>;
+  usageUpdateObserved?: boolean;
+  configOptionUpdateObserved?: boolean;
+  locationsObserved?: boolean;
   authRequired: boolean;
   promptImage: boolean;
+  promptAudio?: boolean;
+  promptEmbeddedContext?: boolean;
+  probedAt?: number;
   /** Human reason when the probe could not reach the agent. */
   reason?: string;
 }
@@ -127,6 +147,8 @@ export interface AgentStatusEntry {
    * Absent until the host has probed this kind at least once.
    */
   capabilities?: AgentAcpCapabilities;
+  /** Persisted, real-turn breaker state for this runner. */
+  health?: RunnerHealthEntry[];
 }
 
 export interface AgentsStatus {
@@ -148,6 +170,7 @@ export async function readAgentsStatus(opts?: {
   resolveModels?: ResolveAgentModels;
   resolveCapabilities?: ResolveAgentCapabilities;
   binPathFor?: BinPathForKind;
+  resolveHealth?: ResolveAgentHealth;
   refresh?: boolean;
 }): Promise<AgentsStatus> {
   const resolveModels = opts?.resolveModels;
@@ -170,6 +193,7 @@ export async function readAgentsStatus(opts?: {
         availability.available && resolveCapabilities
           ? await resolveCapabilities(backend.kind, refresh).catch(() => undefined)
           : undefined;
+      const health = opts?.resolveHealth?.(backend.kind) ?? [];
       return {
         kind: backend.kind,
         label: backend.label,
@@ -183,6 +207,7 @@ export async function readAgentsStatus(opts?: {
         modelsStatus: models.status,
         ...(defaultModel ? { defaultModel } : {}),
         ...(capabilities ? { capabilities } : {}),
+        ...(health.length > 0 ? { health } : {}),
       };
     }),
   );
@@ -201,6 +226,7 @@ export function makeAgentsRouteHandler(opts?: {
   resolveModels?: ResolveAgentModels;
   resolveCapabilities?: ResolveAgentCapabilities;
   binPathFor?: BinPathForKind;
+  resolveHealth?: ResolveAgentHealth;
 }): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   return async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -215,6 +241,7 @@ export function makeAgentsRouteHandler(opts?: {
         ...(opts?.resolveModels ? { resolveModels: opts.resolveModels } : {}),
         ...(opts?.resolveCapabilities ? { resolveCapabilities: opts.resolveCapabilities } : {}),
         ...(opts?.binPathFor ? { binPathFor: opts.binPathFor } : {}),
+        ...(opts?.resolveHealth ? { resolveHealth: opts.resolveHealth } : {}),
         refresh,
       }),
     );

@@ -44,6 +44,7 @@ function fakeRegistry(): VaultRegistry {
   };
   const plane = {
     name: 'Family',
+    dir,
     boot: { vaultId: 'v-test' },
     assistantContext: () => 'SCHEMA-DOC-MARKER',
     resolveAsOwner: (refs: { type: string; id: string }[]) => ({

@@ -7,8 +7,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   PrefsStore,
   makeUserStoreRouteHandler,
+  resolveSubsystemConfigPins,
   resolveSubsystemModel,
   resolveSubsystemRunner,
+  resolveSubsystemRunnerLadder,
 } from './prefs-store.js';
 
 function freshFile(): string {
@@ -142,6 +144,37 @@ describe('resolveSubsystemModel', () => {
   });
 });
 
+describe('resolveSubsystemConfigPins', () => {
+  const prefs = {
+    'config.claude-code.default.thought_level': 'medium',
+    'config.claude-code.assistant.thought_level': 'high',
+    'config.claude-code.default.mode': 'plan',
+    'config.codex.assistant.thought_level': 'low',
+  };
+
+  it('uses explicit category pins before subsystem and runner defaults', () => {
+    expect(
+      resolveSubsystemConfigPins(prefs, 'claude-code', 'assistant', {
+        thought_level: 'max',
+      }),
+    ).toEqual({ thought_level: 'max', mode: 'plan' });
+  });
+
+  it('keeps categories scoped to the selected runner and subsystem', () => {
+    expect(resolveSubsystemConfigPins(prefs, 'claude-code', 'assistant')).toEqual({
+      thought_level: 'high',
+      mode: 'plan',
+    });
+    expect(resolveSubsystemConfigPins(prefs, 'claude-code', 'builder')).toEqual({
+      thought_level: 'medium',
+      mode: 'plan',
+    });
+    expect(resolveSubsystemConfigPins(prefs, 'codex', 'assistant')).toEqual({
+      thought_level: 'low',
+    });
+  });
+});
+
 describe('resolveSubsystemRunner', () => {
   it('prefers the per-subsystem pin over the default agent', () => {
     const prefs = { 'runner.assistant': 'claude-code', 'agent.runner.kind': 'codex' };
@@ -226,6 +259,30 @@ describe('resolveSubsystemRunner + resolveSubsystemModel compose', () => {
   });
 });
 
+describe('resolveSubsystemRunnerLadder', () => {
+  it('keeps the primary first and removes unknown and duplicate kinds', () => {
+    expect(
+      resolveSubsystemRunnerLadder(
+        {
+          'runner.ladder.assistant': ['claude-code', 'codex', 'bogus', 'claude-code'],
+        },
+        'assistant',
+        'codex',
+      ),
+    ).toEqual(['codex', 'claude-code']);
+  });
+
+  it('accepts the CLI-friendly JSON representation and default ladder', () => {
+    expect(
+      resolveSubsystemRunnerLadder(
+        { 'runner.ladder.default': '["gemini","claude-code"]' },
+        'builder',
+        'codex',
+      ),
+    ).toEqual(['codex', 'gemini', 'claude-code']);
+  });
+});
+
 describe('makeUserStoreRouteHandler', () => {
   const handlerFor = (ownerId?: () => string) => {
     const store = new PrefsStore(freshFile());
@@ -271,6 +328,37 @@ describe('makeUserStoreRouteHandler', () => {
     await handler(mockReq('PUT', '/_centraid-user/prefs', { patch: { theme: 'paper' } }), cap.res);
     expect(cap.out.statusCode).toBe(200);
     expect(cap.out.json).toEqual({ prefs: { theme: 'paper' } });
+  });
+
+  it('rejects a preflight-failed patch without changing prefs', async () => {
+    const store = new PrefsStore(freshFile());
+    store.setPrefs({ 'agent.runner.kind': 'codex' });
+    const handler = makeUserStoreRouteHandler(() => store, undefined, {
+      validatePatch: async () => 'agent is unavailable',
+    });
+    const { res, out } = mockRes();
+    await handler(
+      mockReq('PUT', '/_centraid-user/prefs', {
+        patch: { 'agent.runner.kind': 'claude-code' },
+      }),
+      res,
+    );
+    expect(out.statusCode).toBe(409);
+    expect(store.getAllPrefs()['agent.runner.kind']).toBe('codex');
+  });
+
+  it('runs post-commit hooks with before and after snapshots', async () => {
+    const store = new PrefsStore(freshFile());
+    store.setPrefs({ a: 1 });
+    let observed: unknown;
+    const handler = makeUserStoreRouteHandler(() => store, undefined, {
+      afterPatch: (patch, before, after) => {
+        observed = { patch, before, after };
+      },
+    });
+    const { res } = mockRes();
+    await handler(mockReq('PUT', '/_centraid-user/prefs', { patch: { a: 2 } }), res);
+    expect(observed).toEqual({ patch: { a: 2 }, before: { a: 1 }, after: { a: 2 } });
   });
 
   it('PUT /prefs 400s without a patch object', async () => {

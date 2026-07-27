@@ -12,14 +12,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
 import { lowPriorityCommand } from '../../low-priority.js';
-import {
-  ACP_PROTOCOL_VERSION,
-  AUTH_REQUIRED_CODE,
-  AcpRpcError,
-  createAcpConnection,
-} from './json-rpc.js';
+import { classifyAgentFailureDetail } from './agent-errors.js';
+import { ACP_PROTOCOL_VERSION, createAcpConnection } from './json-rpc.js';
 import { planLaunch } from './launch.js';
 import {
+  findConfigOption,
   hasSessionCapability,
   readConfigOptions,
   readOfferedModels,
@@ -27,6 +24,15 @@ import {
   type SessionSetupResult,
 } from './session-config.js';
 import type { AcpTurnConfig } from './types.js';
+
+/** Persistable, adapter-neutral view of one ACP session config option. */
+export interface AcpConfigOptionSnapshot {
+  id: string;
+  category: string;
+  type: string;
+  values: Array<{ value: string; name?: string }>;
+  currentValue?: string;
+}
 
 /** Wire-stable capability snapshot for one runner kind on this host. */
 export interface AcpAgentCapabilities {
@@ -41,12 +47,20 @@ export interface AcpAgentCapabilities {
   mcpAcp: boolean;
   /** Agent exposes a model config option we can pin. */
   modelConfigurable: boolean;
+  /** Full config option surface observed on session/new. */
+  configOptions: AcpConfigOptionSnapshot[];
+  /** Optional ACP signals observed during the bounded diagnostic prompt. */
+  usageUpdateObserved: boolean;
+  configOptionUpdateObserved: boolean;
+  locationsObserved: boolean;
   /** session/new failed with AUTH_REQUIRED. */
   authRequired: boolean;
   /** Prompt image capability. */
   promptImage: boolean;
   promptAudio: boolean;
   promptEmbeddedContext: boolean;
+  /** Epoch milliseconds when this evidence was collected. */
+  probedAt: number;
   /** Human reason when `reachable` is false. */
   reason?: string;
 }
@@ -61,12 +75,63 @@ const emptyCaps = (over: Partial<AcpAgentCapabilities> = {}): AcpAgentCapabiliti
   mcpSse: false,
   mcpAcp: false,
   modelConfigurable: false,
+  configOptions: [],
+  usageUpdateObserved: false,
+  configOptionUpdateObserved: false,
+  locationsObserved: false,
   authRequired: false,
   promptImage: false,
   promptAudio: false,
   promptEmbeddedContext: false,
+  probedAt: Date.now(),
   ...over,
 });
+
+function snapshotConfigOptions(
+  options: ReturnType<typeof readConfigOptions>,
+): AcpConfigOptionSnapshot[] {
+  return options.flatMap((option) => {
+    if (
+      typeof option.id !== 'string' ||
+      typeof option.category !== 'string' ||
+      typeof option.type !== 'string'
+    ) {
+      return [];
+    }
+    const offered =
+      option.category === 'model'
+        ? readOfferedModels(options).models
+        : (() => {
+            const selected = option.options;
+            if (!Array.isArray(selected)) return [];
+            const values: Array<{ value: string; name?: string }> = [];
+            const visit = (entries: unknown[]): void => {
+              for (const entry of entries) {
+                if (!entry || typeof entry !== 'object') continue;
+                const record = entry as Record<string, unknown>;
+                if (Array.isArray(record.options)) visit(record.options);
+                else if (typeof record.value === 'string') {
+                  values.push({
+                    value: record.value,
+                    ...(typeof record.name === 'string' ? { name: record.name } : {}),
+                  });
+                }
+              }
+            };
+            visit(selected);
+            return values;
+          })();
+    return [
+      {
+        id: option.id,
+        category: option.category,
+        type: option.type,
+        values: offered,
+        ...(typeof option.currentValue === 'string' ? { currentValue: option.currentValue } : {}),
+      },
+    ];
+  });
+}
 
 /**
  * Spawn → initialize → optional session/new → teardown. Bounded so a wedged
@@ -96,11 +161,27 @@ export async function probeAcpCapabilities(
     stdio: ['pipe', 'pipe', 'pipe'],
   }) as ChildProcessByStdio<Writable, Readable, Readable>;
 
+  let usageUpdateObserved = false;
+  let configOptionUpdateObserved = false;
+  let locationsObserved = false;
   const conn = createAcpConnection(child, {
     onServerRequest: (id, method) => {
       conn.respondMethodNotFound(id, method);
     },
-    onNotification: () => undefined,
+    onNotification: (method, params) => {
+      if (method !== 'session/update' || !params || typeof params !== 'object') return;
+      const update = (params as { update?: Record<string, unknown> }).update;
+      if (!update) return;
+      if (update.sessionUpdate === 'usage_update') usageUpdateObserved = true;
+      if (update.sessionUpdate === 'config_option_update') configOptionUpdateObserved = true;
+      if (
+        (update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update') &&
+        Array.isArray(update.locations) &&
+        update.locations.length > 0
+      ) {
+        locationsObserved = true;
+      }
+    },
   });
 
   const timer = setTimeout(() => {
@@ -144,11 +225,59 @@ export async function probeAcpCapabilities(
         cwd,
         mcpServers: [],
       });
-      const offered = readOfferedModels(readConfigOptions(created));
+      const configOptions = readConfigOptions(created);
+      const offered = readOfferedModels(configOptions);
       caps.modelConfigurable = offered.models.length > 0;
+      caps.configOptions = snapshotConfigOptions(configOptions);
+
+      // `config_option_update`, context usage and tool locations are optional
+      // runtime signals rather than initialize capabilities. An explicit
+      // Settings refresh runs this one bounded diagnostic prompt so the dump
+      // records observed truth instead of assuming every adapter implements
+      // the two first-party extensions.
+      const sessionId = typeof created.sessionId === 'string' ? created.sessionId : undefined;
+      if (sessionId) {
+        const model = findConfigOption(configOptions, 'model');
+        const current = offered.models.find((entry) => entry.value === offered.currentValue);
+        if (model && typeof model.id === 'string' && current) {
+          // Re-apply the observed value rather than selecting an arbitrary
+          // alternative. Some native agents persist config-option changes
+          // globally, so a diagnostics refresh must never move the owner's
+          // default model or choose a provider for which they have no key.
+          await conn
+            .request('session/set_config_option', {
+              sessionId,
+              configId: model.id,
+              value: current.value,
+            })
+            .catch(() => undefined);
+        }
+        await conn
+          .request('session/prompt', {
+            sessionId,
+            prompt: [
+              {
+                type: 'text',
+                text: 'Centraid capability probe: reply briefly and do not modify files.',
+              },
+            ],
+          })
+          .catch((error: unknown) => {
+            const classified = classifyAgentFailureDetail(error, conn.stderrTail(), config);
+            if (classified.failureClass === 'auth') {
+              caps.authRequired = true;
+              caps.reason = classified.message;
+            }
+          });
+      }
+      caps.usageUpdateObserved = usageUpdateObserved;
+      caps.configOptionUpdateObserved = configOptionUpdateObserved;
+      caps.locationsObserved = locationsObserved;
     } catch (err) {
-      if (err instanceof AcpRpcError && err.code === AUTH_REQUIRED_CODE) {
+      const classified = classifyAgentFailureDetail(err, conn.stderrTail(), config);
+      if (classified.failureClass === 'auth') {
         caps.authRequired = true;
+        caps.reason = classified.message;
       }
     }
 

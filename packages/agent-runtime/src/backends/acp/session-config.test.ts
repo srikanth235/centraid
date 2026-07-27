@@ -6,6 +6,7 @@ import {
   hasSessionCapability,
   modeAvailable,
   pinModel,
+  pinThoughtLevel,
   readConfigOptions,
   readOfferedModels,
   SET_CONFIG_OPTION,
@@ -157,7 +158,16 @@ test('pinModel matches by name / substring and skips RPC when already current', 
         configId: 'model',
         value: 'claude-sonnet-4',
       });
-      return undefined as T;
+      return {
+        configOptions: [
+          {
+            id: 'model',
+            category: 'model',
+            currentValue: 'claude-sonnet-4',
+            options: opts[0]!.options,
+          },
+        ],
+      } as T;
     },
     emit: (e) => events.push(e),
     sessionId: 's1',
@@ -213,4 +223,42 @@ test('pinModel exact value match wins over name', async () => {
     requested: 'exact-id',
   });
   expect(pinned).toBe('exact-id');
+});
+
+test('pinThoughtLevel records only a value the runner confirms', async () => {
+  const options = [
+    {
+      id: 'reasoning_effort',
+      category: 'thought_level',
+      currentValue: 'medium',
+      options: [{ value: 'medium' }, { value: 'high' }],
+    },
+  ];
+  const confirmed = await pinThoughtLevel({
+    request: async <T = unknown>(): Promise<T> =>
+      ({
+        configOptions: [
+          {
+            ...options[0],
+            currentValue: 'high',
+          },
+        ],
+      }) as T,
+    emit: () => undefined,
+    sessionId: 's1',
+    configOptions: options,
+    requested: 'high',
+  });
+  expect(confirmed).toBe('high');
+
+  const notices: Array<{ code?: string }> = [];
+  const unconfirmed = await pinThoughtLevel({
+    request: async <T = unknown>(): Promise<T> => ({}) as T,
+    emit: (event) => notices.push(event as { code?: string }),
+    sessionId: 's1',
+    configOptions: options,
+    requested: 'high',
+  });
+  expect(unconfirmed).toBeUndefined();
+  expect(notices.at(-1)?.code).toBe('thought_level_unconfirmed');
 });

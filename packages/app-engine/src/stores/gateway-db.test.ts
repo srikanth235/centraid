@@ -82,8 +82,13 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
       'automation_trigger_cursor',
       'conversation_archive',
       'conversation_digest',
+      'conversation_harness_sessions',
+      'conversation_provider_consent',
+      'conversation_turn_locks',
+      'conversation_workspace_selection',
       'conversations',
       'items',
+      'runner_health',
       'trigger_ingress',
       'turns',
     ]);
@@ -235,6 +240,34 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
       expect(Number(n.n)).toBe(1);
     } finally {
       again.close();
+    }
+  });
+
+  it('upgrades effort columns before recreating the run_summary view', () => {
+    const path = freshDbPath();
+    const legacy = openJournalDb(path);
+    legacy.exec('DROP VIEW run_summary');
+    legacy.exec('ALTER TABLE items DROP COLUMN effort');
+    legacy.exec('ALTER TABLE conversation_digest DROP COLUMN efforts_json');
+    legacy.close();
+
+    const upgraded = openJournalDb(path);
+    try {
+      const itemColumns = (
+        upgraded.prepare('PRAGMA table_info(items)').all() as Array<{ name: string }>
+      ).map((column) => column.name);
+      const digestColumns = (
+        upgraded.prepare('PRAGMA table_info(conversation_digest)').all() as Array<{ name: string }>
+      ).map((column) => column.name);
+      expect(itemColumns).toContain('effort');
+      expect(digestColumns).toContain('efforts_json');
+      expect(
+        upgraded
+          .prepare(`SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'run_summary'`)
+          .get(),
+      ).toBeDefined();
+    } finally {
+      upgraded.close();
     }
   });
 

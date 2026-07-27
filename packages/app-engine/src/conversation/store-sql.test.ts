@@ -89,6 +89,7 @@ function rawItem(over: Partial<RawItem> = {}): RawItem {
     child_turn_id: null,
     model: null,
     provider: null,
+    effort: null,
     input_tokens: null,
     output_tokens: null,
     cache_read_tokens: null,
@@ -125,6 +126,7 @@ describe('store-sql row mappers', () => {
       title: 'Hello',
       adapterKind: 'acp',
       adapterSessionId: 'sess',
+      hydrationCount: 0,
       turnCount: 2,
       pinned: true,
       archived: true,
@@ -169,6 +171,7 @@ describe('store-sql row mappers', () => {
         name: 'agent',
         model: 'gpt',
         provider: 'openai',
+        effort: 'high',
         input_tokens: 5,
         output_tokens: 7,
         cost_usd: 0.02,
@@ -178,6 +181,7 @@ describe('store-sql row mappers', () => {
     );
     expect(step.kind).toBe('step');
     expect(step.model).toBe('gpt');
+    expect(step.effort).toBe('high');
     expect(step.inputTokens).toBe(5);
     expect(step.costSource).toBe('agent');
     expect(step.childTurnId).toBe('child');
@@ -193,6 +197,7 @@ describe('store-sql row mappers', () => {
       size_bytes: 99,
       source: 'upload',
       filename: 'x.png',
+      workspace_path: null,
       created_at: 1,
     };
     expect(attachmentFromRaw(att)).toEqual({
@@ -244,8 +249,21 @@ describe('store-sql prepare()', () => {
     expect(conversationFromRaw(row!).title).toBe('T');
 
     // (id, conversation_id, seq, parent_turn_id, trigger, trigger_origin,
-    //  retry_of, idempotency_key, note, started_at) — ok is fixed to 0 in SQL.
-    stmts.insertTurn.run('t-sql', 'c-sql', 0, null, 'interactive', null, null, null, null, 100);
+    //  retry_of, idempotency_key, note, hydration_tokens, started_at) — ok is
+    //  fixed to 0 in SQL.
+    stmts.insertTurn.run(
+      't-sql',
+      'c-sql',
+      0,
+      null,
+      'interactive',
+      null,
+      null,
+      null,
+      null,
+      null,
+      100,
+    );
     const turn = stmts.getTurn.get('t-sql') as RawTurn | undefined;
     expect(turn?.conversation_id).toBe('c-sql');
     expect(turnFromRaw(turn!).triggerKind).toBe('interactive');

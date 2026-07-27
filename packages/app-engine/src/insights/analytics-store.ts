@@ -52,12 +52,14 @@ interface RawSummary {
   error: string | null;
   retry_of: string | null;
   model: string | null;
+  effort: string | null;
   started_at: number;
   ended_at: number | null;
   total_input_tokens: number | null;
   total_output_tokens: number | null;
   total_cache_read_tokens: number | null;
   total_cache_write_tokens: number | null;
+  hydration_tokens: number | null;
   total_cost_usd: number | null;
   step_count: number | null;
   tool_count: number | null;
@@ -79,6 +81,7 @@ function fromRaw(raw: RawSummary): RunSummary {
     ...(raw.error !== null ? { error: raw.error } : {}),
     ...(raw.retry_of !== null ? { retryOf: raw.retry_of } : {}),
     ...(raw.model !== null ? { model: raw.model } : {}),
+    ...(raw.effort !== null ? { effort: raw.effort } : {}),
     startedAt: raw.started_at,
     ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
     ...(raw.total_input_tokens !== null ? { totalInputTokens: raw.total_input_tokens } : {}),
@@ -89,6 +92,7 @@ function fromRaw(raw: RawSummary): RunSummary {
     ...(raw.total_cache_write_tokens !== null
       ? { totalCacheWriteTokens: raw.total_cache_write_tokens }
       : {}),
+    ...(raw.hydration_tokens !== null ? { hydrationTokens: raw.hydration_tokens } : {}),
     ...(raw.total_cost_usd !== null ? { totalCostUsd: raw.total_cost_usd } : {}),
     ...(raw.step_count !== null ? { stepCount: raw.step_count } : {}),
     ...(raw.tool_count !== null ? { toolCount: raw.tool_count } : {}),

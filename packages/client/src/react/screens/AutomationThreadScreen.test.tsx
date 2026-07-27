@@ -174,26 +174,23 @@ describe('AutomationThreadScreen', () => {
   it('steers the automation from the composer, framing one-off vs standing intent', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const input = el.querySelector<HTMLInputElement>(
-      'input[aria-label="Ask about this automation\'s runs"]',
+    const input = el.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Ask about this automation\'s runs"]',
     );
     const send = el.querySelector<HTMLButtonElement>('button[aria-label="Send"]');
     expect(input).not.toBeNull();
     expect(send).not.toBeNull();
     // Drive the controlled input through React's value tracker (native setter).
-    const nativeSet = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set as (
-      v: string,
-    ) => void;
+    const nativeSet = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+      ?.set as (v: string) => void;
     await act(async () => {
       nativeSet.call(input, 'only flag movers over 5%');
       input!.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    const form = input!.closest('form') as HTMLFormElement;
-    await act(async () =>
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-    );
+    await act(async () => send!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onAskAboutRuns).toHaveBeenCalledWith(
       'only flag movers over 5%',
+      expect.objectContaining({ onContext: expect.any(Function) }),
       expect.any(Function),
       expect.any(AbortSignal),
     );
@@ -202,7 +199,9 @@ describe('AutomationThreadScreen', () => {
   it('hides the composer for gateways without the automationTurns capability', async () => {
     const el = await mount(makeProps({}, makeData({ automationTurns: false })));
     expect(
-      el.querySelector<HTMLInputElement>('input[aria-label="Ask about this automation\'s runs"]'),
+      el.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="Ask about this automation\'s runs"]',
+      ),
     ).toBeNull();
   });
 

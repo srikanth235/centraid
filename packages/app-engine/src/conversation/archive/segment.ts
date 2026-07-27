@@ -23,6 +23,14 @@ interface ModelRollup {
   cost: number;
 }
 
+/** Per-effort rollup entry stored in `conversation_digest.efforts_json`. */
+interface EffortRollup {
+  effort: string;
+  runs: number;
+  tokens: number;
+  cost: number;
+}
+
 interface DigestDelta {
   runCount: number;
   okCount: number;
@@ -32,12 +40,14 @@ interface DigestDelta {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  hydrationTokens: number;
   costUsd: number;
   stepCount: number;
   toolCount: number;
   firstStartedAt: number | null;
   lastEndedAt: number | null;
   models: Map<string, ModelRollup>;
+  efforts: Map<string, EffortRollup>;
 }
 
 function num(v: unknown): number {
@@ -62,6 +72,20 @@ function dominantModelOf(journal: DatabaseSync, turnId: string): string | null {
   return row?.model ?? null;
 }
 
+/** The run's dominant confirmed thought_level, matching `run_summary.effort`. */
+function dominantEffortOf(journal: DatabaseSync, turnId: string): string | null {
+  const row = journal
+    .prepare(
+      `SELECT i.effort AS effort FROM items i
+        WHERE i.turn_id = ? AND i.effort IS NOT NULL AND i.kind IN ('step','agent')
+        GROUP BY i.effort
+        ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
+        LIMIT 1`,
+    )
+    .get(turnId) as { effort: string } | undefined;
+  return row?.effort ?? null;
+}
+
 /** Fold one eligible range into a digest delta (rollups over its finished turns). */
 function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta {
   const delta: DigestDelta = {
@@ -73,12 +97,14 @@ function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta 
     outputTokens: 0,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
+    hydrationTokens: 0,
     costUsd: 0,
     stepCount: 0,
     toolCount: 0,
     firstStartedAt: null,
     lastEndedAt: null,
     models: new Map(),
+    efforts: new Map(),
   };
   for (const t of range.turns) {
     delta.runCount += 1;
@@ -93,6 +119,7 @@ function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta 
     delta.outputTokens += output;
     delta.cacheReadTokens += cacheRead;
     delta.cacheWriteTokens += cacheWrite;
+    delta.hydrationTokens += num(t.hydration_tokens);
     delta.costUsd += num(t.total_cost_usd);
     delta.stepCount += num(t.step_count);
     delta.toolCount += num(t.tool_count);
@@ -111,6 +138,15 @@ function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta 
       roll.tokens += input + output + cacheRead + cacheWrite;
       roll.cost += num(t.total_cost_usd);
       delta.models.set(model, roll);
+    }
+    // No "default" bucket: only a runner-confirmed thought_level is durable.
+    const effort = dominantEffortOf(journal, t.id as string);
+    if (effort !== null) {
+      const roll = delta.efforts.get(effort) ?? { effort, runs: 0, tokens: 0, cost: 0 };
+      roll.runs += 1;
+      roll.tokens += input + output + cacheRead + cacheWrite;
+      roll.cost += num(t.total_cost_usd);
+      delta.efforts.set(effort, roll);
     }
   }
   return delta;
@@ -143,6 +179,23 @@ function mergeModels(existingJson: string, delta: Map<string, ModelRollup>): str
   return JSON.stringify([...merged.values()]);
 }
 
+function mergeEfforts(existingJson: string, delta: Map<string, EffortRollup>): string {
+  const merged = new Map<string, EffortRollup>();
+  try {
+    for (const e of JSON.parse(existingJson) as EffortRollup[]) merged.set(e.effort, { ...e });
+  } catch {
+    /* legacy/empty — start clean */
+  }
+  for (const [effort, roll] of delta) {
+    const cur = merged.get(effort) ?? { effort, runs: 0, tokens: 0, cost: 0 };
+    cur.runs += roll.runs;
+    cur.tokens += roll.tokens;
+    cur.cost += roll.cost;
+    merged.set(effort, cur);
+  }
+  return JSON.stringify([...merged.values()]);
+}
+
 /**
  * UPSERT the digest by ADDING the range's deltas (an eternal automation archives
  * many ranges over time — each fold accretes). first_started_at/last_ended_at
@@ -164,6 +217,8 @@ function upsertDigest(journal: DatabaseSync, conv: Row, delta: DigestDelta, nowM
 
   const prevModelsJson = (existing?.models_json as string | undefined) ?? '[]';
   const modelsJson = mergeModels(prevModelsJson, delta.models);
+  const prevEffortsJson = (existing?.efforts_json as string | undefined) ?? '[]';
+  const effortsJson = mergeEfforts(prevEffortsJson, delta.efforts);
 
   const firstStartedAt =
     existing && existing.first_started_at !== null
@@ -183,9 +238,9 @@ function upsertDigest(journal: DatabaseSync, conv: Row, delta: DigestDelta, nowM
          conversation_id, kind, app_id, automation_ref, automation_name, title,
          first_started_at, last_ended_at, run_count, ok_count, err_count, retry_count,
          total_input_tokens, total_output_tokens, total_cache_read_tokens,
-         total_cache_write_tokens, total_cost_usd, step_count, tool_count,
-         models_json, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         total_cache_write_tokens, total_hydration_tokens, total_cost_usd, step_count, tool_count,
+         models_json, efforts_json, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(conversation_id) DO UPDATE SET
          kind = excluded.kind,
          app_id = excluded.app_id,
@@ -202,10 +257,12 @@ function upsertDigest(journal: DatabaseSync, conv: Row, delta: DigestDelta, nowM
          total_output_tokens = total_output_tokens + excluded.total_output_tokens,
          total_cache_read_tokens = total_cache_read_tokens + excluded.total_cache_read_tokens,
          total_cache_write_tokens = total_cache_write_tokens + excluded.total_cache_write_tokens,
+         total_hydration_tokens = total_hydration_tokens + excluded.total_hydration_tokens,
          total_cost_usd = total_cost_usd + excluded.total_cost_usd,
          step_count = step_count + excluded.step_count,
          tool_count = tool_count + excluded.tool_count,
          models_json = ?,
+         efforts_json = ?,
          updated_at = excluded.updated_at`,
     )
     .run(
@@ -225,15 +282,18 @@ function upsertDigest(journal: DatabaseSync, conv: Row, delta: DigestDelta, nowM
       delta.outputTokens,
       delta.cacheReadTokens,
       delta.cacheWriteTokens,
+      delta.hydrationTokens,
       delta.costUsd,
       delta.stepCount,
       delta.toolCount,
       modelsJson,
+      effortsJson,
       nowMs,
       // ON CONFLICT bound params (first/last/models recomputed in JS):
       firstStartedAt,
       lastEndedAt,
       modelsJson,
+      effortsJson,
     );
 }
 
@@ -241,6 +301,7 @@ function upsertDigest(journal: DatabaseSync, conv: Row, delta: DigestDelta, nowM
 function distinctHashes(attachments: Row[]): string[] {
   const seen = new Set<string>();
   for (const a of attachments) {
+    if (typeof a.workspace_path === 'string' && a.workspace_path.length > 0) continue;
     const h = a.hash as string;
     if (!seen.has(h)) seen.add(h);
   }

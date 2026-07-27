@@ -1,0 +1,60 @@
+.strip,
+.leading,
+.telemetry,
+.context,
+.activity {
+  display: flex;
+  align-items: center;
+}
+.strip {
+  justify-content: space-between;
+  min-height: 28px;
+  gap: 10px;
+}
+.leading,
+.telemetry {
+  gap: 7px;
+  min-width: 0;
+}
+.telemetry {
+  justify-content: flex-end;
+  color: var(--ink-3);
+  font: var(--t-tiny);
+}
+.context {
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.contextTrack {
+  width: 42px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--r-sm);
+  background: color-mix(in oklab, var(--ink) 9%, transparent);
+}
+.contextFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 180ms ease;
+}
+.activity {
+  gap: 5px;
+}
+.activityDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.activity[data-busy='true'] .activityDot {
+  background: var(--c-amber);
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+@keyframes status-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}

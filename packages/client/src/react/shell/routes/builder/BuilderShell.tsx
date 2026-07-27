@@ -344,6 +344,10 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
               onCancel={() => vm.cancelTurn()}
               onToggleGroup={(id) => vm.toggleGroup(id)}
               onSetView={(v) => vm.setChatView(v)}
+              onSetWorkspaceKind={(kind) => vm.setChatWorkspaceKind(kind)}
+              onSetRunner={(kind) => vm.setChatRunner(kind)}
+              onSetModel={(model) => vm.setChatModel(model)}
+              onSetEffort={(effort) => vm.setChatEffort(effort)}
               onMountHistory={(host) => {
                 historyRoots.current.get(host)?.unmount();
                 const root = createRoot(host);

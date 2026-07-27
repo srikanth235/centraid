@@ -414,10 +414,34 @@ export interface CentraidAgentStatusEntry {
     mcpHttp: boolean;
     mcpSse: boolean;
     modelConfigurable: boolean;
+    configOptions?: Array<{
+      id: string;
+      category: string;
+      type: string;
+      values: Array<{ value: string; name?: string }>;
+      currentValue?: string;
+    }>;
+    usageUpdateObserved?: boolean;
+    configOptionUpdateObserved?: boolean;
+    locationsObserved?: boolean;
     authRequired: boolean;
     promptImage: boolean;
+    promptAudio?: boolean;
+    promptEmbeddedContext?: boolean;
+    probedAt?: number;
     reason?: string;
   };
+  /** Persisted circuit-breaker state for this runner across workspace contexts. */
+  health?: Array<{
+    workspaceContext: string;
+    runnerKind: string;
+    failureClass: string;
+    consecutiveFailures: number;
+    state: 'closed' | 'open' | 'half-open';
+    breakerUntil?: number;
+    retryAfterMs?: number;
+    lastFailureAt?: number;
+  }>;
 }
 
 export interface CentraidAgentsStatus {
@@ -451,6 +475,15 @@ export interface CentraidConversationSummary {
   createdAt: number;
   updatedAt: number;
   messageCount: number;
+  /** Count of runner/session handoffs rebuilt from canonical ledger history. */
+  hydrationCount: number;
+  lastHydratedAt?: number;
+}
+
+export interface CentraidConversationWorkspaceSelection {
+  primaryKind: 'vault-data' | 'app' | 'draft';
+  additionalDirectories: string[];
+  updatedAt: number;
 }
 
 /** A conversation search hit: the summary plus a highlighted match snippet. */
@@ -466,6 +499,8 @@ export interface CentraidConversationHistoryAttachment {
   filename?: string;
   sizeBytes: number;
   url?: string;
+  source?: string;
+  workspacePath?: string;
 }
 
 /** Per-turn token/cost usage on a terminal `ai` answer (issue #420, Wave 2). */
@@ -474,6 +509,7 @@ export interface CentraidConversationTurnUsage {
   outputTokens?: number;
   costUsd?: number;
   model?: string;
+  effort?: string;
 }
 
 /** One prior attempt of a regenerated answer — a sibling in the "<2/2>" pager. */
@@ -520,6 +556,12 @@ export type CentraidConversationHistoryMessage =
       fromArchive?: boolean;
     }
   | {
+      kind: 'notice';
+      level: 'warn' | 'info';
+      text: string;
+      fromArchive?: boolean;
+    }
+  | {
       kind: 'tool';
       id: string;
       tool: string;
@@ -528,6 +570,7 @@ export type CentraidConversationHistoryMessage =
       state: 'ok' | 'error';
       result?: unknown;
       errorText?: string;
+      artifacts?: CentraidConversationHistoryAttachment[];
       fromArchive?: boolean;
     };
 
@@ -1008,6 +1051,7 @@ interface CentraidApi {
 /** KPI tiles for the Insights screen (issue #514). */
 export interface CentraidInsightsKpis {
   totalTokens: number;
+  hydrationTokens: number;
   /** Known spend floor when unpriced/unreported runs exist. */
   totalCostUsd: number;
   agentReportedCostUsd: number;
@@ -1059,6 +1103,14 @@ export interface CentraidInsightsModelRow {
   costUsd: number;
 }
 
+/** One row of the confirmed ACP thought-level breakdown. */
+export interface CentraidInsightsEffortRow {
+  effort: string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
+}
+
 /** One entry of the recent-activity feed. */
 export interface CentraidInsightsActivityRow {
   runId: string;
@@ -1069,9 +1121,11 @@ export interface CentraidInsightsActivityRow {
   ok: boolean;
   startedAt: number;
   tokens: number;
+  hydrationTokens: number;
   costUsd: number;
   provider?: string;
   model?: string;
+  effort?: string;
 }
 
 export interface CentraidInsightsPeakDay {
@@ -1105,6 +1159,7 @@ export interface CentraidInsightsSummary {
   bySource: CentraidInsightsSourceRow[];
   byRunner: CentraidInsightsRunnerRow[];
   byModel: CentraidInsightsModelRow[];
+  byEffort: CentraidInsightsEffortRow[];
   recent: CentraidInsightsActivityRow[];
   peakDay?: CentraidInsightsPeakDay;
   attention?: CentraidInsightsAttention;
@@ -1119,6 +1174,8 @@ export interface CentraidAutomationTurnRecord {
   /** The automation's last-known display name, recorded on its conversation —
    *  survives the automation being deleted (falls back to `automationId`). */
   automationName?: string;
+  /** Active runner binding on the stable automation conversation. */
+  adapterKind?: string;
   triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'compile' | 'interactive';
   /** Source that fired the run (`cron` / `webhook` / `data` / `condition` / `manual`). */
   triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
@@ -1199,7 +1256,12 @@ export interface CentraidAutomationManifest {
         every?: string;
       }
   >;
-  requires: { mcps?: readonly string[]; runner?: string; model?: string };
+  requires: {
+    mcps?: readonly string[];
+    runner?: string;
+    model?: string;
+    thoughtLevel?: string;
+  };
   /** App ids this automation is associated with. */
   apps?: readonly string[];
   costEstimate?: { model: string; tokensPerFire: number };
@@ -1491,6 +1553,11 @@ declare global {
     updatedAt: number;
     messageCount: number;
   }
+  interface CentraidConversationWorkspaceSelection {
+    primaryKind: 'vault-data' | 'app' | 'draft';
+    additionalDirectories: string[];
+    updatedAt: number;
+  }
   interface CentraidConversationSearchResult extends CentraidConversationSummary {
     snippet: string;
   }
@@ -1500,12 +1567,15 @@ declare global {
     filename?: string;
     sizeBytes: number;
     url?: string;
+    source?: string;
+    workspacePath?: string;
   }
   interface CentraidConversationTurnUsage {
     inputTokens?: number;
     outputTokens?: number;
     costUsd?: number;
     model?: string;
+    effort?: string;
   }
   interface CentraidConversationHistoryRetryAttempt {
     turnId: string;
@@ -1536,6 +1606,12 @@ declare global {
         fromArchive?: boolean;
       }
     | {
+        kind: 'notice';
+        level: 'warn' | 'info';
+        text: string;
+        fromArchive?: boolean;
+      }
+    | {
         kind: 'tool';
         id: string;
         tool: string;
@@ -1544,6 +1620,7 @@ declare global {
         state: 'ok' | 'error';
         result?: unknown;
         errorText?: string;
+        artifacts?: CentraidConversationHistoryAttachment[];
         fromArchive?: boolean;
       };
   // Mirror of the module-level automation types so screens can
@@ -1567,7 +1644,12 @@ declare global {
           every?: string;
         }
     >;
-    requires: { mcps?: readonly string[]; runner?: string; model?: string };
+    requires: {
+      mcps?: readonly string[];
+      runner?: string;
+      model?: string;
+      thoughtLevel?: string;
+    };
     apps?: readonly string[];
     costEstimate?: { model: string; tokensPerFire: number };
     onFailure?: string;
@@ -1612,6 +1694,7 @@ declare global {
     seq: number;
     automationId?: string;
     automationName?: string;
+    adapterKind?: string;
     triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'compile' | 'interactive';
     triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
     parentTurnId?: string;
@@ -1666,6 +1749,7 @@ declare global {
   // Mirror of the module-level Insights types (issue #514).
   interface CentraidInsightsKpis {
     totalTokens: number;
+    hydrationTokens: number;
     totalCostUsd: number;
     agentReportedCostUsd: number;
     estimatedCostUsd: number;
@@ -1706,6 +1790,12 @@ declare global {
     tokens: number;
     costUsd: number;
   }
+  interface CentraidInsightsEffortRow {
+    effort: string;
+    runs: number;
+    tokens: number;
+    costUsd: number;
+  }
   interface CentraidInsightsActivityRow {
     runId: string;
     kind: string;
@@ -1715,9 +1805,11 @@ declare global {
     ok: boolean;
     startedAt: number;
     tokens: number;
+    hydrationTokens: number;
     costUsd: number;
     provider?: string;
     model?: string;
+    effort?: string;
   }
   interface CentraidInsightsPeakDay {
     date: string;
@@ -1747,6 +1839,7 @@ declare global {
     bySource: CentraidInsightsSourceRow[];
     byRunner: CentraidInsightsRunnerRow[];
     byModel: CentraidInsightsModelRow[];
+    byEffort: CentraidInsightsEffortRow[];
     recent: CentraidInsightsActivityRow[];
     peakDay?: CentraidInsightsPeakDay;
     attention?: CentraidInsightsAttention;

@@ -39,6 +39,8 @@ export interface RawConversation {
   adapter_kind: string | null;
   adapter_session_id: string | null;
   adapter_usage_json: string | null;
+  hydration_count?: number;
+  last_hydrated_at?: number | null;
   turn_count: number;
   pinned: number;
   archived: number;
@@ -58,6 +60,7 @@ export interface RawTurn {
   output_json: string | null;
   retry_of: string | null;
   idempotency_key: string | null;
+  hydration_tokens?: number | null;
   ok: number;
   error: string | null;
   feedback: string | null;
@@ -89,6 +92,7 @@ export interface RawItem {
   child_turn_id: string | null;
   model: string | null;
   provider: string | null;
+  effort: string | null;
   input_tokens: number | null;
   output_tokens: number | null;
   cache_read_tokens: number | null;
@@ -111,6 +115,7 @@ export interface RawAttachment {
   size_bytes: number;
   source: string | null;
   filename: string | null;
+  workspace_path: string | null;
   created_at: number;
 }
 
@@ -140,6 +145,8 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
     ...(raw.adapter_kind !== null ? { adapterKind: raw.adapter_kind } : {}),
     ...(raw.adapter_session_id !== null ? { adapterSessionId: raw.adapter_session_id } : {}),
     ...(adapterUsageSnapshot ? { adapterUsageSnapshot } : {}),
+    hydrationCount: Number(raw.hydration_count ?? 0),
+    ...(raw.last_hydrated_at != null ? { lastHydratedAt: raw.last_hydrated_at } : {}),
     turnCount: Number(raw.turn_count),
     pinned: raw.pinned !== 0,
     archived: raw.archived !== 0,
@@ -161,6 +168,7 @@ export function turnFromRaw(raw: RawTurn): Turn {
     ...(raw.note !== null ? { note: raw.note } : {}),
     ...(raw.retry_of !== null ? { retryOf: raw.retry_of } : {}),
     ...(raw.idempotency_key !== null ? { idempotencyKey: raw.idempotency_key } : {}),
+    ...(raw.hydration_tokens != null ? { hydrationTokens: raw.hydration_tokens } : {}),
     startedAt: raw.started_at,
     ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
     ok: raw.ok !== 0,
@@ -208,6 +216,7 @@ export function itemFromRaw(raw: RawItem): Item {
     ...(raw.cache_write_tokens !== null ? { cacheWriteTokens: raw.cache_write_tokens } : {}),
     ...(raw.model !== null ? { model: raw.model } : {}),
     ...(raw.provider !== null ? { provider: raw.provider } : {}),
+    ...(raw.effort !== null ? { effort: raw.effort } : {}),
     ...(raw.cost_usd !== null ? { costUsd: raw.cost_usd } : {}),
     ...(raw.cost_source === 'agent' || raw.cost_source === 'estimated'
       ? { costSource: raw.cost_source }
@@ -226,6 +235,7 @@ export function attachmentFromRaw(raw: RawAttachment): Attachment {
     sizeBytes: raw.size_bytes,
     ...(raw.source !== null ? { source: raw.source } : {}),
     ...(raw.filename !== null ? { filename: raw.filename } : {}),
+    ...(raw.workspace_path !== null ? { workspacePath: raw.workspace_path } : {}),
     createdAt: raw.created_at,
   };
 }
@@ -295,7 +305,7 @@ export interface PreparedStatements {
 // turns (one `message_in` per turn + each step/tool item).
 const CONV_COLS = `c.id, c.kind, c.user_id, c.app_id, c.automation_id, c.title,
         c.adapter_kind, c.adapter_session_id, c.adapter_usage_json,
-        c.turn_count, c.pinned, c.archived,
+        c.hydration_count, c.last_hydrated_at, c.turn_count, c.pinned, c.archived,
         c.created_at, c.updated_at`;
 
 export function prepare(db: DatabaseSync): PreparedStatements {
@@ -369,12 +379,16 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     noteTurnWithAdapter: db.prepare(`
       UPDATE conversations
       SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?,
-          adapter_session_id = ?, adapter_usage_json = ?
+          adapter_session_id = ?, adapter_usage_json = ?,
+          hydration_count = hydration_count + ?,
+          last_hydrated_at = CASE WHEN ? = 1 THEN ? ELSE last_hydrated_at END
       WHERE id = ? AND user_id = ?
     `),
     noteTurnKindOnly: db.prepare(`
       UPDATE conversations
-      SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?
+      SET turn_count = turn_count + 1, updated_at = ?, adapter_kind = ?,
+          hydration_count = hydration_count + ?,
+          last_hydrated_at = CASE WHEN ? = 1 THEN ? ELSE last_hydrated_at END
       WHERE id = ? AND user_id = ?
     `),
     noteTurnNoAdapter: db.prepare(`
@@ -386,8 +400,8 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     insertTurn: db.prepare(`
       INSERT INTO turns
         (id, conversation_id, seq, parent_turn_id, trigger, trigger_origin,
-         retry_of, idempotency_key, note, started_at, ok)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+         retry_of, idempotency_key, note, hydration_tokens, started_at, ok)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `),
     // Σ over this turn's own step/agent items; step/tool counts. SUM over an
     // empty set yields NULL — correct in-flight semantics.
@@ -487,12 +501,12 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     `),
     insertItem: db.prepare(`
       INSERT INTO items (
-        id, turn_id, ordinal, call_id, batch_id, kind, role, text, model, provider,
+        id, turn_id, ordinal, call_id, batch_id, kind, role, text, model, provider, effort,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd,
         cost_source,
         app_id, name, args_json, output_json, raw_json, child_turn_id,
         ok, error, started_at, ended_at, duration_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     // The inbound message (issue #190) — ordinal 0 of the turn. Attachments
     // hang off the returned item id.
@@ -514,7 +528,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         child_turn_id = $childTurnId,
         input_tokens = $inputTokens, output_tokens = $outputTokens,
         cache_read_tokens = $cacheReadTokens, cache_write_tokens = $cacheWriteTokens,
-        model = $model, provider = $provider, cost_usd = $costUsd,
+        model = $model, provider = $provider, effort = $effort, cost_usd = $costUsd,
         cost_source = $costSource,
         ended_at = $endedAt, duration_ms = $durationMs
       WHERE id = $itemId
@@ -527,8 +541,8 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     ),
     insertAttachment: db.prepare(`
       INSERT INTO attachments
-        (id, item_id, hash, mime, size_bytes, source, filename, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (id, item_id, hash, mime, size_bytes, source, filename, workspace_path, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     listAttachmentsForItem: db.prepare(
       `SELECT * FROM attachments WHERE item_id = ? ORDER BY created_at ASC`,
@@ -545,7 +559,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     // hashes on the one true-deletion path.
     referencedHashes: db.prepare(`
       SELECT DISTINCT hash FROM (
-        SELECT hash FROM attachments
+        SELECT hash FROM attachments WHERE workspace_path IS NULL
         UNION
         SELECT j.value AS hash
           FROM conversation_archive ca, json_each(ca.attachment_hashes_json) j

@@ -44,6 +44,8 @@ import {
   Dispatcher,
   InsightsStore,
   PrefsStore,
+  ProviderEgressConsentStore,
+  RunnerHealthStore,
   RUNNER_KINDS,
   Runtime,
   changesSubscriberCount,
@@ -54,7 +56,10 @@ import {
   makeConversationRunnerCore,
   makeJournalDbProvider,
   makeUserStoreRouteHandler,
+  isRunnerKind,
   resolveSubsystemModel,
+  resolveSubsystemRunnerLadder,
+  validateTurnAttachmentRefs,
   TurnLimiter,
   prewarmAppAssets,
   workerAdmissionStats,
@@ -109,6 +114,7 @@ import { createEnrichmentHealthProbe } from './enrichment-health.js';
 import { createBlobSweepHealthProbe } from './blob-sweep-health.js';
 import { createStorageQuotaHealthProbe } from './storage-quota-health.js';
 import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
+import { removedRunnerLadderMembers, resolveGatewayRunnerPrefs } from './runner-prefs.js';
 import { GatewayDatabase } from './gateway-db.js';
 import { ConnectionBroker } from './connection-broker.js';
 import { pollProviderEventSource } from './automation-event-sources.js';
@@ -153,6 +159,7 @@ import { makeDiagnosticsRouteHandler } from '../routes/diagnostics-routes.js';
 import { makeBackupRouteHandler } from '../routes/backup-routes.js';
 import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
 import {
+  ensureSession,
   prepareLifecycleSession,
   publishAndReconcile,
   stageAndMaybePublish,
@@ -190,7 +197,6 @@ import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
 import { HealthRegistry } from './health-registry.js';
 import { PowerContextMonitor } from './power-context.js';
 import { ResourceAccounting } from './resource-accounting.js';
-import { resolveGatewayRunnerPrefs } from './runner-prefs.js';
 import { GatewayPerformanceMonitor } from './gateway-performance.js';
 import { measureStorageLatency } from './storage-latency.js';
 import {
@@ -1358,6 +1364,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // handle opened for Resource mode so we don't re-read the same file.
   const prefs = prefsEarly;
   const journalProvider = () => currentWorkspace().journal();
+  const runnerHealth = new RunnerHealthStore(journalProvider);
+  const providerEgressConsent = new ProviderEgressConsentStore(
+    journalProvider,
+    (runnerKind, subsystem) => {
+      const snapshot = prefs.getAllPrefs();
+      const primary = resolveGatewayRunnerPrefs(snapshot, subsystem).kind;
+      return resolveSubsystemRunnerLadder(snapshot, subsystem, primary)
+        .slice(1)
+        .includes(runnerKind);
+    },
+  );
   const analyticsStore = new AnalyticsStore(journalProvider);
   const insightsStore = new InsightsStore(journalProvider);
   // Lazy archive rehydration (issue #438 wave 3): opening a conversation whose
@@ -1387,6 +1404,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   ): Promise<RunnerPrefs | undefined> => {
     return resolveGatewayRunnerPrefs(prefs.getAllPrefs(), subsystem, requestedRunner);
   };
+  const runnerLadder = (
+    subsystem: ModelSubsystem | undefined,
+    primary: RunnerKind,
+  ): readonly RunnerKind[] =>
+    subsystem ? resolveSubsystemRunnerLadder(prefs.getAllPrefs(), subsystem, primary) : [primary];
+  const runnerHealthContext = (): string => currentWorkspace().vaultId;
+  const onConversationRunnerFailover = (event: {
+    conversationId: string;
+    subsystem?: ModelSubsystem;
+    from: RunnerKind;
+    to: RunnerKind;
+  }): void => {
+    const detail =
+      `${event.subsystem ?? 'conversation'} ${event.conversationId}: ` +
+      `${event.from} → ${event.to}`;
+    health.reportError('agent-failover', detail);
+    logger.warn(`Agent failover: ${detail}`);
+  };
 
   // Per-subsystem model resolution (shared prefs contract): explicit
   // (request/manifest) → `model.<runnerKind>.<subsystem>` → `model.<runnerKind>.default`
@@ -1401,15 +1436,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const resolveModel = async (
     subsystem: ModelSubsystem,
     explicit?: string,
+    requestedRunner?: RunnerKind,
   ): Promise<string | undefined> => {
-    const runnerPrefs = await prefsLoader(subsystem);
+    const runnerPrefs = await prefsLoader(subsystem, requestedRunner);
     if (!runnerPrefs) return explicit;
     return resolveSubsystemModel(prefs.getAllPrefs(), runnerPrefs.kind, subsystem, explicit);
   };
 
   const resolveAutomationAgent = async (
     requires: automation.ManifestRequires,
-  ): Promise<{ runner: RunnerKind; model?: string }> => {
+  ): Promise<{
+    runner: RunnerKind;
+    model?: string;
+    configPins?: Readonly<Record<string, string>>;
+  }> => {
     const fallbackRunner = (await prefsLoader('automations'))?.kind ?? 'codex';
     return resolveAutomationAgentSelection(requires, prefs.getAllPrefs(), fallbackRunner);
   };
@@ -1417,7 +1457,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const resolveAutomationAgentForRef = async (
     automationRef: string,
     codeAppsDir: string,
-  ): Promise<{ runner: RunnerKind; model?: string }> => {
+  ): Promise<{
+    runner: RunnerKind;
+    model?: string;
+    configPins?: Readonly<Record<string, string>>;
+  }> => {
     const parsed = automation.parseRef(automationRef);
     const row = parsed
       ? await automation.readAppOwned(codeAppsDir, parsed.appId, parsed.automationId)
@@ -1481,6 +1525,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     if (allPrefs['agent.runner.kind'] !== kind) return undefined;
     const binPath = allPrefs['agent.runner.binPath'];
     return typeof binPath === 'string' && binPath.length > 0 ? binPath : undefined;
+  };
+  const extraArgsForKind = (kind: RunnerKind): string[] | undefined => {
+    const allPrefs = prefs.getAllPrefs();
+    if (allPrefs['agent.runner.kind'] !== kind) return undefined;
+    const extraArgs = allPrefs['agent.runner.extraArgs'];
+    return Array.isArray(extraArgs) && extraArgs.every((entry) => typeof entry === 'string')
+      ? extraArgs
+      : undefined;
   };
 
   // Ask-model picker (kit Ask panel, subsystem `ask`) — GET/PUT
@@ -1727,6 +1779,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         if (prior) ledger.deleteTurn(opts.runId);
       }
       const agent = await resolveAutomationAgentForRef(automationRef, host.codeAppsDir());
+      const automationLadder = resolveSubsystemRunnerLadder(
+        prefs.getAllPrefs(),
+        'automations',
+        agent.runner,
+      );
       await runAutomation({
         automationRef,
         runId,
@@ -1749,6 +1806,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           return {
             runnerKind: nested.runner,
             ...(nested.model ? { model: nested.model } : {}),
+            ...(nested.configPins ? { configPins: nested.configPins } : {}),
           };
         },
         runner: agent.runner,
@@ -1757,6 +1815,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         ...(opts.input !== undefined ? { input: opts.input } : {}),
         ...(opts.note ? { note: opts.note } : {}),
         ...(agent.model ? { model: agent.model } : {}),
+        ...(agent.configPins ? { configPins: agent.configPins } : {}),
+        runnerLadder: automationLadder,
+        runnerPrefsFor: (kind) => prefsLoader('automations', kind),
+        runnerHealth,
+        runnerHealthContext: ws.vaultId,
+        providerEgressConsent,
+        hydrationAttachmentPath: (hash) => {
+          const parsed = automation.parseRef(automationRef);
+          if (!parsed) throw new Error(`invalid automation ref "${automationRef}"`);
+          return conversationHistoryStore.blobPathFor(parsed.appId, hash);
+        },
+        onFailover: (event) => {
+          const detail =
+            `automation ${event.automationRef}: ${event.from} → ${event.to} ` +
+            `after ${event.failureClass} (${event.failedRunId})`;
+          health.reportError('agent-failover', detail);
+          logger.warn(`Agent failover: ${detail}`);
+        },
         onRunEvent: (ev) => runEventBus.publish(runId, ev),
       });
       // Grant-matched outbox items the fire just staged drain now, not
@@ -1900,6 +1976,29 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // Test inject: finish headless compile without spawning a coding agent.
       // Either way the driver is wrapped for resource accounting (#528 Phase C).
       runTurn: accountRunTurn(options.runTurn ?? runTurn),
+      runnerLadder,
+      runnerHealth,
+      runnerHealthContext,
+      providerEgressConsent,
+      onFailover: onConversationRunnerFailover,
+    });
+    // Headless compilation has its own outer automations ladder. Keep the
+    // injected runner automations-scoped and single-rung so breaker selection
+    // can never jump providers inside one compile ledger turn.
+    const automationCompileRunner: ConversationRunner = makeUnifiedConversationRunner({
+      store,
+      prefsLoader,
+      subsystem: 'automations',
+      getDispatcher,
+      publicBaseUrl: () => serverUrl,
+      ext,
+      ...makeVaultToolRunners(vaultRegistry),
+      ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
+      runTurn: accountRunTurn(options.runTurn ?? runTurn),
+      runnerHealth,
+      runnerHealthContext,
+      providerEgressConsent,
+      onFailover: onConversationRunnerFailover,
     });
     // Interactive automation turns run in a scratch cwd (the route passes it
     // as `dataDir`) and through an agent-plane dispatcher. This preserves the
@@ -1917,6 +2016,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         getDispatcher: () => automationDispatcher,
         resolveCwd: (input) => input.dataDir,
         runTurn: accountRunTurn(options.runTurn ?? runTurn),
+        runnerLadder,
+        runnerHealth,
+        runnerHealthContext,
+        providerEgressConsent,
+        onFailover: onConversationRunnerFailover,
       });
     };
     // The headless compile, as an AWAITABLE task. Two callers need it: the
@@ -1933,7 +2037,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       if (!parsed) return { ok: false, error: `invalid automation ref "${automationRef}"` };
       const row = await automation.readAppOwned(codeAppsDir(), parsed.appId, parsed.automationId);
       if (!row) return { ok: false, error: `automation "${automationRef}" does not exist` };
-      let failure: string | undefined;
       const agent = await resolveAutomationAgent(row.manifest.requires);
       const enabledBeforeCompile = row.enabled;
       // Resolve core_link_anchor tokens before the model runs. The token
@@ -1959,84 +2062,126 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // then poisons a later retry (and can conflict with UI edits).
       // The compile run id is already unique; its final UUID segment is
       // safe for WorktreeStore session ids.
-      const runSuffix = runId.split(':').at(-1) ?? crypto.randomUUID().slice(0, 8);
-      const sessionId = `compile-${parsed.appId}-${runSuffix}`;
-      // The compile reports its outcome through `failure` rather than by
-      // rejecting: callers (the 202 route seam AND `reviseAutomation`, which
-      // must know whether the handler still matches the published prompt)
-      // both need an outcome, and the old fire-and-forget shape turned a
-      // throw here into an unhandled rejection.
-      await runHeadlessAutomationCompile({
-        runner,
-        journalDbFile: workspace.journalDbFile,
-        runnerSessionDir: workspace.runnerSessionDir,
-        dataDir: workspace.appsDir,
-        appId: parsed.appId,
-        draftSessionId: sessionId,
-        automationRef,
-        automationName: row.name,
-        instructions: row.manifest.prompt,
-        runnerKind: agent.runner,
-        ...(agent.model ? { model: agent.model } : {}),
-        anchors: anchorResolution.anchors,
-        ...(anchorResolution.error ? { preflightError: anchorResolution.error } : {}),
-        runId,
-        onSuccess: async () => {
-          const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
-          const manifestFile = path.join(
-            appDir,
-            'automations',
-            parsed.automationId,
-            automation.MANIFEST_FILE,
-          );
-          const manifest = automation.parseManifest(await fs.readFile(manifestFile, 'utf8'));
-          const compiled = finalizeCompiledManifest(manifest, {
-            enabledBeforeCompile,
-            enableOnSuccess,
-            anchoredScopes: anchorResolution.scopes,
+      const compileLadder = resolveSubsystemRunnerLadder(
+        prefs.getAllPrefs(),
+        'automations',
+        agent.runner,
+      );
+      let finalFailure: string | undefined;
+      let failoverNotice: string | undefined;
+      for (let index = 0; index < compileLadder.length; index += 1) {
+        const kind = compileLadder[index]!;
+        const selection =
+          index === 0
+            ? agent
+            : resolveAutomationAgentSelection(
+                { ...row.manifest.requires, runner: kind },
+                prefs.getAllPrefs(),
+                kind,
+                { includeManifestProviderPins: false },
+              );
+        const attemptRunId = index === 0 ? runId : `${runId}:failover:${index}:${kind}`;
+        const runSuffix = attemptRunId.split(':').at(-1) ?? crypto.randomUUID().slice(0, 8);
+        const sessionId = `compile-${parsed.appId}-${runSuffix}-${index}`;
+        let attemptFailure: string | undefined;
+        let attemptFailureClass: string | undefined;
+
+        // Each provider attempt owns a fresh worktree and ledger turn. A
+        // provider failure advances only after this turn has settled; compile
+        // output is never replayed into another stateful session.
+        await runHeadlessAutomationCompile({
+          runner: automationCompileRunner,
+          journalDbFile: workspace.journalDbFile,
+          runnerSessionDir: workspace.runnerSessionDir,
+          dataDir: workspace.appsDir,
+          appId: parsed.appId,
+          draftSessionId: sessionId,
+          automationRef,
+          automationName: row.name,
+          instructions: row.manifest.prompt,
+          runnerKind: selection.runner,
+          ...(selection.model ? { model: selection.model } : {}),
+          ...(selection.configPins ? { configPins: selection.configPins } : {}),
+          providerEgressConsent,
+          consentSource: index === 0 ? 'direct' : 'ladder',
+          hydrationAttachmentPath: (hash) =>
+            conversationHistoryStore.blobPathFor(parsed.appId, hash),
+          ...(failoverNotice ? { failoverNotice } : {}),
+          anchors: anchorResolution.anchors,
+          ...(anchorResolution.error ? { preflightError: anchorResolution.error } : {}),
+          runId: attemptRunId,
+          onSuccess: async () => {
+            const appDir = await store.snapshotSessionAppDir(sessionId, parsed.appId);
+            const manifestFile = path.join(
+              appDir,
+              'automations',
+              parsed.automationId,
+              automation.MANIFEST_FILE,
+            );
+            const manifest = automation.parseManifest(await fs.readFile(manifestFile, 'utf8'));
+            const compiled = finalizeCompiledManifest(manifest, {
+              enabledBeforeCompile,
+              enableOnSuccess,
+              anchoredScopes: anchorResolution.scopes,
+            });
+            await fs.writeFile(manifestFile, `${JSON.stringify(compiled, null, 2)}\n`);
+            await publishAndReconcile(lifecycleOpts, {
+              appId: parsed.appId,
+              sessionId,
+              appDir,
+              message: `compile ${parsed.automationId}`,
+              ephemeralSession: true,
+            });
+            health.reportOk('automation-runs', `Plan ready for ${row.name}`);
+          },
+          onFailure: async (error, failureClass) => {
+            attemptFailure = error;
+            attemptFailureClass = failureClass;
+            // Discard a failed compile's isolated branch. This also clears an
+            // interrupted rebase before the next provider starts.
+            await store.closeSession(sessionId).catch(() => undefined);
+          },
+        }).catch((error: unknown) => {
+          attemptFailure = error instanceof Error ? error.message : String(error);
+        });
+
+        if (!attemptFailure) return { ok: true };
+        finalFailure = attemptFailure;
+        const next = compileLadder[index + 1];
+        if (!attemptFailureClass || !next) break;
+        failoverNotice =
+          `${kind} failed at the compile boundary (${attemptFailureClass}). ` +
+          `Continuing with ${next}; provider-specific model and effort pins were cleared.`;
+        onConversationRunnerFailover({
+          conversationId: automationRef,
+          subsystem: 'automations',
+          from: kind,
+          to: next,
+        });
+      }
+
+      const failure = finalFailure ?? 'Compile failed without a diagnostic.';
+      health.reportError(
+        'automation-runs',
+        `Compile failed for ${row.name}: ${failure}. Retry from the automation thread.`,
+      );
+      logger.warn?.(`Headless compile failed for ${automationRef}: ${failure}`);
+      if (row.manifest.onFailure) {
+        const target = automation.parseRef(row.manifest.onFailure, parsed.appId);
+        if (target) {
+          await fireAutomation(`${target.appId}/${target.automationId}`, {
+            triggerKind: 'on_failure',
+            triggerOrigin: 'manual',
+            input: {
+              automationRef,
+              compileRunId: runId,
+              error: failure,
+              phase: 'compile',
+            },
           });
-          await fs.writeFile(manifestFile, `${JSON.stringify(compiled, null, 2)}\n`);
-          await publishAndReconcile(lifecycleOpts, {
-            appId: parsed.appId,
-            sessionId,
-            appDir,
-            message: `compile ${parsed.automationId}`,
-            ephemeralSession: true,
-          });
-          health.reportOk('automation-runs', `Plan ready for ${row.name}`);
-        },
-        onFailure: async (error) => {
-          failure = error;
-          health.reportError(
-            'automation-runs',
-            `Compile failed for ${row.name}: ${error}. Retry from the automation thread.`,
-          );
-          logger.warn?.(`Headless compile failed for ${automationRef}: ${error}`);
-          // Discard a failed compile's isolated branch. This also
-          // clears any interrupted rebase before the user retries.
-          await store.closeSession(sessionId).catch(() => undefined);
-          if (row.manifest.onFailure) {
-            const target = automation.parseRef(row.manifest.onFailure, parsed.appId);
-            if (target) {
-              await fireAutomation(`${target.appId}/${target.automationId}`, {
-                triggerKind: 'on_failure',
-                triggerOrigin: 'manual',
-                input: {
-                  automationRef,
-                  compileRunId: runId,
-                  error,
-                  phase: 'compile',
-                },
-              });
-            }
-          }
-        },
-      }).catch((error: unknown) => {
-        failure = error instanceof Error ? error.message : String(error);
-        health.reportError('automation-runs', `Compile failed for ${row.name}: ${failure}`);
-        logger.warn?.(`Headless compile threw for ${automationRef}: ${failure}`);
-      });
-      return failure === undefined ? { ok: true } : { ok: false, error: failure };
+        }
+      }
+      return { ok: false, error: failure };
     };
 
     const lifecycleOpts: LifecycleRouteOptions = {
@@ -2261,8 +2406,40 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           });
         },
         subscribeTurnEvents: (turnId, listener) => runEventBus.subscribe(turnId, listener),
-        runInteractiveTurn: async ({ row, turnId, message, abortSignal, onEvent }) => {
-          const selected = await resolveAutomationAgent(row.manifest.requires);
+        runInteractiveTurn: async ({
+          row,
+          turnId,
+          message,
+          providerConsent,
+          runnerKind,
+          model,
+          thinking,
+          attachmentRefs,
+          abortSignal,
+          onEvent,
+        }) => {
+          const selected = runnerKind
+            ? resolveAutomationAgentSelection(
+                { runner: runnerKind },
+                prefs.getAllPrefs(),
+                runnerKind,
+                { includeManifestProviderPins: false },
+              )
+            : await resolveAutomationAgent(row.manifest.requires);
+          const validatedAttachmentRefs = validateTurnAttachmentRefs(
+            conversationHistoryStore,
+            row.ownerApp,
+            attachmentRefs ?? [],
+          );
+          const turnAttachments = validatedAttachmentRefs.map((attachment) => ({
+            path: conversationHistoryStore.blobPathFor(row.ownerApp, attachment.hash),
+            mime: attachment.mime,
+            ...(attachment.filename ? { filename: attachment.filename } : {}),
+          }));
+          const configPins = {
+            ...selected.configPins,
+            ...(thinking ? { thought_level: thinking } : {}),
+          };
           await runInteractiveAutomationTurn({
             row,
             turnId,
@@ -2271,7 +2448,28 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             runnerSessionDir: workspace.runnerSessionDir,
             runner: automationConversationRunnerFor(executionScopeBlock(row.manifest.vault)),
             runnerKind: selected.runner,
-            ...(selected.model ? { model: selected.model } : {}),
+            ...((model ?? selected.model) ? { model: model ?? selected.model } : {}),
+            ...(Object.keys(configPins).length > 0 ? { configPins } : {}),
+            ...(providerConsent ? { providerConsent } : {}),
+            ...(validatedAttachmentRefs.length
+              ? {
+                  attachmentRefs: validatedAttachmentRefs.map((attachment) => ({
+                    hash: attachment.hash,
+                    mime: attachment.mime,
+                    sizeBytes: attachment.sizeBytes ?? 0,
+                    ...(attachment.filename ? { filename: attachment.filename } : {}),
+                  })),
+                  turnAttachments,
+                }
+              : {}),
+            hydrationAttachmentPath: (hash) =>
+              conversationHistoryStore.blobPathFor(row.ownerApp, hash),
+            artifactRoots: [
+              workspace.appsDir,
+              path.join(store.getActiveMainLink(), 'apps', row.ownerApp),
+            ],
+            uploadInlineArtifact: (bytes) =>
+              conversationHistoryStore.uploadBlob(row.ownerApp, bytes),
             abortSignal,
             conversationLocks: automationConversationLocks,
             onEvent,
@@ -2788,7 +2986,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // and the backend that receives it can't disagree, and a re-pin
         // takes effect on the next turn with no restart.
         const subsystem: ModelSubsystem = input.register === 'ask' ? 'ask' : 'builder';
-        const model = await resolveModel(subsystem, input.model);
+        const model = await resolveModel(subsystem, input.model, input.runnerKind);
         const resolvedInput = model !== input.model ? { ...input, model } : input;
         if (input.register === 'ask') return askRunner.run(resolvedInput);
         return (await currentVaultHost()).runner.run(resolvedInput);
@@ -2833,6 +3031,22 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     },
     draftCodeDir: async (appId: string, sessionId: string) =>
       (await currentVaultHost()).draftCodeDir(appId, sessionId),
+    conversationWorkspaceRoots: async (appId: string) => {
+      const plane = vaultRegistry.current();
+      const host = await currentVaultHost();
+      const app =
+        bundledAppIds.has(appId) && plane.installedAppIds().has(appId)
+          ? bundledAppDir(appId)
+          : await host.store.resolveActiveAppDir(appId);
+      const sessionId = options.sessionIdFor?.(appId) ?? `chat-${appId}`;
+      await ensureSession(host.store, sessionId);
+      const draft = await host.draftCodeDir(appId, sessionId);
+      return {
+        'vault-data': plane.dir,
+        ...(app ? { app } : {}),
+        ...(draft ? { draft } : {}),
+      };
+    },
     vaultFor: (appId: string) => vaultRegistry.bridgeFor(appId),
     askModel: askModelPrefs,
     turnLimiter: turnLimiterForCurrentVault,
@@ -2850,6 +3064,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     vaults: vaultRegistry,
     // Measure + label every assistant agent run (#528 Phase C); never throttled.
     runTurn: accountedRunTurn,
+    runnerLadder,
+    runnerHealth,
+    runnerHealthContext,
+    providerEgressConsent,
+    onFailover: onConversationRunnerFailover,
   });
 
   // LLM auto-title (issue #420, Wave 3): after the first turn of a new
@@ -2935,6 +3154,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     vaults: vaultRegistry,
     // Measure + label every ask-register agent run (#528 Phase C); never throttled.
     runTurn: accountedRunTurn,
+    runnerLadder,
+    runnerHealth,
+    runnerHealthContext,
+    providerEgressConsent,
+    onFailover: onConversationRunnerFailover,
     buildPrompt: async (input) => {
       const plane = vaultRegistry.current();
       const meta = await askAppMeta(input.appId);
@@ -3210,11 +3434,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         resolveCapabilities: async (kind, refresh) => {
           const caps = await resolveAcpCapabilities(kind, {
             binPath: binPathForKind(kind),
+            ...(extraArgsForKind(kind) ? { extraArgs: extraArgsForKind(kind) } : {}),
+            cacheDir: path.join(
+              paths.cacheDir ?? path.join(dataDir, 'cache'),
+              'agent-capabilities',
+            ),
             // Only force a spawn on explicit refresh; otherwise serve cache
             // (and probe once on first read when cold).
             refresh,
           });
           if (!caps) return undefined;
+          if (refresh && caps.reachable && !caps.authRequired) {
+            for (const entry of runnerHealth.list().filter((row) => row.runnerKind === kind)) {
+              runnerHealth.reportPreflightOk(entry.workspaceContext, kind);
+            }
+          }
           const out: AgentAcpCapabilities = {
             reachable: caps.reachable,
             loadSession: caps.loadSession,
@@ -3224,12 +3458,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             mcpHttp: caps.mcpHttp,
             mcpSse: caps.mcpSse,
             modelConfigurable: caps.modelConfigurable,
+            configOptions: caps.configOptions,
+            usageUpdateObserved: caps.usageUpdateObserved,
+            configOptionUpdateObserved: caps.configOptionUpdateObserved,
+            locationsObserved: caps.locationsObserved,
             authRequired: caps.authRequired,
             promptImage: caps.promptImage,
+            promptAudio: caps.promptAudio,
+            promptEmbeddedContext: caps.promptEmbeddedContext,
+            probedAt: caps.probedAt,
             ...(caps.reason ? { reason: caps.reason } : {}),
           };
           return out;
         },
+        resolveHealth: (kind) => runnerHealth.list().filter((row) => row.runnerKind === kind),
         binPathFor: binPathForKind,
       }),
     ),
@@ -3254,9 +3496,58 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // hosts that own auth themselves. CORS is the host's job too: a fronting
   // gateway emits its own.
   const conversationHandler = makeConversationRouteHandler(() => conversationHistoryStore);
+  const runnerSubsystems: readonly ModelSubsystem[] = [
+    'assistant',
+    'ask',
+    'builder',
+    'automations',
+  ];
+  const patchedPrefs = (
+    before: Record<string, unknown>,
+    patch: Record<string, unknown>,
+  ): Record<string, unknown> => {
+    const next = { ...before };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null || value === undefined) delete next[key];
+      else next[key] = value;
+    }
+    return next;
+  };
   const userStoreHandler = makeUserStoreRouteHandler(
     () => prefs,
     () => currentWorkspace().ownerPartyId,
+    {
+      validatePatch: async (patch, before) => {
+        const next = patchedPrefs(before, patch);
+        const switches: Array<ModelSubsystem | undefined> = [];
+        if (Object.hasOwn(patch, 'agent.runner.kind')) switches.push(undefined);
+        for (const subsystem of runnerSubsystems) {
+          if (Object.hasOwn(patch, `runner.${subsystem}`)) switches.push(subsystem);
+        }
+        for (const subsystem of switches) {
+          const candidate = resolveGatewayRunnerPrefs(next, subsystem);
+          if (!candidate)
+            return `Cannot switch ${subsystem ?? 'the default lane'}: no valid agent is configured.`;
+          const status = await runPreflight(candidate, {
+            ...(catalogPath ? { catalogPath } : {}),
+            requireSessionReady: true,
+          });
+          if (!status.ok)
+            return `Cannot switch ${subsystem ?? 'the default lane'} to ${candidate.kind}: ${status.reason ?? 'preflight failed'}`;
+        }
+        return undefined;
+      },
+      afterPatch: (_patch, before, after) => {
+        for (const { kind, subsystem } of removedRunnerLadderMembers(before, after)) {
+          for (const plane of vaultRegistry.planesList()) {
+            new ProviderEgressConsentStore(() => plane.workspace.journal()).revokeLadderProvider(
+              kind,
+              subsystem,
+            );
+          }
+        }
+      },
+    },
   );
   const prefixDispatch = createRoutePrefixDispatch([
     forRoutePrefixes(CONVERSATIONS_PREFIX, conversationHandler),

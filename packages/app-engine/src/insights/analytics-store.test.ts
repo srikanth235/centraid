@@ -23,9 +23,11 @@ interface SeedOptions {
   ok?: boolean;
   error?: string;
   model?: string;
+  effort?: string;
   startedAt?: number;
   inputTokens?: number;
   outputTokens?: number;
+  hydrationTokens?: number;
   finish?: boolean;
 }
 
@@ -35,7 +37,13 @@ function seedFire(runs: ConversationStore, opts: SeedOptions = {}): string {
   const ref = opts.automationRef ?? 'auto.todos/digest';
   const startedAt = opts.startedAt ?? 1_000;
   const conversationId = runs.ensureAutomationConversation(ref, ref.split('/')[0]!);
-  runs.insertTurn({ turnId: runId, conversationId, triggerKind: 'manual', startedAt });
+  runs.insertTurn({
+    turnId: runId,
+    conversationId,
+    triggerKind: 'manual',
+    ...(opts.hydrationTokens !== undefined ? { hydrationTokens: opts.hydrationTokens } : {}),
+    startedAt,
+  });
   runs.insertItem({
     itemId: randomUUID(),
     turnId: runId,
@@ -43,6 +51,7 @@ function seedFire(runs: ConversationStore, opts: SeedOptions = {}): string {
     kind: 'step',
     ok: true,
     model: opts.model ?? 'claude-sonnet-4-5',
+    ...(opts.effort ? { effort: opts.effort } : {}),
     inputTokens: opts.inputTokens ?? 100,
     outputTokens: opts.outputTokens ?? 50,
     startedAt,
@@ -63,7 +72,12 @@ function seedFire(runs: ConversationStore, opts: SeedOptions = {}): string {
 describe('AnalyticsStore (read-only lens over the run_summary view)', () => {
   it('derives a finished run: ref, owning app id, rollups, dominant model', () => {
     const { runs, analytics } = setup();
-    const runId = seedFire(runs, { inputTokens: 100, outputTokens: 50 });
+    const runId = seedFire(runs, {
+      inputTokens: 100,
+      outputTokens: 50,
+      hydrationTokens: 32,
+      effort: 'high',
+    });
     const got = analytics.getSummary(runId);
     expect(got?.kind).toBe('automation');
     expect(got?.automationRef).toBe('auto.todos/digest');
@@ -72,6 +86,8 @@ describe('AnalyticsStore (read-only lens over the run_summary view)', () => {
     expect(got?.ok).toBe(true);
     expect(got?.totalInputTokens).toBe(100);
     expect(got?.model).toBe('claude-sonnet-4-5');
+    expect(got?.effort).toBe('high');
+    expect(got?.hydrationTokens).toBe(32);
   });
 
   it('shows only FINISHED runs — an in-flight turn is not a summary yet', () => {

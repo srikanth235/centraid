@@ -107,7 +107,7 @@ describe('runHeadlessAutomationCompile', () => {
     expect(receivedDraftSessionId).toBe('compile-digest-1');
     expect(receivedRunnerKind).toBe('claude-code');
     expect(receivedModel).toBe('claude-custom');
-    const conversationId = 'digest/main::runner:claude-code';
+    const conversationId = 'digest/main';
     expect(store.getConversation(conversationId)?.title).toBe('Daily digest');
     const turn = store.getTurn('compile-1');
     expect(turn?.conversationId).toBe(conversationId);
@@ -253,7 +253,7 @@ describe('recordFailedAutomationCompile', () => {
 
     const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
     expect(store.getTurn('compile-reserved')).toMatchObject({
-      conversationId: 'digest/main::runner:claude-code',
+      conversationId: 'digest/main',
       triggerKind: 'compile',
       ok: false,
       error: 'Instruction revision failed: empty result',

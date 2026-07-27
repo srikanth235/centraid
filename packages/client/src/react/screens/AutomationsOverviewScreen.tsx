@@ -103,6 +103,13 @@ function AutoTile({
                 <span className={styles.failedBadge} title="Last run failed">
                   Failed
                 </span>
+              ) : row.recentFailover ? (
+                <span
+                  className={styles.failoverBadge}
+                  title="The latest operation continued on a fallback agent"
+                >
+                  Fallback
+                </span>
               ) : null}
             </div>
             <div className={cx(cardCss.desc, styles.tileBlurb)}>{blurb}</div>

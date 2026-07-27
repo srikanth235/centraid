@@ -43,5 +43,6 @@ export function formatUsageTitle(u: AsstUsageDTO | undefined): string | undefine
     parts.push(`${formatCost(u.costUsd)}${u.estimated ? ' (estimated)' : ''}`);
   }
   if (u.model) parts.push(u.model);
+  if (u.effort) parts.push(`${u.effort} effort`);
   return parts.length ? parts.join(' · ') : undefined;
 }

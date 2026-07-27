@@ -73,7 +73,9 @@ afterEach(async () => {
 });
 
 test('warmKey joins kind/cwd/sessionId', () => {
-  expect(warmKey('goose', '/tmp/a', 's1')).toBe('goose\0/tmp/a\0s1');
+  expect(warmKey('goose', '/tmp/a', 's1', 'conversation-1')).toBe(
+    'conversation-1\0goose\0/tmp/a\0s1',
+  );
 });
 
 test('takeWarmSlot returns undefined when empty', () => {
@@ -92,6 +94,7 @@ test('put then take returns a live slot and removes it from the pool', async () 
     canResume: true,
     canLoad: false,
     canClose: false,
+    canAdditional: false,
     httpMcp: true,
     promptCaps: { image: true },
   });
@@ -117,6 +120,7 @@ test('takeWarmSlot disposes and returns undefined when process already exited', 
     canResume: false,
     canLoad: true,
     canClose: false,
+    canAdditional: false,
     httpMcp: false,
     promptCaps: {},
   });
@@ -134,6 +138,7 @@ test('putWarmSlot replaces a previous entry for the same key', async () => {
     canResume: false,
     canLoad: false,
     canClose: false,
+    canAdditional: false,
     httpMcp: false,
     promptCaps: {},
   });
@@ -147,6 +152,7 @@ test('putWarmSlot replaces a previous entry for the same key', async () => {
     canResume: true,
     canLoad: true,
     canClose: true,
+    canAdditional: false,
     httpMcp: true,
     promptCaps: {},
   });
@@ -154,6 +160,84 @@ test('putWarmSlot replaces a previous entry for the same key', async () => {
   expect(slot?.conn).toBe(next.conn);
   expect(slot?.canResume).toBe(true);
   await disposeSlot(slot!);
+});
+
+test('a conversation keeps only its newest warm runner binding', async () => {
+  const codex = makeConn();
+  putWarmSlot({
+    kind: 'codex',
+    conversationId: 'conversation-1',
+    cwd: '/shared',
+    sessionId: 'codex-session',
+    child: makeChild(codex.markExited),
+    conn: codex.conn,
+    canResume: true,
+    canLoad: false,
+    canClose: false,
+    canAdditional: false,
+    httpMcp: false,
+    promptCaps: {},
+  });
+  const claude = makeConn();
+  putWarmSlot({
+    kind: 'claude-code',
+    conversationId: 'conversation-1',
+    cwd: '/shared',
+    sessionId: 'claude-session',
+    child: makeChild(claude.markExited),
+    conn: claude.conn,
+    canResume: true,
+    canLoad: false,
+    canClose: false,
+    canAdditional: false,
+    httpMcp: false,
+    promptCaps: {},
+  });
+
+  expect(takeWarmSlot('codex', '/shared', 'codex-session', 'conversation-1')).toBeUndefined();
+  const current = takeWarmSlot('claude-code', '/shared', 'claude-session', 'conversation-1');
+  expect(current).toBeDefined();
+  await disposeSlot(current!);
+});
+
+test('conversations sharing a cwd keep independent warm processes', async () => {
+  const first = makeConn();
+  putWarmSlot({
+    kind: 'codex',
+    conversationId: 'conversation-a',
+    cwd: '/shared',
+    sessionId: 'session-a',
+    child: makeChild(first.markExited),
+    conn: first.conn,
+    canResume: true,
+    canLoad: false,
+    canClose: false,
+    canAdditional: false,
+    httpMcp: false,
+    promptCaps: {},
+  });
+  const second = makeConn();
+  putWarmSlot({
+    kind: 'claude-code',
+    conversationId: 'conversation-b',
+    cwd: '/shared',
+    sessionId: 'session-b',
+    child: makeChild(second.markExited),
+    conn: second.conn,
+    canResume: true,
+    canLoad: false,
+    canClose: false,
+    canAdditional: false,
+    httpMcp: false,
+    promptCaps: {},
+  });
+
+  const a = takeWarmSlot('codex', '/shared', 'session-a', 'conversation-a');
+  const b = takeWarmSlot('claude-code', '/shared', 'session-b', 'conversation-b');
+  expect(a).toBeDefined();
+  expect(b).toBeDefined();
+  await disposeSlot(a!);
+  await disposeSlot(b!);
 });
 
 test('disposeSlot issues session/close when canClose and still live', async () => {
@@ -168,6 +252,7 @@ test('disposeSlot issues session/close when canClose and still live', async () =
     canResume: false,
     canLoad: false,
     canClose: true,
+    canAdditional: false,
     httpMcp: false,
     promptCaps: {},
   });
@@ -187,6 +272,7 @@ test('disposeSlot ignores close failures and still kills the child', async () =>
     canResume: false,
     canLoad: false,
     canClose: true,
+    canAdditional: false,
     httpMcp: false,
     promptCaps: {},
   });
@@ -205,6 +291,7 @@ test('clearWarmPool empties every slot', async () => {
     canResume: false,
     canLoad: false,
     canClose: false,
+    canAdditional: false,
     httpMcp: false,
     promptCaps: {},
   });
@@ -217,6 +304,7 @@ test('clearWarmPool empties every slot', async () => {
     canResume: false,
     canLoad: false,
     canClose: false,
+    canAdditional: false,
     httpMcp: false,
     promptCaps: {},
   });

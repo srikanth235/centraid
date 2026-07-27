@@ -19,6 +19,11 @@ vi.mock('@centraid/automation', () => ({
 vi.mock('./run-automation-live-dispatch.js', () => ({
   startLiveDispatch: (...args: never[]) =>
     (startLiveDispatch as (...a: never[]) => ReturnType<typeof startLiveDispatch>)(...args),
+  parseAutomationAgentFailure: (error: string | undefined) => {
+    const prefix = 'centraid-agent-failure:';
+    if (!error?.startsWith(prefix)) return undefined;
+    return JSON.parse(error.slice(prefix.length));
+  },
 }));
 
 import { runAutomation } from './run-automation.ts';
@@ -95,5 +100,49 @@ describe('runAutomation', () => {
     };
     deps.openDispatch({ workdir: '/w', runId: 'r' });
     expect(startLiveDispatch).toHaveBeenCalledWith(expect.objectContaining({ runner: 'codex' }));
+  });
+
+  it('re-enters a failed automation on the next ladder rung as a new ledger turn', async () => {
+    const failure =
+      'centraid-agent-failure:{"runner":"codex","failureClass":"quota","message":"limit"}';
+    runFire
+      .mockResolvedValueOnce({
+        outcome: { ok: false, error: failure },
+        record: { runId: 'run-fire', ok: false },
+      })
+      .mockResolvedValueOnce({
+        outcome: { ok: true, value: 'done' },
+        record: { runId: 'run-fire:failover:1:claude-code', ok: true },
+      });
+    const onFailover = vi.fn();
+
+    const result = await runAutomation({
+      automationRef: 'app/digest',
+      appsDir: '/apps',
+      journalDbFile: '/j.db',
+      runId: 'run-fire',
+      runner: 'codex',
+      runnerLadder: ['codex', 'claude-code'],
+      onFailover,
+    });
+
+    expect(result.outcome.ok).toBe(true);
+    expect(runFire).toHaveBeenCalledTimes(2);
+    expect(runFire.mock.calls.map((call) => call[0])).toEqual([
+      expect.objectContaining({ runId: 'run-fire', runnerKind: 'codex' }),
+      expect.objectContaining({
+        runId: 'run-fire:failover:1:claude-code',
+        runnerKind: 'claude-code',
+        note:
+          'codex failed at the automation fire boundary (quota). ' +
+          'Continuing with claude-code; provider-specific model and effort pins were cleared.',
+        failoverNotice:
+          'codex failed at the automation fire boundary (quota). ' +
+          'Continuing with claude-code; provider-specific model and effort pins were cleared.',
+      }),
+    ]);
+    expect(onFailover).toHaveBeenCalledWith(
+      expect.objectContaining({ from: 'codex', to: 'claude-code' }),
+    );
   });
 });

@@ -290,6 +290,8 @@ function UsageSection({
   const peak = hasDaily ? Math.max(...series) : 0;
   const models = summary.byModel.slice(0, 3);
   const modelMax = Math.max(1, ...models.map((m) => m.tokens));
+  const efforts = summary.byEffort.slice(0, 4);
+  const effortMax = Math.max(1, ...efforts.map((e) => e.tokens));
 
   return (
     <View>
@@ -314,7 +316,11 @@ function UsageSection({
               <Text style={styles.meterFoot}>{`${quotaPct}% of included`}</Text>
             </View>
           ) : (
-            <Text style={styles.kpiFoot}>this window</Text>
+            <Text style={styles.kpiFoot}>
+              {kpis.hydrationTokens > 0
+                ? `${formatCount(kpis.hydrationTokens)} hydration`
+                : 'this window'}
+            </Text>
           )}
         </Kpi>
         <Kpi
@@ -409,6 +415,37 @@ function UsageSection({
         </View>
       ) : null}
 
+      {efforts.length > 0 ? (
+        <View style={styles.panel}>
+          <View style={styles.panelHead}>
+            <Text style={styles.panelTitle}>By effort</Text>
+            <Text style={styles.panelMeta}>RUNNER-CONFIRMED</Text>
+          </View>
+          {efforts.map((e) => (
+            <View key={e.effort} style={styles.model}>
+              <Text style={styles.modelName} numberOfLines={1}>
+                {e.effort}
+              </Text>
+              <View style={styles.meterTrack}>
+                <View
+                  style={[
+                    styles.meterFill,
+                    {
+                      backgroundColor: colors.accent,
+                      width: `${Math.round((e.tokens / effortMax) * 100)}%`,
+                    },
+                  ]}
+                />
+              </View>
+              <View style={styles.modelFoot}>
+                <Text style={styles.modelFootText}>{formatCount(e.tokens)}</Text>
+                <Text style={styles.modelFootText}>{`${e.runs} · ${formatUsd(e.costUsd)}`}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
       {summary.recent.length > 0 ? (
         <View style={styles.panel}>
           <View style={styles.panelHead}>
@@ -425,7 +462,7 @@ function UsageSection({
                     {a.label}
                   </Text>
                   <Text style={styles.actKind}>
-                    {`${a.kind.toUpperCase()}${a.ok ? '' : ' · FAILED'}`}
+                    {`${a.kind.toUpperCase()}${a.effort ? ` · ${a.effort.toUpperCase()}` : ''}${a.ok ? '' : ' · FAILED'}`}
                   </Text>
                 </View>
                 <View style={styles.actNums}>

@@ -1,7 +1,7 @@
 import type { CSSProperties, JSX } from 'react';
 import type { AgentCardDTO } from '../screen-contracts.js';
 import { AgentGlyph } from './agentGlyphs.js';
-import { ModelSelect } from './SettingsProvidersSelects.js';
+import { ConfigSelect, ModelSelect } from './SettingsProvidersSelects.js';
 import styles from './SettingsProvidersScreen.module.css';
 
 // Settings → Agents' inventory section: what is installed and which routing
@@ -26,13 +26,17 @@ export default function AgentEntry({
   usedBy,
   isDefault,
   saved,
+  effort,
   onSetModel,
+  onSetEffort,
 }: {
   card: AgentCardDTO;
   usedBy: string[];
   isDefault: boolean;
   saved: string;
+  effort: string;
   onSetModel: (v: string) => void;
+  onSetEffort: (v: string) => void;
 }): JSX.Element {
   return (
     <div className={styles.entry} style={{ '--row-accent': card.accent } as CSSProperties}>
@@ -72,13 +76,23 @@ export default function AgentEntry({
             ))}
           </div>
         </div>
-        <ModelSelect
-          card={card}
-          saved={saved}
-          onChange={onSetModel}
-          emptyLabel="Built-in default"
-          ariaLabel={`Default model for ${card.title}`}
-        />
+        <div className={styles.agentControls}>
+          <ModelSelect
+            card={card}
+            saved={saved}
+            onChange={onSetModel}
+            emptyLabel="Built-in model"
+            ariaLabel={`Default model for ${card.title}`}
+          />
+          <ConfigSelect
+            card={card}
+            category="thought_level"
+            saved={effort}
+            onChange={onSetEffort}
+            emptyLabel="Built-in effort"
+            ariaLabel={`Default effort for ${card.title}`}
+          />
+        </div>
       </div>
     </div>
   );

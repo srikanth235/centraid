@@ -716,6 +716,55 @@
   padding-top: 8px;
   background: linear-gradient(to top, var(--bg) 72%, transparent);
 }
+.attachRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.attachChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 4px 6px 4px 9px;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.attachChip[data-state='error'] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.attachChip > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachChip > button,
+.attachButton {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.attachChip > button {
+  width: 20px;
+  height: 20px;
+}
+.attachButton {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+.attachButton:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
 .composerHint {
   margin: 0;
   padding: 0 2px;
