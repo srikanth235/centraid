@@ -1,7 +1,7 @@
 use std::io::{Cursor, Read, Seek, SeekFrom, Write};
 
 use aes_gcm::{
-    Aes256Gcm, KeyInit, Nonce,
+    Aes256Gcm, KeyInit,
     aead::{Aead, Payload},
 };
 use anyhow::{Context, Result, bail};
@@ -36,10 +36,10 @@ fn directory_aad(sha: &str, count: usize) -> String {
 }
 
 fn nonce_for(key: &[u8; 32], aad: &[u8], plain: &[u8]) -> [u8; 12] {
-    let mut body_mac = <HmacSha256 as Mac>::new_from_slice(key).expect("fixed HMAC key");
+    let mut body_mac = <HmacSha256 as KeyInit>::new_from_slice(key).expect("fixed HMAC key");
     body_mac.update(plain);
     let body_hash = body_mac.finalize().into_bytes();
-    let mut mac = <HmacSha256 as Mac>::new_from_slice(key).expect("fixed HMAC key");
+    let mut mac = <HmacSha256 as KeyInit>::new_from_slice(key).expect("fixed HMAC key");
     mac.update(b"cbsf-nonce\0");
     mac.update(aad);
     mac.update(b"\0");
@@ -53,7 +53,7 @@ fn seal(key: &[u8; 32], aad: &[u8], plain: &[u8]) -> Result<Vec<u8>> {
     let nonce = nonce_for(key, aad, plain);
     let cipher = Aes256Gcm::new_from_slice(key).context("invalid CBSF key")?;
     let body = cipher
-        .encrypt(Nonce::from_slice(&nonce), Payload { msg: plain, aad })
+        .encrypt((&nonce).into(), Payload { msg: plain, aad })
         .map_err(|_| anyhow::anyhow!("CBSF seal failed"))?;
     let mut output = Vec::with_capacity(NONCE_BYTES + body.len());
     output.extend_from_slice(&nonce);
@@ -68,7 +68,9 @@ fn open(key: &[u8; 32], aad: &[u8], sealed: &[u8]) -> Result<Vec<u8>> {
     let cipher = Aes256Gcm::new_from_slice(key).context("invalid CBSF key")?;
     cipher
         .decrypt(
-            Nonce::from_slice(&sealed[..NONCE_BYTES]),
+            sealed[..NONCE_BYTES]
+                .try_into()
+                .context("CBSF nonce length")?,
             Payload {
                 msg: &sealed[NONCE_BYTES..],
                 aad,
