@@ -715,9 +715,25 @@ export {
   stageGatewayDeviceWorkDerivative,
   type CentraidGatewayDevice,
   type GatewayDeviceRole,
+  type GatewayVaultGrant,
   type DeviceComputeCapabilities,
   type DeviceComputeProfile,
   type GatewayDeviceWorkDepth,
   type DeviceEnrichmentLease,
   type GatewayDeviceTicket,
+  type GatewayDeviceTicketInput,
 } from './gateway-client-devices.js';
+
+// The tombstone predicate lives on its own leaf so screens can ask "is this
+// row revoked?" without importing the HTTP client (see the module header).
+export { isRevokedDevice } from './device-roster.js';
+
+// The household roster (issue #599 L2) — the people devices act as. Same
+// card, same barrel; see `gateway-client-members.ts` for the two-verb split.
+export {
+  listGatewayMembers,
+  createGatewayMember,
+  renameGatewayMember,
+  removeGatewayMember,
+  type GatewayMember,
+} from './gateway-client-members.js';

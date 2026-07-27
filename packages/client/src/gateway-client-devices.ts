@@ -70,12 +70,26 @@ export interface DeviceEnrichmentLease {
  */
 export type GatewayDeviceRole = 'admin' | 'write' | 'read';
 
+/**
+ * One (space, role) pair — the unit authority is authored in since #599.
+ * Roles hang off the MEMBER; a device only inherits its member's grants.
+ */
+export interface GatewayVaultGrant {
+  vaultId: string;
+  vaultName?: string;
+  role: GatewayDeviceRole;
+}
+
 /** One paired device (mirrors the gateway route's `DeviceDTO`). */
 export interface CentraidGatewayDevice {
   /** The revocation handle (the enrollment row id). */
   deviceId: string;
   /** The device's key (iroh EndpointId, or a synthetic `http:<uuid>`). */
   endpointId: string;
+  /** The person this device acts as (#599 L2). The roster groups on it. */
+  memberId: string;
+  /** That person's display label, denormalized so a roster needs one call. */
+  memberLabel: string;
   label: string;
   platform?: string;
   transport: 'iroh';
@@ -126,6 +140,11 @@ export async function listGatewayDevices(): Promise<CentraidGatewayDevice[]> {
 export interface GatewayDeviceTicket {
   /** The pasteable one-line token for the client's "Add gateway" dialog. */
   ticket: string;
+  /** The person the redeeming device will act as. */
+  memberId: string;
+  memberLabel: string;
+  /** Every (space, role) the ticket carries. The first is echoed flat below. */
+  grants: GatewayVaultGrant[];
   vaultId: string;
   vaultName?: string;
   /** Ticket expiry, ISO-8601. */
@@ -134,21 +153,35 @@ export interface GatewayDeviceTicket {
   role: GatewayDeviceRole;
 }
 
+/** What the panel sends to mint — a person plus what they may reach. */
+export interface GatewayDeviceTicketInput {
+  vaultId?: string;
+  ttlMinutes?: number;
+  label?: string;
+  role?: GatewayDeviceRole;
+  /** An EXISTING person: member id (or exact label, for CLI parity). */
+  memberId?: string;
+  /** A NEW person, created by this mint. Never combine with `memberId`. */
+  newMemberLabel?: string;
+  /** Per-space roles. Omitted with no member = self-pair at your own roles. */
+  grants?: { vaultId: string; role: GatewayDeviceRole }[];
+}
+
 /**
  * Mint a device-pairing ticket from the app (the operator twin of
  * `centraid-gateway pair`). The gateway scopes it to the caller's plane and
  * defaults the target vault to the active `x-centraid-vault` when none is given.
  *
- * `role` picks the role the redeeming device lands at; omitted, the gateway
- * defaults to `write`. Granting `admin` requires the caller already hold admin
- * on that vault — the ticket leaves this machine, so the role travels with it.
+ * Naming NO member is a SELF-PAIR — the ticket lands on the caller's own
+ * member at the roles they already hold (#599 Decision 5), which is why a
+ * bare `{ttlMinutes}` call is safe. Naming another person (`memberId`, or
+ * `newMemberLabel` to create one) is an invite, and requires the caller hold
+ * `admin` in every granted space: the ticket leaves this machine, so the
+ * grants travel with it.
  */
-export async function createGatewayDeviceTicket(input?: {
-  vaultId?: string;
-  ttlMinutes?: number;
-  label?: string;
-  role?: GatewayDeviceRole;
-}): Promise<GatewayDeviceTicket> {
+export async function createGatewayDeviceTicket(
+  input?: GatewayDeviceTicketInput,
+): Promise<GatewayDeviceTicket> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, '/centraid/_gateway/devices/ticket', {
     method: 'POST',
@@ -158,12 +191,26 @@ export async function createGatewayDeviceTicket(input?: {
   return readJson<GatewayDeviceTicket & { ok: true }>(res, 'mint pairing ticket');
 }
 
-/** Revoke one paired device (cascades its HTTP token). Idempotent — `removed:false` when already gone. */
-export async function revokeGatewayDevice(deviceId: string): Promise<{ removed: boolean }> {
+/**
+ * Revoke one paired DEVICE — "this phone was stolen". The person and their
+ * other devices are untouched (removing a person is `removeGatewayMember`).
+ * Idempotent — `removed:false` when already gone.
+ *
+ * The row survives as a tombstone at role `revoked`, so prior attribution
+ * still resolves. Revoking the last live device of a space's last owner 409s
+ * until `confirmLastAdmin` echoes that space's name back.
+ */
+export async function revokeGatewayDevice(
+  deviceId: string,
+  options?: { confirmLastAdmin?: string },
+): Promise<{ removed: boolean }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_gateway/devices/${enc(deviceId)}`, {
     method: 'DELETE',
-    headers: authHeaders(token),
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify(
+      options?.confirmLastAdmin ? { confirmLastAdmin: options.confirmLastAdmin } : {},
+    ),
   });
   return readJson<{ removed: boolean }>(res, 'revoke device');
 }

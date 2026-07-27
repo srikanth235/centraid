@@ -20,6 +20,8 @@ function device(optedIn = true, transcript = false): CentraidGatewayDevice {
   return {
     deviceId: 'enrollment-1',
     endpointId: 'http:laptop',
+    memberId: 'mem-1',
+    memberLabel: 'You',
     label: 'Laptop',
     transport: 'iroh',
     vaultId: 'vault-1',

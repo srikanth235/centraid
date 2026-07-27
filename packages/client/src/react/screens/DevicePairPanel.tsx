@@ -1,20 +1,34 @@
 import { useEffect, useState, type JSX } from 'react';
 import QRCode from 'qrcode';
-import type { GatewayDeviceRole, GatewayDeviceTicket } from '../../gateway-client.js';
+import type {
+  GatewayDeviceTicket,
+  GatewayDeviceTicketInput,
+  GatewayMember,
+} from '../../gateway-client.js';
 import { formatClock, formatDuration } from '../shell/routes/gatewayData.js';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
 import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
-import styles from './DevicesCard.module.css';
+import cardCss from './DevicesCard.module.css';
+import styles from './DevicePairPanel.module.css';
+import { pairErrorMessage, roleLabel } from './device-roles.js';
+import DevicePairTarget, {
+  type PairGrant,
+  type PairSpace,
+  type PairTarget,
+} from './DevicePairTarget.js';
 
 export interface DevicePairPanelProps {
   now: number;
-  onCreateTicket: (input?: {
-    ttlMinutes?: number;
-    role?: GatewayDeviceRole;
-  }) => Promise<GatewayDeviceTicket>;
+  onCreateTicket: (input?: GatewayDeviceTicketInput) => Promise<GatewayDeviceTicket>;
   onClose: () => void;
+  /** Everyone the caller shares a space with — the picker's list (#599). */
+  members?: readonly GatewayMember[];
+  /** The caller's own member id, so "Myself" is distinguishable from a peer. */
+  currentMemberId?: string;
+  /** Spaces the caller may grant, with resolved names. */
+  spaces?: readonly PairSpace[];
 }
 
 const TTL_PRESETS: readonly { label: string; minutes: number }[] = [
@@ -24,34 +38,23 @@ const TTL_PRESETS: readonly { label: string; minutes: number }[] = [
 ];
 
 /*
- * The role travels WITH the ticket, so it is chosen at mint time, not after
- * the device connects. `write` is the default because a ticket leaves this
- * machine — pasted into a browser, scanned by a phone — and whatever redeems
- * it lands at the chosen role. Defaulting to Admin would make a casually
- * paired phone able to mint further tickets and revoke this very device.
+ * "Pair a device for <person>" — a device is always somebody's (#599 L2), so
+ * the first question is who, not what role. Self-pair is the landing state:
+ * pairing your own second phone must not require asking another person for a
+ * QR code, and it grants exactly the access you already hold (the gateway
+ * derives it — this panel sends no member and no grants for that case).
  */
-const ROLE_PRESETS: readonly { label: string; role: GatewayDeviceRole; hint: string }[] = [
-  { label: 'Read only', role: 'read', hint: 'Can read your vault. Cannot change anything.' },
-  {
-    label: 'Read & write',
-    role: 'write',
-    hint: 'Can read and change your vault. The usual choice.',
-  },
-  {
-    label: 'Admin',
-    role: 'admin',
-    hint: 'Everything, plus pairing new devices and revoking existing ones — including this one.',
-  },
-];
-
-/** Owner-facing QR/paste material for one short-lived, single-use pairing ticket. */
 export default function DevicePairPanel({
   now,
   onCreateTicket,
   onClose,
+  members = [],
+  currentMemberId,
+  spaces = [],
 }: DevicePairPanelProps): JSX.Element {
   const [minutes, setMinutes] = useState(15);
-  const [role, setRole] = useState<GatewayDeviceRole>('write');
+  const [target, setTarget] = useState<PairTarget>({ kind: 'self' });
+  const [grants, setGrants] = useState<PairGrant[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<GatewayDeviceTicket | null>(null);
@@ -79,12 +82,30 @@ export default function DevicePairPanel({
   }, [ticket]);
 
   const generate = async (): Promise<void> => {
+    if (target.kind === 'new' && target.label.trim().length === 0) {
+      setError('Give the new person a name.');
+      return;
+    }
+    if (target.kind !== 'self' && grants.length === 0) {
+      setError('Choose at least one space this device may reach.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      setTicket(await onCreateTicket({ ttlMinutes: minutes, role }));
+      // Self-pair sends NEITHER member nor grants: the gateway resolves the
+      // caller's own member and clamps to the roles they already hold.
+      const input: GatewayDeviceTicketInput = { ttlMinutes: minutes };
+      if (target.kind === 'member') {
+        input.memberId = target.memberId;
+        input.grants = grants;
+      } else if (target.kind === 'new') {
+        input.newMemberLabel = target.label.trim();
+        input.grants = grants;
+      }
+      setTicket(await onCreateTicket(input));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(pairErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -102,13 +123,22 @@ export default function DevicePairPanel({
 
   if (ticket) {
     const expMs = Date.parse(ticket.expiresAt);
+    const granted = ticket.grants ?? [];
     return (
       <div className={styles.pair} data-testid="pair-panel">
         <div className={styles.pairLead}>
-          One-time ticket for <strong>{ticket.vaultName ?? 'your vault'}</strong>, granting{' '}
-          <strong>{ROLE_PRESETS.find((p) => p.role === ticket.role)?.label ?? ticket.role}</strong>.
-          Scan it in Centraid Companion, or paste it into another device’s pairing dialog. It burns
-          on first use.
+          One-time ticket for <strong>{ticket.memberLabel}</strong>. Scan it in Centraid Companion,
+          or paste it into the other device’s pairing dialog. It burns on first use.
+        </div>
+        <div className={styles.grantSummary}>
+          {(granted.length > 0
+            ? granted
+            : [{ vaultId: ticket.vaultId, vaultName: ticket.vaultName, role: ticket.role }]
+          ).map((grant) => (
+            <span key={grant.vaultId}>
+              {grant.vaultName ?? grant.vaultId} · {roleLabel(grant.role)}
+            </span>
+          ))}
         </div>
         <div className={styles.pairTicketSurface}>
           {qrSvg ? (
@@ -166,27 +196,20 @@ export default function DevicePairPanel({
 
   return (
     <div className={styles.pair} data-testid="pair-panel">
-      <div className={styles.pairLead}>
-        Generate a one-time ticket, then scan it in Centraid Companion or paste it into another
-        device’s pairing dialog. The device pairs into your active vault and appears here once it
-        connects.
-      </div>
+      <DevicePairTarget
+        target={target}
+        onTargetChange={(next) => {
+          setTarget(next);
+          setError(null);
+        }}
+        members={members}
+        {...(currentMemberId !== undefined ? { currentMemberId } : {})}
+        spaces={spaces}
+        grants={grants}
+        onGrantsChange={setGrants}
+        disabled={busy}
+      />
       <div className={styles.pairForm}>
-        <fieldset className={styles.ttlGroup} aria-label="What this device may do">
-          {ROLE_PRESETS.map((preset) => (
-            <button
-              key={preset.role}
-              type="button"
-              className={cx(styles.ttlPreset, preset.role === role && styles.ttlPresetOn)}
-              aria-pressed={preset.role === role}
-              disabled={busy}
-              onClick={() => setRole(preset.role)}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </fieldset>
-        <p className={styles.roleHint}>{ROLE_PRESETS.find((p) => p.role === role)?.hint}</p>
         <fieldset className={styles.ttlGroup} aria-label="Ticket lifetime">
           {TTL_PRESETS.map((preset) => (
             <button
@@ -209,7 +232,7 @@ export default function DevicePairPanel({
             onClick={() => void generate()}
           >
             {busy ? (
-              <span className={styles.spin}>
+              <span className={cardCss.spin}>
                 <Icon name="Loader" size={13} />
               </span>
             ) : (
@@ -226,7 +249,7 @@ export default function DevicePairPanel({
           </button>
         </div>
       </div>
-      {error ? <div className={styles.rowError}>{error}</div> : null}
+      {error ? <div className={cardCss.rowError}>{error}</div> : null}
     </div>
   );
 }

@@ -56,6 +56,9 @@ export interface GatewayScreenProps {
   loadDevices?: DevicesCardProps['loadDevices'];
   onRevokeDevice?: DevicesCardProps['onRevokeDevice'];
   onCurrentDeviceRevoked?: DevicesCardProps['onCurrentDeviceRevoked'];
+  /** The household roster the card groups devices by (#599 L2). */
+  loadMembers?: DevicesCardProps['loadMembers'];
+  onRemoveMember?: DevicesCardProps['onRemoveMember'];
   onCreateDeviceTicket?: DevicesCardProps['onCreateTicket'];
   onUpdateDeviceCompute?: DevicesCardProps['onUpdateCompute'];
   loadDeviceWorkStatus?: DevicesCardProps['loadWorkStatus'];
@@ -391,6 +394,8 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                   {...(props.onCurrentDeviceRevoked
                     ? { onCurrentDeviceRevoked: props.onCurrentDeviceRevoked }
                     : {})}
+                  {...(props.loadMembers ? { loadMembers: props.loadMembers } : {})}
+                  {...(props.onRemoveMember ? { onRemoveMember: props.onRemoveMember } : {})}
                   {...(props.onCreateDeviceTicket
                     ? { onCreateTicket: props.onCreateDeviceTicket }
                     : {})}

@@ -8,7 +8,7 @@
 - [x] Two revocation verbs: revoke device vs remove member (atomic)
 - [x] Founding auto-creates the owner member; ≥1-owner-per-vault invariant
 - [x] CLI parity: `members list|add|rename|remove`, `pair --member --grant`, member column in `devices list`
-- [ ] People-first DevicesCard + member-picker pairing panel (client)
+- [x] People-first DevicesCard + member-picker pairing panel (client)
 - [x] Share-by-placement: hardlink-or-copy into audience CAS + projected row + `core_share_origin` sidecar, single-DB transaction (vault-package primitive; gateway routes follow in a later commit)
 - [ ] Journal attribution (member + device) on writes
 - [ ] Docs: glossary member vocabulary, decisions.md, SECURITY.md threat-model premise
@@ -44,6 +44,13 @@
 - **Wire:** `packages/tunnel/src/gateway-endpoint.ts` — `GatewayPairResponse` adds `memberId`/`memberLabel`/`vaultIds[]`; the request payload still carries no role and no member; `packages/tunnel/fixtures/wire-golden.json` regenerated (diff is exactly the `gatewayPairResponse` vector); `packages/tunnel/src/wire-conformance.contract.test.ts` updated.
 - **Updated tests across the reshape:** `packages/gateway/src/serve/gateway-db.test.ts`, `device-plane.test.ts`, `packages/gateway/src/routes/devices-routes.test.ts` (trimmed; the invitation cases moved to the new split file), `founding-routes.test.ts`, `vault-erase.test.ts`, `packages/gateway/src/cli/admin.test.ts`, `packages/gateway/src/backup/recover-live.integration.test.ts`, plus `packages/tunnel/src/wire-conformance.contract.test.ts`.
 
+**Commit 4 — the client member surfaces.** This realizes the checked checklist item — People-first DevicesCard + member-picker pairing panel (client):
+
+- **Members API client:** new `packages/client/src/gateway-client-members.ts` (`listGatewayMembers` — 404 → `[]` for older gateways, `createGatewayMember`, `renameGatewayMember`, `removeGatewayMember(id, {confirmLastAdmin?})`); `packages/client/src/gateway-client-devices.ts` — `CentraidGatewayDevice` gains required `memberId`/`memberLabel`, new `GatewayVaultGrant`, `GatewayDeviceTicket` gains `memberId`/`memberLabel`/`grants[]`, new `GatewayDeviceTicketInput` (`memberId` / `newMemberLabel` / `grants[]`), `revokeGatewayDevice` sends a JSON body for `confirmLastAdmin`; new leaf `packages/client/src/device-roster.ts` (`isRevokedDevice` tombstone predicate — a leaf module because importing the HTTP client into a React screen executes `window.CentraidApi.onGatewayChanged` at module load and kills the test env); `packages/client/src/gateway-client.ts` re-exports.
+- **People-first card:** `packages/client/src/react/screens/DevicesCard.tsx` becomes "People & devices" — one group per person via new `packages/client/src/react/screens/device-groups.ts` (grouping keys on NOT-NULL `memberId`; no "Unassigned" bucket is constructible), rendered by new `packages/client/src/react/screens/DeviceMemberGroup.tsx` (avatar, name, "You" chip, role chips in ownership words, device count, "Remove <person>" with single confirm) and `packages/client/src/react/screens/DeviceRow.tsx` ("Revoke device" per row); a 409 last-admin refusal escalates the confirm in place and re-sends `confirmLastAdmin`. Revoked devices render collapsed under a `<details>` foot per group ("N revoked device(s)", no actions) and are excluded from counts. New `packages/client/src/react/screens/device-roles.ts` centralizes the Owner/Member/Viewer labels (mapping `admin`/`write`/`read`) and server-error → human-message mapping; `admin`/`write`/`read` are never rendered, and new copy says **space**/person, never "vault"/"user"/"account". Styles in `packages/client/src/react/screens/DevicesCard.module.css`.
+- **Member-picker pairing panel:** `packages/client/src/react/screens/DevicePairPanel.tsx` + new `packages/client/src/react/screens/DevicePairTarget.tsx` — "Pair a device for [Myself | <person>… | New person…]" as a select (never free text; the only text input appears under "New person…"); self-pair is the landing state (sends only `{ttlMinutes}`, hints "joins as you, with your current access"); otherwise per-space grant rows (checkbox + Viewer/Member/Owner ladder, default Member) derived from the roster rather than a new listVaults dependency; new server error codes (`role_above_own`, `not_admin`, `ambiguous_member`, …) surface as human messages. Styles split into new `packages/client/src/react/screens/DevicePairPanel.module.css` (the combined file crossed the 500-line cap).
+- **Mount/wiring + ripple:** `packages/client/src/react/screens/GatewayScreen.tsx`, `packages/client/src/react/shell/routes/GatewayRoute.tsx`, `packages/client/src/device-enrichment-worker.test.ts`. Tests: rewritten `packages/client/src/react/screens/DevicesCard.test.tsx` (9), new `packages/client/src/react/screens/DevicePairPanel.test.tsx` (7), new `packages/client/src/react/screens/device-groups.test.ts` (5).
+
 _Later commits will be appended per phase._
 
 ## Decisions
@@ -53,6 +60,7 @@ _Later commits will be appended per phase._
 - The vault's `consent_device.trust` mirror is unchanged by design: `admin` and `write` both collapse to `full` (minting/revoking are gateway-plane concerns).
 - **Known gap surfaced by commit 2 (deliberate, deferred to the gateway-wiring commit):** there is no shipped *local-only* orphan sweep — `reconcileCustody` deletes only remote orphans and `BlobCache.runEviction` only sheds shas with replica evidence. #599's "the audience vault's own orphan-grace sweep already reclaims" is therefore not yet true for local bytes; the share tests compose the shipped primitives (`liveBlobShas` → `OrphanTombstoneIndex` grace gate → `BlobCustody.deleteLocalSync`) to prove the semantics, and the gateway phase must package that composition as a real sweep or unshared blobs accumulate.
 - **Commit-3 deviations (deliberate):** `DeviceEnrollment` stays a derived per-(device, vault) view rather than rewriting ~30 call sites — authority is still authored in exactly one place (`member_roles`). Host-custody `enroll()` without a member creates one labelled with the device label (the communal-device story; never an "Unassigned" bucket). `tickets.member_id` is nullable for kind `found` only — founding mints before any vault exists, so the owner member is created at redemption. Self-pair with no explicit grants now bakes the member's **current** roles (an admin self-pairing gets admin) instead of defaulting to `write`. **Journal attribution stops at the gateway boundary in this commit**: `memberId` is resolved into the request scope and carried to `ReplicaIntentContext`/`ReplicaRequestAccess`, but the journal receipt writer (`packages/vault/src/gateway/gateway.ts` `writeReceipt`, `InvokeRequest.intentDeviceId`) is a vault-package seam landed in a later commit — same for the agent on-behalf-of hard-cap, whose `app` credential today has no principal dimension.
+- **Commit-4 deviations (deliberate):** `ROLE_PRESETS` moved out of the panel into `device-roles.ts` and relabelled Owner/Member/Viewer (was Read only / Read & write / Admin) so card and panel share one vocabulary table. `createGatewayMember`/`renameGatewayMember` are API-only — "New person…" creates the member through the ticket route per Decision 5; a standalone add/rename-person UI is a follow-up. Grant-row spaces derive from the roster + device rows (the caller's visible set) instead of a new `listVaults` dependency.
 - `core_share_origin.shared_at` is INTEGER epoch-ms, diverging from core.ts's "timestamps are TEXT ISO-8601" header rule — it is gateway-plane boundary machinery on the same clock as `blob_orphan.first_orphaned_at` (justified in the DDL comment).
 
 ## Out of scope
@@ -87,6 +95,14 @@ cd packages/gateway && bun run test && bun run typecheck
 ```
 
 Result at commit time: gateway 173 files passed / 1 skipped, 1167 tests passed / 6 skipped; tunnel 69 passed / 2 skipped with regenerated golden; protocol 32 passed; typecheck green in all three.
+
+Commit-4 spot check:
+
+```sh
+cd packages/client && bun run test -- src/react/screens/DevicesCard.test.tsx src/react/screens/DevicePairPanel.test.tsx src/react/screens/device-groups.test.ts && bun run typecheck
+```
+
+Result at commit time: 21/21 targeted tests passing (full client package: 182 files / 1375 tests), typecheck clean.
 
 Commit-1 result: 3 files, 23 tests, all passing. Full suites for gateway/client/tunnel were green in the authoring session, and `bun run check:pr:full` runs before requesting merge (shared packages `client`, `protocol`, `tunnel`, `gateway` all move). The `packages/tunnel/fixtures/wire-golden.json` diff is limited to dropping the client-supplied `"trust":"full"` field from the pair-request payload.
 
@@ -132,6 +148,20 @@ Verified line by line against the staged diff. The `gateway-db.ts` DDL matches e
 
 All six newly checked boxes are realized: the L2 member layer (DDL + `member-store.ts` + derived enrollment view, no role column on devices); invitation tickets with the self-pair/invite split (`tickets` CHECK, `mint(TicketInvitation)`, `redeemAndEnroll` returning `DeviceEnrollment[]` atomically, `device-invitations.ts`); two revocation verbs (`EnrollmentStore.revoke` tombstone vs `MemberStore.remove` atomic, surfaced as distinct routes); founding auto-member with the ≥1-owner invariant (`vaultsLosingLastAdmin` + `confirmLastAdmin` on route and CLI paths); CLI parity (`member-admin.ts`, `pair --member/--new-member/--grant`, `devices list` rows carrying `memberId`/`memberLabel` as fields); and the regenerated wire golden whose only changed vector is `gatewayPairResponse`, with the request payload still naming neither role nor member.
 
+### Commit 4
+
+**Check 1: the Commit-4 "What changed" block faithfully describes the staged diff**
+
+**Verdict: PASS**
+
+File-list fidelity is exact: the 19 staged code files plus the receipt all appear in the block, and every named path is in `git diff --cached --stat`. Spot checks: `device-groups.ts#groupDevicesByMember` keys on the required `memberId` field — no "Unassigned" branch exists or is constructible; `DeviceRow.tsx` carries the per-device "Revoke device" and `DeviceMemberGroup.tsx` the per-person "Remove {label}", both escalating a 409 in place via `lastAdminSpace(err)` → "Revoke/Remove anyway" re-sent with `confirmLastAdmin` as a JSON body; revoked rows render in a `<details>` with no actions and are excluded from all counts; `DevicePairTarget.tsx` is a `<select>` whose only text input is gated on "New person…", self-pair is the initial state and sends only `{ttlMinutes}`; `device-roles.ts` is the single Owner/Member/Viewer table and a grep of added lines finds no user-visible "vault"/"user"/"account" (only an icon glyph name, locals, the forbidden-synonym comment, and an error-code key whose message says "space"). The 500-line-cap split claim is honest (post-split 367 + 212 would have been 579 combined). The deviations bullet is verified (ROLE_PRESETS relocation + relabel; members create/rename API-only). The Verification numbers reproduce: 3 files / 21 tests, split 9 / 7 / 5.
+
+**Check 2: the newly checked checklist item is realized in the diff**
+
+**Verdict: PASS**
+
+Both halves are realized and behaviourally tested: the people-first card ("People & devices", groups over `DeviceMemberGroup`, `N people · M devices`, roster wired `GatewayScreen.tsx` → `GatewayRoute.tsx` → `listGatewayMembers`/`removeGatewayMember`) and the member-picker panel (person select + per-space grant ladder replacing the role picker; grouping in ownership words; two distinct removal verbs; tombstone disclosure; self-pair sending neither member nor grants; new-person defaulting to Member). The still-unchecked items carry no claim in this diff.
+
 ## Steering
 
 ### Check 1: Every human-steering event in the session transcript is recorded as a row
@@ -160,3 +190,4 @@ No steering rows recorded; the opening goal directive was correctly not logged a
 | claude-code-8a1af371-ccc-1785178492-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 116 | 165515 | 10316658 | 72923 | 238554 | 16.0329 | 506 | 2830006 | 33628405 | 342803 | feat(vault): share-by-placement primitive — hardlink CAS + core_share_origin (#5 |
 | claude-code-8a1af371-ccc-1785179223-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 76 | 50078 | 8515232 | 21439 | 71593 | 10.2139 | 582 | 2880084 | 42143637 | 364242 | feat(vault): share-by-placement primitive — hardlink CAS + core_share_origin (#5 |
 | claude-code-8a1af371-ccc-1785179823-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 58 | 55535 | 7242481 | 27523 | 83116 | 9.3134 | 640 | 2935619 | 49386118 | 391765 | feat(gateway): L2 member layer — members, (member,vault) roles, invitation ticke |
+| claude-code-8a1af371-ccc-1785181123-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 48 | 50242 | 6548877 | 21740 | 72030 | 8.2644 | 688 | 2985861 | 55934995 | 413505 | feat(client): people-first devices card + member-picker pairing panel (#599)Devi |

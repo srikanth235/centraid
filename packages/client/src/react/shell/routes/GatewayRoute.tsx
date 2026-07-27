@@ -4,7 +4,9 @@ import {
   getGatewayDeviceWorkStatus,
   getUserPrefs,
   listGatewayDevices,
+  listGatewayMembers,
   pauseBackgroundWork,
+  removeGatewayMember,
   resumeBackgroundWork,
   revokeGatewayDevice,
   saveUserPrefs,
@@ -166,6 +168,8 @@ export default function GatewayRoute(): JSX.Element {
             replica.purgeCurrentReplicaDevice(),
           )
         }
+        loadMembers={listGatewayMembers}
+        onRemoveMember={removeGatewayMember}
         onCreateDeviceTicket={createGatewayDeviceTicket}
         onUpdateDeviceCompute={setGatewayDeviceCompute}
         loadDeviceWorkStatus={getGatewayDeviceWorkStatus}

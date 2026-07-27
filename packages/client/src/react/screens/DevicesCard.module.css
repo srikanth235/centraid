@@ -34,6 +34,109 @@
   overscroll-behavior: contain;
 }
 
+/* ── People-first grouping (#599) ────────────────────────────────────────
+   A group is one PERSON: the header carries what is authored on them (their
+   access, and the wide "Remove <person>" verb), the list under it carries the
+   hardware that merely inherits. */
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.groupHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.groupGlyph {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  color: var(--ink-2);
+  background: var(--surface-2, color-mix(in srgb, var(--ink) 6%, transparent));
+  border: 0.5px solid var(--line);
+}
+.group[data-self] .groupGlyph {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+.groupMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.groupName {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+/* Ownership words (Owner / Member / Viewer) beside the space they apply to —
+   the only place a role is stated, because the person is where it is authored. */
+.roleChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-deep, var(--accent));
+  font-size: 10px;
+}
+.groupEmpty {
+  margin: 0 0 0 42px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.rowWarn {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+/* Tombstones: present for audit, folded away by default, no actions. */
+.tombstones {
+  margin-left: 42px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.tombstones summary {
+  cursor: pointer;
+}
+.tombstones ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tombstones li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+.tombstones li span[data-quiet='true'] {
+  color: color-mix(in srgb, var(--ink-3) 72%, transparent);
+}
+
 .row {
   display: flex;
   align-items: flex-start;
@@ -255,145 +358,10 @@
   }
 }
 
-/* ── Pair-a-device panel ─────────────────────────────────────────────── */
+/* The card head's right rail: counts, work depth, and the pair affordance. */
 
 .headRight {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-.pair {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  border: 0.5px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-}
-.pairLead {
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--ink-2);
-}
-.pairLead strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.pairForm {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-/* Full-basis so the hint claims its own line directly under the role group,
-   rather than competing with the lifetime presets for the same row. */
-.roleHint {
-  flex-basis: 100%;
-  margin: -4px 0 0;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--ink-3);
-}
-.ttlGroup {
-  display: inline-flex;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.ttlPreset {
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: var(--ink-3);
-  font-size: 11.5px;
-  padding: 5px 11px;
-  cursor: pointer;
-}
-.ttlPreset + .ttlPreset {
-  border-left: 1px solid var(--line);
-}
-.ttlPreset:hover:not(:disabled) {
-  color: var(--ink);
-}
-.ttlPresetOn {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent-deep, var(--accent));
-}
-
-.pairActions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.generateBtn {
-  color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.generateBtn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 88%, #000);
-}
-
-.ticketRow {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-}
-.pairTicketSurface {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: start;
-  gap: 12px;
-}
-.pairQr {
-  width: 176px;
-  height: 176px;
-  padding: 6px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: #fff;
-}
-.ticket {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--ink);
-  background: var(--surface-2, color-mix(in srgb, var(--ink) 6%, transparent));
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 10px;
-  overflow-wrap: anywhere;
-  max-height: 88px;
-  overflow-y: auto;
-}
-.copyBtn {
-  flex: none;
-  align-self: flex-start;
-}
-
-.pairFoot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.pairExpiry {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-@media (max-width: 620px) {
-  .pairTicketSurface {
-    grid-template-columns: 1fr;
-  }
-  .pairQr {
-    justify-self: center;
-  }
 }

@@ -1,0 +1,212 @@
+/* Gateway → Overview → People & devices → "Pair a device for <person>".
+   Co-located with DevicePairPanel.tsx + DevicePairTarget.tsx. Split out of
+   DevicesCard.module.css so neither file has to carry both the roster and the
+   mint form; the two share only `.spin`/`.rowError`, imported from there. */
+.pair {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 0.5px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.pairLead {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.pairLead strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Who the ticket is for, then what they may reach — the picker never offers a
+   bare text field for an existing person (#599 Decision 10). */
+.pairTarget {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pairField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pairFieldLabel {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.pairSelect,
+.pairInput {
+  appearance: none;
+  width: 100%;
+  max-width: 280px;
+  padding: 6px 9px;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: var(--surface-2, color-mix(in srgb, var(--ink) 5%, transparent));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.pairSelect:focus-visible,
+.pairInput:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.grantGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.grantRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.grantCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.grantCheck input {
+  accent-color: var(--accent);
+}
+.grantSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.grantSummary span {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-deep, var(--accent));
+  font-size: 10.5px;
+}
+
+.pairForm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+/* Full-basis so the hint claims its own line directly under the role group,
+   rather than competing with the lifetime presets for the same row. */
+.roleHint {
+  flex-basis: 100%;
+  margin: -4px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.ttlGroup {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ttlPreset {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+.ttlPreset + .ttlPreset {
+  border-left: 1px solid var(--line);
+}
+.ttlPreset:hover:not(:disabled) {
+  color: var(--ink);
+}
+.ttlPresetOn {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-deep, var(--accent));
+}
+
+.pairActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.generateBtn {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.generateBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, #000);
+}
+
+.ticketRow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.pairTicketSurface {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 12px;
+}
+.pairQr {
+  width: 176px;
+  height: 176px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.ticket {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--surface-2, color-mix(in srgb, var(--ink) 6%, transparent));
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  max-height: 88px;
+  overflow-y: auto;
+}
+.copyBtn {
+  flex: none;
+  align-self: flex-start;
+}
+
+.pairFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pairExpiry {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+@media (max-width: 620px) {
+  .pairTicketSurface {
+    grid-template-columns: 1fr;
+  }
+  .pairQr {
+    justify-self: center;
+  }
+}
