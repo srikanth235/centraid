@@ -46,6 +46,10 @@ export interface UseBuilderInput {
   }) => void;
   onMetaChange?: (input: { appId: string; name?: string; description?: string }) => void;
   showToast: (message: string) => void;
+  /** The space a NEW app is created in (issue #599, Decision 14). Named by the
+   *  route's target picker rather than inherited from an ambient pointer;
+   *  omitted falls back to the shell's internal default scope. */
+  targetScopeId?: string;
 }
 
 type SyncState = 'editing' | 'publishing' | 'idle-live' | 'idle-draft';
@@ -252,6 +256,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const publishing = useRef(false);
   const lastPublishedVersionId = useRef<string | undefined>(undefined);
   const conversationId = useRef<string | null>(null);
+  // The space this app was created into (issue #599). Every later request in
+  // the builder — turns, attachment uploads — must replay it explicitly, or a
+  // non-default-space app would stage blobs and run turns in the ambient space.
+  const targetScope = useRef<string | undefined>(input.targetScopeId);
   const agentAbort = useRef<AbortController | null>(null);
   const currentAiMsgIndex = useRef(-1);
   const currentThinkingMsgIndex = useRef(-1);
@@ -543,7 +551,9 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           return conversationId.current;
         }
       }
-      conversationId.current = (await createConversation(id, projName.current)).id;
+      conversationId.current = (
+        await createConversation(id, projName.current, targetScope.current)
+      ).id;
       return conversationId.current;
     },
     [],
@@ -561,6 +571,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         bytes,
         file.type || 'application/octet-stream',
         file.name,
+        targetScope.current,
       );
     },
     [],
@@ -583,6 +594,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
             {
               conversationId: sessionId,
               message: text,
+              ...(targetScope.current ? { scopeId: targetScope.current } : {}),
               // Fresh idempotency key per builder send (issue #420) — a re-POST
               // after a network blip replays instead of double-running.
               idempotencyKey: crypto.randomUUID(),
@@ -769,6 +781,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           version: '0.1.0',
           iconKey: visual.iconKey,
           colorKey: visual.colorKey,
+          ...(input.targetScopeId ? { scopeId: input.targetScopeId } : {}),
         });
         appId.current = id;
         bump();
@@ -777,7 +790,9 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         return;
       }
       try {
-        conversationId.current = (await createConversation(id, projName.current)).id;
+        conversationId.current = (
+          await createConversation(id, projName.current, input.targetScopeId)
+        ).id;
       } catch (err) {
         pushMessage({ kind: 'status', text: `Could not start chat: ${String(err)}` });
         return;

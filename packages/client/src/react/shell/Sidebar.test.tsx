@@ -131,6 +131,56 @@ describe('Sidebar', () => {
     ).toBeTruthy();
   });
 
+  it('puts Household in Operations between Gateway and Storage (#599)', () => {
+    const onHousehold = vi.fn();
+    const el = render(
+      <Sidebar {...base} onGateway={() => {}} onHousehold={onHousehold} onStorage={() => {}} />,
+    );
+    const items = [...el.querySelectorAll('.sbItem')];
+    const gateway = items.find((b) => b.textContent?.includes('Gateway'))!;
+    const household = items.find((b) => b.textContent?.includes('Household'))!;
+    const storage = items.find((b) => b.textContent?.includes('Storage'))!;
+    expect(household).toBeDefined();
+    expect(
+      gateway.compareDocumentPosition(household) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      household.compareDocumentPosition(storage) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    act(() => (household as HTMLButtonElement).click());
+    expect(onHousehold).toHaveBeenCalled();
+  });
+
+  it('highlights Household on its own route and disables it without a handler', () => {
+    const active = render(<Sidebar {...base} activePage="household" onHousehold={() => {}} />);
+    expect(active.querySelector('[data-active="true"]')?.textContent).toContain('Household');
+    act(() => root?.unmount());
+    host?.remove();
+    const el = render(<Sidebar {...base} />);
+    const household = [...el.querySelectorAll('.sbItem')].find((b) =>
+      b.textContent?.includes('Household'),
+    ) as HTMLButtonElement;
+    expect(household.disabled).toBe(true);
+  });
+
+  it('labels a conversation row with its space only when one is recorded (#599)', () => {
+    const el = render(
+      <Sidebar
+        {...base}
+        conversations={[
+          { id: 'a', title: 'Groceries', timeLabel: '2m', scopeLabel: 'Family' },
+          { id: 'b', title: 'Taxes', timeLabel: '5m' },
+        ]}
+      />,
+    );
+    const rows = [...el.querySelectorAll('.sbItem')];
+    const shared = rows.find((b) => b.textContent?.includes('Groceries'))!;
+    const own = rows.find((b) => b.textContent?.includes('Taxes'))!;
+    expect(shared.textContent).toContain('Family · 2m');
+    expect(own.textContent).toContain('5m');
+    expect(own.textContent).not.toContain('·');
+  });
+
   it('fires onStorage and highlights the Storage item on its route', () => {
     const onStorage = vi.fn();
     const el = render(<Sidebar {...base} activePage="storage" onStorage={onStorage} />);

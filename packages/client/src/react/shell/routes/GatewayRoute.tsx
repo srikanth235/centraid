@@ -1,16 +1,9 @@
 import { type JSX, useCallback, useEffect, useState } from 'react';
 import {
-  createGatewayDeviceTicket,
-  getGatewayDeviceWorkStatus,
   getUserPrefs,
-  listGatewayDevices,
-  listGatewayMembers,
   pauseBackgroundWork,
-  removeGatewayMember,
   resumeBackgroundWork,
-  revokeGatewayDevice,
   saveUserPrefs,
-  setGatewayDeviceCompute,
   streamGatewayLogs,
 } from '../../../gateway-client.js';
 import GatewayScreen from '../../screens/GatewayScreen.js';
@@ -161,18 +154,6 @@ export default function GatewayRoute(): JSX.Element {
         health={health}
         loadHealth={loadDiagnosticsData}
         streamLogs={streamGatewayLogs}
-        loadDevices={listGatewayDevices}
-        onRevokeDevice={revokeGatewayDevice}
-        onCurrentDeviceRevoked={() =>
-          import('../../../replica/shell-session.js').then((replica) =>
-            replica.purgeCurrentReplicaDevice(),
-          )
-        }
-        loadMembers={listGatewayMembers}
-        onRemoveMember={removeGatewayMember}
-        onCreateDeviceTicket={createGatewayDeviceTicket}
-        onUpdateDeviceCompute={setGatewayDeviceCompute}
-        loadDeviceWorkStatus={getGatewayDeviceWorkStatus}
         onRestartGateway={() => window.CentraidApi.restartGateway()}
         onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
         loadResourceMode={loadResourceMode}

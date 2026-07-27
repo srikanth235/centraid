@@ -9,7 +9,7 @@ import {
 
 /*
  * Impure IO for ConnectFlow (issue #382) — mirrors the
- * flatVaultSwitcher-core.ts / flatVaultSwitcherRegistry.ts split: every
+ * gatewayRegistry.ts pure-core / impure-glue split: every
  * `window.CentraidApi` call and error-shape decision lives here, so
  * `connectFlow-core.ts` and the component stay pure/presentational.
  *

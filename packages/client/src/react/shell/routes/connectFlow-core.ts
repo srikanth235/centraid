@@ -18,8 +18,8 @@
  * over an explicit event — no `window.CentraidApi`, no timers, no DOM. The
  * impure IO (testGatewayConnection / redeemGatewayPairing / addGateway /
  * sshConnectGateway / listVaults) lives in `connectFlowIO.ts` and feeds
- * results back in as events, mirroring the flatVaultSwitcher-core.ts /
- * flatVaultSwitcherRegistry.ts split.
+ * results back in as events, mirroring the gatewayRegistry.ts pure-core /
+ * impure-glue split.
  */
 
 export type ConnectMethod = 'local' | 'gateway' | 'ssh';

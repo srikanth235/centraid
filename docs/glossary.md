@@ -99,6 +99,7 @@ One deliberate mapping: the vault's `consent_device.trust` (`full`/`readonly`) i
 | `owner` as a **device** role | **`admin`** — the owner is the human; a device is never the owner |
 | `full` as a device role | **`write`** — "full" is a lie once `admin` sits above it |
 | "trust" / "trust tier" for what a device may do | **role** — trust is proved identity, role is granted authority |
+| "the active vault" as a user-facing mode / a space switcher | **spaces are never switched between** (#599, Decision 14). The sidebar switcher is retired: Household lists every space the member can reach, each creation flow (conversation, app, install) names its target with a visible picker, and the active-vault pointer survives only as an INTERNAL default for surfaces with no explicit target (per-space home pins, the ambient request header). The one switcher left is the **gateway** switcher, shown only when more than one gateway is registered. |
 | "user" / "account" for a household principal | **member** — there are no accounts, passwords, or sessions; a member is a principal on the enrollment plane (#599) |
 | "token" for the pairing artifact | **ticket** — one-time, burns on redemption (#555 removed bearer redemption) |
 | `com.centraid.*` identifiers | **`dev.centraid.*`** ([identifiers.md](identifiers.md)) |

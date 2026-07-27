@@ -14,6 +14,7 @@ Which UI/query state is keyed on which durable axis. Issue #504 batch 1.
 | **Conversation id** | Ledger scope | Conversation list + turn pages |
 | **App id + vault** | Generated app / grants | App session, replica scope |
 | **Scope SET** | Which scopes an inline app is mounted over | `InlineAppRoute` mount key (issue #599) |
+| **Conversation → space** | Which space a conversation addresses, for life | `conversationScopes.ts` (issue #599) |
 
 ## Rules
 
@@ -29,6 +30,16 @@ Which UI/query state is keyed on which durable axis. Issue #504 batch 1.
    it with `scopeSetKey` so ordering never churns the key, and never key such a
    mount on "the active vault" — that pointer moving is not a reason to
    re-mount, while a scope joining or leaving the set is.
+
+6. **A conversation is pinned to one space, and the client records which**
+   (issue #599). The row itself lives in the space it was created in, so the
+   client must name that space before it can fetch the row at all: the choice is
+   recorded once at creation (`rememberConversationScope`) and replayed as an
+   explicit `x-centraid-vault` on every later turn, load, status poll and
+   mutation. `undefined` — an older thread, or one started on another device —
+   falls back to the internal default-scope pointer, which is exactly how every
+   conversation behaved before the picker existed. Never re-derive a
+   conversation's space from "the space the shell is pointing at now".
 
 ## Related
 

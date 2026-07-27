@@ -17,6 +17,10 @@ import {
   type TurnStreamEvent,
 } from '../../../gateway-client.js';
 import { openPrompt } from '../prompt.js';
+import { useMemberScopes } from '../useMemberScopes.js';
+import { conversationScope, rememberConversationScope } from './conversationScopes.js';
+import ScopePicker from './ScopePicker.js';
+import scopeBarCss from './ScopePicker.module.css';
 import { catchUpAfterDrop } from './assistantCatchUp.js';
 import { downloadConversation } from './conversationExport.js';
 import { DEFAULT_STARTERS, resolveStarters } from './assistantStarters.js';
@@ -65,6 +69,16 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     /** Server turn count of the open thread — the reconnect catch-up baseline. */
     turnCount: 0,
   });
+  // The space this conversation addresses (issue #599). Chosen once, before the
+  // first message; from then on the recorded scope is authoritative and every
+  // request the thread makes repeats it, so a conversation reads exactly ONE
+  // space for its whole life. `undefined` — an older thread, or a gateway with
+  // no member layer — falls back to the internal default scope.
+  const memberScopes = useMemberScopes();
+  const [pickedScope, setPickedScope] = useState<string | undefined>(undefined);
+  const activeScopeId = conversationId
+    ? conversationScope(conversationId)
+    : (pickedScope ?? memberScopes.primary?.id);
   // Render-visible mirror of `m.current.currentId !== null` — the slash-command
   // list gates Export/Rename on it, and render may not read the model ref.
   const [hasThread, setHasThread] = useState(false);
@@ -109,7 +123,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
   /** Re-fetch the transcript so answers carry turn ids + retry pagers (#420). */
   const reloadTranscript = async (id: string): Promise<void> => {
     try {
-      const loaded = await loadConversation(ASSISTANT_APP_ID, id);
+      const loaded = await loadConversation(ASSISTANT_APP_ID, id, conversationScope(id));
       if (m.current.disposed || m.current.currentId !== id || m.current.busy) return;
       m.current.msgs = hydrateMessages(loaded.messages, {
         ...(loaded.hasArchivedHistory ? { hasArchivedHistory: true } : {}),
@@ -133,7 +147,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     push();
     if (!id) return;
     try {
-      const loaded = await loadConversation(ASSISTANT_APP_ID, id);
+      const loaded = await loadConversation(ASSISTANT_APP_ID, id, conversationScope(id));
       if (m.current.disposed || m.current.currentId !== id) return;
       m.current.msgs = hydrateMessages(loaded.messages, {
         ...(loaded.hasArchivedHistory ? { hasArchivedHistory: true } : {}),
@@ -170,7 +184,13 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       void (async () => {
         try {
           const bytes = new Uint8Array(await file.arrayBuffer());
-          const ref = await uploadConversationAttachment(ASSISTANT_APP_ID, bytes, mime, file.name);
+          const ref = await uploadConversationAttachment(
+            ASSISTANT_APP_ID,
+            bytes,
+            mime,
+            file.name,
+            activeScopeId,
+          );
           if (m.current.disposed) return;
           const entry = m.current.pendingAttachments.find((a) => a.localId === localId);
           if (entry) {
@@ -401,6 +421,11 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           idempotencyKey: opts.idempotencyKey,
           ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
           ...(opts.attachments.length ? { attachments: opts.attachments.map((a) => a.ref) } : {}),
+          // Explicit, never ambient: the turn must land in the space the
+          // conversation was created in (issue #599).
+          ...(conversationScope(conversationId)
+            ? { scopeId: conversationScope(conversationId) }
+            : {}),
         },
         onEvent,
         m.current.abort.signal,
@@ -432,7 +457,8 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       push();
       const settled = await catchUpAfterDrop({
         baselineTurnCount,
-        getStatus: () => conversationStatus(ASSISTANT_APP_ID, conversationId),
+        getStatus: () =>
+          conversationStatus(ASSISTANT_APP_ID, conversationId, conversationScope(conversationId)),
         isCancelled: () => m.current.disposed || m.current.currentId !== conversationId,
       });
       if (m.current.disposed || m.current.currentId !== conversationId) return;
@@ -494,7 +520,8 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     if (!text && ready.length === 0) return;
     if (!m.current.currentId) {
       try {
-        const created = await createConversation(ASSISTANT_APP_ID, '');
+        const created = await createConversation(ASSISTANT_APP_ID, '', activeScopeId);
+        if (activeScopeId) rememberConversationScope(created.id, activeScopeId);
         m.current.currentId = created.id;
         setHasThread(true);
         suppressSelectRef.current = created.id;
@@ -677,7 +704,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     }
     if (!cid) return;
     if (id === 'export') {
-      void loadConversation(ASSISTANT_APP_ID, cid)
+      void loadConversation(ASSISTANT_APP_ID, cid, conversationScope(cid))
         .then((conv) => downloadConversation(conv, 'markdown'))
         .catch((err: unknown) =>
           showToast(`Couldn't export: ${err instanceof Error ? err.message : String(err)}`),
@@ -690,8 +717,9 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           confirmLabel: 'Rename',
         });
         if (!next) return;
-        await renameConversation(ASSISTANT_APP_ID, cid, next).catch((err: unknown) =>
-          showToast(`Couldn't rename: ${err instanceof Error ? err.message : String(err)}`),
+        await renameConversation(ASSISTANT_APP_ID, cid, next, conversationScope(cid)).catch(
+          (err: unknown) =>
+            showToast(`Couldn't rename: ${err instanceof Error ? err.message : String(err)}`),
         );
         refreshAssistantThreads?.();
       })();
@@ -700,6 +728,20 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
 
   return (
     <div className={mainScrollCss.hasWall}>
+      {/* Which space this conversation reads (issue #599). A picker while the
+          conversation is still hypothetical; a plain statement once it exists,
+          because the space is part of the thread's identity from then on. */}
+      {memberScopes.scopes.length > 0 ? (
+        <div className={scopeBarCss.bar}>
+          <ScopePicker
+            scopes={memberScopes.scopes}
+            value={activeScopeId}
+            onChange={setPickedScope}
+            label={conversationId ? 'Reading' : 'New conversation in'}
+            locked={Boolean(conversationId)}
+          />
+        </div>
+      ) : null}
       <AssistantScreen
         suggestions={starters}
         searchEntities={searchEntities}

@@ -17,7 +17,6 @@ import SettingsDiagnosticsScreen, {
   type SettingsDiagnosticsBridgeProps,
 } from './SettingsDiagnosticsScreen.js';
 import LogsScreen, { type LogsBridgeProps } from './LogsScreen.js';
-import DevicesCard, { type DevicesCardProps } from './DevicesCard.js';
 import GatewayAlertsTab from './GatewayAlertsTab.js';
 import RestartGatewayButton from './RestartGatewayButton.js';
 import ResourceModeCard, {
@@ -27,10 +26,12 @@ import ResourceModeCard, {
 import styles from './GatewayScreen.module.css';
 import a11y from '../styles/a11y.module.css';
 
-// Gateway runtime, component health, paired devices, logs, and alerts share
-// one instrument panel (#341/#344/#347). Backup/storage custody used to live
-// on the Overview tab too; it's its own page now (BackupsScreen) — "is the
-// gateway up" and "are my bytes safe" are different questions.
+// Gateway runtime, component health, logs, and alerts share one instrument
+// panel (#341/#344/#347). Backup/storage custody used to live on the Overview
+// tab too; it's its own page now (BackupsScreen) — "is the gateway up" and "are
+// my bytes safe" are different questions. People & devices left for the same
+// reason (#599): who may act here is a household question, not a runtime one,
+// and it now lives on the Household page.
 
 export interface GatewayScreenProps {
   snapshot: GatewayRuntimeSnapshot;
@@ -50,18 +51,6 @@ export interface GatewayScreenProps {
   health: GatewayHealthDTO | null;
   loadHealth: SettingsDiagnosticsBridgeProps['loadHealth'];
   streamLogs: LogsBridgeProps['streamLogs'];
-  /** Paired-devices card data (Overview tab) — `GET/DELETE _gateway/devices`.
-   *  Optional so callers/tests that predate the card render the tab
-   *  unchanged; the card is simply omitted when unwired. */
-  loadDevices?: DevicesCardProps['loadDevices'];
-  onRevokeDevice?: DevicesCardProps['onRevokeDevice'];
-  onCurrentDeviceRevoked?: DevicesCardProps['onCurrentDeviceRevoked'];
-  /** The household roster the card groups devices by (#599 L2). */
-  loadMembers?: DevicesCardProps['loadMembers'];
-  onRemoveMember?: DevicesCardProps['onRemoveMember'];
-  onCreateDeviceTicket?: DevicesCardProps['onCreateTicket'];
-  onUpdateDeviceCompute?: DevicesCardProps['onUpdateCompute'];
-  loadDeviceWorkStatus?: DevicesCardProps['loadWorkStatus'];
   /**
    * Restart the local embedded gateway (Overview tab, near the runtime
    * status). Refused for a remote gateway — main answers `{ok: false}`
@@ -384,29 +373,6 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                   <RestartGatewayButton onRestart={props.onRestartGateway} />
                 </div>
               </section>
-
-              {/* Paired devices and their contributed-compute status (#392/#414). */}
-              {props.loadDevices && props.onRevokeDevice ? (
-                <DevicesCard
-                  now={now}
-                  loadDevices={props.loadDevices}
-                  onRevokeDevice={props.onRevokeDevice}
-                  {...(props.onCurrentDeviceRevoked
-                    ? { onCurrentDeviceRevoked: props.onCurrentDeviceRevoked }
-                    : {})}
-                  {...(props.loadMembers ? { loadMembers: props.loadMembers } : {})}
-                  {...(props.onRemoveMember ? { onRemoveMember: props.onRemoveMember } : {})}
-                  {...(props.onCreateDeviceTicket
-                    ? { onCreateTicket: props.onCreateDeviceTicket }
-                    : {})}
-                  {...(props.onUpdateDeviceCompute
-                    ? { onUpdateCompute: props.onUpdateDeviceCompute }
-                    : {})}
-                  {...(props.loadDeviceWorkStatus
-                    ? { loadWorkStatus: props.loadDeviceWorkStatus }
-                    : {})}
-                />
-              ) : null}
             </div>
           </div>
         </>
