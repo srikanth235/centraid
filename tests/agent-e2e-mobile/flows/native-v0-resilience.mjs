@@ -1,70 +1,93 @@
+import { HOME_RAIL_LABEL } from '../lib/first-run.mjs';
 import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from '../lib/harness.mjs';
 
 await runFlow('native-v0-resilience', async (ctx) => {
   await ctx.configureGateway();
-  // The five tabs are Home, Photos, Docs, Agenda, Settings — there is no "Apps"
-  // tab, and the old `tapOn: "Apps"` / `assertVisible: "Apps"` pair asserted on a
-  // label that exists nowhere in the app. Each tab is checked by a string unique
-  // to the SCREEN it opens, not the tab label: the label is in the tab bar on
-  // every screen, so `tapOn: "Docs.*"` + `assertVisible: "Docs"` passed even when
-  // the tap did nothing (issue #483, enforced by scripts/lint-e2e-flows.mjs).
-  //
-  // Each per-tab marker is an accessibilityLabel the target screen's own header
-  // publishes — the persistent action button that only that screen renders:
-  //   Photos  → "Search photos"          (apps/mobile/src/apps/photos/PhotosHome.tsx)
-  //   Docs    → "Add document or folder"  (apps/mobile/src/apps/docs/DocsHome.tsx)
-  //   Agenda  → "Create event"            (apps/mobile/src/apps/agenda/AgendaHome.tsx)
-  //   Settings→ "Gateway link"            (visible heading, Settings-unique; was "Desktop link")
-  // These are Pressable accessibilityLabels — surfaced to the iOS a11y tree and
-  // Maestro-matchable, the same construct template-gate keys on with "Open <name>".
+  // Springboard model (issue #498): there is no bottom tab bar. Native apps are
+  // full-screen covers opened from the launcher grid ("Open Photos|Docs|Agenda"
+  // accessibilityLabels on LauncherGrid tiles). Settings is the glass-dock slot.
+  // Each cover is checked by a string unique to THAT screen's header action,
+  // not the tile name (which remains on Home under the cover):
+  //   Photos  → "Search photos and moments" (PhotosHome.tsx)
+  //   Docs    → "Add document or folder"    (DocsHome.tsx)
+  //   Agenda  → "Create event"              (AgendaHome.tsx)
+  //   Settings→ "Gateway link"              (Settings screen)
+  // Covers dismiss via HomeKey ("Back to your apps"); Settings uses "Back to home".
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
 - launchApp:
     clearState: false
 - extendedWaitUntil:
-    visible: "Everything you build, in one place."
+    visible: "${HOME_RAIL_LABEL}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+- scrollUntilVisible:
+    element:
+      text: "Open Photos"
+    direction: DOWN
 - tapOn:
-    text: "Photos.*"
+    text: "Open Photos"
 - extendedWaitUntil:
-    visible: "Search photos"
+    visible: "Search photos and moments"
     timeout: 15000
+- tapOn: "Back to your apps"
+- extendedWaitUntil:
+    visible: "${HOME_RAIL_LABEL}"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      text: "Open Docs"
+    direction: DOWN
 - tapOn:
-    text: "Docs.*"
+    text: "Open Docs"
 - extendedWaitUntil:
     visible: "Add document or folder"
     timeout: 15000
+- tapOn: "Back to your apps"
+- extendedWaitUntil:
+    visible: "${HOME_RAIL_LABEL}"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      text: "Open Agenda"
+    direction: DOWN
 - tapOn:
-    text: "Agenda.*"
+    text: "Open Agenda"
 - extendedWaitUntil:
     visible: "Create event"
     timeout: 15000
-- tapOn:
-    text: "Settings.*"
+- tapOn: "Back to your apps"
+- extendedWaitUntil:
+    visible: "${HOME_RAIL_LABEL}"
+    timeout: 15000
+- tapOn: "Settings"
 - extendedWaitUntil:
     visible: "Gateway link"
     timeout: 15000
-- tapOn:
-    text: "Home.*"
-- assertVisible: "Everything you build, in one place."
-- takeScreenshot: native-five-tabs
+- tapOn: "Back to home"
+- extendedWaitUntil:
+    visible: "${HOME_RAIL_LABEL}"
+    timeout: 15000
+- takeScreenshot: native-covers
 `,
-    'five-tabs',
+    'native-covers',
   );
   await ctx.restart();
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
 - extendedWaitUntil:
-    visible: "Everything you build, in one place."
+    visible: "${HOME_RAIL_LABEL}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - takeScreenshot: after-force-kill
 `,
     'after-force-kill',
   );
   ctx.note(
-    'Five native tabs survived navigation and a process restart; complete the documented network matrix on this device.',
+    'Native Photos/Docs/Agenda covers + Settings survived navigation and a process restart.',
   );
-  return { pass: true, notes: 'native five-tab shell and process-restart smoke passed' };
+  return {
+    pass: true,
+    notes: 'springboard native covers and process-restart smoke passed',
+  };
 });

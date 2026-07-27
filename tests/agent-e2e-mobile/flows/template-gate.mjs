@@ -159,7 +159,7 @@ await runFlow('template-gate', async (ctx) => {
     clearState: false
 - extendedWaitUntil:
     visible:
-      text: "centraid"
+      text: "YOUR APPS"
     timeout: 30000
 - scrollUntilVisible:
     element:

@@ -20,7 +20,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
-import { DISMISS_KEYBOARD_ONBOARDING, skipOnboarding } from './first-run.mjs';
+import { DISMISS_KEYBOARD_ONBOARDING, HOME_RAIL_LABEL, skipOnboarding } from './first-run.mjs';
 import { metroReachable, prewarmMetroBundle } from './metro.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -358,8 +358,9 @@ ${DISMISS_KEYBOARD_ONBOARDING}`
     clearState: true
 ${skipOnboarding(state.platform, FIRST_LAUNCH_TIMEOUT_MS)}- extendedWaitUntil:
     visible:
-      text: "Everything you build, in one place."
+      text: "${HOME_RAIL_LABEL}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+# Glass dock Settings slot (springboard — no tab bar). Label is unique on Home.
 - tapOn: "Settings"
 - extendedWaitUntil:
     visible: "Gateway link"
@@ -404,9 +405,10 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
 ${tokenSteps}- hideKeyboard
 - tapOn: "Save"
 - extendedWaitUntil:
-    visible: "Everything you build, in one place."
+    visible: "${HOME_RAIL_LABEL}"
     timeout: 30000
-- assertNotVisible: "Connect your desktop"
+# Attention-line pairing card title (AttentionLine.tsx) — gone once a gateway URL is set.
+- assertNotVisible: "Connect your computer"
 `,
       'configure-gateway',
     );

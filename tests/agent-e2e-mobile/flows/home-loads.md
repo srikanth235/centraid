@@ -5,38 +5,31 @@ launch. It is the canonical "does the whole thing run" smoke test, with the
 same process-boundary posture as the desktop Playwright journeys.
 
 **Setup:** the standalone dev build must be installed on a booted
-iOS Simulator (`bun run --filter=@centraid/mobile ios` once), and Metro
-must be running on `:8081` (the dev build fetches its JS bundle from there).
+simulator/emulator (`bun run --filter=@centraid/mobile ios|android` once),
+and Metro must be running on `:8081` (the dev build fetches its JS bundle
+from there).
 
 **Steps:**
-1. Launch `dev.centraid.mobile` with `clearState: true` → AsyncStorage
-   wiped (pairing included), so Home renders in its `no-gateway` branch.
-2. Wait up to `FIRST_LAUNCH_TIMEOUT_MS` for the hero line
-   `"Everything you build, in one place."` — the first thing `<Home>`
-   paints once the JS bundle has downloaded from Metro. Note this waits on
-   the hero, *not* on `"Connect your desktop"`: the pairing card only
-   appears after the gateway probe resolves, so waiting on it would
-   conflate "Home rendered" with "the probe finished".
-3. Take screenshot `home-fresh` (lands under `runs/<runId>/screenshots/`).
-4. Assert the hero plus the `"Built in"` section — `<Home>` rendered.
-5. `scrollUntilVisible` the `"Connect your desktop"` card with
-   `visibilityPercentage: 100`, then assert it and `"Pair desktop"`. The
-   card sits **below the fold** on a phone-sized screen, and Maestro will
-   happily match an element hidden behind the tab bar — so a bare
-   `assertVisible` here passes while the pairing button is in fact
-   untappable. The scroll is what makes this assertion mean something.
+1. Launch the installed app id (`ctx.state.appId`) with `clearState: true` →
+   AsyncStorage wiped (pairing + onboarded flag included), so the founding
+   onboarding screen paints.
+2. Wait up to `FIRST_LAUNCH_TIMEOUT_MS` for debug-only **"Skip for now"** and
+   tap it. Production has no skip (ceremony is mandatory); debug builds expose
+   this so e2e can reach the springboard without a live pairing ticket.
+3. Wait for the stable Home rail label **`"YOUR APPS"`** — first paint marker
+   for the springboard launcher (the greeting above is time-of-day dependent).
+4. Take screenshot `home-fresh`.
+5. `scrollUntilVisible` the **"Connect your computer"** attention card with
+   `visibilityPercentage: 100`, then assert it and **"Pair desktop"**. The
+   card can sit below the fold; Maestro matches off-screen nodes, so the
+   scroll is what makes the assertion mean something.
 
-**Expectations:** the run dir contains `screenshots/01-home-fresh-home-fresh.png`,
-`screenshots/02-home-fresh-pairing-home-fresh-pairing.png`,
-`flows/01-home-fresh.yaml`, `flows/02-home-fresh-pairing.yaml`,
-`state.json`, and a PASS `verdict.md`.
+**Expectations:** the run dir contains screenshots for both steps,
+`flows/*.yaml`, `state.json`, and a PASS `verdict.md`.
 
 **Verdict:** PASS if the assertions succeed. FAIL otherwise — common
-causes: Metro not running on `:8081`, or the app not installed on the sim.
+causes: Metro not running on `:8081`, or the app not installed / not a
+debug build (no "Skip for now").
 
-**On the timeout:** the budget used to be 30s, which is what made this flow
-fail in the nightly lane — on a cold Metro the first `clearState` launch has
-to rebuild the whole JS bundle, and that alone exceeded 30s on the CI runner.
-The copy was correct all along. `setup()` now prewarms the bundle before the
-flow's clock starts, and the budget is deliberately generous: it covers a
-bundle fetch, not product latency, so nothing is proven by tightening it.
+**On the timeout:** the budget covers cold Metro bundle fetch after
+`clearState`, not product latency.

@@ -89,6 +89,13 @@ export default function Onboarding({ onDone }: { onDone: () => void }): React.JS
               setSession(next);
               setStep('choice');
             }}
+            // Debug builds only: e2e + local simulators need a path onto the
+            // springboard without a live pairing ticket (Settings → Advanced
+            // still configures a tokenless loopback gateway). Release builds
+            // keep the ceremony as the only route home. Guard the global so
+            // Node/vitest (where Metro does not define `__DEV__`) does not
+            // throw.
+            onSkipDev={typeof __DEV__ !== 'undefined' && __DEV__ ? enter : undefined}
           />
         ) : step === 'choice' && session ? (
           <FoundingChoice
@@ -169,11 +176,14 @@ function ConnectionStep({
   onDeviceName,
   onPaired,
   onFounding,
+  onSkipDev,
 }: {
   deviceName: string;
   onDeviceName: (value: string) => void;
   onPaired: () => void;
   onFounding: (session: MobileFoundingSession) => void;
+  /** Present only when `__DEV__` — see call site. */
+  onSkipDev?: () => void;
 }): React.JSX.Element {
   const available = isTunnelAvailable();
   const [scanning, setScanning] = useState(false);
@@ -284,6 +294,17 @@ function ConnectionStep({
             <Text style={styles.textBtnLabel}>Scan QR instead</Text>
           </Pressable>
         </>
+      ) : null}
+      {onSkipDev ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Skip for now"
+          disabled={pairing}
+          onPress={onSkipDev}
+          style={styles.textBtn}
+        >
+          <Text style={styles.textBtnLabel}>Skip for now</Text>
+        </Pressable>
       ) : null}
     </View>
   );

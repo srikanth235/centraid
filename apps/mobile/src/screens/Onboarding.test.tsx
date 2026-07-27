@@ -37,6 +37,7 @@ vi.mock('react-native', async () => {
   return {
     Platform: { OS: 'ios' },
     Pressable: ({
+      accessibilityLabel,
       accessibilityRole,
       accessibilityState,
       children,
@@ -44,6 +45,7 @@ vi.mock('react-native', async () => {
       onPress,
       style,
     }: {
+      accessibilityLabel?: string;
       accessibilityRole?: string;
       accessibilityState?: { checked?: boolean };
       children?: React.ReactNode;
@@ -53,6 +55,7 @@ vi.mock('react-native', async () => {
     }) =>
       element('button', {
         'aria-checked': accessibilityState?.checked,
+        'aria-label': accessibilityLabel,
         children,
         disabled,
         onClick: onPress,
@@ -264,6 +267,34 @@ async function openFoundingChoice(): Promise<void> {
 }
 
 describe('mobile founding onboarding', () => {
+  it('exposes Skip for now only when __DEV__ is true', () => {
+    const prev = (globalThis as { __DEV__?: boolean }).__DEV__;
+    try {
+      (globalThis as { __DEV__?: boolean }).__DEV__ = true;
+      act(() => {
+        root!.render(React.createElement(Onboarding, { onDone: mocks.onDone }));
+      });
+      const skip = Array.from(document.querySelectorAll('button')).find((node) =>
+        (node.textContent ?? '').includes('Skip for now'),
+      );
+      expect(skip).toBeTruthy();
+      click(skip!);
+      expect(mocks.setOnboarded).toHaveBeenCalledWith(true);
+      expect(mocks.onDone).toHaveBeenCalledOnce();
+
+      mocks.setOnboarded.mockClear();
+      mocks.onDone.mockClear();
+      (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+      act(() => {
+        root!.render(React.createElement(Onboarding, { onDone: mocks.onDone }));
+      });
+      expect(document.body.textContent).not.toContain('Skip for now');
+    } finally {
+      if (prev === undefined) delete (globalThis as { __DEV__?: boolean }).__DEV__;
+      else (globalThis as { __DEV__?: boolean }).__DEV__ = prev;
+    }
+  });
+
   it('completes ordinary pasted pairing and persists the first-device profile', async () => {
     typeValue(container!.querySelector('input')!, 'Ada Phone');
     typeValue(container!.querySelector('textarea')!, 'ordinary-ticket');
