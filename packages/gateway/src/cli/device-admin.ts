@@ -44,6 +44,12 @@ interface DeviceArgs {
   label?: string;
   ttlMinutes?: number;
   role?: GrantableRole;
+  /** Existing member (id or exact label) this invitation is minted for. */
+  member?: string;
+  /** …or a brand-new person, created at mint time so no phantom can appear. */
+  newMember?: string;
+  /** Repeatable `--grant <vaultId>:<role>` — one scan, many vaults, atomic. */
+  grants?: Array<{ vaultId: string; role: GrantableRole }>;
   /** Exact vault name required when the requested revoke removes its last admin. */
   confirmLastAdmin?: string;
   /** Emit machine-readable JSON instead of human text (issue #382, `pair` only). */
@@ -100,6 +106,23 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
           fail('--role must be "admin", "write", or "read"', 2);
         }
         out.role = role;
+        break;
+      }
+      case '--member':
+        out.member = next();
+        break;
+      case '--new-member':
+        out.newMember = next();
+        break;
+      case '--grant': {
+        const raw = next();
+        const split = raw.lastIndexOf(':');
+        const vaultId = split === -1 ? '' : raw.slice(0, split);
+        const role = split === -1 ? '' : raw.slice(split + 1);
+        if (!vaultId || (role !== 'admin' && role !== 'write' && role !== 'read')) {
+          fail('--grant must read "<vaultId>:<admin|write|read>"', 2);
+        }
+        (out.grants ??= []).push({ vaultId, role });
         break;
       }
       case '--confirm-last-admin':
@@ -204,6 +227,9 @@ export async function commandPair(
           ...(parsed.vault !== undefined ? { vaultId: parsed.vault } : {}),
           ...(parsed.ttlMinutes !== undefined ? { ttlMinutes: parsed.ttlMinutes } : {}),
           ...(parsed.role !== undefined ? { role: parsed.role } : {}),
+          ...(parsed.member !== undefined ? { memberId: parsed.member } : {}),
+          ...(parsed.newMember !== undefined ? { newMemberLabel: parsed.newMember } : {}),
+          ...(parsed.grants !== undefined ? { grants: parsed.grants } : {}),
         }),
       });
     } catch (error) {
@@ -221,6 +247,9 @@ export async function commandPair(
       vaultName?: string;
       expiresAt?: string;
       role?: GrantableRole;
+      memberId?: string;
+      memberLabel?: string;
+      grants?: Array<{ vaultId: string; vaultName?: string; role: GrantableRole }>;
     };
     if (
       !response.ok ||
@@ -244,6 +273,9 @@ export async function commandPair(
         `${JSON.stringify({
           ok: true,
           ticket: token,
+          memberId: result.memberId,
+          memberLabel: result.memberLabel,
+          grants: result.grants,
           vaultId: vault.vaultId,
           vaultName: vault.name,
           expiresAt: result.expiresAt,
@@ -253,8 +285,10 @@ export async function commandPair(
       return;
     }
     const lines = [
-      `Pairing ticket for vault "${vault.name}" (${vault.vaultId})`,
-      `Role: ${role}`,
+      `Pairing ticket for ${result.memberLabel ?? 'a new member'} (${result.memberId ?? 'unknown'})`,
+      ...(result.grants ?? [{ vaultId: vault.vaultId, vaultName: vault.name, role }]).map(
+        (grant) => `  ${grant.vaultName ?? grant.vaultId} (${grant.vaultId}): ${grant.role}`,
+      ),
       `Expires: ${result.expiresAt}`,
       '',
       'Desktop / PWA: paste this one-line ticket into "Add gateway":',
@@ -354,11 +388,21 @@ export async function commandDevices(
       });
       try {
         const vault = resolveVault(registry, parsed.vault, fail);
+        // No `--member`: the device becomes its own low-trust member, which
+        // is the honest reading of a communal box added from the host (#599
+        // Decision 4) and never an "Unassigned" bucket.
+        const member =
+          parsed.member === undefined ? undefined : devices.members.find(parsed.member);
+        if (parsed.member !== undefined && !member) {
+          fail(`no member matches "${parsed.member}" — try \`members list\``, 1);
+        }
         const row = devices.enroll({
           endpointId,
           vaultId: vault.vaultId,
           label: parsed.label ?? `device ${endpointId.slice(0, 10)}…`,
           ...(parsed.role ? { role: parsed.role } : {}),
+          ...(member ? { memberId: member.memberId } : {}),
+          ...(parsed.newMember !== undefined ? { memberLabel: parsed.newMember } : {}),
         });
         process.stdout.write(`${JSON.stringify(row)}\n`);
       } catch (err) {
@@ -390,12 +434,23 @@ export async function commandDevices(
       enableWalShipper: false,
     });
     try {
-      const lastAdmins = candidates.filter(
-        (row) =>
-          row.role === 'admin' &&
-          devices.listByVault(row.vaultId).filter((candidate) => candidate.role === 'admin')
-            .length === 1,
-      );
+      // The ≥1-admin invariant is authored on MEMBERS now (#599), so a device
+      // revocation only endangers it when this is the last live device of the
+      // vault's last admin member.
+      const liveEndpointsOf = (memberId: string): Set<string> =>
+        new Set(
+          devices
+            .list()
+            .filter((row) => row.memberId === memberId && row.role !== 'revoked')
+            .map((row) => row.endpointId),
+        );
+      const lastAdmins = candidates.filter((row) => {
+        if (row.role !== 'admin') return false;
+        const admins = devices.members.adminsOf(row.vaultId);
+        if (admins.length !== 1 || admins[0] !== row.memberId) return false;
+        const live = liveEndpointsOf(row.memberId);
+        return live.size === 1 && live.has(row.endpointId);
+      });
       if (lastAdmins.length > 1) {
         fail(
           'this endpoint is the last admin of multiple vaults; revoke each enrollment id separately',

@@ -14,6 +14,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { EnrollmentStore } from './enrollment-store.js';
 import { PairingTicketStore, encodePairingTicket, parsePairingTicket } from './pairing-store.js';
+import { MemberStore } from './member-store.js';
 import { GatewayDatabase } from './gateway-db.js';
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -28,13 +29,31 @@ async function tempFile(name: string): Promise<string> {
   return path.join(dir, name);
 }
 
-test('enrollment: multi-vault = multiple rows; revoke by row or by key', async () => {
+test("enrollment: a device inherits its member's grants; revoke kills the binding", async () => {
   const file = await tempFile('gateway.db');
   const store = EnrollmentStore.open(file);
 
-  const laptop1 = store.enroll({ endpointId: 'ep-laptop', vaultId: 'v1', label: 'laptop' });
-  store.enroll({ endpointId: 'ep-laptop', vaultId: 'v2', label: 'laptop' });
-  store.enroll({ endpointId: 'ep-phone', vaultId: 'v2', label: 'phone', platform: 'android' });
+  // Authority is authored on the member (#599); the device is a binding, so
+  // enrolling it into a second vault is a second GRANT on the same person.
+  const laptop = store.enroll({
+    endpointId: 'ep-laptop',
+    vaultId: 'v1',
+    label: 'laptop',
+    memberLabel: 'Priya',
+  });
+  store.enroll({
+    endpointId: 'ep-laptop',
+    vaultId: 'v2',
+    label: 'laptop',
+    memberId: laptop.memberId,
+  });
+  store.enroll({
+    endpointId: 'ep-phone',
+    vaultId: 'v2',
+    label: 'phone',
+    platform: 'android',
+    memberLabel: 'Sid',
+  });
 
   expect(store.vaultsFor('ep-laptop')).toEqual(['v1', 'v2']);
   expect(store.vaultsFor('ep-phone')).toEqual(['v2']);
@@ -46,22 +65,34 @@ test('enrollment: multi-vault = multiple rows; revoke by row or by key', async (
   ).toEqual(['ep-laptop', 'ep-phone']);
   expect(store.isEnrolled('ep-nobody')).toBe(false);
 
-  // Re-enrolling the same (key, vault) refreshes, never duplicates.
+  // A second device for the SAME member inherits every grant with no
+  // per-device authoring — this is the self-pair story.
+  store.enroll({ endpointId: 'ep-tablet', label: 'tablet', memberId: laptop.memberId });
+  expect(store.vaultsFor('ep-tablet')).toEqual(['v1', 'v2']);
+
+  // Re-enrolling the same device refreshes, never duplicates.
   store.enroll({ endpointId: 'ep-laptop', vaultId: 'v1', label: 'renamed laptop' });
   expect(store.vaultsFor('ep-laptop')).toEqual(['v1', 'v2']);
-  expect(store.list().find((e) => e.enrollmentId === laptop1.enrollmentId)?.label).toBe(
+  expect(store.list().find((e) => e.enrollmentId === laptop.enrollmentId)?.label).toBe(
     'renamed laptop',
   );
 
-  // Revoke one row: the other vault survives.
-  store.revoke(laptop1.enrollmentId);
-  expect(store.vaultsFor('ep-laptop')).toEqual(['v2']);
-
-  // Revoke by key ("lost laptop"): every row dies.
-  store.enroll({ endpointId: 'ep-laptop', vaultId: 'v1', label: 'laptop' });
+  // Revoke a DEVICE ("lost laptop"): every vault it reached dies with it,
+  // and the member's other device is untouched.
   const removed = store.revoke('ep-laptop');
   expect(removed).toHaveLength(2);
   expect(store.isEnrolled('ep-laptop')).toBe(false);
+  expect(store.vaultsFor('ep-tablet')).toEqual(['v1', 'v2']);
+
+  // Remove the PERSON: their remaining bindings and grants go together.
+  const orphaned = store.removeMember(laptop.memberId);
+  expect([...new Set(orphaned.map((row) => row.vaultId))].sort()).toEqual(['v1', 'v2']);
+  expect([...new Set(orphaned.map((row) => row.endpointId))].sort()).toEqual([
+    'ep-laptop',
+    'ep-tablet',
+  ]);
+  expect(store.isEnrolled('ep-tablet')).toBe(false);
+  expect(store.listByVault('v2').map((row) => row.endpointId)).toEqual(['ep-phone']);
 });
 
 test("enrollment: a second process's writes are visible without restart", async () => {
@@ -146,7 +177,10 @@ test('enrollment: a stale daemon checkpoint cannot resurrect a CLI revocation', 
       schemaEpoch: 2,
     }),
   ).toThrow(/not enrolled/);
-  expect(EnrollmentStore.open(file).get('ep-lost', 'v1')).toBeUndefined();
+  // Revocation is a device-level TOMBSTONE, not a delete: the binding is
+  // still visible and its effective role is `revoked` in every vault.
+  expect(EnrollmentStore.open(file).get('ep-lost', 'v1')?.role).toBe('revoked');
+  expect(EnrollmentStore.open(file).isEnrolled('ep-lost')).toBe(false);
   await expect(fs.stat(`${file}.lock`)).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
@@ -222,23 +256,41 @@ test('pairing tickets: one-time, secret-checked, TTL-bound', async () => {
   const file = await tempFile('gateway.db');
   const store = PairingTicketStore.open(file);
 
-  const minted = store.mint('v1');
+  const members = MemberStore.open(store.gatewayDatabase);
+  const priya = members.create('Priya');
+  const invite = (grants: Array<{ vaultId: string; role: 'admin' | 'write' | 'read' }>) => ({
+    memberId: priya.memberId,
+    grants,
+  });
+  const minted = store.mint(invite([{ vaultId: 'v1', role: 'write' }]));
   expect(store.listActive()).toHaveLength(1);
 
   // A guessed secret must not burn the ticket before the secret is verified.
   expect(store.redeem(minted.ticketId, 'guessed')).toBeUndefined();
   expect(store.redeem(minted.ticketId, minted.secret)).toEqual({
-    vaultId: 'v1',
-    role: 'write',
+    memberId: priya.memberId,
+    grants: [{ vaultId: 'v1', role: 'write' }],
   });
 
-  const second = store.mint('v2');
-  expect(store.redeem(second.ticketId, second.secret)).toEqual({ vaultId: 'v2', role: 'write' });
+  // One invitation may carry several vaults at distinct roles — one scan.
+  const second = store.mint(
+    invite([
+      { vaultId: 'v2', role: 'write' },
+      { vaultId: 'v3', role: 'read' },
+    ]),
+  );
+  expect(store.redeem(second.ticketId, second.secret)).toEqual({
+    memberId: priya.memberId,
+    grants: [
+      { vaultId: 'v2', role: 'write' },
+      { vaultId: 'v3', role: 'read' },
+    ],
+  });
   // …and it burned on success.
   expect(store.redeem(second.ticketId, second.secret)).toBeUndefined();
 
   // Expiry: a stale ticket never redeems.
-  const brief = store.mint('v3', 1);
+  const brief = store.mint(invite([{ vaultId: 'v3', role: 'write' }]), 1);
   await new Promise((resolve) => setTimeout(resolve, 5));
   expect(store.redeem(brief.ticketId, brief.secret)).toBeUndefined();
 });
@@ -249,7 +301,15 @@ test('ticket redemption and enrollment commit atomically and one row wins concur
   cleanups.push(() => gateway.close());
   const tickets = PairingTicketStore.open(gateway);
   const enrollments = EnrollmentStore.open(gateway);
-  const first = tickets.mint('v1');
+  const members = MemberStore.open(gateway);
+  const priya = members.create('Priya');
+  const first = tickets.mint({
+    memberId: priya.memberId,
+    grants: [
+      { vaultId: 'v1', role: 'write' },
+      { vaultId: 'v2', role: 'read' },
+    ],
+  });
 
   expect(() =>
     tickets.redeemAndEnroll(
@@ -263,16 +323,26 @@ test('ticket redemption and enrollment commit atomically and one row wins concur
     ),
   ).toThrow('injected crash');
   expect(tickets.listActive()).toHaveLength(1);
+  // A partial redemption leaves NO enrollment at all — never half-paired.
   expect(enrollments.get('phone', 'v1')).toBeUndefined();
+  expect(enrollments.get('phone', 'v2')).toBeUndefined();
+  expect(members.grants(priya.memberId)).toEqual([]);
 
-  expect(
-    tickets.redeemAndEnroll(first.ticketId, first.secret, enrollments, {
-      endpointId: 'phone',
-      label: 'Phone',
-    }),
-  ).toMatchObject({ endpointId: 'phone', vaultId: 'v1' });
+  const enrolled = tickets.redeemAndEnroll(first.ticketId, first.secret, enrollments, {
+    endpointId: 'phone',
+    label: 'Phone',
+  });
+  // One scan, both vaults, at the distinct roles the invitation named.
+  expect(enrolled?.map((row) => ({ vaultId: row.vaultId, role: row.role }))).toEqual([
+    { vaultId: 'v1', role: 'write' },
+    { vaultId: 'v2', role: 'read' },
+  ]);
+  expect(enrolled?.every((row) => row.memberId === priya.memberId)).toBe(true);
 
-  const raced = tickets.mint('v1');
+  const raced = tickets.mint({
+    memberId: priya.memberId,
+    grants: [{ vaultId: 'v1', role: 'write' }],
+  });
   const results = await Promise.all([
     Promise.resolve().then(() =>
       tickets.redeemAndEnroll(raced.ticketId, raced.secret, enrollments, {

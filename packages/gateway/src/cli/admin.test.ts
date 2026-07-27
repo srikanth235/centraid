@@ -21,6 +21,7 @@ import { openVaultRegistry } from '../serve/vault-registry.ts';
 import { daemonKeyStore } from './key-store.ts';
 import { landlordBearerForEndpointSecret } from './landlord-auth.ts';
 import { EnrollmentStore } from '../serve/enrollment-store.ts';
+import { MemberStore } from '../serve/member-store.ts';
 import { encodePairingTicket, PairingTicketStore } from '../serve/pairing-store.ts';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
@@ -114,6 +115,7 @@ async function fakePairDaemon(): Promise<typeof fetch> {
     const body = JSON.parse(String(init?.body ?? '{}')) as {
       vaultId?: string;
       ttlMinutes?: number;
+      newMemberLabel?: string;
       role?: 'admin' | 'write' | 'read';
     };
     const registry = openVaultRegistry({
@@ -150,13 +152,19 @@ async function fakePairDaemon(): Promise<typeof fetch> {
         );
       }
       const role = body.role ?? 'write';
-      const minted = PairingTicketStore.open(layout.gatewayDbFile).mint(
-        vault.vaultId,
-        (body.ttlMinutes ?? 15) * 60_000,
-        role,
-      );
+      const tickets = PairingTicketStore.open(layout.gatewayDbFile);
+      // The daemon owns the invitation: it names the member and the grant
+      // list; the CLI only carries the token (#599 Decision 5).
+      const label = typeof body.newMemberLabel === 'string' ? body.newMemberLabel : 'New member';
+      const member = MemberStore.open(tickets.gatewayDatabase).create(label);
+      const grants = [{ vaultId: vault.vaultId, vaultName: vault.name, role }];
+      const ttl = (body.ttlMinutes ?? 15) * 60_000;
+      const minted = tickets.mint({ memberId: member.memberId, grants }, ttl);
       return Response.json({
         ok: true,
+        memberId: member.memberId,
+        memberLabel: member.label,
+        grants,
         ticket: encodePairingTicket({
           v: 1,
           kind: 'centraid-gw-pair',
@@ -296,7 +304,8 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
       daemon,
     ),
   );
-  expect(text).toMatch(/Pairing ticket for vault "Family"/);
+  expect(text).toMatch(/Pairing ticket for New member/);
+  expect(text).toMatch(/Family \(.*\): read/);
   // The pasteable token is the sole base64url line in the human block.
   const token = text
     .split('\n')
@@ -316,7 +325,7 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
     vaultName: 'Family',
   });
   expect(PairingTicketStore.open(layout.gatewayDbFile).redeem(payload.t, payload.s)).toMatchObject({
-    role: 'read',
+    grants: [{ vaultId: expect.any(String) as unknown as string, role: 'read' }],
   });
 });
 
@@ -327,7 +336,7 @@ test('pair --qr prints a terminal QR of the same pasteable ticket', async () => 
   const text = await capture(() =>
     commandPair(['--data-dir', dataDir, '--vault', 'Family', '--qr'], fail, daemon),
   );
-  expect(text).toMatch(/Pairing ticket for vault "Family"/);
+  expect(text).toMatch(/Pairing ticket for New member/);
   expect(text).toMatch(/Phone: scan this QR/);
   // Token still present and decodable.
   const token = text

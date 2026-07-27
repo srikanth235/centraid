@@ -3,15 +3,16 @@
 ## Checklist
 
 - [x] Device role vocabulary (prerequisite): `DeviceRole` / `GrantableRole` lattice, `canWrite()` predicate, role-in-ticket, role picker in DevicePairPanel, glossary "Device roles" section
-- [ ] L2 member layer: `members` table, roles authored on `(member, vault)`, devices as pure bindings that inherit
-- [ ] Invitation tickets `(member_id, [(vault, role)…])` with atomic multi-grant redemption; self-pair vs invite split
-- [ ] Two revocation verbs: revoke device vs remove member (atomic)
-- [ ] Founding auto-creates the owner member; ≥1-owner-per-vault invariant
-- [ ] People-first DevicesCard + member-picker pairing panel; CLI parity (`members`, `pair --member --grant`)
+- [x] L2 member layer: `members` table, roles authored on `(member, vault)`, devices as pure bindings that inherit
+- [x] Invitation tickets `(member_id, [(vault, role)…])` with atomic multi-grant redemption; self-pair vs invite split
+- [x] Two revocation verbs: revoke device vs remove member (atomic)
+- [x] Founding auto-creates the owner member; ≥1-owner-per-vault invariant
+- [x] CLI parity: `members list|add|rename|remove`, `pair --member --grant`, member column in `devices list`
+- [ ] People-first DevicesCard + member-picker pairing panel (client)
 - [x] Share-by-placement: hardlink-or-copy into audience CAS + projected row + `core_share_origin` sidecar, single-DB transaction (vault-package primitive; gateway routes follow in a later commit)
 - [ ] Journal attribution (member + device) on writes
 - [ ] Docs: glossary member vocabulary, decisions.md, SECURITY.md threat-model premise
-- [ ] Wire golden regenerated (invitation payload)
+- [x] Wire golden regenerated (invitation payload)
 
 ## What changed
 
@@ -33,6 +34,16 @@
 - **Blob store:** `packages/vault/src/blob/local.ts` gains `linkFromSync` + `BlobLinkOutcome` (EEXIST → `exists`; EXDEV/EPERM/EACCES/EOPNOTSUPP/ENOSYS/EMLINK → `unsupported` → copy fallback; ENOSPC → `VaultDiskFullError`; everything else rethrows) so the two-hex fan-out stays a `local.ts`-owned detail.
 - **Errors/exports:** `packages/vault/src/errors.ts` (`VaultShareError`), `packages/vault/src/index.ts` barrel exports.
 
+**Commit 3 — the L2 member layer in the gateway.** This realizes six checked checklist items — L2 member layer: `members` table, roles authored on `(member, vault)`, devices as pure bindings that inherit · Invitation tickets `(member_id, [(vault, role)…])` with atomic multi-grant redemption; self-pair vs invite split · Two revocation verbs: revoke device vs remove member (atomic) · Founding auto-creates the owner member; ≥1-owner-per-vault invariant · CLI parity: `members list|add|rename|remove`, `pair --member --grant`, member column in `devices list` · Wire golden regenerated (invitation payload):
+
+- **New files:** `packages/gateway/src/serve/member-store.ts` (members + member_roles CRUD, `adminsOf`, `vaultsLosingLastAdmin`, atomic `remove(memberId)`, `removeVault`), `packages/gateway/src/routes/members-routes.ts` (member CRUD: GET list with roles+deviceCount, POST admin-only, PATCH self-or-admin rename, DELETE with `confirmLastAdmin`), `packages/gateway/src/routes/device-invitations.ts` (the self-pair-vs-invite authorization decision, isolated), `packages/gateway/src/cli/member-admin.ts` (`members list|add|rename|remove`), plus split/new tests `packages/gateway/src/routes/devices-routes.test-fixtures.ts`, `packages/gateway/src/routes/devices-routes-invitations.test.ts`, `packages/gateway/src/routes/members-routes.test.ts`.
+- **Schema (`packages/gateway/src/serve/gateway-db.ts`, edited in place, no migration):** `members(member_id PK, label, created_at)`; `member_roles(member_id→members, vault_id, role CHECK admin|write|read, PK(member_id, vault_id))`; `devices` reshaped to a binding `(enrollment_id PK, endpoint_id UNIQUE, member_id NOT NULL→members, …, revoked)` — the per-vault `role` column and `UNIQUE(endpoint_id, vault_id)` are gone; new `device_checkpoints(endpoint_id, vault_id, checkpoint_json)` for the one genuinely per-(device, vault) fact; `tickets` become invitations `(kind found|enroll, member_id→members, grants_json, CHECK found ⇒ both NULL / enroll ⇒ both NOT NULL)`; `web_sessions` keeps `vault_id` (deferred re-key per the issue) with `device_key → devices(endpoint_id) ON DELETE CASCADE`.
+- **Stores:** `packages/gateway/src/serve/enrollment-store.ts` — the device row is a binding; `DeviceEnrollment` becomes a derived `(device × member × member_roles)` view so ~30 call sites keep their shape, with `memberId`/`memberLabel` added and `enrollmentId` now the device id (repeats across a device's vaults); revocation is a tombstone and web sessions are deleted explicitly since the FK cascade no longer fires. `packages/gateway/src/serve/pairing-store.ts` — invitations with multi-grant atomic redemption (injected `beforeEnroll` crash leaves zero enrollment, zero grants, ticket unburned) and founding auto-creating the owner member ("You", admin).
+- **Routes:** `packages/gateway/src/routes/devices-routes.ts` — mint accepts `memberId` (id or exact label) / `newMemberLabel` / `grants:[{vaultId, role}]` with legacy `vaultId`+`role` as a single grant; self-pair default bakes the caller's current roles; invite requires `admin` in every granted vault; new error codes `role_above_own`, `ambiguous_member`, `invalid_member_label`, `member_not_found`, `invalid_grants`, `grants_required`; device DTO adds `memberId`/`memberLabel`; `confirmLastAdmin` now guards the last live device of a vault's last admin member. `packages/gateway/src/routes/vault-routes.ts` — vault erase drops `member_roles`, `device_checkpoints`, `web_sessions`, and matching invitations. `packages/gateway/src/serve/build-gateway.ts` mounts the members route and resolves the acting member into the request scope; `packages/gateway/src/serve/vault-context.ts`, `packages/gateway/src/serve/replica-intent-context.ts`, `packages/gateway/src/routes/replica-access.ts`, `packages/gateway/src/routes/replica-intent-route.ts` thread `memberId` through the request path; `packages/gateway/src/serve/founding-recovery.ts` probes owner-commit via `member_roles`.
+- **CLI:** `packages/gateway/src/cli/cli.ts`, `packages/gateway/src/cli/device-admin.ts` — `pair --member <id|label> | --new-member <label> | --grant <vaultId>:<role>…` (self-pair default), `devices add --member/--new-member`, member columns in `devices list`; `packages/gateway/src/cli/endpoint-host.ts` — multi-vault redemption with the capability mirror written per granted vault.
+- **Wire:** `packages/tunnel/src/gateway-endpoint.ts` — `GatewayPairResponse` adds `memberId`/`memberLabel`/`vaultIds[]`; the request payload still carries no role and no member; `packages/tunnel/fixtures/wire-golden.json` regenerated (diff is exactly the `gatewayPairResponse` vector); `packages/tunnel/src/wire-conformance.contract.test.ts` updated.
+- **Updated tests across the reshape:** `packages/gateway/src/serve/gateway-db.test.ts`, `device-plane.test.ts`, `packages/gateway/src/routes/devices-routes.test.ts` (trimmed; the invitation cases moved to the new split file), `founding-routes.test.ts`, `vault-erase.test.ts`, `packages/gateway/src/cli/admin.test.ts`, `packages/gateway/src/backup/recover-live.integration.test.ts`, plus `packages/tunnel/src/wire-conformance.contract.test.ts`.
+
 _Later commits will be appended per phase._
 
 ## Decisions
@@ -41,6 +52,7 @@ _Later commits will be appended per phase._
 - `revoked` is deliberately a tombstone state, not a member of `GrantableRole` — never offered in pickers, never mintable.
 - The vault's `consent_device.trust` mirror is unchanged by design: `admin` and `write` both collapse to `full` (minting/revoking are gateway-plane concerns).
 - **Known gap surfaced by commit 2 (deliberate, deferred to the gateway-wiring commit):** there is no shipped *local-only* orphan sweep — `reconcileCustody` deletes only remote orphans and `BlobCache.runEviction` only sheds shas with replica evidence. #599's "the audience vault's own orphan-grace sweep already reclaims" is therefore not yet true for local bytes; the share tests compose the shipped primitives (`liveBlobShas` → `OrphanTombstoneIndex` grace gate → `BlobCustody.deleteLocalSync`) to prove the semantics, and the gateway phase must package that composition as a real sweep or unshared blobs accumulate.
+- **Commit-3 deviations (deliberate):** `DeviceEnrollment` stays a derived per-(device, vault) view rather than rewriting ~30 call sites — authority is still authored in exactly one place (`member_roles`). Host-custody `enroll()` without a member creates one labelled with the device label (the communal-device story; never an "Unassigned" bucket). `tickets.member_id` is nullable for kind `found` only — founding mints before any vault exists, so the owner member is created at redemption. Self-pair with no explicit grants now bakes the member's **current** roles (an admin self-pairing gets admin) instead of defaulting to `write`. **Journal attribution stops at the gateway boundary in this commit**: `memberId` is resolved into the request scope and carried to `ReplicaIntentContext`/`ReplicaRequestAccess`, but the journal receipt writer (`packages/vault/src/gateway/gateway.ts` `writeReceipt`, `InvokeRequest.intentDeviceId`) is a vault-package seam landed in a later commit — same for the agent on-behalf-of hard-cap, whose `app` credential today has no principal dimension.
 - `core_share_origin.shared_at` is INTEGER epoch-ms, diverging from core.ts's "timestamps are TEXT ISO-8601" header rule — it is gateway-plane boundary machinery on the same clock as `blob_orphan.first_orphaned_at` (justified in the DDL comment).
 
 ## Out of scope
@@ -67,6 +79,14 @@ cd packages/vault && bun run test -- src/share/placement.test.ts && bun run type
 ```
 
 Result at commit time: 13/13 share tests passing (full package: 117 files, 985 passed, 1 pre-existing skip), typecheck clean.
+
+Commit-3 spot check:
+
+```sh
+cd packages/gateway && bun run test && bun run typecheck
+```
+
+Result at commit time: gateway 173 files passed / 1 skipped, 1167 tests passed / 6 skipped; tunnel 69 passed / 2 skipped with regenerated golden; protocol 32 passed; typecheck green in all three.
 
 Commit-1 result: 3 files, 23 tests, all passing. Full suites for gateway/client/tunnel were green in the authoring session, and `bun run check:pr:full` runs before requesting merge (shared packages `client`, `protocol`, `tunnel`, `gateway` all move). The `packages/tunnel/fixtures/wire-golden.json` diff is limited to dropping the client-supplied `"trust":"full"` field from the pair-request payload.
 
@@ -98,6 +118,20 @@ Every load-bearing claim is realized in the staged diff, and the file list match
 
 Hardlink-or-copy (`linkFromSync` + `placeBlob`, proved by inode/nlink assertions and the copy-fallback test), the projected row (`projectShareClosure`), the `core_share_origin` sidecar (DDL + insert in `shareToVault`), and the single-DB transaction (one `BEGIN IMMEDIATE` on the audience handle, origin read-only) are all present. The scoping parenthetical is honest — the diff touches only `packages/vault` and adds no gateway routes. The nine unchecked items correctly carry no claim in the diff.
 
+### Commit 3
+
+**Check 1: the Commit-3 "What changed" block faithfully describes the staged diff**
+
+**Verdict: PASS**
+
+Verified line by line against the staged diff. The `gateway-db.ts` DDL matches every schema claim (members / member_roles PK / devices reshaped with `member_id NOT NULL` and no role column / `device_checkpoints` / tickets kind+member_id+grants_json CHECK / web_sessions FK). Mint authorization in `device-invitations.ts` self-pairs off the caller's current roles via `members.grants`, clamps by `roleWithin`, and requires `admin` in every granted vault on the invite path, with all six named error codes present. `pairing-store.ts` performs multi-grant atomic redemption in one transaction (injected-crash rollback proven in `device-plane.test.ts`: zero enrollment, zero grants, ticket unburned) and `enrollFounder` auto-creates the "You"/admin member (proven in `founding-routes.test.ts`). `enrollment-store.ts` is the derived `devices ⋈ members ⋈ member_roles` view with the `revoked` tombstone winning and explicit web-session deletion on the tombstone path; `member-store.ts#remove` is a single transaction dropping checkpoints → devices → member_roles → member. The `wire-golden.json` diff is confined to the `gatewayPairResponse` vector (adds `memberId`/`memberLabel`/`vaultIds`). The named test files account for exactly the 11 staged test files — no file named that is not in the diff, no staged file left unnamed. The spot-run (10 tests) passes, and the full gateway suite reproduces the Verification numbers exactly: 173 passed / 1 skipped files, 1167 passed / 6 skipped tests. (Earlier drafts of the block failed this check on file-list fidelity — eight commit-1 test files listed as updated, one wrong path, a miscounted header — all corrected before commit.)
+
+**Check 2: each newly checked checklist item is realized in the diff**
+
+**Verdict: PASS**
+
+All six newly checked boxes are realized: the L2 member layer (DDL + `member-store.ts` + derived enrollment view, no role column on devices); invitation tickets with the self-pair/invite split (`tickets` CHECK, `mint(TicketInvitation)`, `redeemAndEnroll` returning `DeviceEnrollment[]` atomically, `device-invitations.ts`); two revocation verbs (`EnrollmentStore.revoke` tombstone vs `MemberStore.remove` atomic, surfaced as distinct routes); founding auto-member with the ≥1-owner invariant (`vaultsLosingLastAdmin` + `confirmLastAdmin` on route and CLI paths); CLI parity (`member-admin.ts`, `pair --member/--new-member/--grant`, `devices list` rows carrying `memberId`/`memberLabel` as fields); and the regenerated wire golden whose only changed vector is `gatewayPairResponse`, with the request payload still naming neither role nor member.
+
 ## Steering
 
 ### Check 1: Every human-steering event in the session transcript is recorded as a row
@@ -125,3 +159,4 @@ No steering rows recorded; the opening goal directive was correctly not logged a
 | claude-code-8a1af371-ccc-1785177015-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 34 | 17710 | 2380205 | 12990 | 30734 | 3.2514 | 390 | 2664491 | 23311747 | 269880 | feat(gateway): device role vocabulary — DeviceRole lattice, role-in-ticket (#599 |
 | claude-code-8a1af371-ccc-1785178492-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 116 | 165515 | 10316658 | 72923 | 238554 | 16.0329 | 506 | 2830006 | 33628405 | 342803 | feat(vault): share-by-placement primitive — hardlink CAS + core_share_origin (#5 |
 | claude-code-8a1af371-ccc-1785179223-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 76 | 50078 | 8515232 | 21439 | 71593 | 10.2139 | 582 | 2880084 | 42143637 | 364242 | feat(vault): share-by-placement primitive — hardlink CAS + core_share_origin (#5 |
+| claude-code-8a1af371-ccc-1785179823-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 58 | 55535 | 7242481 | 27523 | 83116 | 9.3134 | 640 | 2935619 | 49386118 | 391765 | feat(gateway): L2 member layer — members, (member,vault) roles, invitation ticke |

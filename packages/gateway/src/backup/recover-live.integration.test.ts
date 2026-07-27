@@ -21,6 +21,7 @@ import type { VaultPlane } from '../serve/vault-plane.js';
 import { HealthRegistry } from '../serve/health-registry.js';
 import { serve, type GatewayServeHandle } from '../serve/serve.js';
 import { BackupService } from './backup-service.js';
+import { EnrollmentStore } from '../serve/enrollment-store.js';
 import { GatewayDatabase } from '../serve/gateway-db.js';
 import {
   encodePairingTicket,
@@ -432,7 +433,13 @@ test('erase then restore on the same box preserves gateway identity and drops pr
   await handle.close();
 
   const database = GatewayDatabase.open(dataDir);
-  expect(database.db.prepare('SELECT COUNT(*) AS count FROM devices').get()).toEqual({ count: 0 });
+  // Authority is authored on `member_roles` since #599, so erase drops the
+  // grants: the old binding survives as a row that reaches nothing, and
+  // `EnrollmentStore` — the only view anything authorizes against — is empty.
+  expect(database.db.prepare('SELECT COUNT(*) AS count FROM member_roles').get()).toEqual({
+    count: 0,
+  });
+  expect(EnrollmentStore.open(database).list()).toEqual([]);
   const minted = PairingTicketStore.open(database).mintFounding(FOUNDING_TICKET_TTL_MS)!;
   database.close();
   const ticket = encodePairingTicket({

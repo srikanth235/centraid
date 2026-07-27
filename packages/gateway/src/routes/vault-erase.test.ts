@@ -71,13 +71,15 @@ test('erasing the last vault cascades gateway state, destroys its DEK, and prese
     deviceKey: 'owner-device',
     shellOrigin: 'http://127.0.0.1:4173',
   });
+  const invitedMember = enrollments.members.create('Invited');
   database.run(
     `INSERT INTO tickets (
-      ticket_id, kind, secret_hash, vault_id, role, created_at, expires_at
-    ) VALUES (?, 'enroll', ?, ?, 'write', ?, ?)`,
+      ticket_id, kind, secret_hash, member_id, grants_json, created_at, expires_at
+    ) VALUES (?, 'enroll', ?, ?, ?, ?, ?)`,
     'pending-pair',
     'secret-hash',
-    vault.vaultId,
+    invitedMember.memberId,
+    JSON.stringify([{ vaultId: vault.vaultId, role: 'write' }]),
     new Date(0).toISOString(),
     Date.now() + 60_000,
   );

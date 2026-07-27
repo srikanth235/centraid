@@ -182,43 +182,83 @@ function installGatewaySchema(db: DatabaseSync): void {
       key TEXT PRIMARY KEY,
       value_json TEXT NOT NULL
     ) STRICT;
+    /*
+     * L2 — principals (issue #599). A member is a human on this household
+     * gateway: a stable id the whole system keys on, plus an editable label.
+     * People-as-principals live here; people-as-data live in the vault's
+     * 'core_party'. There is deliberately no pointer between them.
+     */
+    CREATE TABLE IF NOT EXISTS members (
+      member_id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    ) STRICT;
+    /*
+     * L3 — authorization. Authority is authored HERE and nowhere else: the
+     * effective role of a device in a vault is its member's row in this
+     * table, and an absent row means no access at all. Every vault keeps at
+     * least one 'admin' member (the founding invariant, read as ownership).
+     */
+    CREATE TABLE IF NOT EXISTS member_roles (
+      member_id TEXT NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
+      vault_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('admin', 'write', 'read')),
+      PRIMARY KEY (member_id, vault_id)
+    ) STRICT;
+    /*
+     * L1 — authentication. A device row is a pure BINDING of a proved iroh
+     * EndpointId to a member; it carries no authored authority (no role
+     * column, no per-vault fan-out). 'revoked' is the device-level tombstone
+     * — "this phone was stolen" — and leaves the member untouched.
+     */
     CREATE TABLE IF NOT EXISTS devices (
       enrollment_id TEXT PRIMARY KEY,
-      endpoint_id TEXT NOT NULL,
-      vault_id TEXT NOT NULL,
+      endpoint_id TEXT NOT NULL UNIQUE,
+      member_id TEXT NOT NULL REFERENCES members(member_id) ON DELETE CASCADE,
       label TEXT NOT NULL,
       platform TEXT,
-      role TEXT NOT NULL CHECK (role IN ('admin', 'write', 'read', 'revoked')),
       remember_device INTEGER NOT NULL CHECK (remember_device IN (0, 1)),
       grant_profile_json TEXT,
       compute_json TEXT,
-      checkpoint_json TEXT,
-      added_at TEXT NOT NULL,
-      UNIQUE (endpoint_id, vault_id)
+      revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
+      added_at TEXT NOT NULL
+    ) STRICT;
+    /*
+     * Replica checkpoints are the one genuinely per-(device, vault) fact, so
+     * they keep their own table now that 'devices' no longer fans out.
+     */
+    CREATE TABLE IF NOT EXISTS device_checkpoints (
+      endpoint_id TEXT NOT NULL REFERENCES devices(endpoint_id) ON DELETE CASCADE,
+      vault_id TEXT NOT NULL,
+      checkpoint_json TEXT NOT NULL,
+      PRIMARY KEY (endpoint_id, vault_id)
     ) STRICT;
     CREATE TABLE IF NOT EXISTS web_sessions (
       token_hash TEXT PRIMARY KEY,
       vault_id TEXT NOT NULL,
-      device_key TEXT,
+      device_key TEXT REFERENCES devices(endpoint_id) ON DELETE CASCADE,
       shell_origin TEXT NOT NULL,
       created_at TEXT NOT NULL,
       expires_at INTEGER NOT NULL,
-      last_used_at INTEGER NOT NULL,
-      FOREIGN KEY (device_key, vault_id)
-        REFERENCES devices(endpoint_id, vault_id) ON DELETE CASCADE
+      last_used_at INTEGER NOT NULL
     ) STRICT;
+    /*
+     * A ticket is an INVITATION: which member the joining device binds to,
+     * and the full grant list that member must hold once it redeems. One
+     * scan, many vaults, atomically. 'found' carries neither — the founding
+     * ceremony creates the vault and its owner member at redemption.
+     */
     CREATE TABLE IF NOT EXISTS tickets (
       ticket_id TEXT PRIMARY KEY,
       kind TEXT NOT NULL CHECK (kind IN ('found', 'enroll')),
       secret_hash TEXT NOT NULL,
-      vault_id TEXT,
-      role TEXT,
+      member_id TEXT REFERENCES members(member_id) ON DELETE CASCADE,
+      grants_json TEXT,
       created_at TEXT NOT NULL,
       expires_at INTEGER NOT NULL,
       CHECK (
-        (kind = 'found' AND vault_id IS NULL AND role IS NULL) OR
-        (kind = 'enroll' AND vault_id IS NOT NULL AND
-          role IN ('admin', 'write', 'read'))
+        (kind = 'found' AND member_id IS NULL AND grants_json IS NULL) OR
+        (kind = 'enroll' AND member_id IS NOT NULL AND grants_json IS NOT NULL)
       )
     ) STRICT;
     CREATE UNIQUE INDEX IF NOT EXISTS one_founding_ticket

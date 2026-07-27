@@ -31,7 +31,7 @@ export type ReplicaIntentDispatcher = (
 
 export interface ReplicaIntentRouteContext {
   plane: VaultPlane;
-  access: ReplicaShapeAccess & { deviceId: string };
+  access: ReplicaShapeAccess & { deviceId: string; memberId?: string };
   dispatch: ReplicaIntentDispatcher;
 }
 
@@ -211,8 +211,16 @@ export async function handleReplicaIntent(
   const canonicalCommitExistedBeforeDispatch = hasCanonicalCommit(context.plane, intentId, 'any');
   let dispatched: ReplicaIntentDispatchOutcome;
   try {
-    dispatched = await runWithReplicaIntent({ intentId, appId, deviceId: identity.deviceId }, () =>
-      context.dispatch({ intentId, appId, action, input: body.input }),
+    dispatched = await runWithReplicaIntent(
+      {
+        intentId,
+        appId,
+        deviceId: identity.deviceId,
+        // L4 attribution (#599): the acting member travels with the intent so
+        // a replayed offline write names the person, not only the hardware.
+        ...(context.access.memberId !== undefined ? { memberId: context.access.memberId } : {}),
+      },
+      () => context.dispatch({ intentId, appId, action, input: body.input }),
     );
   } catch {
     // Dispatch/transport failure is ambiguous: the canonical command may

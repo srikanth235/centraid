@@ -7,6 +7,8 @@ import type { ReplicaShapeAccess } from './replica-shape.js';
 export interface ReplicaRequestAccess extends ReplicaShapeAccess {
   deviceId: string;
   deviceKey?: string;
+  /** The acting member behind the device (issue #599 L2/L4). */
+  memberId?: string;
   enrollment?: DeviceEnrollment;
 }
 
@@ -67,6 +69,7 @@ export function resolveReplicaAccess(
       rememberDevice: enrollment.rememberDevice,
       deviceId: deviceKey,
       deviceKey,
+      memberId: enrollment.memberId,
       enrollment,
       ...(appId ? { appId } : {}),
     },

@@ -126,6 +126,7 @@ import { EnrollmentStore } from './enrollment-store.js';
 import { PairingTicketStore } from './pairing-store.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makeDevicesRouteHandler } from '../routes/devices-routes.js';
+import { makeMembersRouteHandler } from '../routes/members-routes.js';
 import { makeDeviceWorkRouteHandler } from '../routes/device-work-routes.js';
 import { companionRequestAllowed } from './companion-access.js';
 import { makeReplicaRouteHandler } from '../routes/replica-routes.js';
@@ -3026,6 +3027,26 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               },
             }),
           ),
+          // Household roster (issue #599): members are the principals roles
+          // are authored on; the devices route above only binds hardware.
+          forRoutePrefixes(
+            '/centraid/_gateway/members',
+            makeMembersRouteHandler({
+              enrollments: options.devicePairing.enrollments,
+              vaultName: (id) => vaultRegistry.get(id)?.name,
+              ...(options.canMintFoundingTicket
+                ? { isHostCustody: options.canMintFoundingTicket }
+                : {}),
+              onEndpointRevoked: options.devicePairing.onEndpointRevoked,
+              onRevoked: (rows) => {
+                for (const row of rows) {
+                  const plane = vaultRegistry.get(row.vaultId);
+                  plane?.forgetReplicaDevice(row.endpointId);
+                  plane?.db.blobTransfers.revokePairedDevice(row.endpointId);
+                }
+              },
+            }),
+          ),
           forRoutePrefixes(
             '/centraid/_gateway/device-work',
             makeDeviceWorkRouteHandler({
@@ -3386,6 +3407,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       {
         vaultId,
         deviceKey,
+        // L4 attribution (#599): resolve the ACTING MEMBER once, here, from
+        // the device binding, so everything downstream reads "who did this"
+        // off the request scope instead of re-deriving it from hardware.
+        ...(enrollment ? { memberId: enrollment.memberId } : {}),
         ...(enrollment?.grantProfile !== undefined
           ? { grantProfile: enrollment.grantProfile }
           : {}),

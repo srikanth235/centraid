@@ -31,10 +31,13 @@ test('installs the full vaultless schema without a vault catalog or shm sidecar'
   expect(tables).toEqual([
     'backup_targets',
     'cas_reconciliations',
+    'device_checkpoints',
     'devices',
     'erase_intents',
     'founding_ticket_reservations',
     'gateway_meta',
+    'member_roles',
+    'members',
     'prefs',
     'recovery_kit',
     'storage_connections',
@@ -101,14 +104,19 @@ test('device deletion cascades its durable browser sessions', async () => {
   const gateway = GatewayDatabase.open(dir);
   opened.push(gateway);
   gateway.run(
+    'INSERT INTO members (member_id, label, created_at) VALUES (?, ?, ?)',
+    'member',
+    'Priya',
+    0,
+  );
+  gateway.run(
     `INSERT INTO devices (
-      enrollment_id, endpoint_id, vault_id, label, role, remember_device, added_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      enrollment_id, endpoint_id, member_id, label, remember_device, added_at
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
     'enrollment',
     'endpoint',
-    'vault',
+    'member',
     'Laptop',
-    'write',
     1,
     new Date(0).toISOString(),
   );

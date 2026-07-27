@@ -119,6 +119,15 @@ test('founding ticket is single-outstanding and initialize enrolls one verified 
   };
   expect(registry.list()).toEqual([initialized.vault]);
   expect(enrollments.get('founder-device', initialized.vault.vaultId)?.role).toBe('admin');
+  // Founding auto-creates the owner MEMBER with no extra first-run prompt
+  // (#599 Decision 9): exactly one member, admin of the founded vault, and
+  // every binding carries a member id — there is no "Unassigned" bucket.
+  expect(enrollments.members.list().map((member) => member.label)).toEqual(['You']);
+  const owner = enrollments.members.list()[0]!;
+  expect(enrollments.members.grants(owner.memberId)).toEqual([
+    { vaultId: initialized.vault.vaultId, role: 'admin' },
+  ]);
+  expect(enrollments.list().every((row) => row.memberId === owner.memberId)).toBe(true);
   expect(tickets.pendingFoundingVaults()).toEqual([]);
   expect(parseRecoveryKit(initialized.kit, 'correct horse battery staple').targets).toEqual([]);
   expect(JSON.stringify(initialized.kit)).not.toContain(

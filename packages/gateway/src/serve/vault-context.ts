@@ -27,6 +27,13 @@ export interface VaultRequestContext {
    * never an admin wildcard: the composed handler fails closed.
    */
   deviceKey?: string;
+  /**
+   * The member (L2 principal) the calling device is bound to — the acting
+   * human for authorization and journal attribution (issue #599). Resolved
+   * once per request from the binding, so it is correct across renames: the
+   * id is the key, the label is only display.
+   */
+  memberId?: string;
   /** App-id allow-list for a constrained Companion device. */
   grantProfile?: readonly string[];
 }

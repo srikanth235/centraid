@@ -34,6 +34,7 @@ import type {
 } from '../serve/enrollment-store.js';
 import type { PairingTicketStore } from '../serve/pairing-store.js';
 import { encodePairingTicket, DEFAULT_TICKET_TTL_MS } from '../serve/pairing-store.js';
+import { parseGrants, resolveInvitation } from './device-invitations.js';
 import { readJson, sendJson } from './route-helpers.js';
 
 const DEVICES_PATH = '/centraid/_gateway/devices';
@@ -49,6 +50,9 @@ const VAULT_HEADER = 'x-centraid-vault';
 interface DeviceDTO {
   deviceId: string;
   endpointId: string;
+  /** The person this device acts as (#599 L2) — roster grouping keys on it. */
+  memberId: string;
+  memberLabel: string;
   label: string;
   platform?: string;
   transport: 'iroh';
@@ -185,30 +189,39 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       ) {
         return sendJson(res, 404, { error: 'not_found' });
       }
-      // Minting a pairing ticket delegates enrollment, so only a proved admin
-      // of this exact vault may do it. There is no keyless loopback wildcard.
-      if (
-        !hostCustody &&
-        (!callerKey || deps.enrollments.get(callerKey, target)?.role !== 'admin')
-      ) {
-        return sendJson(res, 403, {
-          error: 'not_admin',
-          message: 'only an admin device can mint pairing tickets',
-        });
-      }
-      // `admin` is grantable here, not just `write`/`read`: the guard above
-      // already proved this caller is either direct host custody or an admin
-      // of THIS vault, and granting admin is the only way to have a second
-      // admin device (or to replace a lost one). The CLI validates
-      // `--role admin`, `GrantableRole` names it, and `tickets.mint` accepts
-      // it — rejecting it here was the odd one out.
+      // `admin` is grantable here, not just `write`/`read`: granting admin is
+      // the only way a vault gets a second owner (or replaces a lost one).
       //
       // The default stays `write`: a ticket LEAVES this machine, and whatever
-      // redeems it lands at the role baked into it. Defaulting to admin would
+      // redeems it lands at the roles baked into it. Defaulting to admin would
       // let a casually paired phone mint further tickets and revoke this device.
       const role = body.role ?? 'write';
       if (role !== 'admin' && role !== 'write' && role !== 'read') {
         return sendJson(res, 400, { error: 'invalid_role' });
+      }
+      const requestedGrants = parseGrants(body.grants);
+      if (requestedGrants === null) {
+        return sendJson(res, 400, {
+          error: 'invalid_grants',
+          message: 'grants must be a list of {vaultId, role}',
+        });
+      }
+      const invitation = resolveInvitation({
+        enrollments: deps.enrollments,
+        vaultName: deps.vaultName,
+        callerKey,
+        hostCustody,
+        hostVaults,
+        target,
+        role,
+        body,
+        grants: requestedGrants,
+      });
+      if ('error' in invitation) {
+        return sendJson(res, invitation.status, {
+          error: invitation.error,
+          message: invitation.message,
+        });
       }
       const ttlMs =
         typeof body.ttlMinutes === 'number' && body.ttlMinutes > 0
@@ -224,23 +237,36 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
             'gateway has no iroh endpoint identity yet — start the daemon so it mints its endpoint',
         });
       }
-      const minted = deps.tickets.mint(target, ttlMs, role);
+      const minted = deps.tickets.mint(
+        { memberId: invitation.memberId, grants: invitation.grants },
+        ttlMs,
+      );
+      const primary = invitation.grants[0] ?? { vaultId: target, role };
       const token = encodePairingTicket({
         v: 1,
         kind: 'centraid-gw-pair',
         gw,
         t: minted.ticketId,
         s: minted.secret,
-        vaultName: deps.vaultName(target) ?? target,
+        vaultName: deps.vaultName(primary.vaultId) ?? primary.vaultId,
         exp: minted.expiresAt,
       });
       return sendJson(res, 200, {
         ok: true,
         ticket: token,
-        vaultId: target,
-        vaultName: deps.vaultName(target),
+        memberId: invitation.memberId,
+        memberLabel: invitation.memberLabel,
+        grants: invitation.grants.map((grant) => ({
+          vaultId: grant.vaultId,
+          vaultName: deps.vaultName(grant.vaultId),
+          role: grant.role,
+        })),
+        // The first grant is also reported flat so single-vault callers (the
+        // `pair` CLI, the desktop panel) need no shape change to keep working.
+        vaultId: primary.vaultId,
+        vaultName: deps.vaultName(primary.vaultId),
         expiresAt: new Date(minted.expiresAt).toISOString(),
-        role,
+        role: primary.role,
       });
     }
 
@@ -306,11 +332,10 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       });
     }
 
-    if (
-      target?.role === 'admin' &&
-      deps.enrollments.listByVault(target.vaultId).filter((row) => row.role === 'admin').length ===
-        1
-    ) {
+    // The ≥1-admin invariant is authored on MEMBERS now, so revoking a device
+    // only endangers it when this is the last live device of the vault's last
+    // admin member — the case where recovery needs filesystem access.
+    if (target && lastAdminDeviceFor(deps, target)) {
       let body: Record<string, unknown>;
       try {
         body = await readJson(req);
@@ -355,11 +380,26 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
   };
 }
 
+/** Is this the last live device of the last admin MEMBER of its vault? */
+function lastAdminDeviceFor(deps: DevicesRouteDeps, row: DeviceEnrollment): boolean {
+  const admins = deps.enrollments.members.adminsOf(row.vaultId);
+  if (admins.length !== 1 || admins[0] !== row.memberId) return false;
+  const live = new Set(
+    deps.enrollments
+      .list()
+      .filter((candidate) => candidate.memberId === row.memberId && candidate.role !== 'revoked')
+      .map((candidate) => candidate.endpointId),
+  );
+  return live.size === 1 && live.has(row.endpointId);
+}
+
 function toDto(row: DeviceEnrollment, deps: DevicesRouteDeps, callerKey: string): DeviceDTO {
   const vaultName = deps.vaultName(row.vaultId);
   return {
     deviceId: row.enrollmentId,
     endpointId: row.endpointId,
+    memberId: row.memberId,
+    memberLabel: row.memberLabel,
     label: row.label,
     ...(row.platform !== undefined ? { platform: row.platform } : {}),
     transport: 'iroh',

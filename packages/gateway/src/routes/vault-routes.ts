@@ -232,13 +232,29 @@ export function makeVaultRouteHandler(
                ON CONFLICT(vault_id) DO NOTHING`,
             )
             .run(vaultId, new Date().toISOString());
-          // `devices` is the parent of web_sessions; the FK cascade makes a
-          // formerly paired device lose every route to this erased vault.
+          // Authority for an erased vault is the `member_roles` row (#599);
+          // dropping it makes every device of every member lose its route
+          // here while their other vaults are untouched. Web sessions and
+          // replica checkpoints are vault-keyed, so they go explicitly.
           options
-            .gatewayDatabase!.db.prepare('DELETE FROM devices WHERE vault_id = ?')
+            .gatewayDatabase!.db.prepare('DELETE FROM member_roles WHERE vault_id = ?')
             .run(vaultId);
           options
-            .gatewayDatabase!.db.prepare('DELETE FROM tickets WHERE vault_id = ?')
+            .gatewayDatabase!.db.prepare('DELETE FROM device_checkpoints WHERE vault_id = ?')
+            .run(vaultId);
+          options
+            .gatewayDatabase!.db.prepare('DELETE FROM web_sessions WHERE vault_id = ?')
+            .run(vaultId);
+          // An invitation naming this vault can no longer be honoured.
+          options
+            .gatewayDatabase!.db.prepare(
+              `DELETE FROM tickets
+                WHERE kind = 'enroll'
+                  AND EXISTS (
+                    SELECT 1 FROM json_each(tickets.grants_json)
+                     WHERE json_extract(json_each.value, '$.vaultId') = ?
+                  )`,
+            )
             .run(vaultId);
           options
             .gatewayDatabase!.db.prepare('DELETE FROM backup_targets WHERE vault_id = ?')

@@ -130,13 +130,16 @@ const VECTORS: Array<{ name: string; note: string; value: unknown }> = [
   },
   {
     name: 'gatewayPairResponse',
-    note: 'centraid/gw-pair/1 redemption response (all fields).',
+    note: 'centraid/gw-pair/1 redemption response (all fields); the invitation binds a member and may grant several vaults.',
     value: {
       ok: true,
       gatewayId: 'gw_9c8d',
       gatewayName: 'home',
+      memberId: 'mbr_priya',
+      memberLabel: 'Priya',
       vaultId: 'vlt_42',
       vaultName: 'personal',
+      vaultIds: ['vlt_42', 'vlt_family'],
       version: '0.1.0',
       schemaEpoch: 7,
     },

@@ -45,7 +45,9 @@ export function recoverPendingFoundingVaults(options: PendingFoundingRecoveryOpt
   for (const row of pending) {
     for (const vaultId of row.vaultIds) {
       const enrollment = options.gatewayDatabase.db
-        .prepare('SELECT 1 AS present FROM devices WHERE vault_id = ? LIMIT 1')
+        // Authority lives on `member_roles` since #599: a granted role is the
+        // proof that a founding ceremony committed an owner for this vault.
+        .prepare('SELECT 1 AS present FROM member_roles WHERE vault_id = ? LIMIT 1')
         .get(vaultId) as { present: number } | undefined;
       if (enrollment) {
         throw new Error(
