@@ -58,3 +58,76 @@ export function skipOnboarding(_platform, timeoutMs) {
 
 /** Stable first-paint marker on the springboard Home (issue #498). */
 export const HOME_RAIL_LABEL = 'YOUR APPS';
+
+/**
+ * Maestro YAML body for `ctx.configureGateway` — clearState → skip onboarding
+ * → Settings → Advanced → type URL (and optional token) → Save → Home.
+ * Kept here so lib/harness.mjs stays under the 500-line repo-hygiene cap.
+ */
+export function configureGatewayYaml({
+  appId,
+  platform,
+  firstLaunchTimeoutMs,
+  gatewayUrl,
+  gatewayToken = '',
+}) {
+  const tokenSteps = gatewayToken
+    ? `- tapOn: "paste token here"
+# e2e-lint-allow: unasserted-input — a bearer token is a secret; the field masks
+# it and it is never rendered back, so there is no value to assertVisible on.
+- inputText: ${JSON.stringify(gatewayToken)}
+${DISMISS_KEYBOARD_ONBOARDING}`
+    : '';
+  return `appId: ${appId}
+---
+- launchApp:
+    clearState: true
+${skipOnboarding(platform, firstLaunchTimeoutMs)}- extendedWaitUntil:
+    visible:
+      text: "${HOME_RAIL_LABEL}"
+    timeout: ${firstLaunchTimeoutMs}
+- tapOn: "Settings"
+# LogBox toast steals Advanced taps (CI run 30264498210).
+- runFlow:
+    when:
+      visible: "Open debugger to view warnings"
+    commands:
+      - tapOn:
+          point: "92%,96%"
+- extendedWaitUntil:
+    visible: "Desktop link"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      text: "Gateway connection"
+    direction: DOWN
+    visibilityPercentage: 100
+- tapOn: "Gateway connection"
+- scrollUntilVisible:
+    element:
+      text: "Gateway URL"
+    direction: DOWN
+    visibilityPercentage: 100
+    timeout: 15000
+- extendedWaitUntil:
+    visible: "Gateway URL"
+    timeout: 10000
+- tapOn:
+    text: "http://127.0.0.1:18789"
+    below: "Dev fallback for simulators.*"
+# e2e-lint-allow: unasserted-input — throwaway keystroke to provoke the iOS
+# keyboard onboarding sheet; erased immediately below.
+- inputText: "x"
+${DISMISS_KEYBOARD_ONBOARDING}- eraseText
+- inputText: ${JSON.stringify(gatewayUrl)}
+- assertVisible:
+    text: ${JSON.stringify(gatewayUrl)}
+    below: "Dev fallback for simulators.*"
+${tokenSteps}- hideKeyboard
+- tapOn: "Save"
+- extendedWaitUntil:
+    visible: "${HOME_RAIL_LABEL}"
+    timeout: 30000
+- assertNotVisible: "Connect your computer. Pair desktop"
+`;
+}

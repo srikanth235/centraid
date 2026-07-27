@@ -17,7 +17,7 @@ Debug onboarding exposes Skip for now; release does not:
 
 first-run skip waits for Skip for now on both platforms:
 
-- `tests/agent-e2e-mobile/lib/first-run.mjs` — `skipOnboarding` no longer Android-only; scrolls to 100% visibility, taps **"Skip for now"**, then waits until **"Connect your gateway"** is gone before Home; exports `HOME_RAIL_LABEL`.
+- `tests/agent-e2e-mobile/lib/first-run.mjs` (also `configureGatewayYaml` + LogBox dismiss) — `skipOnboarding` no longer Android-only; scrolls to 100% visibility, taps **"Skip for now"**, then waits until **"Connect your gateway"** is gone before Home; exports `HOME_RAIL_LABEL`.
 
 configureGateway / home-loads / template-gate use springboard markers:
 
@@ -86,3 +86,5 @@ gh workflow run e2e.yml --ref fix/mobile-e2e-springboard-onboarding -f suite=mob
 ### Steering
 
 ### Costs
+
+- dismiss LogBox before Advanced expand (tap steal)

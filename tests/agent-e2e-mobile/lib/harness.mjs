@@ -20,7 +20,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
-import { DISMISS_KEYBOARD_ONBOARDING, HOME_RAIL_LABEL, skipOnboarding } from './first-run.mjs';
+import { configureGatewayYaml } from './first-run.mjs';
 import { metroReachable, prewarmMetroBundle } from './metro.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -316,108 +316,17 @@ export async function runFlow(slug, fn) {
     if (!gatewayUrl) {
       throw new Error('MAESTRO_GATEWAY_URL is required for this mobile journey');
     }
-    // The token field's placeholder is unique on the screen, so it needs no
-    // relative anchor the way the URL field does.
-    const tokenSteps = gatewayToken
-      ? `- tapOn: "paste token here"
-# e2e-lint-allow: unasserted-input — a bearer token is a secret; the field masks
-# it and it is never rendered back, so there is no value to assertVisible on.
-- inputText: ${JSON.stringify(gatewayToken)}
-${DISMISS_KEYBOARD_ONBOARDING}`
-      : '';
-    // Every selector below was checked against a running build. The previous
-    // version of this helper was written from the source instead, and each of
-    // these lines is a place where that produced something that "passed" while
-    // doing nothing. Please don't shorten them back:
-    //
-    //   * Reaching Settings: Home's "Pair desktop" button sits *under* the tab
-    //     bar on a fresh launch, so tapping it is a silent no-op — Maestro still
-    //     reports COMPLETED. Use the header gear, which is always on screen.
-    //   * Confirming we arrived: `assertVisible: "Settings"` is vacuous — the
-    //     header gear, the tab, and the screen title are all "Settings", so it
-    //     passes on Home too. "Gateway link" is unique to the Settings screen
-    //     (post-#498 redesign; was "Desktop link").
-    //   * The URL field: Maestro matches text as a SUBSTRING, so a bare
-    //     `tapOn: "http://127.0.0.1:18789"` matched the help paragraph above the
-    //     field ("…e.g. http://127.0.0.1:18789. An authed gateway…") and focused
-    //     nothing; the URL was never typed and Save persisted an empty string.
-    //     The `below:` anchor is the paragraph itself, so only the input matches.
-    //     (An accessibilityLabel on the TextInput does not help — RN does not
-    //     surface it to the iOS a11y tree for text fields; it stays the placeholder.)
-    //   * `hideKeyboard` before Save: the software keyboard covers the Save
-    //     button, so tapping it lands on a key instead.
-    //   * After Save: Settings calls `navigation.navigate('Apps', …)`, so the
-    //     old `extendedWaitUntil: visible: "Apps"` looks right in the source —
-    //     but 'Apps' is the *route* name and the tab renders as "Home". Assert on
-    //     what a user sees, and prove the setting actually took by requiring the
-    //     no-gateway card to be gone.
+    // Selectors live in first-run.mjs (file-size cap). Glass-dock Settings,
+    // Desktop link / Gateway connection, placeholder URL + below-anchor, and
+    // LogBox dismiss are load-bearing — see that helper's comments + #586.
     await ctx.run(
-      `appId: ${state.appId}
----
-- launchApp:
-    clearState: true
-${skipOnboarding(state.platform, FIRST_LAUNCH_TIMEOUT_MS)}- extendedWaitUntil:
-    visible:
-      text: "${HOME_RAIL_LABEL}"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-# Glass dock Settings slot (springboard — no tab bar). Label is unique on Home.
-- tapOn: "Settings"
-# Settings section eyebrow (Settings.tsx / SettingsSection) — source label is
-# "Desktop link" (CSS uppercase is visual only). Not "Gateway link".
-- extendedWaitUntil:
-    visible: "Desktop link"
-    timeout: 15000
-# Expand Advanced: the row's accessibilityLabel/text is "Gateway connection"
-# (not the section eyebrow "Advanced (developer)").
-- scrollUntilVisible:
-    element:
-      text: "Gateway connection"
-    direction: DOWN
-- tapOn: "Gateway connection"
-- extendedWaitUntil:
-    visible: "Gateway URL"
-    timeout: 10000
-# This literal is the field's PLACEHOLDER, not the URL being configured — the
-# input is empty after clearState, and an empty TextInput exposes only its
-# placeholder as matchable text. It must therefore stay byte-equal to
-# placeholder="http://127.0.0.1:18789" in apps/mobile/src/screens/Settings.tsx,
-# even when this flow configures a DIFFERENT gateway (a port already in use
-# locally is the common case). The below: anchor is load-bearing too: the help
-# paragraph above quotes the same URL, and matching it instead used to type the
-# address into nothing. The durable fix is an accessibilityLabel on that
-# TextInput so this can select the field by name — see #482.
-- tapOn:
-    text: "http://127.0.0.1:18789"
-    below: "Dev fallback for simulators.*"
-# The multilingual-keyboard onboarding sheet is a one-time, per-boot modal that
-# iOS raises on the first keystroke and which silently swallows the ones after
-# it. Dismissing it AFTER typing the URL — as this flow used to — is a race: on
-# ci run 29773028739 it appeared mid-input and corrupted the gateway URL to
-# "h7.0.0.1:18789" (the app then redboxed on the malformed address and the Save
-# assertion below failed for an unrelated-looking reason). Force it up with one
-# throwaway keystroke, dismiss it, then erase and type into a settled keyboard.
-# If the sheet never appears (a sim that was already onboarded), the dismiss is a
-# no-op and the erase clears the throwaway — so this is safe either way.
-# e2e-lint-allow: unasserted-input — a throwaway keystroke to provoke the sheet;
-# it is erased immediately below, so there is deliberately nothing to assert.
-- inputText: "x"
-${DISMISS_KEYBOARD_ONBOARDING}- eraseText
-- inputText: ${JSON.stringify(gatewayUrl)}
-# Prove the field actually holds the URL before Save, anchored below the help
-# paragraph so it checks the INPUT, not the paragraph that quotes the same URL.
-# A dropped keystroke fails here, at the field, instead of as a redbox two steps
-# on.
-- assertVisible:
-    text: ${JSON.stringify(gatewayUrl)}
-    below: "Dev fallback for simulators.*"
-${tokenSteps}- hideKeyboard
-- tapOn: "Save"
-- extendedWaitUntil:
-    visible: "${HOME_RAIL_LABEL}"
-    timeout: 30000
-# Attention-line BannerCard a11y label (collapsed title + action) — gone once a URL is set.
-- assertNotVisible: "Connect your computer. Pair desktop"
-`,
+      configureGatewayYaml({
+        appId: state.appId,
+        platform: state.platform,
+        firstLaunchTimeoutMs: FIRST_LAUNCH_TIMEOUT_MS,
+        gatewayUrl,
+        gatewayToken,
+      }),
       'configure-gateway',
     );
     ctx.note(`configured the journey gateway at ${gatewayUrl}`);
