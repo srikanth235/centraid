@@ -130,6 +130,28 @@ platform- or emit-mode-specific, so no local gate could have caught them:
   in for so they cannot drift.
 - **`web-e2e` cold-shell request budget** — see below.
 
+### Coverage floors under `@vitest/coverage-v8` 4
+
+`bun run coverage` (the CI `verify` job — **not** part of `check:pr:full`) failed
+15 floors. coverage-v8 4 made AST-aware remapping the only mode, redefining what
+counts as a branch. This is a *measurement* change, not lost coverage, proven by
+a controlled comparison: `packages/tunnel`, `packages/backup`,
+`packages/agent-runtime` and `packages/cli` have **zero source or test changes**
+vs `origin/main` yet all moved (tunnel branches 80 → 52.67). Local and CI agree
+within 0.06pt. `tests/coverage-floors.json` re-seeds ~1pt under measured, with an
+`approvedDeviation`.
+
+One miss was **not** the remap. `packages/design-tokens/src/css.ts` measured
+**0/32 lines** because `toCss()` is exercised nowhere in the repo — that single
+file was the entire design-tokens lines miss. It is not trivial code: palette
+`--c-*`/`--icon-*` aliasing, camelCase→kebab-case conversion for the type scale,
+per-theme and per-density block emission, and the cool-cast override, all
+injected into a `<style>` tag at desktop preload. New
+**`packages/design-tokens/src/css.test.ts`** adds six tests asserting the emitted
+contract (which properties, under which selectors, with which names) rather than
+literal bytes. Lines go 66.01 → 99.03, and that floor **tightens 90 → 98**
+instead of being lowered.
+
 ### Vite 8 cold-shell budget re-baseline
 
 Vite 8 moved the bundler to rolldown, which splits the shell into more, smaller
@@ -141,15 +163,34 @@ chunks. Like-for-like on the same harness, main (`051658de`) vs this branch:
 | cold shell transfer | 402,997 B | 390,074 B (−3.2%) |
 
 That is nearly double the request count for a marginal byte saving — not a win.
-Accepted rather than blocking the bump: the seven added chunks are small
-(`jsx-runtime` 9 KB, `shell-session` 15 KB, six under 2.5 KB), they multiplex on
-one HTTP/2 connection, and finer chunks make a release re-fetch less. Tuning
-rolldown chunking to claw the count back is follow-up work.
+So it is partly repaid rather than merely accepted: a `shell-common` chunk group
+in **`apps/web/vite.config.ts`** folds back the small client-owned modules
+rolldown split out individually, taking the cold shell to **12 requests /
+387,990 B**.
 
-In `apps/web/tests/e2e/perf-budgets.ts`, `maxRequests` goes 10 → 18 (a widen,
-so it carries the `approvedDeviation` the ratchet documents for a deliberate
-re-baseline) while `maxTransferBytes` tightens 1,250,000 → 470,000 in the same
-edit.
+| | main (Vite 7) | Vite 8 unmitigated | Vite 8 + grouping |
+| --- | --- | --- | --- |
+| cold shell requests | 8 | 15 | 12 |
+| cold shell transfer | 402,997 B | 390,074 B | 387,990 B |
+
+In `apps/web/tests/e2e/perf-budgets.ts`, `maxRequests` goes 10 → 13 (a widen, so
+it carries the `approvedDeviation` the ratchet documents for a deliberate
+re-baseline) rather than the 18 an unmitigated re-baseline needed, while
+`maxTransferBytes` tightens 1,250,000 → 470,000 in the same edit.
+
+The group is deliberately narrow, by explicit module path. Two broader shapes
+were built and measured, and **both ship a blank page** (`Cannot read properties
+of undefined (reading 'onGatewayChanged')`): `{ test: /node_modules/ }` and
+`{ test: /packages\/(client\/src|blob-format\/dist)\// }`. Cause:
+`apps/web/src/web-host.ts` assigns `window.CentraidApi` at module-evaluation
+time, and `apps/web/src/main.ts` only defers the client behind
+`void import('@centraid/client/react/boot')` — grouping collapses that dynamic
+boundary and reorders the consumers ahead of the assignment.
+
+**Both blank-page builds measured 6 requests / 221,730 B — better than Vite 7 on
+both axes.** Request count alone is gameable by a build that fails to boot; only
+`perf-waterfall.spec.ts`'s render assertion caught it. That assertion must stay
+in front of these budgets in any future chunking work.
 
 **Correction to the file's own history:** the previous comment's 1,041,444 B
 baseline was measured 2026-07-14, *before* #460 added brotli precompression on
@@ -403,6 +444,8 @@ CI on the PR is the final gate.
 | claude-code-91b540ed-688-1785134031-1 | claude-code | 91b540ed-688c-4f97-b5cc-58377ec29378 | #565 | claude-opus-5 | 54 | 58464 | 4105930 | 31742 | 90260 | 3.2122 | 1553 | 923227 | 153666050 | 424575 |  |
 | claude-code-91b540ed-688-1785134117-1 | claude-code | 91b540ed-688c-4f97-b5cc-58377ec29378 | #565 | claude-opus-5 | 14 | 11435 | 1167995 | 7142 | 18591 | 0.8341 | 1567 | 934662 | 154834045 | 431717 |  |
 | claude-code-91b540ed-688-1785135833-1 | claude-code | 91b540ed-688c-4f97-b5cc-58377ec29378 | #565 | claude-opus-5 | 382 | 197014 | 43691889 | 111997 | 309393 | 25.8791 | 1949 | 1131676 | 198525934 | 543714 |  |
+| claude-code-5686fd74-b3c-1785139176-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-opus-5 | 1128 | 1440742 | 139115145 | 339912 | 1781782 | 87.0657 | 1128 | 1440742 | 139115145 | 339912 |  |
+| claude-code-5686fd74-b3c-1785139267-1 | claude-code | 5686fd74-b3c6-4897-a826-6a9406700ae9 | #565 | claude-opus-5 | 12 | 12452 | 2422555 | 2795 | 15259 | 1.3590 | 1140 | 1453194 | 141537700 | 342707 |  |
 
 ### Steering
 
