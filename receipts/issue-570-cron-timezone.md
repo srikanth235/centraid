@@ -31,7 +31,7 @@ GitHub issue: [#570](https://github.com/srikanth235/centraid/issues/570)
 ### Resolution: per-trigger `tz` → gateway default pref → host-local (no geographic hardcode)
 
 - **New** `packages/automation/src/cron-timezone.ts` — `resolveCronTimezone`, `isValidIanaTimeZone`, `wallClockFields`, `wallClockMinuteKey`, pref key `CRON_DEFAULT_TIMEZONE_PREF` (`automation.cron.defaultTimezone`).
-- `packages/automation/src/fire/cursor-engine-support.ts` — `registrationsFor(row, defaultTimeZone)` builds `cronSchedules` with resolved zones.
+- `packages/automation/src/fire/cursor-engine-support.ts` / `packages/automation/src/fire/cursor-engine-support.test.ts` — `registrationsFor(row, defaultTimeZone)` builds `cronSchedules` with resolved zones; collapse test asserts the new field.
 - `packages/automation/src/fire/cursor-engine.ts` — `defaultCronTimeZone` option; `readCronCursor` uses `cronSchedules`.
 - `packages/gateway/src/serve/build-gateway.ts` — reads the pref on each register/reconcile.
 - `packages/automation/src/fire/scheduler-ledger.ts` — missed-window scan carries per-expr zones.
@@ -51,7 +51,7 @@ GitHub issue: [#570](https://github.com/srikanth235/centraid/issues/570)
 ### Automation editor timezone control + Settings default timezone control
 
 - `packages/client/src/react/screens/AutomationEditorScreen.tsx` — timezone input on cron triggers (`data-testid="cron-timezone"`), zone-aware preview.
-- `packages/client/src/react/shell/routes/AutomationEditorRoute.tsx` — loads/saves `tz`; hydrates `defaultCronTimeZone` from prefs.
+- `packages/client/src/react/shell/routes/AutomationEditorRoute.tsx` / `packages/client/src/react/shell/routes/AutomationEditorRoute.test.tsx` — loads/saves `tz`; hydrates `defaultCronTimeZone` from prefs (`getUserPrefs` mocked in the route test).
 - `packages/client/src/react/screens/SettingsLayoutScreen.tsx` — Settings → Layout → Default cron timezone (`data-testid="settings-default-cron-timezone"`).
 - **New** `packages/client/src/react/shell/routes/settingsCronTimezoneData.ts` and `packages/client/src/react/shell/routes/settingsCronTimezoneData.test.ts` — load/save/validate the pref; test uses `vi.hoisted` so oxlint `import/first` stays green under `check:pr`.
 - `packages/client/src/react/screens/settings-controls.module.css` — `.input` for the Settings control.
