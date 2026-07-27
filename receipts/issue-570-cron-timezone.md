@@ -53,7 +53,7 @@ GitHub issue: [#570](https://github.com/srikanth235/centraid/issues/570)
 - `packages/client/src/react/screens/AutomationEditorScreen.tsx` — timezone input on cron triggers (`data-testid="cron-timezone"`), zone-aware preview.
 - `packages/client/src/react/shell/routes/AutomationEditorRoute.tsx` — loads/saves `tz`; hydrates `defaultCronTimeZone` from prefs.
 - `packages/client/src/react/screens/SettingsLayoutScreen.tsx` — Settings → Layout → Default cron timezone (`data-testid="settings-default-cron-timezone"`).
-- **New** `packages/client/src/react/shell/routes/settingsCronTimezoneData.ts` and `packages/client/src/react/shell/routes/settingsCronTimezoneData.test.ts` — load/save/validate the pref.
+- **New** `packages/client/src/react/shell/routes/settingsCronTimezoneData.ts` and `packages/client/src/react/shell/routes/settingsCronTimezoneData.test.ts` — load/save/validate the pref; test uses `vi.hoisted` so oxlint `import/first` stays green under `check:pr`.
 - `packages/client/src/react/screens/settings-controls.module.css` — `.input` for the Settings control.
 
 ### DST gap (skip) and overlap (once) documented and tested on real US transitions

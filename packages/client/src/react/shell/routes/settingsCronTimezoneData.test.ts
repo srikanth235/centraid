@@ -1,18 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const getUserPrefs = vi.fn();
-const saveUserPrefs = vi.fn();
-
-vi.mock('../../../gateway-client.js', () => ({
-  getUserPrefs: () => getUserPrefs(),
-  saveUserPrefs: (patch: Record<string, unknown>) => saveUserPrefs(patch),
-}));
-
 import {
   CRON_DEFAULT_TIMEZONE_PREF,
   loadDefaultCronTimeZone,
   saveDefaultCronTimeZone,
 } from './settingsCronTimezoneData.js';
+
+const getUserPrefs = vi.hoisted(() => vi.fn());
+const saveUserPrefs = vi.hoisted(() => vi.fn());
+
+vi.mock('../../../gateway-client.js', () => ({
+  getUserPrefs: () => getUserPrefs(),
+  saveUserPrefs: (patch: Record<string, unknown>) => saveUserPrefs(patch),
+}));
 
 beforeEach(() => {
   getUserPrefs.mockReset();
