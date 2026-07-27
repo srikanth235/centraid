@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Frame, type Page } from '@playwright/test';
+import { installHarnessControlTransport } from './control-transport.js';
 import { enforceTiming, perfBudgets } from './perf-budgets.js';
 
 // PWA fast-path waterfall probe (issue #404 workstream I). The desktop rig
@@ -21,6 +22,8 @@ import { enforceTiming, perfBudgets } from './perf-budgets.js';
 const API_URL = 'http://127.0.0.1:48765';
 const ADMIN_TOKEN = 'centraid-web-e2e-token';
 const APP_ID = 'web-e2e';
+const GATEWAY_ENDPOINT_ID = 'web-e2e-gateway';
+const GATEWAY_ENDPOINT_TICKET = 'web-e2e-control-transport';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPORT_PATH = path.resolve(here, '../../test-results/perf-waterfall-report.json');
@@ -134,6 +137,7 @@ async function waitForShellBundle(page: Page): Promise<void> {
 // booted shell with the app tile on Home. The caller has already done the cold
 // `goto('/')` so the shell bundle could be measured before this reload.
 async function establishSession(page: Page): Promise<void> {
+  await installHarnessControlTransport(page, API_URL);
   const control = await page.evaluate(
     async ({ apiUrl, token }) => {
       const response = await fetch(`${apiUrl}/centraid/_web/control`, {
@@ -149,21 +153,17 @@ async function establishSession(page: Page): Promise<void> {
   const vaultId = (control.body as { vaultId: string }).vaultId;
 
   await page.evaluate(
-    ({ apiUrl, vault }) => {
-      // See web-pwa.spec.ts: sessionStorage wins in `loadConnection`, so the
-      // boot-time bootstrap record must go. Setting rememberDevice keeps this
-      // record durable — matching what `saveConnection` would itself write —
-      // so the reload we measure never re-fetches /web-config.json.
+    ({ endpointId, endpointTicket, vault }) => {
       sessionStorage.removeItem('centraid.web.v1.connection');
       localStorage.setItem(
         'centraid.web.v1.connection',
         JSON.stringify({
-          baseUrl: apiUrl,
+          endpointId,
+          endpointTicket,
           label: 'Perf E2E',
           displayName: 'Web owner',
           avatarColor: '#6f5bf6',
           vaultId: vault,
-          control: true,
           rememberDevice: true,
         }),
       );
@@ -180,7 +180,11 @@ async function establishSession(page: Page): Promise<void> {
         }),
       );
     },
-    { apiUrl: API_URL, vault: vaultId },
+    {
+      endpointId: GATEWAY_ENDPOINT_ID,
+      endpointTicket: GATEWAY_ENDPOINT_TICKET,
+      vault: vaultId,
+    },
   );
   await page.reload();
   await expect(page.locator(`[data-app-id="${APP_ID}"]`).first()).toBeVisible();
@@ -543,8 +547,7 @@ test('iroh pool — connects stay far below streams (or contract is present)', a
     localStorage.setItem(
       'centraid.web.v1.connection',
       JSON.stringify({
-        baseUrl: '',
-        transport: 'iroh',
+        endpointId: 'perf-probe-gateway',
         endpointTicket: 'perf-probe-ticket',
         label: 'Perf iroh probe',
         displayName: 'probe',

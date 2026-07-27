@@ -36,7 +36,10 @@ export function connectionSecretsFile(): string {
 
 /** Canonical local gateway root, deliberately outside Electron userData. */
 export function localGatewayDataDir(): string {
-  return platformDefaultDataDir();
+  // Match the gateway CLI's explicit test/development override before
+  // falling back to the one platform default shared by desktop and service
+  // installs. Production launches do not set this variable.
+  return process.env.CENTRAID_DATA_DIR?.trim() || platformDefaultDataDir();
 }
 
 export function gatewayTemplatesCacheDir(_id: string): string {

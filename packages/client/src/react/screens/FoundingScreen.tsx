@@ -45,7 +45,10 @@ function downloadKit(kit: unknown): void {
   anchor.href = href;
   anchor.download = 'centraid-recovery-kit.json';
   anchor.click();
-  URL.revokeObjectURL(href);
+  // Chromium begins the Blob read after the click handler returns. Revoking
+  // synchronously races that read in Electron (404, despite the UI claiming
+  // the kit was downloaded), so release it on the next task.
+  setTimeout(() => URL.revokeObjectURL(href), 1_000);
 }
 
 async function readJsonFile(file: File | undefined): Promise<unknown> {

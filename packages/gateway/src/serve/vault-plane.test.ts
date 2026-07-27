@@ -120,32 +120,47 @@ test("a WAL-disabled vault plane never checkpoints another process's stream on s
   expect(checkpoints).toBe(0);
 });
 
-test('WAL capture is unconditional while this process owns the vault', async () => {
+test('WAL ownership stays unconditional while capture follows backup configuration', async () => {
   const dir = await tempDir();
+  let backupConfigured = false;
   const plane = openVaultPlane({
     bootstrap: true,
     dir,
     logger: silentLogger,
     ownerName: 'Priya',
+    walCaptureConfigured: () => backupConfigured,
   });
   cleanups.push(() => plane.stop());
-  const tick = vi.spyOn(plane.walShipper!, 'tick');
-  const close = vi.spyOn(plane.walShipper!, 'close');
+  const shipper = plane.walShipper!;
+  const tick = vi.spyOn(shipper, 'tick');
+  const close = vi.spyOn(shipper, 'close');
   const autocheckpointPages = () =>
     [plane.db.vault, plane.db.journal].map((db) => {
       const row = db.prepare('PRAGMA wal_autocheckpoint').get() as Record<string, number>;
       return Object.values(row)[0];
     });
 
-  const ticksBeforeStart = tick.mock.calls.length;
   plane.start();
   await new Promise<void>((resolve) => setImmediate(resolve));
-  expect(tick.mock.calls.length).toBeGreaterThan(ticksBeforeStart);
+  expect(tick).not.toHaveBeenCalled();
+  expect(plane.walShipper).toBe(shipper);
+  expect(autocheckpointPages().every((pages) => (pages ?? 0) > 0)).toBe(true);
+
+  backupConfigured = true;
+  plane.rescheduleWalCapture();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  expect(tick).toHaveBeenCalledOnce();
+  expect(plane.walShipper).toBe(shipper);
   expect(autocheckpointPages()).toEqual([0, 0]);
 
+  backupConfigured = false;
+  plane.rescheduleWalCapture();
+  expect(plane.walShipper).toBe(shipper);
+  expect(autocheckpointPages().every((pages) => (pages ?? 0) > 0)).toBe(true);
+  const shipBytesBeforeStop = await directoryBytes(path.join(dir, 'wal-ship'));
   plane.stop();
-  expect(close).toHaveBeenCalledOnce();
-  expect(await directoryBytes(path.join(dir, 'wal-ship'))).toBeGreaterThan(0);
+  expect(close).not.toHaveBeenCalled();
+  expect(await directoryBytes(path.join(dir, 'wal-ship'))).toBe(shipBytesBeforeStop);
 });
 
 function seedCalendar(plane: VaultPlane): string {

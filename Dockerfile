@@ -61,7 +61,8 @@ LABEL org.opencontainers.image.title="centraid-gateway" \
   org.opencontainers.image.licenses="SEE LICENSE IN REPOSITORY"
 
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+  CENTRAID_KEYSTORE_CREDENTIAL_ROOT=/config/centraid/credentials
 
 # git: apps-store / blueprint publish paths shell out to git.
 # Non-root operator user; mount /data with matching UID/GID (10001) or chown.
@@ -70,13 +71,13 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --system --gid 10001 centraid \
   && useradd --system --uid 10001 --gid centraid --home-dir /app --shell /usr/sbin/nologin centraid \
-  && mkdir -p /data \
-  && chown centraid:centraid /data
+  && mkdir -p /data /config \
+  && chown centraid:centraid /data /config
 
 COPY --from=deps --chown=centraid:centraid /app/ /app/
 
 USER centraid
-VOLUME ["/data"]
+VOLUME ["/data", "/config"]
 EXPOSE 8787
 
 # Proves listen on loopback Host (always allowlisted). 200 or 401 = up.

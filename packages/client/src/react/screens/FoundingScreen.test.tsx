@@ -86,6 +86,7 @@ describe('FoundingScreen ceremony', () => {
   it('cannot complete create until the downloaded kit is reselected and loss is acknowledged', async () => {
     const bridge = props();
     const el = await mount(bridge);
+    const timeout = vi.spyOn(globalThis, 'setTimeout');
     await act(async () => {
       setValue(inputFor('Recovery-kit password'), 'correct horse');
       click('Create vault and download kit');
@@ -96,6 +97,7 @@ describe('FoundingScreen ceremony', () => {
     expect(bridge.initialize).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Personal', password: 'correct horse' }),
     );
+    expect(timeout).toHaveBeenCalledWith(expect.any(Function), 1_000);
     expect(el.textContent).toContain('Re-select that exact file');
     const verifyButton = [...el.querySelectorAll('button')].find((candidate) =>
       candidate.textContent?.includes('Verify and enter'),

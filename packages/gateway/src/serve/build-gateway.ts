@@ -71,6 +71,7 @@ import {
 import { KIT_DIR, bundledAppDir, listBundledAppTemplates } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
 import { ROUTES } from '@centraid/protocol';
+import { endpointTicketFor } from '@centraid/tunnel';
 import { isExpectedPrewarmSkip } from './app-prewarm-errors.js';
 import { closeJournalConversationStores, journalConversationStore } from '../journal-stores.js';
 import {
@@ -788,6 +789,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     database: gatewayDatabase,
     keyStore: gatewayKeys,
   });
+  let walCaptureConfigured =
+    options.backup?.enabled === true || (await storageConnections.list()).length > 0;
   const recoveryKit = new RecoveryKitStateStore(gatewayDatabase);
   // Provider usage cache (issue #367 §D1) — cache-with-TTL + stale-while-
   // refresh in front of a provider connection's optional `usage` capability
@@ -881,6 +884,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       health.shouldDeferBackgroundWork() ||
       health.shouldPauseBackgroundWork() ||
       powerContext.isDeferringBackgroundWork(),
+    // gateway.db owns the WAL lifecycle unconditionally. Only the capture
+    // clock sleeps when no backup destination exists, preserving the
+    // low-end no-unconfigured-spool contract without reviving lease gating.
+    walCaptureConfigured: () => walCaptureConfigured,
     // Disposable runner cache lives outside the vault tree (defaults to a
     // `-cache` sibling of `vaultDir` when the host doesn't pin one).
     cacheRootDir: paths.cacheDir ?? path.join(dataDir, 'cache'),
@@ -1280,6 +1287,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       trust: 'owner',
     });
   }
+  const directHostEndpointId = options.hostDeviceEndpointId;
   const foundingHandler = makeFoundingRouteHandler({
     vaults: vaultRegistry,
     enrollments: foundingEnrollments,
@@ -1295,7 +1303,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     ...(effectiveDeviceAccess ? { deviceAccess: effectiveDeviceAccess } : {}),
     ...(options.devicePairing?.endpointTicket
       ? { endpointTicket: options.devicePairing.endpointTicket }
-      : {}),
+      : directHostEndpointId
+        ? {
+            // A loopback-only embed has no daemon-owned iroh endpoint, but
+            // its host EndpointId still gives the direct founding ceremony a
+            // well-formed ticket envelope. The ticket never leaves the host;
+            // remote founding remains daemon/iroh-only.
+            endpointTicket: () => endpointTicketFor(directHostEndpointId),
+          }
+        : {}),
   });
 
   const currentWorkspace = (): VaultWorkspace => vaultRegistry.currentWorkspace();
@@ -3015,6 +3031,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         localUsage,
         storageLimits,
         onConnectionsChanged: async () => {
+          walCaptureConfigured =
+            options.backup?.enabled === true || (await storageConnections.list()).length > 0;
+          for (const plane of vaultRegistry.planesList()) plane.rescheduleWalCapture();
           await backupService.refreshWalSchedule();
         },
       }),

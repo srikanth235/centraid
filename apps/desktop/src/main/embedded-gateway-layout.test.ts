@@ -84,3 +84,67 @@ test('actual Electron embed and headless daemon produce identical complete trees
     normalizeDynamicNames(await treeShape(headlessRoot)),
   );
 }, 15_000);
+
+test('actual Electron embed can complete the direct-host founding ceremony', async () => {
+  const root = await tempDir('desktop-embedded-founding-');
+  roots.push(root);
+  const gateway = await startDesktopEmbeddedGateway({
+    dataDir: root,
+    paths: pathsFor(root),
+    keyStore: new KeyStore(path.join(root, 'keys'), {
+      protector: aesGcmKeyProtector(Buffer.alloc(32, 0x43)),
+    }),
+    token: 'desktop-founding-token',
+    ownerEndpointId: 'a'.repeat(64),
+  });
+  try {
+    const headers = { Authorization: 'Bearer desktop-founding-token' };
+    const mintedResponse = await fetch(`${gateway.url}/centraid/_gateway/founding/ticket`, {
+      method: 'POST',
+      headers,
+    });
+    const minted = (await mintedResponse.json()) as {
+      ticket?: string;
+      error?: string;
+      message?: string;
+    };
+    expect({
+      status: mintedResponse.status,
+      ticket: typeof minted.ticket,
+      error: minted.error,
+      message: minted.message,
+    }).toEqual({
+      status: 200,
+      ticket: 'string',
+      error: undefined,
+      message: undefined,
+    });
+
+    const initializedResponse = await fetch(`${gateway.url}/centraid/_vault/vaults:initialize`, {
+      method: 'POST',
+      headers: { ...headers, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ticket: minted.ticket,
+        name: 'Personal',
+        password: 'correct horse battery staple',
+        deviceName: 'Desktop host',
+        platform: 'desktop',
+      }),
+    });
+    const initialized = (await initializedResponse.json()) as { kit?: unknown };
+    expect(initializedResponse.status).toBe(201);
+
+    const verified = await fetch(`${gateway.url}/centraid/_vault/vaults:initialize/verify`, {
+      method: 'POST',
+      headers: { ...headers, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        kit: initialized.kit,
+        password: 'correct horse battery staple',
+        lossConsent: true,
+      }),
+    });
+    expect(verified.status).toBe(200);
+  } finally {
+    await gateway.close();
+  }
+}, 15_000);

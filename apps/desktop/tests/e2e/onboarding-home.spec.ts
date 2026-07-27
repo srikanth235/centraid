@@ -6,6 +6,7 @@ import {
   closeApp,
   launchApp,
   makeEnv,
+  markOnboardingPending,
   markUserApp,
   openTile,
   openTileMenu,
@@ -37,10 +38,8 @@ test('1.1 — first launch shows onboarding with the CTA disabled until a name i
   await seedRemoteGateway(env, gateway, { onboarding: true });
   const { app, page } = await launchApp(env);
   try {
-    // Realigned: first run opens on the FirstRunGate's binary choice —
-    // "Start fresh" vs "Recover my vault" (FirstRunGate.tsx:47-74); the
-    // onboarding identity step is behind "Start fresh".
-    await page.getByRole('button', { name: 'Start fresh' }).click();
+    // A seeded remote vault is already founded, so this path begins at the
+    // device-local identity step rather than the zero-vault founding gate.
     await page.getByTestId('onboarding-view').waitFor({ state: 'visible' });
     const cta = page.getByRole('button', { name: 'Continue' });
     const name = page.getByRole('textbox', { name: 'Your name' });
@@ -56,14 +55,69 @@ test('1.1 — first launch shows onboarding with the CTA disabled until a name i
 });
 
 test('1.2 — completing onboarding persists the profile and lands on home', async () => {
-  await seedRemoteGateway(env, gateway, { onboarding: true });
-  gateway.state.apps = [];
+  // Found the isolated local gateway through the same non-skippable ceremony
+  // a real first launch uses. The founding completion enters Home, so reopen
+  // device onboarding afterwards to exercise identity + connection separately.
+  const founded = await launchApp(env);
+  try {
+    await founded.page.getByRole('button', { name: 'Create vault' }).click();
+    await founded.page.getByLabel('Recovery-kit password').fill('correct horse battery staple');
+    // Electron's Playwright transport does not surface renderer-created Blob
+    // downloads as Page "download" events. Capture the exact Blob bytes while
+    // leaving the real anchor/download path intact, then re-select those bytes.
+    await founded.page.evaluate(() => {
+      const createObjectURL = URL.createObjectURL.bind(URL);
+      URL.createObjectURL = (blob: Blob): string => {
+        void blob.text().then((text) => {
+          (
+            window as typeof window & {
+              __centraidE2eRecoveryKit?: string;
+            }
+          ).__centraidE2eRecoveryKit = text;
+        });
+        return createObjectURL(blob);
+      };
+    });
+    await founded.page.getByRole('button', { name: 'Create vault and download kit' }).click();
+    await expect
+      .poll(() =>
+        founded.page.evaluate(
+          () =>
+            (
+              window as typeof window & {
+                __centraidE2eRecoveryKit?: string;
+              }
+            ).__centraidE2eRecoveryKit ?? '',
+        ),
+      )
+      .not.toBe('');
+    const recoveryKit = await founded.page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            __centraidE2eRecoveryKit?: string;
+          }
+        ).__centraidE2eRecoveryKit ?? '',
+    );
+    await founded.page.locator('input[type="file"]').setInputFiles({
+      name: 'centraid-recovery-kit.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(recoveryKit),
+    });
+    await founded.page
+      .getByRole('checkbox', {
+        name: /losing this file or password makes backed-up vaults unrecoverable/i,
+      })
+      .check();
+    await founded.page.getByRole('button', { name: 'Verify and enter' }).click();
+    await waitForHome(founded.page);
+  } finally {
+    await closeApp(founded.app);
+  }
+
+  await markOnboardingPending(env);
   const { app, page } = await launchApp(env);
   try {
-    // Realigned: first run opens on the FirstRunGate's binary choice —
-    // "Start fresh" vs "Recover my vault" (FirstRunGate.tsx:47-74); the
-    // onboarding identity step is behind "Start fresh".
-    await page.getByRole('button', { name: 'Start fresh' }).click();
     const onboarding = page.getByTestId('onboarding-view');
     await onboarding.waitFor({ state: 'visible' });
     await page.getByRole('textbox', { name: 'Your name' }).fill('Ada Lovelace');

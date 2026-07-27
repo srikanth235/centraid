@@ -678,6 +678,14 @@ export async function seedRemoteGateway(
   );
 }
 
+/** Re-open device onboarding without disturbing the founded gateway/vault. */
+export async function markOnboardingPending(env: TestEnv): Promise<void> {
+  const file = path.join(env.userData, 'centraid-settings.json');
+  const settings = JSON.parse(await fs.readFile(file, 'utf8')) as Record<string, unknown>;
+  delete settings.onboardingCompletedAt;
+  await fs.writeFile(file, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+}
+
 /** Seed an additional paired remote profile without changing the active gateway. */
 export async function seedRemoteGatewayProfile(
   env: TestEnv,
@@ -723,6 +731,11 @@ export async function launchApp(env: TestEnv): Promise<{ app: ElectronApplicatio
     env: {
       ...process.env,
       NODE_ENV: 'test',
+      // The local gateway moved out of Electron userData in #555. Keep every
+      // E2E worker's real gateway state inside its disposable workspace so it
+      // cannot contend with the developer's/service's canonical gateway.db.
+      CENTRAID_DATA_DIR: path.join(env.workspace, 'gateway-data'),
+      CENTRAID_EMBEDDED_GATEWAY: '1',
       CENTRAID_E2E_IROH_PROXY_MAP: JSON.stringify(env.gatewayProxies),
     },
   });
