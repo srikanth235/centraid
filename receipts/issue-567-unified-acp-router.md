@@ -11,7 +11,7 @@ GitHub issue: [#567](https://github.com/srikanth235/centraid/issues/567)
 - [x] Every settled decision D1–D13 is either implemented as stated or has a PR note explaining the approved deviation (constitution compliance path)
 - [x] `docs/runners.md` updated in the same PRs that invalidate it (fork-per-runner language, "not product features" list, config-pin section)
 - [x] No routing/failover behavior ships without its transcript `notice`; no accounting field is stamped from requested (unconfirmed) configuration
-- [ ] `bun run check:pr` green per PR; ratchet floors respected; new modules covered per TESTING.md — pending the authoritative GitHub Actions run because the restricted local workspace denies loopback test listeners
+- [x] `bun run check:pr` green per PR; ratchet floors respected; new modules covered per TESTING.md — authoritative GitHub Actions CI run 30299535485 passed
 
 ## What changed
 
@@ -28,7 +28,7 @@ workspace/artifact/shared-composer/mobile surfaces.
 - **Every settled decision D1–D13 is either implemented as stated or has a PR note explaining the approved deviation (constitution compliance path).** D1–D13 are implemented; the only approved deviation is PR/issue consolidation, which is not a technical decision.
 - **`docs/runners.md` updated in the same PRs that invalidate it (fork-per-runner language, "not product features" list, config-pin section).** The document now describes category-keyed pins, per-runner bindings, never-retry-inside-turn boundaries, breaker classes, ladder consent, workspace selection, and artifacts.
 - **No routing/failover behavior ships without its transcript `notice`; no accounting field is stamped from requested (unconfirmed) configuration.** Interactive switches emit normalized notices; automation fire and compile fallbacks write durable attempt notes/notice steps; model and effort are recorded only after ACP confirmation.
-- **`bun run check:pr` green per PR; ratchet floors respected; new modules covered per TESTING.md.** Verification uses the stricter dependent-aware `bun run check:pr:full`.
+- **`bun run check:pr` green per PR; ratchet floors respected; new modules covered per TESTING.md.** Verification used the stricter dependent-aware `bun run check:pr:full`, and the authoritative GitHub Actions CI run passed.
 
 ### D1–D13 resolution
 
@@ -337,7 +337,20 @@ Observed live results:
   commit also failed governance. The corrective commit removes exactly that
   generated fixture set and records the incident here; no production
   implementation changed.
-- GitHub Actions status is pending on the umbrella PR after push.
+- The first clean-history coverage run exposed two branch-floor gaps:
+  app-engine measured 72.98% against 73%, and agent-runtime measured 74.77%
+  against 75%. Focused behavior tests for runner-health list metadata/state and
+  ACP config-update/effort-pin fallbacks raised their file branch coverage from
+  86.79% to 96.22% (+5 covered branches) and from 77.27% to 94.31% (+15),
+  respectively; both focused suites and both package typechecks pass.
+- GitHub Actions CI run
+  [30299535485](https://github.com/srikanth235/centraid/actions/runs/30299535485)
+  passed every required lane: verify (including coverage), mutation, static,
+  dependency review, docs, companion static, web build, gateway package/image
+  smoke, desktop E2E, web E2E, boot smoke, and the aggregate check.
+- Governance run
+  [30299535212](https://github.com/srikanth235/centraid/actions/runs/30299535212)
+  passed all 25 directives.
 
 ## Audit
 
@@ -347,8 +360,8 @@ the complete working-tree path set. The owner-approved umbrella-PR deviation
 and Claude live-validation-only waiver are documented without waiving technical
 requirements. The prior sequence-zero recovery, durable automation-fire
 failover notice, and A→B→C lifecycle/resumption blockers are resolved and
-regression-covered. The final `check:pr`/GitHub Actions and publication steps
-remain honestly pending.
+regression-covered. The ready umbrella PR is published, and its authoritative
+GitHub Actions CI and Governance runs are green.
 
 ## Steering
 
@@ -372,6 +385,8 @@ and records no non-steering event.
 | codex-019fa35f-701-1785180075-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 179234 | 0 | 4605184 | 6949 | 186183 | 1.7036 | 5747084 | 0 | 287336448 | 613664 | chore(test): remove generated fixture apps (#567) |
 | codex-019fa35f-701-1785180136-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 12508 | 0 | 381696 | 863 | 13371 | 0.1396 | 5759592 | 0 | 287718144 | 614527 | chore(test): remove generated fixture apps (#567) |
 | codex-019fa35f-701-1785180193-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 14704 | 0 | 426752 | 712 | 15416 | 0.1541 | 5774296 | 0 | 288144896 | 615239 | chore(test): remove generated fixture apps (#567) |
+| codex-019fa35f-701-1785181382-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 188115 | 0 | 12551936 | 13881 | 201996 | 3.8165 | 5962411 | 0 | 300696832 | 629120 | test(runtime): cover ACP and health branches (#567) |
+| codex-019fa35f-701-1785182227-1 | codex | 019fa35f-701c-7c43-bf91-10202a688f13 | #567 | gpt-5.6-sol | 61593 | 0 | 9561600 | 6712 | 68305 | 2.6451 | 6024004 | 0 | 310258432 | 635832 | test(runtime): cover ACP and health branches (#567) |
 
 ### Steering
 

@@ -7,6 +7,7 @@ import {
   modeAvailable,
   pinModel,
   pinThoughtLevel,
+  readConfigOptionUpdate,
   readConfigOptions,
   readOfferedModels,
   SET_CONFIG_OPTION,
@@ -51,6 +52,39 @@ test('readConfigOptions filters non-objects and empty lists', () => {
       configOptions: [null, 'x', 1, { id: 'model' }, { category: 'mode' }],
     }),
   ).toEqual([{ id: 'model' }, { category: 'mode' }]);
+});
+
+test('readConfigOptionUpdate normalizes plural and legacy singular notifications', () => {
+  expect(readConfigOptionUpdate(null)).toBeUndefined();
+  expect(readConfigOptionUpdate({ update: null })).toBeUndefined();
+  expect(readConfigOptionUpdate({ update: { sessionUpdate: 'other' } })).toBeUndefined();
+  expect(
+    readConfigOptionUpdate({
+      update: {
+        sessionUpdate: 'config_option_update',
+        configOptions: [null, 'skip', { id: 'model' }],
+      },
+    }),
+  ).toEqual([{ id: 'model' }]);
+  expect(
+    readConfigOptionUpdate({
+      update: {
+        sessionUpdate: 'config_option_update',
+        configOption: { category: 'thought_level' },
+      },
+    }),
+  ).toEqual([{ category: 'thought_level' }]);
+  expect(
+    readConfigOptionUpdate({
+      update: {
+        sessionUpdate: 'config_option_update',
+        option: { category: 'model' },
+      },
+    }),
+  ).toEqual([{ category: 'model' }]);
+  expect(
+    readConfigOptionUpdate({ update: { sessionUpdate: 'config_option_update' } }),
+  ).toBeUndefined();
 });
 
 test('readOfferedModels flattens groups and reports currentValue', () => {
@@ -261,4 +295,52 @@ test('pinThoughtLevel records only a value the runner confirms', async () => {
   });
   expect(unconfirmed).toBeUndefined();
   expect(notices.at(-1)?.code).toBe('thought_level_unconfirmed');
+});
+
+test('pinThoughtLevel surfaces unsupported, unavailable, and rejected effort pins', async () => {
+  const notices: Array<{ code?: string }> = [];
+  const emit = (event: unknown) => notices.push(event as { code?: string });
+
+  expect(
+    await pinThoughtLevel({
+      request: noopRequest,
+      emit,
+      sessionId: 's1',
+      configOptions: [],
+      requested: 'high',
+    }),
+  ).toBeUndefined();
+  expect(notices.at(-1)?.code).toBe('thought_level_unsupported');
+
+  const options = [
+    {
+      id: 'effort',
+      category: 'thought_level',
+      currentValue: 'medium',
+      options: [{ value: 'medium' }, { value: 'high', name: 'High' }],
+    },
+  ];
+  expect(
+    await pinThoughtLevel({
+      request: noopRequest,
+      emit,
+      sessionId: 's1',
+      configOptions: options,
+      requested: 'missing',
+    }),
+  ).toBe('medium');
+  expect(notices.at(-1)?.code).toBe('thought_level_not_offered');
+
+  expect(
+    await pinThoughtLevel({
+      request: async () => {
+        throw new Error('stale effort option');
+      },
+      emit,
+      sessionId: 's1',
+      configOptions: options,
+      requested: 'High',
+    }),
+  ).toBe('medium');
+  expect(notices.at(-1)?.code).toBe('thought_level_not_offered');
 });

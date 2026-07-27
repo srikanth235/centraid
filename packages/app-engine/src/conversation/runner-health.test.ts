@@ -66,3 +66,34 @@ test('quota backs off and timeout admits exactly one half-open claimant', () => 
     ]),
   );
 });
+
+test('list reports open and closed breaker metadata across all workspaces', () => {
+  const health = new RunnerHealthStore(newProvider(), policies);
+  health.reportFailure('vault-a', 'codex', 'spawn', 'first failure', 1_000);
+  health.reportFailure('vault-a', 'codex', 'spawn', 'second failure', 1_010);
+
+  expect(health.list(undefined, 1_011)).toEqual([
+    expect.objectContaining({
+      workspaceContext: 'vault-a',
+      runnerKind: 'codex',
+      failureClass: 'spawn',
+      consecutiveFailures: 2,
+      state: 'open',
+      breakerUntil: 1_110,
+      lastError: 'second failure',
+      lastFailureAt: 1_010,
+    }),
+  ]);
+
+  health.reportOk('vault-a', 'codex', 1_020);
+  expect(health.list()).toEqual([
+    expect.objectContaining({
+      workspaceContext: 'vault-a',
+      runnerKind: 'codex',
+      failureClass: 'spawn',
+      consecutiveFailures: 0,
+      state: 'closed',
+      lastOkAt: 1_020,
+    }),
+  ]);
+});
