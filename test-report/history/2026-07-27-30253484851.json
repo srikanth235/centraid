@@ -1,0 +1,38 @@
+{
+  "slug": "2026-07-27-30253484851",
+  "date": "2026-07-27",
+  "runId": "30253484851",
+  "runUrl": "https://github.com/srikanth235/centraid/actions/runs/30253484851",
+  "reportPath": "test-report/nightly/runs/2026-07-27-30253484851/",
+  "summary": {
+    "generatedAt": "2026-07-27T09:55:32.355Z",
+    "passed": 754,
+    "failed": 7,
+    "skipped": 0,
+    "skippedTests": 36,
+    "envGated": 36,
+    "stale": 0,
+    "unhandledErrors": 0,
+    "unhandledErrorMessages": [],
+    "cellsFailed": 6,
+    "cellsMissing": 10,
+    "envGatedOwners": [],
+    "unmappedEvidence": 0,
+    "unmappedFailed": [],
+    "failedJobs": [
+      "mobile-e2e-android",
+      "mobile-e2e-ios",
+      "pairing-cross-network-relay",
+      "pairing-founding",
+      "pairing-lifecycle",
+      "pairing-ticket-hygiene"
+    ],
+    "silentAllClear": false,
+    "jobReconciliation": null,
+    "cellsMissingPrior": 15,
+    "cellsMissingRose": false,
+    "cellsMissingDelta": -5,
+    "coverageBelowFloor": [],
+    "validationErrorCount": 0
+  }
+}

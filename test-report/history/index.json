@@ -1,6 +1,21 @@
 {
-  "updatedAt": "2026-07-23T09:07:28.385Z",
+  "updatedAt": "2026-07-27T09:55:50.167Z",
   "entries": [
+    {
+      "slug": "2026-07-27-30253484851",
+      "date": "2026-07-27",
+      "runId": "30253484851",
+      "runUrl": "https://github.com/srikanth235/centraid/actions/runs/30253484851",
+      "reportPath": "test-report/nightly/runs/2026-07-27-30253484851/",
+      "generatedAt": "2026-07-27T09:55:32.355Z",
+      "passed": 754,
+      "failed": 7,
+      "skipped": 0,
+      "stale": 0,
+      "cellsFailed": 6,
+      "cellsMissing": 10,
+      "unhandledErrors": 0
+    },
     {
       "slug": "2026-07-23-29990153576",
       "date": "2026-07-23",
