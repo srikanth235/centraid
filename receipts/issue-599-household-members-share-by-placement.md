@@ -11,7 +11,7 @@
 - [x] People-first DevicesCard + member-picker pairing panel (client)
 - [x] Share-by-placement: hardlink-or-copy into audience CAS + projected row + `core_share_origin` sidecar, single-DB transaction (vault-package primitive; gateway routes follow in a later commit)
 - [x] Journal attribution (member + device) on writes; gateway share/unshare routes; packaged local orphan sweep; agent on-behalf-of cap
-- [ ] Docs: glossary member vocabulary, decisions.md, SECURITY.md threat-model premise
+- [x] Docs: glossary member vocabulary, decisions.md, SECURITY.md threat-model premise
 - [x] Wire golden regenerated (invitation payload)
 
 ## What changed
@@ -57,6 +57,12 @@
 - **Packaged local orphan sweep:** new `packages/vault/src/blob/local-orphan-sweep.ts` (+ `packages/vault/src/blob/local-orphan-sweep.test.ts`, 4 tests) closes the gap surfaced in commit 2 — the sweep unions `liveBlobShas` + `archivedSegmentShas` + `conversationArchiveShas` as roots (narrower roots would have deleted the only copy of an archived journal segment), gates on the shared `blob_orphan` tombstone grace clock, and returns `{deleted, graceHeld}`. Wired into `packages/gateway/src/serve/vault-plane.ts#runBlobSweep` right after `gateway.sweepBlobs`, riding the same safety envelope (skipped on `skipOrphanDelete` lease conflict or unreadable snapshot roots); grace = the backup provider's recovery window when present, else `LOCAL_ORPHAN_GRACE_MS` = 7 days. `packages/vault/src/share/placement-fixture.ts` and `packages/vault/src/share/placement-lifecycle.test.ts` drop their fixture copy and call the packaged function; `packages/vault/src/index.ts` exports it.
 - **Journal attribution:** `packages/vault/src/gateway/types.ts` gains `InvokeRequest.actingMemberId`, agent `Credential.onBehalfOfMember`, and `Identity.onBehalfOfMember`; threaded through `packages/vault/src/gateway/identity.ts`, `packages/vault/src/gateway/consent.ts`, `packages/vault/src/gateway/evidence.ts` (`actingMemberDetail`), `packages/vault/src/gateway/execution.ts`, and `packages/vault/src/gateway/gateway.ts` so `consent_receipt.detail_json` records `actingMember: "<member_id>"` on both allow receipts (surviving replay reconciliation) and consent-deny receipts. `packages/gateway/src/serve/vault-plane.ts#bridgeFor` passes the request scope's member through, and `withoutActingMember` strips any caller-supplied member first so an app cannot forge attribution. Only the id is stored — rename is a no-op on history (asserted). Tests: new `packages/gateway/src/routes/replica-intent-attribution.test.ts` (3) and `packages/vault/src/gateway/acting-member.test.ts` (5).
 - **Agent on-behalf-of cap (Decision 7):** `packages/gateway/src/serve/vault-context.ts` adds `memberRole` to the request scope; `agentBridgeFor` in `vault-plane.ts` attaches `onBehalfOfMember` with `mayAct = canWrite(memberRole)`; `packages/vault/src/gateway/consent.ts` denies every `act`/`reveal` for an agent identity carrying `mayAct === false` (the same shape as the readonly-device rule, distinct failure message). Tests: new `packages/gateway/src/serve/agent-member-cap.test.ts` (5).
+
+**Commit 6 — the decision record.** This realizes the checked checklist item — Docs: glossary member vocabulary, decisions.md, SECURITY.md threat-model premise:
+
+- `docs/glossary.md` — the "Device roles" section becomes **"Members and roles (gateway, #599)"** built on the five-layer model (L0 custody · L1 authn · L2 principals · L3 authz · L4 attribution): member/role vocabulary rows, the trust/member/role axis split, the role table relabelled to ownership words (Owner / Member / Viewer over `admin`/`write`/`read`), and the invariants — no vault types, narrower vaults over finer roles, minting splits by target, two revocation verbs, founding auto-member with the ≥1-owner confirmation, and sharing-is-placement. Forbidden synonyms gain "user"/"account" → **member**.
+- `docs/decisions.md` — new section "#599 — household members, sharing, and the no-credential invariant": authentication is the transport (no password/session/OIDC plane by design), Model A over Model B with the 46/122 `core_party` FK rationale, authority authored on `(member, vault)`, sharing-is-placement with row-level ACLs rejected as fail-open, and the v0 encryption posture (local gateway is not an adversary; sealing activates with a storage provider; remote-dedup loss accepted and deferred).
+- `SECURITY.md` — the credential-issuance paragraph drops the stale `owner`/`full`/`readonly` tier language for the member model (founding auto-creates the owner member; devices inherit `(member, vault)` roles) and links the no-credential-plane decision; new subsection "Members, households, and the v0 storage premise (#599)" records the five layers, the vault-boundary-is-the-isolation promise, agents acting on behalf of a member, and the L0-trusted local gateway premise (plaintext local CAS; sealing exists for untrusted remote storage; hardlink link count as the cross-vault refcount).
 
 _Later commits will be appended per phase._
 
@@ -120,6 +126,12 @@ cd packages/vault && bun run test -- src/blob/local-orphan-sweep.test.ts src/gat
 ```
 
 Result at commit time: gateway 20/20 new tests, vault 22/22 (new + adapted share suites); full suites vault 120 files / 994 passed / 1 skipped, gateway 176 files / 1187 passed / 6 skipped; typecheck clean in both.
+
+Commit-6 spot check (docs only — link integrity rides the doc-integrity governance directive):
+
+```sh
+.governance/run.sh
+```
 
 Commit-1 result: 3 files, 23 tests, all passing. Full suites for gateway/client/tunnel were green in the authoring session, and `bun run check:pr:full` runs before requesting merge (shared packages `client`, `protocol`, `tunnel`, `gateway` all move). The `packages/tunnel/fixtures/wire-golden.json` diff is limited to dropping the client-supplied `"trust":"full"` field from the pair-request payload.
 
@@ -193,6 +205,20 @@ File-list fidelity is exact — the 19 staged code files plus the receipt are al
 
 All four halves are realized and behaviourally tested, and this commit honestly retires the two forward-references left open earlier (the commit-3 "attribution stops at the gateway boundary" deviation and the commit-2 "no shipped local-only sweep" gap). The deviations bullet checks out against the code: write-bit granularity (`canWrite` = admin || write), automations uncapped exactly as before (asserted), and the `intentDeviceId` strip gap confirmed real and left for the flagged follow-up. The still-unchecked docs item carries no claim in this diff.
 
+### Commit 6
+
+**Check 1: the Commit-6 "What changed" block faithfully describes the diff, and the docs match the shipped code**
+
+**Verdict: PASS**
+
+Every claim in the block is present in the diff, and every load-bearing doc statement was cross-checked against the shipped code: the glossary's Owner/Member/Viewer table matches `device-roles.ts` `ROLE_PRESETS` and the `write` defaults in `enrollment-store.ts`/`devices-routes.ts`; SECURITY's founding claim matches `pairing-store.ts#enrollFounder` (`'You'`, `admin`, no prompt); the five-layer description matches the `gateway-db.ts` schema comments and issue #599 verbatim; minting-splits-by-target, the two revocation verbs, the ≥1-owner confirmation, creating-a-vault-makes-you-owner, and no-vault-`type`-column all resolve to real code; the storage premise matches `blob/local.ts` (plaintext local CAS), the remote-only seal path, and the hardlink `nlink` proof in the share tests. The section rename leaves no dangling anchors repo-wide. Two doc statements that read finer than the shipped code (unconditional "member + device + agent per write" attribution; "hard-capped at that member's role") were corrected before commit to state the write-bit cap granularity and the no-principal automation exception, matching the commit-5 deviations.
+
+**Check 2: the newly checked checklist item is realized in the diff**
+
+**Verdict: PASS**
+
+All three named sub-parts are delivered by exactly the three files in this commit: the glossary member vocabulary (member row, rewritten role row, axis split, forbidden synonyms), the decisions.md #599 section, and the SECURITY.md threat-model premise demanded verbatim by issue Decision 12. Nothing in the item is left to a later commit.
+
 ## Steering
 
 ### Check 1: Every human-steering event in the session transcript is recorded as a row
@@ -224,3 +250,4 @@ No steering rows recorded; the opening goal directive was correctly not logged a
 | claude-code-8a1af371-ccc-1785181123-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 48 | 50242 | 6548877 | 21740 | 72030 | 8.2644 | 688 | 2985861 | 55934995 | 413505 | feat(client): people-first devices card + member-picker pairing panel (#599)Devi |
 | claude-code-8a1af371-ccc-1785181416-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 34 | 30868 | 4978501 | 20270 | 51172 | 6.3782 | 722 | 3016729 | 60913496 | 433775 | feat(gateway): share plane, local orphan sweep, member attribution, agent cap (# |
 | claude-code-8a1af371-ccc-1785181508-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 8 | 7991 | 1222583 | 1854 | 9853 | 1.4153 | 730 | 3024720 | 62136079 | 435629 | feat(gateway): share plane, local orphan sweep, member attribution, agent cap (# |
+| claude-code-8a1af371-ccc-1785181850-1 | claude-code | 8a1af371-ccc1-4938-8f5b-6e749b8d9c7e | #599 | claude-fable-5 | 40 | 47301 | 6301340 | 22793 | 70134 | 8.0327 | 770 | 3072021 | 68437419 | 458422 | docs: member vocabulary, #599 decision record, v0 threat-model premise (#599)Glo |
