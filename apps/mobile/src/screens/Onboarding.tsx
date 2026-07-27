@@ -253,6 +253,20 @@ function ConnectionStep({
         Scan an ordinary pairing code, or the founding ticket printed by{' '}
         <Text style={styles.ledeStrong}>centraid-gateway init-ticket</Text> over SSH.
       </Text>
+      {/* Above the fold on phone-sized screens: e2e taps this; burying it under
+          the form fields made Maestro report COMPLETED while the press missed
+          (run 30260560923). */}
+      {onSkipDev ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Skip for now"
+          disabled={pairing}
+          onPress={onSkipDev}
+          style={styles.textBtn}
+        >
+          <Text style={styles.textBtnLabel}>Skip for now</Text>
+        </Pressable>
+      ) : null}
       <Text style={styles.fieldLabel}>DEVICE NAME</Text>
       <TextInput
         value={deviceName}
@@ -294,17 +308,6 @@ function ConnectionStep({
             <Text style={styles.textBtnLabel}>Scan QR instead</Text>
           </Pressable>
         </>
-      ) : null}
-      {onSkipDev ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Skip for now"
-          disabled={pairing}
-          onPress={onSkipDev}
-          style={styles.textBtn}
-        >
-          <Text style={styles.textBtnLabel}>Skip for now</Text>
-        </Pressable>
       ) : null}
     </View>
   );

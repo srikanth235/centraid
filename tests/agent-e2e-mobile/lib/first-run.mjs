@@ -41,7 +41,18 @@ export function skipOnboarding(_platform, timeoutMs) {
   return `- extendedWaitUntil:
     visible: "Skip for now"
     timeout: ${timeoutMs}
+- scrollUntilVisible:
+    element:
+      text: "Skip for now"
+    direction: DOWN
+    visibilityPercentage: 100
 - tapOn: "Skip for now"
+# Prove the ceremony screen is gone before waiting on Home — a silent miss on
+# the Skip press used to leave us on "Connect your gateway" for the full
+# YOUR APPS timeout (CI runs 30260560923 / 30260563070).
+- extendedWaitUntil:
+    notVisible: "Connect your gateway"
+    timeout: 30000
 `;
 }
 

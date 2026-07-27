@@ -12,12 +12,12 @@
 
 Debug onboarding exposes Skip for now; release does not:
 
-- `apps/mobile/src/screens/Onboarding.tsx` — connect step gets `onSkipDev` only when `typeof __DEV__ !== 'undefined' && __DEV__`; label **"Skip for now"**.
+- `apps/mobile/src/screens/Onboarding.tsx` — connect step gets `onSkipDev` only when `typeof __DEV__ !== 'undefined' && __DEV__`; label **"Skip for now"** placed **above** the device-name field so it is on-screen on phone layouts (below-fold taps were no-ops).
 - `apps/mobile/src/screens/Onboarding.test.tsx` — asserts presence under `__DEV__` and absence when false.
 
 first-run skip waits for Skip for now on both platforms:
 
-- `tests/agent-e2e-mobile/lib/first-run.mjs` — `skipOnboarding` no longer Android-only; waits/taps **"Skip for now"**; exports `HOME_RAIL_LABEL`.
+- `tests/agent-e2e-mobile/lib/first-run.mjs` — `skipOnboarding` no longer Android-only; scrolls to 100% visibility, taps **"Skip for now"**, then waits until **"Connect your gateway"** is gone before Home; exports `HOME_RAIL_LABEL`.
 
 configureGateway / home-loads / template-gate use springboard markers:
 
