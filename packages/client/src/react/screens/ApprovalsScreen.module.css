@@ -323,3 +323,115 @@ button.rowMain:hover {
   font-size: 12.5px;
   color: var(--ink-4);
 }
+
+/* Recent activity (issue #552) — decision accents, risk rail, collapse ×N. */
+.activityHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.activityHead .groupHead {
+  margin-bottom: 0;
+}
+.activityFilters {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.filterChip {
+  font: inherit;
+  font-size: 11.5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.filterChip[data-active='true'] {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+  color: var(--ink);
+}
+.activityRow {
+  position: relative;
+}
+.activityRow .rowMain {
+  padding-left: 16px;
+}
+.riskMarker {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: color-mix(in oklab, var(--danger, #c4453b) 70%, var(--accent));
+}
+.decisionAllow .activityIcon {
+  color: color-mix(in oklab, #2f9e6b 90%, var(--ink));
+  background: color-mix(in oklab, #2f9e6b 14%, transparent);
+}
+.decisionDeny .activityIcon {
+  color: color-mix(in oklab, var(--danger, #c4453b) 90%, var(--ink));
+  background: color-mix(in oklab, var(--danger, #c4453b) 14%, transparent);
+}
+.decisionParked .activityIcon {
+  color: color-mix(in oklab, #c48a1a 90%, var(--ink));
+  background: color-mix(in oklab, #c48a1a 14%, transparent);
+}
+.decisionBadge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 999px;
+  vertical-align: middle;
+  color: var(--ink-3);
+  border: 0.5px solid var(--line);
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+}
+.decisionAllow .decisionBadge {
+  color: color-mix(in oklab, #2f9e6b 95%, var(--ink));
+  border-color: color-mix(in oklab, #2f9e6b 35%, var(--line));
+  background: color-mix(in oklab, #2f9e6b 10%, transparent);
+}
+.decisionDeny .decisionBadge {
+  color: color-mix(in oklab, var(--danger, #c4453b) 95%, var(--ink));
+  border-color: color-mix(in oklab, var(--danger, #c4453b) 35%, var(--line));
+  background: color-mix(in oklab, var(--danger, #c4453b) 10%, transparent);
+}
+.decisionParked .decisionBadge {
+  color: color-mix(in oklab, #c48a1a 95%, var(--ink));
+  border-color: color-mix(in oklab, #c48a1a 35%, var(--line));
+  background: color-mix(in oklab, #c48a1a 10%, transparent);
+}
+.countMarker {
+  display: inline-block;
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--ink-3);
+  vertical-align: middle;
+}
+.attribution {
+  font-size: 11.5px;
+  color: var(--ink-4);
+  font-style: italic;
+}
+.monoId {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  word-break: break-all;
+}
+.seeAllRow {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}

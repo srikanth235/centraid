@@ -372,11 +372,15 @@ test('blocking lists what waits on the owner; the review feed ranks receipts by 
     note: expect.stringContaining('reconnect'),
   });
 
-  // The review feed carries acts with their salience marker.
+  // The review feed carries acts with their salience marker, and widens
+  // actorKind / grantId for the Approvals activity surface (issue #552).
   const feed = plane.reviewFeed(10);
   expect(feed.length).toBeGreaterThan(0);
   expect(feed.every((e) => e.action.startsWith('act '))).toBe(true);
   expect(feed.some((e) => e.risk !== null)).toBe(true);
+  // Owner-staged acts refine to an actor kind (or null only when no
+  // invocation was attached — every staged act here has one).
+  expect(feed.every((e) => 'actorKind' in e && 'grantId' in e && 'actor' in e)).toBe(true);
 
   // Explicit Locker fills join the same review-after-the-fact surface with
   // the normalized origin, but never the revealed secret.
@@ -404,10 +408,86 @@ test('blocking lists what waits on the owner; the review feed ranks receipts by 
       expect.objectContaining({
         objectType: 'locker.item',
         context: { kind: 'fill', origin: 'https://example.test' },
+        // Owner-direct reveals have no agent invocation — actorId null and
+        // refined fields stay null (issue #552).
+        actorId: null,
+        actorKind: null,
+        actor: null,
+        grantId: null,
       }),
     ]),
   );
   expect(JSON.stringify(fills)).not.toContain('not-in-the-review-feed');
+});
+
+test('review feed surfaces standing outbox grant id and refined actorKind (issue #552)', async () => {
+  const plane = openPlane(await tempDir());
+  configureApiKey(plane);
+  // Mint a standing grant, then stage under it so auto-approve carries grant_id.
+  const stage1 = plane.gateway.invoke(plane.ownerCredential, {
+    command: 'outbox.stage',
+    input: {
+      kind: 'pull.gmail',
+      label: 'personal',
+      verb: 'gmail.send',
+      target: 'ravi@example.com',
+      artifact: { to: 'ravi@example.com', subject: 'Hi', body: 'See you.' },
+      request: {
+        method: 'POST',
+        url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+        headers: { authorization: 'Bearer {{connection:api_key}}' },
+        body: '{"raw":"x"}',
+      },
+    },
+  });
+  expect(stage1.status).toBe('executed');
+  const itemId = (stage1 as { output: { item_id: string } }).output.item_id;
+  const decide = await plane.decideOutbox({
+    itemId,
+    decision: 'approve',
+    alwaysAllow: true,
+  });
+  expect(decide.status).toBe('executed');
+  const grantId = (decide as { output: { grant_id?: string } }).output.grant_id;
+  expect(grantId).toBeTruthy();
+
+  // Second stage under the standing grant — auto-approved at staging time.
+  const stage2 = plane.gateway.invoke(plane.ownerCredential, {
+    command: 'outbox.stage',
+    input: {
+      kind: 'pull.gmail',
+      label: 'personal',
+      verb: 'gmail.send',
+      target: 'ravi@example.com',
+      artifact: { to: 'ravi@example.com', subject: 'Again', body: 'Yo.' },
+      request: {
+        method: 'POST',
+        url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+        headers: { authorization: 'Bearer {{connection:api_key}}' },
+        body: '{"raw":"y"}',
+      },
+    },
+  });
+  expect(stage2.status).toBe('executed');
+  expect((stage2 as { output: { status: string; grant_id?: string } }).output.status).toBe(
+    'approved',
+  );
+  expect((stage2 as { output: { grant_id?: string } }).output.grant_id).toBe(grantId);
+
+  const feed = plane.reviewFeed(50);
+  const autoAllowed = feed.find((e) => e.action === 'act outbox.stage' && e.grantId === grantId);
+  expect(autoAllowed).toMatchObject({
+    grantId,
+    decision: 'allow',
+    // Owner-device stages refine to owner (or null only if table miss).
+    actorKind: expect.stringMatching(/owner|app|agent|assistant/),
+  });
+  // Null-actor receipts (no invocation) still shape-correct.
+  const nullActor = feed.find((e) => e.actorId === null);
+  if (nullActor) {
+    expect(nullActor.actorKind).toBeNull();
+    expect(nullActor.actor).toBeNull();
+  }
 });
 
 function blockingConnectionId(plane: VaultPlane): string {
