@@ -22,6 +22,10 @@
   }
 }
 .methodCard {
+  /* The card is a <label> wrapping an invisible native radio that covers it
+     (a11y.srControl) — the input is the hit area, so the label must position
+     it. */
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -41,12 +45,12 @@
   transform: translateY(-1px);
   background: color-mix(in srgb, var(--ink) 4%, transparent);
 }
-.methodCard:focus-visible {
+.methodCard:has(:focus-visible) {
   outline: none;
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
-.methodCard[aria-checked='true'] {
+.methodCard:has(:checked) {
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
@@ -252,6 +256,8 @@
   gap: 6px;
 }
 .vaultRow {
+  /* <label> around an invisible native radio (a11y.srControl) that covers it. */
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -271,6 +277,13 @@
 }
 .vaultRow:hover {
   background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+/* The radio inside is invisible, so it cannot carry the UA focus ring —
+   the label draws it, using this module's own focus idiom (.methodCard). */
+.vaultRow:has(:focus-visible) {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 .vaultRow[data-selected='true'] {
   border-color: color-mix(in srgb, var(--accent) 50%, transparent);

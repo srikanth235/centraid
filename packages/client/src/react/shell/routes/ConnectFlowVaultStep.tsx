@@ -1,7 +1,8 @@
-import type { Dispatch, JSX, KeyboardEvent } from 'react';
+import type { Dispatch, JSX } from 'react';
 import Icon from '../../ui/Icon.js';
 import { cx } from '../../ui/cx.js';
 import buttonCss from '../../ui/Button.module.css';
+import a11y from '../../styles/a11y.module.css';
 import controlsCss from '../../styles/controls.module.css';
 import { PROFILE_COLORS } from './SpaceModal.js';
 import {
@@ -14,18 +15,6 @@ import styles from './ConnectFlow.module.css';
 
 // The 'vault' step — split out of ConnectFlow.tsx (issue #382) purely to
 // keep that file under the repo's file-size cap.
-
-function radioKeyNav(e: KeyboardEvent<HTMLElement>): void {
-  if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) return;
-  const group = (e.currentTarget.closest('[role="radiogroup"]') ??
-    e.currentTarget.parentElement) as HTMLElement | null;
-  const items = Array.from(group?.querySelectorAll<HTMLButtonElement>('[role="radio"]') ?? []);
-  const idx = items.indexOf(e.currentTarget as HTMLButtonElement);
-  if (idx < 0 || items.length === 0) return;
-  e.preventDefault();
-  const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
-  items[(idx + dir + items.length) % items.length]?.focus();
-}
 
 export function VaultStep({
   state,
@@ -64,22 +53,27 @@ export function VaultStep({
       ) : (
         <div className={styles.vaultList} role="radiogroup" aria-label="Space">
           {cap.options.map((v) => (
-            <button
+            <label
               key={v.vaultId}
-              type="button"
-              role="radio"
-              aria-checked={
-                state.vaultChoice?.kind === 'existing' && state.vaultChoice.vaultId === v.vaultId
-              }
               data-selected={
                 state.vaultChoice?.kind === 'existing' && state.vaultChoice.vaultId === v.vaultId
               }
               className={styles.vaultRow}
-              onClick={() =>
-                dispatch({ choice: { kind: 'existing', vaultId: v.vaultId }, type: 'selectVault' })
-              }
-              onKeyDown={radioKeyNav}
             >
+              <input
+                type="radio"
+                className={a11y.srControl}
+                name="connect-flow-vault"
+                checked={
+                  state.vaultChoice?.kind === 'existing' && state.vaultChoice.vaultId === v.vaultId
+                }
+                onChange={() =>
+                  dispatch({
+                    choice: { kind: 'existing', vaultId: v.vaultId },
+                    type: 'selectVault',
+                  })
+                }
+              />
               <span
                 className={styles.vaultDot}
                 style={{ background: v.color ?? PROFILE_COLORS[0] }}
@@ -89,24 +83,26 @@ export function VaultStep({
               {state.vaultChoice?.kind === 'existing' && state.vaultChoice.vaultId === v.vaultId ? (
                 <Icon name="Check" size={14} strokeWidth={2.4} />
               ) : null}
-            </button>
+            </label>
           ))}
           {cap.canCreate ? (
             <div className={styles.createRow}>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={state.vaultChoice?.kind === 'create'}
+              <label
                 data-selected={state.vaultChoice?.kind === 'create'}
                 className={styles.vaultRow}
-                onClick={() => dispatch({ choice: { kind: 'create' }, type: 'selectVault' })}
-                onKeyDown={radioKeyNav}
               >
+                <input
+                  type="radio"
+                  className={a11y.srControl}
+                  name="connect-flow-vault"
+                  checked={state.vaultChoice?.kind === 'create'}
+                  onChange={() => dispatch({ choice: { kind: 'create' }, type: 'selectVault' })}
+                />
                 <span className={cx(styles.vaultDot, styles.vaultDotAdd)} aria-hidden="true">
                   <Icon name="Plus" size={12} strokeWidth={2.4} />
                 </span>
                 <span>Create new space</span>
-              </button>
+              </label>
               {state.vaultChoice?.kind === 'create' ? (
                 <input
                   className={styles.input}

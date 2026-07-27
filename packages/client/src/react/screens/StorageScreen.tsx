@@ -68,18 +68,19 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
   // footprint card and the limits panel in agreement — a limit shown beside a
   // total it wasn't evaluated against is worse than no limit shown.
   const refresh = useCallback(
-    async (opts: { refresh?: boolean } = {}): Promise<void> => {
-      try {
-        const next = await loadLocalUsage(opts);
-        if (!mountedRef.current) return;
-        setReport(next);
-        setLimits(next.limits);
-        setFootprintError(null);
-      } catch (err) {
-        if (!mountedRef.current) return;
-        setFootprintError(err instanceof Error ? err.message : String(err));
-      }
-    },
+    (opts: { refresh?: boolean } = {}): Promise<void> =>
+      loadLocalUsage(opts).then(
+        (next) => {
+          if (!mountedRef.current) return;
+          setReport(next);
+          setLimits(next.limits);
+          setFootprintError(null);
+        },
+        (err: unknown) => {
+          if (!mountedRef.current) return;
+          setFootprintError(err instanceof Error ? err.message : String(err));
+        },
+      ),
     [loadLocalUsage],
   );
 

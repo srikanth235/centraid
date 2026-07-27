@@ -57,12 +57,11 @@ export function CustodyDot({ state }: { state: string | null }) {
   const meta = custodyMeta(state);
   if (!meta) return null;
   return (
-    <span
-      className={`${styles.custodyDot} ${CUSTODY_DOT_TONE[meta.tone]}`}
-      title={meta.label}
-      aria-label={meta.label}
-      role="img"
-    />
+    // The label is real text (visually hidden) rather than an `aria-label` on a
+    // `role="img"` wrapper — same announcement, no faked role.
+    <span className={`${styles.custodyDot} ${CUSTODY_DOT_TONE[meta.tone]}`} title={meta.label}>
+      <span className="kit-sr-only">{meta.label}</span>
+    </span>
   );
 }
 

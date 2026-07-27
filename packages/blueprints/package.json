@@ -35,17 +35,17 @@
   "dependencies": {
     "@centraid/blob-format": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
-    "pdfjs-dist": "5.7.284",
-    "tldts": "6.1.86"
+    "pdfjs-dist": "6.1.200",
+    "tldts": "7.4.9"
   },
   "devDependencies": {
     "@centraid/app-engine": "workspace:*",
     "@centraid/test-kit": "workspace:*",
-    "@types/node": "^22.0.0",
-    "@types/react": "~19.1.0",
+    "@types/node": "^26.1.1",
+    "@types/react": "~19.2.17",
     "esbuild": "^0.28.1",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "typescript": "catalog:"
   },
   "engines": {

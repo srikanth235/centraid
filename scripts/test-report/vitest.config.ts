@@ -27,12 +27,19 @@ export default defineConfig({
       ],
       exclude: ['**/*.test.mjs', '**/*.test.ts', '**/vitest.config.ts'],
       // Conservative seed under realistic unit coverage of pure helpers
-      // (~39% lines measured with current unit set); ratchet upward once
+      // (~36% lines measured with current unit set); ratchet upward once
       // more script modules gain tests (up-only floors live elsewhere).
+      //
+      // `functions` was 40 under @vitest/coverage-v8 3.x. Version 4 made
+      // AST-aware remapping the only mode, so nested arrows and callbacks now
+      // count as functions too — the denominator grew to 218 and the same test
+      // set measures 30.27%. This is a re-seed against the new definition, not
+      // a regression in what the tests cover; these thresholds are local to
+      // this lane and are not the ratcheted floors in tests/coverage-floors.json.
       thresholds: {
         lines: 35,
         branches: 30,
-        functions: 40,
+        functions: 30,
         statements: 35,
       },
     },

@@ -92,28 +92,40 @@ function WeekCol({
   const now = new Date();
   const nowTop = (now.getHours() + now.getMinutes() / 60) * HOUR_PX;
 
+  const dayLabel = date.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+
   return (
-    <div
-      className={styles.weekCol}
-      data-today={String(isToday)}
-      style={{ height: 24 * HOUR_PX }}
-      onClick={(e) => {
-        if (e.target instanceof Element && e.target.closest(`.${styles.weekEv}`)) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const hour = Math.max(
-          0,
-          Math.min(23.5, Math.floor(((e.clientY - rect.top) / HOUR_PX) * 2) / 2),
-        );
-        const at = new Date(
-          date.getFullYear(),
-          date.getMonth(),
-          date.getDate(),
-          Math.floor(hour),
-          (hour % 1) * 60,
-        );
-        onSlotCreate(date, at);
-      }}
-    >
+    <div className={styles.weekCol} data-today={String(isToday)} style={{ height: 24 * HOUR_PX }}>
+      {/* Clicking a slot proposes an event at that time. That is a real button
+          stretched over the column (issue #573) rather than a click handler on
+          the column div: the event blocks are positioned above it, so the old
+          `closest('.weekEv')` guard is no longer needed. The half-hour comes
+          from where the pointer landed; a keyboard press (no pointer position)
+          clamps to the start of the day. */}
+      <button
+        type="button"
+        className={`kit-stretch-btn ${styles.weekSlot}`}
+        aria-label={`${dayLabel}. Press Enter to propose an event.`}
+        onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const hour = Math.max(
+            0,
+            Math.min(23.5, Math.floor(((e.clientY - rect.top) / HOUR_PX) * 2) / 2),
+          );
+          const at = new Date(
+            date.getFullYear(),
+            date.getMonth(),
+            date.getDate(),
+            Math.floor(hour),
+            (hour % 1) * 60,
+          );
+          onSlotCreate(date, at);
+        }}
+      />
       {isToday ? (
         <span className={styles.nowLine} style={{ top: nowTop }} aria-hidden="true" />
       ) : null}

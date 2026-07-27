@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useState, type JSX } from 'react';
 import { formatBytes } from '../../format.js';
 import { formatDuration } from '../shell/routes/gatewayData.js';
 import buttonCss from '../ui/Button.module.css';
@@ -148,7 +148,14 @@ export default function BackupInventoryPanel({
   const [current, setCurrent] = useState(reconciliation);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => setCurrent(reconciliation), [reconciliation]);
+  // A fresh reconciliation from the server replaces the locally verified one.
+  // Adjusted during render (the React "state derived from a prop" pattern), so
+  // the new payload paints immediately instead of one cascading render later.
+  const [seenReconciliation, setSeenReconciliation] = useState(reconciliation);
+  if (seenReconciliation !== reconciliation) {
+    setSeenReconciliation(reconciliation);
+    setCurrent(reconciliation);
+  }
 
   const verify = async (): Promise<void> => {
     if (!onVerifyBucket) return;

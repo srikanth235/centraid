@@ -53,6 +53,11 @@ export interface ChromeProps {
 }
 
 export function Chrome(props: ChromeProps): ReactNode {
+  // Callback refs come off `props` first: a ref read from the props object taints
+  // every later `props.*` read for the React compiler ("cannot access refs during
+  // render"), so they are destructured into plain locals here (#573).
+  const { searchRef, themeButtonRef, uploadRef } = props;
+
   const shellClass = [
     styles.shell,
     props.narrow ? styles.isNarrow : '',
@@ -179,7 +184,15 @@ export function Chrome(props: ChromeProps): ReactNode {
         </div>
       </aside>
 
-      <div className={styles.scrim} onClick={props.onCloseSide} />
+      {/* Dismiss-on-outside-click for the narrow drawer. A real button, so the
+          same gesture is reachable by keyboard; it only exists (display:block)
+          while the drawer is open. */}
+      <button
+        type="button"
+        className={`kit-plain-btn ${styles.scrim}`}
+        aria-label="Close menu"
+        onClick={props.onCloseSide}
+      />
 
       <main className={styles.main}>
         <div className={styles.topbar}>
@@ -217,7 +230,7 @@ export function Chrome(props: ChromeProps): ReactNode {
               <path d="m21 21-4.3-4.3" />
             </svg>
             <input
-              ref={props.searchRef}
+              ref={searchRef}
               id="searchInput"
               type="search"
               placeholder="Search documents, contents, people…"
@@ -228,7 +241,7 @@ export function Chrome(props: ChromeProps): ReactNode {
             />
           </label>
           <div className={styles.topbarTools}>
-            <div className="kit-seg" role="group" aria-label="View">
+            <fieldset className="kit-seg" aria-label="View">
               <button
                 type="button"
                 aria-label="Grid view"
@@ -270,9 +283,9 @@ export function Chrome(props: ChromeProps): ReactNode {
                   <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
                 </svg>
               </button>
-            </div>
+            </fieldset>
             <button
-              ref={props.themeButtonRef}
+              ref={themeButtonRef}
               type="button"
               className="kit-icon-btn"
               aria-label="Toggle light/dark"
@@ -292,10 +305,9 @@ export function Chrome(props: ChromeProps): ReactNode {
         ) : null}
         {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,
             never reconciled, so those DOM writes are never clobbered. */}
-        <div
+        <output
           id="noticeBanner"
           className={`kit-banner notice ${styles.banner}`}
-          role="status"
           aria-live="polite"
           hidden
         />
@@ -306,12 +318,12 @@ export function Chrome(props: ChromeProps): ReactNode {
             <div className={styles.sub}>{props.activeSub}</div>
           </div>
           <div className={styles.toolbarTools}>
-            <div className={styles.chips} role="group" aria-label="Filter by type">
+            <fieldset className={styles.chips} aria-label="Filter by type">
               {props.typeChips}
-            </div>
-            <div className={styles.chips} role="group" aria-label="Filter by tag">
+            </fieldset>
+            <fieldset className={styles.chips} aria-label="Filter by tag">
               {props.tagChips}
-            </div>
+            </fieldset>
             <span className={styles.toolbarDiv} aria-hidden="true" />
             <button type="button" className="kit-btn" onClick={props.onSort}>
               <svg
@@ -342,13 +354,15 @@ export function Chrome(props: ChromeProps): ReactNode {
 
       {props.overlays}
 
+      {/* Opened programmatically (uploadRef.click()); `hidden` already keeps it
+          out of the a11y tree, so it carries no aria-hidden on top of that. */}
       <input
-        ref={props.uploadRef}
+        ref={uploadRef}
         id="uploadInput"
         type="file"
         multiple
         hidden
-        aria-hidden="true"
+        aria-label="Upload files"
         onChange={props.onUploadChange}
       />
       <div className="kit-drop" hidden={!props.dropVisible} aria-hidden="true">

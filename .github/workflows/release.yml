@@ -135,8 +135,7 @@ jobs:
   desktop:
     needs: plan
     if: >
-      needs.plan.outputs.product == 'true' &&
-      (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'desktop')
+      needs.plan.outputs.product == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'desktop')
     permissions:
       contents: write
     uses: ./.github/workflows/lane-release-desktop.yml
@@ -156,8 +155,7 @@ jobs:
   gateway-npm:
     needs: plan
     if: >
-      needs.plan.outputs.product == 'true' &&
-      (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'gateway-npm')
+      needs.plan.outputs.product == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'gateway-npm')
     permissions:
       contents: read
       # OIDC for `npm publish --provenance` (#557). Job-level permissions
@@ -173,8 +171,7 @@ jobs:
   gateway-image:
     needs: plan
     if: >
-      needs.plan.outputs.product == 'true' &&
-      (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'gateway-image')
+      needs.plan.outputs.product == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'gateway-image')
     permissions:
       contents: read
       packages: write
@@ -193,8 +190,7 @@ jobs:
   mobile:
     needs: plan
     if: >
-      github.event_name == 'workflow_dispatch' &&
-      needs.plan.outputs.surfaces == 'mobile'
+      github.event_name == 'workflow_dispatch' && needs.plan.outputs.surfaces == 'mobile'
     permissions:
       contents: read
     uses: ./.github/workflows/lane-release-mobile.yml
@@ -209,8 +205,7 @@ jobs:
   companion:
     needs: plan
     if: >
-      needs.plan.outputs.companion == 'true' &&
-      (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'companion')
+      needs.plan.outputs.companion == 'true' && (needs.plan.outputs.surfaces == 'all' || needs.plan.outputs.surfaces == 'companion')
     permissions:
       contents: read
     uses: ./.github/workflows/lane-release-companion.yml

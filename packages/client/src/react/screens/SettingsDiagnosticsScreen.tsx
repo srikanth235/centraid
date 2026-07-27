@@ -258,10 +258,11 @@ export default function SettingsDiagnosticsScreen({
 }: SettingsDiagnosticsBridgeProps): JSX.Element {
   const [health, setHealth] = useState<GatewayHealthDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  // The mount read is already in flight when the first render happens, so the
+  // busy flag starts true rather than being flipped from inside the effect.
+  const [busy, setBusy] = useState(true);
 
-  const refresh = useCallback((): void => {
-    setBusy(true);
+  const load = useCallback((): void => {
     loadHealth()
       .then((snap) => {
         setHealth(snap);
@@ -271,7 +272,13 @@ export default function SettingsDiagnosticsScreen({
       .finally(() => setBusy(false));
   }, [loadHealth]);
 
-  useEffect(() => refresh(), [refresh]);
+  /** The "Check again" button — the only path that re-arms the busy flag. */
+  const refresh = useCallback((): void => {
+    setBusy(true);
+    load();
+  }, [load]);
+
+  useEffect(() => load(), [load]);
 
   if (error !== null) {
     return <div className={styles.loadError}>Couldn’t reach the gateway: {error}</div>;

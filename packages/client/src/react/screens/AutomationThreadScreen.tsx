@@ -1,5 +1,14 @@
 // governance: allow-repo-hygiene file-size-limit (#539) single cohesive screen component (header/consent-strip/chat-turn spine/steering composer of one thread surface); splitting would fragment one visual unit
-import { type FormEvent, type JSX, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type Dispatch,
+  type FormEvent,
+  type JSX,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
 import { cx } from '../ui/cx.js';
@@ -99,6 +108,43 @@ function withoutId(current: ReadonlySet<string>, id: string): ReadonlySet<string
   const next = new Set(current);
   next.delete(id);
   return next;
+}
+
+/**
+ * Cold-read one turn's trace, marking it in-flight first so the effect that
+ * warms the latest turn cannot start a second read for the same turn.
+ *
+ * Module scope, taking its setters as arguments: this is an IO routine, not a
+ * render value, and the in-flight mark HAS to land before the read starts.
+ */
+function fetchTurnTrace(
+  turnId: string,
+  io: {
+    loadTurnTrace: (turnId: string) => Promise<AsstMsgDTO[]>;
+    setTraces: Dispatch<SetStateAction<Record<string, AsstMsgDTO[]>>>;
+    setTraceErrors: Dispatch<SetStateAction<ReadonlySet<string>>>;
+    setLoadingTraces: Dispatch<SetStateAction<ReadonlySet<string>>>;
+  },
+): Promise<void> {
+  const { loadTurnTrace, setTraces, setTraceErrors, setLoadingTraces } = io;
+  setLoadingTraces((current) => new Set(current).add(turnId));
+  return loadTurnTrace(turnId)
+    .then(
+      (messages) => {
+        setTraces((current) => ({ ...current, [turnId]: messages }));
+        setTraceErrors((current) => withoutId(current, turnId));
+      },
+      () => {
+        // A failed cold read is NOT an empty turn. Writing `[]` here would be
+        // indistinguishable from "no messages yet" — the turn would show the
+        // spinner and the Done/Failed footer at once and lose "Show trace".
+        // Leave `traces` untouched and flag the turn so it offers a retry.
+        setTraceErrors((current) => new Set(current).add(turnId));
+      },
+    )
+    .finally(() => {
+      setLoadingTraces((current) => withoutId(current, turnId));
+    });
 }
 
 function fmtDuration(ms: number): string {
@@ -774,36 +820,22 @@ export default function AutomationThreadScreen({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
 
-  const reload = useCallback(async () => {
-    try {
-      const d = await loadData();
-      setState(d ?? 'missing');
-    } catch {
-      setState('error');
-    }
-  }, [loadData]);
+  const reload = useCallback(
+    (): Promise<void> =>
+      loadData().then(
+        (d) => setState(d ?? 'missing'),
+        () => setState('error'),
+      ),
+    [loadData],
+  );
 
   useEffect(() => {
     void reload();
   }, [reload]);
 
   const loadTrace = useCallback(
-    async (turnId: string): Promise<void> => {
-      setLoadingTraces((current) => new Set(current).add(turnId));
-      try {
-        const messages = await loadTurnTrace(turnId);
-        setTraces((current) => ({ ...current, [turnId]: messages }));
-        setTraceErrors((current) => withoutId(current, turnId));
-      } catch {
-        // A failed cold read is NOT an empty turn. Writing `[]` here would be
-        // indistinguishable from "no messages yet" — the turn would show the
-        // spinner and the Done/Failed footer at once and lose "Show trace".
-        // Leave `traces` untouched and flag the turn so it offers a retry.
-        setTraceErrors((current) => new Set(current).add(turnId));
-      } finally {
-        setLoadingTraces((current) => withoutId(current, turnId));
-      }
-    },
+    (turnId: string): Promise<void> =>
+      fetchTurnTrace(turnId, { loadTurnTrace, setLoadingTraces, setTraceErrors, setTraces }),
     [loadTurnTrace],
   );
 
@@ -1069,17 +1101,16 @@ export default function AutomationThreadScreen({
               header badge, since nothing else signals a stopped automation at
               a glance. */}
           {header.statusKind === 'paused' ? (
-            <span
+            <output
               className={au.auStatus}
               data-tone={header.statusKind}
               data-au-status={header.statusKind}
-              role="status"
             >
               <span className={au.auStatusIc} aria-hidden="true">
                 <Icon name={STATUS_ICON[header.statusKind]} size={12} />
               </span>
               <span>{header.statusLabel}</span>
-            </span>
+            </output>
           ) : null}
           <div className={cx(au.auActions, styles.headActions)}>
             <button
@@ -1142,7 +1173,7 @@ export default function AutomationThreadScreen({
                     <Icon name={header.enabled ? 'Pause' : 'Play'} size={15} />
                     <span>{header.enabled ? 'Pause' : 'Resume'}</span>
                   </button>
-                  <div className={styles.menuDivider} role="separator" />
+                  <hr className={styles.menuDivider} />
                   <button
                     type="button"
                     className={cx(styles.menuItem, styles.menuItemDanger)}

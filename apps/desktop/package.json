@@ -28,20 +28,20 @@
     "@centraid/vault": "workspace:*",
     "electron-updater": "^6.6.2",
     "qrcode": "^1.5.4",
-    "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",
-    "@playwright/test": "^1.60.0",
-    "@types/node": "^22.0.0",
+    "@playwright/test": "^1.62.0",
+    "@types/node": "^26.1.1",
     "@types/qrcode": "^1.5.5",
-    "@types/react": "~19.1.0",
-    "@types/react-dom": "~19.1.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "electron": "^37.0.0",
+    "@types/react": "~19.2.17",
+    "@types/react-dom": "~19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "electron": "^43.2.0",
     "electron-builder": "^26.0.12",
     "typescript": "catalog:",
-    "vite": "^7.0.0"
+    "vite": "^8.1.5"
   }
 }

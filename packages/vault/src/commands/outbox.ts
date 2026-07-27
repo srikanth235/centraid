@@ -485,9 +485,9 @@ function publishSentMessage(ctx: HandlerCtx, itemId: string): string | null {
   const externalRef = `outbox:${item.connection_id}:${item.target}`;
   const channel = /mail/.test(item.verb) ? 'email' : 'dm';
   let threadId = (
-    ctx.db.prepare('SELECT thread_id FROM social_thread WHERE external_ref = ?').get(externalRef) as
-      | { thread_id: string }
-      | undefined
+    ctx.db
+      .prepare('SELECT thread_id FROM social_thread WHERE external_ref = ?')
+      .get(externalRef) as { thread_id: string } | undefined
   )?.thread_id;
   if (!threadId) {
     threadId = ctx.newId();

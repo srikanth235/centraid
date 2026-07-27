@@ -66,3 +66,40 @@ textarea {
   display: flex;
   flex-direction: column;
 }
+
+/* Native elements adopted for their semantics (jsx-a11y profile, issue #573).
+   Each of these replaced a `div`/`span` that carried the matching ARIA role,
+   so the UA chrome they ship with (dialog's centering box + border, fieldset's
+   groove + min-inline-size floor, hr's inset rule, figure's 40px margins) is
+   chrome the layout never had. Strip it here once; the component modules keep
+   owning every visual. */
+dialog {
+  position: static;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  background: transparent;
+  color: inherit;
+}
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+legend {
+  padding: 0;
+}
+hr {
+  margin: 0;
+  border: 0;
+}
+figure {
+  margin: 0;
+}

@@ -49,6 +49,23 @@ Reuse = components, not class strings:
   rows-layout fixed-width rule via `--lib-row-badge-w`).
 - **`Icon`, `Logo`, `cx`, `tile-visual`** — as before.
 
+## The a11y riders (`react/styles/a11y.module.css`)
+
+Adopting the full jsx-a11y profile (#573) replaced ARIA roles with the native
+elements behind them, and four riders carry that swap so no screen invents its
+own: **`plainBtn`** (a `<button>` that replaced a clickable div/span — undoes
+the UA button box), **`stretchBtn`** (an overlay button covering a region whose
+whole area is clickable but which contains its own controls, so nothing nests
+inside a button; the region needs `position: relative` and the nested controls
+`position: relative` to stay above it), **`srControl`** (a native input kept
+operable but invisible inside a styled `<label>` — the radio-group pattern),
+and **`srOnly`** (text for assistive tech only). `styles.css` carries the
+matching element resets (`dialog`, `fieldset`, `legend`, `hr`, `figure`), since
+an element adopted for its semantics must not drag in UA chrome the `div` it
+replaced never had. The blueprints kit has the same set as global classes
+(`kit-plain-btn`, `kit-stretch-btn`, `kit-sr-control`, `kit-sr-only`, plus
+`kit-modal-scrim` for click-outside dismissal).
+
 ## The chrome (`react/shell/chrome.module.css`)
 
 The whole window-chrome family — `.window` grid, split titlebar

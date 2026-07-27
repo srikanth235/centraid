@@ -546,6 +546,9 @@
 }
 
 .loadingBody {
+  /* An <output> (implicit role=status) replaced the div this was written for;
+     `display` keeps the block box the padding + centering assume. */
+  display: block;
   padding: 48px 0;
   font-size: 14px;
   color: var(--ink-3);

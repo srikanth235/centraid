@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import * as Network from 'expo-network';
 import {
@@ -41,7 +41,11 @@ interface ReplicaContextValue {
   error?: string;
 }
 
-const ReplicaContext = createContext<ReplicaContextValue>({ ready: false, online: false });
+// One shared instance so a not-yet-built Space hands consumers a stable value
+// (a fresh object every render would re-render every consumer).
+const REPLICA_LOADING: ReplicaContextValue = { ready: false, online: false };
+
+const ReplicaContext = createContext<ReplicaContextValue>(REPLICA_LOADING);
 
 function fetcher(vaultId?: string): ReplicaFetcher {
   return async (baseUrl, pathname, init) => {
@@ -108,7 +112,11 @@ async function resolveIdentity(): Promise<{
 }
 
 export function ReplicaProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const [value, setValue] = useState<ReplicaContextValue>({ ready: false, online: false });
+  // Tagged with the Space it was built for, so a switch drops back to the
+  // loading value *during the render that changes the id* — consumers can never
+  // read the previous vault's session, not even for the one frame it took the
+  // old effect-body reset to land.
+  const [built, setBuilt] = useState<{ spaceId: string; value: ReplicaContextValue }>();
 
   // Re-key the replica when the user switches the active Space. Keyed on the
   // active Space *id*: switching / forgetting / pairing changes the id, tearing
@@ -128,9 +136,7 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
 
   useEffect(() => {
     if (activeSpaceId === undefined) return undefined; // wait for the first Space read
-    // A switch: drop back to a loading state so consumers don't read the old
-    // vault's session while the new one opens.
-    setValue({ ready: false, online: false });
+    const spaceId = activeSpaceId;
     let cancelled = false;
     let session: NativeReplicaSession | undefined;
     // Held so an unmount landing in the window between opening the op-sqlite
@@ -170,12 +176,15 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
           await session.close();
           return;
         }
-        setValue({
-          session,
-          gatewayBase: identity.auth.baseUrl,
-          vaultId: identity.auth.vaultId,
-          ready: true,
-          online: identity.online,
+        setBuilt({
+          spaceId,
+          value: {
+            session,
+            gatewayBase: identity.auth.baseUrl,
+            vaultId: identity.auth.vaultId,
+            ready: true,
+            online: identity.online,
+          },
         });
         const refreshReachability = async (network: Network.NetworkState): Promise<void> => {
           const liveBase =
@@ -189,11 +198,18 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
             session?.updateGatewayBase(liveBase);
             session?.notifyReachable();
           }
-          setValue((current) => ({
-            ...current,
-            ...(liveBase ? { gatewayBase: liveBase } : {}),
-            online: connected,
-          }));
+          setBuilt((current) =>
+            current?.spaceId === spaceId
+              ? {
+                  spaceId,
+                  value: {
+                    ...current.value,
+                    ...(liveBase ? { gatewayBase: liveBase } : {}),
+                    online: connected,
+                  },
+                }
+              : current,
+          );
         };
         networkSubscription = Network.addNetworkStateListener((network) => {
           void refreshReachability(network);
@@ -201,10 +217,13 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
         void Network.getNetworkStateAsync().then(refreshReachability);
       } catch (error) {
         if (!cancelled) {
-          setValue({
-            ready: true,
-            online: false,
-            error: error instanceof Error ? error.message : String(error),
+          setBuilt({
+            spaceId,
+            value: {
+              ready: true,
+              online: false,
+              error: error instanceof Error ? error.message : String(error),
+            },
           });
         }
       }
@@ -219,8 +238,8 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
     };
   }, [activeSpaceId]);
 
-  const stable = useMemo(() => value, [value]);
-  return <ReplicaContext.Provider value={stable}>{children}</ReplicaContext.Provider>;
+  const value = built && built.spaceId === activeSpaceId ? built.value : REPLICA_LOADING;
+  return <ReplicaContext.Provider value={value}>{children}</ReplicaContext.Provider>;
 }
 
 export function useReplica(): ReplicaContextValue {

@@ -152,14 +152,14 @@ export default function ImportScreen({
   const [picking, setPicking] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const reload = useCallback(async () => {
-    try {
-      const data = await loadData();
-      setState(data ?? 'no-vault');
-    } catch {
-      setState('error');
-    }
-  }, [loadData]);
+  const reload = useCallback(
+    (): Promise<void> =>
+      loadData().then(
+        (data) => setState(data ?? 'no-vault'),
+        () => setState('error'),
+      ),
+    [loadData],
+  );
 
   useEffect(() => {
     void reload();

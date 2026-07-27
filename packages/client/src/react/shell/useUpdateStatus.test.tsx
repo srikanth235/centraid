@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { relaunchToUpdate, useUpdateStatus, type UpdateStatus } from './useUpdateStatus.js';
@@ -37,7 +37,13 @@ afterEach(() => {
 
 let status: UpdateStatus | null = null;
 function Harness(): null {
-  status = useUpdateStatus();
+  const value = useUpdateStatus();
+  // Published from a commit-time effect, not the render body — assigning to an
+  // outer binding during render is a side effect (`act()` flushes this before
+  // the assertions run, so every test still reads the latest value).
+  useEffect(() => {
+    status = value;
+  });
   return null;
 }
 async function mount(): Promise<void> {

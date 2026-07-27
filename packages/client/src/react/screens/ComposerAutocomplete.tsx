@@ -190,8 +190,13 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
   let popover: JSX.Element | null = null;
   if (suggest) {
     const clampedActive = active >= suggest.items.length ? 0 : active;
+    // A popover of buttons, not a listbox: focus stays in the composer, the
+    // items are never focused and nothing points at them with
+    // `aria-activedescendant`, so the listbox/option roles claimed a widget
+    // this never was. The buttons are the real control; `data-active` marks the
+    // keyboard highlight, as it always did.
     popover = (
-      <div className={styles.acPopover} role="listbox" aria-label="Composer suggestions">
+      <div className={styles.acPopover}>
         {suggest.kind === 'mention' && suggest.loading && suggest.items.length === 0 ? (
           <div className={styles.acEmpty}>Searching…</div>
         ) : suggest.items.length === 0 ? (
@@ -203,8 +208,6 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
             <button
               key={`${item.type}/${item.id}`}
               type="button"
-              role="option"
-              aria-selected={i === clampedActive}
               className={styles.acItem}
               data-active={i === clampedActive ? 'true' : undefined}
               onMouseDown={(e) => e.preventDefault()}
@@ -220,8 +223,6 @@ export function useComposerAutocomplete(opts: ComposerAutocompleteOptions): {
             <button
               key={cmd.id}
               type="button"
-              role="option"
-              aria-selected={i === clampedActive}
               className={styles.acItem}
               data-active={i === clampedActive ? 'true' : undefined}
               data-disabled={cmd.enabled === false ? 'true' : undefined}

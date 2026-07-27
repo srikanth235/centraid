@@ -111,10 +111,17 @@ const basename = (p: string): string => (p.includes('/') ? p.slice(p.lastIndexOf
 
 const BACKEND_DIRS = new Set(['actions', 'queries', 'migrations', 'automations']);
 
+/** Stable empty listing — `files` feeds effect dependency arrays, so the
+ *  "no app / not fetched yet" case must not mint a new array each render. */
+const NO_FILES: AppFile[] = [];
+
 export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): JSX.Element {
-  const [files, setFiles] = useState<AppFile[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // The settled read of the app's files. `appId === ''` ("no app yet") is a
+  // render-time case, not something the fetch effect has to reset state for.
+  const [fetched, setFetched] = useState<{ files: AppFile[]; error: string | null } | null>(null);
+  const files = appId && fetched ? fetched.files : NO_FILES;
+  const loaded = !appId || fetched !== null;
+  const loadError = appId && fetched ? fetched.error : null;
   const [buffers, setBuffers] = useState<Record<string, CodeBuffer>>({});
   const [openTabs, setOpenTabs] = useState<string[]>([]);
   const [activePath, setActivePath] = useState<string | undefined>(undefined);
@@ -125,15 +132,18 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Refs mirror the latest state for use inside async/imperative callbacks
-  // that must not close over stale values.
-  const filesRef = useRef(files);
-  filesRef.current = files;
+  // that must not close over stale values. Mirrored at commit time — every
+  // reader is an event handler or an awaited continuation, both of which run
+  // after the commit that this effect belongs to. Declared before the other
+  // effects so they see this render's values.
   const buffersRef = useRef(buffers);
-  buffersRef.current = buffers;
   const activePathRef = useRef(activePath);
-  activePathRef.current = activePath;
   const openTabsRef = useRef(openTabs);
-  openTabsRef.current = openTabs;
+  useEffect(() => {
+    buffersRef.current = buffers;
+    activePathRef.current = activePath;
+    openTabsRef.current = openTabs;
+  }, [buffers, activePath, openTabs]);
 
   // Editor DOM refs — the transparent textarea over a tokenized <pre> is
   // legitimately imperative (scroll-sync + caret restore live on refs).
@@ -144,10 +154,12 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   // controlled value re-renders.
   const pendingCaret = useRef<number | null>(null);
 
-  const openFile = useCallback((p: string): void => {
+  // `list` is passed rather than read off a ref so a caller reconciling a
+  // just-fetched listing can open a file that state has not committed yet.
+  const openFile = useCallback((p: string, list: AppFile[]): void => {
     setBuffers((prev) => {
       if (prev[p]) return prev;
-      const f = filesRef.current.find((x) => x.path === p);
+      const f = list.find((x) => x.path === p);
       if (!f) return prev;
       return {
         ...prev,
@@ -158,73 +170,71 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     setActivePath(p);
   }, []);
 
+  // Reconcile buffers/tabs/active against the freshest on-disk bytes. Driven
+  // by the fetch that produced them (the only writer of `files`) rather than
+  // by a follow-up effect, so the reconciliation lands in the same batch.
+  const reconcileToFiles = useCallback(
+    (list: AppFile[]): void => {
+      if (list.length === 0) return;
+      setBuffers((prev) => {
+        const next = { ...prev };
+        // Sync clean buffers to fresh bytes; leave dirty buffers untouched so
+        // unsaved edits are never clobbered.
+        for (const f of list) {
+          const buf = next[f.path];
+          if (buf && buf.current === buf.original) {
+            next[f.path] = { ...buf, original: f.content, current: f.content };
+          }
+        }
+        // Drop buffers whose file no longer exists on disk.
+        for (const p of Object.keys(next)) {
+          if (!list.some((f) => f.path === p)) delete next[p];
+        }
+        return next;
+      });
+      // Drop tabs whose file no longer exists.
+      setOpenTabs((prev) => prev.filter((p) => list.some((f) => f.path === p)));
+
+      let ap = activePathRef.current;
+      if (!ap || !list.some((f) => f.path === ap)) {
+        ap = list.find((f) => f.path === 'index.html')?.path ?? list[0]!.path;
+      }
+      openFile(ap, list);
+
+      // Folders containing the active file start expanded.
+      setExpanded((prev) => {
+        const nextSet = new Set(prev);
+        const parts = (ap ?? '').split('/');
+        let acc = '';
+        for (let i = 0; i < parts.length - 1; i++) {
+          acc = acc ? `${acc}/${parts[i]}` : parts[i]!;
+          nextSet.add(acc);
+        }
+        return nextSet;
+      });
+    },
+    [openFile],
+  );
+
   // Fetch the file list on mount, app switch, and each agent-write nonce bump.
   useEffect(() => {
-    if (!appId) {
-      setFiles([]);
-      setLoaded(true);
-      setLoadError(null);
-      return;
-    }
+    if (!appId) return;
     let cancelled = false;
     void (async () => {
       try {
         const fs = await readAppFiles({ id: appId });
         if (cancelled) return;
-        setFiles(fs);
-        setLoadError(null);
-        setLoaded(true);
+        setFetched({ files: fs, error: null });
+        reconcileToFiles(fs);
       } catch (err) {
         if (cancelled) return;
-        setLoadError(String(err));
-        setLoaded(true);
+        setFetched((prev) => ({ files: prev?.files ?? NO_FILES, error: String(err) }));
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [appId, reloadNonce]);
-
-  // Reconcile buffers/tabs/active against the freshest on-disk bytes.
-  useEffect(() => {
-    if (files.length === 0) return;
-    setBuffers((prev) => {
-      const next = { ...prev };
-      // Sync clean buffers to fresh bytes; leave dirty buffers untouched so
-      // unsaved edits are never clobbered.
-      for (const f of files) {
-        const buf = next[f.path];
-        if (buf && buf.current === buf.original) {
-          next[f.path] = { ...buf, original: f.content, current: f.content };
-        }
-      }
-      // Drop buffers whose file no longer exists on disk.
-      for (const p of Object.keys(next)) {
-        if (!files.some((f) => f.path === p)) delete next[p];
-      }
-      return next;
-    });
-    // Drop tabs whose file no longer exists.
-    setOpenTabs((prev) => prev.filter((p) => files.some((f) => f.path === p)));
-
-    let ap = activePathRef.current;
-    if (!ap || !files.some((f) => f.path === ap)) {
-      ap = files.find((f) => f.path === 'index.html')?.path ?? files[0]!.path;
-    }
-    openFile(ap);
-
-    // Folders containing the active file start expanded.
-    setExpanded((prev) => {
-      const nextSet = new Set(prev);
-      const parts = (ap ?? '').split('/');
-      let acc = '';
-      for (let i = 0; i < parts.length - 1; i++) {
-        acc = acc ? `${acc}/${parts[i]}` : parts[i]!;
-        nextSet.add(acc);
-      }
-      return nextSet;
-    });
-  }, [files, openFile]);
+  }, [appId, reloadNonce, reconcileToFiles]);
 
   // Close the overflow menu on any outside click (capture, like the vanilla).
   useEffect(() => {
@@ -302,7 +312,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     if (activePathRef.current === p) {
       const na = nextTabs[Math.max(0, idx - 1)];
       setActivePath(na);
-      if (na) openFile(na);
+      if (na) openFile(na, files);
     }
   };
 
@@ -432,7 +442,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
           data-depth={String(depth)}
           style={{ '--depth': String(depth) } as React.CSSProperties}
           onClick={() => {
-            openFile(node.path);
+            openFile(node.path, files);
             setDiffMode(false);
           }}
         >
@@ -532,7 +542,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
                 className={styles.tabLabel}
                 title={p}
                 onClick={() => {
-                  openFile(p);
+                  openFile(p, files);
                   setDiffMode(false);
                 }}
               >

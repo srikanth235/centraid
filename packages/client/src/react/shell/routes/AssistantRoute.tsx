@@ -65,6 +65,9 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     /** Server turn count of the open thread — the reconnect catch-up baseline. */
     turnCount: 0,
   });
+  // Render-visible mirror of `m.current.currentId !== null` — the slash-command
+  // list gates Export/Rename on it, and render may not read the model ref.
+  const [hasThread, setHasThread] = useState(false);
   const updateRef = useRef<((s: AssistantSnapshot) => void) | null>(null);
   const suppressSelectRef = useRef<string | null>(null);
   const modelPickerRunnerRef = useRef<AgentRunnerKind>('codex');
@@ -122,6 +125,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
   const selectThread = async (id: string | null): Promise<void> => {
     m.current.abort?.abort();
     setBusy(false);
+    setHasThread(id !== null);
     m.current.currentId = id;
     m.current.msgs = [];
     m.current.pendingAttachments = [];
@@ -492,6 +496,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       try {
         const created = await createConversation(ASSISTANT_APP_ID, '');
         m.current.currentId = created.id;
+        setHasThread(true);
         suppressSelectRef.current = created.id;
         replace?.({ kind: 'assistant', conversationId: created.id });
         refreshAssistantThreads?.();
@@ -616,7 +621,6 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       model.disposed = true;
       model.abort?.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount/unmount lifecycle only, deliberately [] #392; governance: allow-no-unjustified-suppressions stable lifecycle dependency contract
   }, []);
 
   useEffect(() => {
@@ -625,7 +629,6 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       return;
     }
     void selectThread(conversationId ?? null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectThread closes over the stable ref model, not React state #392; governance: allow-no-unjustified-suppressions stable ref model contract
   }, [conversationId]);
 
   // Configurable empty-state starters (§4) — from prefs `assistant.starters`,
@@ -661,7 +664,6 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
 
   // Slash commands (§4) — minimal + extensible, each firing an existing UI
   // action. Export/Rename need an open (created) conversation.
-  const hasThread = m.current.currentId !== null;
   const slashCommands: AsstSlashCommand[] = [
     { id: 'export', label: 'export', hint: 'Download as Markdown', enabled: hasThread },
     { id: 'rename', label: 'rename', hint: 'Rename this conversation', enabled: hasThread },

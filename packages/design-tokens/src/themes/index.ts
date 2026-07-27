@@ -13,13 +13,8 @@ import { solarizedDarkTheme, solarizedLightTheme } from './solarized';
 
 export type { Theme } from './shared';
 export { BRAND } from './shared';
-export { airtableDarkTheme, airtableLightTheme } from './airtable';
+
 export { darkTheme, lightTheme } from './centraid';
-export { githubDarkTheme, githubLightTheme } from './github';
-export { monokaiTheme } from './monokai';
-export { nordTheme } from './nord';
-export { notionDarkTheme, notionLightTheme } from './notion';
-export { solarizedDarkTheme, solarizedLightTheme } from './solarized';
 
 // Registry: every entry shows up in the desktop theme picker. The first
 // two keys (`light`, `dark`) double as the Centraid defaults — mobile

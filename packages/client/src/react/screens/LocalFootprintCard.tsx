@@ -5,6 +5,7 @@ import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
 import gwStyles from './GatewayScreen.module.css';
 import styles from './LocalFootprintCard.module.css';
+import a11y from '../styles/a11y.module.css';
 import type { LocalUsageReportDTO } from '../../gateway-client-local-storage.js';
 import {
   COMPONENT_PRESENTATION,
@@ -42,11 +43,13 @@ function OccupancyRail({ report }: { report: LocalUsageReportDTO }): JSX.Element
 
   return (
     <div className={styles.rail} data-over={scale.over || undefined}>
-      <div
-        className={styles.railTrack}
-        role="img"
-        aria-label={`${formatBytes(report.totalBytes)} used of ${formatBytes(scale.againstBytes ?? 0)}`}
-      >
+      <div className={styles.railTrack}>
+        {/* The bar is a row of hue segments, not an image: the reading it used
+            to fake with `role="img"` is real text now (absolutely positioned,
+            so it is not a flex item and costs no gap). */}
+        <span className={a11y.srOnly}>
+          {`${formatBytes(report.totalBytes)} used of ${formatBytes(scale.againstBytes ?? 0)}`}
+        </span>
         {/* Each component keeps its own hue; widths are shares of the SCALE,
             not of the total, so the bar and the denominator agree. */}
         {slices.map((slice) => (

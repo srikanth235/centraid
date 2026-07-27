@@ -55,7 +55,6 @@ import {
   loadBackupState,
   opaqueLabel,
   saveBackupState,
-  type BackupState,
   type BackupTargetState,
 } from './backup-state.js';
 import { RecoveryKitStateStore, type RecoveryKitState } from './recovery-kit-state.js';
@@ -1985,4 +1984,4 @@ export class BackupService {
   }
 }
 
-export type { BackupState, RecoveryKitState };
+export type { RecoveryKitState };

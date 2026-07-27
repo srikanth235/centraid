@@ -52,11 +52,13 @@ function ReplaceButton({
       >
         Replace file…
       </button>
+      {/* Opened programmatically by the button above; `hidden` already keeps it
+          out of the a11y tree, so it carries no aria-hidden on top of that. */}
       <input
         ref={inputRef}
         type="file"
         hidden
-        aria-hidden="true"
+        aria-label="Replace file"
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = '';
@@ -114,13 +116,15 @@ export function Details({
 
   return (
     <>
-      <div className={styles.detailsBackdrop} onClick={onClose}></div>
-      <aside
-        className={styles.details}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Document details"
-      >
+      {/* Dismiss-on-outside-click as a real button, so the same gesture has a
+          keyboard equivalent. */}
+      <button
+        type="button"
+        className={`kit-plain-btn ${styles.detailsBackdrop}`}
+        aria-label="Close"
+        onClick={onClose}
+      />
+      <dialog open className={styles.details} aria-modal="true" aria-label="Document details">
         <div className={styles.detailsHead}>
           <span className={styles.lbl}>Details</span>
           <button type="button" className="kit-icon-btn" aria-label="Close" onClick={onClose}>
@@ -262,7 +266,7 @@ export function Details({
             </>
           )}
         </div>
-      </aside>
+      </dialog>
     </>
   );
 }

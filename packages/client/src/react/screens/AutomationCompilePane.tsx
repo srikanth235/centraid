@@ -99,10 +99,12 @@ function useElapsedLabel(startedAt: number | null): string | null {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (startedAt === null) return;
-    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [startedAt]);
+  // No re-read of the clock when a turn opens: `now` can only be older than a
+  // freshly-started turn, and the elapsed seconds are floored at zero — so the
+  // rail already reads "0:00" until the first tick lands.
   if (startedAt === null) return null;
   const secs = Math.max(0, Math.floor((now - startedAt) / 1000));
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
@@ -146,13 +148,11 @@ export default function AutomationCompilePane({
     }
   }, [loadAttempts]);
 
-  const refreshSource = useCallback(async () => {
-    try {
-      setSource(await onReadSource());
-    } catch {
-      setSource({ handler: null, manifest: null });
-    }
-  }, [onReadSource]);
+  const refreshSource = useCallback(
+    (): Promise<void> =>
+      onReadSource().then(setSource, () => setSource({ handler: null, manifest: null })),
+    [onReadSource],
+  );
 
   /**
    * Follow one turn to settlement. `settled: false` means the stream dropped

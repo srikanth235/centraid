@@ -67,14 +67,14 @@ export default function PhoneScreen({
   const [status, setStatus] = useState<PhoneStatusDTO | 'loading' | 'error'>('loading');
   const [pairing, setPairing] = useState<Pairing>(null);
 
-  const reload = useCallback(async () => {
-    try {
-      const s = await loadStatus();
-      setStatus(s ?? 'error');
-    } catch {
-      setStatus('error');
-    }
-  }, [loadStatus]);
+  const reload = useCallback(
+    (): Promise<void> =>
+      loadStatus().then(
+        (s) => setStatus(s ?? 'error'),
+        () => setStatus('error'),
+      ),
+    [loadStatus],
+  );
 
   useEffect(() => {
     void reload();

@@ -49,6 +49,11 @@ const brandGlyph = (
 );
 
 export function Chrome(props: ChromeProps): ReactNode {
+  // Callback refs come off `props` first: a ref read from the props object taints
+  // every later `props.*` read for the React compiler ("cannot access refs during
+  // render"), so they are destructured into plain locals here (#573).
+  const { searchRef, themeButtonRef } = props;
+
   const shellClass = [
     styles.shell,
     props.narrow ? styles.isNarrow : '',
@@ -128,7 +133,12 @@ export function Chrome(props: ChromeProps): ReactNode {
         </div>
       </aside>
 
-      <div className={styles.scrim} onClick={props.onCloseSide} />
+      <button
+        type="button"
+        className={`kit-plain-btn ${styles.scrim}`}
+        aria-label="Close menu"
+        onClick={props.onCloseSide}
+      />
 
       <main className={styles.main}>
         <div className={styles.topbar}>
@@ -168,7 +178,7 @@ export function Chrome(props: ChromeProps): ReactNode {
                 <path d="m21 21-4.3-4.3" />
               </svg>
               <input
-                ref={props.searchRef}
+                ref={searchRef}
                 type="search"
                 placeholder="Search events"
                 aria-label="Search events"
@@ -178,7 +188,7 @@ export function Chrome(props: ChromeProps): ReactNode {
               />
             </label>
             <button
-              ref={props.themeButtonRef}
+              ref={themeButtonRef}
               type="button"
               className="kit-icon-btn"
               aria-label="Toggle light/dark"
@@ -195,10 +205,9 @@ export function Chrome(props: ChromeProps): ReactNode {
             Ask the owner to approve this app&apos;s requested scopes in vault settings.
           </span>
         </div>
-        <div
+        <output
           id="noticeBanner"
           className={`kit-banner notice ${styles.banner}`}
-          role="status"
           aria-live="polite"
           hidden
         />

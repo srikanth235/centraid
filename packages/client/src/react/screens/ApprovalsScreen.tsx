@@ -898,7 +898,7 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
               label="Recent activity"
               count={filteredActivity.length}
             />
-            <div className={styles.activityFilters} role="group" aria-label="Activity filter">
+            <fieldset className={styles.activityFilters} aria-label="Activity filter">
               <button
                 type="button"
                 className={styles.filterChip}
@@ -916,7 +916,7 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
               >
                 Denied
               </button>
-            </div>
+            </fieldset>
           </div>
           <div className={styles.grantsList}>
             {filteredActivity.map((row) => (

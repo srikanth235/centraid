@@ -1,9 +1,9 @@
 {
-  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignore": ["tests/**"],
-  "ignoreBinaries": ["actionlint", "python3", "eas"],
+  "ignoreBinaries": ["actionlint", "eas", "hdiutil", "pmset", "sqlite3", "strace", "systemd-creds"],
   "ignoreExportsUsedInFile": true,
-  "exclude": ["enumMembers", "classMembers"],
+  "exclude": ["enumMembers"],
   "workspaces": {
     ".": {
       "entry": ["scripts/**/*.{js,mjs,ts}", ".github/workflows/*.{yml,yaml}"],
@@ -25,7 +25,8 @@
     },
     "packages/gateway": {
       "entry": ["src/index.ts", "src/cli/cli.ts", "scripts/*.mjs"],
-      "project": ["src/**/*.{ts,tsx}", "scripts/*.mjs"]
+      "project": ["src/**/*.{ts,tsx}", "scripts/*.mjs"],
+      "ignoreUnresolved": ["/usr/bin/security", "/sbin/mount"]
     },
     "packages/protocol": {
       "entry": ["src/index.ts"],

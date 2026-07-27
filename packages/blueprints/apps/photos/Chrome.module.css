@@ -144,6 +144,17 @@
   min-width: 9rem;
   max-width: 30rem;
 }
+/* The magnifier's <label htmlFor="searchInput"> generates no box, so the svg
+   stays the direct flex child `.kit-search svg` sizes — the row is unchanged.
+   kit.css makes that svg `pointer-events: none` (it was there to let clicks
+   fall through to the old wrapping <label>); now the label IS the glyph, so the
+   svg takes the click again and clicking the magnifier still focuses the field. */
+.searchGlyph {
+  display: contents;
+}
+.searchGlyph svg {
+  pointer-events: auto;
+}
 .headerActions {
   composes: kit-app-tools from global;
 }
@@ -166,6 +177,12 @@
 }
 .askMount {
   composes: kit-app-ask-mount from global;
+}
+
+/* `#noticeBanner` is an <output> (implicit role=status) — an inline element by
+   default, where the <div> it replaced was block. */
+.noticeBanner {
+  display: block;
 }
 
 /* #live wraps the toolbar + scroll pane; it must be a bounded flex column so
@@ -418,7 +435,9 @@
 .shell.isNarrow .sideHost > aside[data-open='true'] {
   transform: translateX(0);
 }
-.shell.isNarrow .sideHost > div {
+/* The drawer scrim — SidebarView's first child, a real <button> (kit-modal-scrim)
+   since #573 so it is keyboard-reachable; it was a bare <div>. */
+.shell.isNarrow .sideHost > button {
   display: block;
   position: absolute;
   inset: 0;

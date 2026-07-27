@@ -11,29 +11,41 @@ export type AsyncState<T> =
   | { status: 'error'; error: string }
   | { status: 'ready'; data: T };
 
+const LOADING: AsyncState<never> = { status: 'loading' };
+
+function sameDeps(a: readonly unknown[], b: readonly unknown[]): boolean {
+  return a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
+}
+
 export function useAsyncData<T>(
   load: () => Promise<T>,
   deps: readonly unknown[] = [],
 ): AsyncState<T> {
-  const [state, setState] = useState<AsyncState<T>>({ status: 'loading' });
+  // The settled result is stamped with the deps it was fetched for; a deps
+  // change therefore reads as `loading` during render, without an effect having
+  // to push a synchronous `setState({status:'loading'})` first.
+  const [settled, setSettled] = useState<{
+    deps: readonly unknown[];
+    state: AsyncState<T>;
+  } | null>(null);
   // `deps` is a caller-provided array by contract — re-fetch when it changes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) `load` itself is intentionally excluded, see contract above
   useEffect(() => {
     let alive = true;
-    setState({ status: 'loading' });
     load()
       .then((data) => {
-        if (alive) setState({ status: 'ready', data });
+        if (alive) setSettled({ deps, state: { status: 'ready', data } });
       })
       .catch((err: unknown) => {
         if (alive) {
-          setState({ status: 'error', error: err instanceof Error ? err.message : String(err) });
+          setSettled({
+            deps,
+            state: { status: 'error', error: err instanceof Error ? err.message : String(err) },
+          });
         }
       });
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) `load` itself is intentionally excluded, see contract above
   }, deps);
-  return state;
+  return settled !== null && sameDeps(settled.deps, deps) ? settled.state : LOADING;
 }

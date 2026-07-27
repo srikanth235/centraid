@@ -81,11 +81,15 @@ export default function BuilderPreview({
   reloadNonce,
   onResolved,
 }: BuilderPreviewProps): JSX.Element {
-  const [resolved, setResolved] = useState<PreviewResolved | null>(null);
+  // A resolved preview belongs to exactly one (app, device, nonce); any change
+  // to those re-resolves, and until the new one lands the derived value is
+  // null — the building skeleton — without the effect clearing state first.
+  const resolveKey = `${appId}\u0000${device}\u0000${reloadNonce}`;
+  const [settled, setSettled] = useState<{ key: string; resolved: PreviewResolved } | null>(null);
+  const resolved = settled !== null && settled.key === resolveKey ? settled.resolved : null;
 
   useEffect(() => {
     let alive = true;
-    setResolved(null);
     void (async () => {
       if (!appId) {
         if (alive) onResolved(null);
@@ -100,20 +104,21 @@ export default function BuilderPreview({
       }
       if (!alive) return;
       if (!src) {
-        setResolved(null);
         onResolved(null);
         return;
       }
       const { theme, bgL } = resolveTheme();
       const sep = src.includes('#') ? '&' : '#';
-      setResolved({ src, themedSrc: `${src}${sep}theme=${theme}&bgL=${bgL}`, theme, bgL });
+      setSettled({
+        key: resolveKey,
+        resolved: { src, themedSrc: `${src}${sep}theme=${theme}&bgL=${bgL}`, theme, bgL },
+      });
       onResolved({ src });
     })();
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) re-resolve only on appId/device/reloadNonce
-  }, [appId, device, reloadNonce]);
+  }, [appId, device, reloadNonce, resolveKey]);
 
   if (!resolved) {
     return (

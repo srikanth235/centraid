@@ -225,7 +225,7 @@ describe('SettingsStorageScreen — recovery-kit gate', () => {
     const props = makeProps({ createConnection, loadConnections: vi.fn().mockResolvedValue([]) });
     const el = await openFormAndSubmit(props);
 
-    const dialog = el.querySelector('[role="dialog"]');
+    const dialog = el.querySelector('dialog');
     expect(dialog).toBeTruthy();
     expect(dialog?.textContent).toContain('confirm you have exported the recovery kit');
     expect(dialog?.textContent).toContain('Open the Storage page');
@@ -236,12 +236,16 @@ describe('SettingsStorageScreen — recovery-kit gate', () => {
 });
 
 describe('SettingsStorageScreen — per-vault hosted/local choice', () => {
+  // The toggle is a native radio group: the visible text lives on the styled
+  // <label>, the state (checked/disabled) on the <input> it wraps.
+  const option = (el: HTMLElement, text: string): HTMLInputElement | null => {
+    const label = [...el.querySelectorAll('label')].find((l) => l.textContent === text);
+    return label?.querySelector<HTMLInputElement>('input[type="radio"]') ?? null;
+  };
+
   it('shows "On this device" active and the local hint when nothing is hosted', async () => {
     const el = await mount(makeProps());
-    const device = [...el.querySelectorAll('button')].find(
-      (b) => b.textContent === 'On this device',
-    );
-    expect(device?.getAttribute('aria-checked')).toBe('true');
+    expect(option(el, 'On this device')?.checked).toBe(true);
     expect(el.textContent).toContain('Everything stays on this machine');
   });
 
@@ -250,16 +254,15 @@ describe('SettingsStorageScreen — per-vault hosted/local choice', () => {
       loadVaultBlobStore: vi.fn().mockResolvedValue({ kind: 's3', connectionId: 'c1' }),
     });
     const el = await mount(props);
-    const hosted = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Hosted');
-    expect(hosted?.getAttribute('aria-checked')).toBe('true');
+    expect(option(el, 'Hosted')?.checked).toBe(true);
     expect(el.textContent).toContain('one sealed bundle with your provider');
   });
 
   it('clicking Hosted attaches to the home connection', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const hosted = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Hosted');
-    await act(async () => hosted?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const hosted = option(el, 'Hosted');
+    await act(async () => hosted?.click());
     await act(async () => {
       await Promise.resolve();
     });
@@ -271,10 +274,8 @@ describe('SettingsStorageScreen — per-vault hosted/local choice', () => {
       loadVaultBlobStore: vi.fn().mockResolvedValue({ kind: 's3', connectionId: 'c1' }),
     });
     const el = await mount(props);
-    const device = [...el.querySelectorAll('button')].find(
-      (b) => b.textContent === 'On this device',
-    );
-    await act(async () => device?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const device = option(el, 'On this device');
+    await act(async () => device?.click());
     await act(async () => {
       await Promise.resolve();
     });
@@ -284,8 +285,7 @@ describe('SettingsStorageScreen — per-vault hosted/local choice', () => {
   it('disables Hosted with a hint when no provider is connected', async () => {
     const props = makeProps({ loadConnections: vi.fn().mockResolvedValue([]) });
     const el = await mount(props);
-    const hosted = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Hosted');
-    expect(hosted?.hasAttribute('disabled')).toBe(true);
+    expect(option(el, 'Hosted')?.hasAttribute('disabled')).toBe(true);
     expect(el.textContent).toContain('Connect a storage provider above');
   });
 });

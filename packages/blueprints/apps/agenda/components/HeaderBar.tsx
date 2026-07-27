@@ -42,7 +42,7 @@ export function HeaderBar({
         </button>
       </div>
       <div className={styles.rangeLabel}>{rangeLabel}</div>
-      <div className={`kit-seg ${styles.viewSeg}`} role="group" aria-label="View">
+      <fieldset className={`kit-seg ${styles.viewSeg}`} aria-label="View">
         {VIEWS.map((v) => (
           <button
             key={v.key}
@@ -54,7 +54,7 @@ export function HeaderBar({
             {v.label}
           </button>
         ))}
-      </div>
+      </fieldset>
     </>
   );
 }

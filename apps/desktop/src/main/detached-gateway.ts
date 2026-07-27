@@ -28,7 +28,6 @@ import { endpointIdForSecret } from '@centraid/tunnel';
 import { landlordBearerForDataDir } from '@centraid/gateway';
 import {
   buildDetachedSpawnOptions,
-  DEFAULT_GATEWAY_PORT,
   decideControl,
   resolveListenPort,
   type ControlDecision,
@@ -576,4 +575,4 @@ export async function installGatewayOsService(
   }
 }
 
-export { DEFAULT_GATEWAY_PORT, resolveListenPort };
+export { resolveListenPort };

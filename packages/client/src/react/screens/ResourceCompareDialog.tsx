@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { cx } from '../ui/cx.js';
 import buttonCss from '../ui/Button.module.css';
+import a11y from '../styles/a11y.module.css';
 import styles from './ResourceDialogs.module.css';
 import {
   PRESET_MODES,
@@ -77,9 +78,9 @@ export default function ResourceCompareDialog({
   return (
     <>
       <div className={styles.backdrop} role="presentation" onClick={onClose} />
-      <div
+      <dialog
+        open
         className={cx(styles.dialog, styles.dialogWide)}
-        role="dialog"
         aria-modal="true"
         aria-label="Compare resource modes"
         data-testid="resource-compare-dialog"
@@ -108,17 +109,18 @@ export default function ResourceCompareDialog({
             <div className={styles.cmpHeadCell} />
             {MODE_COLUMNS.map((mode) => (
               <div key={mode} className={styles.cmpHeadCell}>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={sel === mode}
-                  className={cx(styles.cmpMode, sel === mode && styles.cmpModeActive)}
-                  onClick={() => setSel(mode)}
-                  data-testid={`resource-compare-mode-${mode}`}
-                >
+                <label className={cx(styles.cmpMode, sel === mode && styles.cmpModeActive)}>
+                  <input
+                    type="radio"
+                    className={a11y.srControl}
+                    name="resource-compare-mode"
+                    checked={sel === mode}
+                    onChange={() => setSel(mode)}
+                    data-testid={`resource-compare-mode-${mode}`}
+                  />
                   <span className={styles.cmpName}>{MODE_LABEL[mode]}</span>
                   <span className={styles.cmpPick}>{presetHint(mode)}</span>
-                </button>
+                </label>
               </div>
             ))}
 
@@ -179,7 +181,7 @@ export default function ResourceCompareDialog({
             </button>
           </div>
         </div>
-      </div>
+      </dialog>
     </>
   );
 }

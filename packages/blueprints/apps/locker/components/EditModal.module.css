@@ -26,19 +26,33 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+/* Checkbox + title + hint. The title/hint used to share a <span> flex item;
+   they are direct children of the <label> now (so the label carries its own
+   accessible text — issue #573), which the two-column grid reassembles into
+   the identical box: checkbox in column 1 spanning both rows, title above
+   hint in column 2, same 9px gutter and 2px hint offset. */
 .matchPolicy {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  column-gap: 9px;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 9px;
   cursor: pointer;
 }
 .matchPolicy input {
+  grid-column: 1;
+  grid-row: 1 / span 2;
   margin-top: 2px;
 }
+.matchPolicy strong {
+  grid-column: 2;
+  grid-row: 1;
+}
 .matchPolicy small {
+  grid-column: 2;
+  grid-row: 2;
   display: block;
   margin-top: 2px;
   color: var(--muted);

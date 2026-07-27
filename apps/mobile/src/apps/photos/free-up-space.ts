@@ -57,8 +57,16 @@ export function selectFreeUpCandidates(
   });
 }
 
-/** Current bytes of one device copy, or `null` if the OS no longer has it. */
-export type DeviceByteProbe = (localId: string) => Promise<{ sha256: string; size: number } | null>;
+/**
+ * Current bytes of one device copy: `null` if the OS no longer has it, or the
+ * literal `'in-cloud'` when the original is in iCloud and was never downloaded
+ * here. The two are reported apart because "already gone" and "still in the
+ * cloud" are different sentences to tell the user — and the second one is not
+ * evidence of anything about the bytes.
+ */
+export type DeviceByteProbe = (
+  localId: string,
+) => Promise<{ sha256: string; size: number } | 'in-cloud' | null>;
 
 export interface RevalidationResult {
   /** Device copies whose current sha still equals the backed-up sha. */
@@ -69,6 +77,8 @@ export interface RevalidationResult {
   changedCount: number;
   /** Copies the OS could not read (already gone / permission) — excluded. */
   missingCount: number;
+  /** Copies whose original is in iCloud, so nothing could be re-hashed. */
+  inCloudCount: number;
 }
 
 /**
@@ -84,6 +94,7 @@ export async function revalidateBackedUp(
   let eligibleBytes = 0;
   let changedCount = 0;
   let missingCount = 0;
+  let inCloudCount = 0;
   for (const candidate of candidates) {
     for (const localId of candidate.localIds) {
       let current: Awaited<ReturnType<DeviceByteProbe>>;
@@ -91,6 +102,10 @@ export async function revalidateBackedUp(
         current = await probe(localId);
       } catch {
         current = null;
+      }
+      if (current === 'in-cloud') {
+        inCloudCount += 1;
+        continue;
       }
       if (current === null) {
         missingCount += 1;
@@ -104,5 +119,5 @@ export async function revalidateBackedUp(
       }
     }
   }
-  return { deletableLocalIds, eligibleBytes, changedCount, missingCount };
+  return { deletableLocalIds, eligibleBytes, changedCount, missingCount, inCloudCount };
 }

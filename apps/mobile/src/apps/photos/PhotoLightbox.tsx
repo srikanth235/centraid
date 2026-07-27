@@ -13,13 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import { GestureDetector } from 'react-native-gesture-handler';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
@@ -32,9 +27,14 @@ import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
 import type { PhotosScreenProps } from '../../navigation';
 import type { PhotoAsset } from './timeline-model';
+import { InCloudOriginalError, openDeviceOriginal } from './device-media';
+import { buildDismissGesture, buildZoomGesture } from './lightbox-gestures';
 import { imageSource, videoSource } from './media-source';
 import { styles } from './PhotoLightbox.styles';
 import { usePhotoTimeline } from './timeline-source';
+
+// Gesture construction lives in lightbox-gestures.ts — see the comment there
+// for why the builder chains must stay outside component render bodies.
 
 function VideoAsset({
   uri,
@@ -66,24 +66,19 @@ function MediaPage({
 }): React.JSX.Element {
   const [playingLive, setPlayingLive] = useState(false);
   const [quality, setQuality] = useState<'thumb' | 'preview' | 'original'>('thumb');
+  // Re-point at a different asset ⇒ start again at the thumbnail. Adjusting the
+  // state during render (React's documented "derive state from props" escape
+  // hatch) rather than in an effect means the reset lands before paint, so a new
+  // asset can never flash the previous one's full-resolution source.
+  const [qualityAssetId, setQualityAssetId] = useState(asset.id);
+  if (qualityAssetId !== asset.id) {
+    setQualityAssetId(asset.id);
+    setQuality('thumb');
+  }
   const scale = useSharedValue(1);
   const startScale = useSharedValue(1);
   const zoomStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-  const pinch = Gesture.Pinch()
-    .onStart(() => {
-      startScale.value = scale.value;
-    })
-    .onUpdate(({ scale: nextScale }) => {
-      scale.value = Math.max(1, Math.min(5, startScale.value * nextScale));
-    });
-  const doubleTap = Gesture.Tap()
-    .numberOfTaps(2)
-    .maxDuration(300)
-    .onEnd(() => {
-      scale.value = withTiming(scale.value > 1 ? 1 : 2.5);
-    });
-  const zoom = Gesture.Simultaneous(pinch, doubleTap);
-  useEffect(() => setQuality('thumb'), [asset.id]);
+  const zoom = buildZoomGesture(scale, startScale);
   if (asset.kind === 'video')
     return <VideoAsset uri={asset.originalUri} width={width} height={height} />;
   if (playingLive && companionUri)
@@ -157,9 +152,11 @@ export default function PhotoLightbox({
   const index = assets.findIndex((asset) => asset.id === currentId);
   const current = index >= 0 ? assets[index] : undefined;
   // The scroll offset the list must open at, captured the first time the target
-  // row actually exists in the data (so we never open on the wrong photo).
-  const initialIndex = useRef<number | null>(null);
-  if (index >= 0 && initialIndex.current === null) initialIndex.current = index;
+  // row actually exists in the data (so we never open on the wrong photo). Held
+  // in state, not a ref: a ref read during render is not guaranteed to be seen
+  // by the render that consumes it, and this value gates what the list mounts on.
+  const [initialIndex, setInitialIndex] = useState<number | null>(null);
+  if (index >= 0 && initialIndex === null) setInitialIndex(index);
   const albumIds = new Set(
     entries.rows
       .filter((row) => row.target_id === current?.assetId)
@@ -169,12 +166,7 @@ export default function PhotoLightbox({
     .filter((row) => albumIds.has(String(row.collection_id)))
     .map((row) => String(row.name ?? 'Album'));
   const currentPlace = places.rows.find((row) => row.place_id === current?.placeId);
-  const dismiss = Gesture.Pan()
-    .activeOffsetY([-24, 24])
-    .failOffsetX([-24, 24])
-    .onEnd(({ translationY, velocityY }) => {
-      if (translationY > 120 || velocityY > 900) runOnJS(navigation.goBack)();
-    });
+  const dismiss = buildDismissGesture(navigation.goBack);
 
   useEffect(() => {
     if (!slideshow || assets.length < 2) return;
@@ -207,7 +199,7 @@ export default function PhotoLightbox({
   const exportAsset = async (save: boolean): Promise<void> => {
     if (!current) return;
     let uri = current.originalUri;
-    if (!uri.startsWith('file:')) {
+    if (uri.startsWith('http:') || uri.startsWith('https:')) {
       const name =
         current.filename ??
         `${current.contentId ?? current.id}.${current.kind === 'video' ? 'mp4' : 'jpg'}`;
@@ -217,16 +209,31 @@ export default function PhotoLightbox({
           idempotent: true,
         })
       ).uri;
+    } else if (!uri.startsWith('file:')) {
+      // A device-only original is addressed by its media-store id (`ph://` on
+      // iOS, `content://` on Android), which is not a readable file — sharing
+      // or saving needs the full-quality bytes resolved first.
+      uri = (await openDeviceOriginal(current.localId ?? uri)).uri;
     }
-    if (save) await MediaLibrary.saveToLibraryAsync(uri);
+    if (save) await MediaLibrary.Asset.create(uri);
     else if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri);
     else await Share.share({ url: uri });
+  };
+
+  /** Export never fails quietly: an iCloud-only original says exactly that. */
+  const runExport = (save: boolean): void => {
+    void exportAsset(save).catch((reason: unknown) => {
+      Alert.alert(
+        reason instanceof InCloudOriginalError ? 'Original is in iCloud' : 'Export failed',
+        reason instanceof Error ? reason.message : String(reason),
+      );
+    });
   };
 
   // Until the shared timeline has loaded the requested row we hold on a black
   // frame rather than opening index 0 (the wrong photo). Once loaded without a
   // match the asset is genuinely gone, so the same frame stands in.
-  if (!current || initialIndex.current === null)
+  if (!current || initialIndex === null)
     return <View style={[styles.fill, { backgroundColor: '#000' }]} />;
   return (
     <GestureDetector gesture={dismiss}>
@@ -247,7 +254,7 @@ export default function PhotoLightbox({
           data={assets}
           horizontal
           pagingEnabled
-          initialScrollIndex={initialIndex.current}
+          initialScrollIndex={initialIndex}
           getItemLayout={(_, itemIndex) => ({
             length: width,
             offset: width * itemIndex,
@@ -295,10 +302,10 @@ export default function PhotoLightbox({
           >
             <Feather name="heart" size={23} color={current.favorite ? '#ff625f' : '#fff'} />
           </Pressable>
-          <Pressable onPress={() => void exportAsset(false)}>
+          <Pressable onPress={() => runExport(false)}>
             <Feather name="share" size={23} color="#fff" />
           </Pressable>
-          <Pressable onPress={() => void exportAsset(true)}>
+          <Pressable onPress={() => runExport(true)}>
             <Feather name="download" size={23} color="#fff" />
           </Pressable>
           <Pressable

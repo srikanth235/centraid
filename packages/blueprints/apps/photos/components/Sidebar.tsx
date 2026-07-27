@@ -176,7 +176,17 @@ export function SidebarView({
 }) {
   return (
     <Fragment>
-      {open ? <div className={styles.scrim} onClick={onClose} /> : null}
+      {/* The dismiss-on-outside-click target is a real button (kit-modal-scrim
+          strips the UA button box; `.scrim` still draws the dim), so the drawer
+          can be closed from the keyboard too. */}
+      {open ? (
+        <button
+          type="button"
+          className={`kit-modal-scrim ${styles.scrim}`}
+          aria-label="Close menu"
+          onClick={onClose}
+        />
+      ) : null}
       <aside className={styles.sidebar} data-open={open ? 'true' : 'false'}>
         <div className={styles.brand}>
           <span className={styles.brandMark}>

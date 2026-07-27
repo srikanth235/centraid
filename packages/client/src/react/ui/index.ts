@@ -7,21 +7,11 @@
 // logic) — design-tokens stays the sole shared UI package.
 
 export { default as Icon } from './Icon.js';
-export type { IconProps } from './Icon.js';
 
 export { default as Button, IconButton } from './Button.js';
-export type { ButtonProps, ButtonSize, ButtonVariant } from './Button.js';
 
 export { default as StatusPill } from './StatusPill.js';
-export type { StatusPillProps, StatusTone } from './StatusPill.js';
 
 export { default as KindBadge } from './KindBadge.js';
-export type { KindBadgeProps } from './KindBadge.js';
-
-export { default as Logo } from './Logo.js';
-export type { LogoProps } from './Logo.js';
-
-export { default as AppCard } from './AppCard.js';
-export type { AppCardProps, AppCardTone } from './AppCard.js';
 
 export { default as Gallery } from './Gallery.js';

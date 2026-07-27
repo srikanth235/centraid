@@ -32,6 +32,8 @@
 }
 
 .check {
+  /* Above the .rowOpen overlay, so the control still gets the click. */
+  position: relative;
   flex-shrink: 0;
   width: 20px;
   height: 20px;
@@ -49,12 +51,21 @@
 }
 
 .row {
+  /* Containing block for the .rowOpen overlay button. */
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   transition: background 0.1s;
+}
+/* The whole-row "open details" target: a transparent `kit-stretch-btn` laid
+   under every control on the row. Its ring is drawn inset so it never bleeds
+   over the neighbouring rows. */
+.rowOpen:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--selb);
 }
 .row:last-child {
   border-bottom: none;
@@ -67,6 +78,8 @@
 }
 .badge {
   position: relative;
+  /* Above the .rowOpen overlay. */
+  z-index: 1;
   flex-shrink: 0;
   width: 34px;
   height: 34px;
@@ -93,6 +106,8 @@
   min-width: 0;
 }
 .rowTitle {
+  /* Above the .rowOpen overlay. */
+  position: relative;
   font: var(--t-body-strong);
   font-size: 14px;
   color: var(--ink);
@@ -145,6 +160,8 @@
   opacity: 0.85;
 }
 .rowEnd {
+  /* Above the .rowOpen overlay. */
+  position: relative;
   width: 40px;
   display: flex;
   justify-content: flex-end;

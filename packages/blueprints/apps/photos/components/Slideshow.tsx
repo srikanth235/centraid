@@ -48,7 +48,7 @@ export function SlideshowView({
     if (paused || photos.length <= 1) return undefined;
     timerRef.current = setTimeout(() => step(1), ADVANCE_MS);
     return () => clearTimeout(timerRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) `step`/`photos.length` are stable for the component's lifetime (the list is a snapshot passed in at open time)
+    // (#360) `step`/`photos.length` are stable for the component's lifetime (the list is a snapshot passed in at open time)
   }, [idx, paused]);
 
   useEffect(() => {
@@ -66,7 +66,7 @@ export function SlideshowView({
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) `onClose`/`step` are stable for this mount (the whole tree remounts fresh on every openSlideshow() call)
+    // (#360) `onClose`/`step` are stable for this mount (the whole tree remounts fresh on every openSlideshow() call)
   }, []);
 
   if (photos.length === 0) {
@@ -94,12 +94,14 @@ export function SlideshowView({
   ];
   return (
     <>
+      {/* No backdrop-shield onClick on the image or the bar: `#slideshow`'s
+          native close listener already gates on `e.target === e.currentTarget`
+          (see slideshow.tsx), so a click on either never reached it. */}
       <img
         key={asset.asset_id}
         className={styles.image}
         src={asset.content_uri ?? undefined}
         alt={asset.title ?? 'Photo'}
-        onClick={(e) => e.stopPropagation()}
       />
       {navs.map(([variant, delta, Glyph, name]) => (
         <button
@@ -115,7 +117,7 @@ export function SlideshowView({
           <Glyph size={22} />
         </button>
       ))}
-      <div className={styles.bar} onClick={(e) => e.stopPropagation()}>
+      <div className={styles.bar}>
         <button
           type="button"
           className="kit-btn"

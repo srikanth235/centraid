@@ -9,6 +9,7 @@ import type {
 import { formatBytes, relativeWhen } from '../../format.js';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
+import a11y from '../styles/a11y.module.css';
 import styles from './AtlasKindsTab.module.css';
 
 // Kinds tab — the periodic table of the ontology (issue #441 B1). Every kind
@@ -316,28 +317,31 @@ export default function AtlasKindsTab({
         </p>
         <div className={styles.censusControls}>
           <div className={styles.metricToggle} role="radiogroup" aria-label="Show rows or bytes">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={metric === 'rows'}
-              className={styles.metricOption}
-              data-active={String(metric === 'rows')}
-              onClick={() => setMetric('rows')}
-            >
+            <label className={styles.metricOption} data-active={String(metric === 'rows')}>
+              <input
+                type="radio"
+                className={a11y.srControl}
+                name="atlas-census-metric"
+                checked={metric === 'rows'}
+                onChange={() => setMetric('rows')}
+              />
               Rows
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={metric === 'bytes'}
+            </label>
+            <label
               className={styles.metricOption}
               data-active={String(metric === 'bytes')}
-              disabled={bytesUnknown}
               title={bytesUnknown ? 'Byte sizes need the dbstat measure' : undefined}
-              onClick={() => setMetric('bytes')}
             >
+              <input
+                type="radio"
+                className={a11y.srControl}
+                name="atlas-census-metric"
+                checked={metric === 'bytes'}
+                disabled={bytesUnknown}
+                onChange={() => setMetric('bytes')}
+              />
               Bytes
-            </button>
+            </label>
           </div>
           <button
             type="button"

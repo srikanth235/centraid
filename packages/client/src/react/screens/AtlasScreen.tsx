@@ -49,23 +49,33 @@ export default function AtlasScreen({
   const [statsError, setStatsError] = useState<string | null>(null);
   const [pulse, setPulse] = useState<AtlasPulsePayload | null>(null);
   const [graph, setGraph] = useState<AtlasGraphPayload | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  // The mount census is already in flight when the first render happens, so
+  // the flag starts true rather than being flipped from inside the effect.
+  const [refreshing, setRefreshing] = useState(true);
   const mountedRef = useRef(true);
 
   // Census + pulse travel together (both feed Kinds). Pulse is enhancement-only
   // — a failure leaves sparklines/dormancy off but never blocks the census, so
   // only a stats failure surfaces as an error state.
   const loadCensus = useCallback(() => {
-    setRefreshing(true);
-    setStatsError(null);
     void Promise.allSettled([loadStats(), loadPulse()]).then(([s, p]) => {
       if (!mountedRef.current) return;
-      if (s.status === 'fulfilled') setStats(s.value);
-      else setStatsError(s.reason instanceof Error ? s.reason.message : String(s.reason));
+      if (s.status === 'fulfilled') {
+        setStats(s.value);
+        setStatsError(null);
+      } else setStatsError(s.reason instanceof Error ? s.reason.message : String(s.reason));
       if (p.status === 'fulfilled') setPulse(p.value);
       setRefreshing(false);
     });
   }, [loadStats, loadPulse]);
+
+  /** The Kinds tab's Refresh affordance — the only path that re-arms the
+   *  pending flag and drops a stale error before the read starts. */
+  const refreshCensus = useCallback(() => {
+    setRefreshing(true);
+    setStatsError(null);
+    loadCensus();
+  }, [loadCensus]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -81,7 +91,6 @@ export default function AtlasScreen({
     return () => {
       mountedRef.current = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#441) mount-once, keyed to loader identities
   }, [loadStats, loadPulse, loadGraph]);
 
   const openBrowse = useCallback((logical: string) => {
@@ -110,7 +119,7 @@ export default function AtlasScreen({
         </div>
       </div>
 
-      <nav className={styles.tabs} role="tablist" aria-label="Vault Atlas">
+      <div className={styles.tabs} role="tablist" aria-label="Vault Atlas">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -123,7 +132,7 @@ export default function AtlasScreen({
             {t.label}
           </button>
         ))}
-      </nav>
+      </div>
 
       {tab === 'kinds' ? (
         statsError && !stats ? (
@@ -137,7 +146,7 @@ export default function AtlasScreen({
             stats={stats}
             pulse={pulse}
             refreshing={refreshing}
-            onRefresh={loadCensus}
+            onRefresh={refreshCensus}
             onOpenBrowse={openBrowse}
           />
         )

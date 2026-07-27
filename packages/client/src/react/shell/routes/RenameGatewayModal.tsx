@@ -54,7 +54,7 @@ export default function RenameGatewayModal({
         tabIndex={-1}
         onClick={onCancel}
       />
-      <div className={spaceModalStyles.profModal} role="dialog" aria-modal="true">
+      <dialog open className={spaceModalStyles.profModal} aria-modal="true">
         <div className={spaceModalStyles.profModalHead}>
           <span
             className={spaceModalStyles.profModalHeadIcon}
@@ -103,7 +103,7 @@ export default function RenameGatewayModal({
             Save
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

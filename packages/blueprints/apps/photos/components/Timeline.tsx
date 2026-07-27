@@ -58,6 +58,10 @@ function Tile({
       <button
         type="button"
         className={styles.tileMedia}
+        /* The tile's only text is the <img> media.ts injects — and the
+           placeholder branch injects none at all, so the name is stated here,
+           identical to the alt fillTileMedia() writes. */
+        aria-label={asset.title ?? asset.kind ?? 'Photo'}
         ref={(el) => mountMedia(el, asset)}
         onClick={() => {
           if (isTrash) return;

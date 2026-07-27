@@ -138,5 +138,5 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: HEADER_SIZE,
   },
-  wash: { ...StyleSheet.absoluteFillObject, backgroundColor: TEAL_WASH },
+  wash: { ...StyleSheet.absoluteFill, backgroundColor: TEAL_WASH },
 });

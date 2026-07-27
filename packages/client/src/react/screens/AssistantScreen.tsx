@@ -202,9 +202,13 @@ export default function AssistantScreen({
   }, [loadModelPicker]);
 
   // Restore the per-conversation draft when the open thread changes (§4).
-  useEffect(() => {
+  // Done during render, so the composer never paints the previous thread's
+  // draft for a frame after the switch.
+  const [seenConversationId, setSeenConversationId] = useState(conversationId);
+  if (seenConversationId !== conversationId) {
+    setSeenConversationId(conversationId);
     setDraft(loadDraft(conversationId));
-  }, [conversationId]);
+  }
 
   const changeDraft = (v: string): void => {
     setDraft(v);

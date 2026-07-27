@@ -43,7 +43,7 @@ export default function ConnectFlowModal({
         tabIndex={-1}
         onClick={onCancel}
       />
-      <div className={spaceModalStyles.profModal} role="dialog" aria-modal="true">
+      <dialog open className={spaceModalStyles.profModal} aria-modal="true">
         <div className={spaceModalStyles.profModalHead}>
           <span
             className={spaceModalStyles.profModalHeadIcon}
@@ -62,7 +62,7 @@ export default function ConnectFlowModal({
         <div className={spaceModalStyles.profModalBody}>
           <ConnectFlow context={context} methods={methods} onDone={onDone} />
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

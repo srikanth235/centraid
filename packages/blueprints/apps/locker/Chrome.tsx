@@ -61,10 +61,9 @@ export function Chrome(props: ChromeProps): ReactNode {
           Ask the owner to approve this app’s requested scopes in vault settings.
         </span>
       </div>
-      <div
+      <output
         id="noticeBanner"
         className={`${styles.banner} ${styles.notice}`}
-        role="status"
         aria-live="polite"
         hidden
       />

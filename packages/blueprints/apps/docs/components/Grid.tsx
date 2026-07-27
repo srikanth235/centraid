@@ -24,21 +24,23 @@ export function GridCard({
   const m = typeMeta(doc.media_type);
   const selected = selectedIds.has(doc.document_id);
   return (
-    <div
-      className={styles.card}
-      data-selected={String(selected)}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest('button, a')) return;
-        onOpenDetails(doc.document_id);
-      }}
-    >
-      <div
-        className={styles.thumb}
+    <div className={styles.card} data-selected={String(selected)}>
+      {/* The card can't be a <button> (it holds the select + thumb buttons), so
+          the "open details" gesture is a stretched overlay button under them.
+          The old `closest('button, a')` guard is gone: every control now sits
+          above this overlay, so their clicks never reach it. */}
+      <button
+        type="button"
+        className={`kit-stretch-btn ${styles.cardOpen}`}
+        aria-label={`Open ${doc.title ?? 'Untitled'} details`}
+        onClick={() => onOpenDetails(doc.document_id)}
+      />
+      <button
+        type="button"
+        className={`kit-plain-btn ${styles.thumb}`}
         style={{ background: tintBg(m.cv, 15) }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenQuick(doc.document_id);
-        }}
+        aria-label={`Preview ${doc.title ?? 'Untitled'}`}
+        onClick={() => onOpenQuick(doc.document_id)}
       >
         {isImage(doc) ? (
           <img src={doc.content_uri} alt="" loading="lazy" />
@@ -59,14 +61,17 @@ export function GridCard({
             <span className={styles.thumbLabel} style={{ color: `var(${m.cv})` }}>
               {m.label}
             </span>
-            <div className={styles.thumbLines}>
+            {/* <span>, not <div>: this subtree is inside a <button> now, whose
+                content model is phrasing content. `.thumbLines` already sets
+                `display: flex`, so the box is unchanged. */}
+            <span className={styles.thumbLines}>
               <i style={{ width: '70%', background: `var(${m.cv})`, opacity: 0.18 }}></i>
               <i style={{ width: '90%', background: `var(${m.cv})`, opacity: 0.14 }}></i>
               <i style={{ width: '55%', background: `var(${m.cv})`, opacity: 0.14 }}></i>
-            </div>
+            </span>
           </>
         )}
-      </div>
+      </button>
       <Checkbox
         cls={styles.cardSelect!}
         selected={selected}

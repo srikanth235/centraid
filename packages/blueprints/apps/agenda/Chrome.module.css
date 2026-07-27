@@ -193,6 +193,9 @@
 }
 .scrim {
   composes: kit-app-scrim from global;
+  /* The dismiss target is a real <button> (issue #573) — keep the plain arrow
+     the clickable <div> had, not the button/`kit-plain-btn` hand. */
+  cursor: default;
 }
 
 /* ---- Main / topbar ---- */
@@ -223,6 +226,9 @@
   composes: kit-app-ask-mount from global;
 }
 .banner {
+  /* The notice banner is an <output> (its implicit role IS `status`), which is
+     inline by default — the block box the former div had has to be explicit. */
+  display: block;
   margin: 14px 22px 0;
 }
 .canvas {

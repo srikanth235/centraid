@@ -279,7 +279,7 @@ const makeStyles = (_colors: ThemeColors): ReturnType<typeof StyleSheet.create> 
       margin: 9,
     },
     categoryShade: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: 'rgba(0,0,0,.28)',
     },
     emptyAlbums: {

@@ -83,16 +83,47 @@ export interface PerfBudgets {
 // See the report table in the task summary / scripts/perf/README.md. Headroom
 // rationale is inline on each number.
 // -----------------------------------------------------------------------------
+// Re-baselined 2026-07-27 for Vite 8 (#565). Vite 8 moved the bundler to
+// rolldown, which splits the shell into more, smaller chunks than Vite 7 did.
+//
+// Measured on the SAME e2e harness, main (051658de, Vite 7) vs this branch:
+//
+//   requests   8 -> 15 unmitigated -> 12 with chunk grouping
+//   transfer   402,997 B -> 387,990 B   (-3.7%)
+//
+// Read the request number honestly: 12 is still +4 on Vite 7 for a ~4% byte
+// saving. It is not a win, it is a partly-repaid regression. (The 1,041,444 B
+// figure in the old comment below predated the brotli precompression added by
+// #460 on 2026-07-19; comparing against it overstates the result by ~60 points.
+// 402,997 B is the like-for-like number.)
+//
+// The 15 -> 12 came from a `shell-common` group in apps/web/vite.config.ts.
+// Going lower is blocked on source, not config: `apps/web/src/web-host.ts`
+// assigns `window.CentraidApi` at module-evaluation time, so any grouping wide
+// enough to fold in the remaining chunks reorders its consumers ahead of it and
+// ships a BLANK PAGE. Two such shapes were built and measured — both reported
+// only 6 requests / 221 KB, i.e. the naive metric *improved* while the app was
+// dead. That is why perf-waterfall.spec.ts asserts the app renders, and why any
+// future chunking work must keep that assertion in front of these budgets.
+//
+// `maxRequests` still rises 10 -> 13 (ratchet calls that a widen, hence the
+// approvedDeviation below), but 13 rather than the 18 an unmitigated
+// re-baseline would have needed. `maxTransferBytes` tightens 1,250,000 ->
+// 470,000 in the same edit — a genuine tightening against both measurements.
+export const approvedDeviation =
+  'Vite 8 (rolldown) re-baseline in #565. Like-for-like vs main (051658de): cold shell 8 -> 15 requests unmitigated; a shell-common chunk group in apps/web/vite.config.ts recovers that to 12, with transfer 402,997 -> 387,990 B (-3.7%). Going below 12 needs a source change (web-host.ts assigns window.CentraidApi at module-eval time, so wider grouping ships a blank page) and is tracked separately. maxRequests widens 10 -> 13, not the 18 an unmitigated re-baseline needed; maxTransferBytes tightens 1,250,000 -> 470,000 in the same change.';
+
 export const perfBudgets: PerfBudgets = {
   shell: {
-    // MEASURED cold shell (same-origin, 4173): 6 requests (index.html,
-    // index-*.js, boot-*.js, tokens/css chunks). Ceiling = measured + headroom
-    // for a chunk the bundler may split out. If bundling REDUCES this, tighten.
-    maxRequests: 10,
-    // MEASURED cold same-origin shell transfer ~1,041,444 B (boot-*.js
-    // dominates: 708 KB raw). Ceiling = measured + ~20%. The bundling
-    // workstream should push this DOWN — re-measure and tighten when it lands.
-    maxTransferBytes: 1_250_000,
+    // MEASURED cold shell (same-origin, 4173): 12 requests under Vite 8 with
+    // the `shell-common` group (boot js+css, index js+css, src, shell-common,
+    // the gateway info fetch, two workers, and the rolldown/preload runtimes).
+    // Ceiling = measured + 1. If chunking work reduces this, tighten.
+    maxRequests: 13,
+    // MEASURED cold same-origin shell transfer 387,990 B under Vite 8 (Vite 7
+    // like-for-like: 402,997 B). Ceiling = measured + ~20%. If a future
+    // bundling change pushes this down again, re-measure and tighten.
+    maxTransferBytes: 470_000,
     // MEASURED warm/cold ratio ~0.0 (served from cache). 0.15 leaves room for
     // an unavoidable no-store fetch or two while still proving the shell cache.
     maxWarmToColdByteRatio: 0.15,

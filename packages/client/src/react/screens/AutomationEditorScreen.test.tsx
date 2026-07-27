@@ -189,10 +189,10 @@ describe('AutomationEditorScreen — create mode', () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
     });
     expect(onSearchEntities).toHaveBeenCalledWith('Pri');
-    expect(el.querySelector('[role="listbox"]')?.textContent).toContain('Priya');
+    expect(el.querySelector('.mentionPopover')?.textContent).toContain('Priya');
 
     await act(async () => {
-      (el.querySelector('[role="option"]') as HTMLButtonElement).click();
+      (el.querySelector('.mentionOption') as HTMLButtonElement).click();
     });
     expect(instructions.value).toBe('Send a reminder to @[core.party/party-1]');
     expect(el.querySelector('[aria-label="Tagged data"]')?.textContent).toContain('party-1');

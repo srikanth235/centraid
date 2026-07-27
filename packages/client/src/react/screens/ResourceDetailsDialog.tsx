@@ -68,9 +68,9 @@ export default function ResourceDetailsDialog({
   return (
     <>
       <div className={styles.backdrop} role="presentation" onClick={onClose} />
-      <div
+      <dialog
+        open
         className={styles.dialog}
-        role="dialog"
         aria-modal="true"
         aria-label="How we sized this"
         data-testid="resource-details-dialog"
@@ -103,7 +103,7 @@ export default function ResourceDetailsDialog({
             />
           ) : null}
         </div>
-      </div>
+      </dialog>
     </>
   );
 }

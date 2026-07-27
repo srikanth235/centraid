@@ -13,9 +13,7 @@ import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { ROLLOUT_WINDOW_MS, shouldAdmitUpdate, stableBucketId } from './update-rollout-core.js';
-
-export { ROLLOUT_WINDOW_MS, shouldAdmitUpdate, stableBucketId } from './update-rollout-core.js';
+import { shouldAdmitUpdate, stableBucketId } from './update-rollout-core.js';
 
 const INSTALL_ID_FILE = 'install-id';
 

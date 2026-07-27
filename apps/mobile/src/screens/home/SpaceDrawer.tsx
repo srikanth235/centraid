@@ -14,11 +14,12 @@
 // transparent Modal, a translateX slide from -width→0 on a bezier, and a fading
 // ~40% black scrim that closes on tap. Each row closes the drawer, then routes.
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
+import { useAnimatedValue } from '../../kit/hooks/useAnimatedValue';
 import { family, useTheme, type ThemeColors } from '../../kit/theme';
 import { initialsOf } from '../../lib/profile';
 import type { ConnectionState } from './AttentionLine';
@@ -76,8 +77,8 @@ export default function SpaceDrawer({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const slide = useRef(new Animated.Value(-PANEL_WIDTH)).current;
-  const fade = useRef(new Animated.Value(0)).current;
+  const slide = useAnimatedValue(-PANEL_WIDTH);
+  const fade = useAnimatedValue(0);
 
   const status = describeConnection(connection);
   const dotColor =

@@ -20,13 +20,10 @@ import {
   stageReservedFoundingVaults,
 } from './founding-reservations.js';
 
-export { FOUNDING_RESERVATION_TTL_MS } from './founding-reservations.js';
 export {
   encodePairingTicket,
   parseFoundingTicket,
   parsePairingTicket,
-  type FoundingTicketPayload,
-  type PairingTicketPayload,
 } from './pairing-ticket-codec.js';
 
 export const DEFAULT_TICKET_TTL_MS = 15 * 60 * 1000;

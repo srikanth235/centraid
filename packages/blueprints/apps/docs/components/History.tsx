@@ -33,11 +33,19 @@ function VersionPreview({ v }: { v: VersionEntry }) {
         poster={v.poster_uri ?? undefined}
         controls
         preload="metadata"
-      />
+      >
+        {/* The vault has no caption sidecar for a version yet; this is the
+            wiring point for its `src` when it does. */}
+        <track kind="captions" />
+      </video>
     );
   if (t.startsWith('audio/'))
     return (
-      <audio className={styles.versionAudio} src={v.content_uri} controls preload="metadata" />
+      <audio className={styles.versionAudio} src={v.content_uri} controls preload="metadata">
+        {/* The vault has no caption sidecar for a version yet; this is the
+            wiring point for its `src` when it does. */}
+        <track kind="captions" />
+      </audio>
     );
   if (t === 'application/pdf')
     return (
@@ -123,7 +131,7 @@ export function History({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) loadVersions/documentId read once at mount; Details.tsx keys this component by content_id, so a real version change already remounts it fresh instead of re-running this effect
+    // (#360) loadVersions/documentId read once at mount; Details.tsx keys this component by content_id, so a real version change already remounts it fresh instead of re-running this effect
   }, []);
 
   if (versions === null) return <div className={styles.versionStatus}>Loading history…</div>;

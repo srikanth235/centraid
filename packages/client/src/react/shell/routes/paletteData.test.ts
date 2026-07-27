@@ -78,6 +78,7 @@ describe('buildPaletteGroups', () => {
       ensure,
       results: () => [{ id: 'c9', title: 'Budget chat', snippet: 'the ⟦budget⟧ plan' }],
       reset: vi.fn(),
+      setOnResults: vi.fn(),
     };
     const groups = buildPaletteGroups('budget', deps({ navigate, onClose, conversationSearch }));
     expect(ensure).toHaveBeenCalledWith('budget');
@@ -91,7 +92,7 @@ describe('buildPaletteGroups', () => {
   });
 
   it('omits the Conversations group with no query or no hits (#420)', () => {
-    const empty = { ensure: vi.fn(), results: () => [], reset: vi.fn() };
+    const empty = { ensure: vi.fn(), results: () => [], reset: vi.fn(), setOnResults: vi.fn() };
     expect(
       buildPaletteGroups('', deps({ conversationSearch: empty })).find(
         (g) => g.group === 'Conversations',

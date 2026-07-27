@@ -3,9 +3,6 @@ export { runConversationArchival } from './engine.js';
 export { readArchivedConversationSegment } from './segment.js';
 export {
   DEFAULT_CONVERSATION_ARCHIVE_WINDOW_DAYS,
-  DEFAULT_MAX_CONVERSATIONS_PER_RUN,
-  DEFAULT_MAX_PRUNE_SEGMENTS_PER_RUN,
-  CONVERSATION_SEGMENT_VERSION,
   type ConversationArchivalDeps,
   type ConversationArchivalOptions,
   type ConversationArchivalResult,

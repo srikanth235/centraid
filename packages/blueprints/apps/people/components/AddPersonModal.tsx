@@ -56,8 +56,9 @@ export function AddPersonModal({
   };
 
   return (
-    <div className="kit-modal-back" onClick={onClose}>
-      <div className="kit-modal" onClick={(e) => e.stopPropagation()}>
+    <div className="kit-modal-back">
+      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <div className="kit-modal">
         <h2>Add someone</h2>
         <p className="hint">Who do you want to keep up with?</p>
         <input

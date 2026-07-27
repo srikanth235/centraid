@@ -44,6 +44,11 @@ export interface ChromeProps {
 }
 
 export function Chrome(props: ChromeProps): ReactNode {
+  // Callback refs come off `props` first: a ref read from the props object taints
+  // every later `props.*` read for the React compiler ("cannot access refs during
+  // render"), so they are destructured into plain locals here (#573).
+  const { newWrapRef, themeButtonRef } = props;
+
   const shellClass = [
     styles.shell,
     props.narrow ? styles.isNarrow : '',
@@ -94,7 +99,7 @@ export function Chrome(props: ChromeProps): ReactNode {
             </button>
           </div>
 
-          <div className={styles.newWrap} ref={props.newWrapRef}>
+          <div className={styles.newWrap} ref={newWrapRef}>
             <button
               type="button"
               className={styles.new}
@@ -172,7 +177,12 @@ export function Chrome(props: ChromeProps): ReactNode {
           </div>
         </aside>
 
-        <div className={styles.scrim} onClick={props.onCloseSide} />
+        <button
+          type="button"
+          className={`kit-plain-btn ${styles.scrim}`}
+          aria-label="Close menu"
+          onClick={props.onCloseSide}
+        />
 
         <main className={styles.main}>
           <div className={styles.topbar}>
@@ -221,7 +231,7 @@ export function Chrome(props: ChromeProps): ReactNode {
               />
             </div>
             <div className={styles.topbarTools}>
-              <div className={`kit-seg ${styles.viewtoggle}`} role="group" aria-label="View">
+              <fieldset className={`kit-seg ${styles.viewtoggle}`} aria-label="View">
                 <button
                   type="button"
                   className={styles.viewbtn}
@@ -265,9 +275,9 @@ export function Chrome(props: ChromeProps): ReactNode {
                     <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
                   </svg>
                 </button>
-              </div>
+              </fieldset>
               <button
-                ref={props.themeButtonRef}
+                ref={themeButtonRef}
                 type="button"
                 className={styles.themebtn}
                 aria-label="Toggle light/dark"
@@ -291,10 +301,9 @@ export function Chrome(props: ChromeProps): ReactNode {
           ) : null}
           {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,
               never reconciled, so those DOM writes are never clobbered. */}
-          <div
+          <output
             id="noticeBanner"
             className={`kit-banner notice ${styles.banner}`}
-            role="status"
             aria-live="polite"
             hidden
           />
@@ -306,9 +315,9 @@ export function Chrome(props: ChromeProps): ReactNode {
             </div>
             {props.showPeopleTools ? (
               <div className={styles.toolbarTools}>
-                <div className={styles.chips} role="group" aria-label="Filter by status">
+                <fieldset className={styles.chips} aria-label="Filter by status">
                   {props.statusChips}
-                </div>
+                </fieldset>
                 <span className={styles.toolbarDiv} aria-hidden="true" />
                 <button type="button" className={styles.sort} onClick={props.onSort}>
                   <svg

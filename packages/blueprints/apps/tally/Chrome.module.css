@@ -162,6 +162,13 @@
 .scrim {
   composes: kit-app-scrim from global;
 }
+/* The scrim is a real <button> now (issue #573) wearing `kit-plain-btn`, whose
+   `cursor: pointer` is the one thing that would look different from the div it
+   replaced — the compound selector wins over the shared class regardless of
+   stylesheet order. Same parity choice `.kit-modal-scrim` makes in kit.css. */
+.shell .scrim {
+  cursor: default;
+}
 
 /* ---------- Main frame ---------- */
 .main {
@@ -258,6 +265,10 @@
 
 /* Trust / notice banners */
 .banner {
+  /* The notice banner is an `<output>` (it carries the status live region the
+     `role="status"` div used to), and `output` is inline by default — the
+     banner box is a block in both cases. */
+  display: block;
   position: relative;
   border: 1px solid var(--line);
   background: var(--bg-elev);

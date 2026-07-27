@@ -976,7 +976,22 @@ kit-reference-strip,
 .kit-modal-back[hidden] {
   display: none;
 }
+/* The dismiss-on-outside-click target. It used to be a click handler on
+   `.kit-modal-back` itself, which no keyboard could reach; it is a real
+   button now, laid under the card (the card is `position: relative`, so it
+   paints above this one) and labelled "Close". Transparent — the dim still
+   comes from `.kit-modal-back`. */
+.kit-modal-scrim {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: default;
+}
 .kit-modal {
+  position: relative;
   width: min(28rem, 100%);
   max-height: min(88vh, 42rem);
   overflow-y: auto;
@@ -2652,4 +2667,107 @@ kit-reference-strip,
 }
 .kit-small {
   font-size: 0.8rem;
+}
+
+/* ---------- Accessibility primitives ---------------------------------------- */
+/* Issue #573 (full jsx-a11y profile). Apps swapped ARIA roles for the native
+   elements behind them; these are the riders that swap costs nothing visually.
+
+   Element resets first: a `dialog`/`fieldset`/`hr` that replaced a div must
+   not drag in UA chrome (dialog's centering box + border, fieldset's groove
+   and min-inline-size floor, hr's inset rule) the layout never had. */
+
+dialog {
+  position: static;
+  inset: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  background: transparent;
+  color: inherit;
+}
+fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-inline-size: 0;
+}
+legend {
+  padding: 0;
+}
+hr {
+  margin: 0;
+  border: 0;
+}
+figure {
+  margin: 0;
+}
+
+/* A <button> that replaced a clickable div/span: undo the UA button box so
+   the element's own class draws exactly what it drew before. The focus ring
+   is deliberately left to the UA / the app's own `:focus-visible` rule. */
+.kit-plain-btn {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+/* The click target for a region whose whole area is clickable but which
+   contains its own controls (a card with a pin button, a calendar cell with
+   event pills). A real button laid over the region — the nested controls sit
+   above it via `position: relative`, so nothing ever nests inside a button.
+   The region itself needs `position: relative`. */
+.kit-stretch-btn {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Text for assistive tech only — the accessible name a `role="img"` wrapper
+   carried as `aria-label`, now real text in the tree. */
+.kit-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A native control kept operable but invisible: the visible chrome is drawn
+   by the wrapping <label> (which needs `position: relative`), the input keeps
+   focus, keyboard and form semantics, and covers the label as the hit area. */
+.kit-sr-control {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  appearance: none;
+  /* Hit-area owner for the whole card; positioned siblings must not paint
+     above it (see client a11y.module.css srControl for the full note). */
+  z-index: 1;
+  cursor: inherit;
 }

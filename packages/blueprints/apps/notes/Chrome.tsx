@@ -48,6 +48,11 @@ const brandGlyph = (
 );
 
 export function Chrome(props: ChromeProps): ReactNode {
+  // Callback refs come off `props` first: a ref read from the props object taints
+  // every later `props.*` read for the React compiler ("cannot access refs during
+  // render"), so they are destructured into plain locals here (#573).
+  const { searchRef, themeButtonRef } = props;
+
   const shellClass = [
     styles.shell,
     props.narrow ? styles.isNarrow : '',
@@ -115,7 +120,15 @@ export function Chrome(props: ChromeProps): ReactNode {
         <div className={styles.sideFoot}>{props.sidebarFoot}</div>
       </aside>
 
-      <div className={styles.scrim} onClick={props.onCloseSide} />
+      {/* Dismiss-on-outside-click for the narrow drawer. A real button, so the
+          same gesture is reachable by keyboard; it only exists (display:block)
+          while the drawer is open. */}
+      <button
+        type="button"
+        className={`kit-plain-btn ${styles.scrim}`}
+        aria-label="Close menu"
+        onClick={props.onCloseSide}
+      />
 
       <main className={styles.main}>
         <div className={styles.topbar}>
@@ -153,7 +166,7 @@ export function Chrome(props: ChromeProps): ReactNode {
               <path d="m21 21-4.3-4.3" />
             </svg>
             <input
-              ref={props.searchRef}
+              ref={searchRef}
               type="search"
               placeholder="Search notes — title and contents"
               aria-label="Search notes"
@@ -225,7 +238,7 @@ export function Chrome(props: ChromeProps): ReactNode {
               </button>
             </div>
             <button
-              ref={props.themeButtonRef}
+              ref={themeButtonRef}
               type="button"
               className="kit-icon-btn"
               aria-label="Toggle light/dark"
@@ -245,10 +258,9 @@ export function Chrome(props: ChromeProps): ReactNode {
         ) : null}
         {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,
             never reconciled, so those DOM writes are never clobbered. */}
-        <div
+        <output
           id="noticeBanner"
           className={`kit-banner notice ${styles.banner}`}
-          role="status"
           aria-live="polite"
           hidden
         />

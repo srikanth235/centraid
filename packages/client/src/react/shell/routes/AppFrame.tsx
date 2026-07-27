@@ -103,9 +103,14 @@ export default function AppFrame({
   const documentNonce = useMemo(() => `${appId}-${crypto.randomUUID()}`, [appId]);
   const themeKind = themes[theme]?.kind ?? 'dark';
   // Latest theme, read by the load handler so a frame that loads mid-change
-  // paints the current theme without re-resolving its URL.
+  // paints the current theme without re-resolving its URL. Mirrored from a
+  // commit-time effect (render stays free of ref writes); both readers are
+  // async — the iframe `load` event and the resolve promise — so they always
+  // observe the committed value.
   const themeRef = useRef({ themeKind, bgL });
-  themeRef.current = { themeKind, bgL };
+  useEffect(() => {
+    themeRef.current = { themeKind, bgL };
+  }, [themeKind, bgL]);
 
   // Query-only app bundles use this shell-owned RPC for local reads, durable
   // intents and dependency invalidations. The bridge authenticates both the

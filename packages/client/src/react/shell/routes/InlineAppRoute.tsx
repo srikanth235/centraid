@@ -101,37 +101,23 @@ function InlineAppMount({
   onRootReady,
 }: InlineAppMountProps): JSX.Element {
   const descriptorPromise = useMemo(() => loadDescriptor(cacheKey, loader), [cacheKey, loader]);
-  const sessionPromise = useMemo<Promise<ReplicaShellSession>>(
-    () => getReplicaShellSession(),
-    // A new mount (appId change) re-resolves the live singleton session.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed intentionally on appId (#505)
-    [appId],
-  );
+  // The live singleton session is resolved once per mount; the parent keys
+  // this component on (appId, cacheKey), so a new app means a new mount.
+  const sessionPromise = useMemo<Promise<ReplicaShellSession>>(() => getReplicaShellSession(), []);
   const descriptor = use(descriptorPromise).default;
   const session = use(sessionPromise);
 
   // Install window.centraid BEFORE the app's Root renders/effects run (its first
-  // refresh() reads window.centraid). Render-phase install is the createRoot-
-  // style resource pattern; guarded so it runs once per (appId, session).
-  const install = useRef<{ key?: string; teardown?: () => void }>({});
-  const key = `${appId}\0${cacheKey}`;
-  if (install.current.key !== key) {
-    install.current.teardown?.();
-    install.current.teardown = installInlineCentraid({
-      appId,
-      session,
-      queries: descriptor.queries,
-    });
-    install.current.key = key;
-  }
+  // refresh() reads window.centraid). The lazy state initialiser is the
+  // createRoot-style resource pattern: it runs once per mount — which the
+  // parent's key makes "once per (appId, cacheKey)" — and the effect below
+  // tears it down when that mount goes away.
+  const [installation] = useState(() => ({
+    teardown: installInlineCentraid({ appId, session, queries: descriptor.queries }),
+  }));
   useEffect(() => {
     onDescriptor(descriptor);
-    const inst = install.current; // stable ref object; reads the latest teardown
-    return () => {
-      inst.teardown?.();
-      inst.key = undefined;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- teardown-on-unmount only (#505)
+    return () => installation.teardown();
   }, []);
 
   const Root = descriptor.Root;
@@ -148,7 +134,10 @@ export default function InlineAppRoute({
   onToggleSidebar,
 }: InlineAppRouteProps): JSX.Element {
   const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } = useShellActions();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Opening the settings panel snapshots the mounted inline root at click
+  // time — an event handler may read the ref, render may not.
+  const [settings, setSettings] = useState<{ inlineRoot: HTMLElement | null } | null>(null);
+  const settingsOpen = settings !== null;
   const [attempt, setAttempt] = useState(0);
   const appRootRef = useRef<HTMLElement | null>(null);
   const askTeardown = useRef<(() => void) | null>(null);
@@ -305,7 +294,7 @@ export default function InlineAppRoute({
           aria-label="App settings"
           aria-haspopup="dialog"
           data-open={settingsOpen ? 'true' : undefined}
-          onClick={() => setSettingsOpen((open) => !open)}
+          onClick={() => setSettings(settingsOpen ? null : { inlineRoot: appRootRef.current })}
           dangerouslySetInnerHTML={{ __html: iconSvg('Settings', 15) }}
         />
         <span className={chrome.tooltip}>App settings</span>
@@ -341,6 +330,7 @@ export default function InlineAppRoute({
           >
             <Suspense fallback={<div className={styles.fallback}>Loading {app.name}…</div>}>
               <InlineAppMount
+                key={`${appId}\0${cacheKey}`}
                 appId={appId}
                 cacheKey={cacheKey}
                 loader={loader}
@@ -350,29 +340,29 @@ export default function InlineAppRoute({
             </Suspense>
           </ErrorBoundary>
         </div>
-        {settingsOpen ? (
+        {settings !== null ? (
           <AppSettingsController
             app={app}
             appId={appId}
-            inlineRoot={appRootRef.current}
+            inlineRoot={settings.inlineRoot}
             {...(bundled ? { bundled: true } : {})}
-            onClose={() => setSettingsOpen(false)}
+            onClose={() => setSettings(null)}
             onOpenAutomations={() => {
-              setSettingsOpen(false);
+              setSettings(null);
               nav.navigate({ kind: 'automations' });
             }}
             onOpenOrder={(ref) => {
-              setSettingsOpen(false);
+              setSettings(null);
               nav.navigate({ kind: 'automation-view', automationId: ref });
             }}
             onRename={() => {
-              setSettingsOpen(false);
+              setSettings(null);
               void renameFlow();
             }}
             onShare={() => showToast('Sharing isn’t available yet.')}
             onReveal={() => void window.CentraidApi.openAppFolder({ id: app.id })}
             onDelete={() => {
-              setSettingsOpen(false);
+              setSettings(null);
               void deleteFlow();
             }}
             showToast={showToast}

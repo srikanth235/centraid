@@ -62,7 +62,7 @@ export function AutomationEditorAgentPicker({
         <Icon name="ChevronDown" size={12} />
       </button>
       {open ? (
-        <div className={styles.agentPicker} role="dialog" aria-label="Automation agent">
+        <dialog open className={styles.agentPicker} aria-label="Automation agent">
           <div>
             <strong className={styles.agentPickerTitle}>Agent</strong>
             <p className={styles.agentPickerHint}>
@@ -109,7 +109,7 @@ export function AutomationEditorAgentPicker({
               ))}
             </select>
           </label>
-        </div>
+        </dialog>
       ) : null}
     </div>
   );

@@ -22,37 +22,41 @@ export interface UseAutomations {
   toggle: (ref: string, next: boolean) => Promise<void>;
 }
 
+// The loader lives outside the hook: it closes over nothing but the (stable)
+// state setter, so it needs no `useCallback` identity dance, it is testable on
+// its own, and the mount effect below is plainly an async kick-off rather than
+// something that could set state during the effect body.
+async function loadAutomations(setState: (next: AutomationsState) => void): Promise<void> {
+  try {
+    const base = await resolveGatewayBase();
+    if (!base) {
+      setState({ kind: 'no-gateway' });
+      return;
+    }
+    const rows = await listAutomations();
+    setState({ kind: 'ready', rows });
+  } catch (err) {
+    const message =
+      err instanceof GatewayError || err instanceof Error
+        ? err.message
+        : 'Could not load automations.';
+    setState({ kind: 'error', message });
+  }
+}
+
 export function useAutomations(): UseAutomations {
   const [state, setState] = useState<AutomationsState>({ kind: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (): Promise<void> => {
-    try {
-      const base = await resolveGatewayBase();
-      if (!base) {
-        setState({ kind: 'no-gateway' });
-        return;
-      }
-      const rows = await listAutomations();
-      setState({ kind: 'ready', rows });
-    } catch (err) {
-      const message =
-        err instanceof GatewayError || err instanceof Error
-          ? err.message
-          : 'Could not load automations.';
-      setState({ kind: 'error', message });
-    }
-  }, []);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadAutomations(setState);
+  }, []);
 
   const refresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);
-    await load();
+    await loadAutomations(setState);
     setRefreshing(false);
-  }, [load]);
+  }, []);
 
   const toggle = useCallback(async (ref: string, next: boolean): Promise<void> => {
     const flip = (value: boolean): void =>

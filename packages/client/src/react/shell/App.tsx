@@ -233,14 +233,13 @@ export default function App(): JSX.Element {
   const [paletteOpen, setPaletteOpen] = useState(false);
   // The palette's injected refresh() (issue #420) — held so the async
   // conversation-search source can re-run buildPaletteGroups when hits land.
-  const paletteRefreshRef = useRef<(() => void) | null>(null);
-  const paletteConversationSearch = useMemo(
-    () =>
-      createPaletteConversationSearch({
-        search: (query, limit) => searchConversations(ASSISTANT_APP_ID, query, limit),
-        onResults: () => paletteRefreshRef.current?.(),
-      }),
-    [],
+  // Created once per mount; the palette hands it its `refresh()` on mount via
+  // `setOnResults` (see `onReady` below), so nothing here has to hold that
+  // callback in a ref and reach for it during render.
+  const [paletteConversationSearch] = useState(() =>
+    createPaletteConversationSearch({
+      search: (query, limit) => searchConversations(ASSISTANT_APP_ID, query, limit),
+    }),
   );
   const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
   // The switcher's per-gateway actions (issue #382) — "New space…", "Test
@@ -307,7 +306,6 @@ export default function App(): JSX.Element {
       // drop it explicitly so it can't outlive the shell root (tests, HMR).
       closeVaultSwitcher();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) mount-once shim/listener wiring, deliberately []
   }, []);
 
   // Sidebar "Chats" row delete — mirrors the vanilla AssistantRoute's old
@@ -757,6 +755,8 @@ export default function App(): JSX.Element {
   const closePalette = useCallback(() => {
     setPaletteOpen(false);
     paletteConversationSearch.reset();
+    // The refresh() belongs to the palette instance that is going away.
+    paletteConversationSearch.setOnResults(null);
   }, [paletteConversationSearch]);
 
   return (
@@ -792,7 +792,7 @@ export default function App(): JSX.Element {
         <PaletteScreen
           onClose={closePalette}
           onReady={(refresh) => {
-            paletteRefreshRef.current = refresh;
+            paletteConversationSearch.setOnResults(refresh);
           }}
           buildGroups={(query) =>
             buildPaletteGroups(query, {

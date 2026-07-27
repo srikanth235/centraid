@@ -43,28 +43,30 @@ export default function DocsHome({
   const drive = useDocsLibrary();
   const folderId = route.params?.folderId;
   const [query, setQuery] = useState('');
-  const [matches, setMatches] = useState<Set<string>>();
-  const [searchError, setSearchError] = useState<string>();
+  // Search results carry the query they were produced for, so a result can only
+  // ever be shown against its own query — clearing them when the box empties is
+  // then a derivation rather than a state update from the effect body, and a
+  // stale hit list can't survive into the next query's debounce window.
+  const [searched, setSearched] = useState<{ query: string; ids?: Set<string>; error?: string }>();
   const [filter, setFilter] = useState<LibraryFilter>('all');
   const [view, setView] = useState<ViewMode>('list');
   const [addOpen, setAddOpen] = useState(false);
   const [folderName, setFolderName] = useState('');
 
   useEffect(() => {
+    const needle = query.trim();
+    if (!needle || !session) return;
     let active = true;
-    if (!query.trim() || !session) {
-      setMatches(undefined);
-      setSearchError(undefined);
-      return;
-    }
     const timeout = setTimeout(
       () =>
         void session
-          .search('docs', { entity: 'core.document', query: query.trim(), limit: 100 })
+          .search('docs', { entity: 'core.document', query: needle, limit: 100 })
           .then((result) => {
             if (!active) return;
-            setSearchError(undefined);
-            setMatches(new Set(result.rows.map((row) => String(row.values.document_id))));
+            setSearched({
+              query: needle,
+              ids: new Set(result.rows.map((row) => String(row.values.document_id))),
+            });
           })
           .catch((error: unknown) => {
             if (!active) return;
@@ -72,13 +74,12 @@ export default function DocsHome({
             // title too large to rank offline): fall back to the unfiltered
             // library rather than a scary error or a blank "no matches". A
             // real transport/protocol failure is surfaced instead of swallowed.
-            if (error instanceof OnlineOnlyError) {
-              setMatches(undefined);
-              setSearchError(undefined);
-            } else {
-              setMatches(undefined);
-              setSearchError('Search is unavailable right now.');
-            }
+            setSearched({
+              query: needle,
+              ...(error instanceof OnlineOnlyError
+                ? {}
+                : { error: 'Search is unavailable right now.' }),
+            });
           }),
       160,
     );
@@ -108,6 +109,10 @@ export default function DocsHome({
     return names.length ? names.join(' / ') : 'Docs';
   };
 
+  // Results only count while they still describe what is in the box.
+  const current = searched?.query === query.trim() ? searched : undefined;
+  const matches = current?.ids;
+  const searchError = current?.error;
   // When a search is active the folder scope is dropped so a hit in any
   // subfolder surfaces; otherwise documents are scoped to the open folder.
   const searching = matches !== undefined;

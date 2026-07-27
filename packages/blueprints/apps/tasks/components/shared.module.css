@@ -17,6 +17,9 @@
 /* ---------- Task row primitives (Board pending-add + Row) ---------- */
 
 .row {
+  /* Positioning context for Row's stretched "open the task" button, which is
+     laid under the row's own controls (`.circle` below is positioned too). */
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 11px;

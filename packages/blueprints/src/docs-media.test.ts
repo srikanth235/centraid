@@ -102,7 +102,9 @@ describe('Docs device-side PDF text', () => {
     try {
       const pdfjs = await loadPdfJs();
       expect(typeof Reflect.get(Promise, 'try')).toBe('function');
-      expect(pdfjs.version).toBe('5.7.284');
+      // Pinned on purpose: proves the real client-bundled runtime loaded rather
+      // than a stub. Bump in lockstep with the `pdfjs-dist` dependency.
+      expect(pdfjs.version).toBe('6.1.200');
       expect(pdfjs.GlobalWorkerOptions.workerSrc).toContain('pdf.worker.min');
 
       const bytes = realPdf('Offline PDF.js narwhal');

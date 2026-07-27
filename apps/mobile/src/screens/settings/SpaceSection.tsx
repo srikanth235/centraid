@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { palette } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
@@ -64,6 +64,52 @@ type State =
   | { kind: 'ready'; vault: VaultRow }
   | { kind: 'error'; message: string };
 
+type SpaceFormSetters = {
+  setState(next: State): void;
+  setName(next: string): void;
+  setColor(next: string): void;
+  setIcon(next: IconName): void;
+  setBlurb(next: string): void;
+};
+
+/** Push a vault's presentation into the edit form's fields. */
+function seedForm(setters: SpaceFormSetters, vault: VaultRow): void {
+  setters.setName(vault.name);
+  setters.setColor(vault.color ?? DEFAULT_COLOR);
+  setters.setIcon(asIcon(vault.icon) ?? DEFAULT_ICON);
+  setters.setBlurb(vault.blurb ?? '');
+}
+
+// The loader lives outside the component: it closes over nothing but the
+// (stable) state setters, so it needs no `useCallback` identity dance and the
+// effects below read as plain async kick-offs.
+async function loadSpace(setters: SpaceFormSetters): Promise<void> {
+  try {
+    const base = await resolveGatewayBase();
+    if (!base) {
+      setters.setState({ kind: 'no-gateway' });
+      return;
+    }
+    const vaults = await listVaults();
+    // Prefer the vault the Spaces switcher has active; fall back to the first
+    // visible one (fresh install with nothing selected yet).
+    const activeVaultId = getActiveVaultId();
+    const active = vaults?.find((v) => v.vaultId === activeVaultId) ?? vaults?.[0];
+    if (!active) {
+      setters.setState({ kind: 'no-space' });
+      return;
+    }
+    seedForm(setters, active);
+    setters.setState({ kind: 'ready', vault: active });
+  } catch (err) {
+    const message =
+      err instanceof GatewayError || err instanceof Error
+        ? err.message
+        : 'Could not load your space.';
+    setters.setState({ kind: 'error', message });
+  }
+}
+
 export default function SpaceSection(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -75,46 +121,19 @@ export default function SpaceSection(): React.JSX.Element {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
 
-  const seed = (vault: VaultRow): void => {
-    setName(vault.name);
-    setColor(vault.color ?? DEFAULT_COLOR);
-    setIcon(asIcon(vault.icon) ?? DEFAULT_ICON);
-    setBlurb(vault.blurb ?? '');
-  };
-
-  const load = useCallback(async (): Promise<void> => {
-    try {
-      const base = await resolveGatewayBase();
-      if (!base) {
-        setState({ kind: 'no-gateway' });
-        return;
-      }
-      const vaults = await listVaults();
-      // Prefer the vault the Spaces switcher has active; fall back to the first
-      // visible one (fresh install with nothing selected yet).
-      const activeVaultId = getActiveVaultId();
-      const active = vaults?.find((v) => v.vaultId === activeVaultId) ?? vaults?.[0];
-      if (!active) {
-        setState({ kind: 'no-space' });
-        return;
-      }
-      seed(active);
-      setState({ kind: 'ready', vault: active });
-    } catch (err) {
-      const message =
-        err instanceof GatewayError || err instanceof Error
-          ? err.message
-          : 'Could not load your space.';
-      setState({ kind: 'error', message });
-    }
-  }, []);
+  // Every member is a `useState` setter, so the bundle is stable for the
+  // component's lifetime — memoized once so the effects below can depend on it.
+  const setters = useMemo<SpaceFormSetters>(
+    () => ({ setState, setName, setColor, setIcon, setBlurb }),
+    [],
+  );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadSpace(setters);
+  }, [setters]);
   // Re-load when the active Space changes, so this edits whatever the switcher
   // just selected.
-  useEffect(() => subscribeSpaces(() => void load()), [load]);
+  useEffect(() => subscribeSpaces(() => void loadSpace(setters)), [setters]);
 
   if (state.kind !== 'ready') {
     return (
@@ -146,7 +165,7 @@ export default function SpaceSection(): React.JSX.Element {
     setSaveError(undefined);
     updateVault(vault.vaultId, { blurb: blurb.trim(), color, icon, name: trimmedName })
       .then((updated) => {
-        seed(updated);
+        seedForm(setters, updated);
         setState({ kind: 'ready', vault: updated });
       })
       .catch((err: unknown) => {

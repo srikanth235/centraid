@@ -51,7 +51,9 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
   const [dir, setDir] = useState<'asc' | 'desc'>('asc');
   const [cursor, setCursor] = useState<string | null>(null);
   const [gridError, setGridError] = useState<string | null>(null);
-  const [gridLoading, setGridLoading] = useState(false);
+  // A preselected table means the mount read is already in flight on the first
+  // render, so the grid starts pending rather than being flipped by an effect.
+  const [gridLoading, setGridLoading] = useState(initialTable !== undefined);
   const [moreLoading, setMoreLoading] = useState(false);
 
   const [unlockMachinery, setUnlockMachinery] = useState(false);
@@ -79,12 +81,15 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
   }, []);
 
   // React to the preselect prop changing while mounted (a fresh Kinds click).
-  useEffect(() => {
+  // Picked up during render so the click lands on the very next paint.
+  const [seenInitialTable, setSeenInitialTable] = useState(initialTable);
+  if (seenInitialTable !== initialTable) {
+    setSeenInitialTable(initialTable);
     if (initialTable) {
       setSelected(initialTable);
       setPickerOpen(false);
     }
-  }, [initialTable]);
+  }
 
   const selectedEntry = tables?.find((t) => t.logical === selected);
   const isMachinery = selectedEntry?.machinery ?? cols?.machinery ?? false;
@@ -125,26 +130,32 @@ export default function AtlasBrowseTab({ initialTable }: AtlasBrowseTabProps): J
     [],
   );
 
-  // A selection change resets everything table-scoped, then loads columns + the
-  // first page. Guarded against a fast re-selection racing an in-flight load.
-  useEffect(() => {
-    if (!selected) {
-      setCols(null);
-      setRows([]);
-      return;
-    }
-    let cancelled = false;
+  // A selection change resets everything table-scoped. Done during render so
+  // the grid never paints the previous table's rows under the new table's
+  // name; the load itself stays in the effect below.
+  const [seenSelected, setSeenSelected] = useState(selected);
+  if (seenSelected !== selected) {
+    setSeenSelected(selected);
     setCols(null);
     setRows([]);
-    setOrderBy(null);
-    setDir('asc');
-    setCursor(null);
-    setUnlockMachinery(false);
-    setEditor(null);
-    setDel(null);
-    setExpanded(new Set());
-    setGridError(null);
-    setGridLoading(true);
+    if (selected) {
+      setOrderBy(null);
+      setDir('asc');
+      setCursor(null);
+      setUnlockMachinery(false);
+      setEditor(null);
+      setDel(null);
+      setExpanded(new Set());
+      setGridError(null);
+      setGridLoading(true);
+    }
+  }
+
+  // Load columns + the first page for the selected table. Guarded against a
+  // fast re-selection racing an in-flight load.
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
     void (async () => {
       try {
         const meta = await browseColumns(selected);

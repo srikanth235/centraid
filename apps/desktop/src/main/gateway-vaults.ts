@@ -15,7 +15,7 @@
 import { resolveGateway } from './gateway-store.js';
 import { fetchGatewayVaults, type ListGatewayVaultsResult } from './gateway-vaults-core.js';
 
-export type { GatewayVaultEntry, ListGatewayVaultsResult } from './gateway-vaults-core.js';
+export type { ListGatewayVaultsResult } from './gateway-vaults-core.js';
 
 export async function listGatewayVaults(gatewayId: string): Promise<ListGatewayVaultsResult> {
   let resolved = await resolveGateway(gatewayId);

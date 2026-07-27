@@ -1,9 +1,10 @@
-import { type JSX, type KeyboardEvent, useEffect, useReducer, useRef } from 'react';
+import { type JSX, useEffect, useReducer, useRef } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import { tileFinish } from '@centraid/design-tokens';
 import Icon from '../../ui/Icon.js';
 import { cx } from '../../ui/cx.js';
 import buttonCss from '../../ui/Button.module.css';
+import a11y from '../../styles/a11y.module.css';
 import controlsCss from '../../styles/controls.module.css';
 import { PROFILE_COLORS } from './SpaceModal.js';
 import HandshakeLadder, { reportSummaryText } from './HandshakeLadder.js';
@@ -78,18 +79,6 @@ const METHOD_CARDS: ReadonlyArray<{
   },
 ];
 
-function radioKeyNav(e: KeyboardEvent<HTMLElement>): void {
-  if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(e.key)) return;
-  const group = (e.currentTarget.closest('[role="radiogroup"]') ??
-    e.currentTarget.parentElement) as HTMLElement | null;
-  const items = Array.from(group?.querySelectorAll<HTMLButtonElement>('[role="radio"]') ?? []);
-  const idx = items.indexOf(e.currentTarget as HTMLButtonElement);
-  if (idx < 0 || items.length === 0) return;
-  e.preventDefault();
-  const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
-  items[(idx + dir + items.length) % items.length]?.focus();
-}
-
 export default function ConnectFlow({
   context,
   methods = ['local', 'gateway', 'ssh'],
@@ -115,7 +104,6 @@ export default function ConnectFlow({
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#382) re-run keyed on entering `testing`, `state` read at effect time is current
   }, [state.step, state.testing]);
 
   // "This Mac" has no test step — load its existing vaults straight into
@@ -165,12 +153,10 @@ export default function ConnectFlow({
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#382) re-run keyed on entering `committing`, `state` read at effect time is current
   }, [state.step]);
 
   useEffect(() => {
     if (state.step === 'done' && state.result) onDone(state.result);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#382) fire once per successful commit
   }, [state.step, state.result]);
 
   useEffect(() => {
@@ -195,15 +181,14 @@ export default function ConnectFlow({
           {METHOD_CARDS.filter((c) => methods.includes(c.method)).map((card) => {
             const finish = tileFinish(card.color, 'gradient');
             return (
-              <button
-                key={card.method}
-                type="button"
-                role="radio"
-                aria-checked={state.method === card.method}
-                className={styles.methodCard}
-                onClick={() => dispatch({ method: card.method, type: 'selectMethod' })}
-                onKeyDown={radioKeyNav}
-              >
+              <label key={card.method} className={styles.methodCard}>
+                <input
+                  type="radio"
+                  className={a11y.srControl}
+                  name="connect-flow-method"
+                  checked={state.method === card.method}
+                  onChange={() => dispatch({ method: card.method, type: 'selectMethod' })}
+                />
                 <span
                   className={styles.methodIcon}
                   style={{
@@ -216,7 +201,7 @@ export default function ConnectFlow({
                 </span>
                 <span className={styles.methodTitle}>{card.title}</span>
                 <span className={styles.methodDesc}>{card.desc}</span>
-              </button>
+              </label>
             );
           })}
         </div>

@@ -25,6 +25,7 @@ import ResourceModeCard, {
   type ResourceModeCardProps,
 } from './ResourceModeCard.js';
 import styles from './GatewayScreen.module.css';
+import a11y from '../styles/a11y.module.css';
 
 // Gateway runtime, component health, paired devices, logs, and alerts share
 // one instrument panel (#341/#344/#347). Backup/storage custody used to live
@@ -178,7 +179,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
         </div>
       </div>
 
-      <nav className={styles.tabs} role="tablist" aria-label="Gateway">
+      <div className={styles.tabs} role="tablist" aria-label="Gateway">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -194,7 +195,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
             ) : null}
           </button>
         ))}
-      </nav>
+      </div>
 
       {tab === 'overview' ? (
         <>
@@ -249,7 +250,11 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
               </div>
             </div>
 
-            <div className={styles.strip} role="img" aria-label="Recent heartbeat results">
+            {/* The strip is a row of bare beat squares, not an image: the name
+                it used to fake with `role="img"` is real text now (absolutely
+                positioned, so it is not a flex item and costs no gap). */}
+            <div className={styles.strip}>
+              <span className={a11y.srOnly}>Recent heartbeat results</span>
               {samples.length > 0 ? (
                 samples.map((s) => (
                   <span

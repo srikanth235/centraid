@@ -64,9 +64,13 @@ function GrantSection({
   // "Grant access" button that appears after a Revoke inherits the `busy`
   // this same component instance set for the Revoke click, since the
   // grants.length===0 → >0 branch swap doesn't remount GrantSection.
-  useEffect(() => {
+  // Done during render so the button is live on the same paint the new grants
+  // arrive, not one render later.
+  const [seenGrants, setSeenGrants] = useState(grants);
+  if (seenGrants !== grants) {
+    setSeenGrants(grants);
     setBusy(false);
-  }, [grants]);
+  }
   return (
     <div className={cx(appSettingsCss.appSettingsSection, vault.grants)}>
       <div className={vault.label}>{`Access · ${vaultName}`}</div>
@@ -228,19 +232,21 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
   const { block, loadData, showToast, onAccessChanged, onParkedCount } = props;
   const [state, setState] = useState<State>({ phase: 'loading' });
 
-  const reload = useCallback(async () => {
-    try {
-      const data = await loadData();
-      if (!data) {
-        setState({ phase: 'no-vault' });
-        return;
-      }
-      onParkedCount?.(data.parked.length);
-      setState({ data, phase: 'ready' });
-    } catch {
-      setState({ phase: 'error' });
-    }
-  }, [loadData, onParkedCount]);
+  const reload = useCallback(
+    (): Promise<void> =>
+      loadData().then(
+        (data) => {
+          if (!data) {
+            setState({ phase: 'no-vault' });
+            return;
+          }
+          onParkedCount?.(data.parked.length);
+          setState({ data, phase: 'ready' });
+        },
+        () => setState({ phase: 'error' }),
+      ),
+    [loadData, onParkedCount],
+  );
 
   useEffect(() => {
     void reload();

@@ -5,7 +5,7 @@
 // converts both into the wire `BridgeResponse` envelope.
 
 import * as Haptics from 'expo-haptics';
-import * as FileSystem from 'expo-file-system/legacy';
+import { EncodingType, File, Paths, UploadType } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import { SchedulableTriggerInputTypes } from 'expo-notifications';
 import type { BridgeMethod, BridgeRequest, BridgeResponse } from './protocol';
@@ -93,17 +93,20 @@ async function handleBackgroundPut(
   if (bodyBase64.length > MAX_BACKGROUND_PART_BASE64_CHARS) {
     throw new BridgeFailureError('invalid_args', 'Background upload part exceeds 18 MiB.');
   }
-  const root = FileSystem.cacheDirectory;
-  if (!root) throw new BridgeFailureError('unavailable', 'The device cache is unavailable.');
-  const fileUri = `${root}centraid-transfer-${encodeURIComponent(appId)}-${transferId}.cbsf`;
-  await FileSystem.writeAsStringAsync(fileUri, bodyBase64, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
+  const spool = new File(
+    Paths.cache,
+    `centraid-transfer-${encodeURIComponent(appId)}-${transferId}.cbsf`,
+  );
+  // A retried transfer id must overwrite its own leftovers, never append to them.
+  spool.create({ overwrite: true });
+  spool.write(bodyBase64, { encoding: EncodingType.Base64 });
   try {
-    const response = await FileSystem.uploadAsync(uploadUrl.toString(), fileUri, {
+    // Streams from the file through the native background session, so the
+    // spooled part is never re-materialized in JavaScript.
+    const response = await spool.upload(uploadUrl.toString(), {
       httpMethod: 'PUT',
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-      sessionType: FileSystem.FileSystemSessionType.BACKGROUND,
+      uploadType: UploadType.BINARY_CONTENT,
+      sessionType: 'background',
       headers: { 'content-type': 'application/octet-stream' },
     });
     if (response.status < 200 || response.status >= 300) {
@@ -114,7 +117,9 @@ async function handleBackgroundPut(
     }
     return { status: response.status, headers: response.headers };
   } finally {
-    await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => undefined);
+    // Idempotent by inspection rather than by flag: `delete()` throws when the
+    // file is already gone, and a cleanup throw here would mask the real error.
+    if (spool.exists) spool.delete();
   }
 }
 

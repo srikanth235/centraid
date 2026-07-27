@@ -6,5 +6,8 @@
    the shared/CreateModal module boundary.) */
 
 .formNotice {
+  /* Carried by an <output> (its implicit role IS `status`), which is inline by
+     default — the block box the former <p> had has to be explicit (#573). */
+  display: block;
   margin: 6px 0 14px;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import { formatClock } from '../shell/routes/gatewayData.js';
 import buttonCss from '../ui/Button.module.css';
 import Icon from '../ui/Icon.js';
@@ -28,7 +28,13 @@ export default function RecoveryKitGate({
   const [lossConsent, setLossConsent] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => setConfirmedAt(recoveryKit.confirmedAt), [recoveryKit.confirmedAt]);
+  // A fresh confirmation timestamp from the gateway replaces the local one.
+  // Adjusted during render, so the gate never paints the stale value once.
+  const [seenConfirmedAt, setSeenConfirmedAt] = useState(recoveryKit.confirmedAt);
+  if (seenConfirmedAt !== recoveryKit.confirmedAt) {
+    setSeenConfirmedAt(recoveryKit.confirmedAt);
+    setConfirmedAt(recoveryKit.confirmedAt);
+  }
 
   const exportKit = async (): Promise<void> => {
     if (!onExport || password.length === 0) {

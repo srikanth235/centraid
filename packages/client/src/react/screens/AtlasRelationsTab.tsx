@@ -20,6 +20,7 @@ import {
   sortedPacks,
   visibleAtLevel,
 } from './atlasOrreryGeometry.js';
+import { LEVELS, QUESTIONS, fmt, type QuestionKey } from './atlasRelationsMeta.js';
 import styles from './AtlasRelationsTab.module.css';
 
 // Relations tab — the orrery (issue #441 B2, "Map" redesign #519). A
@@ -43,29 +44,6 @@ export interface AtlasRelationsTabProps {
    */
   fetchSampleRows?: SampleRowsFetcher;
 }
-
-const fmt = (n: number): string => n.toLocaleString('en-US');
-
-/** The three question chips above the stage — each a saved "lens" over the
- *  chart. `q` is the stable key (also the `data-q` attribute); one is active at
- *  a time, and clicking the active one clears it. */
-const QUESTIONS: readonly { q: 'connected' | 'heaviest' | 'unused'; label: string }[] = [
-  { q: 'connected', label: "What's connected here?" },
-  { q: 'heaviest', label: "Where's my data heaviest?" },
-  { q: 'unused', label: "What's unused?" },
-];
-type QuestionKey = (typeof QUESTIONS)[number]['q'];
-
-/** The three detail-dial positions, tightest lens first. Each is an honest
- *  FILTER over the real schema (never an aggregation — see `visibleAtLevel` for
- *  the filter-not-aggregate rationale and the bearings-stay-fixed invariant):
- *  Simple shows only kinds that provably carry data; Standard is today's lens;
- *  Everything reveals the unreachable machinery and the raw SQL names too. */
-const LEVELS: readonly { level: AtlasDetailLevel; label: string }[] = [
-  { level: 'simple', label: 'Simple' },
-  { level: 'standard', label: 'Standard' },
-  { level: 'everything', label: 'Everything' },
-];
 
 export default function AtlasRelationsTab({
   graph,
@@ -112,16 +90,21 @@ export default function AtlasRelationsTab({
   const { view, resetView, consumeDrag, zoomBy, handlers } = useOrreryCamera();
   const { onWheel, onPointerDown, onPointerMove, onPointerUp } = handlers;
 
-  // Re-seat the centre if a fresh graph arrives.
-  useEffect(() => {
-    if (!graph) return;
-    setCenter(graph.center);
-    setTrail([graph.center]);
-    setReadout({ kind: 'idle' });
-    setActiveRels(new Set());
-    setQuestion(null);
-    resetView();
-  }, [graph, resetView]);
+  // Re-seat the centre if a fresh graph arrives. Done during render (the React
+  // "adjust state when a prop changes" pattern) so the orrery never paints the
+  // old centre and breadcrumb against the new graph's nodes for a frame.
+  const [seenGraph, setSeenGraph] = useState(graph);
+  if (seenGraph !== graph) {
+    setSeenGraph(graph);
+    if (graph) {
+      setCenter(graph.center);
+      setTrail([graph.center]);
+      setReadout({ kind: 'idle' });
+      setActiveRels(new Set());
+      setQuestion(null);
+      resetView();
+    }
+  }
 
   // Hop distances from the current centre — undirected BFS, memoized per centre.
   const hops = useMemo(() => bfsHops(center, edges, allTables), [center, edges, allTables]);
@@ -327,7 +310,7 @@ export default function AtlasRelationsTab({
     <div className={styles.tab}>
       <div className={styles.head}>
         {/* question chips — saved lenses over the chart, one active at a time */}
-        <div className={styles.questions} role="group" aria-label="Ask the map">
+        <fieldset className={styles.questions} aria-label="Ask the map">
           {QUESTIONS.map((qq) => {
             const on = question === qq.q;
             return (
@@ -344,15 +327,14 @@ export default function AtlasRelationsTab({
               </button>
             );
           })}
-        </div>
+        </fieldset>
 
         {/* the detail dial — a three-position FILTER over which kinds/edges
             show. Simple (default) = only kinds that provably carry data;
             Standard = today's lens; Everything = also the unreachable machinery
             + the raw SQL names. A segmented control; one position active. */}
-        <div
+        <fieldset
           className={styles.detailDial}
-          role="group"
           aria-label="Level of detail"
           data-testid="atlas-detail-dial"
         >
@@ -371,7 +353,7 @@ export default function AtlasRelationsTab({
               </button>
             );
           })}
-        </div>
+        </fieldset>
       </div>
 
       <div className={styles.instrument}>

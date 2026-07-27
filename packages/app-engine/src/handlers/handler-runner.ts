@@ -223,14 +223,17 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       }
     });
     worker.on('error', (err) => {
+      // @types/node 26 types this callback's argument as `unknown` — a worker
+      // can reject with any value, not only an Error.
+      const message = err instanceof Error ? err.message : String(err);
       persistedEntries.push({
         ts: Date.now(),
         level: 'error',
-        msg: `worker error: ${err.message}`,
+        msg: `worker error: ${message}`,
         source: opts.handlerKind,
         handler: handlerName,
       });
-      finish({ ok: false, error: err.message, logs });
+      finish({ ok: false, error: message, logs });
     });
     worker.on('exit', (code) => {
       if (code !== 0) {

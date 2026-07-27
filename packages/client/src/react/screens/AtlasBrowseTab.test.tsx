@@ -226,7 +226,7 @@ describe('AtlasBrowseTab — table picker', () => {
 
     // preselected: core.party is the active option and drives the header
     const active = opts.find((o) => o.dataset.logical === 'core.party');
-    expect(active?.getAttribute('aria-selected')).toBe('true');
+    expect(active?.getAttribute('aria-current')).toBe('true');
     expect(el.textContent).toContain('core.party');
   });
 

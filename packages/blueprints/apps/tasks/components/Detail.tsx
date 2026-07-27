@@ -4,7 +4,7 @@
 // no stale-buffer bugs, no defaultValue tricks. Edits commit on blur/Enter
 // (never per keystroke) so typing never spams the vault with writes.
 import { useEffect, useRef, useState } from 'react';
-import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent } from 'react';
+import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react';
 import { renderAttachments } from '../kit.ts';
 import { flagLevel, fmtDay, plusDays, todayStr } from '../format.ts';
 import type { ActivityEntry, EditPatch, Task } from '../types.ts';
@@ -188,12 +188,12 @@ export function Detail({
   };
 
   return (
-    <div
-      className={styles.detailBackdrop}
-      onClick={(e: MouseEvent<HTMLDivElement>) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
+    <div className={styles.detailBackdrop}>
+      {/* Dismiss-on-outside-click used to be an `e.target === e.currentTarget`
+          handler on the backdrop itself, which no keyboard could reach. It is a
+          real button now, laid under the drawer (`.detail` is `position:
+          relative`, so it paints above); the dim still comes from the backdrop. */}
+      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
       <div className={pending ? `${styles.detail} kit-pending` : styles.detail}>
         <div className={styles.detailHead}>
           <button

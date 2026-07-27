@@ -93,7 +93,11 @@
 .askMount {
   composes: kit-app-ask-mount from global;
 }
+/* `#noticeBanner` is an <output> (implicit role=status) — inline by default,
+   where the <div> it replaced was block; `#consentBanner` is still a <div>, for
+   which `display:block` is a no-op. */
 .banner {
+  display: block;
   margin: 14px 26px 0;
 }
 .scroll {

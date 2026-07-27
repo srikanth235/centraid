@@ -18,6 +18,8 @@
   animation: kit-fade 0.18s ease;
 }
 .drawer {
+  /* Above the backdrop's `kit-modal-scrim` close button (#573). */
+  position: relative;
   width: min(440px, 94vw);
   height: 100vh;
   display: flex;

@@ -17,6 +17,7 @@ export function MemoriesStrip({ memories }: { memories: MemoryCard[] }) {
             type="button"
             className={styles.memoryCard}
             style={m.coverUri ? { backgroundImage: `url(${m.coverUri})` } : undefined}
+            aria-label={`Open ${m.title}`}
             onClick={m.onOpen}
           >
             <span className={styles.memoryScrim} />

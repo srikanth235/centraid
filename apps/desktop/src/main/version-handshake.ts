@@ -10,6 +10,5 @@ export {
   handshakeGateway,
   judgeGatewayInfo,
   protocolsCompatible,
-  type GatewayInfo,
   type HandshakeResult,
 } from '@centraid/client/version-handshake';

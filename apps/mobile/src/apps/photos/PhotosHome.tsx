@@ -5,7 +5,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import * as MediaLibrary from 'expo-media-library';
 import { File } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 
@@ -23,6 +22,13 @@ import PhotosCreateView from './PhotosCreateView';
 import PhotosAskView from './PhotosAskView';
 import PhotosDrawer from './PhotosDrawer';
 import SpacesSwitcher from '../../screens/home/SpacesSwitcher';
+import {
+  IN_CLOUD_MESSAGE,
+  InCloudOriginalError,
+  liveVideoUri,
+  openDeviceOriginal,
+  type DeviceOriginal,
+} from './device-media';
 import { imageSource } from './media-source';
 import { onThisDay } from './timeline-model';
 import { usePhotoTimeline } from './timeline-source';
@@ -99,50 +105,65 @@ export default function PhotosHome({
     }
     const selected = timeline.assets.filter((asset) => selection.has(asset.id) && asset.localId);
     setBackingUp(true);
+    // Assets whose originals never came down from iCloud. Never dropped on the
+    // floor: they stay selected and are named in an alert once the run ends.
+    const inCloud = new Set<string>();
     try {
       for (const asset of selected) {
-        const info = await MediaLibrary.getAssetInfoAsync(asset.localId!, {
-          shouldDownloadFromNetwork: true,
-        });
-        const uri = info.localUri ?? info.uri;
-        const file = new File(uri);
+        let original: DeviceOriginal;
+        try {
+          original = await openDeviceOriginal(asset.localId!);
+        } catch (reason) {
+          if (!(reason instanceof InCloudOriginalError)) throw reason;
+          inCloud.add(asset.id);
+          continue;
+        }
+        // A Live Photo's paired MOV is a distinct durable upload; the canonical
+        // HEIC remains the visible asset until the vault grows a compound-media
+        // edge. Resolved first because the still's capture group depends on it.
+        const companion = await liveVideoUri(original.asset);
         await backupDeviceMedia(session, gatewayBase, {
-          localUri: uri,
+          localUri: original.uri,
           filename: asset.filename,
           mediaType: asset.kind === 'video' ? 'video/mp4' : 'image/jpeg',
-          plaintextSize: file.size,
+          plaintextSize: new File(original.uri).size,
           kind: asset.kind,
           capturedAt: asset.capturedAt,
           // The capture's true UTC offset isn't in MediaLibrary metadata, so we
           // record none rather than fabricating the device's current offset —
           // sectioning falls back to the viewing device's local day (matching
           // BackupHealth, which also passes no offset).
-          captureGroupId: info.pairedVideoAsset ? `live:${asset.localId}` : undefined,
+          captureGroupId: companion ? `live:${asset.localId}` : undefined,
           width: asset.width,
           height: asset.height,
           durationS: asset.durationS,
         });
-        // A Live Photo's paired MOV is a distinct durable upload; the canonical
-        // HEIC remains the visible asset until the vault grows a compound-media edge.
-        if (info.pairedVideoAsset) {
-          const pair = await MediaLibrary.getAssetInfoAsync(info.pairedVideoAsset);
-          const pairUri = pair.localUri ?? pair.uri;
+        if (companion) {
+          const companionFile = new File(companion);
           await backupDeviceMedia(session, gatewayBase, {
-            localUri: pairUri,
-            filename: pair.filename,
+            localUri: companion,
+            // The Next API hands back an extracted file, not a paired asset, so
+            // the companion's name comes from that file and its dimensions and
+            // duration are simply not on offer.
+            filename: companionFile.name,
             mediaType: 'video/quicktime',
-            plaintextSize: new File(pairUri).size,
+            plaintextSize: companionFile.size,
             kind: 'video',
             capturedAt: asset.capturedAt,
             captureGroupId: `live:${asset.localId}`,
-            width: pair.width,
-            height: pair.height,
-            durationS: pair.duration,
           });
         }
       }
-      setSelection(new Set());
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Anything still in iCloud stays selected so a retry is one tap.
+      setSelection(inCloud);
+      if (inCloud.size) {
+        Alert.alert(
+          'Some originals are in iCloud',
+          `${inCloud.size} of ${selected.length} selected items are ${IN_CLOUD_MESSAGE}, so their bytes never reached the vault. They are still selected — download the originals in the Photos app, then back up again.`,
+        );
+      } else {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     } catch (error) {
       Alert.alert('Backup paused', error instanceof Error ? error.message : String(error));
     } finally {
@@ -440,9 +461,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     opacity: 0.9,
   },
-  heroImage: { ...StyleSheet.absoluteFillObject },
+  heroImage: { ...StyleSheet.absoluteFill },
   heroShade: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(10,14,24,.28)',
   },
   heroTitle: {

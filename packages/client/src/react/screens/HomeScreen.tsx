@@ -132,6 +132,11 @@ export function AppCard({
       <button
         type="button"
         className={cx(cardCss.card, cardCss.small)}
+        // The tile's name sits four levels down, past the icon plate, so the
+        // control had no name a static reader could find. Point at the name
+        // node rather than retyping it into an aria-label — the accessible
+        // name then always matches what the tile shows.
+        aria-labelledby={`app-tile-name-${a.id}`}
         data-testid="app-tile"
         data-kind="app"
         onClick={() => (a.draft ? onEnterDraft(a.id) : onOpen(a.id))}
@@ -154,7 +159,9 @@ export function AppCard({
           </div>
           <div className={cardCss.headText}>
             <div className={cardCss.nameRow}>
-              <div className={cardCss.name}>{a.name}</div>
+              <div className={cardCss.name} id={`app-tile-name-${a.id}`}>
+                {a.name}
+              </div>
               {a.tone ? <StatusPill tone={a.tone}>{a.tone}</StatusPill> : null}
             </div>
             <div className={cardCss.desc}>{a.desc || 'No description yet.'}</div>
@@ -209,12 +216,12 @@ export function AutoCard({
           </div>
         </div>
         <div className={styles.appCardMeta}>
-          <span className={au.auStatus} data-tone={r.statusKind} role="status">
+          <output className={au.auStatus} data-tone={r.statusKind}>
             <span className={au.auStatusIc} aria-hidden="true">
               <Icon name={STATUS_ICON[r.statusKind]} size={12} />
             </span>
             <span>{r.statusLabel}</span>
-          </span>
+          </output>
           <span className={styles.appCardTrig}>
             <span aria-hidden="true">
               <Icon name={r.triggerIcon as IconName} size={12} />
@@ -483,7 +490,7 @@ export default function HomeScreen({
               <Icon name="ChevronRight" size={14} />
             </span>
           </button>
-          <div className={libCss.libLayout} role="group" aria-label="Layout">
+          <fieldset className={libCss.libLayout} aria-label="Layout">
             <button
               type="button"
               className={libCss.libLayoutBtn}
@@ -506,7 +513,7 @@ export default function HomeScreen({
             >
               <RowsGlyph />
             </button>
-          </div>
+          </fieldset>
         </div>
         <div className={styles.homeLibBody}>
           {cardCount === 0 ? (

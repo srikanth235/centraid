@@ -69,9 +69,10 @@ describe('SettingsAppearanceScreen', () => {
   it('picks an accent and a tile treatment', () => {
     const props = makeProps();
     const el = mount(props);
-    const violet = [...el.querySelectorAll('.swatch')].find(
-      (b) => (b as HTMLElement).getAttribute('aria-label') === 'Violet',
-    ) as HTMLButtonElement;
+    // Each swatch is a <label> whose visible text names the radio inside it.
+    const violet = [...el.querySelectorAll('.swatch')]
+      .find((l) => l.textContent === 'Violet')
+      ?.querySelector('input[type="radio"]') as HTMLInputElement;
     void act(() => violet.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onSetAccent).toHaveBeenCalledWith('violet');
 

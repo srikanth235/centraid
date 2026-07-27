@@ -56,9 +56,9 @@ function groupMemberIds(ctx: HandlerCtx, groupId: string): Set<string> {
 
 /** The circle a group decorates. */
 function circleOf(ctx: HandlerCtx, groupId: string): string {
-  const row = ctx.db.prepare('SELECT circle_id FROM tally_group WHERE group_id = ?').get(groupId) as
-    | { circle_id: string }
-    | undefined;
+  const row = ctx.db
+    .prepare('SELECT circle_id FROM tally_group WHERE group_id = ?')
+    .get(groupId) as { circle_id: string } | undefined;
   if (!row) throw new Error('group not found');
   return row.circle_id;
 }

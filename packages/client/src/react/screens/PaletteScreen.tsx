@@ -126,7 +126,14 @@ export default function PaletteScreen({
     }
   };
 
-  let rowIndex = -1;
+  // Where each group starts in the flattened `rows` list — the keyboard cursor
+  // indexes `rows`, so a group's items need their flat offset. Precomputed
+  // rather than counted with a mutable cursor inside the JSX map.
+  const groupStarts = groups.reduce<number[]>(
+    (starts, g, i) => [...starts, (starts[i - 1] ?? 0) + (groups[i - 1]?.items.length ?? 0)],
+    [],
+  );
+
   return (
     <div
       className={styles.backdrop}
@@ -137,7 +144,7 @@ export default function PaletteScreen({
         }
       }}
     >
-      <div className={styles.root} role="dialog" aria-label="Command palette">
+      <dialog open className={styles.root} aria-label="Command palette">
         <div className={styles.inputrow}>
           <span className={styles.searchIcon} aria-hidden="true">
             <svg
@@ -170,12 +177,11 @@ export default function PaletteScreen({
           <span className={styles.esc}>esc</span>
         </div>
         <div className={styles.results}>
-          {groups.map((g) => (
+          {groups.map((g, groupIndex) => (
             <Fragment key={g.group}>
               <div className={styles.group}>{g.group}</div>
-              {g.items.map((item) => {
-                rowIndex += 1;
-                const thisIndex = rowIndex;
+              {g.items.map((item, itemIndex) => {
+                const thisIndex = (groupStarts[groupIndex] ?? 0) + itemIndex;
                 return (
                   <Row
                     key={`${g.group}:${item.label}:${thisIndex}`}
@@ -199,7 +205,7 @@ export default function PaletteScreen({
           <span className={styles.kbd}>esc</span>
           <span>close</span>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

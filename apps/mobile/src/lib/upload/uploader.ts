@@ -15,7 +15,7 @@
 //    finds `alreadyPresent`, and settles from there.
 
 import { assertGatewayMintedUploadUrl } from '../bridge/transfer-policy';
-import { partCountFor, sealDirectory, sealPart } from './cbsf';
+import { sealDirectory, sealPart } from './cbsf';
 import type { UploadCrypto } from './crypto';
 import { base64ToBytes } from './bytes';
 import type { FileSourceOpener } from './file-source';
@@ -294,5 +294,3 @@ function messageOf(error: unknown): string {
 function isKill(error: unknown): boolean {
   return error instanceof Error && error.name === 'UploadKillSignalError';
 }
-
-export { partCountFor };

@@ -24,7 +24,7 @@ const STATUS_ICON: Record<AuStatusKind, IconName> = {
 
 function StatusPill({ kind, label }: { kind: AuStatusKind; label: string }): JSX.Element {
   return (
-    <span className={au.auStatus} data-tone={kind} role="status">
+    <output className={au.auStatus} data-tone={kind}>
       <span
         className={au.auStatusIc}
         data-spin={kind === 'running' ? 'true' : undefined}
@@ -33,7 +33,7 @@ function StatusPill({ kind, label }: { kind: AuStatusKind; label: string }): JSX
         <Icon name={STATUS_ICON[kind]} size={12} />
       </span>
       <span>{label}</span>
-    </span>
+    </output>
   );
 }
 
@@ -188,12 +188,12 @@ export default function RunViewScreen({
   const header = (
     <>
       {snap.deleted ? (
-        <div className={styles.deletedNotice} role="status">
+        <output className={styles.deletedNotice}>
           <span className={styles.deletedNoticeIc} aria-hidden="true">
             <Icon name="AlertCircle" size={14} />
           </span>
           <span>This automation was deleted — showing the last recorded details for this run.</span>
-        </div>
+        </output>
       ) : null}
       <div className={styles.rvHead}>
         <span className={au.auGlyph} data-hue={snap.hue}>

@@ -149,15 +149,11 @@ export function CreateModal({
   };
 
   return (
-    <div
-      className="kit-modal-back"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
+    <div className="kit-modal-back">
+      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <dialog
+        open
         className={`kit-modal ${styles.createModal}`}
-        role="dialog"
         aria-modal="true"
         aria-labelledby="createEventTitle"
       >
@@ -271,9 +267,7 @@ export function CreateModal({
             onChange={(e) => setDescription(e.target.value)}
           />
           {formNotice ? (
-            <p className={`${shared.formNotice} muted small`} role="status">
-              {formNotice}
-            </p>
+            <output className={`${shared.formNotice} muted small`}>{formNotice}</output>
           ) : null}
         </div>
         <div className="kit-modal-foot">
@@ -289,7 +283,7 @@ export function CreateModal({
             Propose event
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

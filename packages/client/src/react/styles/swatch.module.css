@@ -4,6 +4,9 @@
   gap: 8px;
 }
 .swatch {
+  /* <label> wrapping an invisible native radio (a11y.srControl) that covers
+     it — the input is the hit area, so the label must position it. */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -16,6 +19,11 @@
 }
 .swatch:hover {
   border-color: var(--ink-3);
+}
+/* The radio is invisible, so the label carries the focus ring. */
+.swatch:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .swatch[data-active='true'] {
   border: 1.5px solid var(--ink);

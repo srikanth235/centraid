@@ -40,7 +40,10 @@ function durableDerivativesDir(): Directory {
 function persistDurably(cacheUri: string, name: string): string {
   const destination = new File(durableDerivativesDir(), name);
   if (destination.exists) destination.delete();
-  new File(cacheUri).copy(destination);
+  // expo-file-system 57 made `copy()` async and split the original synchronous
+  // behaviour out as `copySync()`. This helper is sync by contract (its callers
+  // build derivative descriptors inline), so it keeps the synchronous variant.
+  new File(cacheUri).copySync(destination);
   return destination.uri;
 }
 

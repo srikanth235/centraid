@@ -64,18 +64,21 @@ export function QuickLook({
         playsInline
         preload="metadata"
         aria-label={doc.title ?? 'Video'}
-      />
+      >
+        {/* The vault has no caption sidecar for a document yet; this is the
+            wiring point for its `src` when it does. */}
+        <track kind="captions" />
+      </video>
     );
   } else if (isAudio(doc)) {
     stage = (
       <div className={styles.quickAudio} key={doc.content_id}>
         <span aria-hidden="true">♪</span>
-        <audio
-          src={doc.content_uri}
-          controls
-          preload="metadata"
-          aria-label={doc.title ?? 'Audio'}
-        />
+        <audio src={doc.content_uri} controls preload="metadata" aria-label={doc.title ?? 'Audio'}>
+          {/* The vault has no caption sidecar for a document yet; this is the
+              wiring point for its `src` when it does. */}
+          <track kind="captions" />
+        </audio>
       </div>
     );
   } else if (String(doc.media_type ?? '') === 'application/pdf' && loadable(doc.content_uri)) {
@@ -117,7 +120,7 @@ export function QuickLook({
   }
 
   return (
-    <div className={styles.quick} role="dialog" aria-modal="true" aria-label="Quick look">
+    <dialog open className={styles.quick} aria-modal="true" aria-label="Quick look">
       <div className={styles.quickTop}>
         <span
           className={styles.quickBadge}
@@ -163,6 +166,6 @@ export function QuickLook({
       <div className={styles.quickFoot}>
         {folderName(doc.folder_id)} · {fmtBytes(doc.byte_size)} · added {fmtFull(doc.created_at)}
       </div>
-    </div>
+    </dialog>
   );
 }

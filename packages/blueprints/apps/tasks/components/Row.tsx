@@ -4,7 +4,6 @@
 // them. Local `completing` state gives the circle an optimistic fill the
 // instant it's clicked, reverting if the write didn't execute.
 import { useState } from 'react';
-import type { MouseEvent } from 'react';
 import { flagLevel, fmtDay, fmtEffort, highlightSegments, todayStr } from '../format.ts';
 import type { Task } from '../types.ts';
 import { Icon, Snippet } from './Shared.tsx';
@@ -48,8 +47,10 @@ export function Row({
   const note = String(task.description ?? '').trim();
   const overdue = Boolean(isOpen && task.due_at && String(task.due_at).slice(0, 10) < todayStr());
 
-  const handleToggle = async (e: MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation();
+  // No `stopPropagation` any more: the row's own click handler is gone (the
+  // "open" button below is a sibling laid under this circle), so there is
+  // nothing above to stop.
+  const handleToggle = async () => {
     if (closed) return;
     if (!isOpen) {
       onToggle(task);
@@ -61,11 +62,21 @@ export function Row({
   };
 
   return (
-    <div
-      className={pending ? `${shared.row} kit-pending` : shared.row}
-      data-status={task.status}
-      onClick={closed ? undefined : () => onOpen(task.task_id)}
-    >
+    <div className={pending ? `${shared.row} kit-pending` : shared.row} data-status={task.status}>
+      {/* "Open the task" used to be a click handler on the row <div>, which no
+          keyboard could reach. It is a real button now, stretched across the row
+          and laid UNDER the completion circle (`.circle` is already
+          `position: relative`), so a row that contains its own control never
+          nests one button inside another. Closed rows had no handler at all —
+          they still get no button. */}
+      {closed ? null : (
+        <button
+          type="button"
+          className="kit-stretch-btn"
+          aria-label={`Open ${task.title}`}
+          onClick={() => onOpen(task.task_id)}
+        />
+      )}
       <button
         type="button"
         className={shared.circle}

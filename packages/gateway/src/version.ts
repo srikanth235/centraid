@@ -10,6 +10,4 @@ export {
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_SCHEMA_EPOCH,
-  DEFAULT_GATEWAY_CAPABILITIES,
-  type GatewayCapabilities,
 } from '@centraid/protocol';

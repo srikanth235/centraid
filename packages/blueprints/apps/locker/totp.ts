@@ -79,30 +79,36 @@ function cacheKey(seed: string, step: number): string {
  * owner might be mid-interaction with (typing in search, editing a modal).
  */
 export function useTotp(seed: string | null | undefined): { code: string | null; offset: number } {
-  const [tick, setTick] = useState(0);
-  const [code, setCode] = useState<string | null>(() => {
-    if (!seed) return null;
-    const key = cacheKey(seed, Math.floor(Date.now() / 30000));
-    return OTP_CACHE.has(key) ? (OTP_CACHE.get(key) ?? null) : null;
-  });
+  // The code is derived during render, never synced into state by an effect
+  // (#573). `computed` carries the last value this hook resolved asynchronously,
+  // so a fresh 30s step keeps showing the previous code until its replacement
+  // lands — the same continuity the old `code` state gave. The tick value itself
+  // is never read: bumping it is what re-renders the countdown ring each second.
+  const [, setTick] = useState(0);
+  const [step, setStep] = useState(() => Math.floor(Date.now() / 30000));
+  const [computed, setComputed] = useState<string | null>(null);
 
+  // One interval drives both: `tick` re-renders for the countdown ring, `step`
+  // rolls the 30s window over within a second of the real one — the same
+  // once-a-second re-check the old `[seed, tick]` effect performed, but as
+  // state the render can read purely.
   useEffect(() => {
     if (!seed) return undefined;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    const id = setInterval(() => {
+      setTick((t) => t + 1);
+      setStep(Math.floor(Date.now() / 30000));
+    }, 1000);
     return () => clearInterval(id);
   }, [seed]);
 
+  const key = seed ? cacheKey(seed, step) : null;
+  // A cached entry wins even when it is null (a failed compute is cached as
+  // null, exactly as the old effect stored it); only a cache miss falls back to
+  // the previous resolved code.
+  const code = key ? (OTP_CACHE.has(key) ? (OTP_CACHE.get(key) ?? null) : computed) : null;
+
   useEffect(() => {
-    if (!seed) {
-      setCode(null);
-      return undefined;
-    }
-    const step = Math.floor(Date.now() / 30000);
-    const key = cacheKey(seed, step);
-    if (OTP_CACHE.has(key)) {
-      setCode(OTP_CACHE.get(key) ?? null);
-      return undefined;
-    }
+    if (!seed || !key || OTP_CACHE.has(key)) return undefined;
     let cancelled = false;
     computeTotp(seed, step).then((value) => {
       OTP_CACHE.set(key, value);
@@ -110,15 +116,12 @@ export function useTotp(seed: string | null | undefined): { code: string | null;
         const oldest = OTP_CACHE.keys().next().value;
         if (oldest !== undefined) OTP_CACHE.delete(oldest);
       }
-      if (!cancelled) setCode(value);
+      if (!cancelled) setComputed(value);
     });
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#339) `tick` is the
-    // once-a-second re-check; the effect intentionally re-runs on every tick
-    // to notice a fresh 30s step, not just when `seed` changes.
-  }, [seed, tick]);
+  }, [seed, key, step]);
 
   return { code, offset: totpOffset() };
 }

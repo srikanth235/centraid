@@ -16,6 +16,7 @@ import type { ReplicaRow } from '@centraid/client/replica/native';
 import { authHeader } from '../../lib/gateway';
 import type { NativeReplicaSession } from '../../lib/replica/native-session';
 import { UploadQueue } from '../../lib/upload/native-queue';
+import { capturedAtIso, durationSeconds } from './device-media';
 import {
   mergePhotoAssets,
   sectionPhotoAssets,
@@ -206,31 +207,47 @@ class PhotoTimelineEngine {
         return;
       }
       const rows: PhotoAsset[] = [];
-      let after: string | undefined;
-      let first = true;
-      do {
-        const page = await MediaLibrary.getAssetsAsync({
-          first: first ? 250 : 1_000,
-          ...(after ? { after } : {}),
-          mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
-          sortBy: [[MediaLibrary.SortBy.creationTime, false]],
-        });
+      let offset = 0;
+      // A small first page paints the grid fast; the rest walk in bigger bites.
+      let pageSize = 250;
+      for (;;) {
+        const page = await new MediaLibrary.Query()
+          .within(MediaLibrary.AssetField.MEDIA_TYPE, [
+            MediaLibrary.MediaType.IMAGE,
+            MediaLibrary.MediaType.VIDEO,
+          ])
+          .orderBy({ key: MediaLibrary.AssetField.CREATION_TIME, ascending: false })
+          .limit(pageSize)
+          .offset(offset)
+          // ONE native round-trip per page, as the legacy paged read was.
+          // `exe()` hands back Asset handles whose every field is a separate
+          // async getter — seven more crossings per photo, which across a
+          // 50k-photo library is 350k round-trips instead of ~50.
+          .exeForMetadata();
         if (generation !== this.#generation) return;
-        for (const asset of page.assets) {
+        for (const metadata of page) {
+          // The media-store id IS the addressable uri — `ph://…` on iOS,
+          // `content://…` on Android — and both render directly in expo-image,
+          // exactly as the legacy `asset.uri` did. A grid cell therefore still
+          // costs no native call of its own; full-quality bytes are resolved
+          // per asset, on demand, by `openDeviceOriginal`.
           rows.push({
-            id: `device:${asset.id}`,
-            localId: asset.id,
-            uri: asset.uri,
-            previewUri: asset.uri,
-            originalUri: asset.uri,
-            ...(asset.filename ? { filename: asset.filename } : {}),
-            capturedAt: new Date(asset.creationTime).toISOString(),
-            kind: asset.mediaType === MediaLibrary.MediaType.video ? 'video' : 'photo',
-            width: asset.width,
-            height: asset.height,
-            durationS: asset.duration,
-            fileSize: 'fileSize' in asset ? Number(asset.fileSize) : undefined,
-            favorite: false,
+            id: `device:${metadata.id}`,
+            localId: metadata.id,
+            uri: metadata.id,
+            previewUri: metadata.id,
+            originalUri: metadata.id,
+            ...(metadata.filename ? { filename: metadata.filename } : {}),
+            capturedAt: capturedAtIso(metadata),
+            kind: metadata.mediaType === MediaLibrary.MediaType.VIDEO ? 'video' : 'photo',
+            width: metadata.width ?? undefined,
+            height: metadata.height ?? undefined,
+            durationS: durationSeconds(metadata.duration),
+            // Byte size is not part of the cheap metadata batch and is not
+            // worth a per-photo round-trip here; the replica row carries it
+            // once an asset is backed up.
+            fileSize: undefined,
+            favorite: metadata.isFavorite,
             archived: false,
             deleted: false,
             backupState: 'local-only',
@@ -238,13 +255,16 @@ class PhotoTimelineEngine {
           });
         }
         this.#deviceRows = [...rows];
-        if (first) this.#deviceLoading = false;
-        first = false;
+        if (offset === 0) this.#deviceLoading = false;
         this.recompute();
-        after = page.hasNextPage ? page.endCursor : undefined;
-      } while (after);
-    } catch {
+        offset += page.length;
+        // A short page is the last page: the query has no cursor to run out of.
+        if (page.length < pageSize) break;
+        pageSize = 1_000;
+      }
+    } catch (reason) {
       if (generation !== this.#generation) return;
+      this.#error = reason instanceof Error ? reason.message : String(reason);
       this.#deviceLoading = false;
       this.recompute();
     }

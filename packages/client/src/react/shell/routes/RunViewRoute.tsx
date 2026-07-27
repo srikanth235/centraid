@@ -33,7 +33,9 @@ export default function RunViewRoute({
   // restarting the run stream (which the fresh functions would trigger if
   // they were in its dependency array).
   const actionsRef = useRef({ navigate, showToast });
-  actionsRef.current = { navigate, showToast };
+  useEffect(() => {
+    actionsRef.current = { navigate, showToast };
+  }, [navigate, showToast]);
 
   useEffect(() => {
     let stopped = false;

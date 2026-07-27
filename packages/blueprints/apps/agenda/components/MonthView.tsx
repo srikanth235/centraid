@@ -71,26 +71,17 @@ function DayCell({
     segs.length === 0 ? 'no events' : `${segs.length} event${segs.length === 1 ? '' : 's'}`
   }. Press Enter to propose an event.`;
   return (
-    <div
-      className={styles.dayCell}
-      role="gridcell"
-      tabIndex={0}
-      data-outside={String(outside)}
-      data-today={String(isToday)}
-      aria-label={label}
-      onClick={(e) => {
-        if (e.target instanceof Element && e.target.closest(`.${styles.pill}, .${styles.more}`))
-          return;
-        onCreate(date);
-      }}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onCreate(date);
-        }
-      }}
-    >
+    <div className={styles.dayCell} data-outside={String(outside)} data-today={String(isToday)}>
+      {/* Empty day space proposes an event. That is a real button laid over the
+          cell (issue #573) rather than a click+keydown pair on the cell div:
+          the pills and the "+N more" button sit above it, so the old
+          `closest('.pill, .more')` guard is no longer needed. */}
+      <button
+        type="button"
+        className={`kit-stretch-btn ${styles.dayOpen}`}
+        aria-label={label}
+        onClick={() => onCreate(date)}
+      />
       <span className={styles.dayNum}>{date.getDate()}</span>
       <div className={styles.dayPills}>
         {segs.slice(0, MAX_PILLS).map((seg) => (
@@ -142,10 +133,13 @@ export function MonthView({
     (_, i) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i),
   );
 
+  // No `role="grid"`: this flat CSS grid has no `role="row"` rows, so the grid
+  // semantics never reached a screen reader (#573) — the day-of-week spans are
+  // plain text and each day cell names itself on the button that acts on it.
   return (
-    <div className={styles.month} role="grid" aria-label="Month view">
+    <div className={styles.month}>
       {DOW.map((d) => (
-        <span className={styles.dow} role="columnheader" key={d}>
+        <span className={styles.dow} key={d}>
           {d}
         </span>
       ))}

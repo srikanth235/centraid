@@ -22,6 +22,15 @@ import { family, useTheme } from '../../kit/theme';
 import { useReplica } from '../../kit/replica/ReplicaProvider';
 import { Store } from '../../storage';
 import type { PhotosScreenProps } from '../../navigation';
+import {
+  IN_CLOUD_MESSAGE,
+  InCloudOriginalError,
+  capturedAtIso,
+  durationSeconds,
+  liveVideoUri,
+  openDeviceOriginal,
+  type DeviceOriginal,
+} from './device-media';
 
 interface Rules {
   wifiOnly: boolean;
@@ -37,18 +46,36 @@ const DEFAULT_RULES: Rules = {
   selectedAlbums: [],
 };
 
+type PendingUpload = { plaintextSize: number; lastError?: string; filename?: string };
+
+// A one-shot read of the durable upload queue — an external system, opened and
+// closed around the read so the screen never holds the sqlite handle. Lives
+// outside the component so the effect that calls it stays a plain external read
+// rather than an in-body state update.
+function readPendingUploads(
+  gatewayBase: string,
+  setPending: (next: PendingUpload[]) => void,
+): void {
+  const queue = UploadQueue.open({ gatewayBaseUrl: gatewayBase, headers: authHeader });
+  setPending(queue.pending());
+  queue.close();
+}
+
 export default function BackupHealth({
   navigation,
 }: PhotosScreenProps<'BackupHealth'>): React.JSX.Element {
   const { colors } = useTheme();
   const { gatewayBase, online, session } = useReplica();
   const [rules, setRules] = useState<Rules>(DEFAULT_RULES);
-  const [albums, setAlbums] = useState<MediaLibrary.Album[]>([]);
-  const [pending, setPending] = useState<
-    Array<{ plaintextSize: number; lastError?: string; filename?: string }>
-  >([]);
+  // Album titles are async getters in the Next API, so they are read once here
+  // rather than during render. The asset count legacy albums carried has no
+  // Next equivalent short of walking every album, which this screen will not do.
+  const [albums, setAlbums] = useState<Array<{ id: string; title: string }>>([]);
+  const [albumError, setAlbumError] = useState<string>();
+  const [pending, setPending] = useState<PendingUpload[]>([]);
   const [storage, setStorage] = useState('Storage policy unavailable offline');
   const [running, setRunning] = useState(false);
+  const [inCloudSkipped, setInCloudSkipped] = useState(0);
   const [lastSuccessfulSync, setLastSuccessfulSync] = useState<string>();
 
   useEffect(() => {
@@ -58,15 +85,18 @@ export default function BackupHealth({
     void Store.hydrate<string | undefined>(LAST_SUCCESSFUL_SYNC_KEY, undefined).then(
       setLastSuccessfulSync,
     );
-    void MediaLibrary.getAlbumsAsync()
+    void MediaLibrary.Album.getAll()
+      .then((all) =>
+        Promise.all(all.map(async (album) => ({ id: album.id, title: await album.getTitle() }))),
+      )
       .then(setAlbums)
-      .catch(() => undefined);
+      .catch((reason: unknown) =>
+        setAlbumError(reason instanceof Error ? reason.message : String(reason)),
+      );
   }, []);
   useEffect(() => {
     if (!gatewayBase) return;
-    const queue = UploadQueue.open({ gatewayBaseUrl: gatewayBase, headers: authHeader });
-    setPending(queue.pending());
-    queue.close();
+    readPendingUploads(gatewayBase, setPending);
     if (online)
       void fetch(`${gatewayBase}/centraid/_gateway/storage/status`, { headers: authHeader() })
         .then((response) => response.json())
@@ -100,53 +130,70 @@ export default function BackupHealth({
     if (!session || !gatewayBase || rules.selectedAlbums.length === 0) return;
     if (!(await nativeUploadPolicy().canTransfer())) return;
     setRunning(true);
+    let skipped = 0;
+    setInCloudSkipped(0);
     try {
       for (const albumId of rules.selectedAlbums) {
-        let after: string | undefined;
-        do {
-          const page = await MediaLibrary.getAssetsAsync({
-            album: albumId,
-            first: 250,
-            ...(after ? { after } : {}),
-            mediaType: [MediaLibrary.MediaType.photo, MediaLibrary.MediaType.video],
-          });
-          for (const asset of page.assets) {
-            const info = await MediaLibrary.getAssetInfoAsync(asset, {
-              shouldDownloadFromNetwork: true,
-            });
-            const uri = info.localUri ?? info.uri;
+        let offset = 0;
+        const pageSize = 250;
+        for (;;) {
+          // One native round-trip per page for every cheap field; the bytes of
+          // each asset are resolved individually below.
+          const page = await new MediaLibrary.Query()
+            .album(new MediaLibrary.Album(albumId))
+            .within(MediaLibrary.AssetField.MEDIA_TYPE, [
+              MediaLibrary.MediaType.IMAGE,
+              MediaLibrary.MediaType.VIDEO,
+            ])
+            .limit(pageSize)
+            .offset(offset)
+            .exeForMetadata();
+          for (const metadata of page) {
+            const isVideo = metadata.mediaType === MediaLibrary.MediaType.VIDEO;
+            const capturedAt = capturedAtIso(metadata);
+            let original: DeviceOriginal;
+            try {
+              original = await openDeviceOriginal(metadata.id);
+            } catch (reason) {
+              if (!(reason instanceof InCloudOriginalError)) throw reason;
+              // Counted and shown on the screen, never passed over in silence.
+              skipped += 1;
+              setInCloudSkipped(skipped);
+              continue;
+            }
+            // Resolved before the still so both halves share one capture group.
+            const companion = await liveVideoUri(original.asset);
             await backupDeviceMedia(session, gatewayBase, {
-              localUri: uri,
-              filename: info.filename,
-              mediaType:
-                info.mediaType === MediaLibrary.MediaType.video ? 'video/mp4' : 'image/jpeg',
-              plaintextSize: new File(uri).size,
-              kind: info.mediaType === MediaLibrary.MediaType.video ? 'video' : 'photo',
-              capturedAt: new Date(info.creationTime).toISOString(),
-              captureGroupId: info.pairedVideoAsset ? `live:${info.id}` : undefined,
-              width: info.width,
-              height: info.height,
-              durationS: info.duration,
+              localUri: original.uri,
+              ...(metadata.filename ? { filename: metadata.filename } : {}),
+              mediaType: isVideo ? 'video/mp4' : 'image/jpeg',
+              plaintextSize: new File(original.uri).size,
+              kind: isVideo ? 'video' : 'photo',
+              capturedAt,
+              captureGroupId: companion ? `live:${metadata.id}` : undefined,
+              width: metadata.width ?? undefined,
+              height: metadata.height ?? undefined,
+              durationS: durationSeconds(metadata.duration),
             });
-            if (info.pairedVideoAsset) {
-              const pair = await MediaLibrary.getAssetInfoAsync(info.pairedVideoAsset);
-              const pairUri = pair.localUri ?? pair.uri;
+            if (companion) {
+              const companionFile = new File(companion);
               await backupDeviceMedia(session, gatewayBase, {
-                localUri: pairUri,
-                filename: pair.filename,
+                localUri: companion,
+                // The Next API extracts the Live Photo's video to a file rather
+                // than exposing a paired asset, so its dimensions and duration
+                // are not on offer — only the name and the bytes.
+                filename: companionFile.name,
                 mediaType: 'video/quicktime',
-                plaintextSize: new File(pairUri).size,
+                plaintextSize: companionFile.size,
                 kind: 'video',
-                capturedAt: new Date(info.creationTime).toISOString(),
-                captureGroupId: `live:${info.id}`,
-                width: pair.width,
-                height: pair.height,
-                durationS: pair.duration,
+                capturedAt,
+                captureGroupId: `live:${metadata.id}`,
               });
             }
           }
-          after = page.hasNextPage ? page.endCursor : undefined;
-        } while (after);
+          offset += page.length;
+          if (page.length < pageSize) break;
+        }
       }
       setLastSuccessfulSync(Store.get<string | undefined>(LAST_SUCCESSFUL_SYNC_KEY, undefined));
     } finally {
@@ -188,6 +235,16 @@ export default function BackupHealth({
             {lastSuccessfulSync ? formatSyncTime(lastSuccessfulSync) : 'Never'}
           </Text>
         </View>
+        {inCloudSkipped ? (
+          <View style={[styles.warning, { borderColor: colors.danger }]}>
+            <Feather name="cloud-off" size={18} color={colors.danger} />
+            <Text style={[styles.warningText, { color: colors.danger }]}>
+              {inCloudSkipped} {inCloudSkipped === 1 ? 'original is' : 'originals are'}{' '}
+              {IN_CLOUD_MESSAGE}, so {inCloudSkipped === 1 ? 'it was' : 'they were'} not backed up.
+              Download {inCloudSkipped === 1 ? 'it' : 'them'} in the Photos app and run this again.
+            </Text>
+          </View>
+        ) : null}
         <Text style={[styles.section, { color: colors.ink2 }]}>TRANSFER RULES</Text>
         <Rule
           label="Wi-Fi only"
@@ -209,12 +266,17 @@ export default function BackupHealth({
           colors={colors}
         />
         <Text style={[styles.section, { color: colors.ink2 }]}>DEVICE ALBUMS</Text>
+        {albumError ? (
+          <Text style={[styles.error, { color: colors.danger }]}>
+            Device albums could not be read: {albumError}
+          </Text>
+        ) : null}
         {albums.map((album) => {
           const active = rules.selectedAlbums.includes(album.id);
           return (
             <Rule
               key={album.id}
-              label={`${album.title} · ${album.assetCount ?? 0}`}
+              label={album.title}
               value={active}
               onValueChange={(value) => {
                 update({
@@ -358,4 +420,14 @@ const styles = StyleSheet.create({
   settingsText: { fontFamily: family.sansMedium, fontSize: 14 },
   storage: { fontFamily: family.sansRegular, fontSize: 14, lineHeight: 20 },
   title: { fontFamily: family.displayBold, fontSize: 18 },
+  warning: {
+    alignItems: 'flex-start',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+    padding: 14,
+  },
+  warningText: { flex: 1, fontFamily: family.sansMedium, fontSize: 13, lineHeight: 19 },
 });

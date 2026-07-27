@@ -22,8 +22,17 @@
   border-color: var(--selb);
   box-shadow: 0 0 0 2px var(--sel);
 }
+/* The whole-card "open details" target: a transparent `kit-stretch-btn` laid
+   under every control on the card. `.card` clips overflow, so its focus ring is
+   drawn inset rather than as an outline that would be cut off. */
+.cardOpen:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--selb);
+}
 .thumb {
   position: relative;
+  /* Above the .cardOpen overlay, so the preview click still reaches it. */
+  z-index: 1;
   height: 104px;
   display: flex;
   align-items: center;
@@ -58,6 +67,8 @@
 }
 .cardSelect {
   position: absolute;
+  /* Above the .cardOpen overlay. */
+  z-index: 1;
   top: 9px;
   left: 9px;
   width: 22px;

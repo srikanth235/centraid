@@ -278,14 +278,16 @@ function EntityKindPicker({
         spellCheck={false}
         autoComplete="off"
       />
+      {/* A popover of buttons, not a listbox: focus stays in the input, the
+          items are never focused, and there is no `aria-activedescendant`
+          wiring — so `role="listbox"`/`role="option"` claimed a widget the
+          markup never was. The buttons are the real control. */}
       {showList ? (
-        <div className={styles.mentionPopover} role="listbox" aria-label="Choose entity type">
+        <div className={styles.mentionPopover}>
           {matches.map((kind, i) => (
             <button
               key={kind}
               type="button"
-              role="option"
-              aria-selected={i === activeIndex ? 'true' : 'false'}
               data-active={String(i === activeIndex)}
               className={styles.mentionOption}
               onMouseDown={(event) => event.preventDefault()}
@@ -410,7 +412,10 @@ export default function AutomationEditorScreen({
     selectedConnectorsRef.current = selectedConnectors;
   }, [selectedConnectors]);
 
-  const baselineInstructionsRef = useRef('');
+  // The last persisted instructions. State, not a ref: `dirty` is computed
+  // during render from it, and a ref read during render is not a value React
+  // can keep the UI consistent with.
+  const [baselineInstructions, setBaselineInstructions] = useState('');
   const instructionsRef = useRef<HTMLTextAreaElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const connectorsWrapRef = useRef<HTMLDivElement | null>(null);
@@ -431,7 +436,7 @@ export default function AutomationEditorScreen({
     setInstructions(d.instructions);
     setRunner(d.runner);
     setModel(d.model);
-    baselineInstructionsRef.current = d.instructions;
+    setBaselineInstructions(d.instructions);
     setTriggers(d.triggers.map(loadedTrigger));
     const bound = d.connectors?.connections ?? [];
     setSelectedConnectors(new Set(bound.map((b) => b.kind)));
@@ -493,11 +498,18 @@ export default function AutomationEditorScreen({
     if (instructionsRef.current) autogrow(instructionsRef.current);
   }, [instructions]);
 
+  // Leaving an @-mention (or backspacing it down to the sigil) discards the
+  // last result set. Adjusted during render so the popover closes on the same
+  // paint the mention ends, instead of one cascading render later.
+  const mentionIdle = !mention || mention.query.length < 1;
+  const [seenMentionIdle, setSeenMentionIdle] = useState(mentionIdle);
+  if (seenMentionIdle !== mentionIdle) {
+    setSeenMentionIdle(mentionIdle);
+    if (mentionIdle) setMentionHits([]);
+  }
+
   useEffect(() => {
-    if (!mention || mention.query.length < 1) {
-      setMentionHits([]);
-      return;
-    }
+    if (mentionIdle || !mention) return;
     let active = true;
     const timer = window.setTimeout(() => {
       void onSearchEntities(mention.query)
@@ -591,9 +603,9 @@ export default function AutomationEditorScreen({
   if (state === 'loading' || state === 'error') {
     return (
       <div className={styles.page}>
-        <div className={styles.loadingBody} role="status">
+        <output className={styles.loadingBody}>
           {state === 'loading' ? 'Loading automation…' : 'Could not load automation.'}
-        </div>
+        </output>
       </div>
     );
   }
@@ -670,7 +682,7 @@ export default function AutomationEditorScreen({
   const doSave = async (): Promise<void> => {
     if (!name.trim() || saving) return;
     setSaving(true);
-    const changed = instructions !== baselineInstructionsRef.current;
+    const changed = instructions !== baselineInstructions;
     try {
       const builtTriggers = buildTriggers();
       const connections = [...connectionBindings.values()].filter((b) =>
@@ -685,7 +697,7 @@ export default function AutomationEditorScreen({
         ...(model !== undefined ? { model } : {}),
       });
       if (ok) {
-        baselineInstructionsRef.current = instructions;
+        setBaselineInstructions(instructions);
         // Save no longer navigates. A create always needs its first compile;
         // an edit only when the instructions actually changed (renaming or
         // retiming a trigger does not invalidate the compiled handler). The
@@ -1291,14 +1303,14 @@ export default function AutomationEditorScreen({
           ))}
         </div>
       ) : null}
+      {/* Same shape as the entity-type popover above: buttons in a popover,
+          not a listbox — focus never leaves the editor. */}
       {mention && mentionHits.length > 0 ? (
-        <div className={styles.mentionPopover} role="listbox" aria-label="Tag vault data">
+        <div className={styles.mentionPopover}>
           {mentionHits.map((hit) => (
             <button
               key={`${hit.type}/${hit.id}`}
               type="button"
-              role="option"
-              aria-selected="false"
               className={styles.mentionOption}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => insertMention(hit)}
@@ -1375,14 +1387,10 @@ export default function AutomationEditorScreen({
             : `${connectorCount} selected`}
         </span>
         {danglingConnectorKinds.size > 0 ? (
-          <span
-            className={styles.connDanglingNote}
-            role="status"
-            data-testid="connector-binding-dangling"
-          >
+          <output className={styles.connDanglingNote} data-testid="connector-binding-dangling">
             {[...danglingConnectorKinds].join(', ')} — the bound account is no longer configured.
             Open Connectors and choose a replacement.
-          </span>
+          </output>
         ) : null}
         <AutomationEditorConnectorsPicker
           open={connectorsOpen}
@@ -1402,24 +1410,28 @@ export default function AutomationEditorScreen({
     </div>
   );
 
-  const dirty = instructions !== baselineInstructionsRef.current;
+  const dirty = instructions !== baselineInstructions;
 
   return (
     <div className={styles.page} data-testid="automation-editor" data-mode={d.mode}>
+      {/* Each suggestion carries its zone as text, not just as `value`: a
+          value-only <option> has no accessible name, so a screen reader
+          announces an unlabelled list. Label and value are identical, which
+          is what the picker already showed. */}
       <datalist id="centraid-cron-timezones">
-        <option value="UTC" />
-        <option value="America/New_York" />
-        <option value="America/Chicago" />
-        <option value="America/Denver" />
-        <option value="America/Los_Angeles" />
-        <option value="America/Sao_Paulo" />
-        <option value="Europe/London" />
-        <option value="Europe/Paris" />
-        <option value="Europe/Berlin" />
-        <option value="Asia/Kolkata" />
-        <option value="Asia/Tokyo" />
-        <option value="Asia/Shanghai" />
-        <option value="Australia/Sydney" />
+        <option value="UTC">UTC</option>
+        <option value="America/New_York">America/New_York</option>
+        <option value="America/Chicago">America/Chicago</option>
+        <option value="America/Denver">America/Denver</option>
+        <option value="America/Los_Angeles">America/Los_Angeles</option>
+        <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+        <option value="Europe/London">Europe/London</option>
+        <option value="Europe/Paris">Europe/Paris</option>
+        <option value="Europe/Berlin">Europe/Berlin</option>
+        <option value="Asia/Kolkata">Asia/Kolkata</option>
+        <option value="Asia/Tokyo">Asia/Tokyo</option>
+        <option value="Asia/Shanghai">Asia/Shanghai</option>
+        <option value="Australia/Sydney">Australia/Sydney</option>
       </datalist>
       <div className={styles.head} data-hue={hue}>
         <div className={styles.headIdentity}>

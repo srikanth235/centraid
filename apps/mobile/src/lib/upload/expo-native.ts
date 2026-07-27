@@ -4,8 +4,7 @@
 // this file — the drainer takes both of these by injection (the M0.2 lesson:
 // a statically-imported native module breaks the vitest rig).
 
-import { File, Paths } from 'expo-file-system';
-import * as Legacy from 'expo-file-system/legacy';
+import { File, Paths, UploadType } from 'expo-file-system';
 
 import {
   assertGatewayMintedUploadUrl,
@@ -37,12 +36,12 @@ export const expoFileSource: FileSourceOpener = async (localUri: string): Promis
 
 /**
  * PUT one sealed part through the native background transfer stack: on iOS a
- * background URLSession (`FileSystemSessionType.BACKGROUND`), on Android the
+ * background URLSession (`sessionType: 'background'`), on Android the
  * uploader is background-capable by default. This is the same mechanism the
  * WebView bridge's `transfer.putBackground` uses — reached directly here
  * rather than through the bridge, which is the WebView-facing door.
  *
- * `uploadAsync` uploads from a file path, so the sealed part is spooled to the
+ * `File.upload` streams from a file path, so the sealed part is spooled to the
  * cache directory first. Bytes are written raw (no base64 round-trip), which
  * is why this does not inherit the bridge's 24 MiB base64 cap.
  */
@@ -56,10 +55,10 @@ export function expoPartPutter(scope: BackgroundTransferScope): PartPutter {
     spool.create();
     spool.write(body);
     try {
-      const response = await Legacy.uploadAsync(target.toString(), spool.uri, {
+      const response = await spool.upload(target.toString(), {
         httpMethod: 'PUT',
-        uploadType: Legacy.FileSystemUploadType.BINARY_CONTENT,
-        sessionType: Legacy.FileSystemSessionType.BACKGROUND,
+        uploadType: UploadType.BINARY_CONTENT,
+        sessionType: 'background',
         headers: { 'content-type': 'application/octet-stream' },
       });
       if (response.status < 200 || response.status >= 300) {

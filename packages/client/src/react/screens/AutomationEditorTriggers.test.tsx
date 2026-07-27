@@ -1,6 +1,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, type Mock, vi } from 'vitest';
 import type { AutomationEditorBridgeProps, AutomationEditorData } from '../screen-contracts.js';
 import AutomationEditorScreen from './AutomationEditorScreen.js';
 
@@ -302,7 +302,7 @@ describe('AutomationEditorScreen — authoring data triggers', () => {
 
   const KINDS = ['core.transaction', 'core.event', 'billing.invoice'];
 
-  async function mountWithDataTrigger(loadEntityTypes: ReturnType<typeof vi.fn>): Promise<{
+  async function mountWithDataTrigger(loadEntityTypes: Mock<() => Promise<string[]>>): Promise<{
     el: HTMLDivElement;
     input: HTMLInputElement;
   }> {
@@ -318,7 +318,7 @@ describe('AutomationEditorScreen — authoring data triggers', () => {
   }
 
   const optionLabels = (el: HTMLElement): string[] =>
-    [...el.querySelectorAll('[role="option"] span')].map((s) => s.textContent ?? '');
+    [...el.querySelectorAll('.mentionOption span')].map((s) => s.textContent ?? '');
 
   it('fetches entity kinds lazily the first time a data trigger appears', async () => {
     const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
@@ -329,7 +329,7 @@ describe('AutomationEditorScreen — authoring data triggers', () => {
       await Promise.resolve();
     });
     expect(loadEntityTypes).toHaveBeenCalledTimes(1);
-    expect(el.querySelector('[role="listbox"]')).toBeNull();
+    expect(el.querySelector('.mentionPopover')).toBeNull();
   });
 
   it('filters kinds client-side as the user types, capped to the query', async () => {
@@ -348,16 +348,16 @@ describe('AutomationEditorScreen — authoring data triggers', () => {
     keydown(input, 'ArrowDown');
     keydown(input, 'Enter');
     expect(input.value).toBe('core.event');
-    expect(el.querySelector('[role="listbox"]')).toBeNull();
+    expect(el.querySelector('.mentionPopover')).toBeNull();
   });
 
   it('Escape dismisses the picker without changing the input', async () => {
     const loadEntityTypes = vi.fn().mockResolvedValue(KINDS);
     const { el, input } = await mountWithDataTrigger(loadEntityTypes);
     setValue(input, 'core');
-    expect(el.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(el.querySelector('.mentionPopover')).not.toBeNull();
     keydown(input, 'Escape');
-    expect(el.querySelector('[role="listbox"]')).toBeNull();
+    expect(el.querySelector('.mentionPopover')).toBeNull();
     expect(input.value).toBe('core');
   });
 
@@ -391,7 +391,7 @@ describe('AutomationEditorScreen — authoring data triggers', () => {
     const input = el.querySelector('input[placeholder="business.invoice"]') as HTMLInputElement;
     setValue(input, 'invoice');
     await act(async () => {
-      (el.querySelector('[role="option"]') as HTMLButtonElement).click();
+      (el.querySelector('.mentionOption') as HTMLButtonElement).click();
     });
     expect(input.value).toBe('billing.invoice');
   });

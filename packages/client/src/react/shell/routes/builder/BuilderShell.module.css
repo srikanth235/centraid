@@ -208,7 +208,11 @@
   place-items: center;
   color: #fff;
 }
-.tlIdentity b {
+/* The name lockup renders as static <b> for automations and as a rename
+   <input> for apps (issue #573 — it used to be one contenteditable <b>
+   claiming `role="textbox"`). Both wear the same type. */
+.tlIdentity b,
+.tlIdentity input {
   font-size: 12.5px;
   font-weight: 600;
   letter-spacing: -0.005em;
@@ -219,15 +223,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tlIdentity b[contenteditable] {
+.tlIdentity input {
   cursor: text;
+  border: 0;
+  background: transparent;
   border-radius: 3px;
   padding: 0 3px;
   margin: 0 -3px;
+  min-width: 0;
   transition: background 0.12s;
 }
-.tlIdentity b[contenteditable]:hover,
-.tlIdentity b[contenteditable]:focus {
+.tlIdentity input:hover,
+.tlIdentity input:focus {
   background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 .tlStatus {

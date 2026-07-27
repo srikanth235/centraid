@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import ConnectFlow from '../shell/routes/ConnectFlow.js';
 import type { ConnectFlowResult } from '../shell/routes/connectFlow-core.js';
+import a11y from '../styles/a11y.module.css';
 import styles from './OnboardingScreen.module.css';
 
 export interface OnboardingCompleteInput {
@@ -221,21 +222,22 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
             </span>
             <div className={styles.swatches} role="radiogroup" aria-labelledby="cd-onb-color-label">
               {AVATAR_PALETTE.map((c) => (
-                <button
+                <label
                   key={c}
-                  type="button"
                   className={styles.swatch}
-                  role="radio"
-                  aria-label={`Color ${c}`}
-                  aria-checked={c === avatarColor}
                   data-color={c}
                   data-selected={c === avatarColor ? 'true' : 'false'}
                   style={{ background: c }}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setAvatarColor(c);
-                  }}
-                />
+                >
+                  <input
+                    type="radio"
+                    className={a11y.srControl}
+                    name="onboarding-avatar-color"
+                    aria-label={`Color ${c}`}
+                    checked={c === avatarColor}
+                    onChange={() => setAvatarColor(c)}
+                  />
+                </label>
               ))}
             </div>
             <button

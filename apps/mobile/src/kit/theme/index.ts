@@ -12,25 +12,8 @@
 // legacy `colors` export stays light-only for callers that read it at module
 // scope; anything that needs to follow the OS theme should call `useTheme()`.
 
-import {
-  themes,
-  densities,
-  spacing,
-  palette,
-  radii,
-  fonts,
-  type as typeTokens,
-  tileFinish,
-  TILE_VARIANTS,
-} from '@centraid/design-tokens';
-import type {
-  Theme,
-  ThemeName,
-  DensityName,
-  TypeKey,
-  TileVariant,
-  TileFinish,
-} from '@centraid/design-tokens';
+import { spacing, radii, type as typeTokens } from '@centraid/design-tokens';
+import type { TypeKey } from '@centraid/design-tokens';
 import type { TextStyle } from 'react-native';
 
 // One family name per (family, weight) pair. Keep in sync with the
@@ -69,21 +52,13 @@ export const t = (key: TypeKey): Pick<TextStyle, 'fontSize' | 'lineHeight' | 'fo
   };
 };
 
-export { themes, densities, spacing, palette, radii, fonts, tileFinish, TILE_VARIANTS };
-export type { Theme, ThemeName, DensityName, TileVariant, TileFinish };
+export { spacing, radii };
 
 // Dark-mode-aware theme API, lowered from the canonical blueprint token source.
 export { useTheme } from './useTheme';
-export { resolveTheme, navThemes, navThemeFor } from './resolve';
-export type { ThemeValue, ThemeColors, Scheme } from './resolve';
-export { lightPalette, darkPalette } from './tokens.generated';
+export { resolveTheme, navThemeFor } from './resolve';
+export type { ThemeColors, Scheme } from './resolve';
 
 // Device-local Appearance override (System / Light / Dark) folded over the OS.
-export {
-  useAppearance,
-  getAppearance,
-  setAppearance,
-  hydrateAppearance,
-  resolveScheme,
-} from './appearance';
+export { useAppearance, setAppearance, hydrateAppearance, resolveScheme } from './appearance';
 export type { Appearance } from './appearance';

@@ -19,7 +19,7 @@ export function FriendModal({
 }) {
   return (
     <ModalBackdrop onClose={onClose}>
-      <div className="kit-modal" style={{ maxWidth: '400px' }} onClick={(e) => e.stopPropagation()}>
+      <div className="kit-modal" style={{ maxWidth: '400px' }}>
         <h2>Add a friend</h2>
         <input
           className={shared.in}

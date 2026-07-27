@@ -35,18 +35,17 @@ export function Card({
   const notebookColor = notebookId ? notebookColorVar(notebookId) : null;
 
   return (
-    <article
-      className={pending ? `${styles.card} kit-pending` : styles.card}
-      tabIndex={0}
-      role="button"
-      onClick={() => onOpen(note.note_id)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onOpen(note.note_id);
-        }
-      }}
-    >
+    <article className={pending ? `${styles.card} kit-pending` : styles.card}>
+      {/* The card holds its own pin button, so it can't itself be a <button>:
+          the open gesture is a stretched overlay button laid under the pin.
+          Enter/Space come free with it — the old article-level tabIndex +
+          onKeyDown pair only re-implemented them. */}
+      <button
+        type="button"
+        className={`kit-stretch-btn ${styles.cardOpen}`}
+        aria-label={`Open ${note.title?.trim() || 'Untitled note'}`}
+        onClick={() => onOpen(note.note_id)}
+      />
       <div className={styles.cardHead}>
         <div className={styles.cardTitle}>
           <Highlighted text={note.title ?? ''} term={search} />

@@ -1,5 +1,5 @@
 use aes_gcm::{
-    Aes256Gcm, KeyInit, Nonce,
+    Aes256Gcm, KeyInit,
     aead::{Aead, Payload},
 };
 use anyhow::{Context, Result, bail};
@@ -83,7 +83,7 @@ pub fn derive_nonce(key: &[u8], info: &str) -> Result<[u8; 12]> {
 pub fn seal_aes_gcm(key: &[u8; 32], nonce: &[u8; 12], plain: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
     let cipher = Aes256Gcm::new_from_slice(key).context("invalid AES key")?;
     let body = cipher
-        .encrypt(Nonce::from_slice(nonce), Payload { msg: plain, aad })
+        .encrypt(nonce.into(), Payload { msg: plain, aad })
         .map_err(|_| anyhow::anyhow!("AES-GCM seal failed"))?;
     let mut sealed = Vec::with_capacity(12 + body.len());
     sealed.extend_from_slice(nonce);
@@ -98,7 +98,7 @@ pub fn open_aes_gcm(key: &[u8; 32], sealed: &[u8], aad: &[u8]) -> Result<Vec<u8>
     let cipher = Aes256Gcm::new_from_slice(key).context("invalid AES key")?;
     cipher
         .decrypt(
-            Nonce::from_slice(&sealed[..12]),
+            sealed[..12].try_into().context("AES-GCM nonce length")?,
             Payload {
                 msg: &sealed[12..],
                 aad,

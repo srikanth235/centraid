@@ -16,16 +16,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
       - run: bunx playwright install --with-deps chromium
         working-directory: apps/extension
       - run: bunx turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel --filter=@centraid/extension
       - run: xvfb-run --auto-servernum node tests/agent-e2e-pairing/flows/extension-companion.mjs
-      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()
         with:
           name: companion-e2e-run
@@ -39,10 +39,7 @@ jobs:
   companion-failure-issue:
     needs: [companion]
     if: >
-      always() &&
-      github.event_name == 'schedule' &&
-      github.ref == 'refs/heads/main' &&
-      (
+      always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (
         contains(join(needs.*.result, ','), 'failure') ||
         contains(join(needs.*.result, ','), 'cancelled')
       )
@@ -52,7 +49,7 @@ jobs:
       issues: write
       contents: read
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Open or update companion tracking issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

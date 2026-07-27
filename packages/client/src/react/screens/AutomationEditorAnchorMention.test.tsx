@@ -61,7 +61,7 @@ it('inserts an anchor-grade row/field/span token', async () => {
     await new Promise((resolve) => setTimeout(resolve, 150));
   });
   await act(async () => {
-    (container.querySelector('[role="option"]') as HTMLButtonElement).click();
+    (container.querySelector('.mentionOption') as HTMLButtonElement).click();
   });
   expect(instructions.value).toBe('Notify me about @[core.link_anchor/anchor-1]');
   expect(container.querySelector('[aria-label="Tagged data"]')?.textContent).toContain(

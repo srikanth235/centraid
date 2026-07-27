@@ -1,5 +1,53 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ORRERY } from './atlasOrreryGeometry.js';
+
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+/** `null` in any host without `matchMedia` (jsdom, SSR) — there is no
+ *  preference to read, so motion is never suppressed. */
+const reducedMotionQuery = (): MediaQueryList | null =>
+  typeof window === 'undefined' || typeof window.matchMedia !== 'function'
+    ? null
+    : window.matchMedia(REDUCED_MOTION_QUERY);
+
+const subscribeReducedMotion = (onChange: () => void): (() => void) => {
+  const mq = reducedMotionQuery();
+  if (!mq) return () => {};
+  mq.addEventListener?.('change', onChange);
+  return () => mq.removeEventListener?.('change', onChange);
+};
+
+const readReducedMotion = (): boolean => reducedMotionQuery()?.matches ?? false;
+
+const serverReducedMotion = (): boolean => false;
+
+const RECENTER_MS = 640;
+
+/** jsdom (and SSR) have neither `matchMedia` nor `requestAnimationFrame` — there
+ *  an ease would only schedule frames that never composite, so we snap. */
+const canAnimateRecenter = (): boolean =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  typeof requestAnimationFrame === 'function';
+
+const easeInOutCubic = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+
+/**
+ * Drive one re-centre ease, reporting 0→1 progress per frame and calling
+ * `onSettled` once the last frame lands. Returns the canceller. Module scope,
+ * because the rAF loop names itself and a self-referential function declared
+ * inside a hook is not a value the compiler can reason about.
+ */
+function driveRecenter(onProgress: (p: number) => void, onSettled: () => void): () => void {
+  const t0 = performance.now();
+  let raf = requestAnimationFrame(function step(now: number) {
+    const t = Math.min(1, (now - t0) / RECENTER_MS);
+    onProgress(easeInOutCubic(t));
+    if (t < 1) raf = requestAnimationFrame(step);
+    else onSettled();
+  });
+  return () => cancelAnimationFrame(raf);
+}
 
 // The orrery's re-centre motion (issue #519), lifted out of AtlasRelationsTab.
 // Two concerns: reading the user's reduced-motion preference, and the
@@ -8,16 +56,10 @@ import { ORRERY } from './atlasOrreryGeometry.js';
 // centre changes, so pack identity stays a fixed compass direction throughout.
 
 export function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReduced(mq.matches);
-    const onChange = (): void => setReduced(mq.matches);
-    mq.addEventListener?.('change', onChange);
-    return () => mq.removeEventListener?.('change', onChange);
-  }, []);
-  return reduced;
+  // Subscribed, not synced-through-an-effect: the very first paint already
+  // knows the preference, so a reduced-motion user never sees one animated
+  // frame before the effect catches up.
+  return useSyncExternalStore(subscribeReducedMotion, readReducedMotion, serverReducedMotion);
 }
 
 /**
@@ -36,31 +78,30 @@ export function useRecenterAnimation(
   const startRadiusRef = useRef<Map<string, number>>(new Map());
   const [progress, setProgress] = useState(1);
 
+  // The centre the current `progress` belongs to. A centre change is picked up
+  // during render (the React "adjust state when a prop changes" pattern) rather
+  // than in the effect, so the ease starts from 0 on the very first frame the
+  // new centre paints instead of one cascading render later.
+  const [animCenter, setAnimCenter] = useState(center);
+  if (animCenter !== center) {
+    setAnimCenter(center);
+    setProgress(canAnimateRecenter() && !reduced ? 0 : 1);
+  }
+
   useEffect(() => {
-    const start = startRadiusRef.current;
-    const canAnimate =
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      typeof requestAnimationFrame === 'function';
-    const snap = start.size === 0 || reduced || !canAnimate;
-    if (snap) {
+    // Snap (no animation) on first paint, under reduced-motion, and in any host
+    // without `matchMedia`/`requestAnimationFrame` (jsdom) — there, animating
+    // would only schedule frames that never composite.
+    if (startRadiusRef.current.size === 0 || reduced || !canAnimateRecenter()) {
       startRadiusRef.current = new Map(targetRadius);
-      setProgress(1);
       return;
     }
-    setProgress(0);
-    const t0 = performance.now();
-    const dur = 640;
-    const ease = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
-    let raf = requestAnimationFrame(function step(now: number) {
-      const t = Math.min(1, (now - t0) / dur);
-      setProgress(ease(t));
-      if (t < 1) raf = requestAnimationFrame(step);
-      else startRadiusRef.current = new Map(targetRadius);
+    return driveRecenter(setProgress, () => {
+      startRadiusRef.current = new Map(targetRadius);
     });
-    return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#519) animate only on centre change
-  }, [center]);
+    // Only a centre change re-runs the ease; `targetRadius` is read for its
+    // value at that moment, never as a trigger.
+  }, [animCenter]);
 
   return useCallback(
     (physical: string): number => {

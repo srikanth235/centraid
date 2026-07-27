@@ -54,6 +54,11 @@ function formatPreviewUrl(src: string): string {
 
 const CHAT_PANE_PREF = 'builder.chatPaneOpen';
 
+/** Character width for the rename input, clamped to the old lockup's range. */
+function nameSize(name: string): number {
+  return Math.min(24, Math.max(4, name.length));
+}
+
 export interface BuilderShellProps extends UseBuilderInput {
   nav: ShellNav;
   renderSidebar: (nav: ShellNav) => ReactNode;
@@ -71,11 +76,14 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   );
   const [previewInfo, setPreviewInfo] = useState<{ src: string } | null>(null);
 
-  // Name lockup: set text imperatively so React never clobbers a mid-edit caret.
-  const nameRef = useRef<HTMLElement | null>(null);
+  // Name lockup: set the value imperatively so React never clobbers a mid-edit
+  // caret. `size` is the input's own shrink-to-fit knob (an inline <b> sized
+  // itself; a text input does not), clamped so the titlebar never jumps.
+  const nameRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
-    if (nameRef.current && nameRef.current.textContent !== vm.projName) {
-      nameRef.current.textContent = vm.projName;
+    if (nameRef.current && nameRef.current.value !== vm.projName) {
+      nameRef.current.value = vm.projName;
+      nameRef.current.size = nameSize(vm.projName);
     }
   }, [vm.projName]);
 
@@ -110,7 +118,6 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) listener re-bound only on chatEligible, toggleChat is stable
   }, [chatEligible]);
 
   const finish = window.CentraidTokens.tileFinish(vm.projColor, 'gradient');
@@ -127,26 +134,41 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
         }}
         dangerouslySetInnerHTML={{ __html: iconSvg(vm.projIcon || 'Sparkle', 11, 1.9) }}
       />
-      <b
-        ref={nameRef}
-        role="textbox"
-        aria-label="App name"
-        contentEditable={vm.isAutomation ? false : 'plaintext-only'}
-        spellCheck={false}
-        suppressContentEditableWarning
-        title={vm.isAutomation ? undefined : 'Click to rename'}
-        onBlur={(e) => vm.commitRename(e.currentTarget.textContent ?? '')}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            e.currentTarget.blur();
-          } else if (e.key === 'Escape') {
-            e.preventDefault();
-            e.currentTarget.textContent = vm.projName;
-            e.currentTarget.blur();
-          }
-        }}
-      />
+      {/* The rename field is a text field, so it is a real <input> — a
+          contenteditable <b> claiming `role="textbox"` was neither, and it
+          stopped being focusable at all for automations (whose name is not
+          editable, and which render as static text). `size` tracks the value
+          so the box still shrinks to the name the way the old inline element
+          did; it is set imperatively for the same reason the text was — React
+          must never re-render a mid-edit caret away. */}
+      {vm.isAutomation ? (
+        <b>{vm.projName}</b>
+      ) : (
+        <input
+          ref={nameRef}
+          type="text"
+          aria-label="App name"
+          defaultValue={vm.projName}
+          size={nameSize(vm.projName)}
+          spellCheck={false}
+          title="Click to rename"
+          onInput={(e) => {
+            e.currentTarget.size = nameSize(e.currentTarget.value);
+          }}
+          onBlur={(e) => vm.commitRename(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              e.currentTarget.blur();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              e.currentTarget.value = vm.projName;
+              e.currentTarget.size = nameSize(vm.projName);
+              e.currentTarget.blur();
+            }
+          }}
+        />
+      )}
       <span className={styles.tlStatus} data-state={vm.statusState}>
         <span className={styles.tlStatusDot} />
         <span>{vm.statusText}</span>

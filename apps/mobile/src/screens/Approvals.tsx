@@ -24,6 +24,27 @@ type ApprovalsState =
   | { kind: 'ready'; rows: ParkedInvocation[] }
   | { kind: 'error'; message: string };
 
+// The loader lives outside the component: it closes over nothing but the
+// (stable) state setter, so it needs no `useCallback` identity dance and the
+// mount effect below reads as a plain async kick-off.
+async function loadApprovals(setState: (next: ApprovalsState) => void): Promise<void> {
+  try {
+    const base = await resolveGatewayBase();
+    if (!base) {
+      setState({ kind: 'no-gateway' });
+      return;
+    }
+    const rows = await listParked();
+    setState({ kind: 'ready', rows });
+  } catch (err) {
+    const message =
+      err instanceof GatewayError || err instanceof Error
+        ? err.message
+        : 'Could not load approvals.';
+    setState({ kind: 'error', message });
+  }
+}
+
 export default function ApprovalsScreen({
   navigation,
 }: SettingsScreenProps<'Approvals'>): React.JSX.Element {
@@ -33,34 +54,16 @@ export default function ApprovalsScreen({
   const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState<string | undefined>(undefined);
 
-  const load = useCallback(async (): Promise<void> => {
-    try {
-      const base = await resolveGatewayBase();
-      if (!base) {
-        setState({ kind: 'no-gateway' });
-        return;
-      }
-      const rows = await listParked();
-      setState({ kind: 'ready', rows });
-    } catch (err) {
-      const message =
-        err instanceof GatewayError || err instanceof Error
-          ? err.message
-          : 'Could not load approvals.';
-      setState({ kind: 'error', message });
-    }
-  }, []);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    void loadApprovals(setState);
+  }, []);
 
   const onRefresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);
     setActionError(undefined);
-    await load();
+    await loadApprovals(setState);
     setRefreshing(false);
-  }, [load]);
+  }, []);
 
   const decide = useCallback(async (invocationId: string, approve: boolean): Promise<void> => {
     setActionError(undefined);

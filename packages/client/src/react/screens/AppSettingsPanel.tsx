@@ -7,6 +7,7 @@ import type {
 } from '../screen-contracts.js';
 import styles from './AppSettingsPanel.module.css';
 import { cx } from '../ui/cx.js';
+import a11y from '../styles/a11y.module.css';
 import segCss from '../styles/seg.module.css';
 import appSettingsCss from '../styles/appSettings.module.css';
 import swatchCss from '../styles/swatch.module.css';
@@ -53,20 +54,23 @@ function KnobControl({
         aria-label={knob.label}
       >
         {knob.options.map((o) => (
-          <button
+          <label
             key={o.value}
-            type="button"
             className={cx(swatchCss.swatch, styles.paneSwatch)}
-            role="radio"
-            aria-checked={o.value === value}
-            aria-label={o.label}
             title={o.label}
             data-active={String(o.value === value)}
             style={{ background: o.value }}
-            onClick={() => pick(o.value)}
           >
+            <input
+              type="radio"
+              className={a11y.srControl}
+              name={`app-knob-${knob.key}`}
+              aria-label={o.label}
+              checked={o.value === value}
+              onChange={() => pick(o.value)}
+            />
             <Icon name="Check" size={14} strokeWidth={2.5} />
-          </button>
+          </label>
         ))}
       </div>
     );
@@ -257,12 +261,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
   return (
     <>
       <div className={styles.settingsBackdrop} role="presentation" onClick={onClose} />
-      <div
-        className={styles.settingsPanel}
-        role="dialog"
-        aria-label="App settings"
-        style={panelStyle}
-      >
+      <dialog open className={styles.settingsPanel} aria-label="App settings" style={panelStyle}>
         <div className={styles.settingsHeader}>
           <span
             className={styles.settingsIcon}
@@ -424,7 +423,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
             </button>
           </div>
         </div>
-      </div>
+      </dialog>
     </>
   );
 }

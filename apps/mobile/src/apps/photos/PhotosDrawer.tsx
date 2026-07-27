@@ -10,11 +10,12 @@
 // nearest real screen or surfaces an "on desktop" note, matching how the rest
 // of the Photos port handles desktop-only affordances.
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
+import { useAnimatedValue } from '../../kit/hooks/useAnimatedValue';
 import { family, useTheme } from '../../kit/theme';
 import { getProfileColor, getProfileName, initialsOf } from '../../lib/profile';
 import { getActiveSpace, subscribeSpaces } from '../../lib/spaces';
@@ -55,8 +56,8 @@ export default function PhotosDrawer({
   useEffect(() => subscribeSpaces(() => setSpace(getActiveSpace())), []);
   const vaultName = space?.vaultName || space?.desktopName || name || 'Personal vault';
   const vaultColor = space?.color || color;
-  const slide = useRef(new Animated.Value(-PANEL_WIDTH)).current;
-  const fade = useRef(new Animated.Value(0)).current;
+  const slide = useAnimatedValue(-PANEL_WIDTH);
+  const fade = useAnimatedValue(0);
 
   useEffect(() => {
     if (!visible) return;
