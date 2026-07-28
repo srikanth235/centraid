@@ -21,7 +21,7 @@ import type {
   ManifestActionEntry,
   ManifestExtTable,
   ManifestQueryEntry,
-} from '../registry/manifest.js';
+} from "../registry/manifest.js";
 
 export interface BuildExtraPromptInput {
   appId: string;
@@ -43,13 +43,13 @@ export function buildExtraPrompt(input: BuildExtraPromptInput): string {
     `You are working inside the centraid app "${name}" (id: \`${input.appId}\`).`,
   ];
   if (input.appDescription) {
-    lines.push('', input.appDescription);
+    lines.push("", input.appDescription);
   }
-  lines.push('', renderCatalogBlock(input.manifest));
+  lines.push("", renderCatalogBlock(input.manifest));
   const vaultBlock = renderVaultBlock(input.appId, input.manifest);
-  if (vaultBlock) lines.push('', vaultBlock);
-  lines.push('', EXTERNAL_WORLD_BLOCK);
-  return lines.join('\n');
+  if (vaultBlock) lines.push("", vaultBlock);
+  lines.push("", EXTERNAL_WORLD_BLOCK);
+  return lines.join("\n");
 }
 
 /**
@@ -75,18 +75,23 @@ External APIs are reached through owner-configured CONNECTIONS (\`sync.connectio
  * (when the manifest declares an ext band) the app's own extension tables
  * with their typed write commands.
  */
-function renderVaultBlock(appId: string, manifest: Manifest | undefined): string {
+function renderVaultBlock(
+  appId: string,
+  manifest: Manifest | undefined
+): string {
   const vault = manifest?.vault;
   const ext = manifest?.ext;
-  if (!vault && !ext) return '';
+  if (!vault && !ext) return "";
   const lines: string[] = [`### Personal vault`, ``];
   if (vault) {
     const scopes = vault.scopes
-      .map((s) => `\`${s.schema}${s.table ? `.${s.table}` : '.*'}\` (${s.verbs})`)
-      .join(', ');
+      .map(
+        (s) => `\`${s.schema}${s.table ? `.${s.table}` : ".*"}\` (${s.verbs})`
+      )
+      .join(", ");
     lines.push(
-      `This app declares access to the owner's personal vault — purpose \`${vault.purpose}\`, requested scopes: ${scopes}.${vault.why ? ` Rationale: ${vault.why}` : ''}`,
-      ``,
+      `This app declares access to the owner's personal vault — purpose \`${vault.purpose}\`, requested scopes: ${scopes}.${vault.why ? ` Rationale: ${vault.why}` : ""}`,
+      ``
     );
   }
   lines.push(
@@ -97,68 +102,70 @@ function renderVaultBlock(appId: string, manifest: Manifest | undefined): string
     `- \`await ctx.vault.invoke({ command, input, purpose })\` — typed command (e.g. \`schedule.propose_event\`). Returns an outcome: \`{ status: 'executed' | 'denied' | 'parked' | 'failed', output?, … }\` — check \`status\` before assuming the write landed; \`parked\` means the owner must confirm.`,
     `- \`await ctx.vault.describe()\` — the commands this app can discover (name, schema, risk).`,
     ``,
-    `Every call is consent-checked host-side and receipted. A denial throws with the receipt id in the message — do not retry in a loop; surface the denial. Until the owner approves the requested scopes, calls fail closed.`,
+    `Every call is consent-checked host-side and receipted. A denial throws with the receipt id in the message — do not retry in a loop; surface the denial. Until the owner approves the requested scopes, calls fail closed.`
   );
   if (ext && ext.tables.length > 0) {
     lines.push(
       ``,
       `#### Extension tables (this app's own band)`,
       ``,
-      `The manifest declares extension tables the gateway hosts INSIDE the vault as \`ext_${appId.replaceAll('-', '_')}_<table>\`. Read them via \`ctx.vault.read({ entity: 'ext.${appId}.<table>', … })\`; write them via the typed trio \`ext.${appId}.insert\` / \`ext.${appId}.update\` / \`ext.${appId}.delete\` through \`ctx.vault.invoke\` (insert takes \`{ table, values }\` and returns \`{ id }\`; update takes \`{ table, id, set }\`; delete takes \`{ table, id }\`). Schema changes are DECLARED (edit \`ext.tables\` in app.json — the gateway diffs and applies on publish); never attempt DDL.`,
+      `The manifest declares extension tables the gateway hosts INSIDE the vault as \`ext_${appId.replaceAll("-", "_")}_<table>\`. Read them via \`ctx.vault.read({ entity: 'ext.${appId}.<table>', … })\`; write them via the typed trio \`ext.${appId}.insert\` / \`ext.${appId}.update\` / \`ext.${appId}.delete\` through \`ctx.vault.invoke\` (insert takes \`{ table, values }\` and returns \`{ id }\`; update takes \`{ table, id, set }\`; delete takes \`{ table, id }\`). Schema changes are DECLARED (edit \`ext.tables\` in app.json — the gateway diffs and applies on publish); never attempt DDL.`,
       ``,
       `Declared tables:`,
-      ...ext.tables.map(renderExtTable),
+      ...ext.tables.map(renderExtTable)
     );
   }
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 function renderExtTable(table: ManifestExtTable): string {
   const cols = table.columns
     .map(
       (c) =>
-        `${c.name} ${c.type}${c.primaryKey ? ' PK' : ''}${c.notNull ? ' NOT NULL' : ''}${c.references ? ` → ${c.references}` : ''}`,
+        `${c.name} ${c.type}${c.primaryKey ? " PK" : ""}${c.notNull ? " NOT NULL" : ""}${c.references ? ` → ${c.references}` : ""}`
     )
-    .join(', ');
-  return `- **${table.name}** (${cols})${table.searchable?.length ? ` — searchable: ${table.searchable.join(', ')}` : ''}`;
+    .join(", ");
+  return `- **${table.name}** (${cols})${table.searchable?.length ? ` — searchable: ${table.searchable.join(", ")}` : ""}`;
 }
 
 function renderCatalogBlock(manifest: Manifest | undefined): string {
   if (!manifest) {
-    return [`### Declared handlers`, ``, `(manifest unavailable)`].join('\n');
+    return [`### Declared handlers`, ``, `(manifest unavailable)`].join("\n");
   }
   const lines: string[] = [`### Declared handlers`, ``];
   if (manifest.actions.length === 0 && manifest.queries.length === 0) {
     lines.push(`(no declared actions or queries yet)`);
-    return lines.join('\n');
+    return lines.join("\n");
   }
   lines.push(
     `These are the app's dispatchable surface — UI buttons and automations call them; each validates its input against the JSON Schema shown.`,
-    ``,
+    ``
   );
   if (manifest.actions.length > 0) {
     lines.push(`Actions:`);
     for (const a of manifest.actions) lines.push(renderHandlerLine(a));
-    lines.push('');
+    lines.push("");
   }
   if (manifest.queries.length > 0) {
     lines.push(`Queries:`);
     for (const q of manifest.queries) lines.push(renderHandlerLine(q));
   }
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
-function renderHandlerLine(entry: ManifestActionEntry | ManifestQueryEntry): string {
-  const desc = entry.description ? ` — ${entry.description}` : '';
+function renderHandlerLine(
+  entry: ManifestActionEntry | ManifestQueryEntry
+): string {
+  const desc = entry.description ? ` — ${entry.description}` : "";
   const schema = compactSchema(entry.input);
-  return `- \`${entry.name}\`${desc}${schema ? `\n  input: ${schema}` : ''}`;
+  return `- \`${entry.name}\`${desc}${schema ? `\n  input: ${schema}` : ""}`;
 }
 
 function compactSchema(schema: unknown): string {
-  if (!schema || typeof schema !== 'object') return '';
+  if (!schema || typeof schema !== "object") return "";
   try {
     return JSON.stringify(schema);
   } catch {
-    return '';
+    return "";
   }
 }

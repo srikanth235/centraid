@@ -1,31 +1,47 @@
 // One vault owns vault.db, journal.db, and blobs/. Only the gateway holds
 // these handles; apps, agents, and generated views never see a connection.
 
-import { mkdirSync, statfsSync } from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import { BlobCustody, type RemoteTier } from './blob/custody.js';
-import { BlobCache, readBlobCacheSettings } from './blob/cache.js';
-import { BlobContentKeyRegistry } from './blob/content-keys.js';
-import { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
+import { mkdirSync, statfsSync } from "node:fs";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
+import { readBackupPolicy } from "./backup-policy.js";
+import { BlobCache, readBlobCacheSettings } from "./blob/cache.js";
+import { BlobContentKeyRegistry } from "./blob/content-keys.js";
+import { BlobCustody, type RemoteTier } from "./blob/custody.js";
+import {
+  FsBlobStore,
+  MemoryBlobStore,
+  type LocalBlobStore,
+} from "./blob/local.js";
 import {
   contributeIngressPreviews,
   type IngressPreviewInput,
   type PreviewCodec,
-} from './blob/preview.js';
-import { S3BlobStore, type S3BlobStoreOptions, type S3Credentials } from './blob/s3.js';
-import { S3TransferStore } from './blob/s3-transfer.js';
-import { desiredStoreForSha, storageClassForShaWrite } from './blob/store-routing.js';
-import { BlobTransferCoordinator } from './blob/transfers.js';
-import { readBackupPolicy } from './backup-policy.js';
-import { registerHammingFn } from './enrich/similarity.js';
-import { asVaultDiskFullError } from './errors.js';
-import { initializeReplicaProtocol } from './replica/change-log.js';
-import { repairReplicaInvocationCommits } from './replica/invocation-commits.js';
-import { registerContentTextFn } from './schema/fts.js';
-import type { KeyStore } from './schema/key-store.js';
-import { JOURNAL_MIGRATIONS, migrate, migrateVault } from './schema/migrate.js';
-import { ephemeralSealKey, resolveSealKey, sealKeyFileFor } from './schema/sealed.js';
+} from "./blob/preview.js";
+import { S3TransferStore } from "./blob/s3-transfer.js";
+import {
+  S3BlobStore,
+  type S3BlobStoreOptions,
+  type S3Credentials,
+} from "./blob/s3.js";
+import {
+  desiredStoreForSha,
+  storageClassForShaWrite,
+} from "./blob/store-routing.js";
+import { BlobTransferCoordinator } from "./blob/transfers.js";
+import { registerHammingFn } from "./enrich/similarity.js";
+import { asVaultDiskFullError } from "./errors.js";
+import { initializeReplicaProtocol } from "./replica/change-log.js";
+import { repairReplicaInvocationCommits } from "./replica/invocation-commits.js";
+import { registerContentTextFn } from "./schema/fts.js";
+import type { KeyStore } from "./schema/key-store.js";
+import { JOURNAL_MIGRATIONS, migrate, migrateVault } from "./schema/migrate.js";
+import {
+  ephemeralSealKey,
+  resolveSealKey,
+  sealKeyFileFor,
+} from "./schema/sealed.js";
 
 export interface VaultDb {
   vault: DatabaseSync;
@@ -49,7 +65,7 @@ export interface VaultDb {
    */
   blobs: BlobCustody;
   /** Current remote CAS tier, or null when full restore is required. */
-  remote(): RemoteTier | null;
+  remote: () => RemoteTier | null;
   /** Persistent resumable ingress + continuous pending-offsite drain (#414). */
   blobTransfers: BlobTransferCoordinator;
   /**
@@ -70,12 +86,12 @@ export interface VaultDb {
    * behind the shipper's back (a spurious foreign-checkpoint detection on
    * every restart).
    */
-  close(opts?: { skipOptimize?: boolean }): void;
+  close: (opts?: { skipOptimize?: boolean }) => void;
 }
 
 /** The `blob_store` settings bag shape (issue #296 §2, extended #367). */
 export interface BlobStoreSettings {
-  kind?: 'fs' | 's3';
+  kind?: "fs" | "s3";
   endpoint?: string;
   bucket?: string;
   region?: string;
@@ -105,7 +121,7 @@ export interface BlobStoreSettings {
    * whenever it wires `connectionId` (issue #367 §C4). Only `provider`
    * connections exist now (#436 §2); all remote CAS objects use CBSF.
    */
-  connectionKind?: 'provider';
+  connectionKind?: "provider";
   /**
    * Upload rate cap for the replication path, bytes/sec (issue #367 §C7,
    * simple token bucket in `S3BlobStore`). Omitted/0 = unthrottled.
@@ -157,7 +173,7 @@ export interface OpenVaultOptions {
    */
   s3Credentials?: (
     settings: BlobStoreSettings,
-    store?: 'cas' | 'derived',
+    store?: "cas" | "derived"
   ) => Promise<S3Credentials>;
   /**
    * The preview ladder's raster codec (issue #405 §2) — the gateway host
@@ -171,14 +187,17 @@ export interface OpenVaultOptions {
   /** Hardware-profile cap for concurrent remote blob pushes. */
   replicationConcurrency?: number;
   /** FULL by default; a measured low-end hardware profile may choose WAL-safe NORMAL. */
-  synchronous?: 'FULL' | 'NORMAL';
+  synchronous?: "FULL" | "NORMAL";
 }
 
-function openFile(location: string, synchronous: 'FULL' | 'NORMAL' = 'FULL'): DatabaseSync {
+function openFile(
+  location: string,
+  synchronous: "FULL" | "NORMAL" = "FULL"
+): DatabaseSync {
   try {
     const db = new DatabaseSync(location);
-    db.exec('PRAGMA foreign_keys = ON');
-    if (location !== ':memory:') {
+    db.exec("PRAGMA foreign_keys = ON");
+    if (location !== ":memory:") {
       // auto_vacuum=INCREMENTAL bounds journal.db (issue #438): the ledger-band
       // archival prune (and #367's audit-band archival) frees pages that only
       // `incremental_vacuum` returns to the OS — freelist mode never shrinks the
@@ -187,9 +206,9 @@ function openFile(location: string, synchronous: 'FULL' | 'NORMAL' = 'FULL'): Da
       // header is fixed and the pragma no longer takes at table-create time —
       // only a full VACUUM can then convert. So set it first (applies at DDL on
       // fresh files), then WAL.
-      db.exec('PRAGMA page_size = 8192');
-      db.exec('PRAGMA auto_vacuum = INCREMENTAL');
-      db.exec('PRAGMA journal_mode = WAL');
+      db.exec("PRAGMA page_size = 8192");
+      db.exec("PRAGMA auto_vacuum = INCREMENTAL");
+      db.exec("PRAGMA journal_mode = WAL");
       // This is a personal-data vault with a low write rate — durability of
       // each commit matters more than write throughput, so fsync on every
       // transaction (WAL's default NORMAL can drop the last commit(s) on
@@ -199,13 +218,13 @@ function openFile(location: string, synchronous: 'FULL' | 'NORMAL' = 'FULL'): Da
       // cache size is kibibytes, so this caps each connection at 16 MiB
       // instead of SQLite's ~2 MiB default. mmap is virtual and demand-paged;
       // 64 MiB keeps the address-space win without assuming desktop RAM.
-      db.exec('PRAGMA cache_size = -16000');
-      db.exec('PRAGMA mmap_size = 67108864');
-      db.exec('PRAGMA temp_store = MEMORY');
+      db.exec("PRAGMA cache_size = -16000");
+      db.exec("PRAGMA mmap_size = 67108864");
+      db.exec("PRAGMA temp_store = MEMORY");
       // journal.db also carries the conversation-ledger band (the old
       // transcripts.db folded in), which worker subprocesses open by path —
       // wait for their locks instead of failing immediately.
-      db.exec('PRAGMA busy_timeout = 30000');
+      db.exec("PRAGMA busy_timeout = 30000");
       // Checkpointing is the WAL shipper's exclusive duty (issue #408): segments
       // are raw WAL byte ranges, valid only while the WAL is strictly
       // append-only between checkpoints THE SHIPPER performs (TRUNCATE-only —
@@ -218,7 +237,7 @@ function openFile(location: string, synchronous: 'FULL' | 'NORMAL' = 'FULL'): Da
       // each heal is a whole-DB base re-upload, so turning autocheckpoint OFF on
       // every connection — here and in every by-path opener (app-engine's
       // openJournalDb, key-admin) — keeps generation churn near zero.
-      db.exec('PRAGMA wal_autocheckpoint = 0');
+      db.exec("PRAGMA wal_autocheckpoint = 0");
       // One-time conversion for a file created BEFORE #438 (auto_vacuum=0,
       // freelist mode) while fleet files are still small. A fresh file reads
       // back 2 here (the pragma above is pending, page 1 already written by WAL);
@@ -230,11 +249,13 @@ function openFile(location: string, synchronous: 'FULL' | 'NORMAL' = 'FULL'): Da
       // The WAL shipper (issue #408) sees this whole-file rewrite as a foreign
       // checkpoint and heals via a generation break — a one-time base re-upload,
       // acceptable now that files are small (cf. vault-plane.ts:~1815-1846).
-      const autoVacuum = (db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number })
-        .auto_vacuum;
-      const pageCount = (db.prepare('PRAGMA page_count').get() as { page_count: number })
-        .page_count;
-      if (autoVacuum === 0 && pageCount > 0) db.exec('VACUUM');
+      const autoVacuum = (
+        db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }
+      ).auto_vacuum;
+      const pageCount = (
+        db.prepare("PRAGMA page_count").get() as { page_count: number }
+      ).page_count;
+      if (autoVacuum === 0 && pageCount > 0) db.exec("VACUUM");
     }
     return db;
   } catch (err) {
@@ -248,15 +269,15 @@ function openFile(location: string, synchronous: 'FULL' | 'NORMAL' = 'FULL'): Da
 /** The vault's current `blob_store` settings (`{}`-safe on any shape). */
 export function readBlobStoreSettings(vault: DatabaseSync): BlobStoreSettings {
   try {
-    const row = vault.prepare('SELECT settings_json FROM core_vault LIMIT 1').get() as
-      | { settings_json: string | null }
-      | undefined;
+    const row = vault
+      .prepare("SELECT settings_json FROM core_vault LIMIT 1")
+      .get() as { settings_json: string | null } | undefined;
     if (!row?.settings_json) return {};
     const parsed = JSON.parse(row.settings_json) as Record<string, unknown>;
-    const bag = parsed['blob_store'];
-    if (!bag || typeof bag !== 'object') return {};
+    const bag = parsed["blob_store"];
+    if (!bag || typeof bag !== "object") return {};
     const settings = bag as BlobStoreSettings;
-    return settings.kind === 's3' ? { ...settings, encrypt: true } : settings;
+    return settings.kind === "s3" ? { ...settings, encrypt: true } : settings;
   } catch {
     return {};
   }
@@ -269,17 +290,17 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   let journal: DatabaseSync;
   let local: LocalBlobStore;
   if (dir === undefined) {
-    vault = openFile(':memory:', options.synchronous);
+    vault = openFile(":memory:", options.synchronous);
     // The journal is the durable execution/receipt proof used to reclaim
     // vault-side invocation markers. It stays FULL even when an operator
     // explicitly relaxes the canonical vault to NORMAL.
-    journal = openFile(':memory:', 'FULL');
+    journal = openFile(":memory:", "FULL");
     local = options.blobStore ?? new MemoryBlobStore();
   } else {
     mkdirSync(dir, { recursive: true });
-    vault = openFile(path.join(dir, 'vault.db'), options.synchronous);
-    journal = openFile(path.join(dir, 'journal.db'), 'FULL');
-    local = options.blobStore ?? new FsBlobStore(path.join(dir, 'blobs'));
+    vault = openFile(path.join(dir, "vault.db"), options.synchronous);
+    journal = openFile(path.join(dir, "journal.db"), "FULL");
+    local = options.blobStore ?? new FsBlobStore(path.join(dir, "blobs"));
   }
   // The FTS sync triggers (and the v2 backfill) decode canonical bodies via
   // this function, so it must exist before migrations touch the file.
@@ -327,7 +348,8 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   let cachedRemote: { key: string; tier: RemoteTier | null } | null = null;
   const remoteTier = (): RemoteTier | null => {
     const settings = readBlobStoreSettings(vault);
-    if (settings.kind !== 's3' || !settings.endpoint || !settings.bucket) return null;
+    if (settings.kind !== "s3" || !settings.endpoint || !settings.bucket)
+      return null;
     if (!options.s3Credentials) return null;
     const policy = readBackupPolicy(vault);
     const key = JSON.stringify({
@@ -344,13 +366,15 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       : {};
     // Storage class passthrough (issue #405 §6): unset ⇒ omitted ⇒ the driver
     // sends no x-amz-storage-class header (today's behavior).
-    const storageClass = policy.storageClass ? { storageClass: policy.storageClass } : {};
+    const storageClass = policy.storageClass
+      ? { storageClass: policy.storageClass }
+      : {};
     const s3Options: S3BlobStoreOptions = {
       endpoint: settings.endpoint,
       bucket: settings.bucket,
       region: settings.region,
       prefix: settings.prefix,
-      credentials: () => resolver(settings, 'cas'),
+      credentials: () => resolver(settings, "cas"),
       ...throttle,
       ...storageClass,
     };
@@ -370,7 +394,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
           storeClass,
           settings.supportedStorageClasses,
           readBackupPolicy(vault),
-          originalHint,
+          originalHint
         ),
       // The `derived` store (issue #425 Wave 2): a second CAS-shaped store under
       // the target's derived-grant prefix, sharing endpoint/bucket/creds — only
@@ -381,7 +405,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
             derivedStore: new S3BlobStore({
               ...s3Options,
               prefix: settings.derivedPrefix,
-              credentials: () => resolver(settings, 'derived'),
+              credentials: () => resolver(settings, "derived"),
             }),
           }
         : {}),
@@ -396,13 +420,13 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   // unless a test sets `blob_cache.budgetBytes` explicitly). The budget's
   // settings read is the CURRENT `blob_cache` row on every check, so changing
   // it needs no reopen — same lazy-settings contract as `remoteTier`.
-  const blobsDir = dir === undefined ? undefined : path.join(dir, 'blobs');
+  const blobsDir = dir === undefined ? undefined : path.join(dir, "blobs");
   const blobCache = new BlobCache(vault, local, {
     settings: () => readBlobCacheSettings(vault),
     policy: () => readBackupPolicy(vault),
-    ...(options.replicationConcurrency !== undefined
-      ? { replicationConcurrency: options.replicationConcurrency }
-      : {}),
+    ...(options.replicationConcurrency === undefined
+      ? {}
+      : { replicationConcurrency: options.replicationConcurrency }),
     ...(blobsDir
       ? {
           statfs: () => {
@@ -422,11 +446,11 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   });
   const blobTransfers = new BlobTransferCoordinator({
     vault,
-    dir: dir ?? ':memory:',
+    dir: dir ?? ":memory:",
     local,
     cache: blobCache,
     remote: remoteTier,
-    remoteConfigured: () => readBlobStoreSettings(vault).kind === 's3',
+    remoteConfigured: () => readBlobStoreSettings(vault).kind === "s3",
     policy: () => readBackupPolicy(vault),
     contentKeys: blobContentKeys,
     // Capture-time previews (issue #405 §2): rungs + dHash while the plaintext
@@ -434,7 +458,9 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     // forget best-effort; closes over `api` (below) — only fires post-open.
     ...(options.previewCodec && {
       contributePreview: (input: IngressPreviewInput) =>
-        void contributeIngressPreviews(api, options.previewCodec!, input).catch(() => {}),
+        void contributeIngressPreviews(api, options.previewCodec!, input).catch(
+          () => {}
+        ),
     }),
     ...(options.shouldDeferBackgroundWork
       ? { shouldDeferBackgroundWork: options.shouldDeferBackgroundWork }
@@ -444,10 +470,12 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   const api: VaultDb = {
     vault,
     journal,
-    dir: dir ?? ':memory:',
+    dir: dir ?? ":memory:",
     sealKey,
     ...(options.keyStore ? { keyStore: options.keyStore } : {}),
-    blobs: new BlobCustody(local, remoteTier, blobCache, (sha) => desiredStoreForSha(vault, sha)),
+    blobs: new BlobCustody(local, remoteTier, blobCache, (sha) =>
+      desiredStoreForSha(vault, sha)
+    ),
     // Narrow read-only accessor onto the cached remote-tier closure (issue #439
     // R2) — the lazy-by-default restore's "durable remote CAS tier?" oracle.
     remote: remoteTier,
@@ -475,12 +503,12 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       // checkpoint (see the interface doc).
       if (!opts?.skipOptimize) {
         try {
-          vault.exec('PRAGMA optimize');
+          vault.exec("PRAGMA optimize");
         } catch {
           // best-effort; the handle still needs to close below.
         }
         try {
-          journal.exec('PRAGMA optimize');
+          journal.exec("PRAGMA optimize");
         } catch {
           // best-effort; the handle still needs to close below.
         }

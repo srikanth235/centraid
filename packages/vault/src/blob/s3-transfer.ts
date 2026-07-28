@@ -1,27 +1,35 @@
 // Restartable/direct S3 transfer surface (issue #414). Kept out of s3.ts so
 // the ordinary CAS driver remains below the repository's 500-line ceiling.
 
-import { assertSha, type BlobRange, type BlobStat } from './store.js';
-import { encodeKeyPath, presignS3Request } from './sigv4.js';
-import type { S3BlobStoreOptions } from './s3.js';
-import { S3RequestPipeline } from './s3-pipeline.js';
 import type {
   MultipartPart,
   RemoteBlobTransfer,
   TemporaryMultipartUpload,
-} from './remote-transfer.js';
+} from "./remote-transfer.js";
+import { S3RequestPipeline } from "./s3-pipeline.js";
+import type { S3BlobStoreOptions } from "./s3.js";
+import { encodeKeyPath, presignS3Request } from "./sigv4.js";
+import { assertSha, type BlobRange, type BlobStat } from "./store.js";
 
 const PART_BYTES = 16 * 1024 * 1024;
 const MULTIPART_AT = 32 * 1024 * 1024;
-const TEMP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const TEMP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 
 /** Canonical path-style namespace advertised to trusted native carriers. */
-export function s3TemporaryUploadPrefix(input: { bucket: string; prefix?: string }): string {
-  const prefix = input.prefix ? `${input.prefix.replace(/^\/+|\/+$/g, '')}/` : '';
+export function s3TemporaryUploadPrefix(input: {
+  bucket: string;
+  prefix?: string;
+}): string {
+  const prefix = input.prefix
+    ? `${input.prefix.replace(/^\/+|\/+$/gu, "")}/`
+    : "";
   return `/${encodeKeyPath(input.bucket)}/${encodeKeyPath(`${prefix}tmp/blobs/`)}`;
 }
 
-async function* chunks(source: NodeJS.ReadableStream, size = PART_BYTES): AsyncGenerator<Buffer> {
+async function* chunks(
+  source: NodeJS.ReadableStream,
+  size = PART_BYTES
+): AsyncGenerator<Buffer> {
   let pending: Buffer[] = [];
   let length = 0;
   for await (const value of source as AsyncIterable<Buffer | string>) {
@@ -43,15 +51,16 @@ async function* chunks(source: NodeJS.ReadableStream, size = PART_BYTES): AsyncG
 
 function xmlUnescape(value: string): string {
   return value
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&gt;/g, '>')
-    .replace(/&lt;/g, '<')
-    .replace(/&amp;/g, '&');
+    .replace(/&quot;/gu, '"')
+    .replace(/&apos;/gu, "'")
+    .replace(/&gt;/gu, ">")
+    .replace(/&lt;/gu, "<")
+    .replace(/&amp;/gu, "&");
 }
 
 function xmlValue(xml: string, tag: string): string | undefined {
-  return new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(xml)?.[1];
+  return new RegExp(`<${tag}>(?<value>[^<]*)</${tag}>`, "u").exec(xml)
+    ?.groups?.["value"];
 }
 
 export class S3TransferStore implements RemoteBlobTransfer {
@@ -64,7 +73,9 @@ export class S3TransferStore implements RemoteBlobTransfer {
   }
 
   private prefix(): string {
-    return this.options.prefix ? this.options.prefix.replace(/\/+$/, '') + '/' : '';
+    return this.options.prefix
+      ? this.options.prefix.replace(/\/+$/u, "") + "/"
+      : "";
   }
 
   private shaKey(sha: string): string {
@@ -72,14 +83,19 @@ export class S3TransferStore implements RemoteBlobTransfer {
   }
 
   private tempKey(tempId: string): string {
-    if (!TEMP_ID.test(tempId)) throw new Error(`invalid blob transfer temp id: ${tempId}`);
+    if (!TEMP_ID.test(tempId))
+      throw new Error(`invalid blob transfer temp id: ${tempId}`);
     return `${this.prefix()}tmp/blobs/${tempId}`;
   }
 
   private async request(
     method: string,
     key: string,
-    input: { body?: Buffer; query?: Record<string, string>; headers?: Record<string, string> } = {},
+    input: {
+      body?: Buffer;
+      query?: Record<string, string>;
+      headers?: Record<string, string>;
+    } = {}
   ): Promise<Response> {
     return this.pipeline.request(method, key, input);
   }
@@ -87,16 +103,27 @@ export class S3TransferStore implements RemoteBlobTransfer {
   private async send(
     method: string,
     key: string,
-    input: { body?: Buffer; query?: Record<string, string>; headers?: Record<string, string> } = {},
+    input: {
+      body?: Buffer;
+      query?: Record<string, string>;
+      headers?: Record<string, string>;
+    } = {}
   ): Promise<Response> {
     return this.pipeline.send(method, key, input);
   }
 
-  private async beginMultipart(key: string, label: string, storageClass?: string): Promise<string> {
+  private async beginMultipart(
+    key: string,
+    label: string,
+    storageClass?: string
+  ): Promise<string> {
     void label;
     // Per-call override wins (issue #425 Wave 3), else the instance default.
     const cls = storageClass ?? this.options.storageClass;
-    return this.pipeline.beginMultipart(key, cls ? { 'x-amz-storage-class': cls } : undefined);
+    return this.pipeline.beginMultipart(
+      key,
+      cls ? { "x-amz-storage-class": cls } : undefined
+    );
   }
 
   private async uploadPart(
@@ -104,7 +131,7 @@ export class S3TransferStore implements RemoteBlobTransfer {
     label: string,
     uploadId: string,
     partNumber: number,
-    bytes: Buffer,
+    bytes: Buffer
   ): Promise<string> {
     void label;
     return this.pipeline.uploadPart(key, uploadId, partNumber, bytes);
@@ -114,80 +141,119 @@ export class S3TransferStore implements RemoteBlobTransfer {
     key: string,
     label: string,
     uploadId: string,
-    parts: readonly MultipartPart[],
+    parts: readonly MultipartPart[]
   ): Promise<void> {
     void label;
     await this.pipeline.completeMultipart(key, uploadId, parts);
   }
 
-  private async abortMultipart(key: string, label: string, uploadId: string): Promise<void> {
+  private async abortMultipart(
+    key: string,
+    label: string,
+    uploadId: string
+  ): Promise<void> {
     void label;
     await this.pipeline.abortMultipart(key, uploadId);
   }
 
   beginShaUpload(sha: string, storageClass?: string): Promise<string> {
-    return this.beginMultipart(this.shaKey(sha), 'final SHA', storageClass);
+    return this.beginMultipart(this.shaKey(sha), "final SHA", storageClass);
   }
 
-  uploadShaPart(sha: string, uploadId: string, partNumber: number, bytes: Buffer): Promise<string> {
-    return this.uploadPart(this.shaKey(sha), 'final SHA', uploadId, partNumber, bytes);
+  uploadShaPart(
+    sha: string,
+    uploadId: string,
+    partNumber: number,
+    bytes: Buffer
+  ): Promise<string> {
+    return this.uploadPart(
+      this.shaKey(sha),
+      "final SHA",
+      uploadId,
+      partNumber,
+      bytes
+    );
   }
 
-  completeShaUpload(sha: string, uploadId: string, parts: readonly MultipartPart[]): Promise<void> {
-    return this.completeMultipart(this.shaKey(sha), 'final SHA', uploadId, parts);
+  completeShaUpload(
+    sha: string,
+    uploadId: string,
+    parts: readonly MultipartPart[]
+  ): Promise<void> {
+    return this.completeMultipart(
+      this.shaKey(sha),
+      "final SHA",
+      uploadId,
+      parts
+    );
   }
 
   abortShaUpload(sha: string, uploadId: string): Promise<void> {
-    return this.abortMultipart(this.shaKey(sha), 'final SHA', uploadId);
+    return this.abortMultipart(this.shaKey(sha), "final SHA", uploadId);
   }
 
   async beginTemporaryUpload(tempId: string): Promise<string> {
-    return this.beginMultipart(this.tempKey(tempId), 'temporary');
+    return this.beginMultipart(this.tempKey(tempId), "temporary");
   }
 
   async uploadTemporaryPart(
     tempId: string,
     uploadId: string,
     partNumber: number,
-    bytes: Buffer,
+    bytes: Buffer
   ): Promise<string> {
-    return this.uploadPart(this.tempKey(tempId), 'temporary', uploadId, partNumber, bytes);
+    return this.uploadPart(
+      this.tempKey(tempId),
+      "temporary",
+      uploadId,
+      partNumber,
+      bytes
+    );
   }
 
   async completeTemporaryUpload(
     tempId: string,
     uploadId: string,
-    parts: readonly MultipartPart[],
+    parts: readonly MultipartPart[]
   ): Promise<void> {
-    return this.completeMultipart(this.tempKey(tempId), 'temporary', uploadId, parts);
+    return this.completeMultipart(
+      this.tempKey(tempId),
+      "temporary",
+      uploadId,
+      parts
+    );
   }
 
   async abortTemporaryUpload(tempId: string, uploadId: string): Promise<void> {
-    return this.abortMultipart(this.tempKey(tempId), 'temporary', uploadId);
+    return this.abortMultipart(this.tempKey(tempId), "temporary", uploadId);
   }
 
   async listTemporaryUploads(): Promise<TemporaryMultipartUpload[]> {
     const prefix = `${this.prefix()}tmp/blobs/`;
     const uploads: TemporaryMultipartUpload[] = [];
-    let keyMarker: string | undefined;
-    let uploadIdMarker: string | undefined;
-    for (;;) {
+    const listPage = async (
+      keyMarker?: string,
+      uploadIdMarker?: string
+    ): Promise<void> => {
       const query: Record<string, string> = {
-        uploads: '',
+        uploads: "",
         prefix,
-        'encoding-type': 'url',
-        'max-uploads': '1000',
+        "encoding-type": "url",
+        "max-uploads": "1000",
       };
-      if (keyMarker) query['key-marker'] = keyMarker;
-      if (uploadIdMarker) query['upload-id-marker'] = uploadIdMarker;
-      const response = await this.send('GET', '', { query });
-      if (!response.ok) throw new Error(`s3 list temporary uploads: ${response.status}`);
+      if (keyMarker) query["key-marker"] = keyMarker;
+      if (uploadIdMarker) query["upload-id-marker"] = uploadIdMarker;
+      const response = await this.send("GET", "", { query });
+      if (!response.ok)
+        throw new Error(`s3 list temporary uploads: ${response.status}`);
       const xml = await response.text();
-      for (const match of xml.matchAll(/<Upload>([\s\S]*?)<\/Upload>/g)) {
-        const block = match[1] ?? '';
-        const rawKey = xmlValue(block, 'Key');
-        const rawUploadId = xmlValue(block, 'UploadId');
-        const rawInitiated = xmlValue(block, 'Initiated');
+      for (const match of xml.matchAll(
+        /<Upload>(?<upload>[\s\S]*?)<\/Upload>/gu
+      )) {
+        const block = match.groups?.upload ?? "";
+        const rawKey = xmlValue(block, "Key");
+        const rawUploadId = xmlValue(block, "UploadId");
+        const rawInitiated = xmlValue(block, "Initiated");
         if (rawKey === undefined || !rawUploadId || !rawInitiated) continue;
         let key: string;
         try {
@@ -195,7 +261,7 @@ export class S3TransferStore implements RemoteBlobTransfer {
         } catch {
           continue;
         }
-        const tempId = key.startsWith(prefix) ? key.slice(prefix.length) : '';
+        const tempId = key.startsWith(prefix) ? key.slice(prefix.length) : "";
         if (!TEMP_ID.test(tempId)) continue;
         uploads.push({
           tempId,
@@ -203,23 +269,31 @@ export class S3TransferStore implements RemoteBlobTransfer {
           initiatedAt: xmlUnescape(rawInitiated),
         });
       }
-      if (!/<IsTruncated>true<\/IsTruncated>/.test(xml)) break;
-      const nextKey = xmlValue(xml, 'NextKeyMarker');
-      const nextUploadId = xmlValue(xml, 'NextUploadIdMarker');
-      if (!nextKey || (nextKey === keyMarker && nextUploadId === uploadIdMarker)) {
-        throw new Error('s3 list temporary uploads: invalid pagination markers');
+      if (!/<IsTruncated>true<\/IsTruncated>/u.test(xml)) return;
+      const nextKey = xmlValue(xml, "NextKeyMarker");
+      const nextUploadId = xmlValue(xml, "NextUploadIdMarker");
+      if (
+        !nextKey ||
+        (nextKey === keyMarker && nextUploadId === uploadIdMarker)
+      ) {
+        throw new Error(
+          "s3 list temporary uploads: invalid pagination markers"
+        );
       }
-      keyMarker = decodeURIComponent(xmlUnescape(nextKey));
-      uploadIdMarker = nextUploadId ? xmlUnescape(nextUploadId) : undefined;
-    }
+      return listPage(
+        decodeURIComponent(xmlUnescape(nextKey)),
+        nextUploadId ? xmlUnescape(nextUploadId) : undefined
+      );
+    };
+    await listPage();
     return uploads;
   }
 
   async putTemporary(tempId: string, bytes: Buffer): Promise<void> {
     await this.pipeline.pace(bytes.length);
-    const response = await this.send('PUT', this.tempKey(tempId), {
+    const response = await this.send("PUT", this.tempKey(tempId), {
       body: bytes,
-      headers: { 'content-type': 'application/octet-stream' },
+      headers: { "content-type": "application/octet-stream" },
     });
     if (!response.ok) throw new Error(`s3 put temporary: ${response.status}`);
   }
@@ -227,7 +301,7 @@ export class S3TransferStore implements RemoteBlobTransfer {
   async putTemporaryStream(
     tempId: string,
     source: NodeJS.ReadableStream,
-    approxSize: number,
+    approxSize: number
   ): Promise<void> {
     if (approxSize <= MULTIPART_AT) {
       const all: Buffer[] = [];
@@ -243,7 +317,12 @@ export class S3TransferStore implements RemoteBlobTransfer {
       for await (const bytes of chunks(source)) {
         parts.push({
           partNumber,
-          etag: await this.uploadTemporaryPart(tempId, uploadId, partNumber, bytes),
+          etag: await this.uploadTemporaryPart(
+            tempId,
+            uploadId,
+            partNumber,
+            bytes
+          ),
         });
         partNumber += 1;
       }
@@ -255,52 +334,60 @@ export class S3TransferStore implements RemoteBlobTransfer {
   }
 
   async statTemporary(tempId: string): Promise<BlobStat | null> {
-    const response = await this.send('HEAD', this.tempKey(tempId));
+    const response = await this.send("HEAD", this.tempKey(tempId));
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`s3 head temporary: ${response.status}`);
-    return { size: Number(response.headers.get('content-length') ?? 0) };
+    return { size: Number(response.headers.get("content-length") ?? 0) };
   }
 
-  async getTemporary(tempId: string, range?: BlobRange): Promise<Buffer | null> {
+  async getTemporary(
+    tempId: string,
+    range?: BlobRange
+  ): Promise<Buffer | null> {
     const headers: Record<string, string> = {};
-    if (range) headers['range'] = `bytes=${range.start}-${range.end ?? ''}`;
-    const response = await this.send('GET', this.tempKey(tempId), { headers });
+    if (range) headers["range"] = `bytes=${range.start}-${range.end ?? ""}`;
+    const response = await this.send("GET", this.tempKey(tempId), { headers });
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`s3 get temporary: ${response.status}`);
     return Buffer.from(await response.arrayBuffer());
   }
 
-  async copyTemporaryToSha(tempId: string, sha: string, storageClass?: string): Promise<void> {
+  async copyTemporaryToSha(
+    tempId: string,
+    sha: string,
+    storageClass?: string
+  ): Promise<void> {
     const source = `/${this.options.bucket}/${encodeKeyPath(this.tempKey(tempId))}`;
     // The CopyObject is the object-creating call for the direct-to-CAS door, so
     // the class rides HERE (issue #425 Wave 3); override wins over the default.
     const cls = storageClass ?? this.options.storageClass;
-    const response = await this.send('PUT', this.shaKey(sha), {
+    const response = await this.send("PUT", this.shaKey(sha), {
       headers: {
-        'x-amz-copy-source': source,
-        ...(cls ? { 'x-amz-storage-class': cls } : {}),
+        "x-amz-copy-source": source,
+        ...(cls ? { "x-amz-storage-class": cls } : {}),
       },
     });
-    if (!response.ok) throw new Error(`s3 promote temporary blob: ${response.status}`);
+    if (!response.ok)
+      throw new Error(`s3 promote temporary blob: ${response.status}`);
   }
 
   async deleteTemporary(tempId: string): Promise<void> {
-    const response = await this.send('DELETE', this.tempKey(tempId));
+    const response = await this.send("DELETE", this.tempKey(tempId));
     if (!response.ok && response.status !== 404)
       throw new Error(`s3 delete temporary: ${response.status}`);
   }
 
   private async presign(
-    method: 'GET' | 'PUT',
+    method: "GET" | "PUT",
     key: string,
     query: Record<string, string> | undefined,
-    expiresSeconds: number | undefined,
+    expiresSeconds: number | undefined
   ): Promise<URL> {
     return presignS3Request({
       method,
       base: this.base,
       path: `${this.options.bucket}/${key}`,
-      region: this.options.region ?? 'us-east-1',
+      region: this.options.region ?? "us-east-1",
       credentials: await this.options.credentials(),
       ...(query ? { query } : {}),
       ...(expiresSeconds ? { expiresSeconds } : {}),
@@ -308,24 +395,24 @@ export class S3TransferStore implements RemoteBlobTransfer {
   }
 
   presignTemporaryPut(tempId: string, expiresSeconds?: number): Promise<URL> {
-    return this.presign('PUT', this.tempKey(tempId), undefined, expiresSeconds);
+    return this.presign("PUT", this.tempKey(tempId), undefined, expiresSeconds);
   }
 
   presignTemporaryPart(
     tempId: string,
     uploadId: string,
     partNumber: number,
-    expiresSeconds?: number,
+    expiresSeconds?: number
   ): Promise<URL> {
     return this.presign(
-      'PUT',
+      "PUT",
       this.tempKey(tempId),
       { partNumber: String(partNumber), uploadId },
-      expiresSeconds,
+      expiresSeconds
     );
   }
 
   presignShaGet(sha: string, expiresSeconds?: number): Promise<URL> {
-    return this.presign('GET', this.shaKey(sha), undefined, expiresSeconds);
+    return this.presign("GET", this.shaKey(sha), undefined, expiresSeconds);
   }
 }

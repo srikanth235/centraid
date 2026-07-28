@@ -3,11 +3,13 @@
 // Rename swaps the title for an inline input (Enter/blur commits, Escape
 // cancels); delete arms on first click (kit armConfirm) like every other
 // blueprint delete control.
-import { useState } from 'react';
-import { I } from '../icons.ts';
-import { Icon } from './Shared.tsx';
-import styles from './Toolbar.module.css';
-import shared from './shared.module.css';
+import { useState } from "react";
+
+import { I } from "../icons.ts";
+import { Icon } from "./Shared.tsx";
+
+import shared from "./shared.module.css";
+import styles from "./Toolbar.module.css";
 
 // kit.ts's armConfirm swaps a button's textContent for the armed label —
 // fine for text buttons, but it would wipe this icon-only button's SVG
@@ -27,7 +29,7 @@ function DeleteButton({
     <button
       type="button"
       className="kit-icon-btn danger"
-      aria-label={armed ? 'Confirm delete notebook' : 'Delete notebook'}
+      aria-label={armed ? "Confirm delete notebook" : "Delete notebook"}
       onClick={() => {
         if (!armed) {
           setArmed(true);
@@ -37,7 +39,11 @@ function DeleteButton({
         onDelete(notebookId);
       }}
     >
-      {armed ? <span className={shared.armedLabel}>Sure?</span> : <Icon svg={I.trash} />}
+      {armed ? (
+        <span className={shared.armedLabel}>Sure?</span>
+      ) : (
+        <Icon svg={I.trash} />
+      )}
     </button>
   );
 }
@@ -63,10 +69,10 @@ function RenameField({
       aria-label={`Rename notebook ${name}`}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
-        if (e.key === 'Escape') {
+        if (e.key === "Escape") {
           e.preventDefault();
           onCancel();
-        } else if (e.key === 'Enter') {
+        } else if (e.key === "Enter") {
           e.preventDefault();
           e.currentTarget.blur();
         }
@@ -126,7 +132,11 @@ export function Toolbar({
             >
               <Icon svg={I.rename} />
             </button>
-            <DeleteButton key={notebookId!} notebookId={notebookId!} onDelete={onDelete} />
+            <DeleteButton
+              key={notebookId!}
+              notebookId={notebookId!}
+              onDelete={onDelete}
+            />
           </div>
         ) : null}
       </div>

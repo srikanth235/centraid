@@ -8,84 +8,102 @@
 // changes (issue #404) that only manifest with content: notes shipping a
 // preview + checklist tally instead of full bodies, the on-open body pull, and
 // agenda bounding recurring expansion to the visible range.
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from "vitest";
+
+type VaultReadTestSeam = (input: {
+  entity?: string;
+  filter?: Record<string, unknown>;
+}) => Promise<{ rows: unknown[] }>;
+type VaultRevealTestSeam = (input: {
+  columns?: string[];
+  context?: { kind: string; origin?: string };
+}) => Promise<{ values: Record<string, unknown>; receiptId: string }>;
+type VaultInvokeTestSeam = (input: {
+  command: string;
+  input?: unknown;
+}) => Promise<{ status: string; output: unknown }>;
 
 /** A mock ctx.vault that returns fixture rows keyed by entity name. */
 function ctxOf(rowsByEntity: Record<string, unknown[]>) {
   return {
     vault: {
-      read: async ({ entity }: { entity: string }) => ({ rows: rowsByEntity[entity] ?? [] }),
+      read: async ({ entity }: { entity: string }) => ({
+        rows: rowsByEntity[entity] ?? [],
+      }),
       resolve: async () => ({ cards: [] }),
-      invoke: async () => ({ status: 'executed', output: { items: [] } }),
+      invoke: async () => ({ status: "executed", output: { items: [] } }),
       search: async () => ({ rows: rowsByEntity.__search__ ?? [] }),
     },
   };
 }
 
-const dataUri = (text: string) => `data:text/markdown,${encodeURIComponent(text)}`;
+const dataUri = (text: string) =>
+  `data:text/markdown,${encodeURIComponent(text)}`;
 
 // Keep browser-JS fixtures out of the TypeScript program while still loading
 // the real module at runtime. oxlint's type-aware host otherwise tries to emit
 // imported JavaScript beside the source despite this test config using noEmit.
 const importQuery = (relativePath: string) => import(relativePath);
 
-describe('Locker Companion queries (#462)', () => {
-  it('reduces sealed login rows to secret-free candidates', async () => {
+describe("Locker Companion queries (#462)", () => {
+  it("reduces sealed login rows to secret-free candidates", async () => {
     const { default: candidates } = await importQuery(
-      '../apps/locker/queries/autofill-candidates.ts',
+      "../apps/locker/queries/autofill-candidates.ts"
     );
     const ctx = ctxOf({
-      'locker.item': [
+      "locker.item": [
         {
-          item_id: 'login-1',
-          type: 'login',
-          title: 'Example',
-          username: 'priya',
-          password: '«sealed»',
-          otp_seed: '«sealed»',
-          url: 'https://example.com/login',
-          url_match_policy: 'exact-host',
+          item_id: "login-1",
+          type: "login",
+          title: "Example",
+          username: "priya",
+          password: "«sealed»",
+          otp_seed: "«sealed»",
+          url: "https://example.com/login",
+          url_match_policy: "exact-host",
         },
       ],
     });
     const result = await candidates({ ctx });
-    expect(result.candidates).toEqual([
+    expect(result.candidates).toStrictEqual([
       {
-        item_id: 'login-1',
-        title: 'Example',
-        username: 'priya',
-        url: 'https://example.com/login',
-        url_match_policy: 'exact-host',
+        item_id: "login-1",
+        title: "Example",
+        username: "priya",
+        url: "https://example.com/login",
+        url_match_policy: "exact-host",
         has_totp: true,
         compromised: false,
         warning: false,
       },
     ]);
-    expect(JSON.stringify(result)).not.toContain('password');
-    expect(JSON.stringify(result)).not.toContain('«sealed»');
+    expect(JSON.stringify(result)).not.toContain("password");
+    expect(JSON.stringify(result)).not.toContain("«sealed»");
   });
 
-  it('reveals password with page context and asks only for a TOTP derivative', async () => {
-    const { default: fill } = await importQuery('../apps/locker/queries/autofill-item.ts');
-    const reveal = vi.fn().mockResolvedValue({
-      values: { password: 'live-password' },
-      receiptId: 'receipt-fill',
+  it("reveals password with page context and asks only for a TOTP derivative", async () => {
+    const { default: fill } = await importQuery(
+      "../apps/locker/queries/autofill-item.ts"
+    );
+    const reveal = vi.fn<VaultRevealTestSeam>().mockResolvedValue({
+      values: { password: "live-password" },
+      receiptId: "receipt-fill",
     });
-    const invoke = vi.fn().mockResolvedValue({
-      status: 'executed',
-      output: { code: '123456', remaining: 12 },
+    const invoke = vi.fn<VaultInvokeTestSeam>().mockResolvedValue({
+      status: "executed",
+      output: { code: "123456", remaining: 12 },
     });
     const ctx = {
       vault: {
-        read: vi.fn().mockResolvedValue({
+        read: vi.fn<VaultReadTestSeam>().mockResolvedValue({
           rows: [
             {
-              item_id: 'login-1',
-              type: 'login',
-              username: 'priya',
-              otp_seed: '«sealed»',
-              url: 'https://example.com/login',
-              url_match_policy: 'registrable-domain',
+              item_id: "login-1",
+              type: "login",
+              username: "priya",
+              otp_seed: "«sealed»",
+              url: "https://example.com/login",
+              url_match_policy: "registrable-domain",
             },
           ],
         }),
@@ -94,79 +112,86 @@ describe('Locker Companion queries (#462)', () => {
       },
     };
     const result = await fill({
-      input: { item_id: 'login-1', page_origin: 'https://example.com' },
+      input: { item_id: "login-1", page_origin: "https://example.com" },
       ctx,
     });
-    expect(result.fill).toEqual({
-      username: 'priya',
-      password: 'live-password',
-      totp: '123456',
-      receipt_id: 'receipt-fill',
+    expect(result.fill).toStrictEqual({
+      username: "priya",
+      password: "live-password",
+      totp: "123456",
+      receipt_id: "receipt-fill",
     });
     expect(reveal).toHaveBeenCalledWith(
       expect.objectContaining({
-        columns: ['password'],
-        context: { kind: 'fill', origin: 'https://example.com' },
-      }),
+        columns: ["password"],
+        context: { kind: "fill", origin: "https://example.com" },
+      })
     );
     expect(invoke).toHaveBeenCalledWith(
-      expect.objectContaining({ command: 'locker.totp_code', input: { item_id: 'login-1' } }),
+      expect.objectContaining({
+        command: "locker.totp_code",
+        input: { item_id: "login-1" },
+      })
     );
-    expect(JSON.stringify(result)).not.toContain('otp_seed');
+    expect(JSON.stringify(result)).not.toContain("otp_seed");
   });
 
-  it('refuses reveal when page origin does not match the stored login URL', async () => {
-    const { default: fill } = await importQuery('../apps/locker/queries/autofill-item.ts');
-    const reveal = vi.fn();
+  it("refuses reveal when page origin does not match the stored login URL", async () => {
+    const { default: fill } = await importQuery(
+      "../apps/locker/queries/autofill-item.ts"
+    );
+    const reveal = vi.fn<VaultRevealTestSeam>();
     const ctx = {
       vault: {
-        read: vi.fn().mockResolvedValue({
+        read: vi.fn<VaultReadTestSeam>().mockResolvedValue({
           rows: [
             {
-              item_id: 'login-1',
-              type: 'login',
-              username: 'priya',
-              url: 'https://example.com/login',
-              url_match_policy: 'exact-host',
+              item_id: "login-1",
+              type: "login",
+              username: "priya",
+              url: "https://example.com/login",
+              url_match_policy: "exact-host",
             },
           ],
         }),
         reveal,
-        invoke: vi.fn(),
+        invoke: vi.fn<VaultInvokeTestSeam>(),
       },
     };
     const result = await fill({
-      input: { item_id: 'login-1', page_origin: 'https://evil.example' },
+      input: { item_id: "login-1", page_origin: "https://evil.example" },
       ctx,
     });
     expect(result.fill).toBeNull();
-    expect(result.reason).toMatch(/does not match/i);
+    expect(result.reason).toMatch(/does not match/iu);
     expect(reveal).not.toHaveBeenCalled();
   });
 
-  it('refuses forged evil 127 hostnames that are not true loopback', async () => {
-    const { default: fill } = await importQuery('../apps/locker/queries/autofill-item.ts');
-    const reveal = vi.fn();
+  it("refuses forged evil 127 hostnames that are not true loopback", async () => {
+    const { default: fill } = await importQuery(
+      "../apps/locker/queries/autofill-item.ts"
+    );
+    const reveal = vi.fn<VaultRevealTestSeam>();
     const ctx = {
       vault: {
-        read: vi.fn().mockResolvedValue({
+        read: vi.fn<VaultReadTestSeam>().mockResolvedValue({
           rows: [
             {
-              item_id: 'login-1',
-              type: 'login',
-              username: 'priya',
-              url: 'http://127.0.0.1:3000',
-              url_match_policy: 'exact-host',
+              item_id: "login-1",
+              type: "login",
+              username: "priya",
+              url: "http://127.0.0.1:3000",
+              url_match_policy: "exact-host",
             },
           ],
         }),
         reveal,
-        invoke: vi.fn(),
+        invoke: vi.fn<VaultInvokeTestSeam>(),
       },
     };
     // pageOrigin requires origin === raw; evil hostname fails match even if stored is loopback.
     const result = await fill({
-      input: { item_id: 'login-1', page_origin: 'https://example.com' },
+      input: { item_id: "login-1", page_origin: "https://example.com" },
       ctx,
     });
     expect(result.fill).toBeNull();
@@ -174,80 +199,104 @@ describe('Locker Companion queries (#462)', () => {
   });
 });
 
-describe('notes library query (issue #404)', () => {
-  const body = ['- [ ] buy milk', '- [x] call bob', '# A heading', 'x'.repeat(250)].join('\n');
+describe("notes library query (issue #404)", () => {
+  const body = [
+    "- [ ] buy milk",
+    "- [x] call bob",
+    "# A heading",
+    "x".repeat(250),
+  ].join("\n");
   const note = {
-    note_id: 'n1',
-    title: 'T',
-    format: 'markdown',
+    note_id: "n1",
+    title: "T",
+    format: "markdown",
     pinned: 0,
-    created_at: '2026-01-01T00:00:00.000Z',
-    updated_at: '2026-01-02T00:00:00.000Z',
-    body_content_id: 'c1',
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-02T00:00:00.000Z",
+    body_content_id: "c1",
   };
-  const content = { content_id: 'c1', content_uri: dataUri(body) };
+  const content = { content_id: "c1", content_uri: dataUri(body) };
 
-  it('ships a bounded preview + checklist tally, never the full body', async () => {
-    const { default: library } = await importQuery('../apps/notes/queries/library.ts');
-    const ctx = ctxOf({ 'knowledge.note': [note], 'core.content_item': [content] });
+  it("ships a bounded preview + checklist tally, never the full body", async () => {
+    const { default: library } = await importQuery(
+      "../apps/notes/queries/library.ts"
+    );
+    const ctx = ctxOf({
+      "knowledge.note": [note],
+      "core.content_item": [content],
+    });
     const res = await library({ input: { limit: 50 }, query: {}, ctx });
     expect(res.notes).toHaveLength(1);
     const row = res.notes[0];
     // No full body on the wire anymore.
     expect(row.body).toBeUndefined();
     // Checklist tally computed server-side (2 boxes, 1 done).
-    expect(row.check).toEqual({ total: 2, done: 1 });
+    expect(row.check).toStrictEqual({ total: 2, done: 1 });
     // Preview is short and glyphs the checklist, dropping the heading.
-    expect(typeof row.preview).toBe('string');
+    expect(row.preview).toBeTypeOf("string");
     expect(row.preview.length).toBeLessThanOrEqual(200);
-    expect(row.preview).toContain('☐ buy milk');
-    expect(row.preview).toContain('☑ call bob');
-    expect(row.preview).not.toContain('heading');
+    expect(row.preview).toContain("☐ buy milk");
+    expect(row.preview).toContain("☑ call bob");
+    expect(row.preview).not.toContain("heading");
   });
 
-  it('note query decodes and returns the full canonical body on open', async () => {
-    const { default: noteQuery } = await importQuery('../apps/notes/queries/note.ts');
-    const ctx = ctxOf({ 'knowledge.note': [note], 'core.content_item': [content] });
-    const res = await noteQuery({ input: { note_id: 'n1' }, query: { note_id: 'n1' }, ctx });
-    expect(res.note_id).toBe('n1');
+  it("note query decodes and returns the full canonical body on open", async () => {
+    const { default: noteQuery } = await importQuery(
+      "../apps/notes/queries/note.ts"
+    );
+    const ctx = ctxOf({
+      "knowledge.note": [note],
+      "core.content_item": [content],
+    });
+    const res = await noteQuery({
+      input: { note_id: "n1" },
+      query: { note_id: "n1" },
+      ctx,
+    });
+    expect(res.note_id).toBe("n1");
     expect(res.body).toBe(body);
   });
 });
 
-describe('agenda upcoming query — range-bounded recurrence (issue #404)', () => {
+describe("agenda upcoming query — range-bounded recurrence (issue #404)", () => {
   const ev = {
-    event_id: 'e1',
-    summary: 'Daily standup',
-    dtstart: '2026-01-01T09:00:00.000Z',
-    dtend: '2026-01-01T10:00:00.000Z',
-    rrule: 'FREQ=DAILY',
-    status: 'confirmed',
+    event_id: "e1",
+    summary: "Daily standup",
+    dtstart: "2026-01-01T09:00:00.000Z",
+    dtend: "2026-01-01T10:00:00.000Z",
+    rrule: "FREQ=DAILY",
+    status: "confirmed",
     sequence: 0,
-    created_at: '2026-01-01T00:00:00.000Z',
-    updated_at: 'u1',
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "u1",
   };
 
   async function run(range: { from: string; to?: string }) {
-    const { default: upcoming } = await importQuery('../apps/agenda/queries/upcoming.ts');
-    const ctx = ctxOf({ 'core.event': [ev] });
+    const { default: upcoming } = await importQuery(
+      "../apps/agenda/queries/upcoming.ts"
+    );
+    const ctx = ctxOf({ "core.event": [ev] });
     return upcoming({ query: range, input: range, ctx });
   }
 
-  it('expands a daily series only within an explicit [from, to] window (+ buffer)', async () => {
-    const res = await run({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-08T00:00:00.000Z' });
+  it("expands a daily series only within an explicit [from, to] window (+ buffer)", async () => {
+    const res = await run({
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-06-08T00:00:00.000Z",
+    });
     // A one-week window (plus the ~31d span buffer back of `from`) — a couple
     // dozen instances, NOT a year's worth.
     expect(res.events.length).toBeGreaterThan(30);
     expect(res.events.length).toBeLessThan(45);
     // Every instance sits inside [fromLower, to).
     for (const e of res.events) {
-      expect(e.dtstart >= '2026-05-01T00:00:00.000Z').toBe(true);
-      expect(e.dtstart < '2026-06-08T00:00:00.000Z').toBe(true);
+      expect(e.dtstart >= "2026-05-01T00:00:00.000Z").toBe(true);
+      expect(e.dtstart < "2026-06-08T00:00:00.000Z").toBe(true);
     }
   });
 
-  it('caps open-ended (no `to`) expansion to a bounded forward window, not a year', async () => {
-    const bounded = await run({ from: '2026-06-01T00:00:00.000Z' });
+  it("caps open-ended (no `to`) expansion to a bounded forward window, not a year", async () => {
+    const bounded = await run({ from: "2026-06-01T00:00:00.000Z" });
     // The 120-day default window would yield ~150 daily instances; the old
     // 366-day ceiling would hit expandRrule's 200 backstop. Assert we're well
     // under that ceiling AND larger than the one-week window above.
@@ -255,56 +304,68 @@ describe('agenda upcoming query — range-bounded recurrence (issue #404)', () =
     expect(bounded.events.length).toBeGreaterThan(120);
   });
 
-  it('is idempotent across repeated reads of the same range (memoized expansion)', async () => {
-    const a = await run({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-08T00:00:00.000Z' });
-    const b = await run({ from: '2026-06-01T00:00:00.000Z', to: '2026-06-08T00:00:00.000Z' });
-    expect(b.events.map((e) => e.instance_key)).toEqual(a.events.map((e) => e.instance_key));
+  it("is idempotent across repeated reads of the same range (memoized expansion)", async () => {
+    const a = await run({
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-06-08T00:00:00.000Z",
+    });
+    const b = await run({
+      from: "2026-06-01T00:00:00.000Z",
+      to: "2026-06-08T00:00:00.000Z",
+    });
+    expect(b.events.map((e) => e.instance_key)).toStrictEqual(
+      a.events.map((e) => e.instance_key)
+    );
   });
 });
 
-describe('replica-local search projections (issue #406)', () => {
-  it('renders an Agenda search hit using only airplane-safe vault reads', async () => {
-    const { default: search } = await importQuery('../apps/agenda/queries/search.ts');
+describe("replica-local search projections (issue #406)", () => {
+  it("renders an Agenda search hit using only airplane-safe vault reads", async () => {
+    const { default: search } = await importQuery(
+      "../apps/agenda/queries/search.ts"
+    );
     const event = {
-      event_id: 'event-offline',
-      summary: 'Quarterly budget review',
-      description: 'Bring the forecast',
-      status: 'confirmed',
-      dtstart: '2026-07-20T09:00:00.000Z',
-      dtend: '2026-07-20T10:00:00.000Z',
-      _snippet: 'Quarterly ⟦budget⟧ review',
+      event_id: "event-offline",
+      summary: "Quarterly budget review",
+      description: "Bring the forecast",
+      status: "confirmed",
+      dtstart: "2026-07-20T09:00:00.000Z",
+      dtend: "2026-07-20T10:00:00.000Z",
+      _snippet: "Quarterly ⟦budget⟧ review",
     };
     // No fetch/online capability is present on this context. Every join the
     // real handler performs is satisfiable by eager replica rows.
     const ctx = ctxOf({ __search__: [event] });
-    const result = await search({ input: { term: 'budg' }, query: {}, ctx });
+    const result = await search({ input: { term: "budg" }, query: {}, ctx });
 
     expect(result.vaultDenied).toBeUndefined();
     expect(result.events).toHaveLength(1);
     expect(result.events[0]).toMatchObject({
-      event_id: 'event-offline',
-      summary: 'Quarterly budget review',
-      snippet: 'Quarterly ⟦budget⟧ review',
+      event_id: "event-offline",
+      summary: "Quarterly budget review",
+      snippet: "Quarterly ⟦budget⟧ review",
       attachments: [],
       attendees: [],
     });
   });
 
-  it('joins an off-window photo caption hit back into the real grid row', async () => {
-    const { default: search } = await importQuery('../apps/photos/queries/search.js');
+  it("joins an off-window photo caption hit back into the real grid row", async () => {
+    const { default: search } = await importQuery(
+      "../apps/photos/queries/search.js"
+    );
     const content = {
-      content_id: 'content-off-window',
-      title: 'Moonlit campsite in Ladakh',
-      content_uri: 'blob:sha256:photo',
-      media_type: 'image/jpeg',
+      content_id: "content-off-window",
+      title: "Moonlit campsite in Ladakh",
+      content_uri: "blob:sha256:photo",
+      media_type: "image/jpeg",
       byte_size: 42,
-      created_at: '2024-01-01T00:00:00.000Z',
+      created_at: "2024-01-01T00:00:00.000Z",
       deleted_at: null,
     };
     const asset = {
-      asset_id: 'asset-off-window',
+      asset_id: "asset-off-window",
       content_id: content.content_id,
-      captured_at: '2024-01-01T00:00:00.000Z',
+      captured_at: "2024-01-01T00:00:00.000Z",
       deleted_at: null,
       place_id: null,
     };
@@ -312,18 +373,22 @@ describe('replica-local search projections (issue #406)', () => {
     // normal recency window is intentionally absent from the fixture.
     const ctx = ctxOf({
       __search__: [content],
-      'core.content_item': [content],
-      'media.media_asset': [asset],
+      "core.content_item": [content],
+      "media.media_asset": [asset],
     });
-    const result = await search({ input: { term: 'moon camp' }, query: {}, ctx });
+    const result = await search({
+      input: { term: "moon camp" },
+      query: {},
+      ctx,
+    });
 
     expect(result.vaultDenied).toBeUndefined();
     expect(result.assets).toHaveLength(1);
     expect(result.assets[0]).toMatchObject({
-      asset_id: 'asset-off-window',
-      content_id: 'content-off-window',
-      title: 'Moonlit campsite in Ladakh',
-      thumb_uri: '/centraid/_vault/blobs/content-off-window?variant=thumb',
+      asset_id: "asset-off-window",
+      content_id: "content-off-window",
+      title: "Moonlit campsite in Ladakh",
+      thumb_uri: "/centraid/_vault/blobs/content-off-window?variant=thumb",
     });
   });
 });

@@ -1,4 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Feather } from "@expo/vector-icons";
+import { File, Paths } from "expo-file-system";
+import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
+import * as MediaLibrary from "expo-media-library";
+import * as Sharing from "expo-sharing";
+import { VideoView, useVideoPlayer } from "expo-video";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -8,30 +15,26 @@ import {
   Text,
   View,
   useWindowDimensions,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import { Image } from 'expo-image';
-import { VideoView, useVideoPlayer } from 'expo-video';
-import { GestureDetector } from 'react-native-gesture-handler';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
-import * as MediaLibrary from 'expo-media-library';
-import * as Sharing from 'expo-sharing';
-import { File, Paths } from 'expo-file-system';
+} from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { authHeader } from '../../lib/gateway';
-import type { NativeOptimisticMutation } from '../../lib/replica/native-session';
-import { useTheme } from '../../kit/theme';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
-import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
-import type { PhotosScreenProps } from '../../navigation';
-import type { PhotoAsset } from './timeline-model';
-import { InCloudOriginalError, openDeviceOriginal } from './device-media';
-import { buildDismissGesture, buildZoomGesture } from './lightbox-gestures';
-import { imageSource, videoSource } from './media-source';
-import { styles } from './PhotoLightbox.styles';
-import { usePhotoTimeline } from './timeline-source';
+import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { useTheme } from "../../kit/theme";
+import { authHeader } from "../../lib/gateway";
+import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
+import type { PhotosScreenProps } from "../../navigation";
+import { InCloudOriginalError, openDeviceOriginal } from "./device-media";
+import { buildDismissGesture, buildZoomGesture } from "./lightbox-gestures";
+import { imageSource, videoSource } from "./media-source";
+import { styles } from "./PhotoLightbox.styles";
+import type { PhotoAsset } from "./timeline-model";
+import { usePhotoTimeline } from "./timeline-source";
 
 // Gesture construction lives in lightbox-gestures.ts — see the comment there
 // for why the builder chains must stay outside component render bodies.
@@ -49,7 +52,12 @@ function VideoAsset({
     instance.loop = false;
   });
   return (
-    <VideoView player={player} nativeControls contentFit="contain" style={{ width, height }} />
+    <VideoView
+      player={player}
+      nativeControls
+      contentFit="contain"
+      style={{ width, height }}
+    />
   );
 }
 
@@ -65,7 +73,9 @@ function MediaPage({
   height: number;
 }): React.JSX.Element {
   const [playingLive, setPlayingLive] = useState(false);
-  const [quality, setQuality] = useState<'thumb' | 'preview' | 'original'>('thumb');
+  const [quality, setQuality] = useState<"thumb" | "preview" | "original">(
+    "thumb"
+  );
   // Re-point at a different asset ⇒ start again at the thumbnail. Adjusting the
   // state during render (React's documented "derive state from props" escape
   // hatch) rather than in an effect means the reset lands before paint, so a new
@@ -73,47 +83,63 @@ function MediaPage({
   const [qualityAssetId, setQualityAssetId] = useState(asset.id);
   if (qualityAssetId !== asset.id) {
     setQualityAssetId(asset.id);
-    setQuality('thumb');
+    setQuality("thumb");
   }
   const scale = useSharedValue(1);
   const startScale = useSharedValue(1);
-  const zoomStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const zoomStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
   const zoom = buildZoomGesture(scale, startScale);
-  if (asset.kind === 'video')
+  if (asset.kind === "video")
     return <VideoAsset uri={asset.originalUri} width={width} height={height} />;
   if (playingLive && companionUri)
     return <VideoAsset uri={companionUri} width={width} height={height} />;
   return (
     <View style={{ width, height }}>
       <GestureDetector gesture={zoom}>
-        <Animated.View style={[styles.mediaCenter, { width, height }, zoomStyle]}>
+        <Animated.View
+          style={[styles.mediaCenter, { width, height }, zoomStyle]}
+        >
           <Image
             source={imageSource(
-              quality === 'original'
+              quality === "original"
                 ? asset.originalUri
-                : quality === 'preview'
+                : quality === "preview"
                   ? asset.previewUri || asset.uri
-                  : asset.uri,
+                  : asset.uri
             )}
-            placeholder={asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined}
+            placeholder={
+              asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined
+            }
             contentFit="contain"
             transition={120}
             onLoad={() => {
-              if (quality === 'thumb' && asset.previewUri && asset.previewUri !== asset.uri)
-                setQuality('preview');
+              if (
+                quality === "thumb" &&
+                asset.previewUri &&
+                asset.previewUri !== asset.uri
+              )
+                setQuality("preview");
             }}
             style={{ width, height }}
           />
         </Animated.View>
       </GestureDetector>
       {companionUri ? (
-        <Pressable style={styles.liveButton} onPress={() => setPlayingLive(true)}>
+        <Pressable
+          style={styles.liveButton}
+          onPress={() => setPlayingLive(true)}
+        >
           <Feather name="play" size={18} color="#fff" />
           <Text style={styles.liveText}>LIVE</Text>
         </Pressable>
       ) : null}
-      {quality !== 'original' && asset.originalUri !== asset.previewUri ? (
-        <Pressable style={styles.originalButton} onPress={() => setQuality('original')}>
+      {quality !== "original" && asset.originalUri !== asset.previewUri ? (
+        <Pressable
+          style={styles.originalButton}
+          onPress={() => setQuality("original")}
+        >
           <Feather name="maximize" size={15} color="#fff" />
           <Text style={styles.liveText}>ORIGINAL</Text>
         </Pressable>
@@ -125,22 +151,22 @@ function MediaPage({
 export default function PhotoLightbox({
   route,
   navigation,
-}: PhotosScreenProps<'PhotoLightbox'>): React.JSX.Element {
+}: PhotosScreenProps<"PhotoLightbox">): React.JSX.Element {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
   const { session } = useReplica();
   const { assets } = usePhotoTimeline();
   const collections = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.collection' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.collection" }), [])
   );
   const entries = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.collection_entry' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.collection_entry" }), [])
   );
   const places = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.place' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.place" }), [])
   );
   // Page by asset identity, never by raw index: this timeline is the shared,
   // still-loading instance, so device pages land after mount and shift every
@@ -160,12 +186,14 @@ export default function PhotoLightbox({
   const albumIds = new Set(
     entries.rows
       .filter((row) => row.target_id === current?.assetId)
-      .map((row) => String(row.collection_id)),
+      .map((row) => String(row.collection_id))
   );
   const albumNames = collections.rows
     .filter((row) => albumIds.has(String(row.collection_id)))
-    .map((row) => String(row.name ?? 'Album'));
-  const currentPlace = places.rows.find((row) => row.place_id === current?.placeId);
+    .map((row) => String(row.name ?? "Album"));
+  const currentPlace = places.rows.find(
+    (row) => row.place_id === current?.placeId
+  );
   const dismiss = buildDismissGesture(navigation.goBack);
 
   useEffect(() => {
@@ -184,32 +212,35 @@ export default function PhotoLightbox({
   const write = async (
     action: string,
     input: Record<string, string | number>,
-    optimistic?: NativeOptimisticMutation[],
+    optimistic?: NativeOptimisticMutation[]
   ): Promise<void> => {
     if (!session) return;
-    const result = await session.write('photos', {
+    const result = await session.write("photos", {
       action,
       input,
       ...(optimistic ? { optimistic } : {}),
     });
-    if (result.status === 'parked')
-      Alert.alert('Awaiting approval', result.reason ?? 'The change is ready for owner approval.');
+    if (result.status === "parked")
+      Alert.alert(
+        "Awaiting approval",
+        result.reason ?? "The change is ready for owner approval."
+      );
   };
 
   const exportAsset = async (save: boolean): Promise<void> => {
     if (!current) return;
     let uri = current.originalUri;
-    if (uri.startsWith('http:') || uri.startsWith('https:')) {
+    if (uri.startsWith("http:") || uri.startsWith("https:")) {
       const name =
         current.filename ??
-        `${current.contentId ?? current.id}.${current.kind === 'video' ? 'mp4' : 'jpg'}`;
+        `${current.contentId ?? current.id}.${current.kind === "video" ? "mp4" : "jpg"}`;
       uri = (
         await File.downloadFileAsync(uri, new File(Paths.cache, name), {
           headers: authHeader(),
           idempotent: true,
         })
       ).uri;
-    } else if (!uri.startsWith('file:')) {
+    } else if (!uri.startsWith("file:")) {
       // A device-only original is addressed by its media-store id (`ph://` on
       // iOS, `content://` on Android), which is not a readable file — sharing
       // or saving needs the full-quality bytes resolved first.
@@ -224,8 +255,10 @@ export default function PhotoLightbox({
   const runExport = (save: boolean): void => {
     void exportAsset(save).catch((reason: unknown) => {
       Alert.alert(
-        reason instanceof InCloudOriginalError ? 'Original is in iCloud' : 'Export failed',
-        reason instanceof Error ? reason.message : String(reason),
+        reason instanceof InCloudOriginalError
+          ? "Original is in iCloud"
+          : "Export failed",
+        reason instanceof Error ? reason.message : String(reason)
       );
     });
   };
@@ -234,10 +267,13 @@ export default function PhotoLightbox({
   // frame rather than opening index 0 (the wrong photo). Once loaded without a
   // match the asset is genuinely gone, so the same frame stands in.
   if (!current || initialIndex === null)
-    return <View style={[styles.fill, { backgroundColor: '#000' }]} />;
+    return <View style={[styles.fill, { backgroundColor: "#000" }]} />;
   return (
     <GestureDetector gesture={dismiss}>
-      <SafeAreaView style={[styles.fill, { backgroundColor: '#000' }]} edges={['top', 'bottom']}>
+      <SafeAreaView
+        style={[styles.fill, { backgroundColor: "#000" }]}
+        edges={["top", "bottom"]}
+      >
         <View style={styles.topbar}>
           <Pressable onPress={() => navigation.goBack()}>
             <Feather name="chevron-down" size={28} color="#fff" />
@@ -262,7 +298,9 @@ export default function PhotoLightbox({
           })}
           keyExtractor={(asset) => asset.id}
           onMomentumScrollEnd={(event) => {
-            const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+            const nextIndex = Math.round(
+              event.nativeEvent.contentOffset.x / width
+            );
             setCurrentId((activeId) => assets[nextIndex]?.id ?? activeId);
           }}
           renderItem={({ item }) => (
@@ -277,30 +315,38 @@ export default function PhotoLightbox({
         />
         <View style={styles.toolbar}>
           <Pressable onPress={() => setSlideshow((value) => !value)}>
-            <Feather name={slideshow ? 'pause' : 'play'} size={22} color="#fff" />
+            <Feather
+              name={slideshow ? "pause" : "play"}
+              size={22}
+              color="#fff"
+            />
           </Pressable>
           <Pressable
             onPress={() => {
               void Haptics.selectionAsync();
               void write(
-                'update-asset',
+                "update-asset",
                 {
                   asset_id: current.assetId!,
                   favorite: current.favorite ? 0 : 1,
                 },
                 [
                   {
-                    op: 'upsert',
-                    entity: 'media.media_asset',
+                    op: "upsert",
+                    entity: "media.media_asset",
                     rowId: current.assetId!,
                     values: { favorite: current.favorite ? 0 : 1 },
                   },
-                ],
+                ]
               );
             }}
             disabled={!current.assetId}
           >
-            <Feather name="heart" size={23} color={current.favorite ? '#ff625f' : '#fff'} />
+            <Feather
+              name="heart"
+              size={23}
+              color={current.favorite ? "#ff625f" : "#fff"}
+            />
           </Pressable>
           <Pressable onPress={() => runExport(false)}>
             <Feather name="share" size={23} color="#fff" />
@@ -312,19 +358,23 @@ export default function PhotoLightbox({
             disabled={!current.assetId}
             onPress={() =>
               void write(
-                'update-asset',
+                "update-asset",
                 {
                   asset_id: current.assetId!,
                   archived: current.archived ? 0 : 1,
                 },
                 [
                   {
-                    op: 'upsert',
-                    entity: 'media.media_asset',
+                    op: "upsert",
+                    entity: "media.media_asset",
                     rowId: current.assetId!,
-                    values: { archived_at: current.archived ? null : new Date().toISOString() },
+                    values: {
+                      archived_at: current.archived
+                        ? null
+                        : new Date().toISOString(),
+                    },
                   },
-                ],
+                ]
               )
             }
           >
@@ -334,24 +384,28 @@ export default function PhotoLightbox({
             disabled={!current.assetId}
             onPress={() =>
               Alert.alert(
-                'Move to trash?',
-                'The device original is never deleted by this action.',
+                "Move to trash?",
+                "The device original is never deleted by this action.",
                 [
-                  { text: 'Cancel' },
+                  { text: "Cancel" },
                   {
-                    text: 'Trash',
-                    style: 'destructive',
+                    text: "Trash",
+                    style: "destructive",
                     onPress: () =>
-                      void write('delete-asset', { asset_id: current.assetId! }, [
-                        {
-                          op: 'upsert',
-                          entity: 'media.media_asset',
-                          rowId: current.assetId!,
-                          values: { deleted_at: new Date().toISOString() },
-                        },
-                      ]),
+                      void write(
+                        "delete-asset",
+                        { asset_id: current.assetId! },
+                        [
+                          {
+                            op: "upsert",
+                            entity: "media.media_asset",
+                            rowId: current.assetId!,
+                            values: { deleted_at: new Date().toISOString() },
+                          },
+                        ]
+                      ),
                   },
-                ],
+                ]
               )
             }
           >
@@ -364,46 +418,56 @@ export default function PhotoLightbox({
           visible={infoOpen}
           onRequestClose={() => setInfoOpen(false)}
         >
-          <Pressable style={styles.modalBackdrop} onPress={() => setInfoOpen(false)} />
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setInfoOpen(false)}
+          />
           <View style={[styles.sheet, { backgroundColor: colors.bgElev }]}>
-            <View style={[styles.sheetHandle, { backgroundColor: colors.lineStrong }]} />
+            <View
+              style={[
+                styles.sheetHandle,
+                { backgroundColor: colors.lineStrong },
+              ]}
+            />
             <Text style={[styles.sheetTitle, { color: colors.ink }]}>
-              {current.filename ?? 'Photo details'}
+              {current.filename ?? "Photo details"}
             </Text>
             {[
               [
-                'Captured',
+                "Captured",
                 new Intl.DateTimeFormat(undefined, {
-                  dateStyle: 'medium',
-                  timeStyle: 'short',
+                  dateStyle: "medium",
+                  timeStyle: "short",
                 }).format(new Date(current.capturedAt)),
               ],
               [
-                'Timezone',
+                "Timezone",
                 current.tzOffsetMin == null
-                  ? 'Original offset unavailable'
+                  ? "Original offset unavailable"
                   : formatTimezoneOffset(current.tzOffsetMin),
               ],
               [
-                'Dimensions',
+                "Dimensions",
                 current.width && current.height
                   ? `${current.width} × ${current.height}`
-                  : 'Unknown',
+                  : "Unknown",
               ],
               [
-                'File size',
+                "File size",
                 current.fileSize == null
-                  ? 'Unknown'
+                  ? "Unknown"
                   : `${(current.fileSize / 1024 / 1024).toFixed(current.fileSize > 10_485_760 ? 0 : 1)} MB`,
               ],
-              ['Place', String(currentPlace?.name ?? 'Unknown')],
-              ['Albums', albumNames.length ? albumNames.join(', ') : 'None'],
-              ['SHA-256', current.sha256 ?? 'Pending backup'],
-              ['Backup', current.backupState],
-              ['Source', current.source],
+              ["Place", String(currentPlace?.name ?? "Unknown")],
+              ["Albums", albumNames.length ? albumNames.join(", ") : "None"],
+              ["SHA-256", current.sha256 ?? "Pending backup"],
+              ["Backup", current.backupState],
+              ["Source", current.source],
             ].map(([label, value]) => (
               <View key={label} style={styles.infoRow}>
-                <Text style={[styles.infoLabel, { color: colors.ink2 }]}>{label}</Text>
+                <Text style={[styles.infoLabel, { color: colors.ink2 }]}>
+                  {label}
+                </Text>
                 <Text
                   selectable
                   numberOfLines={2}
@@ -423,7 +487,7 @@ export default function PhotoLightbox({
                   current.exif.ExposureTime,
                 ]
                   .filter(Boolean)
-                  .join(' · ')}
+                  .join(" · ")}
               </Text>
             ) : null}
             {current.assetId && places.rows.length ? (
@@ -433,42 +497,50 @@ export default function PhotoLightbox({
                     key={place.__rowId}
                     onPress={() =>
                       void write(
-                        'set-place',
+                        "set-place",
                         {
                           asset_id: current.assetId!,
                           place_id: String(place.place_id),
                         },
                         [
                           {
-                            op: 'upsert',
-                            entity: 'media.media_asset',
+                            op: "upsert",
+                            entity: "media.media_asset",
                             rowId: current.assetId!,
                             values: { place_id: String(place.place_id) },
                           },
-                        ],
+                        ]
                       )
                     }
-                    style={[styles.placeChip, { backgroundColor: colors.bgSunken }]}
+                    style={[
+                      styles.placeChip,
+                      { backgroundColor: colors.bgSunken },
+                    ]}
                   >
                     <Text style={[styles.placeText, { color: colors.ink }]}>
-                      {String(place.name ?? 'Place')}
+                      {String(place.name ?? "Place")}
                     </Text>
                   </Pressable>
                 ))}
                 <Pressable
                   onPress={() =>
-                    void write('set-place', { asset_id: current.assetId! }, [
+                    void write("set-place", { asset_id: current.assetId! }, [
                       {
-                        op: 'upsert',
-                        entity: 'media.media_asset',
+                        op: "upsert",
+                        entity: "media.media_asset",
                         rowId: current.assetId!,
                         values: { place_id: null },
                       },
                     ])
                   }
-                  style={[styles.placeChip, { backgroundColor: colors.bgSunken }]}
+                  style={[
+                    styles.placeChip,
+                    { backgroundColor: colors.bgSunken },
+                  ]}
                 >
-                  <Text style={[styles.placeText, { color: colors.ink2 }]}>Clear place</Text>
+                  <Text style={[styles.placeText, { color: colors.ink2 }]}>
+                    Clear place
+                  </Text>
                 </Pressable>
               </View>
             ) : null}
@@ -483,5 +555,5 @@ function formatTimezoneOffset(offsetMinutes: number): string {
   const absolute = Math.abs(offsetMinutes);
   const hours = Math.floor(absolute / 60);
   const minutes = absolute % 60;
-  return `UTC${offsetMinutes >= 0 ? '+' : '-'}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return `UTC${offsetMinutes >= 0 ? "+" : "-"}${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }

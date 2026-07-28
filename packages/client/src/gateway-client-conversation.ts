@@ -20,32 +20,34 @@
  */
 
 import {
+  appTurnPath,
+  assistantTurnPath,
+  resolvePath,
+  conversationStatusPath,
+  blobsPath,
+} from "@centraid/blueprints/kit/conversation-client.js";
+// Shared chat-client core (issue #420): the ONE SSE parser + wire-route
+// builders + the documented TurnStreamEvent union, from the canonical kit copy.
+import { consumeSse } from "@centraid/blueprints/kit/turn-stream.js";
+import type { TurnStreamEvent } from "@centraid/blueprints/kit/turn-stream.js";
+
+import type {
+  CentraidAgentsStatus,
+  CentraidRunnerStatus,
+} from "./centraid-api.js";
+import {
   auth,
   authHeaders,
   doFetch,
   readJson,
   scopedAuthHeaders,
   GatewayClientError,
-} from './gateway-client-core.js';
-import type { CentraidAgentsStatus, CentraidRunnerStatus } from './centraid-api.js';
-// Shared chat-client core (issue #420): the ONE SSE parser + wire-route
-// builders + the documented TurnStreamEvent union, from the canonical kit copy.
-import { consumeSse } from '@centraid/blueprints/kit/turn-stream.js';
-import type { TurnStreamEvent } from '@centraid/blueprints/kit/turn-stream.js';
-import {
-  appTurnPath,
-  assistantTurnPath,
-  resolvePath,
-  conversationsPath,
-  conversationPath,
-  conversationSearchPath,
-  conversationStatusPath,
-  blobsPath,
-} from '@centraid/blueprints/kit/conversation-client.js';
+} from "./gateway-client-core.js";
+
+export { type TurnStreamEvent } from "@centraid/blueprints/kit/turn-stream.js";
 
 // Re-exported so every consumer keeps importing the union from this barrel; the
 // definition now lives in one place (the wire contract, turn-stream.d.ts).
-export type { TurnStreamEvent };
 
 /**
  * Runner preflight + model catalog from the ACTIVE gateway. Reads the
@@ -54,17 +56,17 @@ export type { TurnStreamEvent };
  * can list them.
  */
 export async function getRunnerStatus(
-  opts: { refresh?: boolean } = {},
+  opts: { refresh?: boolean } = {}
 ): Promise<CentraidRunnerStatus> {
   const { baseUrl, token } = await auth();
   const path = opts.refresh
-    ? '/centraid/_turn/runner-status?refresh=1'
-    : '/centraid/_turn/runner-status';
+    ? "/centraid/_turn/runner-status?refresh=1"
+    : "/centraid/_turn/runner-status";
   const res = await doFetch(baseUrl, path, {
-    method: 'GET',
+    method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<CentraidRunnerStatus>(res, 'fetch runner status');
+  return readJson<CentraidRunnerStatus>(res, "fetch runner status");
 }
 
 /**
@@ -74,17 +76,19 @@ export async function getRunnerStatus(
  * rather than whatever is installed on the desktop.
  */
 export async function getAgentsStatus(
-  opts: { refresh?: boolean } = {},
+  opts: { refresh?: boolean } = {}
 ): Promise<CentraidAgentsStatus> {
   const { baseUrl, token } = await auth();
   // `?refresh=1` re-enumerates each agent's models (issue #188). A plain load
   // returns the catalog cache.
-  const path = opts.refresh ? '/centraid/_agents/status?refresh=1' : '/centraid/_agents/status';
+  const path = opts.refresh
+    ? "/centraid/_agents/status?refresh=1"
+    : "/centraid/_agents/status";
   const res = await doFetch(baseUrl, path, {
-    method: 'GET',
+    method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<CentraidAgentsStatus>(res, 'fetch agents status');
+  return readJson<CentraidAgentsStatus>(res, "fetch agents status");
 }
 
 /** An attachment already uploaded to the blob CAS, referenced on the next turn. */
@@ -107,7 +111,7 @@ export interface StreamTurnInput {
    * ask about my data") — the gateway routes vault-backed apps' ask turns
    * onto the vault register. Absent = builder chat (unchanged).
    */
-  register?: 'ask' | 'build';
+  register?: "ask" | "build";
   /** Per-conversation runner selection; does not mutate the device default. */
   runnerKind?: string;
   model?: string;
@@ -133,7 +137,7 @@ export interface StreamTurnInput {
   /** Explicit owner-selected extra workspace roots for this conversation turn. */
   additionalDirectories?: string[];
   /** Centraid-owned primary workspace selector (the host resolves the path). */
-  workspaceKind?: 'vault-data' | 'app' | 'draft';
+  workspaceKind?: "vault-data" | "app" | "draft";
   /**
    * The space this conversation reads and writes (issue #599). A conversation
    * is pinned to exactly ONE space for its whole life: the picker records the
@@ -170,49 +174,53 @@ async function postTurnWithRetry(
   body: string,
   signal: AbortSignal,
   errLabel: string,
-  scopeId?: string,
+  scopeId?: string
 ): Promise<Response> {
   const { baseUrl, token } = await auth();
-  for (let attempt = 0; ; attempt++) {
+  async function postAttempt(attempt: number): Promise<Response> {
     const res = await doFetch(baseUrl, path, {
-      method: 'POST',
-      headers: scopedAuthHeaders(token, scopeId, 'application/json'),
+      method: "POST",
+      headers: scopedAuthHeaders(token, scopeId, "application/json"),
       body,
       signal,
     });
     if (res.status === 429 && attempt < TURN_BUSY_MAX_RETRIES) {
-      const retryAfter = Number(res.headers.get('retry-after'));
-      const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 3000;
+      const retryAfter = Number(res.headers.get("retry-after"));
+      const waitMs =
+        Number.isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : 3000;
       await res.body?.cancel().catch(() => undefined);
       await delay(waitMs);
-      continue;
+      return postAttempt(attempt + 1);
     }
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
+      const text = await res.text().catch(() => "");
       if (res.status === 401 || res.status === 403) {
         throw new GatewayClientError(
-          'auth_required',
-          `${errLabel}: gateway rejected request (HTTP ${res.status}).`,
+          "auth_required",
+          `${errLabel}: gateway rejected request (HTTP ${res.status}).`
         );
       }
       if (res.status === 429) {
         throw new GatewayClientError(
-          'gateway_error',
-          `${errLabel}: still busy after ${TURN_BUSY_MAX_RETRIES} retries — try again shortly.`,
+          "gateway_error",
+          `${errLabel}: still busy after ${TURN_BUSY_MAX_RETRIES} retries — try again shortly.`
         );
       }
       throw new GatewayClientError(
-        'gateway_error',
-        `${errLabel} failed (HTTP ${res.status}): ${text || res.statusText}`,
+        "gateway_error",
+        `${errLabel} failed (HTTP ${res.status}): ${text || res.statusText}`
       );
     }
     if (!res.body)
       throw new GatewayClientError(
-        'gateway_error',
-        `${errLabel}: gateway returned no stream body.`,
+        "gateway_error",
+        `${errLabel}: gateway returned no stream body.`
       );
     return res;
   }
+  return postAttempt(0);
 }
 
 /**
@@ -225,23 +233,31 @@ export async function uploadConversationAttachment(
   bytes: Uint8Array,
   mime: string,
   filename?: string,
-  scopeId?: string,
+  scopeId?: string
 ): Promise<ConversationAttachmentRef> {
   const { baseUrl, token } = await auth();
   // The blob CAS is vault-partitioned: an attachment staged in the ambient
   // space while the turn resolves its hash in the conversation's space would
   // silently break — so the conversation's scope rides the upload too (#599).
   const res = await doFetch(baseUrl, blobsPath(appId), {
-    method: 'POST',
+    method: "POST",
     headers: scopedAuthHeaders(token, scopeId, mime),
     body: bytes as BodyInit,
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new GatewayClientError('gateway_error', `upload failed (HTTP ${res.status}): ${text}`);
+    const text = await res.text().catch(() => "");
+    throw new GatewayClientError(
+      "gateway_error",
+      `upload failed (HTTP ${res.status}): ${text}`
+    );
   }
   const out = (await res.json()) as { hash: string; sizeBytes: number };
-  return { hash: out.hash, mime, sizeBytes: out.sizeBytes, ...(filename ? { filename } : {}) };
+  return {
+    hash: out.hash,
+    mime,
+    sizeBytes: out.sizeBytes,
+    ...(filename ? { filename } : {}),
+  };
 }
 
 /**
@@ -254,7 +270,7 @@ export async function streamTurn(
   appId: string,
   input: StreamTurnInput,
   onEvent: (event: TurnStreamEvent) => void,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<StreamTurnResult> {
   const res = await postTurnWithRetry(
     appTurnPath(appId),
@@ -268,15 +284,17 @@ export async function streamTurn(
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-      ...(input.providerConsent?.length ? { providerConsent: input.providerConsent } : {}),
-      ...(input.additionalDirectories !== undefined
-        ? { additionalDirectories: input.additionalDirectories }
+      ...(input.providerConsent?.length
+        ? { providerConsent: input.providerConsent }
         : {}),
+      ...(input.additionalDirectories === undefined
+        ? {}
+        : { additionalDirectories: input.additionalDirectories }),
       ...(input.workspaceKind ? { workspaceKind: input.workspaceKind } : {}),
     }),
     signal,
-    'chat',
-    input.scopeId,
+    "chat",
+    input.scopeId
   );
   // `res.body` is guaranteed by postTurnWithRetry.
   return consumeSse(res.body!, onEvent, { signal });
@@ -289,13 +307,13 @@ export async function streamTurn(
  * `ASSISTANT_APP_ID`). Its threads ride the same `/_centraid-conversations`
  * CRUD as app chats — list/create/load/rename/delete all take this id.
  */
-export const ASSISTANT_APP_ID = '_assistant';
+export const ASSISTANT_APP_ID = "_assistant";
 
 /** A minimal renderable entity card resolved from an answer's @-ref. */
 export interface AssistantRefCard {
   type: string;
   id: string;
-  status: 'live' | 'trashed' | 'missing' | 'denied' | 'unknown';
+  status: "live" | "trashed" | "missing" | "denied" | "unknown";
   title: string | null;
   subtitle: string | null;
 }
@@ -307,7 +325,7 @@ export interface AssistantRefCard {
 export async function streamAssistantTurn(
   input: StreamTurnInput,
   onEvent: (event: TurnStreamEvent) => void,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<StreamTurnResult> {
   const res = await postTurnWithRetry(
     assistantTurnPath(),
@@ -320,15 +338,17 @@ export async function streamAssistantTurn(
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-      ...(input.providerConsent?.length ? { providerConsent: input.providerConsent } : {}),
-      ...(input.additionalDirectories !== undefined
-        ? { additionalDirectories: input.additionalDirectories }
+      ...(input.providerConsent?.length
+        ? { providerConsent: input.providerConsent }
         : {}),
+      ...(input.additionalDirectories === undefined
+        ? {}
+        : { additionalDirectories: input.additionalDirectories }),
       ...(input.workspaceKind ? { workspaceKind: input.workspaceKind } : {}),
     }),
     signal,
-    'assistant',
-    input.scopeId,
+    "assistant",
+    input.scopeId
   );
   return consumeSse(res.body!, onEvent, { signal });
 }
@@ -341,32 +361,35 @@ export async function streamAssistantTurn(
 export async function conversationStatus(
   appId: string,
   sessionId: string,
-  scopeId?: string,
+  scopeId?: string
 ): Promise<{ turnCount: number; updatedAt: number }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, conversationStatusPath(appId, sessionId), {
-    method: 'GET',
+    method: "GET",
     headers: scopedAuthHeaders(token, scopeId),
   });
-  return readJson(res, 'conversation status');
+  return readJson(res, "conversation status");
 }
 
 /** Resolve answer refs (`ref:type/id`) to renderable entity cards. */
 export async function resolveAssistantRefs(
-  refs: Array<{ type: string; id: string }>,
+  refs: Array<{ type: string; id: string }>
 ): Promise<AssistantRefCard[]> {
   if (refs.length === 0) return [];
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, resolvePath(), {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify({ refs }),
   });
-  const out = await readJson<{ cards: AssistantRefCard[] }>(res, 'resolve assistant refs');
+  const out = await readJson<{ cards: AssistantRefCard[] }>(
+    res,
+    "resolve assistant refs"
+  );
   return out.cards ?? [];
 }
 
 // The chat-history CRUD (list/create/load/rename/search/pin/archive/delete)
 // lives beside this file; re-exported so the conversation surface stays one
 // import for every call site.
-export * from './gateway-client-conversation-history.js';
+export * from "./gateway-client-conversation-history.js";

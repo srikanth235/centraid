@@ -1,4 +1,4 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
+import { promises as fs } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit one suite over the whole connector contract — manifest, secret injection (#293) and connection-credential injection (#304) share the runFire fixture
 /*
  * Connector broker invariants (issue #290 phase 4): manifest contract
@@ -6,83 +6,98 @@ import { tempDir } from '@centraid/test-kit/temp-dir';
  * and the honest-liveness fire gate (paused/needs-auth connections never run
  * their connector).
  */
+import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import type { VaultBridge } from '@centraid/app-engine';
-import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
-import { validateManifest, type Manifest } from '../manifest/manifest.js';
-import { isBrokerReadOnlyPost } from '../handler/runner.js';
+import type { VaultBridge } from "@centraid/app-engine";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { isBrokerReadOnlyPost } from "../handler/runner.js";
+import { validateManifest, type Manifest } from "../manifest/manifest.js";
+import {
+  runFire,
+  type DispatchSurface,
+  type OpenDispatchArgs,
+} from "./fire.js";
 
 const VAULT_BLOCK = {
-  purpose: 'dpv:ServiceProvision',
-  why: 'stage pulled rows',
-  scopes: [{ schema: 'sync', verbs: 'act' }],
+  purpose: "dpv:ServiceProvision",
+  why: "stage pulled rows",
+  scopes: [{ schema: "sync", verbs: "act" }],
 };
 
-function rawManifest(over: Record<string, unknown> = {}): Record<string, unknown> {
+function rawManifest(
+  over: Record<string, unknown> = {}
+): Record<string, unknown> {
   return {
-    name: 'Gmail pull',
-    version: '0.1.0',
+    name: "Gmail pull",
+    version: "0.1.0",
     enabled: true,
-    prompt: 'sync mail',
-    triggers: [{ kind: 'cron', expr: '*/30 * * * *' }],
+    prompt: "sync mail",
+    triggers: [{ kind: "cron", expr: "*/30 * * * *" }],
     requires: {},
-    connector: { kind: 'mcp.gmail', label: 'personal', principal: 'me@example.com' },
+    connector: {
+      kind: "mcp.gmail",
+      label: "personal",
+      principal: "me@example.com",
+    },
     vault: VAULT_BLOCK,
     history: { keep: { count: 100 } },
-    generated: { by: 'test', at: '2026-07-06' },
+    generated: { by: "test", at: "2026-07-06" },
     ...over,
   };
 }
 
-describe('connector manifest contract', () => {
-  it('accepts a well-formed connector block', () => {
+describe("connector manifest contract", () => {
+  it("accepts a well-formed connector block", () => {
     const m = validateManifest(rawManifest());
-    expect(m.connector).toEqual({
-      kind: 'mcp.gmail',
-      label: 'personal',
-      principal: 'me@example.com',
+    expect(m.connector).toStrictEqual({
+      kind: "mcp.gmail",
+      label: "personal",
+      principal: "me@example.com",
     });
   });
 
-  it('accepts connector.connectionId and soft connections bindings', () => {
+  it("accepts connector.connectionId and soft connections bindings", () => {
     const m = validateManifest(
       rawManifest({
         connector: {
-          kind: 'mcp.gmail',
-          label: 'personal',
-          principal: 'me@example.com',
-          connectionId: 'conn-abc',
+          kind: "mcp.gmail",
+          label: "personal",
+          principal: "me@example.com",
+          connectionId: "conn-abc",
         },
-      }),
+      })
     );
-    expect(m.connector?.connectionId).toBe('conn-abc');
+    expect(m.connector?.connectionId).toBe("conn-abc");
     const soft = validateManifest(
       rawManifest({
         connector: undefined,
         vault: undefined,
-        connections: [{ connectionId: 'c1', kind: 'pull.github', label: 'work' }],
-      }),
+        connections: [
+          { connectionId: "c1", kind: "pull.github", label: "work" },
+        ],
+      })
     );
-    expect(soft.connections).toEqual([{ connectionId: 'c1', kind: 'pull.github', label: 'work' }]);
+    expect(soft.connections).toStrictEqual([
+      { connectionId: "c1", kind: "pull.github", label: "work" },
+    ]);
   });
 
-  it('refuses a connector without a vault block', () => {
+  it("refuses a connector without a vault block", () => {
     const raw = rawManifest();
     delete raw.vault;
-    expect(() => validateManifest(raw)).toThrow(/manifest\.vault/);
+    expect(() => validateManifest(raw)).toThrow(/manifest\.vault/u);
   });
 });
 
-describe('connector runtime gates', () => {
+describe("connector runtime gates", () => {
   let appsDir: string;
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await tempDir('centraid-connector-');
-    journalDbFile = path.join(appsDir, 'journal.db');
+    appsDir = await tempDir("centraid-connector-");
+    journalDbFile = path.join(appsDir, "journal.db");
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -91,22 +106,25 @@ describe('connector runtime gates', () => {
   async function writeConnector(
     handler: string,
     over: Record<string, unknown> = {},
-    appId = 'mail',
+    appId = "mail"
   ): Promise<void> {
-    const dir = path.join(appsDir, appId, 'automations', 'pull');
+    const dir = path.join(appsDir, appId, "automations", "pull");
     await fs.mkdir(dir, { recursive: true });
     const manifest = validateManifest(rawManifest(over)) as Manifest;
-    await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(manifest, null, 2));
-    await fs.writeFile(path.join(dir, 'handler.js'), handler);
+    await fs.writeFile(
+      path.join(dir, "automation.json"),
+      JSON.stringify(manifest, null, 2)
+    );
+    await fs.writeFile(path.join(dir, "handler.js"), handler);
   }
 
   const openDispatch = () => (_args: OpenDispatchArgs) =>
     Promise.resolve({
-      agentDispatcher: async () => 'should never run',
+      agentDispatcher: async () => "should never run",
       close: async () => undefined,
     } satisfies DispatchSurface);
 
-  it('forbids ctx.agent in connector handlers', async () => {
+  it("forbids ctx.agent in connector handlers", async () => {
     await writeConnector(
       `export default async ({ ctx }) => {
          try {
@@ -115,53 +133,63 @@ describe('connector runtime gates', () => {
          } catch (err) {
            return { reached: false, reason: err.message };
          }
-       };`,
+       };`
     );
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile },
-      { openDispatch: openDispatch() },
+      { automationRef: "mail/pull", appsDir, journalDbFile },
+      { openDispatch: openDispatch() }
     );
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toMatchObject({
       reached: false,
-      reason: expect.stringContaining('forbidden in connector handlers'),
+      reason: expect.stringContaining("forbidden in connector handlers"),
     });
   });
 
-  it('a paused connection never fires its connector (honest liveness)', async () => {
+  it("a paused connection never fires its connector (honest liveness)", async () => {
     await writeConnector(`export default async () => ({ ranAnyway: true });`);
     const paused: VaultBridge = async (call) => {
-      if (call.op === 'read') {
-        return { ok: true, result: { rows: [{ status: 'paused' }] } };
+      if (call.op === "read") {
+        return { ok: true, result: { rows: [{ status: "paused" }] } };
       }
-      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+      return { ok: false, code: "VAULT_ERROR", error: "unexpected op" };
     };
     const { outcome, record } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => paused },
-      { openDispatch: openDispatch() },
+      {
+        automationRef: "mail/pull",
+        appsDir,
+        journalDbFile,
+        vaultFor: () => paused,
+      },
+      { openDispatch: openDispatch() }
     );
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toMatch(/paused/);
+    expect(outcome.error).toMatch(/paused/u);
     expect(record.ok).toBe(false);
     expect(outcome.value).toBeUndefined(); // the handler never executed
   });
 
-  it('an unreadable status fails open — begin_run stays the hard gate', async () => {
+  it("an unreadable status fails open — begin_run stays the hard gate", async () => {
     await writeConnector(`export default async () => ({ ran: true });`);
     const deny: VaultBridge = async () => ({
       ok: false,
-      code: 'VAULT_CONSENT',
-      error: 'deny (receipt r1): no active grant',
+      code: "VAULT_CONSENT",
+      error: "deny (receipt r1): no active grant",
     });
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => deny },
-      { openDispatch: openDispatch() },
+      {
+        automationRef: "mail/pull",
+        appsDir,
+        journalDbFile,
+        vaultFor: () => deny,
+      },
+      { openDispatch: openDispatch() }
     );
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toMatchObject({ ran: true });
   });
 
-  it('owns run identity, staging, cursors, and finish outside the pull spec', async () => {
+  it("owns run identity, staging, cursors, and finish outside the pull spec", async () => {
     await writeConnector(
       `export default {
          protocol: 'centraid.pull/v1',
@@ -180,85 +208,93 @@ describe('connector runtime gates', () => {
        };`,
       {
         connector: {
-          kind: 'mcp.gmail',
-          label: 'personal',
-          principal: 'me@example.com',
-          connectionId: 'conn-bound',
+          kind: "mcp.gmail",
+          label: "personal",
+          principal: "me@example.com",
+          connectionId: "conn-bound",
         },
-      },
+      }
     );
     const invoked: Record<string, unknown>[] = [];
     const bridge: VaultBridge = async (call) => {
-      if (call.op === 'read') {
-        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      if (call.op === "read") {
+        return { ok: true, result: { rows: [{ status: "active" }] } };
       }
-      if (call.op === 'invoke') {
+      if (call.op === "invoke") {
         invoked.push(call.payload);
         const command = call.payload.command;
-        if (command === 'sync.begin_run') {
+        if (command === "sync.begin_run") {
           return {
             ok: true,
             result: {
               output: {
-                connection_id: 'conn-bound',
-                run_id: 'sync-run-1',
+                connection_id: "conn-bound",
+                run_id: "sync-run-1",
                 cursors: {
-                  'messages.updated_at': '2026-07-22T18:00:00Z',
-                  'provider.page': 'poison',
+                  "messages.updated_at": "2026-07-22T18:00:00Z",
+                  "provider.page": "poison",
                 },
               },
             },
           };
         }
-        if (command === 'sync.stage_rows') {
-          return { ok: true, result: { output: { published: { created: 1, updated: 0 } } } };
+        if (command === "sync.stage_rows") {
+          return {
+            ok: true,
+            result: { output: { published: { created: 1, updated: 0 } } },
+          };
         }
         return { ok: true, result: { output: {} } };
       }
-      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+      return { ok: false, code: "VAULT_ERROR", error: "unexpected op" };
     };
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
-      { openDispatch: openDispatch() },
+      {
+        automationRef: "mail/pull",
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
+      { openDispatch: openDispatch() }
     );
     expect(outcome.ok).toBe(true);
     expect(outcome).toMatchObject({
-      summary: 'pulled one',
+      summary: "pulled one",
       output: { staged: 1, published: 1 },
     });
-    expect(invoked.map((payload) => payload.command)).toEqual([
-      'sync.begin_run',
-      'sync.stage_rows',
-      'sync.set_cursor',
-      'sync.set_cursor',
-      'sync.finish_run',
+    expect(invoked.map((payload) => payload.command)).toStrictEqual([
+      "sync.begin_run",
+      "sync.stage_rows",
+      "sync.set_cursor",
+      "sync.set_cursor",
+      "sync.finish_run",
     ]);
     for (const payload of invoked) {
-      if (payload.command === 'sync.finish_run') continue;
-      expect(payload).toMatchObject({ input: { connection_id: 'conn-bound' } });
+      if (payload.command === "sync.finish_run") continue;
+      expect(payload).toMatchObject({ input: { connection_id: "conn-bound" } });
     }
     expect(invoked[0]).toMatchObject({
-      input: { connection_id: 'conn-bound', principal: 'me@example.com' },
+      input: { connection_id: "conn-bound", principal: "me@example.com" },
     });
-    expect(invoked[0]?.input).not.toHaveProperty('kind');
-    expect(invoked[0]?.input).not.toHaveProperty('label');
-    expect(invoked[1]?.input).not.toHaveProperty('kind');
-    expect(invoked[1]?.input).not.toHaveProperty('label');
+    expect(invoked[0]?.input).not.toHaveProperty("kind");
+    expect(invoked[0]?.input).not.toHaveProperty("label");
+    expect(invoked[1]?.input).not.toHaveProperty("kind");
+    expect(invoked[1]?.input).not.toHaveProperty("label");
     expect(invoked[2]).toMatchObject({
       input: {
-        key: 'messages.updated_at',
-        value: '2026-07-23T12:00:00Z',
+        key: "messages.updated_at",
+        value: "2026-07-23T12:00:00Z",
       },
     });
     expect(invoked[3]).toMatchObject({
       input: {
-        key: 'provider.page',
+        key: "provider.page",
         value: null,
       },
     });
   });
 
-  it('keeps two same-kind connector accounts isolated by manifest binding', async () => {
+  it("keeps two same-kind connector accounts isolated by manifest binding", async () => {
     const handler = `export default {
       protocol: 'centraid.pull/v1',
       async principal() { return 'same@example.com'; },
@@ -268,34 +304,34 @@ describe('connector runtime gates', () => {
       handler,
       {
         connector: {
-          kind: 'mcp.gmail',
-          label: 'personal',
-          principal: 'same@example.com',
-          connectionId: 'conn-personal',
+          kind: "mcp.gmail",
+          label: "personal",
+          principal: "same@example.com",
+          connectionId: "conn-personal",
         },
       },
-      'mail-personal',
+      "mail-personal"
     );
     await writeConnector(
       handler,
       {
         connector: {
-          kind: 'mcp.gmail',
-          label: 'personal',
-          principal: 'same@example.com',
-          connectionId: 'conn-work',
+          kind: "mcp.gmail",
+          label: "personal",
+          principal: "same@example.com",
+          connectionId: "conn-work",
         },
       },
-      'mail-work',
+      "mail-work"
     );
     const beginInputs: Record<string, unknown>[] = [];
     const bridge: VaultBridge = async (call) => {
-      if (call.op === 'read') {
-        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      if (call.op === "read") {
+        return { ok: true, result: { rows: [{ status: "active" }] } };
       }
-      if (call.op === 'invoke') {
+      if (call.op === "invoke") {
         const input = call.payload.input as Record<string, unknown>;
-        if (call.payload.command === 'sync.begin_run') {
+        if (call.payload.command === "sync.begin_run") {
           beginInputs.push(input);
           return {
             ok: true,
@@ -310,24 +346,28 @@ describe('connector runtime gates', () => {
         }
         return { ok: true, result: { output: {} } };
       }
-      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+      return { ok: false, code: "VAULT_ERROR", error: "unexpected op" };
     };
 
-    for (const automationRef of ['mail-personal/pull', 'mail-work/pull']) {
+    const runNext = async (index: number): Promise<void> => {
+      const automationRef = ["mail-personal/pull", "mail-work/pull"][index];
+      if (!automationRef) return;
       const { outcome } = await runFire(
         { automationRef, appsDir, journalDbFile, vaultFor: () => bridge },
-        { openDispatch: openDispatch() },
+        { openDispatch: openDispatch() }
       );
       expect(outcome.ok).toBe(true);
-    }
+      return runNext(index + 1);
+    };
+    await runNext(0);
 
-    expect(beginInputs).toEqual([
-      expect.objectContaining({ connection_id: 'conn-personal' }),
-      expect.objectContaining({ connection_id: 'conn-work' }),
+    expect(beginInputs).toStrictEqual([
+      expect.objectContaining({ connection_id: "conn-personal" }),
+      expect.objectContaining({ connection_id: "conn-work" }),
     ]);
   });
 
-  it('does not invoke provider paging when the engine refuses the scoped run', async () => {
+  it("does not invoke provider paging when the engine refuses the scoped run", async () => {
     await writeConnector(
       `export default {
          protocol: 'centraid.pull/v1',
@@ -336,42 +376,47 @@ describe('connector runtime gates', () => {
        };`,
       {
         connector: {
-          kind: 'mcp.gmail',
-          label: 'personal',
-          principal: 'me@example.com',
-          connectionId: 'conn-bound',
+          kind: "mcp.gmail",
+          label: "personal",
+          principal: "me@example.com",
+          connectionId: "conn-bound",
         },
-      },
+      }
     );
     const invoked: string[] = [];
     const bridge: VaultBridge = async (call) => {
-      if (call.op === 'read') {
-        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      if (call.op === "read") {
+        return { ok: true, result: { rows: [{ status: "active" }] } };
       }
-      if (call.op === 'invoke') {
+      if (call.op === "invoke") {
         invoked.push(String(call.payload.command));
         return {
           ok: true,
-          result: { output: { refused: 'paused', reason: 'paused by owner' } },
+          result: { output: { refused: "paused", reason: "paused by owner" } },
         };
       }
-      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+      return { ok: false, code: "VAULT_ERROR", error: "unexpected op" };
     };
 
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
-      { openDispatch: openDispatch() },
+      {
+        automationRef: "mail/pull",
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
+      { openDispatch: openDispatch() }
     );
 
     expect(outcome.ok).toBe(true);
     expect(outcome).toMatchObject({
-      summary: 'skipped: paused by owner',
+      summary: "skipped: paused by owner",
       output: { skipped: true },
     });
-    expect(invoked).toEqual(['sync.begin_run']);
+    expect(invoked).toStrictEqual(["sync.begin_run"]);
   });
 
-  it('does not expose vault or state rails to declarative pull specs', async () => {
+  it("does not expose vault or state rails to declarative pull specs", async () => {
     await writeConnector(
       `export default {
          protocol: 'centraid.pull/v1',
@@ -385,42 +430,47 @@ describe('connector runtime gates', () => {
        };`,
       {
         connector: {
-          kind: 'mcp.gmail',
-          label: 'personal',
-          principal: 'me@example.com',
-          connectionId: 'conn-bound',
+          kind: "mcp.gmail",
+          label: "personal",
+          principal: "me@example.com",
+          connectionId: "conn-bound",
         },
-      },
+      }
     );
     const bridge: VaultBridge = async (call) => {
-      if (call.op === 'read') {
-        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      if (call.op === "read") {
+        return { ok: true, result: { rows: [{ status: "active" }] } };
       }
-      if (call.op === 'invoke' && call.payload.command === 'sync.begin_run') {
+      if (call.op === "invoke" && call.payload.command === "sync.begin_run") {
         return {
           ok: true,
           result: {
             output: {
-              connection_id: 'conn-bound',
-              run_id: 'sync-run-1',
+              connection_id: "conn-bound",
+              run_id: "sync-run-1",
               cursors: {},
             },
           },
         };
       }
-      if (call.op === 'invoke') return { ok: true, result: { output: {} } };
-      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+      if (call.op === "invoke") return { ok: true, result: { output: {} } };
+      return { ok: false, code: "VAULT_ERROR", error: "unexpected op" };
     };
 
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
-      { openDispatch: openDispatch() },
+      {
+        automationRef: "mail/pull",
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
+      { openDispatch: openDispatch() }
     );
 
     expect(outcome.ok).toBe(true);
   });
 
-  it('closes an engine-owned run when a pull spec throws', async () => {
+  it("closes an engine-owned run when a pull spec throws", async () => {
     await writeConnector(
       `export default {
          protocol: 'centraid.pull/v1',
@@ -429,27 +479,27 @@ describe('connector runtime gates', () => {
        };`,
       {
         connector: {
-          kind: 'mcp.gmail',
-          label: 'personal',
-          principal: 'me@example.com',
-          connectionId: 'conn-bound',
+          kind: "mcp.gmail",
+          label: "personal",
+          principal: "me@example.com",
+          connectionId: "conn-bound",
         },
-      },
+      }
     );
     const invoked: Record<string, unknown>[] = [];
     const bridge: VaultBridge = async (call) => {
-      if (call.op === 'read') {
-        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      if (call.op === "read") {
+        return { ok: true, result: { rows: [{ status: "active" }] } };
       }
-      if (call.op === 'invoke') {
+      if (call.op === "invoke") {
         invoked.push(call.payload);
-        if (call.payload.command === 'sync.begin_run') {
+        if (call.payload.command === "sync.begin_run") {
           return {
             ok: true,
             result: {
               output: {
-                connection_id: 'conn-bound',
-                run_id: 'sync-run-1',
+                connection_id: "conn-bound",
+                run_id: "sync-run-1",
                 cursors: {},
               },
             },
@@ -457,26 +507,35 @@ describe('connector runtime gates', () => {
         }
         return { ok: true, result: { output: {} } };
       }
-      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+      return { ok: false, code: "VAULT_ERROR", error: "unexpected op" };
     };
 
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
-      { openDispatch: openDispatch() },
+      {
+        automationRef: "mail/pull",
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
+      { openDispatch: openDispatch() }
     );
 
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toMatch(/provider pagination failed/);
-    expect(invoked.map((payload) => payload.command)).toEqual([
-      'sync.begin_run',
-      'sync.finish_run',
+    expect(outcome.error).toMatch(/provider pagination failed/u);
+    expect(invoked.map((payload) => payload.command)).toStrictEqual([
+      "sync.begin_run",
+      "sync.finish_run",
     ]);
     expect(invoked[1]).toMatchObject({
-      input: { run_id: 'sync-run-1', ok: false, error: expect.stringContaining('pagination') },
+      input: {
+        run_id: "sync-run-1",
+        ok: false,
+        error: expect.stringContaining("pagination"),
+      },
     });
   });
 
-  it('preserves the handler error when closing its failed connector run also fails', async () => {
+  it("preserves the handler error when closing its failed connector run also fails", async () => {
     await writeConnector(
       `export default {
          protocol: 'centraid.pull/v1',
@@ -485,53 +544,62 @@ describe('connector runtime gates', () => {
        };`,
       {
         connector: {
-          kind: 'mcp.gmail',
-          label: 'personal',
-          principal: 'me@example.com',
-          connectionId: 'conn-bound',
+          kind: "mcp.gmail",
+          label: "personal",
+          principal: "me@example.com",
+          connectionId: "conn-bound",
         },
-      },
+      }
     );
     const bridge: VaultBridge = async (call) => {
-      if (call.op === 'read') {
-        return { ok: true, result: { rows: [{ status: 'active' }] } };
+      if (call.op === "read") {
+        return { ok: true, result: { rows: [{ status: "active" }] } };
       }
-      if (call.op === 'invoke' && call.payload.command === 'sync.begin_run') {
+      if (call.op === "invoke" && call.payload.command === "sync.begin_run") {
         return {
           ok: true,
           result: {
             output: {
-              connection_id: 'conn-bound',
-              run_id: 'sync-run-1',
+              connection_id: "conn-bound",
+              run_id: "sync-run-1",
               cursors: {},
             },
           },
         };
       }
-      if (call.op === 'invoke' && call.payload.command === 'sync.finish_run') {
-        return { ok: false, code: 'VAULT_ERROR', error: 'close bookkeeping failed' };
+      if (call.op === "invoke" && call.payload.command === "sync.finish_run") {
+        return {
+          ok: false,
+          code: "VAULT_ERROR",
+          error: "close bookkeeping failed",
+        };
       }
-      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
+      return { ok: false, code: "VAULT_ERROR", error: "unexpected op" };
     };
 
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
-      { openDispatch: openDispatch() },
+      {
+        automationRef: "mail/pull",
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
+      { openDispatch: openDispatch() }
     );
 
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toContain('original provider failure');
-    expect(outcome.error).not.toContain('close bookkeeping failed');
+    expect(outcome.error).toContain("original provider failure");
+    expect(outcome.error).not.toContain("close bookkeeping failed");
   });
 });
 
-describe('connector secrets (issue #293)', () => {
+describe("connector secrets (issue #293)", () => {
   let appsDir: string;
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await tempDir('centraid-secrets-');
-    journalDbFile = path.join(appsDir, 'journal.db');
+    appsDir = await tempDir("centraid-secrets-");
+    journalDbFile = path.join(appsDir, "journal.db");
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -539,49 +607,54 @@ describe('connector secrets (issue #293)', () => {
 
   async function writeAutomation(
     handler: string,
-    over: Record<string, unknown> = {},
+    over: Record<string, unknown> = {}
   ): Promise<void> {
-    const dir = path.join(appsDir, 'mail', 'automations', 'pull');
+    const dir = path.join(appsDir, "mail", "automations", "pull");
     await fs.mkdir(dir, { recursive: true });
     const manifest = validateManifest(rawManifest(over)) as Manifest;
-    await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(manifest, null, 2));
-    await fs.writeFile(path.join(dir, 'handler.js'), handler);
+    await fs.writeFile(
+      path.join(dir, "automation.json"),
+      JSON.stringify(manifest, null, 2)
+    );
+    await fs.writeFile(path.join(dir, "handler.js"), handler);
   }
 
   const noDispatch = () =>
     Promise.resolve({
-      agentDispatcher: async () => 'never',
+      agentDispatcher: async () => "never",
       close: async () => undefined,
     } satisfies DispatchSurface);
 
-  it('manifest: requires.secrets must be locker refs, and connector-only', () => {
+  it("manifest: requires.secrets must be locker refs, and connector-only", () => {
     const m = validateManifest(
       rawManifest({
-        requires: { secrets: ['locker:item-1:password'] },
-      }),
+        requires: { secrets: ["locker:item-1:password"] },
+      })
     );
-    expect(m.requires.secrets).toEqual(['locker:item-1:password']);
-    expect(() => validateManifest(rawManifest({ requires: { secrets: ['not-a-ref'] } }))).toThrow(
-      /locker:<item_id>:<column>/,
-    );
+    expect(m.requires.secrets).toStrictEqual(["locker:item-1:password"]);
+    expect(() =>
+      validateManifest(rawManifest({ requires: { secrets: ["not-a-ref"] } }))
+    ).toThrow(/locker:<item_id>:<column>/u);
     const nonConnector = rawManifest({
-      requires: { secrets: ['locker:item-1:password'] },
+      requires: { secrets: ["locker:item-1:password"] },
     });
     delete nonConnector.connector;
     delete nonConnector.vault;
-    expect(() => validateManifest(nonConnector)).toThrow(/connector-only/);
+    expect(() => validateManifest(nonConnector)).toThrow(/connector-only/u);
   });
 
-  it('injects the secret at the transport layer and scrubs it from everything recorded', async () => {
-    const { createServer } = await import('node:http');
+  it("injects the secret at the transport layer and scrubs it from everything recorded", async () => {
+    const { createServer } = await import("node:http");
     const seen: string[] = [];
     const server = createServer((req, res) => {
-      seen.push(String(req.headers.authorization ?? ''));
-      res.writeHead(200, { 'content-type': 'text/plain' });
+      seen.push(String(req.headers.authorization ?? ""));
+      res.writeHead(200, { "content-type": "text/plain" });
       // The response ECHOES the secret — the scrub net must catch it.
-      res.end(`hello bearer ${req.headers.authorization ?? ''}`);
+      res.end(`hello bearer ${req.headers.authorization ?? ""}`);
     });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve)
+    );
     const port = (server.address() as { port: number }).port;
     try {
       await writeAutomation(
@@ -593,35 +666,48 @@ describe('connector secrets (issue #293)', () => {
            log.info('fetched ' + res.status);
            return { status: res.status, body: res.text };
          };`,
-        { requires: { secrets: ['locker:item-1:password'] } },
+        { requires: { secrets: ["locker:item-1:password"] } }
       );
       const reveals: string[] = [];
       const bridge: VaultBridge = async (call) => {
-        if (call.op === 'reveal') {
+        if (call.op === "reveal") {
           reveals.push(String((call.payload as { entityId: string }).entityId));
-          return { ok: true, result: { values: { password: 'imap-app-p4ss' } } };
+          return {
+            ok: true,
+            result: { values: { password: "imap-app-p4ss" } },
+          };
         }
-        if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
-        return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
+        if (call.op === "read")
+          return { ok: true, result: { rows: [{ status: "active" }] } };
+        return {
+          ok: false,
+          code: "VAULT_ERROR",
+          error: `unexpected op ${call.op}`,
+        };
       };
       const { outcome } = await runFire(
-        { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
-        { openDispatch: noDispatch },
+        {
+          automationRef: "mail/pull",
+          appsDir,
+          journalDbFile,
+          vaultFor: () => bridge,
+        },
+        { openDispatch: noDispatch }
       );
       expect(outcome.ok).toBe(true);
       // The wire carried the REAL secret (transport-level injection)…
-      expect(seen).toEqual(['Bearer imap-app-p4ss']);
-      expect(reveals).toEqual(['item-1']);
+      expect(seen).toStrictEqual(["Bearer imap-app-p4ss"]);
+      expect(reveals).toStrictEqual(["item-1"]);
       // …but nothing the run RECORDS holds it: the echoed body is scrubbed.
-      expect(JSON.stringify(outcome.value)).not.toContain('imap-app-p4ss');
-      expect(JSON.stringify(outcome.value)).toContain('«secret»');
-      expect(JSON.stringify(outcome.logs)).not.toContain('imap-app-p4ss');
+      expect(JSON.stringify(outcome.value)).not.toContain("imap-app-p4ss");
+      expect(JSON.stringify(outcome.value)).toContain("«secret»");
+      expect(JSON.stringify(outcome.logs)).not.toContain("imap-app-p4ss");
     } finally {
       server.close();
     }
   });
 
-  it('resolves an aliased secret ref (locker:@alias:column) by alias, not entityId', async () => {
+  it("resolves an aliased secret ref (locker:@alias:column) by alias, not entityId", async () => {
     await writeAutomation(
       `export default async ({ ctx }) => {
          const res = await ctx.fetch({
@@ -630,28 +716,40 @@ describe('connector secrets (issue #293)', () => {
          }).catch(() => ({ status: 0, text: '' }));
          return { status: res.status };
        };`,
-      { requires: { secrets: ['locker:@github-token:password'] } },
+      { requires: { secrets: ["locker:@github-token:password"] } }
     );
     const aliases: Array<string | undefined> = [];
+    const entityIds: Array<string | undefined> = [];
     const bridge: VaultBridge = async (call) => {
-      if (call.op === 'reveal') {
+      if (call.op === "reveal") {
         const p = call.payload as { alias?: string; entityId?: string };
         aliases.push(p.alias);
-        // The ref carried an alias, never an entityId.
-        expect(p.entityId).toBeUndefined();
-        return { ok: true, result: { values: { password: 'aliased-secret' } } };
+        entityIds.push(p.entityId);
+        return { ok: true, result: { values: { password: "aliased-secret" } } };
       }
-      if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
-      return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
+      if (call.op === "read")
+        return { ok: true, result: { rows: [{ status: "active" }] } };
+      return {
+        ok: false,
+        code: "VAULT_ERROR",
+        error: `unexpected op ${call.op}`,
+      };
     };
     await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
-      { openDispatch: noDispatch },
+      {
+        automationRef: "mail/pull",
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
+      { openDispatch: noDispatch }
     );
-    expect(aliases).toEqual(['github-token']);
+    expect(aliases).toStrictEqual(["github-token"]);
+    // The ref carried an alias, never an entityId.
+    expect(entityIds).toStrictEqual([undefined]);
   });
 
-  it('a placeholder outside requires.secrets errors without resolving', async () => {
+  it("a placeholder outside requires.secrets errors without resolving", async () => {
     await writeAutomation(
       `export default async ({ ctx }) => {
          try {
@@ -661,25 +759,32 @@ describe('connector secrets (issue #293)', () => {
            return { reached: false, reason: err.message };
          }
        };`,
-      { requires: { secrets: ['locker:item-1:password'] } },
+      { requires: { secrets: ["locker:item-1:password"] } }
     );
     const bridge: VaultBridge = async (call) => {
-      if (call.op === 'reveal') return { ok: true, result: { values: { password: 'x' } } };
-      if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
-      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected' };
+      if (call.op === "reveal")
+        return { ok: true, result: { values: { password: "x" } } };
+      if (call.op === "read")
+        return { ok: true, result: { rows: [{ status: "active" }] } };
+      return { ok: false, code: "VAULT_ERROR", error: "unexpected" };
     };
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
-      { openDispatch: noDispatch },
+      {
+        automationRef: "mail/pull",
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
+      { openDispatch: noDispatch }
     );
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toMatchObject({
       reached: false,
-      reason: expect.stringContaining('allowlist'),
+      reason: expect.stringContaining("allowlist"),
     });
   });
 
-  it('ctx.fetch is connector-only', async () => {
+  it("ctx.fetch is connector-only", async () => {
     const raw = rawManifest({ requires: {} });
     delete raw.connector;
     delete raw.vault;
@@ -692,64 +797,76 @@ describe('connector secrets (issue #293)', () => {
            return { reached: false, reason: err.message };
          }
        };`,
-      { requires: {}, connector: undefined, vault: undefined },
+      { requires: {}, connector: undefined, vault: undefined }
     );
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile },
-      { openDispatch: noDispatch },
+      { automationRef: "mail/pull", appsDir, journalDbFile },
+      { openDispatch: noDispatch }
     );
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toMatchObject({
       reached: false,
-      reason: expect.stringContaining('connector-only'),
+      reason: expect.stringContaining("connector-only"),
     });
   });
 
-  it('a missing secret item flips the connection to needs-auth and skips the run', async () => {
+  it("a missing secret item flips the connection to needs-auth and skips the run", async () => {
     await writeAutomation(`export default async () => ({ ranAnyway: true });`, {
-      requires: { secrets: ['locker:item-gone:password'] },
+      requires: { secrets: ["locker:item-gone:password"] },
     });
     const invoked: { command: string; input: Record<string, unknown> }[] = [];
     const bridge: VaultBridge = async (call) => {
-      if (call.op === 'read') {
+      if (call.op === "read") {
         return {
           ok: true,
-          result: { rows: [{ status: 'active', connection_id: 'conn-1' }] },
+          result: { rows: [{ status: "active", connection_id: "conn-1" }] },
         };
       }
-      if (call.op === 'reveal') {
-        return { ok: false, code: 'VAULT_CONSENT', error: 'deny (receipt r9): no revealable row' };
+      if (call.op === "reveal") {
+        return {
+          ok: false,
+          code: "VAULT_CONSENT",
+          error: "deny (receipt r9): no revealable row",
+        };
       }
-      if (call.op === 'invoke') {
-        const payload = call.payload as { command: string; input: Record<string, unknown> };
+      if (call.op === "invoke") {
+        const payload = call.payload as {
+          command: string;
+          input: Record<string, unknown>;
+        };
         invoked.push({ command: payload.command, input: payload.input });
-        return { ok: true, result: { status: 'executed' } };
+        return { ok: true, result: { status: "executed" } };
       }
-      return { ok: false, code: 'VAULT_ERROR', error: 'unexpected' };
+      return { ok: false, code: "VAULT_ERROR", error: "unexpected" };
     };
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
-      { openDispatch: noDispatch },
+      {
+        automationRef: "mail/pull",
+        appsDir,
+        journalDbFile,
+        vaultFor: () => bridge,
+      },
+      { openDispatch: noDispatch }
     );
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toMatch(/needs-auth/);
+    expect(outcome.error).toMatch(/needs-auth/u);
     expect(outcome.value).toBeUndefined(); // the handler never executed
-    expect(invoked).toEqual([
+    expect(invoked).toStrictEqual([
       {
-        command: 'sync.set_connection_status',
-        input: { connection_id: 'conn-1', status: 'needs-auth' },
+        command: "sync.set_connection_status",
+        input: { connection_id: "conn-1", status: "needs-auth" },
       },
     ]);
   });
 });
 
-describe('broker-injected connection credentials (issue #304)', () => {
+describe("broker-injected connection credentials (issue #304)", () => {
   let appsDir: string;
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await tempDir('centraid-connauth-');
-    journalDbFile = path.join(appsDir, 'journal.db');
+    appsDir = await tempDir("centraid-connauth-");
+    journalDbFile = path.join(appsDir, "journal.db");
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -757,36 +874,48 @@ describe('broker-injected connection credentials (issue #304)', () => {
 
   async function writeAutomation(
     handler: string,
-    over: Record<string, unknown> = {},
+    over: Record<string, unknown> = {}
   ): Promise<void> {
-    const dir = path.join(appsDir, 'mail', 'automations', 'pull');
+    const dir = path.join(appsDir, "mail", "automations", "pull");
     await fs.mkdir(dir, { recursive: true });
-    const manifest = validateManifest(rawManifest({ requires: {}, ...over })) as Manifest;
-    await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(manifest, null, 2));
-    await fs.writeFile(path.join(dir, 'handler.js'), handler);
+    const manifest = validateManifest(
+      rawManifest({ requires: {}, ...over })
+    ) as Manifest;
+    await fs.writeFile(
+      path.join(dir, "automation.json"),
+      JSON.stringify(manifest, null, 2)
+    );
+    await fs.writeFile(path.join(dir, "handler.js"), handler);
   }
 
   const noDispatch = () =>
     Promise.resolve({
-      agentDispatcher: async () => 'never',
+      agentDispatcher: async () => "never",
       close: async () => undefined,
     } satisfies DispatchSurface);
 
   const activeBridge: VaultBridge = async (call) => {
-    if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
-    return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
+    if (call.op === "read")
+      return { ok: true, result: { rows: [{ status: "active" }] } };
+    return {
+      ok: false,
+      code: "VAULT_ERROR",
+      error: `unexpected op ${call.op}`,
+    };
   };
 
   async function withServer(
     respond: (
-      req: import('node:http').IncomingMessage,
-      res: import('node:http').ServerResponse,
+      req: import("node:http").IncomingMessage,
+      res: import("node:http").ServerResponse
     ) => void,
-    run: (port: number) => Promise<void>,
+    run: (port: number) => Promise<void>
   ): Promise<void> {
-    const { createServer } = await import('node:http');
+    const { createServer } = await import("node:http");
     const server = createServer(respond);
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve)
+    );
     const port = (server.address() as { port: number }).port;
     try {
       await run(port);
@@ -795,13 +924,13 @@ describe('broker-injected connection credentials (issue #304)', () => {
     }
   }
 
-  it('injects {{connection:access_token}} toward a pinned host and scrubs everything recorded', async () => {
+  it("injects {{connection:access_token}} toward a pinned host and scrubs everything recorded", async () => {
     const seen: string[] = [];
     await withServer(
       (req, res) => {
-        seen.push(String(req.headers.authorization ?? ''));
-        res.writeHead(200, { 'content-type': 'text/plain' });
-        res.end(`echo ${req.headers.authorization ?? ''}`);
+        seen.push(String(req.headers.authorization ?? ""));
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end(`echo ${req.headers.authorization ?? ""}`);
       },
       async (port) => {
         await writeAutomation(
@@ -811,36 +940,36 @@ describe('broker-injected connection credentials (issue #304)', () => {
                headers: { authorization: 'Bearer {{connection:access_token}}' },
              });
              return { status: res.status, body: res.text };
-           };`,
+           };`
         );
         const { outcome } = await runFire(
           {
-            automationRef: 'mail/pull',
+            automationRef: "mail/pull",
             appsDir,
             journalDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
-              values: { access_token: 'tok-live-1' },
-              allowedHosts: ['127.0.0.1'],
+              values: { access_token: "tok-live-1" },
+              allowedHosts: ["127.0.0.1"],
             }),
           },
-          { openDispatch: noDispatch },
+          { openDispatch: noDispatch }
         );
         expect(outcome.ok).toBe(true);
-        expect(seen).toEqual(['Bearer tok-live-1']);
-        expect(JSON.stringify(outcome.value)).not.toContain('tok-live-1');
-        expect(JSON.stringify(outcome.value)).toContain('«secret»');
-      },
+        expect(seen).toStrictEqual(["Bearer tok-live-1"]);
+        expect(JSON.stringify(outcome.value)).not.toContain("tok-live-1");
+        expect(JSON.stringify(outcome.value)).toContain("«secret»");
+      }
     );
   });
 
-  it('refuses to inject toward a host outside allowed_hosts — nothing leaves', async () => {
+  it("refuses to inject toward a host outside allowed_hosts — nothing leaves", async () => {
     let reached = 0;
     await withServer(
       (_req, res) => {
         reached += 1;
         res.writeHead(200);
-        res.end('x');
+        res.end("x");
       },
       async (port) => {
         await writeAutomation(
@@ -854,43 +983,43 @@ describe('broker-injected connection credentials (issue #304)', () => {
              } catch (err) {
                return { reached: false, reason: err.message };
              }
-           };`,
+           };`
         );
         const { outcome } = await runFire(
           {
-            automationRef: 'mail/pull',
+            automationRef: "mail/pull",
             appsDir,
             journalDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
-              values: { access_token: 'tok-live-2' },
-              allowedHosts: ['gmail.googleapis.com', '*.example.com'],
+              values: { access_token: "tok-live-2" },
+              allowedHosts: ["gmail.googleapis.com", "*.example.com"],
             }),
           },
-          { openDispatch: noDispatch },
+          { openDispatch: noDispatch }
         );
         expect(outcome.ok).toBe(true);
         expect(outcome.value).toMatchObject({
           reached: false,
-          reason: expect.stringContaining('allowed_hosts'),
+          reason: expect.stringContaining("allowed_hosts"),
         });
         expect(reached).toBe(0);
-      },
+      }
     );
   });
 
-  it('a 401 forces one refresh and the retry rides the new token', async () => {
+  it("a 401 forces one refresh and the retry rides the new token", async () => {
     const seen: string[] = [];
     await withServer(
       (req, res) => {
-        seen.push(String(req.headers.authorization ?? ''));
-        if (req.headers.authorization === 'Bearer tok-stale') {
+        seen.push(String(req.headers.authorization ?? ""));
+        if (req.headers.authorization === "Bearer tok-stale") {
           res.writeHead(401);
-          res.end('expired');
+          res.end("expired");
           return;
         }
         res.writeHead(200);
-        res.end('fresh data');
+        res.end("fresh data");
       },
       async (port) => {
         await writeAutomation(
@@ -900,39 +1029,42 @@ describe('broker-injected connection credentials (issue #304)', () => {
                headers: { authorization: 'Bearer {{connection:access_token}}' },
              });
              return { status: res.status, body: res.text };
-           };`,
+           };`
         );
         let refreshes = 0;
         const { outcome } = await runFire(
           {
-            automationRef: 'mail/pull',
+            automationRef: "mail/pull",
             appsDir,
             journalDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
-              values: { access_token: 'tok-stale' },
-              allowedHosts: ['127.0.0.1'],
+              values: { access_token: "tok-stale" },
+              allowedHosts: ["127.0.0.1"],
               refresh: async () => {
                 refreshes += 1;
-                return { access_token: 'tok-refreshed' };
+                return { access_token: "tok-refreshed" };
               },
             }),
           },
-          { openDispatch: noDispatch },
+          { openDispatch: noDispatch }
         );
         expect(outcome.ok).toBe(true);
         expect(outcome.value).toMatchObject({ status: 200 });
         expect(refreshes).toBe(1);
-        expect(seen).toEqual(['Bearer tok-stale', 'Bearer tok-refreshed']);
-      },
+        expect(seen).toStrictEqual([
+          "Bearer tok-stale",
+          "Bearer tok-refreshed",
+        ]);
+      }
     );
   });
 
-  it('a 401 with nothing to refresh flips auth-dead and hands the response back', async () => {
+  it("a 401 with nothing to refresh flips auth-dead and hands the response back", async () => {
     await withServer(
       (_req, res) => {
         res.writeHead(401);
-        res.end('revoked');
+        res.end("revoked");
       },
       async (port) => {
         await writeAutomation(
@@ -942,44 +1074,44 @@ describe('broker-injected connection credentials (issue #304)', () => {
                headers: { authorization: 'token {{connection:api_key}}' },
              });
              return { status: res.status };
-           };`,
+           };`
         );
         const dead: string[] = [];
         const { outcome } = await runFire(
           {
-            automationRef: 'mail/pull',
+            automationRef: "mail/pull",
             appsDir,
             journalDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
-              values: { api_key: 'ghp-revoked' },
-              allowedHosts: ['127.0.0.1'],
+              values: { api_key: "ghp-revoked" },
+              allowedHosts: ["127.0.0.1"],
               onAuthDead: async (reason) => {
                 dead.push(reason);
               },
             }),
           },
-          { openDispatch: noDispatch },
+          { openDispatch: noDispatch }
         );
         expect(outcome.ok).toBe(true);
         expect(outcome.value).toMatchObject({ status: 401 });
-        expect(dead).toEqual([expect.stringContaining('401')]);
-      },
+        expect(dead).toStrictEqual([expect.stringContaining("401")]);
+      }
     );
   });
 
-  it('429/5xx retries on the backoff schedule, then hands back the last response', async () => {
+  it("429/5xx retries on the backoff schedule, then hands back the last response", async () => {
     let hits = 0;
     await withServer(
       (_req, res) => {
         hits += 1;
         if (hits < 3) {
           res.writeHead(hits === 1 ? 429 : 500);
-          res.end('later');
+          res.end("later");
           return;
         }
         res.writeHead(200);
-        res.end('finally');
+        res.end("finally");
       },
       async (port) => {
         await writeAutomation(
@@ -989,49 +1121,50 @@ describe('broker-injected connection credentials (issue #304)', () => {
                headers: { authorization: 'Bearer {{connection:access_token}}' },
              });
              return { status: res.status, body: res.text };
-           };`,
+           };`
         );
         const { outcome } = await runFire(
           {
-            automationRef: 'mail/pull',
+            automationRef: "mail/pull",
             appsDir,
             journalDbFile,
             vaultFor: () => activeBridge,
             fetchRetryDelaysMs: [1, 1],
             resolveConnection: async () => ({
-              values: { access_token: 'tok-x' },
-              allowedHosts: ['127.0.0.1'],
+              values: { access_token: "tok-x" },
+              allowedHosts: ["127.0.0.1"],
             }),
           },
-          { openDispatch: noDispatch },
+          { openDispatch: noDispatch }
         );
         expect(outcome.ok).toBe(true);
-        expect(outcome.value).toMatchObject({ status: 200, body: 'finally' });
+        expect(outcome.value).toMatchObject({ status: 200, body: "finally" });
         expect(hits).toBe(3);
-      },
+      }
     );
   });
 
-  it('a refused connection skips the fire before the handler runs', async () => {
+  it("a refused connection skips the fire before the handler runs", async () => {
     await writeAutomation(`export default async () => ({ ranAnyway: true });`);
     const { outcome } = await runFire(
       {
-        automationRef: 'mail/pull',
+        automationRef: "mail/pull",
         appsDir,
         journalDbFile,
         vaultFor: () => activeBridge,
         resolveConnection: async () => ({
-          refused: 'connection "personal" has no usable token: token refresh refused',
+          refused:
+            'connection "personal" has no usable token: token refresh refused',
         }),
       },
-      { openDispatch: noDispatch },
+      { openDispatch: noDispatch }
     );
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toMatch(/no usable token/);
+    expect(outcome.error).toMatch(/no usable token/u);
     expect(outcome.value).toBeUndefined();
   });
 
-  it('a {{connection:…}} placeholder without a broker credential is a loud error', async () => {
+  it("a {{connection:…}} placeholder without a broker credential is a loud error", async () => {
     await writeAutomation(
       `export default async ({ ctx }) => {
          try {
@@ -1043,55 +1176,65 @@ describe('broker-injected connection credentials (issue #304)', () => {
          } catch (err) {
            return { reached: false, reason: err.message };
          }
-       };`,
+       };`
     );
     const { outcome } = await runFire(
       {
-        automationRef: 'mail/pull',
+        automationRef: "mail/pull",
         appsDir,
         journalDbFile,
         vaultFor: () => activeBridge,
         // No resolveConnection at all — the harness-ambient lane.
       },
-      { openDispatch: noDispatch },
+      { openDispatch: noDispatch }
     );
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toMatchObject({
       reached: false,
-      reason: expect.stringContaining('no broker credential'),
+      reason: expect.stringContaining("no broker credential"),
     });
   });
 });
 
-describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
+describe("read-only ceiling on injected fetches (issue #304 phase 5)", () => {
   let appsDir: string;
   let journalDbFile: string;
 
   beforeEach(async () => {
-    appsDir = await tempDir('centraid-ro-');
-    journalDbFile = path.join(appsDir, 'journal.db');
+    appsDir = await tempDir("centraid-ro-");
+    journalDbFile = path.join(appsDir, "journal.db");
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
   });
 
   async function writeAutomation(handler: string): Promise<void> {
-    const dir = path.join(appsDir, 'mail', 'automations', 'pull');
+    const dir = path.join(appsDir, "mail", "automations", "pull");
     await fs.mkdir(dir, { recursive: true });
-    const manifest = validateManifest(rawManifest({ requires: {} })) as Manifest;
-    await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(manifest, null, 2));
-    await fs.writeFile(path.join(dir, 'handler.js'), handler);
+    const manifest = validateManifest(
+      rawManifest({ requires: {} })
+    ) as Manifest;
+    await fs.writeFile(
+      path.join(dir, "automation.json"),
+      JSON.stringify(manifest, null, 2)
+    );
+    await fs.writeFile(path.join(dir, "handler.js"), handler);
   }
 
   const noDispatch = () =>
     Promise.resolve({
-      agentDispatcher: async () => 'never',
+      agentDispatcher: async () => "never",
       close: async () => undefined,
     } satisfies DispatchSurface);
 
   const activeBridge: VaultBridge = async (call) => {
-    if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
-    return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
+    if (call.op === "read")
+      return { ok: true, result: { rows: [{ status: "active" }] } };
+    return {
+      ok: false,
+      code: "VAULT_ERROR",
+      error: `unexpected op ${call.op}`,
+    };
   };
 
   const postHandler = `export default async ({ ctx }) => {
@@ -1108,45 +1251,63 @@ describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
      }
    };`;
 
-  it('a read-only credential refuses an injected POST — external writes are not raw fetch', async () => {
+  it("a read-only credential refuses an injected POST — external writes are not raw fetch", async () => {
     await writeAutomation(postHandler);
     const { outcome } = await runFire(
       {
-        automationRef: 'mail/pull',
+        automationRef: "mail/pull",
         appsDir,
         journalDbFile,
         vaultFor: () => activeBridge,
         resolveConnection: async () => ({
-          values: { access_token: 'tok' },
-          allowedHosts: ['gmail.googleapis.com'],
+          values: { access_token: "tok" },
+          allowedHosts: ["gmail.googleapis.com"],
         }),
       },
-      { openDispatch: noDispatch },
+      { openDispatch: noDispatch }
     );
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toMatchObject({
       reached: false,
-      reason: expect.stringContaining('read-only'),
+      reason: expect.stringContaining("read-only"),
     });
   });
 
-  it('allows only an exact broker-declared read-only POST endpoint', () => {
-    const policy = [{ host: 'api.notion.com', path: '/v1/search', body: 'json' as const }];
-    expect(isBrokerReadOnlyPost(policy, new URL('https://api.notion.com/v1/search'), '{}')).toBe(
-      true,
-    );
-    expect(isBrokerReadOnlyPost(policy, new URL('https://api.notion.com/v1/pages'), '{}')).toBe(
-      false,
-    );
-    expect(isBrokerReadOnlyPost(policy, new URL('https://attacker.example/v1/search'), '{}')).toBe(
-      false,
-    );
+  it("allows only an exact broker-declared read-only POST endpoint", () => {
+    const policy = [
+      { host: "api.notion.com", path: "/v1/search", body: "json" as const },
+    ];
     expect(
-      isBrokerReadOnlyPost(policy, new URL('https://api.notion.com/v1/search'), undefined),
+      isBrokerReadOnlyPost(
+        policy,
+        new URL("https://api.notion.com/v1/search"),
+        "{}"
+      )
+    ).toBe(true);
+    expect(
+      isBrokerReadOnlyPost(
+        policy,
+        new URL("https://api.notion.com/v1/pages"),
+        "{}"
+      )
+    ).toBe(false);
+    expect(
+      isBrokerReadOnlyPost(
+        policy,
+        new URL("https://attacker.example/v1/search"),
+        "{}"
+      )
+    ).toBe(false);
+    expect(
+      isBrokerReadOnlyPost(
+        policy,
+        new URL("https://api.notion.com/v1/search"),
+        undefined
+      )
     ).toBe(false);
   });
 
-  it('rejects a GraphQL mutation on a query-only POST endpoint', async () => {
+  it("rejects a GraphQL mutation on a query-only POST endpoint", async () => {
     await writeAutomation(`export default async ({ ctx }) => {
       try {
         await ctx.fetch({
@@ -1162,34 +1323,38 @@ describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
     };`);
     const { outcome } = await runFire(
       {
-        automationRef: 'mail/pull',
+        automationRef: "mail/pull",
         appsDir,
         journalDbFile,
         vaultFor: () => activeBridge,
         resolveConnection: async () => ({
-          values: { api_key: 'lin_api_test' },
-          allowedHosts: ['api.linear.app'],
-          readOnlyPosts: [{ host: 'api.linear.app', path: '/graphql', body: 'graphql-query' }],
+          values: { api_key: "lin_api_test" },
+          allowedHosts: ["api.linear.app"],
+          readOnlyPosts: [
+            { host: "api.linear.app", path: "/graphql", body: "graphql-query" },
+          ],
         }),
       },
-      { openDispatch: noDispatch },
+      { openDispatch: noDispatch }
     );
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toMatchObject({
       reached: false,
-      reason: expect.stringContaining('read-only'),
+      reason: expect.stringContaining("read-only"),
     });
   });
 
-  it('a write-opted credential lets the injected POST through', async () => {
-    const { createServer } = await import('node:http');
-    let method = '';
+  it("a write-opted credential lets the injected POST through", async () => {
+    const { createServer } = await import("node:http");
+    let method = "";
     const server = createServer((req, res) => {
-      method = req.method ?? '';
+      method = req.method ?? "";
       res.writeHead(200);
-      res.end('ok');
+      res.end("ok");
     });
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve)
+    );
     const port = (server.address() as { port: number }).port;
     try {
       await writeAutomation(
@@ -1201,25 +1366,25 @@ describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
              body: '{}',
            });
            return { status: res.status };
-         };`,
+         };`
       );
       const { outcome } = await runFire(
         {
-          automationRef: 'mail/pull',
+          automationRef: "mail/pull",
           appsDir,
           journalDbFile,
           vaultFor: () => activeBridge,
           resolveConnection: async () => ({
-            values: { access_token: 'tok' },
-            allowedHosts: ['127.0.0.1'],
+            values: { access_token: "tok" },
+            allowedHosts: ["127.0.0.1"],
             allowWrites: true,
           }),
         },
-        { openDispatch: noDispatch },
+        { openDispatch: noDispatch }
       );
       expect(outcome.ok).toBe(true);
       expect(outcome.value).toMatchObject({ status: 200 });
-      expect(method).toBe('POST');
+      expect(method).toBe("POST");
     } finally {
       server.close();
     }

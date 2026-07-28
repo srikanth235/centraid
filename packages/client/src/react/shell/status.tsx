@@ -1,7 +1,9 @@
-import type { JSX } from 'react';
-import Icon from '../ui/Icon.js';
-import emptyCss from '../styles/pageEmpty.module.css';
-import au from '../styles/automation.module.css';
+import type { JSX } from "react";
+
+import Icon from "../ui/Icon.js";
+
+import au from "../styles/automation.module.css";
+import emptyCss from "../styles/pageEmpty.module.css";
 
 // Loading + empty/error affordances the vanilla shell rendered inline
 // (`cd-au-loading` line, `renderSimpleEmpty` → `cd-page-empty`). Kept as plain

@@ -96,7 +96,7 @@
 .item:hover {
   background: var(--bg-sunken);
 }
-.item[aria-current='true'] {
+.item[aria-current="true"] {
   background: var(--accs);
 }
 .star {

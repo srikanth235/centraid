@@ -20,19 +20,19 @@ export interface MemberScope {
 /** Ownership words for a role — the badge on a space card or picker row.
  *  Deliberately not the wire word: a member reads "Owner", not "admin". */
 export function roleBadge(role: string): string {
-  if (role === 'admin') return 'Owner';
-  if (role === 'write') return 'Member';
-  return 'Viewer';
+  if (role === "admin") return "Owner";
+  if (role === "write") return "Member";
+  return "Viewer";
 }
 
 /** One sentence of what the role lets this member do. */
 export function roleSentence(role: string): string {
-  if (role === 'admin') return 'You own this space and can share it.';
-  if (role === 'write') return 'You can add and change things here.';
-  return 'You can read this space, not change it.';
+  if (role === "admin") return "You own this space and can share it.";
+  if (role === "write") return "You can add and change things here.";
+  return "You can read this space, not change it.";
 }
 
 /** Whether a role may write — admin is write's superset. */
 export function canWrite(role: string): boolean {
-  return role === 'admin' || role === 'write';
+  return role === "admin" || role === "write";
 }

@@ -17,13 +17,14 @@
  * concurrent callers — there is no interleaving to race.
  */
 
-import path from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
+import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+
 import {
   ConversationStore,
   makeJournalDbProvider,
   type DatabaseProvider,
-} from '@centraid/app-engine';
+} from "@centraid/app-engine";
 
 interface JournalEntry {
   store: ConversationStore;
@@ -38,7 +39,9 @@ const entries = new Map<string, JournalEntry>();
  * NOT call `close()` on the result — the handle outlives any single request
  * and is released by {@link closeJournalConversationStores} at shutdown.
  */
-export function journalConversationStore(journalDbFile: string): ConversationStore {
+export function journalConversationStore(
+  journalDbFile: string
+): ConversationStore {
   const key = path.resolve(journalDbFile);
   const existing = entries.get(key);
   if (existing) return existing.store;
@@ -69,9 +72,13 @@ export function journalConversationStore(journalDbFile: string): ConversationSto
  * test suites), and one stopping must never close the other's handle. Omitting
  * `journalDbFiles` closes everything and is for a whole-process teardown.
  */
-export function closeJournalConversationStores(journalDbFiles?: readonly string[]): void {
+export function closeJournalConversationStores(
+  journalDbFiles?: readonly string[]
+): void {
   const keys =
-    journalDbFiles === undefined ? [...entries.keys()] : journalDbFiles.map((f) => path.resolve(f));
+    journalDbFiles === undefined
+      ? [...entries.keys()]
+      : journalDbFiles.map((f) => path.resolve(f));
   for (const key of keys) {
     const entry = entries.get(key);
     if (!entry) continue;

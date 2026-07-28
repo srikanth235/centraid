@@ -1,29 +1,43 @@
-import type { JSX, ReactNode } from 'react';
-import { apps, icons } from '@centraid/design-tokens';
-import type { IconName } from '@centraid/design-tokens';
-import AppCard from './AppCard.js';
-import Button from './Button.js';
-import Icon from './Icon.js';
-import Logo from './Logo.js';
+import { apps, icons } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design-tokens";
+import type { JSX, ReactNode } from "react";
+
+import AppCard from "./AppCard.js";
+import Button from "./Button.js";
+import Icon from "./Icon.js";
+import Logo from "./Logo.js";
 
 const SAMPLE_ICONS = Object.keys(icons).slice(0, 12) as IconName[];
 
-function Section({ title, children }: { title: string; children: ReactNode }): JSX.Element {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}): JSX.Element {
   return (
     <section style={{ marginBottom: 36 }}>
       <h2
         style={{
-          color: 'var(--ink-3, #6b7280)',
+          color: "var(--ink-3, #6b7280)",
           fontSize: 12,
           fontWeight: 600,
-          letterSpacing: '0.08em',
-          margin: '0 0 14px',
-          textTransform: 'uppercase',
+          letterSpacing: "0.08em",
+          margin: "0 0 14px",
+          textTransform: "uppercase",
         }}
       >
         {title}
       </h2>
-      <div style={{ alignItems: 'center', display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 16,
+        }}
+      >
         {children}
       </div>
     </section>
@@ -40,18 +54,25 @@ export default function Gallery(): JSX.Element {
   return (
     <div
       style={{
-        color: 'var(--ink, #141820)',
-        fontFamily: 'var(--font-ui, system-ui, sans-serif)',
-        margin: '0 auto',
+        color: "var(--ink, #141820)",
+        fontFamily: "var(--font-ui, system-ui, sans-serif)",
+        margin: "0 auto",
         maxWidth: 880,
-        padding: '32px 28px 64px',
+        padding: "32px 28px 64px",
       }}
     >
-      <header style={{ alignItems: 'center', display: 'flex', gap: 12, marginBottom: 32 }}>
+      <header
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: 12,
+          marginBottom: 32,
+        }}
+      >
         <Logo size={36} />
         <div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>desktop-ui</div>
-          <div style={{ color: 'var(--ink-3, #6b7280)', fontSize: 13 }}>
+          <div style={{ color: "var(--ink-3, #6b7280)", fontSize: 13 }}>
             React DOM primitives · pixel-identical to the vanilla shell
           </div>
         </div>
@@ -69,7 +90,7 @@ export default function Gallery(): JSX.Element {
           <span
             key={name}
             title={name}
-            style={{ color: 'var(--ink-2, #374151)', display: 'inline-flex' }}
+            style={{ color: "var(--ink-2, #374151)", display: "inline-flex" }}
           >
             <Icon name={name} size={22} />
           </span>
@@ -88,8 +109,8 @@ export default function Gallery(): JSX.Element {
             <AppCard
               app={app}
               variant="gradient"
-              tone={i === 0 ? 'new' : i === 1 ? 'draft' : null}
-              stamp={i === 1 ? 'saved' : '2h ago'}
+              tone={i === 0 ? "new" : i === 1 ? "draft" : null}
+              stamp={i === 1 ? "saved" : "2h ago"}
             />
           </div>
         ))}

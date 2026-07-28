@@ -2,13 +2,19 @@
  * Direct tests for the capability map (issue #545 B9).
  */
 
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_GATEWAY_CAPABILITIES, isGatewayCapabilities } from './capabilities.js';
+import { describe, expect, it } from "vitest";
 
-describe('DEFAULT_GATEWAY_CAPABILITIES', () => {
-  it('is frozen and advertises the modern loopback surface', () => {
+import {
+  DEFAULT_GATEWAY_CAPABILITIES,
+  isGatewayCapabilities,
+} from "./capabilities.js";
+
+// Titled in prose, not `describe(DEFAULT_GATEWAY_CAPABILITIES)`: the constant
+// is an object, and `describe` only accepts a string or a function.
+describe("the default gateway capabilities", () => {
+  it("is frozen and advertises the modern loopback surface", () => {
     expect(Object.isFrozen(DEFAULT_GATEWAY_CAPABILITIES)).toBe(true);
-    expect(DEFAULT_GATEWAY_CAPABILITIES).toEqual({
+    expect(DEFAULT_GATEWAY_CAPABILITIES).toStrictEqual({
       webSessions: true,
       devicePairing: true,
       tunnel: true,
@@ -19,10 +25,10 @@ describe('DEFAULT_GATEWAY_CAPABILITIES', () => {
   });
 });
 
-describe('isGatewayCapabilities', () => {
-  it('accepts the required booleans and optional assistOAuth / automationTurns', () => {
+describe(isGatewayCapabilities, () => {
+  it("accepts the required booleans and optional assistOAuth / automationTurns", () => {
     expect(isGatewayCapabilities(null)).toBe(false);
-    expect(isGatewayCapabilities('x')).toBe(false);
+    expect(isGatewayCapabilities("x")).toBe(false);
     expect(isGatewayCapabilities({})).toBe(false);
     expect(
       isGatewayCapabilities({
@@ -30,7 +36,7 @@ describe('isGatewayCapabilities', () => {
         devicePairing: true,
         tunnel: false,
         backupWal: true,
-      }),
+      })
     ).toBe(true);
     expect(
       isGatewayCapabilities({
@@ -40,7 +46,7 @@ describe('isGatewayCapabilities', () => {
         backupWal: true,
         assistOAuth: true,
         automationTurns: true,
-      }),
+      })
     ).toBe(true);
     expect(
       isGatewayCapabilities({
@@ -48,8 +54,8 @@ describe('isGatewayCapabilities', () => {
         devicePairing: true,
         tunnel: true,
         backupWal: true,
-        assistOAuth: 'yes',
-      }),
+        assistOAuth: "yes",
+      })
     ).toBe(false);
     expect(
       isGatewayCapabilities({
@@ -57,16 +63,16 @@ describe('isGatewayCapabilities', () => {
         devicePairing: true,
         tunnel: true,
         backupWal: true,
-        automationTurns: 'yes',
-      }),
+        automationTurns: "yes",
+      })
     ).toBe(false);
     expect(
       isGatewayCapabilities({
         webSessions: true,
         devicePairing: true,
         tunnel: true,
-        backupWal: 'true',
-      }),
+        backupWal: "true",
+      })
     ).toBe(false);
   });
 });

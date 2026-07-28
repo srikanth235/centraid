@@ -27,12 +27,12 @@
  * though it no longer holds any literal ids itself.
  */
 
-import { lookupEntry } from './pricing/catalog.js';
-import { costFromEntry, entryToModelPrice } from './pricing/cost.js';
+import { lookupEntry } from "./pricing/catalog.js";
+import { costFromEntry, entryToModelPrice } from "./pricing/cost.js";
 
-export { setPricingCatalog } from './pricing/catalog.js';
-export { filterLiteLLM } from './pricing/filter.js';
-export type { PricingCatalog, PricingEntry } from './pricing/types.js';
+export { setPricingCatalog } from "./pricing/catalog.js";
+export { filterLiteLLM } from "./pricing/filter.js";
+export type { PricingCatalog, PricingEntry } from "./pricing/types.js";
 
 /** USD-per-million-token rates for one model (back-compat convenience view). */
 export interface ModelPrice {
@@ -56,7 +56,9 @@ export interface TokenUsage {
  * Look up a model's rates as USD-per-million-token. Returns `undefined` when
  * the catalog has no match — the caller must record NULL, not 0.
  */
-export function priceForModel(model: string | undefined): ModelPrice | undefined {
+export function priceForModel(
+  model: string | undefined
+): ModelPrice | undefined {
   const entry = lookupEntry(model);
   return entry ? entryToModelPrice(entry) : undefined;
 }
@@ -66,13 +68,16 @@ export function priceForModel(model: string | undefined): ModelPrice | undefined
  * model has no known price — distinct from a `0` result for a call that
  * genuinely used no tokens. Missing token fields count as 0.
  */
-export function costForUsage(model: string | undefined, usage: TokenUsage): number | undefined {
+export function costForUsage(
+  model: string | undefined,
+  usage: TokenUsage
+): number | undefined {
   const entry = lookupEntry(model);
   return entry ? costFromEntry(entry, usage) : undefined;
 }
 
 /** Where a frozen `cost_usd` came from (issue #514). */
-export type CostSource = 'agent' | 'estimated';
+export type CostSource = "agent" | "estimated";
 
 export interface ResolvedItemCost {
   readonly costUsd?: number;
@@ -94,11 +99,11 @@ export function resolveItemCost(opts: {
   usage: TokenUsage;
 }): ResolvedItemCost {
   if (opts.agentCostUsd !== undefined && Number.isFinite(opts.agentCostUsd)) {
-    return { costUsd: opts.agentCostUsd, costSource: 'agent' };
+    return { costUsd: opts.agentCostUsd, costSource: "agent" };
   }
   const estimated = costForUsage(opts.model, opts.usage);
   if (estimated !== undefined) {
-    return { costUsd: estimated, costSource: 'estimated' };
+    return { costUsd: estimated, costSource: "estimated" };
   }
   return {};
 }

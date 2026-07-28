@@ -1,5 +1,5 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
 /**
  * Persistent per-app handler logs.
@@ -15,33 +15,36 @@ import path from 'node:path';
  */
 export interface LogEntry {
   ts: number;
-  level: 'info' | 'warn' | 'error';
+  level: "info" | "warn" | "error";
   msg: string;
-  source: 'query' | 'action';
+  source: "query" | "action";
   /** Handler id (filename stem under queries/ actions/). */
   handler: string;
 }
 
-export type LogLevel = LogEntry['level'];
+export type LogLevel = LogEntry["level"];
 
-const FILENAME = 'logs.jsonl';
-const ROTATED = 'logs.jsonl.1';
+const FILENAME = "logs.jsonl";
+const ROTATED = "logs.jsonl.1";
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MiB before rotation
 const READ_HARD_CAP = 500;
 
-export async function appendLogs(appDataDir: string, entries: LogEntry[]): Promise<void> {
+export async function appendLogs(
+  appDataDir: string,
+  entries: LogEntry[]
+): Promise<void> {
   if (entries.length === 0) return;
   const file = path.join(appDataDir, FILENAME);
-  const payload = entries.map((e) => JSON.stringify(e)).join('\n') + '\n';
+  const payload = entries.map((e) => JSON.stringify(e)).join("\n") + "\n";
 
   await fs.mkdir(appDataDir, { recursive: true }).catch(() => {});
   try {
-    await fs.appendFile(file, payload, 'utf8');
+    await fs.appendFile(file, payload, "utf8");
   } catch (err) {
     // Log persistence is best-effort — never fail the handler request just
     // because logs couldn't be written. Surface via console for diagnostic.
     console.error(
-      `[centraid] log append failed for ${appDataDir}: ${err instanceof Error ? err.message : String(err)}`,
+      `[centraid] log append failed for ${appDataDir}: ${err instanceof Error ? err.message : String(err)}`
     );
     return;
   }
@@ -76,14 +79,20 @@ export interface ReadLogsOptions {
  */
 export async function readLogs(
   appDataDir: string,
-  opts: ReadLogsOptions = {},
+  opts: ReadLogsOptions = {}
 ): Promise<LogEntry[]> {
-  const limit = Math.max(1, Math.min(READ_HARD_CAP, Math.floor(opts.limit ?? 100)));
+  const limit = Math.max(
+    1,
+    Math.min(READ_HARD_CAP, Math.floor(opts.limit ?? 100))
+  );
 
   const current = path.join(appDataDir, FILENAME);
   const rotated = path.join(appDataDir, ROTATED);
 
-  const [curText, rotText] = await Promise.all([readMaybe(current), readMaybe(rotated)]);
+  const [curText, rotText] = await Promise.all([
+    readMaybe(current),
+    readMaybe(rotated),
+  ]);
   const all = parseJsonl(curText).concat(parseJsonl(rotText));
 
   const filtered = all.filter((e) => {
@@ -98,25 +107,27 @@ export async function readLogs(
 
 async function readMaybe(file: string): Promise<string> {
   try {
-    return await fs.readFile(file, 'utf8');
+    return await fs.readFile(file, "utf8");
   } catch {
-    return '';
+    return "";
   }
 }
 
 function parseJsonl(text: string): LogEntry[] {
   if (!text) return [];
   const out: LogEntry[] = [];
-  for (const line of text.split('\n')) {
+  for (const line of text.split("\n")) {
     if (!line) continue;
     try {
       const obj = JSON.parse(line) as Partial<LogEntry>;
       if (
-        typeof obj.ts === 'number' &&
-        (obj.level === 'info' || obj.level === 'warn' || obj.level === 'error') &&
-        typeof obj.msg === 'string' &&
-        (obj.source === 'query' || obj.source === 'action') &&
-        typeof obj.handler === 'string'
+        typeof obj.ts === "number" &&
+        (obj.level === "info" ||
+          obj.level === "warn" ||
+          obj.level === "error") &&
+        typeof obj.msg === "string" &&
+        (obj.source === "query" || obj.source === "action") &&
+        typeof obj.handler === "string"
       ) {
         out.push(obj as LogEntry);
       }

@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import type { RuntimeLogger } from '@centraid/app-engine';
-import { HealthRegistry } from './health-registry.js';
-import { RESOURCE_KNOB_BOUNDS } from './hardware-profile.js';
+import type { RuntimeLogger } from "@centraid/app-engine";
+import { describe, expect, it } from "vitest";
+
+import { RESOURCE_KNOB_BOUNDS } from "./hardware-profile.js";
+import { HealthRegistry } from "./health-registry.js";
 
 const silentLogger: RuntimeLogger = {
   info: () => undefined,
@@ -9,125 +10,135 @@ const silentLogger: RuntimeLogger = {
   error: () => undefined,
 };
 
-describe('HealthRegistry', () => {
-  it('starts with no components and overall ok', async () => {
+describe(HealthRegistry, () => {
+  it("starts with no components and overall ok", async () => {
     const registry = new HealthRegistry();
     const snap = await registry.snapshot();
-    expect(snap.status).toBe('ok');
-    expect(snap.components).toEqual([]);
-    expect(snap.recentEvents).toEqual([]);
+    expect(snap.status).toBe("ok");
+    expect(snap.components).toStrictEqual([]);
+    expect(snap.recentEvents).toStrictEqual([]);
   });
 
-  it('tracks ok → error → ok transitions with timestamps', async () => {
+  it("tracks ok → error → ok transitions with timestamps", async () => {
     let clock = 1_000;
     const registry = new HealthRegistry({ now: () => clock });
 
     clock = 2_000;
-    registry.reportOk('outbox', 'drained');
+    registry.reportOk("outbox", "drained");
     clock = 3_000;
-    registry.reportError('outbox', 'drain failed: boom');
+    registry.reportError("outbox", "drain failed: boom");
 
     let snap = await registry.snapshot();
-    let outbox = snap.components.find((c) => c.component === 'outbox');
-    expect(outbox?.status).toBe('error');
-    expect(outbox?.lastError).toBe('drain failed: boom');
+    let outbox = snap.components.find((c) => c.component === "outbox");
+    expect(outbox?.status).toBe("error");
+    expect(outbox?.lastError).toBe("drain failed: boom");
     expect(outbox?.lastOkAt).toBe(new Date(2_000).toISOString());
     expect(outbox?.lastErrorAt).toBe(new Date(3_000).toISOString());
     expect(outbox?.errorCount).toBe(1);
-    expect(snap.status).toBe('error');
+    expect(snap.status).toBe("error");
 
     clock = 4_000;
-    registry.reportOk('outbox');
+    registry.reportOk("outbox");
     snap = await registry.snapshot();
-    outbox = snap.components.find((c) => c.component === 'outbox');
+    outbox = snap.components.find((c) => c.component === "outbox");
     // Recovers to ok but keeps the error history for diagnosis.
-    expect(outbox?.status).toBe('ok');
-    expect(outbox?.lastError).toBe('drain failed: boom');
+    expect(outbox?.status).toBe("ok");
+    expect(outbox?.lastError).toBe("drain failed: boom");
     expect(outbox?.errorCount).toBe(1);
-    expect(snap.status).toBe('ok');
+    expect(snap.status).toBe("ok");
   });
 
-  it('overall status is the worst component', async () => {
+  it("overall status is the worst component", async () => {
     const registry = new HealthRegistry();
-    registry.reportOk('a');
-    registry.reportDegraded('b', 'slow');
-    expect((await registry.snapshot()).status).toBe('degraded');
-    registry.reportError('c', 'down');
-    expect((await registry.snapshot()).status).toBe('error');
+    registry.reportOk("a");
+    registry.reportDegraded("b", "slow");
+    expect((await registry.snapshot()).status).toBe("degraded");
+    registry.reportError("c", "down");
+    expect((await registry.snapshot()).status).toBe("error");
   });
 
-  it('loggerFor records warns as events without flipping status', async () => {
+  it("loggerFor records warns as events without flipping status", async () => {
     const registry = new HealthRegistry({ now: () => 5_000 });
     const seen: string[] = [];
-    const logger = registry.loggerFor('automations', {
+    const logger = registry.loggerFor("automations", {
       ...silentLogger,
       warn: (m) => seen.push(m),
     });
 
-    logger.warn('scheduled ref failed: transient');
+    logger.warn("scheduled ref failed: transient");
     const snap = await registry.snapshot();
-    const comp = snap.components.find((c) => c.component === 'automations');
-    expect(comp?.status).toBe('ok');
-    expect(seen).toEqual(['scheduled ref failed: transient']);
-    expect(snap.recentEvents).toEqual([
+    const comp = snap.components.find((c) => c.component === "automations");
+    expect(comp?.status).toBe("ok");
+    expect(seen).toStrictEqual(["scheduled ref failed: transient"]);
+    expect(snap.recentEvents).toStrictEqual([
       {
         at: new Date(5_000).toISOString(),
-        component: 'automations',
-        level: 'warn',
-        message: 'scheduled ref failed: transient',
+        component: "automations",
+        level: "warn",
+        message: "scheduled ref failed: transient",
       },
     ]);
   });
 
-  it('loggerFor flips status on error and passes through to the base logger', async () => {
+  it("loggerFor flips status on error and passes through to the base logger", async () => {
     const registry = new HealthRegistry();
     const seen: string[] = [];
-    const logger = registry.loggerFor('vaults', { ...silentLogger, error: (m) => seen.push(m) });
+    const logger = registry.loggerFor("vaults", {
+      ...silentLogger,
+      error: (m) => seen.push(m),
+    });
 
-    logger.error('sqlite is corrupt');
+    logger.error("sqlite is corrupt");
     const snap = await registry.snapshot();
-    const comp = snap.components.find((c) => c.component === 'vaults');
-    expect(comp?.status).toBe('error');
-    expect(comp?.lastError).toBe('sqlite is corrupt');
-    expect(seen).toEqual(['sqlite is corrupt']);
+    const comp = snap.components.find((c) => c.component === "vaults");
+    expect(comp?.status).toBe("error");
+    expect(comp?.lastError).toBe("sqlite is corrupt");
+    expect(seen).toStrictEqual(["sqlite is corrupt"]);
   });
 
-  it('caps the event ring buffer, newest first in snapshots', async () => {
+  it("caps the event ring buffer, newest first in snapshots", async () => {
     const registry = new HealthRegistry({ maxEvents: 3, now: () => 0 });
-    const logger = registry.loggerFor('x', silentLogger);
+    const logger = registry.loggerFor("x", silentLogger);
     for (let i = 1; i <= 5; i++) logger.warn(`w${i}`);
 
     const snap = await registry.snapshot();
-    expect(snap.recentEvents.map((e) => e.message)).toEqual(['w5', 'w4', 'w3']);
+    expect(snap.recentEvents.map((e) => e.message)).toStrictEqual([
+      "w5",
+      "w4",
+      "w3",
+    ]);
   });
 
-  it('probe result wins the component status at snapshot time', async () => {
+  it("probe result wins the component status at snapshot time", async () => {
     const registry = new HealthRegistry();
-    registry.reportError('vaults', 'mount failed');
-    registry.registerProbe('vaults', async () => ({ status: 'ok', detail: '2 vaults mounted' }));
+    registry.reportError("vaults", "mount failed");
+    registry.registerProbe("vaults", async () => ({
+      status: "ok",
+      detail: "2 vaults mounted",
+    }));
 
     const snap = await registry.snapshot();
-    const comp = snap.components.find((c) => c.component === 'vaults');
-    expect(comp?.status).toBe('ok');
-    expect(comp?.detail).toBe('2 vaults mounted');
+    const comp = snap.components.find((c) => c.component === "vaults");
+    expect(comp?.status).toBe("ok");
+    expect(comp?.detail).toBe("2 vaults mounted");
     // Error history survives the recovery.
-    expect(comp?.lastError).toBe('mount failed');
+    expect(comp?.lastError).toBe("mount failed");
   });
 
-  it('a throwing probe marks the component error', async () => {
+  it("a throwing probe marks the component error", async () => {
     const registry = new HealthRegistry();
-    registry.registerProbe('vaults', async () => {
-      throw new Error('registry unreachable');
+    registry.registerProbe("vaults", async () => {
+      throw new Error("registry unreachable");
     });
 
     const snap = await registry.snapshot();
-    const comp = snap.components.find((c) => c.component === 'vaults');
-    expect(comp?.status).toBe('error');
-    expect(comp?.lastError).toBe('registry unreachable');
-    expect(snap.status).toBe('error');
+    const comp = snap.components.find((c) => c.component === "vaults");
+    expect(comp?.status).toBe("error");
+    expect(comp?.lastError).toBe("registry unreachable");
+    expect(snap.status).toBe("error");
   });
 
-  it('reports uptime from construction', async () => {
+  it("reports uptime from construction", async () => {
     let clock = 10_000;
     const registry = new HealthRegistry({ now: () => clock });
     clock = 25_000;
@@ -136,8 +147,8 @@ describe('HealthRegistry', () => {
     expect(snap.uptimeMs).toBe(15_000);
   });
 
-  describe('metrics (issue #351 tier 3)', () => {
-    it('always includes rssBytes + uptimeMs, with outboxPending defaulting to 0, unwired', async () => {
+  describe("metrics (issue #351 tier 3)", () => {
+    it("always includes rssBytes + uptimeMs, with outboxPending defaulting to 0, unwired", async () => {
       const registry = new HealthRegistry();
       const snap = await registry.snapshot();
       expect(snap.metrics.rssBytes).toBeGreaterThan(0);
@@ -146,10 +157,13 @@ describe('HealthRegistry', () => {
       expect(snap.metrics.sseClients).toBeUndefined();
     });
 
-    it('pulls outboxPending/sseClients from the injected source at snapshot time', async () => {
+    it("pulls outboxPending/sseClients from the injected source at snapshot time", async () => {
       const registry = new HealthRegistry();
       let pending = 3;
-      registry.setMetricsSource(() => ({ outboxPending: pending, sseClients: 2 }));
+      registry.setMetricsSource(() => ({
+        outboxPending: pending,
+        sseClients: 2,
+      }));
 
       let snap = await registry.snapshot();
       expect(snap.metrics.outboxPending).toBe(3);
@@ -161,19 +175,23 @@ describe('HealthRegistry', () => {
       expect(snap.metrics.outboxPending).toBe(7);
     });
 
-    it('omits sseClients when the source leaves it unset', async () => {
+    it("omits sseClients when the source leaves it unset", async () => {
       const registry = new HealthRegistry();
       registry.setMetricsSource(() => ({ outboxPending: 1 }));
       const snap = await registry.snapshot();
       expect(snap.metrics.outboxPending).toBe(1);
-      expect('sseClients' in snap.metrics).toBe(false);
+      expect("sseClients" in snap.metrics).toBe(false);
     });
 
-    it('surfaces resourceUsage actuals from the source, and omits it when unset (#528)', async () => {
+    it("surfaces resourceUsage actuals from the source, and omits it when unset (#528)", async () => {
       const withUsage = new HealthRegistry();
       const usage = {
         sinceMs: 1_000,
-        process: { cpuSecondsTotal: 1.5, currentRssBytes: 200, peakRssBytes: 300 },
+        process: {
+          cpuSecondsTotal: 1.5,
+          currentRssBytes: 200,
+          peakRssBytes: 300,
+        },
         subsystems: {
           workerPool: { tasks: 4, busyMs: 40 },
           replication: { passes: 2, bytesReplicated: 512, busyMs: 12 },
@@ -183,37 +201,42 @@ describe('HealthRegistry', () => {
         },
         backgroundTimerFiresLastHour: 7,
       };
-      withUsage.setMetricsSource(() => ({ outboxPending: 0, resourceUsage: usage }));
+      withUsage.setMetricsSource(() => ({
+        outboxPending: 0,
+        resourceUsage: usage,
+      }));
       const snap = await withUsage.snapshot();
-      expect(snap.metrics.resourceUsage).toEqual(usage);
-      expect(snap.metrics.resourceUsage?.subsystems.agentRuns.cpuSeconds).toBeNull();
+      expect(snap.metrics.resourceUsage).toStrictEqual(usage);
+      expect(
+        snap.metrics.resourceUsage?.subsystems.agentRuns.cpuSeconds
+      ).toBeNull();
 
       const without = new HealthRegistry();
       without.setMetricsSource(() => ({ outboxPending: 0 }));
-      expect('resourceUsage' in (await without.snapshot()).metrics).toBe(false);
+      expect("resourceUsage" in (await without.snapshot()).metrics).toBe(false);
     });
 
-    it('surfaces powerContext from the source, and omits it when unset (#528 Phase D)', async () => {
+    it("surfaces powerContext from the source, and omits it when unset (#528 Phase D)", async () => {
       const withPower = new HealthRegistry();
       const powerContext = {
-        kind: 'battery' as const,
+        kind: "battery" as const,
         battery: { percent: 15, charging: false },
         deferringBackgroundWork: true,
-        reason: 'low-battery' as const,
-        source: 'client-push' as const,
+        reason: "low-battery" as const,
+        source: "client-push" as const,
         stealPercent: null,
         updatedAt: 1_000,
       };
       withPower.setMetricsSource(() => ({ outboxPending: 0, powerContext }));
       const snap = await withPower.snapshot();
-      expect(snap.metrics.powerContext).toEqual(powerContext);
+      expect(snap.metrics.powerContext).toStrictEqual(powerContext);
 
       const without = new HealthRegistry();
       without.setMetricsSource(() => ({ outboxPending: 0 }));
-      expect('powerContext' in (await without.snapshot()).metrics).toBe(false);
+      expect("powerContext" in (await without.snapshot()).metrics).toBe(false);
     });
 
-    it('surfaces performance metrics and exposes the shared load-shed signal', async () => {
+    it("surfaces performance metrics and exposes the shared load-shed signal", async () => {
       const registry = new HealthRegistry();
       let p99 = 18;
       let resets = 0;
@@ -228,12 +251,12 @@ describe('HealthRegistry', () => {
         }),
         () => {
           resets += 1;
-        },
+        }
       );
       registry.setMetricsSource(() => ({
         outboxPending: 0,
-        hardwareProfileClass: 'constrained',
-        resourceMode: 'conserve',
+        hardwareProfileClass: "constrained",
+        resourceMode: "conserve",
       }));
 
       const snap = await registry.snapshot();
@@ -241,30 +264,30 @@ describe('HealthRegistry', () => {
         eventLoopLagP50Ms: 7,
         eventLoopLagP99Ms: 18,
         storageFsyncMs: 11,
-        hardwareProfileClass: 'constrained',
-        resourceMode: 'conserve',
+        hardwareProfileClass: "constrained",
+        resourceMode: "conserve",
       });
-      expect(typeof snap.metrics.rssBytes).toBe('number');
+      expect(snap.metrics.rssBytes).toBeTypeOf("number");
       expect(snap.metrics.rssBytes).toBeGreaterThan(0);
       expect(registry.shouldDeferBackgroundWork()).toBe(false);
       p99 = 51;
       expect(registry.shouldDeferBackgroundWork()).toBe(true);
       expect((await registry.snapshot()).components).toContainEqual(
         expect.objectContaining({
-          component: 'load-shed',
-          status: 'degraded',
-          detail: expect.stringContaining('pausing backups'),
-        }),
+          component: "load-shed",
+          status: "degraded",
+          detail: expect.stringContaining("pausing backups"),
+        })
       );
       registry.resetPerformanceMetrics();
       expect(resets).toBe(1);
     });
 
-    it('carries an injected structured resourceProfile through the snapshot', async () => {
+    it("carries an injected structured resourceProfile through the snapshot", async () => {
       const registry = new HealthRegistry();
       const resourceProfile = {
-        class: 'standard' as const,
-        mode: 'balanced' as const,
+        class: "standard" as const,
+        mode: "balanced" as const,
         host: {
           cores: 8,
           totalMemoryBytes: 16 * 1024 ** 3,
@@ -281,29 +304,32 @@ describe('HealthRegistry', () => {
           replicationConcurrency: 3,
           staticBrotliQuality: 10,
           staticGzipQuality: 9,
-          sqliteSynchronous: 'FULL' as const,
+          sqliteSynchronous: "FULL" as const,
           vaultSweepIntervalMs: 3_600_000,
           outboxIdleIntervalMs: 60_000,
         },
         sources: {
-          workerMaxConcurrent: { source: 'preset' as const },
-          workerMaxOldGenerationMb: { source: 'preset' as const },
-          workerPoolSize: { source: 'preset' as const },
-          replicationConcurrency: { source: 'preset' as const },
-          staticBrotliQuality: { source: 'preset' as const },
-          staticGzipQuality: { source: 'preset' as const },
+          workerMaxConcurrent: { source: "preset" as const },
+          workerMaxOldGenerationMb: { source: "preset" as const },
+          workerPoolSize: { source: "preset" as const },
+          replicationConcurrency: { source: "preset" as const },
+          staticBrotliQuality: { source: "preset" as const },
+          staticGzipQuality: { source: "preset" as const },
         },
         bounds: RESOURCE_KNOB_BOUNDS,
       };
       registry.setMetricsSource(() => ({ outboxPending: 0, resourceProfile }));
       const snap = await registry.snapshot();
-      expect(snap.metrics.resourceProfile).toEqual(resourceProfile);
+      expect(snap.metrics.resourceProfile).toStrictEqual(resourceProfile);
     });
 
-    it('forces one visible background pass after sustained load shedding', async () => {
+    it("forces one visible background pass after sustained load shedding", async () => {
       let clock = 1_000;
       let p99 = 75;
-      const registry = new HealthRegistry({ now: () => clock, maxLoadShedMs: 5_000 });
+      const registry = new HealthRegistry({
+        now: () => clock,
+        maxLoadShedMs: 5_000,
+      });
       registry.setPerformanceMetricsSource(() => ({ eventLoopLagP99Ms: p99 }));
 
       expect(registry.shouldDeferBackgroundWork()).toBe(true);
@@ -314,52 +340,68 @@ describe('HealthRegistry', () => {
       expect(registry.shouldDeferBackgroundWork()).toBe(true);
       expect((await registry.snapshot()).components).toContainEqual(
         expect.objectContaining({
-          component: 'load-shed',
-          status: 'degraded',
-          detail: expect.stringMatching(/deferred background pass|pausing backups/),
-        }),
+          component: "load-shed",
+          status: "degraded",
+          detail: expect.stringMatching(
+            /deferred background pass|pausing backups/u
+          ),
+        })
       );
 
       p99 = 10;
       expect(registry.shouldDeferBackgroundWork()).toBe(false);
       expect((await registry.snapshot()).components).toContainEqual(
         expect.objectContaining({
-          component: 'load-shed',
-          status: 'ok',
-          detail: expect.stringContaining('pressure cleared'),
-        }),
+          component: "load-shed",
+          status: "ok",
+          detail: expect.stringContaining("pressure cleared"),
+        })
       );
     });
   });
 
-  describe('background pause (issue #528 Phase B)', () => {
-    it('is unpaused by default and exposes an unpaused snapshot window', async () => {
+  describe("background pause (issue #528 Phase B)", () => {
+    it("is unpaused by default and exposes an unpaused snapshot window", async () => {
       const registry = new HealthRegistry();
       expect(registry.shouldPauseBackgroundWork()).toBe(false);
-      expect(registry.backgroundPauseState()).toEqual({ paused: false, until: null });
-      expect((await registry.snapshot()).metrics.backgroundPause).toEqual({
+      expect(registry.backgroundPauseState()).toStrictEqual({
         paused: false,
         until: null,
       });
+      expect((await registry.snapshot()).metrics.backgroundPause).toStrictEqual(
+        {
+          paused: false,
+          until: null,
+        }
+      );
     });
 
-    it('pauses indefinitely with a null until and records an event', async () => {
+    it("pauses indefinitely with a null until and records an event", async () => {
       const registry = new HealthRegistry({ now: () => 1_000 });
       const state = registry.pauseBackgroundWork();
-      expect(state).toEqual({ paused: true, until: null });
+      expect(state).toStrictEqual({ paused: true, until: null });
       expect(registry.shouldPauseBackgroundWork()).toBe(true);
 
       const snap = await registry.snapshot();
-      expect(snap.metrics.backgroundPause).toEqual({ paused: true, until: null });
+      expect(snap.metrics.backgroundPause).toStrictEqual({
+        paused: true,
+        until: null,
+      });
       expect(snap.components).toContainEqual(
-        expect.objectContaining({ component: 'background-pause', status: 'degraded' }),
+        expect.objectContaining({
+          component: "background-pause",
+          status: "degraded",
+        })
       );
       expect(snap.recentEvents).toContainEqual(
-        expect.objectContaining({ component: 'background-pause', level: 'warn' }),
+        expect.objectContaining({
+          component: "background-pause",
+          level: "warn",
+        })
       );
     });
 
-    it('auto-lifts a duration-bounded pause once the clock passes until', () => {
+    it("auto-lifts a duration-bounded pause once the clock passes until", () => {
       let clock = 1_000;
       const registry = new HealthRegistry({ now: () => clock });
       const state = registry.pauseBackgroundWork(5_000);
@@ -369,13 +411,19 @@ describe('HealthRegistry', () => {
       expect(registry.shouldPauseBackgroundWork()).toBe(true);
       clock = 6_000;
       expect(registry.shouldPauseBackgroundWork()).toBe(false);
-      expect(registry.backgroundPauseState()).toEqual({ paused: false, until: null });
+      expect(registry.backgroundPauseState()).toStrictEqual({
+        paused: false,
+        until: null,
+      });
     });
 
-    it('resume lifts an active pause and is a no-op afterward', async () => {
+    it("resume lifts an active pause and is a no-op afterward", async () => {
       const registry = new HealthRegistry();
       registry.pauseBackgroundWork();
-      expect(registry.resumeBackgroundWork()).toEqual({ paused: false, until: null });
+      expect(registry.resumeBackgroundWork()).toStrictEqual({
+        paused: false,
+        until: null,
+      });
       expect(registry.shouldPauseBackgroundWork()).toBe(false);
 
       const before = (await registry.snapshot()).recentEvents.length;
@@ -384,7 +432,7 @@ describe('HealthRegistry', () => {
       // Idempotent: a second resume emits no further event.
       expect(after).toBe(before);
       expect((await registry.snapshot()).components).toContainEqual(
-        expect.objectContaining({ component: 'background-pause', status: 'ok' }),
+        expect.objectContaining({ component: "background-pause", status: "ok" })
       );
     });
   });

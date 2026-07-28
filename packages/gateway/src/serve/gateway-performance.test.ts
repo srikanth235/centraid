@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GatewayPerformanceMonitor } from './gateway-performance.js';
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { GatewayPerformanceMonitor } from "./gateway-performance.js";
 
 class FakeHistogram {
   count = 4;
@@ -27,10 +28,10 @@ class FakeHistogram {
   }
 }
 
-describe('GatewayPerformanceMonitor', () => {
+describe(GatewayPerformanceMonitor, () => {
   afterEach(() => vi.useRealTimers());
 
-  it('surfaces event-loop delay in milliseconds and the boot fsync sample', () => {
+  it("surfaces event-loop delay in milliseconds and the boot fsync sample", () => {
     const histogram = new FakeHistogram();
     const monitor = new GatewayPerformanceMonitor({
       histogram,
@@ -39,7 +40,7 @@ describe('GatewayPerformanceMonitor', () => {
       storageFsyncMs: 12.5,
     });
 
-    expect(monitor.snapshot()).toEqual({
+    expect(monitor.snapshot()).toStrictEqual({
       eventLoopLagP50Ms: 5,
       eventLoopLagP99Ms: 55,
       eventLoopLagMaxMs: 70,
@@ -56,11 +57,14 @@ describe('GatewayPerformanceMonitor', () => {
     expect(histogram.enabled).toBe(false);
   });
 
-  it('subtracts the sampling interval so an idle histogram reports zero lag', () => {
+  it("subtracts the sampling interval so an idle histogram reports zero lag", () => {
     const histogram = new FakeHistogram();
     histogram.max = 20_000_000;
     histogram.p99 = 20_000_000;
-    const monitor = new GatewayPerformanceMonitor({ histogram, sampleWindowMs: 0 });
+    const monitor = new GatewayPerformanceMonitor({
+      histogram,
+      sampleWindowMs: 0,
+    });
 
     expect(monitor.snapshot()).toMatchObject({
       eventLoopLagP50Ms: 0,
@@ -71,16 +75,19 @@ describe('GatewayPerformanceMonitor', () => {
     monitor.close();
   });
 
-  it('does not shed while the histogram has no samples', () => {
+  it("does not shed while the histogram has no samples", () => {
     const histogram = new FakeHistogram();
     histogram.count = 0;
-    const monitor = new GatewayPerformanceMonitor({ histogram, sampleWindowMs: 0 });
+    const monitor = new GatewayPerformanceMonitor({
+      histogram,
+      sampleWindowMs: 0,
+    });
     expect(monitor.shouldDeferBackgroundWork()).toBe(false);
     expect(monitor.snapshot().eventLoopLagP99Ms).toBe(0);
     monitor.close();
   });
 
-  it('keeps collection enabled continuously between rolling snapshots', async () => {
+  it("keeps collection enabled continuously between rolling snapshots", async () => {
     vi.useFakeTimers();
     const histogram = new FakeHistogram();
     const monitor = new GatewayPerformanceMonitor({

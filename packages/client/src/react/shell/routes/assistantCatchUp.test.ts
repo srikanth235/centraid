@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { catchUpAfterDrop } from './assistantCatchUp.js';
+import { describe, expect, it } from "vitest";
+
+import { catchUpAfterDrop } from "./assistantCatchUp.js";
 
 const instantSleep = (): Promise<void> => Promise.resolve();
 
-describe('catchUpAfterDrop (#420)', () => {
-  it('resolves true once turnCount climbs past the baseline', async () => {
+describe("catchUpAfterDrop (#420)", () => {
+  it("resolves true once turnCount climbs past the baseline", async () => {
     let calls = 0;
     const settled = await catchUpAfterDrop({
       baselineTurnCount: 3,
@@ -19,7 +20,7 @@ describe('catchUpAfterDrop (#420)', () => {
     expect(calls).toBe(3);
   });
 
-  it('resolves false on timeout when the turn never settles', async () => {
+  it("resolves false on timeout when the turn never settles", async () => {
     const settled = await catchUpAfterDrop({
       baselineTurnCount: 1,
       getStatus: () => Promise.resolve({ turnCount: 1, updatedAt: 0 }),
@@ -29,13 +30,13 @@ describe('catchUpAfterDrop (#420)', () => {
     expect(settled).toBe(false);
   });
 
-  it('keeps polling through transient status errors', async () => {
+  it("keeps polling through transient status errors", async () => {
     let calls = 0;
     const settled = await catchUpAfterDrop({
       baselineTurnCount: 0,
       getStatus: () => {
         calls += 1;
-        if (calls < 2) return Promise.reject(new Error('network'));
+        if (calls < 2) return Promise.reject(new Error("network"));
         return Promise.resolve({ turnCount: 1, updatedAt: 0 });
       },
       sleep: instantSleep,
@@ -44,7 +45,7 @@ describe('catchUpAfterDrop (#420)', () => {
     expect(calls).toBe(2);
   });
 
-  it('bails immediately when cancelled', async () => {
+  it("bails immediately when cancelled", async () => {
     let calls = 0;
     const settled = await catchUpAfterDrop({
       baselineTurnCount: 0,

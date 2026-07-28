@@ -1,5 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit shared shell relocation keeps this cohesive route intact; split later under #392
-import { type JSX, useEffect, useRef, useState } from 'react';
+import { type JSX, useEffect, useRef, useState } from "react";
+
 import {
   ASSISTANT_APP_ID,
   conversationStatus,
@@ -15,27 +16,24 @@ import {
   MAX_ATTACHMENT_BYTES,
   type ConversationAttachmentRef,
   type TurnStreamEvent,
-} from '../../../gateway-client.js';
-import { openPrompt } from '../prompt.js';
-import { providerConsentWire, withProviderConsent } from '../../providerConsent.js';
-import { useMemberScopes } from '../useMemberScopes.js';
-import { conversationScope, rememberConversationScope } from './conversationScopes.js';
-import ScopePicker from './ScopePicker.js';
-import scopeBarCss from './ScopePicker.module.css';
-import { catchUpAfterDrop } from './assistantCatchUp.js';
-import { rejectScopedDirectory } from './scopedDirectory.js';
-import { downloadConversation } from './conversationExport.js';
-import { DEFAULT_STARTERS, resolveStarters } from './assistantStarters.js';
-import mainScrollCss from '../../styles/mainScroll.module.css';
+} from "../../../gateway-client.js";
+import {
+  providerConsentWire,
+  withProviderConsent,
+} from "../../providerConsent.js";
 import type {
   AssistantSnapshot,
   AsstModelPickerDTO,
   AsstSlashCommand,
   AgentRunnerKind,
-} from '../../screen-contracts.js';
-import AssistantScreen from '../../screens/AssistantScreen.js';
-import { useShellActions } from '../actions.js';
-import { hydrateRefs, wireCodeCopy } from './assistantRich.js';
+} from "../../screen-contracts.js";
+import AssistantScreen from "../../screens/AssistantScreen.js";
+import { useShellActions } from "../actions.js";
+import { openPrompt } from "../prompt.js";
+import { useMemberScopes } from "../useMemberScopes.js";
+import { catchUpAfterDrop } from "./assistantCatchUp.js";
+import { hydrateRefs, wireCodeCopy } from "./assistantRich.js";
+import { DEFAULT_STARTERS, resolveStarters } from "./assistantStarters.js";
 import {
   activeAttemptOf,
   hydrateMessages,
@@ -44,13 +42,23 @@ import {
   type AsstMsg,
   type AsstToolCall,
   type PendingAttachment,
-} from './assistantTranscript.js';
+} from "./assistantTranscript.js";
+import { downloadConversation } from "./conversationExport.js";
+import {
+  conversationScope,
+  rememberConversationScope,
+} from "./conversationScopes.js";
+import { rejectScopedDirectory } from "./scopedDirectory.js";
+import ScopePicker from "./ScopePicker.js";
 import {
   loadProviders,
   resolveReportedRunnerKind,
   setSubsystemConfigPin,
   setSubsystemModel,
-} from './settingsProvidersData.js';
+} from "./settingsProvidersData.js";
+
+import mainScrollCss from "../../styles/mainScroll.module.css";
+import scopeBarCss from "./ScopePicker.module.css";
 
 type ReadyAttachment = PendingAttachment & { ref: ConversationAttachmentRef };
 
@@ -68,8 +76,11 @@ interface AssistantRouteProps {
 // rich-answer renderer and pushes a derived snapshot into AssistantScreen. The
 // mutable model lives in a ref (the snapshot, not React state, is the source of
 // truth for the screen). The conversation LIST lives in the shell sidebar.
-export default function AssistantRoute({ conversationId }: AssistantRouteProps): JSX.Element {
-  const { showToast, replace, navigate, confirm, refreshAssistantThreads } = useShellActions();
+export default function AssistantRoute({
+  conversationId,
+}: AssistantRouteProps): JSX.Element {
+  const { showToast, replace, navigate, confirm, refreshAssistantThreads } =
+    useShellActions();
   const m = useRef({
     currentId: null as string | null,
     msgs: [] as AsstMsg[],
@@ -79,9 +90,9 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     disposed: false,
     context: null as { used: number; size: number } | null,
     runnerKind: null as AgentRunnerKind | null,
-    selectedModel: '',
-    selectedEffort: '',
-    workspaceKind: 'vault-data' as 'vault-data' | 'app' | 'draft',
+    selectedModel: "",
+    selectedEffort: "",
+    workspaceKind: "vault-data" as "vault-data" | "app" | "draft",
     additionalDirectories: [] as string[],
     /** Server turn count of the open thread — the reconnect catch-up baseline. */
     turnCount: 0,
@@ -101,7 +112,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
   const [hasThread, setHasThread] = useState(false);
   const updateRef = useRef<((s: AssistantSnapshot) => void) | null>(null);
   const suppressSelectRef = useRef<string | null>(null);
-  const modelPickerRunnerRef = useRef<AgentRunnerKind>('codex');
+  const modelPickerRunnerRef = useRef<AgentRunnerKind>("codex");
 
   const buildSnapshot = (): AssistantSnapshot => {
     // The last final AI answer gates the Regenerate control — but only when
@@ -110,7 +121,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     if (!m.current.busy) {
       for (let i = m.current.msgs.length - 1; i >= 0; i--) {
         const msg = m.current.msgs[i];
-        if (msg?.kind === 'ai' && !msg.streaming && !msg.error) {
+        if (msg?.kind === "ai" && !msg.streaming && !msg.error) {
           lastAnswer = i;
           break;
         }
@@ -145,8 +156,13 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
   /** Re-fetch the transcript so answers carry turn ids + retry pagers (#420). */
   const reloadTranscript = async (id: string): Promise<void> => {
     try {
-      const loaded = await loadConversation(ASSISTANT_APP_ID, id, conversationScope(id));
-      if (m.current.disposed || m.current.currentId !== id || m.current.busy) return;
+      const loaded = await loadConversation(
+        ASSISTANT_APP_ID,
+        id,
+        conversationScope(id)
+      );
+      if (m.current.disposed || m.current.currentId !== id || m.current.busy)
+        return;
       m.current.msgs = hydrateMessages(loaded.messages, {
         ...(loaded.hasArchivedHistory ? { hasArchivedHistory: true } : {}),
         ...(loaded.archiveUnavailable ? { archiveUnavailable: true } : {}),
@@ -155,7 +171,9 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       if (loaded.adapterKind) m.current.runnerKind = loaded.adapterKind;
       if (loaded.workspace) {
         m.current.workspaceKind = loaded.workspace.primaryKind;
-        m.current.additionalDirectories = [...loaded.workspace.additionalDirectories];
+        m.current.additionalDirectories = [
+          ...loaded.workspace.additionalDirectories,
+        ];
       }
       push();
     } catch {
@@ -173,12 +191,16 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     m.current.turnCount = 0;
     m.current.context = null;
     m.current.runnerKind = null;
-    m.current.workspaceKind = 'vault-data';
+    m.current.workspaceKind = "vault-data";
     m.current.additionalDirectories = [];
     push();
     if (!id) return;
     try {
-      const loaded = await loadConversation(ASSISTANT_APP_ID, id, conversationScope(id));
+      const loaded = await loadConversation(
+        ASSISTANT_APP_ID,
+        id,
+        conversationScope(id)
+      );
       if (m.current.disposed || m.current.currentId !== id) return;
       m.current.msgs = hydrateMessages(loaded.messages, {
         ...(loaded.hasArchivedHistory ? { hasArchivedHistory: true } : {}),
@@ -188,11 +210,15 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       if (loaded.adapterKind) m.current.runnerKind = loaded.adapterKind;
       if (loaded.workspace) {
         m.current.workspaceKind = loaded.workspace.primaryKind;
-        m.current.additionalDirectories = [...loaded.workspace.additionalDirectories];
+        m.current.additionalDirectories = [
+          ...loaded.workspace.additionalDirectories,
+        ];
       }
     } catch (err) {
       if (m.current.disposed) return;
-      m.current.msgs = [{ kind: 'ai', text: `Failed to load: ${String(err)}`, error: true }];
+      m.current.msgs = [
+        { kind: "ai", text: `Failed to load: ${String(err)}`, error: true },
+      ];
     }
     push();
   };
@@ -204,16 +230,18 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         continue;
       }
       const localId = crypto.randomUUID();
-      const mime = file.type || 'application/octet-stream';
+      const mime = file.type || "application/octet-stream";
       // Image attachments get a local object-URL thumbnail in the composer
       // staging area straight away — no round-trip needed (issue #420, W2).
-      const previewUrl = mime.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+      const previewUrl = mime.startsWith("image/")
+        ? URL.createObjectURL(file)
+        : undefined;
       m.current.pendingAttachments.push({
         localId,
         filename: file.name,
         sizeBytes: file.size,
         mime,
-        state: 'uploading',
+        state: "uploading",
         ...(previewUrl ? { previewUrl } : {}),
       });
       push();
@@ -225,12 +253,14 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
             bytes,
             mime,
             file.name,
-            activeScopeId,
+            activeScopeId
           );
           if (m.current.disposed) return;
-          const entry = m.current.pendingAttachments.find((a) => a.localId === localId);
+          const entry = m.current.pendingAttachments.find(
+            (a) => a.localId === localId
+          );
           if (entry) {
-            entry.state = 'ready';
+            entry.state = "ready";
             entry.ref = {
               hash: ref.hash,
               mime: ref.mime,
@@ -241,10 +271,13 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           push();
         } catch (err) {
           if (m.current.disposed) return;
-          const entry = m.current.pendingAttachments.find((a) => a.localId === localId);
+          const entry = m.current.pendingAttachments.find(
+            (a) => a.localId === localId
+          );
           if (entry) {
-            entry.state = 'error';
-            entry.errorText = err instanceof Error ? err.message : 'Upload failed';
+            entry.state = "error";
+            entry.errorText =
+              err instanceof Error ? err.message : "Upload failed";
           }
           push();
         }
@@ -255,22 +288,34 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
   // Composer model picker — reuses the Settings → Models → Agents data path.
   const pickerFromStatus = (
     status: Awaited<ReturnType<typeof loadProviders>>,
-    requestedRunner?: AgentRunnerKind | null,
+    requestedRunner?: AgentRunnerKind | null
   ): AsstModelPickerDTO => {
-    const runnerKind = resolveReportedRunnerKind(status, requestedRunner, 'assistant');
+    const runnerKind = resolveReportedRunnerKind(
+      status,
+      requestedRunner,
+      "assistant"
+    );
     m.current.runnerKind = runnerKind;
     modelPickerRunnerRef.current = runnerKind;
     const card = status.cards.find((c) => c.kind === runnerKind);
     const models = card?.modelConfigurable ? card.models : [];
-    const defaultId = status.savedModelByKind[runnerKind] ?? '';
+    const defaultId = status.savedModelByKind[runnerKind] ?? "";
     const defaultModel =
-      models.find((mm) => mm.id === defaultId) ?? models.find((mm) => mm.default) ?? models[0];
-    const effortOption = card?.configOptions?.find((option) => option.category === 'thought_level');
+      models.find((mm) => mm.id === defaultId) ??
+      models.find((mm) => mm.default) ??
+      models[0];
+    const effortOption = card?.configOptions?.find(
+      (option) => option.category === "thought_level"
+    );
     const defaultEffort =
-      status.defaultConfigPinsByKind[runnerKind]?.thought_level ?? effortOption?.currentValue ?? '';
-    m.current.selectedModel = status.subsystemModelByKind[runnerKind]?.assistant ?? '';
+      status.defaultConfigPinsByKind[runnerKind]?.thought_level ??
+      effortOption?.currentValue ??
+      "";
+    m.current.selectedModel =
+      status.subsystemModelByKind[runnerKind]?.assistant ?? "";
     m.current.selectedEffort =
-      status.subsystemConfigPinsByKind[runnerKind]?.assistant?.thought_level ?? '';
+      status.subsystemConfigPinsByKind[runnerKind]?.assistant?.thought_level ??
+      "";
     return {
       runners: status.cards.map((runner) => ({
         kind: runner.kind,
@@ -282,22 +327,26 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         // won't take the turn (matches builder + automations).
         hint: [
           runner.subtitle,
-          ...(runner.breakerStates ?? []).map((state) => `${state.failureClass} ${state.state}`),
-        ].join(' · '),
+          ...(runner.breakerStates ?? []).map(
+            (state) => `${state.failureClass} ${state.state}`
+          ),
+        ].join(" · "),
       })),
       selectedRunnerKind: runnerKind,
-      workspaceKinds: ['vault-data'],
+      workspaceKinds: ["vault-data"],
       connected: card?.connected ?? false,
       models: models.map((mm) => ({
         id: mm.id,
         ...(mm.name ? { name: mm.name } : {}),
         ...(mm.default ? { default: true } : {}),
       })),
-      defaultModelName: defaultModel?.name ?? defaultModel?.id ?? 'gateway default',
+      defaultModelName:
+        defaultModel?.name ?? defaultModel?.id ?? "gateway default",
       selectedModelId: m.current.selectedModel,
       efforts: effortOption?.values ?? [],
       defaultEffortName:
-        effortOption?.values.find((value) => value.value === defaultEffort)?.name ?? defaultEffort,
+        effortOption?.values.find((value) => value.value === defaultEffort)
+          ?.name ?? defaultEffort,
       selectedEffortId: m.current.selectedEffort,
       supportsAdditionalDirectories: card?.additionalDirectories === true,
       supportsAttachments: card?.supportsAttachments === true,
@@ -310,20 +359,30 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
 
   const setModel = (modelId: string): void => {
     m.current.selectedModel = modelId;
-    setSubsystemModel(modelPickerRunnerRef.current, 'assistant', modelId);
+    setSubsystemModel(modelPickerRunnerRef.current, "assistant", modelId);
   };
 
   const setEffort = (effort: string): void => {
     m.current.selectedEffort = effort;
-    setSubsystemConfigPin(modelPickerRunnerRef.current, 'assistant', 'thought_level', effort);
+    setSubsystemConfigPin(
+      modelPickerRunnerRef.current,
+      "assistant",
+      "thought_level",
+      effort
+    );
   };
 
-  const setRunner = async (runnerKind: AgentRunnerKind): Promise<AsstModelPickerDTO> => {
+  const setRunner = async (
+    runnerKind: AgentRunnerKind
+  ): Promise<AsstModelPickerDTO> => {
     const previous = m.current.runnerKind;
     const status = await loadProviders({ refresh: true });
     const target = status.cards.find((card) => card.kind === runnerKind);
     if (!target?.sessionReady) {
-      showToast(target?.subtitle ?? `${runnerKind} did not complete its session preflight.`);
+      showToast(
+        target?.subtitle ??
+          `${runnerKind} did not complete its session preflight.`
+      );
       return pickerFromStatus(status, previous);
     }
     m.current.runnerKind = runnerKind;
@@ -339,10 +398,12 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
   };
 
   const removePendingAttachment = (localId: string): void => {
-    const gone = m.current.pendingAttachments.find((a) => a.localId === localId);
+    const gone = m.current.pendingAttachments.find(
+      (a) => a.localId === localId
+    );
     if (gone?.previewUrl) URL.revokeObjectURL(gone.previewUrl);
     m.current.pendingAttachments = m.current.pendingAttachments.filter(
-      (a) => a.localId !== localId,
+      (a) => a.localId !== localId
     );
     push();
   };
@@ -371,7 +432,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       m.current.msgs = m.current.msgs.slice(0, opts.removeFromIndex);
     if (opts.appendUser) {
       m.current.msgs.push({
-        kind: 'user',
+        kind: "user",
         text: opts.text,
         // Live sends carry a timestamp too, so the hover clock works before the
         // transcript reload replaces the row with the ledger copy.
@@ -392,10 +453,10 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     setBusy(true);
     m.current.abort = new AbortController();
 
-    let ai: Extract<AsstMsg, { kind: 'ai' }> | null = null;
-    const ensureAi = (): Extract<AsstMsg, { kind: 'ai' }> => {
+    let ai: Extract<AsstMsg, { kind: "ai" }> | null = null;
+    const ensureAi = (): Extract<AsstMsg, { kind: "ai" }> => {
       if (!ai) {
-        ai = { kind: 'ai', text: '', streaming: true, createdAt: Date.now() };
+        ai = { kind: "ai", text: "", streaming: true, createdAt: Date.now() };
         m.current.msgs.push(ai);
         push();
       }
@@ -404,7 +465,11 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     // Live reasoning row (issue #420, Wave 2) — ported from BuilderChatPane. It
     // streams `reasoning.delta`, collapses once the answer/tools begin, and (as
     // reasoning is not persisted) vanishes when the turn reloads from the ledger.
-    let thinking: { kind: 'thinking'; text: string; streaming?: boolean } | null = null;
+    let thinking: {
+      kind: "thinking";
+      text: string;
+      streaming?: boolean;
+    } | null = null;
     const collapseThinking = (): void => {
       if (thinking && thinking.streaming) {
         thinking.streaming = false;
@@ -421,33 +486,38 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
 
     const onEvent = (event: TurnStreamEvent): void => {
       if (m.current.disposed || m.current.currentId !== conversationId) return;
-      if (event.type !== 'error' && event.type !== 'aborted') sawActivity = true;
+      if (event.type !== "error" && event.type !== "aborted")
+        sawActivity = true;
       switch (event.type) {
-        case 'consent.required':
+        case "consent.required":
           requiredProvider = event.provider;
           return;
-        case 'notice': {
+        case "notice": {
           // A non-fatal runner notice. The SSE path renders immediately and
           // the ledger copy restores it after reload.
-          m.current.msgs.push({ kind: 'notice', level: event.level, text: event.message });
+          m.current.msgs.push({
+            kind: "notice",
+            level: event.level,
+            text: event.message,
+          });
           push();
           return;
         }
-        case 'reasoning.delta':
-          if (!thinking) {
-            thinking = { kind: 'thinking', text: event.delta, streaming: true };
-            m.current.msgs.push(thinking);
-          } else {
+        case "reasoning.delta":
+          if (thinking) {
             thinking.text += event.delta;
+          } else {
+            thinking = { kind: "thinking", text: event.delta, streaming: true };
+            m.current.msgs.push(thinking);
           }
           push();
           return;
-        case 'assistant.delta':
+        case "assistant.delta":
           collapseThinking();
           ensureAi().text += event.delta;
           push();
           return;
-        case 'usage': {
+        case "usage": {
           const msg = ensureAi();
           const inputTokens = event.inputTokens;
           const outputTokens = event.outputTokens;
@@ -455,56 +525,63 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           // ledger rollup replaces it on reload.
           const costUsd = event.costUsd;
           msg.usage = {
-            ...(inputTokens !== undefined ? { inputTokens } : {}),
-            ...(outputTokens !== undefined ? { outputTokens } : {}),
-            ...(costUsd !== undefined ? { costUsd, estimated: true } : {}),
+            ...(inputTokens === undefined ? {} : { inputTokens }),
+            ...(outputTokens === undefined ? {} : { outputTokens }),
+            ...(costUsd === undefined ? {} : { costUsd, estimated: true }),
             ...(event.model ? { model: event.model } : {}),
             ...(event.effort ? { effort: event.effort } : {}),
           };
           push();
           return;
         }
-        case 'context':
+        case "context":
           if (event.used !== undefined && event.size !== undefined) {
             m.current.context = { used: event.used, size: event.size };
             push();
           }
           return;
-        case 'tool.start': {
+        case "tool.start": {
           collapseThinking();
           const call: AsstToolCall = {
             id: event.toolCallId,
             tool: event.toolName,
             ...(event.sql ? { sql: event.sql } : {}),
-            state: 'run',
+            state: "run",
           };
           byCall.set(event.toolCallId, call);
-          const anchor = ai ? m.current.msgs.indexOf(ai) : m.current.msgs.length;
+          const anchor = ai
+            ? m.current.msgs.indexOf(ai)
+            : m.current.msgs.length;
           const prev = m.current.msgs[anchor - 1];
-          if (prev?.kind === 'tools') prev.calls.push(call);
-          else m.current.msgs.splice(anchor, 0, { kind: 'tools', calls: [call] });
+          if (prev?.kind === "tools") prev.calls.push(call);
+          else
+            m.current.msgs.splice(anchor, 0, { kind: "tools", calls: [call] });
           push();
           return;
         }
-        case 'tool.result': {
+        case "tool.result": {
           const call = byCall.get(event.toolCallId);
           if (!call) return;
-          call.state = event.ok ? 'ok' : 'error';
-          if (!event.ok) call.errorText = event.errorText ?? 'failed';
-          const result = event.result as { totalRows?: number; durationMs?: number } | undefined;
-          if (result && typeof result.totalRows === 'number') call.totalRows = result.totalRows;
-          if (result && typeof result.durationMs === 'number') call.durationMs = result.durationMs;
+          call.state = event.ok ? "ok" : "error";
+          if (!event.ok) call.errorText = event.errorText ?? "failed";
+          const result = event.result as
+            | { totalRows?: number; durationMs?: number }
+            | undefined;
+          if (result && typeof result.totalRows === "number")
+            call.totalRows = result.totalRows;
+          if (result && typeof result.durationMs === "number")
+            call.durationMs = result.durationMs;
           const outputText = toolOutputText(event.result);
           if (outputText) call.outputText = outputText;
           const artifacts = [
             ...(event.locations ?? []).map((location) => ({
-              label: location.path.split(/[\\/]/).at(-1) ?? location.path,
+              label: location.path.split(/[\\/]/u).at(-1) ?? location.path,
               workspacePath: location.path,
             })),
             // Keep the live chip identical to the reload path: when the runner
             // reports a content hash, the chip shows `sha256 …` (#567).
             ...(event.artifacts ?? []).map((artifact) => ({
-              label: artifact.filename ?? 'Agent artifact',
+              label: artifact.filename ?? "Agent artifact",
               ...(artifact.hash ? { hash: artifact.hash } : {}),
             })),
           ];
@@ -512,18 +589,18 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           push();
           return;
         }
-        case 'final': {
+        case "final": {
           collapseThinking();
           const msg = ensureAi();
-          msg.text = msg.text || event.text;
+          msg.text ||= event.text;
           msg.streaming = false;
           push();
           return;
         }
-        case 'error': {
+        case "error": {
           errored = true;
           m.current.msgs.push({
-            kind: 'ai',
+            kind: "ai",
             text: event.message,
             error: true,
             failedText: opts.text,
@@ -549,11 +626,19 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           message: opts.text,
           idempotencyKey: opts.idempotencyKey,
           ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
-          ...(opts.attachments.length ? { attachments: opts.attachments.map((a) => a.ref) } : {}),
-          ...(consentWire !== undefined ? { providerConsent: consentWire } : {}),
+          ...(opts.attachments.length
+            ? { attachments: opts.attachments.map((a) => a.ref) }
+            : {}),
+          ...(consentWire === undefined
+            ? {}
+            : { providerConsent: consentWire }),
           ...(m.current.runnerKind ? { runnerKind: m.current.runnerKind } : {}),
-          ...(m.current.selectedModel ? { model: m.current.selectedModel } : {}),
-          ...(m.current.selectedEffort ? { thinking: m.current.selectedEffort } : {}),
+          ...(m.current.selectedModel
+            ? { model: m.current.selectedModel }
+            : {}),
+          ...(m.current.selectedEffort
+            ? { thinking: m.current.selectedEffort }
+            : {}),
           workspaceKind: m.current.workspaceKind,
           additionalDirectories: m.current.additionalDirectories,
           // Explicit, never ambient: the turn must land in the space the
@@ -563,18 +648,19 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
             : {}),
         },
         onEvent,
-        m.current.abort.signal,
+        m.current.abort.signal
       );
       streamEnded = res.ended;
     } catch (err) {
-      if (!(err instanceof DOMException && err.name === 'AbortError')) threw = err;
+      if (!(err instanceof DOMException && err.name === "AbortError"))
+        threw = err;
     }
 
     if (m.current.disposed || m.current.currentId !== conversationId) return;
     if (requiredProvider) {
       setBusy(false);
       const approved = await confirm({
-        confirmLabel: 'Allow provider',
+        confirmLabel: "Allow provider",
         title: `Send to ${requiredProvider}?`,
         message: `Allow this conversation to be sent to ${requiredProvider}? This can include your message, attachments, conversation handoff, and vault tool results.`,
       });
@@ -585,12 +671,15 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         await runTurn({
           ...opts,
           appendUser: false,
-          providerConsent: withProviderConsent(opts.providerConsent ?? [], requiredProvider),
+          providerConsent: withProviderConsent(
+            opts.providerConsent ?? [],
+            requiredProvider
+          ),
         });
       } else {
         m.current.msgs.push({
-          kind: 'notice',
-          level: 'info',
+          kind: "notice",
+          level: "info",
           text: `Nothing was sent to ${requiredProvider}.`,
         });
         push();
@@ -598,29 +687,41 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       return;
     }
     for (const msg of m.current.msgs) {
-      if (msg.kind === 'thinking' && msg.streaming) msg.streaming = false;
+      if (msg.kind === "thinking" && msg.streaming) msg.streaming = false;
     }
     const aborted = m.current.abort?.signal.aborted ?? false;
     // A mid-turn drop: the stream carried activity then closed WITHOUT the
     // terminal `event: end` (or threw a network error). The backend finished the
     // turn and folded it into the ledger, so catch up rather than fail (#420).
-    const droppedMidTurn = !errored && !aborted && sawActivity && (threw !== null || !streamEnded);
+    const droppedMidTurn =
+      !errored && !aborted && sawActivity && (threw !== null || !streamEnded);
 
     if (droppedMidTurn) {
       // Mark the live answer "catching up" and poll the ledger until the turn
       // settles, then reload to materialize the completed answer.
       const live = m.current.msgs.find(
-        (msg): msg is Extract<AsstMsg, { kind: 'ai' }> =>
-          msg.kind === 'ai' && msg.streaming === true,
+        (msg): msg is Extract<AsstMsg, { kind: "ai" }> =>
+          msg.kind === "ai" && msg.streaming === true
       );
       if (live) live.catchingUp = true;
-      else m.current.msgs.push({ kind: 'ai', text: '', streaming: true, catchingUp: true });
+      else
+        m.current.msgs.push({
+          kind: "ai",
+          text: "",
+          streaming: true,
+          catchingUp: true,
+        });
       push();
       const settled = await catchUpAfterDrop({
         baselineTurnCount,
         getStatus: () =>
-          conversationStatus(ASSISTANT_APP_ID, conversationId, conversationScope(conversationId)),
-        isCancelled: () => m.current.disposed || m.current.currentId !== conversationId,
+          conversationStatus(
+            ASSISTANT_APP_ID,
+            conversationId,
+            conversationScope(conversationId)
+          ),
+        isCancelled: () =>
+          m.current.disposed || m.current.currentId !== conversationId,
       });
       if (m.current.disposed || m.current.currentId !== conversationId) return;
       m.current.busy = false;
@@ -628,14 +729,17 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         await reloadTranscript(conversationId);
       } else {
         // Give up: drop the catch-up row and offer a one-tap resend (same key).
-        m.current.msgs = m.current.msgs.filter((msg) => !(msg.kind === 'ai' && msg.catchingUp));
+        m.current.msgs = m.current.msgs.filter(
+          (msg) => !(msg.kind === "ai" && msg.catchingUp)
+        );
         m.current.msgs.push({
-          kind: 'ai',
+          kind: "ai",
           text: "Connection lost and the turn didn't come back. You can resend.",
           error: true,
           failedText: opts.text,
           idempotencyKey: opts.idempotencyKey,
-          offline: typeof navigator !== 'undefined' && navigator.onLine === false,
+          offline:
+            typeof navigator !== "undefined" && navigator.onLine === false,
           ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
         });
       }
@@ -645,7 +749,8 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     }
 
     const live = m.current.msgs.find(
-      (msg): msg is Extract<AsstMsg, { kind: 'ai' }> => msg.kind === 'ai' && msg.streaming === true,
+      (msg): msg is Extract<AsstMsg, { kind: "ai" }> =>
+        msg.kind === "ai" && msg.streaming === true
     );
     if (live) live.streaming = false;
     // A request that never started (threw before any activity) → resend bubble.
@@ -654,16 +759,18 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       // A rejected shared folder is a rejection of the SELECTION, not a
       // transient turn failure: say so out of band, because the resend button
       // on the error bubble will keep failing until the chip is removed (#567).
-      if (/additional director/i.test(message)) {
-        showToast(`The gateway rejected a shared folder — remove it and try again. ${message}`);
+      if (/additional director/iu.test(message)) {
+        showToast(
+          `The gateway rejected a shared folder — remove it and try again. ${message}`
+        );
       }
       m.current.msgs.push({
-        kind: 'ai',
+        kind: "ai",
         text: message,
         error: true,
         failedText: opts.text,
         idempotencyKey: opts.idempotencyKey,
-        offline: typeof navigator !== 'undefined' && navigator.onLine === false,
+        offline: typeof navigator !== "undefined" && navigator.onLine === false,
         ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
       });
       errored = true;
@@ -676,31 +783,39 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
   };
 
   const submit = async (textArg?: string): Promise<void> => {
-    const text = (textArg ?? '').trim();
+    const text = (textArg ?? "").trim();
     if (m.current.busy) return;
-    if (m.current.pendingAttachments.some((a) => a.state === 'uploading')) {
-      showToast('Wait for attachments to finish uploading.');
+    if (m.current.pendingAttachments.some((a) => a.state === "uploading")) {
+      showToast("Wait for attachments to finish uploading.");
       return;
     }
     const ready = m.current.pendingAttachments.filter(
-      (a): a is ReadyAttachment => a.state === 'ready' && a.ref !== undefined,
+      (a): a is ReadyAttachment => a.state === "ready" && a.ref !== undefined
     );
     if (!text && ready.length === 0) return;
     if (!m.current.currentId) {
       try {
-        const created = await createConversation(ASSISTANT_APP_ID, '', activeScopeId);
+        const created = await createConversation(
+          ASSISTANT_APP_ID,
+          "",
+          activeScopeId
+        );
         if (activeScopeId) rememberConversationScope(created.id, activeScopeId);
         m.current.currentId = created.id;
         setHasThread(true);
         suppressSelectRef.current = created.id;
-        replace?.({ kind: 'assistant', conversationId: created.id });
+        replace?.({ kind: "assistant", conversationId: created.id });
         refreshAssistantThreads?.();
       } catch (err) {
-        showToast(err instanceof Error ? err.message : 'Could not start a conversation');
+        showToast(
+          err instanceof Error ? err.message : "Could not start a conversation"
+        );
         return;
       }
     }
-    m.current.pendingAttachments = m.current.pendingAttachments.filter((a) => a.state !== 'ready');
+    m.current.pendingAttachments = m.current.pendingAttachments.filter(
+      (a) => a.state !== "ready"
+    );
     // Fresh idempotency key per user send (issue #420) — reused only on resend.
     await runTurn({
       text,
@@ -718,20 +833,23 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     let answerIdx = -1;
     for (let i = m.current.msgs.length - 1; i >= 0; i--) {
       const msg = m.current.msgs[i];
-      if (msg?.kind === 'ai' && !msg.streaming && !msg.error) {
+      if (msg?.kind === "ai" && !msg.streaming && !msg.error) {
         answerIdx = i;
         break;
       }
     }
     if (answerIdx < 0) return;
-    const answer = m.current.msgs[answerIdx] as Extract<AsstMsg, { kind: 'ai' }>;
+    const answer = m.current.msgs[answerIdx] as Extract<
+      AsstMsg,
+      { kind: "ai" }
+    >;
     const active = activeAttemptOf(answer);
     const retryOf = active ? active.turnId : answer.turnId;
     if (!retryOf) return;
-    let userText = '';
+    let userText = "";
     for (let i = answerIdx - 1; i >= 0; i--) {
       const msg = m.current.msgs[i];
-      if (msg?.kind === 'user') {
+      if (msg?.kind === "user") {
         userText = msg.text;
         break;
       }
@@ -753,7 +871,8 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
   const retryError = (messageIndex: number): void => {
     if (m.current.busy) return;
     const msg = m.current.msgs[messageIndex];
-    if (!msg || msg.kind !== 'ai' || !msg.error || msg.failedText === undefined) return;
+    if (!msg || msg.kind !== "ai" || !msg.error || msg.failedText === undefined)
+      return;
     // One-tap resend REUSES the failed send's idempotency key (issue #420) so a
     // turn that actually completed server-side replays instead of double-running;
     // a legacy bubble with no key falls back to a fresh one.
@@ -767,12 +886,12 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     });
   };
 
-  const setFeedback = (turnId: string, value: 'up' | 'down'): void => {
+  const setFeedback = (turnId: string, value: "up" | "down"): void => {
     const conversationId = m.current.currentId;
     if (!conversationId) return;
-    let applied: 'up' | 'down' | null = null;
+    let applied: "up" | "down" | null = null;
     for (const msg of m.current.msgs) {
-      if (msg.kind !== 'ai') continue;
+      if (msg.kind !== "ai") continue;
       const attempt = msg.attempts?.find((a) => a.turnId === turnId);
       if (attempt) {
         attempt.feedback = attempt.feedback === value ? null : value;
@@ -786,17 +905,20 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       }
     }
     push();
-    void setConversationFeedback(ASSISTANT_APP_ID, conversationId, turnId, applied).catch(
-      () => undefined,
-    );
+    void setConversationFeedback(
+      ASSISTANT_APP_ID,
+      conversationId,
+      turnId,
+      applied
+    ).catch(() => undefined);
   };
 
   const pagerNav = (messageIndex: number, delta: number): void => {
     const msg = m.current.msgs[messageIndex];
-    if (!msg || msg.kind !== 'ai' || !msg.attempts?.length) return;
+    if (!msg || msg.kind !== "ai" || !msg.attempts?.length) return;
     const next = Math.min(
       Math.max((msg.activeAttempt ?? msg.attempts.length - 1) + delta, 0),
-      msg.attempts.length - 1,
+      msg.attempts.length - 1
     );
     msg.activeAttempt = next;
     push();
@@ -804,8 +926,8 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
 
   const copyMessage = (text: string): void => {
     void navigator.clipboard.writeText(text).then(
-      () => showToast('Copied to clipboard'),
-      () => showToast('Could not copy'),
+      () => showToast("Copied to clipboard"),
+      () => showToast("Could not copy")
     );
   };
 
@@ -844,8 +966,10 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
   // @-mention entity search (§4) — the auth-aware vault picker, mapped to the
   // composer's {type,id,title,subtitle} shape.
   const searchEntities = (
-    term: string,
-  ): Promise<{ type: string; id: string; title: string; subtitle?: string }[]> =>
+    term: string
+  ): Promise<
+    { type: string; id: string; title: string; subtitle?: string }[]
+  > =>
     searchVaultEntities(term)
       .then((hits) =>
         hits.map((h) => ({
@@ -853,41 +977,59 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           id: h.id,
           title: h.title ?? `${h.type} ${h.id}`,
           ...(h.subtitle ? { subtitle: h.subtitle } : {}),
-        })),
+        }))
       )
       .catch(() => []);
 
   // Slash commands (§4) — minimal + extensible, each firing an existing UI
   // action. Export/Rename need an open (created) conversation.
   const slashCommands: AsstSlashCommand[] = [
-    { id: 'export', label: 'export', hint: 'Download as Markdown', enabled: hasThread },
-    { id: 'rename', label: 'rename', hint: 'Rename this conversation', enabled: hasThread },
-    { id: 'new', label: 'new', hint: 'Start a new conversation' },
+    {
+      id: "export",
+      label: "export",
+      hint: "Download as Markdown",
+      enabled: hasThread,
+    },
+    {
+      id: "rename",
+      label: "rename",
+      hint: "Rename this conversation",
+      enabled: hasThread,
+    },
+    { id: "new", label: "new", hint: "Start a new conversation" },
   ];
   const runSlash = (id: string): void => {
     const cid = m.current.currentId;
-    if (id === 'new') {
-      navigate({ kind: 'assistant' });
+    if (id === "new") {
+      navigate({ kind: "assistant" });
       return;
     }
     if (!cid) return;
-    if (id === 'export') {
+    if (id === "export") {
       void loadConversation(ASSISTANT_APP_ID, cid, conversationScope(cid))
-        .then((conv) => downloadConversation(conv, 'markdown'))
+        .then((conv) => downloadConversation(conv, "markdown"))
         .catch((err: unknown) =>
-          showToast(`Couldn't export: ${err instanceof Error ? err.message : String(err)}`),
+          showToast(
+            `Couldn't export: ${err instanceof Error ? err.message : String(err)}`
+          )
         );
-    } else if (id === 'rename') {
+    } else if (id === "rename") {
       void (async () => {
         const next = await openPrompt({
-          title: 'Rename conversation',
-          placeholder: 'Conversation name',
-          confirmLabel: 'Rename',
+          title: "Rename conversation",
+          placeholder: "Conversation name",
+          confirmLabel: "Rename",
         });
         if (!next) return;
-        await renameConversation(ASSISTANT_APP_ID, cid, next, conversationScope(cid)).catch(
-          (err: unknown) =>
-            showToast(`Couldn't rename: ${err instanceof Error ? err.message : String(err)}`),
+        await renameConversation(
+          ASSISTANT_APP_ID,
+          cid,
+          next,
+          conversationScope(cid)
+        ).catch((err: unknown) =>
+          showToast(
+            `Couldn't rename: ${err instanceof Error ? err.message : String(err)}`
+          )
         );
         refreshAssistantThreads?.();
       })();
@@ -905,7 +1047,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
             scopes={memberScopes.scopes}
             value={activeScopeId}
             onChange={setPickedScope}
-            label={conversationId ? 'Reading' : 'New conversation in'}
+            label={conversationId ? "Reading" : "New conversation in"}
             locked={Boolean(conversationId)}
           />
         </div>
@@ -929,15 +1071,18 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         onRemovePendingAttachment={removePendingAttachment}
         onAddWorkspace={() => {
           void openPrompt({
-            title: 'Add a scoped workspace folder',
-            placeholder: '/absolute/path/to/folder',
-            confirmLabel: 'Share folder',
+            title: "Add a scoped workspace folder",
+            placeholder: "/absolute/path/to/folder",
+            confirmLabel: "Share folder",
           }).then((directory) => {
-            const trimmed = directory?.trim() ?? '';
+            const trimmed = directory?.trim() ?? "";
             if (!trimmed) return;
             // The gateway rejects a bad root with a 400 on the NEXT turn, which
             // reads as a failed answer. Catch what we can name here (#567).
-            const rejection = rejectScopedDirectory(trimmed, m.current.additionalDirectories);
+            const rejection = rejectScopedDirectory(
+              trimmed,
+              m.current.additionalDirectories
+            );
             if (rejection) {
               showToast(rejection);
               return;
@@ -947,9 +1092,10 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           });
         }}
         onRemoveWorkspace={(directory) => {
-          m.current.additionalDirectories = m.current.additionalDirectories.filter(
-            (current) => current !== directory,
-          );
+          m.current.additionalDirectories =
+            m.current.additionalDirectories.filter(
+              (current) => current !== directory
+            );
           push();
         }}
         hydrateRefs={(node) => hydrateRefs(node)}

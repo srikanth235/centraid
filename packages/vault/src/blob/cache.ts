@@ -13,14 +13,20 @@
 // demand (custody.open) and re-promote. Admission never trusts a possibly stale
 // replica-index row to delete an original's last local copy.
 
-import type { DatabaseSync } from 'node:sqlite';
-import { availableParallelism, totalmem } from 'node:os';
-import type { BackupPolicy } from '../backup-policy.js';
-import { VaultBlobBackpressureError } from '../errors.js';
-import type { LocalBlobStore } from './local.js';
-import { AccessIndex, ReplicaIndex } from './replica-index.js';
-import { OrphanTombstoneIndex } from './orphan-tombstone.js';
-import { pendingOutboxShas, pinnedThumbShas, previewShas, stagingShas } from './evict.js';
+import { availableParallelism, totalmem } from "node:os";
+import type { DatabaseSync } from "node:sqlite";
+
+import type { BackupPolicy } from "../backup-policy.js";
+import { VaultBlobBackpressureError } from "../errors.js";
+import {
+  pendingOutboxShas,
+  pinnedThumbShas,
+  previewShas,
+  stagingShas,
+} from "./evict.js";
+import type { LocalBlobStore } from "./local.js";
+import { OrphanTombstoneIndex } from "./orphan-tombstone.js";
+import { AccessIndex, ReplicaIndex } from "./replica-index.js";
 
 /** The `blob_cache` settings bag (issue #405 §3), camelCase to match `blob_store`. */
 export interface BlobCacheSettings {
@@ -33,18 +39,18 @@ export interface BlobCacheSettings {
 }
 
 /** Which synchronous caller has authority to shed original blobs. */
-export type BlobEvictionScope = 'admission' | 'reconciled-sweep';
+export type BlobEvictionScope = "admission" | "reconciled-sweep";
 
 /** The vault's current `blob_cache` settings (`{}`-safe on any shape). */
 export function readBlobCacheSettings(vault: DatabaseSync): BlobCacheSettings {
   try {
-    const row = vault.prepare('SELECT settings_json FROM core_vault LIMIT 1').get() as
-      | { settings_json: string | null }
-      | undefined;
+    const row = vault
+      .prepare("SELECT settings_json FROM core_vault LIMIT 1")
+      .get() as { settings_json: string | null } | undefined;
     if (!row?.settings_json) return {};
     const parsed = JSON.parse(row.settings_json) as Record<string, unknown>;
-    const bag = parsed['blob_cache'];
-    return bag && typeof bag === 'object' ? (bag as BlobCacheSettings) : {};
+    const bag = parsed["blob_cache"];
+    return bag && typeof bag === "object" ? (bag as BlobCacheSettings) : {};
   } catch {
     return {};
   }
@@ -62,12 +68,13 @@ export function replicationConcurrencyFromEnv(
   host: { cores: number; totalMemoryBytes: number } = {
     cores: availableParallelism(),
     totalMemoryBytes: totalmem(),
-  },
+  }
 ): number {
-  const fallback = host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3 ? 1 : 3;
+  const fallback =
+    host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3 ? 1 : 3;
   const raw = env.CENTRAID_REPLICATION_CONCURRENCY;
-  if (raw === undefined || raw === '') return fallback;
-  const parsed = Number.parseInt(raw, 10);
+  if (raw === undefined || raw === "") return fallback;
+  const parsed = Math.trunc(Number(raw));
   return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 8) : fallback;
 }
 /** Default QoS cooldown after the last interactive read before bulk resumes (issue #405 §7). */
@@ -164,16 +171,19 @@ export class BlobCache {
   constructor(
     private readonly db: DatabaseSync,
     private readonly local: LocalBlobStore,
-    private readonly options: BlobCacheOptions = {},
+    private readonly options: BlobCacheOptions = {}
   ) {
     this.replica = new ReplicaIndex(db);
     this.access = new AccessIndex(db);
     this.orphan = new OrphanTombstoneIndex(db);
-    this.replicationConcurrency = options.replicationConcurrency ?? replicationConcurrencyFromEnv();
+    this.replicationConcurrency =
+      options.replicationConcurrency ?? replicationConcurrencyFromEnv();
     this.qosCooldownMs = options.qosCooldownMs ?? DEFAULT_QOS_COOLDOWN_MS;
     this.qosPollMs = options.qosPollMs ?? DEFAULT_QOS_POLL_MS;
     this.nowMs = options.nowMs ?? (() => Date.now());
-    this.sleepFn = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.sleepFn =
+      options.sleep ??
+      ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
   // ---- spool accounting (issue #405 §3/§7) ----
@@ -186,7 +196,8 @@ export class BlobCache {
   spoolBytes(): number {
     if (this.spool === null) {
       let total = 0;
-      for (const sha of this.local.listSync()) total += this.local.statSync(sha)?.size ?? 0;
+      for (const sha of this.local.listSync())
+        total += this.local.statSync(sha)?.size ?? 0;
       this.spool = total;
     }
     return this.spool;
@@ -234,11 +245,14 @@ export class BlobCache {
    * boundaries, not mid-multipart. Resolves immediately when nothing is hot.
    */
   async qosWait(): Promise<void> {
-    for (;;) {
-      const cooling = this.nowMs() - this.lastInteractiveAtMs < this.qosCooldownMs;
+    const waitUntilClear = async (): Promise<void> => {
+      const cooling =
+        this.nowMs() - this.lastInteractiveAtMs < this.qosCooldownMs;
       if (this.interactiveReads === 0 && !cooling) return;
       await this.sleepFn(this.qosPollMs);
-    }
+      return waitUntilClear();
+    };
+    return waitUntilClear();
   }
 
   // ---- budget (issue #405 §3) ----
@@ -260,12 +274,16 @@ export class BlobCache {
    *   3. else (no disk to measure — MemoryBlobStore) UNLIMITED.
    */
   budgetBytes(): number {
-    const explicit = this.options.policy?.().cacheBudgetBytes ?? this.settings().budgetBytes;
+    const explicit =
+      this.options.policy?.().cacheBudgetBytes ?? this.settings().budgetBytes;
     if (explicit && explicit > 0) return explicit;
     const free = this.freeBytes();
     if (free === null) return Number.MAX_SAFE_INTEGER;
     const half = Math.floor(0.5 * (free + this.spoolBytes()));
-    return Math.max(CACHE_BUDGET_FLOOR_BYTES, Math.min(half, CACHE_BUDGET_CEILING_BYTES));
+    return Math.max(
+      CACHE_BUDGET_FLOOR_BYTES,
+      Math.min(half, CACHE_BUDGET_CEILING_BYTES)
+    );
   }
 
   private settings(): BlobCacheSettings {
@@ -286,15 +304,19 @@ export class BlobCache {
    */
   admissionCapacity(
     reservedBytes = 0,
-    diskReservedBytes = reservedBytes,
+    diskReservedBytes = reservedBytes
   ): {
     availableBytes: number;
     freeBytes: number | null;
     reservedHeadroomBytes: number;
   } {
     const freeBytes = this.freeBytes();
-    const reservedHeadroomBytes = this.options.policy?.().reservedHeadroomBytes ?? 0;
-    const budgetAvailable = Math.max(0, this.budgetBytes() - this.spoolBytes() - reservedBytes);
+    const reservedHeadroomBytes =
+      this.options.policy?.().reservedHeadroomBytes ?? 0;
+    const budgetAvailable = Math.max(
+      0,
+      this.budgetBytes() - this.spoolBytes() - reservedBytes
+    );
     const diskAvailable =
       freeBytes === null
         ? Number.MAX_SAFE_INTEGER
@@ -315,24 +337,32 @@ export class BlobCache {
    * bytes), throws `VaultBlobBackpressureError` so the caller paces against the
    * uplink instead of losing data. A no-op when already under budget.
    */
-  admit(incoming: number, reservedBytes = 0, diskReservedBytes = reservedBytes): void {
+  admit(
+    incoming: number,
+    reservedBytes = 0,
+    diskReservedBytes = reservedBytes
+  ): void {
     const target = this.budgetBytes();
-    if (this.admissionCapacity(reservedBytes, diskReservedBytes).availableBytes >= incoming) return;
-    this.runEviction(incoming, reservedBytes, diskReservedBytes, 'admission');
+    if (
+      this.admissionCapacity(reservedBytes, diskReservedBytes).availableBytes >=
+      incoming
+    )
+      return;
+    this.runEviction(incoming, reservedBytes, diskReservedBytes, "admission");
     const capacity = this.admissionCapacity(reservedBytes, diskReservedBytes);
     if (capacity.availableBytes < incoming) {
       this.backpressureEvents += 1;
       throw new VaultBlobBackpressureError(
-        'blob ingest',
+        "blob ingest",
         `blob ingest needs ${incoming} bytes but only ${capacity.availableBytes} bytes are ` +
-          `admissible (free=${capacity.freeBytes ?? 'unknown'}, reserved headroom=${capacity.reservedHeadroomBytes}, ` +
+          `admissible (free=${capacity.freeBytes ?? "unknown"}, reserved headroom=${capacity.reservedHeadroomBytes}, ` +
           `cache spool=${this.spoolBytes()}, budget=${target}); nothing safely evictable`,
         {
           needBytes: incoming,
           availableBytes: capacity.availableBytes,
           freeBytes: capacity.freeBytes,
           reservedHeadroomBytes: capacity.reservedHeadroomBytes,
-        },
+        }
       );
     }
   }
@@ -351,14 +381,19 @@ export class BlobCache {
     incoming = 0,
     reservedBytes = 0,
     diskReservedBytes = reservedBytes,
-    scope: BlobEvictionScope = 'admission',
+    scope: BlobEvictionScope = "admission"
   ): { evicted: string[]; bytes: number } {
     const target = this.budgetBytes();
     const free = this.freeBytes();
     const headroom = this.options.policy?.().reservedHeadroomBytes ?? 0;
-    const logicalNeed = Math.max(0, this.spoolBytes() + reservedBytes + incoming - target);
+    const logicalNeed = Math.max(
+      0,
+      this.spoolBytes() + reservedBytes + incoming - target
+    );
     const physicalNeed =
-      free === null ? 0 : Math.max(0, headroom + diskReservedBytes + incoming - free);
+      free === null
+        ? 0
+        : Math.max(0, headroom + diskReservedBytes + incoming - free);
     const bytesNeeded = Math.max(logicalNeed, physicalNeed);
     if (bytesNeeded === 0) return { evicted: [], bytes: 0 };
     // Flush write-behind touches so LRU ordering reflects the latest reads.
@@ -378,7 +413,7 @@ export class BlobCache {
     // replica index against remote truth.
     const previews = [...preview].filter(evictable);
     const originals =
-      scope === 'reconciled-sweep'
+      scope === "reconciled-sweep"
         ? [...localSet].filter((s) => evictable(s) && !preview.has(s))
         : [];
     const order = [

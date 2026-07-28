@@ -6,37 +6,37 @@
  *   node scripts/release/verify-secrets.mjs [--strict]
  */
 
-const DESKTOP_APPLE = ['APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER'];
+const DESKTOP_APPLE = ["APPLE_API_KEY", "APPLE_API_KEY_ID", "APPLE_API_ISSUER"];
 const DESKTOP_AZURE = [
-  'AZURE_TENANT_ID',
-  'AZURE_CLIENT_ID',
-  'AZURE_CLIENT_SECRET',
-  'AZURE_CODE_SIGNING_ACCOUNT',
-  'AZURE_CERT_PROFILE',
+  "AZURE_TENANT_ID",
+  "AZURE_CLIENT_ID",
+  "AZURE_CLIENT_SECRET",
+  "AZURE_CODE_SIGNING_ACCOUNT",
+  "AZURE_CERT_PROFILE",
 ];
 const MOBILE = [
-  'EXPO_TOKEN',
-  'EAS_PROJECT_ID',
-  'CENTRAID_UPLOAD_STORE_FILE',
-  'CENTRAID_UPLOAD_STORE_PASSWORD',
-  'CENTRAID_UPLOAD_KEY_ALIAS',
-  'CENTRAID_UPLOAD_KEY_PASSWORD',
+  "EXPO_TOKEN",
+  "EAS_PROJECT_ID",
+  "CENTRAID_UPLOAD_STORE_FILE",
+  "CENTRAID_UPLOAD_STORE_PASSWORD",
+  "CENTRAID_UPLOAD_KEY_ALIAS",
+  "CENTRAID_UPLOAD_KEY_PASSWORD",
 ];
-const WEB = ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'];
-const GATEWAY_NPM = ['NPM_TOKEN'];
+const WEB = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"];
+const GATEWAY_NPM = ["NPM_TOKEN"];
 /** GHCR uses GITHUB_TOKEN + packages:write in Actions; local probe is informational. */
-const GATEWAY_IMAGE = ['GITHUB_TOKEN'];
+const GATEWAY_IMAGE = ["GITHUB_TOKEN"];
 
 const groups = {
-  'desktop-apple': DESKTOP_APPLE,
-  'desktop-azure': DESKTOP_AZURE,
+  "desktop-apple": DESKTOP_APPLE,
+  "desktop-azure": DESKTOP_AZURE,
   mobile: MOBILE,
   web: WEB,
-  'gateway-npm': GATEWAY_NPM,
-  'gateway-image': GATEWAY_IMAGE,
+  "gateway-npm": GATEWAY_NPM,
+  "gateway-image": GATEWAY_IMAGE,
 };
 
-const strict = process.argv.includes('--strict');
+const strict = process.argv.includes("--strict");
 const report = {};
 let missingRequired = 0;
 
@@ -44,8 +44,10 @@ for (const [group, names] of Object.entries(groups)) {
   const rows = {};
   let present = 0;
   for (const name of names) {
-    const ok = Boolean(process.env[name] && String(process.env[name]).length > 0);
-    rows[name] = ok ? 'present' : 'absent';
+    const ok = Boolean(
+      process.env[name] && String(process.env[name]).length > 0
+    );
+    rows[name] = ok ? "present" : "absent";
     if (ok) present++;
   }
   report[group] = {
@@ -56,7 +58,9 @@ for (const [group, names] of Object.entries(groups)) {
   };
 }
 
-console.log(JSON.stringify({ note: 'values never printed', groups: report }, null, 2));
+console.log(
+  JSON.stringify({ note: "values never printed", groups: report }, null, 2)
+);
 
 if (strict) {
   for (const g of Object.values(report)) {
@@ -64,7 +68,7 @@ if (strict) {
   }
   if (missingRequired > 0) {
     console.error(
-      `${missingRequired} secret group(s) incomplete — enrollment residual (docs/enrollment.md)`,
+      `${missingRequired} secret group(s) incomplete — enrollment residual (docs/enrollment.md)`
     );
     process.exit(1);
   }

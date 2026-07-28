@@ -3,7 +3,7 @@
 // per-view toggles) persist through here. A plain module — imported where
 // needed rather than reached through a window global.
 
-const PREFIX = 'centraid.v1.';
+const PREFIX = "centraid.v1.";
 
 export const Store = {
   get<T>(key: string, fallback: T): T {

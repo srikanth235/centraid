@@ -1,30 +1,32 @@
-import crypto from 'node:crypto';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { BearerAuthorization } from '@centraid/app-engine';
-import { sendJson } from '../routes/route-helpers.js';
-import { vaultContext, VAULT_HEADER } from './vault-context.js';
+import crypto from "node:crypto";
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+import type { BearerAuthorization } from "@centraid/app-engine";
+
+import { sendJson } from "../routes/route-helpers.js";
+import type { RouteHandler } from "./build-gateway.js";
+import { vaultContext, VAULT_HEADER } from "./vault-context.js";
 import {
   WebControlSessionStore,
   hashControlToken,
   CONTROL_ABSOLUTE_TTL_MS,
-} from './web-session-store.js';
-import type { RouteHandler } from './build-gateway.js';
+} from "./web-session-store.js";
 
-export const WEB_SESSION_REDEEM_PATH = '/centraid/_web/session';
-export const WEB_CONTROL_PATH = '/centraid/_web/control';
-export const WEB_APP_HEADER = 'x-centraid-web-app';
-export const WEB_SHELL_ORIGIN_HEADER = 'x-centraid-web-shell-origin';
+export const WEB_SESSION_REDEEM_PATH = "/centraid/_web/session";
+export const WEB_CONTROL_PATH = "/centraid/_web/control";
+export const WEB_APP_HEADER = "x-centraid-web-app";
+export const WEB_SHELL_ORIGIN_HEADER = "x-centraid-web-shell-origin";
 
-const CONTROL_COOKIE = '__centraid_control';
-const MINT_RE = /^\/centraid\/_apps\/([^/]+)\/web-session$/;
+const CONTROL_COOKIE = "__centraid_control";
+const MINT_RE = /^\/centraid\/_apps\/(?<appId>[^/]+)\/web-session$/u;
 const PENDING_TTL_MS = 60_000;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const REPLICA_APP_PATHS = new Set([
-  '/centraid/_vault/replica/bootstrap',
-  '/centraid/_vault/changes',
-  '/centraid/_vault/replica/row',
-  '/centraid/_vault/replica/checkpoint',
-  '/centraid/_vault/replica/intents',
+  "/centraid/_vault/replica/bootstrap",
+  "/centraid/_vault/changes",
+  "/centraid/_vault/replica/row",
+  "/centraid/_vault/replica/checkpoint",
+  "/centraid/_vault/replica/intents",
 ]);
 
 export interface WebAppSessionsOptions {
@@ -71,8 +73,10 @@ interface ActiveSession extends SessionScope {
 function safeOrigin(raw: string | string[] | undefined): string | undefined {
   if (Array.isArray(raw)) return undefined;
   try {
-    const url = new URL(raw ?? '');
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.origin : undefined;
+    const url = new URL(raw ?? "");
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.origin
+      : undefined;
   } catch {
     return undefined;
   }
@@ -81,7 +85,10 @@ function safeOrigin(raw: string | string[] | undefined): string | undefined {
 /** Constant-time cookie-token comparison, matching the repo's secret-compare
  * standard. `crypto.timingSafeEqual` throws on unequal lengths, so bail early
  * (a length mismatch already means the tokens differ). */
-function tokenMatches(presented: string | undefined, expected: string): boolean {
+function tokenMatches(
+  presented: string | undefined,
+  expected: string
+): boolean {
   if (presented === undefined) return false;
   const a = Buffer.from(presented);
   const b = Buffer.from(expected);
@@ -91,8 +98,8 @@ function tokenMatches(presented: string | undefined, expected: string): boolean 
 
 function cookies(req: IncomingMessage): Map<string, string> {
   const values = new Map<string, string>();
-  for (const pair of (req.headers.cookie ?? '').split(';')) {
-    const split = pair.indexOf('=');
+  for (const pair of (req.headers.cookie ?? "").split(";")) {
+    const split = pair.indexOf("=");
     if (split <= 0) continue;
     values.set(pair.slice(0, split).trim(), pair.slice(split + 1).trim());
   }
@@ -100,7 +107,7 @@ function cookies(req: IncomingMessage): Map<string, string> {
 }
 
 function requestPath(req: IncomingMessage): string {
-  return (req.url ?? '/').split('?')[0] ?? '/';
+  return (req.url ?? "/").split("?")[0] ?? "/";
 }
 
 function permits(scope: SessionScope, pathname: string): boolean {
@@ -117,7 +124,10 @@ function permits(scope: SessionScope, pathname: string): boolean {
   // Generated apps stage uploads and serve their already-authorized media
   // through the blob custody door. Keep this separate from the rest of the
   // vault surface: the app still receives no general /_vault authority.
-  if (pathname === '/centraid/_vault/blobs' || pathname.startsWith('/centraid/_vault/blobs/')) {
+  if (
+    pathname === "/centraid/_vault/blobs" ||
+    pathname.startsWith("/centraid/_vault/blobs/")
+  ) {
     return true;
   }
   // App sessions may use only the replica protocol's exact paths. The
@@ -137,7 +147,8 @@ export class WebAppSessions {
 
   constructor(options: WebAppSessionsOptions = {}) {
     this.controlStore =
-      options.controlStore ?? WebControlSessionStore.open(options.controlsFile, options.now);
+      options.controlStore ??
+      WebControlSessionStore.open(options.controlsFile, options.now);
     if (options.isDeviceValid) this.isDeviceValid = options.isDeviceValid;
     this.now = options.now ?? Date.now;
   }
@@ -159,52 +170,56 @@ export class WebAppSessions {
     if (pathname === WEB_CONTROL_PATH) {
       // A DELETE that cleared the bearer gate in `authorize()` (valid cookie
       // + matching Origin) is a logout; POST is the establish ceremony.
-      if ((req.method ?? 'GET').toUpperCase() === 'DELETE') return this.logout(req, res);
+      if ((req.method ?? "GET").toUpperCase() === "DELETE")
+        return this.logout(req, res);
       return this.establishControl(req, res);
     }
     const match = MINT_RE.exec(pathname);
     if (!match) return false;
-    if ((req.method ?? 'GET') !== 'POST') {
-      sendJson(res, 405, { error: 'method_not_allowed' });
+    if ((req.method ?? "GET") !== "POST") {
+      sendJson(res, 405, { error: "method_not_allowed" });
       return true;
     }
     const context = vaultContext();
     if (!context) {
-      sendJson(res, 500, { error: 'vault_context_missing' });
+      sendJson(res, 500, { error: "vault_context_missing" });
       return true;
     }
     const shellOrigin = safeOrigin(req.headers.origin);
     if (!shellOrigin) {
       sendJson(res, 400, {
-        error: 'origin_required',
-        message: 'Browser sessions require an HTTP Origin.',
+        error: "origin_required",
+        message: "Browser sessions require an HTTP Origin.",
       });
       return true;
     }
     let appId: string;
     try {
-      appId = decodeURIComponent(match[1] ?? '');
+      appId = decodeURIComponent(match.groups?.appId ?? "");
     } catch {
-      sendJson(res, 400, { error: 'invalid_app_id' });
+      sendJson(res, 400, { error: "invalid_app_id" });
       return true;
     }
     let draftSessionId: string | undefined;
     try {
-      let body = '';
+      let body = "";
       for await (const chunk of req) body += chunk.toString();
       if (body) {
         const parsed = JSON.parse(body) as { draftSessionId?: unknown };
-        if (parsed.draftSessionId !== undefined && typeof parsed.draftSessionId !== 'string') {
-          throw new Error('invalid draft session');
+        if (
+          parsed.draftSessionId !== undefined &&
+          typeof parsed.draftSessionId !== "string"
+        ) {
+          throw new Error("invalid draft session");
         }
         draftSessionId = parsed.draftSessionId;
       }
     } catch {
-      sendJson(res, 400, { error: 'malformed_request' });
+      sendJson(res, 400, { error: "malformed_request" });
       return true;
     }
     this.sweep();
-    const code = crypto.randomBytes(32).toString('base64url');
+    const code = crypto.randomBytes(32).toString("base64url");
     this.pending.set(code, {
       appId,
       vaultId: context.vaultId,
@@ -228,7 +243,8 @@ export class WebAppSessions {
     this.sweep();
     const origins = new Set<string>();
     for (const row of this.controlStore.list()) origins.add(row.shellOrigin);
-    for (const session of this.active.values()) origins.add(session.shellOrigin);
+    for (const session of this.active.values())
+      origins.add(session.shellOrigin);
     return [...origins];
   }
 
@@ -240,16 +256,19 @@ export class WebAppSessions {
       const origin = safeOrigin(req.headers.origin);
       const presentedToken = presented.get(CONTROL_COOKIE);
       const control =
-        presentedToken !== undefined
-          ? this.controlStore.find(hashControlToken(presentedToken))
-          : undefined;
+        presentedToken === undefined
+          ? undefined
+          : this.controlStore.find(hashControlToken(presentedToken));
       if (!control || origin !== control.shellOrigin) return undefined;
       // A revoked device's cookie stops working immediately — evict the row.
       if (this.revoked(control.deviceKey)) {
         this.controlStore.remove(control.tokenHash);
         return undefined;
       }
-      const target = new URL(req.url ?? '/', 'http://gateway.invalid').searchParams.get('path');
+      const target = new URL(
+        req.url ?? "/",
+        "http://gateway.invalid"
+      ).searchParams.get("path");
       // A DELETE straight to the control endpoint (no proxied `?path=`) is a
       // logout: leave the URL intact so `handler` performs the deletion and
       // expires the cookie; just clear the bearer gate here. A DELETE that
@@ -258,22 +277,31 @@ export class WebAppSessions {
       // must fall through to the rewrite below — otherwise every DELETE API
       // call from the web shell would be swallowed as a control-session logout.
       if (!target) {
-        if ((req.method ?? 'GET').toUpperCase() === 'DELETE') {
-          return control.deviceKey ? { plane: 'device', deviceKey: control.deviceKey } : undefined;
+        if ((req.method ?? "GET").toUpperCase() === "DELETE") {
+          return control.deviceKey
+            ? { plane: "device", deviceKey: control.deviceKey }
+            : undefined;
         }
         return undefined;
       }
-      if (!target.startsWith('/') || target.startsWith(WEB_CONTROL_PATH)) return undefined;
+      if (!target.startsWith("/") || target.startsWith(WEB_CONTROL_PATH))
+        return undefined;
       // Extend the sliding idle window (throttled to an hourly disk write).
       this.controlStore.touch(control.tokenHash);
       req.url = target;
       req.headers[VAULT_HEADER] = control.vaultId;
-      return control.deviceKey ? { plane: 'device', deviceKey: control.deviceKey } : undefined;
+      return control.deviceKey
+        ? { plane: "device", deviceKey: control.deviceKey }
+        : undefined;
     }
     let session: ActiveSession | undefined;
     for (const [cookieName, token] of presented) {
       const candidate = this.activeByCookieName.get(cookieName);
-      if (candidate && tokenMatches(token, candidate.token) && permits(candidate, pathname)) {
+      if (
+        candidate &&
+        tokenMatches(token, candidate.token) &&
+        permits(candidate, pathname)
+      ) {
         session = candidate;
         break;
       }
@@ -298,7 +326,9 @@ export class WebAppSessions {
     // legitimately omit it, and must still pass on cookie + path alone.
     const origin = safeOrigin(req.headers.origin);
     if (origin !== undefined) {
-      const host = Array.isArray(req.headers.host) ? undefined : req.headers.host;
+      const host = Array.isArray(req.headers.host)
+        ? undefined
+        : req.headers.host;
       let originHost: string | undefined;
       try {
         originHost = new URL(origin).host;
@@ -306,24 +336,30 @@ export class WebAppSessions {
         originHost = undefined;
       }
       const sameOriginAsGateway = host !== undefined && originHost === host;
-      if (origin !== session.shellOrigin && !sameOriginAsGateway) return undefined;
+      if (origin !== session.shellOrigin && !sameOriginAsGateway)
+        return undefined;
     }
     req.headers[VAULT_HEADER] = session.vaultId;
     req.headers[WEB_APP_HEADER] = session.appId;
     req.headers[WEB_SHELL_ORIGIN_HEADER] = session.shellOrigin;
-    return session.deviceKey ? { plane: 'device', deviceKey: session.deviceKey } : undefined;
+    return session.deviceKey
+      ? { plane: "device", deviceKey: session.deviceKey }
+      : undefined;
   }
 
   private redeem(req: IncomingMessage, res: ServerResponse): Promise<true> {
-    const code = new URL(req.url ?? '/', 'http://gateway.invalid').searchParams.get('code') ?? '';
+    const code =
+      new URL(req.url ?? "/", "http://gateway.invalid").searchParams.get(
+        "code"
+      ) ?? "";
     const pending = this.pending.get(code);
     this.pending.delete(code);
     if (!pending || pending.expiresAt <= Date.now()) {
-      sendJson(res, 403, { error: 'web_session_invalid' });
+      sendJson(res, 403, { error: "web_session_invalid" });
       return Promise.resolve(true);
     }
-    const token = crypto.randomBytes(32).toString('base64url');
-    const cookieName = `__centraid_app_${crypto.randomBytes(8).toString('hex')}`;
+    const token = crypto.randomBytes(32).toString("base64url");
+    const cookieName = `__centraid_app_${crypto.randomBytes(8).toString("hex")}`;
     const session: ActiveSession = {
       ...pending,
       token,
@@ -332,34 +368,37 @@ export class WebAppSessions {
     };
     this.active.set(token, session);
     this.activeByCookieName.set(cookieName, session);
-    const forwarded = req.headers['x-forwarded-proto'];
-    const secure = forwarded === 'https' ? '; Secure' : '';
+    const forwarded = req.headers["x-forwarded-proto"];
+    const secure = forwarded === "https" ? "; Secure" : "";
     res.statusCode = 303;
     res.setHeader(
-      'Set-Cookie',
-      `${cookieName}=${token}; HttpOnly; SameSite=Strict; Path=/centraid/; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${secure}`,
+      "Set-Cookie",
+      `${cookieName}=${token}; HttpOnly; SameSite=Strict; Path=/centraid/; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${secure}`
     );
     const app = encodeURIComponent(pending.appId);
     const location = pending.draftSessionId
       ? `/centraid/_draft/${encodeURIComponent(pending.draftSessionId)}/${app}/`
       : `/centraid/${app}/`;
-    res.setHeader('Location', location);
+    res.setHeader("Location", location);
     res.end();
     return Promise.resolve(true);
   }
 
-  private establishControl(req: IncomingMessage, res: ServerResponse): Promise<true> {
-    if ((req.method ?? 'GET') !== 'POST') {
-      sendJson(res, 405, { error: 'method_not_allowed' });
+  private establishControl(
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<true> {
+    if ((req.method ?? "GET") !== "POST") {
+      sendJson(res, 405, { error: "method_not_allowed" });
       return Promise.resolve(true);
     }
     const context = vaultContext();
     const shellOrigin = safeOrigin(req.headers.origin);
     if (!context || !shellOrigin) {
-      sendJson(res, 400, { error: 'origin_required' });
+      sendJson(res, 400, { error: "origin_required" });
       return Promise.resolve(true);
     }
-    const token = crypto.randomBytes(32).toString('base64url');
+    const token = crypto.randomBytes(32).toString("base64url");
     // Multiple browsers/devices may hold concurrent control sessions: each is
     // HttpOnly, origin-bound, and expiry-swept. `establish` replaces only the
     // same-hash row — a second pairing must not silently invalidate the first
@@ -371,13 +410,13 @@ export class WebAppSessions {
       ...(context.deviceKey ? { deviceKey: context.deviceKey } : {}),
       shellOrigin,
     });
-    const forwarded = req.headers['x-forwarded-proto'];
-    const secure = forwarded === 'https' ? '; Secure' : '';
+    const forwarded = req.headers["x-forwarded-proto"];
+    const secure = forwarded === "https" ? "; Secure" : "";
     // Cookie `Max-Age` carries the ABSOLUTE 180-day wall; the server-side
     // idle window (30d, sliding) is the tighter bound enforced on authorize.
     res.setHeader(
-      'Set-Cookie',
-      `${CONTROL_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=${WEB_CONTROL_PATH}; Max-Age=${Math.floor(CONTROL_ABSOLUTE_TTL_MS / 1000)}${secure}`,
+      "Set-Cookie",
+      `${CONTROL_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=${WEB_CONTROL_PATH}; Max-Age=${Math.floor(CONTROL_ABSOLUTE_TTL_MS / 1000)}${secure}`
     );
     sendJson(res, 200, { ok: true, vaultId: context.vaultId });
     return Promise.resolve(true);
@@ -390,12 +429,13 @@ export class WebAppSessions {
    */
   private logout(req: IncomingMessage, res: ServerResponse): Promise<true> {
     const presentedToken = cookies(req).get(CONTROL_COOKIE);
-    if (presentedToken !== undefined) this.controlStore.remove(hashControlToken(presentedToken));
-    const forwarded = req.headers['x-forwarded-proto'];
-    const secure = forwarded === 'https' ? '; Secure' : '';
+    if (presentedToken !== undefined)
+      this.controlStore.remove(hashControlToken(presentedToken));
+    const forwarded = req.headers["x-forwarded-proto"];
+    const secure = forwarded === "https" ? "; Secure" : "";
     res.setHeader(
-      'Set-Cookie',
-      `${CONTROL_COOKIE}=; HttpOnly; SameSite=Strict; Path=${WEB_CONTROL_PATH}; Max-Age=0${secure}`,
+      "Set-Cookie",
+      `${CONTROL_COOKIE}=; HttpOnly; SameSite=Strict; Path=${WEB_CONTROL_PATH}; Max-Age=0${secure}`
     );
     sendJson(res, 200, { ok: true });
     return Promise.resolve(true);

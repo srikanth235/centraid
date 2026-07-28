@@ -13,40 +13,43 @@ import type {
   ReplicaShape,
   ReplicaStatus,
   ReplicaWorkerOpenOptions,
-} from './types.js';
+} from "./types.js";
 
 export type ReplicaWorkerRequest =
-  | { id: number; op: 'open'; payload: ReplicaWorkerOpenOptions }
-  | { id: number; op: 'status'; payload: undefined }
-  | { id: number; op: 'catalog'; payload: undefined }
-  | { id: number; op: 'bootstrap'; payload: ReplicaSnapshot }
-  | { id: number; op: 'bootstrap-begin'; payload: ReplicaBootstrapHeader }
-  | { id: number; op: 'bootstrap-page'; payload: ReplicaSnapshotRow[] }
-  | { id: number; op: 'bootstrap-commit'; payload: ReplicaCursor }
-  | { id: number; op: 'apply-changes'; payload: ReplicaChangeBatch }
+  | { id: number; op: "open"; payload: ReplicaWorkerOpenOptions }
+  | { id: number; op: "status"; payload: undefined }
+  | { id: number; op: "catalog"; payload: undefined }
+  | { id: number; op: "bootstrap"; payload: ReplicaSnapshot }
+  | { id: number; op: "bootstrap-begin"; payload: ReplicaBootstrapHeader }
+  | { id: number; op: "bootstrap-page"; payload: ReplicaSnapshotRow[] }
+  | { id: number; op: "bootstrap-commit"; payload: ReplicaCursor }
+  | { id: number; op: "apply-changes"; payload: ReplicaChangeBatch }
   | {
       id: number;
-      op: 'read';
+      op: "read";
       payload: { request: ReplicaReadRequest; mutations: OptimisticMutation[] };
     }
   | {
       id: number;
-      op: 'search';
-      payload: { request: ReplicaSearchRequest; mutations: OptimisticMutation[] };
+      op: "search";
+      payload: {
+        request: ReplicaSearchRequest;
+        mutations: OptimisticMutation[];
+      };
     }
-  | { id: number; op: 'wipe'; payload: undefined }
-  | { id: number; op: 'close'; payload: undefined }
-  | { id: number; op: 'purge'; payload: undefined };
+  | { id: number; op: "wipe"; payload: undefined }
+  | { id: number; op: "close"; payload: undefined }
+  | { id: number; op: "purge"; payload: undefined };
 
 export interface ReplicaWorkerResults {
   open: ReplicaStatus;
   status: ReplicaStatus;
   catalog: ReplicaShape[];
   bootstrap: ReplicaCursor;
-  'bootstrap-begin': undefined;
-  'bootstrap-page': undefined;
-  'bootstrap-commit': ReplicaCursor;
-  'apply-changes': ApplyChangesResult;
+  "bootstrap-begin": undefined;
+  "bootstrap-page": undefined;
+  "bootstrap-commit": ReplicaCursor;
+  "apply-changes": ApplyChangesResult;
   read: ReplicaReadWireResult;
   search: ReplicaSearchWireResult;
   wipe: undefined;

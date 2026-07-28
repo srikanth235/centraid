@@ -1,39 +1,59 @@
-import { useState, type JSX } from 'react';
-import { THEME_PRESETS, themes, tileFinish } from '@centraid/design-tokens';
-import type { IconName, ThemeName } from '@centraid/design-tokens';
-import { Icon } from '../ui/index.js';
-import type { SettingsAppearanceBridgeProps, SettingsTileVariant } from '../screen-contracts.js';
-import { DrawerGroup, DrawerRow, Switch } from './settings-controls.js';
-import styles from './SettingsAppearanceScreen.module.css';
-import a11y from '../styles/a11y.module.css';
-import segCss from '../styles/seg.module.css';
-import swatchCss from '../styles/swatch.module.css';
-import linkBtnCss from '../styles/linkBtn.module.css';
+import { THEME_PRESETS, themes, tileFinish } from "@centraid/design-tokens";
+import type { IconName, ThemeName } from "@centraid/design-tokens";
+import { useState, type JSX } from "react";
+
+import type {
+  SettingsAppearanceBridgeProps,
+  SettingsTileVariant,
+} from "../screen-contracts.js";
+import { Icon } from "../ui/index.js";
+import { DrawerGroup, DrawerRow, Switch } from "./settings-controls.js";
+
+import a11y from "../styles/a11y.module.css";
+import linkBtnCss from "../styles/linkBtn.module.css";
+import segCss from "../styles/seg.module.css";
+import swatchCss from "../styles/swatch.module.css";
+import styles from "./SettingsAppearanceScreen.module.css";
 
 // Accent options — mirrors ACCENT_PALETTE (app-shell-context.ts) + the names
 // from makeSwatches. Kept inline so the React bundle stays decoupled.
 const ACCENTS: ReadonlyArray<{ key: string; name: string; color: string }> = [
-  { key: 'teal', name: 'Teal', color: '#3EC8B4' },
-  { key: 'blue', name: 'Electric', color: '#4950F6' },
-  { key: 'violet', name: 'Violet', color: '#7C5BD9' },
-  { key: 'ochre', name: 'Ochre', color: '#B47B3F' },
-  { key: 'rose', name: 'Rose', color: '#E55772' },
+  { key: "teal", name: "Teal", color: "#3EC8B4" },
+  { key: "blue", name: "Electric", color: "#4950F6" },
+  { key: "violet", name: "Violet", color: "#7C5BD9" },
+  { key: "ochre", name: "Ochre", color: "#B47B3F" },
+  { key: "rose", name: "Rose", color: "#E55772" },
 ];
 
-const TILE_VARIANTS: readonly SettingsTileVariant[] = ['solid', 'gradient', 'glassy', 'flat'];
-
-const PREVIEW_SEEDS: ReadonlyArray<{ color: string; icon: IconName; name: string }> = [
-  { color: '#4E68DD', icon: 'Todo', name: 'Tasks' },
-  { color: '#7C5BD9', icon: 'Journal', name: 'Journal' },
-  { color: '#E55772', icon: 'Pencil', name: 'Notes' },
-  { color: '#2EA098', icon: 'Habit', name: 'Weekly' },
+const TILE_VARIANTS: readonly SettingsTileVariant[] = [
+  "solid",
+  "gradient",
+  "glassy",
+  "flat",
 ];
 
-function themePreview(name: ThemeName): { bg: string; elev: string; accent: string } {
+const PREVIEW_SEEDS: ReadonlyArray<{
+  color: string;
+  icon: IconName;
+  name: string;
+}> = [
+  { color: "#4E68DD", icon: "Todo", name: "Tasks" },
+  { color: "#7C5BD9", icon: "Journal", name: "Journal" },
+  { color: "#E55772", icon: "Pencil", name: "Notes" },
+  { color: "#2EA098", icon: "Habit", name: "Weekly" },
+];
+
+function themePreview(name: ThemeName): {
+  bg: string;
+  elev: string;
+  accent: string;
+} {
   const theme = themes[name];
   const bgL = (theme as { bgL?: string }).bgL;
-  const bg = bgL ? `hsl(222 11% ${bgL.replace('%', '')}%)` : theme.bg;
-  const elev = bgL ? `hsl(222 11% calc(${bgL.replace('%', '')}% + 4.5%))` : theme.bgElev;
+  const bg = bgL ? `hsl(222 11% ${bgL.replace("%", "")}%)` : theme.bg;
+  const elev = bgL
+    ? `hsl(222 11% calc(${bgL.replace("%", "")}% + 4.5%))`
+    : theme.bgElev;
   return { bg, elev, accent: theme.accent };
 }
 
@@ -74,7 +94,11 @@ export default function SettingsAppearanceScreen({
           hint="Pick a preset for the Centraid shell. Apps stay in their own light/dark palette."
           full
         >
-          <div className={styles.themePicker} role="radiogroup" aria-label="Color theme">
+          <div
+            className={styles.themePicker}
+            role="radiogroup"
+            aria-label="Color theme"
+          >
             {THEME_PRESETS.map((preset) => {
               const p = themePreview(preset.name);
               const active = preset.name === curTheme;
@@ -93,12 +117,23 @@ export default function SettingsAppearanceScreen({
                     checked={active}
                     onChange={() => pickTheme(preset.name)}
                   />
-                  <div className={styles.themeCardPreview} style={{ background: p.bg }}>
-                    <span className={styles.themeCardBar} style={{ background: p.elev }} />
-                    <span className={styles.themeCardDot} style={{ background: p.accent }} />
+                  <div
+                    className={styles.themeCardPreview}
+                    style={{ background: p.bg }}
+                  >
+                    <span
+                      className={styles.themeCardBar}
+                      style={{ background: p.elev }}
+                    />
+                    <span
+                      className={styles.themeCardDot}
+                      style={{ background: p.accent }}
+                    />
                   </div>
                   <div className={styles.themeCardFoot}>
-                    <span className={styles.themeCardLabel}>{preset.label}</span>
+                    <span className={styles.themeCardLabel}>
+                      {preset.label}
+                    </span>
                     <span className={styles.themeCardKind}>{preset.kind}</span>
                   </div>
                 </label>
@@ -106,7 +141,10 @@ export default function SettingsAppearanceScreen({
             })}
           </div>
         </DrawerRow>
-        <DrawerRow label="Match system" hint="Snap the theme to your OS appearance right now.">
+        <DrawerRow
+          label="Match system"
+          hint="Snap the theme to your OS appearance right now."
+        >
           <button
             type="button"
             className={linkBtnCss.linkBtn}
@@ -135,7 +173,11 @@ export default function SettingsAppearanceScreen({
           label="Color"
           hint="Used for the build button, sparkle, focus rings, and version badges."
         >
-          <div className={swatchCss.swatches} role="radiogroup" aria-label="Accent">
+          <div
+            className={swatchCss.swatches}
+            role="radiogroup"
+            aria-label="Accent"
+          >
             {ACCENTS.map((a) => (
               <label
                 key={a.key}
@@ -152,7 +194,10 @@ export default function SettingsAppearanceScreen({
                     onSetAccent(a.key);
                   }}
                 />
-                <span className={styles.swatchChip} style={{ background: a.color }} />
+                <span
+                  className={styles.swatchChip}
+                  style={{ background: a.color }}
+                />
                 <span className={styles.swatchName}>{a.name}</span>
               </label>
             ))}
@@ -161,7 +206,10 @@ export default function SettingsAppearanceScreen({
       </DrawerGroup>
 
       <DrawerGroup label="App tiles">
-        <DrawerRow label="Treatment" hint="How icon tiles on the home grid look.">
+        <DrawerRow
+          label="Treatment"
+          hint="How icon tiles on the home grid look."
+        >
           <div className={segCss.seg} role="tablist" aria-label="Treatment">
             {TILE_VARIANTS.map((v) => (
               <button
@@ -180,7 +228,11 @@ export default function SettingsAppearanceScreen({
             ))}
           </div>
         </DrawerRow>
-        <DrawerRow label="Preview" hint="How the home grid looks with your current choices." full>
+        <DrawerRow
+          label="Preview"
+          hint="How the home grid looks with your current choices."
+          full
+        >
           <div className="ap-preview-host">
             <div className={styles.preview}>
               {PREVIEW_SEEDS.map((s) => {

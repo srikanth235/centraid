@@ -4,16 +4,17 @@
 // conversation_digest so Insights/Executions read identical numbers before
 // archive and after prune (the digest union lives in insights-store.ts).
 
-import { gunzipSync, gzipSync } from 'node:zlib';
-import type { DatabaseSync } from 'node:sqlite';
-import { randomUUID } from 'node:crypto';
-import type { EligibleRange } from './selector.js';
+import { randomUUID } from "node:crypto";
+import type { DatabaseSync } from "node:sqlite";
+import { gunzipSync, gzipSync } from "node:zlib";
+
+import type { EligibleRange } from "./selector.js";
 import {
   CONVERSATION_SEGMENT_VERSION,
   type ArchivedConversationSegment,
   type BlobSink,
   type Row,
-} from './types.js';
+} from "./types.js";
 
 /** Per-model rollup entry stored in `conversation_digest.models_json`. */
 interface ModelRollup {
@@ -51,7 +52,7 @@ interface DigestDelta {
 }
 
 function num(v: unknown): number {
-  return typeof v === 'number' ? v : 0;
+  return typeof v === "number" ? v : 0;
 }
 
 /**
@@ -66,28 +67,34 @@ function dominantModelOf(journal: DatabaseSync, turnId: string): string | null {
         WHERE i.turn_id = ? AND i.model IS NOT NULL AND i.kind IN ('step','agent')
         GROUP BY i.model
         ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-        LIMIT 1`,
+        LIMIT 1`
     )
     .get(turnId) as { model: string } | undefined;
   return row?.model ?? null;
 }
 
 /** The run's dominant confirmed thought_level, matching `run_summary.effort`. */
-function dominantEffortOf(journal: DatabaseSync, turnId: string): string | null {
+function dominantEffortOf(
+  journal: DatabaseSync,
+  turnId: string
+): string | null {
   const row = journal
     .prepare(
       `SELECT i.effort AS effort FROM items i
         WHERE i.turn_id = ? AND i.effort IS NOT NULL AND i.kind IN ('step','agent')
         GROUP BY i.effort
         ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
-        LIMIT 1`,
+        LIMIT 1`
     )
     .get(turnId) as { effort: string } | undefined;
   return row?.effort ?? null;
 }
 
 /** Fold one eligible range into a digest delta (rollups over its finished turns). */
-function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta {
+function computeDelta(
+  journal: DatabaseSync,
+  range: EligibleRange
+): DigestDelta {
   const delta: DigestDelta = {
     runCount: 0,
     okCount: 0,
@@ -108,8 +115,11 @@ function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta 
   };
   for (const t of range.turns) {
     delta.runCount += 1;
-    if (num(t.ok) !== 0) delta.okCount += 1;
-    else delta.errCount += 1;
+    if (num(t.ok) === 0) {
+      delta.errCount += 1;
+    } else {
+      delta.okCount += 1;
+    }
     if (t.retry_of !== null && t.retry_of !== undefined) delta.retryCount += 1;
     const input = num(t.total_input_tokens);
     const output = num(t.total_output_tokens);
@@ -127,13 +137,21 @@ function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta 
     const endedAt = t.ended_at as number | null;
     if (delta.firstStartedAt === null || startedAt < delta.firstStartedAt)
       delta.firstStartedAt = startedAt;
-    if (endedAt !== null && (delta.lastEndedAt === null || endedAt > delta.lastEndedAt))
+    if (
+      endedAt !== null &&
+      (delta.lastEndedAt === null || endedAt > delta.lastEndedAt)
+    )
       delta.lastEndedAt = endedAt;
     // byModel keys off the run's dominant model (matching run_summary); a run
     // with no step/agent model contributes to KPIs but not to byModel.
     const model = dominantModelOf(journal, t.id as string);
     if (model !== null) {
-      const roll = delta.models.get(model) ?? { model, runs: 0, tokens: 0, cost: 0 };
+      const roll = delta.models.get(model) ?? {
+        model,
+        runs: 0,
+        tokens: 0,
+        cost: 0,
+      };
       roll.runs += 1;
       roll.tokens += input + output + cacheRead + cacheWrite;
       roll.cost += num(t.total_cost_usd);
@@ -142,7 +160,12 @@ function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta 
     // No "default" bucket: only a runner-confirmed thought_level is durable.
     const effort = dominantEffortOf(journal, t.id as string);
     if (effort !== null) {
-      const roll = delta.efforts.get(effort) ?? { effort, runs: 0, tokens: 0, cost: 0 };
+      const roll = delta.efforts.get(effort) ?? {
+        effort,
+        runs: 0,
+        tokens: 0,
+        cost: 0,
+      };
       roll.runs += 1;
       roll.tokens += input + output + cacheRead + cacheWrite;
       roll.cost += num(t.total_cost_usd);
@@ -156,16 +179,20 @@ function computeDelta(journal: DatabaseSync, range: EligibleRange): DigestDelta 
 function derivedAppId(conv: Row): string | null {
   const kind = conv.kind as string;
   const automationId = (conv.automation_id as string | null) ?? null;
-  if (kind === 'automation' && automationId && automationId.indexOf('/') > 0) {
-    return automationId.slice(0, automationId.indexOf('/'));
+  if (kind === "automation" && automationId && automationId.indexOf("/") > 0) {
+    return automationId.slice(0, automationId.indexOf("/"));
   }
   return (conv.app_id as string | null) ?? null;
 }
 
-function mergeModels(existingJson: string, delta: Map<string, ModelRollup>): string {
+function mergeModels(
+  existingJson: string,
+  delta: Map<string, ModelRollup>
+): string {
   const merged = new Map<string, ModelRollup>();
   try {
-    for (const e of JSON.parse(existingJson) as ModelRollup[]) merged.set(e.model, { ...e });
+    for (const e of JSON.parse(existingJson) as ModelRollup[])
+      merged.set(e.model, { ...e });
   } catch {
     /* legacy/empty — start clean */
   }
@@ -179,10 +206,14 @@ function mergeModels(existingJson: string, delta: Map<string, ModelRollup>): str
   return JSON.stringify([...merged.values()]);
 }
 
-function mergeEfforts(existingJson: string, delta: Map<string, EffortRollup>): string {
+function mergeEfforts(
+  existingJson: string,
+  delta: Map<string, EffortRollup>
+): string {
   const merged = new Map<string, EffortRollup>();
   try {
-    for (const e of JSON.parse(existingJson) as EffortRollup[]) merged.set(e.effort, { ...e });
+    for (const e of JSON.parse(existingJson) as EffortRollup[])
+      merged.set(e.effort, { ...e });
   } catch {
     /* legacy/empty — start clean */
   }
@@ -202,34 +233,45 @@ function mergeEfforts(existingJson: string, delta: Map<string, EffortRollup>): s
  * extend; kind/app_id/automation_ref/automation_name/title snapshot the latest
  * conversation state. Read-modify-write in JS keeps the models_json merge simple.
  */
-function upsertDigest(journal: DatabaseSync, conv: Row, delta: DigestDelta, nowMs: number): void {
+function upsertDigest(
+  journal: DatabaseSync,
+  conv: Row,
+  delta: DigestDelta,
+  nowMs: number
+): void {
   const conversationId = conv.id as string;
   const kind = conv.kind as string;
   const automationRef =
-    kind === 'automation' ? ((conv.automation_id as string | null) ?? null) : null;
+    kind === "automation"
+      ? ((conv.automation_id as string | null) ?? null)
+      : null;
   const appId = derivedAppId(conv);
-  const title = (conv.title as string | null) ?? '';
-  const automationName = kind === 'automation' && title !== '' ? title : null;
+  const title = (conv.title as string | null) ?? "";
+  const automationName = kind === "automation" && title !== "" ? title : null;
 
   const existing = journal
     .prepare(`SELECT * FROM conversation_digest WHERE conversation_id = ?`)
     .get(conversationId) as Row | undefined;
 
-  const prevModelsJson = (existing?.models_json as string | undefined) ?? '[]';
+  const prevModelsJson = (existing?.models_json as string | undefined) ?? "[]";
   const modelsJson = mergeModels(prevModelsJson, delta.models);
-  const prevEffortsJson = (existing?.efforts_json as string | undefined) ?? '[]';
+  const prevEffortsJson =
+    (existing?.efforts_json as string | undefined) ?? "[]";
   const effortsJson = mergeEfforts(prevEffortsJson, delta.efforts);
 
   const firstStartedAt =
     existing && existing.first_started_at !== null
       ? Math.min(
           num(existing.first_started_at),
-          delta.firstStartedAt ?? num(existing.first_started_at),
+          delta.firstStartedAt ?? num(existing.first_started_at)
         )
       : delta.firstStartedAt;
   const lastEndedAt =
     existing && existing.last_ended_at !== null
-      ? Math.max(num(existing.last_ended_at), delta.lastEndedAt ?? num(existing.last_ended_at))
+      ? Math.max(
+          num(existing.last_ended_at),
+          delta.lastEndedAt ?? num(existing.last_ended_at)
+        )
       : delta.lastEndedAt;
 
   journal
@@ -263,7 +305,7 @@ function upsertDigest(journal: DatabaseSync, conv: Row, delta: DigestDelta, nowM
          tool_count = tool_count + excluded.tool_count,
          models_json = ?,
          efforts_json = ?,
-         updated_at = excluded.updated_at`,
+         updated_at = excluded.updated_at`
     )
     .run(
       conversationId,
@@ -293,7 +335,7 @@ function upsertDigest(journal: DatabaseSync, conv: Row, delta: DigestDelta, nowM
       firstStartedAt,
       lastEndedAt,
       modelsJson,
-      effortsJson,
+      effortsJson
     );
 }
 
@@ -301,7 +343,8 @@ function upsertDigest(journal: DatabaseSync, conv: Row, delta: DigestDelta, nowM
 function distinctHashes(attachments: Row[]): string[] {
   const seen = new Set<string>();
   for (const a of attachments) {
-    if (typeof a.workspace_path === 'string' && a.workspace_path.length > 0) continue;
+    if (typeof a.workspace_path === "string" && a.workspace_path.length > 0)
+      continue;
     const h = a.hash as string;
     if (!seen.has(h)) seen.add(h);
   }
@@ -320,15 +363,15 @@ export function archiveRange(
   blobSink: BlobSink,
   conv: Row,
   range: EligibleRange,
-  nowMs: number,
+  nowMs: number
 ): { segmentSha256: string; turnCount: number; itemCount: number } {
   const turnIds = range.turns.map((t) => t.id as string);
-  const placeholders = turnIds.map(() => '?').join(', ');
+  const placeholders = turnIds.map(() => "?").join(", ");
   const items =
     turnIds.length > 0
       ? (journal
           .prepare(
-            `SELECT * FROM items WHERE turn_id IN (${placeholders}) ORDER BY turn_id, ordinal`,
+            `SELECT * FROM items WHERE turn_id IN (${placeholders}) ORDER BY turn_id, ordinal`
           )
           .all(...turnIds) as Row[])
       : [];
@@ -338,8 +381,8 @@ export function archiveRange(
       ? (journal
           .prepare(
             `SELECT * FROM attachments WHERE item_id IN (${itemIds
-              .map(() => '?')
-              .join(', ')}) ORDER BY item_id, created_at`,
+              .map(() => "?")
+              .join(", ")}) ORDER BY item_id, created_at`
           )
           .all(...itemIds) as Row[])
       : [];
@@ -354,11 +397,13 @@ export function archiveRange(
     items,
     attachments,
   };
-  const plaintext = Buffer.from(JSON.stringify(segment), 'utf8');
+  const plaintext = Buffer.from(JSON.stringify(segment), "utf8");
   const bytes = gzipSync(plaintext);
   const { sha256, byteSize } = blobSink.ingestSync(bytes);
   if (!blobSink.has(sha256)) {
-    throw new Error(`conversation archive segment ${sha256} did not land in the blob CAS`);
+    throw new Error(
+      `conversation archive segment ${sha256} did not land in the blob CAS`
+    );
   }
 
   const hashes = distinctHashes(attachments);
@@ -368,7 +413,7 @@ export function archiveRange(
          id, conversation_id, seq_from, seq_to, from_time, to_time, turn_count,
          item_count, segment_sha256, segment_bytes, plaintext_bytes,
          attachment_hashes_json, pruned_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`
     )
     .run(
       randomUUID(),
@@ -383,11 +428,15 @@ export function archiveRange(
       byteSize,
       plaintext.length,
       JSON.stringify(hashes),
-      nowMs,
+      nowMs
     );
 
   upsertDigest(journal, conv, computeDelta(journal, range), nowMs);
-  return { segmentSha256: sha256, turnCount: range.turns.length, itemCount: items.length };
+  return {
+    segmentSha256: sha256,
+    turnCount: range.turns.length,
+    itemCount: items.length,
+  };
 }
 
 /**
@@ -395,6 +444,10 @@ export function archiveRange(
  * rehydration reuses. Verifies the sha the caller asked for is what the bytes
  * hash to is the sink's job (custody read-back); this just gunzips + parses.
  */
-export function readArchivedConversationSegment(bytes: Buffer): ArchivedConversationSegment {
-  return JSON.parse(gunzipSync(bytes).toString('utf8')) as ArchivedConversationSegment;
+export function readArchivedConversationSegment(
+  bytes: Buffer
+): ArchivedConversationSegment {
+  return JSON.parse(
+    gunzipSync(bytes).toString("utf8")
+  ) as ArchivedConversationSegment;
 }

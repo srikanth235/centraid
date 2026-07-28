@@ -104,7 +104,7 @@
 .modeSeg:hover {
   color: var(--ink);
 }
-.modeSeg[data-active='true'] {
+.modeSeg[data-active="true"] {
   background: var(--bg-elev);
   color: var(--ink);
   box-shadow: 0 0 0 0.5px var(--line);

@@ -13,7 +13,7 @@ export interface AuthInjectorSnapshot {
 }
 
 /** The vault-addressing header (mirrors the gateway's constant, #289). */
-export const VAULT_HEADER = 'x-centraid-vault';
+export const VAULT_HEADER = "x-centraid-vault";
 
 /** True when `url` is same-origin with the configured gateway. */
 export function matchesGateway(url: string, gatewayOrigin: string): boolean {
@@ -32,17 +32,21 @@ export function matchesGateway(url: string, gatewayOrigin: string): boolean {
 export function applyOutgoingAuthHeaders(
   requestHeaders: Record<string, string>,
   snapshot: AuthInjectorSnapshot,
-  url: string,
+  url: string
 ): Record<string, string> {
   if (!snapshot.gatewayOrigin || !snapshot.gatewayToken) return requestHeaders;
   if (!matchesGateway(url, snapshot.gatewayOrigin)) return requestHeaders;
   const headers = { ...requestHeaders };
-  const hasAuth = Object.keys(headers).some((k) => k.toLowerCase() === 'authorization');
+  const hasAuth = Object.keys(headers).some(
+    (k) => k.toLowerCase() === "authorization"
+  );
   if (!hasAuth) {
     headers.Authorization = `Bearer ${snapshot.gatewayToken}`;
   }
   if (snapshot.gatewayVaultId) {
-    const hasVault = Object.keys(headers).some((k) => k.toLowerCase() === VAULT_HEADER);
+    const hasVault = Object.keys(headers).some(
+      (k) => k.toLowerCase() === VAULT_HEADER
+    );
     if (!hasVault) headers[VAULT_HEADER] = snapshot.gatewayVaultId;
   }
   return headers;
@@ -52,17 +56,20 @@ export function applyOutgoingAuthHeaders(
 // trusted to frame the gateway, so we strip `frame-ancestors` rather than
 // trying to allowlist the file:// origin (which CSP matches awkwardly).
 export function relaxFrameAncestors(
-  responseHeaders: Record<string, string[] | string>,
+  responseHeaders: Record<string, string[] | string>
 ): Record<string, string[] | string> {
   const out: Record<string, string[] | string> = {};
   for (const [name, value] of Object.entries(responseHeaders)) {
     const lower = name.toLowerCase();
-    if (lower === 'content-security-policy' || lower === 'content-security-policy-report-only') {
+    if (
+      lower === "content-security-policy" ||
+      lower === "content-security-policy-report-only"
+    ) {
       const values = Array.isArray(value) ? value : [value];
       out[name] = values.map(stripFrameAncestors).filter((v) => v.length > 0);
       continue;
     }
-    if (lower === 'x-frame-options') continue;
+    if (lower === "x-frame-options") continue;
     out[name] = value;
   }
   return out;
@@ -70,10 +77,10 @@ export function relaxFrameAncestors(
 
 export function stripFrameAncestors(policy: string): string {
   return policy
-    .split(';')
+    .split(";")
     .map((d) => d.trim())
-    .filter((d) => d.length > 0 && !/^frame-ancestors\b/i.test(d))
-    .join('; ');
+    .filter((d) => d.length > 0 && !/^frame-ancestors\b/iu.test(d))
+    .join("; ");
 }
 
 /**
@@ -83,7 +90,7 @@ export function stripFrameAncestors(policy: string): string {
 export function applyIncomingFrameRelaxation(
   responseHeaders: Record<string, string[] | string> | undefined,
   snapshot: AuthInjectorSnapshot | null,
-  url: string,
+  url: string
 ): Record<string, string[] | string> | undefined {
   if (!snapshot || !snapshot.gatewayOrigin) return responseHeaders;
   if (!matchesGateway(url, snapshot.gatewayOrigin)) return responseHeaders;

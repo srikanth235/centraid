@@ -3,8 +3,8 @@
 // keep files small. Pure functions of props: `dp` is the freshly-read PERSON,
 // `adders` is which "+ add" affordances are open. Every write flows out
 // through the `on*` callback props; nothing here calls the vault itself.
-import type { ReactNode } from 'react';
-import { fmtMoney } from '../kit.ts';
+import type { ReactNode } from "react";
+
 import {
   cadence,
   daysSince,
@@ -14,11 +14,10 @@ import {
   fmtMonthDay,
   inFmt,
   statusOf,
-} from '../format.ts';
-import { I } from '../icons.ts';
-import type { DetailPerson } from '../types.ts';
-import { Icon } from './Shared.tsx';
-import type { DrawerCallbacks } from './Details.tsx';
+} from "../format.ts";
+import { I } from "../icons.ts";
+import { fmtMoney } from "../kit.ts";
+import type { DetailPerson } from "../types.ts";
 import {
   DateAddRow,
   DebtAddRow,
@@ -26,9 +25,12 @@ import {
   NoteAddRow,
   RelationshipAddRow,
   TaskAddRow,
-} from './AddRows.tsx';
-import styles from './DetailSections.module.css';
-import shared from './shared.module.css';
+} from "./AddRows.tsx";
+import type { DrawerCallbacks } from "./Details.tsx";
+import { Icon } from "./Shared.tsx";
+
+import styles from "./DetailSections.module.css";
+import shared from "./shared.module.css";
 
 function SectionLabel({
   text,
@@ -49,7 +51,7 @@ function SectionLabel({
       {extra ?? null}
       {addKey ? (
         <button type="button" className={styles.addToggle} onClick={onToggle}>
-          {open ? 'close' : '+ add'}
+          {open ? "close" : "+ add"}
         </button>
       ) : null}
     </div>
@@ -71,24 +73,24 @@ function DebtsSection({
 }) {
   const debts = dp.debts ?? [];
   const net = debts.reduce(
-    (a, b) => a + (b.direction === 'owed' ? b.amount_minor : -b.amount_minor),
-    0,
+    (a, b) => a + (b.direction === "owed" ? b.amount_minor : -b.amount_minor),
+    0
   );
   const netLabel =
     net === 0
-      ? 'settled'
+      ? "settled"
       : net > 0
-        ? `net owes you ${fmtMoney(net, 'USD')}`
-        : `net you owe ${fmtMoney(-net, 'USD')}`;
+        ? `net owes you ${fmtMoney(net, "USD")}`
+        : `net you owe ${fmtMoney(-net, "USD")}`;
   const netEl =
     debts.length > 0 ? (
       <span
         style={{
-          fontFamily: 'var(--mono)',
-          fontSize: '11px',
-          textTransform: 'none',
+          fontFamily: "var(--mono)",
+          fontSize: "11px",
+          textTransform: "none",
           letterSpacing: 0,
-          color: net >= 0 ? 'var(--ok)' : 'var(--ink-3)',
+          color: net >= 0 ? "var(--ok)" : "var(--ink-3)",
         }}
       >
         {netLabel}
@@ -100,42 +102,42 @@ function DebtsSection({
         text="Debts"
         addKey="debt"
         open={!!adders.debt}
-        onToggle={() => onToggleAdder('debt')}
+        onToggle={() => onToggleAdder("debt")}
         extra={netEl}
       />
       {debts.length > 0 ? (
         <div className={styles.kv}>
           {debts.map((b) => {
-            const owe = b.direction === 'owe';
-            const amount = fmtMoney(b.amount_minor, 'USD');
+            const owe = b.direction === "owe";
+            const amount = fmtMoney(b.amount_minor, "USD");
             return (
               <div className={styles.kvRow} key={b.debt_id}>
                 <span style={{ flex: 1 }}>
                   <span
                     style={{
-                      display: 'block',
-                      font: 'var(--t-body)',
+                      display: "block",
+                      font: "var(--t-body)",
                       fontWeight: 500,
-                      color: owe ? 'var(--ink)' : 'var(--ok)',
+                      color: owe ? "var(--ink)" : "var(--ok)",
                     }}
                   >
-                    {(owe ? 'You owe ' : 'Owes you ') + amount}
+                    {(owe ? "You owe " : "Owes you ") + amount}
                   </span>
                   <span
                     style={{
-                      display: 'block',
-                      font: 'var(--t-small)',
-                      fontSize: '12px',
-                      color: 'var(--ink-3)',
+                      display: "block",
+                      font: "var(--t-small)",
+                      fontSize: "12px",
+                      color: "var(--ink-3)",
                     }}
                   >
-                    {b.reason || ''}
+                    {b.reason || ""}
                   </span>
                 </span>
                 <button
                   type="button"
                   className={`kit-chip quiet ${styles.chipSm}`}
-                  style={{ borderColor: 'var(--line)', color: 'var(--ink-2)' }}
+                  style={{ borderColor: "var(--line)", color: "var(--ink-2)" }}
                   onClick={() => onSettleDebt(b.debt_id)}
                 >
                   settle
@@ -145,7 +147,9 @@ function DebtsSection({
           })}
         </div>
       ) : null}
-      {adders.debt ? <DebtAddRow onSubmit={(fields) => onAddDebt(fields)} /> : null}
+      {adders.debt ? (
+        <DebtAddRow onSubmit={(fields) => onAddDebt(fields)} />
+      ) : null}
     </>
   );
 }
@@ -186,38 +190,52 @@ export function Sections({
   return (
     <>
       <div className={styles.detailActions}>
-        <button type="button" className={`kit-btn primary ${shared.detailBtn}`} onClick={onMessage}>
+        <button
+          type="button"
+          className={`kit-btn primary ${shared.detailBtn}`}
+          onClick={onMessage}
+        >
           <Icon svg={I.message} />
           Message
         </button>
-        <button type="button" className={`kit-btn ${shared.detailBtn}`} onClick={onCall}>
+        <button
+          type="button"
+          className={`kit-btn ${shared.detailBtn}`}
+          onClick={onCall}
+        >
           <Icon svg={I.call} />
           Call
         </button>
-        <button type="button" className={`kit-btn ${shared.detailBtn}`} onClick={onToggleStar}>
-          {dp.starred ? '★ Favorite' : '☆ Favorite'}
+        <button
+          type="button"
+          className={`kit-btn ${shared.detailBtn}`}
+          onClick={onToggleStar}
+        >
+          {dp.starred ? "★ Favorite" : "☆ Favorite"}
         </button>
       </div>
 
       <div
         style={{
-          border: '1px solid var(--line)',
-          borderRadius: '12px',
-          background: 'var(--bg-elev)',
-          padding: '13px 15px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          border: "1px solid var(--line)",
+          borderRadius: "12px",
+          background: "var(--bg-elev)",
+          padding: "13px 15px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
       >
         <div>
-          <div style={{ font: 'var(--t-strong)', fontSize: '13px' }}>Keep in touch</div>
+          <div style={{ font: "var(--t-strong)", fontSize: "13px" }}>
+            Keep in touch
+          </div>
           <div
             style={{
-              font: 'var(--t-small)',
-              fontSize: '12px',
-              color: 'var(--ink-2)',
-              marginTop: '2px',
+              font: "var(--t-small)",
+              fontSize: "12px",
+              color: "var(--ink-2)",
+              marginTop: "2px",
             }}
           >
             {cadence(dp.cadence_days ?? 30)} · last {fmt(days)}
@@ -234,7 +252,14 @@ export function Sections({
       {dp.met ? (
         <>
           <div className={styles.detailLabel}>How you met</div>
-          <p style={{ margin: 0, font: 'var(--t-body)', color: 'var(--ink-2)', lineHeight: 1.5 }}>
+          <p
+            style={{
+              margin: 0,
+              font: "var(--t-body)",
+              color: "var(--ink-2)",
+              lineHeight: 1.5,
+            }}
+          >
             {dp.met}
           </p>
         </>
@@ -246,7 +271,7 @@ export function Sections({
           <div className={styles.kv}>
             {contact.map((c, i) => (
               <div className={styles.kvRow} key={i}>
-                <Icon svg={c.kind === 'phone' ? I.phone : I.mail} />
+                <Icon svg={c.kind === "phone" ? I.phone : I.mail} />
                 <span className={styles.kvV}>{c.value}</span>
                 <span className={styles.kvK}>{c.kind}</span>
               </div>
@@ -259,48 +284,69 @@ export function Sections({
         text="Relationships"
         addKey="rel"
         open={!!adders.rel}
-        onToggle={() => onToggleAdder('rel')}
+        onToggle={() => onToggleAdder("rel")}
       />
       {rels.length > 0 ? (
         <div>
           {rels.map((r, i) => (
             <div className={styles.rel} key={i}>
               <span className={styles.relBadge}>
-                {r.pet === 'cat' ? '🐱' : r.pet === 'dog' ? '🐶' : r.name?.[0] || '·'}
+                {r.pet === "cat"
+                  ? "🐱"
+                  : r.pet === "dog"
+                    ? "🐶"
+                    : r.name?.[0] || "·"}
               </span>
-              <span style={{ flex: 1, font: 'var(--t-body)', fontWeight: 500 }}>{r.name}</span>
-              <span style={{ font: 'var(--t-small)', fontSize: '11.5px', color: 'var(--ink-3)' }}>
+              <span style={{ flex: 1, font: "var(--t-body)", fontWeight: 500 }}>
+                {r.name}
+              </span>
+              <span
+                style={{
+                  font: "var(--t-small)",
+                  fontSize: "11.5px",
+                  color: "var(--ink-3)",
+                }}
+              >
                 {r.kind}
               </span>
             </div>
           ))}
         </div>
       ) : null}
-      {adders.rel ? <RelationshipAddRow onSubmit={(fields) => onAddRelationship(fields)} /> : null}
+      {adders.rel ? (
+        <RelationshipAddRow onSubmit={(fields) => onAddRelationship(fields)} />
+      ) : null}
 
       <SectionLabel
         text="Important dates"
         addKey="date"
         open={!!adders.date}
-        onToggle={() => onToggleAdder('date')}
+        onToggle={() => onToggleAdder("date")}
       />
       {dates.length > 0 ? (
         <div className={styles.kv}>
           {dates.map((d) => (
             <div className={styles.kvRow} key={d.date_id}>
               <span style={{ flex: 1 }}>
-                <span style={{ display: 'block', font: 'var(--t-body)', fontWeight: 500 }}>
+                <span
+                  style={{
+                    display: "block",
+                    font: "var(--t-body)",
+                    fontWeight: 500,
+                  }}
+                >
                   {d.label}
                 </span>
                 <span
                   style={{
-                    display: 'block',
-                    font: 'var(--t-small)',
-                    fontSize: '12px',
-                    color: 'var(--ink-3)',
+                    display: "block",
+                    font: "var(--t-small)",
+                    fontSize: "12px",
+                    color: "var(--ink-3)",
                   }}
                 >
-                  {fmtMonthDay(d.month_day)} · {inFmt(daysUntilAnnual(d.month_day))}
+                  {fmtMonthDay(d.month_day)} ·{" "}
+                  {inFmt(daysUntilAnnual(d.month_day))}
                 </span>
               </span>
               <button
@@ -309,9 +355,9 @@ export function Sections({
                 aria-label="Reminder"
                 style={{
                   background: d.reminder_on
-                    ? 'color-mix(in oklab, var(--_accent) 12%, transparent)'
-                    : 'color-mix(in oklab, var(--ink) 5%, transparent)',
-                  color: d.reminder_on ? 'var(--_accent)' : 'var(--ink-3)',
+                    ? "color-mix(in oklab, var(--_accent) 12%, transparent)"
+                    : "color-mix(in oklab, var(--ink) 5%, transparent)",
+                  color: d.reminder_on ? "var(--_accent)" : "var(--ink-3)",
                 }}
                 onClick={() => onToggleReminder(d.date_id)}
               >
@@ -321,13 +367,15 @@ export function Sections({
           ))}
         </div>
       ) : null}
-      {adders.date ? <DateAddRow onSubmit={(fields) => onAddDate(fields)} /> : null}
+      {adders.date ? (
+        <DateAddRow onSubmit={(fields) => onAddDate(fields)} />
+      ) : null}
 
       <SectionLabel
         text="Tasks"
         addKey="task"
         open={!!adders.task}
-        onToggle={() => onToggleAdder('task')}
+        onToggle={() => onToggleAdder("task")}
       />
       {tasks.length > 0 ? (
         <div>
@@ -335,7 +383,9 @@ export function Sections({
             <div className={styles.taskrow} key={t.task_id}>
               <button
                 type="button"
-                className={t.done ? `${styles.taskbox} ${styles.on}` : styles.taskbox}
+                className={
+                  t.done ? `${styles.taskbox} ${styles.on}` : styles.taskbox
+                }
                 aria-label="Toggle task"
                 onClick={() => onToggleTask(t.task_id)}
               >
@@ -344,9 +394,9 @@ export function Sections({
               <span
                 style={{
                   flex: 1,
-                  font: 'var(--t-body)',
-                  color: t.done ? 'var(--ink-3)' : 'var(--ink)',
-                  textDecoration: t.done ? 'line-through' : 'none',
+                  font: "var(--t-body)",
+                  color: t.done ? "var(--ink-3)" : "var(--ink)",
+                  textDecoration: t.done ? "line-through" : "none",
                 }}
               >
                 {t.text}
@@ -355,14 +405,18 @@ export function Sections({
           ))}
         </div>
       ) : null}
-      {adders.task ? <TaskAddRow onSubmit={(fields) => onAddTask(fields)} /> : null}
+      {adders.task ? (
+        <TaskAddRow onSubmit={(fields) => onAddTask(fields)} />
+      ) : null}
 
       <div className={styles.detailLabel}>Notes</div>
       <div>
         {notes.map((nn, i) => (
           <div className={styles.note} key={i}>
             <p>{nn.text}</p>
-            <div className={styles.when}>{fmt(daysSinceIso(nn.created_at))}</div>
+            <div className={styles.when}>
+              {fmt(daysSinceIso(nn.created_at))}
+            </div>
           </div>
         ))}
         <NoteAddRow onSubmit={(fields) => onAddNote(fields)} />
@@ -372,21 +426,21 @@ export function Sections({
         text="Gift ideas"
         addKey="gift"
         open={!!adders.gift}
-        onToggle={() => onToggleAdder('gift')}
+        onToggle={() => onToggleAdder("gift")}
       />
       {gifts.length > 0 ? (
         <div>
           {gifts.map((g) => {
-            const given = g.state === 'given';
+            const given = g.state === "given";
             return (
               <div className={styles.taskrow} key={g.gift_id}>
                 <Icon svg={I.gift} />
                 <span
                   style={{
                     flex: 1,
-                    font: 'var(--t-body)',
-                    color: given ? 'var(--ink-3)' : 'var(--ink)',
-                    textDecoration: given ? 'line-through' : 'none',
+                    font: "var(--t-body)",
+                    color: given ? "var(--ink-3)" : "var(--ink)",
+                    textDecoration: given ? "line-through" : "none",
                   }}
                 >
                   {g.text}
@@ -396,12 +450,12 @@ export function Sections({
                   className={`kit-chip quiet ${styles.chipSm}`}
                   style={{
                     borderColor: given
-                      ? 'color-mix(in oklab, var(--ok) 30%, transparent)'
-                      : 'color-mix(in oklab, var(--c-family) 30%, transparent)',
+                      ? "color-mix(in oklab, var(--ok) 30%, transparent)"
+                      : "color-mix(in oklab, var(--c-family) 30%, transparent)",
                     background: given
-                      ? 'color-mix(in oklab, var(--ok) 14%, transparent)'
-                      : 'color-mix(in oklab, var(--c-family) 14%, transparent)',
-                    color: given ? 'var(--ok)' : 'var(--c-family)',
+                      ? "color-mix(in oklab, var(--ok) 14%, transparent)"
+                      : "color-mix(in oklab, var(--c-family) 14%, transparent)",
+                    color: given ? "var(--ok)" : "var(--c-family)",
                   }}
                   onClick={() => onToggleGift(g.gift_id)}
                 >
@@ -412,7 +466,9 @@ export function Sections({
           })}
         </div>
       ) : null}
-      {adders.gift ? <GiftAddRow onSubmit={(fields) => onAddGift(fields)} /> : null}
+      {adders.gift ? (
+        <GiftAddRow onSubmit={(fields) => onAddGift(fields)} />
+      ) : null}
 
       <DebtsSection
         dp={dp}
@@ -429,27 +485,42 @@ export function Sections({
             {interactions.map((t, i) => (
               <div className={shared.activityItem} key={i}>
                 <div className={shared.activityRail}>
-                  <span className={shared.activityDot} style={{ background: color }}></span>
-                  <span className={shared.activityLine}></span>
+                  <span
+                    className={shared.activityDot}
+                    style={{ background: color }}
+                  />
+                  <span className={shared.activityLine} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span className={shared.activityKind} style={{ color: 'var(--ink-2)' }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <span
+                      className={shared.activityKind}
+                      style={{ color: "var(--ink-2)" }}
+                    >
                       {t.kind}
                     </span>
-                    <span className={shared.activityDate} style={{ marginLeft: 'auto' }}>
+                    <span
+                      className={shared.activityDate}
+                      style={{ marginLeft: "auto" }}
+                    >
                       {fmt(daysSinceIso(t.occurred_at))}
                     </span>
                   </div>
                   <div
                     style={{
-                      marginTop: '2px',
-                      font: 'var(--t-body)',
-                      fontSize: '13.5px',
-                      color: 'var(--ink-2)',
+                      marginTop: "2px",
+                      font: "var(--t-body)",
+                      fontSize: "13.5px",
+                      color: "var(--ink-2)",
                     }}
                   >
-                    {t.text || ''}
+                    {t.text || ""}
                   </div>
                 </div>
               </div>

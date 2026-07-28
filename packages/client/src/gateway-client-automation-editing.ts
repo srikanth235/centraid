@@ -9,8 +9,14 @@
  * into a session worktree and published into the vault's git code store.
  */
 
-import { auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
-import { dropAppSession, ensureAppSession } from './gateway-client-editing.js';
+import {
+  auth,
+  authHeaders,
+  doFetch,
+  enc,
+  readJson,
+} from "./gateway-client-core.js";
+import { dropAppSession, ensureAppSession } from "./gateway-client-editing.js";
 
 /**
  * A create-time trigger spec. `condition`/`data` are validated gateway-side
@@ -20,12 +26,12 @@ import { dropAppSession, ensureAppSession } from './gateway-client-editing.js';
  * some requested grant, or there is nothing for the trigger to evaluate.
  */
 export type CentraidCreateTrigger =
-  | { kind: 'cron'; expr: string; tz?: string }
-  | { kind: 'webhook' }
-  | { kind: 'condition'; entity: string; where?: unknown; every?: string }
-  | { kind: 'data'; entities: string[]; every?: string }
+  | { kind: "cron"; expr: string; tz?: string }
+  | { kind: "webhook" }
+  | { kind: "condition"; entity: string; where?: unknown; every?: string }
+  | { kind: "data"; entities: string[]; every?: string }
   | {
-      kind: 'event';
+      kind: "event";
       connectorKind: string;
       event: string;
       filter?: Record<string, unknown>;
@@ -73,7 +79,7 @@ export async function createAutomation(input: {
   apps?: string[];
   runner?: string;
   model?: string;
-  historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
+  historyKeep?: { count: number } | { days: number } | "all" | "errors";
   onFailure?: string;
   enabled?: boolean;
 }): Promise<{
@@ -83,15 +89,18 @@ export async function createAutomation(input: {
   const sessionId = await ensureAppSession(input.id);
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_automations`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify({ ...input, sessionId, publish: true }),
   });
   const out = await readJson<{
     row: CentraidAutomationRow | null;
     webhook?: { id: string; secret: string; url: string };
-  }>(res, 'create automation');
-  return { row: out.row ?? null, ...(out.webhook ? { webhook: out.webhook } : {}) };
+  }>(res, "create automation");
+  return {
+    row: out.row ?? null,
+    ...(out.webhook ? { webhook: out.webhook } : {}),
+  };
 }
 
 /**
@@ -133,34 +142,41 @@ export async function updateAutomation(input: {
   row: CentraidAutomationRow | null;
   webhook?: { id: string; secret: string; url: string };
 }> {
-  const appId = input.automationId.split('/')[0] ?? '';
+  const appId = input.automationId.split("/")[0] ?? "";
   const sessionId = await ensureAppSession(appId);
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
     `/centraid/_automations/update?ref=${enc(input.automationId)}`,
     {
-      method: 'POST',
-      headers: authHeaders(token, 'application/json'),
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
       body: JSON.stringify({
-        ...(input.name !== undefined ? { name: input.name } : {}),
-        ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
-        ...(input.triggers !== undefined ? { triggers: input.triggers } : {}),
-        ...(input.vault !== undefined ? { vault: input.vault } : {}),
-        ...(input.connections !== undefined ? { connections: input.connections } : {}),
-        ...(input.connector !== undefined ? { connector: input.connector } : {}),
-        ...(input.runner !== undefined ? { runner: input.runner } : {}),
-        ...(input.model !== undefined ? { model: input.model } : {}),
+        ...(input.name === undefined ? {} : { name: input.name }),
+        ...(input.prompt === undefined ? {} : { prompt: input.prompt }),
+        ...(input.triggers === undefined ? {} : { triggers: input.triggers }),
+        ...(input.vault === undefined ? {} : { vault: input.vault }),
+        ...(input.connections === undefined
+          ? {}
+          : { connections: input.connections }),
+        ...(input.connector === undefined
+          ? {}
+          : { connector: input.connector }),
+        ...(input.runner === undefined ? {} : { runner: input.runner }),
+        ...(input.model === undefined ? {} : { model: input.model }),
         sessionId,
         publish: true,
       }),
-    },
+    }
   );
   const out = await readJson<{
     row: CentraidAutomationRow | null;
     webhook?: { id: string; secret: string; url: string };
-  }>(res, 'update automation');
-  return { row: out.row ?? null, ...(out.webhook ? { webhook: out.webhook } : {}) };
+  }>(res, "update automation");
+  return {
+    row: out.row ?? null,
+    ...(out.webhook ? { webhook: out.webhook } : {}),
+  };
 }
 
 /** Toggle an automation's `enabled` flag in its draft, then publish. */
@@ -168,19 +184,23 @@ export async function setAutomationEnabled(input: {
   automationId: string;
   enabled: boolean;
 }): Promise<{ ok: true }> {
-  const appId = input.automationId.split('/')[0] ?? '';
+  const appId = input.automationId.split("/")[0] ?? "";
   const sessionId = await ensureAppSession(appId);
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
     `/centraid/_automations/set-enabled?ref=${enc(input.automationId)}`,
     {
-      method: 'POST',
-      headers: authHeaders(token, 'application/json'),
-      body: JSON.stringify({ enabled: input.enabled, sessionId, publish: true }),
-    },
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({
+        enabled: input.enabled,
+        sessionId,
+        publish: true,
+      }),
+    }
   );
-  await readJson(res, 'set automation enabled');
+  await readJson(res, "set automation enabled");
   return { ok: true };
 }
 
@@ -196,36 +216,40 @@ export async function setAutomationEnabled(input: {
 export async function rotateAutomationWebhookSecret(input: {
   automationId: string;
 }): Promise<{ webhook: { id: string; secret: string; url: string } }> {
-  const appId = input.automationId.split('/')[0] ?? '';
+  const appId = input.automationId.split("/")[0] ?? "";
   const sessionId = await ensureAppSession(appId);
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
     `/centraid/_automations/rotate-webhook?ref=${enc(input.automationId)}`,
     {
-      method: 'POST',
-      headers: authHeaders(token, 'application/json'),
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
       body: JSON.stringify({ sessionId, publish: true }),
-    },
+    }
   );
-  const out = await readJson<{ webhook: { id: string; secret: string; url: string } }>(
-    res,
-    'rotate automation webhook secret',
-  );
+  const out = await readJson<{
+    webhook: { id: string; secret: string; url: string };
+  }>(res, "rotate automation webhook secret");
   return { webhook: out.webhook };
 }
 
 /** Remove an automation (whole app or in-app subdir), then publish. */
-export async function deleteAutomation(input: { automationId: string }): Promise<{ ok: true }> {
-  const appId = input.automationId.split('/')[0] ?? '';
+export async function deleteAutomation(input: {
+  automationId: string;
+}): Promise<{ ok: true }> {
+  const appId = input.automationId.split("/")[0] ?? "";
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
     `/centraid/_automations?ref=${enc(input.automationId)}&publish=true`,
-    { method: 'DELETE', headers: authHeaders(token) },
+    { method: "DELETE", headers: authHeaders(token) }
   );
   // Surface a gateway rejection instead of reporting a phantom success.
-  const out = await readJson<{ deletedApp?: boolean }>(res, 'delete automation');
+  const out = await readJson<{ deletedApp?: boolean }>(
+    res,
+    "delete automation"
+  );
   // A whole-automation-app delete drops the app; forget its session too.
   if (out.deletedApp) await dropAppSession(appId);
   return { ok: true };

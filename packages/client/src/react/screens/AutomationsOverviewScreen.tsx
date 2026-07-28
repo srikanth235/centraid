@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
-import { Icon, Button, KindBadge } from '../ui/index.js';
-import type { IconName } from '@centraid/design-tokens';
+import type { IconName } from "@centraid/design-tokens";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+
 import type {
   AuOverviewData,
   AuOverviewRowDTO,
@@ -8,13 +8,19 @@ import type {
   AuOverviewSuggestionDTO,
   AuStatusKind,
   AutomationsOverviewBridgeProps,
-} from '../screen-contracts.js';
-import { groupRuns, runOrigin, sortOverviewRows } from './automationsOverviewGrouping.js';
-import styles from './AutomationsOverviewScreen.module.css';
-import homeCss from './HomeScreen.module.css';
-import cardCss from '../ui/AppCard.module.css';
-import { cx } from '../ui/cx.js';
-import au from '../styles/automation.module.css';
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Icon, Button, KindBadge } from "../ui/index.js";
+import {
+  groupRuns,
+  runOrigin,
+  sortOverviewRows,
+} from "./automationsOverviewGrouping.js";
+
+import au from "../styles/automation.module.css";
+import cardCss from "../ui/AppCard.module.css";
+import styles from "./AutomationsOverviewScreen.module.css";
+import homeCss from "./HomeScreen.module.css";
 
 // Automations overview (Automations UI revamp — see
 // receipts/issue-387-automations-ui-revamp.md; chat-thread redesign,
@@ -27,21 +33,31 @@ import au from '../styles/automation.module.css';
 // this component renders.
 
 const STATUS_META: Record<AuStatusKind, { icon: IconName; spin?: boolean }> = {
-  active: { icon: 'Power' },
-  paused: { icon: 'Pause' },
-  draft: { icon: 'Pencil' },
-  running: { icon: 'Loader', spin: true },
-  success: { icon: 'CheckCircle' },
-  failed: { icon: 'AlertTriangle' },
+  active: { icon: "Power" },
+  paused: { icon: "Pause" },
+  draft: { icon: "Pencil" },
+  running: { icon: "Loader", spin: true },
+  success: { icon: "CheckCircle" },
+  failed: { icon: "AlertTriangle" },
 };
 
 const RECENT_CAP = 10;
 
-function StatusPill({ kind, label }: { kind: AuStatusKind; label: string }): JSX.Element {
+function StatusPill({
+  kind,
+  label,
+}: {
+  kind: AuStatusKind;
+  label: string;
+}): JSX.Element {
   const meta = STATUS_META[kind];
   return (
     <span className={au.auStatus} data-tone={kind} data-au-status={kind}>
-      <span className={au.auStatusIc} data-spin={meta.spin ? 'true' : undefined} aria-hidden="true">
+      <span
+        className={au.auStatusIc}
+        data-spin={meta.spin ? "true" : undefined}
+        aria-hidden="true"
+      >
         <Icon name={meta.icon} size={10} />
       </span>
       <span>{label}</span>
@@ -72,8 +88,8 @@ function AutoTile({
         type="button"
         className={cx(cardCss.card, cardCss.small, styles.tile)}
         data-kind="automation"
-        data-attention={needsYou ? 'true' : undefined}
-        data-last-failed={row.lastRunOk === false ? 'true' : undefined}
+        data-attention={needsYou ? "true" : undefined}
+        data-last-failed={row.lastRunOk === false ? "true" : undefined}
         data-testid="automation-row"
         onClick={() => onOpen(row.ref)}
       >
@@ -94,7 +110,7 @@ function AutoTile({
               {row.attentionCount > 0 ? (
                 <span
                   className={styles.attentionBadge}
-                  title={`${row.attentionCount} item${row.attentionCount === 1 ? '' : 's'} waiting on you`}
+                  title={`${row.attentionCount} item${row.attentionCount === 1 ? "" : "s"} waiting on you`}
                 >
                   <Icon name="AlertTriangle" size={11} />
                   <span>{row.attentionCount}</span>
@@ -128,7 +144,10 @@ function AutoTile({
           <KindBadge kind="automation">
             <span>Automation</span>
           </KindBadge>
-          <span className={cardCss.footTime} data-ok={row.lastRunOk === true ? 'true' : undefined}>
+          <span
+            className={cardCss.footTime}
+            data-ok={row.lastRunOk === true ? "true" : undefined}
+          >
             {row.lastRunOk === true ? (
               <span aria-hidden="true">
                 <Icon name="CheckCircle" size={13} />
@@ -156,11 +175,15 @@ function ActivityRow({
       data-ok={String(run.ok)}
       onClick={() => onOpen(run.automationId, run.runId)}
     >
-      <i className={styles.activityDot} data-ok={String(run.ok)} aria-hidden="true" />
+      <i
+        className={styles.activityDot}
+        data-ok={String(run.ok)}
+        aria-hidden="true"
+      />
       <span className={styles.activityName}>{run.name}</span>
       <span className={styles.activityOrigin} data-mono="true">
         {runOrigin(run.metaLabel)}
-        {run.ok ? '' : ' · failed'}
+        {run.ok ? "" : " · failed"}
       </span>
       <span className={styles.activityWhen} data-mono="true">
         {run.whenLabel}
@@ -178,8 +201,18 @@ function HeaderActions({
 }): JSX.Element {
   return (
     <div className={styles.actions}>
-      <Button variant="soft" icon="Bolt" label="Browse templates" onClick={onBrowseTemplates} />
-      <Button variant="primary" icon="Sparkle" label="New automation" onClick={onNewAutomation} />
+      <Button
+        variant="soft"
+        icon="Bolt"
+        label="Browse templates"
+        onClick={onBrowseTemplates}
+      />
+      <Button
+        variant="primary"
+        icon="Sparkle"
+        label="New automation"
+        onClick={onNewAutomation}
+      />
     </div>
   );
 }
@@ -202,7 +235,12 @@ function SuggestionCard({
           </span>
         ) : null}
       </div>
-      <Button variant="soft" size="sm" label="Add" onClick={() => onAdd(suggestion.id)} />
+      <Button
+        variant="soft"
+        size="sm"
+        label="Add"
+        onClick={() => onAdd(suggestion.id)}
+      />
     </div>
   );
 }
@@ -225,24 +263,42 @@ function EmptyState({
       </div>
       <div className={styles.emptyTitle}>No automations yet</div>
       <p className={styles.emptyText}>
-        Automations run on a schedule or when your data changes — summarize mail, sync calendars, or
-        watch the vault. Start from a template or write instructions from scratch.
+        Automations run on a schedule or when your data changes — summarize
+        mail, sync calendars, or watch the vault. Start from a template or write
+        instructions from scratch.
       </p>
       {suggestions.length > 0 && onUseSuggestion ? (
-        <div className={styles.suggestSection} data-testid="automation-suggestions">
+        <div
+          className={styles.suggestSection}
+          data-testid="automation-suggestions"
+        >
           <div className={styles.sectionHead}>
             <span className={styles.sectionLabel}>Suggested starters</span>
           </div>
           <div className={styles.suggestGrid}>
             {suggestions.map((s) => (
-              <SuggestionCard key={s.id} suggestion={s} onAdd={onUseSuggestion} />
+              <SuggestionCard
+                key={s.id}
+                suggestion={s}
+                onAdd={onUseSuggestion}
+              />
             ))}
           </div>
         </div>
       ) : null}
       <div className={styles.emptyActions}>
-        <Button variant="primary" icon="Sparkle" label="New automation" onClick={onNewAutomation} />
-        <Button variant="soft" icon="Bolt" label="Browse templates" onClick={onBrowseTemplates} />
+        <Button
+          variant="primary"
+          icon="Sparkle"
+          label="New automation"
+          onClick={onNewAutomation}
+        />
+        <Button
+          variant="soft"
+          icon="Bolt"
+          label="Browse templates"
+          onClick={onBrowseTemplates}
+        />
       </div>
     </div>
   );
@@ -257,9 +313,11 @@ export default function AutomationsOverviewScreen({
   onNewAutomation,
   onUseSuggestion,
 }: AutomationsOverviewBridgeProps): JSX.Element {
-  const [state, setState] = useState<AuOverviewData | 'loading' | 'error'>('loading');
-  const [errMsg, setErrMsg] = useState('');
-  const [filter, setFilter] = useState('');
+  const [state, setState] = useState<AuOverviewData | "loading" | "error">(
+    "loading"
+  );
+  const [errMsg, setErrMsg] = useState("");
+  const [filter, setFilter] = useState("");
 
   // Keep the latest loadData without rebinding reload. Routes historically pass
   // an inline async prop; if reload depended on that identity, every parent
@@ -272,17 +330,20 @@ export default function AutomationsOverviewScreen({
 
   const load = useCallback(
     (): Promise<void> =>
-      loadDataRef.current().then(setState, (err: unknown) => {
-        setErrMsg(err instanceof Error ? err.message : String(err));
-        setState('error');
-      }),
-    [],
+      loadDataRef
+        .current()
+        .then(setState)
+        .catch((err: unknown) => {
+          setErrMsg(err instanceof Error ? err.message : String(err));
+          setState("error");
+        }),
+    []
   );
 
   /** The Retry affordance — the only path that puts the screen back into
    *  `loading`; the mount read starts there already. */
   const reload = useCallback((): void => {
-    setState('loading');
+    setState("loading");
     void load();
   }, [load]);
 
@@ -292,7 +353,9 @@ export default function AutomationsOverviewScreen({
 
   // With no suggestion loader there are no suggestions — derived, not synced,
   // so no effect has to blank the list out.
-  const [fetchedSuggestions, setFetchedSuggestions] = useState<AuOverviewSuggestionDTO[]>([]);
+  const [fetchedSuggestions, setFetchedSuggestions] = useState<
+    AuOverviewSuggestionDTO[]
+  >([]);
   const suggestions = loadSuggestions ? fetchedSuggestions : [];
 
   useEffect(() => {
@@ -310,7 +373,7 @@ export default function AutomationsOverviewScreen({
     };
   }, [loadSuggestions]);
 
-  if (state === 'loading') {
+  if (state === "loading") {
     return (
       <div className={styles.page}>
         <div className={styles.skelHead} aria-hidden="true" />
@@ -324,15 +387,22 @@ export default function AutomationsOverviewScreen({
     );
   }
 
-  if (state === 'error') {
+  if (state === "error") {
     return (
       <div className={styles.error} data-testid="automations-error">
         <div className={styles.errorIcon} aria-hidden="true">
           <Icon name="AlertCircle" size={22} />
         </div>
         <div className={styles.errorTitle}>Couldn&apos;t load automations</div>
-        <div className={styles.errorText}>{errMsg || 'Check the gateway and try again.'}</div>
-        <Button variant="primary" icon="Refresh" label="Retry" onClick={reload} />
+        <div className={styles.errorText}>
+          {errMsg || "Check the gateway and try again."}
+        </div>
+        <Button
+          variant="primary"
+          icon="Refresh"
+          label="Retry"
+          onClick={reload}
+        />
       </div>
     );
   }
@@ -341,32 +411,36 @@ export default function AutomationsOverviewScreen({
   const activeCount = health.active;
   const pausedCount = health.paused;
   const draftCount = health.drafts;
-  const attentionCount = rows.filter((r) => r.attentionCount > 0 || r.lastRunOk === false).length;
+  const attentionCount = rows.filter(
+    (r) => r.attentionCount > 0 || r.lastRunOk === false
+  ).length;
 
   const subtitle =
     rows.length === 0
-      ? 'Run on a schedule or when your data changes.'
+      ? "Run on a schedule or when your data changes."
       : [
           `${activeCount} active`,
           `${pausedCount} paused`,
-          draftCount > 0 ? `${draftCount} draft${draftCount === 1 ? '' : 's'}` : null,
+          draftCount > 0
+            ? `${draftCount} draft${draftCount === 1 ? "" : "s"}`
+            : null,
           attentionCount > 0
-            ? `${attentionCount} need${attentionCount === 1 ? 's' : ''} attention`
+            ? `${attentionCount} need${attentionCount === 1 ? "s" : ""} attention`
             : null,
         ]
           .filter((part): part is string => part !== null)
-          .join(' · ');
+          .join(" · ");
 
   const q = filter.trim().toLowerCase();
   const sortedRows = sortOverviewRows(rows);
-  const visibleRows = !q
-    ? sortedRows
-    : sortedRows.filter(
+  const visibleRows = q
+    ? sortedRows.filter(
         (r) =>
           r.name.toLowerCase().includes(q) ||
           r.triggerLabel.toLowerCase().includes(q) ||
-          r.statusLabel.toLowerCase().includes(q),
-      );
+          r.statusLabel.toLowerCase().includes(q)
+      )
+    : sortedRows;
 
   const recentRuns = runs.slice(0, RECENT_CAP);
   const runGroups = groupRuns(recentRuns);
@@ -380,9 +454,12 @@ export default function AutomationsOverviewScreen({
           <p className={styles.subtitle}>{subtitle}</p>
         </div>
         {/* Empty state owns its CTAs so we don't double the same pair. */}
-        {!isEmpty ? (
-          <HeaderActions onBrowseTemplates={onBrowseTemplates} onNewAutomation={onNewAutomation} />
-        ) : null}
+        {isEmpty ? null : (
+          <HeaderActions
+            onBrowseTemplates={onBrowseTemplates}
+            onNewAutomation={onNewAutomation}
+          />
+        )}
       </header>
 
       {isEmpty ? (
@@ -415,12 +492,19 @@ export default function AutomationsOverviewScreen({
             {visibleRows.length === 0 ? (
               <div className={styles.filterEmpty}>
                 No automations match “{filter.trim()}”.
-                <button type="button" className={styles.filterClear} onClick={() => setFilter('')}>
+                <button
+                  type="button"
+                  className={styles.filterClear}
+                  onClick={() => setFilter("")}
+                >
                   Clear filter
                 </button>
               </div>
             ) : (
-              <div className={cx(homeCss.appsGrid, homeCss.appsGridSmall)} data-testid="apps-grid">
+              <div
+                className={cx(homeCss.appsGrid, homeCss.appsGridSmall)}
+                data-testid="apps-grid"
+              >
                 {visibleRows.map((row) => (
                   <AutoTile key={row.ref} row={row} onOpen={onOpenAutomation} />
                 ))}
@@ -436,10 +520,16 @@ export default function AutomationsOverviewScreen({
               <div className={styles.activity}>
                 {runGroups.map((group) => (
                   <div key={group.label} className={styles.activityGroup}>
-                    <span className={styles.activityGroupLabel}>{group.label}</span>
+                    <span className={styles.activityGroupLabel}>
+                      {group.label}
+                    </span>
                     <div className={styles.activityList}>
                       {group.runs.map((run) => (
-                        <ActivityRow key={run.runId} run={run} onOpen={onOpenRun} />
+                        <ActivityRow
+                          key={run.runId}
+                          run={run}
+                          onOpen={onOpenRun}
+                        />
                       ))}
                     </div>
                   </div>
@@ -447,8 +537,8 @@ export default function AutomationsOverviewScreen({
               </div>
             ) : (
               <div className={cx(styles.activity, styles.activityEmpty)}>
-                No runs yet. Open an automation and use <strong>Run now</strong>, or wait for its
-                trigger.
+                No runs yet. Open an automation and use <strong>Run now</strong>
+                , or wait for its trigger.
               </div>
             )}
           </section>

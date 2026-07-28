@@ -6,26 +6,31 @@
 
 // ── Appearance prefs (renderer-local; mirrored to the gateway) ──────────────
 export type ThemeName = keyof typeof window.CentraidTokens.themes;
-export type Density = 'compact' | 'regular' | 'comfy';
-export type TileVariant = 'solid' | 'gradient' | 'glassy' | 'flat';
-export type AccentKey = 'blue' | 'violet' | 'teal' | 'ochre' | 'rose';
-export type CardVariant = 'flat' | 'outlined' | 'elevated';
+export type Density = "compact" | "regular" | "comfy";
+export type TileVariant = "solid" | "gradient" | "glassy" | "flat";
+export type AccentKey = "blue" | "violet" | "teal" | "ochre" | "rose";
+export type CardVariant = "flat" | "outlined" | "elevated";
 
 // Accent key → resolved hex swatches (Centraid Redesign Tweaks panel). Shared
 // between the appearance core in app.ts and the settings page in app-settings.
 // `teal` is the brand accent — its ramp matches @centraid/design-tokens'
 // ACCENT / ACCENT_LIGHT / ACCENT_DEEP (and the `--brand` logo hue), so the
 // default swatch and the token default paint identically.
-export const ACCENT_PALETTE: Record<AccentKey, { accent: string; light: string; deep: string }> = {
-  blue: { accent: '#4950F6', light: '#6B72FF', deep: '#2D34D9' },
-  ochre: { accent: '#B47B3F', light: '#CB9359', deep: '#92622F' },
-  rose: { accent: '#E55772', light: '#EE7D92', deep: '#BF3E57' },
-  teal: { accent: '#3EC8B4', light: '#62D6C6', deep: '#2AA593' },
-  violet: { accent: '#7C5BD9', light: '#9D80E6', deep: '#5D3EB3' },
+export const ACCENT_PALETTE: Record<
+  AccentKey,
+  { accent: string; light: string; deep: string }
+> = {
+  blue: { accent: "#4950F6", light: "#6B72FF", deep: "#2D34D9" },
+  ochre: { accent: "#B47B3F", light: "#CB9359", deep: "#92622F" },
+  rose: { accent: "#E55772", light: "#EE7D92", deep: "#BF3E57" },
+  teal: { accent: "#3EC8B4", light: "#62D6C6", deep: "#2AA593" },
+  violet: { accent: "#7C5BD9", light: "#9D80E6", deep: "#5D3EB3" },
 };
 
 // A gateway profile as returned by the listGateways IPC.
-export type GatewayProfile = Awaited<ReturnType<typeof window.CentraidApi.listGateways>>[number];
+export type GatewayProfile = Awaited<
+  ReturnType<typeof window.CentraidApi.listGateways>
+>[number];
 
 export interface AppearancePrefs {
   theme: ThemeName;
@@ -44,41 +49,41 @@ export interface AppearancePrefs {
 // builder route the user into other views). Drives the nav stack + `applyRoute`
 // dispatcher in app.ts and the per-route refresh in the route modules.
 export type ShellRoute =
-  | { kind: 'home' }
+  | { kind: "home" }
   // `page` deep-links into one Settings sub-page (e.g. `'storage'` from the
   // Gateway page's Storage card — issue #367 §D3); omitted, SettingsRoute
   // falls back to its own default (Appearance). Loosely typed as `string`
   // here (not SettingsRoute's own page union) to avoid a type-only import
   // cycle between this shared-types module and a screen route module —
   // SettingsRoute.tsx validates it against its known page ids itself.
-  | { kind: 'settings'; page?: string }
+  | { kind: "settings"; page?: string }
   // `conversationId` omitted = a fresh, not-yet-created conversation (the
   // composer creates one lazily on first send); set = the sidebar's Chats
   // list or a resumed session. See AssistantRoute.tsx.
-  | { kind: 'assistant'; conversationId?: string }
-  | { kind: 'insights' }
-  | { kind: 'discover' }
-  | { kind: 'starred' }
-  | { kind: 'automations' }
+  | { kind: "assistant"; conversationId?: string }
+  | { kind: "insights" }
+  | { kind: "discover" }
+  | { kind: "starred" }
+  | { kind: "automations" }
   // Vault data-source connections (Gmail, GitHub, …) — primary sidebar
   // destination; previously Settings → Account → Connections.
-  | { kind: 'connectors' }
-  | { kind: 'approvals' }
-  | { kind: 'gateway' }
+  | { kind: "connectors" }
+  | { kind: "approvals" }
+  | { kind: "gateway" }
   // The people side of this installation (issue #599, Decision 14): the member
   // roster, the devices acting for each person, and every space this member can
   // reach. Sits under the sidebar's Operations section beside Gateway — which
   // it took People & devices from, leaving Gateway purely about runtime health.
-  | { kind: 'household' }
+  | { kind: "household" }
   // Local disk footprint by component, the owner's disk budget, and the
   // offsite snapshot custody that used to be the whole page (issue #544 —
   // this was `backups`). Sits under the sidebar's Operations section beside
   // Gateway; Settings → Storage provider owns the connection itself.
-  | { kind: 'storage' }
+  | { kind: "storage" }
   // Ontology-at-a-glance — the Kinds/Relations/Browse census over the vault
   // schema (issue #441 Part B). Sits under the sidebar's Operations section.
-  | { kind: 'atlas' }
-  | { kind: 'templates' }
+  | { kind: "atlas" }
+  | { kind: "templates" }
   // Instructions-first create/edit form (Automations UI revamp). `automationId`
   // (a `ref`) is omitted for create mode; `templateId` seeds the form from a
   // template gallery entry (Discover/Templates "Use template" for an
@@ -88,21 +93,30 @@ export type ShellRoute =
   // the initial DTO and is excluded from `routeKey`, so it never persists past
   // the first paint. Reached inside normal chrome, NOT full-bleed — unlike the
   // builder chat it replaces as the primary edit surface.
-  | { kind: 'automation-editor'; automationId?: string; templateId?: string; watchEntity?: string }
-  | { automationId: string; kind: 'automation-view' }
-  | { automationId: string; kind: 'run-view'; runId: string }
-  | { id: string; kind: 'app' }
-  | { appContext?: AppMetaResolvedType; initialPrompt?: string; kind: 'builder' }
+  | {
+      kind: "automation-editor";
+      automationId?: string;
+      templateId?: string;
+      watchEntity?: string;
+    }
+  | { automationId: string; kind: "automation-view" }
+  | { automationId: string; kind: "run-view"; runId: string }
+  | { id: string; kind: "app" }
+  | {
+      appContext?: AppMetaResolvedType;
+      initialPrompt?: string;
+      kind: "builder";
+    }
   // `seedMessage`, when set, is the editor's "compile" handoff — a first
   // message posted into the builder chat on open (mirrors `builder`'s
   // `initialPrompt`). Optional because most automation-builder entries
   // (overview "New automation", thread's "Edit") open the chat cold.
-  | { automationId: string; kind: 'automation-builder'; seedMessage?: string };
+  | { automationId: string; kind: "automation-builder"; seedMessage?: string };
 
 // Compact summary of the active gateway, fed into the sidebar head row.
 export interface GatewaySummary {
   activeId: string;
-  activeKind: 'local' | 'remote';
+  activeKind: "local" | "remote";
   activeLabel: string;
   activeDisplayName: string;
   activeAvatarColor: string;
@@ -120,7 +134,7 @@ export interface TemplateEntry {
   colorKey: string;
   iconKey: string;
   version: string;
-  kind?: 'app' | 'automation';
+  kind?: "app" | "automation";
   /** Whether this app-kind template is already installed in the addressed
    *  vault (issue #434). Drives Install vs Open in Discover. */
   installed?: boolean;
@@ -129,7 +143,7 @@ export interface TemplateEntry {
   // automation-only display fields:
   emoji?: string;
   category?: string;
-  triggerKind?: 'cron' | 'webhook' | 'data' | 'condition';
+  triggerKind?: "cron" | "webhook" | "data" | "condition";
   triggerLabel?: string;
   integrations?: readonly string[];
 }
@@ -150,8 +164,14 @@ export interface TemplateVaultBlock {
 
 // Per-automation run state, keyed by `${appId}:${name}`.
 export type AutomationRunState =
-  | { kind: 'running' }
-  | { kind: 'done'; ok: boolean; durationMs: number; error?: string; finishedAt: number };
+  | { kind: "running" }
+  | {
+      kind: "done";
+      ok: boolean;
+      durationMs: number;
+      error?: string;
+      finishedAt: number;
+    };
 
 // ── Late-bound render registry ──────────────────────────────────────────────
 // Populated by app.ts (for routes still living there) and by each module

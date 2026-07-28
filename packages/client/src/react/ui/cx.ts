@@ -7,7 +7,13 @@
 // Accepts strings, falsy values (skipped), and `{ 'class-name': boolean }`
 // maps. Returns a single space-joined className string.
 
-export type ClassValue = string | number | false | null | undefined | Record<string, boolean>;
+export type ClassValue =
+  | string
+  | number
+  | false
+  | null
+  | undefined
+  | Record<string, boolean>;
 
 export function cx(...values: readonly ClassValue[]): string {
   const out: string[] = [];
@@ -15,7 +21,7 @@ export function cx(...values: readonly ClassValue[]): string {
     if (!value) {
       continue;
     }
-    if (typeof value === 'string' || typeof value === 'number') {
+    if (typeof value === "string" || typeof value === "number") {
       out.push(String(value));
       continue;
     }
@@ -25,5 +31,5 @@ export function cx(...values: readonly ClassValue[]): string {
       }
     }
   }
-  return out.join(' ');
+  return out.join(" ");
 }

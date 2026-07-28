@@ -1,24 +1,33 @@
-import sqlite3InitModule, { type Database, type SAHPoolUtil } from '@sqlite.org/sqlite-wasm';
+import sqlite3InitModule, {
+  type Database,
+  type SAHPoolUtil,
+} from "@sqlite.org/sqlite-wasm";
 
-import { ReplicaProtocolError } from './errors.js';
-import { SqliteReplicaStore } from './sqlite-store.js';
+import { ReplicaProtocolError } from "./errors.js";
+import { SqliteReplicaStore } from "./sqlite-store.js";
+import type {
+  ReplicaMode,
+  ReplicaStatus,
+  ReplicaWorkerOpenOptions,
+} from "./types.js";
 import type {
   ReplicaWorkerRequest,
   ReplicaWorkerResponse,
   SerializedReplicaError,
-} from './worker-protocol.js';
-import type { ReplicaMode, ReplicaStatus, ReplicaWorkerOpenOptions } from './types.js';
+} from "./worker-protocol.js";
 
 interface WorkerScope {
-  addEventListener(
-    type: 'message',
-    listener: (event: MessageEvent<ReplicaWorkerRequest>) => void,
-  ): void;
-  postMessage(message: ReplicaWorkerResponse): void;
-  close(): void;
+  addEventListener: (
+    type: "message",
+    listener: (event: MessageEvent<ReplicaWorkerRequest>) => void
+  ) => void;
+  postMessage: (message: ReplicaWorkerResponse) => void;
+  close: () => void;
 }
 
 const scope = globalThis as unknown as WorkerScope;
+// WorkerGlobalScope.postMessage deliberately has no targetOrigin parameter.
+const postWorkerResponse = scope.postMessage.bind(scope);
 let store: SqliteReplicaStore | undefined;
 let mode: ReplicaMode | undefined;
 let pool: SAHPoolUtil | undefined;
@@ -26,63 +35,75 @@ let dbName: string | undefined;
 let persistentOpened = false;
 let purgeOnly = false;
 
-scope.addEventListener('message', (event) => {
+scope.addEventListener("message", (event) => {
   void dispatch(event.data).then(
     (result) => {
-      // eslint-disable-next-line unicorn/require-post-message-target-origin -- (#406) Worker.postMessage has no targetOrigin overload; governance: allow-no-unjustified-suppressions Web Worker API false positive
-      scope.postMessage({ id: event.data.id, ok: true, result });
-      if (event.data.op === 'close' || event.data.op === 'purge') scope.close();
+      postWorkerResponse({ id: event.data.id, ok: true, result });
+      if (event.data.op === "close" || event.data.op === "purge") scope.close();
     },
     (error: unknown) => {
-      // eslint-disable-next-line unicorn/require-post-message-target-origin -- (#406) Worker.postMessage has no targetOrigin overload; governance: allow-no-unjustified-suppressions Web Worker API false positive
-      scope.postMessage({ id: event.data.id, ok: false, error: serializeError(error) });
-    },
+      postWorkerResponse({
+        id: event.data.id,
+        ok: false,
+        error: serializeError(error),
+      });
+    }
   );
 });
 
 async function dispatch(request: ReplicaWorkerRequest): Promise<unknown> {
   switch (request.op) {
-    case 'open':
+    case "open":
       return open(request.payload);
-    case 'status':
+    case "status":
       return status();
-    case 'catalog':
+    case "catalog":
       return requiredStore().catalog();
-    case 'bootstrap':
+    case "bootstrap":
       return requiredStore().bootstrap(request.payload);
-    case 'bootstrap-begin':
+    case "bootstrap-begin":
       requiredStore().bootstrapBegin(request.payload);
       return undefined;
-    case 'bootstrap-page':
+    case "bootstrap-page":
       requiredStore().bootstrapPage(request.payload);
       return undefined;
-    case 'bootstrap-commit':
+    case "bootstrap-commit":
       return requiredStore().bootstrapCommit(request.payload);
-    case 'apply-changes':
+    case "apply-changes":
       return requiredStore().applyChanges(request.payload);
-    case 'read':
-      return requiredStore().read(request.payload.request, request.payload.mutations);
-    case 'search':
-      return requiredStore().search(request.payload.request, request.payload.mutations);
-    case 'wipe':
+    case "read":
+      return requiredStore().read(
+        request.payload.request,
+        request.payload.mutations
+      );
+    case "search":
+      return requiredStore().search(
+        request.payload.request,
+        request.payload.mutations
+      );
+    case "wipe":
       requiredStore().wipe();
       return undefined;
-    case 'close':
+    case "close":
       closeDatabase();
       return undefined;
-    case 'purge':
+    case "purge":
       await purgeDatabase();
       return undefined;
   }
 }
 
 async function open(options: ReplicaWorkerOpenOptions): Promise<ReplicaStatus> {
-  if (store) throw new ReplicaProtocolError('Replica worker is already open');
-  if (!options.dbName.startsWith('/')) {
-    throw new ReplicaProtocolError('Persistent replica database name must be absolute');
+  if (store) throw new ReplicaProtocolError("Replica worker is already open");
+  if (!options.dbName.startsWith("/")) {
+    throw new ReplicaProtocolError(
+      "Persistent replica database name must be absolute"
+    );
   }
   if (options.purgeOnly && !options.remember) {
-    throw new ReplicaProtocolError('A purge-only replica worker requires durable storage');
+    throw new ReplicaProtocolError(
+      "A purge-only replica worker requires durable storage"
+    );
   }
   persistentOpened = false;
   purgeOnly = options.purgeOnly === true;
@@ -91,8 +112,11 @@ async function open(options: ReplicaWorkerOpenOptions): Promise<ReplicaStatus> {
   if (options.remember && opfsAvailable()) {
     try {
       const directory = `/.centraid-replica-${fileStem(options.dbName)}`;
-      pool = await sqlite3.installOpfsSAHPoolVfs({ directory, initialCapacity: 4 });
-      mode = 'opfs-sahpool';
+      pool = await sqlite3.installOpfsSAHPoolVfs({
+        directory,
+        initialCapacity: 4,
+      });
+      mode = "opfs-sahpool";
       dbName = options.dbName;
       persistentOpened = true;
       if (purgeOnly) return status();
@@ -116,25 +140,28 @@ async function open(options: ReplicaWorkerOpenOptions): Promise<ReplicaStatus> {
     }
   }
   if (purgeOnly) {
-    throw new ReplicaProtocolError('Persistent replica storage is unavailable for confirmed purge');
+    throw new ReplicaProtocolError(
+      "Persistent replica storage is unavailable for confirmed purge"
+    );
   }
   if (!db) {
-    db = new sqlite3.oo1.DB(':memory:', 'c');
-    mode = 'memory';
+    db = new sqlite3.oo1.DB(":memory:", "c");
+    mode = "memory";
   }
   store = new SqliteReplicaStore(db, options.vaultId);
   return status();
 }
 
 function status(): ReplicaStatus {
-  if (!mode) throw new ReplicaProtocolError('Replica mode was not initialized');
+  if (!mode) throw new ReplicaProtocolError("Replica mode was not initialized");
   if (purgeOnly) return { mode, cursor: null, schemaEpoch: null };
   const current = requiredStore().status();
   return { mode, cursor: current.cursor, schemaEpoch: current.schemaEpoch };
 }
 
 function requiredStore(): SqliteReplicaStore {
-  if (!store) throw new ReplicaProtocolError('Replica worker has not been opened');
+  if (!store)
+    throw new ReplicaProtocolError("Replica worker has not been opened");
   return store;
 }
 
@@ -147,14 +174,20 @@ async function purgeDatabase(): Promise<void> {
   closeDatabase();
   if (persistentOpened) {
     if (!pool || !dbName) {
-      throw new ReplicaProtocolError('Persistent replica purge could not be confirmed');
+      throw new ReplicaProtocolError(
+        "Persistent replica purge could not be confirmed"
+      );
     }
     const names = pool.getFileNames();
     if (names.includes(dbName) && pool.unlink(dbName) !== true) {
-      throw new ReplicaProtocolError(`Persistent replica database ${dbName} is still in use`);
+      throw new ReplicaProtocolError(
+        `Persistent replica database ${dbName} is still in use`
+      );
     }
     if ((await pool.removeVfs()) !== true) {
-      throw new ReplicaProtocolError('Persistent replica VFS removal could not be confirmed');
+      throw new ReplicaProtocolError(
+        "Persistent replica VFS removal could not be confirmed"
+      );
     }
   }
   pool = undefined;
@@ -165,20 +198,23 @@ async function purgeDatabase(): Promise<void> {
 
 function opfsAvailable(): boolean {
   return (
-    typeof navigator !== 'undefined' &&
-    typeof navigator.storage !== 'undefined' &&
-    typeof navigator.storage.getDirectory === 'function'
+    typeof navigator !== "undefined" &&
+    typeof navigator.storage !== "undefined" &&
+    typeof navigator.storage.getDirectory === "function"
   );
 }
 
 function fileStem(name: string): string {
-  const match = /centraid-replica-([a-f0-9]+)\.sqlite3$/.exec(name);
-  if (!match?.[1]) throw new ReplicaProtocolError('Replica database name is not namespaced');
-  return match[1];
+  const stem = /centraid-replica-(?<stem>[a-f0-9]+)\.sqlite3$/u.exec(name)
+    ?.groups?.stem;
+  if (!stem)
+    throw new ReplicaProtocolError("Replica database name is not namespaced");
+  return stem;
 }
 
 function serializeError(error: unknown): SerializedReplicaError {
-  if (!(error instanceof Error)) return { name: 'Error', message: String(error) };
+  if (!(error instanceof Error))
+    return { name: "Error", message: String(error) };
   const shaped = error as Error & { code?: string; reason?: string };
   return {
     name: error.name,

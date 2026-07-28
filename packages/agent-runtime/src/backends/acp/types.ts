@@ -21,7 +21,7 @@ import type {
   ToolContext,
   TurnAttachment,
   TurnStreamEvent,
-} from '@centraid/app-engine';
+} from "@centraid/app-engine";
 
 export interface AcpTurnInput {
   /** Stable ledger identity used only to scope the warm-process cache. */
@@ -51,7 +51,7 @@ export interface AcpTurnInput {
   /** Category-keyed ACP pins. `model` is applied before `thought_level`. */
   configPins?: Readonly<Record<string, string>>;
   /** Host decision for ACP permission requests; automation chat always denies. */
-  permissionPolicy?: 'auto-allow' | 'deny';
+  permissionPolicy?: "auto-allow" | "deny";
   /** Session id from a prior turn; triggers resume/load when supported. */
   prevSessionId?: string;
   /** Persisted cumulative counters paired with `prevSessionId`. */
@@ -173,5 +173,5 @@ export interface AcpTurnResult {
   /** A fresh session consumed the canonical ledger handoff. */
   hydrated?: boolean;
   /** Whether the normal delta or full resume-recovery plan was consumed. */
-  hydrationKind?: 'handoff' | 'recovery';
+  hydrationKind?: "handoff" | "recovery";
 }

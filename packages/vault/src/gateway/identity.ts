@@ -4,9 +4,10 @@
 // grantee to receipt against, so nothing enters the model — not even a
 // denial row.
 
-import type { DatabaseSync } from 'node:sqlite';
-import type { Credential, Identity } from './types.js';
-import { GatewayError } from './types.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import type { Credential, Identity } from "./types.js";
+import { GatewayError } from "./types.js";
 
 interface AppRow {
   app_id: string;
@@ -25,14 +26,18 @@ interface DeviceRow {
   trust: string;
 }
 
-function deviceRow(vault: DatabaseSync, deviceId: string, deviceKey: string): DeviceRow {
+function deviceRow(
+  vault: DatabaseSync,
+  deviceId: string,
+  deviceKey: string
+): DeviceRow {
   const row = vault
     .prepare(
-      'SELECT device_id, owner_party_id, public_key, trust FROM consent_device WHERE device_id = ?',
+      "SELECT device_id, owner_party_id, public_key, trust FROM consent_device WHERE device_id = ?"
     )
     .get(deviceId) as DeviceRow | undefined;
-  if (!row || row.public_key !== deviceKey || row.trust === 'revoked') {
-    throw new GatewayError('identity', 'unknown caller');
+  if (!row || row.public_key !== deviceKey || row.trust === "revoked") {
+    throw new GatewayError("identity", "unknown caller");
   }
   return row;
 }
@@ -43,56 +48,66 @@ function deviceRow(vault: DatabaseSync, deviceId: string, deviceKey: string): De
  * signatures only changes this function.
  */
 export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
-  if (cred.kind === 'app') {
+  if (cred.kind === "app") {
     const row = vault
-      .prepare('SELECT app_id, signing_key, status FROM consent_app WHERE app_id = ?')
+      .prepare(
+        "SELECT app_id, signing_key, status FROM consent_app WHERE app_id = ?"
+      )
       .get(cred.appId) as AppRow | undefined;
     if (
       !row ||
       row.signing_key === null ||
       row.signing_key !== cred.signingKey ||
-      row.status !== 'active'
+      row.status !== "active"
     ) {
-      throw new GatewayError('identity', 'unknown caller');
+      throw new GatewayError("identity", "unknown caller");
     }
     return {
-      kind: 'app',
+      kind: "app",
       callerId: row.app_id,
-      provAgentKind: 'app',
+      provAgentKind: "app",
       partyId: null,
       mayAct: true,
     };
   }
-  if (cred.kind === 'agent') {
+  if (cred.kind === "agent") {
     // Session binding: an agent call rides an enrolled device's key.
     const device = deviceRow(vault, cred.deviceId, cred.deviceKey);
     const row = vault
-      .prepare('SELECT agent_id, party_id, status FROM agent_agent WHERE agent_id = ?')
+      .prepare(
+        "SELECT agent_id, party_id, status FROM agent_agent WHERE agent_id = ?"
+      )
       .get(cred.agentId) as AgentRow | undefined;
-    if (!row || row.status !== 'active') throw new GatewayError('identity', 'unknown caller');
+    if (!row || row.status !== "active")
+      throw new GatewayError("identity", "unknown caller");
     return {
-      kind: 'agent',
+      kind: "agent",
       callerId: row.agent_id,
-      provAgentKind: 'ai_agent',
+      provAgentKind: "ai_agent",
       partyId: row.party_id,
-      mayAct: device.trust === 'full',
+      mayAct: device.trust === "full",
       ...(cred.scopeClamp ? { scopeClamp: cred.scopeClamp } : {}),
-      ...(cred.onBehalfOfMember ? { onBehalfOfMember: cred.onBehalfOfMember } : {}),
+      ...(cred.onBehalfOfMember
+        ? { onBehalfOfMember: cred.onBehalfOfMember }
+        : {}),
     };
   }
   // Owner-direct: an enrolled device belonging to the vault owner.
   const device = deviceRow(vault, cred.deviceId, cred.deviceKey);
-  const owner = vault.prepare('SELECT owner_party_id FROM core_vault LIMIT 1').get() as
-    | { owner_party_id: string | null }
-    | undefined;
-  if (!owner?.owner_party_id || owner.owner_party_id !== device.owner_party_id) {
-    throw new GatewayError('identity', 'unknown caller');
+  const owner = vault
+    .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
+    .get() as { owner_party_id: string | null } | undefined;
+  if (
+    !owner?.owner_party_id ||
+    owner.owner_party_id !== device.owner_party_id
+  ) {
+    throw new GatewayError("identity", "unknown caller");
   }
   return {
-    kind: 'owner-device',
+    kind: "owner-device",
     callerId: device.device_id,
-    provAgentKind: 'owner',
+    provAgentKind: "owner",
     partyId: device.owner_party_id,
-    mayAct: device.trust === 'full',
+    mayAct: device.trust === "full",
   };
 }

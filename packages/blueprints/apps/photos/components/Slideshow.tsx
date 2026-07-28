@@ -9,13 +9,21 @@
 // CSS split: the fixed dark `.slideshow` container stays global (static
 // index.html element); this view's own bits live in Slideshow.module.css,
 // while `kit-viewer-nav`/`prev`/`next` are kit.css vocabulary (global).
-import { useEffect, useRef, useState } from 'react';
-import type { FC } from 'react';
-import { isRenderableUri, isVideoAsset } from '../format.ts';
-import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PauseIcon, PlayIcon } from '../icons.tsx';
-import { scopeAttr } from '../scopes.ts';
-import type { Asset } from '../types.ts';
-import styles from './Slideshow.module.css';
+import { useEffect, useRef, useState } from "react";
+import type { FC } from "react";
+
+import { isRenderableUri, isVideoAsset } from "../format.ts";
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  PauseIcon,
+  PlayIcon,
+} from "../icons.tsx";
+import { scopeAttr } from "../scopes.ts";
+import type { Asset } from "../types.ts";
+
+import styles from "./Slideshow.module.css";
 
 const ADVANCE_MS = 4000;
 
@@ -28,8 +36,12 @@ export function SlideshowView({
   startAssetId: string | null;
   onClose: () => void;
 }) {
-  const photos = list.filter((a) => isRenderableUri(a.content_uri) && !isVideoAsset(a));
-  const startIdx = startAssetId ? photos.findIndex((a) => a.asset_id === startAssetId) : 0;
+  const photos = list.filter(
+    (a) => isRenderableUri(a.content_uri) && !isVideoAsset(a)
+  );
+  const startIdx = startAssetId
+    ? photos.findIndex((a) => a.asset_id === startAssetId)
+    : 0;
   const [idx, setIdx] = useState(Math.max(0, startIdx));
   const [paused, setPaused] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | 0>(0);
@@ -50,25 +62,25 @@ export function SlideshowView({
     timerRef.current = setTimeout(() => step(1), ADVANCE_MS);
     return () => clearTimeout(timerRef.current);
     // (#360) `step`/`photos.length` are stable for the component's lifetime (the list is a snapshot passed in at open time)
-  }, [idx, paused]);
+  }, [idx, paused, step, photos.length]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         onClose();
-      } else if (e.key === ' ') {
+      } else if (e.key === " ") {
         e.preventDefault();
         setPaused((p) => !p);
-      } else if (e.key === 'ArrowLeft') {
+      } else if (e.key === "ArrowLeft") {
         step(-1);
-      } else if (e.key === 'ArrowRight') {
+      } else if (e.key === "ArrowRight") {
         step(1);
       }
     }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
     // (#360) `onClose`/`step` are stable for this mount (the whole tree remounts fresh on every openSlideshow() call)
-  }, []);
+  }, [step, onClose]);
 
   if (photos.length === 0) {
     return (
@@ -90,8 +102,8 @@ export function SlideshowView({
 
   const asset = photos[idx]!;
   const navs: Array<[string, number, FC<{ size?: number }>, string]> = [
-    ['prev', -1, ChevronLeftIcon, 'Previous photo'],
-    ['next', 1, ChevronRightIcon, 'Next photo'],
+    ["prev", -1, ChevronLeftIcon, "Previous photo"],
+    ["next", 1, ChevronRightIcon, "Next photo"],
   ];
   return (
     <>
@@ -99,10 +111,10 @@ export function SlideshowView({
           native close listener already gates on `e.target === e.currentTarget`
           (see slideshow.tsx), so a click on either never reached it. */}
       <img
-        key={`${asset.scope_id ?? ''}:${asset.asset_id}`}
+        key={`${asset.scope_id ?? ""}:${asset.asset_id}`}
         className={styles.image}
         src={asset.content_uri ?? undefined}
-        alt={asset.title ?? 'Photo'}
+        alt={asset.title ?? "Photo"}
         /* A slideshow steps through the merged list, so consecutive slides can
            come from different scopes; each names its own (issue #599). */
         data-scope={scopeAttr(asset.scope_id)}
@@ -125,16 +137,20 @@ export function SlideshowView({
         <button
           type="button"
           className="kit-btn"
-          aria-pressed={paused ? 'true' : 'false'}
+          aria-pressed={paused ? "true" : "false"}
           onClick={() => setPaused((p) => !p)}
         >
           {paused ? <PlayIcon size={14} /> : <PauseIcon size={14} />}
-          {paused ? 'Play' : 'Pause'}
+          {paused ? "Play" : "Pause"}
         </button>
         <span className={styles.count}>
           {idx + 1} / {photos.length}
         </span>
-        <button type="button" className="kit-btn slideshow-exit" onClick={onClose}>
+        <button
+          type="button"
+          className="kit-btn slideshow-exit"
+          onClick={onClose}
+        >
           Exit
         </button>
       </div>

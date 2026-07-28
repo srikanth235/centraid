@@ -5,7 +5,7 @@
 // routes here (not to transactions) when its header names a password column;
 // the staged rows' secret fields seal in the draft band immediately.
 
-import { parseCsvRows } from './csv.js';
+import { parseCsvRows } from "./csv.js";
 
 export interface CsvPasswordItem {
   title: string;
@@ -16,12 +16,12 @@ export interface CsvPasswordItem {
   notes: string | null;
 }
 
-const TITLE_ALIASES = ['name', 'title', 'item'];
-const URL_ALIASES = ['url', 'login_uri', 'website', 'uri'];
-const USERNAME_ALIASES = ['username', 'login_username', 'user', 'login'];
-const PASSWORD_ALIASES = ['password', 'login_password', 'pass'];
-const OTP_ALIASES = ['otp', 'totp', 'login_totp', 'otp_seed', 'otpauth'];
-const NOTES_ALIASES = ['notes', 'note', 'comments'];
+const TITLE_ALIASES = ["name", "title", "item"];
+const URL_ALIASES = ["url", "login_uri", "website", "uri"];
+const USERNAME_ALIASES = ["username", "login_username", "user", "login"];
+const PASSWORD_ALIASES = ["password", "login_password", "pass"];
+const OTP_ALIASES = ["otp", "totp", "login_totp", "otp_seed", "otpauth"];
+const NOTES_ALIASES = ["notes", "note", "comments"];
 
 function findColumn(header: string[], aliases: string[]): number {
   const lower = header.map((h) => h.trim().toLowerCase());
@@ -36,7 +36,8 @@ function findColumn(header: string[], aliases: string[]): number {
 export function isPasswordsCsvHeader(header: string[]): boolean {
   return (
     findColumn(header, PASSWORD_ALIASES) >= 0 &&
-    (findColumn(header, USERNAME_ALIASES) >= 0 || findColumn(header, URL_ALIASES) >= 0)
+    (findColumn(header, USERNAME_ALIASES) >= 0 ||
+      findColumn(header, URL_ALIASES) >= 0)
   );
 }
 
@@ -46,9 +47,9 @@ export function isPasswordsCsvHeader(header: string[]): boolean {
  */
 function otpSeedOf(raw: string | null): string | null {
   if (!raw) return null;
-  if (!raw.startsWith('otpauth://')) return raw;
+  if (!raw.startsWith("otpauth://")) return raw;
   try {
-    return new URL(raw).searchParams.get('secret');
+    return new URL(raw).searchParams.get("secret");
   } catch {
     return null;
   }
@@ -59,7 +60,7 @@ export function parsePasswordsCsv(text: string): CsvPasswordItem[] {
   const rows = parseCsvRows(text);
   const header = rows[0];
   if (!header || !isPasswordsCsvHeader(header)) {
-    throw new Error('csv header does not name a password column');
+    throw new Error("csv header does not name a password column");
   }
   const col = {
     title: findColumn(header, TITLE_ALIASES),
@@ -76,7 +77,9 @@ export function parsePasswordsCsv(text: string): CsvPasswordItem[] {
   };
   const hostnameOf = (url: string): string | null => {
     try {
-      return new URL(url.includes('://') ? url : `https://${url}`).hostname || null;
+      return (
+        new URL(url.includes("://") ? url : `https://${url}`).hostname || null
+      );
     } catch {
       return null;
     }

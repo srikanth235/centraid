@@ -20,8 +20,8 @@ import {
   doFetch,
   enc,
   readJson,
-} from './gateway-client-core.js';
-import type { VaultParkedEntry } from './gateway-client-vault.js';
+} from "./gateway-client-core.js";
+import type { VaultParkedEntry } from "./gateway-client-vault.js";
 
 /** The connection an outbox item will drain through. */
 export interface OutboxConnectionRef {
@@ -89,7 +89,7 @@ export interface OutboxScopeTriple {
 /** A manifest asking beyond its last owner consent (issue #308 A3). */
 export interface OutboxScopeRequest {
   requestId: string;
-  plane: 'app' | 'agent';
+  plane: "app" | "agent";
   appId: string;
   purpose: string;
   scopes: OutboxScopeTriple[];
@@ -111,17 +111,27 @@ export interface BlockingSummary {
  * transport error, so callers read `.status` rather than catching.
  */
 export type OutboxOutcome =
-  | { status: 'executed'; invocationId: string; receiptId: string; output: unknown }
-  | { status: 'parked'; invocationId: string; reason: string }
-  | { status: 'denied'; invocationId?: string; receiptId: string; reason: string }
   | {
-      status: 'failed';
+      status: "executed";
+      invocationId: string;
+      receiptId: string;
+      output: unknown;
+    }
+  | { status: "parked"; invocationId: string; reason: string }
+  | {
+      status: "denied";
+      invocationId?: string;
+      receiptId: string;
+      reason: string;
+    }
+  | {
+      status: "failed";
       invocationId: string;
       receiptId: string;
       reason: string;
       predicate?: string;
     }
-  | { status: 'replayed'; invocationId: string; output: unknown };
+  | { status: "replayed"; invocationId: string; output: unknown };
 
 /** The `output` shape of an executed `outbox.decide` / `outbox.stage`. */
 export interface OutboxDecideOutput {
@@ -142,8 +152,8 @@ async function readOutcome(res: Response, op: string): Promise<OutboxOutcome> {
     return JSON.parse(text) as OutboxOutcome;
   } catch {
     throw new GatewayClientError(
-      'gateway_error',
-      `${op} returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200)}`,
+      "gateway_error",
+      `${op} returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200)}`
     );
   }
 }
@@ -151,11 +161,11 @@ async function readOutcome(res: Response, op: string): Promise<OutboxOutcome> {
 /** The unified blocking inbox: outbox + needs-auth + parked + scope requests. */
 export async function getBlocking(): Promise<BlockingSummary> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/blocking', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/blocking", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<BlockingSummary>(res, 'fetch blocking inbox');
+  return readJson<BlockingSummary>(res, "fetch blocking inbox");
 }
 
 export interface ReviewEntry {
@@ -181,29 +191,42 @@ export interface ReviewEntry {
    * drives "Auto-allowed by standing grant" + inline Revoke (issue #552).
    */
   grantId: string | null;
-  context: { kind: 'fill'; origin: string } | null;
+  context: { kind: "fill"; origin: string } | null;
 }
 
 /** Recent low-friction acts and Locker reveals for review after the fact. */
 export async function getReview(limit = 20): Promise<ReviewEntry[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/review?limit=${enc(String(limit))}`, {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  const body = await readJson<{ entries: ReviewEntry[] }>(res, 'fetch review feed');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/review?limit=${enc(String(limit))}`,
+    {
+      method: "GET",
+      headers: authHeaders(token),
+    }
+  );
+  const body = await readJson<{ entries: ReviewEntry[] }>(
+    res,
+    "fetch review feed"
+  );
   return body.entries ?? [];
 }
 
 /** Outbox items, optionally filtered by status (e.g. `['pending']`). */
-export async function listOutboxItems(statuses?: readonly string[]): Promise<OutboxItem[]> {
+export async function listOutboxItems(
+  statuses?: readonly string[]
+): Promise<OutboxItem[]> {
   const { baseUrl, token } = await auth();
-  const qs = statuses && statuses.length > 0 ? `?status=${enc(statuses.join(','))}` : '';
+  const qs =
+    statuses && statuses.length > 0 ? `?status=${enc(statuses.join(","))}` : "";
   const res = await doFetch(baseUrl, `/centraid/_vault/outbox${qs}`, {
-    method: 'GET',
+    method: "GET",
     headers: authHeaders(token),
   });
-  const body = await readJson<{ items: OutboxItem[] }>(res, 'list outbox items');
+  const body = await readJson<{ items: OutboxItem[] }>(
+    res,
+    "list outbox items"
+  );
   return body.items ?? [];
 }
 
@@ -221,55 +244,73 @@ export async function listOutboxItems(statuses?: readonly string[]): Promise<Out
  */
 export async function decideOutboxItem(input: {
   itemId: string;
-  decision: 'approve' | 'discard';
+  decision: "approve" | "discard";
   /** Edit-then-approve (issue #308 A5 UI slice): only valid with `decision: 'approve'`. */
   artifact?: Record<string, unknown>;
   alwaysAllow?: boolean;
   note?: string;
 }): Promise<OutboxOutcome> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/outbox/${enc(input.itemId)}`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({
-      decision: input.decision,
-      ...(input.artifact !== undefined ? { artifact: input.artifact } : {}),
-      ...(input.alwaysAllow !== undefined ? { always_allow: input.alwaysAllow } : {}),
-      ...(input.note !== undefined ? { note: input.note } : {}),
-    }),
-  });
-  return readOutcome(res, 'decide outbox item');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/outbox/${enc(input.itemId)}`,
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({
+        decision: input.decision,
+        ...(input.artifact === undefined ? {} : { artifact: input.artifact }),
+        ...(input.alwaysAllow === undefined
+          ? {}
+          : { always_allow: input.alwaysAllow }),
+        ...(input.note === undefined ? {} : { note: input.note }),
+      }),
+    }
+  );
+  return readOutcome(res, "decide outbox item");
 }
 
 /** Standing `(actor, verb, target)` rules, live-first. */
 export async function listOutboxGrants(): Promise<OutboxGrant[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/outbox-grants', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/outbox-grants", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const body = await readJson<{ grants: OutboxGrant[] }>(res, 'list outbox grants');
+  const body = await readJson<{ grants: OutboxGrant[] }>(
+    res,
+    "list outbox grants"
+  );
   return body.grants ?? [];
 }
 
 /** Revoke a standing grant — any undrained rider it approved reparks (issue #308 A8). */
-export async function revokeOutboxGrant(grantId: string): Promise<OutboxOutcome> {
+export async function revokeOutboxGrant(
+  grantId: string
+): Promise<OutboxOutcome> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/outbox-grants/${enc(grantId)}`, {
-    method: 'DELETE',
-    headers: authHeaders(token),
-  });
-  return readOutcome(res, 'revoke outbox grant');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/outbox-grants/${enc(grantId)}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    }
+  );
+  return readOutcome(res, "revoke outbox grant");
 }
 
 /** Open manifest scope-widening asks (issue #308 A3). */
 export async function listScopeRequests(): Promise<OutboxScopeRequest[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/scope-requests', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/scope-requests", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const body = await readJson<{ requests: OutboxScopeRequest[] }>(res, 'list scope requests');
+  const body = await readJson<{ requests: OutboxScopeRequest[] }>(
+    res,
+    "list scope requests"
+  );
   return body.requests ?? [];
 }
 
@@ -279,10 +320,14 @@ export async function decideScopeRequest(input: {
   approve: boolean;
 }): Promise<{ request: OutboxScopeRequest; approved: boolean }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/scope-requests/${enc(input.requestId)}`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ approve: input.approve }),
-  });
-  return readJson(res, 'decide scope request');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/scope-requests/${enc(input.requestId)}`,
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify({ approve: input.approve }),
+    }
+  );
+  return readJson(res, "decide scope request");
 }

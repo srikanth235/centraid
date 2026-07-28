@@ -31,17 +31,18 @@
 // it back. `core_share_origin` keeps the lineage so a future re-share/re-sync
 // stays possible without one existing now.
 
-import type { DatabaseSync } from 'node:sqlite';
-import { isBlobUri } from '../blob/store.js';
-import { VaultShareError } from '../errors.js';
-import { uuidv7 } from '../ids.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import { isBlobUri } from "../blob/store.js";
+import { VaultShareError } from "../errors.js";
+import { uuidv7 } from "../ids.js";
 
 /** Item kinds that can be placed into an audience vault at v0. */
-export type ShareableItemType = 'core.content_item' | 'media.media_asset';
+export type ShareableItemType = "core.content_item" | "media.media_asset";
 
 const SHAREABLE_ITEM_TYPES: readonly ShareableItemType[] = [
-  'core.content_item',
-  'media.media_asset',
+  "core.content_item",
+  "media.media_asset",
 ];
 
 /** True for a logical entity name this module knows how to project. */
@@ -113,9 +114,14 @@ const MEDIA_ASSET_COLUMNS = `asset_id, content_id, kind, captured_at, tz_offset_
 
 function readContentItem(db: DatabaseSync, contentId: string): ContentItemRow {
   const row = db
-    .prepare(`SELECT ${CONTENT_ITEM_COLUMNS} FROM core_content_item WHERE content_id = ?`)
+    .prepare(
+      `SELECT ${CONTENT_ITEM_COLUMNS} FROM core_content_item WHERE content_id = ?`
+    )
     .get(contentId) as ContentItemRow | undefined;
-  if (!row) throw new VaultShareError(`core.content_item ${contentId} is not in the origin vault`);
+  if (!row)
+    throw new VaultShareError(
+      `core.content_item ${contentId} is not in the origin vault`
+    );
   return row;
 }
 
@@ -123,13 +129,16 @@ function readDerivatives(db: DatabaseSync, contentId: string): DerivativeRow[] {
   return db
     .prepare(
       `SELECT ${DERIVATIVE_COLUMNS} FROM core_content_derivative
-        WHERE content_id = ? ORDER BY variant`,
+        WHERE content_id = ? ORDER BY variant`
     )
     .all(contentId) as unknown as DerivativeRow[];
 }
 
 /** Content addresses a closure needs resident in the audience CAS. */
-function shasOf(contentItem: ContentItemRow, derivatives: DerivativeRow[]): string[] {
+function shasOf(
+  contentItem: ContentItemRow,
+  derivatives: DerivativeRow[]
+): string[] {
   const shas = new Set<string>();
   // An inline body (`data:` uri) is carried in the row itself, so only a
   // blob-backed item rents a CAS entry — the same rule `liveBlobShas` applies.
@@ -145,9 +154,9 @@ function shasOf(contentItem: ContentItemRow, derivatives: DerivativeRow[]): stri
 export function readShareClosure(
   origin: DatabaseSync,
   itemType: ShareableItemType,
-  itemId: string,
+  itemId: string
 ): ShareClosure {
-  if (itemType === 'core.content_item') {
+  if (itemType === "core.content_item") {
     const contentItem = readContentItem(origin, itemId);
     const derivatives = readDerivatives(origin, contentItem.content_id);
     return {
@@ -160,9 +169,14 @@ export function readShareClosure(
     };
   }
   const asset = origin
-    .prepare(`SELECT ${MEDIA_ASSET_COLUMNS} FROM media_media_asset WHERE asset_id = ?`)
+    .prepare(
+      `SELECT ${MEDIA_ASSET_COLUMNS} FROM media_media_asset WHERE asset_id = ?`
+    )
     .get(itemId) as MediaAssetRow | undefined;
-  if (!asset) throw new VaultShareError(`media.media_asset ${itemId} is not in the origin vault`);
+  if (!asset)
+    throw new VaultShareError(
+      `media.media_asset ${itemId} is not in the origin vault`
+    );
   const contentItem = readContentItem(origin, asset.content_id);
   const derivatives = readDerivatives(origin, contentItem.content_id);
   return {
@@ -181,7 +195,12 @@ export function readShareClosure(
  * the audience already holds a different row under that id — where a fresh id
  * is minted rather than corrupting either row.
  */
-function freeId(db: DatabaseSync, table: string, column: string, preferred: string): string {
+function freeId(
+  db: DatabaseSync,
+  table: string,
+  column: string,
+  preferred: string
+): string {
   const taken = db
     .prepare(`SELECT 1 AS present FROM "${table}" WHERE "${column}" = ?`)
     .get(preferred);
@@ -196,20 +215,28 @@ export interface ProjectionResult {
   deduped: boolean;
 }
 
-function projectContentItem(audience: DatabaseSync, row: ContentItemRow): string {
+function projectContentItem(
+  audience: DatabaseSync,
+  row: ContentItemRow
+): string {
   // `core_content_item.sha256` is UNIQUE, so re-sharing the same bytes — even
   // by a different member — dedupes onto the existing row by construction.
   const existing = audience
-    .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?')
+    .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
     .get(row.sha256) as { content_id: string } | undefined;
   if (existing) return existing.content_id;
-  const contentId = freeId(audience, 'core_content_item', 'content_id', row.content_id);
+  const contentId = freeId(
+    audience,
+    "core_content_item",
+    "content_id",
+    row.content_id
+  );
   audience
     .prepare(
       `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, title, language,
           creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)`
     )
     .run(
       contentId,
@@ -221,7 +248,7 @@ function projectContentItem(audience: DatabaseSync, row: ContentItemRow): string
       row.language,
       row.deleted_at,
       row.purge_at,
-      row.created_at,
+      row.created_at
     );
   return contentId;
 }
@@ -229,28 +256,33 @@ function projectContentItem(audience: DatabaseSync, row: ContentItemRow): string
 function projectDerivatives(
   audience: DatabaseSync,
   contentId: string,
-  rows: DerivativeRow[],
+  rows: DerivativeRow[]
 ): void {
   const held = audience.prepare(
-    'SELECT 1 AS present FROM core_content_derivative WHERE content_id = ? AND variant = ?',
+    "SELECT 1 AS present FROM core_content_derivative WHERE content_id = ? AND variant = ?"
   );
   const insert = audience.prepare(
     `INSERT INTO core_content_derivative
        (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
   for (const row of rows) {
     // `UNIQUE (content_id, variant)` is the slot — one thumb per content item.
     if (held.get(contentId, row.variant)) continue;
     insert.run(
-      freeId(audience, 'core_content_derivative', 'derivative_id', row.derivative_id),
+      freeId(
+        audience,
+        "core_content_derivative",
+        "derivative_id",
+        row.derivative_id
+      ),
       contentId,
       row.variant,
       row.sha256,
       row.media_type,
       row.byte_size,
       row.text_content,
-      row.created_at,
+      row.created_at
     );
   }
 }
@@ -258,22 +290,27 @@ function projectDerivatives(
 function projectMediaAsset(
   audience: DatabaseSync,
   contentId: string,
-  row: MediaAssetRow,
+  row: MediaAssetRow
 ): ProjectionResult {
   // `media_media_asset.content_id` is UNIQUE: one asset per content item, so
   // the dedup falls out of the schema exactly like the content item's sha.
   const existing = audience
-    .prepare('SELECT asset_id FROM media_media_asset WHERE content_id = ?')
+    .prepare("SELECT asset_id FROM media_media_asset WHERE content_id = ?")
     .get(contentId) as { asset_id: string } | undefined;
   if (existing) return { itemId: existing.asset_id, deduped: true };
-  const assetId = freeId(audience, 'media_media_asset', 'asset_id', row.asset_id);
+  const assetId = freeId(
+    audience,
+    "media_media_asset",
+    "asset_id",
+    row.asset_id
+  );
   audience
     .prepare(
       `INSERT INTO media_media_asset
          (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id,
           place_id, camera_device_id, width, height, duration_s, exif_json,
           favorite, archived_at, deleted_at, purge_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       assetId,
@@ -289,7 +326,7 @@ function projectMediaAsset(
       row.favorite,
       row.archived_at,
       row.deleted_at,
-      row.purge_at,
+      row.purge_at
     );
   return { itemId: assetId, deduped: false };
 }
@@ -301,10 +338,10 @@ function projectMediaAsset(
  */
 export function projectShareClosure(
   audience: DatabaseSync,
-  closure: ShareClosure,
+  closure: ShareClosure
 ): ProjectionResult {
   const heldContent = audience
-    .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?')
+    .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
     .get(closure.contentItem.sha256) as { content_id: string } | undefined;
   const contentId = projectContentItem(audience, closure.contentItem);
   projectDerivatives(audience, contentId, closure.derivatives);

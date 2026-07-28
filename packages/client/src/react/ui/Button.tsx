@@ -1,11 +1,13 @@
-import type { JSX, MouseEvent, ReactNode } from 'react';
-import { cx } from './cx.js';
-import type { IconName } from '@centraid/design-tokens';
-import Icon from './Icon.js';
-import styles from './Button.module.css';
+import type { IconName } from "@centraid/design-tokens";
+import type { JSX, MouseEvent, ReactNode } from "react";
 
-export type ButtonVariant = 'solid' | 'primary' | 'soft' | 'ghost';
-export type ButtonSize = 'md' | 'sm' | 'chrome';
+import { cx } from "./cx.js";
+import Icon from "./Icon.js";
+
+import styles from "./Button.module.css";
+
+export type ButtonVariant = "solid" | "primary" | "soft" | "ghost";
+export type ButtonSize = "md" | "sm" | "chrome";
 
 export interface ButtonProps {
   label?: string;
@@ -43,8 +45,8 @@ export default function Button({
   label,
   children,
   onClick,
-  variant = 'primary',
-  size = 'md',
+  variant = "primary",
+  size = "md",
   icon,
   disabled,
   className,
@@ -55,17 +57,23 @@ export default function Button({
     <button
       type="button"
       className={cx(
-        size === 'chrome' ? styles.chrome : styles.btn,
-        size === 'sm' && styles.sm,
+        size === "chrome" ? styles.chrome : styles.btn,
+        size === "sm" && styles.sm,
         VARIANT_CLASS[variant],
-        className,
+        className
       )}
       disabled={disabled}
       title={title}
       aria-label={ariaLabel}
       onClick={disabled ? undefined : onClick}
     >
-      {icon ? <Icon name={icon} size={14} strokeWidth={variant === 'primary' ? 2 : 1.75} /> : null}
+      {icon ? (
+        <Icon
+          name={icon}
+          size={14}
+          strokeWidth={variant === "primary" ? 2 : 1.75}
+        />
+      ) : null}
       {children ?? label}
     </button>
   );
@@ -90,7 +98,11 @@ export function IconButton(props: {
       disabled={props.disabled}
       onClick={props.onClick}
     >
-      {props.icon ? <Icon name={props.icon} size={16} strokeWidth={1.7} /> : props.children}
+      {props.icon ? (
+        <Icon name={props.icon} size={16} strokeWidth={1.7} />
+      ) : (
+        props.children
+      )}
     </button>
   );
 }

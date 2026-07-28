@@ -38,7 +38,7 @@ import {
   EXPECTED_SCHEMA_EPOCH,
   GATEWAY_MIN_PROTOCOL_VERSION,
   protocolsCompatible,
-} from './version-handshake.js';
+} from "./version-handshake.js";
 
 /** Result of one heartbeat probe (`/centraid/_gateway/health`, or `/info` on a fallback). */
 export interface GatewayProbe {
@@ -59,7 +59,7 @@ export interface GatewayProbe {
    * when the probe fell back to `/info` (older gateway, pre-#347/#351) —
    * that gateway simply never reports component health.
    */
-  healthStatus?: 'ok' | 'degraded' | 'error';
+  healthStatus?: "ok" | "degraded" | "error";
   /** Non-'ok' components from the health snapshot, when `healthStatus` is set. */
   componentIssues?: GatewayComponentIssue[];
 }
@@ -67,7 +67,7 @@ export interface GatewayProbe {
 /** One subsystem sitting at `degraded` or `error` in the health snapshot. */
 export interface GatewayComponentIssue {
   component: string;
-  status: 'degraded' | 'error';
+  status: "degraded" | "error";
   message?: string;
 }
 
@@ -129,10 +129,10 @@ export interface GatewayRuntimeState {
   /** Which gateway this history belongs to — a switch resets tracking. */
   gatewayId: string;
   gatewayLabel: string;
-  gatewayKind: 'local' | 'remote';
+  gatewayKind: "local" | "remote";
   /** When this state was created (app launch or gateway switch). */
   trackingSince: number;
-  status: 'unknown' | 'up' | 'down';
+  status: "unknown" | "up" | "down";
   /** When the current status began (first probe that established it). */
   statusSince?: number;
   lastCheckAt?: number;
@@ -157,7 +157,7 @@ export interface GatewayRuntimeState {
    * at its last value while the gateway is unreachable or when a probe
    * fell back to `/info` (same "last-known" posture as `version`).
    */
-  healthStatus?: 'ok' | 'degraded' | 'error';
+  healthStatus?: "ok" | "degraded" | "error";
   /** Non-'ok' components from the most recent `/health` snapshot. */
   componentIssues?: GatewayComponentIssue[];
   /** True when recent probe latency has sustained above {@link DEGRADED_LATENCY_MS}. */
@@ -182,8 +182,8 @@ export interface GatewayAlertConfig {
 }
 
 export type GatewayAlertAction =
-  | { kind: 'down'; downForMs: number }
-  | { kind: 'recovered'; outageMs: number };
+  | { kind: "down"; downForMs: number }
+  | { kind: "recovered"; outageMs: number };
 
 /** Sane default: alert after the gateway has been down for 2 minutes. */
 export const DEFAULT_ALERT_SECONDS = 120;
@@ -214,20 +214,23 @@ export const COMPONENT_ALERT_CAP = 50;
 /** Clamp a raw settings value into the valid alert-threshold range.
  *  Returns `undefined` for non-numeric garbage (field is then dropped). */
 export function clampAlertSeconds(raw: unknown): number | undefined {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return undefined;
-  return Math.min(MAX_ALERT_SECONDS, Math.max(MIN_ALERT_SECONDS, Math.round(raw)));
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
+  return Math.min(
+    MAX_ALERT_SECONDS,
+    Math.max(MIN_ALERT_SECONDS, Math.round(raw))
+  );
 }
 
 export function initialRuntimeState(
-  gateway: { id: string; label: string; kind: 'local' | 'remote' },
-  now: number,
+  gateway: { id: string; label: string; kind: "local" | "remote" },
+  now: number
 ): GatewayRuntimeState {
   return {
     gatewayId: gateway.id,
     gatewayLabel: gateway.label,
     gatewayKind: gateway.kind,
     trackingSince: now,
-    status: 'unknown',
+    status: "unknown",
     checksTotal: 0,
     checksFailed: 0,
     samples: [],
@@ -241,16 +244,22 @@ export function initialRuntimeState(
 function sustainedHighLatency(samples: GatewaySample[]): boolean {
   if (samples.length < SUSTAINED_LATENCY_SAMPLE_COUNT) return false;
   const tail = samples.slice(-SUSTAINED_LATENCY_SAMPLE_COUNT);
-  return tail.every((s) => s.ok && s.latencyMs !== undefined && s.latencyMs > DEGRADED_LATENCY_MS);
+  return tail.every(
+    (s) =>
+      s.ok && s.latencyMs !== undefined && s.latencyMs > DEGRADED_LATENCY_MS
+  );
 }
 
 /** Fold one probe result into the runtime state. Pure — returns a new state. */
-export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): GatewayRuntimeState {
-  const nextStatus = probe.ok ? 'up' : 'down';
+export function applyProbe(
+  state: GatewayRuntimeState,
+  probe: GatewayProbe
+): GatewayRuntimeState {
+  const nextStatus = probe.ok ? "up" : "down";
   const transitioned = state.status !== nextStatus;
 
   let outages = state.outages;
-  if (probe.ok && transitioned && state.status === 'down') {
+  if (probe.ok && transitioned && state.status === "down") {
     // Close the open outage. (An open outage always exists after a down
     // transition; slice defensively anyway.)
     const last = outages[outages.length - 1];
@@ -267,7 +276,7 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
     {
       at: probe.at,
       ok: probe.ok,
-      ...(probe.latencyMs !== undefined ? { latencyMs: probe.latencyMs } : {}),
+      ...(probe.latencyMs === undefined ? {} : { latencyMs: probe.latencyMs }),
     },
   ].slice(-SAMPLE_CAP);
   const latencyDegraded = sustainedHighLatency(samples);
@@ -277,10 +286,11 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
   // A probe that never reached `/health` (fell back to `/info`) carries no
   // opinion — keep the last-known value, same as `version`.
   const healthStatus = probe.ok
-    ? probe.healthStatus === 'error'
-      ? 'error'
-      : probe.healthStatus === 'degraded' || (probe.healthStatus === 'ok' && latencyDegraded)
-        ? 'degraded'
+    ? probe.healthStatus === "error"
+      ? "error"
+      : probe.healthStatus === "degraded" ||
+          (probe.healthStatus === "ok" && latencyDegraded)
+        ? "degraded"
         : (probe.healthStatus ?? state.healthStatus)
     : state.healthStatus;
 
@@ -294,7 +304,7 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
     samples,
     outages,
     latencyDegraded,
-    ...(healthStatus !== undefined ? { healthStatus } : {}),
+    ...(healthStatus === undefined ? {} : { healthStatus }),
     ...(probe.ok && probe.componentIssues !== undefined
       ? { componentIssues: probe.componentIssues }
       : {}),
@@ -302,20 +312,24 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
     // failures (the page still shows the last-known version while down).
     ...(probe.ok
       ? {
-          ...(probe.latencyMs !== undefined ? { latencyMs: probe.latencyMs } : {}),
-          ...(probe.gatewayStartedAt !== undefined
-            ? { gatewayStartedAt: probe.gatewayStartedAt }
-            : {}),
-          ...(probe.gatewayUptimeMs !== undefined
-            ? { gatewayUptimeMs: probe.gatewayUptimeMs }
-            : {}),
-          ...(probe.version !== undefined ? { version: probe.version } : {}),
-          ...(probe.schemaEpoch !== undefined ? { schemaEpoch: probe.schemaEpoch } : {}),
+          ...(probe.latencyMs === undefined
+            ? {}
+            : { latencyMs: probe.latencyMs }),
+          ...(probe.gatewayStartedAt === undefined
+            ? {}
+            : { gatewayStartedAt: probe.gatewayStartedAt }),
+          ...(probe.gatewayUptimeMs === undefined
+            ? {}
+            : { gatewayUptimeMs: probe.gatewayUptimeMs }),
+          ...(probe.version === undefined ? {} : { version: probe.version }),
+          ...(probe.schemaEpoch === undefined
+            ? {}
+            : { schemaEpoch: probe.schemaEpoch }),
           // Version handshake (wave 2 of #351) — REMOTE gateways only; a
           // local gateway is embedded in this same build and can never
           // skew. `/info`-fallback probes (no version/schemaEpoch) leave
           // the last-known verdict in place, same as `version` above.
-          ...(state.gatewayKind === 'remote' &&
+          ...(state.gatewayKind === "remote" &&
           probe.version !== undefined &&
           probe.schemaEpoch !== undefined
             ? {
@@ -336,9 +350,9 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
               }
             : {}),
         }
-      : probe.detail !== undefined
-        ? { lastError: probe.detail }
-        : {}),
+      : probe.detail === undefined
+        ? {}
+        : { lastError: probe.detail }),
   };
 }
 
@@ -351,12 +365,12 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
 export function evaluateAlert(
   state: GatewayRuntimeState,
   config: GatewayAlertConfig,
-  now: number,
+  now: number
 ): { state: GatewayRuntimeState; action?: GatewayAlertAction } {
   const last = state.outages[state.outages.length - 1];
   if (!last) return { state };
 
-  if (state.status === 'down' && last.endedAt === undefined) {
+  if (state.status === "down" && last.endedAt === undefined) {
     if (!config.enabled || last.alertedAt !== undefined) return { state };
     const downForMs = now - last.startedAt;
     if (downForMs < config.thresholdSeconds * 1000) return { state };
@@ -365,12 +379,12 @@ export function evaluateAlert(
         ...state,
         outages: [...state.outages.slice(0, -1), { ...last, alertedAt: now }],
       },
-      action: { kind: 'down', downForMs },
+      action: { kind: "down", downForMs },
     };
   }
 
   if (
-    state.status === 'up' &&
+    state.status === "up" &&
     last.endedAt !== undefined &&
     last.alertedAt !== undefined &&
     last.recoveredNoticeAt === undefined
@@ -378,9 +392,12 @@ export function evaluateAlert(
     return {
       state: {
         ...state,
-        outages: [...state.outages.slice(0, -1), { ...last, recoveredNoticeAt: now }],
+        outages: [
+          ...state.outages.slice(0, -1),
+          { ...last, recoveredNoticeAt: now },
+        ],
       },
-      action: { kind: 'recovered', outageMs: last.endedAt - last.startedAt },
+      action: { kind: "recovered", outageMs: last.endedAt - last.startedAt },
     };
   }
 
@@ -400,12 +417,12 @@ export function evaluateAlert(
 export function applyComponentAlerts(
   state: GatewayRuntimeState,
   now: number,
-  config: GatewayAlertConfig,
+  config: GatewayAlertConfig
 ): { state: GatewayRuntimeState; actions: GatewayComponentAlertAction[] } {
   const erroring = new Map(
     (state.componentIssues ?? [])
-      .filter((c) => c.status === 'error')
-      .map((c) => [c.component, c] as const),
+      .filter((c) => c.status === "error")
+      .map((c) => [c.component, c] as const)
   );
 
   const actions: GatewayComponentAlertAction[] = [];
@@ -431,7 +448,7 @@ export function applyComponentAlerts(
     nextRecords.push({
       ...rec,
       ...(issue.message ? { message: issue.message } : {}),
-      ...(alertedAt !== undefined ? { alertedAt } : {}),
+      ...(alertedAt === undefined ? {} : { alertedAt }),
     });
   }
   // Components that started erroring this tick get a fresh record.
@@ -444,7 +461,10 @@ export function applyComponentAlerts(
   }
 
   return {
-    state: { ...state, componentAlerts: nextRecords.slice(-COMPONENT_ALERT_CAP) },
+    state: {
+      ...state,
+      componentAlerts: nextRecords.slice(-COMPONENT_ALERT_CAP),
+    },
     actions,
   };
 }
@@ -462,7 +482,7 @@ export function applyComponentAlerts(
 export function applyVersionSkewAlert(
   state: GatewayRuntimeState,
   config: GatewayAlertConfig,
-  now: number,
+  now: number
 ): { state: GatewayRuntimeState; action?: GatewayVersionSkewAction } {
   const skew = state.versionSkew;
   if (!skew?.skewed) {
@@ -470,10 +490,14 @@ export function applyVersionSkewAlert(
     const { versionSkewAlertedAt: _cleared, ...rest } = state;
     return { state: rest as GatewayRuntimeState };
   }
-  if (!config.enabled || state.versionSkewAlertedAt !== undefined) return { state };
+  if (!config.enabled || state.versionSkewAlertedAt !== undefined)
+    return { state };
   return {
     state: { ...state, versionSkewAlertedAt: now },
-    action: { gatewayVersion: skew.gatewayVersion, gatewaySchemaEpoch: skew.gatewaySchemaEpoch },
+    action: {
+      gatewayVersion: skew.gatewayVersion,
+      gatewaySchemaEpoch: skew.gatewaySchemaEpoch,
+    },
   };
 }
 
@@ -482,8 +506,8 @@ export function formatDurationMs(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return `${s}s`;
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
+  if (m < 60) return `${m}m ${String(s % 60).padStart(2, "0")}s`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ${String(m % 60).padStart(2, '0')}m`;
+  if (h < 24) return `${h}h ${String(m % 60).padStart(2, "0")}m`;
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }

@@ -14,19 +14,21 @@
 // local code; the worker is crash + timeout isolation), with `ctx.vault`
 // bound to the demo bridge — read/search/invoke/describe only.
 
-import { existsSync, readdirSync } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import path from 'node:path';
-import { runHandler } from '@centraid/app-engine';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import { sendJson } from './route-helpers.js';
+import { existsSync, readdirSync } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
 
-const PREFIX = '/centraid/_vault/demo';
+import { runHandler } from "@centraid/app-engine";
+
+import type { RouteHandler } from "../serve/build-gateway.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
+import { sendJson } from "./route-helpers.js";
+
+const PREFIX = "/centraid/_vault/demo";
 
 export interface DemoRouteDeps {
   /** Live code root (`<main worktree>/apps`) of the ACTIVE vault's store. */
-  codeAppsDir(): string;
+  codeAppsDir: () => string;
 }
 
 /** Apps whose live code ships a seed.js scenario generator. */
@@ -39,42 +41,59 @@ function seedableApps(codeAppsDir: string): Set<string> {
     return seedable;
   }
   for (const entry of entries) {
-    if (existsSync(path.join(codeAppsDir, entry, 'seed.js'))) seedable.add(entry);
+    if (existsSync(path.join(codeAppsDir, entry, "seed.js")))
+      seedable.add(entry);
   }
   return seedable;
 }
 
-export function makeDemoRouteHandler(vaults: VaultRegistry, deps: DemoRouteDeps): RouteHandler {
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
-    if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
-    const rest = url.pathname.slice(PREFIX.length).replace(/^\//, '');
-    const appId = rest === '' ? null : decodeURIComponent(rest);
-    const method = req.method ?? 'GET';
+export function makeDemoRouteHandler(
+  vaults: VaultRegistry,
+  deps: DemoRouteDeps
+): RouteHandler {
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
+    const url = new URL(req.url ?? "/", "http://gateway.local");
+    if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`))
+      return false;
+    const rest = url.pathname.slice(PREFIX.length).replace(/^\//u, "");
+    const appId = rest === "" ? null : decodeURIComponent(rest);
+    const method = req.method ?? "GET";
     const plane = vaults.current();
 
-    if (method === 'GET' && appId === null) {
-      const rowsByApp = new Map(plane.demoStatus().map((s) => [s.appId, s.rows]));
+    if (method === "GET" && appId === null) {
+      const rowsByApp = new Map(
+        plane.demoStatus().map((s) => [s.appId, s.rows])
+      );
       const seedable = seedableApps(deps.codeAppsDir());
-      const apps = [...new Set([...rowsByApp.keys(), ...seedable])].sort().map((id) => ({
-        appId: id,
-        rows: rowsByApp.get(id) ?? 0,
-        seedable: seedable.has(id),
-      }));
+      const apps = [...new Set([...rowsByApp.keys(), ...seedable])]
+        .sort()
+        .map((id) => ({
+          appId: id,
+          rows: rowsByApp.get(id) ?? 0,
+          seedable: seedable.has(id),
+        }));
       sendJson(res, 200, { apps });
       return true;
     }
 
-    if (method === 'POST' && appId !== null) {
-      const seedFile = path.join(deps.codeAppsDir(), appId, 'seed.js');
+    if (method === "POST" && appId !== null) {
+      const seedFile = path.join(deps.codeAppsDir(), appId, "seed.js");
       if (!existsSync(seedFile)) {
-        sendJson(res, 404, { error: `app "${appId}" ships no seed.js scenario` });
+        sendJson(res, 404, {
+          error: `app "${appId}" ships no seed.js scenario`,
+        });
         return true;
       }
       const outcome = await runHandler({
-        app: { id: appId, dir: path.join(vaults.currentWorkspace().appsDir, appId) },
+        app: {
+          id: appId,
+          dir: path.join(vaults.currentWorkspace().appsDir, appId),
+        },
         handlerFile: seedFile,
-        handlerKind: 'action',
+        handlerKind: "action",
         // Deterministic-by-default: generators derive their randomness from
         // `input.seed` and their dates from `input.now`, so the same load
         // reproduces the same scenario (test fixtures ride this too).
@@ -83,15 +102,22 @@ export function makeDemoRouteHandler(vaults: VaultRegistry, deps: DemoRouteDeps)
         vault: vaults.demoBridgeFor(appId),
       });
       if (!outcome.ok) {
-        sendJson(res, 500, { error: outcome.error ?? 'seed generator failed', logs: outcome.logs });
+        sendJson(res, 500, {
+          error: outcome.error ?? "seed generator failed",
+          logs: outcome.logs,
+        });
         return true;
       }
       const status = plane.demoStatus().find((s) => s.appId === appId);
-      sendJson(res, 200, { ok: true, result: outcome.value ?? null, rows: status?.rows ?? 0 });
+      sendJson(res, 200, {
+        ok: true,
+        result: outcome.value ?? null,
+        rows: status?.rows ?? 0,
+      });
       return true;
     }
 
-    if (method === 'DELETE') {
+    if (method === "DELETE") {
       const result = plane.purgeDemo(appId ?? undefined);
       sendJson(res, 200, result);
       return true;

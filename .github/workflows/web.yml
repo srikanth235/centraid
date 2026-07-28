@@ -19,12 +19,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'apps/web/**'
-      - 'packages/client/**'
-      - 'packages/design-tokens/**'
-      - '.github/workflows/web.yml'
-      - 'package.json'
-      - 'bun.lock'
+      - "apps/web/**"
+      - "packages/client/**"
+      - "packages/design-tokens/**"
+      - ".github/workflows/web.yml"
+      - "package.json"
+      - "bun.lock"
 
 permissions:
   contents: read

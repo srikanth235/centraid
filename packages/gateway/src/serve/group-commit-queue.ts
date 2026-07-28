@@ -1,4 +1,6 @@
-export type GroupCommitResult = { ok: true; value: unknown } | { ok: false; error: unknown };
+export type GroupCommitResult =
+  | { ok: true; value: unknown }
+  | { ok: false; error: unknown };
 
 /**
  * A short write coalescer for the constrained gateway profile.
@@ -19,7 +21,9 @@ export class GroupCommitQueue {
 
   constructor(
     private readonly windowMs = 8,
-    private readonly runBatch?: (runs: readonly (() => unknown)[]) => readonly GroupCommitResult[],
+    private readonly runBatch?: (
+      runs: readonly (() => unknown)[]
+    ) => readonly GroupCommitResult[]
   ) {}
 
   enqueue<T>(run: () => T): Promise<T> {
@@ -45,7 +49,7 @@ export class GroupCommitQueue {
       try {
         const results = this.runBatch(batch.map((task) => task.run));
         if (results.length !== batch.length)
-          throw new Error('group commit returned wrong result count');
+          throw new Error("group commit returned wrong result count");
         for (let index = 0; index < batch.length; index += 1) {
           const result = results[index]!;
           if (result.ok) batch[index]!.resolve(result.value);

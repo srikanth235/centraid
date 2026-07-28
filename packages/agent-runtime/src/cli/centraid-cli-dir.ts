@@ -4,9 +4,6 @@
  * agent's shell tool can invoke `centraid preview snapshot` by bare name.
  */
 
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 export function defaultCentraidCliDir(): string {
-  return path.dirname(fileURLToPath(import.meta.url));
+  return import.meta.dirname;
 }

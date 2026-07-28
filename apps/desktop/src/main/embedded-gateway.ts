@@ -4,8 +4,8 @@ import {
   serve,
   type GatewayPaths,
   type GatewayServeHandle,
-} from '@centraid/gateway';
-import type { KeyStore } from '@centraid/vault';
+} from "@centraid/gateway";
+import type { KeyStore } from "@centraid/vault";
 
 export interface DesktopEmbeddedGatewayOptions {
   dataDir: string;
@@ -23,7 +23,7 @@ export interface DesktopEmbeddedGatewayOptions {
  * options here lets layout parity exercise the exact path the desktop uses.
  */
 export async function startDesktopEmbeddedGateway(
-  options: DesktopEmbeddedGatewayOptions,
+  options: DesktopEmbeddedGatewayOptions
 ): Promise<GatewayServeHandle> {
   return serve({
     assistOAuth: assistOAuthFromEnvironment(process.env),
@@ -31,7 +31,9 @@ export async function startDesktopEmbeddedGateway(
     paths: {
       ...options.paths,
       dataDir: options.dataDir,
-      ...(options.remoteTemplatesUrl ? { remoteTemplatesUrl: options.remoteTemplatesUrl } : {}),
+      ...(options.remoteTemplatesUrl
+        ? { remoteTemplatesUrl: options.remoteTemplatesUrl }
+        : {}),
     },
     keyStore: options.keyStore,
     token: options.token,

@@ -1,7 +1,8 @@
-import { iconSvg } from './iconSvg.js';
-import { openMenu, type CtxItem } from './contextMenu.js';
-import type { GatewayRow } from './gatewayRegistry.js';
-import styles from './gatewaySwitcher.module.css';
+import { openMenu, type CtxItem } from "./contextMenu.js";
+import type { GatewayRow } from "./gatewayRegistry.js";
+import { iconSvg } from "./iconSvg.js";
+
+import styles from "./gatewaySwitcher.module.css";
 
 // Gateway switcher popover (issue #599, Decision 14) — what survives of the
 // grouped (gateway, space) switcher. Spaces are no longer picked here: the
@@ -46,7 +47,7 @@ export function isGatewaySwitcherOpen(): boolean {
 
 export function closeGatewaySwitcher(): void {
   if (keyHandler) {
-    document.removeEventListener('keydown', keyHandler, true);
+    document.removeEventListener("keydown", keyHandler, true);
     keyHandler = null;
   }
   backdropEl?.remove();
@@ -62,95 +63,100 @@ export function closeGatewaySwitcher(): void {
 
 function subtitleFor(row: GatewayRow): string {
   switch (row.status) {
-    case 'loading':
-      return 'Checking…';
-    case 'auth_failed':
-      return 'Sign-in required';
-    case 'bad_response':
-      return 'Unexpected response';
-    case 'unreachable':
-      return 'Offline';
+    case "loading":
+      return "Checking…";
+    case "auth_failed":
+      return "Sign-in required";
+    case "bad_response":
+      return "Unexpected response";
+    case "unreachable":
+      return "Offline";
     default:
       return row.spaceCount === undefined
-        ? 'Connected'
-        : `${row.spaceCount} ${row.spaceCount === 1 ? 'space' : 'spaces'}`;
+        ? "Connected"
+        : `${row.spaceCount} ${row.spaceCount === 1 ? "space" : "spaces"}`;
   }
 }
 
-function railStatus(row: GatewayRow): 'ready' | 'loading' | 'error' {
-  if (row.status === 'ready') return 'ready';
-  if (row.status === 'loading') return 'loading';
-  return 'error';
+function railStatus(row: GatewayRow): "ready" | "loading" | "error" {
+  if (row.status === "ready") return "ready";
+  if (row.status === "loading") return "loading";
+  return "error";
 }
 
 function buildRow(row: GatewayRow, o: GatewaySwitcherOpts): HTMLElement {
-  const el = document.createElement('button');
-  el.type = 'button';
-  el.className = styles.row ?? '';
-  el.setAttribute('role', 'menuitem');
+  const el = document.createElement("button");
+  el.type = "button";
+  el.className = styles.row ?? "";
+  el.setAttribute("role", "menuitem");
   el.dataset.active = String(row.isActive);
   el.dataset.gatewayId = row.gatewayId;
 
-  const rail = document.createElement('span');
-  rail.className = styles.rail ?? '';
+  const rail = document.createElement("span");
+  rail.className = styles.rail ?? "";
   rail.dataset.status = railStatus(row);
   el.append(rail);
 
-  const text = document.createElement('span');
-  text.className = styles.text ?? '';
-  const nameEl = document.createElement('span');
-  nameEl.className = styles.name ?? '';
-  const labelEl = document.createElement('span');
+  const text = document.createElement("span");
+  text.className = styles.text ?? "";
+  const nameEl = document.createElement("span");
+  nameEl.className = styles.name ?? "";
+  const labelEl = document.createElement("span");
   labelEl.textContent = row.gatewayLabel;
   nameEl.append(labelEl);
-  const badge = document.createElement('span');
-  badge.className = styles.badge ?? '';
+  const badge = document.createElement("span");
+  badge.className = styles.badge ?? "";
   badge.textContent = row.transportBadge;
   nameEl.append(badge);
   text.append(nameEl);
-  const sub = document.createElement('span');
-  sub.className = styles.sub ?? '';
+  const sub = document.createElement("span");
+  sub.className = styles.sub ?? "";
   sub.textContent = subtitleFor(row);
   text.append(sub);
   el.append(text);
 
-  const more = document.createElement('span');
-  more.className = styles.more ?? '';
-  more.setAttribute('role', 'button');
+  const more = document.createElement("span");
+  more.className = styles.more ?? "";
+  more.setAttribute("role", "button");
   more.tabIndex = 0;
-  more.title = 'More';
-  more.setAttribute('aria-label', `More actions for ${row.gatewayLabel}`);
-  more.innerHTML = iconSvg('MoreHoriz', 13, 2);
+  more.title = "More";
+  more.setAttribute("aria-label", `More actions for ${row.gatewayLabel}`);
+  more.innerHTML = iconSvg("MoreHoriz", 13, 2);
   const openMore = (e: Event): void => {
     e.stopPropagation();
     e.preventDefault();
     const rect = more.getBoundingClientRect();
-    const items: Array<CtxItem | 'sep'> = [
-      { icon: 'Wifi', id: 'test', label: 'Test connection…' },
-      { icon: 'Pencil', id: 'rename', label: 'Rename…' },
+    const items: Array<CtxItem | "sep"> = [
+      { icon: "Wifi", id: "test", label: "Test connection…" },
+      { icon: "Pencil", id: "rename", label: "Rename…" },
     ];
     if (row.canRemove) {
-      items.push('sep', { danger: true, icon: 'Trash', id: 'remove', label: 'Remove' });
+      items.push("sep", {
+        danger: true,
+        icon: "Trash",
+        id: "remove",
+        label: "Remove",
+      });
     }
     // Close this popover FIRST: its scrim sits at z-index 1100 and the context
     // menu at 70/71, so leaving it open would swallow every click (found live
     // on the switcher this replaces, issue #382). `rect` is already captured.
     closeGatewaySwitcher();
-    openMenu(items, { kind: 'rect', rect }, (id) => {
-      if (id === 'test') o.onTestConnection(row.gatewayId);
-      else if (id === 'rename') o.onRenameGateway(row.gatewayId);
-      else if (id === 'remove') o.onRemoveGateway(row.gatewayId);
+    openMenu(items, { kind: "rect", rect }, (id) => {
+      if (id === "test") o.onTestConnection(row.gatewayId);
+      else if (id === "rename") o.onRenameGateway(row.gatewayId);
+      else if (id === "remove") o.onRemoveGateway(row.gatewayId);
     });
   };
-  more.addEventListener('click', openMore);
+  more.addEventListener("click", openMore);
   el.append(more);
 
-  const check = document.createElement('span');
-  check.className = styles.check ?? '';
-  if (row.isActive) check.innerHTML = iconSvg('Check', 13, 2.2);
+  const check = document.createElement("span");
+  check.className = styles.check ?? "";
+  if (row.isActive) check.innerHTML = iconSvg("Check", 13, 2.2);
   el.append(check);
 
-  el.addEventListener('click', () => {
+  el.addEventListener("click", () => {
     closeGatewaySwitcher();
     if (!row.isActive) o.onSelectGateway(row.gatewayId);
   });
@@ -159,7 +165,7 @@ function buildRow(row: GatewayRow, o: GatewaySwitcherOpts): HTMLElement {
 
 function renderRows(): void {
   if (!listEl || !opts) return;
-  listEl.innerHTML = '';
+  listEl.innerHTML = "";
   for (const row of opts.rows) listEl.append(buildRow(row, opts));
 }
 
@@ -178,33 +184,37 @@ export function openGatewaySwitcher(o: GatewaySwitcherOpts): void {
   opts = o;
   closeCb = o.onClose ?? null;
 
-  backdropEl = document.createElement('div');
-  backdropEl.className = styles.scrim ?? '';
-  backdropEl.addEventListener('click', () => closeGatewaySwitcher());
+  backdropEl = document.createElement("div");
+  backdropEl.className = styles.scrim ?? "";
+  backdropEl.addEventListener("click", () => closeGatewaySwitcher());
   document.body.append(backdropEl);
 
-  popEl = document.createElement('div');
-  popEl.className = styles.pop ?? '';
-  popEl.setAttribute('role', 'menu');
-  popEl.setAttribute('aria-label', 'Gateways');
+  popEl = document.createElement("div");
+  popEl.className = styles.pop ?? "";
+  popEl.setAttribute("role", "menu");
+  popEl.setAttribute("aria-label", "Gateways");
 
-  const eyebrow = document.createElement('div');
-  eyebrow.className = styles.eyebrow ?? '';
-  eyebrow.textContent = 'Gateways';
+  const eyebrow = document.createElement("div");
+  eyebrow.className = styles.eyebrow ?? "";
+  eyebrow.textContent = "Gateways";
   popEl.append(eyebrow);
 
-  listEl = document.createElement('div');
-  listEl.className = styles.list ?? '';
+  listEl = document.createElement("div");
+  listEl.className = styles.list ?? "";
   popEl.append(listEl);
   renderRows();
 
-  popEl.append(Object.assign(document.createElement('div'), { className: styles.divider ?? '' }));
+  popEl.append(
+    Object.assign(document.createElement("div"), {
+      className: styles.divider ?? "",
+    })
+  );
 
-  const add = document.createElement('button');
-  add.type = 'button';
-  add.className = styles.action ?? '';
-  add.innerHTML = `${iconSvg('Plug', 15)}<span>Add gateway…</span>`;
-  add.addEventListener('click', () => {
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = styles.action ?? "";
+  add.innerHTML = `${iconSvg("Plug", 15)}<span>Add gateway…</span>`;
+  add.addEventListener("click", () => {
     closeGatewaySwitcher();
     o.onAddGateway();
   });
@@ -222,18 +232,20 @@ export function openGatewaySwitcher(o: GatewaySwitcherOpts): void {
   }
   popEl.style.top = `${top}px`;
   const overflowRight = a.left + popEl.offsetWidth - window.innerWidth + 8;
-  if (overflowRight > 0) popEl.style.left = `${Math.max(8, a.left - overflowRight)}px`;
+  if (overflowRight > 0)
+    popEl.style.left = `${Math.max(8, a.left - overflowRight)}px`;
 
   keyHandler = (e) => {
-    if (e.key === 'Escape') {
+    if (e.key === "Escape") {
       e.preventDefault();
       closeGatewaySwitcher();
     }
   };
-  document.addEventListener('keydown', keyHandler, true);
+  document.addEventListener("keydown", keyHandler, true);
 
   (
-    popEl.querySelector<HTMLElement>(`.${styles.row ?? ''}[data-active="true"]`) ??
-    popEl.querySelector<HTMLElement>(`.${styles.row ?? ''}`)
+    popEl.querySelector<HTMLElement>(
+      `.${styles.row ?? ""}[data-active="true"]`
+    ) ?? popEl.querySelector<HTMLElement>(`.${styles.row ?? ""}`)
   )?.focus();
 }

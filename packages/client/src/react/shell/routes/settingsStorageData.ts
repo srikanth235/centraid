@@ -9,14 +9,14 @@ import {
   RecoveryKitNotConfirmedError,
   testStorageConnection as gwTestStorageConnection,
   type StorageConnectionDTO,
-} from '../../../gateway-client.js';
+} from "../../../gateway-client.js";
 import type {
   StorageConnectionFormInput,
   StorageConnectionRowDTO,
   StorageMutationResult,
   StorageTestResult,
   VaultBlobStoreDTO,
-} from '../../screens/SettingsStorageScreen.js';
+} from "../../screens/SettingsStorageScreen.js";
 
 // Settings → Storage data layer (issue #436 §7): maps the gateway's storage
 // surface onto the collapsed hosted-vs-local screen. There is exactly ONE
@@ -26,20 +26,26 @@ import type {
 // "blocked by the gate" from "not a valid home" from "just failed".
 
 function toRowDTO(c: StorageConnectionDTO): StorageConnectionRowDTO {
-  return { id: c.id, name: c.name, ...(c.baseUrl ? { baseUrl: c.baseUrl } : {}) };
+  return {
+    id: c.id,
+    name: c.name,
+    ...(c.baseUrl ? { baseUrl: c.baseUrl } : {}),
+  };
 }
 
-export async function loadStorageConnectionsData(): Promise<StorageConnectionRowDTO[]> {
+export async function loadStorageConnectionsData(): Promise<
+  StorageConnectionRowDTO[]
+> {
   const rows = await listStorageConnections();
   return rows.map(toRowDTO);
 }
 
 export async function createStorageConnection(
-  input: StorageConnectionFormInput,
+  input: StorageConnectionFormInput
 ): Promise<StorageMutationResult<StorageConnectionRowDTO>> {
   try {
     const connection = await gwCreateStorageConnection({
-      kind: 'provider',
+      kind: "provider",
       name: input.name,
       baseUrl: input.baseUrl,
       apiKey: input.apiKey,
@@ -47,20 +53,28 @@ export async function createStorageConnection(
     return { ok: true, value: toRowDTO(connection) };
   } catch (err) {
     if (err instanceof RecoveryKitNotConfirmedError) {
-      return { ok: false, code: 'recovery_kit_not_confirmed', message: err.message };
+      return {
+        ok: false,
+        code: "recovery_kit_not_confirmed",
+        message: err.message,
+      };
     }
     if (err instanceof ProviderNotHomeProfileError) {
       const missing =
         err.missingCapabilities.length > 0
-          ? ` It’s missing: ${err.missingCapabilities.join(', ')}.`
-          : '';
+          ? ` It’s missing: ${err.missingCapabilities.join(", ")}.`
+          : "";
       return {
         ok: false,
-        code: 'error',
+        code: "error",
         message: `This provider can’t be a home for your data.${missing} A home needs to keep snapshots, store your sealed files, meter usage, and prove restores work.`,
       };
     }
-    return { ok: false, code: 'error', message: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      code: "error",
+      message: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -77,51 +91,68 @@ export function makeDeleteStorageConnection(
     message: string;
     confirmLabel?: string;
     danger?: boolean;
-  }) => Promise<boolean>,
+  }) => Promise<boolean>
 ): (id: string, name: string) => Promise<void> {
   return async (id, name) => {
     const ok = await confirm({
-      confirmLabel: 'Disconnect',
+      confirmLabel: "Disconnect",
       danger: true,
       message: `Disconnect "${name}"? This removes the provider and its saved credential from this gateway. It doesn't touch any bytes already stored — but you'll need to reconnect to use hosted storage again.`,
-      title: 'Disconnect storage provider?',
+      title: "Disconnect storage provider?",
     });
     if (!ok) return;
     await gwDeleteStorageConnection(id);
   };
 }
 
-export async function testStorageConnection(id: string): Promise<StorageTestResult> {
+export async function testStorageConnection(
+  id: string
+): Promise<StorageTestResult> {
   return gwTestStorageConnection(id);
 }
 
 export async function loadVaultBlobStoreData(): Promise<VaultBlobStoreDTO> {
   const settings = await getVaultBlobStore();
-  return settings.kind === 's3'
-    ? { kind: 's3', ...(settings.connectionId ? { connectionId: settings.connectionId } : {}) }
-    : { kind: 'fs' };
+  return settings.kind === "s3"
+    ? {
+        kind: "s3",
+        ...(settings.connectionId
+          ? { connectionId: settings.connectionId }
+          : {}),
+      }
+    : { kind: "fs" };
 }
 
 export async function attachVaultConnection(
-  connectionId: string,
+  connectionId: string
 ): Promise<StorageMutationResult<VaultBlobStoreDTO>> {
   try {
     const settings = await attachVaultStorageConnection(connectionId);
     return {
       ok: true,
       value:
-        settings.kind === 's3'
+        settings.kind === "s3"
           ? {
-              kind: 's3',
-              ...(settings.connectionId ? { connectionId: settings.connectionId } : {}),
+              kind: "s3",
+              ...(settings.connectionId
+                ? { connectionId: settings.connectionId }
+                : {}),
             }
-          : { kind: 'fs' },
+          : { kind: "fs" },
     };
   } catch (err) {
     if (err instanceof RecoveryKitNotConfirmedError) {
-      return { ok: false, code: 'recovery_kit_not_confirmed', message: err.message };
+      return {
+        ok: false,
+        code: "recovery_kit_not_confirmed",
+        message: err.message,
+      };
     }
-    return { ok: false, code: 'error', message: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      code: "error",
+      message: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -129,7 +160,12 @@ export async function attachVaultConnection(
  *  the recovery kit (going local-only is always safe). */
 export async function detachVaultConnection(): Promise<VaultBlobStoreDTO> {
   const settings = await detachVaultStorageConnection();
-  return settings.kind === 's3'
-    ? { kind: 's3', ...(settings.connectionId ? { connectionId: settings.connectionId } : {}) }
-    : { kind: 'fs' };
+  return settings.kind === "s3"
+    ? {
+        kind: "s3",
+        ...(settings.connectionId
+          ? { connectionId: settings.connectionId }
+          : {}),
+      }
+    : { kind: "fs" };
 }

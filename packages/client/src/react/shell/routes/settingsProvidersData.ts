@@ -1,6 +1,14 @@
-import { getAgentsStatus, getUserPrefs, saveUserPrefs } from '../../../gateway-client.js';
-import type { AgentRunnerKind, AgentsStatusDTO, ModelSubsystem } from '../../screen-contracts.js';
-import type { CentraidAgentStatusEntry } from '../../../centraid-api.js';
+import type { CentraidAgentStatusEntry } from "../../../centraid-api.js";
+import {
+  getAgentsStatus,
+  getUserPrefs,
+  saveUserPrefs,
+} from "../../../gateway-client.js";
+import type {
+  AgentRunnerKind,
+  AgentsStatusDTO,
+  ModelSubsystem,
+} from "../../screen-contracts.js";
 
 // Providers (agents) console data. Centraid runs the user's installed
 // coding-agent CLIs in place; the gateway reports which are runnable on its
@@ -37,7 +45,7 @@ type Snap = Awaited<ReturnType<typeof getAgentsStatus>>;
 export function resolveReportedRunnerKind(
   status: AgentsStatusDTO,
   requested: AgentRunnerKind | null | undefined,
-  subsystem: ModelSubsystem,
+  subsystem: ModelSubsystem
 ): AgentRunnerKind {
   const reported = new Set(status.cards.map((card) => card.kind));
   const candidates = [
@@ -49,7 +57,7 @@ export function resolveReportedRunnerKind(
   return (
     candidates.find(
       (candidate): candidate is AgentRunnerKind =>
-        typeof candidate === 'string' && reported.has(candidate),
+        typeof candidate === "string" && reported.has(candidate)
     ) ??
     requested ??
     status.subsystemRunnerByKey[subsystem] ??
@@ -64,39 +72,47 @@ export function resolveReportedRunnerKind(
  * console shows; the gateway's list is the source of truth for that.
  */
 const ACCENT_BY_KIND: Record<string, string> = {
-  codex: 'var(--c-teal)',
-  'claude-code': 'var(--c-violet)',
-  gemini: 'var(--c-indigo)',
-  qwen: 'var(--c-amber)',
-  opencode: 'var(--c-teal)',
-  grok: 'var(--c-rose)',
-  kimi: 'var(--c-violet)',
-  copilot: 'var(--c-indigo)',
-  cursor: 'var(--c-teal)',
-  kilo: 'var(--c-violet)',
-  cline: 'var(--c-forest)',
-  goose: 'var(--c-ochre)',
-  auggie: 'var(--c-teal)',
-  vibe: 'var(--c-rose)',
-  droid: 'var(--c-amber)',
-  pi: 'var(--c-ochre)',
-  acp: 'var(--c-slate)',
+  codex: "var(--c-teal)",
+  "claude-code": "var(--c-violet)",
+  gemini: "var(--c-indigo)",
+  qwen: "var(--c-amber)",
+  opencode: "var(--c-teal)",
+  grok: "var(--c-rose)",
+  kimi: "var(--c-violet)",
+  copilot: "var(--c-indigo)",
+  cursor: "var(--c-teal)",
+  kilo: "var(--c-violet)",
+  cline: "var(--c-forest)",
+  goose: "var(--c-ochre)",
+  auggie: "var(--c-teal)",
+  vibe: "var(--c-rose)",
+  droid: "var(--c-amber)",
+  pi: "var(--c-ochre)",
+  acp: "var(--c-slate)",
 };
-const DEFAULT_ACCENT = 'var(--c-slate)';
+const DEFAULT_ACCENT = "var(--c-slate)";
 
 /** The runner every unpinned subsystem falls back to when prefs name none. */
-const FALLBACK_KIND: AgentRunnerKind = 'codex';
+const FALLBACK_KIND: AgentRunnerKind = "codex";
 
-const SUBSYSTEMS: readonly ModelSubsystem[] = ['assistant', 'ask', 'builder', 'automations'];
+const SUBSYSTEMS: readonly ModelSubsystem[] = [
+  "assistant",
+  "ask",
+  "builder",
+  "automations",
+];
 
-function modelPrefKey(kind: AgentRunnerKind, slot: 'default' | ModelSubsystem): string {
+function modelPrefKey(
+  kind: AgentRunnerKind,
+  slot: "default" | ModelSubsystem
+): string {
   return `model.${kind}.${slot}`;
 }
 
 function configPrefKey(
   kind: AgentRunnerKind,
-  slot: 'default' | ModelSubsystem,
-  category: string,
+  slot: "default" | ModelSubsystem,
+  category: string
 ): string {
   return `config.${kind}.${slot}.${category}`;
 }
@@ -116,7 +132,7 @@ function runnerLadderPrefKey(subsystem: ModelSubsystem): string {
 
 /** Pull the explicit `runner.<subsystem>` pins out of the raw prefs snapshot. */
 function readRunnerPrefs(
-  prefs: Record<string, unknown>,
+  prefs: Record<string, unknown>
 ): Partial<Record<ModelSubsystem, AgentRunnerKind>> {
   const byKey: Partial<Record<ModelSubsystem, AgentRunnerKind>> = {};
   for (const s of SUBSYSTEMS) {
@@ -125,20 +141,20 @@ function readRunnerPrefs(
     // closed pair, which would have silently dropped a pin onto a runner
     // kind this build predates — the gateway is what resolves a pin, and it
     // treats an unknown one as "inherit" anyway.
-    if (typeof v === 'string' && v) byKey[s] = v;
+    if (typeof v === "string" && v) byKey[s] = v;
   }
   return byKey;
 }
 
 /** Read ordered ladder membership written as an array (or legacy JSON text). */
 function readRunnerLadderPrefs(
-  prefs: Record<string, unknown>,
+  prefs: Record<string, unknown>
 ): Partial<Record<ModelSubsystem, AgentRunnerKind[]>> {
   const byKey: Partial<Record<ModelSubsystem, AgentRunnerKind[]>> = {};
   for (const subsystem of SUBSYSTEMS) {
     const raw = prefs[runnerLadderPrefKey(subsystem)];
     let decoded: unknown = raw;
-    if (typeof raw === 'string') {
+    if (typeof raw === "string") {
       try {
         decoded = JSON.parse(raw) as unknown;
       } catch {
@@ -148,7 +164,9 @@ function readRunnerLadderPrefs(
     if (!Array.isArray(decoded)) continue;
     const kinds = decoded.filter(
       (value, index): value is AgentRunnerKind =>
-        typeof value === 'string' && value.length > 0 && decoded.indexOf(value) === index,
+        typeof value === "string" &&
+        value.length > 0 &&
+        decoded.indexOf(value) === index
     );
     if (kinds.length > 0) byKey[subsystem] = kinds;
   }
@@ -162,20 +180,23 @@ function readRunnerLadderPrefs(
  */
 function readModelPrefs(
   prefs: Record<string, unknown>,
-  kinds: readonly AgentRunnerKind[],
+  kinds: readonly AgentRunnerKind[]
 ): {
   defaultByKind: Record<string, string>;
   subsystemByKind: Record<string, Partial<Record<ModelSubsystem, string>>>;
 } {
   const defaultByKind: Record<string, string> = {};
-  const subsystemByKind: Record<string, Partial<Record<ModelSubsystem, string>>> = {};
+  const subsystemByKind: Record<
+    string,
+    Partial<Record<ModelSubsystem, string>>
+  > = {};
   for (const kind of kinds) {
-    const d = prefs[modelPrefKey(kind, 'default')];
-    if (typeof d === 'string' && d) defaultByKind[kind] = d;
+    const d = prefs[modelPrefKey(kind, "default")];
+    if (typeof d === "string" && d) defaultByKind[kind] = d;
     const subs: Partial<Record<ModelSubsystem, string>> = {};
     for (const s of SUBSYSTEMS) {
       const v = prefs[modelPrefKey(kind, s)];
-      if (typeof v === 'string' && v) subs[s] = v;
+      if (typeof v === "string" && v) subs[s] = v;
     }
     subsystemByKind[kind] = subs;
   }
@@ -184,10 +205,13 @@ function readModelPrefs(
 
 function readConfigPrefs(
   prefs: Record<string, unknown>,
-  agents: readonly CentraidAgentStatusEntry[],
+  agents: readonly CentraidAgentStatusEntry[]
 ): {
   defaultByKind: Record<string, Record<string, string>>;
-  subsystemByKind: Record<string, Partial<Record<ModelSubsystem, Record<string, string>>>>;
+  subsystemByKind: Record<
+    string,
+    Partial<Record<ModelSubsystem, Record<string, string>>>
+  >;
 } {
   const defaultByKind: Record<string, Record<string, string>> = {};
   const subsystemByKind: Record<
@@ -198,16 +222,18 @@ function readConfigPrefs(
     const categories = new Set(
       (agent.capabilities?.configOptions ?? [])
         .map((option) => option.category)
-        .filter((category) => category !== 'model'),
+        .filter((category) => category !== "model")
     );
     const defaults: Record<string, string> = {};
     const subs: Partial<Record<ModelSubsystem, Record<string, string>>> = {};
     for (const category of categories) {
-      const defaultValue = prefs[configPrefKey(agent.kind, 'default', category)];
-      if (typeof defaultValue === 'string' && defaultValue) defaults[category] = defaultValue;
+      const defaultValue =
+        prefs[configPrefKey(agent.kind, "default", category)];
+      if (typeof defaultValue === "string" && defaultValue)
+        defaults[category] = defaultValue;
       for (const subsystem of SUBSYSTEMS) {
         const value = prefs[configPrefKey(agent.kind, subsystem, category)];
-        if (typeof value !== 'string' || !value) continue;
+        if (typeof value !== "string" || !value) continue;
         (subs[subsystem] ??= {})[category] = value;
       }
     }
@@ -222,33 +248,38 @@ function readConfigPrefs(
  * (`label`, `version`, `hint`), so a runner kind this build has never heard of
  * still renders a complete, honest card — only the accent falls back.
  */
-function capabilityChips(caps: CentraidAgentStatusEntry['capabilities']): string[] {
+function capabilityChips(
+  caps: CentraidAgentStatusEntry["capabilities"]
+): string[] {
   if (!caps?.reachable) {
     return caps?.reason ? [`probe failed`] : [];
   }
   const chips: string[] = [];
-  if (caps.mcpHttp) chips.push('vault');
-  else chips.push('no vault HTTP');
-  if (caps.resume || caps.loadSession) chips.push(caps.resume ? 'resume' : 'load');
-  if (caps.modelConfigurable) chips.push('models');
-  if (caps.configOptions?.some((option) => option.category === 'thought_level'))
-    chips.push('effort');
-  if (caps.usageUpdateObserved) chips.push('context');
-  if (caps.locationsObserved) chips.push('file refs');
-  if (caps.additionalDirectories) chips.push('scoped folders');
-  if (caps.authRequired) chips.push('sign-in needed');
-  if (caps.promptImage) chips.push('images');
+  if (caps.mcpHttp) chips.push("vault");
+  else chips.push("no vault HTTP");
+  if (caps.resume || caps.loadSession)
+    chips.push(caps.resume ? "resume" : "load");
+  if (caps.modelConfigurable) chips.push("models");
+  if (caps.configOptions?.some((option) => option.category === "thought_level"))
+    chips.push("effort");
+  if (caps.usageUpdateObserved) chips.push("context");
+  if (caps.locationsObserved) chips.push("file refs");
+  if (caps.additionalDirectories) chips.push("scoped folders");
+  if (caps.authRequired) chips.push("sign-in needed");
+  if (caps.promptImage) chips.push("images");
   return chips;
 }
 
-function toCard(entry: CentraidAgentStatusEntry): AgentsStatusDTO['cards'][number] {
+function toCard(
+  entry: CentraidAgentStatusEntry
+): AgentsStatusDTO["cards"][number] {
   const models = entry.models ?? [];
   const caps = entry.capabilities;
   const chips = capabilityChips(caps);
   const breakerStates = (entry.health ?? []).flatMap((health) =>
-    health.state === 'closed'
+    health.state === "closed"
       ? []
-      : [{ failureClass: health.failureClass, state: health.state } as const],
+      : [{ failureClass: health.failureClass, state: health.state } as const]
   );
   for (const breaker of breakerStates) {
     chips.push(`${breaker.failureClass} ${breaker.state}`);
@@ -256,10 +287,16 @@ function toCard(entry: CentraidAgentStatusEntry): AgentsStatusDTO['cards'][numbe
   return {
     accent: ACCENT_BY_KIND[entry.kind] ?? DEFAULT_ACCENT,
     connected: entry.available,
-    sessionReady: entry.available && caps?.reachable === true && caps.authRequired !== true,
+    sessionReady:
+      entry.available && caps?.reachable === true && caps.authRequired !== true,
     kind: entry.kind,
-    models: models.map((m) => ({ default: m.default, id: m.id, name: m.name, tier: m.tier })),
-    modelsLoading: entry.modelsStatus === 'loading' && models.length === 0,
+    models: models.map((m) => ({
+      default: m.default,
+      id: m.id,
+      name: m.name,
+      tier: m.tier,
+    })),
+    modelsLoading: entry.modelsStatus === "loading" && models.length === 0,
     ...(caps?.configOptions ? { configOptions: caps.configOptions } : {}),
     ...(caps?.additionalDirectories ? { additionalDirectories: true } : {}),
     ...(caps?.modelConfigurable ? { modelConfigurable: true } : {}),
@@ -275,7 +312,9 @@ function toCard(entry: CentraidAgentStatusEntry): AgentsStatusDTO['cards'][numbe
       : (entry.hint ?? `${entry.label} CLI not found`),
     title: entry.label,
     ...(chips.length ? { capabilityChips: chips } : {}),
-    ...(caps && !caps.mcpHttp && caps.reachable ? { vaultUnavailable: true } : {}),
+    ...(caps && !caps.mcpHttp && caps.reachable
+      ? { vaultUnavailable: true }
+      : {}),
     ...(caps?.authRequired ? { authRequired: true } : {}),
     ...(breakerStates.length ? { breakerStates } : {}),
   };
@@ -292,11 +331,11 @@ function toDTO(
     Partial<Record<ModelSubsystem, Record<string, string>>>
   >,
   subsystemRunnerByKey: Partial<Record<ModelSubsystem, AgentRunnerKind>>,
-  subsystemRunnerLadders: Partial<Record<ModelSubsystem, AgentRunnerKind[]>>,
+  subsystemRunnerLadders: Partial<Record<ModelSubsystem, AgentRunnerKind[]>>
 ): AgentsStatusDTO {
   const agents = status.agents ?? [];
   return {
-    anyLoading: agents.some((a) => a.modelsStatus === 'loading'),
+    anyLoading: agents.some((a) => a.modelsStatus === "loading"),
     cards: agents.map(toCard),
     savedModelByKind: defaultByKind,
     subsystemModelByKind: subsystemByKind,
@@ -314,7 +353,7 @@ function toDTO(
         })),
       },
       null,
-      2,
+      2
     ),
     subsystemRunnerByKey,
     subsystemRunnerLadders,
@@ -322,19 +361,23 @@ function toDTO(
   };
 }
 
-export async function loadProviders(opts?: { refresh?: boolean }): Promise<AgentsStatusDTO> {
+export async function loadProviders(opts?: {
+  refresh?: boolean;
+}): Promise<AgentsStatusDTO> {
   const [status, prefs] = await Promise.all([
     getAgentsStatus(opts).catch(() => ({ agents: [] }) as Snap),
     getUserPrefs().catch(() => ({}) as Record<string, unknown>),
   ]);
-  const kindRaw = prefs['agent.runner.kind'];
+  const kindRaw = prefs["agent.runner.kind"];
   // Trust the persisted kind as-is (the gateway validated it on write and
   // resolves it on read); only an absent/blank value falls back.
   const selectedKind =
-    typeof kindRaw === 'string' && kindRaw ? (kindRaw as AgentRunnerKind) : FALLBACK_KIND;
+    typeof kindRaw === "string" && kindRaw
+      ? (kindRaw as AgentRunnerKind)
+      : FALLBACK_KIND;
   const { defaultByKind, subsystemByKind } = readModelPrefs(
     prefs,
-    (status.agents ?? []).map((a) => a.kind),
+    (status.agents ?? []).map((a) => a.kind)
   );
   const config = readConfigPrefs(prefs, status.agents ?? []);
   return toDTO(
@@ -345,14 +388,14 @@ export async function loadProviders(opts?: { refresh?: boolean }): Promise<Agent
     config.defaultByKind,
     config.subsystemByKind,
     readRunnerPrefs(prefs),
-    readRunnerLadderPrefs(prefs),
+    readRunnerLadderPrefs(prefs)
   );
 }
 
 /** Switch the DEFAULT agent — the runner every unpinned subsystem inherits. */
 export async function activateRunner(kind: AgentRunnerKind): Promise<boolean> {
   try {
-    await saveUserPrefs({ 'agent.runner.kind': kind });
+    await saveUserPrefs({ "agent.runner.kind": kind });
     return true;
   } catch {
     return false;
@@ -366,7 +409,7 @@ export async function activateRunner(kind: AgentRunnerKind): Promise<boolean> {
  */
 export async function setSubsystemRunner(
   subsystem: ModelSubsystem,
-  kind: AgentRunnerKind | '',
+  kind: AgentRunnerKind | ""
 ): Promise<boolean> {
   try {
     await saveUserPrefs({ [runnerPrefKey(subsystem)]: kind || null });
@@ -378,34 +421,44 @@ export async function setSubsystemRunner(
 
 export function setSubsystemRunnerLadder(
   subsystem: ModelSubsystem,
-  kinds: AgentRunnerKind[],
+  kinds: AgentRunnerKind[]
 ): void {
-  void saveUserPrefs({ [runnerLadderPrefKey(subsystem)]: kinds.length > 0 ? kinds : null });
+  void saveUserPrefs({
+    [runnerLadderPrefKey(subsystem)]: kinds.length > 0 ? kinds : null,
+  });
 }
 
 /** Persist this agent's default model ('' clears the key, falling through to the backend default). */
 export function setAgentModel(kind: AgentRunnerKind, modelId: string): void {
-  void saveUserPrefs({ [modelPrefKey(kind, 'default')]: modelId || null });
+  void saveUserPrefs({ [modelPrefKey(kind, "default")]: modelId || null });
 }
 
 /** Persist this agent's per-subsystem model override ('' clears the key, falling through to the default model). */
 export function setSubsystemModel(
   kind: AgentRunnerKind,
   subsystem: ModelSubsystem,
-  modelId: string,
+  modelId: string
 ): void {
   void saveUserPrefs({ [modelPrefKey(kind, subsystem)]: modelId || null });
 }
 
-export function setAgentConfigPin(kind: AgentRunnerKind, category: string, value: string): void {
-  void saveUserPrefs({ [configPrefKey(kind, 'default', category)]: value || null });
+export function setAgentConfigPin(
+  kind: AgentRunnerKind,
+  category: string,
+  value: string
+): void {
+  void saveUserPrefs({
+    [configPrefKey(kind, "default", category)]: value || null,
+  });
 }
 
 export function setSubsystemConfigPin(
   kind: AgentRunnerKind,
   subsystem: ModelSubsystem,
   category: string,
-  value: string,
+  value: string
 ): void {
-  void saveUserPrefs({ [configPrefKey(kind, subsystem, category)]: value || null });
+  void saveUserPrefs({
+    [configPrefKey(kind, subsystem, category)]: value || null,
+  });
 }

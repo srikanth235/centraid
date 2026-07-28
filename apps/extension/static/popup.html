@@ -10,24 +10,47 @@
     <main>
       <header>
         <div class="mark">C</div>
-        <div><strong>Centraid Companion</strong><small>your vault, at hand</small></div>
+        <div>
+          <strong>Centraid Companion</strong><small>your vault, at hand</small>
+        </div>
       </header>
 
       <section id="pairing" class="hero">
         <p class="eyebrow">Pair this browser</p>
         <h1>A narrow door to your Centraid.</h1>
-        <p>Use a one-time code from Settings → Devices. No gateway software is installed here.</p>
+        <p>
+          Use a one-time code from Settings → Devices. No gateway software is
+          installed here.
+        </p>
         <form id="pair-form">
           <label for="ticket">Pairing code</label>
           <textarea id="ticket" rows="4" required autocomplete="off"></textarea>
           <fieldset class="grant-grid">
             <legend>Allow on this device</legend>
-            <label><input type="checkbox" name="grant" value="locker" checked /> Locker</label>
-            <label><input type="checkbox" name="grant" value="tasks" checked /> Tasks</label>
-            <label><input type="checkbox" name="grant" value="notes" checked /> Notes</label>
-            <label><input type="checkbox" name="grant" value="docs" checked /> Docs</label>
-            <label><input type="checkbox" name="grant" value="agenda" /> Agenda</label>
-            <label><input type="checkbox" name="grant" value="people" /> People</label>
+            <label
+              ><input type="checkbox" name="grant" value="locker" checked />
+              Locker</label
+            >
+            <label
+              ><input type="checkbox" name="grant" value="tasks" checked />
+              Tasks</label
+            >
+            <label
+              ><input type="checkbox" name="grant" value="notes" checked />
+              Notes</label
+            >
+            <label
+              ><input type="checkbox" name="grant" value="docs" checked />
+              Docs</label
+            >
+            <label
+              ><input type="checkbox" name="grant" value="agenda" />
+              Agenda</label
+            >
+            <label
+              ><input type="checkbox" name="grant" value="people" />
+              People</label
+            >
           </fieldset>
           <div class="button-row">
             <button class="primary" type="submit">Pair device</button
@@ -40,13 +63,14 @@
         <div class="status-card">
           <span class="pulse"></span>
           <div>
-            <strong id="gateway">Paired gateway</strong><small id="vault">Personal vault</small>
+            <strong id="gateway">Paired gateway</strong
+            ><small id="vault">Personal vault</small>
           </div>
           <button id="lock" class="quiet" type="button">Lock</button>
         </div>
         <p class="lock-note">
-          Lock closes the live tunnel and hides actions. The paired device key remains on this
-          browser until you unpair or revoke it.
+          Lock closes the live tunnel and hides actions. The paired device key
+          remains on this browser until you unpair or revoke it.
         </p>
         <p id="approvals" class="approval-summary">Checking approvals…</p>
 
@@ -87,9 +111,13 @@
               <input id="person-role" placeholder="Role or context" />
               <label for="person-cadence">Reconnect every</label>
               <div class="suffix">
-                <input id="person-cadence" type="number" min="1" value="90" required /><span
-                  >days</span
-                >
+                <input
+                  id="person-cadence"
+                  type="number"
+                  min="1"
+                  value="90"
+                  required
+                /><span>days</span>
               </div>
               <button class="primary" type="submit">Add to People</button>
             </form>
@@ -100,7 +128,9 @@
           <summary>Granted modules</summary>
           <ul id="modules"></ul>
         </details>
-        <button id="unpair" class="danger quiet" type="button">Unpair this browser</button>
+        <button id="unpair" class="danger quiet" type="button">
+          Unpair this browser
+        </button>
       </section>
 
       <p id="notice" role="status"></p>

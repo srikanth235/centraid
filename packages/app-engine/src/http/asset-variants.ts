@@ -1,6 +1,6 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createHash } from 'node:crypto';
-import { staticSecurityHeaders } from './security.js';
+import { createHash } from "node:crypto";
+import type { IncomingMessage, ServerResponse } from "node:http";
+
 import {
   compress,
   isCompressibleType,
@@ -9,10 +9,11 @@ import {
   staticQualityForHost,
   type CompressQuality,
   type Encoding,
-} from './compression.js';
+} from "./compression.js";
+import { staticSecurityHeaders } from "./security.js";
 
 export function computeEtag(buf: Buffer): string {
-  return `"${createHash('sha256').update(buf).digest('hex')}"`;
+  return `"${createHash("sha256").update(buf).digest("hex")}"`;
 }
 
 /**
@@ -22,11 +23,14 @@ export function computeEtag(buf: Buffer): string {
  * no need for a real structured-header parser. Node also folds repeated
  * `If-None-Match` headers into one comma-joined string, which this covers.
  */
-export function ifNoneMatchHits(header: string | undefined, etag: string): boolean {
+export function ifNoneMatchHits(
+  header: string | undefined,
+  etag: string
+): boolean {
   if (!header) return false;
   const trimmed = header.trim();
-  if (trimmed === '*') return true;
-  return trimmed.split(',').some((tok) => tok.trim() === etag);
+  if (trimmed === "*") return true;
+  return trimmed.split(",").some((tok) => tok.trim() === etag);
 }
 
 /**
@@ -60,7 +64,7 @@ export const jsxVariantCache = new Map<string, Map<Encoding, Buffer>>();
 export const cssModuleVariantCache = new Map<string, Map<Encoding, Buffer>>();
 export function variantCacheFor(
   cache: Map<string, Map<Encoding, Buffer>>,
-  etag: string,
+  etag: string
 ): Map<Encoding, Buffer> {
   let m = cache.get(etag);
   if (!m) {
@@ -98,21 +102,21 @@ export async function finishStaticAsset(
     loadRaw: () => Buffer | Promise<Buffer>;
     variants: Map<Encoding, Buffer>;
     cacheControl?: string;
-  },
+  }
 ): Promise<true> {
   const { contentType, etag, rawSize, loadRaw, variants } = opts;
-  const ifNoneMatch = req.headers['if-none-match'];
+  const ifNoneMatch = req.headers["if-none-match"];
   const notModified = ifNoneMatchHits(
-    Array.isArray(ifNoneMatch) ? ifNoneMatch.join(',') : ifNoneMatch,
-    etag,
+    Array.isArray(ifNoneMatch) ? ifNoneMatch.join(",") : ifNoneMatch,
+    etag
   );
 
-  res.setHeader('Content-Type', contentType);
-  res.setHeader('ETag', etag);
-  res.setHeader('Cache-Control', opts.cacheControl ?? 'private, no-cache');
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("ETag", etag);
+  res.setHeader("Cache-Control", opts.cacheControl ?? "private, no-cache");
   // Content negotiation applies to compressible types → caches must key on
   // Accept-Encoding even when this particular response wasn't compressed.
-  if (isCompressibleType(contentType)) res.setHeader('Vary', 'Accept-Encoding');
+  if (isCompressibleType(contentType)) res.setHeader("Vary", "Accept-Encoding");
   for (const [k, v] of Object.entries(staticSecurityHeaders({}))) {
     res.setHeader(k, v);
   }
@@ -125,7 +129,7 @@ export async function finishStaticAsset(
 
   const encoding =
     rawSize >= MIN_COMPRESS_BYTES && isCompressibleType(contentType)
-      ? negotiateEncoding(req.headers['accept-encoding'])
+      ? negotiateEncoding(req.headers["accept-encoding"])
       : null;
   res.statusCode = 200;
   if (!encoding) {
@@ -137,7 +141,7 @@ export async function finishStaticAsset(
     variant = await compress(await loadRaw(), encoding, staticQualityForHost());
     variants.set(encoding, variant);
   }
-  res.setHeader('Content-Encoding', encoding);
+  res.setHeader("Content-Encoding", encoding);
   res.end(variant);
   return true;
 }
@@ -152,17 +156,17 @@ export async function writeCompressible(
   res: ServerResponse,
   raw: Buffer,
   contentType: string,
-  quality: CompressQuality,
+  quality: CompressQuality
 ): Promise<void> {
-  if (isCompressibleType(contentType)) res.setHeader('Vary', 'Accept-Encoding');
+  if (isCompressibleType(contentType)) res.setHeader("Vary", "Accept-Encoding");
   const encoding =
     raw.length >= MIN_COMPRESS_BYTES && isCompressibleType(contentType)
-      ? negotiateEncoding(req.headers['accept-encoding'])
+      ? negotiateEncoding(req.headers["accept-encoding"])
       : null;
   if (!encoding) {
     res.end(raw);
     return;
   }
-  res.setHeader('Content-Encoding', encoding);
+  res.setHeader("Content-Encoding", encoding);
   res.end(await compress(raw, encoding, quality));
 }

@@ -1,14 +1,23 @@
-import { type JSX, useEffect, useState } from 'react';
-import { formatDuration, relativeTime } from '../../../app-format.js';
-import { listAutomationTurns, pinAutomationTurn } from '../../../gateway-client.js';
-import styles from './RunsPane.module.css';
+import { type JSX, useEffect, useState } from "react";
+
+import { formatDuration, relativeTime } from "../../../app-format.js";
+import {
+  listAutomationTurns,
+  pinAutomationTurn,
+} from "../../../gateway-client.js";
+
+import styles from "./RunsPane.module.css";
 
 // The per-order run-history list inside the app-settings popover — the React
 // successor to app-appview.ts's `loadRunsInto`/`renderRunRow`. Newest first;
 // each row shows outcome + when + duration + summary and a pin toggle (pinned
 // runs double as replay fixtures). Rendered into the host div AppSettingsPanel
 // hands `onMountRuns`.
-export default function RunsPane({ automationId }: { automationId: string }): JSX.Element {
+export default function RunsPane({
+  automationId,
+}: {
+  automationId: string;
+}): JSX.Element {
   const [nonce, setNonce] = useState(0);
   // Stamped with the (automation, nonce) it was fetched for so a switch or a
   // pin-triggered refetch reads as "loading" during render — no effect has to
@@ -18,9 +27,11 @@ export default function RunsPane({ automationId }: { automationId: string }): JS
     result: CentraidAutomationTurnRecord[] | { error: string };
   } | null>(null);
   const key = `${automationId} ${nonce}`;
-  const current = settled !== null && settled.key === key ? settled.result : null;
+  const current =
+    settled !== null && settled.key === key ? settled.result : null;
   const runs = Array.isArray(current) ? current : null;
-  const error = current !== null && !Array.isArray(current) ? current.error : null;
+  const error =
+    current !== null && !Array.isArray(current) ? current.error : null;
 
   useEffect(() => {
     let alive = true;
@@ -47,9 +58,13 @@ export default function RunsPane({ automationId }: { automationId: string }): JS
       .catch(() => setNonce((n) => n + 1));
   };
 
-  if (error) return <div className={styles.empty}>{`Failed to load runs: ${error}`}</div>;
+  if (error)
+    return (
+      <div className={styles.empty}>{`Failed to load runs: ${error}`}</div>
+    );
   if (!runs) return <div className={styles.empty}>Loading…</div>;
-  if (runs.length === 0) return <div className={styles.empty}>No runs recorded yet.</div>;
+  if (runs.length === 0)
+    return <div className={styles.empty}>No runs recorded yet.</div>;
 
   return (
     <div className={styles.list}>
@@ -62,11 +77,11 @@ export default function RunsPane({ automationId }: { automationId: string }): JS
                 {relativeTime(new Date(run.startedAt).toISOString())}
               </span>
               <span className={styles.trigger}>{run.triggerKind}</span>
-              {run.endedAt !== undefined ? (
+              {run.endedAt === undefined ? null : (
                 <span className={styles.duration}>
                   {formatDuration(run.endedAt - run.startedAt)}
                 </span>
-              ) : null}
+              )}
             </div>
             {run.summary || run.error ? (
               <div className={styles.summary}>{run.error ?? run.summary}</div>
@@ -76,8 +91,8 @@ export default function RunsPane({ automationId }: { automationId: string }): JS
             type="button"
             className={styles.pin}
             data-pinned={String(run.pinned)}
-            aria-label={run.pinned ? 'Unpin run' : 'Pin run'}
-            title={run.pinned ? 'Unpin' : 'Pin as replay fixture'}
+            aria-label={run.pinned ? "Unpin run" : "Pin run"}
+            title={run.pinned ? "Unpin" : "Pin as replay fixture"}
             onClick={() => togglePin(run)}
           >
             ★

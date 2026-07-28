@@ -12,10 +12,10 @@
 // what merging N untruncated pages gives. The tagging is not cosmetic: a hit
 // that reached the grid without one would paint the wrong photo, since content
 // ids collide across scopes by design.
-import { debounce } from './kit.ts';
-import { mergeScopePages, type MergeAsset } from './merge.ts';
-import { mountedScopes, ownScopeId } from './scopes.ts';
-import type { Asset } from './types.ts';
+import { debounce } from "./kit.ts";
+import { mergeScopePages, type MergeAsset } from "./merge.ts";
+import { mountedScopes, ownScopeId } from "./scopes.ts";
+import type { Asset } from "./types.ts";
 
 export function createSearch({
   getQuery,
@@ -39,9 +39,9 @@ export function createSearch({
     let assets: Asset[] = [];
     try {
       const client = window.centraid;
-      if (typeof client.readAll === 'function') {
+      if (typeof client.readAll === "function") {
         const results = await client.readAll<{ assets?: Asset[] }>({
-          query: 'search',
+          query: "search",
           input: { term },
         });
         const pages = results.map((result) => ({
@@ -55,10 +55,15 @@ export function createSearch({
           tail: null,
           truncated: false,
         }));
-        const merged = mergeScopePages(pages, { ownScopeId: ownScopeId(mountedScopes()) });
+        const merged = mergeScopePages(pages, {
+          ownScopeId: ownScopeId(mountedScopes()),
+        });
         assets = merged.assets as unknown as Asset[];
       } else {
-        const res = await client.read<{ assets?: Asset[] }>({ query: 'search', input: { term } });
+        const res = await client.read<{ assets?: Asset[] }>({
+          query: "search",
+          input: { term },
+        });
         assets = res?.assets ?? [];
       }
     } catch {

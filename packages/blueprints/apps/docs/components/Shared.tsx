@@ -1,10 +1,12 @@
 // Small shared presentational bits used across the Sidebar, Grid, List,
 // Details and QuickLook components. Pure functions of props — no app state.
-import type { MouseEvent } from 'react';
-import { custodyMeta } from '../format.ts';
-import { I } from '../icons.ts';
-import type { CustodyTone } from '../types.ts';
-import styles from './shared.module.css';
+import type { MouseEvent } from "react";
+
+import { custodyMeta } from "../format.ts";
+import { I } from "../icons.ts";
+import type { CustodyTone } from "../types.ts";
+
+import styles from "./shared.module.css";
 
 // A trusted static SVG string rendered inline, with the exact DOM shape the
 // old `el(svg)` produced: no wrapper box in the layout (`display:contents`),
@@ -13,7 +15,12 @@ import styles from './shared.module.css';
 // `<span>`) so it never collides with `.navItem span:first-of-type`, the one
 // rule in Sidebar.module.css that counts sibling spans.
 export function Icon({ svg }: { svg: string }) {
-  return <i style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: svg }} />;
+  return (
+    <i
+      style={{ display: "contents" }}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
 }
 
 export function Checkbox({
@@ -59,7 +66,10 @@ export function CustodyDot({ state }: { state: string | null }) {
   return (
     // The label is real text (visually hidden) rather than an `aria-label` on a
     // `role="img"` wrapper — same announcement, no faked role.
-    <span className={`${styles.custodyDot} ${CUSTODY_DOT_TONE[meta.tone]}`} title={meta.label}>
+    <span
+      className={`${styles.custodyDot} ${CUSTODY_DOT_TONE[meta.tone]}`}
+      title={meta.label}
+    >
       <span className="kit-sr-only">{meta.label}</span>
     </span>
   );
@@ -71,10 +81,12 @@ export function CustodyDot({ state }: { state: string | null }) {
 // root). Plain strings interleaved with `<mark>` reproduce the exact old
 // text-node + <mark> shape `.snippet mark` styles.
 export function Snippet({ snippet }: { snippet: string }) {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  const parts = String(snippet ?? "").split(/[⟦⟧]/u);
   return (
     <div className={styles.snippet}>
-      {parts.map((part, i) => (!part ? null : i % 2 === 1 ? <mark key={i}>{part}</mark> : part))}
+      {parts.map((part, i) =>
+        part ? i % 2 === 1 ? <mark key={i}>{part}</mark> : part : null
+      )}
     </div>
   );
 }

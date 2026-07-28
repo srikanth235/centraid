@@ -13,14 +13,14 @@
  * slowest promise still reads green rather than false-red on the oldest clock.
  */
 
+import type { StorageConnectionUsageDTO } from "../../gateway-client.js";
 import {
   deriveStorageMetrics,
   type StorageMetrics,
   type RetentionInput,
   type UsageInput,
-} from '../../storage-metrics.js';
-import type { BackupStatusDTO, BackupVaultStatusDTO } from './BackupCard.js';
-import type { StorageConnectionUsageDTO } from '../../gateway-client.js';
+} from "../../storage-metrics.js";
+import type { BackupStatusDTO, BackupVaultStatusDTO } from "./BackupCard.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -45,19 +45,25 @@ function vaultCadenceMs(vault: BackupVaultStatusDTO): number {
   const rpoSeconds = vault.policy?.rpoSeconds ?? 60;
   const snapshotIntervalHours = vault.policy?.snapshotIntervalHours ?? 24;
   const verifyEveryDays = vault.policy?.verifyEveryDays ?? 7;
-  return Math.max(rpoSeconds * 1000, snapshotIntervalHours * HOUR_MS, verifyEveryDays * DAY_MS);
+  return Math.max(
+    rpoSeconds * 1000,
+    snapshotIntervalHours * HOUR_MS,
+    verifyEveryDays * DAY_MS
+  );
 }
 
 /** Sum provider-reported usage across every home connection into the aggregate
  *  per-store shape the cost metric reads. `null` before the first poll. */
-export function aggregateUsage(connections: StorageConnectionUsageDTO[] | null): UsageInput | null {
+export function aggregateUsage(
+  connections: StorageConnectionUsageDTO[] | null
+): UsageInput | null {
   if (!connections || connections.length === 0) return null;
   const out: UsageInput = {};
   let sawAny = false;
   for (const conn of connections) {
     const reported = conn.providerReported;
     if (!reported) continue;
-    for (const store of ['backup', 'cas', 'derived'] as const) {
+    for (const store of ["backup", "cas", "derived"] as const) {
       const report = reported[store];
       if (!report) continue;
       sawAny = true;
@@ -78,7 +84,7 @@ export function aggregateUsage(connections: StorageConnectionUsageDTO[] | null):
 export function computeStorageMetrics(
   status: BackupStatusDTO,
   usage: UsageInput | null,
-  now: number,
+  now: number
 ): StorageMetrics {
   const vaults = status.vaults;
   const snapshotClocks = vaults.map((v) => parseIso(v.lastBackupAt));
@@ -87,13 +93,13 @@ export function computeStorageMetrics(
   // The outbox is only provably drained when nothing is pending offsite; its
   // watermark is then the newest WAL drain, else the edge is unproven (null).
   const outboxClocks = vaults.map((v) =>
-    (v.pendingOffsite?.count ?? 0) === 0 ? parseIso(v.lastWalDrainAt) : null,
+    (v.pendingOffsite?.count ?? 0) === 0 ? parseIso(v.lastWalDrainAt) : null
   );
 
   const declaredCadenceMs =
     vaults.length > 0 ? Math.max(...vaults.map(vaultCadenceMs)) : 7 * DAY_MS;
 
-  const retention: RetentionInput = status.home?.retention ?? { kind: 'none' };
+  const retention: RetentionInput = status.home?.retention ?? { kind: "none" };
 
   return deriveStorageMetrics({
     now,
@@ -108,6 +114,6 @@ export function computeStorageMetrics(
     },
     retention,
     usage,
-    restoreCostClass: status.home?.restoreCostClass ?? 'free-egress',
+    restoreCostClass: status.home?.restoreCostClass ?? "free-egress",
   });
 }

@@ -6,4 +6,4 @@
 // sites that need a `.value`/`.files`/`.disabled` member pass the concrete
 // element type (`$<HTMLInputElement>('searchInput')`).
 export const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
-  document.getElementById(id) as T;
+  document.querySelector(`#${id}`) as T;

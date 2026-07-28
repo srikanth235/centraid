@@ -28,10 +28,11 @@
  *     until an operator reviews and pauses automations by hand.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
-import type { RuntimeLogger } from '@centraid/app-engine';
-import type { VaultDb } from '@centraid/vault';
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+
+import type { RuntimeLogger } from "@centraid/app-engine";
+import type { VaultDb } from "@centraid/vault";
 
 export interface QuarantineStatus {
   restoredAt: string;
@@ -47,35 +48,37 @@ interface QuarantineMarker {
   sourceSeq?: unknown;
 }
 
-export const QUARANTINE_MARKER_FILE = 'RESTORE_QUARANTINE.json';
+export const QUARANTINE_MARKER_FILE = "RESTORE_QUARANTINE.json";
 
 /** Detect + act on a quarantine marker at `dir`. `null` when there is none. */
 export function applyRestoreQuarantine(
   dir: string,
   db: VaultDb,
-  logger: RuntimeLogger,
+  logger: RuntimeLogger
 ): QuarantineStatus | null {
   const markerFile = path.join(dir, QUARANTINE_MARKER_FILE);
   if (!existsSync(markerFile)) return null;
 
   let marker: QuarantineMarker = {};
   try {
-    marker = JSON.parse(readFileSync(markerFile, 'utf8')) as QuarantineMarker;
+    marker = JSON.parse(readFileSync(markerFile, "utf8")) as QuarantineMarker;
   } catch (err) {
     logger.warn(
       `vault plane: ${markerFile} exists but is unreadable: ` +
-        (err instanceof Error ? err.message : String(err)),
+        (err instanceof Error ? err.message : String(err))
     );
   }
-  const restoredAt = typeof marker.restoredAt === 'string' ? marker.restoredAt : 'unknown';
-  const sourceSeq = typeof marker.sourceSeq === 'number' ? marker.sourceSeq : -1;
+  const restoredAt =
+    typeof marker.restoredAt === "string" ? marker.restoredAt : "unknown";
+  const sourceSeq =
+    typeof marker.sourceSeq === "number" ? marker.sourceSeq : -1;
 
   const parked = db.vault
     .prepare(
       `UPDATE outbox_item
          SET status = 'pending', decided_at = NULL, grant_id = NULL,
              note = 'restored from backup (source seq ${sourceSeq}) — reconfirm before it drains'
-       WHERE status = 'approved'`,
+       WHERE status = 'approved'`
     )
     .run();
   const revoked = db.vault
@@ -90,7 +93,7 @@ export function applyRestoreQuarantine(
       `${outboxGrantsRevoked} standing grant(s). Automations were NOT auto-disabled ` +
       `(toggling them needs the code store + a publish, not a plain SQL update) — ` +
       `review and pause them by hand, then rename ${QUARANTINE_MARKER_FILE} to mark this resolved. ` +
-      `Connections also need re-auth review.`,
+      `Connections also need re-auth review.`
   );
 
   return {

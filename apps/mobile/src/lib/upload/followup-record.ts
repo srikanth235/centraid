@@ -1,9 +1,9 @@
-import type { UploadItem } from './store';
+import type { UploadItem } from "./store";
 
 export interface UploadDerivativeFollowup {
-  variant: 'thumb' | 'preview' | 'poster';
+  variant: "thumb" | "preview" | "poster";
   uri: string;
-  mediaType: 'image/jpeg';
+  mediaType: "image/jpeg";
 }
 
 export interface NewUploadFollowup {
@@ -21,7 +21,9 @@ export interface UploadFollowup extends NewUploadFollowup {
   attempts: number;
 }
 
-export type UploadFollowupFactory = (item: UploadItem) => Omit<NewUploadFollowup, 'itemId'>;
+export type UploadFollowupFactory = (
+  item: UploadItem
+) => Omit<NewUploadFollowup, "itemId">;
 
 export interface PersistedUploadFollowupRow {
   followup_id: number;
@@ -36,7 +38,9 @@ export interface PersistedUploadFollowupRow {
   last_error: string | null;
 }
 
-export function toUploadFollowup(row: PersistedUploadFollowupRow): UploadFollowup {
+export function toUploadFollowup(
+  row: PersistedUploadFollowupRow
+): UploadFollowup {
   return {
     followupId: row.followup_id,
     itemId: row.item_id,
@@ -47,7 +51,11 @@ export function toUploadFollowup(row: PersistedUploadFollowupRow): UploadFollowu
     attempts: row.attempts ?? 0,
     ...(row.derivatives_json === null
       ? {}
-      : { derivatives: JSON.parse(row.derivatives_json) as UploadDerivativeFollowup[] }),
+      : {
+          derivatives: JSON.parse(
+            row.derivatives_json
+          ) as UploadDerivativeFollowup[],
+        }),
   };
 }
 
@@ -56,12 +64,14 @@ export function stableFollowupIntentId(
   itemId: string,
   shape: string,
   action: string,
-  inputJson: string,
+  inputJson: string
 ): string {
   let hash = 0xcbf29ce484222325n;
-  for (const byte of new TextEncoder().encode(`${itemId}\0${shape}\0${action}\0${inputJson}`)) {
+  for (const byte of new TextEncoder().encode(
+    `${itemId}\0${shape}\0${action}\0${inputJson}`
+  )) {
     hash ^= BigInt(byte);
     hash = BigInt.asUintN(64, hash * 0x100000001b3n);
   }
-  return `upload-followup-${itemId}-${hash.toString(16).padStart(16, '0')}`;
+  return `upload-followup-${itemId}-${hash.toString(16).padStart(16, "0")}`;
 }

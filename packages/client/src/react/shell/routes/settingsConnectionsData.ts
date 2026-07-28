@@ -1,3 +1,4 @@
+import { completeAssistReturnLink as completeAssistReturnLinkFromClient } from "../../../assist-oauth-handoff.js";
 import {
   beginConnectionAuthorization,
   cloneTemplate as gwCloneTemplate,
@@ -13,20 +14,19 @@ import {
   type ConnectionEntry,
   type ConnectionProviderPreset,
   type AssistOAuthAvailability,
-} from '../../../gateway-client.js';
+} from "../../../gateway-client.js";
 import type {
   ConnectionFormInput,
   ConnectionHealth,
   ConnectionRowDTO,
   LinkedSyncDTO,
   ProviderOptionDTO,
-} from '../../screens/SettingsConnectionsScreen.js';
+} from "../../screens/SettingsConnectionsScreen.js";
 import {
   sortConnectionsByAttention,
   toolDescriptorsFromHealthyConnections,
   type ProviderCapabilitiesDTO,
-} from './connectorPlatform.js';
-import { completeAssistReturnLink as completeAssistReturnLinkFromClient } from '../../../assist-oauth-handoff.js';
+} from "./connectorPlatform.js";
 
 // Connectors data layer (issue #304 renderer half; screen now lives on the
 // primary Connectors sidebar route): maps the gateway's broker-owned OAuth /
@@ -36,11 +36,11 @@ import { completeAssistReturnLink as completeAssistReturnLinkFromClient } from '
 // confirm-gating the destructive detach action, mirroring how SettingsRoute
 // gates space deletion (`removeSpace`) with the same `confirm` action.
 
-const STATUS_TO_HEALTH: Record<ConnectionEntry['status'], ConnectionHealth> = {
-  active: 'ok',
-  failing: 'failing',
-  'needs-auth': 'needs-auth',
-  paused: 'paused',
+const STATUS_TO_HEALTH: Record<ConnectionEntry["status"], ConnectionHealth> = {
+  active: "ok",
+  failing: "failing",
+  "needs-auth": "needs-auth",
+  paused: "paused",
 };
 
 function toRowDTO(c: ConnectionEntry): ConnectionRowDTO {
@@ -60,19 +60,19 @@ function toRowDTO(c: ConnectionEntry): ConnectionRowDTO {
 
 /** Derive capabilities when an older gateway omits the field. */
 function fallbackCapabilities(
-  connectors: ConnectionProviderPreset['connectors'],
-): ProviderOptionDTO['capabilities'] {
-  const syncs: ProviderOptionDTO['capabilities']['syncs'] = [];
-  const actions: ProviderOptionDTO['capabilities']['actions'] = [];
+  connectors: ConnectionProviderPreset["connectors"]
+): ProviderOptionDTO["capabilities"] {
+  const syncs: ProviderOptionDTO["capabilities"]["syncs"] = [];
+  const actions: ProviderOptionDTO["capabilities"]["actions"] = [];
   for (const c of connectors) {
-    if (c.templateId.endsWith('-send')) {
+    if (c.templateId.endsWith("-send")) {
       actions.push({
         id: `action:${c.templateId}`,
         title: c.templateId,
-        toolName: `connector.${c.kind.replace(/\./g, '_')}.send`,
+        toolName: `connector.${c.kind.replace(/\./gu, "_")}.send`,
         kind: c.kind,
         templateId: c.templateId,
-        approval: 'outbox',
+        approval: "outbox",
         ...(c.scope ? { scope: c.scope } : {}),
       });
       continue;
@@ -82,13 +82,13 @@ function fallbackCapabilities(
       title: `${c.templateId} sync`,
       templateId: c.templateId,
       kind: c.kind,
-      defaultCron: '0 * * * *',
+      defaultCron: "0 * * * *",
       ...(c.scope ? { scope: c.scope } : {}),
     });
     actions.push({
       id: `action:list:${c.kind}`,
       title: `List ${c.kind}`,
-      toolName: `connector.${c.kind.replace(/\./g, '_')}.list`,
+      toolName: `connector.${c.kind.replace(/\./gu, "_")}.list`,
       kind: c.kind,
       templateId: c.templateId,
       ...(c.scope ? { scope: c.scope } : {}),
@@ -99,7 +99,7 @@ function fallbackCapabilities(
 
 function toProviderDTO(
   p: ConnectionProviderPreset,
-  assist: AssistOAuthAvailability,
+  assist: AssistOAuthAvailability
 ): ProviderOptionDTO {
   const capabilities = p.capabilities
     ? {
@@ -122,7 +122,7 @@ function toProviderDTO(
     scopes: p.scopes,
     setup: p.setup,
     tokenUrl: p.tokenUrl,
-    ...(p.id === 'google' ? { assist } : {}),
+    ...(p.id === "google" ? { assist } : {}),
   };
 }
 
@@ -131,9 +131,13 @@ export async function loadConnectionsData(): Promise<ConnectionRowDTO[]> {
   return sortConnectionsByAttention(rows.map(toRowDTO));
 }
 
-export async function loadConnectionProvidersData(): Promise<ProviderOptionDTO[]> {
+export async function loadConnectionProvidersData(): Promise<
+  ProviderOptionDTO[]
+> {
   const catalog = await loadConnectionProviderCatalog();
-  return catalog.providers.map((provider) => toProviderDTO(provider, catalog.assist));
+  return catalog.providers.map((provider) =>
+    toProviderDTO(provider, catalog.assist)
+  );
 }
 
 /**
@@ -159,14 +163,16 @@ export async function loadConnectorToolDescriptors(): Promise<
 
 /** Sync capabilities for one connection with install status from vault automations. */
 export async function loadLinkedSyncsForConnection(
-  connection: ConnectionRowDTO,
+  connection: ConnectionRowDTO
 ): Promise<LinkedSyncDTO[]> {
   const providers = await loadConnectionProvidersData();
   const provider =
     providers.find((p) => p.id === connection.provider) ??
     providers.find((p) => p.connectors.some((c) => c.kind === connection.kind));
   if (!provider) return [];
-  const syncs = provider.capabilities.syncs.filter((s) => s.kind === connection.kind);
+  const syncs = provider.capabilities.syncs.filter(
+    (s) => s.kind === connection.kind
+  );
   const automations = await listAutomations().catch(() => []);
   return syncs.map((s) => {
     const installed = automations.find((a) => {
@@ -178,7 +184,8 @@ export async function loadLinkedSyncsForConnection(
         // Template id often matches app id for pull blueprints.
         return a.id === s.templateId || a.ref.endsWith(`/${s.templateId}`);
       }
-      if (c.connectionId && c.connectionId === connection.connectionId) return true;
+      if (c.connectionId && c.connectionId === connection.connectionId)
+        return true;
       return c.kind === connection.kind;
     });
     return {
@@ -201,7 +208,9 @@ export async function installSyncForConnection(input: {
   const rows = await listAutomations().catch(() => []);
   const row = rows.find((r) => r.id === result.app.id);
   if (!row) {
-    throw new Error(`cloned automation "${result.app.id}" was not available to bind`);
+    throw new Error(
+      `cloned automation "${result.app.id}" was not available to bind`
+    );
   }
   const ref = row?.ref ?? `${result.app.id}/${input.templateId}`;
   const existing = (
@@ -229,13 +238,13 @@ export async function installSyncForConnection(input: {
  *  `sync.configure_credential`). Returns `connectionId` so oauth2 can
  *  immediately start the browser authorize step. */
 export async function submitConnectionForm(
-  input: ConnectionFormInput,
+  input: ConnectionFormInput
 ): Promise<{ connectionId: string; status: string }> {
-  if (input.oauthMode === 'assist') {
+  if (input.oauthMode === "assist") {
     const out = await gwConfigureAssistConnection({
       kind: input.connectorKind,
       label: input.label,
-      scopes: input.scopes?.split(/\s+/).filter(Boolean) ?? [],
+      scopes: input.scopes?.split(/\s+/u).filter(Boolean) ?? [],
     });
     return { connectionId: out.connectionId, status: out.status };
   }
@@ -266,21 +275,28 @@ export async function loadOAuthCallbackUri(): Promise<string> {
 /** Pause / resume — the owner's two levers over a connection's fire path. */
 export async function updateConnectionStatus(
   connectionId: string,
-  status: 'active' | 'paused',
+  status: "active" | "paused"
 ): Promise<void> {
   await gwSetConnectionStatus({ connectionId, status });
 }
 
 /** Begins the PKCE ceremony; the screen opens the returned URL itself. */
-export async function beginConnectionAuthorize(connectionId: string): Promise<string> {
+export async function beginConnectionAuthorize(
+  connectionId: string
+): Promise<string> {
   const capabilities = await window.CentraidApi.getHostCapabilities?.();
-  const surface = capabilities?.platform === 'web' ? 'web' : 'desktop';
-  const { authUrl } = await beginConnectionAuthorization({ connectionId, surface });
+  const surface = capabilities?.platform === "web" ? "web" : "desktop";
+  const { authUrl } = await beginConnectionAuthorization({
+    connectionId,
+    surface,
+  });
   return authUrl;
 }
 
 /** Deliver the Worker finish page's manual custom-scheme fallback. */
-export async function completeAssistReturnLink(rawUrl: string): Promise<{ connectionId: string }> {
+export async function completeAssistReturnLink(
+  rawUrl: string
+): Promise<{ connectionId: string }> {
   return completeAssistReturnLinkFromClient(rawUrl);
 }
 
@@ -306,14 +322,14 @@ export function makeDetachConnection(
     message: string;
     confirmLabel?: string;
     danger?: boolean;
-  }) => Promise<boolean>,
+  }) => Promise<boolean>
 ): (connectionId: string, kind: string, label: string) => Promise<void> {
   return async (connectionId, _kind, label) => {
     const ok = await confirm({
-      confirmLabel: 'Remove',
+      confirmLabel: "Remove",
       danger: true,
       message: `Remove "${label}" completely? This deletes the connection and its credential — it can't be undone. If it still has undecided outbox items or sync history, removal will be refused; pause the connection instead if you just want it to stop.`,
-      title: 'Remove connection?',
+      title: "Remove connection?",
     });
     if (!ok) return;
     await gwRemoveConnection(connectionId);

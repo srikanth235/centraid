@@ -34,7 +34,7 @@
  *     to settle every entry.
  */
 
-import type { Row } from '../scaffold/app.js';
+import type { Row } from "../scaffold/app.js";
 
 export interface Host {
   /**
@@ -43,20 +43,20 @@ export interface Host {
    * entry vs. no entry); callers just call this whenever the row
    * changes.
    */
-  register(row: Row): Promise<void>;
+  register: (row: Row) => Promise<void>;
 
   /**
    * Remove one automation from the host by its UUID. Tolerates
    * "not present".
    */
-  unregister(automationId: string): Promise<void>;
+  unregister: (automationId: string) => Promise<void>;
 
   /**
    * List the centraid-owned host entries currently registered. The
    * format is host-specific (automation refs for the in-process
    * scheduler) — useful only for diagnostics and reconciliation.
    */
-  list(): Promise<readonly string[]>;
+  list: () => Promise<readonly string[]>;
 
   /**
    * Bring the host into agreement with `desired`. Implementations
@@ -64,7 +64,7 @@ export interface Host {
    * register/unregister calls needed. `desired` is always the full
    * set of centraid-owned automations.
    */
-  reconcile(desired: ReadonlyArray<Row>): Promise<ReconcileResult>;
+  reconcile: (desired: ReadonlyArray<Row>) => Promise<ReconcileResult>;
 }
 
 export interface ReconcileResult {

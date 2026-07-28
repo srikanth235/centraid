@@ -25,8 +25,14 @@
  * `rename`/presentation remain plain owner acts on an enrolled vault.
  */
 
-import { readdirSync, rmSync, existsSync } from 'node:fs';
-import path from 'node:path';
+import { readdirSync, rmSync, existsSync } from "node:fs";
+import path from "node:path";
+
+import type {
+  RuntimeLogger,
+  VaultBridge,
+  VaultWorkspace,
+} from "@centraid/app-engine";
 import {
   uuidv7,
   VaultSchemaAheadError,
@@ -34,10 +40,14 @@ import {
   type S3Credentials,
   type PreviewCodec,
   type KeyStore,
-} from '@centraid/vault';
-import type { RuntimeLogger, VaultBridge, VaultWorkspace } from '@centraid/app-engine';
-import { openVaultPlane, VaultPlane, type InstallScopeBlock } from './vault-plane.js';
-import { vaultContext } from './vault-context.js';
+} from "@centraid/vault";
+
+import { vaultContext } from "./vault-context.js";
+import {
+  openVaultPlane,
+  VaultPlane,
+  type InstallScopeBlock,
+} from "./vault-plane.js";
 
 /**
  * Minimum time between retry attempts for a directory whose mount failed
@@ -101,9 +111,12 @@ export interface VaultRegistryOptions {
   /** Forwarded to every plane (issue #405 §2) — see `VaultPlaneOptions.previewCodec`. */
   previewCodec?: PreviewCodec;
   /** Forwarded to each plane after journal provenance commits. */
-  onProvenanceCommitted?: (vaultId: string, entityTypes?: readonly string[]) => void;
+  onProvenanceCommitted?: (
+    vaultId: string,
+    entityTypes?: readonly string[]
+  ) => void;
   /** SQLite durability selected by the gateway hardware profile. */
-  synchronous?: 'FULL' | 'NORMAL';
+  synchronous?: "FULL" | "NORMAL";
   /** Global event-loop pressure gate forwarded to mounted planes. */
   shouldDeferBackgroundWork?: () => boolean;
   /** Concurrent remote pushes selected by the gateway hardware profile. */
@@ -111,7 +124,10 @@ export interface VaultRegistryOptions {
   /** Resource-actuals sweep hook (#528 Phase C), forwarded to every plane. */
   onSweepPass?: (info: { durationMs: number }) => void;
   /** Resource-actuals replication hook (#528 Phase C), forwarded to every plane. */
-  onReplicationPass?: (info: { bytesReplicated: number; durationMs: number }) => void;
+  onReplicationPass?: (info: {
+    bytesReplicated: number;
+    durationMs: number;
+  }) => void;
   /** Forwarded to every plane (issue #544) — see `VaultPlaneOptions.journalLimitBytes`. */
   journalLimitBytes?: () => number | null;
 }
@@ -131,11 +147,11 @@ export interface VaultInfo {
 /** A refused registry act (delete the last vault, unknown id, …). */
 export class VaultRegistryError extends Error {
   constructor(
-    readonly code: 'vault_not_found' | 'bad_name',
-    message: string,
+    readonly code: "vault_not_found" | "bad_name",
+    message: string
   ) {
     super(message);
-    this.name = 'VaultRegistryError';
+    this.name = "VaultRegistryError";
   }
 }
 
@@ -156,10 +172,12 @@ export class VaultRegistry {
   private readonly onProvenanceCommitted:
     | ((vaultId: string, entityTypes?: readonly string[]) => void)
     | undefined;
-  private readonly synchronous: 'FULL' | 'NORMAL' | undefined;
+  private readonly synchronous: "FULL" | "NORMAL" | undefined;
   private readonly shouldDeferBackgroundWork: (() => boolean) | undefined;
   private readonly replicationConcurrency: number | undefined;
-  private readonly onSweepPass: ((info: { durationMs: number }) => void) | undefined;
+  private readonly onSweepPass:
+    | ((info: { durationMs: number }) => void)
+    | undefined;
   private readonly onReplicationPass:
     | ((info: { bytesReplicated: number; durationMs: number }) => void)
     | undefined;
@@ -178,7 +196,10 @@ export class VaultRegistry {
     // of the vault root so a vault dir carries only sovereign + code state.
     this.cacheRootDir =
       options.cacheRootDir ??
-      path.join(path.dirname(this.rootDir), `${path.basename(this.rootDir)}-cache`);
+      path.join(
+        path.dirname(this.rootDir),
+        `${path.basename(this.rootDir)}-cache`
+      );
     this.logger = options.logger;
     this.keyStore = options.keyStore;
     this.ownerName = options.ownerName;
@@ -198,12 +219,12 @@ export class VaultRegistry {
     // Zero-vault boot does not materialize `vault/`; the first create or
     // restore owns that transition.
     if (!existsSync(this.rootDir)) return;
-    if (existsSync(path.join(this.rootDir, 'vault.db'))) {
+    if (existsSync(path.join(this.rootDir, "vault.db"))) {
       // Pre-multi-vault layout (v0: no data migrations) — the files stay put
       // but are not mounted.
       this.logger.warn(
         `vault registry: ignoring legacy single-vault files at ${this.rootDir} — ` +
-          'vaults now live one directory per vault',
+          "vaults now live one directory per vault"
       );
     }
     this.scan();
@@ -231,12 +252,13 @@ export class VaultRegistry {
       // — mounting it mid-restore would be a torn vault. Real vaults are named
       // by UUIDv7 and never start with a dot, so this can only ever exclude
       // staging scratch.
-      if (entry.name.startsWith('.')) continue;
+      if (entry.name.startsWith(".")) continue;
       const dir = path.join(this.rootDir, entry.name);
       if (this.scannedDirs.has(dir)) continue;
-      if (!existsSync(path.join(dir, 'vault.db'))) continue;
+      if (!existsSync(path.join(dir, "vault.db"))) continue;
       const priorFailure = this.failedMountsByDir.get(dir);
-      if (priorFailure && nowMs - priorFailure.atMs < MOUNT_RETRY_BACKOFF_MS) continue;
+      if (priorFailure && nowMs - priorFailure.atMs < MOUNT_RETRY_BACKOFF_MS)
+        continue;
       try {
         const plane = this.openPlane(dir, {});
         if (this.planes.has(plane.boot.vaultId)) {
@@ -246,7 +268,11 @@ export class VaultRegistry {
           // operator moving/removing one of the directories.
           const message = `duplicate vault id ${plane.boot.vaultId} at ${dir} — skipped`;
           this.logger.warn(`vault registry: ${message}`);
-          this.failedMountsByDir.set(dir, { message, atMs: nowMs, schemaAhead: false });
+          this.failedMountsByDir.set(dir, {
+            message,
+            atMs: nowMs,
+            schemaAhead: false,
+          });
           plane.stop();
           continue;
         }
@@ -259,9 +285,11 @@ export class VaultRegistry {
         const message = err instanceof Error ? err.message : String(err);
         const schemaAhead =
           err instanceof VaultSchemaAheadError ||
-          (err instanceof Error && err.name === 'VaultSchemaAheadError');
+          (err instanceof Error && err.name === "VaultSchemaAheadError");
         this.failedMountsByDir.set(dir, { message, atMs: nowMs, schemaAhead });
-        this.logger.warn(`vault registry: could not mount vault at ${dir}: ${message}`);
+        this.logger.warn(
+          `vault registry: could not mount vault at ${dir}: ${message}`
+        );
       }
     }
   }
@@ -313,8 +341,8 @@ export class VaultRegistry {
     return !readdirSync(this.rootDir, { withFileTypes: true }).some(
       (entry) =>
         entry.isDirectory() &&
-        !entry.name.startsWith('.') &&
-        existsSync(path.join(this.rootDir, entry.name, 'vault.db')),
+        !entry.name.startsWith(".") &&
+        existsSync(path.join(this.rootDir, entry.name, "vault.db"))
     );
   }
 
@@ -335,14 +363,17 @@ export class VaultRegistry {
     const plane = this.planes.get(vaultId);
     if (!plane) {
       throw new VaultRegistryError(
-        'vault_not_found',
-        `adopt: no vault mounted at "${vaultId}" — is its directory in place under the root?`,
+        "vault_not_found",
+        `adopt: no vault mounted at "${vaultId}" — is its directory in place under the root?`
       );
     }
     return this.info(plane);
   }
 
-  private openPlane(dir: string, boot: { vaultId?: string; vaultName?: string }): VaultPlane {
+  private openPlane(
+    dir: string,
+    boot: { vaultId?: string; vaultName?: string }
+  ): VaultPlane {
     return openVaultPlane({
       dir,
       // Vault dir name IS the vault id (create() names it so), so the cache
@@ -352,23 +383,35 @@ export class VaultRegistry {
       ...(this.keyStore ? { keyStore: this.keyStore } : {}),
       ...(this.ownerName ? { ownerName: this.ownerName } : {}),
       ...(boot.vaultId ? { bootstrap: true } : {}),
-      ...(this.sweepIntervalMs !== undefined ? { sweepIntervalMs: this.sweepIntervalMs } : {}),
+      ...(this.sweepIntervalMs === undefined
+        ? {}
+        : { sweepIntervalMs: this.sweepIntervalMs }),
       enableWalShipper: this.enableWalShipper,
-      ...(this.walCaptureConfigured ? { walCaptureConfigured: this.walCaptureConfigured } : {}),
-      ...(this.skipOrphanDelete ? { skipOrphanDelete: this.skipOrphanDelete } : {}),
+      ...(this.walCaptureConfigured
+        ? { walCaptureConfigured: this.walCaptureConfigured }
+        : {}),
+      ...(this.skipOrphanDelete
+        ? { skipOrphanDelete: this.skipOrphanDelete }
+        : {}),
       ...(this.s3Credentials ? { s3Credentials: this.s3Credentials } : {}),
       ...(this.previewCodec ? { previewCodec: this.previewCodec } : {}),
-      ...(this.onProvenanceCommitted ? { onProvenanceCommitted: this.onProvenanceCommitted } : {}),
+      ...(this.onProvenanceCommitted
+        ? { onProvenanceCommitted: this.onProvenanceCommitted }
+        : {}),
       ...(this.synchronous ? { synchronous: this.synchronous } : {}),
       ...(this.shouldDeferBackgroundWork
         ? { shouldDeferBackgroundWork: this.shouldDeferBackgroundWork }
         : {}),
-      ...(this.replicationConcurrency !== undefined
-        ? { replicationConcurrency: this.replicationConcurrency }
-        : {}),
+      ...(this.replicationConcurrency === undefined
+        ? {}
+        : { replicationConcurrency: this.replicationConcurrency }),
       ...(this.onSweepPass ? { onSweepPass: this.onSweepPass } : {}),
-      ...(this.onReplicationPass ? { onReplicationPass: this.onReplicationPass } : {}),
-      ...(this.journalLimitBytes ? { journalLimitBytes: this.journalLimitBytes } : {}),
+      ...(this.onReplicationPass
+        ? { onReplicationPass: this.onReplicationPass }
+        : {}),
+      ...(this.journalLimitBytes
+        ? { journalLimitBytes: this.journalLimitBytes }
+        : {}),
       ...boot,
     });
   }
@@ -392,7 +435,8 @@ export class VaultRegistry {
    */
   defaultVaultId(): string {
     const oldest = [...this.planes.keys()].sort()[0];
-    if (oldest === undefined) throw new Error('vault registry: no vault mounted');
+    if (oldest === undefined)
+      throw new Error("vault registry: no vault mounted");
     return oldest;
   }
 
@@ -405,7 +449,11 @@ export class VaultRegistry {
     const ctx = vaultContext();
     const vaultId = ctx?.vaultId ?? this.defaultVaultId();
     const plane = this.get(vaultId);
-    if (!plane) throw new VaultRegistryError('vault_not_found', `unknown vault "${vaultId}"`);
+    if (!plane)
+      throw new VaultRegistryError(
+        "vault_not_found",
+        `unknown vault "${vaultId}"`
+      );
     return plane;
   }
 
@@ -425,7 +473,9 @@ export class VaultRegistry {
 
   /** Every mounted vault, oldest first. */
   list(): VaultInfo[] {
-    return [...this.planes.keys()].sort().map((id) => this.info(this.planes.get(id)!));
+    return [...this.planes.keys()]
+      .sort()
+      .map((id) => this.info(this.planes.get(id)!));
   }
 
   /** Every mounted plane, oldest first (boot activation iterates these). */
@@ -441,7 +491,7 @@ export class VaultRegistry {
   create(name?: string): VaultInfo {
     const trimmed = name?.trim();
     if (trimmed !== undefined && trimmed.length === 0) {
-      throw new VaultRegistryError('bad_name', 'a vault name cannot be empty');
+      throw new VaultRegistryError("bad_name", "a vault name cannot be empty");
     }
     const vaultId = uuidv7();
     const dir = path.join(this.rootDir, vaultId);
@@ -453,7 +503,9 @@ export class VaultRegistry {
     this.planes.set(plane.boot.vaultId, plane);
     if (this.started) plane.start();
     this.notifyMounted(plane);
-    this.logger.info(`vault registry: created vault ${plane.boot.vaultId} ("${plane.name}")`);
+    this.logger.info(
+      `vault registry: created vault ${plane.boot.vaultId} ("${plane.name}")`
+    );
     return this.info(plane);
   }
 
@@ -462,7 +514,7 @@ export class VaultRegistry {
     const plane = this.require(vaultId);
     const trimmed = name.trim();
     if (trimmed.length === 0)
-      throw new VaultRegistryError('bad_name', 'a vault name cannot be empty');
+      throw new VaultRegistryError("bad_name", "a vault name cannot be empty");
     plane.rename(trimmed);
     return this.info(plane);
   }
@@ -470,7 +522,7 @@ export class VaultRegistry {
   /** Merge a presentation patch into one vault (owner act, #280). */
   updatePresentation(
     vaultId: string,
-    patch: Partial<Record<'color' | 'icon' | 'blurb', string | null>>,
+    patch: Partial<Record<"color" | "icon" | "blurb", string | null>>
   ): VaultInfo {
     const plane = this.require(vaultId);
     plane.updatePresentation(patch);
@@ -508,28 +560,37 @@ export class VaultRegistry {
     if (existsSync(this.rootDir) && readdirSync(this.rootDir).length === 0) {
       rmSync(this.rootDir, { recursive: true, force: true });
     }
-    if (existsSync(this.cacheRootDir) && readdirSync(this.cacheRootDir).length === 0) {
+    if (
+      existsSync(this.cacheRootDir) &&
+      readdirSync(this.cacheRootDir).length === 0
+    ) {
       rmSync(this.cacheRootDir, { recursive: true, force: true });
     }
     void purge
       .then((shas) => {
         if (shas.length > 0) {
           this.logger.info(
-            `vault registry: purged ${shas.length} remote blob(s) of deleted vault ${vaultId}`,
+            `vault registry: purged ${shas.length} remote blob(s) of deleted vault ${vaultId}`
           );
         }
       })
       .catch((err: unknown) => {
         this.logger.warn(
-          `vault registry: remote blob purge for deleted vault ${vaultId} failed: ${err instanceof Error ? err.message : String(err)}`,
+          `vault registry: remote blob purge for deleted vault ${vaultId} failed: ${err instanceof Error ? err.message : String(err)}`
         );
       });
-    this.logger.info(`vault registry: deleted vault ${vaultId} ("${plane.name}")`);
+    this.logger.info(
+      `vault registry: deleted vault ${vaultId} ("${plane.name}")`
+    );
   }
 
   private require(vaultId: string): VaultPlane {
     const plane = this.get(vaultId);
-    if (!plane) throw new VaultRegistryError('vault_not_found', `unknown vault "${vaultId}"`);
+    if (!plane)
+      throw new VaultRegistryError(
+        "vault_not_found",
+        `unknown vault "${vaultId}"`
+      );
     return plane;
   }
 
@@ -592,6 +653,8 @@ export class VaultRegistry {
   }
 }
 
-export function openVaultRegistry(options: VaultRegistryOptions): VaultRegistry {
+export function openVaultRegistry(
+  options: VaultRegistryOptions
+): VaultRegistry {
   return new VaultRegistry(options);
 }

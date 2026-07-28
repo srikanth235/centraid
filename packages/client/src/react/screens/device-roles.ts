@@ -12,7 +12,7 @@
  * out, which is why it is absent from the presets but present in `roleLabel`.
  */
 
-import type { GatewayDeviceRole } from '../../gateway-client.js';
+import type { GatewayDeviceRole } from "../../gateway-client.js";
 
 export interface RolePreset {
   role: GatewayDeviceRole;
@@ -27,25 +27,29 @@ export interface RolePreset {
  * casually paired phone mint further tickets and revoke this very device.
  */
 export const ROLE_PRESETS: readonly RolePreset[] = [
-  { role: 'read', label: 'Viewer', hint: 'Can see this space. Cannot change anything.' },
   {
-    role: 'write',
-    label: 'Member',
-    hint: 'Can see and change this space. The usual choice.',
+    role: "read",
+    label: "Viewer",
+    hint: "Can see this space. Cannot change anything.",
   },
   {
-    role: 'admin',
-    label: 'Owner',
-    hint: 'Everything, plus pairing new devices and removing people — including you.',
+    role: "write",
+    label: "Member",
+    hint: "Can see and change this space. The usual choice.",
+  },
+  {
+    role: "admin",
+    label: "Owner",
+    hint: "Everything, plus pairing new devices and removing people — including you.",
   },
 ];
 
 /** The default a fresh grant row starts at. */
-export const DEFAULT_ROLE: GatewayDeviceRole = 'write';
+export const DEFAULT_ROLE: GatewayDeviceRole = "write";
 
 /** The ownership word for a role, including the `revoked` tombstone. */
-export function roleLabel(role: GatewayDeviceRole | 'revoked'): string {
-  if (role === 'revoked') return 'Revoked';
+export function roleLabel(role: GatewayDeviceRole | "revoked"): string {
+  if (role === "revoked") return "Revoked";
   return ROLE_PRESETS.find((preset) => preset.role === role)?.label ?? role;
 }
 
@@ -56,21 +60,30 @@ export function roleLabel(role: GatewayDeviceRole | 'revoked'): string {
  */
 const PAIR_ERRORS: readonly (readonly [string, string])[] = [
   [
-    'role_above_own',
-    'You can only pair a device for yourself at the access you already have. Ask an owner of that space to pair it for you.',
+    "role_above_own",
+    "You can only pair a device for yourself at the access you already have. Ask an owner of that space to pair it for you.",
   ],
   [
-    'not_admin',
-    'Pairing a device for someone else needs you to be an Owner of every space you are granting.',
+    "not_admin",
+    "Pairing a device for someone else needs you to be an Owner of every space you are granting.",
   ],
-  ['ambiguous_member', 'Pick an existing person or add a new one — not both.'],
-  ['invalid_member_label', 'Give the new person a name.'],
-  ['member_not_found', 'That person is no longer in the household. Reload and try again.'],
-  ['invalid_grants', 'Each space needs a role. Remove any blank row and try again.'],
-  ['grants_required', 'Choose at least one space this device may reach.'],
-  ['no_iroh_endpoint', 'The gateway has no network identity yet. Start it and try again.'],
-  ['vault_required', 'Choose at least one space this device may reach.'],
-  ['device_identity_required', 'This device is not allowed to pair others.'],
+  ["ambiguous_member", "Pick an existing person or add a new one — not both."],
+  ["invalid_member_label", "Give the new person a name."],
+  [
+    "member_not_found",
+    "That person is no longer in the household. Reload and try again.",
+  ],
+  [
+    "invalid_grants",
+    "Each space needs a role. Remove any blank row and try again.",
+  ],
+  ["grants_required", "Choose at least one space this device may reach."],
+  [
+    "no_iroh_endpoint",
+    "The gateway has no network identity yet. Start it and try again.",
+  ],
+  ["vault_required", "Choose at least one space this device may reach."],
+  ["device_identity_required", "This device is not allowed to pair others."],
 ];
 
 /** Turn a mint failure into something a person can act on. */
@@ -89,8 +102,8 @@ export function pairErrorMessage(err: unknown): string {
  * refusal (JSON-quoted), so the surface can escalate its confirm in place
  * instead of making the owner retype anything.
  */
-const LAST_ADMIN_CODE = 'last_admin_confirmation_required';
-const LAST_ADMIN_SPACE = /(?:type|member of)\s+\\?"([^"\\]+)\\?"/;
+const LAST_ADMIN_CODE = "last_admin_confirmation_required";
+const LAST_ADMIN_SPACE = /(?:type|member of)\s+\\?"(?<space>[^"\\]+)\\?"/u;
 
 /** The space that would lose its last owner, or `undefined` for other errors. */
 export function lastAdminSpace(err: unknown): string | undefined {

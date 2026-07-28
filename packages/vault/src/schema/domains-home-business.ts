@@ -1,6 +1,6 @@
 // Domain DDL — schemas `home`, `business` from duaility-ontology.html §03.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from './updated-at.js';
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const HOME_DDL = `
 CREATE TABLE home_asset_item (
@@ -110,11 +110,11 @@ CREATE TABLE home_meter_reading (
   updated_at     TEXT NOT NULL DEFAULT ${UPDATED_AT_DEFAULT}
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_meter_reading_meter ON home_meter_reading(meter_id);
-${touchUpdatedAt('home_asset_item', 'item_id')}
-${touchUpdatedAt('home_warranty', 'warranty_id')}
-${touchUpdatedAt('home_maintenance_plan', 'plan_id')}
-${touchUpdatedAt('home_utility_meter', 'meter_id')}
-${touchUpdatedAt('home_meter_reading', 'reading_id')}
+${touchUpdatedAt("home_asset_item", "item_id")}
+${touchUpdatedAt("home_warranty", "warranty_id")}
+${touchUpdatedAt("home_maintenance_plan", "plan_id")}
+${touchUpdatedAt("home_utility_meter", "meter_id")}
+${touchUpdatedAt("home_meter_reading", "reading_id")}
 `;
 
 export const BUSINESS_DDL = `
@@ -238,9 +238,9 @@ WHEN NEW.total_minor <> (
 BEGIN
   SELECT RAISE(ABORT, 'invoice total must equal the sum of its lines');
 END;
-${touchUpdatedAt('business_client', 'client_id')}
-${touchUpdatedAt('business_project', 'project_id')}
-${touchUpdatedAt('business_time_entry', 'entry_id')}
-${touchUpdatedAt('business_invoice', 'invoice_id')}
-${touchUpdatedAt('business_invoice_line', 'line_id')}
+${touchUpdatedAt("business_client", "client_id")}
+${touchUpdatedAt("business_project", "project_id")}
+${touchUpdatedAt("business_time_entry", "entry_id")}
+${touchUpdatedAt("business_invoice", "invoice_id")}
+${touchUpdatedAt("business_invoice_line", "line_id")}
 `;

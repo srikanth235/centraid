@@ -25,7 +25,11 @@
   width: 30px;
   height: 30px;
   border-radius: 9px;
-  background: linear-gradient(160deg, color-mix(in oklab, var(--_accent) 78%, #fff), var(--accd));
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--_accent) 78%, #fff),
+    var(--accd)
+  );
   color: #fff;
   display: flex;
   align-items: center;
@@ -110,12 +114,12 @@
   background: var(--bg-sunken);
   color: var(--ink);
 }
-.navItem[aria-current='true'] {
+.navItem[aria-current="true"] {
   background: var(--accs);
   color: var(--accd-fg);
   font-weight: 600;
 }
-.navItem[aria-current='true'] .ic {
+.navItem[aria-current="true"] .ic {
   color: var(--accd-fg);
 }
 .seclabel {

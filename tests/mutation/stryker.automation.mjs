@@ -3,4 +3,4 @@
  * Nightly executes `packages/automation/stryker.config.mjs` via scripts/mutation/run.mjs.
  * @type {import('@stryker-mutator/api/core').PartialStrykerOptions}
  */
-export { default } from '../../packages/automation/stryker.config.mjs';
+export { default } from "../../packages/automation/stryker.config.mjs";

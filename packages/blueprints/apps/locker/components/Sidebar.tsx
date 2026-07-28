@@ -2,12 +2,14 @@
 // trash, lock + theme. A pure projection of props; clicks call straight back
 // into the callbacks app.tsx wired to logic.ts — the React port of app.js's
 // `LockerSidebar` Lit component.
-import type { ReactNode } from 'react';
-import { CAT_ORDER, CATS } from '../format.ts';
-import type { Nav } from '../types.ts';
-import { Icon, CatIcon } from './Shared.tsx';
-import styles from './Sidebar.module.css';
-import shared from './shared.module.css';
+import type { ReactNode } from "react";
+
+import { CAT_ORDER, CATS } from "../format.ts";
+import type { Nav } from "../types.ts";
+import { Icon, CatIcon } from "./Shared.tsx";
+
+import shared from "./shared.module.css";
+import styles from "./Sidebar.module.css";
 
 function NavItem({
   icon,
@@ -23,10 +25,17 @@ function NavItem({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className={styles.navItem} aria-current={!!active} onClick={onClick}>
+    <button
+      type="button"
+      className={styles.navItem}
+      aria-current={!!active}
+      onClick={onClick}
+    >
       <span className={styles.ic}>{icon}</span>
       <span className={styles.lbl}>{label}</span>
-      <span className={styles.ct}>{count == null || count === 0 ? '' : String(count)}</span>
+      <span className={styles.ct}>
+        {count == null || count === 0 ? "" : String(count)}
+      </span>
     </button>
   );
 }
@@ -66,7 +75,12 @@ export function LockerSidebar({
           <div className={styles.brandName}>Locker</div>
           <div className={styles.brandTag}>everything, locked up</div>
         </div>
-        <button type="button" className={styles.sideClose} aria-label="Close" onClick={onCloseSide}>
+        <button
+          type="button"
+          className={styles.sideClose}
+          aria-label="Close"
+          onClick={onCloseSide}
+        >
           <Icon name="close" sw={1.75} />
         </button>
       </div>
@@ -80,22 +94,22 @@ export function LockerSidebar({
           icon={<Icon name="all" />}
           label="All items"
           count={counts.all}
-          active={nav.kind === 'all'}
-          onClick={() => onNav({ kind: 'all' })}
+          active={nav.kind === "all"}
+          onClick={() => onNav({ kind: "all" })}
         />
         <NavItem
           icon={<Icon name="starFill" sw={1.6} />}
           label="Favorites"
           count={counts.fav}
-          active={nav.kind === 'fav'}
-          onClick={() => onNav({ kind: 'fav' })}
+          active={nav.kind === "fav"}
+          onClick={() => onNav({ kind: "fav" })}
         />
         <NavItem
           icon={<Icon name="shield" />}
           label="Watchtower"
           count={counts.watch}
-          active={nav.kind === 'watch'}
-          onClick={() => onNav({ kind: 'watch' })}
+          active={nav.kind === "watch"}
+          onClick={() => onNav({ kind: "watch" })}
         />
       </nav>
 
@@ -107,8 +121,8 @@ export function LockerSidebar({
             icon={<CatIcon type={t} />}
             label={CATS[t]!.label}
             count={catCounts[t]}
-            active={nav.kind === 'cat' && nav.type === t}
-            onClick={() => onNav({ kind: 'cat', type: t })}
+            active={nav.kind === "cat" && nav.type === t}
+            onClick={() => onNav({ kind: "cat", type: t })}
           />
         ))}
       </nav>
@@ -121,16 +135,16 @@ export function LockerSidebar({
             icon={<Icon name="tag" />}
             label={tag}
             count={count}
-            active={nav.kind === 'tag' && nav.tag === tag}
-            onClick={() => onNav({ kind: 'tag', tag })}
+            active={nav.kind === "tag" && nav.tag === tag}
+            onClick={() => onNav({ kind: "tag", tag })}
           />
         ))}
         <NavItem
           icon={<Icon name="trash" sw={1.6} />}
           label="Trash"
           count={trashCount}
-          active={nav.kind === 'trash'}
-          onClick={() => onNav({ kind: 'trash' })}
+          active={nav.kind === "trash"}
+          onClick={() => onNav({ kind: "trash" })}
         />
       </nav>
 
@@ -138,8 +152,13 @@ export function LockerSidebar({
         <button type="button" className={styles.lock} onClick={onLock}>
           <Icon name="lock" sw={1.75} /> Lock
         </button>
-        <button type="button" className={shared.iconbtn} aria-label="Theme" onClick={onToggleTheme}>
-          <Icon name={dark ? 'sun' : 'moon'} sw={1.75} />
+        <button
+          type="button"
+          className={shared.iconbtn}
+          aria-label="Theme"
+          onClick={onToggleTheme}
+        >
+          <Icon name={dark ? "sun" : "moon"} sw={1.75} />
         </button>
       </div>
     </aside>

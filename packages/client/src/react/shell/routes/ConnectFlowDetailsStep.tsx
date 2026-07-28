@@ -1,13 +1,15 @@
-import type { ChangeEvent, Dispatch, JSX, RefObject } from 'react';
-import { cx } from '../../ui/cx.js';
-import buttonCss from '../../ui/Button.module.css';
-import controlsCss from '../../styles/controls.module.css';
+import type { ChangeEvent, Dispatch, JSX, RefObject } from "react";
+
+import { cx } from "../../ui/cx.js";
 import {
   buildTestInput,
   type ConnectFlowEvent,
   type ConnectFlowState,
-} from './connectFlow-core.js';
-import styles from './ConnectFlow.module.css';
+} from "./connectFlow-core.js";
+
+import controlsCss from "../../styles/controls.module.css";
+import buttonCss from "../../ui/Button.module.css";
+import styles from "./ConnectFlow.module.css";
 
 // The 'details' step's panel — split out of ConnectFlow.tsx (issue #382)
 // purely to keep that file under the repo's file-size cap; it is pure
@@ -15,13 +17,13 @@ import styles from './ConnectFlow.module.css';
 // here that isn't also in ConnectFlow.tsx's effects. Its SSH sibling was
 // deleted with the SSH method (issue #603).
 
-type Field = 'ticket' | 'label';
+type Field = "ticket" | "label";
 
 function fieldSetter(
   dispatch: Dispatch<ConnectFlowEvent>,
-  field: Field,
+  field: Field
 ): (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void {
-  return (e) => dispatch({ field, type: 'setField', value: e.target.value });
+  return (e) => dispatch({ field, type: "setField", value: e.target.value });
 }
 
 export function GatewayDetailsStep({
@@ -45,7 +47,7 @@ export function GatewayDetailsStep({
           rows={3}
           spellCheck={false}
           value={state.ticket}
-          onChange={setField('ticket')}
+          onChange={setField("ticket")}
         />
       </label>
       <label className={styles.field}>
@@ -57,7 +59,7 @@ export function GatewayDetailsStep({
           type="text"
           placeholder="e.g. Home server"
           value={state.label}
-          onChange={setField('label')}
+          onChange={setField("label")}
         />
       </label>
       <label className={styles.rememberRow}>
@@ -65,18 +67,23 @@ export function GatewayDetailsStep({
           type="checkbox"
           aria-label="Remember this device"
           checked={state.rememberDevice}
-          onChange={(event) => dispatch({ type: 'setRememberDevice', value: event.target.checked })}
+          onChange={(event) =>
+            dispatch({ type: "setRememberDevice", value: event.target.checked })
+          }
         />
         <span>
           <strong>Remember this device</strong>
-          <small>Keep an encrypted offline replica, queued changes, and cached previews.</small>
+          <small>
+            Keep an encrypted offline replica, queued changes, and cached
+            previews.
+          </small>
         </span>
       </label>
       <div className={styles.foot}>
         <button
           type="button"
           className={controlsCss.chip}
-          onClick={() => dispatch({ type: 'back' })}
+          onClick={() => dispatch({ type: "back" })}
         >
           Back
         </button>
@@ -85,7 +92,7 @@ export function GatewayDetailsStep({
           type="button"
           className={cx(buttonCss.btn, buttonCss.primary, buttonCss.sm)}
           disabled={!buildTestInput(state)}
-          onClick={() => dispatch({ type: 'startTest' })}
+          onClick={() => dispatch({ type: "startTest" })}
         >
           Continue
         </button>

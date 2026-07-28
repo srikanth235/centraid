@@ -124,5 +124,5 @@ SELECT lower(hex(randomblob(16))), 'urn:centraid:doctype', 'Document types (mach
 `;
 
 /** Scheme URIs the enrichment publishers create concepts under. */
-export const VISION_SCHEME_URI = 'urn:centraid:vision';
-export const DOCTYPE_SCHEME_URI = 'urn:centraid:doctype';
+export const VISION_SCHEME_URI = "urn:centraid:vision";
+export const DOCTYPE_SCHEME_URI = "urn:centraid:doctype";

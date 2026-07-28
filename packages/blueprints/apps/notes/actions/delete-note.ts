@@ -4,19 +4,22 @@
  * canonical content item, so its bytes are only released when nothing else
  * shares them — the outcome reports body_released either way.
  */
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function deleteNote({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'knowledge.delete_note',
+      command: "knowledge.delete_note",
       input: {
-        note_id: String(input.note_id ?? ''),
+        note_id: String(input.note_id ?? ""),
       },
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
+    return {
+      status: 200,
+      body: { status: "denied", reason: e.message, code: e.code },
+    };
   }
-};
+}

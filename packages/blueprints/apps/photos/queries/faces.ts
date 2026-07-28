@@ -22,29 +22,31 @@ interface RawParty {
   display_name?: string | null;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
-  const assetId = String(input?.asset_id ?? '');
-  if (!assetId) return { status: 400, body: { error: 'asset_id required' } };
+export default async function faces({ input, ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
+  const assetId = String(input?.asset_id ?? "");
+  if (!assetId) return { status: 400, body: { error: "asset_id required" } };
   try {
     const [regions, people] = await Promise.all([
       ctx.vault.read({
-        entity: 'media.face_region',
-        where: [{ column: 'asset_id', op: 'eq', value: assetId }],
+        entity: "media.face_region",
+        where: [{ column: "asset_id", op: "eq", value: assetId }],
         limit: 50,
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.party',
-        orderBy: { column: 'display_name', dir: 'asc' },
+        entity: "core.party",
+        orderBy: { column: "display_name", dir: "asc" },
         limit: 200,
         purpose,
       }),
     ]);
     const persons = ((people.rows ?? []) as unknown as RawParty[]).filter(
-      (p) => p.kind === 'person',
+      (p) => p.kind === "person"
     );
-    const nameOf = new Map(persons.map((p) => [p.party_id, p.display_name] as const));
+    const nameOf = new Map(
+      persons.map((p) => [p.party_id, p.display_name] as const)
+    );
     return {
       status: 200,
       body: {
@@ -56,21 +58,27 @@ export default async ({ input, ctx }: HandlerArgs) => {
           confidence: r.confidence ?? null,
           confirmed: r.confirmed_by_party_id != null,
         })),
-        people: persons.map((p) => ({ party_id: p.party_id, name: p.display_name })),
+        people: persons.map((p) => ({
+          party_id: p.party_id,
+          name: p.display_name,
+        })),
       },
     };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    if (e.code === 'VAULT_CONSENT') {
+    if (e.code === "VAULT_CONSENT") {
       return { status: 200, body: { denied: true, reason: e.message } };
     }
-    return { status: 200, body: { regions: [], people: [], error: String(e.message ?? err) } };
+    return {
+      status: 200,
+      body: { regions: [], people: [], error: String(e.message ?? err) },
+    };
   }
-};
+}
 
 function safeParse(json: unknown): unknown {
   try {
-    return JSON.parse(String(json ?? 'null'));
+    return JSON.parse(String(json ?? "null"));
   } catch {
     return null;
   }

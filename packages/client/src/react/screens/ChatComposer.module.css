@@ -16,7 +16,7 @@
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 14%, transparent);
 }
 
-.root[data-embedded='true'] {
+.root[data-embedded="true"] {
   padding: 0;
   border: 0;
   border-radius: 0;

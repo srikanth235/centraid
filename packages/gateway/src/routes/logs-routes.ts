@@ -15,14 +15,18 @@
  * the stream lives until the viewer goes away.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { GatewayLogEntry, GatewayLogStore } from '../serve/gateway-log-store.js';
-import { sendJson } from './route-helpers.js';
-import { SseSubscriberCap } from './sse-cap.js';
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-const LOGS_PATH = '/centraid/_logs';
-const EVENTS_PATH = '/centraid/_logs/events';
+import type { RouteHandler } from "../serve/build-gateway.js";
+import type {
+  GatewayLogEntry,
+  GatewayLogStore,
+} from "../serve/gateway-log-store.js";
+import { sendJson } from "./route-helpers.js";
+import { SseSubscriberCap } from "./sse-cap.js";
+
+const LOGS_PATH = "/centraid/_logs";
+const EVENTS_PATH = "/centraid/_logs/events";
 
 /** Default + max entry counts for the one-shot JSON tail. */
 const DEFAULT_LIMIT = 500;
@@ -54,23 +58,23 @@ export interface LogsRouteOptions {
 
 export function makeLogsRouteHandler(
   logs: GatewayLogStore,
-  options: LogsRouteOptions = {},
+  options: LogsRouteOptions = {}
 ): RouteHandler {
   const subscriberCap = options.subscriberCap ?? defaultSubscriberCap;
 
   const streamLogEvents = (
     req: IncomingMessage,
     res: ServerResponse,
-    afterSeq: number,
+    afterSeq: number
   ): boolean => {
     const releaseSlot = subscriberCap.admit(res);
     if (!releaseSlot) return true; // 503 + Retry-After already written
 
     res.writeHead(200, {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     });
     res.write(`: gateway logs\n\n`);
     const heartbeat = setInterval(() => {
@@ -88,10 +92,13 @@ export function makeLogsRouteHandler(
       releaseSlot();
       if (!res.writableEnded) res.end();
     };
-    req.on('close', cleanup);
-    res.on('error', cleanup);
+    req.on("close", cleanup);
+    res.on("error", cleanup);
 
-    const write = (entry: GatewayLogEntry, serialized = JSON.stringify(entry)): void => {
+    const write = (
+      entry: GatewayLogEntry,
+      serialized = JSON.stringify(entry)
+    ): void => {
       if (res.writableEnded) return;
       res.write(`event: log\n`);
       res.write(`data: ${serialized}\n\n`);
@@ -106,20 +113,27 @@ export function makeLogsRouteHandler(
   };
 
   return async (req, res) => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
-    if (url.pathname !== LOGS_PATH && url.pathname !== EVENTS_PATH) return false;
-    if ((req.method ?? 'GET').toUpperCase() !== 'GET') {
-      return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+    const url = new URL(req.url ?? "/", "http://gateway.local");
+    if (url.pathname !== LOGS_PATH && url.pathname !== EVENTS_PATH)
+      return false;
+    if ((req.method ?? "GET").toUpperCase() !== "GET") {
+      return sendJson(res, 405, {
+        error: "method_not_allowed",
+        message: "GET only",
+      });
     }
-    const after = intParam(url, 'after') ?? 0;
+    const after = intParam(url, "after") ?? 0;
 
     if (url.pathname === EVENTS_PATH) return streamLogEvents(req, res, after);
 
-    const limit = Math.min(intParam(url, 'limit') ?? DEFAULT_LIMIT, MAX_LIMIT);
+    const limit = Math.min(intParam(url, "limit") ?? DEFAULT_LIMIT, MAX_LIMIT);
     const entries = logs.snapshot(after);
     // Tail semantics: past the cap, the NEWEST `limit` entries win.
     return sendJson(res, 200, {
-      entries: entries.length > limit ? entries.slice(entries.length - limit) : entries,
+      entries:
+        entries.length > limit
+          ? entries.slice(entries.length - limit)
+          : entries,
     });
   };
 }

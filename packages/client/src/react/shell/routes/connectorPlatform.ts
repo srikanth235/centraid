@@ -4,7 +4,7 @@
  * Kept free of React/gateway so unit tests assert the real shipped logic.
  */
 
-export type ConnectionHealth = 'ok' | 'needs-auth' | 'paused' | 'failing';
+export type ConnectionHealth = "ok" | "needs-auth" | "paused" | "failing";
 
 export interface ConnectionHealthRow {
   connectionId: string;
@@ -14,7 +14,7 @@ export interface ConnectionHealthRow {
   provider: string | null;
   lastRunAt: string | null;
   authNote: string | null;
-  credKind: 'oauth2' | 'api_key' | null;
+  credKind: "oauth2" | "api_key" | null;
 }
 
 export interface ProviderSyncCap {
@@ -32,7 +32,7 @@ export interface ProviderActionCap {
   toolName: string;
   kind: string;
   templateId?: string;
-  approval?: 'outbox';
+  approval?: "outbox";
   scope?: string;
 }
 
@@ -44,13 +44,13 @@ export interface ProviderCapabilitiesDTO {
 /** Attention rank — lower sorts first (needs-auth / failing before healthy). */
 export function connectionAttentionRank(health: ConnectionHealth): number {
   switch (health) {
-    case 'failing':
+    case "failing":
       return 0;
-    case 'needs-auth':
+    case "needs-auth":
       return 1;
-    case 'paused':
+    case "paused":
       return 2;
-    case 'ok':
+    case "ok":
       return 3;
     default:
       return 4;
@@ -58,17 +58,18 @@ export function connectionAttentionRank(health: ConnectionHealth): number {
 }
 
 /** Sort connections so unhealthy ones surface first (attention queue). */
-export function sortConnectionsByAttention<T extends { health: ConnectionHealth }>(
-  rows: readonly T[],
-): T[] {
+export function sortConnectionsByAttention<
+  T extends { health: ConnectionHealth },
+>(rows: readonly T[]): T[] {
   return [...rows].sort(
-    (a, b) => connectionAttentionRank(a.health) - connectionAttentionRank(b.health),
+    (a, b) =>
+      connectionAttentionRank(a.health) - connectionAttentionRank(b.health)
   );
 }
 
 /** Whether the UI should show a primary Reconnect path (refresh credentials). */
 export function connectionNeedsReconnect(health: ConnectionHealth): boolean {
-  return health === 'needs-auth' || health === 'failing';
+  return health === "needs-auth" || health === "failing";
 }
 
 /**
@@ -83,7 +84,7 @@ export interface ConnectorToolDescriptor {
   label: string;
   providerId: string | null;
   actionId: string;
-  approval?: 'outbox';
+  approval?: "outbox";
 }
 
 export function toolDescriptorsFromHealthyConnections(input: {
@@ -95,10 +96,11 @@ export function toolDescriptorsFromHealthyConnections(input: {
 }): ConnectorToolDescriptor[] {
   const out: ConnectorToolDescriptor[] = [];
   for (const row of input.connections) {
-    if (row.health !== 'ok') continue;
+    if (row.health !== "ok") continue;
     const caps =
-      (row.provider ? input.capabilitiesByProvider.get(row.provider) : undefined) ??
-      input.capabilitiesByKind?.get(row.kind);
+      (row.provider
+        ? input.capabilitiesByProvider.get(row.provider)
+        : undefined) ?? input.capabilitiesByKind?.get(row.kind);
     if (!caps) continue;
     for (const action of caps.actions) {
       if (action.kind !== row.kind) continue;
@@ -119,20 +121,22 @@ export function toolDescriptorsFromHealthyConnections(input: {
 
 /** Secret-bearing keys that must never appear on list/tool DTOs. */
 const FORBIDDEN_SECRET_KEYS = [
-  'clientSecret',
-  'client_secret',
-  'apiKey',
-  'api_key',
-  'accessToken',
-  'access_token',
-  'refreshToken',
-  'refresh_token',
-  'token',
-  'secret',
+  "clientSecret",
+  "client_secret",
+  "apiKey",
+  "api_key",
+  "accessToken",
+  "access_token",
+  "refreshToken",
+  "refresh_token",
+  "token",
+  "secret",
 ] as const;
 
 /** Structural check: tool descriptors expose no secret cells. */
-export function toolDescriptorHasNoSecrets(d: ConnectorToolDescriptor): boolean {
+export function toolDescriptorHasNoSecrets(
+  d: ConnectorToolDescriptor
+): boolean {
   const json = JSON.stringify(d);
   for (const k of FORBIDDEN_SECRET_KEYS) {
     if (json.includes(`"${k}"`)) return false;
@@ -156,7 +160,7 @@ export function buildAutomationConnectionsPayload(
     connectionId: string;
     kind: string;
     label: string;
-  }[],
+  }[]
 ): AutomationConnectionBindingPayload[] {
   const seen = new Set<string>();
   const out: AutomationConnectionBindingPayload[] = [];
@@ -198,17 +202,19 @@ export function automationLinksToConnection(
       connections?: readonly { connectionId?: string; kind?: string }[];
     };
   },
-  connection: { connectionId: string; kind: string; label: string },
+  connection: { connectionId: string; kind: string; label: string }
 ): boolean {
   const c = automation.manifest?.connector;
   if (c) {
-    if (c.connectionId && c.connectionId === connection.connectionId) return true;
+    if (c.connectionId && c.connectionId === connection.connectionId)
+      return true;
     if (c.kind === connection.kind && c.label === connection.label) return true;
     if (c.kind === connection.kind && !c.connectionId) return true;
   }
   const bindings = automation.manifest?.connections ?? [];
   return bindings.some(
     (b) =>
-      b.connectionId === connection.connectionId || (b.kind === connection.kind && !b.connectionId),
+      b.connectionId === connection.connectionId ||
+      (b.kind === connection.kind && !b.connectionId)
   );
 }

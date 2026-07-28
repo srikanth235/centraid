@@ -1,7 +1,9 @@
-import { type CSSProperties, type JSX, useEffect, useState } from 'react';
-import { draftPreviewUrl } from '../../../../gateway-client.js';
-import styles from './BuilderPreview.module.css';
-import { cx } from '../../../ui/cx.js';
+import { type CSSProperties, type JSX, useEffect, useState } from "react";
+
+import { draftPreviewUrl } from "../../../../gateway-client.js";
+import { cx } from "../../../ui/cx.js";
+
+import styles from "./BuilderPreview.module.css";
 
 // The Preview tab — the sandboxed draft iframe (React port of builder.ts
 // renderPreview/makePreviewFrame/resolvePreviewSrc). The builder always
@@ -20,29 +22,31 @@ import { cx } from '../../../ui/cx.js';
 export interface PreviewResolved {
   src: string;
   themedSrc: string;
-  theme: 'light' | 'dark';
+  theme: "light" | "dark";
   bgL: number;
 }
 
 export interface BuilderPreviewProps {
   appId: string | undefined;
   accentColor: string;
-  device: 'mobile' | 'tablet' | 'desktop';
+  device: "mobile" | "tablet" | "desktop";
   /** Bumps to force a re-resolve (agent wrote files / manual reload). */
   reloadNonce: number;
   /** Report the resolved source (or null while building) for the URL pill. */
   onResolved: (info: { src: string } | null) => void;
 }
 
-function resolveTheme(): { theme: 'light' | 'dark'; bgL: number } {
+function resolveTheme(): { theme: "light" | "dark"; bgL: number } {
   const html = document.documentElement;
-  const shellTheme = html.dataset.theme || 'dark';
+  const shellTheme = html.dataset.theme || "dark";
   const themes = window.CentraidTokens.themes as Record<
     string,
-    { kind: 'light' | 'dark' } | undefined
+    { kind: "light" | "dark" } | undefined
   >;
-  const theme = themes[shellTheme]?.kind ?? 'dark';
-  const bgL = Number((html.style.getPropertyValue('--bg-l') || '5%').replace('%', '').trim());
+  const theme = themes[shellTheme]?.kind ?? "dark";
+  const bgL = Number(
+    (html.style.getPropertyValue("--bg-l") || "5%").replace("%", "").trim()
+  );
   return { theme, bgL: Number.isFinite(bgL) ? bgL : 5 };
 }
 
@@ -85,8 +89,12 @@ export default function BuilderPreview({
   // to those re-resolves, and until the new one lands the derived value is
   // null — the building skeleton — without the effect clearing state first.
   const resolveKey = `${appId}\u0000${device}\u0000${reloadNonce}`;
-  const [settled, setSettled] = useState<{ key: string; resolved: PreviewResolved } | null>(null);
-  const resolved = settled !== null && settled.key === resolveKey ? settled.resolved : null;
+  const [settled, setSettled] = useState<{
+    key: string;
+    resolved: PreviewResolved;
+  } | null>(null);
+  const resolved =
+    settled !== null && settled.key === resolveKey ? settled.resolved : null;
 
   useEffect(() => {
     let alive = true;
@@ -108,17 +116,22 @@ export default function BuilderPreview({
         return;
       }
       const { theme, bgL } = resolveTheme();
-      const sep = src.includes('#') ? '&' : '#';
+      const sep = src.includes("#") ? "&" : "#";
       setSettled({
         key: resolveKey,
-        resolved: { src, themedSrc: `${src}${sep}theme=${theme}&bgL=${bgL}`, theme, bgL },
+        resolved: {
+          src,
+          themedSrc: `${src}${sep}theme=${theme}&bgL=${bgL}`,
+          theme,
+          bgL,
+        },
       });
       onResolved({ src });
     })();
     return () => {
       alive = false;
     };
-  }, [appId, device, reloadNonce, resolveKey]);
+  }, [appId, device, reloadNonce, resolveKey, onResolved]);
 
   if (!resolved) {
     return (
@@ -133,30 +146,37 @@ export default function BuilderPreview({
   }
 
   const cardClass =
-    device === 'mobile'
+    device === "mobile"
       ? cx(styles.card, styles.cardMobile)
-      : device === 'tablet'
+      : device === "tablet"
         ? cx(styles.card, styles.cardTablet)
         : styles.card;
 
   return (
     <>
       <div className={styles.stage}>
-        <div style={{ display: 'contents' }}>
-          <div className={cardClass} style={{ '--accent-color': accentColor } as CSSProperties}>
+        <div style={{ display: "contents" }}>
+          <div
+            className={cardClass}
+            style={{ "--accent-color": accentColor } as CSSProperties}
+          >
             {/* oxlint-disable-next-line react/iframe-missing-sandbox -- (#363) sandbox buys no isolation here (see comment above) and breaks in-app PDF preview; matches AppFrame's deliberate no-sandbox iframe */}
             <iframe
               title="App preview"
               src={resolved.themedSrc}
-              style={{ border: 0, height: '100%', width: '100%' }}
+              style={{ border: 0, height: "100%", width: "100%" }}
               referrerPolicy="no-referrer"
               data-centraid-app="1"
               allow="clipboard-write; clipboard-read"
               onLoad={(e) => {
                 try {
                   e.currentTarget.contentWindow?.postMessage(
-                    { type: 'centraid:theme', theme: resolved.theme, bgL: resolved.bgL },
-                    '*',
+                    {
+                      type: "centraid:theme",
+                      theme: resolved.theme,
+                      bgL: resolved.bgL,
+                    },
+                    "*"
                   );
                 } catch {
                   /* noop */

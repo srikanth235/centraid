@@ -1,8 +1,10 @@
-import { type JSX } from 'react';
-import Icon from '../ui/Icon.js';
-import { cx } from '../ui/cx.js';
-import styles from './AtlasBrowseTab.module.css';
-import { mechanismLabel, type DeleteState } from './atlasBrowseData.js';
+import { type JSX } from "react";
+
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import { mechanismLabel, type DeleteState } from "./atlasBrowseData.js";
+
+import styles from "./AtlasBrowseTab.module.css";
 
 // The delete-confirmation dialog (issue #441 B3), split out of AtlasBrowseTab.
 // Lists the rows that depend on the target (engine FK + polymorphic), badges
@@ -18,12 +20,17 @@ export function DeleteDialog({
   onConfirm: () => void;
 }): JSX.Element {
   const polyOnly =
-    state.dependents.length > 0 && state.dependents.every((d) => d.mechanism === 'poly');
+    state.dependents.length > 0 &&
+    state.dependents.every((d) => d.mechanism === "poly");
   const blocked = state.hasEngineDependents || state.blockedReason !== null;
 
   return (
     <div className={styles.dialogScrim}>
-      <div className={styles.dialogBackdrop} role="presentation" onClick={onCancel} />
+      <div
+        className={styles.dialogBackdrop}
+        role="presentation"
+        onClick={onCancel}
+      />
       <div
         className={styles.dialog}
         role="alertdialog"
@@ -38,16 +45,23 @@ export function DeleteDialog({
         </header>
 
         {state.loading ? (
-          <p className={styles.dialogBody}>Checking what depends on this row…</p>
+          <p className={styles.dialogBody}>
+            Checking what depends on this row…
+          </p>
         ) : (
           <>
-            <p className={styles.dialogSummary} data-testid="atlas-delete-summary">
+            <p
+              className={styles.dialogSummary}
+              data-testid="atlas-delete-summary"
+            >
               {state.dependents.length === 0
-                ? 'Nothing else references this row.'
+                ? "Nothing else references this row."
                 : `${state.dependents.length} ${
-                    state.dependents.length === 1 ? 'table references' : 'tables reference'
+                    state.dependents.length === 1
+                      ? "table references"
+                      : "tables reference"
                   } this row (${state.totalRows.toLocaleString()} ${
-                    state.totalRows === 1 ? 'row' : 'rows'
+                    state.totalRows === 1 ? "row" : "rows"
                   }).`}
             </p>
 
@@ -65,31 +79,42 @@ export function DeleteDialog({
                     <span
                       className={cx(
                         styles.depBadge,
-                        d.mechanism === 'fk' ? styles.depBadgeFk : styles.depBadgePoly,
+                        d.mechanism === "fk"
+                          ? styles.depBadgeFk
+                          : styles.depBadgePoly
                       )}
                     >
                       {mechanismLabel(d.mechanism)}
                     </span>
-                    <span className={styles.depCount}>{d.count.toLocaleString()}</span>
+                    <span className={styles.depCount}>
+                      {d.count.toLocaleString()}
+                    </span>
                   </li>
                 ))}
               </ul>
             ) : null}
 
             {blocked ? (
-              <p className={styles.dialogBlocked} data-testid="atlas-delete-blocked">
+              <p
+                className={styles.dialogBlocked}
+                data-testid="atlas-delete-blocked"
+              >
                 {state.blockedReason ??
-                  'Engine foreign keys still point at this row — clear them first.'}
+                  "Engine foreign keys still point at this row — clear them first."}
               </p>
             ) : polyOnly ? (
               <p className={styles.dialogWarn} data-testid="atlas-delete-warn">
-                These are authored/polymorphic references — they will be swept when the row is
-                purged, but they are not enforced by the database.
+                These are authored/polymorphic references — they will be swept
+                when the row is purged, but they are not enforced by the
+                database.
               </p>
             ) : null}
 
             {state.error ? (
-              <p className={styles.dialogBlocked} data-testid="atlas-delete-error">
+              <p
+                className={styles.dialogBlocked}
+                data-testid="atlas-delete-error"
+              >
                 {state.error}
               </p>
             ) : null}

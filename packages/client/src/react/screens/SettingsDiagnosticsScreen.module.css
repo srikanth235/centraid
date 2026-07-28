@@ -105,7 +105,8 @@
   border-radius: 50%;
   flex: none;
   background: var(--diag-health, var(--ink-3));
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--diag-health, var(--ink-3)) 16%, transparent);
+  box-shadow: 0 0 0 3px
+    color-mix(in oklab, var(--diag-health, var(--ink-3)) 16%, transparent);
 }
 /* `.row` switched to `align-items: flex-start` so a long, wrapped detail
    doesn't pull the dot toward vertical center — nudge it back to the
@@ -114,13 +115,13 @@
 .row > .dot {
   margin-top: 3px;
 }
-.dot[data-health='ok'] {
+.dot[data-health="ok"] {
   --diag-health: var(--success);
 }
-.dot[data-health='degraded'] {
+.dot[data-health="degraded"] {
   --diag-health: var(--icon-amber);
 }
-.dot[data-health='error'] {
+.dot[data-health="error"] {
   --diag-health: var(--danger);
 }
 
@@ -181,13 +182,13 @@
   text-transform: uppercase;
   color: var(--diag-health, var(--ink-3));
 }
-.healthLabel[data-health='ok'] {
+.healthLabel[data-health="ok"] {
   --diag-health: var(--success);
 }
-.healthLabel[data-health='degraded'] {
+.healthLabel[data-health="degraded"] {
   --diag-health: var(--icon-amber);
 }
-.healthLabel[data-health='error'] {
+.healthLabel[data-health="error"] {
   --diag-health: var(--danger);
 }
 
@@ -223,10 +224,10 @@
   font-size: 9.5px;
   letter-spacing: 0.06em;
 }
-.eventLevel[data-level='warn'] {
+.eventLevel[data-level="warn"] {
   color: var(--icon-amber);
 }
-.eventLevel[data-level='error'] {
+.eventLevel[data-level="error"] {
   color: var(--danger);
 }
 .eventComponent {

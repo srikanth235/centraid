@@ -6,7 +6,7 @@
  * I/O and Electron wiring stay in `gateway-store.ts`.
  */
 
-export type GatewayKind = 'local' | 'remote';
+export type GatewayKind = "local" | "remote";
 
 export interface GatewayProfileShape {
   readonly id: string;
@@ -27,14 +27,14 @@ export interface GatewayProfileShape {
  * The order matters — `defaultAvatarColor` hashes id into this array.
  */
 export const AVATAR_PALETTE: readonly string[] = [
-  '#5B8DEF', // blue
-  '#7C5CFF', // violet
-  '#E36AD2', // pink
-  '#E5734A', // orange
-  '#E0B53D', // amber
-  '#4FB077', // green
-  '#3FB5C7', // teal
-  '#B07A4A', // brown
+  "#5B8DEF", // blue
+  "#7C5CFF", // violet
+  "#E36AD2", // pink
+  "#E5734A", // orange
+  "#E0B53D", // amber
+  "#4FB077", // green
+  "#3FB5C7", // teal
+  "#B07A4A", // brown
 ] as const;
 
 /**
@@ -55,17 +55,17 @@ export function defaultAvatarColor(id: string): string {
 
 /** Validate a user-supplied avatar color. Accepts `#RRGGBB` only. */
 export function isValidAvatarColor(value: unknown): value is string {
-  return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/u.test(value);
 }
 
-export const ENDPOINT_ID_RE = /^[0-9a-f]{64}$/;
+export const ENDPOINT_ID_RE = /^[0-9a-f]{64}$/u;
 
 /**
  * A connection identity is either the primordial local gateway or a real
  * 32-byte iroh public key rendered as its 64-character EndpointId.
  */
 export function isValidGatewayId(id: string): boolean {
-  return id === 'local' || ENDPOINT_ID_RE.test(id);
+  return id === "local" || ENDPOINT_ID_RE.test(id);
 }
 
 /**
@@ -75,24 +75,25 @@ export function isValidGatewayId(id: string): boolean {
  */
 export function normalizeProfile(
   id: string,
-  parsed: Partial<GatewayProfileShape> | null | undefined,
+  parsed: Partial<GatewayProfileShape> | null | undefined
 ): GatewayProfileShape | undefined {
-  if (!parsed || typeof parsed !== 'object') return undefined;
+  if (!parsed || typeof parsed !== "object") return undefined;
   if (parsed.id !== id) return undefined;
-  if (parsed.kind !== 'local' && parsed.kind !== 'remote') return undefined;
+  if (parsed.kind !== "local" && parsed.kind !== "remote") return undefined;
   if (!isValidGatewayId(parsed.id)) return undefined;
-  if (typeof parsed.label !== 'string' || parsed.label.length === 0) return undefined;
-  if (typeof parsed.createdAt !== 'string') return undefined;
+  if (typeof parsed.label !== "string" || parsed.label.length === 0)
+    return undefined;
+  if (typeof parsed.createdAt !== "string") return undefined;
   const displayName =
-    typeof parsed.displayName === 'string' && parsed.displayName.length > 0
+    typeof parsed.displayName === "string" && parsed.displayName.length > 0
       ? parsed.displayName
       : parsed.label;
   const avatarColor = isValidAvatarColor(parsed.avatarColor)
     ? parsed.avatarColor
     : defaultAvatarColor(parsed.id);
   if (
-    parsed.kind === 'remote' &&
-    (typeof parsed.endpointId !== 'string' ||
+    parsed.kind === "remote" &&
+    (typeof parsed.endpointId !== "string" ||
       parsed.endpointId.length === 0 ||
       parsed.id !== parsed.endpointId)
   ) {
@@ -104,10 +105,10 @@ export function normalizeProfile(
     label: parsed.label,
     displayName,
     avatarColor,
-    ...(typeof parsed.endpointId === 'string' && parsed.endpointId.length > 0
+    ...(typeof parsed.endpointId === "string" && parsed.endpointId.length > 0
       ? { endpointId: parsed.endpointId }
       : {}),
-    ...(typeof parsed.relayHint === 'string' && parsed.relayHint.length > 0
+    ...(typeof parsed.relayHint === "string" && parsed.relayHint.length > 0
       ? { relayHint: parsed.relayHint }
       : {}),
     rememberDevice: parsed.rememberDevice === true,
@@ -119,10 +120,9 @@ export function normalizeProfile(
  * Stable list order: local first, then remotes by creation time (oldest first).
  * Mutates nothing — returns a new array.
  */
-export function sortGatewayProfiles<T extends { id: string; createdAt: string }>(
-  profiles: readonly T[],
-  localId: string,
-): T[] {
+export function sortGatewayProfiles<
+  T extends { id: string; createdAt: string },
+>(profiles: readonly T[], localId: string): T[] {
   return [...profiles].sort((a, b) => {
     if (a.id === localId) return -1;
     if (b.id === localId) return 1;
@@ -132,7 +132,7 @@ export function sortGatewayProfiles<T extends { id: string; createdAt: string }>
 
 /** Pure field checks for addGateway before any I/O. */
 export type AddGatewayFieldError =
-  | { ok: false; code: 'invalid_input'; message: string }
+  | { ok: false; code: "invalid_input"; message: string }
   | {
       ok: true;
       label: string;
@@ -149,13 +149,17 @@ export function validateAddGatewayFields(input: {
 }): AddGatewayFieldError {
   const label = input.label.trim();
   if (!label)
-    return { ok: false, code: 'invalid_input', message: 'Gateway label cannot be empty.' };
+    return {
+      ok: false,
+      code: "invalid_input",
+      message: "Gateway label cannot be empty.",
+    };
   const endpointId = input.endpointId.trim();
   if (!endpointId || !isValidGatewayId(endpointId)) {
     return {
       ok: false,
-      code: 'invalid_input',
-      message: 'A gateway needs a valid iroh EndpointId.',
+      code: "invalid_input",
+      message: "A gateway needs a valid iroh EndpointId.",
     };
   }
   const relayHint = input.relayHint?.trim();

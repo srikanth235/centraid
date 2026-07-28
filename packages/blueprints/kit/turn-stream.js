@@ -20,14 +20,14 @@
  * concatenated `data:` payload. Comment frames (`:` heartbeats/banners) and
  * `event:` lines are ignored — the type lives inside the JSON. Returns '' when
  * the frame carries no data lines.
- * @param {string} rawFrame
- * @returns {string}
+ * @param {string} rawFrame The delimited SSE frame text.
+ * @returns {string} The concatenated data payload.
  */
 export function frameData(rawFrame) {
-  let data = '';
-  for (const line of rawFrame.split('\n')) {
+  let data = "";
+  for (const line of rawFrame.split("\n")) {
     // `data:foo` and `data: foo` are both valid — trim one leading space.
-    if (line.slice(0, 5) === 'data:') data += line.slice(5).replace(/^ /, '');
+    if (line.slice(0, 5) === "data:") data += line.slice(5).replace(/^ /u, "");
   }
   return data;
 }
@@ -36,15 +36,15 @@ export function frameData(rawFrame) {
  * Parse one raw frame into a `TurnStreamEvent`, or null when it carries no
  * event (a heartbeat, banner, the terminal `end` frame, or malformed JSON —
  * a bad frame is skipped, never fatal to the stream).
- * @param {string} rawFrame
- * @returns {import('./turn-stream.js').TurnStreamEvent | null}
+ * @param {string} rawFrame The delimited SSE frame text.
+ * @returns {import('./turn-stream.js').TurnStreamEvent | null} The parsed event, if present.
  */
 export function parseFrame(rawFrame) {
   const data = frameData(rawFrame);
   if (!data) return null;
   try {
     const evt = JSON.parse(data);
-    if (evt && typeof evt.type === 'string') return evt;
+    if (evt && typeof evt.type === "string") return evt;
   } catch {
     /* skip a malformed frame rather than abort the stream */
   }
@@ -57,13 +57,17 @@ export function parseFrame(rawFrame) {
  * carries no `type`, so `parseFrame` returns null for it; catch-up-on-reconnect
  * needs to tell "stream closed AFTER the server finished" (end seen) from
  * "connection dropped mid-turn" (end never seen).
- * @param {string} rawFrame
- * @returns {boolean}
+ * @param {string} rawFrame The delimited SSE frame text.
+ * @returns {boolean} Whether the frame terminates the stream.
  */
 export function isEndFrame(rawFrame) {
-  for (const line of rawFrame.split('\n')) {
+  for (const line of rawFrame.split("\n")) {
     // `event:end` and `event: end` are both valid — trim one leading space.
-    if (line.slice(0, 6) === 'event:' && line.slice(6).replace(/^ /, '') === 'end') return true;
+    if (
+      line.slice(0, 6) === "event:" &&
+      line.slice(6).replace(/^ /u, "") === "end"
+    )
+      return true;
   }
   return false;
 }
@@ -71,16 +75,57 @@ export function isEndFrame(rawFrame) {
 /**
  * Parse a whole SSE text blob into events — the pure, stream-free core used by
  * both `consumeSse` and unit tests. Frames are separated by a blank line.
- * @param {string} text
- * @returns {import('./turn-stream.js').TurnStreamEvent[]}
+ * @param {string} text The complete SSE payload.
+ * @returns {import('./turn-stream.js').TurnStreamEvent[]} The parsed stream events.
  */
 export function parseSseText(text) {
   const out = [];
-  for (const frame of text.split('\n\n')) {
+  for (const frame of text.split("\n\n")) {
     const evt = parseFrame(frame);
     if (evt) out.push(evt);
   }
   return out;
+}
+
+/**
+ * Consume complete SSE frames in wire order. This is the ordered boundary for
+ * every fetch-based SSE client: chunks must be read one at a time so partial
+ * frames can be reassembled, while callers keep their frame handling pure and
+ * synchronous. Keeping that contract here prevents each transport surface from
+ * inventing its own raw await-in-a-loop reader.
+ *
+ * @param {ReadableStream<Uint8Array>} body The response body to consume.
+ * @param {(rawFrame: string) => void} onFrame Receives each complete SSE frame.
+ * @param {{ signal?: AbortSignal }} [opts] Optional cancellation signal.
+ * @returns {Promise<void>} Resolves after the body is consumed or cancelled.
+ */
+export async function consumeSseFrames(body, onFrame, opts = {}) {
+  const { signal } = opts;
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  async function consumeNext() {
+    if (signal && signal.aborted) return;
+    const { done, value } = await reader.read();
+    if (done) return;
+    buf += decoder.decode(value, { stream: true });
+    let sep;
+    while ((sep = buf.indexOf("\n\n")) >= 0) {
+      const frame = buf.slice(0, sep);
+      buf = buf.slice(sep + 2);
+      onFrame(frame);
+    }
+    return consumeNext();
+  }
+  try {
+    await consumeNext();
+  } finally {
+    try {
+      reader.cancel();
+    } catch {
+      /* reader already released */
+    }
+  }
 }
 
 /**
@@ -97,42 +142,29 @@ export function parseSseText(text) {
  * network error (connection reset) also means `ended` never became true, so the
  * caller's catch block treats a throw the same as a `false` return.
  *
- * @param {ReadableStream<Uint8Array>} body
- * @param {(event: import('./turn-stream.js').TurnStreamEvent) => void} onEvent
- * @param {{ signal?: AbortSignal }} [opts]
- * @returns {Promise<{ ended: boolean }>}
+ * @param {ReadableStream<Uint8Array>} body The turn response body to consume.
+ * @param {(event: import('./turn-stream.js').TurnStreamEvent) => void} onEvent Receives each parsed event.
+ * @param {{ signal?: AbortSignal }} [opts] Optional cancellation signal.
+ * @returns {Promise<{ ended: boolean }>} Whether the terminal end frame was seen.
  */
 export async function consumeSse(body, onEvent, opts = {}) {
   const { signal } = opts;
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buf = '';
   let ended = false;
   try {
-    for (;;) {
-      if (signal && signal.aborted) break;
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let sep;
-      while ((sep = buf.indexOf('\n\n')) >= 0) {
-        const frame = buf.slice(0, sep);
-        buf = buf.slice(sep + 2);
+    await consumeSseFrames(
+      body,
+      (frame) => {
         if (isEndFrame(frame)) ended = true;
         const evt = parseFrame(frame);
         if (evt) onEvent(evt);
-      }
-    }
+      },
+      opts
+    );
   } catch (err) {
     // An abort surfaces as an AbortError on the pending read — that's the Stop
     // button doing its job, not a stream failure. Re-throw anything else.
-    if (!(signal && signal.aborted) && !(err && err.name === 'AbortError')) throw err;
-  } finally {
-    try {
-      reader.cancel();
-    } catch {
-      /* reader already released */
-    }
+    if (!(signal && signal.aborted) && !(err && err.name === "AbortError"))
+      throw err;
   }
   return { ended };
 }

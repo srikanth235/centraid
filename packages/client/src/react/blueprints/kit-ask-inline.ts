@@ -1,3 +1,5 @@
+import type { InlineKitAsk } from "@centraid/blueprints/apps/inline-types";
+
 // The inline "Ask your <app>" panel — the shell-side replacement for the served
 // kit.ts ask IIFE (which is suppressed inline; see suppress-served-ask.ts). It
 // mounts against the gateway conversation surface: turns stream through
@@ -19,10 +21,12 @@ import {
   streamTurn,
   vaultParked,
   type TurnStreamEvent,
-} from '../../gateway-client.js';
-import { openConfirm } from '../shell/confirm.js';
-import { providerConsentWire, withProviderConsent } from '../providerConsent.js';
-import type { InlineKitAsk } from '@centraid/blueprints/apps/inline-types';
+} from "../../gateway-client.js";
+import {
+  providerConsentWire,
+  withProviderConsent,
+} from "../providerConsent.js";
+import { openConfirm } from "../shell/confirm.js";
 
 export interface InstallInlineAskOptions {
   /** The app root element; the panel mounts into its `[data-ask-mount]`. */
@@ -32,7 +36,7 @@ export interface InstallInlineAskOptions {
 }
 
 function elFrom(html: string): HTMLElement {
-  const template = document.createElement('template');
+  const template = document.createElement("template");
   template.innerHTML = html.trim();
   return template.content.firstElementChild as HTMLElement;
 }
@@ -40,11 +44,11 @@ function elFrom(html: string): HTMLElement {
 /** Install the inline ask affordance; returns a teardown. */
 export function installInlineAsk(options: InstallInlineAskOptions): () => void {
   const { appRoot, appId, config } = options;
-  const mount = appRoot.querySelector<HTMLElement>('[data-ask-mount]');
+  const mount = appRoot.querySelector<HTMLElement>("[data-ask-mount]");
   if (!mount) return () => {};
 
   const button = elFrom(
-    '<button type="button" class="kit-ask-btn"><span class="kit-spark">✦</span> Ask</button>',
+    '<button type="button" class="kit-ask-btn"><span class="kit-spark">✦</span> Ask</button>'
   );
   const panel = elFrom(
     '<div class="kit-ask-panel" role="dialog" aria-label="Ask" hidden>' +
@@ -52,12 +56,12 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
       '<div class="kit-ask-pending" hidden></div>' +
       '<form class="kit-ask-compose"><textarea class="kit-ask-input" rows="2"></textarea>' +
       '<button type="submit" class="kit-ask-send">Send</button></form>' +
-      '</div>',
+      "</div>"
   );
-  const log = panel.querySelector<HTMLElement>('.kit-ask-log')!;
-  const pending = panel.querySelector<HTMLElement>('.kit-ask-pending')!;
-  const form = panel.querySelector<HTMLFormElement>('.kit-ask-compose')!;
-  const input = panel.querySelector<HTMLTextAreaElement>('.kit-ask-input')!;
+  const log = panel.querySelector<HTMLElement>(".kit-ask-log")!;
+  const pending = panel.querySelector<HTMLElement>(".kit-ask-pending")!;
+  const form = panel.querySelector<HTMLFormElement>(".kit-ask-compose")!;
+  const input = panel.querySelector<HTMLTextAreaElement>(".kit-ask-input")!;
   if (config.placeholder) input.placeholder = config.placeholder;
 
   mount.appendChild(button);
@@ -68,7 +72,7 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
   let disposed = false;
 
   const line = (cls: string, text: string): HTMLElement => {
-    const el = document.createElement('div');
+    const el = document.createElement("div");
     el.className = cls;
     el.textContent = text;
     log.appendChild(el);
@@ -78,20 +82,23 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
 
   const refreshParked = async (): Promise<void> => {
     try {
-      const entries = (await vaultParked()).filter((entry) => entry.callerKind === 'app');
-      pending.innerHTML = '';
+      const entries = (await vaultParked()).filter(
+        (entry) => entry.callerKind === "app"
+      );
+      pending.innerHTML = "";
       pending.hidden = entries.length === 0;
       for (const entry of entries) {
         const card = elFrom(
           '<div class="kit-ask-consent"><span></span>' +
             '<button type="button" data-approve="1">Approve</button>' +
-            '<button type="button" data-approve="0">Discard</button></div>',
+            '<button type="button" data-approve="0">Discard</button></div>'
         );
-        card.querySelector('span')!.textContent = entry.command ?? 'Proposed change';
-        for (const btn of card.querySelectorAll<HTMLButtonElement>('button')) {
-          btn.addEventListener('click', () => {
+        card.querySelector("span")!.textContent =
+          entry.command ?? "Proposed change";
+        for (const btn of card.querySelectorAll<HTMLButtonElement>("button")) {
+          btn.addEventListener("click", () => {
             void confirmVaultParked({
-              approve: btn.dataset.approve === '1',
+              approve: btn.dataset.approve === "1",
               invocationId: entry.invocationId,
             })
               .then(() => refreshParked())
@@ -108,77 +115,89 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
   const onEvent =
     (assistantEl: { el: HTMLElement | null }) =>
     (event: TurnStreamEvent): void => {
-      if (event.type === 'assistant.delta' || event.type === 'final') {
-        const text = event.type === 'final' ? event.text : event.delta;
-        if (!assistantEl.el) assistantEl.el = line('kit-ask-a', '');
-        assistantEl.el.textContent = (assistantEl.el.textContent ?? '') + text;
+      if (event.type === "assistant.delta" || event.type === "final") {
+        const text = event.type === "final" ? event.text : event.delta;
+        if (!assistantEl.el) assistantEl.el = line("kit-ask-a", "");
+        assistantEl.el.textContent = (assistantEl.el.textContent ?? "") + text;
         log.scrollTop = log.scrollHeight;
-      } else if (event.type === 'error') {
-        line('kit-ask-err', event.message);
+      } else if (event.type === "error") {
+        line("kit-ask-err", event.message);
       }
     };
 
   const send = async (message: string): Promise<void> => {
-    line('kit-ask-q', message);
+    line("kit-ask-q", message);
     if (!conversationId) {
-      conversationId = (await createConversation(appId).catch(() => undefined))?.id;
+      conversationId = (await createConversation(appId).catch(() => undefined))
+        ?.id;
       if (!conversationId) {
-        line('kit-ask-err', 'Ask is unavailable — the gateway is unreachable.');
+        line("kit-ask-err", "Ask is unavailable — the gateway is unreachable.");
         return;
       }
     }
+    const activeConversationId = conversationId;
     controller = new AbortController();
+    const signal = controller.signal;
     const assistantEl = { el: null as HTMLElement | null };
     try {
       // Accumulated across this send: a consent-gated failover asks for a
       // second provider, and resending without the first loops forever (#567).
       let approvedProviders: string[] = [];
-      for (;;) {
+      // Every consent changes the provider credential wire for the next turn,
+      // so retries are one ordered conversation state machine.
+      const streamWithConsent = async (): Promise<void> => {
         let requiredProvider: string | undefined;
         const providerConsent = providerConsentWire(approvedProviders);
         await streamTurn(
           appId,
           {
-            conversationId,
+            conversationId: activeConversationId,
             message,
-            register: 'ask',
-            ...(providerConsent !== undefined ? { providerConsent } : {}),
+            register: "ask",
+            ...(providerConsent === undefined ? {} : { providerConsent }),
           },
           (event) => {
-            if (event.type === 'consent.required') requiredProvider = event.provider;
+            if (event.type === "consent.required")
+              requiredProvider = event.provider;
             else onEvent(assistantEl)(event);
           },
-          controller.signal,
+          signal
         );
-        if (!requiredProvider) break;
+        const provider = requiredProvider;
+        if (!provider) return;
         // Inline apps mount into the SHELL document (the iframe is builder-only,
         // issue #505), so the shell's own confirm dialog is reachable here.
         const approved = await openConfirm({
-          confirmLabel: 'Allow provider',
-          title: `Send to ${requiredProvider}?`,
-          message: `Allow this conversation to be sent to ${requiredProvider}? This can include vault tool results.`,
+          confirmLabel: "Allow provider",
+          title: `Send to ${provider}?`,
+          message: `Allow this conversation to be sent to ${provider}? This can include vault tool results.`,
         });
         if (!approved) {
-          line('kit-ask-note', `Nothing was sent to ${requiredProvider}.`);
-          break;
+          line("kit-ask-note", `Nothing was sent to ${provider}.`);
+          return;
         }
-        approvedProviders = withProviderConsent(approvedProviders, requiredProvider);
-      }
+        approvedProviders = withProviderConsent(approvedProviders, provider);
+        return streamWithConsent();
+      };
+      await streamWithConsent();
     } catch (error) {
-      line('kit-ask-err', error instanceof Error ? error.message : String(error));
+      line(
+        "kit-ask-err",
+        error instanceof Error ? error.message : String(error)
+      );
     }
     await refreshParked();
   };
 
-  form.addEventListener('submit', (event) => {
+  form.addEventListener("submit", (event) => {
     event.preventDefault();
     const message = input.value.trim();
     if (!message) return;
-    input.value = '';
+    input.value = "";
     void send(message);
   });
 
-  button.addEventListener('click', () => {
+  button.addEventListener("click", () => {
     const opening = panel.hidden;
     panel.hidden = !opening;
     if (opening) {

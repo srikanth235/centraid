@@ -10,13 +10,13 @@
 
 /** Durable-intent lifecycle state (mirrors client's `IntentState` union). */
 export type IntentState =
-  | 'queued'
-  | 'sending'
-  | 'awaiting-change'
-  | 'parked'
-  | 'executed'
-  | 'denied'
-  | 'failed';
+  | "queued"
+  | "sending"
+  | "awaiting-change"
+  | "parked"
+  | "executed"
+  | "denied"
+  | "failed";
 
 /** One replica read a settled intent must invalidate (mirrors `ReplicaDependency`). */
 export interface IntentDependency {
@@ -59,12 +59,12 @@ export interface OverlayInvalidation {
   shapeId: string;
   entity: string;
   rowId?: string;
-  source: 'overlay';
+  source: "overlay";
   intentId?: string;
   intentState?: IntentState;
 }
 
 /** Derive app-visible overlay events for every durable intent transition. */
 export function replicaIntentInvalidations(
-  intents: readonly IntentInvalidationInput[],
+  intents: readonly IntentInvalidationInput[]
 ): OverlayInvalidation[];

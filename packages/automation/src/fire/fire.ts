@@ -20,7 +20,8 @@
  * processes and zero HTTP servers.
  */
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto";
+
 import {
   ConversationStore,
   makeJournalDbProvider,
@@ -28,11 +29,16 @@ import {
   type AutomationTriggerOrigin,
   type AutomationTurnStreamEvent,
   type VaultBridge,
-} from '@centraid/app-engine';
-import { parseRef } from '../manifest/ref.js';
-import { handlerPath, readAppOwned } from '../scaffold/app.js';
-import { runHandler } from '../handler/runner.js';
-import type { AgentDispatcher, ConnectionAuth, HandlerOutcome } from '../handler/runner.js';
+} from "@centraid/app-engine";
+
+import { runHandler } from "../handler/runner.js";
+import type {
+  AgentDispatcher,
+  ConnectionAuth,
+  HandlerOutcome,
+} from "../handler/runner.js";
+import { parseRef } from "../manifest/ref.js";
+import { handlerPath, readAppOwned } from "../scaffold/app.js";
 
 /**
  * The gateway broker's per-fire seam (issue #304). Resolves the connector's
@@ -64,9 +70,9 @@ export interface DispatchSurface {
     store: ConversationStore,
     conversationId: string,
     turnId: string,
-    ok: boolean,
+    ok: boolean
   ) => void;
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 /** Args app-engine hands the host when it needs a dispatch surface for a fire. */
@@ -86,7 +92,7 @@ export interface OpenDispatchArgs {
   model?: string;
   /** Semantic ACP configuration pins, keyed by capability category. */
   configPins?: Readonly<Record<string, string>>;
-  onLog: (level: 'info' | 'warn' | 'error', msg: string) => void;
+  onLog: (level: "info" | "warn" | "error", msg: string) => void;
 }
 
 /** The injected seam: open a live dispatch surface for one fire. */
@@ -134,12 +140,12 @@ export interface RunFireOptions {
    */
   vaultFor?: (
     appId: string,
-    automationRef: string,
+    automationRef: string
   ) => VaultBridge | undefined | Promise<VaultBridge | undefined>;
   /** Hard timeout. Defaults to the handler runner's default. */
   timeoutMs?: number;
   /** Optional logger. */
-  onLog?: (level: 'info' | 'warn' | 'error', msg: string) => void;
+  onLog?: (level: "info" | "warn" | "error", msg: string) => void;
   /** Harness that owns the durable automation conversation. */
   runnerKind?: string;
   /** Host-resolved model fallback used for dispatch and honest cost estimation. */
@@ -152,7 +158,9 @@ export interface RunFireOptions {
   /** Host-resolved semantic ACP configuration pins. */
   configPins?: Readonly<Record<string, string>>;
   /** Resolve an onFailure target's own harness/model instead of inheriting its parent. */
-  resolveNestedRuntime?: (automationRef: string) => Promise<NestedAutomationRuntime>;
+  resolveNestedRuntime?: (
+    automationRef: string
+  ) => Promise<NestedAutomationRuntime>;
   /**
    * Live run-stream sink (issue #158) for THIS fire's run. Not propagated
    * into `onFailure` cascades — those are separate runs with their own ids
@@ -221,7 +229,7 @@ export interface RunRecord {
  */
 export async function runFire(
   opts: RunFireOptions,
-  deps: { openDispatch: OpenDispatch },
+  deps: { openDispatch: OpenDispatch }
 ): Promise<{ outcome: HandlerOutcome; record: RunRecord }> {
   const onLog = opts.onLog ?? (() => undefined);
 
@@ -232,17 +240,29 @@ export async function runFire(
 
   const parsed = parseRef(opts.automationRef);
   if (!parsed) {
-    throw new Error(`automation "${opts.automationRef}": not a valid <appId>/<id> handle`);
+    throw new Error(
+      `automation "${opts.automationRef}": not a valid <appId>/<id> handle`
+    );
   }
-  const row = await readAppOwned(codeAppsDir, parsed.appId, parsed.automationId);
+  const row = await readAppOwned(
+    codeAppsDir,
+    parsed.appId,
+    parsed.automationId
+  );
   if (!row) {
-    throw new Error(`automation ${opts.automationRef}: not found under ${codeAppsDir}`);
+    throw new Error(
+      `automation ${opts.automationRef}: not found under ${codeAppsDir}`
+    );
   }
 
   // The automation's run ledger is its vault's `journal.db` (#280); the
   // `run_summary` view derives from it, so a finished run needs no write-through.
-  const runsStore = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
-  const runId = opts.runId ?? `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
+  const runsStore = new ConversationStore(
+    makeJournalDbProvider(opts.journalDbFile)
+  );
+  const runId =
+    opts.runId ??
+    `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;
   const vaultBridge = await opts.vaultFor?.(parsed.appId, opts.automationRef);
@@ -252,7 +272,7 @@ export async function runFire(
     opts.automationRef,
     parsed.appId,
     row.name,
-    opts.runnerKind,
+    opts.runnerKind
   );
 
   const effectiveModel =
@@ -269,7 +289,9 @@ export async function runFire(
     onLog,
   });
 
-  const skipRun = (error: string): { outcome: HandlerOutcome; record: RunRecord } => {
+  const skipRun = (
+    error: string
+  ): { outcome: HandlerOutcome; record: RunRecord } => {
     const endedAt = Date.now();
     const outcomeSkipped: HandlerOutcome = {
       ok: false,
@@ -301,13 +323,14 @@ export async function runFire(
   // in one fire. Best-effort: an unreadable status (no grant yet) lets the
   // run proceed to sync.begin_run's hard gate rather than dying silently.
   if (row.manifest.connector && vaultBridge) {
-    const status = await connectionStatus(vaultBridge, row.manifest.connector).catch(
-      () => undefined,
-    );
-    if (status === 'paused' || status === 'needs-auth') {
+    const status = await connectionStatus(
+      vaultBridge,
+      row.manifest.connector
+    ).catch(() => undefined);
+    if (status === "paused" || status === "needs-auth") {
       onLog(
-        'warn',
-        `connector ${opts.automationRef} skipped: connection "${row.manifest.connector.label}" is ${status}`,
+        "warn",
+        `connector ${opts.automationRef} skipped: connection "${row.manifest.connector.label}" is ${status}`
       );
       await dispatch.close().catch(() => undefined);
       return skipRun(`connection is ${status}`);
@@ -323,22 +346,35 @@ export async function runFire(
   if (row.manifest.connector && secretRefs.length > 0) {
     if (!vaultBridge) {
       await dispatch.close().catch(() => undefined);
-      return skipRun('connector declares requires.secrets but no vault bridge is mounted');
+      return skipRun(
+        "connector declares requires.secrets but no vault bridge is mounted"
+      );
     }
-    for (const ref of secretRefs) {
-      const value = await revealSecret(vaultBridge, ref).catch((err: unknown) => {
-        onLog(
-          'warn',
-          `connector ${opts.automationRef}: secret "${ref}" did not resolve — ${err instanceof Error ? err.message : String(err)}`,
-        );
-        return undefined;
-      });
-      if (value === undefined) {
-        await flipNeedsAuth(vaultBridge, row.manifest.connector).catch(() => undefined);
-        await dispatch.close().catch(() => undefined);
-        return skipRun(`secret "${ref}" is unavailable — connection flipped to needs-auth`);
-      }
+    const revealNext = async (index: number): Promise<string | undefined> => {
+      const ref = secretRefs[index];
+      if (ref === undefined) return;
+      const value = await revealSecret(vaultBridge, ref).catch(
+        (err: unknown) => {
+          onLog(
+            "warn",
+            `connector ${opts.automationRef}: secret "${ref}" did not resolve — ${err instanceof Error ? err.message : String(err)}`
+          );
+          return undefined;
+        }
+      );
+      if (value === undefined) return ref;
       secretCache.set(ref, value);
+      return revealNext(index + 1);
+    };
+    const unavailableRef = await revealNext(0);
+    if (unavailableRef !== undefined) {
+      await flipNeedsAuth(vaultBridge, row.manifest.connector).catch(
+        () => undefined
+      );
+      await dispatch.close().catch(() => undefined);
+      return skipRun(
+        `secret "${unavailableRef}" is unavailable — connection flipped to needs-auth`
+      );
     }
   }
 
@@ -362,13 +398,13 @@ export async function runFire(
     } catch (err) {
       await dispatch.close().catch(() => undefined);
       return skipRun(
-        `connection credential did not resolve: ${err instanceof Error ? err.message : String(err)}`,
+        `connection credential did not resolve: ${err instanceof Error ? err.message : String(err)}`
       );
     }
-    if (resolved && 'refused' in resolved) {
+    if (resolved && "refused" in resolved) {
       onLog(
-        'warn',
-        `connector ${opts.automationRef} skipped: connection "${row.manifest.connector.label}" refused — ${resolved.refused}`,
+        "warn",
+        `connector ${opts.automationRef} skipped: connection "${row.manifest.connector.label}" refused — ${resolved.refused}`
       );
       await dispatch.close().catch(() => undefined);
       return skipRun(resolved.refused);
@@ -392,13 +428,15 @@ export async function runFire(
       ...(effectiveModel ? { model: effectiveModel } : {}),
       ...(vaultBridge ? { vault: vaultBridge } : {}),
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
-      triggerKind: opts.triggerKind ?? 'scheduled',
-      triggerOrigin: opts.triggerOrigin ?? 'cron',
+      triggerKind: opts.triggerKind ?? "scheduled",
+      triggerOrigin: opts.triggerOrigin ?? "cron",
       ...(opts.note ? { note: opts.note } : {}),
       ...(opts.failoverNotice ? { failoverNotice: opts.failoverNotice } : {}),
-      ...(opts.input !== undefined ? { input: opts.input } : {}),
+      ...(opts.input === undefined ? {} : { input: opts.input }),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
-      ...(row.manifest.outputSchema ? { outputSchema: row.manifest.outputSchema } : {}),
+      ...(row.manifest.outputSchema
+        ? { outputSchema: row.manifest.outputSchema }
+        : {}),
       history: row.manifest.history,
       ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
       ...(row.manifest.connector
@@ -418,13 +456,17 @@ export async function runFire(
             resolveSecret: (ref: string): Promise<string> => {
               const value = secretCache.get(ref);
               return value === undefined
-                ? Promise.reject(new Error(`secret "${ref}" was not preflighted`))
+                ? Promise.reject(
+                    new Error(`secret "${ref}" was not preflighted`)
+                  )
                 : Promise.resolve(value);
             },
           }
         : {}),
       ...(connectionAuth ? { connectionAuth } : {}),
-      ...(opts.fetchRetryDelaysMs ? { fetchRetryDelaysMs: opts.fetchRetryDelaysMs } : {}),
+      ...(opts.fetchRetryDelaysMs
+        ? { fetchRetryDelaysMs: opts.fetchRetryDelaysMs }
+        : {}),
     });
   } finally {
     await dispatch.close().catch(() => undefined);
@@ -434,20 +476,25 @@ export async function runFire(
   // follow-up automation, fire it with the failed run as input. The handle
   // resolves a bare id within the same app. Capped at depth 3.
   const deferOnFailure =
-    typeof opts.deferOnFailure === 'function'
+    typeof opts.deferOnFailure === "function"
       ? opts.deferOnFailure(outcome)
       : (opts.deferOnFailure ?? false);
   if (!outcome.ok && row.manifest.onFailure && !deferOnFailure) {
     if (failureDepth >= 3) {
-      onLog('warn', `onFailure cascade for ${row.name} aborted at depth ${failureDepth} (cap=3)`);
+      onLog(
+        "warn",
+        `onFailure cascade for ${row.name} aborted at depth ${failureDepth} (cap=3)`
+      );
     } else {
       const failTarget = parseRef(row.manifest.onFailure, parsed.appId);
       const next = failTarget
-        ? await readAppOwned(codeAppsDir, failTarget.appId, failTarget.automationId)
+        ? await readAppOwned(
+            codeAppsDir,
+            failTarget.appId,
+            failTarget.automationId
+          )
         : undefined;
-      if (!next) {
-        onLog('warn', `onFailure target "${row.manifest.onFailure}" not found for ${row.name}`);
-      } else {
+      if (next) {
         try {
           const nestedRuntime = await opts.resolveNestedRuntime?.(next.ref);
           await runFire(
@@ -471,20 +518,31 @@ export async function runFire(
                 : {}),
               ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
               onLog,
-              triggerKind: 'on_failure',
-              ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
-              input: { runId, automationName: row.name, error: outcome.error ?? 'unknown error' },
+              triggerKind: "on_failure",
+              ...(opts.triggerOrigin
+                ? { triggerOrigin: opts.triggerOrigin }
+                : {}),
+              input: {
+                runId,
+                automationName: row.name,
+                error: outcome.error ?? "unknown error",
+              },
               parentRunId: runId,
               failureDepth: failureDepth + 1,
             },
-            deps,
+            deps
           );
         } catch (err) {
           onLog(
-            'error',
-            `onFailure dispatch ${row.manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`,
+            "error",
+            `onFailure dispatch ${row.manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`
           );
         }
+      } else {
+        onLog(
+          "warn",
+          `onFailure target "${row.manifest.onFailure}" not found for ${row.name}`
+        );
       }
     }
   }
@@ -514,25 +572,28 @@ export async function runFire(
  * same grant.
  */
 async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
-  const [scheme, selector, column] = ref.split(':');
-  if (scheme !== 'locker' || !selector || !column) {
+  const [scheme, selector, column] = ref.split(":");
+  if (scheme !== "locker" || !selector || !column) {
     throw new Error(
-      `malformed secret ref "${ref}" — expected locker:<item_id>:<column> or locker:@<alias>:<column>`,
+      `malformed secret ref "${ref}" — expected locker:<item_id>:<column> or locker:@<alias>:<column>`
     );
   }
-  const target = selector.startsWith('@') ? { alias: selector.slice(1) } : { entityId: selector };
+  const target = selector.startsWith("@")
+    ? { alias: selector.slice(1) }
+    : { entityId: selector };
   const reply = await vault({
-    op: 'reveal',
+    op: "reveal",
     payload: {
-      entity: 'locker.item',
+      entity: "locker.item",
       ...target,
       columns: [column],
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     },
   });
-  if (!reply.ok) throw new Error(reply.error ?? 'reveal failed');
-  const value = (reply.result as { values?: Record<string, string | null> })?.values?.[column];
-  if (typeof value !== 'string' || value.length === 0) {
+  if (!reply.ok) throw new Error(reply.error ?? "reveal failed");
+  const value = (reply.result as { values?: Record<string, string | null> })
+    ?.values?.[column];
+  if (typeof value !== "string" || value.length === 0) {
     throw new Error(`locker item ${selector} holds no ${column}`);
   }
   return value;
@@ -542,74 +603,81 @@ async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
  *  trashed secret item is the same honest-liveness state a wrong login is. */
 async function flipNeedsAuth(
   vault: VaultBridge,
-  connector: { kind: string; label: string; connectionId?: string },
+  connector: { kind: string; label: string; connectionId?: string }
 ): Promise<void> {
   const connectionId = await connectionIdOf(vault, connector);
   if (!connectionId) return; // no connection yet — nothing to flip
   await vault({
-    op: 'invoke',
+    op: "invoke",
     payload: {
-      command: 'sync.set_connection_status',
-      input: { connection_id: connectionId, status: 'needs-auth' },
-      purpose: 'dpv:ServiceProvision',
+      command: "sync.set_connection_status",
+      input: { connection_id: connectionId, status: "needs-auth" },
+      purpose: "dpv:ServiceProvision",
     },
   });
 }
 
 async function connectionIdOf(
   vault: VaultBridge,
-  connector: { kind: string; label: string; connectionId?: string },
+  connector: { kind: string; label: string; connectionId?: string }
 ): Promise<string | undefined> {
   if (connector.connectionId) return connector.connectionId;
   const reply = await vault({
-    op: 'read',
+    op: "read",
     payload: {
-      entity: 'sync.connection',
+      entity: "sync.connection",
       where: [
-        { column: 'kind', op: 'eq', value: connector.kind },
-        { column: 'label', op: 'eq', value: connector.label },
+        { column: "kind", op: "eq", value: connector.kind },
+        { column: "label", op: "eq", value: connector.label },
       ],
       limit: 1,
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     },
   });
   if (!reply.ok) return undefined;
-  const rows = (reply.result as { rows?: { connection_id?: unknown }[] })?.rows ?? [];
-  return typeof rows[0]?.connection_id === 'string' ? rows[0].connection_id : undefined;
+  const rows =
+    (reply.result as { rows?: { connection_id?: unknown }[] })?.rows ?? [];
+  return typeof rows[0]?.connection_id === "string"
+    ? rows[0].connection_id
+    : undefined;
 }
 
 /** Read one connection's status through the automation's consented bridge. */
 async function connectionStatus(
   vault: VaultBridge,
-  connector: { kind: string; label: string; connectionId?: string },
+  connector: { kind: string; label: string; connectionId?: string }
 ): Promise<string | undefined> {
   if (connector.connectionId) {
     const byId = await vault({
-      op: 'read',
+      op: "read",
       payload: {
-        entity: 'sync.connection',
-        where: [{ column: 'connection_id', op: 'eq', value: connector.connectionId }],
+        entity: "sync.connection",
+        where: [
+          { column: "connection_id", op: "eq", value: connector.connectionId },
+        ],
         limit: 1,
-        purpose: 'dpv:ServiceProvision',
+        purpose: "dpv:ServiceProvision",
       },
     });
     if (!byId.ok) return undefined;
     const rows = (byId.result as { rows?: { status?: unknown }[] })?.rows ?? [];
-    return typeof rows[0]?.status === 'string' ? rows[0].status : undefined;
+    return typeof rows[0]?.status === "string" ? rows[0].status : undefined;
   }
   const reply = await vault({
-    op: 'read',
+    op: "read",
     payload: {
-      entity: 'sync.connection',
+      entity: "sync.connection",
       where: [
-        { column: 'kind', op: 'eq', value: connector.kind },
-        { column: 'label', op: 'eq', value: connector.label },
+        { column: "kind", op: "eq", value: connector.kind },
+        { column: "label", op: "eq", value: connector.label },
       ],
       limit: 1,
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     },
   });
   if (!reply.ok) return undefined;
   const rows = (reply.result as { rows?: { status?: unknown }[] })?.rows ?? [];
-  return typeof rows[0]?.status === 'string' ? (rows[0].status as string) : undefined;
+  return typeof rows[0]?.status === "string"
+    ? (rows[0].status as string)
+    : undefined;
 }

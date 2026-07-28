@@ -1,12 +1,9 @@
-import type { BlobCache } from './cache.js';
-import type { LocalBlobStore } from './local.js';
-import { remoteEncryptionKey, type RemoteTier } from './custody-types.js';
-import type { ReplicaStore } from './replica-index.js';
-import { resolveWriteStore } from './store-routing.js';
-import type { BlobStore } from './store.js';
-import type { MultipartPart, RemoteBlobTransfer } from './remote-transfer.js';
-import { verifyRemoteSealedObject } from './remote-verify.js';
-import { sealBlob, sealBlobStream } from './seal.js';
+import type { BlobCache } from "./cache.js";
+import { remoteEncryptionKey, type RemoteTier } from "./custody-types.js";
+import type { LocalBlobStore } from "./local.js";
+import type { MultipartPart, RemoteBlobTransfer } from "./remote-transfer.js";
+import { verifyRemoteSealedObject } from "./remote-verify.js";
+import type { ReplicaStore } from "./replica-index.js";
 import {
   DEFAULT_FRAME_SIZE,
   encodeHeader,
@@ -14,8 +11,11 @@ import {
   frameCountFor,
   sealDirectory,
   sealStoredFrame,
-} from './seal-frames.js';
-import type { OutboxRow, BlobTransferState } from './transfer-state.js';
+} from "./seal-frames.js";
+import { sealBlob, sealBlobStream } from "./seal.js";
+import { resolveWriteStore } from "./store-routing.js";
+import type { BlobStore } from "./store.js";
+import type { OutboxRow, BlobTransferState } from "./transfer-state.js";
 
 const PART_BYTES = 16 * 1024 * 1024;
 // Match the S3 driver's single-PUT ceiling. Larger outbox residents use a
@@ -30,9 +30,9 @@ function partsOf(row: OutboxRow): MultipartPart[] {
     return value.filter(
       (part): part is MultipartPart =>
         part !== null &&
-        typeof part === 'object' &&
+        typeof part === "object" &&
         Number.isInteger((part as MultipartPart).partNumber) &&
-        typeof (part as MultipartPart).etag === 'string',
+        typeof (part as MultipartPart).etag === "string"
     );
   } catch {
     return [];
@@ -44,7 +44,7 @@ export interface OutboxDrainDeps {
   local: LocalBlobStore;
   cache: BlobCache;
   remote: () => RemoteTier | null;
-  onReplicated(sha256: string): void;
+  onReplicated: (sha256: string) => void;
   settlementAllowed?: () => boolean;
   /** The store class a sha's bytes belong in (issue #425 Wave 2). Default cas. */
   desiredStore?: (sha256: string) => ReplicaStore;
@@ -55,7 +55,7 @@ async function confirmFinal(
   remote: RemoteTier,
   row: OutboxRow,
   store: BlobStore,
-  storeClass: ReplicaStore,
+  storeClass: ReplicaStore
 ): Promise<boolean> {
   const final = await store.stat(row.sha256);
   if (deps.settlementAllowed?.() === false) return true;
@@ -79,15 +79,23 @@ async function confirmFinal(
       if (sample > 0) {
         const ranges = [
           { start: 0, end: sample - 1 },
-          { start: Math.max(0, row.byte_size - sample), end: row.byte_size - 1 },
+          {
+            start: Math.max(0, row.byte_size - sample),
+            end: row.byte_size - 1,
+          },
         ];
-        for (const range of ranges) {
-          const [remoteBytes, localBytes] = await Promise.all([
-            store.get(row.sha256, range),
-            Promise.resolve(deps.local.getSync(row.sha256, range)),
-          ]);
-          if (!remoteBytes || !localBytes || !remoteBytes.equals(localBytes)) return false;
-        }
+        const samples = await Promise.all(
+          ranges.map(async (range) => {
+            const [remoteBytes, localBytes] = await Promise.all([
+              store.get(row.sha256, range),
+              Promise.resolve(deps.local.getSync(row.sha256, range)),
+            ]);
+            return (
+              !!remoteBytes && !!localBytes && remoteBytes.equals(localBytes)
+            );
+          })
+        );
+        if (!samples.every(Boolean)) return false;
       }
     }
   } catch {
@@ -106,19 +114,22 @@ async function confirmFinal(
 }
 
 function supportsFinalMultipart(
-  transfer: RemoteBlobTransfer,
+  transfer: RemoteBlobTransfer
 ): transfer is RemoteBlobTransfer &
   Required<
     Pick<
       RemoteBlobTransfer,
-      'beginShaUpload' | 'uploadShaPart' | 'completeShaUpload' | 'abortShaUpload'
+      | "beginShaUpload"
+      | "uploadShaPart"
+      | "completeShaUpload"
+      | "abortShaUpload"
     >
   > {
   return (
-    typeof transfer.beginShaUpload === 'function' &&
-    typeof transfer.uploadShaPart === 'function' &&
-    typeof transfer.completeShaUpload === 'function' &&
-    typeof transfer.abortShaUpload === 'function'
+    typeof transfer.beginShaUpload === "function" &&
+    typeof transfer.uploadShaPart === "function" &&
+    typeof transfer.completeShaUpload === "function" &&
+    typeof transfer.abortShaUpload === "function"
   );
 }
 
@@ -126,10 +137,11 @@ async function uploadViaDurableFinalMultipart(
   deps: OutboxDrainDeps,
   remote: RemoteTier,
   row: OutboxRow,
-  storageClass: string | undefined,
+  storageClass: string | undefined
 ): Promise<void> {
   const transfer = remote.transfer!;
-  if (!supportsFinalMultipart(transfer)) throw new Error('final multipart upload is unavailable');
+  if (!supportsFinalMultipart(transfer))
+    throw new Error("final multipart upload is unavailable");
   if (!deps.local.hasSync(row.sha256)) {
     throw new Error(`pending blob ${row.sha256} has no local source`);
   }
@@ -144,21 +156,36 @@ async function uploadViaDurableFinalMultipart(
     if (deps.settlementAllowed?.() === false) return;
     deps.state.setOutboxUpload(row.sha256, uploadId);
   }
-  const saved = new Map(partsOf(row).map((part) => [part.partNumber, part.etag]));
+  const saved = new Map(
+    partsOf(row).map((part) => [part.partNumber, part.etag])
+  );
   const encryptionKey = remoteEncryptionKey(remote, row.sha256);
-  const frameSize = Math.max(remote.frameSize ?? DEFAULT_FRAME_SIZE, 8 * 1024 * 1024);
+  const frameSize = Math.max(
+    remote.frameSize ?? DEFAULT_FRAME_SIZE,
+    8 * 1024 * 1024
+  );
   const frameCount = frameCountFor(row.byte_size, frameSize);
   const sealedLens = Array.from({ length: frameCount }, (_, index) => {
     const plainLength = Math.min(frameSize, row.byte_size - index * frameSize);
     return plainLength + 1 + 12 + 16;
   });
   const directory = encryptionKey
-    ? sealDirectory(encryptionKey, row.sha256, frameCount, frameSize, row.byte_size, sealedLens)
+    ? sealDirectory(
+        encryptionKey,
+        row.sha256,
+        frameCount,
+        frameSize,
+        row.byte_size,
+        sealedLens
+      )
     : Buffer.alloc(0);
   const totalParts = encryptionKey
     ? Math.max(1, frameCount)
     : Math.ceil(row.byte_size / PART_BYTES);
-  for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
+  // Persist each completed part before moving on: a crash must leave a prefix
+  // the next drain can resume, never an unrecorded concurrent set of uploads.
+  const uploadNextPart = async (partNumber: number): Promise<void> => {
+    if (partNumber > totalParts) return;
     if (!saved.has(partNumber)) {
       let bytes: Buffer;
       if (encryptionKey) {
@@ -166,12 +193,23 @@ async function uploadViaDurableFinalMultipart(
         const start = index * frameSize;
         const end = Math.min(row.byte_size, start + frameSize) - 1;
         const plain =
-          frameCount === 0 ? Buffer.alloc(0) : deps.local.getSync(row.sha256, { start, end });
-        if (!plain) throw new Error(`pending blob ${row.sha256} has no local source range`);
+          frameCount === 0
+            ? Buffer.alloc(0)
+            : deps.local.getSync(row.sha256, { start, end });
+        if (!plain)
+          throw new Error(
+            `pending blob ${row.sha256} has no local source range`
+          );
         const frame =
           frameCount === 0
             ? Buffer.alloc(0)
-            : sealStoredFrame(encryptionKey, row.sha256, index, frameCount, plain);
+            : sealStoredFrame(
+                encryptionKey,
+                row.sha256,
+                index,
+                frameCount,
+                plain
+              );
         bytes = Buffer.concat([
           ...(partNumber === 1 ? [encodeHeader(row.sha256)] : []),
           frame,
@@ -182,16 +220,22 @@ async function uploadViaDurableFinalMultipart(
       } else {
         const start = (partNumber - 1) * PART_BYTES;
         const end = Math.min(row.byte_size, start + PART_BYTES) - 1;
-        bytes = deps.local.getSync(row.sha256, { start, end }) ?? Buffer.alloc(0);
+        bytes =
+          deps.local.getSync(row.sha256, { start, end }) ?? Buffer.alloc(0);
       }
-      saved.set(partNumber, await transfer.uploadShaPart(row.sha256, uploadId, partNumber, bytes));
+      saved.set(
+        partNumber,
+        await transfer.uploadShaPart(row.sha256, uploadId, partNumber, bytes)
+      );
       if (deps.settlementAllowed?.() === false) return;
       deps.state.setOutboxParts(
         row.sha256,
-        [...saved].map(([number, etag]) => ({ partNumber: number, etag })),
+        [...saved].map(([number, etag]) => ({ partNumber: number, etag }))
       );
     }
-  }
+    return uploadNextPart(partNumber + 1);
+  };
+  await uploadNextPart(1);
   const parts = [...saved]
     .filter(([number]) => number <= totalParts)
     .map(([number, etag]) => ({ partNumber: number, etag }))
@@ -206,8 +250,10 @@ async function uploadViaDurableFinalMultipart(
   if (deps.settlementAllowed?.() === false) return;
   // The durable multipart path is cas-only (large originals); binary derivatives
   // never reach it, so it always confirms + marks under the cas store.
-  if (!(await confirmFinal(deps, remote, row, remote.store, 'cas'))) {
-    throw new Error(`provider did not expose ${row.sha256} after final multipart completion`);
+  if (!(await confirmFinal(deps, remote, row, remote.store, "cas"))) {
+    throw new Error(
+      `provider did not expose ${row.sha256} after final multipart completion`
+    );
   }
 }
 
@@ -217,23 +263,35 @@ async function uploadViaCasStore(
   row: OutboxRow,
   store: BlobStore,
   storeClass: ReplicaStore,
-  storageClass: string | undefined,
+  storageClass: string | undefined
 ): Promise<void> {
-  const opened = store.putStream ? deps.local.openReadStreamSync?.(row.sha256) : null;
+  const opened = store.putStream
+    ? deps.local.openReadStreamSync?.(row.sha256)
+    : null;
   if (opened && store.putStream) {
     const encryptionKey = remoteEncryptionKey(remote, row.sha256);
     const source = encryptionKey
-      ? opened.stream.pipe(sealBlobStream(encryptionKey, row.sha256, opened.size, remote.frameSize))
+      ? opened.stream.pipe(
+          sealBlobStream(
+            encryptionKey,
+            row.sha256,
+            opened.size,
+            remote.frameSize
+          )
+        )
       : opened.stream;
     await store.putStream(row.sha256, source, opened.size, storageClass);
   } else {
     const plain = deps.local.getSync(row.sha256);
-    if (!plain) throw new Error(`pending blob ${row.sha256} has no local source`);
+    if (!plain)
+      throw new Error(`pending blob ${row.sha256} has no local source`);
     const encryptionKey = remoteEncryptionKey(remote, row.sha256);
     await store.put(
       row.sha256,
-      encryptionKey ? sealBlob(encryptionKey, row.sha256, plain, remote.frameSize) : plain,
-      storageClass,
+      encryptionKey
+        ? sealBlob(encryptionKey, row.sha256, plain, remote.frameSize)
+        : plain,
+      storageClass
     );
   }
   if (!(await confirmFinal(deps, remote, row, store, storeClass))) {
@@ -242,15 +300,23 @@ async function uploadViaCasStore(
 }
 
 /** Drain one durable custody obligation; transient failures remain resumable. */
-export async function drainOutboxRow(deps: OutboxDrainDeps, row: OutboxRow): Promise<void> {
+export async function drainOutboxRow(
+  deps: OutboxDrainDeps,
+  row: OutboxRow
+): Promise<void> {
   const remote = deps.remote();
-  if (!remote) throw new Error('remote CAS is not currently reachable/configured');
+  if (!remote)
+    throw new Error("remote CAS is not currently reachable/configured");
   // Route by the sha's store class (issue #425 Wave 2): a binary derivative
   // lands under the derived prefix when the tier grants one, else cas — the
   // resolver caps size + degrades gracefully, so `store`/`storeClass` always
   // agree with where the bytes go, and the preflight HEADs the same store.
-  const desired = deps.desiredStore?.(row.sha256) ?? 'cas';
-  const { store, storeClass } = resolveWriteStore(remote, desired, row.byte_size);
+  const desired = deps.desiredStore?.(row.sha256) ?? "cas";
+  const { store, storeClass } = resolveWriteStore(
+    remote,
+    desired,
+    row.byte_size
+  );
   if (await confirmFinal(deps, remote, row, store, storeClass)) return; // preflight/dedupe
   // Direct-to-cold heuristic (issue #425 Wave 3): a large media original writes
   // to STANDARD_IA when the target declares it. Computed once here and threaded
@@ -260,9 +326,10 @@ export async function drainOutboxRow(deps: OutboxDrainDeps, row: OutboxRow): Pro
   const storageClass = remote.storageClassFor?.(row.sha256, storeClass);
   await deps.cache.qosWait(); // interactive reads preempt bulk custody traffic
   if (deps.settlementAllowed?.() === false) return;
-  const durableUploadStarted = row.upload_id !== null || partsOf(row).length > 0;
+  const durableUploadStarted =
+    row.upload_id !== null || partsOf(row).length > 0;
   if (
-    storeClass === 'cas' &&
+    storeClass === "cas" &&
     remote.transfer &&
     deps.local.openReadStreamSync &&
     supportsFinalMultipart(remote.transfer) &&

@@ -10,7 +10,7 @@
 // already set, so setting a sentinel here — evaluated BEFORE the kit module
 // because kit-inline.ts imports this first — suppresses the served ask entirely.
 // The real inline ask panel is installed separately by kit-ask-inline.ts.
-if (typeof window !== 'undefined') {
+if (typeof window !== "undefined") {
   const w = window as unknown as { kitAsk?: unknown };
   if (!w.kitAsk) w.kitAsk = { inlineSuppressed: true };
 }

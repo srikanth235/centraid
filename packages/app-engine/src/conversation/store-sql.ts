@@ -15,8 +15,8 @@
  * `automation_id`) is the only thing that persists across them.
  */
 
-import { type DatabaseSync, type StatementSync } from 'node:sqlite';
-import type { AdapterUsageSnapshot } from './turn.js';
+import { type DatabaseSync, type StatementSync } from "node:sqlite";
+
 import type {
   Conversation,
   Turn,
@@ -27,7 +27,8 @@ import type {
   AutomationTriggerOrigin,
   ItemKind,
   RunKind,
-} from './schema.js';
+} from "./schema.js";
+import type { AdapterUsageSnapshot } from "./turn.js";
 
 export interface RawConversation {
   id: string;
@@ -130,7 +131,9 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
   let adapterUsageSnapshot: AdapterUsageSnapshot | undefined;
   if (raw.adapter_usage_json !== null) {
     try {
-      adapterUsageSnapshot = JSON.parse(raw.adapter_usage_json) as AdapterUsageSnapshot;
+      adapterUsageSnapshot = JSON.parse(
+        raw.adapter_usage_json
+      ) as AdapterUsageSnapshot;
     } catch {
       // A corrupt optional accounting snapshot must not hide the conversation.
     }
@@ -139,14 +142,18 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
     id: raw.id,
     kind: raw.kind as RunKind,
     userId: raw.user_id,
-    ...(raw.app_id !== null ? { appId: raw.app_id } : {}),
-    ...(raw.automation_id !== null ? { automationId: raw.automation_id } : {}),
+    ...(raw.app_id === null ? {} : { appId: raw.app_id }),
+    ...(raw.automation_id === null ? {} : { automationId: raw.automation_id }),
     title: raw.title,
-    ...(raw.adapter_kind !== null ? { adapterKind: raw.adapter_kind } : {}),
-    ...(raw.adapter_session_id !== null ? { adapterSessionId: raw.adapter_session_id } : {}),
+    ...(raw.adapter_kind === null ? {} : { adapterKind: raw.adapter_kind }),
+    ...(raw.adapter_session_id === null
+      ? {}
+      : { adapterSessionId: raw.adapter_session_id }),
     ...(adapterUsageSnapshot ? { adapterUsageSnapshot } : {}),
     hydrationCount: Number(raw.hydration_count ?? 0),
-    ...(raw.last_hydrated_at != null ? { lastHydratedAt: raw.last_hydrated_at } : {}),
+    ...(raw.last_hydrated_at == null
+      ? {}
+      : { lastHydratedAt: raw.last_hydrated_at }),
     turnCount: Number(raw.turn_count),
     pinned: raw.pinned !== 0,
     archived: raw.archived !== 0,
@@ -160,34 +167,48 @@ export function turnFromRaw(raw: RawTurn): Turn {
     turnId: raw.id,
     conversationId: raw.conversation_id,
     seq: raw.seq,
-    ...(raw.parent_turn_id !== null ? { parentTurnId: raw.parent_turn_id } : {}),
+    ...(raw.parent_turn_id === null
+      ? {}
+      : { parentTurnId: raw.parent_turn_id }),
     triggerKind: raw.trigger as AutomationTriggerKind,
-    ...(raw.trigger_origin !== null
-      ? { triggerOrigin: raw.trigger_origin as AutomationTriggerOrigin }
-      : {}),
-    ...(raw.note !== null ? { note: raw.note } : {}),
-    ...(raw.retry_of !== null ? { retryOf: raw.retry_of } : {}),
-    ...(raw.idempotency_key !== null ? { idempotencyKey: raw.idempotency_key } : {}),
-    ...(raw.hydration_tokens != null ? { hydrationTokens: raw.hydration_tokens } : {}),
+    ...(raw.trigger_origin === null
+      ? {}
+      : { triggerOrigin: raw.trigger_origin as AutomationTriggerOrigin }),
+    ...(raw.note === null ? {} : { note: raw.note }),
+    ...(raw.retry_of === null ? {} : { retryOf: raw.retry_of }),
+    ...(raw.idempotency_key === null
+      ? {}
+      : { idempotencyKey: raw.idempotency_key }),
+    ...(raw.hydration_tokens == null
+      ? {}
+      : { hydrationTokens: raw.hydration_tokens }),
     startedAt: raw.started_at,
-    ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
+    ...(raw.ended_at === null ? {} : { endedAt: raw.ended_at }),
     ok: raw.ok !== 0,
-    ...(raw.error !== null ? { error: raw.error } : {}),
-    ...(raw.feedback === 'up' || raw.feedback === 'down' ? { feedback: raw.feedback } : {}),
-    ...(raw.summary !== null ? { summary: raw.summary } : {}),
-    ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
+    ...(raw.error === null ? {} : { error: raw.error }),
+    ...(raw.feedback === "up" || raw.feedback === "down"
+      ? { feedback: raw.feedback }
+      : {}),
+    ...(raw.summary === null ? {} : { summary: raw.summary }),
+    ...(raw.output_json === null ? {} : { outputJson: raw.output_json }),
     pinned: raw.pinned !== 0,
-    ...(raw.total_input_tokens !== null ? { totalInputTokens: raw.total_input_tokens } : {}),
-    ...(raw.total_output_tokens !== null ? { totalOutputTokens: raw.total_output_tokens } : {}),
-    ...(raw.total_cache_read_tokens !== null
-      ? { totalCacheReadTokens: raw.total_cache_read_tokens }
-      : {}),
-    ...(raw.total_cache_write_tokens !== null
-      ? { totalCacheWriteTokens: raw.total_cache_write_tokens }
-      : {}),
-    ...(raw.total_cost_usd !== null ? { totalCostUsd: raw.total_cost_usd } : {}),
-    ...(raw.step_count !== null ? { stepCount: raw.step_count } : {}),
-    ...(raw.tool_count !== null ? { toolCount: raw.tool_count } : {}),
+    ...(raw.total_input_tokens === null
+      ? {}
+      : { totalInputTokens: raw.total_input_tokens }),
+    ...(raw.total_output_tokens === null
+      ? {}
+      : { totalOutputTokens: raw.total_output_tokens }),
+    ...(raw.total_cache_read_tokens === null
+      ? {}
+      : { totalCacheReadTokens: raw.total_cache_read_tokens }),
+    ...(raw.total_cache_write_tokens === null
+      ? {}
+      : { totalCacheWriteTokens: raw.total_cache_write_tokens }),
+    ...(raw.total_cost_usd === null
+      ? {}
+      : { totalCostUsd: raw.total_cost_usd }),
+    ...(raw.step_count === null ? {} : { stepCount: raw.step_count }),
+    ...(raw.tool_count === null ? {} : { toolCount: raw.tool_count }),
   };
 }
 
@@ -196,33 +217,37 @@ export function itemFromRaw(raw: RawItem): Item {
     itemId: raw.id,
     turnId: raw.turn_id,
     ordinal: raw.ordinal,
-    ...(raw.call_id !== null ? { callId: raw.call_id } : {}),
-    ...(raw.batch_id !== null ? { batchId: raw.batch_id } : {}),
+    ...(raw.call_id === null ? {} : { callId: raw.call_id }),
+    ...(raw.batch_id === null ? {} : { batchId: raw.batch_id }),
     kind: raw.kind as ItemKind,
-    ...(raw.role !== null ? { role: raw.role as 'user' | 'assistant' } : {}),
-    ...(raw.text !== null ? { text: raw.text } : {}),
-    ...(raw.name !== null ? { name: raw.name } : {}),
-    ...(raw.args_json !== null ? { argsJson: raw.args_json } : {}),
-    ...(raw.output_json !== null ? { outputJson: raw.output_json } : {}),
-    ...(raw.raw_json !== null ? { rawJson: raw.raw_json } : {}),
+    ...(raw.role === null ? {} : { role: raw.role as "user" | "assistant" }),
+    ...(raw.text === null ? {} : { text: raw.text }),
+    ...(raw.name === null ? {} : { name: raw.name }),
+    ...(raw.args_json === null ? {} : { argsJson: raw.args_json }),
+    ...(raw.output_json === null ? {} : { outputJson: raw.output_json }),
+    ...(raw.raw_json === null ? {} : { rawJson: raw.raw_json }),
     ok: raw.ok !== 0,
-    ...(raw.error !== null ? { error: raw.error } : {}),
+    ...(raw.error === null ? {} : { error: raw.error }),
     startedAt: raw.started_at,
-    ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
-    ...(raw.duration_ms !== null ? { durationMs: raw.duration_ms } : {}),
-    ...(raw.input_tokens !== null ? { inputTokens: raw.input_tokens } : {}),
-    ...(raw.output_tokens !== null ? { outputTokens: raw.output_tokens } : {}),
-    ...(raw.cache_read_tokens !== null ? { cacheReadTokens: raw.cache_read_tokens } : {}),
-    ...(raw.cache_write_tokens !== null ? { cacheWriteTokens: raw.cache_write_tokens } : {}),
-    ...(raw.model !== null ? { model: raw.model } : {}),
-    ...(raw.provider !== null ? { provider: raw.provider } : {}),
-    ...(raw.effort !== null ? { effort: raw.effort } : {}),
-    ...(raw.cost_usd !== null ? { costUsd: raw.cost_usd } : {}),
-    ...(raw.cost_source === 'agent' || raw.cost_source === 'estimated'
+    ...(raw.ended_at === null ? {} : { endedAt: raw.ended_at }),
+    ...(raw.duration_ms === null ? {} : { durationMs: raw.duration_ms }),
+    ...(raw.input_tokens === null ? {} : { inputTokens: raw.input_tokens }),
+    ...(raw.output_tokens === null ? {} : { outputTokens: raw.output_tokens }),
+    ...(raw.cache_read_tokens === null
+      ? {}
+      : { cacheReadTokens: raw.cache_read_tokens }),
+    ...(raw.cache_write_tokens === null
+      ? {}
+      : { cacheWriteTokens: raw.cache_write_tokens }),
+    ...(raw.model === null ? {} : { model: raw.model }),
+    ...(raw.provider === null ? {} : { provider: raw.provider }),
+    ...(raw.effort === null ? {} : { effort: raw.effort }),
+    ...(raw.cost_usd === null ? {} : { costUsd: raw.cost_usd }),
+    ...(raw.cost_source === "agent" || raw.cost_source === "estimated"
       ? { costSource: raw.cost_source }
       : {}),
-    ...(raw.app_id !== null ? { appId: raw.app_id } : {}),
-    ...(raw.child_turn_id !== null ? { childTurnId: raw.child_turn_id } : {}),
+    ...(raw.app_id === null ? {} : { appId: raw.app_id }),
+    ...(raw.child_turn_id === null ? {} : { childTurnId: raw.child_turn_id }),
   };
 }
 
@@ -233,9 +258,11 @@ export function attachmentFromRaw(raw: RawAttachment): Attachment {
     hash: raw.hash,
     mime: raw.mime,
     sizeBytes: raw.size_bytes,
-    ...(raw.source !== null ? { source: raw.source } : {}),
-    ...(raw.filename !== null ? { filename: raw.filename } : {}),
-    ...(raw.workspace_path !== null ? { workspacePath: raw.workspace_path } : {}),
+    ...(raw.source === null ? {} : { source: raw.source }),
+    ...(raw.filename === null ? {} : { filename: raw.filename }),
+    ...(raw.workspace_path === null
+      ? {}
+      : { workspacePath: raw.workspace_path }),
     createdAt: raw.created_at,
   };
 }
@@ -322,7 +349,9 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       SET app_id = COALESCE(?, app_id), title = COALESCE(?, title), updated_at = ?
       WHERE id = ? AND kind = 'automation' AND automation_id = ?
     `),
-    getConversation: db.prepare(`SELECT ${CONV_COLS} FROM conversations c WHERE c.id = ?`),
+    getConversation: db.prepare(
+      `SELECT ${CONV_COLS} FROM conversations c WHERE c.id = ?`
+    ),
     getConversationWithCount: db.prepare(`
       SELECT ${CONV_COLS},
         c.item_count AS msg_count
@@ -357,24 +386,34 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       LIMIT ?
     `),
     setConversationPinned: db.prepare(
-      `UPDATE conversations SET pinned = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+      `UPDATE conversations SET pinned = ?, updated_at = ? WHERE id = ? AND user_id = ?`
     ),
     setConversationArchived: db.prepare(
-      `UPDATE conversations SET archived = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+      `UPDATE conversations SET archived = ?, updated_at = ? WHERE id = ? AND user_id = ?`
     ),
     renameConversation: db.prepare(
-      `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+      `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`
     ),
-    deleteConversationForUser: db.prepare(`DELETE FROM conversations WHERE id = ? AND user_id = ?`),
-    deleteConversationById: db.prepare(`DELETE FROM conversations WHERE id = ?`),
-    deleteConversationByAutomation: db.prepare(`DELETE FROM conversations WHERE automation_id = ?`),
-    titleOf: db.prepare(`SELECT title FROM conversations WHERE id = ? AND user_id = ?`),
+    deleteConversationForUser: db.prepare(
+      `DELETE FROM conversations WHERE id = ? AND user_id = ?`
+    ),
+    deleteConversationById: db.prepare(
+      `DELETE FROM conversations WHERE id = ?`
+    ),
+    deleteConversationByAutomation: db.prepare(
+      `DELETE FROM conversations WHERE automation_id = ?`
+    ),
+    titleOf: db.prepare(
+      `SELECT title FROM conversations WHERE id = ? AND user_id = ?`
+    ),
     setTitle: db.prepare(
-      `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`,
+      `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`
     ),
-    setKind: db.prepare(`UPDATE conversations SET kind = ? WHERE id = ? AND user_id = ?`),
+    setKind: db.prepare(
+      `UPDATE conversations SET kind = ? WHERE id = ? AND user_id = ?`
+    ),
     touchConversation: db.prepare(
-      `UPDATE conversations SET updated_at = ? WHERE id = ? AND user_id = ?`,
+      `UPDATE conversations SET updated_at = ? WHERE id = ? AND user_id = ?`
     ),
     noteTurnWithAdapter: db.prepare(`
       UPDATE conversations
@@ -396,7 +435,9 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       SET turn_count = turn_count + 1, updated_at = ?
       WHERE id = ? AND user_id = ?
     `),
-    maxSeq: db.prepare(`SELECT COALESCE(MAX(seq), -1) AS m FROM turns WHERE conversation_id = ?`),
+    maxSeq: db.prepare(
+      `SELECT COALESCE(MAX(seq), -1) AS m FROM turns WHERE conversation_id = ?`
+    ),
     insertTurn: db.prepare(`
       INSERT INTO turns
         (id, conversation_id, seq, parent_turn_id, trigger, trigger_origin,
@@ -475,7 +516,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     setTurnPinned: db.prepare(`UPDATE turns SET pinned = ? WHERE id = ?`),
     // Message-level 👍/👎 (issue #420). `?1` is 'up' | 'down' | NULL (clear).
     setTurnFeedback: db.prepare(
-      `UPDATE turns SET feedback = ? WHERE id = ? AND conversation_id = ?`,
+      `UPDATE turns SET feedback = ? WHERE id = ? AND conversation_id = ?`
     ),
     // Retention is per turn within the automation's stable conversation.
     // Deleting a turn cascades its items and attachments; pinned turns survive.
@@ -537,7 +578,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       SELECT * FROM items WHERE turn_id = ? ORDER BY ordinal ASC, started_at ASC
     `),
     messageInText: db.prepare(
-      `SELECT text FROM items WHERE turn_id = ? AND kind = 'message_in' ORDER BY ordinal ASC LIMIT 1`,
+      `SELECT text FROM items WHERE turn_id = ? AND kind = 'message_in' ORDER BY ordinal ASC LIMIT 1`
     ),
     insertAttachment: db.prepare(`
       INSERT INTO attachments
@@ -545,7 +586,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     listAttachmentsForItem: db.prepare(
-      `SELECT * FROM attachments WHERE item_id = ? ORDER BY created_at ASC`,
+      `SELECT * FROM attachments WHERE item_id = ? ORDER BY created_at ASC`
     ),
     listAttachmentsForTurn: db.prepare(`
       SELECT a.* FROM attachments a JOIN items i ON a.item_id = i.id
@@ -582,8 +623,14 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         value_json = excluded.value_json,
         updated_at = excluded.updated_at
     `),
-    getState: db.prepare(`SELECT * FROM automation_state WHERE automation_id = ? AND key = ?`),
-    deleteState: db.prepare(`DELETE FROM automation_state WHERE automation_id = ? AND key = ?`),
-    deleteStateByAutomation: db.prepare(`DELETE FROM automation_state WHERE automation_id = ?`),
+    getState: db.prepare(
+      `SELECT * FROM automation_state WHERE automation_id = ? AND key = ?`
+    ),
+    deleteState: db.prepare(
+      `DELETE FROM automation_state WHERE automation_id = ? AND key = ?`
+    ),
+    deleteStateByAutomation: db.prepare(
+      `DELETE FROM automation_state WHERE automation_id = ?`
+    ),
   };
 }

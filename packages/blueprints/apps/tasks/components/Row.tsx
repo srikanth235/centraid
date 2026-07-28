@@ -3,15 +3,23 @@
 // subtask list, Things-style); a row only ever carries a "1/3" badge for
 // them. Local `completing` state gives the circle an optimistic fill the
 // instant it's clicked, reverting if the write didn't execute.
-import { useState } from 'react';
-import { flagLevel, fmtDay, fmtEffort, highlightSegments, todayStr } from '../format.ts';
-import type { Task } from '../types.ts';
-import { Icon, Snippet } from './Shared.tsx';
-import { I } from '../icons.ts';
-import styles from './Row.module.css';
-import shared from './shared.module.css';
+import { useState } from "react";
 
-const FLAG_MOD: Record<'high' | 'medium' | 'low', string> = {
+import {
+  flagLevel,
+  fmtDay,
+  fmtEffort,
+  highlightSegments,
+  todayStr,
+} from "../format.ts";
+import { I } from "../icons.ts";
+import type { Task } from "../types.ts";
+import { Icon, Snippet } from "./Shared.tsx";
+
+import styles from "./Row.module.css";
+import shared from "./shared.module.css";
+
+const FLAG_MOD: Record<"high" | "medium" | "low", string> = {
   high: styles.high!,
   medium: styles.medium!,
   low: styles.low!,
@@ -19,14 +27,16 @@ const FLAG_MOD: Record<'high' | 'medium' | 'low', string> = {
 
 function Highlighted({ text, term }: { text: string; term: string }) {
   const segments = highlightSegments(text, term);
-  return segments.map((s, i) => (s.hit ? <mark key={i}>{s.text}</mark> : s.text));
+  return segments.map((s, i) =>
+    s.hit ? <mark key={i}>{s.text}</mark> : s.text
+  );
 }
 
 export function Row({
   task,
   closed = false,
   pending = false,
-  search = '',
+  search = "",
   snippet,
   onOpen,
   onToggle,
@@ -40,12 +50,14 @@ export function Row({
   onToggle: (task: Task) => Promise<boolean>;
 }) {
   const [completing, setCompleting] = useState(false);
-  const isOpen = task.status === 'needs-action' || task.status === 'in-process';
-  const cancelled = task.status === 'cancelled';
-  const isDone = task.status === 'completed' || completing;
+  const isOpen = task.status === "needs-action" || task.status === "in-process";
+  const cancelled = task.status === "cancelled";
+  const isDone = task.status === "completed" || completing;
   const level = flagLevel(task.priority);
-  const note = String(task.description ?? '').trim();
-  const overdue = Boolean(isOpen && task.due_at && String(task.due_at).slice(0, 10) < todayStr());
+  const note = String(task.description ?? "").trim();
+  const overdue = Boolean(
+    isOpen && task.due_at && String(task.due_at).slice(0, 10) < todayStr()
+  );
 
   // No `stopPropagation` any more: the row's own click handler is gone (the
   // "open" button below is a sibling laid under this circle), so there is
@@ -62,7 +74,10 @@ export function Row({
   };
 
   return (
-    <div className={pending ? `${shared.row} kit-pending` : shared.row} data-status={task.status}>
+    <div
+      className={pending ? `${shared.row} kit-pending` : shared.row}
+      data-status={task.status}
+    >
       {/* "Open the task" used to be a click handler on the row <div>, which no
           keyboard could reach. It is a real button now, stretched across the row
           and laid UNDER the completion circle (`.circle` is already
@@ -80,21 +95,31 @@ export function Row({
       <button
         type="button"
         className={shared.circle}
-        data-on={String(task.status === 'completed' || completing)}
+        data-on={String(task.status === "completed" || completing)}
         data-cancelled={String(cancelled)}
-        aria-label={isDone ? 'Reopen task' : 'Complete task'}
+        aria-label={isDone ? "Reopen task" : "Complete task"}
         onClick={handleToggle}
       >
-        {isDone ? <Icon svg={I.check} /> : cancelled ? <Icon svg={I.cancelMark} /> : null}
+        {isDone ? (
+          <Icon svg={I.check} />
+        ) : cancelled ? (
+          <Icon svg={I.cancelMark} />
+        ) : null}
       </button>
 
       <div className={shared.rowMain}>
         <div className={shared.rowTitleLine}>
-          <span className={isDone ? `${shared.rowTitle} ${shared.done}` : shared.rowTitle}>
+          <span
+            className={
+              isDone ? `${shared.rowTitle} ${shared.done}` : shared.rowTitle
+            }
+          >
             <Highlighted text={task.title} term={search} />
           </span>
-          {task.status === 'in-process' ? (
-            <span className={`${styles.badge} ${styles.doing}`}>in progress</span>
+          {task.status === "in-process" ? (
+            <span className={`${styles.badge} ${styles.doing}`}>
+              in progress
+            </span>
           ) : null}
           {task.rrule ? (
             <span className={styles.recur} aria-hidden="true">
@@ -106,12 +131,15 @@ export function Row({
         {snippet ? (
           <Snippet snippet={snippet} className={styles.rowNote} />
         ) : note ? (
-          <div className={styles.rowNote}>{note.split('\n')[0]}</div>
+          <div className={styles.rowNote}>{note.split("\n")[0]}</div>
         ) : null}
         {task.tags?.length ? (
           <div className={styles.rowTags}>
             {task.tags.map((t) => (
-              <span className={`${shared.tagChip} ${styles.tagChipStatic}`} key={t.tag_id}>
+              <span
+                className={`${shared.tagChip} ${styles.tagChipStatic}`}
+                key={t.tag_id}
+              >
                 #{t.label}
               </span>
             ))}
@@ -124,19 +152,28 @@ export function Row({
           {task.done_children}/{task.children.length}
         </span>
       ) : null}
-      {task.effort_min ? <span className={styles.meta}>{fmtEffort(task.effort_min)}</span> : null}
+      {task.effort_min ? (
+        <span className={styles.meta}>{fmtEffort(task.effort_min)}</span>
+      ) : null}
       {level ? (
-        <span className={`${styles.flag} ${FLAG_MOD[level]}`} aria-hidden="true">
+        <span
+          className={`${styles.flag} ${FLAG_MOD[level]}`}
+          aria-hidden="true"
+        >
           ⚑
         </span>
       ) : null}
       {!closed && task.due_at ? (
-        <span className={overdue ? `${shared.due} ${shared.overdue}` : shared.due}>
+        <span
+          className={overdue ? `${shared.due} ${shared.overdue}` : shared.due}
+        >
           {fmtDay(task.due_at)}
         </span>
       ) : null}
       {closed && (task.completed_at || task.due_at) ? (
-        <span className={shared.due}>{fmtDay(task.completed_at ?? task.due_at)}</span>
+        <span className={shared.due}>
+          {fmtDay(task.completed_at ?? task.due_at)}
+        </span>
       ) : null}
     </div>
   );

@@ -27,7 +27,7 @@ import {
   type BackupProvider,
   type Keyring,
   type ManifestEntry,
-} from '@centraid/backup';
+} from "@centraid/backup";
 
 /**
  * The blob shas a single manifest's entries reference. A `blob` entry's
@@ -37,12 +37,14 @@ import {
  * CAS objects; `db`/`git-bundle`/`seal-key` entries are the snapshot's own
  * parts, not attachments.
  */
-export function blobShasFromManifestEntries(entries: readonly ManifestEntry[]): string[] {
+export function blobShasFromManifestEntries(
+  entries: readonly ManifestEntry[]
+): string[] {
   const shas: string[] = [];
   for (const entry of entries) {
-    if (entry.kind !== 'blob') continue;
-    const sha = entry.path.split('/').pop() ?? '';
-    if (/^[0-9a-f]{64}$/.test(sha)) shas.push(sha);
+    if (entry.kind !== "blob") continue;
+    const sha = entry.path.split("/").pop() ?? "";
+    if (/^[0-9a-f]{64}$/u.test(sha)) shas.push(sha);
   }
   return shas;
 }
@@ -69,12 +71,18 @@ export async function snapshotReferencedBlobShas(opts: {
   const roots = new Set<string>();
   const cache = opts.manifestBlobCache;
   const rows = await opts.provider.listSnapshots(opts.targetId);
-  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
-  for (const row of rows) {
+  const store = await opts.provider.openDataPlane(
+    opts.targetId,
+    "backup",
+    "read"
+  );
+  const collectNext = async (index: number): Promise<void> => {
+    const row = rows[index];
+    if (!row) return;
     const cached = cache?.get(row.manifestHash);
     if (cached) {
       for (const sha of cached) roots.add(sha);
-      continue;
+      return collectNext(index + 1);
     }
     let opened;
     try {
@@ -82,7 +90,7 @@ export async function snapshotReferencedBlobShas(opts: {
         await store.get(row.manifestKey),
         opts.keyring,
         opts.vaultId,
-        row.manifestHash,
+        row.manifestHash
       );
     } catch (err) {
       // An unreadable retained manifest must FAIL the root computation, never
@@ -90,12 +98,14 @@ export async function snapshotReferencedBlobShas(opts: {
       // deleting bytes it simply failed to prove were still reachable.
       throw new Error(
         `snapshot roots: cannot read manifest seq ${row.seq}: ${err instanceof Error ? err.message : String(err)}`,
-        { cause: err },
+        { cause: err }
       );
     }
     const shas = blobShasFromManifestEntries(opened.entries);
     for (const sha of shas) roots.add(sha);
     cache?.set(row.manifestHash, shas);
-  }
+    return collectNext(index + 1);
+  };
+  await collectNext(0);
   return roots;
 }

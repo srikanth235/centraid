@@ -3,6 +3,24 @@
    no DOM lib (this "src" is node-side); this harness drives the browser apps
    under jsdom, so DOM globals are runtime-real but invisible to tsc. */
 // @ts-nocheck
+import { execFileSync } from "node:child_process";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+import { createElement } from "react";
+import { createRoot, type Root as ReactRoot } from "react-dom/client";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+
 // Boots a blueprint app the way the v0 client does: its query-free `Root`,
 // the real kit, the workspace React runtime, and a mocked `window.centraid`
 // vault. The retired served adapter and its vendored React copy are not part
@@ -33,61 +51,49 @@
 // pending-chip assertions consume the production intent-invalidation
 // derivation, so the harness cannot invent a terminal browser signal that the
 // real coordinator would never publish.
-import { replicaIntentInvalidations } from '../kit/intent-invalidations.js';
-import { execFileSync } from 'node:child_process';
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { createElement } from 'react';
-import { createRoot, type Root as ReactRoot } from 'react-dom/client';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { replicaIntentInvalidations } from "../kit/intent-invalidations.js";
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
 // between a root-run vitest (repo root) and a package-run vitest (this
 // package's dir), but the file's own location never does.
-const PKG = path.resolve(import.meta.dirname, '..');
+const PKG = path.resolve(import.meta.dirname, "..");
 // Apps import these as siblings (`./kit.ts`); at rest they live only in `kit/`,
 // and the gateway serves them from a shared dir (SHARED_ASSET_FILES in
 // app-engine/src/http/static-server.ts). Symlinks reproduce that layout.
 const SHARED = [
-  'kit.ts',
-  'elements.js',
-  'edge-upload.js',
-  'turn-stream.js',
-  'assistant-rich.js',
-  'gfm.js',
-  'code-highlight.js',
-  'consent-cards.js',
-  'conversation-client.js',
+  "kit.ts",
+  "elements.js",
+  "edge-upload.js",
+  "turn-stream.js",
+  "assistant-rich.js",
+  "gfm.js",
+  "code-highlight.js",
+  "consent-cards.js",
+  "conversation-client.js",
 ];
 
 // The harness compiles the same TS/TSX source the client bundles, using the
 // normal React automatic runtime. The esbuild CLI is used because its JS API
 // refuses to load under the jsdom environment (realm-split Uint8Array trips
 // its TextEncoder startup invariant).
-const ESBUILD_BIN = path.resolve(PKG, '../..', 'node_modules/.bin/esbuild');
+const ESBUILD_BIN = path.resolve(PKG, "../..", "node_modules/.bin/esbuild");
 
 // Loader by extension for the client-bundled source graph.
-function loaderForExt(rel: string): 'jsx' | 'tsx' | 'ts' {
-  if (rel.endsWith('.tsx')) return 'tsx';
-  if (rel.endsWith('.ts')) return 'ts';
-  return 'jsx';
+function loaderForExt(rel: string): "jsx" | "tsx" | "ts" {
+  if (rel.endsWith(".tsx")) return "tsx";
+  if (rel.endsWith(".ts")) return "ts";
+  return "jsx";
 }
 
-function transformInlineSource(source: string, rel = 'app.tsx'): string {
-  const code = execFileSync(ESBUILD_BIN, [`--loader=${loaderForExt(rel)}`, '--jsx=automatic'], {
-    input: source,
-    encoding: 'utf8',
-  });
+function transformInlineSource(source: string, rel = "app.tsx"): string {
+  const code = execFileSync(
+    ESBUILD_BIN,
+    [`--loader=${loaderForExt(rel)}`, "--jsx=automatic"],
+    {
+      input: source,
+      encoding: "utf8",
+    }
+  );
   return (
     code
       // The gateway serves a `*.module.css` request as JS at that same URL. Vite/
@@ -101,8 +107,8 @@ function transformInlineSource(source: string, rel = 'app.tsx'): string {
       // Vite from hijacking it. Behaviour is identical to the gateway; only the
       // scratch filename differs from the app source.
       .replace(
-        /(["'])((?:\.\.?\/)[^"']*\.module\.css)\1/g,
-        (_m, q: string, spec: string) => `${q}${spec}.js${q}`,
+        /(?<quote>["'])(?<spec>(?:\.\.?\/)[^"']*\.module\.css)\k<quote>/gu,
+        (_m, quote: string, spec: string) => `${quote}${spec}.js${quote}`
       )
   );
 }
@@ -113,32 +119,42 @@ function transformInlineSource(source: string, rel = 'app.tsx'): string {
 // note above transformInlineSource), but the CLI is a subprocess and is
 // unaffected. The CLI emits the JS class-map module and the compiled CSS as
 // two files into a temp outdir; we compose the served body from both.
-function compileModuleCssLikeTheGateway(absFile: string, appRoot: string, scratch: string): string {
-  const work = path.join(scratch, `.cssmod-${path.basename(absFile)}-${Date.now()}`);
+function compileModuleCssLikeTheGateway(
+  absFile: string,
+  appRoot: string,
+  scratch: string
+): string {
+  const work = path.join(
+    scratch,
+    `.cssmod-${path.basename(absFile)}-${Date.now()}`
+  );
   mkdirSync(work, { recursive: true });
-  const entry = path.join(work, 'entry.js');
-  writeFileSync(entry, `import m from ${JSON.stringify(absFile)};\nexport default m;\n`);
+  const entry = path.join(work, "entry.js");
+  writeFileSync(
+    entry,
+    `import m from ${JSON.stringify(absFile)};\nexport default m;\n`
+  );
   execFileSync(
     ESBUILD_BIN,
     [
       entry,
-      '--bundle',
-      '--format=esm',
-      '--platform=browser',
-      '--loader:.module.css=local-css',
-      `--outdir=${path.join(work, 'out')}`,
+      "--bundle",
+      "--format=esm",
+      "--platform=browser",
+      "--loader:.module.css=local-css",
+      `--outdir=${path.join(work, "out")}`,
     ],
-    { encoding: 'utf8', cwd: appRoot },
+    { encoding: "utf8", cwd: appRoot }
   );
-  const outDir = path.join(work, 'out');
-  let js = '';
-  let css = '';
+  const outDir = path.join(work, "out");
+  let js = "";
+  let css = "";
   for (const name of readdirSync(outDir)) {
-    const body = readFileSync(path.join(outDir, name), 'utf8');
-    if (name.endsWith('.css')) css = body;
+    const body = readFileSync(path.join(outDir, name), "utf8");
+    if (name.endsWith(".css")) css = body;
     else js = body;
   }
-  const key = path.relative(appRoot, absFile).split(path.sep).join('/');
+  const key = path.relative(appRoot, absFile).split(path.sep).join("/");
   return (
     `(() => {\n` +
     `  if (typeof document === 'undefined') return;\n` +
@@ -153,75 +169,82 @@ function compileModuleCssLikeTheGateway(absFile: string, appRoot: string, scratc
   );
 }
 
-const DENIED = { vaultDenied: { message: 'Grant revoked.' } };
+const DENIED = { vaultDenied: { message: "Grant revoked." } };
 
-const AGENDA_EVENT_ID = 'event-airplane';
-const AGENDA_INTENT_ID = 'intent-airplane-cancel';
-const AGENDA_TITLE = 'Airplane-mode planning';
-const PHOTO_ASSET_ID = 'asset-airplane';
-const PHOTO_TITLE = 'Airplane-mode photo';
-const TALLY_TRASH_ID = 'expense-airplane-trash';
+const AGENDA_EVENT_ID = "event-airplane";
+const AGENDA_INTENT_ID = "intent-airplane-cancel";
+const AGENDA_TITLE = "Airplane-mode planning";
+const PHOTO_ASSET_ID = "asset-airplane";
+const PHOTO_TITLE = "Airplane-mode photo";
+const TALLY_TRASH_ID = "expense-airplane-trash";
 
 /** Populated, clone-safe rows shaped exactly like each app's local query. */
 function replicaFixture(app: string): unknown {
-  if (app === 'agenda') {
+  if (app === "agenda") {
     return {
       events: [
         {
           event_id: AGENDA_EVENT_ID,
-          calendar_id: 'calendar-local',
+          calendar_id: "calendar-local",
           summary: AGENDA_TITLE,
-          description: 'Already present in the local replica.',
-          dtstart: '2099-01-15T09:00:00.000Z',
-          dtend: '2099-01-15T10:00:00.000Z',
-          status: 'confirmed',
+          description: "Already present in the local replica.",
+          dtstart: "2099-01-15T09:00:00.000Z",
+          dtend: "2099-01-15T10:00:00.000Z",
+          status: "confirmed",
           attendees: [],
           attachments: [],
         },
       ],
-      calendars: [{ calendar_id: 'calendar-local', name: 'Local calendar', color: '#6f5bf6' }],
+      calendars: [
+        {
+          calendar_id: "calendar-local",
+          name: "Local calendar",
+          color: "#6f5bf6",
+        },
+      ],
     };
   }
-  if (app === 'photos') {
+  if (app === "photos") {
     return {
       assets: [
         {
           asset_id: PHOTO_ASSET_ID,
-          content_id: 'content-airplane',
+          content_id: "content-airplane",
           title: PHOTO_TITLE,
-          media_type: 'image/gif',
-          content_uri: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+          media_type: "image/gif",
+          content_uri:
+            "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==",
           thumb_uri: null,
           preview_uri: null,
           width: 320,
           height: 240,
-          taken_at: '2026-07-15T08:00:00.000Z',
+          taken_at: "2026-07-15T08:00:00.000Z",
           favorite: 0,
-          album_ids: ['album-airplane'],
-          album_titles: ['Offline picks'],
+          album_ids: ["album-airplane"],
+          album_titles: ["Offline picks"],
           tags: [],
           place: null,
-          custody_state: 'available',
+          custody_state: "available",
         },
       ],
-      albums: [{ album_id: 'album-airplane', title: 'Offline picks' }],
+      albums: [{ album_id: "album-airplane", title: "Offline picks" }],
       places: [],
       trash: [],
       truncated: false,
       window: 500,
     };
   }
-  if (app === 'tally') {
+  if (app === "tally") {
     return {
-      me: 'party-owner',
-      currency: 'USD',
+      me: "party-owner",
+      currency: "USD",
       friends: [],
       groups: [
         {
-          group_id: 'group-airplane',
-          name: 'Offline group',
-          icon: '✈️',
-          color: '#4E68DD',
+          group_id: "group-airplane",
+          name: "Offline group",
+          icon: "✈️",
+          color: "#4E68DD",
           member_count: 1,
           owner_net_minor: 0,
         },
@@ -229,10 +252,10 @@ function replicaFixture(app: string): unknown {
       trash: [
         {
           expense_id: TALLY_TRASH_ID,
-          description: 'Recoverable dinner',
+          description: "Recoverable dinner",
           amount_minor: 4200,
-          group_name: 'Offline group',
-          deleted_at: '2026-07-15T08:00:00.000Z',
+          group_name: "Offline group",
+          deleted_at: "2026-07-15T08:00:00.000Z",
           purge_at: null,
         },
       ],
@@ -247,23 +270,23 @@ function replicaFixture(app: string): unknown {
 // by the page — don't copy them into the boot scratch tree. `queries` stays
 // out too: the boot entry is app-root.tsx (the query-free Root), so the graph
 // never reaches a query module. Only the app-inline descriptor imports queries.
-const NON_UI_DIRS = new Set(['queries', 'actions', 'automations']);
+const NON_UI_DIRS = new Set(["queries", "actions", "automations"]);
 
 /** All browser-source files of an app, as relative posix paths: `.js`/`.jsx`
  * and their TS counterparts `.ts`/`.tsx`, plus `*.module.css` (a CSS module is
  * imported by the page as JS — see compileModuleCssLikeTheGateway). */
-function collectSources(root: string, rel = ''): string[] {
+function collectSources(root: string, rel = ""): string[] {
   const out: string[] = [];
   for (const e of readdirSync(path.join(root, rel), { withFileTypes: true })) {
     const r = rel ? `${rel}/${e.name}` : e.name;
     if (e.isDirectory()) {
       if (!NON_UI_DIRS.has(e.name)) out.push(...collectSources(root, r));
     } else if (
-      r.endsWith('.js') ||
-      r.endsWith('.jsx') ||
-      r.endsWith('.ts') ||
-      r.endsWith('.tsx') ||
-      r.endsWith('.module.css')
+      r.endsWith(".js") ||
+      r.endsWith(".jsx") ||
+      r.endsWith(".ts") ||
+      r.endsWith(".tsx") ||
+      r.endsWith(".module.css")
     ) {
       out.push(r);
     }
@@ -291,13 +314,20 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 80));
  * comfortably inside the per-test budget, so a genuine regression still fails
  * with THIS message rather than vitest's opaque test timeout.
  */
-async function waitFor(predicate: () => boolean, what: string, timeoutMs = 4_000): Promise<void> {
+async function waitFor(
+  predicate: () => boolean,
+  what: string,
+  timeoutMs = 4_000
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
+  const waitNext = async (): Promise<void> => {
+    if (predicate()) return;
     if (Date.now() > deadline)
       throw new Error(`timed out after ${timeoutMs}ms waiting for ${what}`);
     await new Promise((resolve) => setTimeout(resolve, 5));
-  }
+    return waitNext();
+  };
+  return waitNext();
 }
 
 // The single boot journey runs the app's real esbuild transform + jsdom render
@@ -315,7 +345,7 @@ const BOOT_TEST_TIMEOUT_MS = 20_000;
 // element and toggled `hidden`; the inline tree mounts/unmounts instead, so
 // "shown" is "present and not hidden".)
 function consentBannerShown(): boolean {
-  const banner = document.querySelector<HTMLElement>('#consentBanner');
+  const banner = document.querySelector<HTMLElement>("#consentBanner");
   return banner !== null && banner.hidden === false;
 }
 
@@ -329,12 +359,22 @@ function mirrorSources(srcRoot: string, destRoot: string): void {
   for (const rel of collectSources(srcRoot)) {
     const out = path.join(destRoot, rel);
     mkdirSync(path.dirname(out), { recursive: true });
-    if (rel.endsWith('.jsx') || rel.endsWith('.tsx') || rel.endsWith('.ts')) {
-      writeFileSync(out, transformInlineSource(readFileSync(path.join(srcRoot, rel), 'utf8'), rel));
-    } else if (rel.endsWith('.module.css')) {
+    if (rel.endsWith(".jsx") || rel.endsWith(".tsx") || rel.endsWith(".ts")) {
+      writeFileSync(
+        out,
+        transformInlineSource(
+          readFileSync(path.join(srcRoot, rel), "utf8"),
+          rel
+        )
+      );
+    } else if (rel.endsWith(".module.css")) {
       writeFileSync(
         `${out}.js`,
-        compileModuleCssLikeTheGateway(path.join(srcRoot, rel), srcRoot, destRoot),
+        compileModuleCssLikeTheGateway(
+          path.join(srcRoot, rel),
+          srcRoot,
+          destRoot
+        )
       );
     } else {
       cpSync(path.join(srcRoot, rel), out);
@@ -344,7 +384,7 @@ function mirrorSources(srcRoot: string, destRoot: string): void {
 
 export function describeAppBoot(
   app: string,
-  options: { expectLive?: boolean; expectReplica?: boolean } = {},
+  options: { expectLive?: boolean; expectReplica?: boolean } = {}
 ) {
   describe(`${app} boots`, () => {
     let dir: string;
@@ -357,7 +397,10 @@ export function describeAppBoot(
 
     /** Fails with the app's own error, not a downstream assertion. */
     const expectNoErrors = (phase: string) => {
-      expect(errors, `${app} threw while ${phase}: ${errors.map(String).join(' | ')}`).toEqual([]);
+      expect(
+        errors,
+        `${app} threw while ${phase}: ${errors.map(String).join(" | ")}`
+      ).toEqual([]);
     };
 
     beforeAll(() => {
@@ -370,35 +413,36 @@ export function describeAppBoot(
       // exactly as it does when served — and because the shared copy lives
       // inside the app's own root, two app-boot files running in parallel never
       // write the same path.
-      bootRoot = path.join(PKG, '.app-boot', app);
+      bootRoot = path.join(PKG, ".app-boot", app);
       rmSync(bootRoot, { recursive: true, force: true });
       dir = path.join(bootRoot, app);
       mkdirSync(dir, { recursive: true });
-      mirrorSources(path.join(PKG, 'apps', app), dir);
-      const sharedDir = path.join(PKG, 'apps', '_shared');
-      if (existsSync(sharedDir)) mirrorSources(sharedDir, path.join(bootRoot, '_shared'));
+      mirrorSources(path.join(PKG, "apps", app), dir);
+      const sharedDir = path.join(PKG, "apps", "_shared");
+      if (existsSync(sharedDir))
+        mirrorSources(sharedDir, path.join(bootRoot, "_shared"));
       for (const file of SHARED) {
         if (!existsSync(path.join(dir, file))) {
-          symlinkSync(path.join(PKG, 'kit', file), path.join(dir, file));
+          symlinkSync(path.join(PKG, "kit", file), path.join(dir, file));
         }
       }
-      if (app === 'photos') {
+      if (app === "photos") {
         execFileSync(
           ESBUILD_BIN,
           [
-            path.resolve(PKG, '../client/src/video-frame.ts'),
-            '--bundle',
-            '--format=esm',
-            '--platform=browser',
-            '--log-level=silent',
-            `--outfile=${path.join(dir, 'video-frame.js')}`,
+            path.resolve(PKG, "../client/src/video-frame.ts"),
+            "--bundle",
+            "--format=esm",
+            "--platform=browser",
+            "--log-level=silent",
+            `--outfile=${path.join(dir, "video-frame.js")}`,
           ],
-          { encoding: 'utf8' },
+          { encoding: "utf8" }
         );
       }
 
-      process.on('unhandledRejection', push);
-      process.on('uncaughtException', push);
+      process.on("unhandledRejection", push);
+      process.on("uncaughtException", push);
 
       // Apps set an every-second TOTP/clock interval; left running it keeps the
       // worker alive past the suite.
@@ -410,31 +454,38 @@ export function describeAppBoot(
       };
 
       // jsdom implements neither; apps read both at boot (theme, layout).
-      window.matchMedia ??= () => ({ matches: false, addEventListener() {}, addListener() {} });
+      window.matchMedia ??= () => ({
+        matches: false,
+        addEventListener() {},
+        addListener() {},
+      });
       window.scrollTo ??= () => {};
-      window.addEventListener('error', (e) => push(e.error ?? e.message));
+      window.addEventListener("error", (e) => push(e.error ?? e.message));
     });
 
     afterAll(() => {
       globalThis.fetch = originalFetch;
       reactRoot?.unmount();
       for (const id of intervals) clearInterval(id);
-      process.off('unhandledRejection', push);
-      process.off('uncaughtException', push);
+      process.off("unhandledRejection", push);
+      process.off("uncaughtException", push);
       rmSync(bootRoot, { recursive: true, force: true });
     });
 
     it(
-      'renders its replica while offline, survives revoke, and re-renders',
+      "renders its replica while offline, survives revoke, and re-renders",
       { timeout: BOOT_TEST_TIMEOUT_MS },
       async () => {
         document.body.innerHTML = '<div id="appRoot"></div>';
-        if (app === 'agenda') {
+        if (app === "agenda") {
           // Schedule view renders the populated fixture independent of the
           // machine's current month, keeping this browser journey deterministic.
-          document.documentElement.dataset.appDefaultView = 'schedule';
+          document.documentElement.dataset.appDefaultView = "schedule";
         }
-        const granted = options.expectLive || options.expectReplica ? replicaFixture(app) : {};
+        const granted =
+          options.expectLive || options.expectReplica
+            ? replicaFixture(app)
+            : {};
         let response: unknown = granted;
         let nextReadError: Error | undefined;
         let readCalls = 0;
@@ -442,10 +493,13 @@ export function describeAppBoot(
         const writeCalls: unknown[] = [];
         const live = new Set<(value: unknown) => void>();
         const changes = new Set<(detail: unknown) => void>();
-        Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+        Object.defineProperty(window.navigator, "onLine", {
+          configurable: true,
+          value: false,
+        });
         globalThis.fetch = async (...args: unknown[]) => {
           networkCalls.push(args[0]);
-          throw new Error('synthetic airplane mode');
+          throw new Error("synthetic airplane mode");
         };
         window.centraid = {
           appId: app,
@@ -465,8 +519,11 @@ export function describeAppBoot(
           },
           write: async (request: unknown) => {
             writeCalls.push(request);
-            if (app === 'agenda' && (request as { action?: string }).action === 'cancel-event') {
-              return { status: 'queued', intentId: AGENDA_INTENT_ID };
+            if (
+              app === "agenda" &&
+              (request as { action?: string }).action === "cancel-event"
+            ) {
+              return { status: "queued", intentId: AGENDA_INTENT_ID };
             }
             return {};
           },
@@ -476,19 +533,21 @@ export function describeAppBoot(
           },
         };
 
-        const emitAgendaIntentState = (state: 'parked' | 'denied') => {
+        const emitAgendaIntentState = (state: "parked" | "denied") => {
           const invalidations = replicaIntentInvalidations([
             {
               intentId: AGENDA_INTENT_ID,
-              payloadHash: 'harness-payload',
-              appId: 'agenda',
-              action: 'cancel-event',
+              payloadHash: "harness-payload",
+              appId: "agenda",
+              action: "cancel-event",
               input: { event_id: AGENDA_EVENT_ID },
               state,
               createdOrder: 1,
               attempts: 1,
               optimistic: [],
-              dependencies: [{ shapeId: 'shape-agenda-events', entity: 'core.event' }],
+              dependencies: [
+                { shapeId: "shape-agenda-events", entity: "core.event" },
+              ],
             },
           ]);
           for (const invalidation of invalidations) {
@@ -498,165 +557,223 @@ export function describeAppBoot(
           }
         };
 
-        const module = await import(pathToFileURL(path.join(dir, 'app-root.tsx')).href);
-        reactRoot = createRoot(document.getElementById('appRoot')!);
+        const module = await import(
+          pathToFileURL(path.join(dir, "app-root.tsx")).href
+        );
+        reactRoot = createRoot(document.querySelector("#appRoot")!);
         reactRoot.render(createElement(module.Root, { rootRef: () => {} }));
         await settle();
-        expectNoErrors('rendering its granted replica in airplane mode');
+        expectNoErrors("rendering its granted replica in airplane mode");
 
-        if (app === 'tally' && options.expectReplica) {
+        if (app === "tally" && options.expectReplica) {
           await waitFor(
-            () => document.querySelector('[aria-label="Trashed expenses"]') !== null,
-            "Tally's trash shelf to render from the local replica",
+            () =>
+              document.querySelector('[aria-label="Trashed expenses"]') !==
+              null,
+            "Tally's trash shelf to render from the local replica"
           );
-          const shelf = document.querySelector('[aria-label="Trashed expenses"]');
-          expect(shelf?.textContent).toContain('Recoverable dinner');
+          const shelf = document.querySelector(
+            '[aria-label="Trashed expenses"]'
+          );
+          expect(shelf?.textContent).toContain("Recoverable dinner");
           const restore = Array.from(
-            shelf?.querySelectorAll<HTMLButtonElement>('button') ?? [],
-          ).find((button) => button.textContent?.trim() === 'Restore');
-          expect(restore, 'Tally trash shelf lost its restore control').toBeTruthy();
+            shelf?.querySelectorAll<HTMLButtonElement>("button") ?? []
+          ).find((button) => button.textContent?.trim() === "Restore");
+          expect(
+            restore,
+            "Tally trash shelf lost its restore control"
+          ).toBeTruthy();
           restore?.click();
           await waitFor(
             () => writeCalls.length > 0,
-            "Tally's restore click to reach the vault write path",
+            "Tally's restore click to reach the vault write path"
           );
           expect(writeCalls).toContainEqual({
-            action: 'restore-expense',
+            action: "restore-expense",
             input: { expense_id: TALLY_TRASH_ID },
           });
         }
 
         if (options.expectLive) {
-          await waitFor(() => live.size > 0, `${app} to subscribe to its replica read`);
-          const bootReads = readCalls;
-          expect(bootReads, `${app} issued an unbounded initial read fanout`).toBeLessThanOrEqual(
-            2,
+          await waitFor(
+            () => live.size > 0,
+            `${app} to subscribe to its replica read`
           );
-          expect(networkCalls, `${app} blocked local paint on the network`).toEqual([]);
-          expect(live.size, `${app} never subscribed to its replica read`).toBeGreaterThan(0);
+          const bootReads = readCalls;
+          expect(
+            bootReads,
+            `${app} issued an unbounded initial read fanout`
+          ).toBeLessThanOrEqual(2);
+          expect(
+            networkCalls,
+            `${app} blocked local paint on the network`
+          ).toEqual([]);
+          expect(
+            live.size,
+            `${app} never subscribed to its replica read`
+          ).toBeGreaterThan(0);
 
-          if (app === 'agenda') {
+          if (app === "agenda") {
             const askToCancel = () =>
-              Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
-                (button) => button.textContent?.trim() === 'Ask to cancel',
+              Array.from(
+                document.querySelectorAll<HTMLButtonElement>("button")
+              ).find(
+                (button) => button.textContent?.trim() === "Ask to cancel"
               );
             await waitFor(
-              () => document.querySelector('.ag-sched-title') !== null,
-              "Agenda's schedule row to render from the local replica",
+              () => document.querySelector(".ag-sched-title") !== null,
+              "Agenda's schedule row to render from the local replica"
             );
-            const event = document.querySelector('.ag-sched-title');
+            const event = document.querySelector(".ag-sched-title");
             expect(event?.textContent).toBe(AGENDA_TITLE);
-            event?.closest('button')?.click();
-            await waitFor(() => askToCancel() !== undefined, "the Agenda event's drawer to open");
+            event?.closest("button")?.click();
+            await waitFor(
+              () => askToCancel() !== undefined,
+              "the Agenda event's drawer to open"
+            );
             const cancel = askToCancel();
-            expect(cancel, 'populated Agenda event did not open its drawer').toBeTruthy();
+            expect(
+              cancel,
+              "populated Agenda event did not open its drawer"
+            ).toBeTruthy();
             cancel?.click();
             cancel?.click();
             // waitFor lands the first write; settle then holds a quiet window so
             // the exactly-one assertion below still proves the second click was
             // deduped rather than merely not yet delivered.
-            await waitFor(() => writeCalls.length > 0, "Agenda's cancel ask to reach the vault");
+            await waitFor(
+              () => writeCalls.length > 0,
+              "Agenda's cancel ask to reach the vault"
+            );
             await settle();
             expect(writeCalls).toEqual([
               {
-                action: 'cancel-event',
+                action: "cancel-event",
                 input: { event_id: AGENDA_EVENT_ID },
                 optimistic: undefined,
               },
             ]);
-            expect(readCalls, 'offline interaction unexpectedly re-read the replica').toBe(
-              bootReads,
-            );
-            expect(networkCalls, 'offline interaction attempted a network request').toEqual([]);
+            expect(
+              readCalls,
+              "offline interaction unexpectedly re-read the replica"
+            ).toBe(bootReads);
+            expect(
+              networkCalls,
+              "offline interaction attempted a network request"
+            ).toEqual([]);
             await waitFor(
-              () => document.querySelector('.kit-pending-chip') !== null,
-              "Agenda's pending chip to paint for the queued cancel",
+              () => document.querySelector(".kit-pending-chip") !== null,
+              "Agenda's pending chip to paint for the queued cancel"
             );
-            expect(document.querySelector('.kit-pending-chip')?.textContent).toBe('cancel asked');
+            expect(
+              document.querySelector(".kit-pending-chip")?.textContent
+            ).toBe("cancel asked");
             expect(document.body.textContent).toContain(AGENDA_TITLE);
 
             // Reconnect admission parks the exact queued intent: the event stays
             // canonical and the chip remains until a terminal owner decision.
-            Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
-            emitAgendaIntentState('parked');
+            Object.defineProperty(window.navigator, "onLine", {
+              configurable: true,
+              value: true,
+            });
+            emitAgendaIntentState("parked");
             await new Promise((resolve) => setTimeout(resolve, 250));
-            expect(document.querySelector('.kit-pending-chip')?.textContent).toBe('cancel asked');
+            expect(
+              document.querySelector(".kit-pending-chip")?.textContent
+            ).toBe("cancel asked");
 
             // An exact denial is the rollback signal: only this chip settles and
             // the unchanged canonical event remains visible.
-            emitAgendaIntentState('denied');
+            emitAgendaIntentState("denied");
             await waitFor(
-              () => document.querySelector('.kit-pending-chip') === null,
-              "Agenda's pending chip to settle on the exact denial",
+              () => document.querySelector(".kit-pending-chip") === null,
+              "Agenda's pending chip to settle on the exact denial"
             );
-            expect(document.querySelector('.kit-pending-chip')).toBeNull();
+            expect(document.querySelector(".kit-pending-chip")).toBeNull();
             expect(document.body.textContent).toContain(AGENDA_TITLE);
-            expect(readCalls, 'exact intent settlement unexpectedly re-read the replica').toBe(
-              bootReads,
-            );
-          } else if (app === 'photos') {
+            expect(
+              readCalls,
+              "exact intent settlement unexpectedly re-read the replica"
+            ).toBe(bootReads);
+          } else if (app === "photos") {
             await waitFor(
-              () => document.querySelector(`[data-asset-id="${PHOTO_ASSET_ID}"]`) !== null,
-              "Photos' local asset tile to render from the local replica",
+              () =>
+                document.querySelector(
+                  `[data-asset-id="${PHOTO_ASSET_ID}"]`
+                ) !== null,
+              "Photos' local asset tile to render from the local replica"
             );
-            const tile = document.querySelector(`[data-asset-id="${PHOTO_ASSET_ID}"]`);
-            expect(tile, 'the populated local Photos row did not render').toBeTruthy();
-            expect(tile?.querySelector('img')?.alt).toBe(PHOTO_TITLE);
+            const tile = document.querySelector(
+              `[data-asset-id="${PHOTO_ASSET_ID}"]`
+            );
+            expect(
+              tile,
+              "the populated local Photos row did not render"
+            ).toBeTruthy();
+            expect(tile?.querySelector("img")?.alt).toBe(PHOTO_TITLE);
           }
 
           response = DENIED;
           for (const listener of Array.from(live)) listener(response);
           await waitFor(
             consentBannerShown,
-            `${app} to reveal its consent banner for a denied live replica value`,
+            `${app} to reveal its consent banner for a denied live replica value`
           );
-          expectNoErrors('applying a denied live replica value');
-          expect(consentBannerShown(), `${app} ignored a denied live replica value`).toBe(true);
+          expectNoErrors("applying a denied live replica value");
+          expect(
+            consentBannerShown(),
+            `${app} ignored a denied live replica value`
+          ).toBe(true);
 
           response = granted;
           for (const listener of Array.from(live)) listener(response);
           await waitFor(
             () => !consentBannerShown(),
-            `${app} to hide its consent banner for a re-granted live replica value`,
+            `${app} to hide its consent banner for a re-granted live replica value`
           );
-          expectNoErrors('applying a re-granted live replica value');
-          expect(consentBannerShown(), `${app} ignored a re-granted live replica value`).toBe(
-            false,
-          );
+          expectNoErrors("applying a re-granted live replica value");
+          expect(
+            consentBannerShown(),
+            `${app} ignored a re-granted live replica value`
+          ).toBe(false);
 
           // A replacement live read can fail before it registers any upstream
           // dependency. The app must release that dead subscription and let a
           // later compatibility doorbell retry it.
           const beforeFailure = readCalls;
-          nextReadError = new Error('synthetic initial replica read failure');
-          if (app === 'photos') {
+          nextReadError = new Error("synthetic initial replica read failure");
+          if (app === "photos") {
             const realNow = Date.now;
             const afterStaleWindow = realNow() + 31_000;
             Date.now = () => afterStaleWindow;
-            window.dispatchEvent(new Event('focus'));
+            window.dispatchEvent(new Event("focus"));
             Date.now = realNow;
           } else {
-            window.dispatchEvent(new Event('focus'));
+            window.dispatchEvent(new Event("focus"));
           }
           await waitFor(
             () => readCalls > beforeFailure,
-            `${app} to attempt the replacement live read`,
-          );
-          expect(readCalls, `${app} did not attempt the replacement live read`).toBeGreaterThan(
-            beforeFailure,
-          );
-          const afterFailure = readCalls;
-          const table = app === 'photos' ? 'core.content_item' : 'core.event';
-          for (const listener of changes) listener({ tables: [table] });
-          await waitFor(
-            () => readCalls > afterFailure && live.size > 0,
-            `${app} to retry its rejected live read on the compatibility doorbell`,
+            `${app} to attempt the replacement live read`
           );
           expect(
             readCalls,
-            `${app} suppressed the compatibility retry after its live read rejected`,
+            `${app} did not attempt the replacement live read`
+          ).toBeGreaterThan(beforeFailure);
+          const afterFailure = readCalls;
+          const table = app === "photos" ? "core.content_item" : "core.event";
+          for (const listener of changes) listener({ tables: [table] });
+          await waitFor(
+            () => readCalls > afterFailure && live.size > 0,
+            `${app} to retry its rejected live read on the compatibility doorbell`
+          );
+          expect(
+            readCalls,
+            `${app} suppressed the compatibility retry after its live read rejected`
           ).toBeGreaterThan(afterFailure);
-          expect(live.size, `${app} did not restore a managed live dependency`).toBeGreaterThan(0);
+          expect(
+            live.size,
+            `${app} did not restore a managed live dependency`
+          ).toBeGreaterThan(0);
           return;
         }
 
@@ -664,25 +781,31 @@ export function describeAppBoot(
         // consent notice in its place. Required, not optional — a guarded check
         // would silently skip the only assertion proving the denied read landed.
         response = DENIED;
-        window.dispatchEvent(new Event('focus'));
+        window.dispatchEvent(new Event("focus"));
 
         await waitFor(
           consentBannerShown,
-          `${app} to reveal its consent banner after the grant was revoked`,
+          `${app} to reveal its consent banner after the grant was revoked`
         );
-        expectNoErrors('clearing after the grant was revoked');
-        expect(consentBannerShown(), `${app} hid its consent banner while denied`).toBe(true);
+        expectNoErrors("clearing after the grant was revoked");
+        expect(
+          consentBannerShown(),
+          `${app} hid its consent banner while denied`
+        ).toBe(true);
 
         // Re-grant: the consent banner unmounts and the board renders again.
         response = {};
-        window.dispatchEvent(new Event('focus'));
+        window.dispatchEvent(new Event("focus"));
         await waitFor(
           () => !consentBannerShown(),
-          `${app} to hide its consent banner after the grant came back`,
+          `${app} to hide its consent banner after the grant came back`
         );
-        expectNoErrors('re-rendering after the grant came back');
-        expect(consentBannerShown(), `${app} kept its consent banner after re-grant`).toBe(false);
-      },
+        expectNoErrors("re-rendering after the grant came back");
+        expect(
+          consentBannerShown(),
+          `${app} kept its consent banner after re-grant`
+        ).toBe(false);
+      }
     );
   });
 }

@@ -22,13 +22,25 @@
  * handler-catalog system-prompt preamble, and attachment blob resolution.
  */
 
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { sendError, sendJson, readBody, MAX_BODY_BYTES } from './http-utils.js';
-import { buildExtraPrompt } from '../handlers/build-extra-prompt.js';
-import type { ConversationRunner } from '../conversation/runner.js';
-import type { ConversationHistoryStore } from '../conversation/history.js';
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
+
+import type { ConversationHistoryStore } from "../conversation/history.js";
+import type { ConversationRunner } from "../conversation/runner.js";
+import type { ConversationWorkspaceKind } from "../conversation/schema.js";
+import { isRunnerKind } from "../conversation/turn.js";
+import { buildExtraPrompt } from "../handlers/build-extra-prompt.js";
+import { appDataDir } from "../registry/app-paths.js";
+import {
+  APP_MANIFEST_FILE,
+  parseManifest,
+  type Manifest,
+} from "../registry/manifest.js";
+import type { Registry } from "../registry/registry.js";
+import type { RegistryEntry } from "../types.js";
+import { sendError, sendJson, readBody, MAX_BODY_BYTES } from "./http-utils.js";
+import type { TurnLimiter } from "./turn-limiter.js";
 import {
   driveTurnOverSse,
   parseAdditionalDirectories,
@@ -37,14 +49,7 @@ import {
   resolveTurnAttachments,
   validateTurnAttachmentRefs,
   type TurnAttachmentRef,
-} from './turn-sse.js';
-import type { TurnLimiter } from './turn-limiter.js';
-import type { Registry } from '../registry/registry.js';
-import { appDataDir } from '../registry/app-paths.js';
-import type { RegistryEntry } from '../types.js';
-import { isRunnerKind } from '../conversation/turn.js';
-import { APP_MANIFEST_FILE, parseManifest, type Manifest } from '../registry/manifest.js';
-import type { ConversationWorkspaceKind } from '../conversation/schema.js';
+} from "./turn-sse.js";
 
 /**
  * Validate a chat-session id. Reject anything that could escape a
@@ -54,9 +59,9 @@ import type { ConversationWorkspaceKind } from '../conversation/schema.js';
  */
 export function isValidConversationId(id: string): boolean {
   if (!id || id.length > 128) return false;
-  if (id === 'index.json') return false;
-  if (id.startsWith('.')) return false;
-  return /^[A-Za-z0-9_\-:]+$/.test(id);
+  if (id === "index.json") return false;
+  if (id.startsWith(".")) return false;
+  return /^[A-Za-z0-9_\-:]+$/u.test(id);
 }
 
 /**
@@ -114,7 +119,7 @@ export interface TurnRouteContext {
    */
   workspaceRoots?: (
     entry: RegistryEntry,
-    conversationId: string,
+    conversationId: string
   ) => Promise<Partial<Record<ConversationWorkspaceKind, string>>>;
   runner?: ConversationRunner;
   /**
@@ -135,7 +140,9 @@ export interface TurnRouteContext {
    * authored `app.json` yet (freshly registered uploads with no
    * committed version).
    */
-  appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
+  appMeta?: (
+    entry: RegistryEntry
+  ) => Promise<{ name?: string; description?: string }>;
   /**
    * Per-runtime chat-session lock map. The `Runtime` instance owns one of
    * these and threads it in here so the `(appId, conversationId)` serialization
@@ -161,9 +168,9 @@ export interface TurnRouteContext {
 }
 
 export type ParsedTurnRoute =
-  | { kind: 'post'; appId: string }
-  | { kind: 'get-model'; appId: string }
-  | { kind: 'put-model'; appId: string };
+  | { kind: "post"; appId: string }
+  | { kind: "get-model"; appId: string }
+  | { kind: "put-model"; appId: string };
 
 /**
  * Match the chat sub-routes under `/centraid/<appId>/_turn`. The caller
@@ -177,17 +184,17 @@ export type ParsedTurnRoute =
 export function parseTurnSubRoute(
   appId: string,
   segments: string[],
-  method: string,
+  method: string
 ): ParsedTurnRoute | undefined {
   // segments here are the path under /centraid/<appId>/ starting with "_turn"
   // segments[0] === "_turn"
   const m = method.toUpperCase();
-  if (segments.length === 1 && m === 'POST') {
-    return { kind: 'post', appId };
+  if (segments.length === 1 && m === "POST") {
+    return { kind: "post", appId };
   }
-  if (segments.length === 2 && segments[1] === 'model') {
-    if (m === 'GET') return { kind: 'get-model', appId };
-    if (m === 'PUT') return { kind: 'put-model', appId };
+  if (segments.length === 2 && segments[1] === "model") {
+    if (m === "GET") return { kind: "get-model", appId };
+    if (m === "PUT") return { kind: "put-model", appId };
   }
   return undefined;
 }
@@ -218,18 +225,18 @@ export async function handleTurnRoute(
   req: IncomingMessage,
   res: ServerResponse,
   ctx: TurnRouteContext,
-  parsed: ParsedTurnRoute,
+  parsed: ParsedTurnRoute
 ): Promise<void> {
   const entry = ctx.registry.get(parsed.appId);
   if (!entry) {
-    sendError(res, 404, 'not_found', 'App not registered.');
+    sendError(res, 404, "not_found", "App not registered.");
     return;
   }
-  if (parsed.kind === 'get-model') {
+  if (parsed.kind === "get-model") {
     await handleGetAskModel(res, ctx);
     return;
   }
-  if (parsed.kind === 'put-model') {
+  if (parsed.kind === "put-model") {
     await handlePutAskModel(req, res, ctx);
     return;
   }
@@ -237,9 +244,17 @@ export async function handleTurnRoute(
 }
 
 /** `GET /centraid/<appId>/_turn/model` — read the ask-model picker state. */
-async function handleGetAskModel(res: ServerResponse, ctx: TurnRouteContext): Promise<void> {
+async function handleGetAskModel(
+  res: ServerResponse,
+  ctx: TurnRouteContext
+): Promise<void> {
   if (!ctx.askModel) {
-    sendError(res, 503, 'no_model_prefs', 'Model preferences are not configured for this runtime.');
+    sendError(
+      res,
+      503,
+      "no_model_prefs",
+      "Model preferences are not configured for this runtime."
+    );
     return;
   }
   sendJson(res, 200, await ctx.askModel.get());
@@ -253,22 +268,39 @@ async function handleGetAskModel(res: ServerResponse, ctx: TurnRouteContext): Pr
 async function handlePutAskModel(
   req: IncomingMessage,
   res: ServerResponse,
-  ctx: TurnRouteContext,
+  ctx: TurnRouteContext
 ): Promise<void> {
   if (!ctx.askModel) {
-    sendError(res, 503, 'no_model_prefs', 'Model preferences are not configured for this runtime.');
+    sendError(
+      res,
+      503,
+      "no_model_prefs",
+      "Model preferences are not configured for this runtime."
+    );
     return;
   }
   let body: { model?: string | null };
   try {
     const raw = await readBody(req);
-    body = raw.length === 0 ? {} : (JSON.parse(raw.toString('utf8')) as { model?: string | null });
+    body =
+      raw.length === 0
+        ? {}
+        : (JSON.parse(raw.toString("utf8")) as { model?: string | null });
   } catch {
-    sendError(res, 400, 'bad_request', 'Invalid JSON body.');
+    sendError(res, 400, "bad_request", "Invalid JSON body.");
     return;
   }
-  if (body.model !== null && body.model !== undefined && typeof body.model !== 'string') {
-    sendError(res, 400, 'bad_request', 'Body must be { model: string | null }.');
+  if (
+    body.model !== null &&
+    body.model !== undefined &&
+    typeof body.model !== "string"
+  ) {
+    sendError(
+      res,
+      400,
+      "bad_request",
+      "Body must be { model: string | null }."
+    );
     return;
   }
   await ctx.askModel.set(body.model ?? null);
@@ -279,14 +311,14 @@ async function handlePostTurn(
   req: IncomingMessage,
   res: ServerResponse,
   ctx: TurnRouteContext,
-  entry: RegistryEntry,
+  entry: RegistryEntry
 ): Promise<void> {
   if (!ctx.runner) {
     sendError(
       res,
       503,
-      'no_conversation_runner',
-      'No chat runner is configured for this runtime. The host must inject one.',
+      "no_conversation_runner",
+      "No chat runner is configured for this runtime. The host must inject one."
     );
     return;
   }
@@ -294,24 +326,30 @@ async function handlePostTurn(
   let body: PostBody;
   try {
     const raw = await readBody(req);
-    body = raw.length === 0 ? {} : (JSON.parse(raw.toString('utf8')) as PostBody);
+    body =
+      raw.length === 0 ? {} : (JSON.parse(raw.toString("utf8")) as PostBody);
   } catch (err) {
     const message =
-      err instanceof Error && err.message.includes('1 MiB')
+      err instanceof Error && err.message.includes("1 MiB")
         ? `Request body exceeds ${MAX_BODY_BYTES} bytes.`
-        : 'Invalid JSON body.';
-    sendError(res, 400, 'bad_request', message);
+        : "Invalid JSON body.";
+    sendError(res, 400, "bad_request", message);
     return;
   }
 
   const conversationId = body.conversationId;
   const message = body.message;
   if (!conversationId || !message) {
-    sendError(res, 400, 'bad_request', 'Body must include { conversationId, message }.');
+    sendError(
+      res,
+      400,
+      "bad_request",
+      "Body must include { conversationId, message }."
+    );
     return;
   }
   if (!isValidConversationId(conversationId)) {
-    sendError(res, 400, 'bad_request', 'Invalid conversationId.');
+    sendError(res, 400, "bad_request", "Invalid conversationId.");
     return;
   }
   // A client accumulates provider consents over a conversation and re-sends
@@ -323,16 +361,31 @@ async function handlePostTurn(
       ? []
       : [body.providerConsent];
   if (!providerConsent.every((kind) => isRunnerKind(kind))) {
-    sendError(res, 400, 'bad_request', 'providerConsent must name registered runners.');
+    sendError(
+      res,
+      400,
+      "bad_request",
+      "providerConsent must name registered runners."
+    );
     return;
   }
   if (body.runnerKind !== undefined && !isRunnerKind(body.runnerKind)) {
-    sendError(res, 400, 'bad_request', 'runnerKind must name a registered runner.');
+    sendError(
+      res,
+      400,
+      "bad_request",
+      "runnerKind must name a registered runner."
+    );
     return;
   }
   const requestedWorkspaceKind = parseWorkspaceKind(body.workspaceKind);
   if (body.workspaceKind !== undefined && !requestedWorkspaceKind) {
-    sendError(res, 400, 'bad_request', 'workspaceKind must be one of vault-data, app, or draft.');
+    sendError(
+      res,
+      400,
+      "bad_request",
+      "workspaceKind must be one of vault-data, app, or draft."
+    );
     return;
   }
 
@@ -341,17 +394,22 @@ async function handlePostTurn(
   // mode toggle to read.
   let prevAdapterSessionId: string | undefined;
   let prevAdapterKind: string | undefined;
-  let prevAdapterUsageSnapshot: import('../conversation/turn.js').AdapterUsageSnapshot | undefined;
+  let prevAdapterUsageSnapshot:
+    | import("../conversation/turn.js").AdapterUsageSnapshot
+    | undefined;
   if (ctx.conversationStore) {
-    const session = ctx.conversationStore.getSessionMeta(entry.id, conversationId);
+    const session = ctx.conversationStore.getSessionMeta(
+      entry.id,
+      conversationId
+    );
     if (!session) {
-      sendError(res, 404, 'not_found', 'No such chat session.');
+      sendError(res, 404, "not_found", "No such chat session.");
       return;
     }
     const resume = ctx.conversationStore.getAdapterResumeState(
       entry.id,
       conversationId,
-      isRunnerKind(body.runnerKind) ? body.runnerKind : undefined,
+      isRunnerKind(body.runnerKind) ? body.runnerKind : undefined
     );
     prevAdapterSessionId = resume?.sessionId;
     prevAdapterKind = resume?.kind;
@@ -365,20 +423,34 @@ async function handlePostTurn(
   const attachmentRefs: TurnAttachmentRef[] = validateTurnAttachmentRefs(
     ctx.conversationStore,
     entry.id,
-    parseTurnAttachmentRefs(body.attachments),
+    parseTurnAttachmentRefs(body.attachments)
   );
-  const turnAttachments = resolveTurnAttachments(ctx.conversationStore, entry.id, attachmentRefs);
-  const savedWorkspace = ctx.conversationStore?.getWorkspaceSelection(entry.id, conversationId);
+  const turnAttachments = resolveTurnAttachments(
+    ctx.conversationStore,
+    entry.id,
+    attachmentRefs
+  );
+  const savedWorkspace = ctx.conversationStore?.getWorkspaceSelection(
+    entry.id,
+    conversationId
+  );
   const workspaceRoots = ctx.workspaceRoots
     ? await ctx.workspaceRoots(entry, conversationId)
     : { app: appDataDir(entry) };
   const defaultWorkspaceKind: ConversationWorkspaceKind =
-    body.register !== 'ask' && workspaceRoots.draft ? 'draft' : 'app';
+    body.register !== "ask" && workspaceRoots.draft ? "draft" : "app";
   const workspaceKind =
-    requestedWorkspaceKind ?? savedWorkspace?.primaryKind ?? defaultWorkspaceKind;
+    requestedWorkspaceKind ??
+    savedWorkspace?.primaryKind ??
+    defaultWorkspaceKind;
   const unresolvedWorkspaceDirectory = workspaceRoots[workspaceKind];
   if (!unresolvedWorkspaceDirectory) {
-    sendError(res, 400, 'bad_request', `The ${workspaceKind} workspace is unavailable here.`);
+    sendError(
+      res,
+      400,
+      "bad_request",
+      `The ${workspaceKind} workspace is unavailable here.`
+    );
     return;
   }
   let workspaceDirectory: string;
@@ -386,30 +458,34 @@ async function handlePostTurn(
   try {
     workspaceDirectory = await fs.realpath(unresolvedWorkspaceDirectory);
     if (body.additionalDirectories !== undefined) {
-      additionalDirectories = await parseAdditionalDirectories(body.additionalDirectories);
+      additionalDirectories = await parseAdditionalDirectories(
+        body.additionalDirectories
+      );
     }
   } catch (err) {
     sendError(
       res,
       400,
-      'bad_request',
-      err instanceof Error ? err.message : 'Invalid workspace selection.',
+      "bad_request",
+      err instanceof Error ? err.message : "Invalid workspace selection."
     );
     return;
   }
   additionalDirectories = additionalDirectories.filter(
-    (directory) => directory !== workspaceDirectory,
+    (directory) => directory !== workspaceDirectory
   );
   if (ctx.conversationStore) {
     ctx.conversationStore.setWorkspaceSelection(
       entry.id,
       conversationId,
       workspaceKind,
-      additionalDirectories,
+      additionalDirectories
     );
   }
 
-  const appMeta = ctx.appMeta ? await ctx.appMeta(entry).catch(() => ({}) as never) : undefined;
+  const appMeta = ctx.appMeta
+    ? await ctx.appMeta(entry).catch(() => ({}) as never)
+    : undefined;
   const manifest = await safeReadManifest(entry, ctx.resolveCodeDir);
   const extraSystemPrompt = buildExtraPrompt({
     appId: entry.id,
@@ -433,14 +509,21 @@ async function handlePostTurn(
     conversationRunnerSessionDir: ctx.conversationRunnerSessionDir,
     conversationLocks: ctx.conversationLocks,
     banner: `chat ${entry.id} session ${conversationId}`,
-    register: body.register === 'ask' ? 'ask' : body.register === 'build' ? 'build' : undefined,
+    register:
+      body.register === "ask"
+        ? "ask"
+        : body.register === "build"
+          ? "build"
+          : undefined,
     model: body.model,
     ...(isRunnerKind(body.runnerKind) ? { runnerKind: body.runnerKind } : {}),
     thinking: body.thinking,
     ...(providerConsent.length > 0 ? { providerConsent } : {}),
     ...(additionalDirectories.length ? { additionalDirectories } : {}),
     idempotencyKey: body.idempotencyKey,
-    ...(typeof body.retryOf === 'string' && body.retryOf ? { retryOf: body.retryOf } : {}),
+    ...(typeof body.retryOf === "string" && body.retryOf
+      ? { retryOf: body.retryOf }
+      : {}),
     ...(ctx.turnLimiter ? { limiter: ctx.turnLimiter() } : {}),
     prevAdapterSessionId,
     prevAdapterKind,
@@ -463,12 +546,15 @@ async function handlePostTurn(
  */
 async function safeReadManifest(
   entry: RegistryEntry,
-  resolveCodeDir: (entry: RegistryEntry) => Promise<string | undefined>,
+  resolveCodeDir: (entry: RegistryEntry) => Promise<string | undefined>
 ): Promise<Manifest | undefined> {
   try {
     const codeDir = await resolveCodeDir(entry);
     if (!codeDir) return undefined;
-    const text = await fs.readFile(path.join(codeDir, APP_MANIFEST_FILE), 'utf8');
+    const text = await fs.readFile(
+      path.join(codeDir, APP_MANIFEST_FILE),
+      "utf8"
+    );
     return parseManifest(text);
   } catch {
     return undefined;

@@ -1,30 +1,32 @@
-import type { GatewayServeHandle } from '@centraid/gateway';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import {
-  gatewayModelCatalogFile,
-  gatewayVaultDir,
-  LOCAL_GATEWAY_ID,
-  localGatewayDataDir,
-} from './gateway-paths.js';
-import { desktopGatewayKeyStore } from './gateway-secrets.js';
-import { setLocalGatewayInfoProvider } from './gateway-store.js';
-import { desktopSessionIdFor } from './app-sessions.js';
-import { loadPersistedSettings, templatesCacheDir } from './settings.js';
-import { phoneLinkStatus } from './phone-link.js';
-import {
-  backoffForAttempt,
-  initialSupervisorState,
-  recordFailure,
-  type SupervisorState,
-} from './gateway-supervisor-core.js';
+import crypto from "node:crypto";
+import path from "node:path";
+
+import type { GatewayServeHandle } from "@centraid/gateway";
+
+import { desktopSessionIdFor } from "./app-sessions.js";
 import {
   ensureDetachedGateway,
   getOrCreateDesktopOwnerId,
   preferEmbeddedGateway,
   type DetachedGatewayHandle,
-} from './detached-gateway.js';
-import { startDesktopEmbeddedGateway } from './embedded-gateway.js';
+} from "./detached-gateway.js";
+import { startDesktopEmbeddedGateway } from "./embedded-gateway.js";
+import {
+  gatewayModelCatalogFile,
+  gatewayVaultDir,
+  LOCAL_GATEWAY_ID,
+  localGatewayDataDir,
+} from "./gateway-paths.js";
+import { desktopGatewayKeyStore } from "./gateway-secrets.js";
+import { setLocalGatewayInfoProvider } from "./gateway-store.js";
+import {
+  backoffForAttempt,
+  initialSupervisorState,
+  recordFailure,
+  type SupervisorState,
+} from "./gateway-supervisor-core.js";
+import { phoneLinkStatus } from "./phone-link.js";
+import { loadPersistedSettings, templatesCacheDir } from "./settings.js";
 
 /**
  * Electron-flavored local-gateway lifecycle (issue #351 / #468).
@@ -52,14 +54,17 @@ import { startDesktopEmbeddedGateway } from './embedded-gateway.js';
 export interface LocalGatewayRuntime {
   url: string;
   token: string;
-  mode: 'embedded' | 'detached';
+  mode: "embedded" | "detached";
   owned?: boolean;
-  close(): Promise<void>;
+  close: () => Promise<void>;
   /** Compatible with gateway HealthRegistry.registerProbe for the tunnel probe. */
   health: {
     registerProbe: (
       name: string,
-      probe: () => Promise<{ status: 'ok' | 'degraded' | 'error'; detail?: string }>,
+      probe: () => Promise<{
+        status: "ok" | "degraded" | "error";
+        detail?: string;
+      }>
     ) => void;
   };
   vaults: {
@@ -87,7 +92,9 @@ export function markLocalGatewaysDisposed(): void {
 }
 
 /** Supervision snapshot for gateway `gatewayId` — empty state if it has never failed. */
-export function getLocalGatewaySupervisorState(gatewayId: string): SupervisorState {
+export function getLocalGatewaySupervisorState(
+  gatewayId: string
+): SupervisorState {
   return supervisor.get(gatewayId) ?? initialSupervisorState();
 }
 
@@ -108,23 +115,26 @@ function wrapEmbedded(handle: GatewayServeHandle): LocalGatewayRuntime {
   const request = async (
     pathname: string,
     body: Record<string, unknown>,
-    vaultId?: string,
+    vaultId?: string
   ): Promise<Record<string, unknown>> => {
     const response = await fetch(new URL(pathname, `${handle.url}/`), {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Bearer ${handle.token}`,
-        'Content-Type': 'application/json',
-        ...(vaultId ? { 'x-centraid-vault': vaultId } : {}),
+        "Content-Type": "application/json",
+        ...(vaultId ? { "x-centraid-vault": vaultId } : {}),
       },
       body: JSON.stringify(body),
     });
-    const result = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const result = (await response.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
     if (!response.ok) {
       throw new Error(
-        typeof result.message === 'string'
+        typeof result.message === "string"
           ? result.message
-          : `vault operation failed (HTTP ${response.status})`,
+          : `vault operation failed (HTTP ${response.status})`
       );
     }
     return result;
@@ -132,19 +142,19 @@ function wrapEmbedded(handle: GatewayServeHandle): LocalGatewayRuntime {
   return {
     url: handle.url,
     token: handle.token,
-    mode: 'embedded',
+    mode: "embedded",
     close: () => handle.close(),
     health: handle.health,
     vaults: {
       create: async (name?: string) => {
-        const result = await request('/centraid/_vault/vaults', { name });
-        if (typeof result.vaultId !== 'string') {
-          throw new Error('vault create returned no vaultId');
+        const result = await request("/centraid/_vault/vaults", { name });
+        if (typeof result.vaultId !== "string") {
+          throw new Error("vault create returned no vaultId");
         }
         return { vaultId: result.vaultId };
       },
       delete: async (vaultId: string, name: string) => {
-        await request('/centraid/_vault/vaults:erase', { name }, vaultId);
+        await request("/centraid/_vault/vaults:erase", { name }, vaultId);
       },
     },
   };
@@ -154,7 +164,7 @@ function wrapDetached(handle: DetachedGatewayHandle): LocalGatewayRuntime {
   return {
     url: handle.url,
     token: handle.token,
-    mode: 'detached',
+    mode: "detached",
     owned: handle.owned,
     close: () => handle.close(),
     health: handle.health,
@@ -166,31 +176,34 @@ async function startEmbedded(gatewayId: string): Promise<LocalGatewayRuntime> {
   const settings = await loadPersistedSettings();
   const dataDir = localGatewayDataDir();
   const ownerId = await getOrCreateDesktopOwnerId();
-  const token = crypto.randomBytes(32).toString('hex');
+  const token = crypto.randomBytes(32).toString("hex");
   const handle = await startDesktopEmbeddedGateway({
     dataDir,
     paths: {
       dataDir,
       vaultDir: gatewayVaultDir(gatewayId),
-      cacheDir: path.join(dataDir, 'cache'),
+      cacheDir: path.join(dataDir, "cache"),
       modelCatalogFile: gatewayModelCatalogFile(gatewayId),
       templatesCacheDir: templatesCacheDir(gatewayId),
-      logsDir: path.join(dataDir, 'gateway-logs'),
+      logsDir: path.join(dataDir, "gateway-logs"),
     },
     keyStore: desktopGatewayKeyStore(dataDir, LOCAL_GATEWAY_ID),
     token,
     ownerEndpointId: ownerId,
-    ...(settings.remoteTemplatesUrl ? { remoteTemplatesUrl: settings.remoteTemplatesUrl } : {}),
+    ...(settings.remoteTemplatesUrl
+      ? { remoteTemplatesUrl: settings.remoteTemplatesUrl }
+      : {}),
     sessionIdFor: desktopSessionIdFor,
     logTag: `local-gateway:${gatewayId}`,
   });
-  handle.health.registerProbe('tunnel', async () => {
+  handle.health.registerProbe("tunnel", async () => {
     const status = await phoneLinkStatus();
-    if (status.error) return { status: 'error', detail: status.error };
-    if (!status.running) return { status: 'degraded', detail: 'phone link not running' };
+    if (status.error) return { status: "error", detail: status.error };
+    if (!status.running)
+      return { status: "degraded", detail: "phone link not running" };
     return {
-      status: 'ok',
-      detail: `${status.devices.length} paired device${status.devices.length === 1 ? '' : 's'}`,
+      status: "ok",
+      detail: `${status.devices.length} paired device${status.devices.length === 1 ? "" : "s"}`,
     };
   });
   return wrapEmbedded(handle);
@@ -203,23 +216,30 @@ async function startDetached(): Promise<LocalGatewayRuntime> {
   // from an older build than the one on disk, respawn it instead of adopting
   // the stale daemon — so a rebuilt gateway (dev) or an updated app (prod)
   // actually takes effect. Safe now that stop waits for real exit.
-  const detached = await ensureDetachedGateway({ dataDir, ownerId, replaceOwnedIfStale: true });
+  const detached = await ensureDetachedGateway({
+    dataDir,
+    ownerId,
+    replaceOwnedIfStale: true,
+  });
   // Phone tunnel lives in the Electron main process; register is a no-op on
   // detached handles (child owns its own health registry). Keep the probe
   // call for API parity.
-  detached.health.registerProbe('tunnel', async () => {
+  detached.health.registerProbe("tunnel", async () => {
     const status = await phoneLinkStatus();
-    if (status.error) return { status: 'error', detail: status.error };
-    if (!status.running) return { status: 'degraded', detail: 'phone link not running' };
+    if (status.error) return { status: "error", detail: status.error };
+    if (!status.running)
+      return { status: "degraded", detail: "phone link not running" };
     return {
-      status: 'ok',
-      detail: `${status.devices.length} paired device${status.devices.length === 1 ? '' : 's'}`,
+      status: "ok",
+      detail: `${status.devices.length} paired device${status.devices.length === 1 ? "" : "s"}`,
     };
   });
   return wrapDetached(detached);
 }
 
-export async function ensureLocalGateway(gatewayId: string): Promise<LocalGatewayRuntime> {
+export async function ensureLocalGateway(
+  gatewayId: string
+): Promise<LocalGatewayRuntime> {
   ensureInfoProviderRegistered();
   const ready = handles.get(gatewayId);
   if (ready) return ready;
@@ -233,15 +253,15 @@ export async function ensureLocalGateway(gatewayId: string): Promise<LocalGatewa
   if (sup?.loopBroken) {
     throw new Error(
       `local gateway "${gatewayId}" failed to start repeatedly and stopped retrying` +
-        (sup.lastError ? ` (last error: ${sup.lastError})` : '') +
-        ' — use Settings → Gateway → Restart to try again.',
+        (sup.lastError ? ` (last error: ${sup.lastError})` : "") +
+        " — use Settings → Gateway → Restart to try again."
     );
   }
   const waitUntil = nextAttemptAt.get(gatewayId);
   if (waitUntil !== undefined && Date.now() < waitUntil) {
     throw new Error(
       `local gateway "${gatewayId}" is backing off after a failed start; retrying automatically` +
-        (sup?.lastError ? ` (last error: ${sup.lastError})` : ''),
+        (sup?.lastError ? ` (last error: ${sup.lastError})` : "")
     );
   }
 
@@ -263,7 +283,9 @@ export async function ensureLocalGateway(gatewayId: string): Promise<LocalGatewa
       const prev = supervisor.get(gatewayId) ?? initialSupervisorState();
       const next = recordFailure(prev, Date.now(), message);
       supervisor.set(gatewayId, next);
-      if (!next.loopBroken) {
+      if (next.loopBroken) {
+        nextAttemptAt.delete(gatewayId);
+      } else {
         const delay = backoffForAttempt(next.attempt);
         nextAttemptAt.set(gatewayId, Date.now() + delay);
         const timer = setTimeout(() => {
@@ -273,8 +295,6 @@ export async function ensureLocalGateway(gatewayId: string): Promise<LocalGatewa
           });
         }, delay);
         timer.unref?.();
-      } else {
-        nextAttemptAt.delete(gatewayId);
       }
       throw err;
     })
@@ -306,11 +326,13 @@ export async function shutdownLocalGateway(gatewayId: string): Promise<void> {
  */
 export async function shutdownAllLocalGatewaysExcept(
   exceptId?: string,
-  options?: { includeDetached?: boolean },
+  options?: { includeDetached?: boolean }
 ): Promise<void> {
   const includeDetached = options?.includeDetached === true;
   const ids = Array.from(handles.entries())
-    .filter(([id, h]) => id !== exceptId && (includeDetached || h.mode === 'embedded'))
+    .filter(
+      ([id, h]) => id !== exceptId && (includeDetached || h.mode === "embedded")
+    )
     .map(([id]) => id);
   await Promise.all(ids.map((id) => shutdownLocalGateway(id)));
 }
@@ -324,10 +346,10 @@ export async function restartLocalGateway(gatewayId: string): Promise<void> {
   if (inFlight) return inFlight;
   const p = (async () => {
     const current = handles.get(gatewayId);
-    if (current?.mode === 'detached' && current.owned !== true) {
+    if (current?.mode === "detached" && current.owned !== true) {
       throw new Error(
-        'This local gateway is held by another process and will not be restarted ' +
-          'from the desktop. Stop it from the shell or leave it running.',
+        "This local gateway is held by another process and will not be restarted " +
+          "from the desktop. Stop it from the shell or leave it running."
       );
     }
     supervisor.delete(gatewayId);
@@ -344,7 +366,7 @@ export async function restartLocalGateway(gatewayId: string): Promise<void> {
 /**
  * Owner-scoped vault operations on the running local gateway.
  */
-function localVaults(gatewayId: string): LocalGatewayRuntime['vaults'] {
+function localVaults(gatewayId: string): LocalGatewayRuntime["vaults"] {
   const h = handles.get(gatewayId);
   if (!h) throw new Error(`local gateway ${gatewayId} is not running`);
   return h.vaults;
@@ -353,7 +375,7 @@ function localVaults(gatewayId: string): LocalGatewayRuntime['vaults'] {
 /** Create a vault as the enrolled local owner. */
 export async function createLocalVault(
   gatewayId: string,
-  name?: string,
+  name?: string
 ): Promise<{ vaultId: string }> {
   return localVaults(gatewayId).create(name);
 }
@@ -362,7 +384,7 @@ export async function createLocalVault(
 export async function deleteLocalVault(
   gatewayId: string,
   vaultId: string,
-  name: string,
+  name: string
 ): Promise<void> {
   await localVaults(gatewayId).delete(vaultId, name);
 }

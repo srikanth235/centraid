@@ -9,7 +9,7 @@
 
    Uses `var(--bg-l)` so it retunes from the host's "Dark shade" knob. */
 
-:root[data-theme='dark'] {
+:root[data-theme="dark"] {
   --bg-wall: linear-gradient(
     180deg,
     hsl(222 13% calc(var(--bg-l) + 2%)) 0%,
@@ -17,7 +17,7 @@
   );
 }
 
-:root[data-theme='light'] {
+:root[data-theme="light"] {
   --bg-wall: #fcfcfc;
 }
 

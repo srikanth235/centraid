@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 export interface UpdateStatus {
   available: boolean;
@@ -38,8 +38,10 @@ export function useUpdateStatus(): UpdateStatus | null {
 
 /** Sidebar pill title — download still in flight vs ready to install. */
 export function updatePillTitle(status: UpdateStatus): string {
-  if (status.readyToInstall === false) return 'Update downloading…';
-  return status.readyToInstall === true ? 'Restart to install' : 'Relaunch to update';
+  if (status.readyToInstall === false) return "Update downloading…";
+  return status.readyToInstall === true
+    ? "Restart to install"
+    : "Relaunch to update";
 }
 
 /** Ask main to restart into the new build. Fire-and-forget: the app exits. */

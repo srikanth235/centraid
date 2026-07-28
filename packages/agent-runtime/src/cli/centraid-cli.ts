@@ -20,11 +20,11 @@
  *   2  — bad usage (missing arg, unknown subcommand)
  */
 
-import path from 'node:path';
-import { statSync } from 'node:fs';
+import { statSync } from "node:fs";
+import path from "node:path";
 
 function printJson(value: unknown): void {
-  process.stdout.write(JSON.stringify(value) + '\n');
+  process.stdout.write(JSON.stringify(value) + "\n");
 }
 
 function fail(message: string, code = 1): never {
@@ -35,17 +35,17 @@ function fail(message: string, code = 1): never {
 function usage(): never {
   process.stderr.write(
     [
-      'Usage:',
-      '  centraid preview snapshot',
-      '',
-      'The CLI operates relative to the current working directory.',
-      '',
-    ].join('\n'),
+      "Usage:",
+      "  centraid preview snapshot",
+      "",
+      "The CLI operates relative to the current working directory.",
+      "",
+    ].join("\n")
   );
   process.exit(2);
 }
 
-const PREVIEW_SNAPSHOT_REL = path.join('.preview', 'snapshot.png');
+const PREVIEW_SNAPSHOT_REL = path.join(".preview", "snapshot.png");
 
 function commandPreviewSnapshot(): void {
   const abs = path.resolve(process.cwd(), PREVIEW_SNAPSHOT_REL);
@@ -59,7 +59,7 @@ function commandPreviewSnapshot(): void {
       ageMs: Date.now() - stat.mtimeMs,
     });
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       printJson({ path: abs, exists: false });
       return;
     }
@@ -68,16 +68,18 @@ function commandPreviewSnapshot(): void {
 }
 
 function main(argv: string[]): void {
-  if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') usage();
+  if (argv.length === 0 || argv[0] === "--help" || argv[0] === "-h") usage();
   const top = argv[0];
-  if (top === 'preview') {
+  if (top === "preview") {
     const sub = argv[1];
-    if (sub !== 'snapshot') {
-      process.stderr.write(`centraid: unknown preview subcommand "${sub ?? ''}"\n`);
+    if (sub !== "snapshot") {
+      process.stderr.write(
+        `centraid: unknown preview subcommand "${sub ?? ""}"\n`
+      );
       usage();
     }
     if (argv.length > 2) {
-      process.stderr.write('centraid: `preview snapshot` takes no arguments\n');
+      process.stderr.write("centraid: `preview snapshot` takes no arguments\n");
       process.exit(2);
     }
     commandPreviewSnapshot();

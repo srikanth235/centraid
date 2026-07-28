@@ -10,28 +10,28 @@
    colour and never read --au-hue. Attribute selectors pass through CSS
    Modules unscoped, so every automation surface importing this module
    shares the same mapping. */
-:global([data-hue='indigo']) {
+:global([data-hue="indigo"]) {
   --au-hue: var(--c-indigo);
 }
-:global([data-hue='rose']) {
+:global([data-hue="rose"]) {
   --au-hue: var(--c-rose);
 }
-:global([data-hue='violet']) {
+:global([data-hue="violet"]) {
   --au-hue: var(--c-violet);
 }
-:global([data-hue='teal']) {
+:global([data-hue="teal"]) {
   --au-hue: var(--c-teal);
 }
-:global([data-hue='forest']) {
+:global([data-hue="forest"]) {
   --au-hue: var(--c-forest);
 }
-:global([data-hue='amber']) {
+:global([data-hue="amber"]) {
   --au-hue: var(--c-amber);
 }
-:global([data-hue='ochre']) {
+:global([data-hue="ochre"]) {
   --au-hue: var(--c-ochre);
 }
-:global([data-hue='slate']) {
+:global([data-hue="slate"]) {
   --au-hue: var(--c-slate);
 }
 
@@ -99,11 +99,11 @@
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   color: var(--ink-3);
 }
-.auGlyph[data-size='sm'] {
+.auGlyph[data-size="sm"] {
   width: 38px;
   height: 38px;
 }
-.auGlyph[data-size='lg'] {
+.auGlyph[data-size="lg"] {
   width: 46px;
   height: 46px;
 }
@@ -111,7 +111,7 @@
   background: color-mix(in srgb, var(--au-hue) 16%, transparent);
   color: var(--au-hue);
 }
-.auGlyph[data-on='true'] {
+.auGlyph[data-on="true"] {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
 }
@@ -126,34 +126,39 @@
   text-transform: uppercase;
   padding: 3px 9px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--au-status-tone, var(--ink)) 28%, transparent);
-  background: color-mix(in srgb, var(--au-status-tone, var(--ink)) 12%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--au-status-tone, var(--ink)) 28%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--au-status-tone, var(--ink)) 12%,
+    transparent
+  );
   color: var(--au-status-tone, var(--ink-3));
 }
-.auStatus[data-tone='active'],
-.auStatus[data-tone='success'] {
+.auStatus[data-tone="active"],
+.auStatus[data-tone="success"] {
   --au-status-tone: var(--success);
 }
-.auStatus[data-tone='paused'] {
+.auStatus[data-tone="paused"] {
   --au-status-tone: var(--ink-3);
 }
-.auStatus[data-tone='draft'] {
+.auStatus[data-tone="draft"] {
   --au-status-tone: var(--icon-amber);
 }
-.auStatus[data-tone='running'] {
+.auStatus[data-tone="running"] {
   --au-status-tone: var(--accent);
 }
-.auStatus[data-tone='failed'] {
+.auStatus[data-tone="failed"] {
   --au-status-tone: var(--danger);
 }
 .auStatusIc {
   display: inline-flex;
 }
-.auStatusIc[data-spin='true'] {
+.auStatusIc[data-spin="true"] {
   animation: cd-spin 0.9s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .auStatusIc[data-spin='true'] {
+  .auStatusIc[data-spin="true"] {
     animation: none;
   }
 }
@@ -168,7 +173,7 @@
   display: inline-flex;
   color: var(--ink-4);
 }
-.auTrigbadge[data-mono='true'] {
+.auTrigbadge[data-mono="true"] {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.02em;
@@ -234,7 +239,7 @@
     border-color 0.16s ease;
 }
 .auOvRow::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   top: 0;
@@ -243,7 +248,7 @@
   background: var(--ink-4);
   transition: width 0.16s ease;
 }
-.auOvRow[data-on='true']::before {
+.auOvRow[data-on="true"]::before {
   background: var(--success);
 }
 .auOvRow[data-hue]::before {
@@ -337,7 +342,7 @@
   background: color-mix(in srgb, var(--success) 16%, transparent);
   color: var(--success);
 }
-.auOvRunIc[data-ok='false'] {
+.auOvRunIc[data-ok="false"] {
   background: color-mix(in srgb, var(--danger) 16%, transparent);
   color: var(--danger);
 }

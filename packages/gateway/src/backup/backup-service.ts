@@ -6,10 +6,12 @@
  * manual runs and the scheduler intentionally share the same code path.
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { randomBytes } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
+import { randomBytes } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
+import type { RuntimeLogger } from "@centraid/app-engine";
 import {
   BackupProviderError,
   createSnapshot,
@@ -30,7 +32,7 @@ import {
   type SnapshotRow,
   type SourceEntry,
   type VerifySnapshotResult,
-} from '@centraid/backup';
+} from "@centraid/backup";
 import {
   DEFAULT_BACKUP_POLICY,
   MIN_RPO_SECONDS,
@@ -45,46 +47,62 @@ import {
   verifyRestoredPair,
   type BackupPolicy,
   type RemoteTier,
-} from '@centraid/vault';
-import { warmPreviewTinies, type PreviewsWarmResult } from './restore-warm.js';
-import type { RuntimeLogger } from '@centraid/app-engine';
-import { type BackupConfig, type BackupProviderConfig } from './backup-config.js';
-import { discardWalFiles, drainWalFiles, pruneWalGenerations, walPairKey } from './wal-uploader.js';
+} from "@centraid/vault";
+
+import { GatewayDatabase } from "../serve/gateway-db.js";
+import type { HealthRegistry } from "../serve/health-registry.js";
+import type { VaultPlane } from "../serve/vault-plane.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
+import { GATEWAY_VERSION } from "../version.js";
+import { resolveBackupBackend } from "./backup-backend.js";
 import {
-  deriveBackupSourceInstanceId,
-  loadBackupState,
-  opaqueLabel,
-  saveBackupState,
-  type BackupTargetState,
-} from './backup-state.js';
-import { RecoveryKitStateStore, type RecoveryKitState } from './recovery-kit-state.js';
-import { assembleSourceEntries, type AssembleOptions } from './backup-sources.js';
-import type { HealthRegistry } from '../serve/health-registry.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import type { VaultPlane } from '../serve/vault-plane.js';
-import type { StorageConnectionStore } from './storage-connections.js';
-import { GATEWAY_VERSION } from '../version.js';
-import { resolveBackupBackend } from './backup-backend.js';
-import { evaluateBackupHealth } from './backup-health.js';
-import { recoveryKitDocument } from './backup-recovery-kit.js';
+  failedCasOnlyReconciliation,
+  runCasOnlyReconciliation,
+} from "./backup-cas-reconciliation.js";
+import {
+  type BackupConfig,
+  type BackupProviderConfig,
+} from "./backup-config.js";
+import { evaluateBackupHealth } from "./backup-health.js";
 import {
   inspectProviderPolicy,
   providerPolicyFor,
   providerPolicyMatches,
   pushProviderPolicy,
   type ProviderPolicySyncState,
-} from './backup-provider-observability.js';
+} from "./backup-provider-observability.js";
 import {
   failedReconciliation,
   runBackupReconciliation,
   type BackupReconciliationState,
-} from './backup-reconciliation.js';
+} from "./backup-reconciliation.js";
+import { recoveryKitDocument } from "./backup-recovery-kit.js";
 import {
-  failedCasOnlyReconciliation,
-  runCasOnlyReconciliation,
-} from './backup-cas-reconciliation.js';
-import { snapshotReferencedBlobShas } from './snapshot-blob-roots.js';
-import { GatewayDatabase } from '../serve/gateway-db.js';
+  assembleSourceEntries,
+  type AssembleOptions,
+} from "./backup-sources.js";
+import {
+  deriveBackupSourceInstanceId,
+  loadBackupState,
+  opaqueLabel,
+  saveBackupState,
+  type BackupTargetState,
+} from "./backup-state.js";
+import {
+  RecoveryKitStateStore,
+  type RecoveryKitState,
+} from "./recovery-kit-state.js";
+import { warmPreviewTinies, type PreviewsWarmResult } from "./restore-warm.js";
+import { snapshotReferencedBlobShas } from "./snapshot-blob-roots.js";
+import type { StorageConnectionStore } from "./storage-connections.js";
+import {
+  discardWalFiles,
+  drainWalFiles,
+  pruneWalGenerations,
+  walPairKey,
+} from "./wal-uploader.js";
+
+export { type RecoveryKitState } from "./recovery-kit-state.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -97,7 +115,7 @@ export interface WalDrainPolicyDue {
 export function walDrainDelayMs(
   configured: boolean,
   policies: readonly WalDrainPolicyDue[],
-  nowMs: number,
+  nowMs: number
 ): number | undefined {
   if (!configured) return undefined;
   if (policies.length === 0) return MIN_RPO_SECONDS * 1000;
@@ -106,33 +124,55 @@ export function walDrainDelayMs(
       const rpoMs = Math.max(MIN_RPO_SECONDS, rpoSeconds) * 1000;
       if (lastAttemptMs === undefined) return rpoMs;
       return Math.max(0, lastAttemptMs + rpoMs - nowMs);
-    }),
+    })
   );
 }
 
 function newestReconciliation(
   first: BackupReconciliationState | undefined,
-  second: BackupReconciliationState | undefined,
+  second: BackupReconciliationState | undefined
 ): BackupReconciliationState | undefined {
   if (!first) return second;
   if (!second) return first;
-  return Date.parse(first.checkedAt) >= Date.parse(second.checkedAt) ? first : second;
+  return Date.parse(first.checkedAt) >= Date.parse(second.checkedAt)
+    ? first
+    : second;
+}
+
+/**
+ * Backup runs share mutable target state and WAL generations, so later vault
+ * work must not start until the preceding vault has settled.
+ */
+function applyInOrder<T>(
+  values: Iterable<T>,
+  apply: (value: T, index: number) => void | PromiseLike<void>
+): Promise<void> {
+  let index = 0;
+  return Array.from(values).reduce<Promise<void>>(
+    (sequence, value) => sequence.then(() => apply(value, index++)),
+    Promise.resolve()
+  );
 }
 
 /** A materialized restore is a new replica history, never a continuation. */
 function invalidateRestoredReplica(destDir: string): void {
-  const vault = new DatabaseSync(path.join(destDir, 'vault.db'));
+  const vault = new DatabaseSync(path.join(destDir, "vault.db"));
   try {
-    bumpReplicaEpoch(vault, { reason: 'backup-restore' });
+    bumpReplicaEpoch(vault, { reason: "backup-restore" });
   } finally {
     vault.close();
   }
 }
 
-export function buildBackupProvider(config: BackupProviderConfig): BackupProvider {
-  return config.kind === 'local'
+export function buildBackupProvider(
+  config: BackupProviderConfig
+): BackupProvider {
+  return config.kind === "local"
     ? openLocalBackupProvider({ rootDir: config.dir })
-    : openRemoteBackupProvider({ baseUrl: config.endpoint, apiKey: config.apiKey });
+    : openRemoteBackupProvider({
+        baseUrl: config.endpoint,
+        apiKey: config.apiKey,
+      });
 }
 
 export interface BackupServiceOptions {
@@ -180,7 +220,10 @@ export interface BackupServiceOptions {
    * completed — `bytesUploaded` is the sealed bytes shipped, `durationMs` the
    * wall-clock of the drain. Accounting only, never a gate.
    */
-  onDrainAccounted?: (info: { bytesUploaded: number; durationMs: number }) => void;
+  onDrainAccounted?: (info: {
+    bytesUploaded: number;
+    durationMs: number;
+  }) => void;
 }
 
 /**
@@ -190,7 +233,9 @@ export interface BackupServiceOptions {
  * time-to-usable-grid a new device waited. `previewsWarm` is absent on a full
  * restore (no `lazy` option).
  */
-export type LazyRestoreResult = RestoreResult & { previewsWarm?: PreviewsWarmResult };
+export type LazyRestoreResult = RestoreResult & {
+  previewsWarm?: PreviewsWarmResult;
+};
 
 /**
  * The previews-first lazy restore option (issue #405 §5 / #439 R2): the remote
@@ -210,7 +255,7 @@ export interface LazyRestoreOption {
  *  (#436 §6) — Recovery window and Exit read these two fields. */
 export interface HomeDiscovery {
   retention: Retention;
-  restoreCostClass: 'free-egress' | 'metered-egress';
+  restoreCostClass: "free-egress" | "metered-egress";
 }
 
 /**
@@ -222,8 +267,10 @@ export interface HomeDiscovery {
  * the promise #436 metric 2 makes, and the grace exists precisely to keep it
  * honest for blobs created and dereferenced within one inter-snapshot interval.
  */
-export function recoveryWindowMs(retention: Retention | undefined): number | undefined {
-  if (retention?.kind === 'ladder') return retention.dailyDays * DAY_MS;
+export function recoveryWindowMs(
+  retention: Retention | undefined
+): number | undefined {
+  if (retention?.kind === "ladder") return retention.dailyDays * DAY_MS;
   return undefined;
 }
 
@@ -242,7 +289,7 @@ export function recoveryWindowMs(retention: Retention | undefined): number | und
  * has a durable remote tier (⇒ lazy is the default and defers the bulk).
  */
 export interface RestoreEgressEstimate {
-  costClass: 'free-egress' | 'metered-egress' | undefined;
+  costClass: "free-egress" | "metered-egress" | undefined;
   /** Seq of the snapshot the estimate (and a subsequent restore) would select. */
   seq: number | undefined;
   /** Whole-library download bytes for a `--full` restore, or undefined if unknown. */
@@ -260,7 +307,7 @@ export interface RestoreEgressEstimate {
  */
 function pickSnapshotRow(
   rows: SnapshotRow[],
-  opts: { seq?: number; pointInTimeMs?: number },
+  opts: { seq?: number; pointInTimeMs?: number }
 ): SnapshotRow | undefined {
   if (opts.seq !== undefined) return rows.find((r) => r.seq === opts.seq);
   if (opts.pointInTimeMs !== undefined) {
@@ -286,7 +333,9 @@ export class BackupService {
   private readonly gatewayDatabase: GatewayDatabase;
   private readonly keyStore: KeyStore;
   private readonly sourceInstanceId: string;
-  private readonly assembleEntries: (opts: AssembleOptions) => Promise<SourceEntry[]>;
+  private readonly assembleEntries: (
+    opts: AssembleOptions
+  ) => Promise<SourceEntry[]>;
   private readonly snapshot: typeof createSnapshot;
   private readonly casReconcile: typeof runCasOnlyReconciliation;
   private readonly recoveryKit: RecoveryKitStateStore;
@@ -309,7 +358,10 @@ export class BackupService {
   /** The vault/kind currently executing inside `chain`, if any — read by
    *  `isRunning()` (the `_gateway/backup` route's `running` flag). */
   private activeRun:
-    | { vaultId: string; kind: 'backup' | 'verify' | 'restore-verify' | 'reconcile' }
+    | {
+        vaultId: string;
+        kind: "backup" | "verify" | "restore-verify" | "reconcile";
+      }
     | undefined;
 
   constructor(opts: BackupServiceOptions) {
@@ -320,44 +372,59 @@ export class BackupService {
     this.logger = opts.logger;
     this.now = opts.now ?? Date.now;
     this.provider =
-      opts.provider ?? (this.config ? buildBackupProvider(this.config.provider) : undefined);
+      opts.provider ??
+      (this.config ? buildBackupProvider(this.config.provider) : undefined);
     this.storageConnections = opts.storageConnections;
-    this.gatewayDatabase = opts.gatewayDatabase ?? GatewayDatabase.open(this.cacheDir);
+    this.gatewayDatabase =
+      opts.gatewayDatabase ?? GatewayDatabase.open(this.cacheDir);
     const firstPlane = this.vaults.planesList()[0];
     this.keyStore =
       opts.keyStore ??
       new KeyStore(
         firstPlane
           ? path.dirname(sealKeyFileFor(firstPlane.dir))
-          : path.join(this.cacheDir, 'keys'),
+          : path.join(this.cacheDir, "keys")
       );
     this.sourceInstanceId =
       opts.sourceInstanceId ??
-      deriveBackupSourceInstanceId(this.keyStore.loadOrCreate('endpoint-key.bin'));
+      deriveBackupSourceInstanceId(
+        this.keyStore.loadOrCreate("endpoint-key.bin")
+      );
     this.assembleEntries = opts.assembleEntries ?? assembleSourceEntries;
     this.snapshot = opts.snapshot ?? createSnapshot;
     this.casReconcile = opts.casReconcile ?? runCasOnlyReconciliation;
     this.recoveryKit =
-      opts.recoveryKit ?? new RecoveryKitStateStore(this.gatewayDatabase, this.now);
+      opts.recoveryKit ??
+      new RecoveryKitStateStore(this.gatewayDatabase, this.now);
     this.onDrainAccounted = opts.onDrainAccounted;
     this.shouldDeferPosture = opts.shouldDeferPosture ?? (() => false);
 
-    this.health.registerProbe('backups', async () => this.probe());
+    this.health.registerProbe("backups", async () => this.probe());
   }
 
   private async backend(): Promise<
-    { provider: BackupProvider; providerRef: string; label: string; dynamic: boolean } | undefined
+    | {
+        provider: BackupProvider;
+        providerRef: string;
+        label: string;
+        dynamic: boolean;
+      }
+    | undefined
   > {
     return resolveBackupBackend({
       ...(this.config ? { config: this.config } : {}),
       ...(this.provider ? { provider: this.provider } : {}),
-      ...(this.storageConnections ? { storageConnections: this.storageConnections } : {}),
+      ...(this.storageConnections
+        ? { storageConnections: this.storageConnections }
+        : {}),
     });
   }
 
   async configured(): Promise<{ configured: boolean; provider?: string }> {
     const backend = await this.backend();
-    return backend ? { configured: true, provider: backend.label } : { configured: false };
+    return backend
+      ? { configured: true, provider: backend.label }
+      : { configured: false };
   }
 
   /**
@@ -376,14 +443,23 @@ export class BackupService {
     if (cached && at - cached.at < HOME_DISCOVERY_TTL_MS) return cached.value;
     const caps = await backend.provider.capabilities();
     const value: HomeDiscovery = caps.backup
-      ? { retention: caps.backup.retention, restoreCostClass: caps.backup.restoreCostClass }
-      : { retention: { kind: 'none' }, restoreCostClass: 'free-egress' };
+      ? {
+          retention: caps.backup.retention,
+          restoreCostClass: caps.backup.restoreCostClass,
+        }
+      : { retention: { kind: "none" }, restoreCostClass: "free-egress" };
     this.homeDiscoveryCache = { at, value };
     return value;
   }
 
-  private async probe(): Promise<{ status: 'ok' | 'degraded' | 'error'; detail?: string }> {
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+  private async probe(): Promise<{
+    status: "ok" | "degraded" | "error";
+    detail?: string;
+  }> {
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
     const backend = await this.backend();
     const backup = backend
       ? evaluateBackupHealth({
@@ -391,46 +467,57 @@ export class BackupService {
           policyForVault: (vaultId) => this.policyForVault(vaultId),
           now: this.now(),
         })
-      : { status: 'ok' as const, detail: 'backup is not configured' };
+      : { status: "ok" as const, detail: "backup is not configured" };
     const casErrors: string[] = [];
     const casWarnings: string[] = [];
     for (const plane of this.vaults.planesList()) {
       const vaultId = plane.boot.vaultId;
-      if (readBlobStoreSettings(plane.db.vault).kind === 's3' && !state.targets[vaultId]) {
+      if (
+        readBlobStoreSettings(plane.db.vault).kind === "s3" &&
+        !state.targets[vaultId]
+      ) {
         casWarnings.push(
           `${vaultId}: remote CAS stores offsite bytes but has no backup target; ` +
-            'the recovery kit cannot restore those bytes',
+            "the recovery kit cannot restore those bytes"
         );
       }
     }
-    for (const [vaultId, reconciliation] of Object.entries(state.casReconciliations)) {
+    for (const [vaultId, reconciliation] of Object.entries(
+      state.casReconciliations
+    )) {
       const detail =
         `${vaultId}: remote CAS inventory ${reconciliation.status} — ` +
         `${reconciliation.cas.missing.count} missing/corrupt, ` +
         `${reconciliation.cas.orphans.count} orphan(s)`;
-      if (reconciliation.status === 'error') casErrors.push(detail);
-      else if (reconciliation.status === 'degraded') casWarnings.push(detail);
+      if (reconciliation.status === "error") casErrors.push(detail);
+      else if (reconciliation.status === "degraded") casWarnings.push(detail);
       const staleMs = this.policyForVault(vaultId).verifyEveryDays * DAY_MS * 2;
       if (this.now() - Date.parse(reconciliation.checkedAt) >= staleMs) {
-        casWarnings.push(`${vaultId}: remote CAS inventory reconciliation is stale`);
+        casWarnings.push(
+          `${vaultId}: remote CAS inventory reconciliation is stale`
+        );
       }
     }
-    if (backup.status === 'error' || casErrors.length > 0) {
+    if (backup.status === "error" || casErrors.length > 0) {
       return {
-        status: 'error',
+        status: "error",
         detail: [
-          ...(backup.status === 'error' && backup.detail ? [backup.detail] : []),
+          ...(backup.status === "error" && backup.detail
+            ? [backup.detail]
+            : []),
           ...casErrors,
-        ].join('; '),
+        ].join("; "),
       };
     }
-    if (backup.status === 'degraded' || casWarnings.length > 0) {
+    if (backup.status === "degraded" || casWarnings.length > 0) {
       return {
-        status: 'degraded',
+        status: "degraded",
         detail: [
-          ...(backup.status === 'degraded' && backup.detail ? [backup.detail] : []),
+          ...(backup.status === "degraded" && backup.detail
+            ? [backup.detail]
+            : []),
           ...casWarnings,
-        ].join('; '),
+        ].join("; "),
       };
     }
     return backup;
@@ -443,9 +530,9 @@ export class BackupService {
 
   private async ensureKeyring(): Promise<Keyring> {
     if (this.keyring) return this.keyring;
-    const existing = this.keyStore.export('keyring.key');
+    const existing = this.keyStore.export("keyring.key");
     if (existing) {
-      this.keyring = validateKeyring(JSON.parse(existing.toString('utf8')));
+      this.keyring = validateKeyring(JSON.parse(existing.toString("utf8")));
       return this.keyring;
     }
     this.keyring = {
@@ -454,23 +541,32 @@ export class BackupService {
       epochs: [
         {
           epoch: 1,
-          key: randomBytes(32).toString('base64'),
+          key: randomBytes(32).toString("base64"),
           createdAt: new Date(this.now()).toISOString(),
         },
       ],
     };
-    this.keyStore.import('keyring.key', Buffer.from(JSON.stringify(this.keyring), 'utf8'));
-    this.logger.info(`backup: minted a fresh wrapped keyring in ${this.keyStore.dir}`);
+    this.keyStore.import(
+      "keyring.key",
+      Buffer.from(JSON.stringify(this.keyring), "utf8")
+    );
+    this.logger.info(
+      `backup: minted a fresh wrapped keyring in ${this.keyStore.dir}`
+    );
     return this.keyring;
   }
 
   private assertTargetBackend(
     target: BackupTargetState,
-    backend: { providerRef: string; dynamic: boolean },
+    backend: { providerRef: string; dynamic: boolean }
   ): void {
-    if (target.providerRef ? target.providerRef !== backend.providerRef : backend.dynamic) {
+    if (
+      target.providerRef
+        ? target.providerRef !== backend.providerRef
+        : backend.dynamic
+    ) {
       throw new Error(
-        'backup destination changed; refusing to use the prior target through a different provider',
+        "backup destination changed; refusing to use the prior target through a different provider"
       );
     }
   }
@@ -483,7 +579,7 @@ export class BackupService {
   }
 
   private assertRunning(): void {
-    if (this.stopped) throw new Error('backup service is stopped');
+    if (this.stopped) throw new Error("backup service is stopped");
   }
 
   // ── Provider policy ─────────────────────────────────────────────────
@@ -495,12 +591,15 @@ export class BackupService {
     if (!plane) throw new Error(`backup: unknown vault "${vaultId}"`);
     const desired = providerPolicyFor(readBackupPolicy(plane.db.vault));
     let result: ProviderPolicySyncState = {
-      status: 'pending',
+      status: "pending",
       desired,
       checkedAt: new Date(this.now()).toISOString(),
     };
     await this.enqueue(async () => {
-      const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+      const state = await loadBackupState(
+        this.gatewayDatabase,
+        this.sourceInstanceId
+      );
       const target = state.targets[vaultId];
       if (!target) return;
       const backend = await this.backend();
@@ -524,13 +623,16 @@ export class BackupService {
   }
 
   private async syncEnabledPolicies(): Promise<void> {
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
-    for (const plane of this.vaults.planesList()) {
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
+    await applyInOrder(this.vaults.planesList(), async (plane) => {
       const vaultId = plane.boot.vaultId;
-      if (!state.targets[vaultId]) continue;
+      if (!state.targets[vaultId]) return;
       this.attachSnapshotRoots(plane);
       await this.syncPolicy(vaultId);
-    }
+    });
   }
 
   /**
@@ -547,7 +649,10 @@ export class BackupService {
     plane.snapshotBlobRoots = async (): Promise<ReadonlySet<string>> => {
       const backend = await this.backend();
       if (!backend) return new Set<string>();
-      const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+      const state = await loadBackupState(
+        this.gatewayDatabase,
+        this.sourceInstanceId
+      );
       const target = state.targets[vaultId];
       // No target ⇒ no registered snapshots for this vault ⇒ no roots to pin.
       if (!target) return new Set<string>();
@@ -574,7 +679,7 @@ export class BackupService {
   async runBackup(vaultId: string): Promise<void> {
     this.assertRunning();
     return this.enqueue(async () => {
-      this.activeRun = { vaultId, kind: 'backup' };
+      this.activeRun = { vaultId, kind: "backup" };
       try {
         await this.doRunBackup(vaultId);
       } finally {
@@ -591,9 +696,9 @@ export class BackupService {
    */
   async runAll(): Promise<void> {
     this.assertRunning();
-    for (const plane of this.vaults.planesList()) {
+    await applyInOrder(this.vaults.planesList(), async (plane) => {
       await this.runBackup(plane.boot.vaultId);
-    }
+    });
   }
 
   /** Is a backup/verify run currently executing? Scoped to `vaultId` when
@@ -606,30 +711,38 @@ export class BackupService {
 
   private async doRunBackup(vaultId: string): Promise<void> {
     const backend = await this.backend();
-    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
+    if (!backend)
+      throw new Error(
+        "backup is not configured — add a provider backup connection"
+      );
     const plane = this.vaults.get(vaultId);
     if (!plane) {
       this.logger.warn(`backup: unknown vault "${vaultId}" — skipped`);
       return;
     }
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
     let target = state.targets[vaultId];
     if (target?.fenced) {
       this.logger.warn(
-        `backup: vault ${vaultId} is fenced (another machine took over) — refusing to auto-backup`,
+        `backup: vault ${vaultId} is fenced (another machine took over) — refusing to auto-backup`
       );
       return;
     }
     if (
       target &&
-      (target.providerRef ? target.providerRef !== backend.providerRef : backend.dynamic)
+      (target.providerRef
+        ? target.providerRef !== backend.providerRef
+        : backend.dynamic)
     ) {
       const message =
-        'backup destination changed; refusing to reuse the prior target automatically';
+        "backup destination changed; refusing to reuse the prior target automatically";
       target.lastError = message;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
-      this.health.reportError('backups', `vault ${vaultId}: ${message}`);
+      this.health.reportError("backups", `vault ${vaultId}: ${message}`);
       throw new Error(message);
     }
     const keyring = await this.ensureKeyring();
@@ -679,14 +792,14 @@ export class BackupService {
     const shipper = plane.walShipper;
     plane.walTick();
     if (!shipper) {
-      target.lastError = 'backup: WAL shipper is unavailable';
+      target.lastError = "backup: WAL shipper is unavailable";
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
       throw new Error(target.lastError);
     }
     if (shipper.discardedStreams().length > 0 || !shipper.basesCoordinated()) {
       throw new Error(
-        'backup: WAL generation is discarded or mid-break — retrying instead of registering a holed base',
+        "backup: WAL generation is discarded or mid-break — retrying instead of registering a holed base"
       );
     }
 
@@ -699,7 +812,9 @@ export class BackupService {
     if (shipStatus.foreignCheckpointCount > 0) {
       target.walForeignCheckpointCount = shipStatus.foreignCheckpointCount;
       if (shipStatus.lastForeignCheckpoint) {
-        target.walLastForeignCheckpoint = { ...shipStatus.lastForeignCheckpoint };
+        target.walLastForeignCheckpoint = {
+          ...shipStatus.lastForeignCheckpoint,
+        };
       }
     }
 
@@ -717,13 +832,17 @@ export class BackupService {
       // deliberately NOT a per-base loop: rolling once per stale base would
       // mint, and immediately retire, a whole extra generation per rotation.
       const stale = bases.find(
-        (b) => pins[b.generation] !== undefined && pins[b.generation] !== keyring.active,
+        (b) =>
+          pins[b.generation] !== undefined &&
+          pins[b.generation] !== keyring.active
       );
       if (stale) {
-        shipper.rollGeneration(stale.db, 'key-epoch-rotation');
+        shipper.rollGeneration(stale.db, "key-epoch-rotation");
         const fresh = shipper.currentBases();
         const unrolled = fresh.some((b) =>
-          bases.some((old) => old.db === b.db && old.generation === b.generation),
+          bases.some(
+            (old) => old.db === b.db && old.generation === b.generation
+          )
         );
         if (unrolled) {
           // The roll's checkpoint came back busy — an OLD generation is still
@@ -731,7 +850,7 @@ export class BackupService {
           // segments under a key its manifest doesn't name (undecryptable at
           // restore). Retry the whole run later.
           throw new Error(
-            'backup: the key-epoch rotation roll did not complete (busy checkpoint) — retrying later',
+            "backup: the key-epoch rotation roll did not complete (busy checkpoint) — retrying later"
           );
         }
         for (const base of fresh) pins[base.generation] = keyring.active;
@@ -746,19 +865,24 @@ export class BackupService {
     // shipper's current base pair. Stamped into the manifest, where it becomes
     // a floor the store is held to at every later verification — which is the
     // only thing that makes deleting the `wal/tick/` prefix visible at all.
-    const walTipTickMs = shipper ? this.confirmedMarkerTip(shipper, target) : undefined;
+    const walTipTickMs = shipper
+      ? this.confirmedMarkerTip(shipper, target)
+      : undefined;
 
     // The code-store bundle is the only artifact assembly writes, and it lives
     // in a PERSISTENT per-vault dir (never wiped) so it survives between ticks
     // and only re-bundles when the store's refs move. Everything else is read in
     // place — there is no ephemeral staging dir.
-    const bundleDir = path.join(this.cacheDir, 'code-bundle', vaultId);
+    const bundleDir = path.join(this.cacheDir, "code-bundle", vaultId);
     try {
       const entries = await this.assembleEntries({
         plane,
         bundleDir,
-        ...(walTipTickMs !== undefined ? { walTipTickMs } : {}),
-        log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
+        ...(walTipTickMs === undefined ? {} : { walTipTickMs }),
+        log: {
+          info: (m) => this.logger.info(m),
+          warn: (m) => this.logger.warn(m),
+        },
       });
       const row = await this.snapshot({
         provider: backend.provider,
@@ -768,7 +892,10 @@ export class BackupService {
         entries,
         generation: target.generation,
         appMeta: this.appMetaFor(plane, state.sourceInstanceId),
-        log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
+        log: {
+          info: (m) => this.logger.info(m),
+          warn: (m) => this.logger.warn(m),
+        },
       });
       const completedAt = new Date(this.now()).toISOString();
       target.firstBackupAt ??= completedAt;
@@ -798,7 +925,7 @@ export class BackupService {
         // invariant must hold on its own.)
         const dbEntries = entries.filter(
           (e): e is SourceEntry & { walGeneration: string } =>
-            e.kind === 'db' && e.walGeneration !== undefined,
+            e.kind === "db" && e.walGeneration !== undefined
         );
         const anchored = row
           ? new Set(dbEntries.map((e) => e.walGeneration))
@@ -806,7 +933,7 @@ export class BackupService {
               backend.provider,
               target.targetId,
               keyring,
-              vaultId,
+              vaultId
             );
         // Any generation a manifest names is also epoch-pinned NOW (the
         // manifest sealed under `keyring.active`): a pin deferred to the
@@ -819,12 +946,12 @@ export class BackupService {
           if (!anchored.has(entry.walGeneration)) {
             this.logger.warn(
               `backup: no manifest anchors ${entry.path}'s generation ${entry.walGeneration} — ` +
-                'leaving its base PENDING so registration keeps retrying (a base marked ' +
-                'registered without a manifest loses every restore point since the last one)',
+                "leaving its base PENDING so registration keeps retrying (a base marked " +
+                "registered without a manifest loses every restore point since the last one)"
             );
             continue;
           }
-          const db = entry.path === 'vault.db' ? 'vault' : 'journal';
+          const db = entry.path === "vault.db" ? "vault" : "journal";
           shipper.noteBaseRegistered(db, entry.walGeneration);
           if (target.walGenerationEpochs[entry.walGeneration] === undefined) {
             target.walGenerationEpochs[entry.walGeneration] = keyring.active;
@@ -849,13 +976,17 @@ export class BackupService {
           });
           if (target.walGenerationEpochs) {
             for (const gen of Object.keys(target.walGenerationEpochs)) {
-              if (!pruned.keptGenerations.has(gen)) delete target.walGenerationEpochs[gen];
+              if (!pruned.keptGenerations.has(gen))
+                delete target.walGenerationEpochs[gen];
             }
           }
           if (target.walMarkerTips) {
             // A pair key names BOTH generations; the tip dies with either of them.
             for (const pair of Object.keys(target.walMarkerTips)) {
-              const [vaultGen, journalGen] = [pair.slice(0, 32), pair.slice(33)];
+              const [vaultGen, journalGen] = [
+                pair.slice(0, 32),
+                pair.slice(33),
+              ];
               if (
                 !pruned.keptGenerations.has(vaultGen) ||
                 !pruned.keptGenerations.has(journalGen)
@@ -870,33 +1001,42 @@ export class BackupService {
           }
         } catch (err) {
           this.logger.warn(
-            `backup: wal prune failed (kept everything): ${err instanceof Error ? err.message : String(err)}`,
+            `backup: wal prune failed (kept everything): ${err instanceof Error ? err.message : String(err)}`
           );
         }
       }
       this.health.reportOk(
-        'backups',
+        "backups",
         row
           ? `vault ${vaultId}: backed up (seq ${row.seq})`
-          : `vault ${vaultId}: no change since last backup`,
+          : `vault ${vaultId}: no change since last backup`
       );
     } catch (err) {
-      if (err instanceof BackupProviderError && err.code === 'conflict_generation') {
+      if (
+        err instanceof BackupProviderError &&
+        err.code === "conflict_generation"
+      ) {
         // PROTOCOL.md § Generation fencing: never retry with a bumped
         // generation automatically — surface loudly and stop.
         target.fenced = true;
         target.lastError =
-          'another machine has taken over this vault (conflict_generation) — backups stopped';
+          "another machine has taken over this vault (conflict_generation) — backups stopped";
         state.targets[vaultId] = target;
         await saveBackupState(this.gatewayDatabase, state);
-        this.health.reportError('backups', `vault ${vaultId}: ${target.lastError}`);
+        this.health.reportError(
+          "backups",
+          `vault ${vaultId}: ${target.lastError}`
+        );
         return;
       }
       const message = err instanceof Error ? err.message : String(err);
       target.lastError = message;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
-      this.health.reportError('backups', `vault ${vaultId}: backup failed: ${message}`);
+      this.health.reportError(
+        "backups",
+        `vault ${vaultId}: backup failed: ${message}`
+      );
       throw err;
     }
     // No staging teardown: the code bundle lives in a persistent per-vault dir
@@ -911,14 +1051,16 @@ export class BackupService {
    * carrying a stale one into a stream that cannot possibly satisfy it.
    */
   private confirmedMarkerTip(
-    shipper: NonNullable<VaultPlane['walShipper']>,
-    target: BackupTargetState,
+    shipper: NonNullable<VaultPlane["walShipper"]>,
+    target: BackupTargetState
   ): number | undefined {
     const bases = shipper.currentBases();
-    const vault = bases.find((b) => b.db === 'vault');
-    const journal = bases.find((b) => b.db === 'journal');
+    const vault = bases.find((b) => b.db === "vault");
+    const journal = bases.find((b) => b.db === "journal");
     if (!vault || !journal) return undefined;
-    return target.walMarkerTips?.[walPairKey(vault.generation, journal.generation)];
+    return target.walMarkerTips?.[
+      walPairKey(vault.generation, journal.generation)
+    ];
   }
 
   /**
@@ -933,11 +1075,14 @@ export class BackupService {
    */
   private async syncWalForeignCheckpoints(
     vaultId: string,
-    shipper: NonNullable<VaultPlane['walShipper']>,
+    shipper: NonNullable<VaultPlane["walShipper"]>
   ): Promise<void> {
     const st = shipper.status();
     if (st.foreignCheckpointCount === 0) return; // nothing ever detected
-    const fresh = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+    const fresh = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
     const target = fresh.targets[vaultId];
     if (!target) return; // no target yet — nothing to hang the signal on
     if (
@@ -957,8 +1102,11 @@ export class BackupService {
     await saveBackupState(this.gatewayDatabase, fresh);
   }
 
-  private appMetaFor(plane: VaultPlane, sourceInstanceId: string): Record<string, string> {
-    const row = plane.db.vault.prepare('PRAGMA user_version').get() as
+  private appMetaFor(
+    plane: VaultPlane,
+    sourceInstanceId: string
+  ): Record<string, string> {
+    const row = plane.db.vault.prepare("PRAGMA user_version").get() as
       | { user_version: number }
       | undefined;
     return {
@@ -975,7 +1123,7 @@ export class BackupService {
     this.assertRunning();
     let result: VerifySnapshotResult | undefined;
     await this.enqueue(async () => {
-      this.activeRun = { vaultId, kind: 'verify' };
+      this.activeRun = { vaultId, kind: "verify" };
       try {
         result = await this.doRunVerify(vaultId);
       } finally {
@@ -988,19 +1136,33 @@ export class BackupService {
   /** Manual integrity check for every vault that already has a snapshot. */
   async verifyAll(): Promise<void> {
     this.assertRunning();
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
-    for (const plane of this.vaults.planesList()) {
-      if (state.targets[plane.boot.vaultId]) await this.runVerify(plane.boot.vaultId);
-    }
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
+    await applyInOrder(this.vaults.planesList(), async (plane) => {
+      if (state.targets[plane.boot.vaultId])
+        await this.runVerify(plane.boot.vaultId);
+    });
   }
 
-  private async doRunVerify(vaultId: string): Promise<VerifySnapshotResult | undefined> {
+  private async doRunVerify(
+    vaultId: string
+  ): Promise<VerifySnapshotResult | undefined> {
     const backend = await this.backend();
-    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+    if (!backend)
+      throw new Error(
+        "backup is not configured — add a provider backup connection"
+      );
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
     const target = state.targets[vaultId];
     if (!target) {
-      this.logger.warn(`backup verify: vault ${vaultId} has no backup target yet — skipped`);
+      this.logger.warn(
+        `backup verify: vault ${vaultId} has no backup target yet — skipped`
+      );
       return undefined;
     }
     this.assertTargetBackend(target, backend);
@@ -1015,15 +1177,15 @@ export class BackupService {
       if (result.missing.length > 0 || result.corrupt.length > 0) {
         target.lastVerifyError = `verify found ${result.missing.length} missing, ${result.corrupt.length} corrupt object(s)`;
         this.health.reportError(
-          'backups',
-          `vault ${vaultId}: verify found ${result.missing.length} missing, ${result.corrupt.length} corrupt object(s)`,
+          "backups",
+          `vault ${vaultId}: verify found ${result.missing.length} missing, ${result.corrupt.length} corrupt object(s)`
         );
       } else {
         target.lastVerifiedAt = new Date(this.now()).toISOString();
         delete target.lastVerifyError;
         this.health.reportOk(
-          'backups',
-          `vault ${vaultId}: verify ok (${result.checkedObjects} checked, ${result.sampled} sampled)`,
+          "backups",
+          `vault ${vaultId}: verify ok (${result.checkedObjects} checked, ${result.sampled} sampled)`
         );
       }
       state.targets[vaultId] = target;
@@ -1034,7 +1196,10 @@ export class BackupService {
       target.lastVerifyError = `verify failed: ${message}`;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state);
-      this.health.reportError('backups', `vault ${vaultId}: verify failed: ${message}`);
+      this.health.reportError(
+        "backups",
+        `vault ${vaultId}: verify failed: ${message}`
+      );
       throw err;
     }
   }
@@ -1043,14 +1208,17 @@ export class BackupService {
 
   async runReconciliation(
     vaultId: string,
-    opts: { verifyBucket?: boolean } = {},
+    opts: { verifyBucket?: boolean } = {}
   ): Promise<BackupReconciliationState | undefined> {
     this.assertRunning();
     let result: BackupReconciliationState | undefined;
     await this.enqueue(async () => {
-      this.activeRun = { vaultId, kind: 'reconcile' };
+      this.activeRun = { vaultId, kind: "reconcile" };
       try {
-        result = await this.doRunReconciliation(vaultId, opts.verifyBucket ?? false);
+        result = await this.doRunReconciliation(
+          vaultId,
+          opts.verifyBucket ?? false
+        );
       } finally {
         this.activeRun = undefined;
       }
@@ -1059,17 +1227,22 @@ export class BackupService {
   }
 
   /** Owner action: independently LIST the bucket and cross-check provider attestation. */
-  async verifyAgainstBucket(vaultId: string): Promise<BackupReconciliationState | undefined> {
+  async verifyAgainstBucket(
+    vaultId: string
+  ): Promise<BackupReconciliationState | undefined> {
     return this.runReconciliation(vaultId, { verifyBucket: true });
   }
 
   private async doRunReconciliation(
     vaultId: string,
-    verifyBucket: boolean,
+    verifyBucket: boolean
   ): Promise<BackupReconciliationState | undefined> {
     const plane = this.vaults.get(vaultId);
     if (!plane) throw new Error(`backup: unknown vault "${vaultId}"`);
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
     const target = state.targets[vaultId];
     const backend = await this.backend();
     const checkedAt = new Date(this.now()).toISOString();
@@ -1078,7 +1251,7 @@ export class BackupService {
       this.assertTargetBackend(target, backend);
       const desired = providerPolicyFor(readBackupPolicy(plane.db.vault));
       if (
-        target.providerPolicy?.status !== 'rejected' ||
+        target.providerPolicy?.status !== "rejected" ||
         !providerPolicyMatches(target.providerPolicy.desired, desired)
       ) {
         target.providerPolicy = await inspectProviderPolicy({
@@ -1095,8 +1268,12 @@ export class BackupService {
           vaultId,
           keyring: await this.ensureKeyring(),
           db: plane.db,
-          ...(this.storageConnections ? { storageConnections: this.storageConnections } : {}),
-          ...(target.walMarkerTips ? { walMarkerTips: target.walMarkerTips } : {}),
+          ...(this.storageConnections
+            ? { storageConnections: this.storageConnections }
+            : {}),
+          ...(target.walMarkerTips
+            ? { walMarkerTips: target.walMarkerTips }
+            : {}),
           manifestBlobCache: this.manifestBlobCache,
           verifyBucket,
           checkedAt,
@@ -1104,30 +1281,34 @@ export class BackupService {
       } catch (err) {
         target.reconciliation = failedReconciliation(
           checkedAt,
-          verifyBucket ? 'bucket' : 'scheduled',
-          err instanceof Error ? err.message : String(err),
+          verifyBucket ? "bucket" : "scheduled",
+          err instanceof Error ? err.message : String(err)
         );
       }
       summary = target.reconciliation;
       state.targets[vaultId] = target;
       delete state.casReconciliations[vaultId];
     } else {
-      if (readBlobStoreSettings(plane.db.vault).kind !== 's3') {
-        this.logger.info(`backup reconcile: vault ${vaultId} has no remote store — skipped`);
+      if (readBlobStoreSettings(plane.db.vault).kind !== "s3") {
+        this.logger.info(
+          `backup reconcile: vault ${vaultId} has no remote store — skipped`
+        );
         return undefined;
       }
       try {
         summary = await this.casReconcile({
           db: plane.db,
-          ...(this.storageConnections ? { storageConnections: this.storageConnections } : {}),
+          ...(this.storageConnections
+            ? { storageConnections: this.storageConnections }
+            : {}),
           verifyBucket,
           checkedAt,
         });
       } catch (err) {
         summary = failedCasOnlyReconciliation(
           checkedAt,
-          verifyBucket ? 'bucket' : 'scheduled',
-          err instanceof Error ? err.message : String(err),
+          verifyBucket ? "bucket" : "scheduled",
+          err instanceof Error ? err.message : String(err)
         );
       }
       state.casReconciliations[vaultId] = summary;
@@ -1138,9 +1319,10 @@ export class BackupService {
       `${summary.cas.missing.count} CAS missing, ${summary.backup.missing.count} backup missing, ` +
       `${summary.walGaps.count} WAL gap(s), ` +
       `${summary.cas.orphans.count + summary.backup.orphans.count} orphan(s)`;
-    if (summary.status === 'error') this.health.reportError('backups', detail);
-    else if (summary.status === 'degraded') this.health.reportDegraded('backups', detail);
-    else this.health.reportOk('backups', detail);
+    if (summary.status === "error") this.health.reportError("backups", detail);
+    else if (summary.status === "degraded")
+      this.health.reportDegraded("backups", detail);
+    else this.health.reportOk("backups", detail);
     return summary;
   }
 
@@ -1157,7 +1339,7 @@ export class BackupService {
   async runRestoreVerify(vaultId: string): Promise<void> {
     this.assertRunning();
     return this.enqueue(async () => {
-      this.activeRun = { vaultId, kind: 'restore-verify' };
+      this.activeRun = { vaultId, kind: "restore-verify" };
       try {
         await this.doRunRestoreVerify(vaultId);
       } finally {
@@ -1168,16 +1350,28 @@ export class BackupService {
 
   private async doRunRestoreVerify(vaultId: string): Promise<void> {
     const backend = await this.backend();
-    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+    if (!backend)
+      throw new Error(
+        "backup is not configured — add a provider backup connection"
+      );
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
     const target = state.targets[vaultId];
     if (!target || target.lastSeq === undefined) {
-      this.logger.info(`backup restore-verify: vault ${vaultId} has no snapshot yet — skipped`);
+      this.logger.info(
+        `backup restore-verify: vault ${vaultId} has no snapshot yet — skipped`
+      );
       return;
     }
     this.assertTargetBackend(target, backend);
     const keyring = await this.ensureKeyring();
-    const destDir = path.join(this.cacheDir, 'restore-verify', `${vaultId}-${this.now()}`);
+    const destDir = path.join(
+      this.cacheDir,
+      "restore-verify",
+      `${vaultId}-${this.now()}`
+    );
     try {
       const result = await restoreSnapshot({
         provider: backend.provider,
@@ -1190,35 +1384,48 @@ export class BackupService {
           vaultUserVersion: String(VAULT_MIGRATIONS.length),
           ontologyVersion: ONTOLOGY_VERSION,
         },
-        log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
+        log: {
+          info: (m) => this.logger.info(m),
+          warn: (m) => this.logger.warn(m),
+        },
       });
-      const report = verifyRestoredPair(destDir, this.keyStore.export(`${vaultId}.sealkey`));
+      const report = verifyRestoredPair(
+        destDir,
+        this.keyStore.export(`${vaultId}.sealkey`)
+      );
       const problems: string[] = [];
-      if (report.vault.integrity !== 'ok') problems.push(`vault: ${report.vault.integrity}`);
-      if (report.journal.integrity !== 'ok') problems.push(`journal: ${report.journal.integrity}`);
+      if (report.vault.integrity !== "ok")
+        problems.push(`vault: ${report.vault.integrity}`);
+      if (report.journal.integrity !== "ok")
+        problems.push(`journal: ${report.journal.integrity}`);
       // Seal-key custody (issue #439 R5): a restore whose sealed columns cannot
       // be opened is "a placebo" (FORMAT.md) — prove the restored key is present
       // AND matches the vault's stamped fingerprint, or say so loudly.
-      if (report.sealKey.verdict === 'missing') {
+      if (report.sealKey.verdict === "missing") {
         problems.push(
           `seal key absent — this vault has sealed secrets (${report.sealKey.expected}) that a ` +
-            'restore without it can never open; the restore would be a placebo',
+            "restore without it can never open; the restore would be a placebo"
         );
-      } else if (report.sealKey.verdict === 'mismatch') {
+      } else if (report.sealKey.verdict === "mismatch") {
         problems.push(
           `seal key does not match the vault's stamped fingerprint (${report.sealKey.expected}) — ` +
-            'the restored key would turn every sealed cell into garbage; the restore would be a placebo',
+            "the restored key would turn every sealed cell into garbage; the restore would be a placebo"
         );
       }
       if (report.vault.foreignKeyViolations > 0) {
-        problems.push(`vault: ${report.vault.foreignKeyViolations} fk violation(s)`);
+        problems.push(
+          `vault: ${report.vault.foreignKeyViolations} fk violation(s)`
+        );
       }
       if (report.journal.foreignKeyViolations > 0) {
-        problems.push(`journal: ${report.journal.foreignKeyViolations} fk violation(s)`);
+        problems.push(
+          `journal: ${report.journal.foreignKeyViolations} fk violation(s)`
+        );
       }
       if (result.walReplay) {
         const { damaged, coordinatedCutMs, expectedCutMs } = result.walReplay;
-        if (damaged.length > 0) problems.push(`${damaged.length} damaged wal object(s) skipped`);
+        if (damaged.length > 0)
+          problems.push(`${damaged.length} damaged wal object(s) skipped`);
         else if (expectedCutMs >= 0 && coordinatedCutMs < expectedCutMs) {
           // The restore SUCCEEDED — coherently, at an earlier instant (G6). It
           // is simply not allowed to be QUIET about it. `expectedCutMs` is the
@@ -1229,18 +1436,18 @@ export class BackupService {
           // that fires: nothing is missing, nothing is damaged, and the restore
           // just silently hands back an hours-old vault.
           problems.push(
-            'wal streams not restorable at their newest registered point (tick ' +
+            "wal streams not restorable at their newest registered point (tick " +
               `${expectedCutMs}); the pair could only be cut at ${coordinatedCutMs} — ` +
-              'objects the provider acknowledged are missing',
+              "objects the provider acknowledged are missing"
           );
         }
       }
       if (problems.length > 0) {
         this.health.reportError(
-          'backups',
-          `vault ${vaultId}: restore-verify FAILED: ${problems.join('; ')}`,
+          "backups",
+          `vault ${vaultId}: restore-verify FAILED: ${problems.join("; ")}`
         );
-        throw new Error(`restore-verify failed: ${problems.join('; ')}`);
+        throw new Error(`restore-verify failed: ${problems.join("; ")}`);
       }
       // Dangling receipts are a signal, not proof of a bad restore: vault
       // rows may be legitimately hard-deleted after their receipt (see
@@ -1263,16 +1470,16 @@ export class BackupService {
         `${report.receiptsChecked} receipts cross-checked` +
         (result.walReplay
           ? `, wal tip ${result.walReplay.perDb.vault.lastTickMs}`
-          : ', /1 snapshot') +
-        ')';
+          : ", /1 snapshot") +
+        ")";
       if (dangling > 0) {
         this.health.reportDegraded(
-          'backups',
+          "backups",
           `${ran}: ${dangling} receipt(s) reference absent vault rows — ` +
-            'hard-deletes explain this; anything else needs eyes',
+            "hard-deletes explain this; anything else needs eyes"
         );
       } else {
-        this.health.reportOk('backups', `${ran}: ok`);
+        this.health.reportOk("backups", `${ran}: ok`);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1282,10 +1489,15 @@ export class BackupService {
       target.lastRestoreVerifyError = message;
       state.targets[vaultId] = target;
       await saveBackupState(this.gatewayDatabase, state).catch(() => undefined);
-      this.health.reportError('backups', `vault ${vaultId}: restore-verify failed: ${message}`);
+      this.health.reportError(
+        "backups",
+        `vault ${vaultId}: restore-verify failed: ${message}`
+      );
       throw err;
     } finally {
-      await fs.rm(destDir, { recursive: true, force: true }).catch(() => undefined);
+      await fs
+        .rm(destDir, { recursive: true, force: true })
+        .catch(() => undefined);
     }
   }
 
@@ -1313,20 +1525,20 @@ export class BackupService {
     provider: BackupProvider,
     targetId: string,
     keyring: Keyring,
-    vaultId: string,
+    vaultId: string
   ): Promise<Set<string>> {
     const anchored = new Set<string>();
     try {
       const rows = await provider.listSnapshots(targetId);
-      const store = await provider.openDataPlane(targetId, 'backup', 'read');
-      for (const row of rows) {
+      const store = await provider.openDataPlane(targetId, "backup", "read");
+      await applyInOrder(rows, async (row) => {
         let generations = this.manifestGenerationCache.get(row.manifestHash);
         if (!generations) {
           const opened = openManifest(
             await store.get(row.manifestKey),
             keyring,
             vaultId,
-            row.manifestHash,
+            row.manifestHash
           );
           generations = opened.entries
             .map((entry) => entry.walGeneration)
@@ -1334,11 +1546,11 @@ export class BackupService {
           this.manifestGenerationCache.set(row.manifestHash, generations);
         }
         for (const gen of generations) anchored.add(gen);
-      }
+      });
     } catch (err) {
       this.logger.warn(
         `backup: could not read the registered manifests to confirm which generations they ` +
-          `anchor (bases stay pending, registration retries): ${err instanceof Error ? err.message : String(err)}`,
+          `anchor (bases stay pending, registration retries): ${err instanceof Error ? err.message : String(err)}`
       );
     }
     return anchored;
@@ -1380,19 +1592,19 @@ export class BackupService {
 
   private async doDrainPass(vaultIds?: ReadonlySet<string>): Promise<void> {
     const backend = await this.backend();
-    for (const plane of this.vaults.planesList()) {
+    await applyInOrder(this.vaults.planesList(), async (plane) => {
       if (this.stopped) return;
       const shipper = plane.walShipper;
-      if (!shipper) continue;
+      if (!shipper) return;
       const vaultId = plane.boot.vaultId;
-      if (vaultIds && !vaultIds.has(vaultId)) continue;
+      if (vaultIds && !vaultIds.has(vaultId)) return;
       if (!backend) {
         // Capture-then-discard: the shipper must keep ticking (its
         // rollovers bound the WALs now that autocheckpoint is off), so
         // without a provider its output is consumed by deletion — and the
         // stream is marked holed (see discardWalFiles).
         discardWalFiles(plane);
-        continue;
+        return;
       }
       try {
         // A stream holed by capture-then-discard must break to a fresh
@@ -1403,9 +1615,13 @@ export class BackupService {
         // any one of them heals the pair.
         const discarded = shipper.discardedStreams();
         if (discarded.length > 0) {
-          const rolled = shipper.rollGeneration(discarded[0]!, 'backup-enabled-after-discard', {
-            captureFirst: false,
-          });
+          const rolled = shipper.rollGeneration(
+            discarded[0]!,
+            "backup-enabled-after-discard",
+            {
+              captureFirst: false,
+            }
+          );
           if (
             rolled.busy.length > 0 ||
             rolled.errors.length > 0 ||
@@ -1413,14 +1629,17 @@ export class BackupService {
             !shipper.basesCoordinated()
           ) {
             this.logger.warn(
-              `backup: discarded WAL generation could not re-base cleanly; registration deferred`,
+              `backup: discarded WAL generation could not re-base cleanly; registration deferred`
             );
-            continue;
+            return;
           }
         }
-        let state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+        let state = await loadBackupState(
+          this.gatewayDatabase,
+          this.sourceInstanceId
+        );
         let target = state.targets[vaultId];
-        if (target?.fenced) continue;
+        if (target?.fenced) return;
         const needsRegistration = !target || shipper.pendingBases().length > 0;
         if (needsRegistration) {
           // A new generation (or a first-ever backup) needs its manifest
@@ -1433,14 +1652,17 @@ export class BackupService {
             await this.doRunBackup(vaultId).catch((err) => {
               this.logger.warn(
                 `backup: base registration for ${vaultId} failed (segments keep accumulating locally): ` +
-                  `${err instanceof Error ? err.message : String(err)}`,
+                  `${err instanceof Error ? err.message : String(err)}`
               );
             });
-            state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+            state = await loadBackupState(
+              this.gatewayDatabase,
+              this.sourceInstanceId
+            );
             target = state.targets[vaultId];
           }
         }
-        if (!target || target.fenced) continue;
+        if (!target || target.fenced) return;
         this.assertTargetBackend(target, backend);
         const keyring = await this.ensureKeyring();
         const newPins: Record<string, number> = {};
@@ -1452,7 +1674,8 @@ export class BackupService {
           keyring,
           vaultId,
           epochForGeneration: (generation) => {
-            const pinned = target.walGenerationEpochs?.[generation] ?? newPins[generation];
+            const pinned =
+              target.walGenerationEpochs?.[generation] ?? newPins[generation];
             if (pinned !== undefined) return pinned;
             newPins[generation] = keyring.active;
             return keyring.active;
@@ -1468,7 +1691,10 @@ export class BackupService {
           // Merge into a FRESH state read: the drain's uploads take long
           // enough that saving the pass's opening snapshot could clobber
           // fields other runs persisted meanwhile.
-          const freshState = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+          const freshState = await loadBackupState(
+            this.gatewayDatabase,
+            this.sourceInstanceId
+          );
           const freshTarget = freshState.targets[vaultId];
           if (freshTarget) {
             freshTarget.lastWalDrainAt = new Date(this.now()).toISOString();
@@ -1489,7 +1715,7 @@ export class BackupService {
         }
         if (result.uploaded > 0) {
           this.logger.info(
-            `backup: drained ${result.uploaded} wal object(s), ${result.bytes} sealed byte(s) (${vaultId})`,
+            `backup: drained ${result.uploaded} wal object(s), ${result.bytes} sealed byte(s) (${vaultId})`
           );
         }
         // Issue #411 action 1: the WAL ticks this pass just ran (via the plane's
@@ -1499,10 +1725,10 @@ export class BackupService {
       } catch (err) {
         this.logger.warn(
           `backup: wal drain for ${vaultId} failed (will retry): ` +
-            `${err instanceof Error ? err.message : String(err)}`,
+            `${err instanceof Error ? err.message : String(err)}`
         );
       }
-    }
+    });
   }
 
   // ── Scheduler ─────────────────────────────────────────────────────────
@@ -1511,7 +1737,7 @@ export class BackupService {
     if (this.timer) return;
     void this.syncEnabledPolicies().catch((err) => {
       this.logger.warn(
-        `backup: provider policy sync failed: ${err instanceof Error ? err.message : String(err)}`,
+        `backup: provider policy sync failed: ${err instanceof Error ? err.message : String(err)}`
       );
     });
     const runScheduled = () => {
@@ -1527,7 +1753,7 @@ export class BackupService {
         return;
       void this.tick().catch((err) => {
         this.logger.warn(
-          `backup: scheduler tick failed: ${err instanceof Error ? err.message : String(err)}`,
+          `backup: scheduler tick failed: ${err instanceof Error ? err.message : String(err)}`
         );
       });
     };
@@ -1543,7 +1769,7 @@ export class BackupService {
     // due time; unconfigured gateways arm no WAL-drain clock (#456 I4).
     void this.refreshWalSchedule().catch((err) => {
       this.logger.warn(
-        `backup: wal scheduler setup failed: ${err instanceof Error ? err.message : String(err)}`,
+        `backup: wal scheduler setup failed: ${err instanceof Error ? err.message : String(err)}`
       );
     });
   }
@@ -1560,7 +1786,9 @@ export class BackupService {
           const vaultId = plane.boot.vaultId;
           let lastAttemptMs = this.lastWalDrainAttemptMs.get(vaultId);
           if (lastAttemptMs === undefined) {
-            const persisted = Date.parse(state?.targets[vaultId]?.lastWalDrainAt ?? '');
+            const persisted = Date.parse(
+              state?.targets[vaultId]?.lastWalDrainAt ?? ""
+            );
             lastAttemptMs = Number.isFinite(persisted) ? persisted : now;
             this.lastWalDrainAttemptMs.set(vaultId, lastAttemptMs);
           }
@@ -1574,7 +1802,10 @@ export class BackupService {
     const delayMs =
       remainingMs === undefined
         ? undefined
-        : Math.max(this.health.shouldDeferBackgroundWork() ? 1_000 : 0, remainingMs);
+        : Math.max(
+            this.health.shouldDeferBackgroundWork() ? 1_000 : 0,
+            remainingMs
+          );
     const dueAtMs = delayMs === undefined ? undefined : now + delayMs;
     if (dueAtMs === this.walTimerDueAtMs) return;
     if (this.walTimer) clearTimeout(this.walTimer);
@@ -1591,7 +1822,7 @@ export class BackupService {
       };
       void run().catch((err) => {
         this.logger.warn(
-          `backup: wal drain tick failed: ${err instanceof Error ? err.message : String(err)}`,
+          `backup: wal drain tick failed: ${err instanceof Error ? err.message : String(err)}`
         );
       });
     }, delayMs);
@@ -1624,12 +1855,15 @@ export class BackupService {
   async tick(): Promise<void> {
     if (this.stopped) return;
     const backupConfigured = (await this.backend()) !== undefined;
-    for (const plane of this.vaults.planesList()) {
+    await applyInOrder(this.vaults.planesList(), async (plane) => {
       const vaultId = plane.boot.vaultId;
       const policy = readBackupPolicy(plane.db.vault);
-      let state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+      let state = await loadBackupState(
+        this.gatewayDatabase,
+        this.sourceInstanceId
+      );
       let target = state.targets[vaultId];
-      if (target?.fenced) continue;
+      if (target?.fenced) return;
       // Keep the plane's blob sweep pinned to the retained-snapshot GC roots
       // (issue #436 §6) for every backup-configured vault — covers planes
       // mounted lazily after start, before their first scheduled backup.
@@ -1637,66 +1871,88 @@ export class BackupService {
       if (backupConfigured) {
         const backupDue =
           !target?.lastBackupAt ||
-          this.now() - Date.parse(target.lastBackupAt) >= policy.snapshotIntervalHours * HOUR_MS;
+          this.now() - Date.parse(target.lastBackupAt) >=
+            policy.snapshotIntervalHours * HOUR_MS;
         if (backupDue) {
           await this.runBackup(vaultId);
-          state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+          state = await loadBackupState(
+            this.gatewayDatabase,
+            this.sourceInstanceId
+          );
           target = state.targets[vaultId];
         }
         const verifyDue =
           target?.lastSeq !== undefined &&
           (!target.lastVerifiedAt ||
-            this.now() - Date.parse(target.lastVerifiedAt) >= policy.verifyEveryDays * DAY_MS);
+            this.now() - Date.parse(target.lastVerifiedAt) >=
+              policy.verifyEveryDays * DAY_MS);
         if (verifyDue) {
           await this.runVerify(vaultId).catch((err) => {
             this.logger.warn(
-              `backup: scheduled verify failed: ${err instanceof Error ? err.message : String(err)}`,
+              `backup: scheduled verify failed: ${err instanceof Error ? err.message : String(err)}`
             );
           });
         }
         // Issue #408 G9: a real restore-verification on its own (weekly)
         // clock, baselined at first backup so fresh targets get grace.
         const restoreBaseline =
-          target?.lastRestoreVerifiedAt ?? target?.firstBackupAt ?? target?.lastBackupAt;
+          target?.lastRestoreVerifiedAt ??
+          target?.firstBackupAt ??
+          target?.lastBackupAt;
         const restoreVerifyDue =
           target?.lastSeq !== undefined &&
           restoreBaseline !== undefined &&
-          this.now() - Date.parse(restoreBaseline) >= policy.verifyEveryDays * DAY_MS;
+          this.now() - Date.parse(restoreBaseline) >=
+            policy.verifyEveryDays * DAY_MS;
         if (restoreVerifyDue) {
           await this.runRestoreVerify(vaultId).catch((err) => {
             this.logger.warn(
-              `backup: scheduled restore-verify failed: ${err instanceof Error ? err.message : String(err)}`,
+              `backup: scheduled restore-verify failed: ${err instanceof Error ? err.message : String(err)}`
             );
           });
         }
       }
-      state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+      state = await loadBackupState(
+        this.gatewayDatabase,
+        this.sourceInstanceId
+      );
       target = state.targets[vaultId];
-      const remoteCas = readBlobStoreSettings(plane.db.vault).kind === 's3';
+      const remoteCas = readBlobStoreSettings(plane.db.vault).kind === "s3";
       const latestReconciliation =
         backupConfigured && target
           ? target.reconciliation
-          : newestReconciliation(target?.reconciliation, state.casReconciliations[vaultId]);
+          : newestReconciliation(
+              target?.reconciliation,
+              state.casReconciliations[vaultId]
+            );
       const reconciliationDue =
         ((backupConfigured && target !== undefined) || remoteCas) &&
-        (latestReconciliation?.status === 'error' ||
+        (latestReconciliation?.status === "error" ||
           !latestReconciliation?.checkedAt ||
           this.now() - Date.parse(latestReconciliation.checkedAt) >=
             policy.verifyEveryDays * DAY_MS);
       if (reconciliationDue) await this.runReconciliation(vaultId);
-    }
+    });
   }
 
   // ── CLI-facing reads ─────────────────────────────────────────────────
 
   async status(): Promise<Record<string, BackupTargetState>> {
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
     return state.targets;
   }
 
   /** Latest persisted remote-CAS inventory for vaults without a backup target. */
-  async casReconciliationStatus(): Promise<Record<string, BackupReconciliationState>> {
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+  async casReconciliationStatus(): Promise<
+    Record<string, BackupReconciliationState>
+  > {
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
     return state.casReconciliations;
   }
 
@@ -1712,7 +1968,9 @@ export class BackupService {
     if (!backend) return status;
     const document = await this.currentRecoveryKitDocument(backend.label);
     const fingerprint = recoveryKitFingerprint(document);
-    return status.kitFingerprint === fingerprint ? status : this.recoveryKit.begin(fingerprint);
+    return status.kitFingerprint === fingerprint
+      ? status
+      : this.recoveryKit.begin(fingerprint);
   }
 
   /**
@@ -1724,11 +1982,15 @@ export class BackupService {
     password: string;
     lossConsent: true;
   }): Promise<RecoveryKitState> {
-    if (input.lossConsent !== true) throw new Error('recovery-kit loss consent is required');
+    if (input.lossConsent !== true)
+      throw new Error("recovery-kit loss consent is required");
     const document = parseRecoveryKit(input.kit, input.password);
     const fingerprint = recoveryKitFingerprint(document);
     const state = await this.recoveryKit.verify(fingerprint);
-    if (!state) throw new Error('selected recovery kit is stale or belongs to another gateway');
+    if (!state)
+      throw new Error(
+        "selected recovery kit is stale or belongs to another gateway"
+      );
     return state;
   }
 
@@ -1743,12 +2005,15 @@ export class BackupService {
         ...current.epochs,
         {
           epoch,
-          key: randomBytes(32).toString('base64'),
+          key: randomBytes(32).toString("base64"),
           createdAt: new Date(this.now()).toISOString(),
         },
       ],
     };
-    this.keyStore.import('keyring.key', Buffer.from(JSON.stringify(rotated), 'utf8'));
+    this.keyStore.import(
+      "keyring.key",
+      Buffer.from(JSON.stringify(rotated), "utf8")
+    );
     this.keyring = rotated;
     await this.recoveryKitStatus();
     return rotated;
@@ -1762,25 +2027,38 @@ export class BackupService {
   async fenceVaultForErase(vaultId: string): Promise<void> {
     const backend = await this.backend();
     if (!backend) return;
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
     const target = state.targets[vaultId];
     if (!target) return;
     this.assertTargetBackend(target, backend);
     const plane = this.vaults.get(vaultId);
-    if (!plane) throw new Error(`backup: cannot fence unknown vault "${vaultId}" before erase`);
+    if (!plane)
+      throw new Error(
+        `backup: cannot fence unknown vault "${vaultId}" before erase`
+      );
     plane.walTick();
     const shipper = plane.walShipper;
-    if (!shipper || shipper.discardedStreams().length > 0 || !shipper.basesCoordinated()) {
-      throw new Error(`backup: cannot fence vault "${vaultId}" with an uncoordinated WAL base`);
+    if (
+      !shipper ||
+      shipper.discardedStreams().length > 0 ||
+      !shipper.basesCoordinated()
+    ) {
+      throw new Error(
+        `backup: cannot fence vault "${vaultId}" with an uncoordinated WAL base`
+      );
     }
     const targetInfo = await backend.provider.getTarget(target.targetId);
-    const generation = Math.max(target.generation, targetInfo.currentGeneration) + 1;
-    const bundleDir = path.join(this.cacheDir, 'code-bundle', vaultId);
+    const generation =
+      Math.max(target.generation, targetInfo.currentGeneration) + 1;
+    const bundleDir = path.join(this.cacheDir, "code-bundle", vaultId);
     const walTipTickMs = this.confirmedMarkerTip(shipper, target);
     const entries = await this.assembleEntries({
       plane,
       bundleDir,
-      ...(walTipTickMs !== undefined ? { walTipTickMs } : {}),
+      ...(walTipTickMs === undefined ? {} : { walTipTickMs }),
       log: {
         info: (message) => this.logger.info(message),
         warn: (message) => this.logger.warn(message),
@@ -1800,16 +2078,25 @@ export class BackupService {
         warn: (message) => this.logger.warn(message),
       },
     });
-    if (!row) throw new Error(`backup: provider did not register erase fence for "${vaultId}"`);
+    if (!row)
+      throw new Error(
+        `backup: provider did not register erase fence for "${vaultId}"`
+      );
     target.generation = generation;
     target.lastSeq = row.seq;
     state.targets[vaultId] = target;
     await saveBackupState(this.gatewayDatabase, state);
   }
 
-  async listSnapshots(vaultId: string, opts?: { includePruned?: boolean }): Promise<SnapshotRow[]> {
+  async listSnapshots(
+    vaultId: string,
+    opts?: { includePruned?: boolean }
+  ): Promise<SnapshotRow[]> {
     const backend = await this.backend();
-    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
+    if (!backend)
+      throw new Error(
+        "backup is not configured — add a provider backup connection"
+      );
     const target = await this.requireTarget(vaultId);
     this.assertTargetBackend(target, backend);
     return backend.provider.listSnapshots(target.targetId, opts);
@@ -1844,7 +2131,10 @@ export class BackupService {
     lazy?: LazyRestoreOption;
   }): Promise<LazyRestoreResult> {
     const backend = await this.backend();
-    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
+    if (!backend)
+      throw new Error(
+        "backup is not configured — add a provider backup connection"
+      );
     const target = await this.requireTarget(opts.vaultId);
     this.assertTargetBackend(target, backend);
     const keyring = await this.ensureKeyring();
@@ -1855,21 +2145,27 @@ export class BackupService {
     // whenever one exists — the metered-egress whole-library download the CLI
     // used to always incur is exactly what the previews-first path was built to
     // avoid. No remote tier ⇒ the snapshot is the only copy ⇒ full.
-    const lazy = opts.lazy ?? (opts.full ? undefined : this.autoLazyTier(opts.vaultId));
+    const lazy =
+      opts.lazy ?? (opts.full ? undefined : this.autoLazyTier(opts.vaultId));
     const result = await restoreSnapshot({
       provider: backend.provider,
       targetId: target.targetId,
       keyring,
       vaultId: opts.vaultId,
-      ...(opts.seq !== undefined ? { seq: opts.seq } : {}),
-      ...(opts.pointInTimeMs !== undefined ? { pointInTimeMs: opts.pointInTimeMs } : {}),
+      ...(opts.seq === undefined ? {} : { seq: opts.seq }),
+      ...(opts.pointInTimeMs === undefined
+        ? {}
+        : { pointInTimeMs: opts.pointInTimeMs }),
       destDir: opts.destDir,
       // Lazy mode: defer any blob the remote CAS already holds — a live
       // `has(sha)` against the remote is the durability evidence a snapshot's
       // registry row still cannot carry (see backup-sources.ts). A blob the
       // remote lacks is NOT skipped: the snapshot is its only copy.
       ...(lazy ? { skipBlob: ({ sha }) => lazy.remote.store.has(sha) } : {}),
-      log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
+      log: {
+        info: (m) => this.logger.info(m),
+        warn: (m) => this.logger.warn(m),
+      },
       current: {
         gatewayVersion: GATEWAY_VERSION,
         // The running code's ceiling — a fresh restore has no live plane to
@@ -1890,8 +2186,13 @@ export class BackupService {
       remote: lazy.remote,
       startedAtMs: restoreCompleteMs,
       now: () => this.now(),
-      ...(lazy.warmConcurrency !== undefined ? { concurrency: lazy.warmConcurrency } : {}),
-      log: { info: (m) => this.logger.info(m), warn: (m) => this.logger.warn(m) },
+      ...(lazy.warmConcurrency === undefined
+        ? {}
+        : { concurrency: lazy.warmConcurrency }),
+      log: {
+        info: (m) => this.logger.info(m),
+        warn: (m) => this.logger.warn(m),
+      },
     });
     return { ...result, previewsWarm };
   }
@@ -1941,32 +2242,45 @@ export class BackupService {
 
   async writeKit(destFile: string, password: string): Promise<void> {
     const backend = await this.backend();
-    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
+    if (!backend)
+      throw new Error(
+        "backup is not configured — add a provider backup connection"
+      );
     const document = await this.currentRecoveryKitDocument(backend.label);
     const wrapped = wrapRecoveryKit(document, password);
     await fs.writeFile(destFile, `${JSON.stringify(wrapped, null, 2)}\n`, {
-      encoding: 'utf8',
+      encoding: "utf8",
       mode: 0o600,
     });
     const fingerprint = recoveryKitFingerprint(document);
     const status = await this.recoveryKit.status();
-    if (status.kitFingerprint !== fingerprint) await this.recoveryKit.begin(fingerprint);
+    if (status.kitFingerprint !== fingerprint)
+      await this.recoveryKit.begin(fingerprint);
   }
 
   /** Recovery-kit document for owner-facing HTTP export. Contains live key material. */
   async recoveryKitDocument(): Promise<RecoveryKitDocument> {
     const backend = await this.backend();
-    if (!backend) throw new Error('backup is not configured — add a provider backup connection');
+    if (!backend)
+      throw new Error(
+        "backup is not configured — add a provider backup connection"
+      );
     const document = await this.currentRecoveryKitDocument(backend.label);
     const fingerprint = recoveryKitFingerprint(document);
     const status = await this.recoveryKit.status();
-    if (status.kitFingerprint !== fingerprint) await this.recoveryKit.begin(fingerprint);
+    if (status.kitFingerprint !== fingerprint)
+      await this.recoveryKit.begin(fingerprint);
     return document;
   }
 
-  private async currentRecoveryKitDocument(provider: string): Promise<RecoveryKitDocument> {
+  private async currentRecoveryKitDocument(
+    provider: string
+  ): Promise<RecoveryKitDocument> {
     const keyring = await this.ensureKeyring();
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
     return recoveryKitDocument({
       keyring,
       state,
@@ -1977,11 +2291,13 @@ export class BackupService {
   }
 
   private async requireTarget(vaultId: string): Promise<BackupTargetState> {
-    const state = await loadBackupState(this.gatewayDatabase, this.sourceInstanceId);
+    const state = await loadBackupState(
+      this.gatewayDatabase,
+      this.sourceInstanceId
+    );
     const target = state.targets[vaultId];
-    if (!target) throw new Error(`backup: vault "${vaultId}" has no backup target yet`);
+    if (!target)
+      throw new Error(`backup: vault "${vaultId}" has no backup target yet`);
     return target;
   }
 }
-
-export type { RecoveryKitState };

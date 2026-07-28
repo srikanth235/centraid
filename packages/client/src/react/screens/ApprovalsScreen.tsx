@@ -1,11 +1,13 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component (list + detail + action rows for one surface); splitting would fragment one visual unit
-import { type JSX, useMemo, useState } from 'react';
-import Icon from '../ui/Icon.js';
-import Button from '../ui/Button.js';
-import KindBadge from '../ui/KindBadge.js';
-import { cx } from '../ui/cx.js';
-import emptyCss from '../styles/pageEmpty.module.css';
-import styles from './ApprovalsScreen.module.css';
+import { type JSX, useMemo, useState } from "react";
+
+import Button from "../ui/Button.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import KindBadge from "../ui/KindBadge.js";
+
+import emptyCss from "../styles/pageEmpty.module.css";
+import styles from "./ApprovalsScreen.module.css";
 
 // The Approvals screen (issues #306/#308) — the desktop UI for the vault's
 // consent surface that shipped with no renderer: agents stage external
@@ -74,7 +76,7 @@ export interface ApprovalsParkedRowDTO {
    * approve a destructive command couldn't tell app vs automation vs
    * assistant apart before this field existed).
    */
-  callerKind: 'app' | 'agent' | 'assistant' | 'owner-device';
+  callerKind: "app" | "agent" | "assistant" | "owner-device";
   parkedAgo: string;
   inputPreview: string;
 }
@@ -125,7 +127,7 @@ export interface ApprovalsActivityRowDTO {
    * How the allow decision was made — grant auto-allow vs owner approval.
    * Null on denies and rows with no attribution signal.
    */
-  attribution: 'grant' | 'owner' | null;
+  attribution: "grant" | "owner" | null;
   /** Adjacent-collapse multiplicity (1 when not collapsed). */
   count: number;
   /** Raw action string for collapse keys / expanded detail. */
@@ -153,7 +155,7 @@ export interface ApprovalsScreenProps {
   onApproveOutbox: (
     itemId: string,
     alwaysAllow: boolean,
-    artifact?: Record<string, unknown>,
+    artifact?: Record<string, unknown>
   ) => void;
   onDenyOutbox: (itemId: string) => void;
   onOpenSettings: () => void;
@@ -183,24 +185,34 @@ function GroupHead({
 }
 
 /** `artifact[key]` is editable (string or a list of strings) — the shape the gateway's shape-drift guard accepts. */
-function isEditableKey(artifact: Record<string, unknown>, key: string): boolean {
+function isEditableKey(
+  artifact: Record<string, unknown>,
+  key: string
+): boolean {
   const v = artifact[key];
-  return typeof v === 'string' || (Array.isArray(v) && v.every((x) => typeof x === 'string'));
+  return (
+    typeof v === "string" ||
+    (Array.isArray(v) && v.every((x) => typeof x === "string"))
+  );
 }
 
 /** A textarea reads better than a single-line input for body-like or already-multi-line text. */
 function wantsTextarea(key: string, value: string): boolean {
-  return key.toLowerCase().includes('body') || value.includes('\n') || value.length > 120;
+  return (
+    key.toLowerCase().includes("body") ||
+    value.includes("\n") ||
+    value.length > 120
+  );
 }
 
 /** The requester badge an outbox row shows next to its actor name — mirrors `parkedKindBadge`. */
 function outboxKindBadge(kind: string): JSX.Element | null {
   switch (kind) {
-    case 'app':
+    case "app":
       return <KindBadge kind="app">App</KindBadge>;
-    case 'agent':
+    case "agent":
       return <KindBadge kind="automation">Automation</KindBadge>;
-    case 'assistant':
+    case "assistant":
       return <KindBadge kind="assistant">Assistant</KindBadge>;
     default:
       return null;
@@ -227,8 +239,11 @@ function OutboxRow({
   const [editText, setEditText] = useState<Record<string, string>>({});
 
   const editableKeys = useMemo(
-    () => row.fields.map((f) => f.key).filter((key) => isEditableKey(row.artifact, key)),
-    [row.artifact, row.fields],
+    () =>
+      row.fields
+        .map((f) => f.key)
+        .filter((key) => isEditableKey(row.artifact, key)),
+    [row.artifact, row.fields]
   );
   const isListKey = (key: string): boolean => Array.isArray(row.artifact[key]);
 
@@ -236,7 +251,7 @@ function OutboxRow({
     const seed: Record<string, string> = {};
     for (const key of editableKeys) {
       const v = row.artifact[key];
-      seed[key] = Array.isArray(v) ? v.join(', ') : String(v);
+      seed[key] = Array.isArray(v) ? v.join(", ") : String(v);
     }
     setEditText(seed);
     setEditing(true);
@@ -245,10 +260,10 @@ function OutboxRow({
   const submitEdit = (): void => {
     const artifact: Record<string, unknown> = { ...row.artifact };
     for (const key of editableKeys) {
-      const raw = editText[key] ?? '';
+      const raw = editText[key] ?? "";
       artifact[key] = isListKey(key)
         ? raw
-            .split(',')
+            .split(",")
             .map((s) => s.trim())
             .filter((s) => s.length > 0)
         : raw;
@@ -258,7 +273,7 @@ function OutboxRow({
   };
 
   return (
-    <div className={styles.row} data-expanded={expanded ? 'true' : undefined}>
+    <div className={styles.row} data-expanded={expanded ? "true" : undefined}>
       <button type="button" className={styles.rowMain} onClick={onToggle}>
         <span className={styles.rowIcon}>
           <Icon name="Send" size={14} />
@@ -285,23 +300,30 @@ function OutboxRow({
                 <div key={f.key} className={styles.field}>
                   <dt>{f.label}</dt>
                   {editableHere ? (
-                    isListKey(f.key) || !wantsTextarea(f.key, editText[f.key] ?? '') ? (
+                    isListKey(f.key) ||
+                    !wantsTextarea(f.key, editText[f.key] ?? "") ? (
                       <input
                         type="text"
                         className={styles.editInput}
                         aria-label={f.label}
-                        value={editText[f.key] ?? ''}
+                        value={editText[f.key] ?? ""}
                         onChange={(e) =>
-                          setEditText((prev) => ({ ...prev, [f.key]: e.target.value }))
+                          setEditText((prev) => ({
+                            ...prev,
+                            [f.key]: e.target.value,
+                          }))
                         }
                       />
                     ) : (
                       <textarea
                         className={styles.editTextarea}
                         aria-label={f.label}
-                        value={editText[f.key] ?? ''}
+                        value={editText[f.key] ?? ""}
                         onChange={(e) =>
-                          setEditText((prev) => ({ ...prev, [f.key]: e.target.value }))
+                          setEditText((prev) => ({
+                            ...prev,
+                            [f.key]: e.target.value,
+                          }))
                         }
                       />
                     )
@@ -312,7 +334,9 @@ function OutboxRow({
               );
             })}
           </dl>
-          {row.note ? <p className={styles.detailNote}>Note: {row.note}</p> : null}
+          {row.note ? (
+            <p className={styles.detailNote}>Note: {row.note}</p>
+          ) : null}
           <label className={styles.alwaysAllow}>
             <input
               type="checkbox"
@@ -323,12 +347,19 @@ function OutboxRow({
           </label>
           {row.canEdit ? null : (
             <p className={styles.editNote}>
-              This preview can’t be edited yet — approving sends exactly what’s shown above.
+              This preview can’t be edited yet — approving sends exactly what’s
+              shown above.
             </p>
           )}
           <div className={styles.actions}>
             {row.canEdit && !editing ? (
-              <Button label="Edit" variant="ghost" size="sm" disabled={busy} onClick={startEdit} />
+              <Button
+                label="Edit"
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={startEdit}
+              />
             ) : null}
             <Button
               label="Deny"
@@ -348,7 +379,7 @@ function OutboxRow({
               />
             ) : null}
             <Button
-              label={editing ? 'Approve with edits' : 'Approve'}
+              label={editing ? "Approve with edits" : "Approve"}
               variant="primary"
               size="sm"
               disabled={busy}
@@ -376,24 +407,33 @@ function NeedsAuthRow({
         </span>
         <span className={styles.rowBody}>
           <span className={styles.rowTitle}>{row.label}</span>
-          <span className={styles.rowSub}>{row.note ?? `${row.kind} needs reconnecting`}</span>
+          <span className={styles.rowSub}>
+            {row.note ?? `${row.kind} needs reconnecting`}
+          </span>
         </span>
-        <Button label="Reconnect" variant="soft" size="sm" onClick={onOpenSettings} />
+        <Button
+          label="Reconnect"
+          variant="soft"
+          size="sm"
+          onClick={onOpenSettings}
+        />
       </div>
     </div>
   );
 }
 
 /** The requester badge a parked row shows next to its display name. */
-function parkedKindBadge(kind: ApprovalsParkedRowDTO['callerKind']): JSX.Element | null {
+function parkedKindBadge(
+  kind: ApprovalsParkedRowDTO["callerKind"]
+): JSX.Element | null {
   switch (kind) {
-    case 'app':
+    case "app":
       return <KindBadge kind="app">App</KindBadge>;
-    case 'agent':
+    case "agent":
       return <KindBadge kind="automation">Automation</KindBadge>;
-    case 'assistant':
+    case "assistant":
       return <KindBadge kind="assistant">Assistant</KindBadge>;
-    case 'owner-device':
+    case "owner-device":
       return null;
     default:
       return null;
@@ -414,7 +454,7 @@ function ParkedRow({
   onConfirm: (approve: boolean) => void;
 }): JSX.Element {
   return (
-    <div className={styles.row} data-expanded={expanded ? 'true' : undefined}>
+    <div className={styles.row} data-expanded={expanded ? "true" : undefined}>
       <button type="button" className={styles.rowMain} onClick={onToggle}>
         <span className={styles.rowIcon}>
           <Icon name="Clock" size={14} />
@@ -533,23 +573,23 @@ function GrantRow({
 
 /** Decision → icon + accent class for Recent activity (issue #552). */
 function activityDecisionVisual(decision: string): {
-  icon: 'CheckCircle' | 'X' | 'Clock';
+  icon: "CheckCircle" | "X" | "Clock";
   accentClass: string;
   badge: string;
 } {
   // CSS-module class names are `string | undefined` under noUncheckedIndexedAccess.
-  const allow = styles.decisionAllow ?? '';
-  const deny = styles.decisionDeny ?? '';
-  const parked = styles.decisionParked ?? '';
+  const allow = styles.decisionAllow ?? "";
+  const deny = styles.decisionDeny ?? "";
+  const parked = styles.decisionParked ?? "";
   switch (decision) {
-    case 'allow':
-      return { icon: 'CheckCircle', accentClass: allow, badge: 'Allowed' };
-    case 'deny':
-      return { icon: 'X', accentClass: deny, badge: 'Denied' };
-    case 'parked':
-      return { icon: 'Clock', accentClass: parked, badge: 'Parked' };
+    case "allow":
+      return { icon: "CheckCircle", accentClass: allow, badge: "Allowed" };
+    case "deny":
+      return { icon: "X", accentClass: deny, badge: "Denied" };
+    case "parked":
+      return { icon: "Clock", accentClass: parked, badge: "Parked" };
     default:
-      return { icon: 'Clock', accentClass: parked, badge: decision };
+      return { icon: "Clock", accentClass: parked, badge: decision };
   }
 }
 
@@ -558,12 +598,12 @@ function formatAbsoluteTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
   });
 }
 
@@ -585,7 +625,7 @@ function ActivityRow({
   return (
     <div
       className={cx(styles.row, styles.activityRow, visual.accentClass)}
-      data-expanded={expanded ? 'true' : undefined}
+      data-expanded={expanded ? "true" : undefined}
       data-decision={row.decision}
       data-risk={row.risk ?? undefined}
     >
@@ -618,24 +658,36 @@ function ActivityRow({
                 ×{row.count}
               </span>
             ) : null}
-            <span className={styles.decisionBadge} data-testid="activity-decision-badge">
+            <span
+              className={styles.decisionBadge}
+              data-testid="activity-decision-badge"
+            >
               {visual.badge}
             </span>
           </span>
           <span className={styles.rowSub}>{row.detail}</span>
           {row.actor || row.actorKind ? (
-            <span className={cx(styles.rowSub, styles.rowSubCaller)} data-testid="activity-actor">
-              {outboxKindBadge(row.actorKind ?? '')}
+            <span
+              className={cx(styles.rowSub, styles.rowSubCaller)}
+              data-testid="activity-actor"
+            >
+              {outboxKindBadge(row.actorKind ?? "")}
               <span>{row.actor ?? row.actorKind}</span>
             </span>
           ) : null}
-          {row.attribution === 'grant' ? (
-            <span className={styles.attribution} data-testid="activity-attribution-grant">
+          {row.attribution === "grant" ? (
+            <span
+              className={styles.attribution}
+              data-testid="activity-attribution-grant"
+            >
               Auto-allowed by standing grant
             </span>
           ) : null}
-          {row.attribution === 'owner' ? (
-            <span className={styles.attribution} data-testid="activity-attribution-owner">
+          {row.attribution === "owner" ? (
+            <span
+              className={styles.attribution}
+              data-testid="activity-attribution-owner"
+            >
               Approved by the owner
             </span>
           ) : null}
@@ -658,7 +710,7 @@ function ActivityRow({
               <dt>Object</dt>
               <dd>
                 {row.objectType}
-                {row.objectId ? ` · ${row.objectId}` : ''}
+                {row.objectId ? ` · ${row.objectId}` : ""}
               </dd>
             </div>
             {row.risk ? (
@@ -672,7 +724,7 @@ function ActivityRow({
                 <dt>Actor</dt>
                 <dd>
                   {row.actor ?? row.actorKind}
-                  {row.actorKind ? ` (${row.actorKind})` : ''}
+                  {row.actorKind ? ` (${row.actorKind})` : ""}
                 </dd>
               </div>
             ) : null}
@@ -717,7 +769,9 @@ function InboxEmpty(): JSX.Element {
   );
 }
 
-export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Element {
+export default function ApprovalsScreen(
+  props: ApprovalsScreenProps
+): JSX.Element {
   const {
     outbox,
     needsAuth,
@@ -738,11 +792,11 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
   const [expandedOutbox, setExpandedOutbox] = useState<string | null>(null);
   const [expandedParked, setExpandedParked] = useState<string | null>(null);
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null);
-  const [activityFilter, setActivityFilter] = useState<'all' | 'denied'>('all');
+  const [activityFilter, setActivityFilter] = useState<"all" | "denied">("all");
 
   const filteredActivity = useMemo(() => {
-    if (activityFilter === 'denied') {
-      return activity.filter((r) => r.decision === 'deny');
+    if (activityFilter === "denied") {
+      return activity.filter((r) => r.decision === "deny");
     }
     return activity;
   }, [activity, activityFilter]);
@@ -752,7 +806,8 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
     needsAuth.length === 0 &&
     parked.length === 0 &&
     scopeRequests.length === 0;
-  const totalCount = outbox.length + needsAuth.length + parked.length + scopeRequests.length;
+  const totalCount =
+    outbox.length + needsAuth.length + parked.length + scopeRequests.length;
 
   return (
     <div className={styles.page}>
@@ -766,7 +821,7 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
         <p className={styles.subtitle}>
           {totalCount > 0
             ? `${totalCount} waiting on you`
-            : 'Everything the vault has staged or parked for your say-so.'}
+            : "Everything the vault has staged or parked for your say-so."}
         </p>
       </div>
 
@@ -789,12 +844,14 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
                     busy={busyId === row.itemId}
                     expanded={expandedOutbox === row.itemId}
                     onToggle={() =>
-                      setExpandedOutbox(expandedOutbox === row.itemId ? null : row.itemId)
+                      setExpandedOutbox(
+                        expandedOutbox === row.itemId ? null : row.itemId
+                      )
                     }
                     onApprove={(alwaysAllow, artifact) =>
-                      artifact !== undefined
-                        ? onApproveOutbox(row.itemId, alwaysAllow, artifact)
-                        : onApproveOutbox(row.itemId, alwaysAllow)
+                      artifact === undefined
+                        ? onApproveOutbox(row.itemId, alwaysAllow)
+                        : onApproveOutbox(row.itemId, alwaysAllow, artifact)
                     }
                     onDeny={() => onDenyOutbox(row.itemId)}
                   />
@@ -812,7 +869,11 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
               />
               <div className={styles.list}>
                 {needsAuth.map((row) => (
-                  <NeedsAuthRow key={row.connectionId} row={row} onOpenSettings={onOpenSettings} />
+                  <NeedsAuthRow
+                    key={row.connectionId}
+                    row={row}
+                    onOpenSettings={onOpenSettings}
+                  />
                 ))}
               </div>
             </section>
@@ -834,10 +895,14 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
                     expanded={expandedParked === row.invocationId}
                     onToggle={() =>
                       setExpandedParked(
-                        expandedParked === row.invocationId ? null : row.invocationId,
+                        expandedParked === row.invocationId
+                          ? null
+                          : row.invocationId
                       )
                     }
-                    onConfirm={(approve) => onConfirmParked(row.invocationId, approve)}
+                    onConfirm={(approve) =>
+                      onConfirmParked(row.invocationId, approve)
+                    }
                   />
                 ))}
               </div>
@@ -857,7 +922,9 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
                     key={row.requestId}
                     row={row}
                     busy={busyId === row.requestId}
-                    onDecide={(approve) => onDecideScopeRequest(row.requestId, approve)}
+                    onDecide={(approve) =>
+                      onDecideScopeRequest(row.requestId, approve)
+                    }
                   />
                 ))}
               </div>
@@ -885,7 +952,8 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
           </div>
         ) : (
           <p className={styles.grantsEmpty}>
-            No standing grants yet — “always allow” on an outbox approval mints one.
+            No standing grants yet — “always allow” on an outbox approval mints
+            one.
           </p>
         )}
       </section>
@@ -898,20 +966,23 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
               label="Recent activity"
               count={filteredActivity.length}
             />
-            <fieldset className={styles.activityFilters} aria-label="Activity filter">
+            <fieldset
+              className={styles.activityFilters}
+              aria-label="Activity filter"
+            >
               <button
                 type="button"
                 className={styles.filterChip}
-                data-active={activityFilter === 'all' ? 'true' : undefined}
-                onClick={() => setActivityFilter('all')}
+                data-active={activityFilter === "all" ? "true" : undefined}
+                onClick={() => setActivityFilter("all")}
               >
                 All
               </button>
               <button
                 type="button"
                 className={styles.filterChip}
-                data-active={activityFilter === 'denied' ? 'true' : undefined}
-                onClick={() => setActivityFilter('denied')}
+                data-active={activityFilter === "denied" ? "true" : undefined}
+                onClick={() => setActivityFilter("denied")}
                 data-testid="activity-filter-denied"
               >
                 Denied
@@ -926,18 +997,27 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
                 busy={busyId === row.grantId || busyId === row.receiptId}
                 expanded={expandedActivity === row.receiptId}
                 onToggle={() =>
-                  setExpandedActivity(expandedActivity === row.receiptId ? null : row.receiptId)
+                  setExpandedActivity(
+                    expandedActivity === row.receiptId ? null : row.receiptId
+                  )
                 }
                 onRevokeGrant={onRevokeGrant}
               />
             ))}
           </div>
           {filteredActivity.length === 0 ? (
-            <p className={styles.grantsEmpty}>No denied activity in this window.</p>
+            <p className={styles.grantsEmpty}>
+              No denied activity in this window.
+            </p>
           ) : null}
           {activityTruncated && onSeeAllActivity ? (
             <div className={styles.seeAllRow} data-testid="activity-see-all">
-              <Button label="See all" variant="ghost" size="sm" onClick={onSeeAllActivity} />
+              <Button
+                label="See all"
+                variant="ghost"
+                size="sm"
+                onClick={onSeeAllActivity}
+              />
             </div>
           ) : null}
         </section>

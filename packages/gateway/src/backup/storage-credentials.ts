@@ -17,10 +17,14 @@ import {
   type ProviderCapabilityFlag,
   type ProviderProfile,
   type S3Grant,
-} from '@centraid/backup';
-import type { BlobStoreSettings, S3Credentials } from '@centraid/vault';
-import { StorageConnectionError, type StorageConnectionStore } from './storage-connections.js';
-import { opaqueLabel } from './backup-state.js';
+} from "@centraid/backup";
+import type { BlobStoreSettings, S3Credentials } from "@centraid/vault";
+
+import { opaqueLabel } from "./backup-state.js";
+import {
+  StorageConnectionError,
+  type StorageConnectionStore,
+} from "./storage-connections.js";
 
 /** Refresh a cached grant this long before it actually expires. */
 const GRANT_REFRESH_MARGIN_MS = 5 * 60 * 1000;
@@ -36,32 +40,39 @@ interface CachedGrant {
  * share one live grant instead of each minting their own).
  */
 export function makeStorageCredentialsResolver(
-  store: StorageConnectionStore,
-): (settings: BlobStoreSettings, storeClass?: 'cas' | 'derived') => Promise<S3Credentials> {
+  store: StorageConnectionStore
+): (
+  settings: BlobStoreSettings,
+  storeClass?: "cas" | "derived"
+) => Promise<S3Credentials> {
   // Keyed by `${connectionId}:${store}` (issue #425 Wave 2): a provider may
   // issue per-store-scoped credentials, so cas and derived grants cache apart.
   const grantCache = new Map<string, CachedGrant>();
 
   return async (
     settings: BlobStoreSettings,
-    storeClass: 'cas' | 'derived' = 'cas',
+    storeClass: "cas" | "derived" = "cas"
   ): Promise<S3Credentials> => {
     const connectionId = settings.connectionId;
     if (!connectionId) {
       throw new Error(
-        'blob_store.connectionId is not set — attach a storage connection before enabling the s3 tier (issue #367)',
+        "blob_store.connectionId is not set — attach a storage connection before enabling the s3 tier (issue #367)"
       );
     }
     const cacheKey = `${connectionId}:${storeClass}`;
     const cached = grantCache.get(cacheKey);
-    if (cached && cached.grant.expiresAt * 1000 - Date.now() > GRANT_REFRESH_MARGIN_MS) {
+    if (
+      cached &&
+      cached.grant.expiresAt * 1000 - Date.now() > GRANT_REFRESH_MARGIN_MS
+    ) {
       return toCredentials(cached.grant);
     }
     const connection = await store.get(connectionId);
-    if (!connection) throw new Error(`unknown storage connection "${connectionId}"`);
+    if (!connection)
+      throw new Error(`unknown storage connection "${connectionId}"`);
     if (!connection.targetId || !connection.baseUrl) {
       throw new Error(
-        `storage connection "${connectionId}" has no provider target yet — the CAS-attach route must create one before this resolves`,
+        `storage connection "${connectionId}" has no provider target yet — the CAS-attach route must create one before this resolves`
       );
     }
     const apiKey = await store.resolveProviderApiKey(connectionId);
@@ -70,7 +81,7 @@ export function makeStorageCredentialsResolver(
       apiKey,
       targetId: connection.targetId,
       store: storeClass,
-      mode: 'read-write',
+      mode: "read-write",
     });
     grantCache.set(cacheKey, { grant });
     return toCredentials(grant);
@@ -97,7 +108,7 @@ export interface ProviderProfileStatus {
 export async function fetchProviderProfileStatus(
   baseUrl: string,
   apiKey: string,
-  fetchImpl?: typeof fetch,
+  fetchImpl?: typeof fetch
 ): Promise<ProviderProfileStatus> {
   const provider = openRemoteBackupProvider({
     baseUrl,
@@ -106,9 +117,11 @@ export async function fetchProviderProfileStatus(
   });
   const caps = await provider.capabilities();
   const profiles = caps.profiles ?? [];
-  const isHome = profiles.includes('home');
+  const isHome = profiles.includes("home");
   const declared = new Set<ProviderCapabilityFlag>(caps.capabilities);
-  const missingCapabilities = HOME_PROFILE_CAPABILITIES.filter((c) => !declared.has(c));
+  const missingCapabilities = HOME_PROFILE_CAPABILITIES.filter(
+    (c) => !declared.has(c)
+  );
   return { profiles, isHome, missingCapabilities };
 }
 
@@ -121,19 +134,19 @@ export async function fetchProviderProfileStatus(
 export async function assertProviderHomeProfile(
   baseUrl: string,
   apiKey: string,
-  fetchImpl?: typeof fetch,
+  fetchImpl?: typeof fetch
 ): Promise<ProviderProfileStatus> {
   const status = await fetchProviderProfileStatus(baseUrl, apiKey, fetchImpl);
   if (!status.isHome) {
     const missing =
       status.missingCapabilities.length > 0
-        ? ` (missing ${status.missingCapabilities.join(', ')})`
-        : '';
+        ? ` (missing ${status.missingCapabilities.join(", ")})`
+        : "";
     throw new StorageConnectionError(
-      'provider_not_home_profile',
+      "provider_not_home_profile",
       `this provider does not advertise the "home" profile${missing} — a Centraid home connection ` +
-        'requires a provider that carries the full home bundle (snapshots, cas, derived, usage, ' +
-        'policy, inventory, audit)',
+        "requires a provider that carries the full home bundle (snapshots, cas, derived, usage, " +
+        "policy, inventory, audit)"
     );
   }
   return status;
@@ -158,7 +171,7 @@ function toCredentials(grant: S3Grant): S3Credentials {
  */
 export async function ensureProviderCasTarget(
   store: StorageConnectionStore,
-  connectionId: string,
+  connectionId: string
 ): Promise<{
   endpoint: string;
   region: string;
@@ -175,11 +188,16 @@ export async function ensureProviderCasTarget(
   supportedStorageClasses?: string[];
 }> {
   const connection = await store.get(connectionId);
-  if (!connection || connection.kind !== 'provider' || !connection.baseUrl) {
-    throw new Error(`connection "${connectionId}" is not a provider connection`);
+  if (!connection || connection.kind !== "provider" || !connection.baseUrl) {
+    throw new Error(
+      `connection "${connectionId}" is not a provider connection`
+    );
   }
   const apiKey = await store.resolveProviderApiKey(connectionId);
-  const provider = openRemoteBackupProvider({ baseUrl: connection.baseUrl, apiKey });
+  const provider = openRemoteBackupProvider({
+    baseUrl: connection.baseUrl,
+    apiKey,
+  });
   let targetId = connection.targetId;
   if (!targetId) {
     const target = await provider.createTarget({ label: opaqueLabel() });
@@ -190,19 +208,19 @@ export async function ensureProviderCasTarget(
     baseUrl: connection.baseUrl,
     apiKey,
     targetId,
-    mode: 'read-write',
+    mode: "read-write",
   });
   // The `derived` store is opt-in per provider (issue #425 Wave 2): only learn +
   // stamp its prefix when discovery advertises the capability. A request for an
   // unadvertised store is a 400, so gate strictly on the discovery document.
   let derivedPrefix: string | undefined;
   const capabilities = await provider.capabilities().catch(() => undefined);
-  if (capabilities?.capabilities.includes('derived')) {
+  if (capabilities?.capabilities.includes("derived")) {
     const derivedGrant = await requestDerivedGrant({
       baseUrl: connection.baseUrl,
       apiKey,
       targetId,
-      mode: 'read-write',
+      mode: "read-write",
     });
     derivedPrefix = derivedGrant.prefix;
   }

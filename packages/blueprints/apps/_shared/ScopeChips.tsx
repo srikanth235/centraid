@@ -11,11 +11,12 @@
 //
 // The chip labels are the only scope strings a user ever sees; they never name
 // the underlying storage.
-import type { InlineScope } from '../inline-types.ts';
-import styles from './ScopeChips.module.css';
+import type { InlineScope } from "../inline-types.ts";
+
+import styles from "./ScopeChips.module.css";
 
 /** The "everything, merged" chip. Not a scope id — selection is null for it. */
-const ALL_LABEL = 'All';
+const ALL_LABEL = "All";
 
 export interface ScopeChipsProps {
   /** Every mounted scope, own scope included, in display order. */
@@ -38,7 +39,11 @@ export function ScopeChips(props: ScopeChipsProps) {
   return (
     // A toolbar of toggle buttons is the ARIA pattern these chips already are
     // (`aria-pressed` on each): one tab stop, arrow keys inside.
-    <div className={styles.scopeChips} role="toolbar" aria-label={props.label ?? 'Shown from'}>
+    <div
+      className={styles.scopeChips}
+      role="toolbar"
+      aria-label={props.label ?? "Shown from"}
+    >
       <button
         type="button"
         className="kit-chip"

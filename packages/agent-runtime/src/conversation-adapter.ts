@@ -22,9 +22,10 @@ import {
   type ConversationRunner,
   type Dispatcher,
   type ModelSubsystem,
-} from '@centraid/app-engine';
-import { runTurn } from './runtime.js';
-import type { RunnerKind, RunnerPrefs } from './types.js';
+} from "@centraid/app-engine";
+
+import { runTurn } from "./runtime.js";
+import type { RunnerKind, RunnerPrefs } from "./types.js";
 
 export interface MakeConversationRunnerOptions {
   /** Loader for the user's persisted runner prefs. Called per turn so
@@ -33,7 +34,7 @@ export interface MakeConversationRunnerOptions {
    *  runner selection per subsystem can answer with the right kind. */
   prefsLoader: (
     subsystem?: ModelSubsystem,
-    runnerKind?: RunnerKind,
+    runnerKind?: RunnerKind
   ) => Promise<RunnerPrefs | undefined>;
   /** Which subsystem's runner/model prefs this adapter rides. Unset →
    *  the host's default agent (the pre-existing behavior). */
@@ -48,13 +49,15 @@ export interface MakeConversationRunnerOptions {
   getDispatcher: () => Dispatcher;
 }
 
-export function makeConversationRunner(opts: MakeConversationRunnerOptions): ConversationRunner {
+export function makeConversationRunner(
+  opts: MakeConversationRunnerOptions
+): ConversationRunner {
   return makeConversationRunnerCore({
     prefsLoader: opts.prefsLoader,
     ...(opts.subsystem ? { subsystem: opts.subsystem } : {}),
     getDispatcher: opts.getDispatcher,
     // The local codex/claude turn driver.
-    runTurn: runTurn,
+    runTurn,
     // Data chat runs in the app's data dir; the route preamble is passed
     // through unchanged (no authoring grounding) and there's no post-turn
     // side effect, so those seams are left at their defaults.

@@ -8,19 +8,19 @@
 // asset is shown from (issue #599) — never to the chip selection. Favoriting a
 // photo in a shared audience edits it there; the member's own library has no
 // copy of it to edit.
-import { toast } from './kit.ts';
-import { act, narrate } from './outcomes.ts';
-import type { Asset } from './types.ts';
+import { toast } from "./kit.ts";
+import { act, narrate } from "./outcomes.ts";
+import type { Asset } from "./types.ts";
 
 export async function toggleFavorite(
   asset: Asset,
   refresh: () => Promise<void>,
-  noteEl?: HTMLElement | null,
+  noteEl?: HTMLElement | null
 ): Promise<void> {
   const outcome = await act(
-    'update-asset',
+    "update-asset",
     { asset_id: asset.asset_id, favorite: asset.favorite ? 0 : 1 },
-    asset.scope_id,
+    asset.scope_id
   );
   if (narrate(outcome, noteEl)) await refresh();
 }
@@ -30,11 +30,11 @@ export async function toggleFavorite(
 export async function restoreAsset(
   assetId: string,
   refresh: () => Promise<void>,
-  { quiet = false, scope }: { quiet?: boolean; scope?: string | null } = {},
+  { quiet = false, scope }: { quiet?: boolean; scope?: string | null } = {}
 ): Promise<boolean> {
-  const outcome = await act('restore', { asset_id: assetId }, scope);
+  const outcome = await act("restore", { asset_id: assetId }, scope);
   if (!narrate(outcome)) return false;
-  if (!quiet) toast('Photo restored to your library.');
+  if (!quiet) toast("Photo restored to your library.");
   await refresh();
   return true;
 }

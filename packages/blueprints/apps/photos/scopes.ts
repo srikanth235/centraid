@@ -9,11 +9,14 @@
 // "the ambient scope". A member with one library therefore walks the same code
 // path as a member with five, and sees no chips, no badges and no scope
 // attributes (an empty id is never stamped).
-import { resolveWriteTarget, type WriteTarget } from '../_shared/write-target.ts';
-import type { InlineScope } from '../inline-types.ts';
+import {
+  resolveWriteTarget,
+  type WriteTarget,
+} from "../_shared/write-target.ts";
+import type { InlineScope } from "../inline-types.ts";
 
 /** The stand-in for a host that mounts one, unnamed scope. */
-const SOLO_SCOPE: InlineScope = { id: '', label: 'Library', canWrite: true };
+const SOLO_SCOPE: InlineScope = { id: "", label: "Library", canWrite: true };
 
 /**
  * Every mounted scope, primary (the member's own) first. Read LIVE on every
@@ -26,8 +29,10 @@ export function mountedScopes(): InlineScope[] {
 }
 
 /** The member's own scope id — the shell puts the primary first, by contract. */
-export function ownScopeId(scopes: readonly InlineScope[] = mountedScopes()): string {
-  return scopes[0]?.id ?? '';
+export function ownScopeId(
+  scopes: readonly InlineScope[] = mountedScopes()
+): string {
+  return scopes[0]?.id ?? "";
 }
 
 /**
@@ -42,14 +47,14 @@ export function ownScopeId(scopes: readonly InlineScope[] = mountedScopes()): st
  *    if "All" were selected.
  */
 export function photoWriteTarget(
-  kind: 'new' | 'own',
+  kind: "new" | "own",
   selectedScopeId: string | null,
-  scopes: readonly InlineScope[] = mountedScopes(),
+  scopes: readonly InlineScope[] = mountedScopes()
 ): WriteTarget {
   return resolveWriteTarget({
     scopes,
     ownScopeId: ownScopeId(scopes),
-    selectedScopeId: kind === 'own' ? null : selectedScopeId,
+    selectedScopeId: kind === "own" ? null : selectedScopeId,
   });
 }
 
@@ -61,7 +66,9 @@ export function photoWriteTarget(
  * and the shell refuses authoritatively anyway.
  */
 export function canWriteScope(scopeId: string | null | undefined): boolean {
-  const scope = mountedScopes().find((candidate) => candidate.id === (scopeId ?? ''));
+  const scope = mountedScopes().find(
+    (candidate) => candidate.id === (scopeId ?? "")
+  );
   return scope ? scope.canWrite : true;
 }
 
@@ -70,6 +77,8 @@ export function canWriteScope(scopeId: string | null | undefined): boolean {
  * is nothing to say (a solo mount). Undefined is what JSX and `dataset` both
  * want for "omit the attribute", so callers never special-case the empty id.
  */
-export function scopeAttr(scopeId: string | null | undefined): string | undefined {
+export function scopeAttr(
+  scopeId: string | null | undefined
+): string | undefined {
   return scopeId ? scopeId : undefined;
 }

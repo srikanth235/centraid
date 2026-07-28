@@ -1,9 +1,10 @@
 // Grid view card (#grid root's mapped children).
-import { avatarColor, metaLine, statusOf } from '../format.ts';
-import { I } from '../icons.ts';
-import type { Person } from '../types.ts';
-import { Icon, KitAvatar } from './Shared.tsx';
-import styles from './Grid.module.css';
+import { avatarColor, metaLine, statusOf } from "../format.ts";
+import { I } from "../icons.ts";
+import type { Person } from "../types.ts";
+import { Icon, KitAvatar } from "./Shared.tsx";
+
+import styles from "./Grid.module.css";
 
 export function GridCard({
   p,
@@ -36,7 +37,7 @@ export function GridCard({
         className={styles.cardTop}
         style={{ background: `color-mix(in oklab, ${color} 12%, transparent)` }}
       >
-        <KitAvatar name={p.name} size="58px" color={color}></KitAvatar>
+        <KitAvatar name={p.name} size="58px" color={color} />
       </div>
       <button
         type="button"
@@ -52,7 +53,9 @@ export function GridCard({
       </button>
       <button
         type="button"
-        className={p.starred ? `${styles.cardStar} ${styles.on}` : styles.cardStar}
+        className={
+          p.starred ? `${styles.cardStar} ${styles.on}` : styles.cardStar
+        }
         aria-label="Favorite"
         onClick={(e) => {
           e.stopPropagation();
@@ -63,20 +66,20 @@ export function GridCard({
           width="16"
           height="16"
           viewBox="0 0 24 24"
-          fill={p.starred ? 'currentColor' : 'none'}
+          fill={p.starred ? "currentColor" : "none"}
           stroke="currentColor"
           strokeWidth="1.6"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="m12 3 2.6 5.6 6 .7-4.5 4.2 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"></path>
+          <path d="m12 3 2.6 5.6 6 .7-4.5 4.2 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z" />
         </svg>
       </button>
       <div className={styles.cardBody}>
         <div className={styles.cardTitle}>{p.name}</div>
-        <div className={styles.cardRole}>{p.role || ''}</div>
+        <div className={styles.cardRole}>{p.role || ""}</div>
         <div className={styles.cardMeta}>
-          <span className="kit-dotmini" style={{ background: st.color }}></span>
+          <span className="kit-dotmini" style={{ background: st.color }} />
           {metaLine(p)}
         </div>
       </div>

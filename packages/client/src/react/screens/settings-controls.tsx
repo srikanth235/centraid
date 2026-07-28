@@ -1,8 +1,10 @@
-import type { JSX, ReactNode } from 'react';
-import styles from './settings-controls.module.css';
-import { cx } from '../ui/cx.js';
-import segCss from '../styles/seg.module.css';
-import drawerGroupCss from '../styles/drawerGroup.module.css';
+import type { JSX, ReactNode } from "react";
+
+import { cx } from "../ui/cx.js";
+
+import drawerGroupCss from "../styles/drawerGroup.module.css";
+import segCss from "../styles/seg.module.css";
+import styles from "./settings-controls.module.css";
 
 // Shared Settings control primitives — React ports of the vanilla
 // drawerGroup / drawerRowH / makeSwitch / makeSegmented (app-settings.ts),
@@ -35,7 +37,11 @@ export function DrawerRow({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <div className={full ? cx(styles.row, styles.rowFull) : cx(styles.row, styles.rowGrid)}>
+    <div
+      className={
+        full ? cx(styles.row, styles.rowFull) : cx(styles.row, styles.rowGrid)
+      }
+    >
       <div className={styles.rowHead}>
         <span className={styles.rowLabel}>{label}</span>
         <span className={styles.rowHint}>{hint}</span>

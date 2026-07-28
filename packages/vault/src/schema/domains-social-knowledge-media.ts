@@ -1,7 +1,7 @@
 // Domain DDL — schemas `social`, `knowledge`, `media` from
 // duaility-ontology.html §03.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from './updated-at.js';
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const SOCIAL_DDL = `
 CREATE TABLE social_contact_card (
@@ -78,7 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_message_thread ON social_message(thread_id);
 CREATE INDEX IF NOT EXISTS idx_message_sender_party ON social_message(sender_party_id);
 CREATE INDEX IF NOT EXISTS idx_message_body_content ON social_message(body_content_id);
 CREATE INDEX IF NOT EXISTS idx_message_in_reply_to ON social_message(in_reply_to_id);
-${touchUpdatedAt('social_contact_card', 'card_id')}
+${touchUpdatedAt("social_contact_card", "card_id")}
 `;
 
 export const KNOWLEDGE_DDL = `

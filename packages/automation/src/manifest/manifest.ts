@@ -20,20 +20,23 @@
  * + validation-code union live in `manifest-errors.ts`.
  */
 
-import { isValidIanaTimeZone } from '../cron-timezone.js';
-import { ManifestError } from './manifest-errors.js';
-import { validateOutputSchema, type OutputSchema } from './manifest-output.js';
-import { isValidRef } from './ref.js';
+import { isValidIanaTimeZone } from "../cron-timezone.js";
+import { ManifestError } from "./manifest-errors.js";
+import { validateOutputSchema, type OutputSchema } from "./manifest-output.js";
+import { isValidRef } from "./ref.js";
 
-export { isValidIanaTimeZone } from '../cron-timezone.js';
+export { isValidIanaTimeZone } from "../cron-timezone.js";
 
-export { ManifestError, type ManifestValidationCode } from './manifest-errors.js';
-export { type OutputSchema } from './manifest-output.js';
+export {
+  ManifestError,
+  type ManifestValidationCode,
+} from "./manifest-errors.js";
+export { type OutputSchema } from "./manifest-output.js";
 
 /** Conventional handler filename inside an automation app directory. */
-export const HANDLER_FILE = 'handler.js';
+export const HANDLER_FILE = "handler.js";
 /** Conventional manifest filename inside an automation app directory. */
-export const MANIFEST_FILE = 'automation.json';
+export const MANIFEST_FILE = "automation.json";
 
 export interface ManifestRequires {
   /** MCP server ids the handler requires (`["github", "linear"]`). */
@@ -77,17 +80,17 @@ export interface CostEstimate {
 export interface ManifestVaultFilterClause {
   readonly column: string;
   readonly op:
-    | 'eq'
-    | 'ne'
-    | 'lt'
-    | 'lte'
-    | 'gt'
-    | 'gte'
-    | 'in'
-    | 'is-null'
-    | 'not-null'
-    | 'within-days'
-    | 'within-next-days';
+    | "eq"
+    | "ne"
+    | "lt"
+    | "lte"
+    | "gt"
+    | "gte"
+    | "in"
+    | "is-null"
+    | "not-null"
+    | "within-days"
+    | "within-next-days";
   readonly value?: unknown;
 }
 
@@ -101,7 +104,7 @@ export interface ManifestVaultFilterClause {
 export interface ManifestVaultScope {
   readonly schema: string;
   readonly table?: string;
-  readonly verbs: 'read' | 'read+act' | 'act' | 'reveal';
+  readonly verbs: "read" | "read+act" | "act" | "reveal";
   readonly rowFilter?: readonly ManifestVaultFilterClause[];
   readonly fieldMask?: readonly string[];
 }
@@ -138,13 +141,13 @@ export interface GeneratedMeta {
  * unless a gateway-wide default timezone is configured.
  */
 export type CronTrigger = {
-  readonly kind: 'cron';
+  readonly kind: "cron";
   readonly expr: string;
   /** Optional IANA timezone (e.g. `America/New_York`). Validated at write. */
   readonly tz?: string;
 };
 export type WebhookTrigger = {
-  readonly kind: 'webhook';
+  readonly kind: "webhook";
   /** Generated route slug — the path segment under `/_centraid-hook/`. */
   readonly id: string;
   /**
@@ -161,23 +164,23 @@ export type WebhookTrigger = {
  * `WebhookTrigger`; this is the agent→builder handoff form.
  */
 export type PendingWebhookTrigger = {
-  readonly kind: 'webhook';
+  readonly kind: "webhook";
   readonly pending: true;
 };
 
 /** Filter ops a condition trigger may use — the vault's FilterClause grammar. */
 export const CONDITION_OPS = [
-  'eq',
-  'ne',
-  'lt',
-  'lte',
-  'gt',
-  'gte',
-  'in',
-  'is-null',
-  'not-null',
-  'within-days',
-  'within-next-days',
+  "eq",
+  "ne",
+  "lt",
+  "lte",
+  "gt",
+  "gte",
+  "in",
+  "is-null",
+  "not-null",
+  "within-days",
+  "within-next-days",
 ] as const;
 export type ConditionOp = (typeof CONDITION_OPS)[number];
 
@@ -188,7 +191,7 @@ export interface ConditionWhereClause {
 }
 
 /** Cron gate a condition trigger evaluates on when `every` is omitted. */
-export const CONDITION_DEFAULT_EVERY = '*/5 * * * *';
+export const CONDITION_DEFAULT_EVERY = "*/5 * * * *";
 
 /**
  * A data-derived time trigger: on the `every` gate the host runs the
@@ -202,7 +205,7 @@ export const CONDITION_DEFAULT_EVERY = '*/5 * * * *';
  * widens it.
  */
 export type ConditionTrigger = {
-  readonly kind: 'condition';
+  readonly kind: "condition";
   /** Logical vault entity, e.g. `business.invoice`. */
   readonly entity: string;
   /** Filter ANDed into the consented read. */
@@ -212,7 +215,7 @@ export type ConditionTrigger = {
 };
 
 /** Cron gate a data trigger polls the change feed on when `every` is omitted. */
-export const DATA_DEFAULT_EVERY = '* * * * *';
+export const DATA_DEFAULT_EVERY = "* * * * *";
 
 /**
  * A data-change trigger: the host pulls the vault's consented provenance
@@ -225,17 +228,17 @@ export const DATA_DEFAULT_EVERY = '* * * * *';
  * `vault` block whose grant covers reading every watched entity.
  */
 export type DataTrigger = {
-  readonly kind: 'data';
+  readonly kind: "data";
   /** Logical vault entities to watch, e.g. `['core.transaction']`. */
   readonly entities: readonly string[];
   /** 5-field cron gate for polling. Default: every minute. */
   readonly every?: string;
 };
 
-export const EVENT_DEFAULT_EVERY = '*/5 * * * *';
+export const EVENT_DEFAULT_EVERY = "*/5 * * * *";
 export const EVENT_TRIGGER_CATALOG = {
-  'pull.gmail': ['new-message'],
-  'pull.github': ['pull-request', 'issue'],
+  "pull.gmail": ["new-message"],
+  "pull.github": ["pull-request", "issue"],
 } as const;
 
 /**
@@ -244,7 +247,7 @@ export const EVENT_TRIGGER_CATALOG = {
  * ordered cursor source and normalized ingress elements.
  */
 export type EventTrigger = {
-  readonly kind: 'event';
+  readonly kind: "event";
   readonly connectorKind: string;
   readonly event: string;
   readonly filter?: Readonly<Record<string, unknown>>;
@@ -260,17 +263,17 @@ export type Trigger =
   | EventTrigger;
 
 const TRIGGER_CURSOR_DENIED_TABLES = new Set([
-  'trigger_ingress',
-  'automation_trigger_cursor',
-  'automation_state',
-  'scheduler_ledger',
-  'conversations',
-  'turns',
-  'items',
-  'attachments',
-  'run_summary',
-  'conversation_archive',
-  'conversation_digest',
+  "trigger_ingress",
+  "automation_trigger_cursor",
+  "automation_state",
+  "scheduler_ledger",
+  "conversations",
+  "turns",
+  "items",
+  "attachments",
+  "run_summary",
+  "conversation_archive",
+  "conversation_digest",
 ]);
 
 /**
@@ -282,28 +285,32 @@ const TRIGGER_CURSOR_DENIED_TABLES = new Set([
  * ordinary data and must stay watchable.
  */
 export function isDeniedTriggerCursorEntity(entity: string): boolean {
-  const [schema = '', table] = entity.split('.', 2);
-  if (schema === 'outbox') return true;
+  const [schema = "", table] = entity.split(".", 2);
+  if (schema === "outbox") return true;
   return table === undefined && TRIGGER_CURSOR_DENIED_TABLES.has(schema);
 }
 
 function rejectDeniedTriggerEntity(entity: string, field: string): void {
   if (!isDeniedTriggerCursorEntity(entity)) return;
   throw new ManifestError(
-    'invalid_trigger',
+    "invalid_trigger",
     `manifest.${field} must not watch "${entity}" — cursor machinery, outbox, ingress, and conversation-ledger entities are excluded to prevent trigger loops`,
-    field,
+    field
   );
 }
 
 /** The cron triggers from a trigger list, in declaration order. */
-export function cronTriggersOf(triggers: readonly Trigger[]): readonly CronTrigger[] {
-  return triggers.filter((t): t is CronTrigger => t.kind === 'cron');
+export function cronTriggersOf(
+  triggers: readonly Trigger[]
+): readonly CronTrigger[] {
+  return triggers.filter((t): t is CronTrigger => t.kind === "cron");
 }
 
 /** True for a webhook trigger still awaiting server-side provisioning. */
-export function isPendingWebhookTrigger(t: Trigger): t is PendingWebhookTrigger {
-  return t.kind === 'webhook' && 'pending' in t;
+export function isPendingWebhookTrigger(
+  t: Trigger
+): t is PendingWebhookTrigger {
+  return t.kind === "webhook" && "pending" in t;
 }
 
 /**
@@ -311,13 +318,17 @@ export function isPendingWebhookTrigger(t: Trigger): t is PendingWebhookTrigger 
  * A pending (un-minted) webhook trigger is skipped — it has no `id` to
  * route on yet.
  */
-export function webhookTriggerOf(triggers: readonly Trigger[]): WebhookTrigger | undefined {
-  return triggers.find((t): t is WebhookTrigger => t.kind === 'webhook' && 'id' in t);
+export function webhookTriggerOf(
+  triggers: readonly Trigger[]
+): WebhookTrigger | undefined {
+  return triggers.find(
+    (t): t is WebhookTrigger => t.kind === "webhook" && "id" in t
+  );
 }
 
 /** The single pending (un-provisioned) webhook trigger, if any. */
 export function pendingWebhookTriggerOf(
-  triggers: readonly Trigger[],
+  triggers: readonly Trigger[]
 ): PendingWebhookTrigger | undefined {
   return triggers.find(isPendingWebhookTrigger);
 }
@@ -328,7 +339,11 @@ export function pendingWebhookTriggerOf(
  * older than N days, `"all"` keep everything (no-op), `"errors"` keep
  * only failed runs. Default at validation time is `{count: 100}`.
  */
-export type HistoryKeep = { readonly count: number } | { readonly days: number } | 'all' | 'errors';
+export type HistoryKeep =
+  | { readonly count: number }
+  | { readonly days: number }
+  | "all"
+  | "errors";
 
 export interface HistoryConfig {
   readonly keep: HistoryKeep;
@@ -416,37 +431,44 @@ export interface Manifest {
 }
 
 export function isValidCronExpression(expr: string): boolean {
-  if (typeof expr !== 'string') return false;
+  if (typeof expr !== "string") return false;
   const trimmed = expr.trim();
   if (!trimmed) return false;
-  const fields = trimmed.split(/\s+/);
+  const fields = trimmed.split(/\s+/u);
   if (fields.length !== 5) return false;
-  const fieldPattern = /^[0-9*,\-/?A-Za-z]+$/;
+  const fieldPattern = /^[0-9*,\-/?A-Za-z]+$/u;
   return fields.every((f) => fieldPattern.test(f));
 }
 
 function requireString(value: unknown, field: string): string {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new ManifestError('missing_field', `manifest.${field} must be a non-empty string`, field);
+  if (typeof value !== "string" || value.length === 0) {
+    throw new ManifestError(
+      "missing_field",
+      `manifest.${field} must be a non-empty string`,
+      field
+    );
   }
   return value;
 }
 
-function optionalStringArray(value: unknown, field: string): readonly string[] | undefined {
+function optionalStringArray(
+  value: unknown,
+  field: string
+): readonly string[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) {
     throw new ManifestError(
-      'invalid_field',
+      "invalid_field",
       `manifest.${field} must be an array of strings`,
-      field,
+      field
     );
   }
   return value.map((entry, idx) => {
-    if (typeof entry !== 'string' || entry.length === 0) {
+    if (typeof entry !== "string" || entry.length === 0) {
       throw new ManifestError(
-        'invalid_field',
+        "invalid_field",
         `manifest.${field}[${idx}] must be a non-empty string`,
-        `${field}[${idx}]`,
+        `${field}[${idx}]`
       );
     }
     return entry;
@@ -455,79 +477,79 @@ function optionalStringArray(value: unknown, field: string): readonly string[] |
 
 /** Webhook route slugs use the same filesystem-safe grammar as ids. */
 function isValidWebhookId(id: string): boolean {
-  return typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id);
+  return typeof id === "string" && /^[A-Za-z0-9_-]+$/u.test(id);
 }
 
 function validateOneTrigger(raw: unknown, field: string): Trigger {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     throw new ManifestError(
-      'invalid_trigger',
+      "invalid_trigger",
       `manifest.${field} must be an object with a "kind"`,
-      field,
+      field
     );
   }
   const t = raw as Record<string, unknown>;
-  if (t.kind === 'cron') {
+  if (t.kind === "cron") {
     const expr = requireString(t.expr, `${field}.expr`);
     if (!isValidCronExpression(expr)) {
       throw new ManifestError(
-        'invalid_trigger',
+        "invalid_trigger",
         `manifest.${field}.expr "${expr}" is not a valid 5-field cron expression`,
-        `${field}.expr`,
+        `${field}.expr`
       );
     }
     let tz: string | undefined;
     if (t.tz !== undefined) {
-      if (typeof t.tz !== 'string' || !t.tz.trim()) {
+      if (typeof t.tz !== "string" || !t.tz.trim()) {
         throw new ManifestError(
-          'invalid_trigger',
+          "invalid_trigger",
           `manifest.${field}.tz must be a non-empty IANA timezone name when set`,
-          `${field}.tz`,
+          `${field}.tz`
         );
       }
       tz = t.tz.trim();
       if (!isValidIanaTimeZone(tz)) {
         throw new ManifestError(
-          'invalid_trigger',
+          "invalid_trigger",
           `manifest.${field}.tz "${tz}" is not a known IANA timezone`,
-          `${field}.tz`,
+          `${field}.tz`
         );
       }
     }
-    return { kind: 'cron', expr, ...(tz !== undefined ? { tz } : {}) };
+    return { kind: "cron", expr, ...(tz === undefined ? {} : { tz }) };
   }
-  if (t.kind === 'webhook') {
+  if (t.kind === "webhook") {
     // A pending webhook (`{ kind: 'webhook', pending: true }`) the
     // builder agent declared but cannot provision — accepted here so
     // the manifest round-trips until the builder mints id + secret.
     if (t.id === undefined && t.secretHash === undefined) {
       if (t.pending !== true) {
         throw new ManifestError(
-          'invalid_trigger',
+          "invalid_trigger",
           `manifest.${field} webhook trigger needs a minted "id" + "secretHash", or "pending": true`,
-          field,
+          field
         );
       }
-      return { kind: 'webhook', pending: true };
+      return { kind: "webhook", pending: true };
     }
     const id = requireString(t.id, `${field}.id`);
     if (!isValidWebhookId(id)) {
       throw new ManifestError(
-        'invalid_trigger',
+        "invalid_trigger",
         `manifest.${field}.id "${id}" is not a valid webhook route slug`,
-        `${field}.id`,
+        `${field}.id`
       );
     }
     const secretHash = requireString(t.secretHash, `${field}.secretHash`);
-    return { kind: 'webhook', id, secretHash };
+    return { kind: "webhook", id, secretHash };
   }
-  if (t.kind === 'condition') {
+  if (t.kind === "condition") {
     const entity = requireString(t.entity, `${field}.entity`);
-    if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(entity)) {
+    if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u.test(entity)) {
       throw new ManifestError(
-        'invalid_trigger',
+        "invalid_trigger",
         `manifest.${field}.entity "${entity}" is not a <schema>.<table> entity name`,
-        `${field}.entity`,
+        `${field}.entity`
       );
     }
     rejectDeniedTriggerEntity(entity, `${field}.entity`);
@@ -536,9 +558,9 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
       every = requireString(t.every, `${field}.every`);
       if (!isValidCronExpression(every)) {
         throw new ManifestError(
-          'invalid_trigger',
+          "invalid_trigger",
           `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
-          `${field}.every`,
+          `${field}.every`
         );
       }
     }
@@ -546,55 +568,62 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
     if (t.where !== undefined) {
       if (!Array.isArray(t.where)) {
         throw new ManifestError(
-          'invalid_trigger',
+          "invalid_trigger",
           `manifest.${field}.where must be an array of {column, op, value?} clauses`,
-          `${field}.where`,
+          `${field}.where`
         );
       }
       where = t.where.map((raw, i) => {
         const cf = `${field}.where[${i}]`;
-        if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-          throw new ManifestError('invalid_trigger', `manifest.${cf} must be an object`, cf);
+        if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+          throw new ManifestError(
+            "invalid_trigger",
+            `manifest.${cf} must be an object`,
+            cf
+          );
         }
         const c = raw as Record<string, unknown>;
         const column = requireString(c.column, `${cf}.column`);
-        if (typeof c.op !== 'string' || !(CONDITION_OPS as readonly string[]).includes(c.op)) {
+        if (
+          typeof c.op !== "string" ||
+          !(CONDITION_OPS as readonly string[]).includes(c.op)
+        ) {
           throw new ManifestError(
-            'invalid_trigger',
-            `manifest.${cf}.op must be one of ${CONDITION_OPS.join(', ')}`,
-            `${cf}.op`,
+            "invalid_trigger",
+            `manifest.${cf}.op must be one of ${CONDITION_OPS.join(", ")}`,
+            `${cf}.op`
           );
         }
         return {
           column,
           op: c.op as ConditionOp,
-          ...(c.value !== undefined ? { value: c.value } : {}),
+          ...(c.value === undefined ? {} : { value: c.value }),
         } satisfies ConditionWhereClause;
       });
     }
     return {
-      kind: 'condition',
+      kind: "condition",
       entity,
       ...(where ? { where } : {}),
-      ...(every !== undefined ? { every } : {}),
+      ...(every === undefined ? {} : { every }),
     };
   }
-  if (t.kind === 'data') {
+  if (t.kind === "data") {
     if (!Array.isArray(t.entities) || t.entities.length === 0) {
       throw new ManifestError(
-        'invalid_trigger',
+        "invalid_trigger",
         `manifest.${field}.entities must be a non-empty array of <schema>.<table> names`,
-        `${field}.entities`,
+        `${field}.entities`
       );
     }
     const entities = t.entities.map((raw, i) => {
       const ef = `${field}.entities[${i}]`;
       const entity = requireString(raw, ef);
-      if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(entity)) {
+      if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/u.test(entity)) {
         throw new ManifestError(
-          'invalid_trigger',
+          "invalid_trigger",
           `manifest.${ef} "${entity}" is not a <schema>.<table> entity name`,
-          ef,
+          ef
         );
       }
       rejectDeniedTriggerEntity(entity, ef);
@@ -605,23 +634,33 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
       every = requireString(t.every, `${field}.every`);
       if (!isValidCronExpression(every)) {
         throw new ManifestError(
-          'invalid_trigger',
+          "invalid_trigger",
           `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
-          `${field}.every`,
+          `${field}.every`
         );
       }
     }
-    return { kind: 'data', entities, ...(every !== undefined ? { every } : {}) };
+    return {
+      kind: "data",
+      entities,
+      ...(every === undefined ? {} : { every }),
+    };
   }
-  if (t.kind === 'event') {
-    const connectorKind = requireString(t.connectorKind, `${field}.connectorKind`);
+  if (t.kind === "event") {
+    const connectorKind = requireString(
+      t.connectorKind,
+      `${field}.connectorKind`
+    );
     const event = requireString(t.event, `${field}.event`);
-    const supported = EVENT_TRIGGER_CATALOG[connectorKind as keyof typeof EVENT_TRIGGER_CATALOG];
+    const supported =
+      EVENT_TRIGGER_CATALOG[
+        connectorKind as keyof typeof EVENT_TRIGGER_CATALOG
+      ];
     if (!supported || !(supported as readonly string[]).includes(event)) {
       throw new ManifestError(
-        'invalid_trigger',
+        "invalid_trigger",
         `manifest.${field} has unsupported provider event "${connectorKind}:${event}"`,
-        `${field}.event`,
+        `${field}.event`
       );
     }
     let every: string | undefined;
@@ -629,25 +668,29 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
       every = requireString(t.every, `${field}.every`);
       if (!isValidCronExpression(every)) {
         throw new ManifestError(
-          'invalid_trigger',
+          "invalid_trigger",
           `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
-          `${field}.every`,
+          `${field}.every`
         );
       }
     }
     let filter: Readonly<Record<string, unknown>> | undefined;
     if (t.filter !== undefined) {
-      if (t.filter === null || typeof t.filter !== 'object' || Array.isArray(t.filter)) {
+      if (
+        t.filter === null ||
+        typeof t.filter !== "object" ||
+        Array.isArray(t.filter)
+      ) {
         throw new ManifestError(
-          'invalid_trigger',
+          "invalid_trigger",
           `manifest.${field}.filter must be an object`,
-          `${field}.filter`,
+          `${field}.filter`
         );
       }
       filter = t.filter as Readonly<Record<string, unknown>>;
     }
     return {
-      kind: 'event',
+      kind: "event",
       connectorKind,
       event,
       ...(filter ? { filter } : {}),
@@ -655,9 +698,9 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
     };
   }
   throw new ManifestError(
-    'invalid_trigger',
+    "invalid_trigger",
     `manifest.${field}.kind "${String(t.kind)}" is not supported — expected "cron", "webhook", "condition", "data" or "event"`,
-    `${field}.kind`,
+    `${field}.kind`
   );
 }
 
@@ -668,19 +711,23 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
  */
 function resolveTriggers(r: Record<string, unknown>): readonly Trigger[] {
   let list: Trigger[];
-  if (r.triggers !== undefined) {
+  if (r.triggers === undefined) {
+    list = [];
+  } else {
     if (!Array.isArray(r.triggers)) {
-      throw new ManifestError('invalid_trigger', 'manifest.triggers must be an array', 'triggers');
+      throw new ManifestError(
+        "invalid_trigger",
+        "manifest.triggers must be an array",
+        "triggers"
+      );
     }
     list = r.triggers.map((t, i) => validateOneTrigger(t, `triggers[${i}]`));
-  } else {
-    list = [];
   }
-  if (list.filter((t) => t.kind === 'webhook').length > 1) {
+  if (list.filter((t) => t.kind === "webhook").length > 1) {
     throw new ManifestError(
-      'invalid_trigger',
-      'manifest.triggers may contain at most one webhook trigger',
-      'triggers',
+      "invalid_trigger",
+      "manifest.triggers may contain at most one webhook trigger",
+      "triggers"
     );
   }
   return list;
@@ -690,91 +737,107 @@ const DEFAULT_HISTORY_KEEP_COUNT = 100;
 
 function validateHistory(raw: unknown): HistoryConfig {
   if (raw === undefined) return { keep: { count: DEFAULT_HISTORY_KEEP_COUNT } };
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new ManifestError('invalid_history', 'manifest.history must be an object', 'history');
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ManifestError(
+      "invalid_history",
+      "manifest.history must be an object",
+      "history"
+    );
   }
   const h = raw as Record<string, unknown>;
-  if (h.keep === undefined) return { keep: { count: DEFAULT_HISTORY_KEEP_COUNT } };
+  if (h.keep === undefined)
+    return { keep: { count: DEFAULT_HISTORY_KEEP_COUNT } };
   const keep = h.keep;
-  if (keep === 'all' || keep === 'errors') return { keep };
-  if (keep === null || typeof keep !== 'object' || Array.isArray(keep)) {
+  if (keep === "all" || keep === "errors") return { keep };
+  if (keep === null || typeof keep !== "object" || Array.isArray(keep)) {
     throw new ManifestError(
-      'invalid_history',
+      "invalid_history",
       'manifest.history.keep must be {count:N} | {days:N} | "all" | "errors"',
-      'history.keep',
+      "history.keep"
     );
   }
   const k = keep as Record<string, unknown>;
-  if (typeof k.count === 'number' && Number.isInteger(k.count) && k.count >= 0) {
+  if (
+    typeof k.count === "number" &&
+    Number.isInteger(k.count) &&
+    k.count >= 0
+  ) {
     return { keep: { count: k.count } };
   }
-  if (typeof k.days === 'number' && Number.isInteger(k.days) && k.days >= 0) {
+  if (typeof k.days === "number" && Number.isInteger(k.days) && k.days >= 0) {
     return { keep: { days: k.days } };
   }
   throw new ManifestError(
-    'invalid_history',
+    "invalid_history",
     'manifest.history.keep must be {count:N} | {days:N} | "all" | "errors"',
-    'history.keep',
+    "history.keep"
   );
 }
 
 function validateRequires(raw: unknown): ManifestRequires {
-  if (raw !== undefined && (raw === null || typeof raw !== 'object')) {
-    throw new ManifestError('invalid_field', 'manifest.requires must be an object', 'requires');
+  if (raw !== undefined && (raw === null || typeof raw !== "object")) {
+    throw new ManifestError(
+      "invalid_field",
+      "manifest.requires must be an object",
+      "requires"
+    );
   }
   const req = (raw ?? {}) as Record<string, unknown>;
-  const mcps = optionalStringArray(req.mcps, 'requires.mcps');
+  const mcps = optionalStringArray(req.mcps, "requires.mcps");
   let runner: string | undefined;
   if (req.runner !== undefined) {
-    if (typeof req.runner !== 'string' || req.runner.length === 0) {
+    if (typeof req.runner !== "string" || req.runner.length === 0) {
       throw new ManifestError(
-        'invalid_field',
-        'manifest.requires.runner must be a non-empty string',
-        'requires.runner',
+        "invalid_field",
+        "manifest.requires.runner must be a non-empty string",
+        "requires.runner"
       );
     }
     runner = req.runner;
   }
   let model: string | undefined;
   if (req.model !== undefined) {
-    if (typeof req.model !== 'string' || req.model.length === 0) {
+    if (typeof req.model !== "string" || req.model.length === 0) {
       throw new ManifestError(
-        'invalid_field',
-        'manifest.requires.model must be a non-empty string',
-        'requires.model',
+        "invalid_field",
+        "manifest.requires.model must be a non-empty string",
+        "requires.model"
       );
     }
-    if (req.model.startsWith('centraid-mock/') || req.model === 'centraid-mock') {
+    if (
+      req.model.startsWith("centraid-mock/") ||
+      req.model === "centraid-mock"
+    ) {
       throw new ManifestError(
-        'mock_model_disallowed',
+        "mock_model_disallowed",
         `manifest.requires.model "${req.model}" points at the centraid-mock provider — that would recurse into the automation runtime itself`,
-        'requires.model',
+        "requires.model"
       );
     }
     model = req.model;
   }
   let thoughtLevel: string | undefined;
   if (req.thoughtLevel !== undefined) {
-    if (typeof req.thoughtLevel !== 'string' || req.thoughtLevel.length === 0) {
+    if (typeof req.thoughtLevel !== "string" || req.thoughtLevel.length === 0) {
       throw new ManifestError(
-        'invalid_field',
-        'manifest.requires.thoughtLevel must be a non-empty string',
-        'requires.thoughtLevel',
+        "invalid_field",
+        "manifest.requires.thoughtLevel must be a non-empty string",
+        "requires.thoughtLevel"
       );
     }
     thoughtLevel = req.thoughtLevel;
   }
-  const secrets = optionalStringArray(req.secrets, 'requires.secrets');
+  const secrets = optionalStringArray(req.secrets, "requires.secrets");
   if (secrets) {
     for (const ref of secrets) {
       // Two forms: the raw UUID (`locker:<item_id>:<column>`) or a stable
       // alias that survives delete+recreate (`locker:@<alias>:<column>`,
       // issue #298 item 4).
-      if (!/^locker:(?:@[A-Za-z0-9._-]{1,64}|[^:@][^:]*):[a-z_]+$/.test(ref)) {
+      if (!/^locker:(?:@[A-Za-z0-9._-]{1,64}|[^:@][^:]*):[a-z_]+$/u.test(ref)) {
         throw new ManifestError(
-          'invalid_field',
+          "invalid_field",
           `manifest.requires.secrets entry "${ref}" must be "locker:<item_id>:<column>" or "locker:@<alias>:<column>" (issues #293, #298)`,
-          'requires.secrets',
+          "requires.secrets"
         );
       }
     }
@@ -791,103 +854,124 @@ function validateRequires(raw: unknown): ManifestRequires {
 
 function validateConnector(value: unknown): ConnectorSpec | undefined {
   if (value === undefined) return undefined;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new ManifestError('invalid_field', 'manifest.connector must be an object', 'connector');
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new ManifestError(
+      "invalid_field",
+      "manifest.connector must be an object",
+      "connector"
+    );
   }
   const c = value as Record<string, unknown>;
-  const kind = requireString(c.kind, 'connector.kind');
-  const label = requireString(c.label, 'connector.label');
+  const kind = requireString(c.kind, "connector.kind");
+  const label = requireString(c.label, "connector.label");
   let principal: string | undefined;
   if (c.principal !== undefined) {
-    principal = requireString(c.principal, 'connector.principal');
+    principal = requireString(c.principal, "connector.principal");
   }
   let connectionId: string | undefined;
   if (c.connectionId !== undefined) {
-    connectionId = requireString(c.connectionId, 'connector.connectionId');
+    connectionId = requireString(c.connectionId, "connector.connectionId");
   }
   return {
     kind,
     label,
-    ...(principal !== undefined ? { principal } : {}),
-    ...(connectionId !== undefined ? { connectionId } : {}),
+    ...(principal === undefined ? {} : { principal }),
+    ...(connectionId === undefined ? {} : { connectionId }),
   };
 }
 
-function validateConnectionBindings(value: unknown): readonly ConnectionBinding[] | undefined {
+function validateConnectionBindings(
+  value: unknown
+): readonly ConnectionBinding[] | undefined {
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) {
     throw new ManifestError(
-      'invalid_field',
-      'manifest.connections must be an array',
-      'connections',
+      "invalid_field",
+      "manifest.connections must be an array",
+      "connections"
     );
   }
   if (value.length === 0) return [];
   return value.map((entry, i) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       throw new ManifestError(
-        'invalid_field',
+        "invalid_field",
         `manifest.connections[${i}] must be an object`,
-        'connections',
+        "connections"
       );
     }
     const e = entry as Record<string, unknown>;
     return {
-      connectionId: requireString(e.connectionId, `connections[${i}].connectionId`),
+      connectionId: requireString(
+        e.connectionId,
+        `connections[${i}].connectionId`
+      ),
       kind: requireString(e.kind, `connections[${i}].kind`),
       label: requireString(e.label, `connections[${i}].label`),
     };
   });
 }
 
-const VAULT_VERBS = new Set(['read', 'read+act', 'act', 'reveal']);
+const VAULT_VERBS = new Set(["read", "read+act", "act", "reveal"]);
 const VAULT_FILTER_OPS = new Set([
-  'eq',
-  'ne',
-  'lt',
-  'lte',
-  'gt',
-  'gte',
-  'in',
-  'is-null',
-  'not-null',
-  'within-days',
-  'within-next-days',
+  "eq",
+  "ne",
+  "lt",
+  "lte",
+  "gt",
+  "gte",
+  "in",
+  "is-null",
+  "not-null",
+  "within-days",
+  "within-next-days",
 ]);
 
 function validateVault(raw: unknown): ManifestVault | undefined {
   if (raw === undefined) return undefined;
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new ManifestError('invalid_field', 'manifest.vault must be an object', 'vault');
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ManifestError(
+      "invalid_field",
+      "manifest.vault must be an object",
+      "vault"
+    );
   }
   const v = raw as Record<string, unknown>;
-  const purpose = requireString(v.purpose, 'vault.purpose');
+  const purpose = requireString(v.purpose, "vault.purpose");
   let why: string | undefined;
   if (v.why !== undefined) {
-    if (typeof v.why !== 'string') {
-      throw new ManifestError('invalid_field', 'manifest.vault.why must be a string', 'vault.why');
+    if (typeof v.why !== "string") {
+      throw new ManifestError(
+        "invalid_field",
+        "manifest.vault.why must be a string",
+        "vault.why"
+      );
     }
     why = v.why;
   }
   if (!Array.isArray(v.scopes) || v.scopes.length === 0) {
     throw new ManifestError(
-      'invalid_field',
-      'manifest.vault.scopes must be a non-empty array',
-      'vault.scopes',
+      "invalid_field",
+      "manifest.vault.scopes must be a non-empty array",
+      "vault.scopes"
     );
   }
   const scopes = v.scopes.map((raw, i) => {
     const field = `vault.scopes[${i}]`;
-    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-      throw new ManifestError('invalid_field', `manifest.${field} must be an object`, field);
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new ManifestError(
+        "invalid_field",
+        `manifest.${field} must be an object`,
+        field
+      );
     }
     const s = raw as Record<string, unknown>;
     const schema = requireString(s.schema, `${field}.schema`);
-    if (typeof s.verbs !== 'string' || !VAULT_VERBS.has(s.verbs)) {
+    if (typeof s.verbs !== "string" || !VAULT_VERBS.has(s.verbs)) {
       throw new ManifestError(
-        'invalid_field',
+        "invalid_field",
         `manifest.${field}.verbs must be "read" | "read+act" | "act" | "reveal"`,
-        `${field}.verbs`,
+        `${field}.verbs`
       );
     }
     let table: string | undefined;
@@ -896,33 +980,37 @@ function validateVault(raw: unknown): ManifestVault | undefined {
     if (s.rowFilter !== undefined) {
       if (!Array.isArray(s.rowFilter) || s.rowFilter.length === 0) {
         throw new ManifestError(
-          'invalid_field',
+          "invalid_field",
           `manifest.${field}.rowFilter must be a non-empty array`,
-          `${field}.rowFilter`,
+          `${field}.rowFilter`
         );
       }
       rowFilter = s.rowFilter.map((rawClause, clauseIndex) => {
         const clauseField = `${field}.rowFilter[${clauseIndex}]`;
-        if (rawClause === null || typeof rawClause !== 'object' || Array.isArray(rawClause)) {
+        if (
+          rawClause === null ||
+          typeof rawClause !== "object" ||
+          Array.isArray(rawClause)
+        ) {
           throw new ManifestError(
-            'invalid_field',
+            "invalid_field",
             `manifest.${clauseField} must be an object`,
-            clauseField,
+            clauseField
           );
         }
         const clause = rawClause as Record<string, unknown>;
         const column = requireString(clause.column, `${clauseField}.column`);
-        if (typeof clause.op !== 'string' || !VAULT_FILTER_OPS.has(clause.op)) {
+        if (typeof clause.op !== "string" || !VAULT_FILTER_OPS.has(clause.op)) {
           throw new ManifestError(
-            'invalid_field',
+            "invalid_field",
             `manifest.${clauseField}.op is not a supported vault filter operator`,
-            `${clauseField}.op`,
+            `${clauseField}.op`
           );
         }
         return {
           column,
-          op: clause.op as ManifestVaultFilterClause['op'],
-          ...(Object.hasOwn(clause, 'value') ? { value: clause.value } : {}),
+          op: clause.op as ManifestVaultFilterClause["op"],
+          ...(Object.hasOwn(clause, "value") ? { value: clause.value } : {}),
         };
       });
     }
@@ -930,60 +1018,60 @@ function validateVault(raw: unknown): ManifestVault | undefined {
     if (s.fieldMask !== undefined) {
       if (!Array.isArray(s.fieldMask) || s.fieldMask.length === 0) {
         throw new ManifestError(
-          'invalid_field',
+          "invalid_field",
           `manifest.${field}.fieldMask must be a non-empty array`,
-          `${field}.fieldMask`,
+          `${field}.fieldMask`
         );
       }
       fieldMask = s.fieldMask.map((value, maskIndex) =>
-        requireString(value, `${field}.fieldMask[${maskIndex}]`),
+        requireString(value, `${field}.fieldMask[${maskIndex}]`)
       );
       if (new Set(fieldMask).size !== fieldMask.length) {
         throw new ManifestError(
-          'invalid_field',
+          "invalid_field",
           `manifest.${field}.fieldMask must not contain duplicates`,
-          `${field}.fieldMask`,
+          `${field}.fieldMask`
         );
       }
     }
     if ((rowFilter || fieldMask) && table === undefined) {
       throw new ManifestError(
-        'invalid_field',
+        "invalid_field",
         `manifest.${field}.table is required for rowFilter or fieldMask`,
-        `${field}.table`,
+        `${field}.table`
       );
     }
     return {
       schema,
-      ...(table !== undefined ? { table } : {}),
-      verbs: s.verbs as ManifestVaultScope['verbs'],
+      ...(table === undefined ? {} : { table }),
+      verbs: s.verbs as ManifestVaultScope["verbs"],
       ...(rowFilter ? { rowFilter } : {}),
       ...(fieldMask ? { fieldMask } : {}),
     } satisfies ManifestVaultScope;
   });
-  return { purpose, ...(why !== undefined ? { why } : {}), scopes };
+  return { purpose, ...(why === undefined ? {} : { why }), scopes };
 }
 
 function validateCostEstimate(raw: unknown): CostEstimate | undefined {
   if (raw === undefined) return undefined;
-  if (raw === null || typeof raw !== 'object') {
+  if (raw === null || typeof raw !== "object") {
     throw new ManifestError(
-      'invalid_field',
-      'manifest.costEstimate must be an object',
-      'costEstimate',
+      "invalid_field",
+      "manifest.costEstimate must be an object",
+      "costEstimate"
     );
   }
   const ce = raw as Record<string, unknown>;
-  const model = requireString(ce.model, 'costEstimate.model');
+  const model = requireString(ce.model, "costEstimate.model");
   if (
-    typeof ce.tokensPerFire !== 'number' ||
+    typeof ce.tokensPerFire !== "number" ||
     !Number.isFinite(ce.tokensPerFire) ||
     ce.tokensPerFire < 0
   ) {
     throw new ManifestError(
-      'invalid_field',
-      'manifest.costEstimate.tokensPerFire must be a non-negative finite number',
-      'costEstimate.tokensPerFire',
+      "invalid_field",
+      "manifest.costEstimate.tokensPerFire must be a non-negative finite number",
+      "costEstimate.tokensPerFire"
     );
   }
   return { model, tokensPerFire: ce.tokensPerFire };
@@ -991,18 +1079,18 @@ function validateCostEstimate(raw: unknown): CostEstimate | undefined {
 
 function validateOnFailure(raw: unknown): string | undefined {
   if (raw === undefined) return undefined;
-  if (typeof raw !== 'string' || raw.length === 0) {
+  if (typeof raw !== "string" || raw.length === 0) {
     throw new ManifestError(
-      'invalid_on_failure',
-      'manifest.onFailure must be a non-empty string naming another automation',
-      'onFailure',
+      "invalid_on_failure",
+      "manifest.onFailure must be a non-empty string naming another automation",
+      "onFailure"
     );
   }
   if (!isValidRef(raw)) {
     throw new ManifestError(
-      'invalid_on_failure',
+      "invalid_on_failure",
       `manifest.onFailure "${raw}" is not a valid automation handle`,
-      'onFailure',
+      "onFailure"
     );
   }
   return raw;
@@ -1014,34 +1102,35 @@ export function parseManifest(json: string): Manifest {
     raw = JSON.parse(json);
   } catch (err) {
     throw new ManifestError(
-      'invalid_json',
-      `manifest is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      "invalid_json",
+      `manifest is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
     );
   }
   return validateManifest(raw);
 }
 
 export function validateManifest(raw: unknown): Manifest {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new ManifestError('invalid_field', 'manifest must be a JSON object');
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ManifestError("invalid_field", "manifest must be a JSON object");
   }
   const r = raw as Record<string, unknown>;
 
-  const name = requireString(r.name, 'name');
-  const version = r.version === undefined ? '0.1.0' : requireString(r.version, 'version');
+  const name = requireString(r.name, "name");
+  const version =
+    r.version === undefined ? "0.1.0" : requireString(r.version, "version");
   let description: string | undefined;
   if (r.description !== undefined) {
-    if (typeof r.description !== 'string') {
+    if (typeof r.description !== "string") {
       throw new ManifestError(
-        'invalid_field',
-        'manifest.description must be a string',
-        'description',
+        "invalid_field",
+        "manifest.description must be a string",
+        "description"
       );
     }
     description = r.description;
   }
   const enabled = r.enabled === undefined ? true : r.enabled === true;
-  const prompt = requireString(r.prompt, 'prompt');
+  const prompt = requireString(r.prompt, "prompt");
   const triggers = resolveTriggers(r);
   const requires = validateRequires(r.requires);
   const connector = validateConnector(r.connector);
@@ -1051,9 +1140,9 @@ export function validateManifest(raw: unknown): Manifest {
   // connector manifest without a vault block can never do anything.
   if (connector && !vault) {
     throw new ManifestError(
-      'invalid_field',
-      'manifest.connector requires a manifest.vault block (connectors stage rows through sync.stage_rows)',
-      'connector',
+      "invalid_field",
+      "manifest.connector requires a manifest.vault block (connectors stage rows through sync.stage_rows)",
+      "connector"
     );
   }
   // Secrets are connector-plumbing (issue #293): only a connector's
@@ -1061,57 +1150,66 @@ export function validateManifest(raw: unknown): Manifest {
   // manifest bug, not a latent capability.
   if (!connector && requires.secrets && requires.secrets.length > 0) {
     throw new ManifestError(
-      'invalid_field',
-      'manifest.requires.secrets is connector-only (issue #293) — declare manifest.connector',
-      'requires.secrets',
+      "invalid_field",
+      "manifest.requires.secrets is connector-only (issue #293) — declare manifest.connector",
+      "requires.secrets"
     );
   }
   // A condition/data trigger IS a consented vault read — without a vault
   // block there is no grant to evaluate it under, so the manifest is
   // incoherent.
-  if (!vault && triggers.some((t) => t.kind === 'condition' || t.kind === 'data')) {
+  if (
+    !vault &&
+    triggers.some((t) => t.kind === "condition" || t.kind === "data")
+  ) {
     throw new ManifestError(
-      'invalid_trigger',
-      'manifest.triggers contains a condition/data trigger but no manifest.vault block declares the access it reads under',
-      'vault',
+      "invalid_trigger",
+      "manifest.triggers contains a condition/data trigger but no manifest.vault block declares the access it reads under",
+      "vault"
     );
   }
   for (const trigger of triggers) {
-    if (trigger.kind !== 'event') continue;
-    if (!connections?.some((binding) => binding.kind === trigger.connectorKind)) {
+    if (trigger.kind !== "event") continue;
+    if (
+      !connections?.some((binding) => binding.kind === trigger.connectorKind)
+    ) {
       throw new ManifestError(
-        'invalid_trigger',
+        "invalid_trigger",
         `manifest event trigger "${trigger.event}" requires a bound "${trigger.connectorKind}" connection`,
-        'connections',
+        "connections"
       );
     }
   }
-  const apps = optionalStringArray(r.apps, 'apps');
+  const apps = optionalStringArray(r.apps, "apps");
   const costEstimate = validateCostEstimate(r.costEstimate);
   const outputSchema = validateOutputSchema(r.outputSchema);
   const onFailure = validateOnFailure(r.onFailure);
   const history = validateHistory(r.history);
 
   const genRaw = r.generated;
-  if (!genRaw || typeof genRaw !== 'object' || Array.isArray(genRaw)) {
-    throw new ManifestError('missing_field', 'manifest.generated must be an object', 'generated');
+  if (!genRaw || typeof genRaw !== "object" || Array.isArray(genRaw)) {
+    throw new ManifestError(
+      "missing_field",
+      "manifest.generated must be an object",
+      "generated"
+    );
   }
   const gen = genRaw as Record<string, unknown>;
   const generated: GeneratedMeta = {
-    by: requireString(gen.by, 'generated.by'),
-    at: requireString(gen.at, 'generated.at'),
+    by: requireString(gen.by, "generated.by"),
+    at: requireString(gen.at, "generated.at"),
   };
 
   return {
     name,
     version,
-    ...(description !== undefined ? { description } : {}),
+    ...(description === undefined ? {} : { description }),
     enabled,
     prompt,
     triggers,
     requires,
     ...(connector ? { connector } : {}),
-    ...(connections !== undefined ? { connections } : {}),
+    ...(connections === undefined ? {} : { connections }),
     ...(vault ? { vault } : {}),
     ...(apps ? { apps } : {}),
     ...(costEstimate ? { costEstimate } : {}),

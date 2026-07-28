@@ -4,9 +4,10 @@
 // learned while plaintext was flowing and converge here without re-reading a
 // multi-hundred-megabyte object into RAM.
 
-import type { DatabaseSync } from 'node:sqlite';
-import { nowIso, uuidv7 } from '../ids.js';
-import type { StagedBlob } from './staging.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import { nowIso, uuidv7 } from "../ids.js";
+import type { StagedBlob } from "./staging.js";
 
 export interface KnownStagedBlobInput {
   sha256: string;
@@ -19,13 +20,13 @@ export interface KnownStagedBlobInput {
 
 export function recordKnownStagedBlob(
   vault: DatabaseSync,
-  input: KnownStagedBlobInput,
+  input: KnownStagedBlobInput
 ): StagedBlob {
-  const mediaType = input.mediaType ?? 'application/octet-stream';
+  const mediaType = input.mediaType ?? "application/octet-stream";
   const meta = input.meta ?? {};
   const hasFreshMeta = input.meta !== undefined;
   const existing = vault
-    .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?')
+    .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
     .get(input.sha256) as { content_id: string } | undefined;
   vault
     .prepare(
@@ -39,7 +40,7 @@ export function recordKnownStagedBlob(
          original_name = COALESCE(excluded.original_name, blob_staging.original_name),
          meta_json = CASE WHEN ? = 1 THEN excluded.meta_json ELSE blob_staging.meta_json END,
          staged_by = excluded.staged_by,
-         staged_at = excluded.staged_at`,
+         staged_at = excluded.staged_at`
     )
     .run(
       uuidv7(),
@@ -50,14 +51,16 @@ export function recordKnownStagedBlob(
       JSON.stringify(meta),
       input.stagedBy ?? null,
       nowIso(),
-      hasFreshMeta ? 1 : 0,
+      hasFreshMeta ? 1 : 0
     );
   const effectiveMeta = JSON.parse(
     (
       vault
-        .prepare('SELECT meta_json FROM blob_staging WHERE sha256 = ? AND variant IS NULL')
+        .prepare(
+          "SELECT meta_json FROM blob_staging WHERE sha256 = ? AND variant IS NULL"
+        )
         .get(input.sha256) as { meta_json: string }
-    ).meta_json,
+    ).meta_json
   ) as Record<string, unknown>;
   return {
     sha256: input.sha256,

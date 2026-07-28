@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import type { GatewayRuntimeSnapshot } from './routes/gatewayData.js';
+import { useEffect, useState } from "react";
+
+import type { GatewayRuntimeSnapshot } from "./routes/gatewayData.js";
 
 // Live view of the main-process gateway heartbeat monitor: one read for
 // first paint, then the per-poll push stream (every ~5s, plus immediately

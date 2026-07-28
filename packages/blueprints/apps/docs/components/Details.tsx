@@ -1,6 +1,6 @@
 // Details drawer (#detailsRoot root).
-import { useRef, useState } from 'react';
-import { armConfirm } from '../kit.ts';
+import { useRef, useState } from "react";
+
 import {
   custodyMeta,
   extOf,
@@ -12,15 +12,22 @@ import {
   purgeCountdown,
   tintBg,
   typeMeta,
-} from '../format.ts';
-import { I, RENAME_ICON } from '../icons.ts';
-import type { ActivityEvent, CustodyTone, DriveDoc, VersionEntry } from '../types.ts';
-import { Activity } from './Activity.tsx';
-import { History } from './History.tsx';
-import { Icon } from './Shared.tsx';
-import { Tags } from './Tags.tsx';
-import styles from './Details.module.css';
-import shared from './shared.module.css';
+} from "../format.ts";
+import { I, RENAME_ICON } from "../icons.ts";
+import { armConfirm } from "../kit.ts";
+import type {
+  ActivityEvent,
+  CustodyTone,
+  DriveDoc,
+  VersionEntry,
+} from "../types.ts";
+import { Activity } from "./Activity.tsx";
+import { History } from "./History.tsx";
+import { Icon } from "./Shared.tsx";
+import { Tags } from "./Tags.tsx";
+
+import styles from "./Details.module.css";
+import shared from "./shared.module.css";
 
 // The custody chip's three tones are compound modifiers on the local base,
 // keyed off a lookup map so the tone never becomes `styles[\`custody-${tone}\`]`.
@@ -61,7 +68,7 @@ function ReplaceButton({
         aria-label="Replace file"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          e.target.value = '';
+          e.target.value = "";
           if (file) onReplace(doc, file);
         }}
       />
@@ -97,13 +104,13 @@ export function Details({
   onEdit: (doc: DriveDoc) => void;
   onReplace: (doc: DriveDoc, file: File) => void;
   loadHistory: (
-    documentId: string,
+    documentId: string
   ) => Promise<{ versions?: VersionEntry[]; vaultDenied?: unknown }>;
   onRestoreVersion: (doc: DriveDoc, contentId: string) => void;
   onAddTag: (doc: DriveDoc, label: string) => void;
   onRemoveTag: (doc: DriveDoc, tagId: string) => void;
   loadActivity: (
-    documentId: string,
+    documentId: string
   ) => Promise<{ events?: ActivityEvent[]; vaultDenied?: unknown }>;
 }) {
   const m = typeMeta(doc.media_type);
@@ -124,10 +131,20 @@ export function Details({
         aria-label="Close"
         onClick={onClose}
       />
-      <dialog open className={styles.details} aria-modal="true" aria-label="Document details">
+      <dialog
+        open
+        className={styles.details}
+        aria-modal="true"
+        aria-label="Document details"
+      >
         <div className={styles.detailsHead}>
           <span className={styles.lbl}>Details</span>
-          <button type="button" className="kit-icon-btn" aria-label="Close" onClick={onClose}>
+          <button
+            type="button"
+            className="kit-icon-btn"
+            aria-label="Close"
+            onClick={onClose}
+          >
             <Icon svg={I.close!} />
           </button>
         </div>
@@ -137,7 +154,11 @@ export function Details({
               <img src={doc.content_uri} alt="" />
             ) : isVideo(doc) && doc.poster_uri ? (
               <>
-                <img src={doc.poster_uri} alt="" onError={(e) => e.currentTarget.remove()} />
+                <img
+                  src={doc.poster_uri}
+                  alt=""
+                  onError={(e) => e.currentTarget.remove()}
+                />
                 <span className={shared.mediaPlay} aria-hidden="true">
                   ▶
                 </span>
@@ -146,7 +167,7 @@ export function Details({
               <span style={{ color: `var(${m.cv})` }}>{m.label}</span>
             )}
           </div>
-          <div className={styles.detailName}>{doc.title ?? 'Untitled'}</div>
+          <div className={styles.detailName}>{doc.title ?? "Untitled"}</div>
           <div className={styles.detailExt}>
             {extOf(doc)} · {fmtBytes(doc.byte_size)}
           </div>
@@ -173,7 +194,7 @@ export function Details({
             <a
               className={`kit-btn ${shared.detailBtn}`}
               href={doc.content_uri}
-              download={doc.title ?? 'file'}
+              download={doc.title ?? "file"}
             >
               Download
             </a>
@@ -183,7 +204,7 @@ export function Details({
                 className={`kit-btn ${shared.detailBtn}`}
                 onClick={() => onToggleStar(doc)}
               >
-                {doc.starred ? '★ Starred' : '☆ Star'}
+                {doc.starred ? "★ Starred" : "☆ Star"}
               </button>
             )}
             {trashed ? null : isTextEditable(doc) ? (
@@ -205,10 +226,12 @@ export function Details({
             <dd>{m.name}</dd>
             <dt>Size</dt>
             <dd>{fmtBytes(doc.byte_size)}</dd>
-            <dt>{trashed ? 'Was in' : 'Folder'}</dt>
+            <dt>{trashed ? "Was in" : "Folder"}</dt>
             <dd>{folderName(doc.folder_id)}</dd>
-            <dt>{trashed ? 'Purges' : 'Added'}</dt>
-            <dd>{trashed ? purgeCountdown(doc.purge_at) : fmtFull(doc.created_at)}</dd>
+            <dt>{trashed ? "Purges" : "Added"}</dt>
+            <dd>
+              {trashed ? purgeCountdown(doc.purge_at) : fmtFull(doc.created_at)}
+            </dd>
           </dl>
           <div className={styles.detailLabel}>Activity</div>
           <Activity
@@ -231,7 +254,9 @@ export function Details({
               documentId={doc.document_id}
               readOnly={trashed}
               loadVersions={loadHistory}
-              onRestoreVersion={(_documentId, contentId) => onRestoreVersion(doc, contentId)}
+              onRestoreVersion={(_documentId, contentId) =>
+                onRestoreVersion(doc, contentId)
+              }
             />
           ) : null}
         </div>
@@ -257,7 +282,12 @@ export function Details({
                 type="button"
                 className={`kit-btn ${shared.detailBtn} danger`}
                 onClick={(e) => {
-                  if (!armConfirm(e.currentTarget, { armedLabel: 'Trash — sure?' })) return;
+                  if (
+                    !armConfirm(e.currentTarget, {
+                      armedLabel: "Trash — sure?",
+                    })
+                  )
+                    return;
                   onTrash(doc);
                 }}
               >

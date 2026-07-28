@@ -19,24 +19,25 @@
  *      verb `gmail.send`, target = recipient list — then remember it.
  */
 
-const KIND = 'pull.gmail';
-const LABEL = 'personal';
-const SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
+const KIND = "pull.gmail";
+const LABEL = "personal";
+const SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 /** Bound one fire's staging work; the next fire continues. */
 const MAX_STAGED_PER_RUN = 10;
 
-const looksLikeEmail = (value) => typeof value === 'string' && /^[^@\s]+@[^@\s]+$/.test(value);
+const looksLikeEmail = (value) =>
+  typeof value === "string" && /^[^@\s]+@[^@\s]+$/.test(value);
 
 async function rowsOf(ctx) {
   const input = ctx.input || {};
   if (Array.isArray(input.rows) && input.rows.length > 0) return input.rows;
   const read = await ctx.vault.read({
-    entity: 'social.message',
+    entity: "social.message",
     where: [
-      { column: 'delivery', op: 'eq', value: 'sent' },
-      { column: 'external_id', op: 'is-null' },
+      { column: "delivery", op: "eq", value: "sent" },
+      { column: "external_id", op: "is-null" },
     ],
-    orderBy: { column: 'message_id', dir: 'desc' },
+    orderBy: { column: "message_id", dir: "desc" },
     limit: 25,
   });
   return read.rows || [];
@@ -44,23 +45,24 @@ async function rowsOf(ctx) {
 
 async function recipientsOf(ctx, message) {
   const participants = await ctx.vault.read({
-    entity: 'social.thread_participant',
-    where: [{ column: 'thread_id', op: 'eq', value: message.thread_id }],
+    entity: "social.thread_participant",
+    where: [{ column: "thread_id", op: "eq", value: message.thread_id }],
     limit: 50,
   });
   const emails = [];
   for (const p of participants.rows || []) {
-    if (message.sender_party_id && p.party_id === message.sender_party_id) continue;
+    if (message.sender_party_id && p.party_id === message.sender_party_id)
+      continue;
     if (looksLikeEmail(p.handle)) {
       emails.push(p.handle);
       continue;
     }
     if (!p.party_id) continue;
     const ids = await ctx.vault.read({
-      entity: 'core.party_identifier',
+      entity: "core.party_identifier",
       where: [
-        { column: 'party_id', op: 'eq', value: p.party_id },
-        { column: 'scheme', op: 'eq', value: 'email' },
+        { column: "party_id", op: "eq", value: p.party_id },
+        { column: "scheme", op: "eq", value: "email" },
       ],
       limit: 5,
     });
@@ -74,21 +76,23 @@ async function recipientsOf(ctx, message) {
 async function bodyTextOf(ctx, message) {
   const outcome = await ctx.vault.content({
     contentId: message.body_content_id,
-    variant: 'text',
+    variant: "text",
   });
-  return outcome && outcome.status === 'ok' && outcome.kind === 'text' ? outcome.text : '';
+  return outcome && outcome.status === "ok" && outcome.kind === "text"
+    ? outcome.text
+    : "";
 }
 
 function rawRfc2822(to, subject, body) {
   const lines = [
-    `To: ${to.join(', ')}`,
-    `Subject: ${subject || '(no subject)'}`,
-    'MIME-Version: 1.0',
+    `To: ${to.join(", ")}`,
+    `Subject: ${subject || "(no subject)"}`,
+    "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
-    '',
+    "",
     body,
   ];
-  return Buffer.from(lines.join('\r\n'), 'utf8').toString('base64url');
+  return Buffer.from(lines.join("\r\n"), "utf8").toString("base64url");
 }
 
 export default async ({ ctx, log }) => {
@@ -102,31 +106,33 @@ export default async ({ ctx, log }) => {
       continue;
     }
     const thread = await ctx.vault.read({
-      entity: 'social.thread',
-      where: [{ column: 'thread_id', op: 'eq', value: message.thread_id }],
+      entity: "social.thread",
+      where: [{ column: "thread_id", op: "eq", value: message.thread_id }],
       limit: 1,
     });
     const threadRow = (thread.rows || [])[0];
-    if (!threadRow || threadRow.channel !== 'email') {
+    if (!threadRow || threadRow.channel !== "email") {
       skipped += 1;
       continue;
     }
     const to = await recipientsOf(ctx, message);
     if (to.length === 0) {
       // No resolvable address yet — leave it unstaged so a later fire heals.
-      log.warn(`message ${message.message_id} has no email recipient; skipping`);
+      log.warn(
+        `message ${message.message_id} has no email recipient; skipping`
+      );
       skipped += 1;
       continue;
     }
     const body = await bodyTextOf(ctx, message);
-    const subject = threadRow.subject || '(no subject)';
+    const subject = threadRow.subject || "(no subject)";
     const outcome = await ctx.vault.invoke({
-      command: 'outbox.stage',
+      command: "outbox.stage",
       input: {
         kind: KIND,
         label: LABEL,
-        verb: 'gmail.send',
-        target: to.join(', '),
+        verb: "gmail.send",
+        target: to.join(", "),
         artifact: {
           to,
           subject,
@@ -134,25 +140,25 @@ export default async ({ ctx, log }) => {
           message_id: message.message_id,
         },
         request: {
-          method: 'POST',
+          method: "POST",
           url: SEND_URL,
           headers: {
-            authorization: 'Bearer {{connection:access_token}}',
-            'content-type': 'application/json',
+            authorization: "Bearer {{connection:access_token}}",
+            "content-type": "application/json",
           },
           body: JSON.stringify({ raw: rawRfc2822(to, subject, body) }),
         },
       },
     });
-    if (!outcome || outcome.status !== 'executed') {
+    if (!outcome || outcome.status !== "executed") {
       throw new Error(
-        `outbox.stage refused for ${message.message_id}: ${(outcome && outcome.reason) || 'unknown'}`,
+        `outbox.stage refused for ${message.message_id}: ${(outcome && outcome.reason) || "unknown"}`
       );
     }
     await ctx.state.set(`staged:${message.message_id}`, outcome.output.item_id);
     staged += 1;
     log.info(
-      `staged gmail.send → ${to.join(', ')} (${outcome.output.status}) as ${outcome.output.item_id}`,
+      `staged gmail.send → ${to.join(", ")} (${outcome.output.status}) as ${outcome.output.item_id}`
     );
   }
   return {

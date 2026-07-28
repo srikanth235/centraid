@@ -3,18 +3,18 @@
 // ordered display list. Both desktop (CSS vars via `toCss()`) and mobile
 // (RN StyleSheet via `themes.light`) drink from this same well.
 
-import { airtableDarkTheme, airtableLightTheme } from './airtable';
-import { darkTheme, lightTheme } from './centraid';
-import { githubDarkTheme, githubLightTheme } from './github';
-import { monokaiTheme } from './monokai';
-import { nordTheme } from './nord';
-import { notionDarkTheme, notionLightTheme } from './notion';
-import { solarizedDarkTheme, solarizedLightTheme } from './solarized';
+import { airtableDarkTheme, airtableLightTheme } from "./airtable";
+import { darkTheme, lightTheme } from "./centraid";
+import { githubDarkTheme, githubLightTheme } from "./github";
+import { monokaiTheme } from "./monokai";
+import { nordTheme } from "./nord";
+import { notionDarkTheme, notionLightTheme } from "./notion";
+import { solarizedDarkTheme, solarizedLightTheme } from "./solarized";
 
-export type { Theme } from './shared';
-export { BRAND } from './shared';
+export type { Theme } from "./shared";
+export { BRAND } from "./shared";
 
-export { darkTheme, lightTheme } from './centraid';
+export { darkTheme, lightTheme } from "./centraid";
 
 // Registry: every entry shows up in the desktop theme picker. The first
 // two keys (`light`, `dark`) double as the Centraid defaults — mobile
@@ -22,14 +22,14 @@ export { darkTheme, lightTheme } from './centraid';
 export const themes = {
   light: lightTheme,
   dark: darkTheme,
-  'notion-light': notionLightTheme,
-  'notion-dark': notionDarkTheme,
-  'airtable-light': airtableLightTheme,
-  'airtable-dark': airtableDarkTheme,
-  'github-light': githubLightTheme,
-  'github-dark': githubDarkTheme,
-  'solarized-light': solarizedLightTheme,
-  'solarized-dark': solarizedDarkTheme,
+  "notion-light": notionLightTheme,
+  "notion-dark": notionDarkTheme,
+  "airtable-light": airtableLightTheme,
+  "airtable-dark": airtableDarkTheme,
+  "github-light": githubLightTheme,
+  "github-dark": githubDarkTheme,
+  "solarized-light": solarizedLightTheme,
+  "solarized-dark": solarizedDarkTheme,
   nord: nordTheme,
   monokai: monokaiTheme,
 } as const;
@@ -40,20 +40,20 @@ export type ThemeName = keyof typeof themes;
 export interface ThemePreset {
   name: ThemeName;
   label: string;
-  kind: 'light' | 'dark';
+  kind: "light" | "dark";
 }
 
 export const THEME_PRESETS: ReadonlyArray<ThemePreset> = [
-  { name: 'light', label: 'Centraid Light', kind: 'light' },
-  { name: 'dark', label: 'Centraid Dark', kind: 'dark' },
-  { name: 'notion-light', label: 'Notion Light', kind: 'light' },
-  { name: 'notion-dark', label: 'Notion Dark', kind: 'dark' },
-  { name: 'airtable-light', label: 'Airtable Light', kind: 'light' },
-  { name: 'airtable-dark', label: 'Airtable Dark', kind: 'dark' },
-  { name: 'github-light', label: 'GitHub Light', kind: 'light' },
-  { name: 'github-dark', label: 'GitHub Dark', kind: 'dark' },
-  { name: 'solarized-light', label: 'Solarized Light', kind: 'light' },
-  { name: 'solarized-dark', label: 'Solarized Dark', kind: 'dark' },
-  { name: 'nord', label: 'Nord', kind: 'dark' },
-  { name: 'monokai', label: 'Monokai', kind: 'dark' },
+  { name: "light", label: "Centraid Light", kind: "light" },
+  { name: "dark", label: "Centraid Dark", kind: "dark" },
+  { name: "notion-light", label: "Notion Light", kind: "light" },
+  { name: "notion-dark", label: "Notion Dark", kind: "dark" },
+  { name: "airtable-light", label: "Airtable Light", kind: "light" },
+  { name: "airtable-dark", label: "Airtable Dark", kind: "dark" },
+  { name: "github-light", label: "GitHub Light", kind: "light" },
+  { name: "github-dark", label: "GitHub Dark", kind: "dark" },
+  { name: "solarized-light", label: "Solarized Light", kind: "light" },
+  { name: "solarized-dark", label: "Solarized Dark", kind: "dark" },
+  { name: "nord", label: "Nord", kind: "dark" },
+  { name: "monokai", label: "Monokai", kind: "dark" },
 ];

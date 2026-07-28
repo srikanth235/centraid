@@ -1,10 +1,16 @@
-import type { JSX } from 'react';
-import { tileFinish } from '@centraid/design-tokens';
-import type { IconName } from '@centraid/design-tokens';
-import Icon from '../ui/Icon.js';
-import DevicesCard, { type DevicesCardProps } from './DevicesCard.js';
-import { roleBadge, roleSentence, type MemberScope } from '../shell/memberScope.js';
-import styles from './HouseholdScreen.module.css';
+import { tileFinish } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design-tokens";
+import type { JSX } from "react";
+
+import {
+  roleBadge,
+  roleSentence,
+  type MemberScope,
+} from "../shell/memberScope.js";
+import Icon from "../ui/Icon.js";
+import DevicesCard, { type DevicesCardProps } from "./DevicesCard.js";
+
+import styles from "./HouseholdScreen.module.css";
 
 // Household (issue #599, Decision 14) — one page for the people side of this
 // installation. It exists because the space switcher is gone: a member is no
@@ -41,14 +47,14 @@ export interface HouseholdScreenProps {
   onOpenSpaceSettings?: () => void;
   /** Devices-card wiring. Optional so a host that can't list devices (or a
    *  test) renders the page without the roster rather than crashing. */
-  loadDevices?: DevicesCardProps['loadDevices'];
-  onRevokeDevice?: DevicesCardProps['onRevokeDevice'];
-  onCurrentDeviceRevoked?: DevicesCardProps['onCurrentDeviceRevoked'];
-  loadMembers?: DevicesCardProps['loadMembers'];
-  onRemoveMember?: DevicesCardProps['onRemoveMember'];
-  onCreateDeviceTicket?: DevicesCardProps['onCreateTicket'];
-  onUpdateDeviceCompute?: DevicesCardProps['onUpdateCompute'];
-  loadDeviceWorkStatus?: DevicesCardProps['loadWorkStatus'];
+  loadDevices?: DevicesCardProps["loadDevices"];
+  onRevokeDevice?: DevicesCardProps["onRevokeDevice"];
+  onCurrentDeviceRevoked?: DevicesCardProps["onCurrentDeviceRevoked"];
+  loadMembers?: DevicesCardProps["loadMembers"];
+  onRemoveMember?: DevicesCardProps["onRemoveMember"];
+  onCreateDeviceTicket?: DevicesCardProps["onCreateTicket"];
+  onUpdateDeviceCompute?: DevicesCardProps["onUpdateCompute"];
+  loadDeviceWorkStatus?: DevicesCardProps["loadWorkStatus"];
 }
 
 function SpaceCard({
@@ -62,7 +68,7 @@ function SpaceCard({
   onOpenStorage: () => void;
   onOpenSpaceSettings?: () => void;
 }): JSX.Element {
-  const finish = tileFinish(space.color ?? '#4E68DD', 'gradient');
+  const finish = tileFinish(space.color ?? "#4E68DD", "gradient");
   return (
     <section className={styles.space}>
       <div className={styles.spaceTop}>
@@ -75,7 +81,11 @@ function SpaceCard({
             color: finish.glyphColor,
           }}
         >
-          <Icon name={(space.icon as IconName) || 'Sparkle'} size={16} strokeWidth={1.9} />
+          <Icon
+            name={(space.icon as IconName) || "Sparkle"}
+            size={16}
+            strokeWidth={1.9}
+          />
         </span>
         <span className={styles.spaceText}>
           <span className={styles.spaceName} title={space.label}>
@@ -83,17 +93,28 @@ function SpaceCard({
           </span>
           <span className={styles.spaceRole}>{roleSentence(space.role)}</span>
         </span>
-        <span className={styles.badge} data-default={isDefault ? 'true' : undefined}>
-          {isDefault ? 'Default' : roleBadge(space.role)}
+        <span
+          className={styles.badge}
+          data-default={isDefault ? "true" : undefined}
+        >
+          {isDefault ? "Default" : roleBadge(space.role)}
         </span>
       </div>
       <div className={styles.spaceLinks}>
-        <button type="button" className={styles.link} onClick={onOpenStorage}>
+        <button
+          type="button"
+          className={styles.link}
+          onClick={() => onOpenStorage()}
+        >
           <Icon name="Save" size={12} />
           Storage &amp; backups
         </button>
         {onOpenSpaceSettings ? (
-          <button type="button" className={styles.link} onClick={onOpenSpaceSettings}>
+          <button
+            type="button"
+            className={styles.link}
+            onClick={() => onOpenSpaceSettings()}
+          >
             <Icon name="Settings" size={12} />
             Space settings
           </button>
@@ -103,7 +124,9 @@ function SpaceCard({
   );
 }
 
-export default function HouseholdScreen(props: HouseholdScreenProps): JSX.Element {
+export default function HouseholdScreen(
+  props: HouseholdScreenProps
+): JSX.Element {
   const { spaces, defaultScopeId } = props;
   const spaceCount = spaces.length;
   return (
@@ -116,8 +139,8 @@ export default function HouseholdScreen(props: HouseholdScreenProps): JSX.Elemen
           <h1>Household</h1>
         </div>
         <div className={styles.headMeta}>
-          The people who share this installation, the devices acting for them, and the spaces they
-          can reach.
+          The people who share this installation, the devices acting for them,
+          and the spaces they can reach.
         </div>
       </div>
 
@@ -134,15 +157,23 @@ export default function HouseholdScreen(props: HouseholdScreenProps): JSX.Elemen
               ? { onCurrentDeviceRevoked: props.onCurrentDeviceRevoked }
               : {})}
             {...(props.loadMembers ? { loadMembers: props.loadMembers } : {})}
-            {...(props.onRemoveMember ? { onRemoveMember: props.onRemoveMember } : {})}
-            {...(props.onCreateDeviceTicket ? { onCreateTicket: props.onCreateDeviceTicket } : {})}
+            {...(props.onRemoveMember
+              ? { onRemoveMember: props.onRemoveMember }
+              : {})}
+            {...(props.onCreateDeviceTicket
+              ? { onCreateTicket: props.onCreateDeviceTicket }
+              : {})}
             {...(props.onUpdateDeviceCompute
               ? { onUpdateCompute: props.onUpdateDeviceCompute }
               : {})}
-            {...(props.loadDeviceWorkStatus ? { loadWorkStatus: props.loadDeviceWorkStatus } : {})}
+            {...(props.loadDeviceWorkStatus
+              ? { loadWorkStatus: props.loadDeviceWorkStatus }
+              : {})}
           />
         ) : (
-          <div className={styles.empty}>This gateway doesn’t report a roster.</div>
+          <div className={styles.empty}>
+            This gateway doesn’t report a roster.
+          </div>
         )}
       </div>
 
@@ -151,11 +182,15 @@ export default function HouseholdScreen(props: HouseholdScreenProps): JSX.Elemen
           <h2>Spaces</h2>
           {spaceCount > 0 ? (
             <span className={styles.sectionMeta}>
-              {spaceCount} {spaceCount === 1 ? 'space' : 'spaces'} you can reach
+              {spaceCount} {spaceCount === 1 ? "space" : "spaces"} you can reach
             </span>
           ) : null}
           {props.onNewSpace ? (
-            <button type="button" className={styles.link} onClick={props.onNewSpace}>
+            <button
+              type="button"
+              className={styles.link}
+              onClick={() => props.onNewSpace?.()}
+            >
               <Icon name="Plus" size={12} />
               New space
             </button>
@@ -177,7 +212,9 @@ export default function HouseholdScreen(props: HouseholdScreenProps): JSX.Elemen
           </div>
         ) : (
           <div className={styles.empty}>
-            {props.spacesLoading ? 'Loading spaces…' : 'No spaces are mounted on this gateway.'}
+            {props.spacesLoading
+              ? "Loading spaces…"
+              : "No spaces are mounted on this gateway."}
           </div>
         )}
       </div>

@@ -8,17 +8,23 @@
  * native module must stay in lockstep with protocol.ts.
  */
 
-import http from 'node:http';
-import type { AddressInfo } from 'node:net';
-import type { Connection, Endpoint } from './iroh.js';
-import { iroh } from './iroh.js';
+import http from "node:http";
+import type { AddressInfo } from "node:net";
+
+import {
+  GW_PAIR_ALPN,
+  type GatewayPairRequest,
+  type GatewayPairResponse,
+} from "./gateway-endpoint.js";
+import type { Connection, Endpoint } from "./iroh.js";
+import { iroh } from "./iroh.js";
 import type {
   HeaderMap,
   PairRequest,
   PairResponse,
   TunnelRequestHeader,
   TunnelResponseHeader,
-} from './protocol.js';
+} from "./protocol.js";
 import {
   alpnBytes,
   encodeHeaderFrame,
@@ -27,12 +33,7 @@ import {
   readHeaderFrame,
   sanitizeHeaders,
   TUNNEL_ALPN,
-} from './protocol.js';
-import {
-  GW_PAIR_ALPN,
-  type GatewayPairRequest,
-  type GatewayPairResponse,
-} from './gateway-endpoint.js';
+} from "./protocol.js";
 
 export interface EndpointTicketHint {
   endpointId: string;
@@ -42,7 +43,9 @@ export interface EndpointTicketHint {
 /** Derive the stable public EndpointId without binding or joining the network. */
 export function endpointIdForSecret(secret: Uint8Array): string {
   if (secret.byteLength !== 32) {
-    throw new Error(`iroh endpoint secret must be 32 bytes, got ${secret.byteLength}`);
+    throw new Error(
+      `iroh endpoint secret must be 32 bytes, got ${secret.byteLength}`
+    );
   }
   return iroh.SecretKey.fromBytes(Array.from(secret)).public().toString();
 }
@@ -62,7 +65,10 @@ export function inspectEndpointTicket(ticket: string): EndpointTicketHint {
 }
 
 /** Build a fresh dial ticket from stable identity plus current cached hint. */
-export function endpointTicketFor(endpointId: string, relayHint?: string): string {
+export function endpointTicketFor(
+  endpointId: string,
+  relayHint?: string
+): string {
   const id = iroh.EndpointId.fromString(endpointId);
   const addr = new iroh.EndpointAddr(id, relayHint ?? null, null);
   return iroh.EndpointTicket.fromAddr(addr).toString();
@@ -72,26 +78,32 @@ export interface TunnelClientOptions {
   /** 32-byte device secret; omit to generate a fresh device identity. */
   secretKey?: Uint8Array;
   /** `disabled` keeps tests offline; production uses the n0 relays + discovery. */
-  relays?: 'n0' | 'disabled';
+  relays?: "n0" | "disabled";
 }
 
 export interface TunnelClient {
   /** This device's transport identity (base32 EndpointId). */
   endpointId: string;
-  secretKeyBytes(): Uint8Array;
+  secretKeyBytes: () => Uint8Array;
   /** Pair with a desktop using the QR payload's ticket + one-time code. */
-  pair(ticket: string, request: PairRequest): Promise<PairResponse>;
+  pair: (ticket: string, request: PairRequest) => Promise<PairResponse>;
   /** Redeem a gateway pairing ticket over `centraid/gw-pair/1` (issue #289). */
-  pairGateway(ticket: string, request: GatewayPairRequest): Promise<GatewayPairResponse>;
+  pairGateway: (
+    ticket: string,
+    request: GatewayPairRequest
+  ) => Promise<GatewayPairResponse>;
   /** Dial the desktop's/gateway's tunnel ALPN. */
-  connect(ticket: string): Promise<Connection>;
-  close(): Promise<void>;
+  connect: (ticket: string) => Promise<Connection>;
+  close: () => Promise<void>;
 }
 
-export async function createTunnelClient(options: TunnelClientOptions = {}): Promise<TunnelClient> {
+export async function createTunnelClient(
+  options: TunnelClientOptions = {}
+): Promise<TunnelClient> {
   const builder = iroh.Endpoint.builder();
   builder.applyN0();
-  if (options.relays === 'disabled') builder.relayMode(iroh.RelayMode.disabled());
+  if (options.relays === "disabled")
+    builder.relayMode(iroh.RelayMode.disabled());
   if (options.secretKey) builder.secretKey(Array.from(options.secretKey));
   const endpoint: Endpoint = await builder.bind();
 
@@ -139,7 +151,12 @@ export interface TunnelResponse {
 /** One HTTP request over one bi-stream, response buffered (test helper). */
 export async function tunnelRequest(
   connection: Connection,
-  request: { method: string; target: string; headers?: HeaderMap; body?: Buffer },
+  request: {
+    method: string;
+    target: string;
+    headers?: HeaderMap;
+    body?: Buffer;
+  }
 ): Promise<TunnelResponse> {
   const bi = await connection.openBi();
   const header: TunnelRequestHeader = {
@@ -148,7 +165,8 @@ export async function tunnelRequest(
     headers: sanitizeHeaders(request.headers ?? {}),
   };
   await bi.send.writeAll(encodeHeaderFrame(header));
-  if (request.body && request.body.length > 0) await bi.send.writeAll(Array.from(request.body));
+  if (request.body && request.body.length > 0)
+    await bi.send.writeAll(Array.from(request.body));
   await bi.send.finish();
   const responseHeader = await readHeaderFrame<TunnelResponseHeader>(bi.recv);
   const chunks: Buffer[] = [];
@@ -162,7 +180,7 @@ export async function tunnelRequest(
 
 export interface LocalProxyHandle {
   port: number;
-  close(): Promise<void>;
+  close: () => Promise<void>;
 }
 
 /**
@@ -173,7 +191,7 @@ export interface LocalProxyHandle {
  */
 export async function startLocalProxy(
   getConnection: () => Promise<Connection>,
-  options: { port?: number } = {},
+  options: { port?: number } = {}
 ): Promise<LocalProxyHandle> {
   const server = http.createServer((request, response) => {
     void (async () => {
@@ -181,27 +199,34 @@ export async function startLocalProxy(
       const bi = await connection.openBi();
       await bi.send.writeAll(
         encodeHeaderFrame({
-          method: request.method ?? 'GET',
-          target: request.url ?? '/',
+          method: request.method ?? "GET",
+          target: request.url ?? "/",
           headers: sanitizeHeaders(request.headers as HeaderMap),
-        } satisfies TunnelRequestHeader),
+        } satisfies TunnelRequestHeader)
       );
       for await (const chunk of request) {
         await bi.send.writeAll(Array.from(chunk as Buffer));
       }
       await bi.send.finish();
-      const responseHeader = await readHeaderFrame<TunnelResponseHeader>(bi.recv);
+      const responseHeader = await readHeaderFrame<TunnelResponseHeader>(
+        bi.recv
+      );
       response.writeHead(responseHeader.status, responseHeader.headers);
       await readBody(bi.recv, (c) => {
         response.write(c);
       });
       response.end();
     })().catch((err: unknown) => {
-      if (!response.headersSent) response.writeHead(502, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ error: 'tunnel_error', message: String(err) }));
+      if (!response.headersSent)
+        response.writeHead(502, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({ error: "tunnel_error", message: String(err) })
+      );
     });
   });
-  await new Promise<void>((resolve) => server.listen(options.port ?? 0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) =>
+    server.listen(options.port ?? 0, "127.0.0.1", resolve)
+  );
   const port = (server.address() as AddressInfo).port;
   return {
     port,

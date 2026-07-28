@@ -7,11 +7,13 @@
  */
 
 function nativeBuildNumber(version) {
-  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(version).trim());
+  const m = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)/u.exec(
+    String(version).trim()
+  );
   if (!m) throw new Error(`unparseable semver: ${version}`);
-  const major = Number(m[1]);
-  const minor = Number(m[2]);
-  const patch = Number(m[3]);
+  const major = Number(m.groups?.major);
+  const minor = Number(m.groups?.minor);
+  const patch = Number(m.groups?.patch);
   return major * 1_000_000 + minor * 1_000 + patch;
 }
 

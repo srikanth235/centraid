@@ -55,14 +55,14 @@
    the default look above; `flat` strips the border down to a plain elev
    tile; `elevated` drops the border and adds depth. The `data-cards`
    attribute rides an ancestor (set by the appearance controller). */
-:global([data-cards='flat']) .card {
+:global([data-cards="flat"]) .card {
   background: var(--bg-elev);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   border-color: transparent;
   box-shadow: none;
 }
-:global([data-cards='elevated']) .card {
+:global([data-cards="elevated"]) .card {
   border-color: transparent;
   box-shadow: var(--shadow-md);
 }
@@ -118,13 +118,13 @@
   border-radius: 999px;
   box-shadow: 0 0 0 2.5px var(--bg);
 }
-.iconDot[data-tone='new'] {
+.iconDot[data-tone="new"] {
   background: var(--accent-light);
 }
-.iconDot[data-tone='draft'] {
+.iconDot[data-tone="draft"] {
   background: var(--icon-amber);
 }
-.iconDot[data-tone='template'] {
+.iconDot[data-tone="template"] {
   background: var(--success);
 }
 /* Name + an optional inline status pill riding to its right. The name
@@ -182,7 +182,7 @@
 .footTime svg {
   display: block;
 }
-.footTime[data-ok='true'] svg {
+.footTime[data-ok="true"] svg {
   color: var(--success);
 }
 
@@ -215,7 +215,7 @@
 }
 .wrap:hover .actions,
 .wrap:has(:focus-visible) .actions,
-.actions:has(.act[data-open='true']) {
+.actions:has(.act[data-open="true"]) {
   opacity: 1;
   transform: none;
 }
@@ -244,7 +244,7 @@
 .starFlag svg path {
   fill: currentColor;
 }
-.wrap[data-starred='true'] .starFlag {
+.wrap[data-starred="true"] .starFlag {
   opacity: 1;
 }
 .wrap:hover .starFlag,
@@ -275,7 +275,7 @@
 .act:active {
   background: color-mix(in oklab, var(--ink) 18%, transparent);
 }
-.act[data-open='true'] {
+.act[data-open="true"] {
   background: color-mix(in oklab, var(--ink) 12%, transparent);
   color: var(--ink);
 }
@@ -289,10 +289,10 @@
    glyph plate · name/blurb (grows) · meta/foot pinned right. The hover
    toolbar re-pins to the vertically-centred right edge; the card reserves
    right padding so the foot never sits under it. */
-:global([data-layout='rows']) .wrap {
+:global([data-layout="rows"]) .wrap {
   height: auto;
 }
-:global([data-layout='rows']) .small {
+:global([data-layout="rows"]) .small {
   min-height: 0;
   flex-direction: row;
   align-items: center;
@@ -300,7 +300,7 @@
   padding: 10px 108px 10px 14px;
 }
 /* Back to a horizontal head for the row strip — icon beside the title. */
-:global([data-layout='rows']) .head {
+:global([data-layout="rows"]) .head {
   flex: 1 1 auto;
   min-width: 0;
   flex-direction: row;
@@ -309,20 +309,20 @@
 }
 /* Slimmer glyph plate in the strip — the row's height is set by the text,
    not a poster icon. */
-:global([data-layout='rows']) .small .icon {
+:global([data-layout="rows"]) .small .icon {
   width: 38px;
   height: 38px;
   border-radius: 10px;
 }
-:global([data-layout='rows']) .small .icon svg {
+:global([data-layout="rows"]) .small .icon svg {
   width: 19px;
   height: 19px;
 }
-:global([data-layout='rows']) .desc {
+:global([data-layout="rows"]) .desc {
   -webkit-line-clamp: 1;
 }
 /* Foot flattens into a fixed-width tail riding the right edge. */
-:global([data-layout='rows']) .foot {
+:global([data-layout="rows"]) .foot {
   flex: 0 0 auto;
   order: 2;
   margin-top: 0;
@@ -333,24 +333,24 @@
 }
 /* Timestamp right-aligns in a fixed slot wide enough for the longest stamp
    ("Weekdays at 11:30 PM") so the times form a clean column. */
-:global([data-layout='rows']) .footTime {
+:global([data-layout="rows"]) .footTime {
   min-width: 132px;
   justify-content: flex-end;
   text-align: right;
 }
 /* Hover toolbar + star flag re-pin to the vertically-centred right edge. */
-:global([data-layout='rows']) .actions {
+:global([data-layout="rows"]) .actions {
   top: 50%;
   right: 14px;
   bottom: auto;
   transform: translateY(-50%) translateY(3px);
 }
-:global([data-layout='rows']) .wrap:hover .actions,
-:global([data-layout='rows']) .wrap:has(:focus-visible) .actions,
-:global([data-layout='rows']) .actions:has(.act[data-open='true']) {
+:global([data-layout="rows"]) .wrap:hover .actions,
+:global([data-layout="rows"]) .wrap:has(:focus-visible) .actions,
+:global([data-layout="rows"]) .actions:has(.act[data-open="true"]) {
   transform: translateY(-50%);
 }
-:global([data-layout='rows']) .starFlag {
+:global([data-layout="rows"]) .starFlag {
   top: 50%;
   right: 17px;
   transform: translateY(-50%);

@@ -21,11 +21,19 @@
  * forwarding — never vaults or tickets.
  */
 
-import http from 'node:http';
-import { once } from 'node:events';
-import type { Accepting, Connection, Endpoint, RecvStream, SendStream } from './iroh.js';
-import { iroh } from './iroh.js';
-import type { TunnelRequestHeader, TunnelResponseHeader } from './protocol.js';
+import { once } from "node:events";
+import http from "node:http";
+
+import type { TunnelUpstream } from "./desktop-tunnel.js";
+import type {
+  Accepting,
+  Connection,
+  Endpoint,
+  RecvStream,
+  SendStream,
+} from "./iroh.js";
+import { iroh } from "./iroh.js";
+import type { TunnelRequestHeader, TunnelResponseHeader } from "./protocol.js";
 import {
   alpnBytes,
   CLOSE_UNAUTHORIZED,
@@ -37,11 +45,10 @@ import {
   TUNNEL_AUTH_MODE_HEADER,
   TUNNEL_AUTH_WEB_SESSION,
   TUNNEL_ALPN,
-} from './protocol.js';
-import type { TunnelUpstream } from './desktop-tunnel.js';
+} from "./protocol.js";
 
-export const GW_PAIR_ALPN = 'centraid/gw-pair/1';
-const DATA_PLANE_RELAY_HEADER = 'x-centraid-data-plane-relay';
+export const GW_PAIR_ALPN = "centraid/gw-pair/1";
+const DATA_PLANE_RELAY_HEADER = "x-centraid-data-plane-relay";
 
 /** Ticket redemption over `centraid/gw-pair/1` — one frame each way. */
 export interface GatewayPairRequest {
@@ -91,7 +98,10 @@ export interface GatewayEndpointOptions {
   /** 32-byte endpoint secret; omit to generate a fresh identity. */
   secretKey?: Uint8Array;
   /** Resolved per request so the endpoint follows gateway restarts. */
-  upstream: () => TunnelUpstream | undefined | Promise<TunnelUpstream | undefined>;
+  upstream: () =>
+    | TunnelUpstream
+    | undefined
+    | Promise<TunnelUpstream | undefined>;
   /**
    * Admit a tunnel connection from this device key? Consulted per
    * connection AND per stream, so a revocation lands on live connections.
@@ -100,7 +110,7 @@ export interface GatewayEndpointOptions {
   /** Redeem a pairing ticket presented by `endpointId`. */
   pair: (
     request: GatewayPairRequest,
-    endpointId: string,
+    endpointId: string
   ) => GatewayPairResponse | Promise<GatewayPairResponse>;
   /**
    * Headers injected into every forwarded request (the calling device's
@@ -109,7 +119,7 @@ export interface GatewayEndpointOptions {
    */
   requestHeaders?: (endpointId: string) => Record<string, string>;
   /** `disabled` keeps tests offline; production uses the n0 relays + discovery. */
-  relays?: 'n0' | 'disabled';
+  relays?: "n0" | "disabled";
   /** Authenticated loopback metadata route used by the Rust-owned relay. */
   nativeControl?: { secret: string };
 }
@@ -118,20 +128,20 @@ export interface GatewayEndpointHandle {
   /** The gateway's stable transport identity (base32 EndpointId). */
   endpointId: string;
   /** Current dial ticket (recomputed — the addr can change with the network). */
-  ticket(): string;
+  ticket: () => string;
   /** Immediately close every live transport owned by a revoked device key. */
-  revokeEndpoint(endpointId: string): Promise<void>;
-  close(): Promise<void>;
+  revokeEndpoint: (endpointId: string) => Promise<void>;
+  close: () => Promise<void>;
 }
 
 export async function startGatewayEndpoint(
-  options: GatewayEndpointOptions,
+  options: GatewayEndpointOptions
 ): Promise<GatewayEndpointHandle> {
   if (options.nativeControl && options.secretKey) {
     try {
       const upstream = await options.upstream();
-      if (!upstream) throw new Error('gateway upstream is unavailable');
-      const { startNativeGatewayRelay } = await import('./native-relay.js');
+      if (!upstream) throw new Error("gateway upstream is unavailable");
+      const { startNativeGatewayRelay } = await import("./native-relay.js");
       return await startNativeGatewayRelay({
         secretKey: options.secretKey,
         upstream,
@@ -147,7 +157,8 @@ export async function startGatewayEndpoint(
   }
   const builder = iroh.Endpoint.builder();
   builder.applyN0();
-  if (options.relays === 'disabled') builder.relayMode(iroh.RelayMode.disabled());
+  if (options.relays === "disabled")
+    builder.relayMode(iroh.RelayMode.disabled());
   if (options.secretKey) builder.secretKey(Array.from(options.secretKey));
   builder.alpns([alpnBytes(TUNNEL_ALPN), alpnBytes(GW_PAIR_ALPN)]);
   const endpoint = await builder.bind();
@@ -163,18 +174,19 @@ class GatewayEndpoint {
 
   constructor(
     private readonly endpoint: Endpoint,
-    private readonly options: GatewayEndpointOptions,
+    private readonly options: GatewayEndpointOptions
   ) {}
 
   handle(): GatewayEndpointHandle {
     return {
       endpointId: this.endpoint.id().toString(),
-      ticket: () => iroh.EndpointTicket.fromAddr(this.endpoint.addr()).toString(),
+      ticket: () =>
+        iroh.EndpointTicket.fromAddr(this.endpoint.addr()).toString(),
       revokeEndpoint: async (endpointId) => {
         const connections = this.liveConnections.get(endpointId);
         this.liveConnections.delete(endpointId);
         for (const connection of connections ?? []) {
-          connection.close(CLOSE_UNAUTHORIZED, alpnBytes('revoked'));
+          connection.close(CLOSE_UNAUTHORIZED, alpnBytes("revoked"));
         }
       },
       close: async () => {
@@ -185,28 +197,28 @@ class GatewayEndpoint {
   }
 
   runAcceptLoop(): void {
-    void (async () => {
-      for (;;) {
-        let incoming;
-        try {
-          incoming = await this.endpoint.acceptNext();
-        } catch {
-          if (this.closed || this.endpoint.isClosed()) return;
-          continue;
-        }
-        if (!incoming) return;
-        void incoming
-          .accept()
-          .then((accepting) => this.routeConnection(accepting))
-          .catch(() => {
-            // Handshake failures are the remote's problem; keep accepting.
-          });
+    const acceptNext = async (): Promise<void> => {
+      let incoming;
+      try {
+        incoming = await this.endpoint.acceptNext();
+      } catch {
+        if (this.closed || this.endpoint.isClosed()) return;
+        return acceptNext();
       }
-    })();
+      if (!incoming) return;
+      void incoming
+        .accept()
+        .then((accepting) => this.routeConnection(accepting))
+        .catch(() => {
+          // Handshake failures are the remote's problem; keep accepting.
+        });
+      return acceptNext();
+    };
+    void acceptNext();
   }
 
   private async routeConnection(accepting: Accepting): Promise<void> {
-    const alpn = Buffer.from(await accepting.alpn()).toString('utf8');
+    const alpn = Buffer.from(await accepting.alpn()).toString("utf8");
     const connection = await accepting.connect();
     if (alpn === GW_PAIR_ALPN) {
       await this.handlePairConnection(connection);
@@ -221,9 +233,10 @@ class GatewayEndpoint {
       const request = await readHeaderFrame<GatewayPairRequest>(bi.recv);
       const endpointId = connection.remoteId().toString();
       const response =
-        typeof request?.ticketId === 'string' && typeof request?.secret === 'string'
+        typeof request?.ticketId === "string" &&
+        typeof request?.secret === "string"
           ? await this.options.pair(request, endpointId)
-          : ({ ok: false, error: 'bad_request' } satisfies GatewayPairResponse);
+          : ({ ok: false, error: "bad_request" } satisfies GatewayPairResponse);
       await bi.send.writeAll(encodeHeaderFrame(response));
       await bi.send.finish();
     } catch {
@@ -236,25 +249,27 @@ class GatewayEndpoint {
   private async handleTunnelConnection(connection: Connection): Promise<void> {
     const endpointId = connection.remoteId().toString();
     if (!this.options.authorize(endpointId)) {
-      connection.close(CLOSE_UNAUTHORIZED, alpnBytes('unauthorized'));
+      connection.close(CLOSE_UNAUTHORIZED, alpnBytes("unauthorized"));
       return;
     }
     const live = this.liveConnections.get(endpointId) ?? new Set<Connection>();
     live.add(connection);
     this.liveConnections.set(endpointId, live);
     try {
-      for (;;) {
+      const serveNextStream = async (): Promise<void> => {
         const bi = await connection.acceptBi();
         // Revocation guard: enrollment is consulted per stream, so a
         // revoked device loses access even on a connection that predates it.
         if (!this.options.authorize(endpointId)) {
-          connection.close(CLOSE_UNAUTHORIZED, alpnBytes('revoked'));
+          connection.close(CLOSE_UNAUTHORIZED, alpnBytes("revoked"));
           return;
         }
         void this.serveStream(endpointId, bi.send, bi.recv).catch(() => {
           // Per-request failures already answered with an error frame when possible.
         });
-      }
+        return serveNextStream();
+      };
+      await serveNextStream();
     } catch {
       // Connection closed (by peer, revocation, or shutdown).
     } finally {
@@ -265,21 +280,27 @@ class GatewayEndpoint {
     }
   }
 
-  private async serveStream(endpointId: string, send: SendStream, recv: RecvStream): Promise<void> {
+  private async serveStream(
+    endpointId: string,
+    send: SendStream,
+    recv: RecvStream
+  ): Promise<void> {
     let header: TunnelRequestHeader;
     try {
       header = await readHeaderFrame<TunnelRequestHeader>(recv);
     } catch {
-      await this.respondError(send, 400, 'bad_request');
+      await this.respondError(send, 400, "bad_request");
       return;
     }
-    const upstream = await Promise.resolve(this.options.upstream()).catch(() => undefined);
+    const upstream = await Promise.resolve(this.options.upstream()).catch(
+      () => undefined
+    );
     if (!upstream) {
-      await this.respondError(send, 503, 'gateway_unavailable');
+      await this.respondError(send, 503, "gateway_unavailable");
       return;
     }
-    if (typeof header.target !== 'string' || !header.target.startsWith('/')) {
-      await this.respondError(send, 400, 'bad_target');
+    if (typeof header.target !== "string" || !header.target.startsWith("/")) {
+      await this.respondError(send, 400, "bad_target");
       return;
     }
     const base = new URL(upstream.baseUrl);
@@ -290,7 +311,8 @@ class GatewayEndpoint {
     // the connection's cryptographic identity — the device key is what the
     // QUIC handshake proved, never what the client claims.
     const injected = this.options.requestHeaders?.(endpointId) ?? {};
-    for (const name of Object.keys(injected)) delete headers[name.toLowerCase()];
+    for (const name of Object.keys(injected))
+      delete headers[name.toLowerCase()];
     Object.assign(headers, injected);
     // A client cannot claim it arrived through the trusted byte relay. Strip
     // its copy and stamp the control secret only on this relay-owned hop.
@@ -318,7 +340,9 @@ class GatewayEndpoint {
           void (async () => {
             const responseHeader: TunnelResponseHeader = {
               status: response.statusCode ?? 502,
-              headers: sanitizeHeaders(response.headers as Record<string, string | string[]>),
+              headers: sanitizeHeaders(
+                response.headers as Record<string, string | string[]>
+              ),
             };
             await send.writeAll(encodeHeaderFrame(responseHeader));
             // Sequential for-await keeps chunk ordering; SSE stays live
@@ -333,21 +357,21 @@ class GatewayEndpoint {
               await send.reset(1n).catch(() => undefined);
             })
             .finally(resolve);
-        },
+        }
       );
-      request.on('error', () => {
+      request.on("error", () => {
         void this.respondError(
           send,
           bodyFailed ? 400 : 502,
-          bodyFailed ? 'bad_request' : 'upstream_unreachable',
+          bodyFailed ? "bad_request" : "upstream_unreachable"
         ).finally(resolve);
       });
       void readBody(
         recv,
         async (chunk) => {
-          if (!request.write(chunk)) await once(request, 'drain');
+          if (!request.write(chunk)) await once(request, "drain");
         },
-        MAX_REQUEST_BODY_BYTES,
+        MAX_REQUEST_BODY_BYTES
       )
         .then(() => request.end())
         .catch(() => {
@@ -357,14 +381,21 @@ class GatewayEndpoint {
     });
   }
 
-  private async respondError(send: SendStream, status: number, error: string): Promise<void> {
+  private async respondError(
+    send: SendStream,
+    status: number,
+    error: string
+  ): Promise<void> {
     try {
-      const body = Buffer.from(JSON.stringify({ error }), 'utf8');
+      const body = Buffer.from(JSON.stringify({ error }), "utf8");
       await send.writeAll(
         encodeHeaderFrame({
           status,
-          headers: { 'content-type': 'application/json', 'content-length': String(body.length) },
-        } satisfies TunnelResponseHeader),
+          headers: {
+            "content-type": "application/json",
+            "content-length": String(body.length),
+          },
+        } satisfies TunnelResponseHeader)
       );
       await send.writeAll(bytesToArray(body));
       await send.finish();

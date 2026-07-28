@@ -1,12 +1,12 @@
-import { relativeTime } from '../../../app-format.js';
+import { relativeTime } from "../../../app-format.js";
 import type {
   OutboxGrant,
   OutboxItem,
   OutboxNeedsAuth,
   OutboxScopeRequest,
   ReviewEntry,
-} from '../../../gateway-client-outbox.js';
-import type { VaultParkedEntry } from '../../../gateway-client-vault.js';
+} from "../../../gateway-client-outbox.js";
+import type { VaultParkedEntry } from "../../../gateway-client-vault.js";
 import type {
   ApprovalsGrantRowDTO,
   ApprovalsNeedsAuthRowDTO,
@@ -14,18 +14,18 @@ import type {
   ApprovalsParkedRowDTO,
   ApprovalsScopeRequestRowDTO,
   ApprovalsActivityRowDTO,
-} from '../../screens/ApprovalsScreen.js';
+} from "../../screens/ApprovalsScreen.js";
 
 /** Titlecase a snake/dot-separated key for the detail panel's field labels. */
 function labelFor(key: string): string {
-  return key.replace(/[_.]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return key.replace(/[_.]/gu, " ").replace(/\b\w/gu, (c) => c.toUpperCase());
 }
 
 /** Render one artifact value readably — arrays join, objects pretty-print. */
 function fieldValue(value: unknown): string {
-  if (value === null || value === undefined) return '—';
-  if (Array.isArray(value)) return value.map(String).join(', ');
-  if (typeof value === 'object') return JSON.stringify(value, null, 2);
+  if (value === null || value === undefined) return "—";
+  if (Array.isArray(value)) return value.map(String).join(", ");
+  if (typeof value === "object") return JSON.stringify(value, null, 2);
   return String(value);
 }
 
@@ -34,18 +34,22 @@ function fieldValue(value: unknown): string {
  * template's real shape is an array; its own test fixture uses a bare
  * string) — join defensively rather than assume one or the other.
  */
-function recipientFrom(artifact: Record<string, unknown>, fallbackTarget: string): string {
+function recipientFrom(
+  artifact: Record<string, unknown>,
+  fallbackTarget: string
+): string {
   const to = artifact.to;
-  if (typeof to === 'string' && to.length > 0) return to;
-  if (Array.isArray(to) && to.length > 0) return to.map(String).join(', ');
+  if (typeof to === "string" && to.length > 0) return to;
+  if (Array.isArray(to) && to.length > 0) return to.map(String).join(", ");
   return fallbackTarget;
 }
 
 /** Map one wire `OutboxItem` to the screen's row DTO. */
 export function buildOutboxRow(item: OutboxItem): ApprovalsOutboxRowDTO {
   const artifact = item.artifact ?? {};
-  const subject = typeof artifact.subject === 'string' ? artifact.subject : null;
-  const body = typeof artifact.body === 'string' ? artifact.body : null;
+  const subject =
+    typeof artifact.subject === "string" ? artifact.subject : null;
+  const body = typeof artifact.body === "string" ? artifact.body : null;
   const fields = Object.entries(artifact).map(([key, value]) => ({
     key,
     label: labelFor(key),
@@ -59,7 +63,11 @@ export function buildOutboxRow(item: OutboxItem): ApprovalsOutboxRowDTO {
     target: item.target,
     recipient: recipientFrom(artifact, item.target),
     subject,
-    bodyPreview: body ? (body.length > 160 ? `${body.slice(0, 160)}…` : body) : null,
+    bodyPreview: body
+      ? body.length > 160
+        ? `${body.slice(0, 160)}…`
+        : body
+      : null,
     fields,
     stagedAgo: relativeTime(item.stagedAt),
     note: item.note,
@@ -70,8 +78,15 @@ export function buildOutboxRow(item: OutboxItem): ApprovalsOutboxRowDTO {
   };
 }
 
-export function buildNeedsAuthRow(row: OutboxNeedsAuth): ApprovalsNeedsAuthRowDTO {
-  return { connectionId: row.connectionId, label: row.label, kind: row.kind, note: row.note };
+export function buildNeedsAuthRow(
+  row: OutboxNeedsAuth
+): ApprovalsNeedsAuthRowDTO {
+  return {
+    connectionId: row.connectionId,
+    label: row.label,
+    kind: row.kind,
+    note: row.note,
+  };
 }
 
 export function buildParkedRow(row: VaultParkedEntry): ApprovalsParkedRowDTO {
@@ -85,23 +100,25 @@ export function buildParkedRow(row: VaultParkedEntry): ApprovalsParkedRowDTO {
   };
 }
 
-function scopeSummary(scopes: OutboxScopeRequest['scopes']): string {
+function scopeSummary(scopes: OutboxScopeRequest["scopes"]): string {
   return scopes
     .map((s) => {
       const extent = [
-        s.rowFilter ? `${s.rowFilter.length} row rule` : '',
-        s.fieldMask ? `${s.fieldMask.length} fields` : '',
+        s.rowFilter ? `${s.rowFilter.length} row rule` : "",
+        s.fieldMask ? `${s.fieldMask.length} fields` : "",
       ]
         .filter(Boolean)
-        .join(', ');
-      return `${s.schema}${s.table ? `.${s.table}` : ''} (${s.verbs}${
-        extent ? ` · ${extent}` : ''
+        .join(", ");
+      return `${s.schema}${s.table ? `.${s.table}` : ""} (${s.verbs}${
+        extent ? ` · ${extent}` : ""
       })`;
     })
-    .join(', ');
+    .join(", ");
 }
 
-export function buildScopeRequestRow(row: OutboxScopeRequest): ApprovalsScopeRequestRowDTO {
+export function buildScopeRequestRow(
+  row: OutboxScopeRequest
+): ApprovalsScopeRequestRowDTO {
   return {
     requestId: row.requestId,
     appId: row.appId,
@@ -131,19 +148,23 @@ export function humanizeActivityLabel(
   action: string,
   decision: string,
   objectType: string,
-  context: ReviewEntry['context'],
+  context: ReviewEntry["context"]
 ): string {
-  const isLockerReveal = action === 'reveal' && objectType === 'locker.item';
-  const fillContext = context?.kind === 'fill' ? context : undefined;
+  const isLockerReveal = action === "reveal" && objectType === "locker.item";
+  const fillContext = context?.kind === "fill" ? context : undefined;
   const isFill = isLockerReveal && fillContext !== undefined;
   if (isFill) {
-    return decision === 'allow' ? 'Locker filled a login' : 'Locker fill denied';
+    return decision === "allow"
+      ? "Locker filled a login"
+      : "Locker fill denied";
   }
   if (isLockerReveal) {
-    return decision === 'allow' ? 'Locker login revealed' : 'Locker reveal denied';
+    return decision === "allow"
+      ? "Locker login revealed"
+      : "Locker reveal denied";
   }
-  const bare = action.startsWith('act ') ? action.slice(4) : action;
-  const spaced = bare.replace(/[._]+/g, ' ').trim();
+  const bare = action.startsWith("act ") ? action.slice(4) : action;
+  const spaced = bare.replace(/[._]+/gu, " ").trim();
   if (spaced.length === 0) return action;
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
@@ -161,11 +182,11 @@ export function truncateObjectId(id: string, max = 12): string {
 export function formatActivityDetail(
   objectType: string,
   objectId: string | null,
-  context: ReviewEntry['context'],
-  action: string,
+  context: ReviewEntry["context"],
+  action: string
 ): string {
-  const isLockerReveal = action === 'reveal' && objectType === 'locker.item';
-  const fillContext = context?.kind === 'fill' ? context : undefined;
+  const isLockerReveal = action === "reveal" && objectType === "locker.item";
+  const fillContext = context?.kind === "fill" ? context : undefined;
   if (isLockerReveal && fillContext) return fillContext.origin;
   if (objectId) return `${objectType} · ${truncateObjectId(objectId)}`;
   return objectType;
@@ -173,13 +194,23 @@ export function formatActivityDetail(
 
 /** Map one wire `ReviewEntry` to the screen's activity row DTO (issue #552). */
 export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
-  const label = humanizeActivityLabel(row.action, row.decision, row.objectType, row.context);
-  const detail = formatActivityDetail(row.objectType, row.objectId, row.context, row.action);
-  const attribution: ApprovalsActivityRowDTO['attribution'] =
+  const label = humanizeActivityLabel(
+    row.action,
+    row.decision,
+    row.objectType,
+    row.context
+  );
+  const detail = formatActivityDetail(
+    row.objectType,
+    row.objectId,
+    row.context,
+    row.action
+  );
+  const attribution: ApprovalsActivityRowDTO["attribution"] =
     row.grantId != null && row.grantId.length > 0
-      ? 'grant'
-      : row.decision === 'allow'
-        ? 'owner'
+      ? "grant"
+      : row.decision === "allow"
+        ? "owner"
         : null;
   return {
     receiptId: row.receiptId,
@@ -206,7 +237,7 @@ export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
  * repeats do not collapse. Pure adjacency — no time window.
  */
 export function collapseAdjacentActivity(
-  rows: readonly ApprovalsActivityRowDTO[],
+  rows: readonly ApprovalsActivityRowDTO[]
 ): ApprovalsActivityRowDTO[] {
   if (rows.length === 0) return [];
   const out: ApprovalsActivityRowDTO[] = [];

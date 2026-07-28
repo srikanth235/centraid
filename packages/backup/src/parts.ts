@@ -20,11 +20,11 @@ export const PART_BYTES = 16 * 1024 * 1024;
  * Re-frame a byte stream into exact `partBytes` slices (last part short).
  * An empty source yields no parts — a zero-byte file is an entry with an
  * empty part list, matching /1's chunker behavior.
- * @yields Owned `partBytes`-sized slices (final slice short), in order.
+ * @yields {Uint8Array} Owned `partBytes`-sized slices (final slice short), in order.
  */
 export async function* partStream(
   source: AsyncIterable<Uint8Array>,
-  partBytes: number = PART_BYTES,
+  partBytes: number = PART_BYTES
 ): AsyncIterable<Uint8Array> {
   if (!Number.isInteger(partBytes) || partBytes <= 0) {
     throw new Error(`partStream: invalid part size ${partBytes}`);
@@ -70,7 +70,7 @@ function concat(pieces: Uint8Array[], total: number): Uint8Array {
 /** Split an in-memory buffer (small inputs / tests). */
 export async function partBuffer(
   data: Uint8Array,
-  partBytes: number = PART_BYTES,
+  partBytes: number = PART_BYTES
 ): Promise<Uint8Array[]> {
   const out: Uint8Array[] = [];
   for await (const part of partStream(single(data), partBytes)) out.push(part);

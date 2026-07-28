@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
 type ReplicaDoorbellListener = () => void;
 
@@ -17,7 +17,7 @@ export function notifyReplicaCommit(db: DatabaseSync): void {
 
 export function subscribeReplicaCommits(
   db: DatabaseSync,
-  listener: ReplicaDoorbellListener,
+  listener: ReplicaDoorbellListener
 ): () => void {
   let set = listeners.get(db);
   if (!set) {

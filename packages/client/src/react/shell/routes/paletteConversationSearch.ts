@@ -21,15 +21,15 @@ export interface PaletteConversationHit {
 
 export interface PaletteConversationSearch {
   /** Cached hits for the trimmed query (`[]` until a fetch settles). */
-  results(query: string): PaletteConversationHit[];
+  results: (query: string) => PaletteConversationHit[];
   /** Schedule a debounced FTS fetch for `query` unless already cached/in-flight. */
-  ensure(query: string): void;
+  ensure: (query: string) => void;
   /** Drop the cache + any pending fetch (call when the palette closes). */
-  reset(): void;
+  reset: () => void;
   /** Rebind the "hits landed" callback. The palette's `refresh()` only exists
    *  once the palette has mounted, which is after the source is created — the
    *  shell hands it over here instead of the source reaching for it. */
-  setOnResults(fn: (() => void) | null): void;
+  setOnResults: (fn: (() => void) | null) => void;
 }
 
 export interface PaletteConversationSearchOptions {
@@ -42,7 +42,7 @@ export interface PaletteConversationSearchOptions {
 const MIN_QUERY_CHARS = 2;
 
 export function createPaletteConversationSearch(
-  opts: PaletteConversationSearchOptions,
+  opts: PaletteConversationSearchOptions
 ): PaletteConversationSearch {
   const cache = new Map<string, PaletteConversationHit[]>();
   const inFlight = new Set<string>();

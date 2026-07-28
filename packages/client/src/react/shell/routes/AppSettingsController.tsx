@@ -1,16 +1,16 @@
-import { type JSX, useEffect, useRef } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { formatDuration, triggersSummary } from '../../../app-format.js';
+import { type JSX, useEffect, useRef } from "react";
+import { createRoot, type Root } from "react-dom/client";
+
+import { formatDuration, triggersSummary } from "../../../app-format.js";
 import {
   listAutomations,
   runAutomationNow,
   setAutomationEnabled,
-} from '../../../gateway-client.js';
-import type { AppSettingsSnapshot } from '../../screen-contracts.js';
-import AppSettingsPanel from '../../screens/AppSettingsPanel.js';
-import VaultScreen from '../../screens/VaultScreen.js';
-import { iconSvg } from '../iconSvg.js';
-import RunsPane from './RunsPane.js';
+} from "../../../gateway-client.js";
+import type { AppSettingsSnapshot } from "../../screen-contracts.js";
+import AppSettingsPanel from "../../screens/AppSettingsPanel.js";
+import VaultScreen from "../../screens/VaultScreen.js";
+import { iconSvg } from "../iconSvg.js";
 import {
   type AppKnob,
   buildVaultProps,
@@ -23,12 +23,24 @@ import {
   reloadAppFrame,
   waitForAutomationRun,
   writeAppKnobValue,
-} from './appSettingsData.js';
+} from "./appSettingsData.js";
+import RunsPane from "./RunsPane.js";
 
 type RunState =
-  | { kind: 'idle' }
-  | { kind: 'running' }
-  | { kind: 'done'; ok: boolean; durationMs: number; error?: string };
+  | { kind: "idle" }
+  | { kind: "running" }
+  | { kind: "done"; ok: boolean; durationMs: number; error?: string };
+
+function mountRunsPane(
+  host: HTMLElement,
+  roots: Map<HTMLElement, Root>,
+  automationId: string
+): void {
+  roots.get(host)?.unmount();
+  const root = createRoot(host);
+  root.render(<RunsPane automationId={automationId} />);
+  roots.set(host, root);
+}
 
 export interface AppSettingsControllerProps {
   app: AppMetaResolvedType;
@@ -84,15 +96,19 @@ export default function AppSettingsController({
   // React roots mounted into the panel's host divs, disposed on unmount.
   const subRoots = useRef(new Map<HTMLElement, Root>());
 
-  const finish = window.CentraidTokens.tileFinish(app.color, 'gradient');
-  const headerIcon = iconSvg(app.iconKey || 'Sparkle', 15, 1.85);
+  const finish = window.CentraidTokens.tileFinish(app.color, "gradient");
+  const headerIcon = iconSvg(app.iconKey || "Sparkle", 15, 1.85);
 
-  const runDto = (ref: string): AppSettingsSnapshot['orders'][number]['run'] => {
+  const runDto = (
+    ref: string
+  ): AppSettingsSnapshot["orders"][number]["run"] => {
     const s = runState.current.get(ref);
-    if (!s || s.kind === 'idle') return { kind: 'idle' };
-    if (s.kind === 'running') return { kind: 'running' };
-    const label = s.ok ? `Ran in ${formatDuration(s.durationMs)}` : (s.error ?? `Failed`);
-    return { kind: 'done', ok: s.ok, label };
+    if (!s || s.kind === "idle") return { kind: "idle" };
+    if (s.kind === "running") return { kind: "running" };
+    const label = s.ok
+      ? `Ran in ${formatDuration(s.durationMs)}`
+      : (s.error ?? `Failed`);
+    return { kind: "done", ok: s.ok, label };
   };
 
   const buildSnapshot = (): AppSettingsSnapshot => ({
@@ -122,8 +138,8 @@ export default function AppSettingsController({
       prompt: row.manifest.prompt,
       appsLabel:
         (row.manifest.apps ?? []).length > 0
-          ? `Apps: ${(row.manifest.apps ?? []).join(', ')}`
-          : 'No apps linked',
+          ? `Apps: ${(row.manifest.apps ?? []).join(", ")}`
+          : "No apps linked",
       enabled: row.enabled,
       run: runDto(row.ref),
     })),
@@ -139,15 +155,17 @@ export default function AppSettingsController({
     const roots = subRoots.current;
     const manifestRaw = fetchAppManifestRaw(appId);
 
-    void Promise.all([manifestRaw, fetchAppKnobValues(appId)]).then(([raw, stored]) => {
-      if (!alive.current) return;
-      const manifest = knobsManifestFrom(raw);
-      if (manifest && manifest.knobs.length > 0) {
-        knobs.current = manifest.knobs;
-        Object.assign(knobValues.current, stored);
+    void Promise.all([manifestRaw, fetchAppKnobValues(appId)]).then(
+      ([raw, stored]) => {
+        if (!alive.current) return;
+        const manifest = knobsManifestFrom(raw);
+        if (manifest && manifest.knobs.length > 0) {
+          knobs.current = manifest.knobs;
+          Object.assign(knobValues.current, stored);
+        }
+        push();
       }
-      push();
-    });
+    );
     void manifestRaw.then((raw) => {
       if (!alive.current) return;
       if (manifestVaultBlock(raw)) {
@@ -158,7 +176,8 @@ export default function AppSettingsController({
     void listAutomations().then((all) => {
       if (!alive.current) return;
       orders.current = all.filter((r) => r.manifest.apps?.includes(appId));
-      automationsBadge.current = orders.current.length === 0 ? null : orders.current.length;
+      automationsBadge.current =
+        orders.current.length === 0 ? null : orders.current.length;
       push();
     });
 
@@ -167,7 +186,7 @@ export default function AppSettingsController({
       roots.forEach((r) => r.unmount());
       roots.clear();
     };
-  }, [appId]);
+  }, [appId, push]);
 
   const pushKnob = (key: string, value: string): void => {
     if (inlineRoot) pushKnobToInlineRoot(inlineRoot, key, value);
@@ -176,7 +195,7 @@ export default function AppSettingsController({
 
   const commitKnob = (key: string, value: string): void => {
     pushKnob(key, value);
-    const def = knobs.current?.find((k) => k.key === key)?.default ?? '';
+    const def = knobs.current?.find((k) => k.key === key)?.default ?? "";
     const prior = knobValues.current[key] ?? def;
     knobValues.current[key] = value;
     void writeAppKnobValue(appId, key, value).catch((err: unknown) => {
@@ -190,20 +209,20 @@ export default function AppSettingsController({
   };
 
   const runOrder = async (ref: string): Promise<void> => {
-    runState.current.set(ref, { kind: 'running' });
+    runState.current.set(ref, { kind: "running" });
     push();
     try {
       const { turnId } = await runAutomationNow({ automationId: ref });
       const rec = await waitForAutomationRun(turnId);
       runState.current.set(ref, {
-        kind: 'done',
+        kind: "done",
         ok: rec.ok,
         durationMs: (rec.endedAt ?? Date.now()) - rec.startedAt,
         ...(rec.error ? { error: rec.error } : {}),
       });
     } catch (err) {
       runState.current.set(ref, {
-        kind: 'done',
+        kind: "done",
         ok: false,
         durationMs: 0,
         error: err instanceof Error ? err.message : String(err),
@@ -225,7 +244,7 @@ export default function AppSettingsController({
       if (alive.current) {
         push();
         showToast(
-          `Could not ${enabled ? 'enable' : 'disable'} ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+          `Could not ${enabled ? "enable" : "disable"} ${row.name}: ${err instanceof Error ? err.message : String(err)}`
         );
       }
     }
@@ -257,7 +276,7 @@ export default function AppSettingsController({
       onReveal={onReveal}
       onDelete={onDelete}
       {...(bundled ? { bundled: true } : {})}
-      onMountRuns={(ref, host) => mountInto(host, <RunsPane automationId={ref} />)}
+      onMountRuns={(ref, host) => mountRunsPane(host, subRoots.current, ref)}
       onMountVault={(host) => {
         void fetchAppManifestRaw(appId).then((raw) => {
           const block = manifestVaultBlock(raw);
@@ -273,7 +292,7 @@ export default function AppSettingsController({
                 },
                 showToast,
               })}
-            />,
+            />
           );
         });
       }}

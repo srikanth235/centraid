@@ -1,175 +1,219 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import {
   getBlocking,
   listAgents,
   listAutomations,
   listOutboxGrants,
   listTemplates,
-} from '../../../gateway-client.js';
-import { openWebhookReveal } from '../webhookReveal.js';
-import { collectAutomationRuns } from './automationsData.js';
-import { adoptOverviewSuggestion, loadAutomationsOverviewData } from './automationsOverviewLoad.js';
-import { cloneAutomationTemplate, surfaceMintedWebhook } from './templatesData.js';
+} from "../../../gateway-client.js";
+import type { ShellActions } from "../actions.js";
+import { openWebhookReveal } from "../webhookReveal.js";
+import { collectAutomationRuns } from "./automationsData.js";
+import {
+  adoptOverviewSuggestion,
+  loadAutomationsOverviewData,
+} from "./automationsOverviewLoad.js";
+import {
+  cloneAutomationTemplate,
+  surfaceMintedWebhook,
+} from "./templatesData.js";
 
-vi.mock('../../../gateway-client.js', () => ({
-  listAutomations: vi.fn(),
-  listAutomationTurns: vi.fn(),
-  getBlocking: vi.fn(),
-  listOutboxGrants: vi.fn(),
-  listAgents: vi.fn(),
-  listTemplates: vi.fn(),
+vi.mock(import("../../../gateway-client.js"), () => ({
+  listAutomations:
+    vi.fn<typeof import("../../../gateway-client.js").listAutomations>(),
+  listAutomationTurns:
+    vi.fn<typeof import("../../../gateway-client.js").listAutomationTurns>(),
+  getBlocking: vi.fn<typeof import("../../../gateway-client.js").getBlocking>(),
+  listOutboxGrants:
+    vi.fn<typeof import("../../../gateway-client.js").listOutboxGrants>(),
+  listAgents: vi.fn<typeof import("../../../gateway-client.js").listAgents>(),
+  listTemplates:
+    vi.fn<typeof import("../../../gateway-client.js").listTemplates>(),
 }));
 
-vi.mock('./automationsData.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./automationsData.js')>();
+vi.mock(import("./automationsData.js"), async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./automationsData.js")>();
   return {
     ...actual,
-    collectAutomationRuns: vi.fn(),
+    collectAutomationRuns:
+      vi.fn<typeof import("./automationsData.js").collectAutomationRuns>(),
   };
 });
 
-vi.mock('./templatesData.js', () => ({
-  cloneAutomationTemplate: vi.fn(),
-  surfaceMintedWebhook: vi.fn(),
+vi.mock(import("./templatesData.js"), () => ({
+  cloneAutomationTemplate:
+    vi.fn<typeof import("./templatesData.js").cloneAutomationTemplate>(),
+  surfaceMintedWebhook:
+    vi.fn<typeof import("./templatesData.js").surfaceMintedWebhook>(),
 }));
 
-vi.mock('../webhookReveal.js', () => ({
-  openWebhookReveal: vi.fn().mockResolvedValue(undefined),
+vi.mock(import("../webhookReveal.js"), () => ({
+  openWebhookReveal: vi
+    .fn<typeof import("../webhookReveal.js").openWebhookReveal>()
+    .mockResolvedValue(undefined),
 }));
 
-const listAutomationsMock = listAutomations as unknown as ReturnType<typeof vi.fn>;
+const listAutomationsMock = listAutomations as unknown as ReturnType<
+  typeof vi.fn
+>;
 const getBlockingMock = getBlocking as unknown as ReturnType<typeof vi.fn>;
-const listOutboxGrantsMock = listOutboxGrants as unknown as ReturnType<typeof vi.fn>;
+const listOutboxGrantsMock = listOutboxGrants as unknown as ReturnType<
+  typeof vi.fn
+>;
 const listAgentsMock = listAgents as unknown as ReturnType<typeof vi.fn>;
 const listTemplatesMock = listTemplates as unknown as ReturnType<typeof vi.fn>;
-const collectRunsMock = collectAutomationRuns as unknown as ReturnType<typeof vi.fn>;
-const cloneMock = cloneAutomationTemplate as unknown as ReturnType<typeof vi.fn>;
+const collectRunsMock = collectAutomationRuns as unknown as ReturnType<
+  typeof vi.fn
+>;
+const cloneMock = cloneAutomationTemplate as unknown as ReturnType<
+  typeof vi.fn
+>;
 const surfaceMock = surfaceMintedWebhook as unknown as ReturnType<typeof vi.fn>;
 const revealMock = openWebhookReveal as unknown as ReturnType<typeof vi.fn>;
 
 const DIGEST_ROW = {
-  id: 'digest',
-  ref: 'auto.digest/digest',
-  name: 'Daily Digest',
+  id: "digest",
+  ref: "auto.digest/digest",
+  name: "Daily Digest",
   enabled: true,
-  ownerApp: 'auto.digest',
-  triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
+  ownerApp: "auto.digest",
+  triggers: [{ kind: "cron", expr: "0 9 * * *" }],
   manifest: { requires: { mcps: [] } },
 };
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  listAutomationsMock.mockResolvedValue([DIGEST_ROW]);
-  // The rows now ride back with the run feed — the loader no longer fetches
-  // the automation list a second time of its own.
-  collectRunsMock.mockResolvedValue({ rows: [DIGEST_ROW], entries: [] });
-  getBlockingMock.mockResolvedValue({ parked: [], outbox: [] });
-  listOutboxGrantsMock.mockResolvedValue([]);
-  listAgentsMock.mockResolvedValue([{ hostKey: 'auto.digest', agentId: 'agent-1' }]);
-});
-
-describe('loadAutomationsOverviewData', () => {
-  it('builds overview data with zero attention when consent lists are empty', async () => {
-    const data = await loadAutomationsOverviewData();
-    expect(data.rows).toHaveLength(1);
-    expect(data.rows[0]!.name).toBe('Daily Digest');
-    expect(data.rows[0]!.attentionCount).toBe(0);
-    // The automation list costs a request; the overview must pay for it once.
-    // It used to be fetched here AND inside `collectAutomationRuns`.
-    expect(listAutomationsMock).not.toHaveBeenCalled();
-    expect(collectRunsMock).toHaveBeenCalledTimes(1);
-    expect(getBlockingMock).toHaveBeenCalledTimes(1);
-    expect(listOutboxGrantsMock).toHaveBeenCalledTimes(1);
-    expect(listAgentsMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('counts parked + outbox items as attention when the agent host matches', async () => {
-    getBlockingMock.mockResolvedValue({
-      parked: [
-        {
-          callerKind: 'agent',
-          callerId: 'agent-1',
-          command: 'x',
-          input: {},
-          invocationId: 'i1',
-          parkedAt: 't',
-        },
-        {
-          callerKind: 'agent',
-          callerId: 'other',
-          command: 'y',
-          input: {},
-          invocationId: 'i2',
-          parkedAt: 't',
-        },
-      ],
-      outbox: [
-        {
-          actorKind: 'agent',
-          actorId: 'agent-1',
-          artifact: 'a',
-          canEdit: false,
-          connection: { kind: 'http', label: 'c' },
-          itemId: 'o1',
-          note: '',
-          stagedAt: 't',
-          status: 'pending',
-          target: 't',
-          verb: 'send',
-        },
-      ],
-    });
+describe("automationsOverviewLoad", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listAutomationsMock.mockResolvedValue([DIGEST_ROW]);
+    // The rows now ride back with the run feed — the loader no longer fetches
+    // the automation list a second time of its own.
+    collectRunsMock.mockResolvedValue({ rows: [DIGEST_ROW], entries: [] });
+    getBlockingMock.mockResolvedValue({ parked: [], outbox: [] });
     listOutboxGrantsMock.mockResolvedValue([]);
-    const data = await loadAutomationsOverviewData();
-    expect(data.rows[0]!.ref).toBe('auto.digest/digest');
-    // 1 parked for agent-1 + 1 outbox for agent-1 (other agent parked ignored).
-    expect(data.rows[0]!.attentionCount).toBe(2);
-  });
-});
-
-describe('adoptOverviewSuggestion', () => {
-  it('toasts when the template id is missing from the catalog', async () => {
-    listTemplatesMock.mockResolvedValue([]);
-    const navigate = vi.fn();
-    const showToast = vi.fn();
-    await adoptOverviewSuggestion('missing-tmpl', { navigate, showToast });
-    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('no longer available'));
-    expect(navigate).toHaveBeenCalledTimes(0);
+    listAgentsMock.mockResolvedValue([
+      { hostKey: "auto.digest", agentId: "agent-1" },
+    ]);
   });
 
-  it('clones, surfaces webhooks, and navigates to the new automation', async () => {
-    const tmpl = { id: 'obligation-extractor', name: 'Deadlines', desc: 'x' };
-    listTemplatesMock.mockResolvedValue([tmpl]);
-    cloneMock.mockResolvedValue({
-      ref: 'auto.x/y',
-      webhooks: [{ url: 'https://h/1', secret: 's' }],
+  describe(loadAutomationsOverviewData, () => {
+    it("builds overview data with zero attention when consent lists are empty", async () => {
+      const data = await loadAutomationsOverviewData();
+      expect(data.rows).toHaveLength(1);
+      expect(data.rows[0]!.name).toBe("Daily Digest");
+      expect(data.rows[0]!.attentionCount).toBe(0);
+      // The automation list costs a request; the overview must pay for it once.
+      // It used to be fetched here AND inside `collectAutomationRuns`.
+      expect(listAutomationsMock).not.toHaveBeenCalled();
+      expect(collectRunsMock).toHaveBeenCalledOnce();
+      expect(getBlockingMock).toHaveBeenCalledOnce();
+      expect(listOutboxGrantsMock).toHaveBeenCalledOnce();
+      expect(listAgentsMock).toHaveBeenCalledOnce();
     });
-    const navigate = vi.fn();
-    const showToast = vi.fn();
-    await adoptOverviewSuggestion('obligation-extractor', { navigate, showToast });
-    expect(cloneMock).toHaveBeenCalledTimes(1);
-    expect(cloneMock).toHaveBeenCalledWith(tmpl);
-    expect(surfaceMock).toHaveBeenCalledWith({ url: 'https://h/1', secret: 's' });
-    expect(revealMock).toHaveBeenCalledWith({ url: 'https://h/1', secret: 's' });
-    expect(navigate).toHaveBeenCalledWith({ kind: 'automation-view', automationId: 'auto.x/y' });
+
+    it("counts parked + outbox items as attention when the agent host matches", async () => {
+      getBlockingMock.mockResolvedValue({
+        parked: [
+          {
+            callerKind: "agent",
+            callerId: "agent-1",
+            command: "x",
+            input: {},
+            invocationId: "i1",
+            parkedAt: "t",
+          },
+          {
+            callerKind: "agent",
+            callerId: "other",
+            command: "y",
+            input: {},
+            invocationId: "i2",
+            parkedAt: "t",
+          },
+        ],
+        outbox: [
+          {
+            actorKind: "agent",
+            actorId: "agent-1",
+            artifact: "a",
+            canEdit: false,
+            connection: { kind: "http", label: "c" },
+            itemId: "o1",
+            note: "",
+            stagedAt: "t",
+            status: "pending",
+            target: "t",
+            verb: "send",
+          },
+        ],
+      });
+      listOutboxGrantsMock.mockResolvedValue([]);
+      const data = await loadAutomationsOverviewData();
+      expect(data.rows[0]!.ref).toBe("auto.digest/digest");
+      // 1 parked for agent-1 + 1 outbox for agent-1 (other agent parked ignored).
+      expect(data.rows[0]!.attentionCount).toBe(2);
+    });
   });
 
-  it('falls back to the automations list when clone returns no ref', async () => {
-    listTemplatesMock.mockResolvedValue([{ id: 't1', name: 'T', desc: 'd' }]);
-    cloneMock.mockResolvedValue({ ref: null, webhooks: [] });
-    const navigate = vi.fn();
-    const showToast = vi.fn();
-    await adoptOverviewSuggestion('t1', { navigate, showToast });
-    expect(navigate).toHaveBeenCalledWith({ kind: 'automations' });
-  });
+  describe(adoptOverviewSuggestion, () => {
+    it("toasts when the template id is missing from the catalog", async () => {
+      listTemplatesMock.mockResolvedValue([]);
+      const navigate = vi.fn<ShellActions["navigate"]>();
+      const showToast = vi.fn<ShellActions["showToast"]>();
+      await adoptOverviewSuggestion("missing-tmpl", { navigate, showToast });
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining("no longer available")
+      );
+      expect(navigate).toHaveBeenCalledTimes(0);
+    });
 
-  it('toasts on clone failure', async () => {
-    listTemplatesMock.mockResolvedValue([{ id: 't1', name: 'T', desc: 'd' }]);
-    cloneMock.mockRejectedValue(new Error('clone boom'));
-    const navigate = vi.fn();
-    const showToast = vi.fn();
-    await adoptOverviewSuggestion('t1', { navigate, showToast });
-    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('clone boom'));
-    expect(navigate).toHaveBeenCalledTimes(0);
+    it("clones, surfaces webhooks, and navigates to the new automation", async () => {
+      const tmpl = { id: "obligation-extractor", name: "Deadlines", desc: "x" };
+      listTemplatesMock.mockResolvedValue([tmpl]);
+      cloneMock.mockResolvedValue({
+        ref: "auto.x/y",
+        webhooks: [{ url: "https://h/1", secret: "s" }],
+      });
+      const navigate = vi.fn<ShellActions["navigate"]>();
+      const showToast = vi.fn<ShellActions["showToast"]>();
+      await adoptOverviewSuggestion("obligation-extractor", {
+        navigate,
+        showToast,
+      });
+      expect(cloneMock).toHaveBeenCalledExactlyOnceWith(tmpl);
+      expect(surfaceMock).toHaveBeenCalledWith({
+        url: "https://h/1",
+        secret: "s",
+      });
+      expect(revealMock).toHaveBeenCalledWith({
+        url: "https://h/1",
+        secret: "s",
+      });
+      expect(navigate).toHaveBeenCalledWith({
+        kind: "automation-view",
+        automationId: "auto.x/y",
+      });
+    });
+
+    it("falls back to the automations list when clone returns no ref", async () => {
+      listTemplatesMock.mockResolvedValue([{ id: "t1", name: "T", desc: "d" }]);
+      cloneMock.mockResolvedValue({ ref: null, webhooks: [] });
+      const navigate = vi.fn<ShellActions["navigate"]>();
+      const showToast = vi.fn<ShellActions["showToast"]>();
+      await adoptOverviewSuggestion("t1", { navigate, showToast });
+      expect(navigate).toHaveBeenCalledWith({ kind: "automations" });
+    });
+
+    it("toasts on clone failure", async () => {
+      listTemplatesMock.mockResolvedValue([{ id: "t1", name: "T", desc: "d" }]);
+      cloneMock.mockRejectedValue(new Error("clone boom"));
+      const navigate = vi.fn<ShellActions["navigate"]>();
+      const showToast = vi.fn<ShellActions["showToast"]>();
+      await adoptOverviewSuggestion("t1", { navigate, showToast });
+      expect(showToast).toHaveBeenCalledWith(
+        expect.stringContaining("clone boom")
+      );
+      expect(navigate).toHaveBeenCalledTimes(0);
+    });
   });
 });

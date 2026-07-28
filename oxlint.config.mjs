@@ -1,32 +1,31 @@
-import { defineConfig } from 'oxlint';
-import core from 'ultracite/oxlint/core';
-import react from 'ultracite/oxlint/react';
+import { defineConfig } from "oxlint";
+import core from "ultracite/oxlint/core";
+import react from "ultracite/oxlint/react";
+import vitest from "ultracite/oxlint/vitest";
 
 // Ultracite ships its oxlint presets as ESM modules from 7.5 on, so the former
 // .oxlintrc.json "extends" paths stopped resolving and the config moved here.
 // oxlint loads a JS config through Node, which is why the lint scripts invoke
 // it via node rather than bunx.
 //
-// core + react are the two presets this repo has always composed. The vitest
-// preset is deliberately NOT extended: it applies through "overrides", which
-// outrank anything declared here, and it lands 11,736 findings across the suite
-// (require-top-level-describe, prefer-strict-equal, max-expects, ...). Those are
-// test-authoring opinions, and prefer-strict-equal rewrites assertion semantics.
-// Adopting them is a deliberate change, not a side effect of a Dependabot bump.
+// core + react are the two presets this repo has always composed; vitest joined
+// them in #573. core and react are `extends`ed, but vitest is NOT: it applies
+// entirely through "overrides", and an extended preset's overrides outrank the
+// consumer's, so `extends: [vitest]` would leave no way to say "these rules,
+// but not on the Playwright specs". Its override is therefore spliced into
+// `overrides` below verbatim — same rules, same glob — which makes ordering
+// ours. See TESTING.md, "ultracite vitest preset (#573)".
 export default defineConfig({
   extends: [core, react],
-  ignorePatterns: [
-    ...(core.ignorePatterns ?? []),
-    ...[
-      '**/dist/**',
-      '**/.expo/**',
-      '**/node_modules/**',
-      'apps/oauth-worker/worker-configuration.d.ts',
-      'apps/web/src/generated/**',
-      'packages/blueprints/automations/**',
-      'packages/blueprints/visual-harness/mock-centraid.js',
-    ],
-  ],
+  ignorePatterns: (core.ignorePatterns ?? []).concat([
+    "**/dist/**",
+    "**/.expo/**",
+    "**/node_modules/**",
+    "apps/oauth-worker/worker-configuration.d.ts",
+    "apps/web/src/generated/**",
+    "packages/blueprints/automations/**",
+    "packages/blueprints/visual-harness/mock-centraid.js",
+  ]),
   rules: {
     // Rules ultracite 7.9's presets newly enable. Issue #210 fixed this
     // repo's profile as correctness + suspicious + perf with explicit
@@ -37,180 +36,195 @@ export default defineConfig({
     // The jsx-a11y family was the first to be adopted on its own terms
     // (#573): all ten rules are back on the preset's defaults and their 223
     // sites are fixed with native elements, not suppressions. Nothing from
-    // that family belongs in this list again.
-    'import/default': 'off', // 1 sites
-    'import/newline-after-import': 'off', // 8 sites
-    'import/no-duplicates': 'off', // 3 sites
-    'jsdoc/require-param-description': 'off', // 37 sites
-    'jsdoc/require-returns-description': 'off', // 21 sites
-    'jsdoc/require-yields-type': 'off', // 4 sites
-    'logical-assignment-operators': 'off', // 15 sites
-    'max-classes-per-file': 'off', // 1 sites
-    'no-await-in-loop': 'off', // 722 sites
-    'no-control-regex': 'off', // 1 sites
-    'no-duplicate-imports': 'off', // 3 sites
-    'no-empty': 'off', // 5 sites
-    'no-implicit-globals': 'off', // 27 sites
-    'no-param-reassign': 'off', // 3 sites
-    'no-unreachable-loop': 'off', // 8 sites
-    'no-unused-expressions': 'off', // 2 sites
-    'no-unused-vars': 'off', // 13 sites
-    'no-useless-return': 'off', // 3 sites
-    'no-var': 'off', // 100 sites
-    'node/callback-return': 'off', // 30 sites
-    'object-shorthand': 'off', // 27 sites
-    'oxc/branches-sharing-code': 'off', // 8 sites
-    'prefer-arrow-callback': 'off', // 70 sites
-    'prefer-named-capture-group': 'off', // 399 sites
-    'promise/no-callback-in-promise': 'off', // 2 sites
-    'promise/param-names': 'off', // 1 sites
-    'promise/prefer-catch': 'off', // 5 sites
-    'react-hooks/exhaustive-deps': 'off', // 1 sites
-    'react/hook-use-state': 'off', // 5 sites
-    'react/iframe-missing-sandbox': 'off', // 2 sites
-    'react/jsx-fragments': 'off', // 1 sites
-    'react/jsx-handler-names': 'off', // 92 sites
-    'react/no-object-type-as-default-prop': 'off', // 2 sites
-    'react/no-unstable-nested-components': 'off', // 3 sites
-    'react/self-closing-comp': 'off', // 38 sites
-    'require-unicode-regexp': 'off', // 1889 sites
-    'typescript/method-signature-style': 'off', // 541 sites
-    'typescript/prefer-for-of': 'off', // 1 sites
-    'unicorn/consistent-date-clone': 'off', // 2 sites
-    'unicorn/import-style': 'off', // 34 sites
-    'unicorn/no-anonymous-default-export': 'off', // 132 sites
-    'unicorn/no-negated-condition': 'off', // 804 sites
-    'unicorn/no-useless-collection-argument': 'off', // 1 sites
-    'unicorn/no-useless-spread': 'off', // 3 sites
-    'unicorn/prefer-add-event-listener': 'off', // 6 sites
-    'unicorn/prefer-array-find': 'off', // 1 sites
-    'unicorn/prefer-default-parameters': 'off', // 1 sites
-    'unicorn/prefer-dom-node-dataset': 'off', // 17 sites
-    'unicorn/prefer-export-from': 'off', // 26 sites
-    'unicorn/prefer-import-meta-properties': 'off', // 95 sites
-    'unicorn/prefer-includes': 'off', // 2 sites
-    'unicorn/prefer-number-coercion': 'off', // 52 sites
-    'unicorn/prefer-optional-catch-binding': 'off', // 5 sites
-    'unicorn/prefer-query-selector': 'off', // 28 sites
-    'unicorn/prefer-single-call': 'off', // 30 sites
-    'unicorn/require-post-message-target-origin': 'off', // 3 sites
-    'vars-on-top': 'off', // 65 sites
+    // that family belongs in this list again. Families C-F followed; what is
+    // left in this list is what survived being audited, not what was skipped.
+    //
+    // Every loop must declare whether its work is independent (concurrent) or
+    // intentionally ordered. Raw awaits in loops obscure that contract, so the
+    // rule applies equally to production code and test scenarios. Ordered work
+    // belongs behind a named, tested primitive; independent work uses bounded
+    // or unbounded concurrency as its resource contract permits. #573
+    "no-await-in-loop": "error",
 
     // Repo profile (#210).
-    'arrow-body-style': 'off',
-    'class-methods-use-this': 'off',
-    complexity: 'off',
-    curly: 'off',
-    'default-case': 'off',
-    eqeqeq: 'off',
-    'func-names': 'off',
-    'func-style': 'off',
-    'import/consistent-type-specifier-style': 'off',
-    'max-lines': 'off',
-    'no-accumulating-spread': 'off',
-    'no-alert': 'off',
-    'no-bitwise': 'off',
-    'no-console': 'off',
-    'no-else-return': 'off',
-    'no-empty-function': 'off',
-    'no-eq-null': 'off',
-    'no-inline-comments': 'off',
-    'no-lonely-if': 'off',
-    'no-loop-func': 'off',
-    'no-negated-condition': 'off',
-    'no-nested-ternary': 'off',
-    'no-plusplus': 'off',
-    'no-promise-executor-return': 'off',
-    'no-restricted-imports': [
-      'error',
+    "arrow-body-style": "off",
+    "class-methods-use-this": "off",
+    complexity: "off",
+    curly: "off",
+    "default-case": "off",
+    eqeqeq: "off",
+    "func-names": "off",
+    "func-style": "off",
+    "import/consistent-type-specifier-style": "off",
+    "max-lines": "off",
+    "no-accumulating-spread": "off",
+    "no-alert": "off",
+    "no-bitwise": "off",
+    "no-console": "off",
+    "no-else-return": "off",
+    "no-empty-function": "off",
+    "no-eq-null": "off",
+    "no-inline-comments": "off",
+    "no-lonely-if": "off",
+    "no-loop-func": "off",
+    "no-negated-condition": "off",
+    "no-nested-ternary": "off",
+    "no-plusplus": "off",
+    "no-promise-executor-return": "off",
+    "no-restricted-imports": [
+      "error",
       {
         patterns: [
           {
-            group: ['@centraid/*/src/*', '@centraid/*/dist/*'],
+            group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
             message:
               "Import from the package root barrel (e.g. '@centraid/app-engine'), not its internals \u2014 keeps each package's public surface the real contract. See governance: no-deep-imports.",
           },
         ],
       },
     ],
-    'no-shadow': 'off',
-    'no-throw-literal': 'off',
-    'no-unmodified-loop-condition': 'off',
-    'no-use-before-define': 'off',
-    'no-useless-constructor': 'off',
-    'no-void': 'off',
-    'no-warning-comments': 'off',
-    'prefer-const': 'off',
-    'prefer-destructuring': 'off',
-    'prefer-object-spread': 'off',
-    'prefer-template': 'off',
-    'promise/avoid-new': 'off',
-    'promise/no-nesting': 'off',
-    'promise/no-promise-in-callback': 'off',
-    'promise/prefer-await-to-callbacks': 'off',
-    'promise/prefer-await-to-then': 'off',
-    'react-perf/jsx-no-new-function-as-prop': 'off',
-    'react/exhaustive-deps': 'warn',
-    'react/jsx-curly-brace-presence': 'off',
-    'react/jsx-no-constructed-context-values': 'off',
-    'react/jsx-no-useless-fragment': 'off',
-    'react/no-array-index-key': 'off',
-    'react/no-danger': 'off',
-    'react/no-unescaped-entities': 'off',
-    'react/rules-of-hooks': 'error',
-    'react/style-prop-object': 'off',
-    'require-await': 'off',
-    'sort-keys': 'off',
-    'typescript/array-type': 'off',
-    'typescript/ban-ts-comment': 'error',
-    'typescript/consistent-type-definitions': 'off',
-    'typescript/consistent-type-imports': 'off',
-    'typescript/no-dynamic-delete': 'off',
-    'typescript/no-empty-interface': 'off',
-    'typescript/no-empty-object-type': 'off',
-    'typescript/no-explicit-any': 'error',
-    'typescript/no-import-type-side-effects': 'off',
-    'typescript/no-inferrable-types': 'off',
-    'typescript/no-invalid-void-type': 'off',
-    'typescript/no-non-null-assertion': 'off',
-    'typescript/parameter-properties': 'off',
-    'unicorn/catch-error-name': 'off',
-    'unicorn/consistent-existence-index-check': 'off',
-    'unicorn/consistent-function-scoping': 'off',
-    'unicorn/filename-case': 'off',
-    'unicorn/no-array-for-each': 'off',
-    'unicorn/no-array-reduce': 'off',
-    'unicorn/no-array-sort': 'off',
-    'unicorn/no-await-expression-member': 'off',
-    'unicorn/no-hex-escape': 'off',
-    'unicorn/no-immediate-mutation': 'off',
-    'unicorn/no-lonely-if': 'off',
-    'unicorn/no-nested-ternary': 'off',
-    'unicorn/no-object-as-default-parameter': 'off',
-    'unicorn/no-typeof-undefined': 'off',
-    'unicorn/no-useless-undefined': 'off',
-    'unicorn/number-literal-case': 'off',
-    'unicorn/numeric-separators-style': 'off',
-    'unicorn/prefer-at': 'off',
-    'unicorn/prefer-code-point': 'off',
-    'unicorn/prefer-dom-node-append': 'off',
-    'unicorn/prefer-logical-operator-over-ternary': 'off',
-    'unicorn/prefer-math-min-max': 'off',
-    'unicorn/prefer-math-trunc': 'off',
-    'unicorn/prefer-module': 'off',
-    'unicorn/prefer-negative-index': 'off',
-    'unicorn/prefer-number-properties': 'off',
-    'unicorn/prefer-response-static-json': 'off',
-    'unicorn/prefer-set-has': 'off',
-    'unicorn/prefer-spread': 'off',
-    'unicorn/prefer-string-replace-all': 'off',
-    'unicorn/prefer-string-slice': 'off',
-    'unicorn/prefer-ternary': 'off',
-    'unicorn/prefer-type-error': 'off',
-    'unicorn/switch-case-braces': 'off',
-    'unicorn/text-encoding-identifier-case': 'off',
+    "no-shadow": "off",
+    "no-throw-literal": "off",
+    "no-unmodified-loop-condition": "off",
+    "no-use-before-define": "off",
+    "no-useless-constructor": "off",
+    "no-void": "off",
+    "no-warning-comments": "off",
+    "prefer-const": "off",
+    "prefer-destructuring": "off",
+    "prefer-object-spread": "off",
+    "prefer-template": "off",
+    "promise/avoid-new": "off",
+    "promise/no-nesting": "off",
+    "promise/no-promise-in-callback": "off",
+    "promise/prefer-await-to-callbacks": "off",
+    "promise/prefer-await-to-then": "off",
+    "react-perf/jsx-no-new-function-as-prop": "off",
+    "react/exhaustive-deps": "warn",
+    "react/jsx-curly-brace-presence": "off",
+    "react/jsx-no-constructed-context-values": "off",
+    "react/jsx-no-useless-fragment": "off",
+    "react/no-array-index-key": "off",
+    "react/no-danger": "off",
+    "react/no-unescaped-entities": "off",
+    "react/rules-of-hooks": "error",
+    "react/style-prop-object": "off",
+    "require-await": "off",
+    "sort-keys": "off",
+    "typescript/array-type": "off",
+    "typescript/ban-ts-comment": "error",
+    "typescript/consistent-type-definitions": "off",
+    "typescript/consistent-type-imports": "off",
+    "typescript/no-dynamic-delete": "off",
+    "typescript/no-empty-interface": "off",
+    "typescript/no-empty-object-type": "off",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-import-type-side-effects": "off",
+    "typescript/no-inferrable-types": "off",
+    "typescript/no-invalid-void-type": "off",
+    "typescript/no-non-null-assertion": "off",
+    "typescript/parameter-properties": "off",
+    "unicorn/catch-error-name": "off",
+    "unicorn/consistent-existence-index-check": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/filename-case": "off",
+    "unicorn/no-array-for-each": "off",
+    "unicorn/no-array-reduce": "off",
+    "unicorn/no-array-sort": "off",
+    "unicorn/no-await-expression-member": "off",
+    "unicorn/no-hex-escape": "off",
+    "unicorn/no-immediate-mutation": "off",
+    "unicorn/no-lonely-if": "off",
+    "unicorn/no-nested-ternary": "off",
+    "unicorn/no-object-as-default-parameter": "off",
+    "unicorn/no-typeof-undefined": "off",
+    "unicorn/no-useless-undefined": "off",
+    "unicorn/number-literal-case": "off",
+    "unicorn/numeric-separators-style": "off",
+    "unicorn/prefer-at": "off",
+    "unicorn/prefer-code-point": "off",
+    "unicorn/prefer-dom-node-append": "off",
+    "unicorn/prefer-logical-operator-over-ternary": "off",
+    "unicorn/prefer-math-min-max": "off",
+    "unicorn/prefer-math-trunc": "off",
+    "unicorn/prefer-module": "off",
+    "unicorn/prefer-negative-index": "off",
+    "unicorn/prefer-number-properties": "off",
+    "unicorn/prefer-response-static-json": "off",
+    "unicorn/prefer-set-has": "off",
+    "unicorn/prefer-spread": "off",
+    "unicorn/prefer-string-replace-all": "off",
+    "unicorn/prefer-string-slice": "off",
+    "unicorn/prefer-ternary": "off",
+    "unicorn/prefer-type-error": "off",
+    "unicorn/switch-case-braces": "off",
+    "unicorn/text-encoding-identifier-case": "off",
   },
   overrides: [
+    // The vitest preset applies through `overrides`, and an extended preset's
+    // overrides outrank the consumer's — so extending it leaves no way to say
+    // "not these files". Its single override is therefore spliced in here
+    // verbatim (rules unchanged, glob unchanged: wholesale adoption) purely so
+    // the Playwright exclusion below can be ordered after it.
+    ...vitest.overrides,
+    {
+      // The two rules in the preset that trade assertion precision for
+      // brevity, and the only two that contradict a rule this repo already
+      // documents: TESTING.md's test convention says "Prefer specific matchers
+      // and meaningful expected values over `toBeTruthy()`". `expect(x).toBe(true)`
+      // asserts x is exactly the boolean true; `expect(x).toBeTruthy()` also
+      // passes for 1, 'x', [], {}. Autofixing the preset over this suite
+      // rewrites 1,117 `toBe(true)` and 720 `toBe(false)` into strictly weaker
+      // assertions. Everything else in the preset is adopted as-is; these two
+      // are held off deliberately. See TESTING.md, "ultracite vitest preset (#573)".
+      files: [
+        "**/*.{test,spec}.{ts,tsx,js,jsx}",
+        "**/__tests__/**/*.{ts,tsx,js,jsx}",
+      ],
+      plugins: ["vitest"],
+      rules: {
+        "vitest/prefer-to-be-falsy": "off",
+        "vitest/prefer-to-be-truthy": "off",
+        // The rule defaults to jest's signature, where `expect` takes exactly
+        // one argument. vitest's takes an optional second one — the message
+        // printed when the assertion fails, e.g.
+        // `expect(res.status, JSON.stringify(body)).toBe(400)`. Complying with
+        // the default would mean deleting those messages, which is the opposite
+        // of the "clear failure output" rule in TESTING.md. This corrects the
+        // rule for the runner rather than relaxing it: everything else it
+        // checks still applies.
+        "vitest/valid-expect": ["error", { maxArgs: 2 }],
+        // The preset's default is 5. This suite is deliberately built around
+        // integration-shaped tests that drive one scenario and then assert the
+        // whole resulting state — splitting those to satisfy a count would mean
+        // re-running the setup per assertion, which changes what is under test
+        // and slows the suite for no coverage gain. Measured sensitivity across
+        // the suite: max 5 -> 2030 findings, 10 -> 448, 15 -> 162, 20 -> 68,
+        // 30 -> 26. 20 keeps the rule a real gate on genuinely sprawling tests
+        // (the remaining 68 were split) while accepting the scenario style the
+        // repo already documents in TESTING.md. Same class of decision as
+        // valid-expect above: configuring the rule for this codebase, not
+        // relaxing it.
+        // One behavior-focused integration test may need a compact assertion
+        // matrix. 31 still catches sprawling tests while avoiding test splits
+        // driven solely by one additional assertion in a shared contract matrix.
+        "vitest/max-expects": ["error", { max: 31 }],
+      },
+    },
+    {
+      // The vitest glob `**/*.{test,spec}.*` also catches the Playwright e2e
+      // specs — a different runner with its own `test`/`expect`. Left in scope,
+      // `prefer-importing-vitest-globals` autofixes a `from 'vitest'` import on
+      // top of the `@playwright/test` one and the files stop parsing. This is
+      // about which runner owns the file, not about opting out of a rule.
+      files: ["apps/desktop/tests/e2e/**", "apps/web/tests/e2e/**"],
+      plugins: ["vitest"],
+      rules: Object.fromEntries(
+        Object.keys(vitest.overrides[0].rules)
+          .filter((rule) => rule.startsWith("vitest/"))
+          .map((rule) => [rule, "off"])
+      ),
+    },
     {
       // react/react-compiler was adopted repo-wide in #573 (714 real sites
       // fixed once the exhaustive-deps disables that made the compiler bail
@@ -225,29 +239,29 @@ export default defineConfig({
       // photos/app-root.tsx is NOT here — it had the same shape and was
       // genuinely converted, proving this list is architectural, not a dodge.
       files: [
-        'packages/blueprints/apps/agenda/app-root.tsx',
-        'packages/blueprints/apps/docs/app-root.tsx',
-        'packages/blueprints/apps/locker/app-root.tsx',
-        'packages/blueprints/apps/notes/app-root.tsx',
-        'packages/blueprints/apps/people/app-root.tsx',
-        'packages/blueprints/apps/tally/app-root.tsx',
-        'packages/blueprints/apps/tasks/app-root.tsx',
+        "packages/blueprints/apps/agenda/app-root.tsx",
+        "packages/blueprints/apps/docs/app-root.tsx",
+        "packages/blueprints/apps/locker/app-root.tsx",
+        "packages/blueprints/apps/notes/app-root.tsx",
+        "packages/blueprints/apps/people/app-root.tsx",
+        "packages/blueprints/apps/tally/app-root.tsx",
+        "packages/blueprints/apps/tasks/app-root.tsx",
       ],
       rules: {
-        'react/react-compiler': 'off',
+        "react/react-compiler": "off",
       },
     },
     {
-      files: ['packages/app-engine/**/*.ts'],
+      files: ["packages/app-engine/**/*.ts"],
       rules: {
-        'no-restricted-imports': [
-          'error',
+        "no-restricted-imports": [
+          "error",
           {
             patterns: [
               {
-                group: ['@centraid/*'],
+                group: ["@centraid/*"],
                 message:
-                  'app-engine is the stable core of the dependency DAG \u2014 it must not import other @centraid packages. Mode/runtime specifics belong at entrypoints (desktop main, gateway CLI). See governance: module-layering.',
+                  "app-engine is the stable core of the dependency DAG \u2014 it must not import other @centraid packages. Mode/runtime specifics belong at entrypoints (desktop main, gateway CLI). See governance: module-layering.",
               },
             ],
           },
@@ -255,26 +269,26 @@ export default defineConfig({
       },
     },
     {
-      files: ['packages/automation/**/*.ts'],
+      files: ["packages/automation/**/*.ts"],
       rules: {
-        'no-restricted-imports': [
-          'error',
+        "no-restricted-imports": [
+          "error",
           {
             patterns: [
               {
                 group: [
-                  '@centraid/agent-runtime',
-                  '@centraid/agent-runtime/*',
-                  '@centraid/gateway',
-                  '@centraid/gateway/*',
+                  "@centraid/agent-runtime",
+                  "@centraid/agent-runtime/*",
+                  "@centraid/gateway",
+                  "@centraid/gateway/*",
                 ],
                 message:
-                  'automation must not depend on an agent backend \u2014 execution and scheduling are injected callbacks (it depends on app-engine, never on agent-runtime/gateway). See governance: module-layering.',
+                  "automation must not depend on an agent backend \u2014 execution and scheduling are injected callbacks (it depends on app-engine, never on agent-runtime/gateway). See governance: module-layering.",
               },
               {
-                group: ['@centraid/*/src/*', '@centraid/*/dist/*'],
+                group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
                 message:
-                  'Import from the package root barrel, not its internals. See governance: no-deep-imports.',
+                  "Import from the package root barrel, not its internals. See governance: no-deep-imports.",
               },
             ],
           },
@@ -282,9 +296,9 @@ export default defineConfig({
       },
     },
     {
-      files: ['packages/blueprints/kit/**', 'packages/blueprints/apps/**'],
+      files: ["packages/blueprints/kit/**", "packages/blueprints/apps/**"],
       rules: {
-        'typescript/no-explicit-any': 'off',
+        "typescript/no-explicit-any": "off",
       },
     },
   ],

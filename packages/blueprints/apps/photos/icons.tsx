@@ -4,21 +4,33 @@
 // prompt's visual system section). Every icon is a plain function component:
 // `stroke="currentColor"` so callers color them via CSS, no props needed
 // beyond an optional `size`.
-import type { FC, SVGProps } from 'react';
+import type { FC, SVGProps } from "react";
 
 const base: SVGProps<SVGSVGElement> = {
-  fill: 'none',
-  stroke: 'currentColor',
+  fill: "none",
+  stroke: "currentColor",
   strokeWidth: 1.75,
-  strokeLinecap: 'round',
-  strokeLinejoin: 'round',
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
 };
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
-function Svg({ size = 18, children, viewBox = '0 0 24 24', ...rest }: IconProps) {
+function Svg({
+  size = 18,
+  children,
+  viewBox = "0 0 24 24",
+  ...rest
+}: IconProps) {
   return (
-    <svg width={size} height={size} viewBox={viewBox} aria-hidden="true" {...base} {...rest}>
+    <svg
+      width={size}
+      height={size}
+      viewBox={viewBox}
+      aria-hidden="true"
+      {...base}
+      {...rest}
+    >
       {children}
     </svg>
   );
@@ -39,8 +51,11 @@ export const GridIcon: FC<IconProps> = (p) => (
   </Svg>
 );
 
-export const HeartIcon: FC<IconProps & { filled?: boolean }> = ({ filled, ...p }) => (
-  <Svg {...p} fill={filled ? 'currentColor' : 'none'}>
+export const HeartIcon: FC<IconProps & { filled?: boolean }> = ({
+  filled,
+  ...p
+}) => (
+  <Svg {...p} fill={filled ? "currentColor" : "none"}>
     <path d="M12 20s-7-4.4-9.2-8.4C1.3 8.9 2.6 6 5.4 6c1.8 0 3 1 3.6 2 .6-1 1.8-2 3.6-2 2.8 0 4.1 2.9 2.6 5.6C19 15.6 12 20 12 20z" />
   </Svg>
 );

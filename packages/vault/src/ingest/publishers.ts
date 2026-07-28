@@ -5,13 +5,14 @@
 // party identifiers, external_id columns), `create`/`update` write, and both
 // report every touched row so the spine stamps provenance for each.
 
-import type { DatabaseSync } from 'node:sqlite';
-import { nowIso, sha256Hex, uuidv7 } from '../ids.js';
-import { promoteStagedBlob } from '../blob/promote.js';
-import { ONTOLOGY_VERSION } from '../schema/migrate.js';
-import { ENRICH_PUBLISHERS } from './enrich-publishers.js';
-import { assertPayload } from './payload-schemas.js';
-import type { Publisher, PublishedWrite } from './staging.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import { promoteStagedBlob } from "../blob/promote.js";
+import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
+import { ONTOLOGY_VERSION } from "../schema/migrate.js";
+import { ENRICH_PUBLISHERS } from "./enrich-publishers.js";
+import { assertPayload } from "./payload-schemas.js";
+import type { Publisher, PublishedWrite } from "./staging.js";
 
 // ── core.event (ICS) ────────────────────────────────────────────────────
 
@@ -27,30 +28,30 @@ export interface EventPayload {
 }
 
 const eventPublisher: Publisher = {
-  entityType: 'core.event',
+  entityType: "core.event",
   probe(vault, payload) {
     // Read-only — the runtime schema gate covers WRITE paths only (#374 T3).
     const p = payload as unknown as EventPayload;
     const existing = vault
-      .prepare('SELECT event_id FROM core_event WHERE ical_uid = ?')
+      .prepare("SELECT event_id FROM core_event WHERE ical_uid = ?")
       .get(p.uid) as { event_id: string } | undefined;
     return existing
       ? {
           entityId: existing.event_id,
-          disposition: 'skip',
-          note: 'already in the vault (ical_uid)',
+          disposition: "skip",
+          note: "already in the vault (ical_uid)",
         }
       : null;
   },
   create(vault, _owner, payload, now) {
-    const p = assertPayload<EventPayload>('EventPayload', payload);
+    const p = assertPayload<EventPayload>("EventPayload", payload);
     const eventId = uuidv7();
     vault
       .prepare(
         `INSERT INTO core_event
            (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule, status,
             location_place_id, organizer_party_id, sequence, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?)`
       )
       .run(
         eventId,
@@ -63,17 +64,17 @@ const eventPublisher: Publisher = {
         p.rrule,
         p.status,
         now,
-        now,
+        now
       );
     return { entityId: eventId, wrote: [] };
   },
   update(vault, entityId, payload, now) {
-    const p = assertPayload<EventPayload>('EventPayload', payload);
+    const p = assertPayload<EventPayload>("EventPayload", payload);
     vault
       .prepare(
         `UPDATE core_event SET summary = ?, description = ?, dtstart = ?, dtend = ?, start_tz = ?,
             rrule = ?, status = ?, sequence = sequence + 1, updated_at = ?
-          WHERE event_id = ?`,
+          WHERE event_id = ?`
       )
       .run(
         p.summary,
@@ -84,7 +85,7 @@ const eventPublisher: Publisher = {
         p.rrule,
         p.status,
         now,
-        entityId,
+        entityId
       );
     return { wrote: [] };
   },
@@ -103,19 +104,23 @@ export interface PartyPayload {
 function bindIdentifiers(
   vault: DatabaseSync,
   partyId: string,
-  identifiers: PartyPayload['identifiers'],
+  identifiers: PartyPayload["identifiers"]
 ): PublishedWrite[] {
   const wrote: PublishedWrite[] = [];
   const primarySeen = new Set<string>(
     (
       vault
-        .prepare('SELECT scheme FROM core_party_identifier WHERE party_id = ? AND is_primary = 1')
+        .prepare(
+          "SELECT scheme FROM core_party_identifier WHERE party_id = ? AND is_primary = 1"
+        )
         .all(partyId) as { scheme: string }[]
-    ).map((r) => r.scheme),
+    ).map((r) => r.scheme)
   );
   for (const identifier of identifiers) {
     const exists = vault
-      .prepare('SELECT 1 AS x FROM core_party_identifier WHERE scheme = ? AND value = ?')
+      .prepare(
+        "SELECT 1 AS x FROM core_party_identifier WHERE scheme = ? AND value = ?"
+      )
       .get(identifier.scheme, identifier.value);
     if (exists) continue;
     const identifierId = uuidv7();
@@ -124,7 +129,7 @@ function bindIdentifiers(
     vault
       .prepare(
         `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, label, is_primary, verified_at, valid_from, valid_to)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL)`,
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL)`
       )
       .run(
         identifierId,
@@ -133,9 +138,9 @@ function bindIdentifiers(
         identifier.value,
         identifier.label,
         isPrimary,
-        nowIso(),
+        nowIso()
       );
-    wrote.push({ type: 'core.party_identifier', id: identifierId });
+    wrote.push({ type: "core.party_identifier", id: identifierId });
   }
   return wrote;
 }
@@ -143,23 +148,25 @@ function bindIdentifiers(
 /** Live-handle lookup, newest primary first — the vCard resolution rule. */
 function partyByIdentifiers(
   vault: DatabaseSync,
-  identifiers: PartyPayload['identifiers'],
+  identifiers: PartyPayload["identifiers"]
 ): string | null {
   for (const identifier of identifiers) {
     const row = vault
       .prepare(
         `SELECT party_id FROM core_party_identifier
           WHERE scheme = ? AND value = ? AND (valid_to IS NULL OR valid_to > ?)
-          ORDER BY is_primary DESC LIMIT 1`,
+          ORDER BY is_primary DESC LIMIT 1`
       )
-      .get(identifier.scheme, identifier.value, nowIso()) as { party_id: string } | undefined;
+      .get(identifier.scheme, identifier.value, nowIso()) as
+      | { party_id: string }
+      | undefined;
     if (row) return row.party_id;
   }
   return null;
 }
 
 const partyPublisher: Publisher = {
-  entityType: 'core.party',
+  entityType: "core.party",
   probe(vault, payload) {
     const p = payload as unknown as PartyPayload;
     const partyId = partyByIdentifiers(vault, p.identifiers);
@@ -167,26 +174,39 @@ const partyPublisher: Publisher = {
     const missing = p.identifiers.filter(
       (i) =>
         !vault
-          .prepare('SELECT 1 AS x FROM core_party_identifier WHERE scheme = ? AND value = ?')
-          .get(i.scheme, i.value),
+          .prepare(
+            "SELECT 1 AS x FROM core_party_identifier WHERE scheme = ? AND value = ?"
+          )
+          .get(i.scheme, i.value)
     );
     return missing.length > 0
-      ? { entityId: partyId, disposition: 'update', note: 'existing person; backfills new handles' }
-      : { entityId: partyId, disposition: 'skip', note: 'existing person; nothing new' };
+      ? {
+          entityId: partyId,
+          disposition: "update",
+          note: "existing person; backfills new handles",
+        }
+      : {
+          entityId: partyId,
+          disposition: "skip",
+          note: "existing person; nothing new",
+        };
   },
   create(vault, _owner, payload, now) {
-    const p = assertPayload<PartyPayload>('PartyPayload', payload);
+    const p = assertPayload<PartyPayload>("PartyPayload", payload);
     const partyId = uuidv7();
     vault
       .prepare(
         `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
-         VALUES (?, 'person', ?, ?, ?, NULL, ?, ?, ?)`,
+         VALUES (?, 'person', ?, ?, ?, NULL, ?, ?, ?)`
       )
       .run(partyId, p.fn, p.sortName, p.bday, now, now, ONTOLOGY_VERSION);
-    return { entityId: partyId, wrote: bindIdentifiers(vault, partyId, p.identifiers) };
+    return {
+      entityId: partyId,
+      wrote: bindIdentifiers(vault, partyId, p.identifiers),
+    };
   },
   update(vault, entityId, payload) {
-    const p = assertPayload<PartyPayload>('PartyPayload', payload);
+    const p = assertPayload<PartyPayload>("PartyPayload", payload);
     // The vault wins: an import never rewrites a person's name or birthday —
     // it only backfills handles the vault has never seen.
     return { wrote: bindIdentifiers(vault, entityId, p.identifiers) };
@@ -205,7 +225,12 @@ export interface MessagePayload {
   /** Normalized subject — the thread grouping key. */
   threadKey: string;
   /** Staged blob shas the parser hashed into the CAS (issue #296). */
-  attachments?: { stagedSha: string; filename: string; mediaType: string; byteSize: number }[];
+  attachments?: {
+    stagedSha: string;
+    filename: string;
+    mediaType: string;
+    byteSize: number;
+  }[];
 }
 
 /** Dedupe-or-insert a plain-text body as a canonical content item. */
@@ -213,11 +238,11 @@ function textContentItem(
   vault: DatabaseSync,
   text: string,
   creatorPartyId: string | null,
-  now: string,
+  now: string
 ): { contentId: string; created: boolean } {
   const sha = sha256Hex(text);
   const existing = vault
-    .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?')
+    .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
     .get(sha) as { content_id: string } | undefined;
   if (existing) return { contentId: existing.content_id, created: false };
   const contentId = uuidv7();
@@ -225,38 +250,44 @@ function textContentItem(
     .prepare(
       `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, 'text/plain', ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?)`,
+       VALUES (?, 'text/plain', ?, ?, ?, NULL, NULL, ?, NULL, NULL, NULL, ?)`
     )
     .run(
       contentId,
       `data:text/plain;charset=utf-8,${encodeURIComponent(text)}`,
       sha,
-      Buffer.from(text, 'utf8').length,
+      Buffer.from(text, "utf8").length,
       creatorPartyId,
-      now,
+      now
     );
   return { contentId, created: true };
 }
 
 const messagePublisher: Publisher = {
-  entityType: 'social.message',
+  entityType: "social.message",
   probe(vault, payload) {
     const p = payload as unknown as MessagePayload;
     const existing = vault
-      .prepare('SELECT message_id FROM social_message WHERE external_id = ?')
+      .prepare("SELECT message_id FROM social_message WHERE external_id = ?")
       .get(p.messageId) as { message_id: string } | undefined;
     return existing
-      ? { entityId: existing.message_id, disposition: 'skip', note: 'message already imported' }
+      ? {
+          entityId: existing.message_id,
+          disposition: "skip",
+          note: "message already imported",
+        }
       : null;
   },
   create(vault, _owner, payload, now) {
-    const p = assertPayload<MessagePayload>('MessagePayload', payload);
+    const p = assertPayload<MessagePayload>("MessagePayload", payload);
     const wrote: PublishedWrite[] = [];
 
     // Sender: resolve by email handle, else mint a person for the address.
     let senderId: string | null = null;
     if (p.fromEmail) {
-      const identifiers = [{ scheme: 'email', value: p.fromEmail, label: null }];
+      const identifiers = [
+        { scheme: "email", value: p.fromEmail, label: null },
+      ];
       senderId = partyByIdentifiers(vault, identifiers);
       if (!senderId) {
         const minted = partyPublisher.create(
@@ -268,58 +299,61 @@ const messagePublisher: Publisher = {
             bday: null,
             identifiers,
           } satisfies PartyPayload as unknown as Record<string, unknown>,
-          now,
+          now
         );
         senderId = minted.entityId;
-        wrote.push({ type: 'core.party', id: senderId }, ...minted.wrote);
+        wrote.push({ type: "core.party", id: senderId }, ...minted.wrote);
       }
     }
 
     // Thread: one per normalized subject per mailbox import.
     const threadRef = `mbox:${sha256Hex(p.threadKey).slice(0, 24)}`;
     let thread = vault
-      .prepare('SELECT thread_id FROM social_thread WHERE external_ref = ?')
+      .prepare("SELECT thread_id FROM social_thread WHERE external_ref = ?")
       .get(threadRef) as { thread_id: string } | undefined;
-    if (!thread) {
+    if (thread) {
+      vault
+        .prepare(
+          `UPDATE social_thread SET last_message_at = max(coalesce(last_message_at, ''), ?) WHERE thread_id = ?`
+        )
+        .run(p.sentAt, thread.thread_id);
+    } else {
       const threadId = uuidv7();
       vault
         .prepare(
           `INSERT INTO social_thread (thread_id, channel, subject, external_ref, created_at, last_message_at)
-           VALUES (?, 'email', ?, ?, ?, ?)`,
+           VALUES (?, 'email', ?, ?, ?, ?)`
         )
         .run(threadId, p.subject, threadRef, now, p.sentAt);
-      wrote.push({ type: 'social.thread', id: threadId });
+      wrote.push({ type: "social.thread", id: threadId });
       thread = { thread_id: threadId };
-    } else {
-      vault
-        .prepare(
-          `UPDATE social_thread SET last_message_at = max(coalesce(last_message_at, ''), ?) WHERE thread_id = ?`,
-        )
-        .run(p.sentAt, thread.thread_id);
     }
     if (senderId) {
       const tp = vault
-        .prepare('SELECT tp_id FROM social_thread_participant WHERE thread_id = ? AND party_id = ?')
+        .prepare(
+          "SELECT tp_id FROM social_thread_participant WHERE thread_id = ? AND party_id = ?"
+        )
         .get(thread.thread_id, senderId) as { tp_id: string } | undefined;
       if (!tp) {
         const tpId = uuidv7();
         vault
           .prepare(
             `INSERT INTO social_thread_participant (tp_id, thread_id, party_id, handle, joined_at, muted, last_read_at)
-             VALUES (?, ?, ?, ?, ?, 0, NULL)`,
+             VALUES (?, ?, ?, ?, ?, 0, NULL)`
           )
           .run(tpId, thread.thread_id, senderId, p.fromEmail, p.sentAt);
-        wrote.push({ type: 'social.thread_participant', id: tpId });
+        wrote.push({ type: "social.thread_participant", id: tpId });
       }
     }
 
     const body = textContentItem(vault, p.body, senderId, now);
-    if (body.created) wrote.push({ type: 'core.content_item', id: body.contentId });
+    if (body.created)
+      wrote.push({ type: "core.content_item", id: body.contentId });
     const messageId = uuidv7();
     vault
       .prepare(
         `INSERT INTO social_message (message_id, thread_id, sender_party_id, sender_handle, sent_at, body_content_id, in_reply_to_id, delivery, external_id)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, 'delivered', ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, NULL, 'delivered', ?)`
       )
       .run(
         messageId,
@@ -328,7 +362,7 @@ const messagePublisher: Publisher = {
         p.fromEmail,
         p.sentAt,
         body.contentId,
-        p.messageId,
+        p.messageId
       );
     // Email attachments (issue #296): the parser staged the bytes; publish
     // is the claim — content items promote from the staging band and pin to
@@ -343,28 +377,28 @@ const messagePublisher: Publisher = {
           creatorPartyId: senderId,
         },
         att.stagedSha,
-        { title: att.filename },
+        { title: att.filename }
       );
       const isFirst = vault
         .prepare(
-          `SELECT count(*) AS n FROM core_attachment WHERE target_type = 'social.message' AND target_id = ?`,
+          `SELECT count(*) AS n FROM core_attachment WHERE target_type = 'social.message' AND target_id = ?`
         )
         .get(messageId) as { n: number };
       const attachmentId = uuidv7();
       vault
         .prepare(
           `INSERT INTO core_attachment (attachment_id, target_type, target_id, content_id, role, is_primary, created_at)
-           VALUES (?, 'social.message', ?, ?, ?, ?, ?)`,
+           VALUES (?, 'social.message', ?, ?, ?, ?, ?)`
         )
         .run(
           attachmentId,
           messageId,
           promoted.contentId,
-          promoted.mediaType.startsWith('image/') ? 'photo' : 'other',
+          promoted.mediaType.startsWith("image/") ? "photo" : "other",
           isFirst.n === 0 ? 1 : 0,
-          now,
+          now
         );
-      wrote.push({ type: 'core.attachment', id: attachmentId });
+      wrote.push({ type: "core.attachment", id: attachmentId });
     }
     return { entityId: messageId, wrote };
   },
@@ -383,7 +417,7 @@ export interface TransactionPayload {
   description: string | null;
   amountMinor: number;
   currency: string;
-  direction: 'debit' | 'credit';
+  direction: "debit" | "credit";
   accountName: string;
 }
 
@@ -392,43 +426,50 @@ function accountFor(
   vault: DatabaseSync,
   ownerPartyId: string,
   name: string,
-  currency: string,
+  currency: string
 ): { accountId: string; created: boolean } {
   const existing = vault
-    .prepare('SELECT account_id FROM core_account WHERE owner_party_id = ? AND name = ?')
+    .prepare(
+      "SELECT account_id FROM core_account WHERE owner_party_id = ? AND name = ?"
+    )
     .get(ownerPartyId, name) as { account_id: string } | undefined;
   if (existing) return { accountId: existing.account_id, created: false };
   const accountId = uuidv7();
   vault
     .prepare(
       `INSERT INTO core_account (account_id, owner_party_id, name, kind, currency, institution_party_id, external_ref, is_asset, opened_at, closed_at)
-       VALUES (?, ?, ?, 'depository', ?, NULL, NULL, 1, NULL, NULL)`,
+       VALUES (?, ?, ?, 'depository', ?, NULL, NULL, 1, NULL, NULL)`
     )
     .run(accountId, ownerPartyId, name, currency);
   return { accountId, created: true };
 }
 
 const transactionPublisher: Publisher = {
-  entityType: 'core.transaction',
+  entityType: "core.transaction",
   probe(vault, payload) {
     const p = payload as unknown as TransactionPayload;
     const existing = vault
-      .prepare('SELECT txn_id FROM core_transaction WHERE external_id = ?')
+      .prepare("SELECT txn_id FROM core_transaction WHERE external_id = ?")
       .get(p.externalId) as { txn_id: string } | undefined;
     return existing
-      ? { entityId: existing.txn_id, disposition: 'skip', note: 'transaction already imported' }
+      ? {
+          entityId: existing.txn_id,
+          disposition: "skip",
+          note: "transaction already imported",
+        }
       : null;
   },
   create(vault, ownerPartyId, payload) {
-    const p = assertPayload<TransactionPayload>('TransactionPayload', payload);
+    const p = assertPayload<TransactionPayload>("TransactionPayload", payload);
     const wrote: PublishedWrite[] = [];
     const account = accountFor(vault, ownerPartyId, p.accountName, p.currency);
-    if (account.created) wrote.push({ type: 'core.account', id: account.accountId });
+    if (account.created)
+      wrote.push({ type: "core.account", id: account.accountId });
     const txnId = uuidv7();
     vault
       .prepare(
         `INSERT INTO core_transaction (txn_id, account_id, posted_at, amount_minor, currency, direction, status, transfer_group_id, counterparty_party_id, description, category_concept_id, external_id)
-         VALUES (?, ?, ?, ?, ?, ?, 'posted', NULL, NULL, ?, NULL, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, 'posted', NULL, NULL, ?, NULL, ?)`
       )
       .run(
         txnId,
@@ -438,15 +479,15 @@ const transactionPublisher: Publisher = {
         p.currency,
         p.direction,
         p.description,
-        p.externalId,
+        p.externalId
       );
     return { entityId: txnId, wrote };
   },
   update(vault, entityId, payload) {
-    const p = assertPayload<TransactionPayload>('TransactionPayload', payload);
+    const p = assertPayload<TransactionPayload>("TransactionPayload", payload);
     vault
       .prepare(
-        `UPDATE core_transaction SET description = ?, amount_minor = ?, posted_at = ? WHERE txn_id = ?`,
+        `UPDATE core_transaction SET description = ?, amount_minor = ?, posted_at = ? WHERE txn_id = ?`
       )
       .run(p.description, p.amountMinor, p.postedAt, entityId);
     return { wrote: [] };
@@ -469,46 +510,56 @@ export interface LockerItemPayload {
 }
 
 const lockerItemPublisher: Publisher = {
-  entityType: 'locker.item',
+  entityType: "locker.item",
   probe(vault, payload) {
     const p = payload as unknown as LockerItemPayload;
     const existing = vault
       .prepare(
         `SELECT item_id FROM locker_item
           WHERE type = 'login' AND deleted_at IS NULL AND title = ?
-            AND ((username IS NULL AND ? IS NULL) OR username = ?)`,
+            AND ((username IS NULL AND ? IS NULL) OR username = ?)`
       )
       .get(p.title, p.username, p.username) as { item_id: string } | undefined;
     return existing
       ? {
           entityId: existing.item_id,
-          disposition: 'update',
-          note: 'matches an existing login (title + username) — vault wins on publish review',
+          disposition: "update",
+          note: "matches an existing login (title + username) — vault wins on publish review",
         }
       : null;
   },
   create(vault, _owner, payload, now) {
-    const p = assertPayload<LockerItemPayload>('LockerItemPayload', payload);
+    const p = assertPayload<LockerItemPayload>("LockerItemPayload", payload);
     const itemId = uuidv7();
     vault
       .prepare(
         `INSERT INTO locker_item
            (item_id, type, title, username, password, url, otp_seed, notes, compromised, created_at, updated_at)
-         VALUES (?, 'login', ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+         VALUES (?, 'login', ?, ?, ?, ?, ?, ?, 0, ?, ?)`
       )
-      .run(itemId, p.title, p.username, p.password, p.url, p.otpSeed, p.notes, now, now);
+      .run(
+        itemId,
+        p.title,
+        p.username,
+        p.password,
+        p.url,
+        p.otpSeed,
+        p.notes,
+        now,
+        now
+      );
     return { entityId: itemId, wrote: [] };
   },
   update(vault, entityId, payload, now) {
     // Source fills gaps, never overwrites: an imported password lands only
     // where the vault holds none (vault-wins, issue #290 decision 6).
-    const p = assertPayload<LockerItemPayload>('LockerItemPayload', payload);
+    const p = assertPayload<LockerItemPayload>("LockerItemPayload", payload);
     vault
       .prepare(
         `UPDATE locker_item SET
            url = COALESCE(url, ?), password = COALESCE(password, ?),
            otp_seed = COALESCE(otp_seed, ?), notes = COALESCE(notes, ?), updated_at = ?
-         WHERE item_id = ?`,
+         WHERE item_id = ?`
       )
       .run(p.url, p.password, p.otpSeed, p.notes, now, entityId);
     return { wrote: [] };
@@ -524,5 +575,5 @@ export const PUBLISHERS: ReadonlyMap<string, Publisher> = new Map(
     transactionPublisher,
     lockerItemPublisher,
     ...ENRICH_PUBLISHERS,
-  ].map((p) => [p.entityType, p]),
+  ].map((p) => [p.entityType, p])
 );

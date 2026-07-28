@@ -40,7 +40,7 @@
 .iconBtn:hover {
   background: rgba(255, 255, 255, 0.16);
 }
-.iconBtn[data-active='true'] {
+.iconBtn[data-active="true"] {
   background: rgba(255, 255, 255, 0.22);
   color: var(--ph-lb-accent, #fff);
 }
@@ -202,7 +202,7 @@
   border: 2px solid transparent;
   opacity: 0.6;
 }
-.frame[data-active='true'] {
+.frame[data-active="true"] {
   border-color: #fff;
   opacity: 1;
 }
@@ -218,7 +218,7 @@
   overflow: hidden;
 }
 .frame:global(.is-placeholder)::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: linear-gradient(

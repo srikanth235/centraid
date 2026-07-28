@@ -62,7 +62,7 @@ export interface SplitEntry {
 }
 
 /** The owner's stance on an expense. */
-export type Role = 'lent' | 'borrowed' | 'none';
+export type Role = "lent" | "borrowed" | "none";
 
 /** A decorated ledger/search row: an expense with the owner's lent/borrowed
  *  stance and its per-person splits. `pending`/`parked` mark optimistic adds. */
@@ -85,7 +85,7 @@ export interface LedgerRow {
 
 /** One interleaved activity entry (expense or settlement). */
 export interface ActivityRow {
-  kind: 'expense' | 'settlement';
+  kind: "expense" | "settlement";
   date?: string;
   description?: string;
   category?: string;
@@ -159,13 +159,13 @@ export interface ViewData {
 
 /** The add/edit expense modal model (state.expense). */
 export interface ExpenseModel {
-  mode: 'new' | 'edit';
+  mode: "new" | "edit";
   expense_id?: string;
   groupId: string;
   desc: string;
   amount: string;
   paidBy: string;
-  method: 'equal' | 'exact' | 'percent';
+  method: "equal" | "exact" | "percent";
   category: string;
   spent_on: string;
   include: Set<string>;
@@ -195,7 +195,7 @@ export interface AddFriendModel {
 }
 
 /** The current top-level view. */
-export type View = 'dashboard' | 'activity' | 'group' | 'friend';
+export type View = "dashboard" | "activity" | "group" | "friend";
 
 /**
  * The module-level `state` bag app.tsx mutates in place (never reassigned) and
@@ -237,7 +237,7 @@ export interface LogicDeps {
 
 /** The `{cls, label}` a balance-label helper returns. */
 export interface BalLabel {
-  cls: 'pos' | 'neg' | 'muted';
+  cls: "pos" | "neg" | "muted";
   label: string;
 }
 

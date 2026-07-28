@@ -13,19 +13,20 @@
  * state and the auto-open gate stays closed.
  */
 
-import { app } from 'electron';
+import { app } from "electron";
+
 import {
   normalizeReleases,
   type ChangelogRelease,
   type ChangelogResult,
-} from './changelog-core.js';
+} from "./changelog-core.js";
 
 /**
  * The repo the release notes come from. Hardcoded (no `repository` field in
  * package.json) — this is the app's own upstream, matched to the git remote
  * `git@github.com:srikanth235/centraid`. Change here if the repo moves.
  */
-const REPO = 'srikanth235/centraid';
+const REPO = "srikanth235/centraid";
 const RELEASES_URL = `https://api.github.com/repos/${REPO}/releases?per_page=50`;
 
 /** Cache TTL — a fresh fetch at most this often. Release cadence is slow. */
@@ -46,10 +47,10 @@ async function fetchReleases(): Promise<ChangelogRelease[]> {
     const res = await fetch(RELEASES_URL, {
       signal: controller.signal,
       headers: {
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
         // GitHub asks unauthenticated clients to identify themselves.
-        'User-Agent': `Centraid-Desktop/${app.getVersion()}`,
+        "User-Agent": `Centraid-Desktop/${app.getVersion()}`,
       },
     });
     if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
@@ -81,7 +82,7 @@ export async function getChangelog(): Promise<ChangelogResult> {
     return {
       currentVersion,
       releases: [],
-      error: err instanceof Error ? err.message : 'Failed to load changelog',
+      error: err instanceof Error ? err.message : "Failed to load changelog",
     };
   }
 }

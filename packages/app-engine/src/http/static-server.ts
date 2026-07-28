@@ -1,20 +1,16 @@
+import { randomBytes } from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit cohesive per-file static asset server; the .ts/.tsx transform, .module.css compile branch, and range/etag plumbing are one request path and share the cache/mtime helpers
-import { promises as fs } from 'node:fs';
-import { randomBytes } from 'node:crypto';
-import path from 'node:path';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import * as esbuild from 'esbuild';
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
+
+import * as esbuild from "esbuild";
+
 import {
-  contentTypeFor,
-  isCssModuleFile,
-  resolveStaticPath,
-  SHARED_ASSET_FILES,
-  staticSecurityHeaders,
-} from './security.js';
-import { BUNDLE_REL_RE, findBundleByHash, prepareBundledIndex } from './app-bundle.js';
-import { compileCssModule } from './css-module.js';
-import { sendError } from './http-utils.js';
-import { DYNAMIC_QUALITY } from './compression.js';
+  BUNDLE_REL_RE,
+  findBundleByHash,
+  prepareBundledIndex,
+} from "./app-bundle.js";
 import {
   computeEtag,
   cssModuleVariantCache,
@@ -23,8 +19,18 @@ import {
   plainCache,
   variantCacheFor,
   writeCompressible,
-} from './asset-variants.js';
-import { injectChangeBridge } from './bridge-script.js';
+} from "./asset-variants.js";
+import { injectChangeBridge } from "./bridge-script.js";
+import { DYNAMIC_QUALITY } from "./compression.js";
+import { compileCssModule } from "./css-module.js";
+import { sendError } from "./http-utils.js";
+import {
+  contentTypeFor,
+  isCssModuleFile,
+  resolveStaticPath,
+  SHARED_ASSET_FILES,
+  staticSecurityHeaders,
+} from "./security.js";
 
 /**
  * Assets that are shared verbatim by every app and therefore served from a
@@ -109,7 +115,7 @@ const cssModuleCache = new Map<string, CssModuleCacheEntry>();
 // `components/jsx-runtime.js`, one directory too deep. esbuild always emits
 // double quotes, but a single-quoted form costs nothing extra to also
 // handle.
-const JSX_RUNTIME_SPECIFIER_RE = /(["'])\.\/jsx-runtime\1/g;
+const JSX_RUNTIME_SPECIFIER_RE = /(?<quote>["'])\.\/jsx-runtime\k<quote>/gu;
 
 /**
  * The relative-path prefix that climbs from a served file's directory back
@@ -121,11 +127,11 @@ const JSX_RUNTIME_SPECIFIER_RE = /(["'])\.\/jsx-runtime\1/g;
  */
 function jsxRuntimeClimb(rel: string): { depth: number; prefix: string } {
   const segments = rel
-    .replace(/^\.?\/+/, '')
-    .split('/')
+    .replace(/^\.?\/+/u, "")
+    .split("/")
     .filter(Boolean);
   const depth = Math.max(0, segments.length - 1);
-  return { depth, prefix: depth === 0 ? './' : '../'.repeat(depth) };
+  return { depth, prefix: depth === 0 ? "./" : "../".repeat(depth) };
 }
 
 /**
@@ -136,10 +142,10 @@ function jsxRuntimeClimb(rel: string): { depth: number; prefix: string } {
  * the depth-aware `./jsx-runtime` rewrite apply unchanged to `.tsx` and are
  * inert for `.ts` (no JSX to rewrite).
  */
-function loaderForExt(file: string): 'jsx' | 'tsx' | 'ts' {
-  if (file.endsWith('.tsx')) return 'tsx';
-  if (file.endsWith('.ts')) return 'ts';
-  return 'jsx';
+function loaderForExt(file: string): "jsx" | "tsx" | "ts" {
+  if (file.endsWith(".tsx")) return "tsx";
+  if (file.endsWith(".ts")) return "ts";
+  return "jsx";
 }
 
 /**
@@ -159,7 +165,7 @@ function loaderForExt(file: string): 'jsx' | 'tsx' | 'ts' {
 async function transformJsx(
   file: string,
   source: Buffer,
-  rel: string,
+  rel: string
 ): Promise<{ code: string; etag: string }> {
   const { depth, prefix } = jsxRuntimeClimb(rel);
   const cacheKey = `${file}\0${depth}`;
@@ -171,20 +177,28 @@ async function transformJsx(
   }
 
   try {
-    const result = await esbuild.transform(source.toString('utf8'), {
+    const result = await esbuild.transform(source.toString("utf8"), {
       loader: loaderForExt(file),
-      jsx: 'automatic',
-      jsxImportSource: '.',
+      jsx: "automatic",
+      jsxImportSource: ".",
     });
-    const code = result.code.replace(JSX_RUNTIME_SPECIFIER_RE, `$1${prefix}jsx-runtime.js$1`);
-    const etag = computeEtag(Buffer.from(code, 'utf8'));
+    const code = result.code.replace(
+      JSX_RUNTIME_SPECIFIER_RE,
+      `$<quote>${prefix}jsx-runtime.js$<quote>`
+    );
+    const etag = computeEtag(Buffer.from(code, "utf8"));
     jsxCache.set(cacheKey, { mtimeMs: stat.mtimeMs, ok: true, code, etag });
     return { code, etag };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const shim = errorShim(message);
-    const etag = computeEtag(Buffer.from(shim, 'utf8'));
-    jsxCache.set(cacheKey, { mtimeMs: stat.mtimeMs, ok: false, error: message, etag });
+    const etag = computeEtag(Buffer.from(shim, "utf8"));
+    jsxCache.set(cacheKey, {
+      mtimeMs: stat.mtimeMs,
+      ok: false,
+      error: message,
+      etag,
+    });
     return { code: shim, etag };
   }
 }
@@ -233,19 +247,23 @@ export async function serveStatic(
   res: ServerResponse,
   appDir: string,
   rel: string,
-  opts: ServeStaticOptions = {},
+  opts: ServeStaticOptions = {}
 ): Promise<true> {
   // Whole-app bundle URLs (`_bundle.<hash>.js`, minted by the live
   // index.html rewrite below) are content-addressed and never touch the
   // filesystem — see app-bundle.ts. Live serving only: a draft never
   // references one (its HTML isn't rewritten), so under `_draft/` this
   // shape falls through to normal resolution and 404s loudly.
-  const bundleMatch = opts.draft ? null : BUNDLE_REL_RE.exec(rel.replace(/^\.?\/+/, ''));
-  if (bundleMatch) {
-    const bundle = findBundleByHash(appDir, bundleMatch[1]!);
-    if (!bundle) return sendError(res, 404, 'not_found', 'Unknown bundle hash.');
+  const bundleMatch = opts.draft
+    ? null
+    : BUNDLE_REL_RE.exec(rel.replace(/^\.?\/+/u, ""));
+  const bundleHash = bundleMatch?.groups?.hash;
+  if (bundleHash) {
+    const bundle = findBundleByHash(appDir, bundleHash);
+    if (!bundle)
+      return sendError(res, 404, "not_found", "Unknown bundle hash.");
     return finishStaticAsset(req, res, {
-      contentType: 'application/javascript; charset=utf-8',
+      contentType: "application/javascript; charset=utf-8",
       etag: bundle.etag,
       rawSize: bundle.code.length,
       loadRaw: () => bundle.code,
@@ -253,12 +271,12 @@ export async function serveStatic(
       // Safe because the URL embeds the content hash: new content = new URL.
       // The ETag still rides along for the PWA service worker's URL+ETag
       // asset cache.
-      cacheControl: 'private, max-age=31536000, immutable',
+      cacheControl: "private, max-age=31536000, immutable",
     });
   }
 
   let file = resolveStaticPath(appDir, rel);
-  if (!file) return sendError(res, 404, 'not_found', 'Asset not found.');
+  if (!file) return sendError(res, 404, "not_found", "Asset not found.");
 
   // Stat first (not read): the file's `mtimeMs`+`size` key the etag/variant
   // cache below, and a 304 revalidation for an unchanged file must never
@@ -276,15 +294,16 @@ export async function serveStatic(
     // of these names is root-level; a nested one (for example
     // `components/kit.ts`) means a hand-written relative import is wrong and
     // must 404 loudly instead of silently resolving to the shared copy.
-    const isRootLevel = !rel.replace(/^\.?\/+/, '').includes('/');
+    const isRootLevel = !rel.replace(/^\.?\/+/u, "").includes("/");
     const base = path.basename(file);
     const shared =
       isRootLevel && opts.sharedAssetsDir && SHARED_ASSET_FILES.has(base)
         ? resolveStaticPath(opts.sharedAssetsDir, base)
         : null;
-    if (!shared) return sendError(res, 404, 'not_found', 'Asset not found.');
+    if (!shared) return sendError(res, 404, "not_found", "Asset not found.");
     const sharedStat = await statOrNull(shared);
-    if (!sharedStat) return sendError(res, 404, 'not_found', 'Asset not found.');
+    if (!sharedStat)
+      return sendError(res, 404, "not_found", "Asset not found.");
     file = shared;
     stat = sharedStat;
   }
@@ -298,8 +317,8 @@ export async function serveStatic(
   // `index.html` would be blocked by the default `script-src 'self'`. The
   // nonce is fresh per response so a leaked old nonce can't whitelist a
   // future injection.
-  if (contentType.startsWith('text/html')) {
-    let html = (await fs.readFile(file)).toString('utf8');
+  if (contentType.startsWith("text/html")) {
+    let html = (await fs.readFile(file)).toString("utf8");
     // LIVE serving collapses the app's request waterfall (issue #404): the
     // entry `<script type="module">` is rewritten to a content-hashed
     // whole-graph bundle and the render-blocking stylesheet `<link>`s are
@@ -327,21 +346,24 @@ export async function serveStatic(
             appId: opts.draft.appId,
             basePath: `/centraid/_draft/${encodeURIComponent(opts.draft.sessionId)}/${encodeURIComponent(opts.draft.appId)}/`,
           }
-        : undefined,
+        : undefined
     );
-    const inlineScriptNonce = randomBytes(16).toString('base64');
+    const inlineScriptNonce = randomBytes(16).toString("base64");
     html = stampInlineScriptNonces(html, inlineScriptNonce);
-    const raw = Buffer.from(html, 'utf8');
+    const raw = Buffer.from(html, "utf8");
 
     // The fresh CSP nonce and baked settings make responses unique, so an ETag
     // cannot hit. `no-store` ensures browsers do not retain the document.
     // The doc shell is compressible (3-5x) — compress inline (no variant
     // cache; it's unique per response) with the fast dynamic quality.
     res.statusCode = 200;
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "no-store");
     for (const [k, v] of Object.entries(
-      staticSecurityHeaders({ inlineScriptNonce, frameAncestor: opts.frameAncestor }),
+      staticSecurityHeaders({
+        inlineScriptNonce,
+        frameAncestor: opts.frameAncestor,
+      })
     )) {
       res.setHeader(k, v);
     }
@@ -363,12 +385,16 @@ export async function serveStatic(
     let cachedCss = cssModuleCache.get(file);
     if (!cachedCss || cachedCss.mtimeMs !== stat.mtimeMs) {
       const compiled = await compileCssModule(file, appDir);
-      cachedCss = { mtimeMs: stat.mtimeMs, code: compiled.js, etag: compiled.etag };
+      cachedCss = {
+        mtimeMs: stat.mtimeMs,
+        code: compiled.js,
+        etag: compiled.etag,
+      };
       cssModuleCache.set(file, cachedCss);
     }
-    const raw = Buffer.from(cachedCss.code, 'utf8');
+    const raw = Buffer.from(cachedCss.code, "utf8");
     return finishStaticAsset(req, res, {
-      contentType: 'application/javascript; charset=utf-8',
+      contentType: "application/javascript; charset=utf-8",
       etag: cachedCss.etag,
       rawSize: raw.length,
       loadRaw: () => raw,
@@ -385,9 +411,9 @@ export async function serveStatic(
   // through this same `serveStatic` call. The transform hands back its etag,
   // memoized in {@link jsxCache}, so it isn't re-hashed per request; its
   // compressed variants ride the etag-keyed {@link jsxVariantCache}.
-  if (file.endsWith('.jsx') || file.endsWith('.tsx') || file.endsWith('.ts')) {
+  if (file.endsWith(".jsx") || file.endsWith(".tsx") || file.endsWith(".ts")) {
     const transformed = await transformJsx(file, await fs.readFile(file), rel);
-    const raw = Buffer.from(transformed.code, 'utf8');
+    const raw = Buffer.from(transformed.code, "utf8");
     return finishStaticAsset(req, res, {
       contentType,
       etag: transformed.etag,
@@ -421,7 +447,9 @@ export async function serveStatic(
 }
 
 /** `fs.stat` or `null` when the path doesn't exist / isn't reachable. */
-async function statOrNull(file: string): Promise<import('node:fs').Stats | null> {
+async function statOrNull(
+  file: string
+): Promise<import("node:fs").Stats | null> {
   try {
     return await fs.stat(file);
   } catch {
@@ -438,20 +466,23 @@ async function statOrNull(file: string): Promise<import('node:fs').Stats | null>
  * limitation since the runtime only serves HTML it controls.
  */
 function stampInlineScriptNonces(html: string, nonce: string): string {
-  return html.replace(/<script\b([^>]*)>/gi, (match, attrs: string) => {
-    if (/\bsrc\s*=/i.test(attrs)) return match;
-    if (/\bnonce\s*=/i.test(attrs)) return match;
-    return `<script${attrs} nonce="${nonce}">`;
-  });
+  return html.replace(
+    /<script\b(?<attrs>[^>]*)>/giu,
+    (match, attrs: string) => {
+      if (/\bsrc\s*=/iu.test(attrs)) return match;
+      if (/\bnonce\s*=/iu.test(attrs)) return match;
+      return `<script${attrs} nonce="${nonce}">`;
+    }
+  );
 }
 
 // `data-<name>` attribute names: lowercase letters, digits, dashes only.
-const DATA_KEY_RE = /^[a-z][a-z0-9-]*$/;
+const DATA_KEY_RE = /^[a-z][a-z0-9-]*$/u;
 // CSS custom-property names (`--foo-bar`): lowercase letters, digits, dashes.
-const CSS_KEY_RE = /^[a-z][a-z0-9-]*$/;
+const CSS_KEY_RE = /^[a-z][a-z0-9-]*$/u;
 // Attribute values: forbid quotes, angle brackets, and control chars. A "%"
 // suffix is fine, so the existing `--bg-l: 5%` use case still flows through.
-const VALUE_RE = /^[A-Za-z0-9 #()%.,_/:-]+$/;
+const VALUE_RE = /^[A-Za-z0-9 #()%.,_/:-]+$/u;
 
 /**
  * Rewrite the first `<html ...>` tag to carry the provided data attrs and
@@ -471,23 +502,23 @@ function injectSettings(html: string, vals: SettingsInject): string {
   const cssKeys = Object.keys(cssVars);
   if (dataKeys.length === 0 && cssKeys.length === 0) return html;
 
-  return html.replace(/<html\b([^>]*)>/i, (_match, attrs: string) => {
+  return html.replace(/<html\b(?<attrs>[^>]*)>/iu, (_match, attrs: string) => {
     let out = attrs;
 
     for (const k of dataKeys) {
       const v = dataAttrs[k]!;
-      const re = new RegExp(`\\bdata-${k}\\s*=`, 'i');
+      const re = new RegExp(`\\bdata-${k}\\s*=`, "iu");
       if (!re.test(out)) {
         out += ` data-${k}="${v}"`;
       }
     }
 
     if (cssKeys.length > 0) {
-      const inlineVars = cssKeys.map((k) => `--${k}:${cssVars[k]!}`).join(';');
-      if (/\bstyle\s*=\s*"/i.test(out)) {
+      const inlineVars = cssKeys.map((k) => `--${k}:${cssVars[k]!}`).join(";");
+      if (/\bstyle\s*=\s*"/iu.test(out)) {
         out = out.replace(
-          /\bstyle\s*=\s*"([^"]*)"/i,
-          (_m, body: string) => `style="${body};${inlineVars}"`,
+          /\bstyle\s*=\s*"(?<body>[^"]*)"/iu,
+          (_m, body: string) => `style="${body};${inlineVars}"`
         );
       } else {
         out += ` style="${inlineVars}"`;
@@ -503,10 +534,13 @@ function injectSettings(html: string, vals: SettingsInject): string {
  * permissive (callers pass through user prefs / per-app settings without
  * pre-sanitizing) and quietly skip anything risky here.
  */
-function filterStringMap(map: Record<string, string>, keyRe: RegExp): Record<string, string> {
+function filterStringMap(
+  map: Record<string, string>,
+  keyRe: RegExp
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(map)) {
-    if (typeof v !== 'string') continue;
+    if (typeof v !== "string") continue;
     if (!keyRe.test(k)) continue;
     if (!VALUE_RE.test(v)) continue;
     out[k] = v;

@@ -23,9 +23,10 @@
  * custom headers natively but it doesn't need to.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ChangeBus } from '../changes/change-bus.js';
-import { sendJson } from './http-utils.js';
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+import type { ChangeBus } from "../changes/change-bus.js";
+import { sendJson } from "./http-utils.js";
 
 // 55s keeps the stream warm while staying under the ~60s idle cut common to
 // mobile carrier NATs and reverse proxies (issue #404) — one heartbeat still
@@ -49,7 +50,9 @@ const CHANGES_SSE_RETRY_AFTER_SECONDS = 5;
 export class ChangesSubscriberCap {
   private readonly counts = new Map<string, number>();
 
-  constructor(private readonly max: number = CHANGES_SSE_MAX_SUBSCRIBERS_PER_APP) {}
+  constructor(
+    private readonly max: number = CHANGES_SSE_MAX_SUBSCRIBERS_PER_APP
+  ) {}
 
   /** Live subscriber count for one app (0 if never subscribed). */
   current(appId: string): number {
@@ -73,9 +76,9 @@ export class ChangesSubscriberCap {
   admit(appId: string, res: ServerResponse): (() => void) | undefined {
     const count = this.counts.get(appId) ?? 0;
     if (count >= this.max) {
-      res.setHeader('Retry-After', String(CHANGES_SSE_RETRY_AFTER_SECONDS));
+      res.setHeader("Retry-After", String(CHANGES_SSE_RETRY_AFTER_SECONDS));
       sendJson(res, 503, {
-        error: 'sse_capacity',
+        error: "sse_capacity",
         message: `too many concurrent _changes subscribers for this app (max ${this.max}) — retry shortly`,
       });
       return undefined;
@@ -108,7 +111,7 @@ export async function handleAppChanges(
   res: ServerResponse,
   bus: ChangeBus,
   appId: string,
-  cap: ChangesSubscriberCap = sharedChangesCap,
+  cap: ChangesSubscriberCap = sharedChangesCap
 ): Promise<void> {
   const release = cap.admit(appId, res);
   if (!release) return;
@@ -117,10 +120,10 @@ export async function handleAppChanges(
   // seconds of no body. `X-Accel-Buffering: no` disables nginx response
   // buffering for deployments behind a reverse proxy.
   res.writeHead(200, {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
-    Connection: 'keep-alive',
-    'X-Accel-Buffering': 'no',
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
   });
   // Send an initial comment so the client's `onopen` fires immediately
   // instead of waiting for the first real event.
@@ -164,8 +167,8 @@ export async function handleAppChanges(
       // eslint-disable-next-line promise/no-multiple-resolved -- `done` guard ensures single resolution (#247)
       resolve();
     };
-    req.on('close', cleanup);
-    req.on('error', cleanup);
-    res.on('close', cleanup);
+    req.on("close", cleanup);
+    req.on("error", cleanup);
+    res.on("close", cleanup);
   });
 }

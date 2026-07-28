@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 /**
  * Reads the `builderEnabled` dev flag (issue #434, Phase 3) from shell settings

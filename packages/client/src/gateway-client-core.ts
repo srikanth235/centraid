@@ -22,7 +22,7 @@ import {
   href,
   VAULT_HEADER,
   type GatewayAuth,
-} from './gateway-auth.js';
+} from "./gateway-auth.js";
 
 export {
   authHeaders,
@@ -32,13 +32,13 @@ export {
   scopedAuthHeaders,
   VAULT_HEADER,
   type GatewayAuth,
-} from './gateway-auth.js';
+} from "./gateway-auth.js";
 
 declare global {
   interface Window {
     CentraidIroh?: {
-      fetch(pathname: string, init?: RequestInit): Promise<Response>;
-      url(pathname: string): Promise<string>;
+      fetch: (pathname: string, init?: RequestInit) => Promise<Response>;
+      url: (pathname: string) => Promise<string>;
     };
   }
 }
@@ -46,7 +46,7 @@ declare global {
 let cachedAuth: Promise<GatewayAuth> | undefined;
 let cachedClientSessionId: string | undefined;
 
-export const CLIENT_SESSION_HEADER = 'x-centraid-client-session';
+export const CLIENT_SESSION_HEADER = "x-centraid-client-session";
 
 /**
  * Per-tab/window ceremony binding. It is not an authentication secret, but
@@ -55,10 +55,10 @@ export const CLIENT_SESSION_HEADER = 'x-centraid-client-session';
  */
 export function clientSessionId(): string {
   if (cachedClientSessionId) return cachedClientSessionId;
-  const storageKey = 'centraid.oauth.client-session.v1';
+  const storageKey = "centraid.oauth.client-session.v1";
   try {
     const saved = window.sessionStorage.getItem(storageKey);
-    if (saved && /^[A-Za-z0-9_-]{32,128}$/.test(saved)) {
+    if (saved && /^[A-Za-z0-9_-]{32,128}$/u.test(saved)) {
       cachedClientSessionId = saved;
       return saved;
     }
@@ -67,7 +67,9 @@ export function clientSessionId(): string {
   }
   const bytes = new Uint8Array(32);
   globalThis.crypto.getRandomValues(bytes);
-  cachedClientSessionId = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  cachedClientSessionId = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
   try {
     window.sessionStorage.setItem(storageKey, cachedClientSessionId);
   } catch {
@@ -105,7 +107,7 @@ window.CentraidApi.onVaultChanged?.(() => resetGatewayAuthCache());
 export async function appSessionUrl(
   appId: string,
   directPath: string,
-  draftSessionId?: string,
+  draftSessionId?: string
 ): Promise<string> {
   const capabilities = await window.CentraidApi.getHostCapabilities?.();
   const { baseUrl, token, iroh } = await auth();
@@ -114,12 +116,19 @@ export async function appSessionUrl(
       ? window.CentraidIroh.url(directPath)
       : href(baseUrl, directPath);
   }
-  const res = await doFetch(baseUrl, `/centraid/_apps/${enc(appId)}/web-session`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify(draftSessionId ? { draftSessionId } : {}),
-  });
-  const out = await readJson<{ launchPath: string }>(res, 'open browser app session');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_apps/${enc(appId)}/web-session`,
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify(draftSessionId ? { draftSessionId } : {}),
+    }
+  );
+  const out = await readJson<{ launchPath: string }>(
+    res,
+    "open browser app session"
+  );
   return iroh && window.CentraidIroh
     ? window.CentraidIroh.url(out.launchPath)
     : href(baseUrl, out.launchPath);
@@ -128,7 +137,7 @@ export async function appSessionUrl(
 export async function doFetch(
   baseUrl: string,
   pathname: string,
-  init: RequestInit,
+  init: RequestInit
 ): Promise<Response> {
   // Stamp the addressed vault on every request (issue #289). The caller
   // resolved `auth()` just above, so the cached promise is settled — read
@@ -138,7 +147,8 @@ export async function doFetch(
   try {
     const gatewayAuth = await auth();
     if (gatewayAuth.iroh) {
-      if (!window.CentraidIroh) throw new Error('Iroh browser transport is not installed.');
+      if (!window.CentraidIroh)
+        throw new Error("Iroh browser transport is not installed.");
       return await window.CentraidIroh.fetch(pathname, finalInit);
     }
     const requestPath = gatewayAuth.webControl
@@ -146,12 +156,12 @@ export async function doFetch(
       : pathname;
     return await fetch(href(baseUrl, requestPath), {
       ...finalInit,
-      credentials: gatewayAuth.webControl ? 'include' : finalInit.credentials,
+      credentials: gatewayAuth.webControl ? "include" : finalInit.credentials,
     });
   } catch (err) {
     throw new GatewayClientError(
-      'gateway_unreachable',
-      `Could not reach gateway at ${baseUrl}: ${err instanceof Error ? err.message : String(err)}`,
+      "gateway_unreachable",
+      `Could not reach gateway at ${baseUrl}: ${err instanceof Error ? err.message : String(err)}`
     );
   }
 }
@@ -174,22 +184,31 @@ export async function readJson<T>(res: Response, op: string): Promise<T> {
   if (!res.ok) {
     if (res.status === 401 || res.status === 403) {
       throw new GatewayClientError(
-        'auth_required',
-        `${op}: gateway rejected request (HTTP ${res.status}). Check your gateway token in Settings.`,
+        "auth_required",
+        `${op}: gateway rejected request (HTTP ${res.status}). Check your gateway token in Settings.`
       );
     }
     if (res.status === 404)
-      throw new GatewayClientError('not_found', `${op}: ${text || res.statusText}`);
+      throw new GatewayClientError(
+        "not_found",
+        `${op}: ${text || res.statusText}`
+      );
     if (res.status === 409)
-      throw new GatewayClientError('conflict', `${op}: ${text || res.statusText}`);
+      throw new GatewayClientError(
+        "conflict",
+        `${op}: ${text || res.statusText}`
+      );
     throw new GatewayClientError(
-      'gateway_error',
-      `${op} failed (HTTP ${res.status}): ${text || res.statusText}`,
+      "gateway_error",
+      `${op} failed (HTTP ${res.status}): ${text || res.statusText}`
     );
   }
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new GatewayClientError('gateway_error', `${op} returned non-JSON: ${text.slice(0, 200)}`);
+    throw new GatewayClientError(
+      "gateway_error",
+      `${op} returned non-JSON: ${text.slice(0, 200)}`
+    );
   }
 }

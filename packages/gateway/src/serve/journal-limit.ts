@@ -29,11 +29,14 @@
  */
 
 /** The window ladder, widest first. The last rung is the floor. */
-export const JOURNAL_ARCHIVE_WINDOW_LADDER: readonly number[] = Object.freeze([90, 30, 14, 7]);
+export const JOURNAL_ARCHIVE_WINDOW_LADDER: readonly number[] = Object.freeze([
+  90, 30, 14, 7,
+]);
 
 /** The widest rung — matches both engines' own defaults, so an unset limit
  *  reproduces today's behaviour byte for byte. */
-export const JOURNAL_ARCHIVE_DEFAULT_WINDOW_DAYS = JOURNAL_ARCHIVE_WINDOW_LADDER[0] as number;
+export const JOURNAL_ARCHIVE_DEFAULT_WINDOW_DAYS =
+  JOURNAL_ARCHIVE_WINDOW_LADDER[0] as number;
 
 /** The narrowest rung — archival never reaches inside this many days. */
 export const JOURNAL_ARCHIVE_FLOOR_WINDOW_DAYS = JOURNAL_ARCHIVE_WINDOW_LADDER[
@@ -72,9 +75,12 @@ export interface JournalArchiveDecision {
  * With no limit set, this collapses to exactly the pre-#544 behaviour: run on
  * the daily gate, at the 90-day window, ladder pinned to rung 0.
  */
-export function decideJournalArchive(input: JournalArchiveDecisionInput): JournalArchiveDecision {
+export function decideJournalArchive(
+  input: JournalArchiveDecisionInput
+): JournalArchiveDecision {
   const { journalBytes, limitBytes, dailyGateElapsed } = input;
-  const overLimit = limitBytes !== null && limitBytes > 0 && journalBytes > limitBytes;
+  const overLimit =
+    limitBytes !== null && limitBytes > 0 && journalBytes > limitBytes;
 
   if (!overLimit) {
     // Back under the limit (or never over it): relax to the widest window so

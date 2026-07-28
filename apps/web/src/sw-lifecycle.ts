@@ -1,4 +1,4 @@
-import { saveSettingsPatch } from './web-state.js';
+import { saveSettingsPatch } from "./web-state.js";
 
 // iOS can evict an origin's storage after ~7 idle days, which would wipe the
 // iroh device key and force a re-pair. Requesting persistence after a
@@ -7,8 +7,12 @@ import { saveSettingsPatch } from './web-state.js';
 export async function requestPersistentStorage(): Promise<void> {
   try {
     if (!navigator.storage?.persist) return;
-    const granted = (await navigator.storage.persisted?.()) || (await navigator.storage.persist());
-    console.info(`[centraid] persistent storage ${granted ? 'granted' : 'denied'}`);
+    const granted =
+      (await navigator.storage.persisted?.()) ||
+      (await navigator.storage.persist());
+    console.info(
+      `[centraid] persistent storage ${granted ? "granted" : "denied"}`
+    );
     saveSettingsPatch({ storagePersisted: granted });
   } catch {
     /* persistence is advisory only */
@@ -16,10 +20,12 @@ export async function requestPersistentStorage(): Promise<void> {
 }
 
 export function purgeTunnelCaches(): void {
-  navigator.serviceWorker?.controller?.postMessage({ type: 'centraid:purge-tunnel-cache' });
+  navigator.serviceWorker?.controller?.postMessage({
+    type: "centraid:purge-tunnel-cache",
+  });
   // A newly opened page may not be controlled yet. Delete the origin caches
   // directly as well so a consent downgrade cannot depend on SW timing.
-  if ('caches' in globalThis) {
+  if ("caches" in globalThis) {
     void caches
       .keys()
       .then((keys) =>
@@ -27,11 +33,11 @@ export function purgeTunnelCaches(): void {
           keys
             .filter(
               (key) =>
-                key.startsWith('centraid-tunnel-assets-') ||
-                key.startsWith('centraid-tunnel-blobs-'),
+                key.startsWith("centraid-tunnel-assets-") ||
+                key.startsWith("centraid-tunnel-blobs-")
             )
-            .map((key) => caches.delete(key)),
-        ),
+            .map((key) => caches.delete(key))
+        )
       )
       .catch(() => undefined);
   }
@@ -43,30 +49,33 @@ export function purgeTunnelCaches(): void {
 // affordance. The very first controllerchange after a cold load is the initial
 // claim, not an update, so it is ignored.
 let updateAvailable = false;
-const updateListeners = new Set<(msg: { available: boolean; version: string }) => void>();
+const updateListeners = new Set<
+  (msg: { available: boolean; version: string }) => void
+>();
 
 export function isUpdateAvailable(): boolean {
   return updateAvailable;
 }
 
 export function onSwUpdateAvailable(
-  callback: (msg: { available: boolean; version: string }) => void,
+  listener: (msg: { available: boolean; version: string }) => void
 ): () => void {
-  updateListeners.add(callback);
-  if (updateAvailable) callback({ available: true, version: 'web' });
-  return () => updateListeners.delete(callback);
+  updateListeners.add(listener);
+  if (updateAvailable) listener({ available: true, version: "web" });
+  return () => updateListeners.delete(listener);
 }
 
 function markUpdateAvailable(): void {
   if (updateAvailable) return;
   updateAvailable = true;
-  for (const listener of updateListeners) listener({ available: true, version: 'web' });
+  for (const listener of updateListeners)
+    listener({ available: true, version: "web" });
 }
 
 export function watchServiceWorkerUpdates(): void {
-  if (!('serviceWorker' in navigator)) return;
+  if (!("serviceWorker" in navigator)) return;
   let hadController = navigator.serviceWorker.controller !== null;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (!hadController) {
       hadController = true; // initial claim on first load — not an update
       return;

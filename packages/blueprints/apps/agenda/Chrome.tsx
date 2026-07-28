@@ -12,8 +12,9 @@
 // them imperatively. Rendered once with constant props, React never reconciles
 // those attributes, so the imperative DOM writes are never clobbered — the same
 // contract the served app relies on.
-import type { KeyboardEvent, ReactNode } from 'react';
-import styles from './Chrome.module.css';
+import type { KeyboardEvent, ReactNode } from "react";
+
+import styles from "./Chrome.module.css";
 
 export interface ChromeProps {
   narrow: boolean;
@@ -56,11 +57,11 @@ export function Chrome(props: ChromeProps): ReactNode {
 
   const shellClass = [
     styles.shell,
-    props.narrow ? styles.isNarrow : '',
-    props.sideOpen ? styles.sideOpen : '',
+    props.narrow ? styles.isNarrow : "",
+    props.sideOpen ? styles.sideOpen : "",
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
   return (
     <div className={shellClass}>
       <aside className={styles.side} aria-label="Agenda navigation">
@@ -110,7 +111,9 @@ export function Chrome(props: ChromeProps): ReactNode {
 
         <div aria-live="polite">{props.sidebarMini}</div>
 
-        <div className={`ag-eyebrow-label ${styles.calsLabel}`}>My calendars</div>
+        <div className={`ag-eyebrow-label ${styles.calsLabel}`}>
+          My calendars
+        </div>
         <div>{props.sidebarCals}</div>
 
         <div className={styles.sideFoot}>
@@ -183,7 +186,9 @@ export function Chrome(props: ChromeProps): ReactNode {
                 placeholder="Search events"
                 aria-label="Search events"
                 autoComplete="off"
-                onInput={(event) => props.onSearchInput(event.currentTarget.value)}
+                onInput={(event) =>
+                  props.onSearchInput(event.currentTarget.value)
+                }
                 onKeyDown={props.onSearchKeyDown}
               />
             </label>
@@ -199,10 +204,15 @@ export function Chrome(props: ChromeProps): ReactNode {
 
         {/* Driven imperatively by app-inline.tsx's applyLoadedData — rendered
             once with constant props, so React never clobbers the DOM writes. */}
-        <div id="consentBanner" className={`kit-banner ${styles.banner}`} hidden>
-          <strong>No vault access yet.</strong>{' '}
+        <div
+          id="consentBanner"
+          className={`kit-banner ${styles.banner}`}
+          hidden
+        >
+          <strong>No vault access yet.</strong>{" "}
           <span id="consentDetail">
-            Ask the owner to approve this app&apos;s requested scopes in vault settings.
+            Ask the owner to approve this app&apos;s requested scopes in vault
+            settings.
           </span>
         </div>
         <output

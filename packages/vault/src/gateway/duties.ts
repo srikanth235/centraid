@@ -7,18 +7,18 @@
 // Gateway (the pause is gateway state); the view service in views.ts; file
 // custody in custody.ts; export & portability in portability.ts.
 
-import type { VaultDb } from '../db.js';
-import { nowIso } from '../ids.js';
-import { sweepBlobStaging } from '../blob/staging.js';
-import { shaOfBlobUri } from '../blob/store.js';
-import { RELATIONS_SCHEME_URI } from '../commands/links.js';
-import { cleanupPolyRefs } from '../schema/poly-refs.js';
-import { resolveEntity } from '../schema/tables.js';
-import { retainExtBand } from './ext.js';
-import { writeScopeTombstones } from '../install-memory.js';
-import { writeProvenance, writeReceipt } from './evidence.js';
-import { tableColumns } from './filters.js';
-import type { FilterClause, Identity } from './types.js';
+import { sweepBlobStaging } from "../blob/staging.js";
+import { shaOfBlobUri } from "../blob/store.js";
+import { RELATIONS_SCHEME_URI } from "../commands/links.js";
+import type { VaultDb } from "../db.js";
+import { nowIso } from "../ids.js";
+import { writeScopeTombstones } from "../install-memory.js";
+import { cleanupPolyRefs } from "../schema/poly-refs.js";
+import { resolveEntity } from "../schema/tables.js";
+import { writeProvenance, writeReceipt } from "./evidence.js";
+import { retainExtBand } from "./ext.js";
+import { tableColumns } from "./filters.js";
+import type { FilterClause, Identity } from "./types.js";
 
 export interface RevocationResult {
   grantId: string;
@@ -44,19 +44,25 @@ export function revokeGrantCascade(
   db: VaultDb,
   owner: Identity,
   grantId: string,
-  dropParked: (grantId: string) => number,
+  dropParked: (grantId: string) => number
 ): RevocationResult {
   const now = nowIso();
   const grant = db.vault
     .prepare(
-      'SELECT grant_id, app_id, grantee_party_id FROM consent_access_grant WHERE grant_id = ?',
+      "SELECT grant_id, app_id, grantee_party_id FROM consent_access_grant WHERE grant_id = ?"
     )
     .get(grantId) as
-    | { grant_id: string; app_id: string | null; grantee_party_id: string | null }
+    | {
+        grant_id: string;
+        app_id: string | null;
+        grantee_party_id: string | null;
+      }
     | undefined;
   if (!grant) throw new Error(`no grant ${grantId}`);
   db.vault
-    .prepare(`UPDATE consent_access_grant SET status='revoked', revoked_at=? WHERE grant_id=?`)
+    .prepare(
+      `UPDATE consent_access_grant SET status='revoked', revoked_at=? WHERE grant_id=?`
+    )
     .run(now, grantId);
   // The owner's "no" outlives the grant row (issue #308 A4): tombstone each
   // revoked scope triple so the install-grant top-up can never silently
@@ -65,7 +71,7 @@ export function revokeGrantCascade(
   const revokedScopes = db.vault
     .prepare(
       `SELECT schema_name, table_name, verbs, row_filter_json, field_mask_json
-         FROM consent_grant_scope WHERE grant_id = ?`,
+         FROM consent_grant_scope WHERE grant_id = ?`
     )
     .all(grantId) as {
     schema_name: string;
@@ -78,18 +84,20 @@ export function revokeGrantCascade(
     grant.app_id !== null || grant.grantee_party_id !== null
       ? writeScopeTombstones(
           db,
-          grant.app_id !== null
-            ? { appId: grant.app_id }
-            : { granteePartyId: grant.grantee_party_id as string },
+          grant.app_id === null
+            ? { granteePartyId: grant.grantee_party_id as string }
+            : { appId: grant.app_id },
           revokedScopes.map((s) => ({
             schema: s.schema_name,
-            ...(s.table_name !== null ? { table: s.table_name } : {}),
-            verbs: s.verbs as 'read' | 'read+act' | 'act' | 'reveal',
+            ...(s.table_name === null ? {} : { table: s.table_name }),
+            verbs: s.verbs as "read" | "read+act" | "act" | "reveal",
             ...(s.row_filter_json
               ? { rowFilter: JSON.parse(s.row_filter_json) as FilterClause[] }
               : {}),
-            ...(s.field_mask_json ? { fieldMask: JSON.parse(s.field_mask_json) as string[] } : {}),
-          })),
+            ...(s.field_mask_json
+              ? { fieldMask: JSON.parse(s.field_mask_json) as string[] }
+              : {}),
+          }))
         )
       : 0;
   let viewsRevoked = 0;
@@ -99,17 +107,19 @@ export function revokeGrantCascade(
     // consent_app.app_id is a row uuid; the ext band (like the code store)
     // keys on the Centraid app id, which enrollment carries as `name`.
     const appRow = db.vault
-      .prepare('SELECT name FROM consent_app WHERE app_id = ?')
+      .prepare("SELECT name FROM consent_app WHERE app_id = ?")
       .get(grant.app_id) as { name: string } | undefined;
     centraidAppId = appRow?.name ?? null;
     const stillGranted = db.vault
       .prepare(
-        `SELECT count(*) AS n FROM consent_access_grant WHERE app_id = ? AND status = 'active' AND revoked_at IS NULL`,
+        `SELECT count(*) AS n FROM consent_access_grant WHERE app_id = ? AND status = 'active' AND revoked_at IS NULL`
       )
       .get(grant.app_id) as { n: number };
     if (stillGranted.n === 0) {
       const res = db.vault
-        .prepare(`UPDATE consent_app_view SET revoked_at=? WHERE app_id=? AND revoked_at IS NULL`)
+        .prepare(
+          `UPDATE consent_app_view SET revoked_at=? WHERE app_id=? AND revoked_at IS NULL`
+        )
         .run(now, grant.app_id);
       viewsRevoked = Number(res.changes);
       if (centraidAppId) extRetained = retainExtBand(db, centraidAppId);
@@ -119,15 +129,34 @@ export function revokeGrantCascade(
   const receiptId = writeReceipt(db.journal, {
     grantId,
     invocationId: null,
-    action: 'act consent.revoke_grant',
-    objectType: 'consent.access_grant',
+    action: "act consent.revoke_grant",
+    objectType: "consent.access_grant",
     objectId: grantId,
     purpose: null,
-    decision: 'allow',
-    detail: { viewsRevoked, parkedDropped, extRetained, tombstoned, revokedBy: owner.partyId },
+    decision: "allow",
+    detail: {
+      viewsRevoked,
+      parkedDropped,
+      extRetained,
+      tombstoned,
+      revokedBy: owner.partyId,
+    },
   });
-  writeProvenance(db.journal, owner, 'consent.access_grant', grantId, 'owner.revoke');
-  return { grantId, appId: centraidAppId, viewsRevoked, parkedDropped, extRetained, receiptId };
+  writeProvenance(
+    db.journal,
+    owner,
+    "consent.access_grant",
+    grantId,
+    "owner.revoke"
+  );
+  return {
+    grantId,
+    appId: centraidAppId,
+    viewsRevoked,
+    parkedDropped,
+    extRetained,
+    receiptId,
+  };
 }
 
 export interface SweepResult {
@@ -165,7 +194,7 @@ function enforceRetention(db: VaultDb, now: string): number {
       `SELECT applies_schema, applies_table, retention_days, rule_json FROM consent_policy
         WHERE kind = 'retention' AND retention_days IS NOT NULL AND applies_table IS NOT NULL
           AND effective_from <= ?
-        ORDER BY priority ASC`,
+        ORDER BY priority ASC`
     )
     .all(now) as {
     applies_schema: string;
@@ -175,12 +204,17 @@ function enforceRetention(db: VaultDb, now: string): number {
   }[];
   let deleted = 0;
   for (const policy of policies) {
-    const ref = resolveEntity(`${policy.applies_schema}.${policy.applies_table}`, db.vault);
-    if (!ref || ref.file !== 'vault') continue;
+    const ref = resolveEntity(
+      `${policy.applies_schema}.${policy.applies_table}`,
+      db.vault
+    );
+    if (!ref || ref.file !== "vault") continue;
     const rule = JSON.parse(policy.rule_json) as { timestamp_column?: string };
-    const tsColumn = rule.timestamp_column ?? 'created_at';
+    const tsColumn = rule.timestamp_column ?? "created_at";
     if (!tableColumns(db.vault, ref.physical).has(tsColumn)) continue;
-    const cutoff = new Date(Date.parse(now) - policy.retention_days * 86_400_000).toISOString();
+    const cutoff = new Date(
+      Date.parse(now) - policy.retention_days * 86_400_000
+    ).toISOString();
     const result = db.vault
       .prepare(`DELETE FROM "${ref.physical}" WHERE "${tsColumn}" < ?`)
       .run(cutoff);
@@ -195,7 +229,7 @@ function revisesConceptId(db: VaultDb): string | null {
     .prepare(
       `SELECT c.concept_id FROM core_concept c
          JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-        WHERE s.uri = ? AND c.notation = 'revises'`,
+        WHERE s.uri = ? AND c.notation = 'revises'`
     )
     .get(RELATIONS_SCHEME_URI) as { concept_id: string } | undefined;
   return row?.concept_id ?? null;
@@ -211,7 +245,11 @@ function revisesConceptId(db: VaultDb): string | null {
  * cycle back through content already visited — the seen-set is load-
  * bearing, not defensive: without it this does not terminate.
  */
-function documentChain(db: VaultDb, headContentId: string, revisesId: string): string[] {
+function documentChain(
+  db: VaultDb,
+  headContentId: string,
+  revisesId: string
+): string[] {
   const seen = new Set<string>([headContentId]);
   const queue: string[] = [headContentId];
   while (queue.length > 0) {
@@ -220,7 +258,7 @@ function documentChain(db: VaultDb, headContentId: string, revisesId: string): s
       .prepare(
         `SELECT to_id FROM core_link
           WHERE from_type = 'core.content_item' AND from_id = ? AND to_type = 'core.content_item'
-            AND relation_concept_id = ? AND valid_to IS NULL`,
+            AND relation_concept_id = ? AND valid_to IS NULL`
       )
       .all(cur, revisesId) as { to_id: string }[];
     for (const n of next) {
@@ -251,7 +289,7 @@ function contentRentedElsewhere(db: VaultDb, contentId: string): boolean {
          OR EXISTS(SELECT 1 FROM home_warranty WHERE terms_content_id = ?)
          OR EXISTS(SELECT 1 FROM home_maintenance_plan WHERE instructions_content_id = ?)
          OR EXISTS(SELECT 1 FROM media_media_asset WHERE content_id = ? AND deleted_at IS NULL)
-       ) AS n`,
+       ) AS n`
     )
     .get(
       contentId,
@@ -261,7 +299,7 @@ function contentRentedElsewhere(db: VaultDb, contentId: string): boolean {
       contentId,
       contentId,
       contentId,
-      contentId,
+      contentId
     ) as {
     n: number;
   };
@@ -278,14 +316,16 @@ function ownedByAnotherLiveDocument(
   db: VaultDb,
   contentId: string,
   excludeDocumentId: string,
-  revisesId: string,
+  revisesId: string
 ): boolean {
   const others = db.vault
     .prepare(
-      `SELECT current_content_id FROM core_document WHERE document_id != ? AND deleted_at IS NULL`,
+      `SELECT current_content_id FROM core_document WHERE document_id != ? AND deleted_at IS NULL`
     )
     .all(excludeDocumentId) as { current_content_id: string }[];
-  return others.some((o) => documentChain(db, o.current_content_id, revisesId).includes(contentId));
+  return others.some((o) =>
+    documentChain(db, o.current_content_id, revisesId).includes(contentId)
+  );
 }
 
 /**
@@ -296,27 +336,50 @@ function ownedByAnotherLiveDocument(
  * content item is purged the same way regardless of which wrapper decided
  * it was time. Returns CAS blobs reclaimed.
  */
-function purgeContentItem(db: VaultDb, owner: Identity, now: string, contentId: string): number {
+function purgeContentItem(
+  db: VaultDb,
+  owner: Identity,
+  now: string,
+  contentId: string
+): number {
   let reclaimed = 0;
   // A trashed media asset over these bytes goes with them — the asset row
   // references the content (NOT NULL), so purging one must purge both.
   const asset = db.vault
-    .prepare('SELECT asset_id FROM media_media_asset WHERE content_id = ?')
+    .prepare("SELECT asset_id FROM media_media_asset WHERE content_id = ?")
     .get(contentId) as { asset_id: string } | undefined;
   if (asset) {
-    writeProvenance(db.journal, owner, 'media.media_asset', asset.asset_id, 'sweep.purge');
-    db.vault.prepare('DELETE FROM media_face_region WHERE asset_id = ?').run(asset.asset_id);
-    db.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(asset.asset_id);
+    writeProvenance(
+      db.journal,
+      owner,
+      "media.media_asset",
+      asset.asset_id,
+      "sweep.purge"
+    );
+    db.vault
+      .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
+      .run(asset.asset_id);
+    db.vault
+      .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+      .run(asset.asset_id);
     // Every polymorphic pointer at the asset (issue #441 A1): end-date links,
     // drop tags/entries/annotations/attachments/embeddings/sync-map/seed rows,
     // revoke shares — the registry is the complete set, not this call site.
-    cleanupPolyRefs(db.vault, now, 'media.media_asset', asset.asset_id);
+    cleanupPolyRefs(db.vault, now, "media.media_asset", asset.asset_id);
   }
-  writeProvenance(db.journal, owner, 'core.content_item', contentId, 'sweep.purge');
+  writeProvenance(
+    db.journal,
+    owner,
+    "core.content_item",
+    contentId,
+    "sweep.purge"
+  );
   // A collection cover pointing at these bytes goes dark rather than
   // dangling (the FK would refuse the delete otherwise).
   db.vault
-    .prepare('UPDATE core_collection SET cover_content_id = NULL WHERE cover_content_id = ?')
+    .prepare(
+      "UPDATE core_collection SET cover_content_id = NULL WHERE cover_content_id = ?"
+    )
     .run(contentId);
   // Derivatives go with their parent (issue #296): registry rows first (the
   // FK), then their CAS bytes, then the original's bytes. sha256 is UNIQUE
@@ -324,14 +387,18 @@ function purgeContentItem(db: VaultDb, owner: Identity, now: string, contentId: 
   // replicas fall to the reconciliation sweep by design.
   const variants = db.vault
     .prepare(
-      'SELECT sha256 FROM core_content_derivative WHERE content_id = ? AND sha256 IS NOT NULL',
+      "SELECT sha256 FROM core_content_derivative WHERE content_id = ? AND sha256 IS NOT NULL"
     )
     .all(contentId) as { sha256: string }[];
-  db.vault.prepare('DELETE FROM core_content_derivative WHERE content_id = ?').run(contentId);
+  db.vault
+    .prepare("DELETE FROM core_content_derivative WHERE content_id = ?")
+    .run(contentId);
   const contentRow = db.vault
-    .prepare('SELECT content_uri FROM core_content_item WHERE content_id = ?')
+    .prepare("SELECT content_uri FROM core_content_item WHERE content_id = ?")
     .get(contentId) as { content_uri: string } | undefined;
-  db.vault.prepare('DELETE FROM core_content_item WHERE content_id = ?').run(contentId);
+  db.vault
+    .prepare("DELETE FROM core_content_item WHERE content_id = ?")
+    .run(contentId);
   for (const v of variants) {
     db.blobs.deleteLocalSync(v.sha256);
     reclaimed += 1;
@@ -344,7 +411,7 @@ function purgeContentItem(db: VaultDb, owner: Identity, now: string, contentId: 
   // Every polymorphic pointer at the content item (issue #441 A1): end-date
   // links, drop tags/entries/annotations/attachments/embeddings/sync-map/seed
   // rows, revoke shares. cover_content_id above is a plain FK, not a poly ref.
-  cleanupPolyRefs(db.vault, now, 'core.content_item', contentId);
+  cleanupPolyRefs(db.vault, now, "core.content_item", contentId);
   return reclaimed;
 }
 
@@ -360,11 +427,27 @@ function purgeContentItem(db: VaultDb, owner: Identity, now: string, contentId: 
  * FK children with ON DELETE CASCADE (tally_expense_split) go automatically —
  * PRAGMA foreign_keys is ON (db.ts) — so no child needs manual deletion here.
  */
-const DOMAIN_TRASH_TABLES: readonly { physical: string; idCol: string; entity: string }[] = [
-  { physical: 'people_important_date', idCol: 'date_id', entity: 'people.important_date' },
-  { physical: 'tally_expense', idCol: 'expense_id', entity: 'tally.expense' },
-  { physical: 'tally_settlement', idCol: 'settlement_id', entity: 'tally.settlement' },
-  { physical: 'tally_obligation', idCol: 'obligation_id', entity: 'tally.obligation' },
+const DOMAIN_TRASH_TABLES: readonly {
+  physical: string;
+  idCol: string;
+  entity: string;
+}[] = [
+  {
+    physical: "people_important_date",
+    idCol: "date_id",
+    entity: "people.important_date",
+  },
+  { physical: "tally_expense", idCol: "expense_id", entity: "tally.expense" },
+  {
+    physical: "tally_settlement",
+    idCol: "settlement_id",
+    entity: "tally.settlement",
+  },
+  {
+    physical: "tally_obligation",
+    idCol: "obligation_id",
+    entity: "tally.obligation",
+  },
 ];
 
 /**
@@ -378,12 +461,14 @@ function purgeDomainTrash(db: VaultDb, owner: Identity, now: string): number {
   for (const t of DOMAIN_TRASH_TABLES) {
     const lapsed = db.vault
       .prepare(
-        `SELECT "${t.idCol}" AS id FROM "${t.physical}" WHERE purge_at IS NOT NULL AND purge_at <= ?`,
+        `SELECT "${t.idCol}" AS id FROM "${t.physical}" WHERE purge_at IS NOT NULL AND purge_at <= ?`
       )
       .all(now) as { id: string }[];
     for (const row of lapsed) {
-      writeProvenance(db.journal, owner, t.entity, row.id, 'sweep.purge');
-      db.vault.prepare(`DELETE FROM "${t.physical}" WHERE "${t.idCol}" = ?`).run(row.id);
+      writeProvenance(db.journal, owner, t.entity, row.id, "sweep.purge");
+      db.vault
+        .prepare(`DELETE FROM "${t.physical}" WHERE "${t.idCol}" = ?`)
+        .run(row.id);
       cleanupPolyRefs(db.vault, now, t.entity, row.id);
       purged += 1;
     }
@@ -402,18 +487,18 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   const grants = db.vault
     .prepare(
       `UPDATE consent_access_grant SET status='expired'
-        WHERE status='active' AND expires_at IS NOT NULL AND expires_at <= ?`,
+        WHERE status='active' AND expires_at IS NOT NULL AND expires_at <= ?`
     )
     .run(now);
   const shares = db.vault
     .prepare(
       `UPDATE consent_share SET revoked_at=?
-        WHERE revoked_at IS NULL AND expires_at IS NOT NULL AND expires_at <= ?`,
+        WHERE revoked_at IS NULL AND expires_at IS NOT NULL AND expires_at <= ?`
     )
     .run(now, now);
   const purgeable = db.vault
     .prepare(
-      `SELECT content_id FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`,
+      `SELECT content_id FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`
     )
     .all(now) as { content_id: string }[];
   // Purges are the one hard delete outside the command pipeline, so the
@@ -426,12 +511,22 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   // body content (NOT NULL FK), so the row and its edges must go before the
   // content purge below can delete the body's bytes in the same pass.
   const lapsedNotes = db.vault
-    .prepare('SELECT note_id FROM knowledge_note WHERE purge_at IS NOT NULL AND purge_at <= ?')
+    .prepare(
+      "SELECT note_id FROM knowledge_note WHERE purge_at IS NOT NULL AND purge_at <= ?"
+    )
     .all(now) as { note_id: string }[];
   for (const n of lapsedNotes) {
-    writeProvenance(db.journal, owner, 'knowledge.note', n.note_id, 'sweep.purge');
-    db.vault.prepare('DELETE FROM knowledge_note WHERE note_id = ?').run(n.note_id);
-    cleanupPolyRefs(db.vault, now, 'knowledge.note', n.note_id);
+    writeProvenance(
+      db.journal,
+      owner,
+      "knowledge.note",
+      n.note_id,
+      "sweep.purge"
+    );
+    db.vault
+      .prepare("DELETE FROM knowledge_note WHERE note_id = ?")
+      .run(n.note_id);
+    cleanupPolyRefs(db.vault, now, "knowledge.note", n.note_id);
   }
   // Lapsed trashed documents purge next (issue #352), same reason as notes
   // above: the wrapper rents its current content (NOT NULL FK), so the row
@@ -442,19 +537,30 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   const revisesId = revisesConceptId(db);
   const lapsedDocuments = db.vault
     .prepare(
-      'SELECT document_id, current_content_id FROM core_document WHERE purge_at IS NOT NULL AND purge_at <= ?',
+      "SELECT document_id, current_content_id FROM core_document WHERE purge_at IS NOT NULL AND purge_at <= ?"
     )
     .all(now) as { document_id: string; current_content_id: string }[];
   for (const doc of lapsedDocuments) {
     const chain = revisesId
       ? documentChain(db, doc.current_content_id, revisesId)
       : [doc.current_content_id];
-    writeProvenance(db.journal, owner, 'core.document', doc.document_id, 'sweep.purge');
-    db.vault.prepare('DELETE FROM core_document WHERE document_id = ?').run(doc.document_id);
-    cleanupPolyRefs(db.vault, now, 'core.document', doc.document_id);
+    writeProvenance(
+      db.journal,
+      owner,
+      "core.document",
+      doc.document_id,
+      "sweep.purge"
+    );
+    db.vault
+      .prepare("DELETE FROM core_document WHERE document_id = ?")
+      .run(doc.document_id);
+    cleanupPolyRefs(db.vault, now, "core.document", doc.document_id);
     for (const contentId of chain) {
       if (contentRentedElsewhere(db, contentId)) continue;
-      if (revisesId && ownedByAnotherLiveDocument(db, contentId, doc.document_id, revisesId))
+      if (
+        revisesId &&
+        ownedByAnotherLiveDocument(db, contentId, doc.document_id, revisesId)
+      )
         continue;
       blobsReclaimed += purgeContentItem(db, owner, now, contentId);
     }
@@ -469,13 +575,25 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   // custody have independent lifecycles. Assets already removed alongside
   // their purged content above are gone and don't reappear here.
   const lapsedAssets = db.vault
-    .prepare('SELECT asset_id FROM media_media_asset WHERE purge_at IS NOT NULL AND purge_at <= ?')
+    .prepare(
+      "SELECT asset_id FROM media_media_asset WHERE purge_at IS NOT NULL AND purge_at <= ?"
+    )
     .all(now) as { asset_id: string }[];
   for (const a of lapsedAssets) {
-    writeProvenance(db.journal, owner, 'media.media_asset', a.asset_id, 'sweep.purge');
-    db.vault.prepare('DELETE FROM media_face_region WHERE asset_id = ?').run(a.asset_id);
-    db.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(a.asset_id);
-    cleanupPolyRefs(db.vault, now, 'media.media_asset', a.asset_id);
+    writeProvenance(
+      db.journal,
+      owner,
+      "media.media_asset",
+      a.asset_id,
+      "sweep.purge"
+    );
+    db.vault
+      .prepare("DELETE FROM media_face_region WHERE asset_id = ?")
+      .run(a.asset_id);
+    db.vault
+      .prepare("DELETE FROM media_media_asset WHERE asset_id = ?")
+      .run(a.asset_id);
+    cleanupPolyRefs(db.vault, now, "media.media_asset", a.asset_id);
   }
   // Lapsed trashed People/Tally content rows purge table-driven, each with its
   // polymorphic references cleaned (issue #441 A4). Runs after the content /
@@ -488,7 +606,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   db.vault
     .prepare(
       `UPDATE social_thread SET last_message_at =
-         (SELECT MAX(sent_at) FROM social_message WHERE social_message.thread_id = social_thread.thread_id)`,
+         (SELECT MAX(sent_at) FROM social_message WHERE social_message.thread_id = social_thread.thread_id)`
     )
     .run();
   const retentionDeleted = enforceRetention(db, now);
@@ -498,11 +616,11 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   const receiptId = writeReceipt(db.journal, {
     grantId: null,
     invocationId: null,
-    action: 'act consent.lifecycle_sweep',
-    objectType: 'consent.policy',
+    action: "act consent.lifecycle_sweep",
+    objectType: "consent.policy",
     objectId: null,
     purpose: null,
-    decision: 'allow',
+    decision: "allow",
     detail: {
       grantsExpired: Number(grants.changes),
       sharesExpired: Number(shares.changes),
@@ -543,28 +661,39 @@ export function admitImportedRow(
   externalIdColumn: { physical: string; column: string },
   externalId: string,
   insert: () => string,
-  batch: string,
+  batch: string
 ): string | null {
   const existing = db.vault
     .prepare(
-      `SELECT 1 AS x FROM "${externalIdColumn.physical}" WHERE "${externalIdColumn.column}" = ?`,
+      `SELECT 1 AS x FROM "${externalIdColumn.physical}" WHERE "${externalIdColumn.column}" = ?`
     )
     .get(externalId);
   if (existing) return null;
   const entityId = insert();
-  writeProvenance(db.journal, importer, entityType, entityId, `import.${batch}`, {
-    external_id: externalId,
-  });
+  writeProvenance(
+    db.journal,
+    importer,
+    entityType,
+    entityId,
+    `import.${batch}`,
+    {
+      external_id: externalId,
+    }
+  );
   return entityId;
 }
 
 /** Resolve a raw handle (email, tel…) to a party via party_identifier. */
-export function resolveHandle(db: VaultDb, scheme: string, value: string): string | null {
+export function resolveHandle(
+  db: VaultDb,
+  scheme: string,
+  value: string
+): string | null {
   const row = db.vault
     .prepare(
       `SELECT party_id FROM core_party_identifier
         WHERE scheme = ? AND value = ? AND (valid_to IS NULL OR valid_to > ?)
-        ORDER BY is_primary DESC LIMIT 1`,
+        ORDER BY is_primary DESC LIMIT 1`
     )
     .get(scheme, value, nowIso()) as { party_id: string } | undefined;
   return row?.party_id ?? null;

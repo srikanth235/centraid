@@ -21,7 +21,7 @@
  * is not the same as silent.
  */
 
-import type { TurnStreamEvent } from '@centraid/app-engine';
+import type { TurnStreamEvent } from "@centraid/app-engine";
 
 export interface PermissionOption {
   optionId: string;
@@ -34,14 +34,15 @@ export function readPermissionOptions(params: unknown): PermissionOption[] {
   if (!Array.isArray(raw)) return [];
   const out: PermissionOption[] = [];
   for (const o of raw) {
-    if (!o || typeof o !== 'object') continue;
+    if (!o || typeof o !== "object") continue;
     const rec = o as Record<string, unknown>;
-    const optionId = typeof rec.optionId === 'string' ? rec.optionId : undefined;
+    const optionId =
+      typeof rec.optionId === "string" ? rec.optionId : undefined;
     if (!optionId) continue;
     out.push({
       optionId,
-      ...(typeof rec.kind === 'string' ? { kind: rec.kind } : {}),
-      ...(typeof rec.name === 'string' ? { name: rec.name } : {}),
+      ...(typeof rec.kind === "string" ? { kind: rec.kind } : {}),
+      ...(typeof rec.name === "string" ? { name: rec.name } : {}),
     });
   }
   return out;
@@ -50,12 +51,14 @@ export function readPermissionOptions(params: unknown): PermissionOption[] {
 /** Best-effort tool title from the permission request's toolCall payload. */
 export function readPermissionToolTitle(params: unknown): string {
   const toolCall = (params as { toolCall?: unknown } | undefined)?.toolCall;
-  if (!toolCall || typeof toolCall !== 'object') return 'tool';
+  if (!toolCall || typeof toolCall !== "object") return "tool";
   const rec = toolCall as Record<string, unknown>;
-  if (typeof rec.title === 'string' && rec.title.trim()) return rec.title.trim();
-  if (typeof rec.kind === 'string' && rec.kind.trim()) return rec.kind.trim();
-  if (typeof rec.toolCallId === 'string' && rec.toolCallId.trim()) return rec.toolCallId.trim();
-  return 'tool';
+  if (typeof rec.title === "string" && rec.title.trim())
+    return rec.title.trim();
+  if (typeof rec.kind === "string" && rec.kind.trim()) return rec.kind.trim();
+  if (typeof rec.toolCallId === "string" && rec.toolCallId.trim())
+    return rec.toolCallId.trim();
+  return "tool";
 }
 
 /**
@@ -67,46 +70,55 @@ export function readPermissionToolTitle(params: unknown): string {
  * the one case where `{ outcome: 'cancelled' }` is the honest answer, even
  * though agents read that as "the prompt turn was cancelled".
  */
-export function pickRejectPermissionOption(options: PermissionOption[]): string | undefined {
-  const byKind = (k: string): PermissionOption | undefined => options.find((o) => o.kind === k);
-  return (byKind('reject_once') ?? byKind('reject_always'))?.optionId;
+export function pickRejectPermissionOption(
+  options: PermissionOption[]
+): string | undefined {
+  const byKind = (k: string): PermissionOption | undefined =>
+    options.find((o) => o.kind === k);
+  return (byKind("reject_once") ?? byKind("reject_always"))?.optionId;
 }
 
 /** Least-destructive allow: prefer allow_always, then allow_once, then any non-reject, then first. */
-export function pickPermissionOption(options: PermissionOption[]): string | undefined {
+export function pickPermissionOption(
+  options: PermissionOption[]
+): string | undefined {
   const first = options[0];
   if (!first) return undefined;
-  const byKind = (k: string): PermissionOption | undefined => options.find((o) => o.kind === k);
-  const nonReject = options.find((o) => !o.kind || !o.kind.startsWith('reject'));
-  return (byKind('allow_always') ?? byKind('allow_once') ?? nonReject ?? first).optionId;
+  const byKind = (k: string): PermissionOption | undefined =>
+    options.find((o) => o.kind === k);
+  const nonReject = options.find(
+    (o) => !o.kind || !o.kind.startsWith("reject")
+  );
+  return (byKind("allow_always") ?? byKind("allow_once") ?? nonReject ?? first)
+    .optionId;
 }
 
 /** Transcript notice for an auto-allow decision. */
 export function permissionAutoAllowNotice(
   optionId: string,
   options: PermissionOption[],
-  toolTitle: string,
-): Extract<TurnStreamEvent, { type: 'notice' }> {
+  toolTitle: string
+): Extract<TurnStreamEvent, { type: "notice" }> {
   const picked = options.find((o) => o.optionId === optionId);
-  const kind = picked?.kind ?? 'unknown';
+  const kind = picked?.kind ?? "unknown";
   const name = picked?.name;
   const choice = name ? `${name} (${kind})` : `${optionId} (${kind})`;
   return {
-    type: 'notice',
-    level: 'info',
-    code: 'permission_auto_allowed',
+    type: "notice",
+    level: "info",
+    code: "permission_auto_allowed",
     message: `Auto-allowed agent permission for “${toolTitle}”: ${choice}.`,
   };
 }
 
 /** Transcript notice for a permission request refused by a confined surface. */
 export function permissionDeniedNotice(
-  toolTitle: string,
-): Extract<TurnStreamEvent, { type: 'notice' }> {
+  toolTitle: string
+): Extract<TurnStreamEvent, { type: "notice" }> {
   return {
-    type: 'notice',
-    level: 'warn',
-    code: 'permission_denied',
+    type: "notice",
+    level: "warn",
+    code: "permission_denied",
     message: `Denied agent permission request for “${toolTitle}”. This turn may use only its pre-granted tools.`,
   };
 }

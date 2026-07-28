@@ -16,14 +16,15 @@
  *   PUT /_centraid-user/prefs  body {patch} → { prefs }
  */
 
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { isRunnerKind, type RunnerKind } from '../conversation/turn.js';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
+
+import { isRunnerKind, type RunnerKind } from "../conversation/turn.js";
 
 export interface PrefsPersistence {
-  read(): Record<string, unknown>;
-  write(prefs: Record<string, unknown>): void;
+  read: () => Record<string, unknown>;
+  write: (prefs: Record<string, unknown>) => void;
 }
 
 export class PrefsStore {
@@ -33,7 +34,7 @@ export class PrefsStore {
 
   /** Hosts may inject database persistence; string paths retain legacy test compatibility. */
   constructor(source: string | PrefsPersistence) {
-    if (typeof source === 'string') this.file = source;
+    if (typeof source === "string") this.file = source;
     else this.persistence = source;
   }
 
@@ -44,9 +45,9 @@ export class PrefsStore {
       return this.cache;
     }
     try {
-      const parsed = JSON.parse(readFileSync(this.file!, 'utf8')) as unknown;
+      const parsed = JSON.parse(readFileSync(this.file!, "utf8")) as unknown;
       this.cache =
-        parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+        parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
           ? (parsed as Record<string, unknown>)
           : {};
     } catch {
@@ -63,7 +64,9 @@ export class PrefsStore {
     }
     mkdirSync(path.dirname(this.file!), { recursive: true });
     const tmp = `${this.file!}.tmp`;
-    writeFileSync(tmp, JSON.stringify(this.cache ?? {}, null, 2), { mode: 0o600 });
+    writeFileSync(tmp, JSON.stringify(this.cache ?? {}, null, 2), {
+      mode: 0o600,
+    });
     renameSync(tmp, this.file!);
   }
 
@@ -99,7 +102,7 @@ export class PrefsStore {
  * per-app build register, `'assistant'` the shell-level vault assistant,
  * `'automations'` the fire pipeline's `ctx.agent` calls.
  */
-export type ModelSubsystem = 'assistant' | 'ask' | 'builder' | 'automations';
+export type ModelSubsystem = "assistant" | "ask" | "builder" | "automations";
 
 /**
  * Resolve which agent runner a subsystem's turn runs on, in priority order:
@@ -120,13 +123,13 @@ export type ModelSubsystem = 'assistant' | 'ask' | 'builder' | 'automations';
  */
 export function resolveSubsystemRunner(
   prefs: Record<string, unknown>,
-  subsystem: ModelSubsystem,
+  subsystem: ModelSubsystem
 ): string {
   const scoped = prefs[`runner.${subsystem}`];
-  if (typeof scoped === 'string' && scoped.length > 0) return scoped;
-  const fallback = prefs['agent.runner.kind'];
-  if (typeof fallback === 'string' && fallback.length > 0) return fallback;
-  return 'codex';
+  if (typeof scoped === "string" && scoped.length > 0) return scoped;
+  const fallback = prefs["agent.runner.kind"];
+  if (typeof fallback === "string" && fallback.length > 0) return fallback;
+  return "codex";
 }
 
 /**
@@ -138,11 +141,12 @@ export function resolveSubsystemRunner(
 export function resolveSubsystemRunnerLadder(
   prefs: Record<string, unknown>,
   subsystem: ModelSubsystem,
-  primary: RunnerKind,
+  primary: RunnerKind
 ): RunnerKind[] {
-  const raw = prefs[`runner.ladder.${subsystem}`] ?? prefs['runner.ladder.default'];
+  const raw =
+    prefs[`runner.ladder.${subsystem}`] ?? prefs["runner.ladder.default"];
   let values: unknown = raw;
-  if (typeof raw === 'string') {
+  if (typeof raw === "string") {
     try {
       values = JSON.parse(raw) as unknown;
     } catch {
@@ -174,13 +178,13 @@ export function resolveSubsystemModel(
   prefs: Record<string, unknown>,
   runnerKind: string,
   subsystem: ModelSubsystem,
-  explicit?: string,
+  explicit?: string
 ): string | undefined {
   if (explicit) return explicit;
   const scoped = prefs[`model.${runnerKind}.${subsystem}`];
-  if (typeof scoped === 'string' && scoped.length > 0) return scoped;
+  if (typeof scoped === "string" && scoped.length > 0) return scoped;
   const fallback = prefs[`model.${runnerKind}.default`];
-  if (typeof fallback === 'string' && fallback.length > 0) return fallback;
+  if (typeof fallback === "string" && fallback.length > 0) return fallback;
   return undefined;
 }
 
@@ -196,14 +200,16 @@ export function resolveSubsystemConfigPins(
   prefs: Record<string, unknown>,
   runnerKind: string,
   subsystem: ModelSubsystem,
-  explicit: Readonly<Record<string, string>> = {},
+  explicit: Readonly<Record<string, string>> = {}
 ): Record<string, string> {
   const categories = new Set(Object.keys(explicit));
   const scopedPrefix = `config.${runnerKind}.${subsystem}.`;
   const defaultPrefix = `config.${runnerKind}.default.`;
   for (const key of Object.keys(prefs)) {
-    if (key.startsWith(scopedPrefix)) categories.add(key.slice(scopedPrefix.length));
-    if (key.startsWith(defaultPrefix)) categories.add(key.slice(defaultPrefix.length));
+    if (key.startsWith(scopedPrefix))
+      categories.add(key.slice(scopedPrefix.length));
+    if (key.startsWith(defaultPrefix))
+      categories.add(key.slice(defaultPrefix.length));
   }
   const resolved: Record<string, string> = {};
   for (const category of categories) {
@@ -214,19 +220,19 @@ export function resolveSubsystemConfigPins(
       continue;
     }
     const scoped = prefs[`${scopedPrefix}${category}`];
-    if (typeof scoped === 'string' && scoped) {
+    if (typeof scoped === "string" && scoped) {
       resolved[category] = scoped;
       continue;
     }
     const fallback = prefs[`${defaultPrefix}${category}`];
-    if (typeof fallback === 'string' && fallback) resolved[category] = fallback;
+    if (typeof fallback === "string" && fallback) resolved[category] = fallback;
   }
   return resolved;
 }
 
 /* ---------- HTTP route handler ---------- */
 
-const ROUTE_PREFIX = '/_centraid-user';
+const ROUTE_PREFIX = "/_centraid-user";
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -234,7 +240,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   if (chunks.length === 0) return undefined;
-  const text = Buffer.concat(chunks).toString('utf8');
+  const text = Buffer.concat(chunks).toString("utf8");
   if (!text) return undefined;
   return JSON.parse(text) as unknown;
 }
@@ -242,8 +248,8 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body ?? null);
   res.writeHead(status, {
-    'content-type': 'application/json',
-    'content-length': Buffer.byteLength(text).toString(),
+    "content-type": "application/json",
+    "content-length": Buffer.byteLength(text).toString(),
   });
   res.end(text);
 }
@@ -262,20 +268,20 @@ export interface UserStoreRouteHooks {
   /** Return a user-facing reason to reject an atomic prefs patch. */
   validatePatch?: (
     patch: Record<string, unknown>,
-    current: Record<string, unknown>,
+    current: Record<string, unknown>
   ) => Promise<string | undefined>;
   /** Observe a committed patch, including its before/after snapshots. */
   afterPatch?: (
     patch: Record<string, unknown>,
     before: Record<string, unknown>,
-    after: Record<string, unknown>,
+    after: Record<string, unknown>
   ) => Promise<void> | void;
 }
 
 export function makeUserStoreRouteHandler(
   getStore: () => PrefsStore,
   getOwnerId?: () => string,
-  hooks: UserStoreRouteHooks = {},
+  hooks: UserStoreRouteHooks = {}
 ) {
   let writeTail: Promise<void> = Promise.resolve();
   const withWriteLock = async <T>(run: () => Promise<T>): Promise<T> => {
@@ -291,36 +297,41 @@ export function makeUserStoreRouteHandler(
       release();
     }
   };
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
     if (!req.url || !req.url.startsWith(ROUTE_PREFIX)) return false;
-    const url = new URL(req.url, 'http://x');
+    const url = new URL(req.url, "http://x");
     const sub = url.pathname.slice(ROUTE_PREFIX.length);
-    const method = (req.method ?? 'GET').toUpperCase();
+    const method = (req.method ?? "GET").toUpperCase();
     const store = getStore();
 
     try {
-      if (sub === '/id' || sub === '/id/') {
-        if (method !== 'GET') {
-          sendError(res, 405, 'method not allowed');
+      if (sub === "/id" || sub === "/id/") {
+        if (method !== "GET") {
+          sendError(res, 405, "method not allowed");
           return true;
         }
         if (!getOwnerId) {
-          sendError(res, 404, 'no vault mounted — there is no owner identity');
+          sendError(res, 404, "no vault mounted — there is no owner identity");
           return true;
         }
         sendJson(res, 200, { id: getOwnerId() });
         return true;
       }
-      if (sub === '/prefs' || sub === '/prefs/') {
-        if (method === 'GET') {
+      if (sub === "/prefs" || sub === "/prefs/") {
+        if (method === "GET") {
           sendJson(res, 200, { prefs: store.getAllPrefs() });
           return true;
         }
-        if (method === 'PUT') {
-          const body = (await readJsonBody(req)) as { patch?: Record<string, unknown> } | undefined;
+        if (method === "PUT") {
+          const body = (await readJsonBody(req)) as
+            | { patch?: Record<string, unknown> }
+            | undefined;
           const patch = body?.patch;
-          if (!patch || typeof patch !== 'object') {
-            sendError(res, 400, 'patch object is required');
+          if (!patch || typeof patch !== "object") {
+            sendError(res, 400, "patch object is required");
             return true;
           }
           await withWriteLock(async () => {
@@ -336,10 +347,10 @@ export function makeUserStoreRouteHandler(
           });
           return true;
         }
-        sendError(res, 405, 'method not allowed');
+        sendError(res, 405, "method not allowed");
         return true;
       }
-      sendError(res, 404, 'unknown user-store route');
+      sendError(res, 404, "unknown user-store route");
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

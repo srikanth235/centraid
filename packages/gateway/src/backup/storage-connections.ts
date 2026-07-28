@@ -8,16 +8,18 @@
  * material in SQLite.
  */
 
-import { randomBytes } from 'node:crypto';
-import path from 'node:path';
-import { KeyStore, sealAad, sealValue, unsealValue } from '@centraid/vault';
-import { GatewayDatabase } from '../serve/gateway-db.js';
+import { randomBytes } from "node:crypto";
+import path from "node:path";
 
-export type StorageConnectionKind = 'provider';
+import { KeyStore, sealAad, sealValue, unsealValue } from "@centraid/vault";
+
+import { GatewayDatabase } from "../serve/gateway-db.js";
+
+export type StorageConnectionKind = "provider";
 
 interface ProviderRow {
   id: string;
-  kind: 'provider';
+  kind: "provider";
   name: string;
   createdAt: string;
   updatedAt: string;
@@ -30,7 +32,7 @@ type StorageConnectionRow = ProviderRow;
 
 interface StoredProviderRow {
   id: string;
-  kind: 'provider';
+  kind: "provider";
   name: string;
   base_url: string;
   sealed_credentials: string;
@@ -55,7 +57,7 @@ export interface StorageConnectionRecord {
 }
 
 export interface CreateProviderInput {
-  kind: 'provider';
+  kind: "provider";
   name: string;
   baseUrl: string;
   apiKey: string;
@@ -71,11 +73,15 @@ export interface StorageConnectionStoreOptions {
 
 export class StorageConnectionError extends Error {
   constructor(
-    readonly code: 'not_found' | 'invalid_request' | 'already_exists' | 'provider_not_home_profile',
-    message: string,
+    readonly code:
+      | "not_found"
+      | "invalid_request"
+      | "already_exists"
+      | "provider_not_home_profile",
+    message: string
   ) {
     super(message);
-    this.name = 'StorageConnectionError';
+    this.name = "StorageConnectionError";
   }
 }
 
@@ -107,20 +113,23 @@ function toRecord(row: StorageConnectionRow): StorageConnectionRecord {
 export class StorageConnectionStore {
   private constructor(
     private readonly database: GatewayDatabase,
-    private readonly keyStore: KeyStore,
+    private readonly keyStore: KeyStore
   ) {}
 
   static async open(
-    source: string | StorageConnectionStoreOptions,
+    source: string | StorageConnectionStoreOptions
   ): Promise<StorageConnectionStore> {
     const options =
-      typeof source === 'string'
+      typeof source === "string"
         ? {
             database: GatewayDatabase.open(source),
-            keyStore: new KeyStore(path.join(source, 'keys')),
+            keyStore: new KeyStore(path.join(source, "keys")),
           }
         : source;
-    const store = new StorageConnectionStore(options.database, options.keyStore);
+    const store = new StorageConnectionStore(
+      options.database,
+      options.keyStore
+    );
     return store;
   }
 
@@ -133,13 +142,15 @@ export class StorageConnectionStore {
     return row ? toRecord(row) : undefined;
   }
 
-  async create(input: CreateStorageConnectionInput): Promise<StorageConnectionRecord> {
+  async create(
+    input: CreateStorageConnectionInput
+  ): Promise<StorageConnectionRecord> {
     validateCreate(input);
-    const id = randomBytes(12).toString('hex');
+    const id = randomBytes(12).toString("hex");
     const now = new Date().toISOString();
     const row: StorageConnectionRow = {
       id,
-      kind: 'provider',
+      kind: "provider",
       name: input.name,
       createdAt: now,
       updatedAt: now,
@@ -148,12 +159,12 @@ export class StorageConnectionStore {
     };
     this.database.transaction(() => {
       const count = this.database.db
-        .prepare('SELECT COUNT(*) AS count FROM storage_connections')
+        .prepare("SELECT COUNT(*) AS count FROM storage_connections")
         .get() as { count: number };
       if (count.count > 0) {
         throw new StorageConnectionError(
-          'already_exists',
-          'a storage connection already exists — only one home connection can be active at a time; delete it before adding another',
+          "already_exists",
+          "a storage connection already exists — only one home connection can be active at a time; delete it before adding another"
         );
       }
       this.insert(row);
@@ -161,45 +172,64 @@ export class StorageConnectionStore {
     return toRecord(row);
   }
 
-  async update(id: string, patch: UpdateStorageConnectionInput): Promise<StorageConnectionRecord> {
+  async update(
+    id: string,
+    patch: UpdateStorageConnectionInput
+  ): Promise<StorageConnectionRecord> {
     const row = this.requireRow(id);
-    if (patch.kind && patch.kind !== 'provider') {
-      throw new StorageConnectionError('invalid_request', "cannot change a connection's kind");
+    if (patch.kind && patch.kind !== "provider") {
+      throw new StorageConnectionError(
+        "invalid_request",
+        "cannot change a connection's kind"
+      );
     }
     if (patch.baseUrl) row.baseUrl = patch.baseUrl;
     if (patch.name) row.name = patch.name;
-    if (patch.apiKey) row.sealedCredentials = this.sealCreds(id, { apiKey: patch.apiKey });
+    if (patch.apiKey)
+      row.sealedCredentials = this.sealCreds(id, { apiKey: patch.apiKey });
     row.updatedAt = new Date().toISOString();
     this.database.db
       .prepare(
         `UPDATE storage_connections
            SET name = ?, base_url = ?, sealed_credentials = ?, updated_at = ?
-         WHERE id = ?`,
+         WHERE id = ?`
       )
       .run(row.name, row.baseUrl, row.sealedCredentials, row.updatedAt, id);
     return toRecord(row);
   }
 
-  async setTargetId(id: string, targetId: string): Promise<StorageConnectionRecord> {
+  async setTargetId(
+    id: string,
+    targetId: string
+  ): Promise<StorageConnectionRecord> {
     const row = this.requireRow(id);
     row.targetId = targetId;
     row.updatedAt = new Date().toISOString();
     this.database.db
-      .prepare('UPDATE storage_connections SET target_id = ?, updated_at = ? WHERE id = ?')
+      .prepare(
+        "UPDATE storage_connections SET target_id = ?, updated_at = ? WHERE id = ?"
+      )
       .run(targetId, row.updatedAt, id);
     return toRecord(row);
   }
 
   async delete(id: string): Promise<void> {
-    const result = this.database.db.prepare('DELETE FROM storage_connections WHERE id = ?').run(id);
+    const result = this.database.db
+      .prepare("DELETE FROM storage_connections WHERE id = ?")
+      .run(id);
     if (result.changes === 0) {
-      throw new StorageConnectionError('not_found', `unknown storage connection "${id}"`);
+      throw new StorageConnectionError(
+        "not_found",
+        `unknown storage connection "${id}"`
+      );
     }
   }
 
   async resolveProviderApiKey(id: string): Promise<string> {
     const row = this.requireRow(id);
-    const creds = this.unsealCreds(id, row.sealedCredentials) as { apiKey: string };
+    const creds = this.unsealCreds(id, row.sealedCredentials) as {
+      apiKey: string;
+    };
     return creds.apiKey;
   }
 
@@ -208,7 +238,7 @@ export class StorageConnectionStore {
       this.database.db
         .prepare(
           `SELECT id, kind, name, base_url, sealed_credentials, target_id, created_at, updated_at
-             FROM storage_connections ORDER BY created_at, id`,
+             FROM storage_connections ORDER BY created_at, id`
         )
         .all() as unknown as StoredProviderRow[]
     ).map(fromStored);
@@ -218,7 +248,7 @@ export class StorageConnectionStore {
     const row = this.database.db
       .prepare(
         `SELECT id, kind, name, base_url, sealed_credentials, target_id, created_at, updated_at
-           FROM storage_connections WHERE id = ?`,
+           FROM storage_connections WHERE id = ?`
       )
       .get(id) as StoredProviderRow | undefined;
     return row ? fromStored(row) : undefined;
@@ -226,7 +256,11 @@ export class StorageConnectionStore {
 
   private requireRow(id: string): StorageConnectionRow {
     const row = this.row(id);
-    if (!row) throw new StorageConnectionError('not_found', `unknown storage connection "${id}"`);
+    if (!row)
+      throw new StorageConnectionError(
+        "not_found",
+        `unknown storage connection "${id}"`
+      );
     return row;
   }
 
@@ -235,7 +269,7 @@ export class StorageConnectionStore {
       .prepare(
         `INSERT INTO storage_connections
           (id, kind, name, base_url, sealed_credentials, target_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         row.id,
@@ -245,43 +279,53 @@ export class StorageConnectionStore {
         row.sealedCredentials,
         row.targetId ?? null,
         row.createdAt,
-        row.updatedAt,
+        row.updatedAt
       );
   }
 
   private sealCreds(id: string, value: Record<string, unknown>): string {
     return sealValue(
       this.connectionKey(),
-      sealAad('storage_connection', 'credentials', id),
-      JSON.stringify(value),
+      sealAad("storage_connection", "credentials", id),
+      JSON.stringify(value)
     );
   }
 
   private unsealCreds(id: string, sealed: string): Record<string, unknown> {
     return JSON.parse(
-      unsealValue(this.connectionKey(), sealAad('storage_connection', 'credentials', id), sealed),
+      unsealValue(
+        this.connectionKey(),
+        sealAad("storage_connection", "credentials", id),
+        sealed
+      )
     ) as Record<string, unknown>;
   }
 
   private connectionKey(): Buffer {
-    return this.keyStore.loadOrCreate('connections.sealkey');
+    return this.keyStore.loadOrCreate("connections.sealkey");
   }
 }
 
 function validateCreate(input: CreateStorageConnectionInput): void {
   if (!input.name || input.name.trim().length === 0) {
-    throw new StorageConnectionError('invalid_request', 'name is required');
+    throw new StorageConnectionError("invalid_request", "name is required");
   }
-  if (input.kind !== 'provider') {
-    throw new StorageConnectionError('invalid_request', 'kind must be "provider"');
+  if (input.kind !== "provider") {
+    throw new StorageConnectionError(
+      "invalid_request",
+      'kind must be "provider"'
+    );
   }
   if (!input.baseUrl || !input.apiKey) {
-    throw new StorageConnectionError('invalid_request', 'provider requires baseUrl and apiKey');
+    throw new StorageConnectionError(
+      "invalid_request",
+      "provider requires baseUrl and apiKey"
+    );
   }
 }
 
 export function openStorageConnectionStore(
-  source: string | StorageConnectionStoreOptions,
+  source: string | StorageConnectionStoreOptions
 ): Promise<StorageConnectionStore> {
   return StorageConnectionStore.open(source);
 }

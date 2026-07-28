@@ -1,8 +1,9 @@
-import type { DatabaseSync } from 'node:sqlite';
-import type { LocalBlobStore } from './local.js';
-import { remoteEncryptionKey, type RemoteTier } from './custody-types.js';
-import { verifyRemoteSealedObject } from './remote-verify.js';
-import { assertSha, sha256OfBytes } from './store.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import { remoteEncryptionKey, type RemoteTier } from "./custody-types.js";
+import type { LocalBlobStore } from "./local.js";
+import { verifyRemoteSealedObject } from "./remote-verify.js";
+import { assertSha, sha256OfBytes } from "./store.js";
 
 /** Authenticated/range-bounded for sealed CAS; full-SHA fallback for plaintext tiers. */
 export async function auditRemoteBlob(input: {
@@ -13,7 +14,7 @@ export async function auditRemoteBlob(input: {
   knownSealedSize?: number;
 }): Promise<void> {
   const sha = assertSha(input.sha256);
-  if (!input.remote) throw new Error('remote CAS is unavailable');
+  if (!input.remote) throw new Error("remote CAS is unavailable");
   const stat =
     input.knownSealedSize === undefined
       ? await input.remote.store.stat(sha)
@@ -28,7 +29,7 @@ export async function auditRemoteBlob(input: {
            SELECT byte_size FROM core_content_item WHERE sha256 = ? AND deleted_at IS NULL
            UNION ALL SELECT byte_size FROM blob_staging WHERE sha256 = ?
            UNION ALL SELECT byte_size FROM blob_replica WHERE sha256 = ?
-         ) LIMIT 1`,
+         ) LIMIT 1`
         )
         .get(sha, sha, sha) as { byte_size: number } | undefined
     )?.byte_size;

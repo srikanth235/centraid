@@ -5,8 +5,13 @@
  * so this is split out of `cli.ts` rather than duplicated.
  */
 
-import { loadConfigFile, validateConfig, DaemonConfigError, type DaemonConfig } from './config.js';
-import { DEFAULT_GATEWAY_PORT, platformDefaultDataDir } from './data-dir.js';
+import {
+  loadConfigFile,
+  validateConfig,
+  DaemonConfigError,
+  type DaemonConfig,
+} from "./config.js";
+import { DEFAULT_GATEWAY_PORT, platformDefaultDataDir } from "./data-dir.js";
 
 export interface ConfigSource {
   configPath?: string;
@@ -16,7 +21,7 @@ export interface ConfigSource {
 export async function resolveDaemonConfig(
   source: ConfigSource,
   fail: (message: string, code?: number) => never,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): Promise<DaemonConfig> {
   const environmentDir = env.CENTRAID_DATA_DIR?.trim() || undefined;
   let cfg: DaemonConfig;
@@ -29,7 +34,8 @@ export async function resolveDaemonConfig(
     }
   } else {
     cfg = validateConfig({
-      dataDir: source.dataDir ?? environmentDir ?? platformDefaultDataDir({ env }),
+      dataDir:
+        source.dataDir ?? environmentDir ?? platformDefaultDataDir({ env }),
     });
   }
   cfg.dataDir = source.dataDir ?? environmentDir ?? cfg.dataDir;

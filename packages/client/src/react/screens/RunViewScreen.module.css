@@ -153,24 +153,24 @@
   display: inline-flex;
   color: var(--ink-3);
 }
-.logGlyph[data-status='ok'] {
+.logGlyph[data-status="ok"] {
   color: var(--success);
 }
-.logGlyph[data-status='fail'] {
+.logGlyph[data-status="fail"] {
   color: var(--danger);
 }
-.logGlyph[data-status='running'] {
+.logGlyph[data-status="running"] {
   color: var(--accent);
 }
-.logGlyph[data-spin='true'] {
+.logGlyph[data-spin="true"] {
   animation: cd-spin 0.9s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .logGlyph[data-spin='true'] {
+  .logGlyph[data-spin="true"] {
     animation: none;
   }
 }
-.logGlyph[data-status='trigger'] {
+.logGlyph[data-status="trigger"] {
   color: var(--ink-3);
 }
 .logChip {
@@ -228,15 +228,16 @@
   place-items: center;
   border-radius: 999px;
   background: var(--bg-elev);
-  border: 1px solid color-mix(in srgb, var(--au-tl-tone, var(--ink)) 35%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--au-tl-tone, var(--ink)) 35%, transparent);
   color: var(--au-tl-tone, var(--ink-3));
 }
-.tlDot[data-spin='true'] {
+.tlDot[data-spin="true"] {
   animation: cd-spin 0.9s linear infinite;
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 @media (prefers-reduced-motion: reduce) {
-  .tlDot[data-spin='true'] {
+  .tlDot[data-spin="true"] {
     animation: none;
   }
 }
@@ -250,17 +251,17 @@
 .tlItem:last-child .tlLine {
   display: none;
 }
-.tlItem[data-status='ok'],
-.tlItem[data-status='trigger'] {
+.tlItem[data-status="ok"],
+.tlItem[data-status="trigger"] {
   --au-tl-tone: var(--success);
 }
-.tlItem[data-status='trigger'] {
+.tlItem[data-status="trigger"] {
   --au-tl-tone: var(--ink-3);
 }
-.tlItem[data-status='running'] {
+.tlItem[data-status="running"] {
   --au-tl-tone: var(--accent);
 }
-.tlItem[data-status='fail'] {
+.tlItem[data-status="fail"] {
   --au-tl-tone: var(--danger);
 }
 .tlCard {
@@ -271,11 +272,11 @@
   background: var(--bg-elev);
   overflow: hidden;
 }
-.tlCard[data-status='running'] {
+.tlCard[data-status="running"] {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
 }
-.tlCard[data-status='fail'] {
+.tlCard[data-status="fail"] {
   border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
 }
 .tlHead {
@@ -338,7 +339,7 @@
   color: var(--ink-4);
   transition: transform 0.16s ease;
 }
-.tlHead[aria-expanded='true'] .tlChev {
+.tlHead[aria-expanded="true"] .tlChev {
   transform: rotate(90deg);
 }
 .tlBody {

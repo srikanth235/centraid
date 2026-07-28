@@ -2,7 +2,7 @@
  * Public types for @centraid/blueprints.
  */
 
-import type { ColorKey, IconName } from '@centraid/design-tokens';
+import type { ColorKey, IconName } from "@centraid/design-tokens";
 
 /**
  * One per-app aesthetic knob declared by a template's `app.json#knobs[]`.
@@ -24,7 +24,7 @@ export interface AppKnob {
   /** Display label shown in the popover row. */
   label: string;
   /** Control type. `segmented` for discrete values, `swatch` for colour. */
-  type: 'segmented' | 'swatch';
+  type: "segmented" | "swatch";
   /** Value to assume when the per-app table has no row for this knob. */
   default: string;
   /** Choices the user picks from. */
@@ -93,7 +93,7 @@ export interface TemplateMeta {
   /** Gallery section header (e.g. 'Daily rhythm', 'Engineering'). */
   category?: string;
   /** Trigger-style glyph picker on the card ('cron' → clock, 'webhook' → globe). */
-  triggerKind?: 'cron' | 'webhook';
+  triggerKind?: "cron" | "webhook";
   /** Human-readable trigger label (e.g. 'Weekdays · 6:00 PM'). */
   triggerLabel?: string;
   /** Integration chip labels (e.g. ['Gmail', 'Slack']). */
@@ -101,7 +101,7 @@ export interface TemplateMeta {
 }
 
 /** App template = full UI app. Automation template = app folder with `kind: 'automation'`, no UI assets. */
-export type TemplateKind = 'app' | 'automation';
+export type TemplateKind = "app" | "automation";
 
 /**
  * Shape of `manifest.json` — the bundled (and remotely-served)
@@ -118,7 +118,7 @@ export interface TemplateManifest {
  * resolver returns `'cache'` when a remote-fetched copy supersedes the
  * bundled one, and `'bundle'` otherwise.
  */
-export type TemplateSource = 'bundle' | 'cache';
+export type TemplateSource = "bundle" | "cache";
 
 export interface ResolvedTemplate extends TemplateMeta {
   /** Whether to clone from the cache directory or the bundled directory. */

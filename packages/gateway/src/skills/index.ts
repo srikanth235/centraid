@@ -16,4 +16,4 @@
  *   - automation → composeSkills(['automation-authoring'])
  */
 
-export { buildAuthoringExtraPrompt } from './authoring-prompt.js';
+export { buildAuthoringExtraPrompt } from "./authoring-prompt.js";

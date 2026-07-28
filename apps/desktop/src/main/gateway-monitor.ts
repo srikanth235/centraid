@@ -28,10 +28,8 @@
  * see gateway-monitor-core.ts's file header for why.
  */
 
-import { BrowserWindow, Notification } from 'electron';
-import { loadSettings } from './settings.js';
-import { getLocalGatewaySupervisorState } from './local-gateway.js';
-import { CRASH_LOOP_THRESHOLD, CRASH_LOOP_WINDOW_MS } from './gateway-supervisor-core.js';
+import { BrowserWindow, Notification } from "electron";
+
 import {
   applyComponentAlerts,
   applyProbe,
@@ -44,22 +42,27 @@ import {
   type GatewayAlertAction,
   type GatewayAlertConfig,
   type GatewayComponentAlertAction,
-  type GatewayComponentIssue,
   type GatewayProbe,
   type GatewayRuntimeState,
   type GatewayVersionSkewAction,
-} from './gateway-monitor-core.js';
-import { deriveOutageEvents, type OutageLogEvent } from './gateway-outage-log-core.js';
-import { loadOutageLog, persistOutageEvents } from './gateway-outage-log.js';
-import { pushPowerContext } from './power-context-push.js';
+} from "./gateway-monitor-core.js";
+import { probeGateway } from "./gateway-monitor-probe.js";
+import {
+  deriveOutageEvents,
+  type OutageLogEvent,
+} from "./gateway-outage-log-core.js";
+import { loadOutageLog, persistOutageEvents } from "./gateway-outage-log.js";
+import {
+  CRASH_LOOP_THRESHOLD,
+  CRASH_LOOP_WINDOW_MS,
+} from "./gateway-supervisor-core.js";
+import { getLocalGatewaySupervisorState } from "./local-gateway.js";
+import { pushPowerContext } from "./power-context-push.js";
+import { loadSettings } from "./settings.js";
 
 export const GATEWAY_RUNTIME_POLL_MS = 5000;
-/** A hung probe counts as down well before the next tick would queue up. */
-const PROBE_TIMEOUT_MS = 4000;
 /** Broadcast channel — keep in sync with `Channel` in ipc.ts + preload.ts. */
-const RUNTIME_EVENT_CHANNEL = 'centraid:gateway-runtime:event';
-const HEALTH_PATH = '/centraid/_gateway/health';
-const INFO_PATH = '/centraid/_gateway/info';
+const RUNTIME_EVENT_CHANNEL = "centraid:gateway-runtime:event";
 
 /**
  * One durable alert-history entry as the renderer sees it (issue #351 wave
@@ -67,7 +70,10 @@ const INFO_PATH = '/centraid/_gateway/info';
  * boot, vs. one recorded during the current run, so the Alerts tab can
  * label history from before the last restart.
  */
-export interface OutageLogSnapshotEntry extends Omit<OutageLogEvent, 'gatewayId' | 'gatewayLabel'> {
+export interface OutageLogSnapshotEntry extends Omit<
+  OutageLogEvent,
+  "gatewayId" | "gatewayLabel"
+> {
   previousSession: boolean;
 }
 
@@ -80,7 +86,7 @@ export interface OutageLogSnapshotEntry extends Omit<OutageLogEvent, 'gatewayId'
  */
 export interface GatewayRuntimeSnapshot extends Omit<
   GatewayRuntimeState,
-  'componentAlerts' | 'versionSkewAlertedAt'
+  "componentAlerts" | "versionSkewAlertedAt"
 > {
   alert: GatewayAlertConfig;
   pollIntervalMs: number;
@@ -108,124 +114,34 @@ const crashLoopNotified = new Set<string>();
 let outageHistory: OutageLogEvent[] | undefined;
 let historyBootAt: number | undefined;
 
-/** Plain liveness probe — used as the primary probe on a `/health` 404 (older gateway). */
-async function probeInfo(baseUrl: string, token: string | undefined): Promise<GatewayProbe> {
-  const startedAt = Date.now();
-  try {
-    const res = await fetch(new URL(INFO_PATH, `${baseUrl}/`).toString(), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
-    const at = Date.now();
-    if (!res.ok) return { at, ok: false, detail: `HTTP ${res.status}` };
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    return {
-      at,
-      ok: true,
-      latencyMs: at - startedAt,
-      ...(typeof body.startedAt === 'number' ? { gatewayStartedAt: body.startedAt } : {}),
-      ...(typeof body.uptimeMs === 'number' ? { gatewayUptimeMs: body.uptimeMs } : {}),
-      ...(typeof body.version === 'string' ? { version: body.version } : {}),
-      ...(typeof body.schemaEpoch === 'number' ? { schemaEpoch: body.schemaEpoch } : {}),
-    };
-  } catch (err) {
-    return {
-      at: Date.now(),
-      ok: false,
-      detail: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-/** Pull the non-'ok' components out of a `/health` payload's `components` array. */
-function extractComponentIssues(body: Record<string, unknown>): GatewayComponentIssue[] {
-  const raw = Array.isArray(body.components) ? body.components : [];
-  const issues: GatewayComponentIssue[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') continue;
-    const rec = entry as Record<string, unknown>;
-    if (rec.status !== 'degraded' && rec.status !== 'error') continue;
-    if (typeof rec.component !== 'string') continue;
-    const message =
-      typeof rec.lastError === 'string'
-        ? rec.lastError
-        : typeof rec.detail === 'string'
-          ? rec.detail
-          : undefined;
-    issues.push({ component: rec.component, status: rec.status, ...(message ? { message } : {}) });
-  }
-  return issues;
-}
-
-/**
- * Heartbeat probe: `/centraid/_gateway/health` (component-level status — a
- * hung-but-listening gateway shows up here, not just "is a compatible
- * gateway listening"), falling back to the plain `/info` liveness probe on
- * a 404 (a gateway built before #347/#351 that doesn't expose `/health`
- * yet). `healthStatus`/`componentIssues` simply stay unpopulated for a
- * gateway served via the fallback.
- */
-async function probeGateway(baseUrl: string, token: string | undefined): Promise<GatewayProbe> {
-  const startedAt = Date.now();
-  try {
-    const res = await fetch(new URL(HEALTH_PATH, `${baseUrl}/`).toString(), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
-    if (res.status === 404) return probeInfo(baseUrl, token);
-    const at = Date.now();
-    if (!res.ok) return { at, ok: false, detail: `HTTP ${res.status}` };
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    const healthStatus =
-      body.status === 'ok' || body.status === 'degraded' || body.status === 'error'
-        ? body.status
-        : undefined;
-    return {
-      at,
-      ok: true,
-      latencyMs: at - startedAt,
-      ...(healthStatus ? { healthStatus } : {}),
-      componentIssues: extractComponentIssues(body),
-      // `/health`'s `startedAt` is an ISO timestamp (vs `/info`'s epoch ms).
-      ...(typeof body.startedAt === 'string' && !Number.isNaN(Date.parse(body.startedAt))
-        ? { gatewayStartedAt: Date.parse(body.startedAt) }
-        : {}),
-      ...(typeof body.uptimeMs === 'number' ? { gatewayUptimeMs: body.uptimeMs } : {}),
-    };
-  } catch (err) {
-    return {
-      at: Date.now(),
-      ok: false,
-      detail: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
 function notify(action: GatewayAlertAction, label: string): void {
   if (!Notification.isSupported()) return;
   const n =
-    action.kind === 'down'
+    action.kind === "down"
       ? new Notification({
-          title: 'Gateway unreachable',
+          title: "Gateway unreachable",
           body: `“${label}” has been down for ${formatDurationMs(action.downForMs)}. Centraid can’t reach it.`,
-          urgency: 'critical',
+          urgency: "critical",
         })
       : new Notification({
-          title: 'Gateway back online',
+          title: "Gateway back online",
           body: `“${label}” recovered after ${formatDurationMs(action.outageMs)}.`,
         });
   n.show();
 }
 
 /** Component-level down alert (issue #351) — de-duped by `applyComponentAlerts`. */
-function notifyComponent(action: GatewayComponentAlertAction, gatewayLabel: string): void {
+function notifyComponent(
+  action: GatewayComponentAlertAction,
+  gatewayLabel: string
+): void {
   if (!Notification.isSupported()) return;
   const n = new Notification({
-    title: 'Gateway component unhealthy',
+    title: "Gateway component unhealthy",
     body:
       `“${action.component}” on “${gatewayLabel}” has been erroring for ` +
-      `${formatDurationMs(action.downForMs)}${action.message ? `: ${action.message}` : '.'}`,
-    urgency: 'critical',
+      `${formatDurationMs(action.downForMs)}${action.message ? `: ${action.message}` : "."}`,
+    urgency: "critical",
   });
   n.show();
 }
@@ -236,31 +152,37 @@ function notifyComponent(action: GatewayComponentAlertAction, gatewayLabel: stri
  * expectations, de-duped by `applyVersionSkewAlert`. v0 policy is
  * "surface loudly", not refuse — see gateway-monitor-core.ts's file header.
  */
-function notifyVersionSkew(action: GatewayVersionSkewAction, gatewayLabel: string): void {
+function notifyVersionSkew(
+  action: GatewayVersionSkewAction,
+  gatewayLabel: string
+): void {
   if (!Notification.isSupported()) return;
   const n = new Notification({
-    title: 'Gateway version mismatch',
+    title: "Gateway version mismatch",
     body:
       `“${gatewayLabel}” is running v${action.gatewayVersion} (schema epoch ` +
       `${action.gatewaySchemaEpoch}), which doesn’t match what this app expects. ` +
-      'Update both to the same version to avoid undebuggable weirdness.',
-    urgency: 'critical',
+      "Update both to the same version to avoid undebuggable weirdness.",
+    urgency: "critical",
   });
   n.show();
 }
 
 /** Fired once when the embedded local gateway's supervised restart gives up (issue #351). */
-function notifyCrashLoop(gatewayLabel: string, lastError: string | undefined): void {
+function notifyCrashLoop(
+  gatewayLabel: string,
+  lastError: string | undefined
+): void {
   if (!Notification.isSupported()) return;
   const windowMinutes = Math.round(CRASH_LOOP_WINDOW_MS / 60_000);
   const n = new Notification({
-    title: 'Gateway failed repeatedly',
+    title: "Gateway failed repeatedly",
     body:
       `“${gatewayLabel}” failed to start ${CRASH_LOOP_THRESHOLD}+ times in the last ` +
       `${windowMinutes} minutes — Centraid stopped retrying automatically.` +
-      (lastError ? ` Last error: ${lastError}.` : '') +
-      ' Use Settings → Gateway to restart it manually.',
-    urgency: 'critical',
+      (lastError ? ` Last error: ${lastError}.` : "") +
+      " Use Settings → Gateway to restart it manually.",
+    urgency: "critical",
   });
   n.show();
 }
@@ -292,7 +214,7 @@ async function tick(): Promise<void> {
     settingsError = err instanceof Error ? err.message : String(err);
     if (!state) {
       process.stdout.write(
-        `[gateway-monitor] settings unavailable, no prior state to track: ${settingsError}\n`,
+        `[gateway-monitor] settings unavailable, no prior state to track: ${settingsError}\n`
       );
       return;
     }
@@ -306,7 +228,7 @@ async function tick(): Promise<void> {
           label: settings.activeGatewayLabel,
           kind: settings.activeGatewayKind,
         },
-        Date.now(),
+        Date.now()
       );
     }
     // Label/kind can change without a gateway switch (rename) — carry them.
@@ -329,22 +251,28 @@ async function tick(): Promise<void> {
   // (see above): in the common case that IS the local gateway failing to
   // boot, so we still attribute it to the supervisor when the tracked
   // gateway is local.
-  const activeGatewayKind = settings?.activeGatewayKind ?? trackedState.gatewayKind;
+  const activeGatewayKind =
+    settings?.activeGatewayKind ?? trackedState.gatewayKind;
   const localSupervisor =
-    activeGatewayKind === 'local'
+    activeGatewayKind === "local"
       ? getLocalGatewaySupervisorState(trackedState.gatewayId)
       : undefined;
-  const probe: GatewayProbe = !settings
-    ? { at: Date.now(), ok: false, detail: settingsError ?? 'settings unavailable' }
-    : localSupervisor?.loopBroken
+  const probe: GatewayProbe = settings
+    ? localSupervisor?.loopBroken
       ? {
           at: Date.now(),
           ok: false,
-          detail: localSupervisor.lastError ?? 'local gateway failed repeatedly',
+          detail:
+            localSupervisor.lastError ?? "local gateway failed repeatedly",
         }
       : settings.gatewayUrl
         ? await probeGateway(settings.gatewayUrl, settings.gatewayToken)
-        : { at: Date.now(), ok: false, detail: 'gateway URL not resolved yet' };
+        : { at: Date.now(), ok: false, detail: "gateway URL not resolved yet" }
+    : {
+        at: Date.now(),
+        ok: false,
+        detail: settingsError ?? "settings unavailable",
+      };
   // Piggyback the power-context push (#528 Phase D) on the heartbeat so the
   // gateway's live host power posture never approaches its 120s staleness
   // window while the desktop runs. Best-effort and independent of the probe
@@ -365,7 +293,8 @@ async function tick(): Promise<void> {
   // picks "Start fresh on this Mac" the local gateway is deliberately not
   // started (no keychain prompt ahead of the chooser), so "unreachable" is
   // expected, not an outage. A FAILED settings read still alerts.
-  const inFirstRunSetup = settings !== undefined && settings.onboardingCompletedAt === undefined;
+  const inFirstRunSetup =
+    settings !== undefined && settings.onboardingCompletedAt === undefined;
   const alert: GatewayAlertConfig = {
     enabled: (settings?.gatewayAlertsEnabled ?? true) && !inFirstRunSetup,
     thresholdSeconds: settings?.gatewayAlertSeconds ?? DEFAULT_ALERT_SECONDS,
@@ -381,16 +310,22 @@ async function tick(): Promise<void> {
     enabled: alert.enabled,
     thresholdSeconds: DEFAULT_COMPONENT_ALERT_SECONDS,
   };
-  const componentEvaluated = applyComponentAlerts(state, Date.now(), componentAlert);
+  const componentEvaluated = applyComponentAlerts(
+    state,
+    Date.now(),
+    componentAlert
+  );
   state = componentEvaluated.state;
-  for (const action of componentEvaluated.actions) notifyComponent(action, state.gatewayLabel);
+  for (const action of componentEvaluated.actions)
+    notifyComponent(action, state.gatewayLabel);
 
   // Version-skew alert (wave 2 of #351) — same enable switch, no threshold
   // (see applyVersionSkewAlert's doc comment for why). `versionSkew` is only
   // ever set for a remote gateway, so this is a no-op for local.
   const skewEvaluated = applyVersionSkewAlert(state, alert, Date.now());
   state = skewEvaluated.state;
-  if (skewEvaluated.action) notifyVersionSkew(skewEvaluated.action, state.gatewayLabel);
+  if (skewEvaluated.action)
+    notifyVersionSkew(skewEvaluated.action, state.gatewayLabel);
 
   // Crash-loop alert — fires once per loop-broken episode; clears when the
   // supervisor recovers (a manual restart, or the app relaunching) so a
@@ -419,7 +354,9 @@ async function tick(): Promise<void> {
     prevHealthStatus,
     state,
     componentActions: componentEvaluated.actions,
-    ...(skewEvaluated.action ? { versionSkewAction: skewEvaluated.action } : {}),
+    ...(skewEvaluated.action
+      ? { versionSkewAction: skewEvaluated.action }
+      : {}),
     now: Date.now(),
   });
   outageHistory = persistOutageEvents(outageHistory, newOutageEvents);
@@ -438,8 +375,8 @@ async function tick(): Promise<void> {
   const alertHistory: OutageLogSnapshotEntry[] = outageHistory.map((e) => ({
     at: e.at,
     kind: e.kind,
-    ...(e.detail !== undefined ? { detail: e.detail } : {}),
-    ...(e.durationMs !== undefined ? { durationMs: e.durationMs } : {}),
+    ...(e.detail === undefined ? {} : { detail: e.detail }),
+    ...(e.durationMs === undefined ? {} : { durationMs: e.durationMs }),
     previousSession: historyBootAt !== undefined && e.at < historyBootAt,
   }));
   lastSnapshot = {
@@ -486,7 +423,7 @@ export function stopGatewayMonitor(): void {
  */
 export async function getGatewayRuntimeSnapshot(): Promise<GatewayRuntimeSnapshot> {
   if (!lastSnapshot) await runTick();
-  if (!lastSnapshot) throw new Error('gateway monitor produced no snapshot');
+  if (!lastSnapshot) throw new Error("gateway monitor produced no snapshot");
   return lastSnapshot;
 }
 

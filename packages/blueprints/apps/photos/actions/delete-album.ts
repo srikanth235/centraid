@@ -4,17 +4,20 @@
  *
  * @type {import('@centraid/app-engine').ActionHandler}
  */
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function deleteAlbum({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'media.delete_album',
-      input: { album_id: String(input.album_id ?? '') },
-      purpose: 'dpv:ServiceProvision',
+      command: "media.delete_album",
+      input: { album_id: String(input.album_id ?? "") },
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
+    return {
+      status: 200,
+      body: { status: "denied", reason: e.message, code: e.code },
+    };
   }
-};
+}

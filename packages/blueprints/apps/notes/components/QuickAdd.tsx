@@ -3,20 +3,28 @@
 // this subtree, not the whole wall. It only calls up to `onSubmit` with the
 // assembled {title, body}; it never touches `state`/`data` directly. Mirrors
 // tasks/components/Capture.jsx's shape.
-import { useEffect, useRef, useState } from 'react';
-import styles from './QuickAdd.module.css';
+import { useEffect, useRef, useState } from "react";
+
+import styles from "./QuickAdd.module.css";
 
 export interface QuickAddProps {
   targetLabel: string;
-  onSubmit: (payload: { title: string; body: string }) => boolean | Promise<boolean>;
+  onSubmit: (payload: {
+    title: string;
+    body: string;
+  }) => boolean | Promise<boolean>;
   registerFocus: (fn: () => void) => void;
 }
 
-export function QuickAdd({ targetLabel, onSubmit, registerFocus }: QuickAddProps) {
+export function QuickAdd({
+  targetLabel,
+  onSubmit,
+  registerFocus,
+}: QuickAddProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -28,8 +36,8 @@ export function QuickAdd({ targetLabel, onSubmit, registerFocus }: QuickAddProps
 
   const cancel = () => {
     setOpen(false);
-    setTitle('');
-    setBody('');
+    setTitle("");
+    setBody("");
   };
 
   const submit = async () => {
@@ -38,8 +46,8 @@ export function QuickAdd({ targetLabel, onSubmit, registerFocus }: QuickAddProps
     const ok = await onSubmit({ title, body });
     setBusy(false);
     if (ok) {
-      setTitle('');
-      setBody('');
+      setTitle("");
+      setBody("");
       setOpen(false);
     }
   };
@@ -56,7 +64,7 @@ export function QuickAdd({ targetLabel, onSubmit, registerFocus }: QuickAddProps
         onChange={(e) => setTitle(e.target.value)}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !open) {
+          if (e.key === "Enter" && !open) {
             e.preventDefault();
             submit();
           }
@@ -71,7 +79,7 @@ export function QuickAdd({ targetLabel, onSubmit, registerFocus }: QuickAddProps
             value={body}
             onChange={(e) => setBody(e.target.value)}
             onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                 e.preventDefault();
                 submit();
               }
@@ -79,7 +87,12 @@ export function QuickAdd({ targetLabel, onSubmit, registerFocus }: QuickAddProps
           />
           <div className={styles.qaActions}>
             <span className={styles.qaTarget}>{targetLabel}</span>
-            <button type="button" className="kit-btn" onClick={cancel} disabled={busy}>
+            <button
+              type="button"
+              className="kit-btn"
+              onClick={cancel}
+              disabled={busy}
+            >
               Cancel
             </button>
             <button

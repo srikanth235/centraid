@@ -63,8 +63,8 @@ interface CustodyRow {
   custody_state?: string | null;
 }
 
-export const BLOB_ROUTE = '/centraid/_vault/blobs';
-const TAGS_SCHEME_URI = 'centraid:tags:v1';
+export const BLOB_ROUTE = "/centraid/_vault/blobs";
+const TAGS_SCHEME_URI = "centraid:tags:v1";
 
 /**
  * Blob-backed bytes (issue #296) resolve to same-origin serve URLs (Range,
@@ -73,8 +73,10 @@ const TAGS_SCHEME_URI = 'centraid:tags:v1';
  */
 export function srcOf(content: SrcContent | undefined) {
   const uri = content?.content_uri;
-  if (typeof uri !== 'string') return { src: null, thumb: null, preview: null, poster: null };
-  if (!uri.startsWith('blob:')) return { src: uri, thumb: null, preview: null, poster: null };
+  if (typeof uri !== "string")
+    return { src: null, thumb: null, preview: null, poster: null };
+  if (!uri.startsWith("blob:"))
+    return { src: uri, thumb: null, preview: null, poster: null };
   const src = `${BLOB_ROUTE}/${content!.content_id}`;
   return {
     src,
@@ -92,8 +94,14 @@ export function srcOf(content: SrcContent | undefined) {
  * command's own doc comment — so this full list is what the lightbox's
  * place picker offers to choose among.
  */
-export async function readPlaces({ ctx, purpose }: { ctx: HandlerCtx; purpose: string }) {
-  const result = await ctx.vault.read({ entity: 'core.place', purpose });
+export async function readPlaces({
+  ctx,
+  purpose,
+}: {
+  ctx: HandlerCtx;
+  purpose: string;
+}) {
+  const result = await ctx.vault.read({ entity: "core.place", purpose });
   const rows = ((result.rows ?? []) as unknown as RawPlace[]).map((p) => ({
     place_id: p.place_id,
     name: p.name,
@@ -120,12 +128,12 @@ export async function readAssetJoins({
   contentIds: string[];
 }) {
   const [schemes, concepts, custody] = await Promise.all([
-    ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
-    ctx.vault.read({ entity: 'core.concept', purpose }),
+    ctx.vault.read({ entity: "core.concept_scheme", purpose }),
+    ctx.vault.read({ entity: "core.concept", purpose }),
     contentIds.length > 0
       ? ctx.vault.read({
-          entity: 'blob.custody_state',
-          where: [{ column: 'content_id', op: 'in', value: contentIds }],
+          entity: "blob.custody_state",
+          where: [{ column: "content_id", op: "in", value: contentIds }],
           purpose,
         })
       : { rows: [] },
@@ -145,15 +153,18 @@ export async function readAssetJoins({
       ? conceptRows
           .filter((c) => c.scheme_id === tagsScheme.scheme_id)
           .map((c) => [c.concept_id, c.pref_label ?? c.notation] as const)
-      : [],
+      : []
   );
-  const tagsByAsset = new Map<string, Array<{ tag_id: string; label: string }>>();
+  const tagsByAsset = new Map<
+    string,
+    Array<{ tag_id: string; label: string }>
+  >();
   if (tagsScheme && assetIds.length > 0) {
     const labelTags = await ctx.vault.read({
-      entity: 'core.tag',
+      entity: "core.tag",
       where: [
-        { column: 'target_type', op: 'eq', value: 'media.media_asset' },
-        { column: 'target_id', op: 'in', value: assetIds },
+        { column: "target_type", op: "eq", value: "media.media_asset" },
+        { column: "target_id", op: "in", value: assetIds },
       ],
       purpose,
     });
@@ -166,7 +177,7 @@ export async function readAssetJoins({
   }
 
   const custodyByContent = new Map(
-    custodyRows.map((c) => [c.content_id, c.custody_state] as const),
+    custodyRows.map((c) => [c.content_id, c.custody_state] as const)
   );
 
   return { tagsByAsset, custodyByContent };

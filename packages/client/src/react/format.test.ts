@@ -2,43 +2,50 @@
  * React format helpers + parity pin with app-format relativeTime (issue #545 B8).
  */
 
-import { describe, expect, it } from 'vitest';
-import { INTEGRATION_HUES, insK, insKindLabel, insUsd, relativeTime } from './format.js';
-import { relativeTime as appRelativeTime } from '../app-format.js';
+import { describe, expect, it } from "vitest";
 
-describe('insK / insUsd / insKindLabel', () => {
-  it('formats token counts and USD', () => {
-    expect(insK(0)).toBe('0');
-    expect(insK(999)).toBe('999');
-    expect(insK(12_300)).toBe('12k');
-    expect(insK(2_500_000)).toBe('2.50M');
-    expect(insUsd(0)).toBe('$0.00');
-    expect(insUsd(0.001)).toBe('<$0.01');
-    expect(insUsd(1.2)).toBe('$1.20');
+import { relativeTime as appRelativeTime } from "../app-format.js";
+import {
+  INTEGRATION_HUES,
+  insK,
+  insKindLabel,
+  insUsd,
+  relativeTime,
+} from "./format.js";
+
+describe("insK / insUsd / insKindLabel", () => {
+  it("formats token counts and USD", () => {
+    expect(insK(0)).toBe("0");
+    expect(insK(999)).toBe("999");
+    expect(insK(12_300)).toBe("12k");
+    expect(insK(2_500_000)).toBe("2.50M");
+    expect(insUsd(0)).toBe("$0.00");
+    expect(insUsd(0.001)).toBe("<$0.01");
+    expect(insUsd(1.2)).toBe("$1.20");
   });
 
-  it('maps known run kinds and passes others through', () => {
-    expect(insKindLabel('chat')).toBe('Chat');
-    expect(insKindLabel('build')).toBe('Build');
-    expect(insKindLabel('automation')).toBe('Automation');
-    expect(insKindLabel('other')).toBe('other');
+  it("maps known run kinds and passes others through", () => {
+    expect(insKindLabel("chat")).toBe("Chat");
+    expect(insKindLabel("build")).toBe("Build");
+    expect(insKindLabel("automation")).toBe("Automation");
+    expect(insKindLabel("other")).toBe("other");
   });
 
-  it('exposes integration hues for known names', () => {
-    expect(INTEGRATION_HUES.Slack).toBe('violet');
-    expect(INTEGRATION_HUES.GitHub).toBe('slate');
+  it("exposes integration hues for known names", () => {
+    expect(INTEGRATION_HUES.Slack).toBe("violet");
+    expect(INTEGRATION_HUES.GitHub).toBe("slate");
   });
 });
 
-describe('relativeTime parity with app-format', () => {
-  const now = Date.parse('2026-07-25T12:00:00.000Z');
+describe("relativeTime parity with app-format", () => {
+  const now = Date.parse("2026-07-25T12:00:00.000Z");
 
-  it('handles missing / invalid ISO', () => {
-    expect(relativeTime(undefined, now)).toBe('Recently');
-    expect(relativeTime('not-a-date', now)).toBe('Recently');
+  it("handles missing / invalid ISO", () => {
+    expect(relativeTime(undefined, now)).toBe("Recently");
+    expect(relativeTime("not-a-date", now)).toBe("Recently");
   });
 
-  it('matches app-format coarse buckets when Date.now is pinned', () => {
+  it("matches app-format coarse buckets when Date.now is pinned", () => {
     const realNow = Date.now;
     Date.now = () => now;
     try {

@@ -4,7 +4,7 @@ name: interop-weekly
 # referenced by no workflow). Weekly schedule + manual dispatch.
 on:
   schedule:
-    - cron: '0 9 * * 1' # Monday 09:00 UTC
+    - cron: "0 9 * * 1" # Monday 09:00 UTC
   workflow_dispatch:
 
 concurrency:
@@ -25,7 +25,7 @@ jobs:
       - run: bunx turbo run build --filter=@centraid/backup...
       - name: Run backup interop suite
         env:
-          CLAWGNITION_INTEROP: '1'
+          CLAWGNITION_INTEROP: "1"
         run: bun run test:interop:backup
 
   # Same silent-rot mode #496 E3 closes for nightly — interop is weekly and

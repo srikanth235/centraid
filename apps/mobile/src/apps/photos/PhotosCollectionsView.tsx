@@ -1,28 +1,42 @@
-import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather } from "@expo/vector-icons";
+import React, { useMemo } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { family, useTheme } from '../../kit/theme';
-import type { ThemeColors } from '../../kit/theme/resolve';
-import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
-import type { PhotosScreenProps } from '../../navigation';
+import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { family, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme/resolve";
+import type { PhotosScreenProps } from "../../navigation";
 
 // The design paints each tile with a linear-gradient; RN has no gradient
 // primitive here (no expo-linear-gradient dependency), so each is approximated
 // by a single representative mid-tone lifted from the gradient stops.
-const AVATAR_TILES = ['#e8896b', '#5a9bc4', '#8ca652', '#8c9bb4', '#c98fae', '#5c8a4e'];
-const ALBUM_TILES = ['#a7c9a0', '#c9a0d4', '#d4b89b', '#9bb4d4', '#e8a98c', '#8ca6b4'];
-
-const CATEGORIES: Array<{ label: string; color: string }> = [
-  { label: 'Documents', color: '#8c9bb4' },
-  { label: 'Selfies', color: '#e8899b' },
-  { label: 'Videos', color: '#5c4a7d' },
-  { label: 'Food', color: '#8ca652' },
-  { label: 'Nature', color: '#5c8a4e' },
-  { label: 'Receipts', color: '#a67c52' },
+const AVATAR_TILES = [
+  "#e8896b",
+  "#5a9bc4",
+  "#8ca652",
+  "#8c9bb4",
+  "#c98fae",
+  "#5c8a4e",
+];
+const ALBUM_TILES = [
+  "#a7c9a0",
+  "#c9a0d4",
+  "#d4b89b",
+  "#9bb4d4",
+  "#e8a98c",
+  "#8ca6b4",
 ];
 
-type Nav = PhotosScreenProps<'PhotosHome'>['navigation'];
+const CATEGORIES: Array<{ label: string; color: string }> = [
+  { label: "Documents", color: "#8c9bb4" },
+  { label: "Selfies", color: "#e8899b" },
+  { label: "Videos", color: "#5c4a7d" },
+  { label: "Food", color: "#8ca652" },
+  { label: "Nature", color: "#5c8a4e" },
+  { label: "Receipts", color: "#a67c52" },
+];
+
+type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
 
 interface CollectionRowProps {
   color: string;
@@ -30,7 +44,7 @@ interface CollectionRowProps {
   title: string;
   count: string;
   last?: boolean;
-  onPress(): void;
+  onPress: () => void;
 }
 
 function CollectionRow({
@@ -42,11 +56,19 @@ function CollectionRow({
   onPress,
   styles,
   colors,
-}: CollectionRowProps & { styles: Styles; colors: ThemeColors }): React.JSX.Element {
+}: CollectionRowProps & {
+  styles: Styles;
+  colors: ThemeColors;
+}): React.JSX.Element {
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.row, last ? null : { borderBottomColor: colors.line, borderBottomWidth: 0.5 }]}
+      style={[
+        styles.row,
+        last
+          ? null
+          : { borderBottomColor: colors.line, borderBottomWidth: 0.5 },
+      ]}
     >
       <View style={[styles.rowTile, { backgroundColor: color }]}>{icon}</View>
       <View style={styles.rowText}>
@@ -67,16 +89,16 @@ export default function PhotosCollectionsView({
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const collections = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.collection' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.collection" }), [])
   );
   const faces = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'media.face_region' }), []),
+    "photos",
+    useMemo(() => ({ entity: "media.face_region" }), [])
   );
   const parties = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.party' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.party" }), [])
   );
 
   // People & pets: the confirmed parties that actually own a face region, in
@@ -92,7 +114,7 @@ export default function PhotosCollectionsView({
     return parties.rows
       .map((party) => ({
         id: String(party.party_id),
-        name: String(party.display_name ?? party.name ?? 'Person'),
+        name: String(party.display_name ?? party.name ?? "Person"),
         count: counts.get(String(party.party_id)) ?? 0,
       }))
       .filter((entry) => entry.count > 0)
@@ -103,7 +125,10 @@ export default function PhotosCollectionsView({
   const albums = collections.rows;
 
   return (
-    <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.scroll}
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.rowList}>
         <CollectionRow
           styles={styles}
@@ -112,7 +137,9 @@ export default function PhotosCollectionsView({
           icon={<Feather name="heart" size={20} color="#fff" />}
           title="Favorites"
           count="Your starred photos"
-          onPress={() => navigation.navigate('PhotoStateView', { mode: 'favorites' })}
+          onPress={() =>
+            navigation.navigate("PhotoStateView", { mode: "favorites" })
+          }
         />
         <CollectionRow
           styles={styles}
@@ -121,7 +148,7 @@ export default function PhotosCollectionsView({
           icon={<Feather name="clock" size={20} color="#fff" />}
           title="Recently added"
           count="Newest first"
-          onPress={() => navigation.navigate('PhotosLibrary')}
+          onPress={() => navigation.navigate("PhotosLibrary")}
         />
         <CollectionRow
           styles={styles}
@@ -130,7 +157,7 @@ export default function PhotosCollectionsView({
           icon={<Feather name="smartphone" size={20} color="#fff" />}
           title="Screenshots"
           count="Captured on this phone"
-          onPress={() => navigation.navigate('PhotosLibrary')}
+          onPress={() => navigation.navigate("PhotosLibrary")}
         />
         <CollectionRow
           styles={styles}
@@ -140,12 +167,16 @@ export default function PhotosCollectionsView({
           title="Archive"
           count="Hidden from the timeline"
           last
-          onPress={() => navigation.navigate('PhotoStateView', { mode: 'archive' })}
+          onPress={() =>
+            navigation.navigate("PhotoStateView", { mode: "archive" })
+          }
         />
       </View>
 
       <View style={styles.sectionHead}>
-        <Text style={[styles.sectionTitle, { color: colors.ink }]}>People &amp; pets</Text>
+        <Text style={[styles.sectionTitle, { color: colors.ink }]}>
+          People &amp; pets
+        </Text>
       </View>
       <ScrollView
         horizontal
@@ -160,14 +191,17 @@ export default function PhotosCollectionsView({
                 { backgroundColor: AVATAR_TILES[index % AVATAR_TILES.length] },
               ]}
             />
-            <Text numberOfLines={1} style={[styles.personName, { color: colors.ink2 }]}>
+            <Text
+              numberOfLines={1}
+              style={[styles.personName, { color: colors.ink2 }]}
+            >
               {person.name}
             </Text>
           </View>
         ))}
         <Pressable
           style={styles.person}
-          onPress={() => navigation.navigate('FaceReview')}
+          onPress={() => navigation.navigate("FaceReview")}
           accessibilityLabel="Add a person"
         >
           <View style={[styles.avatarAdd, { borderColor: colors.lineStrong }]}>
@@ -181,11 +215,13 @@ export default function PhotosCollectionsView({
         <Text style={[styles.sectionTitle, { color: colors.ink }]}>Albums</Text>
         <Pressable
           style={styles.newAlbum}
-          onPress={() => navigation.navigate('PhotosLibrary')}
+          onPress={() => navigation.navigate("PhotosLibrary")}
           accessibilityLabel="New album"
         >
           <Feather name="plus" size={14} color={colors.accent} />
-          <Text style={[styles.newAlbumText, { color: colors.accent }]}>New album</Text>
+          <Text style={[styles.newAlbumText, { color: colors.accent }]}>
+            New album
+          </Text>
         </Pressable>
       </View>
       {albums.length ? (
@@ -195,7 +231,9 @@ export default function PhotosCollectionsView({
               key={album.__rowId}
               style={styles.album}
               onPress={() =>
-                navigation.navigate('AlbumDetail', { albumId: String(album.collection_id) })
+                navigation.navigate("AlbumDetail", {
+                  albumId: String(album.collection_id),
+                })
               }
             >
               <View
@@ -204,8 +242,11 @@ export default function PhotosCollectionsView({
                   { backgroundColor: ALBUM_TILES[index % ALBUM_TILES.length] },
                 ]}
               />
-              <Text numberOfLines={1} style={[styles.albumTitle, { color: colors.ink }]}>
-                {String(album.name ?? 'Album')}
+              <Text
+                numberOfLines={1}
+                style={[styles.albumTitle, { color: colors.ink }]}
+              >
+                {String(album.name ?? "Album")}
               </Text>
               <Text style={[styles.albumMeta, { color: colors.ink3 }]}>
                 {String(album.item_count ?? album.count ?? 0)} photos
@@ -220,11 +261,16 @@ export default function PhotosCollectionsView({
       )}
 
       <View style={styles.sectionHead}>
-        <Text style={[styles.sectionTitle, { color: colors.ink }]}>Categories</Text>
+        <Text style={[styles.sectionTitle, { color: colors.ink }]}>
+          Categories
+        </Text>
       </View>
       <View style={styles.categoryGrid}>
         {CATEGORIES.map((category) => (
-          <View key={category.label} style={[styles.category, { backgroundColor: category.color }]}>
+          <View
+            key={category.label}
+            style={[styles.category, { backgroundColor: category.color }]}
+          >
             <View style={styles.categoryShade} />
             <Text style={styles.categoryLabel}>{category.label}</Text>
           </View>
@@ -236,14 +282,16 @@ export default function PhotosCollectionsView({
 
 type Styles = ReturnType<typeof makeStyles>;
 
-const makeStyles = (_colors: ThemeColors): ReturnType<typeof StyleSheet.create> =>
+const makeStyles = (
+  _colors: ThemeColors
+): ReturnType<typeof StyleSheet.create> =>
   StyleSheet.create({
-    album: { width: '48%' },
+    album: { width: "48%" },
     albumGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection: "row",
+      flexWrap: "wrap",
       gap: 14,
-      justifyContent: 'space-between',
+      justifyContent: "space-between",
       paddingHorizontal: 16,
     },
     albumMeta: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 1 },
@@ -251,64 +299,69 @@ const makeStyles = (_colors: ThemeColors): ReturnType<typeof StyleSheet.create> 
     albumTitle: { fontFamily: family.sansBold, fontSize: 14, marginTop: 9 },
     avatar: { borderRadius: 33, height: 66, width: 66 },
     avatarAdd: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: 33,
-      borderStyle: 'dashed',
+      borderStyle: "dashed",
       borderWidth: 1,
       height: 66,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 66,
     },
     category: {
       aspectRatio: 1.1,
       borderRadius: 12,
-      justifyContent: 'flex-end',
-      overflow: 'hidden',
-      width: '31%',
+      justifyContent: "flex-end",
+      overflow: "hidden",
+      width: "31%",
     },
     categoryGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexDirection: "row",
+      flexWrap: "wrap",
       gap: 8,
       paddingHorizontal: 16,
     },
     categoryLabel: {
-      color: '#fff',
+      color: "#fff",
       fontFamily: family.sansBold,
       fontSize: 12,
       margin: 9,
     },
     categoryShade: {
       ...StyleSheet.absoluteFill,
-      backgroundColor: 'rgba(0,0,0,.28)',
+      backgroundColor: "rgba(0,0,0,.28)",
     },
     emptyAlbums: {
       fontFamily: family.sansRegular,
       fontSize: 13,
       paddingHorizontal: 16,
     },
-    newAlbum: { alignItems: 'center', flexDirection: 'row', gap: 5 },
+    newAlbum: { alignItems: "center", flexDirection: "row", gap: 5 },
     newAlbumText: { fontFamily: family.sansMedium, fontSize: 13 },
     peopleRow: { gap: 14, paddingHorizontal: 16, paddingVertical: 2 },
-    person: { alignItems: 'center', gap: 7, width: 66 },
+    person: { alignItems: "center", gap: 7, width: 66 },
     personName: { fontFamily: family.sansMedium, fontSize: 11 },
-    row: { alignItems: 'center', flexDirection: 'row', gap: 13, paddingVertical: 10 },
+    row: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: 13,
+      paddingVertical: 10,
+    },
     rowList: { paddingHorizontal: 16 },
     rowMeta: { fontFamily: family.sansRegular, fontSize: 13, marginTop: 1 },
     rowText: { flex: 1, minWidth: 0 },
     rowTile: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: 12,
       height: 48,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 48,
     },
     rowTitle: { fontFamily: family.sansRegular, fontSize: 15 },
     scroll: { paddingBottom: 24, paddingTop: 4 },
     sectionHead: {
-      alignItems: 'baseline',
-      flexDirection: 'row',
-      justifyContent: 'space-between',
+      alignItems: "baseline",
+      flexDirection: "row",
+      justifyContent: "space-between",
       paddingBottom: 12,
       paddingHorizontal: 16,
       paddingTop: 24,

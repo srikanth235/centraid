@@ -7,7 +7,9 @@
  * everything drains on the next successful pass — no generation break.
  */
 
-import { promises as fs } from 'node:fs';
+import { promises as fs } from "node:fs";
+
+import type { RuntimeLogger } from "@centraid/app-engine";
 import {
   deriveDataKey,
   masterKeyForEpoch,
@@ -23,9 +25,9 @@ import {
   walPairMarkerRootPrefix,
   type BackupProvider,
   type Keyring,
-} from '@centraid/backup';
-import type { RuntimeLogger } from '@centraid/app-engine';
-import type { VaultPlane } from '../serve/vault-plane.js';
+} from "@centraid/backup";
+
+import type { VaultPlane } from "../serve/vault-plane.js";
 
 export interface DrainResult {
   uploaded: number;
@@ -41,8 +43,43 @@ export interface DrainResult {
   markerTips: Record<string, number>;
 }
 
+/** Ordered I/O is explicit at WAL durability boundaries. */
+function applyInOrder<T>(
+  values: Iterable<T>,
+  apply: (value: T, index: number) => void | PromiseLike<void>
+): Promise<void> {
+  let index = 0;
+  return Array.from(values).reduce<Promise<void>>(
+    (sequence, value) => sequence.then(() => apply(value, index++)),
+    Promise.resolve()
+  );
+}
+
+/** Consume remote object listings in source order without a raw await loop. */
+async function applyAvailableInOrder<T>(
+  values: AsyncIterable<T>,
+  apply: (value: T, index: number) => void | PromiseLike<void>
+): Promise<void> {
+  const iterator = values[Symbol.asyncIterator]();
+  async function applyNext(index: number): Promise<void> {
+    const next = await iterator.next();
+    if (next.done) return;
+    await apply(next.value, index);
+    return applyNext(index + 1);
+  }
+  try {
+    await applyNext(0);
+  } catch (error) {
+    await iterator.return?.();
+    throw error;
+  }
+}
+
 /** The state/manifest key for one base pair — a generation break mints a new one. */
-export function walPairKey(vaultGeneration: string, journalGeneration: string): string {
+export function walPairKey(
+  vaultGeneration: string,
+  journalGeneration: string
+): string {
   return `${vaultGeneration}-${journalGeneration}`;
 }
 
@@ -59,14 +96,14 @@ export function discardWalFiles(plane: VaultPlane): DrainResult {
   const items = shipper.listUploadable();
   const holedDbs = new Set<Parameters<typeof shipper.noteStreamDiscarded>[0]>();
   for (const item of items) {
-    if (item.kind === 'segment') holedDbs.add(item.addr!.db);
-    else if (item.kind === 'closer') holedDbs.add(item.closer!.db);
+    if (item.kind === "segment") holedDbs.add(item.addr!.db);
+    else if (item.kind === "closer") holedDbs.add(item.closer!.db);
     else {
       // A discarded pair marker holes BOTH streams: without it, the tick it
       // described can never be selected as a coordinated restore point again,
       // so neither database is restorable to it.
-      holedDbs.add('vault');
-      holedDbs.add('journal');
+      holedDbs.add("vault");
+      holedDbs.add("journal");
     }
   }
   // Persist the discard intent BEFORE deleting a byte. A crash after this
@@ -105,7 +142,8 @@ export async function drainWalFiles(opts: {
   const shipper = opts.plane.walShipper;
   if (!shipper) return { uploaded: 0, bytes: 0, discarded: 0, markerTips: {} };
   const items = shipper.listUploadable();
-  if (items.length === 0) return { uploaded: 0, bytes: 0, discarded: 0, markerTips: {} };
+  if (items.length === 0)
+    return { uploaded: 0, bytes: 0, discarded: 0, markerTips: {} };
   const dataKeyByEpoch = new Map<number, Uint8Array>();
   const dataKeyFor = (generation: string): Uint8Array => {
     const epoch = opts.epochForGeneration(generation);
@@ -116,7 +154,11 @@ export async function drainWalFiles(opts: {
     }
     return key;
   };
-  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read-write');
+  const store = await opts.provider.openDataPlane(
+    opts.targetId,
+    "backup",
+    "read-write"
+  );
   // A pass that throws part-way loses the tips it had gathered — deliberately
   // fine: the tip only ever UNDER-claims then, and the next successful drain
   // (which ships a newer marker) overtakes it. Over-claiming is the failure that
@@ -127,17 +169,21 @@ export async function drainWalFiles(opts: {
   // Sequential and ordered (listUploadable sorts old generations/groups
   // first; within a group, numeric segment names sort before `closed-…`):
   // a failure mid-pass leaves a clean prefix uploaded and the rest local.
-  for (const item of items) {
+  await applyInOrder(items, async (item) => {
     let sealed: Uint8Array;
-    if (item.kind === 'segment') {
+    if (item.kind === "segment") {
       sealed = sealWalSegment(
         dataKeyFor(item.addr!.generation),
         opts.vaultId,
         item.addr!,
-        await fs.readFile(item.file),
+        await fs.readFile(item.file)
       );
-    } else if (item.kind === 'closer') {
-      sealed = sealWalCloser(dataKeyFor(item.closer!.generation), opts.vaultId, item.closer!);
+    } else if (item.kind === "closer") {
+      sealed = sealWalCloser(
+        dataKeyFor(item.closer!.generation),
+        opts.vaultId,
+        item.closer!
+      );
     } else {
       // A pair marker names BOTH generations, so it can only be sealed under
       // ONE epoch — and it must be the epoch its manifest names, or restore
@@ -154,13 +200,17 @@ export async function drainWalFiles(opts: {
         throw new Error(
           `wal drain: pair marker ${item.key} spans key epochs (vault ${vaultEpoch}, ` +
             `journal ${journalEpoch}) — the two generations must break together and pin to one ` +
-            'epoch; refusing to seal a marker its manifest could not open',
+            "epoch; refusing to seal a marker its manifest could not open"
         );
       }
-      sealed = sealWalPairMarker(dataKeyFor(marker.vaultGeneration), opts.vaultId, marker);
+      sealed = sealWalPairMarker(
+        dataKeyFor(marker.vaultGeneration),
+        opts.vaultId,
+        marker
+      );
     }
     await store.put(item.key, sealed);
-    if (item.kind === 'marker') {
+    if (item.kind === "marker") {
       // AFTER the PUT resolved, never before. This number becomes a floor the
       // provider is held to at every later verification — claiming a marker
       // that did not land would turn an interrupted drain into a permanent
@@ -173,7 +223,7 @@ export async function drainWalFiles(opts: {
     shipper.noteUploaded(item);
     uploaded++;
     bytes += sealed.length;
-  }
+  });
   return { uploaded, bytes, discarded: 0, markerTips };
 }
 
@@ -203,20 +253,30 @@ export async function pruneWalGenerations(opts: {
 }): Promise<{ deletedObjects: number; keptGenerations: Set<string> }> {
   const shipper = opts.plane.walShipper;
   const keep = new Set<string>();
-  if (shipper) for (const base of shipper.currentBases()) keep.add(base.generation);
+  if (shipper)
+    for (const base of shipper.currentBases()) keep.add(base.generation);
 
   const cache = opts.manifestGenerationCache;
   const rows = await opts.provider.listSnapshots(opts.targetId);
-  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read-write');
-  for (const row of rows) {
+  const store = await opts.provider.openDataPlane(
+    opts.targetId,
+    "backup",
+    "read-write"
+  );
+  await applyInOrder(rows, async (row) => {
     const cached = cache?.get(row.manifestHash);
     if (cached) {
       for (const gen of cached) keep.add(gen);
-      continue;
+      return;
     }
     try {
       const bytes = await store.get(row.manifestKey);
-      const opened = openManifest(bytes, opts.keyring, opts.vaultId, row.manifestHash);
+      const opened = openManifest(
+        bytes,
+        opts.keyring,
+        opts.vaultId,
+        row.manifestHash
+      );
       const generations: string[] = [];
       for (const entry of opened.entries) {
         if (entry.walGeneration !== undefined) {
@@ -231,42 +291,44 @@ export async function pruneWalGenerations(opts: {
       // them is exactly backwards.
       throw new Error(
         `wal prune: cannot read manifest seq ${row.seq}: ${err instanceof Error ? err.message : String(err)}`,
-        { cause: err },
+        { cause: err }
       );
     }
-  }
+  });
 
   let deletedObjects = 0;
-  for (const db of WAL_DB_NAMES) {
+  await applyInOrder(WAL_DB_NAMES, async (db) => {
     const doomed: string[] = [];
-    for await (const obj of store.list(walDbPrefix(db))) {
-      const gen = parseWalSegmentKey(obj.key)?.generation ?? parseWalCloserKey(obj.key)?.generation;
+    await applyAvailableInOrder(store.list(walDbPrefix(db)), (obj) => {
+      const gen =
+        parseWalSegmentKey(obj.key)?.generation ??
+        parseWalCloserKey(obj.key)?.generation;
       if (gen !== undefined && !keep.has(gen)) doomed.push(obj.key);
-    }
-    for (const key of doomed) {
+    });
+    await applyInOrder(doomed, async (key) => {
       await store.delete(key);
       deletedObjects++;
-    }
-  }
+    });
+  });
   // Pair markers live outside the per-db prefixes (their key names BOTH
   // generations) — a separate pass, or they would accumulate forever. A marker
   // is dead the moment EITHER of its generations is: it can only ever be used
   // by a restore of exactly that pair.
   const doomedMarkers: string[] = [];
-  for await (const obj of store.list(walPairMarkerRootPrefix())) {
+  await applyAvailableInOrder(store.list(walPairMarkerRootPrefix()), (obj) => {
     const addr = parseWalPairMarkerKey(obj.key);
-    if (!addr) continue;
+    if (!addr) return;
     if (!keep.has(addr.vaultGeneration) || !keep.has(addr.journalGeneration)) {
       doomedMarkers.push(obj.key);
     }
-  }
-  for (const key of doomedMarkers) {
+  });
+  await applyInOrder(doomedMarkers, async (key) => {
     await store.delete(key);
     deletedObjects++;
-  }
+  });
   if (deletedObjects > 0) {
     opts.logger.info(
-      `backup: pruned ${deletedObjects} wal object(s) from unreferenced generations`,
+      `backup: pruned ${deletedObjects} wal object(s) from unreferenced generations`
     );
   }
   return { deletedObjects, keptGenerations: keep };

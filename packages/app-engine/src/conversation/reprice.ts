@@ -23,8 +23,9 @@
  * no-op (idempotent).
  */
 
-import type { DatabaseSync } from 'node:sqlite';
-import { costForUsage } from '../model-pricing.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import { costForUsage } from "../model-pricing.js";
 
 export interface RepriceOptions {
   /** Resume point — process items with `rowid > cursor`. Default 0 (start). */
@@ -71,7 +72,10 @@ function differs(a: number | null, b: number | null): boolean {
  * Run one bounded repricing pass over a journal handle's live ledger. Safe to
  * call repeatedly; only rows whose recomputed cost differs are written.
  */
-export function repriceLedger(db: DatabaseSync, opts: RepriceOptions = {}): RepriceResult {
+export function repriceLedger(
+  db: DatabaseSync,
+  opts: RepriceOptions = {}
+): RepriceResult {
   const cursor = opts.cursor ?? 0;
   const maxScan = Math.max(1, opts.maxScan ?? 5000);
   const maxWrites = Math.max(1, opts.maxWrites ?? 1000);
@@ -84,19 +88,19 @@ export function repriceLedger(db: DatabaseSync, opts: RepriceOptions = {}): Repr
         WHERE rowid > ? AND kind IN ('step','agent') AND model IS NOT NULL
           AND (cost_source IS NULL OR cost_source = 'estimated')
         ORDER BY rowid ASC
-        LIMIT ?`,
+        LIMIT ?`
     )
     .all(cursor, maxScan) as unknown as ItemRow[];
 
   const updateItem = db.prepare(
-    `UPDATE items SET cost_usd = ?, cost_source = CASE WHEN ? IS NULL THEN NULL ELSE 'estimated' END WHERE rowid = ?`,
+    `UPDATE items SET cost_usd = ?, cost_source = CASE WHEN ? IS NULL THEN NULL ELSE 'estimated' END WHERE rowid = ?`
   );
   // Same SUM shape as finishTurn — NULL when every child cost is NULL.
   const rederiveTurn = db.prepare(
     `UPDATE turns SET total_cost_usd = (
         SELECT SUM(cost_usd) FROM items
          WHERE turn_id = ? AND kind IN ('step','agent'))
-      WHERE id = ?`,
+      WHERE id = ?`
   );
 
   const affectedTurns = new Set<string>();
@@ -105,18 +109,26 @@ export function repriceLedger(db: DatabaseSync, opts: RepriceOptions = {}): Repr
 
   // SAVEPOINT (not BEGIN) so this nests safely if the caller already holds a
   // transaction — the sweep runs several duties per tick.
-  db.prepare('SAVEPOINT reprice').run();
+  db.prepare("SAVEPOINT reprice").run();
   try {
     for (const row of rows) {
       lastRowid = row.rowid;
       // Never clobber agent-reported costs (also filtered in SQL).
-      if (row.cost_source === 'agent') continue;
+      if (row.cost_source === "agent") continue;
       const recomputed =
         costForUsage(row.model ?? undefined, {
-          ...(row.input_tokens !== null ? { inputTokens: row.input_tokens } : {}),
-          ...(row.output_tokens !== null ? { outputTokens: row.output_tokens } : {}),
-          ...(row.cache_read_tokens !== null ? { cacheReadTokens: row.cache_read_tokens } : {}),
-          ...(row.cache_write_tokens !== null ? { cacheWriteTokens: row.cache_write_tokens } : {}),
+          ...(row.input_tokens === null
+            ? {}
+            : { inputTokens: row.input_tokens }),
+          ...(row.output_tokens === null
+            ? {}
+            : { outputTokens: row.output_tokens }),
+          ...(row.cache_read_tokens === null
+            ? {}
+            : { cacheReadTokens: row.cache_read_tokens }),
+          ...(row.cache_write_tokens === null
+            ? {}
+            : { cacheWriteTokens: row.cache_write_tokens }),
         }) ?? null;
       if (!differs(recomputed, row.cost_usd)) continue;
       updateItem.run(recomputed, recomputed, row.rowid);
@@ -125,15 +137,16 @@ export function repriceLedger(db: DatabaseSync, opts: RepriceOptions = {}): Repr
       if (itemsRepriced >= maxWrites) break;
     }
     for (const turnId of affectedTurns) rederiveTurn.run(turnId, turnId);
-    db.prepare('RELEASE reprice').run();
+    db.prepare("RELEASE reprice").run();
   } catch (err) {
-    db.prepare('ROLLBACK TO reprice').run();
-    db.prepare('RELEASE reprice').run();
+    db.prepare("ROLLBACK TO reprice").run();
+    db.prepare("RELEASE reprice").run();
     throw err;
   }
 
   // Fewer rows than asked for ⇒ tail reached; wrap to re-sweep from the start.
-  const nextCursor = rows.length < maxScan && itemsRepriced < maxWrites ? 0 : lastRowid;
+  const nextCursor =
+    rows.length < maxScan && itemsRepriced < maxWrites ? 0 : lastRowid;
   return {
     itemsRepriced,
     turnsRederived: affectedTurns.size,

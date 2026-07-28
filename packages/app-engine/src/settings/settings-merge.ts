@@ -29,7 +29,7 @@
  * the matching CSS — no runtime change required.
  */
 
-import type { SettingsInject } from '../http/static-server.js';
+import type { SettingsInject } from "../http/static-server.js";
 
 /**
  * The settings keys this build understands, plus where each one lands in
@@ -41,34 +41,42 @@ import type { SettingsInject } from '../http/static-server.js';
  * CSS var wants `5%`.
  */
 type KeySpec =
-  | { kind: 'data'; attr: string; coerce?: (v: unknown) => string | undefined }
-  | { kind: 'css'; cssVar: string; coerce?: (v: unknown) => string | undefined };
+  | { kind: "data"; attr: string; coerce?: (v: unknown) => string | undefined }
+  | {
+      kind: "css";
+      cssVar: string;
+      coerce?: (v: unknown) => string | undefined;
+    };
 
 const asString = (v: unknown): string | undefined =>
-  typeof v === 'string' && v.length > 0 ? v : undefined;
+  typeof v === "string" && v.length > 0 ? v : undefined;
 const asPercent = (v: unknown): string | undefined => {
-  if (typeof v === 'number' && Number.isFinite(v)) return `${v}%`;
-  if (typeof v === 'string' && /^\d+(\.\d+)?$/.test(v)) return `${v}%`;
+  if (typeof v === "number" && Number.isFinite(v)) return `${v}%`;
+  if (typeof v === "string" && /^\d+(?:\.\d+)?$/u.test(v)) return `${v}%`;
   return undefined;
 };
 const asBoolFlag =
   (onValue: string, offValue: string) =>
   (v: unknown): string | undefined => {
-    if (typeof v === 'boolean') return v ? onValue : offValue;
-    if (v === 'on' || v === 'off') return v;
+    if (typeof v === "boolean") return v ? onValue : offValue;
+    if (v === "on" || v === "off") return v;
     return undefined;
   };
 
 export const KNOWN_KEYS: Record<string, KeySpec> = {
-  theme: { kind: 'data', attr: 'theme', coerce: asString },
-  density: { kind: 'data', attr: 'density', coerce: asString },
-  cards: { kind: 'data', attr: 'cards', coerce: asString },
-  coolCast: { kind: 'data', attr: 'cool-cast', coerce: asBoolFlag('on', 'off') },
+  theme: { kind: "data", attr: "theme", coerce: asString },
+  density: { kind: "data", attr: "density", coerce: asString },
+  cards: { kind: "data", attr: "cards", coerce: asString },
+  coolCast: {
+    kind: "data",
+    attr: "cool-cast",
+    coerce: asBoolFlag("on", "off"),
+  },
   // bgL is stored as a number (slider value 0-35); the CSS var wants `<n>%`.
-  bgL: { kind: 'css', cssVar: 'bg-l', coerce: asPercent },
-  accent: { kind: 'css', cssVar: 'accent', coerce: asString },
-  accentLight: { kind: 'css', cssVar: 'accent-light', coerce: asString },
-  accentDeep: { kind: 'css', cssVar: 'accent-deep', coerce: asString },
+  bgL: { kind: "css", cssVar: "bg-l", coerce: asPercent },
+  accent: { kind: "css", cssVar: "accent", coerce: asString },
+  accentLight: { kind: "css", cssVar: "accent-light", coerce: asString },
+  accentDeep: { kind: "css", cssVar: "accent-deep", coerce: asString },
 };
 
 /**
@@ -81,7 +89,8 @@ function camelTailToKebab(tail: string): string {
   // First char is uppercase (we strip it before calling), so we just
   // lowercase and prefix subsequent uppercase boundaries with `-`.
   return (
-    tail.charAt(0).toLowerCase() + tail.slice(1).replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)
+    tail.charAt(0).toLowerCase() +
+    tail.slice(1).replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`)
   );
 }
 
@@ -91,7 +100,7 @@ function camelTailToKebab(tail: string): string {
  * but bare `app` (probably a typo) or `apps` does not.
  */
 function isAppKnobKey(key: string): key is `app${string}` {
-  if (key.length <= 3 || !key.startsWith('app')) return false;
+  if (key.length <= 3 || !key.startsWith("app")) return false;
   const c = key.charCodeAt(3);
   return c >= 65 && c <= 90; // 'A'..'Z'
 }
@@ -103,13 +112,13 @@ function isAppKnobKey(key: string): key is `app${string}` {
  * styled with attribute selectors.
  */
 function appKnobTarget(
-  key: string,
-): { kind: 'data'; attr: string } | { kind: 'css'; cssVar: string } {
+  key: string
+): { kind: "data"; attr: string } | { kind: "css"; cssVar: string } {
   const kebab = camelTailToKebab(key.slice(3));
   const name = `app-${kebab}`;
-  return /(?:Color|Accent)$/.test(key)
-    ? { kind: 'css', cssVar: name }
-    : { kind: 'data', attr: name };
+  return /(?:Color|Accent)$/u.test(key)
+    ? { kind: "css", cssVar: name }
+    : { kind: "data", attr: name };
 }
 
 /**
@@ -119,7 +128,7 @@ function appKnobTarget(
  * value" and falls through to the previous layer.
  */
 export function buildSettingsInject(
-  layers: Array<Record<string, unknown> | undefined>,
+  layers: Array<Record<string, unknown> | undefined>
 ): Required<SettingsInject> {
   const merged: Record<string, unknown> = {};
   for (const layer of layers) {
@@ -137,7 +146,7 @@ export function buildSettingsInject(
     if (spec) {
       const coerced = spec.coerce ? spec.coerce(raw) : asString(raw);
       if (coerced === undefined) continue;
-      if (spec.kind === 'data') {
+      if (spec.kind === "data") {
         dataAttrs[spec.attr] = coerced;
       } else {
         cssVars[spec.cssVar] = coerced;
@@ -150,7 +159,7 @@ export function buildSettingsInject(
       const coerced = asString(raw);
       if (coerced === undefined) continue;
       const target = appKnobTarget(k);
-      if (target.kind === 'data') dataAttrs[target.attr] = coerced;
+      if (target.kind === "data") dataAttrs[target.attr] = coerced;
       else cssVars[target.cssVar] = coerced;
     }
   }

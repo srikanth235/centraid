@@ -1,5 +1,5 @@
-import crypto from 'node:crypto';
-import path from 'node:path';
+import crypto from "node:crypto";
+import path from "node:path";
 
 export interface DataPlaneHttpOptions {
   baseUrl: string;
@@ -13,11 +13,11 @@ export interface DataPlaneHttpOptions {
  * to its configured byte-plane address: that address is frequently loopback
  * from the gateway host's point of view.
  */
-export const DATA_PLANE_RELAY_HEADER = 'x-centraid-data-plane-relay';
+export const DATA_PLANE_RELAY_HEADER = "x-centraid-data-plane-relay";
 
 export function isDataPlaneRelayRequest(
-  options: Pick<DataPlaneHttpOptions, 'secret'>,
-  supplied: string | string[] | undefined,
+  options: Pick<DataPlaneHttpOptions, "secret">,
+  supplied: string | string[] | undefined
 ): boolean {
   const candidate = Array.isArray(supplied) ? supplied[0] : supplied;
   if (!candidate) return false;
@@ -36,7 +36,7 @@ interface BlobTicket {
 }
 
 function base64url(bytes: Buffer): string {
-  return bytes.toString('base64url');
+  return bytes.toString("base64url");
 }
 
 export function createBlobHandoffUrl(
@@ -47,23 +47,32 @@ export function createBlobHandoffUrl(
     disposition: string;
     etag: string;
     nowMs?: number;
-  },
+  }
 ): string | undefined {
-  const relativePath = path.relative(path.resolve(options.rootDir), path.resolve(input.file));
-  if (relativePath === '' || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+  const relativePath = path.relative(
+    path.resolve(options.rootDir),
+    path.resolve(input.file)
+  );
+  if (
+    relativePath === "" ||
+    relativePath.startsWith("..") ||
+    path.isAbsolute(relativePath)
+  ) {
     return undefined;
   }
   const ticket: BlobTicket = {
     relativePath,
     expiresAtMs: (input.nowMs ?? Date.now()) + 10_000,
-    nonce: crypto.randomBytes(16).toString('hex'),
+    nonce: crypto.randomBytes(16).toString("hex"),
     mediaType: input.mediaType,
     disposition: input.disposition,
     etag: input.etag,
   };
   const payload = base64url(Buffer.from(JSON.stringify(ticket)));
-  const signature = base64url(crypto.createHmac('sha256', options.secret).update(payload).digest());
-  const target = new URL('/v1/blob', options.baseUrl);
-  target.searchParams.set('ticket', `${payload}.${signature}`);
+  const signature = base64url(
+    crypto.createHmac("sha256", options.secret).update(payload).digest()
+  );
+  const target = new URL("/v1/blob", options.baseUrl);
+  target.searchParams.set("ticket", `${payload}.${signature}`);
   return target.toString();
 }

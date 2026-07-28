@@ -5,16 +5,10 @@ import {
   ReplicaProtocolError,
   ReplicaRebootstrapRequiredError,
   type RebootstrapReason,
-} from './errors.js';
-import { replicaDatabaseName } from './key.js';
-import { guardReplicaRow } from './query.js';
-import type { ReplicaStore } from './store.js';
-import type {
-  ReplicaWorkerRequest,
-  ReplicaWorkerResponse,
-  ReplicaWorkerResults,
-  SerializedReplicaError,
-} from './worker-protocol.js';
+} from "./errors.js";
+import { replicaDatabaseName } from "./key.js";
+import { guardReplicaRow } from "./query.js";
+import type { ReplicaStore } from "./store.js";
 import type {
   ApplyChangesResult,
   OptimisticMutation,
@@ -32,28 +26,47 @@ import type {
   ReplicaShape,
   ReplicaStatus,
   ReplicaWorkerOpenOptions,
-} from './types.js';
+} from "./types.js";
+import type {
+  ReplicaWorkerRequest,
+  ReplicaWorkerResponse,
+  ReplicaWorkerResults,
+  SerializedReplicaError,
+} from "./worker-protocol.js";
+
+/**
+ * The two-signature overload for `add`/`removeEventListener`, spelled as an
+ * intersection of function types. An intersection is exactly what a set of
+ * overload signatures means, so the contract is unchanged — but property style
+ * gets the parameters checked contravariantly instead of bivariantly.
+ */
+type ReplicaWorkerListenerRegistration = ((
+  type: "message",
+  listener: (event: MessageEvent<ReplicaWorkerResponse>) => void
+) => void) &
+  ((type: "error", listener: (event: ErrorEvent) => void) => void);
 
 export interface ReplicaWorkerLike {
-  postMessage(message: ReplicaWorkerRequest): void;
-  addEventListener(
-    type: 'message',
-    listener: (event: MessageEvent<ReplicaWorkerResponse>) => void,
-  ): void;
-  addEventListener(type: 'error', listener: (event: ErrorEvent) => void): void;
-  removeEventListener(
-    type: 'message',
-    listener: (event: MessageEvent<ReplicaWorkerResponse>) => void,
-  ): void;
-  removeEventListener(type: 'error', listener: (event: ErrorEvent) => void): void;
-  terminate(): void;
+  postMessage: (message: ReplicaWorkerRequest) => void;
+  addEventListener: ReplicaWorkerListenerRegistration;
+  removeEventListener: ReplicaWorkerListenerRegistration;
+  terminate: () => void;
 }
 
 export type ReplicaWorkerFactory = () => ReplicaWorkerLike;
 
 interface PendingRpc {
-  resolve(value: unknown): void;
-  reject(error: unknown): void;
+  /**
+   * Type-erased on purpose: `#pending` is keyed by request id, and nothing in
+   * the type system correlates an id back to the `Op` that minted it, so the
+   * map cannot be homogeneously typed. The reply also crosses `postMessage`,
+   * where `ReplicaWorkerResponse['result']` is `unknown` by construction.
+   * Widening the parameter to `unknown` here is what lets `onMessage` hand a
+   * wire value to a resolver minted for a specific `Op`; the narrowing back is
+   * asserted once, in `rpc`, where the `Op` is still in scope.
+   */
+  resolve: (value: unknown) => void;
+  reject: (error: unknown) => void;
 }
 
 export class ReplicaWorkerClient implements ReplicaStore {
@@ -64,14 +77,14 @@ export class ReplicaWorkerClient implements ReplicaStore {
 
   private constructor(worker: ReplicaWorkerLike) {
     this.#worker = worker;
-    worker.addEventListener('message', this.onMessage);
-    worker.addEventListener('error', this.onError);
+    worker.addEventListener("message", this.onMessage);
+    worker.addEventListener("error", this.onError);
   }
 
   static async create(
     identity: ReplicaIdentity,
     remember: boolean,
-    factory: ReplicaWorkerFactory = defaultWorkerFactory,
+    factory: ReplicaWorkerFactory = defaultWorkerFactory
   ): Promise<{ client: ReplicaWorkerClient; status: ReplicaStatus }> {
     const options: ReplicaWorkerOpenOptions = {
       dbName: await replicaDatabaseName(identity),
@@ -84,7 +97,7 @@ export class ReplicaWorkerClient implements ReplicaStore {
   /** Open the named durable scope fail-closed, solely to remove it. */
   static async createForPurge(
     identity: ReplicaIdentity,
-    factory: ReplicaWorkerFactory = defaultWorkerFactory,
+    factory: ReplicaWorkerFactory = defaultWorkerFactory
   ): Promise<ReplicaWorkerClient> {
     const { client } = await this.connect(
       {
@@ -93,18 +106,18 @@ export class ReplicaWorkerClient implements ReplicaStore {
         remember: true,
         purgeOnly: true,
       },
-      factory,
+      factory
     );
     return client;
   }
 
   static async connect(
     options: ReplicaWorkerOpenOptions,
-    factory: ReplicaWorkerFactory,
+    factory: ReplicaWorkerFactory
   ): Promise<{ client: ReplicaWorkerClient; status: ReplicaStatus }> {
     const client = new ReplicaWorkerClient(factory());
     try {
-      const status = await client.rpc('open', options);
+      const status = await client.rpc("open", options);
       return { client, status };
     } catch (error) {
       client.dispose(error);
@@ -113,37 +126,37 @@ export class ReplicaWorkerClient implements ReplicaStore {
   }
 
   status(): Promise<ReplicaStatus> {
-    return this.rpc('status', undefined);
+    return this.rpc("status", undefined);
   }
 
   catalog(): Promise<ReplicaShape[]> {
-    return this.rpc('catalog', undefined);
+    return this.rpc("catalog", undefined);
   }
 
   bootstrap(snapshot: ReplicaSnapshot): Promise<ReplicaCursor> {
-    return this.rpc('bootstrap', snapshot);
+    return this.rpc("bootstrap", snapshot);
   }
 
   bootstrapBegin(header: ReplicaBootstrapHeader): Promise<undefined> {
-    return this.rpc('bootstrap-begin', header);
+    return this.rpc("bootstrap-begin", header);
   }
 
   bootstrapPage(rows: ReplicaSnapshotRow[]): Promise<undefined> {
-    return this.rpc('bootstrap-page', rows);
+    return this.rpc("bootstrap-page", rows);
   }
 
   bootstrapCommit(cursor: ReplicaCursor): Promise<ReplicaCursor> {
-    return this.rpc('bootstrap-commit', cursor);
+    return this.rpc("bootstrap-commit", cursor);
   }
 
   applyChanges(batch: ReplicaChangeBatch): Promise<ApplyChangesResult> {
-    return this.rpc('apply-changes', batch);
+    return this.rpc("apply-changes", batch);
   }
 
   async read(
     request: ReplicaReadRequest,
     mutations: OptimisticMutation[] = [],
-    guard: OnlineOnlyGuard = new OnlineOnlyGuard(),
+    guard: OnlineOnlyGuard = new OnlineOnlyGuard()
   ): Promise<ReplicaReadResult> {
     try {
       const result = await this.readWire(request, mutations);
@@ -161,47 +174,59 @@ export class ReplicaWorkerClient implements ReplicaStore {
   /** Structured-cloneable rows for shell → iframe RPC; guard them in the iframe. */
   readWire(
     request: ReplicaReadRequest,
-    mutations: OptimisticMutation[] = [],
+    mutations: OptimisticMutation[] = []
   ): Promise<ReplicaReadWireResult> {
-    return this.rpc('read', { request, mutations });
+    return this.rpc("read", { request, mutations });
   }
 
   /** Structured-cloneable local search rows for shell → iframe RPC. */
   searchWire(
     request: ReplicaSearchRequest,
-    mutations: OptimisticMutation[] = [],
+    mutations: OptimisticMutation[] = []
   ): Promise<ReplicaSearchWireResult> {
-    return this.rpc('search', { request, mutations });
+    return this.rpc("search", { request, mutations });
   }
 
   wipe(): Promise<undefined> {
-    return this.rpc('wipe', undefined);
+    return this.rpc("wipe", undefined);
   }
 
   async close(): Promise<void> {
     if (this.#closed) return;
-    await this.rpc('close', undefined).finally(() => this.dispose(new ReplicaClosedError()));
+    await this.rpc("close", undefined).finally(() =>
+      this.dispose(new ReplicaClosedError())
+    );
   }
 
   async purge(): Promise<void> {
     if (this.#closed) return;
-    await this.rpc('purge', undefined).finally(() => this.dispose(new ReplicaClosedError()));
+    await this.rpc("purge", undefined).finally(() =>
+      this.dispose(new ReplicaClosedError())
+    );
   }
 
   private rpc<Op extends keyof ReplicaWorkerResults>(
     op: Op,
-    payload: Extract<ReplicaWorkerRequest, { op: Op }>['payload'],
+    payload: Extract<ReplicaWorkerRequest, { op: Op }>["payload"]
   ): Promise<ReplicaWorkerResults[Op]> {
     if (this.#closed) return Promise.reject(new ReplicaClosedError());
     const id = this.#nextId++;
     return new Promise<ReplicaWorkerResults[Op]>((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
+      // The single id→`Op` erasure point (see `PendingRpc.resolve`). The worker
+      // answers request `id` with `ReplicaWorkerResults[Op]`, but that is a
+      // protocol guarantee rather than one TypeScript can carry through the map.
+      this.#pending.set(id, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+      });
       // eslint-disable-next-line unicorn/require-post-message-target-origin -- (#406) Worker.postMessage has no targetOrigin overload; governance: allow-no-unjustified-suppressions Web Worker API false positive
       this.#worker.postMessage({ id, op, payload } as ReplicaWorkerRequest);
     });
   }
 
-  private readonly onMessage = (event: MessageEvent<ReplicaWorkerResponse>): void => {
+  private readonly onMessage = (
+    event: MessageEvent<ReplicaWorkerResponse>
+  ): void => {
     const pending = this.#pending.get(event.data.id);
     if (!pending) return;
     this.#pending.delete(event.data.id);
@@ -216,8 +241,8 @@ export class ReplicaWorkerClient implements ReplicaStore {
   private dispose(error: unknown): void {
     if (this.#closed) return;
     this.#closed = true;
-    this.#worker.removeEventListener('message', this.onMessage);
-    this.#worker.removeEventListener('error', this.onError);
+    this.#worker.removeEventListener("message", this.onMessage);
+    this.#worker.removeEventListener("error", this.onError);
     this.#worker.terminate();
     for (const pending of this.#pending.values()) pending.reject(error);
     this.#pending.clear();
@@ -225,20 +250,22 @@ export class ReplicaWorkerClient implements ReplicaStore {
 }
 
 function defaultWorkerFactory(): ReplicaWorkerLike {
-  return new Worker(new URL('sqlite-worker.js', import.meta.url), {
-    type: 'module',
-    name: 'centraid-replica',
+  return new Worker(new URL("sqlite-worker.js", import.meta.url), {
+    type: "module",
+    name: "centraid-replica",
   });
 }
 
 function deserializeError(error: SerializedReplicaError): Error {
-  if (error.code === 'ONLINE_ONLY') return new OnlineOnlyError(error.reason ?? error.message);
-  if (error.code === 'REPLICA_REBOOTSTRAP_REQUIRED') {
+  if (error.code === "ONLINE_ONLY")
+    return new OnlineOnlyError(error.reason ?? error.message);
+  if (error.code === "REPLICA_REBOOTSTRAP_REQUIRED") {
     return new ReplicaRebootstrapRequiredError(
-      (error.reason as RebootstrapReason | undefined) ?? 'not-bootstrapped',
+      (error.reason as RebootstrapReason | undefined) ?? "not-bootstrapped"
     );
   }
-  if (error.code === 'REPLICA_PROTOCOL_ERROR') return new ReplicaProtocolError(error.message);
+  if (error.code === "REPLICA_PROTOCOL_ERROR")
+    return new ReplicaProtocolError(error.message);
   const result = new Error(error.message);
   result.name = error.name;
   return result;

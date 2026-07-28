@@ -16,15 +16,15 @@
 .badge svg {
   display: block;
 }
-.badge[data-kind='automation'] {
+.badge[data-kind="automation"] {
   color: var(--accent);
 }
-.badge[data-kind='assistant'] {
+.badge[data-kind="assistant"] {
   color: var(--ink-2);
 }
 /* Rows layout — the badge takes a fixed slot (shared `--lib-row-badge-w`
    token) so APP / AUTOMATION align into a column across Home and Discover
    row strips. */
-:global([data-layout='rows']) .badge {
+:global([data-layout="rows"]) .badge {
   width: var(--lib-row-badge-w);
 }

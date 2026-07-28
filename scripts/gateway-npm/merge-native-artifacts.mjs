@@ -9,35 +9,35 @@
  *   - flat: centraid-tunnel-native.*.node
  *   - or per-platform subdirs: linux-x64/*.node, darwin-arm64/*.node, …
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import fs from "node:fs";
+import path from "node:path";
+
 import {
   NATIVE_PLATFORMS,
   auditNativeArtifacts,
   nativeArtifactNameForId,
   requiredNativePlatformIds,
-} from './native-platforms.mjs';
+} from "./native-platforms.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '../..');
-const DEST = path.join(ROOT, 'packages/tunnel/native');
+const __dirname = import.meta.dirname;
+const ROOT = path.resolve(__dirname, "../..");
+const DEST = path.join(ROOT, "packages/tunnel/native");
 
 function parseArgs(argv) {
   let from = null;
-  let require = process.env.CENTRAID_REQUIRE_MULTI_NATIVE === '1';
+  let require = process.env.CENTRAID_REQUIRE_MULTI_NATIVE === "1";
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--from') from = path.resolve(argv[++i] ?? '');
-    else if (argv[i] === '--require') require = true;
-    else if (argv[i] === '--help' || argv[i] === '-h') {
+    if (argv[i] === "--from") from = path.resolve(argv[++i] ?? "");
+    else if (argv[i] === "--require") require = true;
+    else if (argv[i] === "--help" || argv[i] === "-h") {
       console.log(
-        'Usage: node scripts/gateway-npm/merge-native-artifacts.mjs --from <dir> [--require]',
+        "Usage: node scripts/gateway-npm/merge-native-artifacts.mjs --from <dir> [--require]"
       );
       process.exit(0);
     }
   }
   if (!from) {
-    console.error('error: --from <dir> is required');
+    console.error("error: --from <dir> is required");
     process.exit(2);
   }
   return { from, require };
@@ -57,7 +57,7 @@ export function collectNodeArtifacts(from) {
       const full = path.join(dir, name);
       const st = fs.statSync(full);
       if (st.isDirectory()) walk(full);
-      else if (name.endsWith('.node')) out.push(full);
+      else if (name.endsWith(".node")) out.push(full);
     }
   };
   walk(from);
@@ -75,7 +75,10 @@ export function copyArtifacts(sources, destDir) {
   const copied = [];
   for (const src of sources) {
     const base = path.basename(src);
-    if (!base.startsWith('centraid-tunnel-native.') || !base.endsWith('.node')) {
+    if (
+      !base.startsWith("centraid-tunnel-native.") ||
+      !base.endsWith(".node")
+    ) {
       console.warn(`  skip unexpected artifact: ${base}`);
       continue;
     }
@@ -100,23 +103,31 @@ function main() {
   // Also list what is already in DEST (host build may have left one file)
   const present = fs
     .readdirSync(DEST)
-    .filter((n) => n.endsWith('.node') && n.startsWith('centraid-tunnel-native.'));
+    .filter(
+      (n) => n.endsWith(".node") && n.startsWith("centraid-tunnel-native.")
+    );
   const audit = auditNativeArtifacts(present, {
     requiredIds: requiredNativePlatformIds(),
   });
-  console.log(`present (${audit.present.length}): ${audit.present.join(', ') || '(none)'}`);
+  console.log(
+    `present (${audit.present.length}): ${audit.present.join(", ") || "(none)"}`
+  );
   if (audit.missingRequired.length) {
-    const msg = `missing required native artifacts: ${audit.missingRequired.join(', ')}`;
+    const msg = `missing required native artifacts: ${audit.missingRequired.join(", ")}`;
     if (require) {
       console.error(`error: ${msg}`);
-      console.error(`required ids: ${requiredNativePlatformIds().join(', ')}`);
-      console.error(`known platforms: ${NATIVE_PLATFORMS.map((p) => p.id).join(', ')}`);
+      console.error(`required ids: ${requiredNativePlatformIds().join(", ")}`);
+      console.error(
+        `known platforms: ${NATIVE_PLATFORMS.map((p) => p.id).join(", ")}`
+      );
       process.exit(1);
     }
-    console.warn(`warn: ${msg} (pass --require or CENTRAID_REQUIRE_MULTI_NATIVE=1 to fail)`);
+    console.warn(
+      `warn: ${msg} (pass --require or CENTRAID_REQUIRE_MULTI_NATIVE=1 to fail)`
+    );
   }
   // Touch a small manifest for pack debugging
-  const manifestPath = path.join(DEST, 'native-platforms.manifest.json');
+  const manifestPath = path.join(DEST, "native-platforms.manifest.json");
   fs.writeFileSync(
     manifestPath,
     JSON.stringify(
@@ -131,11 +142,12 @@ function main() {
         })),
       },
       null,
-      2,
-    ) + '\n',
+      2
+    ) + "\n"
   );
   console.log(`merge-native-artifacts: ok`);
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain =
+  process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
 if (isMain) main();

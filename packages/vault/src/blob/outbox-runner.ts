@@ -1,13 +1,14 @@
-import { rmSync } from 'node:fs';
-import type { DatabaseSync } from 'node:sqlite';
-import type { BlobCache } from './cache.js';
-import type { RemoteTier } from './custody-types.js';
-import type { LocalBlobStore } from './local.js';
-import { drainOutboxRow } from './outbox-drain.js';
-import { cleanupOrphanedMultipartUploads } from './orphan-multipart.js';
-import { desiredStoreForSha } from './store-routing.js';
-import type { BlobTransferState, OutboxRow } from './transfer-state.js';
-import { jitterDelayMs } from '../timer-jitter.js';
+import { rmSync } from "node:fs";
+import type { DatabaseSync } from "node:sqlite";
+
+import { jitterDelayMs } from "../timer-jitter.js";
+import type { BlobCache } from "./cache.js";
+import type { RemoteTier } from "./custody-types.js";
+import type { LocalBlobStore } from "./local.js";
+import { cleanupOrphanedMultipartUploads } from "./orphan-multipart.js";
+import { drainOutboxRow } from "./outbox-drain.js";
+import { desiredStoreForSha } from "./store-routing.js";
+import type { BlobTransferState, OutboxRow } from "./transfer-state.js";
 
 const ORPHAN_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 const ORPHAN_SWEEP_RETRY_MS = 60 * 1000;
@@ -22,7 +23,7 @@ export interface BlobOutboxRunnerOptions {
   cache: BlobCache;
   remote: () => RemoteTier | null;
   remoteConfigured: () => boolean;
-  onStatus(): void;
+  onStatus: () => void;
   /** Host-wide event-loop pressure gate. Explicit `drainSha` calls stay foreground. */
   shouldDeferBackgroundWork?: () => boolean;
   /** Close coordinator-owned resources before an expired row/file is removed. */
@@ -74,11 +75,11 @@ export class BlobOutboxRunner {
 
   private scheduleNext(): void {
     if (this.closing || this.closed || this.timer) return;
-    const delay = !this.options.remoteConfigured()
-      ? OUTBOX_UNCONFIGURED_INTERVAL_MS
-      : this.options.state.dueOutbox().length > 0
+    const delay = this.options.remoteConfigured()
+      ? this.options.state.dueOutbox().length > 0
         ? (this.options.intervalMs ?? OUTBOX_ACTIVE_INTERVAL_MS)
-        : OUTBOX_IDLE_INTERVAL_MS;
+        : OUTBOX_IDLE_INTERVAL_MS
+      : OUTBOX_UNCONFIGURED_INTERVAL_MS;
     this.timer = setTimeout(() => {
       this.timer = undefined;
       this.kick();
@@ -96,7 +97,8 @@ export class BlobOutboxRunner {
       settlementAllowed: () => !this.closed,
       // Route derivatives to the derived store class at drain time (issue #425
       // Wave 2); the enqueue side stays sha+size only.
-      desiredStore: (sha: string) => desiredStoreForSha(this.options.vault, sha),
+      desiredStore: (sha: string) =>
+        desiredStoreForSha(this.options.vault, sha),
     };
   }
 
@@ -106,14 +108,16 @@ export class BlobOutboxRunner {
     const rows = this.options.state.dueOutbox();
     let next = 0;
     const drainNext = async (): Promise<void> => {
-      for (;;) {
-        const row = rows[next];
-        next += 1;
-        if (!row) return;
-        await this.drainRow(row);
-      }
+      const row = rows[next];
+      next += 1;
+      if (!row) return;
+      await this.drainRow(row);
+      return drainNext();
     };
-    const workers = Math.min(rows.length, Math.max(1, this.options.cache.replicationConcurrency));
+    const workers = Math.min(
+      rows.length,
+      Math.max(1, this.options.cache.replicationConcurrency)
+    );
     await Promise.all(Array.from({ length: workers }, () => drainNext()));
   }
 
@@ -122,11 +126,14 @@ export class BlobOutboxRunner {
       await drainOutboxRow(this.deps(), row);
     } catch (error) {
       if (this.closed) return;
-      const backoffMs = Math.min(60_000, 1_000 * 2 ** Math.min(row.attempt_count, 6));
+      const backoffMs = Math.min(
+        60_000,
+        1_000 * 2 ** Math.min(row.attempt_count, 6)
+      );
       this.options.state.failOutbox(
         row.sha256,
         error instanceof Error ? error.message : String(error),
-        new Date(Date.now() + backoffMs).toISOString(),
+        new Date(Date.now() + backoffMs).toISOString()
       );
       this.options.onStatus();
     }
@@ -142,14 +149,17 @@ export class BlobOutboxRunner {
       this.options.state.failOutbox(
         sha256,
         error instanceof Error ? error.message : String(error),
-        new Date(Date.now() + 1_000).toISOString(),
+        new Date(Date.now() + 1_000).toISOString()
       );
       throw error;
     }
   }
 
   private async cleanupExpiredSessions(): Promise<void> {
-    for (const row of this.options.state.expiredSessions()) {
+    const rows = this.options.state.expiredSessions();
+    const cleanupNext = async (index: number): Promise<void> => {
+      const row = rows[index];
+      if (row === undefined) return;
       this.options.onExpireSession?.(row.session_id);
       if (row.temp_path) rmSync(row.temp_path, { force: true });
       const transfer = this.options.remote()?.transfer;
@@ -159,10 +169,14 @@ export class BlobOutboxRunner {
           .catch(() => undefined);
       }
       if (row.remote_temp_id) {
-        await transfer?.deleteTemporary(row.remote_temp_id).catch(() => undefined);
+        await transfer
+          ?.deleteTemporary(row.remote_temp_id)
+          .catch(() => undefined);
       }
       this.options.state.deleteSession(row.session_id);
-    }
+      return cleanupNext(index + 1);
+    };
+    await cleanupNext(0);
   }
 
   private async cleanupOrphanedMultipart(): Promise<void> {
@@ -174,7 +188,11 @@ export class BlobOutboxRunner {
       return;
     }
     try {
-      await cleanupOrphanedMultipartUploads({ state: this.options.state, transfer, nowMs });
+      await cleanupOrphanedMultipartUploads({
+        state: this.options.state,
+        transfer,
+        nowMs,
+      });
       this.nextOrphanSweepAt = nowMs + ORPHAN_SWEEP_INTERVAL_MS;
     } catch {
       this.nextOrphanSweepAt = nowMs + ORPHAN_SWEEP_RETRY_MS;

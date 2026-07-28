@@ -1,15 +1,16 @@
+import { fmtDay } from "../format.ts";
+import { I } from "../icons.ts";
+import type { BoardSection, PendingAdd, Task, View } from "../types.ts";
 // The scrolling board column: the capture bar, a "pending approval" strip
 // for parked adds (no task_id exists yet, so these are rendered as ghost
 // rows rather than real Row components), the bucketed/logbook sections, the
 // empty state and the bounded-window "Show more" footer.
-import { Capture, type CaptureProps } from './Capture.tsx';
-import { Row } from './Row.tsx';
-import { I } from '../icons.ts';
-import { Icon } from './Shared.tsx';
-import { fmtDay } from '../format.ts';
-import type { BoardSection, PendingAdd, Task, View } from '../types.ts';
-import styles from './Board.module.css';
-import shared from './shared.module.css';
+import { Capture, type CaptureProps } from "./Capture.tsx";
+import { Row } from "./Row.tsx";
+import { Icon } from "./Shared.tsx";
+
+import styles from "./Board.module.css";
+import shared from "./shared.module.css";
 
 // Section tone → eyebrow modifier (explicit map, never a computed styles key).
 const TONE_MOD: Record<string, string | undefined> = {
@@ -20,14 +21,20 @@ const TONE_MOD: Record<string, string | undefined> = {
 function PendingAddRow({ item }: { item: PendingAdd }) {
   return (
     <div className={`${shared.row} kit-pending`}>
-      <span className={shared.circle} data-cancelled="false" aria-hidden="true" />
+      <span
+        className={shared.circle}
+        data-cancelled="false"
+        aria-hidden="true"
+      />
       <div className={shared.rowMain}>
         <div className={shared.rowTitleLine}>
           <span className={shared.rowTitle}>{item.title}</span>
           <span className="kit-pending-chip">pending</span>
         </div>
       </div>
-      {item.due_at ? <span className={shared.due}>{fmtDay(item.due_at)}</span> : null}
+      {item.due_at ? (
+        <span className={shared.due}>{fmtDay(item.due_at)}</span>
+      ) : null}
     </div>
   );
 }
@@ -69,7 +76,7 @@ export function Board({
     <div className={styles.column}>
       {showCapture ? <Capture {...captureProps} /> : null}
 
-      {pendingAdds.length > 0 && view !== 'logbook' ? (
+      {pendingAdds.length > 0 && view !== "logbook" ? (
         <div className={styles.section}>
           <div className={styles.sectionHead}>
             <span className={styles.eyebrow}>Pending approval</span>
@@ -87,7 +94,9 @@ export function Board({
       {sections.map((sec) => (
         <div className={styles.section} key={sec.key}>
           <div className={styles.sectionHead}>
-            <span className={`${styles.eyebrow} ${TONE_MOD[sec.tone] ?? ''}`}>{sec.label}</span>
+            <span className={`${styles.eyebrow} ${TONE_MOD[sec.tone] ?? ""}`}>
+              {sec.label}
+            </span>
             <span className={styles.eyebrowCount}>{sec.count}</span>
             <span className={styles.hairline} />
           </div>
@@ -96,7 +105,7 @@ export function Board({
               <Row
                 key={task.task_id}
                 task={task}
-                closed={view === 'logbook'}
+                closed={view === "logbook"}
                 pending={pendingIds.has(task.task_id)}
                 search={search}
                 snippet={snippets?.get(task.task_id)}
@@ -121,7 +130,8 @@ export function Board({
       {footer ? (
         <div className="kit-foot">
           <span>
-            Showing your newest {footer.windowSize} open tasks — the rest are a search away.
+            Showing your newest {footer.windowSize} open tasks — the rest are a
+            search away.
           </span>
           <button type="button" className="kit-btn" onClick={onShowMore}>
             Show more

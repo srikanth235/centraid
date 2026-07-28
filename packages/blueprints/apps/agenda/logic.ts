@@ -1,17 +1,17 @@
+import { colorForCalendar } from "./format.ts";
 // Non-visual business logic: vault IO (write/act), calendar coloring, the
 // session activity log and parked-write tracking, and search. `createLogic`
 // closes over app.tsx's own `state`/`data` (mutated in place, never
 // reassigned) plus the render/refresh entry points app.tsx defines — the
 // same factory shape tasks/logic.ts and notes/logic.ts use.
-import { debounce, outcomeMessage, toast } from './kit.ts';
-import { colorForCalendar } from './format.ts';
+import { debounce, outcomeMessage, toast } from "./kit.ts";
 import {
   clearPendingState,
   reconcilePendingChange,
   settlePendingChange,
   trackPendingOutcome,
-} from './pending.ts';
-import type { AgEvent, AppData, AppState, CreatePayload } from './types.ts';
+} from "./pending.ts";
+import type { AgEvent, AppData, AppState, CreatePayload } from "./types.ts";
 
 interface LogicDeps {
   state: AppState;
@@ -22,7 +22,7 @@ interface LogicDeps {
 
 export function createLogic({ state, data, render, refresh }: LogicDeps) {
   function notice(text: string): void {
-    const el = document.getElementById('noticeBanner');
+    const el = document.querySelector<HTMLElement>("#noticeBanner");
     if (!el) return;
     el.textContent = text;
     (el as HTMLElement).hidden = !text;
@@ -33,12 +33,12 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // not the banner — this is a designed calm state, not an error);
   // failed/denied surface the plain-language reason in the banner.
   function narrate(outcome: VaultOutcome | undefined): boolean {
-    if (outcome?.status === 'executed') {
-      notice('');
+    if (outcome?.status === "executed") {
+      notice("");
       return true;
     }
-    if (outcome?.status === 'parked') {
-      notice('');
+    if (outcome?.status === "parked") {
+      notice("");
       return false;
     }
     const message = outcomeMessage(outcome);
@@ -49,11 +49,15 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   function logActivity(
     eventId: string | null | undefined,
     text: string,
-    outcome?: VaultOutcome,
+    outcome?: VaultOutcome
   ): void {
     if (!eventId) return;
     const list = state.activityLog.get(eventId) ?? [];
-    list.unshift({ text, when: 'Today', receiptId: outcome?.receiptId ?? null });
+    list.unshift({
+      text,
+      when: "Today",
+      receiptId: outcome?.receiptId ?? null,
+    });
     state.activityLog.set(eventId, list.slice(0, 20));
   }
 
@@ -64,7 +68,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   function trackPending(
     eventId: string | null | undefined,
     kind: string,
-    outcome: VaultOutcome | undefined,
+    outcome: VaultOutcome | undefined
   ): boolean {
     return trackPendingOutcome(state, eventId, kind, outcome);
   }
@@ -73,12 +77,18 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return settlePendingChange(state, detail);
   }
 
-  function reconcilePending(detail: CentraidChangeDetail, managed: boolean): boolean {
+  function reconcilePending(
+    detail: CentraidChangeDetail,
+    managed: boolean
+  ): boolean {
     return reconcilePendingChange(state, detail, managed);
   }
 
   function colorFor(calendarId: string | null | undefined): string | null {
-    return colorForCalendar(calendarId ? data.calById.get(calendarId) : undefined, calendarId);
+    return colorForCalendar(
+      calendarId ? data.calById.get(calendarId) : undefined,
+      calendarId
+    );
   }
 
   function findEvent(eventId: string): AgEvent | null {
@@ -89,7 +99,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   async function act(
     action: string,
     input: Record<string, unknown>,
-    optimistic?: unknown,
+    optimistic?: unknown
   ): Promise<VaultOutcome | undefined> {
     try {
       // The change-bridge accepts an `optimistic` overlay-ops array that the
@@ -98,7 +108,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       return await window.centraid.write({
         action,
         input,
-        ...(optimistic !== undefined ? { optimistic } : {}),
+        ...(optimistic === undefined ? {} : { optimistic }),
       });
     } catch (err) {
       notice(String((err as { message?: string })?.message ?? err));
@@ -109,28 +119,37 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   async function write(
     action: string,
     input: Record<string, unknown>,
-    optimistic?: unknown,
+    optimistic?: unknown
   ): Promise<VaultOutcome | undefined> {
     const outcome = await act(action, input, optimistic);
     const executed = narrate(outcome);
-    if (executed || outcome?.status === 'denied') await refresh();
+    if (executed || outcome?.status === "denied") await refresh();
     else render();
     return outcome;
   }
 
   // ---------- Event actions ----------
 
-  async function proposeEvent(input: CreatePayload): Promise<VaultOutcome | undefined> {
-    const outcome = await write('propose', input);
-    if (outcome?.status === 'executed') {
+  async function proposeEvent(
+    input: CreatePayload
+  ): Promise<VaultOutcome | undefined> {
+    const outcome = await write("propose", input);
+    if (outcome?.status === "executed") {
       const newId = outcome.output?.event_id as string | undefined;
       logActivity(newId, `Proposed on ${input.calendar_id}`, outcome);
-      toast('Event proposed · receipt', {
-        undoLabel: newId ? 'Undo' : undefined,
-        onUndo: newId ? () => write('cancel-event', { event_id: newId }) : undefined,
+      toast("Event proposed · receipt", {
+        undoLabel: newId ? "Undo" : undefined,
+        onUndo: newId
+          ? () => write("cancel-event", { event_id: newId })
+          : undefined,
       });
-    } else if (outcome?.status === 'queued' || outcome?.status === 'in-flight') {
-      toast('Event saved on this device — it will sync when the gateway is reachable.');
+    } else if (
+      outcome?.status === "queued" ||
+      outcome?.status === "in-flight"
+    ) {
+      toast(
+        "Event saved on this device — it will sync when the gateway is reachable."
+      );
     }
     return outcome;
   }
@@ -138,28 +157,34 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   async function rescheduleEvent(
     eventId: string,
     dtstart: string,
-    dtend: string,
+    dtend: string
   ): Promise<VaultOutcome | undefined> {
-    const outcome = await write('reschedule', { event_id: eventId, dtstart, dtend });
-    if (outcome?.status === 'executed') {
-      logActivity(eventId, 'Rescheduled', outcome);
-      toast('Event moved · receipt');
+    const outcome = await write("reschedule", {
+      event_id: eventId,
+      dtstart,
+      dtend,
+    });
+    if (outcome?.status === "executed") {
+      logActivity(eventId, "Rescheduled", outcome);
+      toast("Event moved · receipt");
     } else if (
-      outcome?.status === 'parked' ||
-      outcome?.status === 'queued' ||
-      outcome?.status === 'in-flight'
+      outcome?.status === "parked" ||
+      outcome?.status === "queued" ||
+      outcome?.status === "in-flight"
     ) {
-      trackPending(eventId, 'reschedule', outcome);
+      trackPending(eventId, "reschedule", outcome);
       logActivity(
         eventId,
-        outcome.status === 'parked' ? 'Move asked — parked for the owner' : 'Move saved locally',
-        outcome,
+        outcome.status === "parked"
+          ? "Move asked — parked for the owner"
+          : "Move saved locally",
+        outcome
       );
       toast(
-        outcome.status === 'parked'
-          ? 'Sent to the owner for confirmation — it stays at its current time until approved.'
-          : 'Move saved on this device — it will sync when the gateway is reachable.',
-        { duration: 7000 },
+        outcome.status === "parked"
+          ? "Sent to the owner for confirmation — it stays at its current time until approved."
+          : "Move saved on this device — it will sync when the gateway is reachable.",
+        { duration: 7000 }
       );
       render();
     }
@@ -169,74 +194,82 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   async function respondRsvp(
     eventId: string,
     partyId: string,
-    partstat: string,
+    partstat: string
   ): Promise<VaultOutcome | undefined> {
-    const attendee = findEvent(eventId)?.attendees?.find((item) => item.party_id === partyId);
+    const attendee = findEvent(eventId)?.attendees?.find(
+      (item) => item.party_id === partyId
+    );
     const optimistic = attendee?.attendee_id
       ? [
           {
-            op: 'upsert',
-            entity: 'schedule.attendee',
+            op: "upsert",
+            entity: "schedule.attendee",
             rowId: attendee.attendee_id,
             values: { partstat, responded_at: new Date().toISOString() },
-            purpose: 'dpv:ServiceProvision',
+            purpose: "dpv:ServiceProvision",
           },
         ]
       : [];
     const outcome = await write(
-      'rsvp',
+      "rsvp",
       { event_id: eventId, party_id: partyId, partstat },
-      optimistic,
+      optimistic
     );
-    if (outcome?.status === 'executed') {
+    if (outcome?.status === "executed") {
       const label =
-        partstat === 'accepted' ? 'Going' : partstat === 'declined' ? 'Not going' : 'Maybe';
+        partstat === "accepted"
+          ? "Going"
+          : partstat === "declined"
+            ? "Not going"
+            : "Maybe";
       logActivity(eventId, `RSVP: ${label}`, outcome);
       toast(`RSVP recorded: ${label} · receipt`);
     } else if (
-      outcome?.status === 'parked' ||
-      outcome?.status === 'queued' ||
-      outcome?.status === 'in-flight'
+      outcome?.status === "parked" ||
+      outcome?.status === "queued" ||
+      outcome?.status === "in-flight"
     ) {
-      trackPending(eventId, 'rsvp', outcome);
+      trackPending(eventId, "rsvp", outcome);
       toast(
-        outcome.status === 'parked'
-          ? 'Sent to the owner for confirmation.'
-          : 'RSVP saved on this device — it will sync when the gateway is reachable.',
+        outcome.status === "parked"
+          ? "Sent to the owner for confirmation."
+          : "RSVP saved on this device — it will sync when the gateway is reachable."
       );
       render();
     }
     return outcome;
   }
 
-  async function cancelEvent(eventId: string): Promise<VaultOutcome | undefined> {
-    const outcome = await act('cancel-event', { event_id: eventId });
+  async function cancelEvent(
+    eventId: string
+  ): Promise<VaultOutcome | undefined> {
+    const outcome = await act("cancel-event", { event_id: eventId });
     const executed = narrate(outcome);
     if (
-      outcome?.status === 'parked' ||
-      outcome?.status === 'queued' ||
-      outcome?.status === 'in-flight'
+      outcome?.status === "parked" ||
+      outcome?.status === "queued" ||
+      outcome?.status === "in-flight"
     ) {
-      trackPending(eventId, 'cancel', outcome);
+      trackPending(eventId, "cancel", outcome);
       logActivity(
         eventId,
-        outcome.status === 'parked'
-          ? 'Cancellation asked — parked for the owner'
-          : 'Cancellation saved offline',
-        outcome,
+        outcome.status === "parked"
+          ? "Cancellation asked — parked for the owner"
+          : "Cancellation saved offline",
+        outcome
       );
       toast(
-        outcome.status === 'parked'
-          ? 'Sent to the owner for confirmation — it stays on the agenda until approved.'
-          : 'Cancellation saved on this device — it will sync when the gateway is reachable.',
-        { duration: 7000 },
+        outcome.status === "parked"
+          ? "Sent to the owner for confirmation — it stays on the agenda until approved."
+          : "Cancellation saved on this device — it will sync when the gateway is reachable.",
+        { duration: 7000 }
       );
       render();
     } else if (executed) {
-      logActivity(eventId, 'Cancelled', outcome);
-      toast('Event cancelled · receipt');
+      logActivity(eventId, "Cancelled", outcome);
+      toast("Event cancelled · receipt");
       await refresh();
-    } else if (outcome?.status === 'denied') {
+    } else if (outcome?.status === "denied") {
       await refresh();
     } else {
       render();
@@ -252,9 +285,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   };
   const getAttachTarget = () => attachTarget;
 
-  async function removeAttachment(attachmentId: string): Promise<VaultOutcome | undefined> {
-    const outcome = await act('detach', { attachment_id: attachmentId });
-    if (narrate(outcome) || outcome?.status === 'denied') await refresh();
+  async function removeAttachment(
+    attachmentId: string
+  ): Promise<VaultOutcome | undefined> {
+    const outcome = await act("detach", { attachment_id: attachmentId });
+    if (narrate(outcome) || outcome?.status === "denied") await refresh();
     else render();
     return outcome;
   }
@@ -268,7 +303,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   let searchSeq = 0;
   const applySearchInput = debounce(async (raw: string) => {
     state.search = raw;
-    if (raw.trim()) state.view = 'schedule';
+    if (raw.trim()) state.view = "schedule";
     if (!raw.trim()) {
       state.searchResults = null;
       render();
@@ -278,7 +313,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     let rows: AgEvent[] = [];
     try {
       const res = await window.centraid.read<{ events?: AgEvent[] }>({
-        query: 'search',
+        query: "search",
         input: { term: raw },
       });
       rows = res?.events ?? [];
@@ -292,7 +327,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 
   function clearSearch(): void {
     searchSeq += 1;
-    state.search = '';
+    state.search = "";
     state.searchResults = null;
     render();
   }

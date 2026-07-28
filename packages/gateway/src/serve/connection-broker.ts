@@ -32,25 +32,35 @@
  *      the fire WITHOUT flipping, because the next fire may simply succeed.
  */
 
-import { createHash, randomBytes } from 'node:crypto';
-import { sealAad, unsealValue, type InvokeOutcome } from '@centraid/vault';
-import type { RuntimeLogger } from '@centraid/app-engine';
-import type { ConnectionAuth, ConnectionBinding, ResolveConnection } from '@centraid/automation';
-import type { PollJsonResponse } from './automation-event-sources.js';
-import type { VaultPlane } from './vault-plane.js';
-import { authDeadError, ConnectionLimiter, delay } from './connection-limiter.js';
-import { timeoutSignal } from './fetch-timeout.js';
+import { createHash, randomBytes } from "node:crypto";
+
+import type { RuntimeLogger } from "@centraid/app-engine";
+import type {
+  ConnectionAuth,
+  ConnectionBinding,
+  ResolveConnection,
+} from "@centraid/automation";
+import { sealAad, unsealValue, type InvokeOutcome } from "@centraid/vault";
+
+import { PROVIDER_PRESETS } from "../routes/connection-providers.js";
 import {
   ASSIST_GOOGLE_AUTH_URL,
   assistCallbackUrl,
   assistScopes,
   validateAssistOAuthConfig,
   type AssistOAuthConfig,
-} from './assist-oauth.js';
-import { PROVIDER_PRESETS } from '../routes/connection-providers.js';
+} from "./assist-oauth.js";
+import type { PollJsonResponse } from "./automation-event-sources.js";
+import {
+  authDeadError,
+  ConnectionLimiter,
+  delay,
+} from "./connection-limiter.js";
+import { timeoutSignal } from "./fetch-timeout.js";
+import type { VaultPlane } from "./vault-plane.js";
 
 /** Purpose stamped on the broker's own vault acts. */
-const BROKER_PURPOSE = 'dpv:ServiceProvision';
+const BROKER_PURPOSE = "dpv:ServiceProvision";
 
 /** Refresh when the stored token has less than this long to live. */
 const EXPIRY_SLACK_MS = 60 * 1000;
@@ -72,8 +82,8 @@ interface ConnectionCredRow {
   kind: string;
   label: string;
   provider: string | null;
-  cred_kind: 'oauth2' | 'api_key' | null;
-  oauth_mode: 'byo' | 'assist';
+  cred_kind: "oauth2" | "api_key" | null;
+  oauth_mode: "byo" | "assist";
   auth_url: string | null;
   token_url: string | null;
   scopes: string | null;
@@ -87,26 +97,34 @@ interface ConnectionCredRow {
   principal: string | null;
 }
 
-function readOnlyPostsFor(row: ConnectionCredRow): ConnectionAuth['readOnlyPosts'] {
-  switch (`${row.provider ?? ''}:${row.kind}`) {
-    case 'dropbox:pull.dropbox':
+function readOnlyPostsFor(
+  row: ConnectionCredRow
+): ConnectionAuth["readOnlyPosts"] {
+  switch (`${row.provider ?? ""}:${row.kind}`) {
+    case "dropbox:pull.dropbox":
       return [
         {
-          host: 'api.dropboxapi.com',
-          path: '/2/users/get_current_account',
-          body: 'json',
+          host: "api.dropboxapi.com",
+          path: "/2/users/get_current_account",
+          body: "json",
         },
-        { host: 'api.dropboxapi.com', path: '/2/files/list_folder', body: 'json' },
         {
-          host: 'api.dropboxapi.com',
-          path: '/2/files/list_folder/continue',
-          body: 'json',
+          host: "api.dropboxapi.com",
+          path: "/2/files/list_folder",
+          body: "json",
+        },
+        {
+          host: "api.dropboxapi.com",
+          path: "/2/files/list_folder/continue",
+          body: "json",
         },
       ];
-    case 'notion:pull.notion':
-      return [{ host: 'api.notion.com', path: '/v1/search', body: 'json' }];
-    case 'linear:pull.linear':
-      return [{ host: 'api.linear.app', path: '/graphql', body: 'graphql-query' }];
+    case "notion:pull.notion":
+      return [{ host: "api.notion.com", path: "/v1/search", body: "json" }];
+    case "linear:pull.linear":
+      return [
+        { host: "api.linear.app", path: "/graphql", body: "graphql-query" },
+      ];
     default:
       return undefined;
   }
@@ -114,7 +132,7 @@ function readOnlyPostsFor(row: ConnectionCredRow): ConnectionAuth['readOnlyPosts
 
 /** One in-flight consent ceremony, keyed by its single-use `state`. */
 interface PendingCeremony {
-  mode: 'byo' | 'assist';
+  mode: "byo" | "assist";
   plane: VaultPlane;
   connectionId: string;
   verifier: string;
@@ -157,12 +175,14 @@ export class ConnectionBroker {
     assistOAuth?: AssistOAuthConfig,
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
-    private readonly logger?: RuntimeLogger,
+    private readonly logger?: RuntimeLogger
   ) {
     // Defense in depth: every caller, including embedders that bypass the
     // environment parser, gets the same fixed-origin validation before a
     // refresh token can ever be posted.
-    this.assistOAuth = assistOAuth ? validateAssistOAuthConfig(assistOAuth) : undefined;
+    this.assistOAuth = assistOAuth
+      ? validateAssistOAuthConfig(assistOAuth)
+      : undefined;
   }
 
   /**
@@ -175,40 +195,44 @@ export class ConnectionBroker {
   beginAuthorization(
     plane: VaultPlane,
     connectionId: string,
-    redirectUri: string,
+    redirectUri: string
   ): { authUrl: string; state: string } {
     const row = this.readRowById(plane, connectionId);
-    if (!row || row.cred_kind !== 'oauth2') {
-      throw new Error('connection carries no oauth2 credential — configure one first');
+    if (!row || row.cred_kind !== "oauth2") {
+      throw new Error(
+        "connection carries no oauth2 credential — configure one first"
+      );
     }
     if (!row.auth_url || !row.client_id) {
-      throw new Error('oauth2 credential is missing auth_url/client_id');
+      throw new Error("oauth2 credential is missing auth_url/client_id");
     }
-    const preset = PROVIDER_PRESETS.find((candidate) => candidate.id === row.provider);
+    const preset = PROVIDER_PRESETS.find(
+      (candidate) => candidate.id === row.provider
+    );
     if (
-      preset?.credKind === 'oauth2' &&
+      preset?.credKind === "oauth2" &&
       (row.auth_url !== preset.authUrl || row.token_url !== preset.tokenUrl)
     ) {
       throw new Error(
-        `connection provider "${preset.id}" does not match its trusted OAuth endpoints`,
+        `connection provider "${preset.id}" does not match its trusted OAuth endpoints`
       );
     }
     this.pruneCeremonies();
-    const state = randomBytes(32).toString('hex');
-    const verifier = randomBytes(48).toString('base64url');
-    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const state = randomBytes(32).toString("hex");
+    const verifier = randomBytes(48).toString("base64url");
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
     const url = new URL(row.auth_url);
-    url.searchParams.set('client_id', row.client_id);
-    url.searchParams.set('redirect_uri', redirectUri);
-    url.searchParams.set('response_type', 'code');
-    if (row.scopes) url.searchParams.set('scope', row.scopes);
-    url.searchParams.set('code_challenge', challenge);
-    url.searchParams.set('code_challenge_method', 'S256');
-    url.searchParams.set('state', state);
-    url.searchParams.set('access_type', 'offline');
-    url.searchParams.set('prompt', 'consent');
+    url.searchParams.set("client_id", row.client_id);
+    url.searchParams.set("redirect_uri", redirectUri);
+    url.searchParams.set("response_type", "code");
+    if (row.scopes) url.searchParams.set("scope", row.scopes);
+    url.searchParams.set("code_challenge", challenge);
+    url.searchParams.set("code_challenge_method", "S256");
+    url.searchParams.set("state", state);
+    url.searchParams.set("access_type", "offline");
+    url.searchParams.set("prompt", "consent");
     this.pending.set(state, {
-      mode: 'byo',
+      mode: "byo",
       plane,
       connectionId,
       verifier,
@@ -229,39 +253,43 @@ export class ConnectionBroker {
     connectionId: string;
     clientSessionId: string;
     deviceKey?: string;
-    surface: 'desktop' | 'web';
+    surface: "desktop" | "web";
   }): { authUrl: string; state: string; redirectUri: string } {
     const config = this.assistOAuth;
-    if (!config) throw new Error('Centraid Assist is not configured on this gateway');
+    if (!config)
+      throw new Error("Centraid Assist is not configured on this gateway");
     const row = this.readRowById(input.plane, input.connectionId);
-    if (!row || row.cred_kind !== 'oauth2' || row.oauth_mode !== 'assist') {
-      throw new Error('connection is not configured for Centraid Assist');
+    if (!row || row.cred_kind !== "oauth2" || row.oauth_mode !== "assist") {
+      throw new Error("connection is not configured for Centraid Assist");
     }
     this.pruneCeremonies();
-    const state = `${input.surface === 'desktop' ? 'd' : 'w'}.${randomBytes(32).toString('base64url')}`;
-    const verifier = randomBytes(48).toString('base64url');
-    const challenge = createHash('sha256').update(verifier).digest('base64url');
-    const browserBinding = randomBytes(32).toString('base64url');
+    const state = `${input.surface === "desktop" ? "d" : "w"}.${randomBytes(32).toString("base64url")}`;
+    const verifier = randomBytes(48).toString("base64url");
+    const challenge = createHash("sha256").update(verifier).digest("base64url");
+    const browserBinding = randomBytes(32).toString("base64url");
     const redirectUri = assistCallbackUrl(config);
-    const requestedScopes = assistScopes((row.scopes ?? '').split(/\s+/).filter(Boolean), config);
+    const requestedScopes = assistScopes(
+      (row.scopes ?? "").split(/\s+/u).filter(Boolean),
+      config
+    );
     const googleUrl = new URL(ASSIST_GOOGLE_AUTH_URL);
-    googleUrl.searchParams.set('client_id', config.googleClientId);
-    googleUrl.searchParams.set('redirect_uri', redirectUri);
-    googleUrl.searchParams.set('response_type', 'code');
-    googleUrl.searchParams.set('scope', requestedScopes.join(' '));
-    googleUrl.searchParams.set('code_challenge', challenge);
-    googleUrl.searchParams.set('code_challenge_method', 'S256');
-    googleUrl.searchParams.set('state', state);
-    googleUrl.searchParams.set('access_type', 'offline');
-    googleUrl.searchParams.set('prompt', 'consent');
-    if (row.principal) googleUrl.searchParams.set('login_hint', row.principal);
-    const startUrl = new URL('/start', `${config.workerBaseUrl}/`);
+    googleUrl.searchParams.set("client_id", config.googleClientId);
+    googleUrl.searchParams.set("redirect_uri", redirectUri);
+    googleUrl.searchParams.set("response_type", "code");
+    googleUrl.searchParams.set("scope", requestedScopes.join(" "));
+    googleUrl.searchParams.set("code_challenge", challenge);
+    googleUrl.searchParams.set("code_challenge_method", "S256");
+    googleUrl.searchParams.set("state", state);
+    googleUrl.searchParams.set("access_type", "offline");
+    googleUrl.searchParams.set("prompt", "consent");
+    if (row.principal) googleUrl.searchParams.set("login_hint", row.principal);
+    const startUrl = new URL("/start", `${config.workerBaseUrl}/`);
     startUrl.hash = new URLSearchParams({
       authorization_url: googleUrl.toString(),
       browser_binding: browserBinding,
     }).toString();
     this.pending.set(state, {
-      mode: 'assist',
+      mode: "assist",
       plane: input.plane,
       connectionId: input.connectionId,
       verifier,
@@ -282,20 +310,35 @@ export class ConnectionBroker {
    * with the PKCE verifier, and the pair lands via `sync.store_tokens`
    * (receipted, sealed, connection flips active).
    */
-  async completeAuthorization(state: string, code: string): Promise<{ connectionId: string }> {
+  async completeAuthorization(
+    state: string,
+    code: string
+  ): Promise<{ connectionId: string }> {
     const ceremony = this.pending.get(state);
-    if (!ceremony || ceremony.expiresAt < this.now() || ceremony.mode !== 'byo') {
-      if (ceremony?.expiresAt && ceremony.expiresAt < this.now()) this.pending.delete(state);
-      throw new Error('unknown or expired authorization state — start Connect again');
+    if (
+      !ceremony ||
+      ceremony.expiresAt < this.now() ||
+      ceremony.mode !== "byo"
+    ) {
+      if (ceremony?.expiresAt && ceremony.expiresAt < this.now())
+        this.pending.delete(state);
+      throw new Error(
+        "unknown or expired authorization state — start Connect again"
+      );
     }
     this.pending.delete(state);
     const { plane, connectionId } = ceremony;
     const row = this.readRowById(plane, connectionId);
-    if (!row || row.cred_kind !== 'oauth2' || !row.token_url || !row.client_id) {
-      throw new Error('the connection lost its oauth2 credential mid-ceremony');
+    if (
+      !row ||
+      row.cred_kind !== "oauth2" ||
+      !row.token_url ||
+      !row.client_id
+    ) {
+      throw new Error("the connection lost its oauth2 credential mid-ceremony");
     }
     const form = new URLSearchParams({
-      grant_type: 'authorization_code',
+      grant_type: "authorization_code",
       code,
       redirect_uri: ceremony.redirectUri,
       client_id: row.client_id,
@@ -303,16 +346,23 @@ export class ConnectionBroker {
     });
     if (row.client_secret) {
       form.set(
-        'client_secret',
-        this.unseal(plane, connectionId, 'client_secret', row.client_secret),
+        "client_secret",
+        this.unseal(plane, connectionId, "client_secret", row.client_secret)
       );
     }
     const response = await this.postTokenForm(row.token_url, form);
     if (!response.ok) {
       throw new Error(`authorization code exchange failed: ${response.detail}`);
     }
-    await this.persistTokens(plane, connectionId, response, 'tokens did not persist');
-    await this.warnOnBaselineFailure(this.captureGmailBaseline(plane, row, response.accessToken));
+    await this.persistTokens(
+      plane,
+      connectionId,
+      response,
+      "tokens did not persist"
+    );
+    await this.warnOnBaselineFailure(
+      this.captureGmailBaseline(plane, row, response.accessToken)
+    );
     return { connectionId };
   }
 
@@ -330,25 +380,35 @@ export class ConnectionBroker {
     deviceKey?: string;
   }): Promise<{ connectionId: string }> {
     const config = this.assistOAuth;
-    if (!config) throw new Error('Centraid Assist is not configured on this gateway');
+    if (!config)
+      throw new Error("Centraid Assist is not configured on this gateway");
     const ceremony = this.pending.get(input.state);
-    if (!ceremony || ceremony.mode !== 'assist' || ceremony.expiresAt < this.now()) {
-      if (ceremony?.expiresAt && ceremony.expiresAt < this.now()) this.pending.delete(input.state);
-      throw new Error('unknown or expired authorization state — start Connect again');
+    if (
+      !ceremony ||
+      ceremony.mode !== "assist" ||
+      ceremony.expiresAt < this.now()
+    ) {
+      if (ceremony?.expiresAt && ceremony.expiresAt < this.now())
+        this.pending.delete(input.state);
+      throw new Error(
+        "unknown or expired authorization state — start Connect again"
+      );
     }
     if (
       ceremony.clientSessionId !== input.clientSessionId ||
       ceremony.deviceKey !== (input.deviceKey ?? null)
     ) {
-      throw new Error('authorization handoff belongs to a different client session');
+      throw new Error(
+        "authorization handoff belongs to a different client session"
+      );
     }
     this.pending.delete(input.state);
     const row = this.readRowById(ceremony.plane, ceremony.connectionId);
-    if (!row || row.cred_kind !== 'oauth2' || row.oauth_mode !== 'assist') {
-      throw new Error('the connection lost its Assist credential mid-ceremony');
+    if (!row || row.cred_kind !== "oauth2" || row.oauth_mode !== "assist") {
+      throw new Error("the connection lost its Assist credential mid-ceremony");
     }
-    const response = await this.postAssist('/exchange', {
-      provider: 'google',
+    const response = await this.postAssist("/exchange", {
+      provider: "google",
       code: input.code,
       code_verifier: ceremony.verifier,
       redirect_uri: ceremony.redirectUri,
@@ -365,7 +425,7 @@ export class ConnectionBroker {
         await this.flipNeedsAuth(
           ceremony.plane,
           ceremony.connectionId,
-          `Centraid Assist authorization failed (${response.detail}) — Reconnect with Centraid Assist`,
+          `Centraid Assist authorization failed (${response.detail}) — Reconnect with Centraid Assist`
         );
       }
       throw new Error(`authorization code exchange failed: ${response.detail}`);
@@ -374,10 +434,10 @@ export class ConnectionBroker {
       ceremony.plane,
       ceremony.connectionId,
       response,
-      'tokens did not persist',
+      "tokens did not persist"
     );
     await this.warnOnBaselineFailure(
-      this.captureGmailBaseline(ceremony.plane, row, response.accessToken),
+      this.captureGmailBaseline(ceremony.plane, row, response.accessToken)
     );
     return { connectionId: ceremony.connectionId };
   }
@@ -390,7 +450,7 @@ export class ConnectionBroker {
   }): void {
     const ceremony = this.pending.get(input.state);
     if (!ceremony) return;
-    if (ceremony.mode === 'assist') {
+    if (ceremony.mode === "assist") {
       if (
         ceremony.clientSessionId !== input.clientSessionId ||
         ceremony.deviceKey !== (input.deviceKey ?? null)
@@ -407,7 +467,7 @@ export class ConnectionBroker {
    * no broker credential (harness-ambient lane, pre-#304 behavior).
    */
   resolveForFire: ResolveConnection = async (
-    connector,
+    connector
   ): Promise<ConnectionAuth | { refused: string } | undefined> => {
     const plane = this.planeFor();
     const row = this.readRow(plane, connector);
@@ -424,12 +484,21 @@ export class ConnectionBroker {
     const onAuthDead = (reason: string): Promise<void> =>
       this.flipNeedsAuth(plane, row.connection_id, reason);
 
-    if (row.cred_kind === 'api_key') {
+    if (row.cred_kind === "api_key") {
       if (!row.api_key) {
-        return { refused: `connection "${connector.label}" is api_key-kind but holds no key` };
+        return {
+          refused: `connection "${connector.label}" is api_key-kind but holds no key`,
+        };
       }
       return {
-        values: { api_key: this.unseal(plane, row.connection_id, 'api_key', row.api_key) },
+        values: {
+          api_key: this.unseal(
+            plane,
+            row.connection_id,
+            "api_key",
+            row.api_key
+          ),
+        },
         allowedHosts,
         ...(readOnlyPosts ? { readOnlyPosts } : {}),
         onAuthDead,
@@ -439,13 +508,21 @@ export class ConnectionBroker {
 
     // oauth2: make sure a live access token exists before the handler runs.
     try {
-      const accessToken = await this.ensureFreshToken(plane, row.connection_id, false);
+      const accessToken = await this.ensureFreshToken(
+        plane,
+        row.connection_id,
+        false
+      );
       return {
         values: { access_token: accessToken },
         allowedHosts,
         ...(readOnlyPosts ? { readOnlyPosts } : {}),
         refresh: async () => ({
-          access_token: await this.ensureFreshToken(plane, row.connection_id, true),
+          access_token: await this.ensureFreshToken(
+            plane,
+            row.connection_id,
+            true
+          ),
         }),
         onAuthDead,
         limit,
@@ -467,42 +544,53 @@ export class ConnectionBroker {
   async pollJson(
     connection: ConnectionBinding,
     rawUrl: string,
-    requestHeaders: Readonly<Record<string, string>> = {},
+    requestHeaders: Readonly<Record<string, string>> = {}
   ): Promise<PollJsonResponse> {
     if (!connection.connectionId) {
-      throw new Error('event polling requires a durable connectionId binding');
+      throw new Error("event polling requires a durable connectionId binding");
     }
     const url = new URL(rawUrl);
-    if (url.protocol !== 'https:') throw new Error('provider event polling requires https');
+    if (url.protocol !== "https:")
+      throw new Error("provider event polling requires https");
     const resolved = await this.resolveForFire(connection);
-    if (!resolved) throw new Error(`connection "${connection.label}" carries no broker credential`);
-    if ('refused' in resolved) throw new Error(resolved.refused);
+    if (!resolved)
+      throw new Error(
+        `connection "${connection.label}" carries no broker credential`
+      );
+    if ("refused" in resolved) throw new Error(resolved.refused);
     if (!hostAllowed(url.hostname, resolved.allowedHosts)) {
       throw new Error(
-        `provider host "${url.hostname}" is outside connection "${connection.label}" allowed_hosts`,
+        `provider host "${url.hostname}" is outside connection "${connection.label}" allowed_hosts`
       );
     }
     const safeHeaders = Object.fromEntries(
       Object.entries(requestHeaders).filter(
         ([name]) =>
-          !['authorization', 'cookie', 'proxy-authorization'].includes(name.toLowerCase()),
-      ),
+          !["authorization", "cookie", "proxy-authorization"].includes(
+            name.toLowerCase()
+          )
+      )
     );
-    const perform = async (values: Readonly<Record<string, string>>): Promise<Response> => {
+    const perform = async (
+      values: Readonly<Record<string, string>>
+    ): Promise<Response> => {
       const token = values.access_token ?? values.api_key;
-      if (!token) throw new Error(`connection "${connection.label}" has no injectable token`);
+      if (!token)
+        throw new Error(
+          `connection "${connection.label}" has no injectable token`
+        );
       return (resolved.limit ?? ((fn) => fn()))(() =>
         this.fetchImpl(url, {
-          method: 'GET',
+          method: "GET",
           headers: {
-            accept: 'application/json',
-            'user-agent': 'centraid-automation-events',
+            accept: "application/json",
+            "user-agent": "centraid-automation-events",
             ...safeHeaders,
             authorization: `Bearer ${token}`,
           },
-          redirect: 'error',
+          redirect: "error",
           signal: timeoutSignal(this.tokenTimeoutMs),
-        }),
+        })
       );
     };
     let response = await perform(resolved.values);
@@ -510,29 +598,41 @@ export class ConnectionBroker {
       response = await perform(await resolved.refresh());
     }
     if (response.status === 401) {
-      await resolved.onAuthDead?.('provider event poll returned 401 — reconnect the account');
+      await resolved.onAuthDead?.(
+        "provider event poll returned 401 — reconnect the account"
+      );
     }
     const bodyText =
       response.status === 304
-        ? ''
-        : await readBoundedResponseText(response, MAX_PROVIDER_RESPONSE_BYTES, 'provider response');
+        ? ""
+        : await readBoundedResponseText(
+            response,
+            MAX_PROVIDER_RESPONSE_BYTES,
+            "provider response"
+          );
     let body: unknown;
     if (bodyText) {
       try {
         body = JSON.parse(bodyText) as unknown;
       } catch {
-        throw new Error(`provider event poll returned non-JSON (${response.status})`);
+        throw new Error(
+          `provider event poll returned non-JSON (${response.status})`
+        );
       }
     }
     const headers: Record<string, string> = {};
     // Link is provider pagination state, not credential material. Preserve it
     // so adapters exercise the same page walk through this production broker
     // that they do through their direct PollJson test seam.
-    for (const name of ['etag', 'last-modified', 'link', 'x-poll-interval']) {
+    for (const name of ["etag", "last-modified", "link", "x-poll-interval"]) {
       const value = response.headers.get(name);
       if (value) headers[name] = value;
     }
-    return { status: response.status, headers, ...(body !== undefined ? { body } : {}) };
+    return {
+      status: response.status,
+      headers,
+      ...(body === undefined ? {} : { body }),
+    };
   }
 
   /**
@@ -544,7 +644,7 @@ export class ConnectionBroker {
    */
   async resolveForDrain(
     plane: VaultPlane,
-    connectionId: string,
+    connectionId: string
   ): Promise<ConnectionAuth | { refused: string }> {
     const row = this.readRowById(plane, connectionId);
     if (!row?.cred_kind) {
@@ -562,12 +662,21 @@ export class ConnectionBroker {
     const limit = <T>(fn: () => Promise<T>): Promise<T> => limiter.run(fn);
     const onAuthDead = (reason: string): Promise<void> =>
       this.flipNeedsAuth(plane, row.connection_id, reason);
-    if (row.cred_kind === 'api_key') {
+    if (row.cred_kind === "api_key") {
       if (!row.api_key) {
-        return { refused: `connection ${connectionId} is api_key-kind but holds no key` };
+        return {
+          refused: `connection ${connectionId} is api_key-kind but holds no key`,
+        };
       }
       return {
-        values: { api_key: this.unseal(plane, row.connection_id, 'api_key', row.api_key) },
+        values: {
+          api_key: this.unseal(
+            plane,
+            row.connection_id,
+            "api_key",
+            row.api_key
+          ),
+        },
         allowedHosts,
         onAuthDead,
         limit,
@@ -575,12 +684,20 @@ export class ConnectionBroker {
       } satisfies ConnectionAuth;
     }
     try {
-      const accessToken = await this.ensureFreshToken(plane, row.connection_id, false);
+      const accessToken = await this.ensureFreshToken(
+        plane,
+        row.connection_id,
+        false
+      );
       return {
         values: { access_token: accessToken },
         allowedHosts,
         refresh: async () => ({
-          access_token: await this.ensureFreshToken(plane, row.connection_id, true),
+          access_token: await this.ensureFreshToken(
+            plane,
+            row.connection_id,
+            true
+          ),
         }),
         onAuthDead,
         limit,
@@ -598,17 +715,23 @@ export class ConnectionBroker {
    * an upstream 401). Single-flight: concurrent callers of one connection
    * join the running refresh instead of racing it.
    */
-  async ensureFreshToken(plane: VaultPlane, connectionId: string, force: boolean): Promise<string> {
+  async ensureFreshToken(
+    plane: VaultPlane,
+    connectionId: string,
+    force: boolean
+  ): Promise<string> {
     const key = `${plane.boot.vaultId}:${connectionId}`;
     const inflight = this.refreshing.get(key);
     if (inflight) return inflight;
 
     const row = this.readRowById(plane, connectionId);
-    if (!row || row.cred_kind !== 'oauth2') {
-      throw new Error(`connection ${connectionId} carries no oauth2 credential`);
+    if (!row || row.cred_kind !== "oauth2") {
+      throw new Error(
+        `connection ${connectionId} carries no oauth2 credential`
+      );
     }
     if (!force && row.access_token && !expiringSoon(row.token_expires_at)) {
-      return this.unseal(plane, connectionId, 'access_token', row.access_token);
+      return this.unseal(plane, connectionId, "access_token", row.access_token);
     }
     const refresh = this.refreshTokens(plane, connectionId, row).finally(() => {
       this.refreshing.delete(key);
@@ -621,26 +744,38 @@ export class ConnectionBroker {
   private async refreshTokens(
     plane: VaultPlane,
     connectionId: string,
-    row: ConnectionCredRow,
+    row: ConnectionCredRow
   ): Promise<string> {
     if (!row.refresh_token) {
       await this.flipNeedsAuth(
         plane,
         connectionId,
-        row.oauth_mode === 'assist'
-          ? 'No refresh token is available — Reconnect with Centraid Assist'
-          : 'no refresh token on record — run Connect',
+        row.oauth_mode === "assist"
+          ? "No refresh token is available — Reconnect with Centraid Assist"
+          : "no refresh token on record — run Connect"
       );
-      throw authDeadError('no refresh token on record');
+      throw authDeadError("no refresh token on record");
     }
     if (!row.token_url || !row.client_id) {
-      await this.flipNeedsAuth(plane, connectionId, 'credential is missing token_url/client_id');
-      throw authDeadError('credential is missing token_url/client_id');
+      await this.flipNeedsAuth(
+        plane,
+        connectionId,
+        "credential is missing token_url/client_id"
+      );
+      throw authDeadError("credential is missing token_url/client_id");
     }
-    const refreshToken = this.unseal(plane, connectionId, 'refresh_token', row.refresh_token);
+    const refreshToken = this.unseal(
+      plane,
+      connectionId,
+      "refresh_token",
+      row.refresh_token
+    );
     const response =
-      row.oauth_mode === 'assist'
-        ? await this.postAssist('/refresh', { provider: 'google', refresh_token: refreshToken })
+      row.oauth_mode === "assist"
+        ? await this.postAssist("/refresh", {
+            provider: "google",
+            refresh_token: refreshToken,
+          })
         : await this.postByoRefresh(row, connectionId, plane, refreshToken);
     if (!response.ok && response.authDead) {
       // Rot point 3: invalid_grant et al. — the refresh token is dead, only
@@ -648,16 +783,20 @@ export class ConnectionBroker {
       await this.flipNeedsAuth(
         plane,
         connectionId,
-        row.oauth_mode === 'assist'
+        row.oauth_mode === "assist"
           ? `Centraid Assist refresh refused (${response.detail}) — Reconnect with Centraid Assist`
-          : `token refresh refused (${response.detail}) — reconnect to re-authorize`,
+          : `token refresh refused (${response.detail}) — reconnect to re-authorize`
       );
       throw authDeadError(`token refresh refused: ${response.detail}`);
     }
     if (!response.ok) {
       throw new Error(`token refresh failed transiently: ${response.detail}`);
     }
-    const { accessToken, refreshToken: rotatedRefreshToken, expiresAt } = response;
+    const {
+      accessToken,
+      refreshToken: rotatedRefreshToken,
+      expiresAt,
+    } = response;
     // Rot point 1: persist BEFORE first use — receipted, sealed by the
     // command pipeline, journal-redacted via sealedInput.
     await this.persistTokens(
@@ -669,8 +808,8 @@ export class ConnectionBroker {
         ...(rotatedRefreshToken ? { refreshToken: rotatedRefreshToken } : {}),
         ...(expiresAt ? { expiresAt } : {}),
       },
-      'refreshed tokens did not persist',
-      ' — refusing to use an unpersisted token',
+      "refreshed tokens did not persist",
+      " — refusing to use an unpersisted token"
     );
     return accessToken;
   }
@@ -679,17 +818,17 @@ export class ConnectionBroker {
     row: ConnectionCredRow,
     connectionId: string,
     plane: VaultPlane,
-    refreshToken: string,
+    refreshToken: string
   ): Promise<TokenResponse> {
     const form = new URLSearchParams({
-      grant_type: 'refresh_token',
+      grant_type: "refresh_token",
       refresh_token: refreshToken,
       client_id: row.client_id!,
     });
     if (row.client_secret) {
       form.set(
-        'client_secret',
-        this.unseal(plane, connectionId, 'client_secret', row.client_secret),
+        "client_secret",
+        this.unseal(plane, connectionId, "client_secret", row.client_secret)
       );
     }
     return this.postTokenForm(row.token_url!, form);
@@ -699,26 +838,30 @@ export class ConnectionBroker {
    * One token-endpoint POST with a single transient retry. Distinguishes
    * auth-dead (4xx with an OAuth error body) from transient (network/5xx).
    */
-  private async postTokenForm(tokenUrl: string, form: URLSearchParams): Promise<TokenResponse> {
-    for (let attempt = 0; ; attempt++) {
+  private async postTokenForm(
+    tokenUrl: string,
+    form: URLSearchParams
+  ): Promise<TokenResponse> {
+    const { fetchImpl, tokenTimeoutMs } = this;
+    async function sendAttempt(attempt: number): Promise<TokenResponse> {
       let status: number;
       let text: string;
       try {
-        const res = await this.fetchImpl(tokenUrl, {
-          method: 'POST',
-          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        const res = await fetchImpl(tokenUrl, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
           body: form.toString(),
           // Never forward a code, refresh token, or client secret to a
           // token endpoint's attacker-controlled redirect target.
-          redirect: 'error',
-          signal: timeoutSignal(this.tokenTimeoutMs),
+          redirect: "error",
+          signal: timeoutSignal(tokenTimeoutMs),
         });
         status = res.status;
         text = await readBoundedResponseText(res, MAX_TOKEN_RESPONSE_BYTES);
       } catch (err) {
         if (attempt === 0) {
           await delay(TRANSIENT_RETRY_DELAY_MS);
-          continue;
+          return sendAttempt(attempt + 1);
         }
         return {
           ok: false,
@@ -729,9 +872,13 @@ export class ConnectionBroker {
       if (status >= 500 || status === 429) {
         if (attempt === 0) {
           await delay(TRANSIENT_RETRY_DELAY_MS);
-          continue;
+          return sendAttempt(attempt + 1);
         }
-        return { ok: false, authDead: false, detail: `token endpoint answered ${status}` };
+        return {
+          ok: false,
+          authDead: false,
+          detail: `token endpoint answered ${status}`,
+        };
       }
       let body: Record<string, unknown> = {};
       try {
@@ -740,54 +887,64 @@ export class ConnectionBroker {
         /* non-JSON error body — fall through to status handling */
       }
       if (status >= 400) {
-        const code = typeof body.error === 'string' ? body.error : `http ${status}`;
+        const code =
+          typeof body.error === "string" ? body.error : `http ${status}`;
         return { ok: false, authDead: true, detail: code };
       }
       const accessToken = body.access_token;
-      if (typeof accessToken !== 'string' || accessToken.length === 0) {
+      if (typeof accessToken !== "string" || accessToken.length === 0) {
         return {
           ok: false,
           authDead: false,
-          detail: 'token endpoint answered without access_token',
+          detail: "token endpoint answered without access_token",
         };
       }
-      const expiresIn = typeof body.expires_in === 'number' ? body.expires_in : undefined;
+      const expiresIn =
+        typeof body.expires_in === "number" ? body.expires_in : undefined;
       return {
         ok: true,
         accessToken,
-        ...(typeof body.refresh_token === 'string' && body.refresh_token
+        ...(typeof body.refresh_token === "string" && body.refresh_token
           ? { refreshToken: body.refresh_token }
           : {}),
-        ...(expiresIn ? { expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString() } : {}),
+        ...(expiresIn
+          ? { expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString() }
+          : {}),
       };
     }
+    return sendAttempt(0);
   }
 
   /** Stateless confidential-client hop; the gateway never receives a client secret. */
-  private async postAssist(path: '/exchange' | '/refresh', body: unknown): Promise<TokenResponse> {
+  private async postAssist(
+    path: "/exchange" | "/refresh",
+    body: unknown
+  ): Promise<TokenResponse> {
     const config = this.assistOAuth;
-    if (!config) return { ok: false, authDead: false, detail: 'assist_not_configured' };
+    if (!config)
+      return { ok: false, authDead: false, detail: "assist_not_configured" };
+    const { fetchImpl, tokenTimeoutMs } = this;
     const endpoint = new URL(path, `${config.workerBaseUrl}/`).toString();
-    for (let attempt = 0; ; attempt++) {
+    async function sendAttempt(attempt: number): Promise<TokenResponse> {
       let status: number;
       let text: string;
       try {
-        const res = await this.fetchImpl(endpoint, {
-          method: 'POST',
+        const res = await fetchImpl(endpoint, {
+          method: "POST",
           headers: {
-            accept: 'application/json',
-            'content-type': 'application/json',
+            accept: "application/json",
+            "content-type": "application/json",
           },
           body: JSON.stringify(body),
-          redirect: 'error',
-          signal: timeoutSignal(this.tokenTimeoutMs),
+          redirect: "error",
+          signal: timeoutSignal(tokenTimeoutMs),
         });
         status = res.status;
         text = await readBoundedResponseText(res, MAX_TOKEN_RESPONSE_BYTES);
       } catch (err) {
         if (attempt === 0) {
           await delay(TRANSIENT_RETRY_DELAY_MS);
-          continue;
+          return sendAttempt(attempt + 1);
         }
         return {
           ok: false,
@@ -798,35 +955,53 @@ export class ConnectionBroker {
       if (status >= 500 || status === 429) {
         if (attempt === 0) {
           await delay(TRANSIENT_RETRY_DELAY_MS);
-          continue;
+          return sendAttempt(attempt + 1);
         }
-        return { ok: false, authDead: false, detail: `assist_worker_${status}` };
+        return {
+          ok: false,
+          authDead: false,
+          detail: `assist_worker_${status}`,
+        };
       }
       let parsed: Record<string, unknown> = {};
       try {
         parsed = JSON.parse(text) as Record<string, unknown>;
       } catch {
-        return { ok: false, authDead: false, detail: 'assist_worker_invalid_response' };
+        return {
+          ok: false,
+          authDead: false,
+          detail: "assist_worker_invalid_response",
+        };
       }
       if (status >= 400) {
-        const code = typeof parsed.error === 'string' ? parsed.error : `assist_worker_${status}`;
+        const code =
+          typeof parsed.error === "string"
+            ? parsed.error
+            : `assist_worker_${status}`;
         return {
           ok: false,
           authDead:
             status === 400 &&
-            ['invalid_grant', 'invalid_receipt', 'expired_receipt'].includes(code),
+            ["invalid_grant", "invalid_receipt", "expired_receipt"].includes(
+              code
+            ),
           detail: code,
         };
       }
       const accessToken = parsed.access_token;
-      if (typeof accessToken !== 'string' || accessToken.length === 0) {
-        return { ok: false, authDead: false, detail: 'assist_worker_missing_access_token' };
+      if (typeof accessToken !== "string" || accessToken.length === 0) {
+        return {
+          ok: false,
+          authDead: false,
+          detail: "assist_worker_missing_access_token",
+        };
       }
-      const expiresIn = typeof parsed.expires_in === 'number' ? parsed.expires_in : undefined;
+      const expiresIn =
+        typeof parsed.expires_in === "number" ? parsed.expires_in : undefined;
       return {
         ok: true,
         accessToken,
-        ...(typeof parsed.refresh_token === 'string' && parsed.refresh_token
+        ...(typeof parsed.refresh_token === "string" && parsed.refresh_token
           ? { refreshToken: parsed.refresh_token }
           : {}),
         ...(expiresIn && Number.isFinite(expiresIn) && expiresIn > 0
@@ -834,6 +1009,7 @@ export class ConnectionBroker {
           : {}),
       };
     }
+    return sendAttempt(0);
   }
 
   private async persistTokens(
@@ -841,21 +1017,23 @@ export class ConnectionBroker {
     connectionId: string,
     response: Extract<TokenResponse, { ok: true }>,
     prefix: string,
-    suffix = '',
+    suffix = ""
   ): Promise<void> {
     const outcome: InvokeOutcome = await plane.invoke(plane.ownerCredential, {
-      command: 'sync.store_tokens',
+      command: "sync.store_tokens",
       input: {
         connection_id: connectionId,
         access_token: response.accessToken,
-        ...(response.refreshToken ? { refresh_token: response.refreshToken } : {}),
+        ...(response.refreshToken
+          ? { refresh_token: response.refreshToken }
+          : {}),
         ...(response.expiresAt ? { expires_at: response.expiresAt } : {}),
       },
       purpose: BROKER_PURPOSE,
     });
-    if (outcome.status !== 'executed') {
+    if (outcome.status !== "executed") {
       throw new Error(
-        `${prefix} (${outcome.status}: ${'reason' in outcome ? outcome.reason : 'unknown'})${suffix}`,
+        `${prefix} (${outcome.status}: ${"reason" in outcome ? outcome.reason : "unknown"})${suffix}`
       );
     }
   }
@@ -870,7 +1048,7 @@ export class ConnectionBroker {
       this.logger?.warn(
         `connection broker: Gmail history baseline failed (the first poll will re-baseline): ${
           error instanceof Error ? error.message : String(error)
-        }`,
+        }`
       );
     });
   }
@@ -878,37 +1056,40 @@ export class ConnectionBroker {
   private async captureGmailBaseline(
     plane: VaultPlane,
     row: ConnectionCredRow,
-    accessToken: string,
+    accessToken: string
   ): Promise<void> {
-    if (row.provider !== 'google' || row.kind !== 'pull.gmail') return;
+    if (row.provider !== "google" || row.kind !== "pull.gmail") return;
     const response = await this.fetchImpl(
-      'https://gmail.googleapis.com/gmail/v1/users/me/profile',
+      "https://gmail.googleapis.com/gmail/v1/users/me/profile",
       {
-        method: 'GET',
-        headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
-        redirect: 'error',
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${accessToken}`,
+        },
+        redirect: "error",
         signal: timeoutSignal(this.tokenTimeoutMs),
-      },
+      }
     );
     if (!response.ok) return;
     const text = await readBoundedResponseText(
       response,
       MAX_TOKEN_RESPONSE_BYTES,
-      'Gmail profile response',
+      "Gmail profile response"
     );
-    const historyId = stringField(JSON.parse(text) as unknown, 'historyId');
+    const historyId = stringField(JSON.parse(text) as unknown, "historyId");
     if (!historyId) return;
     const outcome = await plane.invoke(plane.ownerCredential, {
-      command: 'sync.set_cursor',
+      command: "sync.set_cursor",
       input: {
         connection_id: row.connection_id,
-        key: 'gmail_history_id',
+        key: "gmail_history_id",
         value: { id: historyId },
       },
       purpose: BROKER_PURPOSE,
     });
-    if (outcome.status !== 'executed') {
-      throw new Error('Gmail profile historyId did not persist');
+    if (outcome.status !== "executed") {
+      throw new Error("Gmail profile historyId did not persist");
     }
   }
 
@@ -922,16 +1103,19 @@ export class ConnectionBroker {
   private async flipNeedsAuth(
     plane: VaultPlane,
     connectionId: string,
-    note: string,
+    note: string
   ): Promise<void> {
     await plane.invoke(plane.ownerCredential, {
-      command: 'sync.set_connection_status',
-      input: { connection_id: connectionId, status: 'needs-auth', note },
+      command: "sync.set_connection_status",
+      input: { connection_id: connectionId, status: "needs-auth", note },
       purpose: BROKER_PURPOSE,
     });
   }
 
-  private limiterFor(plane: VaultPlane, connectionId: string): ConnectionLimiter {
+  private limiterFor(
+    plane: VaultPlane,
+    connectionId: string
+  ): ConnectionLimiter {
     const key = `${plane.boot.vaultId}:${connectionId}`;
     let limiter = this.limiters.get(key);
     if (!limiter) {
@@ -943,7 +1127,7 @@ export class ConnectionBroker {
 
   private readRow(
     plane: VaultPlane,
-    connector: { kind: string; label: string; connectionId?: string },
+    connector: { kind: string; label: string; connectionId?: string }
   ): ConnectionCredRow | undefined {
     // Prefer durable connection id when the automation/manifest carries one.
     if (connector.connectionId) {
@@ -961,28 +1145,36 @@ export class ConnectionBroker {
                 cc.api_key, cc.token_expires_at, cc.allowed_hosts, c.principal
            FROM sync_connection_credential cc
            JOIN sync_connection c ON c.connection_id = cc.connection_id
-          WHERE c.kind = ? AND c.label = ?`,
+          WHERE c.kind = ? AND c.label = ?`
       )
       .get(connector.kind, connector.label) as ConnectionCredRow | undefined;
   }
 
-  private readRowById(plane: VaultPlane, connectionId: string): ConnectionCredRow | undefined {
+  private readRowById(
+    plane: VaultPlane,
+    connectionId: string
+  ): ConnectionCredRow | undefined {
     return plane.db.vault
       .prepare(
         `SELECT cc.*, c.kind, c.label, c.principal
            FROM sync_connection_credential cc
            JOIN sync_connection c ON c.connection_id = cc.connection_id
-          WHERE cc.connection_id = ?`,
+          WHERE cc.connection_id = ?`
       )
       .get(connectionId) as ConnectionCredRow | undefined;
   }
 
   /** Host-side unseal of one credential cell — never crosses to handler code. */
-  private unseal(plane: VaultPlane, connectionId: string, column: string, value: string): string {
+  private unseal(
+    plane: VaultPlane,
+    connectionId: string,
+    column: string,
+    value: string
+  ): string {
     return unsealValue(
       plane.db.sealKey,
-      sealAad('sync_connection_credential', column, connectionId),
-      value,
+      sealAad("sync_connection_credential", column, connectionId),
+      value
     );
   }
 }
@@ -991,24 +1183,30 @@ function parseHosts(json: string | null): readonly string[] {
   if (!json) return [];
   try {
     const parsed = JSON.parse(json) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((h): h is string => typeof h === 'string') : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((h): h is string => typeof h === "string")
+      : [];
   } catch {
     return [];
   }
 }
 
-function hostAllowed(hostname: string, allowedHosts: readonly string[]): boolean {
+function hostAllowed(
+  hostname: string,
+  allowedHosts: readonly string[]
+): boolean {
   return allowedHosts.some((entry) =>
-    entry.startsWith('*.')
+    entry.startsWith("*.")
       ? hostname.endsWith(entry.slice(1)) && hostname.length > entry.length - 1
-      : hostname === entry,
+      : hostname === entry
   );
 }
 
 function stringField(value: unknown, field: string): string | undefined {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    return undefined;
   const candidate = (value as Record<string, unknown>)[field];
-  return typeof candidate === 'string' && candidate ? candidate : undefined;
+  return typeof candidate === "string" && candidate ? candidate : undefined;
 }
 
 function expiringSoon(expiresAt: string | null): boolean {
@@ -1016,29 +1214,46 @@ function expiringSoon(expiresAt: string | null): boolean {
   return Date.parse(expiresAt) - Date.now() < EXPIRY_SLACK_MS;
 }
 
+interface BoundedResponseState {
+  text: string;
+  total: number;
+}
+
+async function readNextBoundedResponseChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  decoder: TextDecoder,
+  state: BoundedResponseState,
+  limit: number,
+  label: string
+): Promise<string> {
+  const chunk = await reader.read();
+  if (chunk.done) return state.text + decoder.decode();
+  state.total += chunk.value.byteLength;
+  if (state.total > limit) throw new Error(`${label} exceeded safety limit`);
+  state.text += decoder.decode(chunk.value, { stream: true });
+  return readNextBoundedResponseChunk(reader, decoder, state, limit, label);
+}
+
 async function readBoundedResponseText(
   response: Response,
   limit: number,
-  label = 'token endpoint response',
+  label = "token endpoint response"
 ): Promise<string> {
-  const declared = Number(response.headers.get('content-length'));
+  const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > limit) {
     throw new Error(`${label} exceeded safety limit`);
   }
-  if (!response.body) return '';
+  if (!response.body) return "";
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let total = 0;
-  let text = '';
   try {
-    for (;;) {
-      const chunk = await reader.read();
-      if (chunk.done) break;
-      total += chunk.value.byteLength;
-      if (total > limit) throw new Error(`${label} exceeded safety limit`);
-      text += decoder.decode(chunk.value, { stream: true });
-    }
-    return text + decoder.decode();
+    return await readNextBoundedResponseChunk(
+      reader,
+      decoder,
+      { text: "", total: 0 },
+      limit,
+      label
+    );
   } finally {
     reader.releaseLock();
   }

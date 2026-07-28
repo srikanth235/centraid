@@ -23,10 +23,11 @@
 // the previous dir — fresh-path-per-publish rotates require() cache
 // lines naturally (the runtime keys its handler cache on path).
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import { run, runRaw, revParse } from './git.js';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { run, runRaw, revParse } from "./git.js";
 import {
   WorktreeStoreError,
   type WorktreeStoreOptions,
@@ -36,10 +37,10 @@ import {
   type RollbackResult,
   type SessionHandle,
   type VersionEntry,
-} from './types.js';
+} from "./types.js";
 
 /** Git's canonical empty tree sha. Used to plant the initial main commit. */
-const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 /**
  * Conservative slug check — matches the canonical app id rule
@@ -48,10 +49,10 @@ const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
  * now marked by the manifest's `kind` field, not a dotted `auto.` id
  * prefix, so the id grammar is a plain slug again.
  */
-const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/i;
+const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/iu;
 
 /** Stable symlink name (under the store root) pointing at the live main worktree. */
-const ACTIVE_MAIN_LINK = 'active-main';
+const ACTIVE_MAIN_LINK = "active-main";
 
 export class WorktreeStore {
   private readonly root: string;
@@ -66,10 +67,10 @@ export class WorktreeStore {
 
   constructor(options: WorktreeStoreOptions) {
     this.root = options.root;
-    this.bareDir = path.join(options.root, 'apps.git');
-    this.worktreesDir = path.join(options.root, 'worktrees');
-    this.mainWorktreesDir = path.join(this.worktreesDir, 'main');
-    this.sessionWorktreesDir = path.join(this.worktreesDir, 'sessions');
+    this.bareDir = path.join(options.root, "apps.git");
+    this.worktreesDir = path.join(options.root, "worktrees");
+    this.mainWorktreesDir = path.join(this.worktreesDir, "main");
+    this.sessionWorktreesDir = path.join(this.worktreesDir, "sessions");
     this.activeMainLink = path.join(options.root, ACTIVE_MAIN_LINK);
   }
 
@@ -85,27 +86,31 @@ export class WorktreeStore {
     await fs.mkdir(this.mainWorktreesDir, { recursive: true });
     await fs.mkdir(this.sessionWorktreesDir, { recursive: true });
 
-    if (!(await pathExists(path.join(this.bareDir, 'HEAD')))) {
+    if (!(await pathExists(path.join(this.bareDir, "HEAD")))) {
       await fs.mkdir(this.bareDir, { recursive: true });
       // `-b main` pins HEAD; without it the host's `init.defaultBranch`
       // (often `master`) wins and downstream calls chase a dynamic name.
-      await run(['init', '--bare', '-b', 'main', this.bareDir], { cwd: this.root });
+      await run(["init", "--bare", "-b", "main", this.bareDir], {
+        cwd: this.root,
+      });
     }
 
-    if (!(await revParse(this.bareDir, 'refs/heads/main'))) {
+    if (!(await revParse(this.bareDir, "refs/heads/main"))) {
       // Empty initial commit so sessions have something to branch off.
       // `commit-tree` against git's canonical empty-tree sha — no
       // working tree needed.
       const initialSha = await run(
-        ['commit-tree', EMPTY_TREE_SHA, '-m', 'centraid: init apps repo'],
-        { cwd: this.bareDir },
+        ["commit-tree", EMPTY_TREE_SHA, "-m", "centraid: init apps repo"],
+        { cwd: this.bareDir }
       );
-      await run(['update-ref', 'refs/heads/main', initialSha], { cwd: this.bareDir });
+      await run(["update-ref", "refs/heads/main", initialSha], {
+        cwd: this.bareDir,
+      });
     }
 
     // Drop worktree metadata pointing at vanished dirs (e.g. host crash).
-    await run(['worktree', 'prune'], { cwd: this.bareDir });
-    const mainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
+    await run(["worktree", "prune"], { cwd: this.bareDir });
+    const mainSha = (await revParse(this.bareDir, "refs/heads/main")) ?? "";
     this.activeMainDir = await this.ensureMainMaterialization(mainSha);
     await this.updateActiveMainLink(this.activeMainDir);
     this.initialized = true;
@@ -137,13 +142,16 @@ export class WorktreeStore {
   /** Every app id with an `apps/<id>/` subtree on main. Replaces `_registry.json`. */
   async listApps(): Promise<string[]> {
     this.assertInitialized();
-    const out = await runRaw(['ls-tree', '--name-only', 'refs/heads/main:apps'], {
-      cwd: this.bareDir,
-      allowNonZero: true,
-    });
+    const out = await runRaw(
+      ["ls-tree", "--name-only", "refs/heads/main:apps"],
+      {
+        cwd: this.bareDir,
+        allowNonZero: true,
+      }
+    );
     if (out.code !== 0) return []; // no `apps/` dir yet
     return out.stdout
-      .split('\n')
+      .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0 && SAFE_ID_RE.test(line))
       .sort();
@@ -159,7 +167,7 @@ export class WorktreeStore {
       id: string;
       name?: string;
       description?: string;
-      kind?: 'app' | 'automation';
+      kind?: "app" | "automation";
       hasIndex: boolean;
       iconKey?: string;
       colorKey?: string;
@@ -171,27 +179,31 @@ export class WorktreeStore {
     if (!mainDir || ids.length === 0) return [];
     const rows = await Promise.all(
       ids.map(async (id) => {
-        const appDir = path.join(mainDir, 'apps', id);
+        const appDir = path.join(mainDir, "apps", id);
         const manifest: Record<string, unknown> = await readJson(
-          path.join(appDir, 'app.json'),
+          path.join(appDir, "app.json")
         ).catch(() => ({}));
-        const hasIndex = await pathExists(path.join(appDir, 'index.html'));
+        const hasIndex = await pathExists(path.join(appDir, "index.html"));
         return {
           id,
-          ...(typeof manifest.name === 'string' ? { name: manifest.name } : {}),
-          ...(typeof manifest.description === 'string'
+          ...(typeof manifest.name === "string" ? { name: manifest.name } : {}),
+          ...(typeof manifest.description === "string"
             ? { description: manifest.description }
             : {}),
-          ...(manifest.kind === 'automation' || manifest.kind === 'app'
-            ? { kind: manifest.kind as 'app' | 'automation' }
+          ...(manifest.kind === "automation" || manifest.kind === "app"
+            ? { kind: manifest.kind as "app" | "automation" }
             : {}),
           hasIndex,
           // Tile identity (issue #263) — pass-through strings; the shells
           // validate against the design-tokens sets before rendering.
-          ...(typeof manifest.iconKey === 'string' ? { iconKey: manifest.iconKey } : {}),
-          ...(typeof manifest.colorKey === 'string' ? { colorKey: manifest.colorKey } : {}),
+          ...(typeof manifest.iconKey === "string"
+            ? { iconKey: manifest.iconKey }
+            : {}),
+          ...(typeof manifest.colorKey === "string"
+            ? { colorKey: manifest.colorKey }
+            : {}),
         };
-      }),
+      })
     );
     return rows;
   }
@@ -205,17 +217,19 @@ export class WorktreeStore {
    *
    * Throws `no_changes` when the app wasn't on main.
    */
-  deleteApp(appId: string): Promise<{ sha: string; materializedMainDir: string }> {
+  deleteApp(
+    appId: string
+  ): Promise<{ sha: string; materializedMainDir: string }> {
     return this.serialize(() => this.deleteAppCritical(appId));
   }
 
   /** App's active code dir, or undefined when never published. */
   async resolveActiveAppDir(appId: string): Promise<string | undefined> {
-    assertSafeId(appId, 'invalid_app_id');
+    assertSafeId(appId, "invalid_app_id");
     this.assertInitialized();
     const mainDir = this.activeMainDir;
     if (!mainDir) return undefined;
-    const appDir = path.join(mainDir, 'apps', appId);
+    const appDir = path.join(mainDir, "apps", appId);
     return (await pathExists(appDir)) ? appDir : undefined;
   }
 
@@ -228,58 +242,67 @@ export class WorktreeStore {
    * `session_exists` and a later `publish()` would `git add` in a
    * plain dir and fail.
    */
-  async snapshotSessionAppDir(sessionId: string, appId: string): Promise<string> {
-    assertSafeId(sessionId, 'invalid_session_id');
-    assertSafeId(appId, 'invalid_app_id');
+  async snapshotSessionAppDir(
+    sessionId: string,
+    appId: string
+  ): Promise<string> {
+    assertSafeId(sessionId, "invalid_session_id");
+    assertSafeId(appId, "invalid_app_id");
     this.assertInitialized();
     const worktreeRoot = this.sessionWorktreePath(sessionId);
-    if (!(await pathExists(path.join(worktreeRoot, '.git')))) {
+    if (!(await pathExists(path.join(worktreeRoot, ".git")))) {
       throw new WorktreeStoreError(
-        'session_missing',
-        `Session "${sessionId}" has no worktree — open it first via openSession().`,
+        "session_missing",
+        `Session "${sessionId}" has no worktree — open it first via openSession().`
       );
     }
-    const dir = path.join(worktreeRoot, 'apps', appId);
+    const dir = path.join(worktreeRoot, "apps", appId);
     await fs.mkdir(dir, { recursive: true });
     return dir;
   }
 
   /** Branch `sessions/<id>` off `main` + materialize a mutable worktree the agent edits. */
   async openSession(sessionId: string): Promise<SessionHandle> {
-    assertSafeId(sessionId, 'invalid_session_id');
+    assertSafeId(sessionId, "invalid_session_id");
     this.assertInitialized();
     const worktreePath = this.sessionWorktreePath(sessionId);
     if (await pathExists(worktreePath)) {
       throw new WorktreeStoreError(
-        'session_exists',
-        `Session "${sessionId}" already has a worktree at ${worktreePath}.`,
+        "session_exists",
+        `Session "${sessionId}" already has a worktree at ${worktreePath}.`
       );
     }
     const branch = sessionBranchName(sessionId);
-    await run(['worktree', 'add', '-b', branch, worktreePath, 'refs/heads/main'], {
-      cwd: this.bareDir,
-    });
+    await run(
+      ["worktree", "add", "-b", branch, worktreePath, "refs/heads/main"],
+      {
+        cwd: this.bareDir,
+      }
+    );
     return { id: sessionId, branch, worktreePath };
   }
 
   /** Remove a session's worktree + branch. Idempotent (safe on a vanished session). */
   async closeSession(sessionId: string): Promise<void> {
-    assertSafeId(sessionId, 'invalid_session_id');
+    assertSafeId(sessionId, "invalid_session_id");
     this.assertInitialized();
     const worktreePath = this.sessionWorktreePath(sessionId);
     if (await pathExists(worktreePath)) {
       // `--force` tolerates uncommitted edits (the session is
       // being abandoned by design).
-      await runRaw(['worktree', 'remove', '--force', worktreePath], {
+      await runRaw(["worktree", "remove", "--force", worktreePath], {
         cwd: this.bareDir,
         allowNonZero: true,
       });
     }
     // Prune so the metadata catches up with any directory we just
     // removed (or that vanished beforehand).
-    await run(['worktree', 'prune'], { cwd: this.bareDir });
+    await run(["worktree", "prune"], { cwd: this.bareDir });
     const branch = sessionBranchName(sessionId);
-    await runRaw(['branch', '-D', branch], { cwd: this.bareDir, allowNonZero: true });
+    await runRaw(["branch", "-D", branch], {
+      cwd: this.bareDir,
+      allowNonZero: true,
+    });
   }
 
   /**
@@ -290,25 +313,31 @@ export class WorktreeStore {
    */
   async listSessions(): Promise<string[]> {
     this.assertInitialized();
-    const out = await run(['for-each-ref', '--format=%(refname:short)', 'refs/heads/sessions/'], {
-      cwd: this.bareDir,
-    });
+    const out = await run(
+      ["for-each-ref", "--format=%(refname:short)", "refs/heads/sessions/"],
+      {
+        cwd: this.bareDir,
+      }
+    );
     if (!out) return [];
     return out
-      .split('\n')
+      .split("\n")
       .map((line) => line.trim())
-      .filter((line) => line.startsWith('sessions/'))
-      .map((line) => line.slice('sessions/'.length));
+      .filter((line) => line.startsWith("sessions/"))
+      .map((line) => line.slice("sessions/".length));
   }
 
   /** App ids present in an open session's `apps/` dir (empty when closed). */
   async sessionAppIds(sessionId: string): Promise<string[]> {
-    assertSafeId(sessionId, 'invalid_session_id');
+    assertSafeId(sessionId, "invalid_session_id");
     this.assertInitialized();
     try {
-      const entries = await fs.readdir(path.join(this.sessionWorktreePath(sessionId), 'apps'), {
-        withFileTypes: true,
-      });
+      const entries = await fs.readdir(
+        path.join(this.sessionWorktreePath(sessionId), "apps"),
+        {
+          withFileTypes: true,
+        }
+      );
       return entries.filter((e) => e.isDirectory()).map((e) => e.name);
     } catch {
       return [];
@@ -353,37 +382,41 @@ export class WorktreeStore {
    * overlay → the older tag re-laid on main becomes active again.
    */
   async listVersions(appId: string): Promise<VersionEntry[]> {
-    assertSafeId(appId, 'invalid_app_id');
+    assertSafeId(appId, "invalid_app_id");
     this.assertInitialized();
     const out = await run(
       [
-        'for-each-ref',
-        '--format=%(refname:short)%09%(objectname)%09%(committerdate:iso-strict)',
+        "for-each-ref",
+        "--format=%(refname:short)%09%(objectname)%09%(committerdate:iso-strict)",
         `refs/tags/${appId}/v*`,
       ],
-      { cwd: this.bareDir },
+      { cwd: this.bareDir }
     );
     if (!out) return [];
     const mainAppTree = await this.treeSha(`refs/heads/main:apps/${appId}`);
-    const rows: VersionEntry[] = [];
-    for (const line of out.split('\n')) {
-      const [tag, sha, uploadedAt] = line.split('\t');
-      if (!tag || !sha || !uploadedAt) continue;
-      const m = /\/v(\d+)$/.exec(tag);
-      if (!m) continue;
-      const version = Number.parseInt(m[1] ?? '', 10);
-      if (!Number.isFinite(version)) continue;
-      const tagAppTree = await this.treeSha(`${tag}:apps/${appId}`);
-      const active = mainAppTree !== undefined && tagAppTree === mainAppTree;
-      rows.push({ tag, version, sha, uploadedAt, active });
-    }
+    const rows = (
+      await Promise.all(
+        out.split("\n").map(async (line): Promise<VersionEntry | undefined> => {
+          const [tag, sha, uploadedAt] = line.split("\t");
+          if (!tag || !sha || !uploadedAt) return undefined;
+          const m = /\/v(?<version>\d+)$/u.exec(tag);
+          if (!m) return undefined;
+          const version = Math.trunc(Number(m.groups?.version ?? ""));
+          if (!Number.isFinite(version)) return undefined;
+          const tagAppTree = await this.treeSha(`${tag}:apps/${appId}`);
+          const active =
+            mainAppTree !== undefined && tagAppTree === mainAppTree;
+          return { tag, version, sha, uploadedAt, active };
+        })
+      )
+    ).filter((row): row is VersionEntry => row !== undefined);
     rows.sort((a, b) => b.version - a.version);
     return rows;
   }
 
   /** Resolve `<ref>:<path>` to its tree/blob sha, or undefined if absent. */
   private async treeSha(refPath: string): Promise<string | undefined> {
-    const r = await runRaw(['rev-parse', refPath], {
+    const r = await runRaw(["rev-parse", refPath], {
       cwd: this.bareDir,
       allowNonZero: true,
     });
@@ -394,15 +427,15 @@ export class WorktreeStore {
 
   private async publishCritical(input: PublishInput): Promise<PublishResult> {
     const { sessionId, appId, message } = input;
-    assertSafeId(sessionId, 'invalid_session_id');
-    assertSafeId(appId, 'invalid_app_id');
+    assertSafeId(sessionId, "invalid_session_id");
+    assertSafeId(appId, "invalid_app_id");
     this.assertInitialized();
 
     const sessionDir = this.sessionWorktreePath(sessionId);
     if (!(await pathExists(sessionDir))) {
       throw new WorktreeStoreError(
-        'session_missing',
-        `Session "${sessionId}" has no worktree — call openSession() first.`,
+        "session_missing",
+        `Session "${sessionId}" has no worktree — call openSession() first.`
       );
     }
 
@@ -411,39 +444,46 @@ export class WorktreeStore {
     // contract).
     const appSubdir = `apps/${appId}`;
     await fs.mkdir(path.join(sessionDir, appSubdir), { recursive: true });
-    await run(['add', '--', appSubdir], { cwd: sessionDir });
+    await run(["add", "--", appSubdir], { cwd: sessionDir });
 
-    const diff = await runRaw(['diff', '--cached', '--quiet', '--', appSubdir], {
-      cwd: sessionDir,
-      allowNonZero: true,
-    });
+    const diff = await runRaw(
+      ["diff", "--cached", "--quiet", "--", appSubdir],
+      {
+        cwd: sessionDir,
+        allowNonZero: true,
+      }
+    );
     if (diff.code === 0) {
       throw new WorktreeStoreError(
-        'no_changes',
-        `Session "${sessionId}" has no staged changes under ${appSubdir}.`,
+        "no_changes",
+        `Session "${sessionId}" has no staged changes under ${appSubdir}.`
       );
     }
 
     const subject = `${appId}: ${message}`;
-    await run(['commit', '-m', subject], { cwd: sessionDir });
+    await run(["commit", "-m", subject], { cwd: sessionDir });
 
     // Rebase if main advanced under us. Inside the publish mutex,
     // the only writer that can have advanced main is a publish that
     // completed before us — `merge-base` is the exact "did we
     // diverge" probe.
-    const mainBeforeSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
+    const mainBeforeSha =
+      (await revParse(this.bareDir, "refs/heads/main")) ?? "";
     const sessionBranch = sessionBranchName(sessionId);
-    const mergeBase = await run(['merge-base', 'refs/heads/main', sessionBranch], {
-      cwd: this.bareDir,
-    });
+    const mergeBase = await run(
+      ["merge-base", "refs/heads/main", sessionBranch],
+      {
+        cwd: this.bareDir,
+      }
+    );
     if (mergeBase !== mainBeforeSha) {
       // Replay the session's commits on top of current main. We do
       // the rebase in the session worktree (it has the index + HEAD
       // git needs for a normal rebase).
-      await run(['rebase', 'refs/heads/main'], { cwd: sessionDir });
+      await run(["rebase", "refs/heads/main"], { cwd: sessionDir });
     }
 
-    const sessionTipSha = await run(['rev-parse', 'HEAD'], { cwd: sessionDir });
+    const sessionTipSha = await run(["rev-parse", "HEAD"], { cwd: sessionDir });
 
     // Run the pre-merge hook AFTER the rebase (the worktree now reflects
     // the exact tree about to go live, with the final merged `app.json`)
@@ -451,7 +491,7 @@ export class WorktreeStore {
     // A throw here — e.g. an ext-band spec the vault refuses — aborts the
     // publish before `main` advances or a tag is minted.
     if (input.beforeMerge) {
-      await input.beforeMerge(path.join(sessionDir, 'apps', appId));
+      await input.beforeMerge(path.join(sessionDir, "apps", appId));
     }
 
     // Pick the next version number BEFORE writing the tag so a
@@ -460,11 +500,11 @@ export class WorktreeStore {
     // honor existing tags — never collides.
     const nextN = await this.nextVersionNumber(appId);
     const tag = `${appId}/v${nextN}`;
-    await run(['tag', tag, sessionTipSha], { cwd: this.bareDir });
+    await run(["tag", tag, sessionTipSha], { cwd: this.bareDir });
 
     // Fast-forward main. After the rebase above main is guaranteed
     // an ancestor of session-tip, so a direct ref update is safe.
-    await run(['update-ref', 'refs/heads/main', sessionTipSha, mainBeforeSha], {
+    await run(["update-ref", "refs/heads/main", sessionTipSha, mainBeforeSha], {
       cwd: this.bareDir,
     });
 
@@ -478,41 +518,48 @@ export class WorktreeStore {
     };
   }
 
-  private async rollbackCritical(input: RollbackInput): Promise<RollbackResult> {
+  private async rollbackCritical(
+    input: RollbackInput
+  ): Promise<RollbackResult> {
     const { appId, versionTag } = input;
-    assertSafeId(appId, 'invalid_app_id');
+    assertSafeId(appId, "invalid_app_id");
     this.assertInitialized();
 
     if (!(await revParse(this.bareDir, `refs/tags/${versionTag}`))) {
       throw new WorktreeStoreError(
-        'tag_missing',
-        `Tag "${versionTag}" does not exist in the apps repo.`,
+        "tag_missing",
+        `Tag "${versionTag}" does not exist in the apps repo.`
       );
     }
 
     // Transient worktree off main for the overlay commit. Same
     // reason as openSession — bare repos can't `checkout` directly.
-    const txId = `_rollback-${crypto.randomBytes(6).toString('hex')}`;
+    const txId = `_rollback-${crypto.randomBytes(6).toString("hex")}`;
     const txDir = path.join(this.worktreesDir, txId);
-    await run(['worktree', 'add', '--detach', txDir, 'refs/heads/main'], {
+    await run(["worktree", "add", "--detach", txDir, "refs/heads/main"], {
       cwd: this.bareDir,
     });
     try {
       const appSubdir = `apps/${appId}`;
-      await run(['checkout', `refs/tags/${versionTag}`, '--', appSubdir], { cwd: txDir });
-      await run(['add', '--', appSubdir], { cwd: txDir });
-      const diff = await runRaw(['diff', '--cached', '--quiet', '--', appSubdir], {
+      await run(["checkout", `refs/tags/${versionTag}`, "--", appSubdir], {
         cwd: txDir,
-        allowNonZero: true,
       });
+      await run(["add", "--", appSubdir], { cwd: txDir });
+      const diff = await runRaw(
+        ["diff", "--cached", "--quiet", "--", appSubdir],
+        {
+          cwd: txDir,
+          allowNonZero: true,
+        }
+      );
       if (diff.code === 0) {
         throw new WorktreeStoreError(
-          'no_changes',
-          `Rollback to ${versionTag} would produce no change — current main already matches.`,
+          "no_changes",
+          `Rollback to ${versionTag} would produce no change — current main already matches.`
         );
       }
       const subject = `rollback: ${appId} -> ${versionTag}`;
-      await run(['commit', '-m', subject], { cwd: txDir });
+      await run(["commit", "-m", subject], { cwd: txDir });
       // No pre-merge hook here, deliberately (the asymmetry with
       // `publishCritical`'s `input.beforeMerge` is by design — #160 / #144).
       // Rollback is CODE-ONLY: it relays an older `apps/<appId>/` tree onto
@@ -521,73 +568,90 @@ export class WorktreeStore {
       // its current shape, ahead of the rolled-back code. The mismatch is
       // healed by a re-publish. Rollback is the rarer operation, so we
       // accept the transient code-behind-schema window.
-      const newSha = await run(['rev-parse', 'HEAD'], { cwd: txDir });
-      const oldMainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
-      await run(['update-ref', 'refs/heads/main', newSha, oldMainSha], { cwd: this.bareDir });
+      const newSha = await run(["rev-parse", "HEAD"], { cwd: txDir });
+      const oldMainSha =
+        (await revParse(this.bareDir, "refs/heads/main")) ?? "";
+      await run(["update-ref", "refs/heads/main", newSha, oldMainSha], {
+        cwd: this.bareDir,
+      });
       const newMainDir = await this.ensureMainMaterialization(newSha);
       await this.swapActiveMain(newMainDir);
       return { sha: newSha, materializedMainDir: newMainDir };
     } finally {
-      await runRaw(['worktree', 'remove', '--force', txDir], {
+      await runRaw(["worktree", "remove", "--force", txDir], {
         cwd: this.bareDir,
         allowNonZero: true,
       });
-      await run(['worktree', 'prune'], { cwd: this.bareDir });
+      await run(["worktree", "prune"], { cwd: this.bareDir });
     }
   }
 
   private async deleteAppCritical(
-    appId: string,
+    appId: string
   ): Promise<{ sha: string; materializedMainDir: string }> {
-    assertSafeId(appId, 'invalid_app_id');
+    assertSafeId(appId, "invalid_app_id");
     this.assertInitialized();
 
-    const txId = `_delete-${crypto.randomBytes(6).toString('hex')}`;
+    const txId = `_delete-${crypto.randomBytes(6).toString("hex")}`;
     const txDir = path.join(this.worktreesDir, txId);
-    await run(['worktree', 'add', '--detach', txDir, 'refs/heads/main'], {
+    await run(["worktree", "add", "--detach", txDir, "refs/heads/main"], {
       cwd: this.bareDir,
     });
     try {
       const appSubdir = `apps/${appId}`;
-      const rm = await runRaw(['rm', '-r', '--ignore-unmatch', '--', appSubdir], {
-        cwd: txDir,
-        allowNonZero: true,
-      });
+      const rm = await runRaw(
+        ["rm", "-r", "--ignore-unmatch", "--", appSubdir],
+        {
+          cwd: txDir,
+          allowNonZero: true,
+        }
+      );
       if (rm.code !== 0) {
         throw new WorktreeStoreError(
-          'no_changes',
-          `App "${appId}" not on main — nothing to delete.`,
+          "no_changes",
+          `App "${appId}" not on main — nothing to delete.`
         );
       }
-      const diff = await runRaw(['diff', '--cached', '--quiet', '--', appSubdir], {
-        cwd: txDir,
-        allowNonZero: true,
-      });
+      const diff = await runRaw(
+        ["diff", "--cached", "--quiet", "--", appSubdir],
+        {
+          cwd: txDir,
+          allowNonZero: true,
+        }
+      );
       if (diff.code === 0) {
         throw new WorktreeStoreError(
-          'no_changes',
-          `App "${appId}" not on main — nothing to delete.`,
+          "no_changes",
+          `App "${appId}" not on main — nothing to delete.`
         );
       }
-      await run(['commit', '-m', `delete: ${appId}`], { cwd: txDir });
-      const newSha = await run(['rev-parse', 'HEAD'], { cwd: txDir });
-      const oldMainSha = (await revParse(this.bareDir, 'refs/heads/main')) ?? '';
-      await run(['update-ref', 'refs/heads/main', newSha, oldMainSha], { cwd: this.bareDir });
+      await run(["commit", "-m", `delete: ${appId}`], { cwd: txDir });
+      const newSha = await run(["rev-parse", "HEAD"], { cwd: txDir });
+      const oldMainSha =
+        (await revParse(this.bareDir, "refs/heads/main")) ?? "";
+      await run(["update-ref", "refs/heads/main", newSha, oldMainSha], {
+        cwd: this.bareDir,
+      });
       // Drop the app's version tags too — listVersions(appId) should
       // return [] post-delete. Best-effort per tag.
       const versions = await this.listVersions(appId);
-      for (const v of versions) {
-        await runRaw(['tag', '-d', v.tag], { cwd: this.bareDir, allowNonZero: true });
-      }
+      await Promise.all(
+        versions.map(async (version) =>
+          runRaw(["tag", "-d", version.tag], {
+            cwd: this.bareDir,
+            allowNonZero: true,
+          })
+        )
+      );
       const newMainDir = await this.ensureMainMaterialization(newSha);
       await this.swapActiveMain(newMainDir);
       return { sha: newSha, materializedMainDir: newMainDir };
     } finally {
-      await runRaw(['worktree', 'remove', '--force', txDir], {
+      await runRaw(["worktree", "remove", "--force", txDir], {
         cwd: this.bareDir,
         allowNonZero: true,
       });
-      await run(['worktree', 'prune'], { cwd: this.bareDir });
+      await run(["worktree", "prune"], { cwd: this.bareDir });
     }
   }
 
@@ -616,7 +680,7 @@ export class WorktreeStore {
       // Trust the on-disk tree in that case.
       return dir;
     }
-    await run(['worktree', 'add', '--detach', dir, sha], { cwd: this.bareDir });
+    await run(["worktree", "add", "--detach", dir, sha], { cwd: this.bareDir });
     return dir;
   }
 
@@ -633,11 +697,11 @@ export class WorktreeStore {
     this.activeMainDir = newDir;
     await this.updateActiveMainLink(newDir);
     if (previous && previous !== newDir) {
-      await runRaw(['worktree', 'remove', '--force', previous], {
+      await runRaw(["worktree", "remove", "--force", previous], {
         cwd: this.bareDir,
         allowNonZero: true,
       });
-      await run(['worktree', 'prune'], { cwd: this.bareDir });
+      await run(["worktree", "prune"], { cwd: this.bareDir });
       await fs.rm(previous, { recursive: true, force: true });
     }
   }
@@ -651,7 +715,7 @@ export class WorktreeStore {
    */
   private async updateActiveMainLink(targetDir: string): Promise<void> {
     const rel = path.relative(this.root, targetDir);
-    const tmp = `${this.activeMainLink}.tmp-${crypto.randomBytes(6).toString('hex')}`;
+    const tmp = `${this.activeMainLink}.tmp-${crypto.randomBytes(6).toString("hex")}`;
     await fs.symlink(rel, tmp);
     await fs.rename(tmp, this.activeMainLink);
   }
@@ -663,8 +727,8 @@ export class WorktreeStore {
   private assertInitialized(): void {
     if (!this.initialized) {
       throw new WorktreeStoreError(
-        'not_initialized',
-        'WorktreeStore.init() must be awaited first.',
+        "not_initialized",
+        "WorktreeStore.init() must be awaited first."
       );
     }
   }
@@ -686,11 +750,14 @@ function sessionBranchName(sessionId: string): string {
   return `sessions/${sessionId}`;
 }
 
-function assertSafeId(id: string, code: 'invalid_app_id' | 'invalid_session_id'): void {
+function assertSafeId(
+  id: string,
+  code: "invalid_app_id" | "invalid_session_id"
+): void {
   if (!SAFE_ID_RE.test(id)) {
     throw new WorktreeStoreError(
       code,
-      `"${id}" is not a valid id (allowed: ASCII letter or digit, then letters/digits/_/-).`,
+      `"${id}" is not a valid id (allowed: ASCII letter or digit, then letters/digits/_/-).`
     );
   }
 }
@@ -705,7 +772,9 @@ async function pathExists(p: string): Promise<boolean> {
 }
 
 async function readJson(p: string): Promise<Record<string, unknown>> {
-  const text = await fs.readFile(p, 'utf8');
+  const text = await fs.readFile(p, "utf8");
   const parsed: unknown = JSON.parse(text);
-  return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  return parsed && typeof parsed === "object"
+    ? (parsed as Record<string, unknown>)
+    : {};
 }

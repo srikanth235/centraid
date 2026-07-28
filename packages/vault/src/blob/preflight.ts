@@ -1,10 +1,11 @@
-import type { DatabaseSync } from 'node:sqlite';
-import type { BlobCache } from './cache.js';
-import type { CustodyState, RemoteTier } from './custody-types.js';
-import type { LocalBlobStore } from './local.js';
-import { recordKnownStagedBlob } from './staging-record.js';
-import { assertSha } from './store.js';
-import type { BlobTransferState } from './transfer-state.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import type { BlobCache } from "./cache.js";
+import type { CustodyState, RemoteTier } from "./custody-types.js";
+import type { LocalBlobStore } from "./local.js";
+import { recordKnownStagedBlob } from "./staging-record.js";
+import { assertSha } from "./store.js";
+import type { BlobTransferState } from "./transfer-state.js";
 
 export interface BlobPreflightResult {
   exists: boolean;
@@ -38,22 +39,28 @@ export interface BlobPreflightDeps {
 export async function preflightBlob(
   deps: BlobPreflightDeps,
   sha256: string,
-  hint: BlobPreflightHint = {},
+  hint: BlobPreflightHint = {}
 ): Promise<BlobPreflightResult> {
   const sha = assertSha(sha256);
   const local = deps.local.hasSync(sha);
   const replica = deps.vault
-    .prepare('SELECT byte_size FROM blob_replica WHERE sha256 = ?')
+    .prepare("SELECT byte_size FROM blob_replica WHERE sha256 = ?")
     .get(sha) as { byte_size: number } | undefined;
-  let custody: CustodyState = deps.state.outbox(sha) ? 'pending-offsite' : 'missing';
+  let custody: CustodyState = deps.state.outbox(sha)
+    ? "pending-offsite"
+    : "missing";
   const remote = deps.remote();
   let remoteAvailable = true;
   let remoteError: string | undefined;
   let remoteStat = null;
-  if (custody !== 'pending-offsite' && remote) {
+  if (custody !== "pending-offsite" && remote) {
     try {
       remoteStat = await remote.store.stat(sha);
-      if (remoteStat && deps.verifyRemote && !(await deps.verifyRemote(sha, remoteStat.size))) {
+      if (
+        remoteStat &&
+        deps.verifyRemote &&
+        !(await deps.verifyRemote(sha, remoteStat.size))
+      ) {
         deps.cache.replica.unmark(sha);
         remoteStat = null;
       }
@@ -62,19 +69,21 @@ export async function preflightBlob(
       remoteError = error instanceof Error ? error.message : String(error);
     }
   }
-  const evidencedSize = deps.local.statSync(sha)?.size ?? replica?.byte_size ?? hint.byteSize;
-  if (remoteStat && evidencedSize !== undefined) deps.cache.replica.mark(sha, evidencedSize);
-  if (custody !== 'pending-offsite') {
+  const evidencedSize =
+    deps.local.statSync(sha)?.size ?? replica?.byte_size ?? hint.byteSize;
+  if (remoteStat && evidencedSize !== undefined)
+    deps.cache.replica.mark(sha, evidencedSize);
+  if (custody !== "pending-offsite") {
     custody =
       local && remoteStat
-        ? 'replicated'
+        ? "replicated"
         : remoteStat
-          ? 'remote-only'
+          ? "remote-only"
           : local
-            ? 'local-only'
-            : 'missing';
+            ? "local-only"
+            : "missing";
   }
-  if (custody === 'missing') {
+  if (custody === "missing") {
     return {
       exists: false,
       custody,
@@ -86,9 +95,11 @@ export async function preflightBlob(
   const content = deps.vault
     .prepare(
       `SELECT content_id, byte_size, media_type FROM core_content_item
-        WHERE sha256 = ? AND deleted_at IS NULL ORDER BY created_at LIMIT 1`,
+        WHERE sha256 = ? AND deleted_at IS NULL ORDER BY created_at LIMIT 1`
     )
-    .get(sha) as { content_id: string; byte_size: number; media_type: string } | undefined;
+    .get(sha) as
+    | { content_id: string; byte_size: number; media_type: string }
+    | undefined;
   if (content) {
     return {
       exists: true,
@@ -103,7 +114,7 @@ export async function preflightBlob(
   }
   const staged = deps.vault
     .prepare(
-      'SELECT byte_size, media_type FROM blob_staging WHERE sha256 = ? AND variant IS NULL LIMIT 1',
+      "SELECT byte_size, media_type FROM blob_staging WHERE sha256 = ? AND variant IS NULL LIMIT 1"
     )
     .get(sha) as { byte_size: number; media_type: string } | undefined;
   if (staged) {
@@ -117,7 +128,8 @@ export async function preflightBlob(
       ...(remoteError ? { remoteError } : {}),
     };
   }
-  const byteSize = hint.byteSize ?? deps.local.statSync(sha)?.size ?? replica?.byte_size;
+  const byteSize =
+    hint.byteSize ?? deps.local.statSync(sha)?.size ?? replica?.byte_size;
   if (byteSize === undefined) {
     return {
       exists: true,
@@ -140,7 +152,9 @@ export async function preflightBlob(
     staged: true,
     byteSize: receipt.byteSize,
     mediaType: receipt.mediaType,
-    ...(receipt.existingContentId ? { contentId: receipt.existingContentId } : {}),
+    ...(receipt.existingContentId
+      ? { contentId: receipt.existingContentId }
+      : {}),
     remoteAvailable,
     ...(remoteError ? { remoteError } : {}),
   };

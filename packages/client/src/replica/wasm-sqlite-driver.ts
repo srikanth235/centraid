@@ -1,6 +1,6 @@
-import type { BindingSpec, Database } from '@sqlite.org/sqlite-wasm';
+import type { BindingSpec, Database } from "@sqlite.org/sqlite-wasm";
 
-import type { ReplicaBindValue, ReplicaSqliteDriver } from './store-core.js';
+import type { ReplicaBindValue, ReplicaSqliteDriver } from "./store-core.js";
 
 /** Drives the platform-neutral store core against a `@sqlite.org/sqlite-wasm` handle. */
 export class WasmSqliteDriver implements ReplicaSqliteDriver {
@@ -16,12 +16,15 @@ export class WasmSqliteDriver implements ReplicaSqliteDriver {
     }
   }
 
-  all<T extends object>(sql: string, bind: readonly ReplicaBindValue[] = []): T[] {
+  all<T extends object>(
+    sql: string,
+    bind: readonly ReplicaBindValue[] = []
+  ): T[] {
     return this.db.exec({
       sql,
       bind: bind as BindingSpec,
-      rowMode: 'object',
-      returnValue: 'resultRows',
+      rowMode: "object",
+      returnValue: "resultRows",
     }) as T[];
   }
 

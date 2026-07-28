@@ -22,25 +22,30 @@
  * `enrollments.isEnrolled`, which this cascade flips.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AUTHED_DEVICE_HEADER } from '@centraid/app-engine';
-import type { RouteHandler } from '../serve/build-gateway.js';
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+import { AUTHED_DEVICE_HEADER } from "@centraid/app-engine";
+
+import type { RouteHandler } from "../serve/build-gateway.js";
 import type {
   DeviceComputeCapabilities,
   DeviceComputeProfile,
   DeviceRole,
   EnrollmentStore,
   DeviceEnrollment,
-} from '../serve/enrollment-store.js';
-import type { PairingTicketStore } from '../serve/pairing-store.js';
-import { encodePairingTicket, DEFAULT_TICKET_TTL_MS } from '../serve/pairing-store.js';
-import { parseGrants, resolveInvitation } from './device-invitations.js';
-import { readJson, sendJson } from './route-helpers.js';
+} from "../serve/enrollment-store.js";
+import type { PairingTicketStore } from "../serve/pairing-store.js";
+import {
+  encodePairingTicket,
+  DEFAULT_TICKET_TTL_MS,
+} from "../serve/pairing-store.js";
+import { parseGrants, resolveInvitation } from "./device-invitations.js";
+import { readJson, sendJson } from "./route-helpers.js";
 
-const DEVICES_PATH = '/centraid/_gateway/devices';
+const DEVICES_PATH = "/centraid/_gateway/devices";
 const DEVICES_TICKET_PATH = `${DEVICES_PATH}/ticket`;
 /** The canonical vault-addressing header (mirrors the client's `VAULT_HEADER`). */
-const VAULT_HEADER = 'x-centraid-vault';
+const VAULT_HEADER = "x-centraid-vault";
 
 /**
  * One paired device on the wire (mirrors the client's `CentraidGatewayDevice`
@@ -55,7 +60,7 @@ interface DeviceDTO {
   memberLabel: string;
   label: string;
   platform?: string;
-  transport: 'iroh';
+  transport: "iroh";
   vaultId: string;
   vaultName?: string;
   addedAt?: string;
@@ -106,31 +111,39 @@ export interface DevicesRouteDeps {
 function callerDeviceKey(req: IncomingMessage): string | undefined {
   const raw = req.headers[AUTHED_DEVICE_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
-    if (url.pathname !== DEVICES_PATH && !url.pathname.startsWith(`${DEVICES_PATH}/`)) {
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
+    const url = new URL(req.url ?? "/", "http://gateway.local");
+    if (
+      url.pathname !== DEVICES_PATH &&
+      !url.pathname.startsWith(`${DEVICES_PATH}/`)
+    ) {
       return false;
     }
 
     const callerKey = callerDeviceKey(req);
-    const allowedVaults = new Set(callerKey ? deps.enrollments.vaultsFor(callerKey) : []);
+    const allowedVaults = new Set(
+      callerKey ? deps.enrollments.vaultsFor(callerKey) : []
+    );
     const isAllowed = (vaultId: string): boolean => allowedVaults.has(vaultId);
 
-    const method = req.method ?? 'GET';
+    const method = req.method ?? "GET";
 
     if (url.pathname === DEVICES_PATH) {
       if (callerKey === undefined) {
         return sendJson(res, 403, {
-          error: 'device_identity_required',
-          message: 'this route requires a proved iroh device identity',
+          error: "device_identity_required",
+          message: "this route requires a proved iroh device identity",
         });
       }
-      if (method !== 'GET') {
-        return sendJson(res, 405, { error: 'method_not_allowed' });
+      if (method !== "GET") {
+        return sendJson(res, 405, { error: "method_not_allowed" });
       }
       const devices = deps.enrollments
         .list()
@@ -144,29 +157,30 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     // (the inverse of revoke; the wire twin of `cli/device-admin.ts`'s `pair`).
     // Matched BEFORE the DELETE `/:id` branch so `ticket` isn't read as an id.
     if (url.pathname === DEVICES_TICKET_PATH) {
-      if (method !== 'POST') {
-        return sendJson(res, 405, { error: 'method_not_allowed' });
+      if (method !== "POST") {
+        return sendJson(res, 405, { error: "method_not_allowed" });
       }
       let body: Record<string, unknown>;
       try {
         body = await readJson(req);
       } catch {
-        return sendJson(res, 400, { error: 'invalid_body' });
+        return sendJson(res, 400, { error: "invalid_body" });
       }
       // Target vault: explicit `body.vaultId`, else the addressed-vault header
       // the shell/web control session stamps on every request.
       const headerVault = req.headers[VAULT_HEADER];
       const requested =
-        typeof body.vaultId === 'string'
+        typeof body.vaultId === "string"
           ? body.vaultId
-          : typeof headerVault === 'string'
+          : typeof headerVault === "string"
             ? headerVault
             : undefined;
       const hostCustody = deps.canMintPairingTicket?.(req) === true;
       if (!callerKey && !hostCustody) {
         return sendJson(res, 403, {
-          error: 'device_identity_required',
-          message: 'pairing tickets require an enrolled admin device or direct host custody',
+          error: "device_identity_required",
+          message:
+            "pairing tickets require an enrolled admin device or direct host custody",
         });
       }
       const hostVaults = hostCustody ? (deps.vaultIds?.() ?? []) : [];
@@ -182,10 +196,11 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
             [...allowedVaults][0] ??
             hostVaults[0])
           : [...allowedVaults, ...hostVaults].find(
-              (vaultId) => vaultId === requested || deps.vaultName(vaultId) === requested,
+              (vaultId) =>
+                vaultId === requested || deps.vaultName(vaultId) === requested
             );
       if (target === undefined) {
-        return sendJson(res, 400, { error: 'vault_required' });
+        return sendJson(res, 400, { error: "vault_required" });
       }
       // Scope + existence guard (no existence leak — a device caller outside
       // the vault, or an unknown vault, both 404 the same way).
@@ -193,7 +208,7 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
         (!isAllowed(target) && !hostVaults.includes(target)) ||
         deps.vaultName(target) === undefined
       ) {
-        return sendJson(res, 404, { error: 'not_found' });
+        return sendJson(res, 404, { error: "not_found" });
       }
       // `admin` is grantable here, not just `write`/`read`: granting admin is
       // the only way a vault gets a second owner (or replaces a lost one).
@@ -201,15 +216,15 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       // The default stays `write`: a ticket LEAVES this machine, and whatever
       // redeems it lands at the roles baked into it. Defaulting to admin would
       // let a casually paired phone mint further tickets and revoke this device.
-      const role = body.role ?? 'write';
-      if (role !== 'admin' && role !== 'write' && role !== 'read') {
-        return sendJson(res, 400, { error: 'invalid_role' });
+      const role = body.role ?? "write";
+      if (role !== "admin" && role !== "write" && role !== "read") {
+        return sendJson(res, 400, { error: "invalid_role" });
       }
       const requestedGrants = parseGrants(body.grants);
       if (requestedGrants === null) {
         return sendJson(res, 400, {
-          error: 'invalid_grants',
-          message: 'grants must be a list of {vaultId, role}',
+          error: "invalid_grants",
+          message: "grants must be a list of {vaultId, role}",
         });
       }
       const invitation = resolveInvitation({
@@ -223,14 +238,14 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
         body,
         grants: requestedGrants,
       });
-      if ('error' in invitation) {
+      if ("error" in invitation) {
         return sendJson(res, invitation.status, {
           error: invitation.error,
           message: invitation.message,
         });
       }
       const ttlMs =
-        typeof body.ttlMinutes === 'number' && body.ttlMinutes > 0
+        typeof body.ttlMinutes === "number" && body.ttlMinutes > 0
           ? body.ttlMinutes * 60_000
           : DEFAULT_TICKET_TTL_MS;
       // `gw` is required in `PairingTicketPayload`; a ticket without the iroh
@@ -238,19 +253,19 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       const gw = deps.endpointTicket?.();
       if (gw === undefined) {
         return sendJson(res, 409, {
-          error: 'no_iroh_endpoint',
+          error: "no_iroh_endpoint",
           message:
-            'gateway has no iroh endpoint identity yet — start the daemon so it mints its endpoint',
+            "gateway has no iroh endpoint identity yet — start the daemon so it mints its endpoint",
         });
       }
       const minted = deps.tickets.mint(
         { memberId: invitation.memberId, grants: invitation.grants },
-        ttlMs,
+        ttlMs
       );
       const primary = invitation.grants[0] ?? { vaultId: target, role };
       const token = encodePairingTicket({
         v: 1,
-        kind: 'centraid-gw-pair',
+        kind: "centraid-gw-pair",
         gw,
         t: minted.ticketId,
         s: minted.secret,
@@ -278,33 +293,37 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
 
     if (callerKey === undefined) {
       return sendJson(res, 403, {
-        error: 'device_identity_required',
-        message: 'this route requires a proved iroh device identity',
+        error: "device_identity_required",
+        message: "this route requires a proved iroh device identity",
       });
     }
 
     // PUT /centraid/_gateway/devices/:enrollmentId/compute — advertise what
     // this device can do and opt it into charging + unmetered work leases.
-    if (url.pathname.endsWith('/compute')) {
-      if (method !== 'PUT') return sendJson(res, 405, { error: 'method_not_allowed' });
+    if (url.pathname.endsWith("/compute")) {
+      if (method !== "PUT")
+        return sendJson(res, 405, { error: "method_not_allowed" });
       const enrollmentId = decodeURIComponent(
-        url.pathname.slice(`${DEVICES_PATH}/`.length, -'/compute'.length),
+        url.pathname.slice(`${DEVICES_PATH}/`.length, -"/compute".length)
       );
-      const target = deps.enrollments.list().find((row) => row.enrollmentId === enrollmentId);
+      const target = deps.enrollments
+        .list()
+        .find((row) => row.enrollmentId === enrollmentId);
       if (!target || !isAllowed(target.vaultId)) {
-        return sendJson(res, 404, { error: 'not_found' });
+        return sendJson(res, 404, { error: "not_found" });
       }
       let body: Record<string, unknown>;
       try {
         body = await readJson(req);
       } catch {
-        return sendJson(res, 400, { error: 'invalid_body' });
+        return sendJson(res, 400, { error: "invalid_body" });
       }
       const compute = parseComputeProfile(body);
       if (!compute) {
         return sendJson(res, 400, {
-          error: 'invalid_compute_profile',
-          message: 'contribution preference and every capability must be boolean',
+          error: "invalid_compute_profile",
+          message:
+            "contribution preference and every capability must be boolean",
         });
       }
       const updated = deps.enrollments.setCompute(enrollmentId, compute);
@@ -312,17 +331,21 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     }
 
     // /centraid/_gateway/devices/:enrollmentId
-    const enrollmentId = decodeURIComponent(url.pathname.slice(`${DEVICES_PATH}/`.length));
-    if (method !== 'DELETE') {
-      return sendJson(res, 405, { error: 'method_not_allowed' });
+    const enrollmentId = decodeURIComponent(
+      url.pathname.slice(`${DEVICES_PATH}/`.length)
+    );
+    if (method !== "DELETE") {
+      return sendJson(res, 405, { error: "method_not_allowed" });
     }
     if (!enrollmentId) return false;
 
     // Refuse to touch — or even acknowledge — an enrollment outside the
     // caller's allowed vaults (don't leak another vault's device existence).
-    const target = deps.enrollments.list().find((row) => row.enrollmentId === enrollmentId);
+    const target = deps.enrollments
+      .list()
+      .find((row) => row.enrollmentId === enrollmentId);
     if (target && !isAllowed(target.vaultId)) {
-      return sendJson(res, 404, { error: 'not_found' });
+      return sendJson(res, 404, { error: "not_found" });
     }
 
     // A device may unpair itself; revoking a peer requires admin role in this
@@ -330,11 +353,11 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     if (
       target &&
       callerKey !== target.endpointId &&
-      deps.enrollments.get(callerKey, target.vaultId)?.role !== 'admin'
+      deps.enrollments.get(callerKey, target.vaultId)?.role !== "admin"
     ) {
       return sendJson(res, 403, {
-        error: 'not_admin',
-        message: 'only an admin device can revoke another device',
+        error: "not_admin",
+        message: "only an admin device can revoke another device",
       });
     }
 
@@ -351,10 +374,10 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
       const vaultName = deps.vaultName(target.vaultId) ?? target.vaultId;
       if (body.confirmLastAdmin !== vaultName) {
         return sendJson(res, 409, {
-          error: 'last_admin_confirmation_required',
+          error: "last_admin_confirmation_required",
           message:
             `this is the last admin enrollment; type ${JSON.stringify(vaultName)} in ` +
-            'confirmLastAdmin. Losing it requires filesystem access and the gateway CLI to recover.',
+            "confirmLastAdmin. Losing it requires filesystem access and the gateway CLI to recover.",
         });
       }
     }
@@ -367,19 +390,28 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     await deps.onRevoked?.(removed);
     // A device key with no remaining enrollment loses its live iroh transport.
     const deadKeys = new Set(
-      removed.map((r) => r.endpointId).filter((key) => !deps.enrollments.isEnrolled(key)),
+      removed
+        .map((r) => r.endpointId)
+        .filter((key) => !deps.enrollments.isEnrolled(key))
     );
-    const selfKey = callerKey && deadKeys.has(callerKey) ? callerKey : undefined;
-    for (const key of deadKeys) {
-      if (key === selfKey) continue;
-      await deps.onEndpointRevoked?.(key);
-    }
+    const selfKey =
+      callerKey && deadKeys.has(callerKey) ? callerKey : undefined;
+    await Promise.all(
+      [...deadKeys]
+        .filter((key) => key !== selfKey)
+        .map(async (key) => {
+          await deps.onEndpointRevoked?.(key);
+        })
+    );
     const sent = sendJson(res, 200, { removed: true });
     if (selfKey && deps.onEndpointRevoked) {
       // Let a self-unpair response finish traversing the current QUIC stream.
       // The enrollment is already absent, so the per-stream authorize guard
       // rejects any second request during this short close grace.
-      const timer = setTimeout(() => void deps.onEndpointRevoked?.(selfKey), 1_000);
+      const timer = setTimeout(
+        () => void deps.onEndpointRevoked?.(selfKey),
+        1_000
+      );
       timer.unref();
     }
     return sent;
@@ -387,19 +419,29 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
 }
 
 /** Is this the last live device of the last admin MEMBER of its vault? */
-function lastAdminDeviceFor(deps: DevicesRouteDeps, row: DeviceEnrollment): boolean {
+function lastAdminDeviceFor(
+  deps: DevicesRouteDeps,
+  row: DeviceEnrollment
+): boolean {
   const admins = deps.enrollments.members.adminsOf(row.vaultId);
   if (admins.length !== 1 || admins[0] !== row.memberId) return false;
   const live = new Set(
     deps.enrollments
       .list()
-      .filter((candidate) => candidate.memberId === row.memberId && candidate.role !== 'revoked')
-      .map((candidate) => candidate.endpointId),
+      .filter(
+        (candidate) =>
+          candidate.memberId === row.memberId && candidate.role !== "revoked"
+      )
+      .map((candidate) => candidate.endpointId)
   );
   return live.size === 1 && live.has(row.endpointId);
 }
 
-function toDto(row: DeviceEnrollment, deps: DevicesRouteDeps, callerKey: string): DeviceDTO {
+function toDto(
+  row: DeviceEnrollment,
+  deps: DevicesRouteDeps,
+  callerKey: string
+): DeviceDTO {
   const vaultName = deps.vaultName(row.vaultId);
   return {
     deviceId: row.enrollmentId,
@@ -407,47 +449,50 @@ function toDto(row: DeviceEnrollment, deps: DevicesRouteDeps, callerKey: string)
     memberId: row.memberId,
     memberLabel: row.memberLabel,
     label: row.label,
-    ...(row.platform !== undefined ? { platform: row.platform } : {}),
-    transport: 'iroh',
+    ...(row.platform === undefined ? {} : { platform: row.platform }),
+    transport: "iroh",
     vaultId: row.vaultId,
-    ...(vaultName !== undefined ? { vaultName } : {}),
+    ...(vaultName === undefined ? {} : { vaultName }),
     addedAt: row.addedAt,
     current: row.endpointId === callerKey,
     role: row.role,
     rememberDevice: row.rememberDevice,
-    ...(row.grantProfile !== undefined ? { grantProfile: [...row.grantProfile] } : {}),
+    ...(row.grantProfile === undefined
+      ? {}
+      : { grantProfile: [...row.grantProfile] }),
     ...(row.compute ? { compute: row.compute } : {}),
     ...(row.checkpoint ? { checkpoint: row.checkpoint } : {}),
   };
 }
 
 const COMPUTE_KEYS: readonly (keyof DeviceComputeCapabilities)[] = [
-  'previews',
-  'poster',
-  'pdfText',
-  'ocr',
-  'embedding',
-  'transcript',
-  'edgeSeal',
-  'backgroundTransfer',
+  "previews",
+  "poster",
+  "pdfText",
+  "ocr",
+  "embedding",
+  "transcript",
+  "edgeSeal",
+  "backgroundTransfer",
 ];
 
 function parseComputeProfile(
-  body: Record<string, unknown>,
-): Omit<DeviceComputeProfile, 'updatedAt'> | undefined {
+  body: Record<string, unknown>
+): Omit<DeviceComputeProfile, "updatedAt"> | undefined {
   if (
-    typeof body.contributeWhileCharging !== 'boolean' ||
-    typeof body.capabilities !== 'object' ||
+    typeof body.contributeWhileCharging !== "boolean" ||
+    typeof body.capabilities !== "object" ||
     body.capabilities === null
   ) {
     return undefined;
   }
   const raw = body.capabilities as Record<string, unknown>;
-  if (!COMPUTE_KEYS.every((key) => typeof raw[key] === 'boolean')) return undefined;
+  if (!COMPUTE_KEYS.every((key) => typeof raw[key] === "boolean"))
+    return undefined;
   return {
     contributeWhileCharging: body.contributeWhileCharging,
     capabilities: Object.fromEntries(
-      COMPUTE_KEYS.map((key) => [key, raw[key]]),
+      COMPUTE_KEYS.map((key) => [key, raw[key]])
     ) as unknown as DeviceComputeCapabilities,
   };
 }

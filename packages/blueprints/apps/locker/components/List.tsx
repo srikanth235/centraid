@@ -4,11 +4,12 @@
 // `render()` synchronously on every keystroke, same as any other state
 // change here — see logic.ts's `applySearchInput` for the debounced fetch
 // that runs behind it).
-import { catOf, monoOf, subOf, warnColor } from '../format.ts';
-import type { LockerRow } from '../types.ts';
-import { Icon } from './Shared.tsx';
-import styles from './List.module.css';
-import shared from './shared.module.css';
+import { catOf, monoOf, subOf, warnColor } from "../format.ts";
+import type { LockerRow } from "../types.ts";
+import { Icon } from "./Shared.tsx";
+
+import styles from "./List.module.css";
+import shared from "./shared.module.css";
 
 function ListRow({
   item,
@@ -27,7 +28,10 @@ function ListRow({
       aria-current={selectedId === item.item_id}
       onClick={() => onSelect(item.item_id)}
     >
-      <span className={shared.itile} style={{ background: catOf(item.type).color }}>
+      <span
+        className={shared.itile}
+        style={{ background: catOf(item.type).color }}
+      >
         {monoOf(item)}
       </span>
       <span className={shared.imain}>
@@ -35,12 +39,19 @@ function ListRow({
           {item.title}
           {item.favorite ? (
             <span className={styles.star}>
-              <Icon name="starFill" size={12} fill="currentColor" stroke="none" />
+              <Icon
+                name="starFill"
+                size={12}
+                fill="currentColor"
+                stroke="none"
+              />
             </span>
           ) : null}
-          {wc ? <span className={styles.warnDot} style={{ background: wc }} /> : null}
+          {wc ? (
+            <span className={styles.warnDot} style={{ background: wc }} />
+          ) : null}
         </span>
-        <span className={shared.isub}>{subOf(item) || '—'}</span>
+        <span className={shared.isub}>{subOf(item) || "—"}</span>
       </span>
     </button>
   );
@@ -71,7 +82,12 @@ export function LockerList({
     <section className={styles.list}>
       <div className={styles.listTop}>
         <div className={styles.listHead}>
-          <button type="button" className={styles.hamburger} aria-label="Menu" onClick={onOpenSide}>
+          <button
+            type="button"
+            className={styles.hamburger}
+            aria-label="Menu"
+            onClick={onOpenSide}
+          >
             <Icon name="menu" sw={1.75} />
           </button>
           <span className={styles.listTitle}>{listTitle}</span>
@@ -86,7 +102,7 @@ export function LockerList({
             value={search}
             onChange={(e) => onSearchInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Escape' && search) {
+              if (e.key === "Escape" && search) {
                 e.preventDefault();
                 onClearSearch();
               }
@@ -98,20 +114,29 @@ export function LockerList({
         {pool.length === 0 ? (
           <div className={shared.listEmpty}>
             <div className={shared.ic}>
-              <Icon name={search.trim() ? 'search' : 'lock'} sw={1.6} size={20} />
+              <Icon
+                name={search.trim() ? "search" : "lock"}
+                sw={1.6}
+                size={20}
+              />
             </div>
             <div className={shared.listEmptyTitle}>
-              {search.trim() ? 'No matches' : 'Nothing here'}
+              {search.trim() ? "No matches" : "Nothing here"}
             </div>
             <div className={shared.listEmptySub}>
               {search.trim()
-                ? 'Try a different search term.'
-                : 'Add a login, card, or note to get started.'}
+                ? "Try a different search term."
+                : "Add a login, card, or note to get started."}
             </div>
           </div>
         ) : (
           pool.map((item) => (
-            <ListRow key={item.item_id} item={item} selectedId={selectedId} onSelect={onSelect} />
+            <ListRow
+              key={item.item_id}
+              item={item}
+              selectedId={selectedId}
+              onSelect={onSelect}
+            />
           ))
         )}
       </div>

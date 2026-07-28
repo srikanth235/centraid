@@ -5,14 +5,14 @@
 // doc does. Built per turn from the live file so it never drifts from the
 // schema, and kept prose-light: it is model context, not documentation.
 
-import type { VaultDb } from '../db.js';
-import { RELATIONS_SCHEME_URI } from '../commands/links.js';
-import { FLAGS_SCHEME_URI, STARRED_NOTATION } from '../commands/flags.js';
-import { FOLDER_SCHEME_URI } from '../commands/documents.js';
-import { LIST_SCHEME_URI } from '../commands/people.js';
-import { SEARCHABLE } from '../schema/fts.js';
-import { VAULT_TABLES } from '../schema/tables.js';
-import { extPhysicalNames } from './ext.js';
+import { FOLDER_SCHEME_URI } from "../commands/documents.js";
+import { FLAGS_SCHEME_URI, STARRED_NOTATION } from "../commands/flags.js";
+import { RELATIONS_SCHEME_URI } from "../commands/links.js";
+import { LIST_SCHEME_URI } from "../commands/people.js";
+import type { VaultDb } from "../db.js";
+import { SEARCHABLE } from "../schema/fts.js";
+import { VAULT_TABLES } from "../schema/tables.js";
+import { extPhysicalNames } from "./ext.js";
 
 const CONVENTIONS = `## Conventions
 - Logical entities are schema-qualified (core.party); physical SQLite tables are underscore-joined (core_party). Polymorphic refs (core_link.from_type, core_tag.target_type, …) store the LOGICAL name.
@@ -42,14 +42,14 @@ function schemeLines(db: VaultDb, uri: string): string[] {
       .prepare(
         `SELECT c.notation, c.pref_label FROM core_concept c
            JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-          WHERE s.uri = ? ORDER BY c.notation`,
+          WHERE s.uri = ? ORDER BY c.notation`
       )
       .all(uri) as { notation: string | null; pref_label: string | null }[];
     return rows
       .filter((r) => r.notation)
       .map(
         (r) =>
-          `${r.notation}${r.pref_label && r.pref_label !== r.notation ? ` — ${r.pref_label}` : ''}`,
+          `${r.notation}${r.pref_label && r.pref_label !== r.notation ? ` — ${r.pref_label}` : ""}`
       );
   } catch {
     return [];
@@ -59,19 +59,21 @@ function schemeLines(db: VaultDb, uri: string): string[] {
 /** Live CREATE TABLE statements: every canonical table + the live ext band. */
 function ddl(db: VaultDb): string {
   const physical = new Set(
-    Object.entries(VAULT_TABLES).flatMap(([schema, tables]) => tables.map((t) => `${schema}_${t}`)),
+    Object.entries(VAULT_TABLES).flatMap(([schema, tables]) =>
+      tables.map((t) => `${schema}_${t}`)
+    )
   );
   for (const name of extPhysicalNames(db.vault)) physical.add(name);
   const rows = db.vault
     .prepare(
       `SELECT name, sql FROM sqlite_master
-        WHERE type = 'table' AND sql IS NOT NULL ORDER BY name`,
+        WHERE type = 'table' AND sql IS NOT NULL ORDER BY name`
     )
     .all() as { name: string; sql: string }[];
   return rows
     .filter((r) => physical.has(r.name))
     .map((r) => `${r.sql};`)
-    .join('\n');
+    .join("\n");
 }
 
 /**
@@ -86,21 +88,24 @@ export function buildAssistantContext(db: VaultDb): string {
   const relations = schemeLines(db, RELATIONS_SCHEME_URI);
   if (relations.length > 0) {
     sections.push(
-      `## Link relations (core_link.relation_concept_id → core_concept.notation)\n${relations.join('\n')}`,
+      `## Link relations (core_link.relation_concept_id → core_concept.notation)\n${relations.join("\n")}`
     );
   }
   const vocab: string[] = [];
   const flags = schemeLines(db, FLAGS_SCHEME_URI);
-  if (flags.length > 0) vocab.push(`flags: ${flags.join(', ')}`);
+  if (flags.length > 0) vocab.push(`flags: ${flags.join(", ")}`);
   const folders = schemeLines(db, FOLDER_SCHEME_URI);
-  if (folders.length > 0) vocab.push(`document folders: ${folders.join(', ')}`);
+  if (folders.length > 0) vocab.push(`document folders: ${folders.join(", ")}`);
   const lists = schemeLines(db, LIST_SCHEME_URI);
-  if (lists.length > 0) vocab.push(`people lists: ${lists.join(', ')}`);
-  if (vocab.length > 0) sections.push(`## Concept vocabularies\n${vocab.join('\n')}`);
+  if (lists.length > 0) vocab.push(`people lists: ${lists.join(", ")}`);
+  if (vocab.length > 0)
+    sections.push(`## Concept vocabularies\n${vocab.join("\n")}`);
 
   const fts = Object.values(SEARCHABLE)
-    .map((s) => `${s.fts} (id: ${s.idColumn}; text: ${s.maskColumns.join(', ')})`)
-    .join('\n');
+    .map(
+      (s) => `${s.fts} (id: ${s.idColumn}; text: ${s.maskColumns.join(", ")})`
+    )
+    .join("\n");
   sections.push(`${FTS_NOTE}\n${fts}`);
 
   const extNames = extPhysicalNames(db.vault);
@@ -109,7 +114,7 @@ export function buildAssistantContext(db: VaultDb): string {
       `## App extension tables (the ext band)\n` +
         `Tables named ext_<app>_<table> are app-declared extensions living beside the canonical model. ` +
         `Logical names are ext.<appId>.<table> (write via the ext.<appId>.insert/update/delete commands; ` +
-        `link/tag them like any entity). Present: ${extNames.join(', ')}.`,
+        `link/tag them like any entity). Present: ${extNames.join(", ")}.`
     );
   }
 
@@ -118,12 +123,12 @@ export function buildAssistantContext(db: VaultDb): string {
     sections.push(
       `## Typed commands (the ONLY write path — use the vault_invoke tool)\n` +
         `Invalid input returns the command's schema error; confirm-gated commands park for the owner's approval (risk is a salience marker, not a gate — issue #306).\n` +
-        commands.join('\n'),
+        commands.join("\n")
     );
   }
 
   sections.push(`## Schema (live DDL)\n${ddl(db)}`);
-  return sections.join('\n\n');
+  return sections.join("\n\n");
 }
 
 /** One line per registered command: name — risk (+ parks note). */
@@ -133,7 +138,7 @@ function registeredCommands(db: VaultDb): string[] {
       .prepare(
         `SELECT c.name, c.risk, cap.requires_confirmation
            FROM agent_command c JOIN agent_capability cap ON cap.command_id = c.command_id
-          ORDER BY c.name`,
+          ORDER BY c.name`
       )
       .all() as { name: string; risk: string; requires_confirmation: number }[];
     // Only the capability's confirm flag parks (issue #306; #308 fixed the
@@ -141,7 +146,7 @@ function registeredCommands(db: VaultDb): string[] {
     // a gate that no longer exists.
     return rows.map(
       (r) =>
-        `${r.name} — risk ${r.risk}${r.requires_confirmation === 1 ? ' (parks for owner approval)' : ''}`,
+        `${r.name} — risk ${r.risk}${r.requires_confirmation === 1 ? " (parks for owner approval)" : ""}`
     );
   } catch {
     return [];

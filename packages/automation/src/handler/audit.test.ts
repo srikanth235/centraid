@@ -2,8 +2,10 @@
  * Direct unit tests for automation handler audit helpers (issue #545 B5).
  */
 
-import { describe, expect, it, vi } from 'vitest';
-import type { Turn } from '@centraid/app-engine';
+import type { ConversationStore, Turn } from "@centraid/app-engine";
+import { describe, expect, it, vi } from "vitest";
+
+import type { RunEventSink } from "./audit.js";
 import {
   applyRetention,
   extractReturnEnvelope,
@@ -14,16 +16,16 @@ import {
   usageCloseFields,
   openRunNode,
   closeRunNode,
-} from './audit.js';
+} from "./audit.js";
 
-describe('truncateForAudit', () => {
-  it('returns undefined for undefined and serializes small values', () => {
+describe(truncateForAudit, () => {
+  it("returns undefined for undefined and serializes small values", () => {
     expect(truncateForAudit(undefined)).toBeUndefined();
     expect(truncateForAudit({ a: 1 })).toBe(JSON.stringify({ a: 1 }));
   });
 
-  it('caps oversize payloads with a truncation envelope', () => {
-    const big = { blob: 'x'.repeat(70_000) };
+  it("caps oversize payloads with a truncation envelope", () => {
+    const big = { blob: "x".repeat(70_000) };
     const out = JSON.parse(truncateForAudit(big)!) as {
       _truncated: boolean;
       bytes: number;
@@ -31,128 +33,136 @@ describe('truncateForAudit', () => {
     };
     expect(out._truncated).toBe(true);
     expect(out.bytes).toBeGreaterThan(64 * 1024);
-    expect(out.head.length).toBe(256);
+    expect(out.head).toHaveLength(256);
   });
 
-  it('marks unserializable values', () => {
+  it("marks unserializable values", () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
-    expect(JSON.parse(truncateForAudit(cyclic)!)).toEqual({
+    expect(JSON.parse(truncateForAudit(cyclic)!)).toStrictEqual({
       _truncated: true,
-      reason: 'unserializable',
+      reason: "unserializable",
     });
   });
 });
 
-describe('rowToRunRef / extractReturnEnvelope / makeNodeId', () => {
-  it('projects a turn into a RunRef and parses input/output JSON when valid', () => {
+describe("rowToRunRef / extractReturnEnvelope / makeNodeId", () => {
+  it("projects a turn into a RunRef and parses input/output JSON when valid", () => {
     const turn: Turn = {
-      turnId: 't1',
-      conversationId: 'app/digest',
+      turnId: "t1",
+      conversationId: "app/digest",
       seq: 0,
-      triggerKind: 'scheduled',
+      triggerKind: "scheduled",
       startedAt: 10,
       endedAt: 20,
       ok: true,
-      summary: 'done',
+      summary: "done",
       outputJson: '{"n":1}',
       pinned: false,
     };
-    const ref = rowToRunRef(turn, 'app/digest', '{"k":2}');
+    const ref = rowToRunRef(turn, "app/digest", '{"k":2}');
     expect(ref).toMatchObject({
-      runId: 't1',
-      automationId: 'app/digest',
-      triggerKind: 'scheduled',
+      runId: "t1",
+      automationId: "app/digest",
+      triggerKind: "scheduled",
       ok: true,
-      summary: 'done',
+      summary: "done",
       input: { k: 2 },
       output: { n: 1 },
     });
     // Non-JSON input falls through as a string.
-    expect(rowToRunRef(turn, 'app/digest', 'not-json').input).toBe('not-json');
+    expect(rowToRunRef(turn, "app/digest", "not-json").input).toBe("not-json");
   });
 
-  it('extractReturnEnvelope only lifts summary/output from plain objects', () => {
-    expect(extractReturnEnvelope(undefined)).toEqual({ value: undefined });
-    expect(extractReturnEnvelope('x')).toEqual({ value: 'x' });
-    expect(extractReturnEnvelope([1])).toEqual({ value: [1] });
-    expect(extractReturnEnvelope({ summary: 's', output: { a: 1 }, extra: true })).toEqual({
-      value: { summary: 's', output: { a: 1 }, extra: true },
-      summary: 's',
+  it("extractReturnEnvelope only lifts summary/output from plain objects", () => {
+    expect(extractReturnEnvelope(undefined)).toStrictEqual({
+      value: undefined,
+    });
+    expect(extractReturnEnvelope("x")).toStrictEqual({ value: "x" });
+    expect(extractReturnEnvelope([1])).toStrictEqual({ value: [1] });
+    expect(
+      extractReturnEnvelope({ summary: "s", output: { a: 1 }, extra: true })
+    ).toStrictEqual({
+      value: { summary: "s", output: { a: 1 }, extra: true },
+      summary: "s",
       output: { a: 1 },
     });
   });
 
-  it('makeNodeId embeds runId + ordinal + a short uuid suffix', () => {
-    const id = makeNodeId('run-1', 3);
-    expect(id).toMatch(/^run-1:3:[0-9a-f]{6}$/);
+  it("makeNodeId embeds runId + ordinal + a short uuid suffix", () => {
+    const id = makeNodeId("run-1", 3);
+    expect(id).toMatch(/^run-1:3:[0-9a-f]{6}$/u);
   });
 });
 
-describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
-  it('applyRetention maps history keep policies onto pruneAutomation', () => {
-    const store = { pruneAutomation: vi.fn() };
-    applyRetention(store as never, 'app/a', undefined);
+describe("applyRetention / usageCloseFields / open+closeRunNode", () => {
+  it("applyRetention maps history keep policies onto pruneAutomation", () => {
+    const store = {
+      pruneAutomation: vi.fn<ConversationStore["pruneAutomation"]>(),
+    };
+    applyRetention(store as never, "app/a", undefined);
     expect(store.pruneAutomation).not.toHaveBeenCalled();
 
-    applyRetention(store as never, 'app/a', { keep: 'all' });
+    applyRetention(store as never, "app/a", { keep: "all" });
     expect(store.pruneAutomation).not.toHaveBeenCalled();
 
-    applyRetention(store as never, 'app/a', { keep: 'errors' });
-    expect(store.pruneAutomation).toHaveBeenCalledWith('app/a', { errorsOnly: true });
+    applyRetention(store as never, "app/a", { keep: "errors" });
+    expect(store.pruneAutomation).toHaveBeenCalledWith("app/a", {
+      errorsOnly: true,
+    });
 
-    applyRetention(store as never, 'app/a', { keep: { count: 5 } });
-    expect(store.pruneAutomation).toHaveBeenCalledWith('app/a', { count: 5 });
+    applyRetention(store as never, "app/a", { keep: { count: 5 } });
+    expect(store.pruneAutomation).toHaveBeenCalledWith("app/a", { count: 5 });
 
-    applyRetention(store as never, 'app/a', { keep: { days: 30 } });
-    expect(store.pruneAutomation).toHaveBeenCalledWith('app/a', { days: 30 });
+    applyRetention(store as never, "app/a", { keep: { days: 30 } });
+    expect(store.pruneAutomation).toHaveBeenCalledWith("app/a", { days: 30 });
   });
 
-  it('usageCloseFields folds a usage stream event into close args', () => {
-    expect(usageCloseFields(undefined)).toEqual({});
+  it("usageCloseFields folds a usage stream event into close args", () => {
+    expect(usageCloseFields(undefined)).toStrictEqual({});
     expect(
       usageCloseFields({
-        type: 'usage',
-        provider: 'codex',
-        model: 'm',
+        type: "usage",
+        provider: "codex",
+        model: "m",
         inputTokens: 1,
         outputTokens: 2,
         costUsd: 0.5,
-      }),
+      })
     ).toMatchObject({
-      model: 'm',
-      provider: 'codex',
+      model: "m",
+      provider: "codex",
       inputTokens: 1,
       outputTokens: 2,
       costUsd: 0.5,
-      costSource: 'agent',
+      costSource: "agent",
     });
   });
 
-  it('openRunNode + closeRunNode write the ledger and emit without throwing on store failures', () => {
+  it("openRunNode + closeRunNode write the ledger and emit without throwing on store failures", () => {
     const store = {
-      openItem: vi.fn(() => {
-        throw new Error('open boom');
+      openItem: vi.fn<ConversationStore["openItem"]>(() => {
+        throw new Error("open boom");
       }),
-      closeItem: vi.fn(() => {
-        throw new Error('close boom');
+      closeItem: vi.fn<ConversationStore["closeItem"]>(() => {
+        throw new Error("close boom");
       }),
     };
-    const emit = vi.fn(() => {
-      throw new Error('emit boom');
+    const emit = vi.fn<RunEventSink>(() => {
+      throw new Error("emit boom");
     });
     // Swallowed failures — handler must not die on audit.
     const nodeId = openRunNode({
       store: store as never,
       emit,
-      runId: 'r1',
+      runId: "r1",
       ordinal: 0,
-      kind: 'tool',
-      name: 'vault_sql',
-      args: { sql: 'select 1' },
+      kind: "tool",
+      name: "vault_sql",
+      args: { sql: "select 1" },
       started: 1,
     });
-    expect(nodeId.startsWith('r1:0:')).toBe(true);
+    expect(nodeId.startsWith("r1:0:")).toBe(true);
 
     closeRunNode({
       store: store as never,
@@ -164,18 +174,35 @@ describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
       started: 1,
       ended: 5,
     });
-    expect(store.openItem).toHaveBeenCalled();
-    expect(store.closeItem).toHaveBeenCalled();
+    expect(store.openItem).toHaveBeenCalledWith({
+      itemId: nodeId,
+      turnId: "r1",
+      ordinal: 0,
+      kind: "tool",
+      name: "vault_sql",
+      argsJson: JSON.stringify({ sql: "select 1" }),
+      startedAt: 1,
+    });
+    expect(store.closeItem).toHaveBeenCalledWith({
+      itemId: nodeId,
+      ok: true,
+      outputJson: JSON.stringify({ rows: [] }),
+      endedAt: 5,
+      durationMs: 4,
+    });
 
     // Happy path still emits item.start / item.end when store+emit succeed.
-    const goodStore = { openItem: vi.fn(), closeItem: vi.fn() };
+    const goodStore = {
+      openItem: vi.fn<ConversationStore["openItem"]>(),
+      closeItem: vi.fn<ConversationStore["closeItem"]>(),
+    };
     const events: unknown[] = [];
     const id = openRunNode({
       store: goodStore as never,
       emit: (e) => events.push(e),
-      runId: 'r2',
+      runId: "r2",
       ordinal: 1,
-      kind: 'step',
+      kind: "step",
       started: 10,
     });
     closeRunNode({
@@ -184,26 +211,31 @@ describe('applyRetention / usageCloseFields / open+closeRunNode', () => {
       nodeId: id,
       ordinal: 1,
       ok: false,
-      error: 'nope',
+      error: "nope",
       started: 10,
       ended: 20,
     });
-    expect(events).toEqual([
-      { type: 'item.start', itemId: id, ordinal: 1, kind: 'step' },
+    expect(events).toStrictEqual([
+      { type: "item.start", itemId: id, ordinal: 1, kind: "step" },
       {
-        type: 'item.end',
+        type: "item.end",
         itemId: id,
         ordinal: 1,
         ok: false,
-        error: 'nope',
+        error: "nope",
         durationMs: 10,
       },
     ]);
   });
 
-  it('noopRunEventSink is callable', () => {
+  it("noopRunEventSink is callable", () => {
     expect(() =>
-      noopRunEventSink({ type: 'item.start', itemId: 'i0', ordinal: 0, kind: 'step' }),
+      noopRunEventSink({
+        type: "item.start",
+        itemId: "i0",
+        ordinal: 0,
+        kind: "step",
+      })
     ).not.toThrow();
   });
 });

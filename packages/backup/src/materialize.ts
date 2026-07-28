@@ -13,10 +13,11 @@
  * snapshot does NOT carry comes back in `absent` (the reconcile records it lost).
  */
 
-import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { unframeChunkPayload } from './compress.js';
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { unframeChunkPayload } from "./compress.js";
 import {
   chunkId as computeChunkId,
   decrypt,
@@ -24,10 +25,15 @@ import {
   deriveDedupKey,
   type Keyring,
   masterKeyForEpoch,
-} from './crypto.js';
-import type { EngineLogger } from './engine-log.js';
-import { isSafeEntryPath, type ManifestEntry, openManifest } from './manifest.js';
-import type { BackupProvider } from './provider.js';
+} from "./crypto.js";
+import type { EngineLogger } from "./engine-log.js";
+import {
+  isSafeEntryPath,
+  type ManifestEntry,
+  openManifest,
+} from "./manifest.js";
+import { applyInOrder } from "./ordered-work.js";
+import type { BackupProvider } from "./provider.js";
 
 export interface MaterializeSnapshotBlobsOptions {
   provider: BackupProvider;
@@ -56,24 +62,28 @@ export interface MaterializeSnapshotBlobsResult {
 
 /** The content sha of a blob entry is its path's final segment (`restoreSnapshot`'s convention). */
 function blobShaOf(entry: ManifestEntry): string | undefined {
-  if (entry.kind !== 'blob') return undefined;
-  const sha = entry.path.split('/').pop();
-  return sha && /^[0-9a-f]{64}$/.test(sha) ? sha : undefined;
+  if (entry.kind !== "blob") return undefined;
+  const sha = entry.path.split("/").pop();
+  return sha && /^[0-9a-f]{64}$/u.test(sha) ? sha : undefined;
 }
 
 export async function materializeSnapshotBlobs(
-  opts: MaterializeSnapshotBlobsOptions,
+  opts: MaterializeSnapshotBlobsOptions
 ): Promise<MaterializeSnapshotBlobsResult> {
   const wanted = new Set(opts.shas);
   if (wanted.size === 0) return { materialized: [], absent: [] };
 
-  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
+  const store = await opts.provider.openDataPlane(
+    opts.targetId,
+    "backup",
+    "read"
+  );
   const row = await opts.provider.getSnapshot(opts.targetId, opts.seq);
   const opened = openManifest(
     await store.get(row.manifestKey),
     opts.keyring,
     opts.vaultId,
-    row.manifestHash,
+    row.manifestHash
   );
   const master = masterKeyForEpoch(opts.keyring, opened.public.keyEpoch);
   const dataKey = deriveDataKey(master, opts.vaultId);
@@ -87,46 +97,54 @@ export async function materializeSnapshotBlobs(
 
   const materialized: string[] = [];
   const absent: string[] = [];
-  for (const sha of wanted) {
+  await applyInOrder(wanted, async (sha) => {
     const entry = bySha.get(sha);
     if (!entry) {
       absent.push(sha);
-      continue;
+      return;
     }
     // Same defensive re-check `restoreSnapshot` applies at the point it touches disk.
     if (!isSafeEntryPath(entry.path)) {
-      throw new Error(`materializeSnapshotBlobs: entry path rejected: "${entry.path}"`);
+      throw new Error(
+        `materializeSnapshotBlobs: entry path rejected: "${entry.path}"`
+      );
     }
-    const dest = path.join(opts.destDir, ...entry.path.split('/'));
+    const dest = path.join(opts.destDir, ...entry.path.split("/"));
     await fs.mkdir(path.dirname(dest), { recursive: true });
-    const hash = createHash('sha256');
-    const handle = await fs.open(dest, 'w');
+    const hash = createHash("sha256");
+    const handle = await fs.open(dest, "w");
     try {
-      for (const id of entry.chunks) {
+      await applyInOrder(entry.chunks, async (id) => {
         // Unseal → unframe → recompute the keyed id: decompression happens
         // BEFORE the integrity check, exactly as in the restore loop.
-        const plain = unframeChunkPayload(decrypt(dataKey, await store.get(`chunks/${id}`)));
+        const plain = unframeChunkPayload(
+          decrypt(dataKey, await store.get(`chunks/${id}`))
+        );
         if (computeChunkId(dedupKey, plain) !== id) {
           throw new Error(
-            `materializeSnapshotBlobs: chunk integrity mismatch for "${entry.path}" (chunk ${id})`,
+            `materializeSnapshotBlobs: chunk integrity mismatch for "${entry.path}" (chunk ${id})`
           );
         }
-        const buf = Buffer.from(plain.buffer, plain.byteOffset, plain.byteLength);
+        const buf = Buffer.from(
+          plain.buffer,
+          plain.byteOffset,
+          plain.byteLength
+        );
         hash.update(buf);
         await handle.write(buf);
-      }
+      });
       await handle.sync();
     } finally {
       await handle.close();
     }
-    const actual = hash.digest('hex');
+    const actual = hash.digest("hex");
     if (actual !== sha) {
       throw new Error(
-        `materializeSnapshotBlobs: "${entry.path}" hash mismatch (expected ${sha}, got ${actual})`,
+        `materializeSnapshotBlobs: "${entry.path}" hash mismatch (expected ${sha}, got ${actual})`
       );
     }
     opts.log?.info?.(`recover: re-pinned blob ${sha} from the snapshot`);
     materialized.push(sha);
-  }
+  });
   return { materialized, absent };
 }

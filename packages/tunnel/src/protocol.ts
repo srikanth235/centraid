@@ -17,11 +17,11 @@
  * implementations in apps/mobile/modules/centraid-tunnel.
  */
 
-export const TUNNEL_ALPN = 'centraid/tunnel/1';
-export const PAIR_ALPN = 'centraid/pair/1';
+export const TUNNEL_ALPN = "centraid/tunnel/1";
+export const PAIR_ALPN = "centraid/pair/1";
 /** Ask the tunnel to defer auth to a gateway-scoped browser app session cookie. */
-export const TUNNEL_AUTH_MODE_HEADER = 'x-centraid-tunnel-auth-mode';
-export const TUNNEL_AUTH_WEB_SESSION = 'web-session';
+export const TUNNEL_AUTH_MODE_HEADER = "x-centraid-tunnel-auth-mode";
+export const TUNNEL_AUTH_WEB_SESSION = "web-session";
 
 /*
  * Loopback is not an identity (issue #568 item A).
@@ -33,16 +33,16 @@ export const TUNNEL_AUTH_WEB_SESSION = 'web-session';
  * client-supplied copy before it stamps its own.
  */
 /** EndpointId the QUIC handshake proved. Stamped only by an identity-bearing forwarder. */
-export const DEVICE_IDENTITY_HEADER = 'x-centraid-device';
+export const DEVICE_IDENTITY_HEADER = "x-centraid-device";
 /** In-process proof that `DEVICE_IDENTITY_HEADER` came from the forwarder, not the client. */
-export const DEVICE_PROOF_HEADER = 'x-centraid-device-proof';
+export const DEVICE_PROOF_HEADER = "x-centraid-device-proof";
 /**
  * Stamped by every forwarder, including the ones that cannot prove a device
  * identity (the desktop phone tunnel forwards under the host's own bearer).
  * Its presence disqualifies a request from host-only capabilities such as
  * minting a founding ticket.
  */
-export const TUNNEL_FORWARDED_HEADER = 'x-centraid-tunnel-forwarded';
+export const TUNNEL_FORWARDED_HEADER = "x-centraid-tunnel-forwarded";
 
 /** QUIC close code for a tunnel connection from an endpoint not in the allowlist. */
 export const CLOSE_UNAUTHORIZED = 401n;
@@ -85,12 +85,12 @@ export type PairResponse =
       deviceId: string;
       desktopName: string;
     }
-  | { ok: false; error: 'invalid_code' | 'expired_code' | 'bad_request' };
+  | { ok: false; error: "invalid_code" | "expired_code" | "bad_request" };
 
 /** The JSON the desktop encodes into the "Connect phone" QR. */
 export interface PairQrPayload {
   v: 1;
-  kind: 'centraid-pair';
+  kind: "centraid-pair";
   /** iroh EndpointTicket (base32) — carries the desktop's EndpointId + dial info. */
   ticket: string;
   /** One-time pairing code, consumed on first successful pair. */
@@ -100,21 +100,22 @@ export interface PairQrPayload {
 export function parsePairQrPayload(raw: string): PairQrPayload | undefined {
   try {
     const obj = JSON.parse(raw) as Partial<PairQrPayload>;
-    if (obj.v !== 1 || obj.kind !== 'centraid-pair') return undefined;
-    if (typeof obj.ticket !== 'string' || typeof obj.code !== 'string') return undefined;
-    return { v: 1, kind: 'centraid-pair', ticket: obj.ticket, code: obj.code };
+    if (obj.v !== 1 || obj.kind !== "centraid-pair") return undefined;
+    if (typeof obj.ticket !== "string" || typeof obj.code !== "string")
+      return undefined;
+    return { v: 1, kind: "centraid-pair", ticket: obj.ticket, code: obj.code };
   } catch {
     return undefined;
   }
 }
 
 export function alpnBytes(alpn: string): Array<number> {
-  return Array.from(Buffer.from(alpn, 'utf8'));
+  return Array.from(Buffer.from(alpn, "utf8"));
 }
 
 /** Encode a header frame: u32 BE length + UTF-8 JSON. */
 export function encodeHeaderFrame(header: unknown): Array<number> {
-  const json = Buffer.from(JSON.stringify(header), 'utf8');
+  const json = Buffer.from(JSON.stringify(header), "utf8");
   const frame = Buffer.alloc(4 + json.length);
   frame.writeUInt32BE(json.length, 0);
   json.copy(frame, 4);
@@ -122,11 +123,11 @@ export function encodeHeaderFrame(header: unknown): Array<number> {
 }
 
 interface FrameRecv {
-  readExact(size: number): Promise<Array<number>>;
+  readExact: (size: number) => Promise<Array<number>>;
 }
 
 interface ChunkRecv {
-  read(sizeLimit: number): Promise<Array<number>>;
+  read: (sizeLimit: number) => Promise<Array<number>>;
 }
 
 // Async stream readers are integration-owned (#532 property suite covers
@@ -140,7 +141,7 @@ export async function readHeaderFrame<T>(recv: FrameRecv): Promise<T> {
     throw new Error(`tunnel: header frame length ${len} out of bounds`);
   }
   const jsonBytes = Buffer.from(await recv.readExact(len));
-  return JSON.parse(jsonBytes.toString('utf8')) as T;
+  return JSON.parse(jsonBytes.toString("utf8")) as T;
 }
 
 /**
@@ -150,22 +151,26 @@ export async function readHeaderFrame<T>(recv: FrameRecv): Promise<T> {
 export async function readBody(
   recv: ChunkRecv,
   onChunk: (chunk: Buffer) => void | Promise<void>,
-  maxBytes = Number.POSITIVE_INFINITY,
+  maxBytes = Number.POSITIVE_INFINITY
 ): Promise<void> {
   let total = 0;
-  for (;;) {
+  // Frame delivery is an ordered stream: backpressure from `onChunk` must
+  // settle before asking the transport for the next bytes.
+  const readNext = async (): Promise<void> => {
     const chunk = await recv.read(READ_CHUNK_BYTES);
     if (!chunk || chunk.length === 0) return;
     total += chunk.length;
-    if (total > maxBytes) throw new Error('tunnel: body exceeds limit');
+    if (total > maxBytes) throw new Error("tunnel: body exceeds limit");
     await onChunk(Buffer.from(chunk));
-  }
+    return readNext();
+  };
+  return readNext();
 }
 
 /** Read an entire body into one buffer (request side; bounded). */
 export async function readBodyToEnd(
   recv: ChunkRecv,
-  maxBytes = MAX_REQUEST_BODY_BYTES,
+  maxBytes = MAX_REQUEST_BODY_BYTES
 ): Promise<Buffer> {
   const chunks: Buffer[] = [];
   await readBody(recv, (c) => void chunks.push(c), maxBytes);
@@ -174,15 +179,15 @@ export async function readBodyToEnd(
 
 /** Hop-by-hop headers that must not cross the tunnel (RFC 9110 §7.6.1). */
 const HOP_BY_HOP = new Set([
-  'connection',
-  'keep-alive',
-  'proxy-authenticate',
-  'proxy-authorization',
-  'proxy-connection',
-  'te',
-  'trailer',
-  'transfer-encoding',
-  'upgrade',
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "proxy-connection",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
 ]);
 
 /** Drop hop-by-hop headers; lowercases every name. */

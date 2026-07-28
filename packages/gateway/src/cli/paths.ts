@@ -10,8 +10,9 @@
  * `gatewayDbFile` (or pass the open `GatewayDatabase`) directly.
  */
 
-import path from 'node:path';
-import type { GatewayPaths } from '../paths.js';
+import path from "node:path";
+
+import type { GatewayPaths } from "../paths.js";
 
 export interface DaemonLayout extends GatewayPaths {
   dataDir: string;
@@ -24,20 +25,20 @@ export interface DaemonLayout extends GatewayPaths {
 
 export function daemonLayoutFor(dataDir: string): DaemonLayout {
   const abs = path.resolve(dataDir);
-  const cacheDir = path.join(abs, 'cache');
+  const cacheDir = path.join(abs, "cache");
   return {
     dataDir: abs,
-    gatewayDbFile: path.join(abs, 'gateway.db'),
-    keysDir: path.join(abs, 'keys'),
+    gatewayDbFile: path.join(abs, "gateway.db"),
+    keysDir: path.join(abs, "keys"),
     cacheDir,
-    modelCatalogFile: path.join(cacheDir, 'model-catalog.json'),
-    modelPricingFile: path.join(cacheDir, 'model-pricing.json'),
-    templatesCacheDir: path.join(cacheDir, 'templates'),
+    modelCatalogFile: path.join(cacheDir, "model-catalog.json"),
+    modelPricingFile: path.join(cacheDir, "model-pricing.json"),
+    templatesCacheDir: path.join(cacheDir, "templates"),
     // Mounting the vault registry (duaility §12): the daemon hosts one
     // gateway holding N sovereign vaults, one subdirectory each — and,
     // post-#280, each vault's whole app world.
-    vaultDir: path.join(abs, 'vault'),
-    logsDir: path.join(abs, 'gateway-logs'),
-    endpointKeyFile: path.join(abs, 'keys', 'endpoint-key.bin'),
+    vaultDir: path.join(abs, "vault"),
+    logsDir: path.join(abs, "gateway-logs"),
+    endpointKeyFile: path.join(abs, "keys", "endpoint-key.bin"),
   };
 }

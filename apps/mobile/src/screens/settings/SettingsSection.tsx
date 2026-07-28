@@ -3,9 +3,16 @@
 // (You · Appearance · Space · Desktop link · Approvals · Advanced). Extracted so
 // every section shares one label treatment and rhythm (issue #498).
 
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { family, spacing, t, useTheme, type ThemeColors } from '../../kit/theme';
+import React, { useMemo } from "react";
+import { StyleSheet, Text, View } from "react-native";
+
+import {
+  family,
+  spacing,
+  t,
+  useTheme,
+  type ThemeColors,
+} from "../../kit/theme";
 
 export interface SettingsSectionProps {
   label: string;
@@ -29,12 +36,12 @@ export default function SettingsSection({
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     label: {
-      ...t('small'),
+      ...t("small"),
       color: colors.ink3,
       fontFamily: family.monoMedium,
       letterSpacing: 0.8,
       marginBottom: spacing[3],
-      textTransform: 'uppercase',
+      textTransform: "uppercase",
     },
     section: { marginTop: spacing[6] },
   });

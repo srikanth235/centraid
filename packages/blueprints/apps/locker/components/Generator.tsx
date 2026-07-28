@@ -4,10 +4,11 @@
 // from a different field mid-edit, and "Use" needs to push the generated
 // value back into whichever field opened it — see logic.ts's
 // `openGenerator`/`closeGen`.
-import { strength } from '../totp.ts';
-import { Icon, KitMeter } from './Shared.tsx';
-import styles from './Generator.module.css';
-import shared from './shared.module.css';
+import { strength } from "../totp.ts";
+import { Icon, KitMeter } from "./Shared.tsx";
+
+import styles from "./Generator.module.css";
+import shared from "./shared.module.css";
 
 function ToggleRow({
   label,
@@ -21,8 +22,11 @@ function ToggleRow({
   last?: boolean;
 }) {
   return (
-    <div className={styles.toggleRow} style={last ? { borderBottom: 'none' } : undefined}>
-      <span style={{ font: 'var(--t-body)', fontSize: '13.5px' }}>{label}</span>
+    <div
+      className={styles.toggleRow}
+      style={last ? { borderBottom: "none" } : undefined}
+    >
+      <span style={{ font: "var(--t-body)", fontSize: "13.5px" }}>{label}</span>
       {/* The switch draws nothing but its knob, so the visible row label is
           also its accessible name; `aria-pressed` reports the on/off state the
           `.on` class draws (issue #573). */}
@@ -33,7 +37,7 @@ function ToggleRow({
         aria-pressed={on}
         onClick={onClick}
       >
-        <i></i>
+        <i />
       </button>
     </div>
   );
@@ -70,8 +74,13 @@ export function Generator({
           the backdrop that only a mouse could reach. It replaces both the
           `e.target === e.currentTarget` guard and the card's stopPropagation —
           clicks inside the card never reach the scrim now (issue #573). */}
-      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
-      <div className="kit-modal" style={{ maxWidth: '420px' }}>
+      <button
+        type="button"
+        className="kit-modal-scrim"
+        aria-label="Close"
+        onClick={onClose}
+      />
+      <div className="kit-modal" style={{ maxWidth: "420px" }}>
         <h2>Password generator</h2>
 
         <div className={shared.genrow}>
@@ -88,7 +97,9 @@ export function Generator({
 
         <div className={shared.strength}>
           <KitMeter ratio={st.ratio} tone={st.tone} />
-          <span style={{ font: 'var(--t-mono)', fontSize: '10px', color: st.color }}>
+          <span
+            style={{ font: "var(--t-mono)", fontSize: "10px", color: st.color }}
+          >
             {st.label}
           </span>
         </div>
@@ -101,7 +112,7 @@ export function Generator({
             min="8"
             max="40"
             value={genLen}
-            onChange={(e) => onSetLen(parseInt(e.target.value, 10))}
+            onChange={(e) => onSetLen(Math.trunc(Number(e.target.value)))}
           />
         </div>
 

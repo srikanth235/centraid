@@ -1,5 +1,5 @@
-import { updateVault } from '../../../gateway-client.js';
-import type { SpaceModalCommit } from './SpaceModal.js';
+import { updateVault } from "../../../gateway-client.js";
+import type { SpaceModalCommit } from "./SpaceModal.js";
 
 // Gateway I/O for the Spaces (#280: a space IS a vault) add / rename / delete
 // flows. The modal chrome is the React <SpaceModal>; App.tsx (switcher "New
@@ -13,8 +13,10 @@ export async function createSpace(data: SpaceModalCommit): Promise<void> {
   // Hosts that cannot administer vaults (the web PWA) omit `createVault`
   // entirely; callers hide the affordance, and this is the honest backstop.
   const create = window.CentraidApi.createVault;
-  if (typeof create !== 'function') {
-    throw new Error('Creating a space needs the desktop app or the gateway host CLI.');
+  if (typeof create !== "function") {
+    throw new Error(
+      "Creating a space needs the desktop app or the gateway host CLI."
+    );
   }
   const created = await create({ name: data.name });
   await updateVault({
@@ -27,7 +29,10 @@ export async function createSpace(data: SpaceModalCommit): Promise<void> {
 }
 
 /** Rename / retheme an existing space. */
-export async function saveSpace(id: string, data: SpaceModalCommit): Promise<void> {
+export async function saveSpace(
+  id: string,
+  data: SpaceModalCommit
+): Promise<void> {
   await updateVault({
     vaultId: id,
     name: data.name,

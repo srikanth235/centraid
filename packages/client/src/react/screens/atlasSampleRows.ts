@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { SEALED_SENTINEL, isSealedValue } from './atlasBrowseData.js';
+import { useEffect, useRef, useState } from "react";
+
+import { SEALED_SENTINEL, isSealedValue } from "./atlasBrowseData.js";
 
 // Sample-row plumbing for the Relations orrery's "A few of yours" panel section
 // (issue #441 human-language layer). The chart speaks human — People, not
@@ -11,7 +12,9 @@ import { SEALED_SENTINEL, isSealedValue } from './atlasBrowseData.js';
 /** The fetcher the Relations tab is handed — a thin wrapper over `browseRows`
  *  wired in AtlasScreen. Optional at the component seam so a test (or any host)
  *  that omits it renders the section-less "no samples" path cleanly. */
-export type SampleRowsFetcher = (logical: string) => Promise<Record<string, unknown>[]>;
+export type SampleRowsFetcher = (
+  logical: string
+) => Promise<Record<string, unknown>[]>;
 
 /**
  * The settled outcome for one kind's sample fetch, cached per-mount. `ready`
@@ -20,8 +23,8 @@ export type SampleRowsFetcher = (logical: string) => Promise<Record<string, unkn
  * inventing a placeholder. The absence of an entry means "still in flight".
  */
 export type SampleResult =
-  | { status: 'ready'; rows: Record<string, unknown>[] }
-  | { status: 'error' };
+  | { status: "ready"; rows: Record<string, unknown>[] }
+  | { status: "error" };
 
 /** How many sample rows we ever show — a glance, not a grid. */
 const SAMPLE_LIMIT = 3;
@@ -35,13 +38,13 @@ const SAMPLE_LIMIT = 3;
  */
 export function useSampleRows(
   logical: string | undefined,
-  fetcher: SampleRowsFetcher | undefined,
+  fetcher: SampleRowsFetcher | undefined
 ): SampleResult | undefined {
-  // Per-mount cache. Held in state's lazy initialiser (not a ref) because the
-  // cache identity must be stable across renders AND be readable during render —
-  // only the resolved entry drives a re-render, via `tick`.
-  const [cache] = useState<Map<string, SampleResult>>(() => new Map());
-  const [, setTick] = useState(0);
+  // Per-mount cache is state because resolved entries drive rendering. Each
+  // settlement replaces the Map, so the reader sees a stable snapshot.
+  const [cache, setCache] = useState<Map<string, SampleResult>>(
+    () => new Map()
+  );
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -57,15 +60,20 @@ export function useSampleRows(
     void fetcher(logical)
       .then((rows) => {
         if (cancelled || !mountedRef.current) return;
-        cache.set(logical, { status: 'ready', rows: rows.slice(0, SAMPLE_LIMIT) });
-        setTick((n) => n + 1);
+        setCache((current) =>
+          new Map(current).set(logical, {
+            status: "ready",
+            rows: rows.slice(0, SAMPLE_LIMIT),
+          })
+        );
       })
       .catch(() => {
         if (cancelled || !mountedRef.current) return;
         // Honest failure: record the error so we neither refetch nor pretend the
         // table is empty (which would misread as "Nothing here yet").
-        cache.set(logical, { status: 'error' });
-        setTick((n) => n + 1);
+        setCache((current) =>
+          new Map(current).set(logical, { status: "error" })
+        );
       });
     return () => {
       cancelled = true;
@@ -78,23 +86,23 @@ export function useSampleRows(
 /** Column-name fragments that tend to name a human-readable display value — the
  *  first pass of the row→string heuristic looks only at these. */
 const PREFERRED_NAME_PARTS = [
-  'title',
-  'name',
-  'label',
-  'summary',
-  'subject',
-  'pref_label',
-  'display_name',
+  "title",
+  "name",
+  "label",
+  "summary",
+  "subject",
+  "pref_label",
+  "display_name",
 ] as const;
 
 /** A column whose name reads as an identifier, not content — skipped by the two
  *  content passes so an FK/pk value never masquerades as a display string. */
-const looksLikeId = (key: string): boolean => /(^|_)id$/i.test(key);
+const looksLikeId = (key: string): boolean => /(?:^|_)id$/iu.test(key);
 
 /** A usable display string is a non-blank string (numbers are only accepted as
  *  the primary-key fallback, so a numeric measure never reads as a title). */
 const stringish = (value: unknown): value is string =>
-  typeof value === 'string' && value.trim().length > 0;
+  typeof value === "string" && value.trim().length > 0;
 
 /**
  * Reduce one row to a single human display string for the "A few of yours"
@@ -114,7 +122,8 @@ export function pickSampleDisplay(row: Record<string, unknown>): string {
   for (const [key, value] of entries) {
     if (looksLikeId(key)) continue;
     if (isSealedValue(value)) continue;
-    if (!PREFERRED_NAME_PARTS.some((p) => key.toLowerCase().includes(p))) continue;
+    if (!PREFERRED_NAME_PARTS.some((p) => key.toLowerCase().includes(p)))
+      continue;
     if (stringish(value)) return value;
   }
 
@@ -134,5 +143,5 @@ export function pickSampleDisplay(row: Record<string, unknown>): string {
 
   // Everything usable was sealed → say so plainly; otherwise nothing to show.
   if (entries.some(([, value]) => isSealedValue(value))) return SEALED_SENTINEL;
-  return '—';
+  return "—";
 }

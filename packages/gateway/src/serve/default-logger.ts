@@ -4,10 +4,10 @@
  * own via `BuildGatewayOptions.logger`.
  */
 
-import type { RuntimeLogger } from '@centraid/app-engine';
+import type { RuntimeLogger } from "@centraid/app-engine";
 
 export function defaultLogger(tag?: string): RuntimeLogger {
-  const prefix = tag ? `[${tag}] ` : '';
+  const prefix = tag ? `[${tag}] ` : "";
   return {
     info: (m) => console.info(`${prefix}${m}`),
     warn: (m) => console.warn(`${prefix}${m}`),

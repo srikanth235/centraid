@@ -4,7 +4,7 @@
  * Shared by host-process smoke and container / --base-url mode.
  */
 
-export const INFO_PATH = '/centraid/_gateway/info';
+export const INFO_PATH = "/centraid/_gateway/info";
 
 /**
  * Probe a running gateway base URL.
@@ -15,7 +15,7 @@ export const INFO_PATH = '/centraid/_gateway/info';
  */
 export async function probeGatewayInfo(baseUrl, opts = {}) {
   const timeoutMs = opts.timeoutMs ?? 5_000;
-  const url = `${baseUrl.replace(/\/$/, '')}${INFO_PATH}`;
+  const url = `${baseUrl.replace(/\/$/u, "")}${INFO_PATH}`;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
@@ -23,7 +23,8 @@ export async function probeGatewayInfo(baseUrl, opts = {}) {
     const body = await res.json().catch(() => null);
     // 200 or 401 both prove the listener (auth may be required).
     let ok = res.status === 200 || res.status === 401;
-    if (res.status === 200 && body && typeof body.version !== 'string') ok = false;
+    if (res.status === 200 && body && typeof body.version !== "string")
+      ok = false;
     return {
       ok,
       status: res.status,
@@ -48,11 +49,15 @@ export async function waitForGatewayInfo(baseUrl, opts = {}) {
   const deadlineMs = opts.deadlineMs ?? 30_000;
   const intervalMs = opts.intervalMs ?? 200;
   const deadline = Date.now() + deadlineMs;
-  let last = { ok: false, detail: 'not attempted' };
-  while (Date.now() < deadline) {
+  let last = { ok: false, detail: "not attempted" };
+  // Poll attempts must stay serial: each timeout-bounded probe represents one
+  // observation before the next retry interval starts.
+  const poll = async () => {
+    if (Date.now() >= deadline) return last;
     last = await probeGatewayInfo(baseUrl, { timeoutMs: 2_000 });
     if (last.ok) return last;
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
-  }
-  return last;
+    return poll();
+  };
+  return poll();
 }

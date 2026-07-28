@@ -1,17 +1,19 @@
-import { type JSX, type ReactNode, useState } from 'react';
-import type { AppearancePrefs } from '../../../app-shell-context.js';
-import { deleteApp, updateAppMeta } from '../../../gateway-client.js';
-import { useShellActions } from '../actions.js';
-import { iconSvg } from '../iconSvg.js';
-import { openPrompt } from '../prompt.js';
-import type { ShellNav } from '../ShellApp.js';
-import ShellFrame from '../ShellFrame.js';
-import { useAsyncData } from '../useAsyncData.js';
-import AppFrame from './AppFrame.js';
-import AppSettingsController from './AppSettingsController.js';
-import { loadAppTemplates } from './templatesData.js';
-import styles from './AppViewRoute.module.css';
-import chrome from '../chrome.module.css';
+import { type JSX, type ReactNode, useState } from "react";
+
+import type { AppearancePrefs } from "../../../app-shell-context.js";
+import { deleteApp, updateAppMeta } from "../../../gateway-client.js";
+import { useShellActions } from "../actions.js";
+import { iconSvg } from "../iconSvg.js";
+import { openPrompt } from "../prompt.js";
+import type { ShellNav } from "../ShellApp.js";
+import ShellFrame from "../ShellFrame.js";
+import { useAsyncData } from "../useAsyncData.js";
+import AppFrame from "./AppFrame.js";
+import AppSettingsController from "./AppSettingsController.js";
+import { loadAppTemplates } from "./templatesData.js";
+
+import chrome from "../chrome.module.css";
+import styles from "./AppViewRoute.module.css";
 
 // React-owned app view — the full-bleed running-app runtime. Replaces the
 // vanilla openApp (app-appview.ts): a brand-chip lead + Use/Build switch, the
@@ -42,7 +44,8 @@ export default function AppViewRoute({
   prefs,
   onToggleSidebar,
 }: AppViewRouteProps): JSX.Element {
-  const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } = useShellActions();
+  const { confirm, enterBuilder, openNewAppSheet, showToast, builderEnabled } =
+    useShellActions();
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // A bundled app-template id is RESERVED (issue #434) and an installed bundled
@@ -51,21 +54,25 @@ export default function AppViewRoute({
   // Delete (wipe local files). Anything else is a code-store app that keeps
   // Delete. Best-effort: an empty/failed load degrades to code-store (Delete).
   const bundledState = useAsyncData(() => loadAppTemplates(), []);
-  const bundled = bundledState.status === 'ready' && bundledState.data.some((t) => t.id === app.id);
+  const bundled =
+    bundledState.status === "ready" &&
+    bundledState.data.some((t) => t.id === app.id);
 
   const renameFlow = async (): Promise<void> => {
     const next = await openPrompt({
-      title: 'Rename app',
+      title: "Rename app",
       initial: app.name,
-      placeholder: 'App name',
-      confirmLabel: 'Rename',
+      placeholder: "App name",
+      confirmLabel: "Rename",
     });
     if (!next) return;
     try {
       await updateAppMeta({ id: app.id, name: next });
       showToast(`Renamed to "${next}"`);
     } catch (err) {
-      showToast(`Could not rename: ${err instanceof Error ? err.message : String(err)}`);
+      showToast(
+        `Could not rename: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   };
 
@@ -75,29 +82,31 @@ export default function AppViewRoute({
   const deleteFlow = async (): Promise<void> => {
     const ok = bundled
       ? await confirm({
-          confirmLabel: 'Uninstall',
+          confirmLabel: "Uninstall",
           danger: true,
           title: `Uninstall ${app.name}?`,
           message: `Removes "${app.name}" and revokes its access. Your data stays in your vault.`,
         })
       : await confirm({
-          confirmLabel: 'Delete',
+          confirmLabel: "Delete",
           danger: true,
-          title: 'Delete app?',
+          title: "Delete app?",
           message: `Delete "${app.name}"? This removes it from the gateway and wipes its local app files.`,
         });
     if (!ok) return;
     try {
       await deleteApp({ id: app.id });
-      showToast(`${bundled ? 'Uninstalled' : 'Deleted'} "${app.name}"`);
-      nav.navigate({ kind: 'home' });
+      showToast(`${bundled ? "Uninstalled" : "Deleted"} "${app.name}"`);
+      nav.navigate({ kind: "home" });
     } catch (err) {
-      const verb = bundled ? 'uninstall' : 'delete';
-      showToast(`Could not ${verb}: ${err instanceof Error ? err.message : String(err)}`);
+      const verb = bundled ? "uninstall" : "delete";
+      showToast(
+        `Could not ${verb}: ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   };
 
-  const finish = window.CentraidTokens.tileFinish(app.color, 'gradient');
+  const finish = window.CentraidTokens.tileFinish(app.color, "gradient");
   const brandChip = (
     <span className={styles.brandChip}>
       <span
@@ -118,7 +127,7 @@ export default function AppViewRoute({
   );
 
   const titlebarRight = (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
       {/* The Use/Build switch is a builder entry point (issue #434, Phase 3) —
           hidden with the builder. "Use" alone is meaningless, so the whole
           toggle goes; the app just runs. */}
@@ -127,7 +136,7 @@ export default function AppViewRoute({
           <button className={styles.modeSeg} type="button" data-active="true">
             <span
               className={styles.modeSegIcon}
-              dangerouslySetInnerHTML={{ __html: iconSvg('Eye', 12) }}
+              dangerouslySetInnerHTML={{ __html: iconSvg("Eye", 12) }}
             />
             Use
           </button>
@@ -138,7 +147,7 @@ export default function AppViewRoute({
           >
             <span
               className={styles.modeSegIcon}
-              dangerouslySetInnerHTML={{ __html: iconSvg('Sparkle', 12) }}
+              dangerouslySetInnerHTML={{ __html: iconSvg("Sparkle", 12) }}
             />
             Build
           </button>
@@ -150,9 +159,9 @@ export default function AppViewRoute({
           type="button"
           aria-label="App settings"
           aria-haspopup="dialog"
-          data-open={settingsOpen ? 'true' : undefined}
+          data-open={settingsOpen ? "true" : undefined}
           onClick={() => setSettingsOpen((open) => !open)}
-          dangerouslySetInnerHTML={{ __html: iconSvg('Settings', 15) }}
+          dangerouslySetInnerHTML={{ __html: iconSvg("Settings", 15) }}
         />
         <span className={chrome.tooltip}>App settings</span>
       </span>
@@ -161,7 +170,7 @@ export default function AppViewRoute({
         type="button"
         aria-label="More"
         title="More"
-        dangerouslySetInnerHTML={{ __html: iconSvg('MoreHoriz', 14) }}
+        dangerouslySetInnerHTML={{ __html: iconSvg("MoreHoriz", 14) }}
       />
     </span>
   );
@@ -186,7 +195,12 @@ export default function AppViewRoute({
               (mountUserApp added it imperatively): a hosted app fills the pane
               edge-to-edge — no padding, no max-width. */}
           <div className={styles.bodyInner} data-fullbleed="true">
-            <AppFrame appId={appId} accentColor={app.color} theme={prefs.theme} bgL={prefs.bgL} />
+            <AppFrame
+              appId={appId}
+              accentColor={app.color}
+              theme={prefs.theme}
+              bgL={prefs.bgL}
+            />
           </div>
         </div>
         {settingsOpen ? (
@@ -197,18 +211,20 @@ export default function AppViewRoute({
             onClose={() => setSettingsOpen(false)}
             onOpenAutomations={() => {
               setSettingsOpen(false);
-              nav.navigate({ kind: 'automations' });
+              nav.navigate({ kind: "automations" });
             }}
             onOpenOrder={(ref) => {
               setSettingsOpen(false);
-              nav.navigate({ kind: 'automation-view', automationId: ref });
+              nav.navigate({ kind: "automation-view", automationId: ref });
             }}
             onRename={() => {
               setSettingsOpen(false);
               void renameFlow();
             }}
-            onShare={() => showToast('Sharing isn’t available yet.')}
-            onReveal={() => void window.CentraidApi.openAppFolder({ id: app.id })}
+            onShare={() => showToast("Sharing isn’t available yet.")}
+            onReveal={() =>
+              void window.CentraidApi.openAppFolder({ id: app.id })
+            }
             onDelete={() => {
               setSettingsOpen(false);
               void deleteFlow();

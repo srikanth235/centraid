@@ -2,15 +2,16 @@
 // label + the Month/Week/Schedule segmented switch. The search box and the
 // light/dark toggle are static HTML wired once in chrome.ts (kit.ts owns
 // their behavior already — no per-render data to bind).
-import { I } from '../icons.ts';
-import { Icon } from './Shared.tsx';
-import type { ViewKind } from '../types.ts';
-import styles from './HeaderBar.module.css';
+import { I } from "../icons.ts";
+import type { ViewKind } from "../types.ts";
+import { Icon } from "./Shared.tsx";
+
+import styles from "./HeaderBar.module.css";
 
 const VIEWS: { key: ViewKind; label: string }[] = [
-  { key: 'month', label: 'Month' },
-  { key: 'week', label: 'Week' },
-  { key: 'schedule', label: 'Schedule' },
+  { key: "month", label: "Month" },
+  { key: "week", label: "Week" },
+  { key: "schedule", label: "Schedule" },
 ];
 
 export function HeaderBar({
@@ -30,14 +31,28 @@ export function HeaderBar({
 }) {
   return (
     <>
-      <button type="button" className={`kit-btn ${styles.today}`} onClick={onToday}>
+      <button
+        type="button"
+        className={`kit-btn ${styles.today}`}
+        onClick={onToday}
+      >
         Today
       </button>
       <div className={styles.navArrows}>
-        <button type="button" className="kit-icon-btn" onClick={onPrev} aria-label="Previous">
+        <button
+          type="button"
+          className="kit-icon-btn"
+          onClick={onPrev}
+          aria-label="Previous"
+        >
           <Icon svg={I.chevronLeft} />
         </button>
-        <button type="button" className="kit-icon-btn" onClick={onNext} aria-label="Next">
+        <button
+          type="button"
+          className="kit-icon-btn"
+          onClick={onNext}
+          aria-label="Next"
+        >
           <Icon svg={I.chevronRight} />
         </button>
       </div>
@@ -47,7 +62,7 @@ export function HeaderBar({
           <button
             key={v.key}
             type="button"
-            className={view === v.key ? 'on' : ''}
+            className={view === v.key ? "on" : ""}
             aria-pressed={view === v.key}
             onClick={() => onSetView(v.key)}
           >

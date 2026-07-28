@@ -12,37 +12,61 @@
 // One entry point — `runFlow(slug, fn)` — does build + daemon boot + verdict
 // + teardown. Flow files under flows/ call it with the actual steps.
 
-import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
-import { promises as fs, createWriteStream } from 'node:fs';
-import { createServer } from 'node:net';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createTunnelClient, tunnelRequest } from '../../../packages/tunnel/dist/index.js';
-import { daemonKeyStore } from '../../../packages/gateway/dist/cli/key-store.js';
-import { landlordBearerForEndpointSecret } from '../../../packages/gateway/dist/cli/landlord-auth.js';
-import { daemonLayoutFor } from '../../../packages/gateway/dist/cli/paths.js';
-import { defaultRunId, writeFlowVerdict } from '../../agent-e2e-shared/harness.mjs';
+import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { promises as fs, createWriteStream } from "node:fs";
+import { createServer } from "node:net";
+import path from "node:path";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const GATEWAY_CLI = path.join(REPO_ROOT, 'packages', 'gateway', 'dist', 'cli', 'cli.js');
-const TUNNEL_DIST = path.join(REPO_ROOT, 'packages', 'tunnel', 'dist', 'index.js');
-const RUNS_DIR = path.join(__dirname, '..', 'runs');
+import { daemonKeyStore } from "../../../packages/gateway/dist/cli/key-store.js";
+import { landlordBearerForEndpointSecret } from "../../../packages/gateway/dist/cli/landlord-auth.js";
+import { daemonLayoutFor } from "../../../packages/gateway/dist/cli/paths.js";
+import {
+  createTunnelClient,
+  tunnelRequest,
+} from "../../../packages/tunnel/dist/index.js";
+import {
+  defaultRunId,
+  writeFlowVerdict,
+} from "../../agent-e2e-shared/harness.mjs";
+
+const __dirname = import.meta.dirname;
+const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
+const GATEWAY_CLI = path.join(
+  REPO_ROOT,
+  "packages",
+  "gateway",
+  "dist",
+  "cli",
+  "cli.js"
+);
+const TUNNEL_DIST = path.join(
+  REPO_ROOT,
+  "packages",
+  "tunnel",
+  "dist",
+  "index.js"
+);
+const RUNS_DIR = path.join(__dirname, "..", "runs");
 
 // Exported so lib/docker-harness.mjs (cross-network-relay flow) can reuse
 // the exact same scoped build instead of re-deriving the turbo filter set.
 export async function ensureBuilt() {
-  const missing = [];
-  for (const file of [GATEWAY_CLI, TUNNEL_DIST]) {
-    try {
-      await fs.access(file);
-    } catch {
-      missing.push(path.relative(REPO_ROOT, file));
-    }
-  }
+  const checked = await Promise.all(
+    [GATEWAY_CLI, TUNNEL_DIST].map(async (file) => {
+      try {
+        await fs.access(file);
+        return undefined;
+      } catch {
+        return path.relative(REPO_ROOT, file);
+      }
+    })
+  );
+  const missing = checked.filter(Boolean);
   if (missing.length === 0) return;
-  console.log(`[harness] missing ${missing.join(', ')} — running scoped build…`);
+  console.log(
+    `[harness] missing ${missing.join(", ")} — running scoped build…`
+  );
   // Scoped to what this tier actually runs, but the daemon imports
   // @centraid/app-engine, @centraid/vault, etc. at runtime — turbo's
   // `dependsOn: ["^build"]` (see turbo.json) pulls the whole workspace
@@ -50,12 +74,18 @@ export async function ensureBuilt() {
   // own dist output, it's everything they transitively need.
   await new Promise((resolve, reject) => {
     const proc = spawn(
-      'bunx',
-      ['turbo', 'run', 'build', '--filter=@centraid/gateway', '--filter=@centraid/tunnel'],
-      { cwd: REPO_ROOT, stdio: 'inherit' },
+      "bunx",
+      [
+        "turbo",
+        "run",
+        "build",
+        "--filter=@centraid/gateway",
+        "--filter=@centraid/tunnel",
+      ],
+      { cwd: REPO_ROOT, stdio: "inherit" }
     );
-    proc.on('error', reject);
-    proc.on('exit', (code) => {
+    proc.on("error", reject);
+    proc.on("exit", (code) => {
       if (code === 0) resolve();
       else reject(new Error(`build exited ${code}`));
     });
@@ -74,32 +104,37 @@ function pidAlive(pid) {
 async function killAndWait(pid, { timeoutMs = 8000 } = {}) {
   if (!pid || !pidAlive(pid)) return;
   try {
-    process.kill(pid, 'SIGTERM');
+    process.kill(pid, "SIGTERM");
   } catch {
     // Already gone.
   }
   const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
+  const waitForExit = async () => {
     if (!pidAlive(pid)) return;
+    if (Date.now() - start >= timeoutMs) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // Won the race.
+      }
+      return;
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  try {
-    process.kill(pid, 'SIGKILL');
-  } catch {
-    // Won the race.
-  }
+    return waitForExit();
+  };
+  return waitForExit();
 }
 
 async function reserveLoopbackPort() {
   const server = createServer();
   await new Promise((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
   });
   const address = server.address();
-  if (!address || typeof address === 'string') {
+  if (!address || typeof address === "string") {
     server.close();
-    throw new Error('failed to reserve a loopback port');
+    throw new Error("failed to reserve a loopback port");
   }
   await new Promise((resolve, reject) => {
     server.close((error) => {
@@ -118,35 +153,53 @@ async function reserveLoopbackPort() {
  * printed both its HTTP listener line and its iroh endpoint id. stdout+stderr
  * stream to `logFile` so a failed run keeps the daemon's own story.
  */
-async function spawnDaemon(dataDir, logFile, { timeoutMs = 60000, port, controlSecret } = {}) {
-  const log = createWriteStream(logFile, { flags: 'a' });
+async function spawnDaemon(
+  dataDir,
+  logFile,
+  { timeoutMs = 60000, port, controlSecret } = {}
+) {
+  const log = createWriteStream(logFile, { flags: "a" });
   // No --init-vault: a fresh data dir auto-founds Shared + Personal (#603).
-  const args = [GATEWAY_CLI, 'serve', '--data-dir', dataDir, '--port', String(port)];
+  const args = [
+    GATEWAY_CLI,
+    "serve",
+    "--data-dir",
+    dataDir,
+    "--port",
+    String(port),
+  ];
   const child = spawn(process.execPath, args, {
     env: { ...process.env, CENTRAID_DATA_PLANE_SECRET: controlSecret },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ["ignore", "pipe", "pipe"],
   });
-  let buffer = '';
+  let buffer = "";
   const wanted = { url: undefined, token: undefined, endpointId: undefined };
   const scan = (chunk) => {
     log.write(chunk);
-    buffer += chunk.toString('utf8');
-    wanted.url ??= buffer.match(/listening on (http:\/\/[^\s]+)/)?.[1];
-    wanted.endpointId ??= buffer.match(/endpoint: ([0-9a-f]{64})/)?.[1];
+    buffer += chunk.toString("utf8");
+    wanted.url ??= buffer.match(
+      /listening on (?<url>http:\/\/[^\s]+)/u
+    )?.groups?.url;
+    wanted.endpointId ??= buffer.match(
+      /endpoint: (?<endpointId>[0-9a-f]{64})/u
+    )?.groups?.endpointId;
   };
-  child.stdout.on('data', scan);
-  child.stderr.on('data', scan);
+  child.stdout.on("data", scan);
+  child.stderr.on("data", scan);
 
   const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
+  const waitForReadiness = async () => {
     if (child.exitCode !== null) {
-      throw new Error(`daemon exited ${child.exitCode} before ready — see ${logFile}`);
+      throw new Error(
+        `daemon exited ${child.exitCode} before ready — see ${logFile}`
+      );
     }
     if (wanted.url && wanted.endpointId && !wanted.token) {
-      const endpointSecret = daemonKeyStore(daemonLayoutFor(dataDir).keysDir).load(
-        'endpoint-key.bin',
-      );
-      if (endpointSecret) wanted.token = landlordBearerForEndpointSecret(endpointSecret);
+      const endpointSecret = daemonKeyStore(
+        daemonLayoutFor(dataDir).keysDir
+      ).load("endpoint-key.bin");
+      if (endpointSecret)
+        wanted.token = landlordBearerForEndpointSecret(endpointSecret);
     }
     if (wanted.url && wanted.token && wanted.endpointId) {
       // `/centraid/_gateway/info` is public for the version/schema handshake,
@@ -157,45 +210,65 @@ async function spawnDaemon(dataDir, logFile, { timeoutMs = 60000, port, controlS
         headers: { authorization: `Bearer ${wanted.token}` },
       });
       if (!response.ok) {
-        throw new Error(`gateway info returned ${response.status} before ready`);
+        throw new Error(
+          `gateway info returned ${response.status} before ready`
+        );
       }
       const info = await response.json();
-      if (typeof info.endpointTicket !== 'string' || info.endpointTicket.length === 0) {
-        throw new Error('gateway info did not publish an endpoint ticket');
+      if (
+        typeof info.endpointTicket !== "string" ||
+        info.endpointTicket.length === 0
+      ) {
+        throw new Error("gateway info did not publish an endpoint ticket");
       }
       return { pid: child.pid, ...wanted, endpointTicket: info.endpointTicket };
     }
+    if (Date.now() - start >= timeoutMs) {
+      await killAndWait(child.pid);
+      throw new Error(
+        `daemon not ready in ${timeoutMs}ms (url=${wanted.url} endpoint=${wanted.endpointId}) — see ${logFile}`
+      );
+    }
     await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-  await killAndWait(child.pid);
-  throw new Error(
-    `daemon not ready in ${timeoutMs}ms (url=${wanted.url} endpoint=${wanted.endpointId}) — see ${logFile}`,
-  );
+    return waitForReadiness();
+  };
+  return waitForReadiness();
 }
 
 /** Run one admin CLI command against the run's data dir; returns stdout. */
 function cli(dataDir, args, { allowFailure = false } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [GATEWAY_CLI, ...args, '--data-dir', dataDir], {
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (c) => (stdout += c));
-    child.stderr.on('data', (c) => (stderr += c));
-    child.on('error', reject);
-    child.on('exit', (code) => {
+    const child = spawn(
+      process.execPath,
+      [GATEWAY_CLI, ...args, "--data-dir", dataDir],
+      {
+        env: process.env,
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (c) => (stdout += c));
+    child.stderr.on("data", (c) => (stderr += c));
+    child.on("error", reject);
+    child.on("exit", (code) => {
       if (code === 0 || allowFailure) resolve({ code, stdout, stderr });
-      else reject(new Error(`centraid-gateway ${args.join(' ')} exited ${code}: ${stderr.trim()}`));
+      else
+        reject(
+          new Error(
+            `centraid-gateway ${args.join(" ")} exited ${code}: ${stderr.trim()}`
+          )
+        );
     });
   });
 }
 
 /** Decode the pasteable one-line token (mirror of pairing-store.ts). */
 export function parseTicket(raw) {
-  const payload = JSON.parse(Buffer.from(raw.trim(), 'base64url').toString('utf8'));
-  if (payload.v !== 1 || payload.kind !== 'centraid-gw-pair') {
+  const payload = JSON.parse(
+    Buffer.from(raw.trim(), "base64url").toString("utf8")
+  );
+  if (payload.v !== 1 || payload.kind !== "centraid-gw-pair") {
     throw new Error(`not a centraid-gw-pair ticket: ${raw.slice(0, 40)}…`);
   }
   return payload;
@@ -218,16 +291,19 @@ export function parseTicket(raw) {
  *
  * Throw on failure, return { pass: true, notes } on success.
  */
-export async function runFlow(slug, fn, { fresh = false } = {}) {
+export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
   await ensureBuilt();
   const runId = `${slug}-${defaultRunId()}`;
   const runDir = path.join(RUNS_DIR, runId);
-  const workspace = path.join(runDir, 'workspace');
-  const dataDir = path.join(workspace, 'gateway');
-  const logFile = path.join(runDir, 'gateway.log');
+  const workspace = path.join(runDir, "workspace");
+  const dataDir = path.join(workspace, "gateway");
+  const logFile = path.join(runDir, "gateway.log");
   await fs.mkdir(dataDir, { recursive: true });
   const previousCredentialRoot = process.env.CENTRAID_KEYSTORE_CREDENTIAL_ROOT;
-  process.env.CENTRAID_KEYSTORE_CREDENTIAL_ROOT = path.join(workspace, 'host-credentials');
+  process.env.CENTRAID_KEYSTORE_CREDENTIAL_ROOT = path.join(
+    workspace,
+    "host-credentials"
+  );
 
   const state = {
     runId,
@@ -235,7 +311,7 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
     workspace,
     dataDir,
     port: await reserveLoopbackPort(),
-    controlSecret: randomBytes(32).toString('hex'),
+    controlSecret: randomBytes(32).toString("hex"),
     gateway: undefined,
   };
   console.log(`[runFlow] ${slug}`);
@@ -251,7 +327,7 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
       controlSecret: state.controlSecret,
     });
     console.log(
-      `  gateway : ${state.gateway.url} endpoint=${state.gateway.endpointId.slice(0, 10)}…`,
+      `  gateway : ${state.gateway.url} endpoint=${state.gateway.endpointId.slice(0, 10)}…`
     );
 
     const ctx = {
@@ -261,26 +337,32 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
         return state.gateway;
       },
       cli: (args, opts) =>
-        cli(dataDir, args[0] === 'pair' ? [...args, '--port', String(state.port)] : args, opts),
+        cli(
+          dataDir,
+          args[0] === "pair" ? [...args, "--port", String(state.port)] : args,
+          opts
+        ),
       mintTicket: async ({ vault, ttlMinutes } = {}) => {
-        const args = ['pair'];
-        if (vault) args.push('--vault', vault);
-        if (ttlMinutes !== undefined) args.push('--ttl-minutes', String(ttlMinutes));
-        args.push('--port', String(state.port));
+        const args = ["pair"];
+        if (vault) args.push("--vault", vault);
+        if (ttlMinutes !== undefined)
+          args.push("--ttl-minutes", String(ttlMinutes));
+        args.push("--port", String(state.port));
         const { stdout } = await cli(dataDir, args);
-        const raw = stdout.match(/^(ey[A-Za-z0-9_-]{40,})$/m)?.[1];
+        const raw = stdout.match(/^(?<ticket>ey[A-Za-z0-9_-]{40,})$/mu)?.groups
+          ?.ticket;
         if (!raw) throw new Error(`pair printed no ticket token:\n${stdout}`);
         return { raw, payload: parseTicket(raw) };
       },
       newDevice: async () => {
-        const device = await createTunnelClient({ relays: 'disabled' });
+        const device = await createTunnelClient({ relays: "disabled" });
         devices.push(device);
         return device;
       },
       request: async (device, target) => {
         const connection = await device.connect(ctx._gwTicket());
         try {
-          return await tunnelRequest(connection, { method: 'GET', target });
+          return await tunnelRequest(connection, { method: "GET", target });
         } finally {
           connection.close(0n, []);
         }
@@ -291,13 +373,13 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
           const response = await tunnelRequest(connection, {
             method,
             target,
-            headers: body ? { 'content-type': 'application/json' } : undefined,
+            headers: body ? { "content-type": "application/json" } : undefined,
             body: body ? Buffer.from(JSON.stringify(body)) : undefined,
           });
           return {
             response,
             json: response.body.length
-              ? JSON.parse(Buffer.from(response.body).toString('utf8'))
+              ? JSON.parse(Buffer.from(response.body).toString("utf8"))
               : undefined,
           };
         } finally {
@@ -313,9 +395,9 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
           {
             headers: {
               authorization: `Bearer ${state.gateway.token}`,
-              'x-centraid-data-plane-secret': state.controlSecret,
+              "x-centraid-data-plane-secret": state.controlSecret,
             },
-          },
+          }
         );
         return { response, json: await response.json() };
       },
@@ -327,13 +409,21 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
           // request, wait for the close, and issue another. One of the two
           // MUST throw for an unauthorized device key.
           try {
-            await tunnelRequest(connection, { method: 'GET', target: '/centraid/_vault/vaults' });
+            await tunnelRequest(connection, {
+              method: "GET",
+              target: "/centraid/_vault/vaults",
+            });
             await connection.closed();
-            await tunnelRequest(connection, { method: 'GET', target: '/centraid/_vault/vaults' });
+            await tunnelRequest(connection, {
+              method: "GET",
+              target: "/centraid/_vault/vaults",
+            });
           } catch {
             return; // refused — expected
           }
-          throw new Error(`device ${device.endpointId.slice(0, 10)}… was NOT refused`);
+          throw new Error(
+            `device ${device.endpointId.slice(0, 10)}… was NOT refused`
+          );
         } finally {
           try {
             connection.close(0n, []);
@@ -343,7 +433,7 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
         }
       },
       restartGateway: async () => {
-        console.log('  restart gateway …');
+        console.log("  restart gateway …");
         await killAndWait(state.gateway.pid);
         state.gateway = undefined; // a failed respawn must not leave the killed daemon looking live
         state.gateway = await spawnDaemon(dataDir, logFile, {
@@ -361,7 +451,9 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
   } catch (e) {
     error = e;
   } finally {
-    for (const device of devices) await device.close().catch(() => {});
+    await Promise.all(
+      devices.map(async (device) => device.close().catch(() => {}))
+    );
     await killAndWait(state.gateway?.pid);
     if (previousCredentialRoot === undefined) {
       delete process.env.CENTRAID_KEYSTORE_CREDENTIAL_ROOT;
@@ -381,8 +473,8 @@ export async function runFlow(slug, fn, { fresh = false } = {}) {
     notes,
     result,
     metadata: {
-      'gateway data dir': state.dataDir,
-      'gateway endpoint': state.gateway?.endpointId ?? 'never became ready',
+      "gateway data dir": state.dataDir,
+      "gateway endpoint": state.gateway?.endpointId ?? "never became ready",
     },
     owner: `tests/agent-e2e-pairing/flows/${slug}.mjs`,
   });

@@ -1,14 +1,15 @@
+import type { ReactNode } from "react";
+
 // The lightbox's render orchestrator — same shape as toolbar.jsx/picker.tsx:
 // a small private slice of state (which asset id is open, the render-seq
 // PanelBody keys off) plus its one root. Pulled out of app.tsx to keep that
 // file from growing unbounded as issue #352 adds regions (search/slideshow/
 // duplicates) alongside it; the pure view still lives in
 // components/Lightbox.tsx.
-import { assetKey } from './asset-key.ts';
-import { LightboxShell } from './components/Lightbox.tsx';
-import { $ } from './dom.ts';
-import type { ReactNode } from 'react';
-import type { Album, Asset, Place } from './types.ts';
+import { assetKey } from "./asset-key.ts";
+import { LightboxShell } from "./components/Lightbox.tsx";
+import { $ } from "./dom.ts";
+import type { Album, Asset, Place } from "./types.ts";
 
 type Root = { render: (node: ReactNode) => void };
 
@@ -27,7 +28,9 @@ export function createLightbox({
   getAlbums: () => Album[];
   getPlaces: () => Place[];
   refresh: () => Promise<void>;
-  slideshow: { openSlideshow: (list: Asset[], startAssetId: string | null) => void };
+  slideshow: {
+    openSlideshow: (list: Asset[], startAssetId: string | null) => void;
+  };
 }) {
   // The COMPOSITE key of the open row (asset-key.ts), non-null while open. A
   // bare `asset_id` would be ambiguous across scopes (issue #599).
@@ -36,7 +39,7 @@ export function createLightbox({
 
   function closeLightbox() {
     openKey = null;
-    const box = $('lightbox');
+    const box = $("lightbox");
     box.hidden = true;
     lightboxRoot.render(null);
   }
@@ -66,7 +69,7 @@ export function createLightbox({
   }
 
   function renderLightbox() {
-    const box = $('lightbox');
+    const box = $("lightbox");
     if (openKey == null) {
       closeLightbox();
       return;
@@ -91,7 +94,7 @@ export function createLightbox({
         refresh={refresh}
         onClose={closeLightbox}
         onSlideshow={() => startSlideshow(asset.asset_id)}
-      />,
+      />
     );
     box.hidden = false;
   }
@@ -107,7 +110,7 @@ export function createLightbox({
   // not just genuine backdrop clicks. Gating on `e.target === e.currentTarget`
   // sidesteps the race entirely: only a click that lands on the backdrop
   // itself (never on a descendant) closes it, regardless of listener order.
-  $('lightbox').addEventListener('click', (e) => {
+  $("lightbox").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeLightbox();
   });
 

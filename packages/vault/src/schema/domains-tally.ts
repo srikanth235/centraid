@@ -59,7 +59,7 @@
 // be BOUND to an already-imported one via tally.bind_txn (the Studio
 // paid_txn_id pattern: bind, don't duplicate, when the bank already knows).
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from './updated-at.js';
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const TALLY_DDL = `
 CREATE TABLE tally_friend (
@@ -149,11 +149,11 @@ CREATE INDEX tally_settlement_to_party_idx ON tally_settlement(to_party);
 CREATE INDEX tally_settlement_txn_idx ON tally_settlement(txn_id);
 CREATE INDEX tally_obligation_from_party_idx ON tally_obligation(from_party);
 CREATE INDEX tally_obligation_to_party_idx ON tally_obligation(to_party);
-${touchUpdatedAt('tally_friend', 'friend_id')}
-${touchUpdatedAt('tally_group', 'group_id')}
-${touchUpdatedAt('tally_expense', 'expense_id')}
-${touchUpdatedAt('tally_settlement', 'settlement_id')}
-${touchUpdatedAt('tally_obligation', 'obligation_id')}
+${touchUpdatedAt("tally_friend", "friend_id")}
+${touchUpdatedAt("tally_group", "group_id")}
+${touchUpdatedAt("tally_expense", "expense_id")}
+${touchUpdatedAt("tally_settlement", "settlement_id")}
+${touchUpdatedAt("tally_obligation", "obligation_id")}
 CREATE TRIGGER tally_expense_split_touch_updated_at
 AFTER UPDATE ON tally_expense_split
 WHEN NEW.updated_at = OLD.updated_at

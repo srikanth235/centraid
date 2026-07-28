@@ -9,7 +9,7 @@
 // same "React-owned but foreign-filled" contract the boot skeleton relies on.
 // No domain (asset/album) state here, so it lives beside outcomes.ts rather
 // than in app.tsx — LightboxInfo imports and calls it directly.
-import { act, narrate } from './outcomes.ts';
+import { act, narrate } from "./outcomes.ts";
 
 interface FaceRegion {
   region_id: string;
@@ -32,24 +32,27 @@ interface FacesData {
 
 function kitBtn(
   label: string,
-  onClick: (event: MouseEvent) => void | Promise<void>,
+  onClick: (event: MouseEvent) => void | Promise<void>
 ): HTMLButtonElement {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'kit-btn';
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "kit-btn";
   btn.textContent = label;
-  btn.addEventListener('click', onClick);
+  btn.addEventListener("click", onClick);
   return btn;
 }
 
 export async function renderFaces(
   host: HTMLElement,
   assetId: string,
-  note: HTMLElement,
+  note: HTMLElement
 ): Promise<void> {
   let data: FacesData | undefined;
   try {
-    data = await window.centraid.read<FacesData>({ query: 'faces', input: { asset_id: assetId } });
+    data = await window.centraid.read<FacesData>({
+      query: "faces",
+      input: { asset_id: assetId },
+    });
   } catch {
     return; // face queries never break the lightbox
   }
@@ -60,51 +63,57 @@ export async function renderFaces(
   // (caught above) leaves whatever was already there alone.
   host.replaceChildren();
   if (regions.length === 0 || data?.denied) return;
-  const heading = document.createElement('p');
-  heading.className = 'lightbox-faces-title';
-  heading.textContent = 'People';
+  const heading = document.createElement("p");
+  heading.className = "lightbox-faces-title";
+  heading.textContent = "People";
   host.appendChild(heading);
   for (const region of regions) {
-    const row = document.createElement('div');
-    row.className = 'lightbox-face';
+    const row = document.createElement("div");
+    row.className = "lightbox-face";
     if (region.confirmed) {
-      const who = document.createElement('span');
-      who.textContent = `✓ ${region.person_name ?? 'Confirmed'}`;
+      const who = document.createElement("span");
+      who.textContent = `✓ ${region.person_name ?? "Confirmed"}`;
       row.appendChild(who);
       host.appendChild(row);
       continue;
     }
-    const label = document.createElement('span');
-    const pct = region.confidence != null ? ` · ${Math.round(region.confidence * 100)}%` : '';
-    label.textContent = `Face${region.person_name ? ` — ${region.person_name}?` : ''}${pct}`;
+    const label = document.createElement("span");
+    const pct =
+      region.confidence == null
+        ? ""
+        : ` · ${Math.round(region.confidence * 100)}%`;
+    label.textContent = `Face${region.person_name ? ` — ${region.person_name}?` : ""}${pct}`;
     row.appendChild(label);
-    const picker = document.createElement('select');
-    picker.setAttribute('aria-label', 'Who is this?');
-    const blank = document.createElement('option');
-    blank.value = '';
-    blank.textContent = 'Who is this?';
+    const picker = document.createElement("select");
+    picker.setAttribute("aria-label", "Who is this?");
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "Who is this?";
     picker.appendChild(blank);
     for (const person of data.people ?? []) {
-      const option = document.createElement('option');
+      const option = document.createElement("option");
       option.value = person.party_id;
       option.textContent = person.name;
       if (region.party_id === person.party_id) option.selected = true;
       picker.appendChild(option);
     }
-    const confirm = kitBtn('Confirm', async () => {
+    const confirm = kitBtn("Confirm", async () => {
       const partyId = picker.value;
       if (!partyId) {
-        note.textContent = 'Pick a person first.';
+        note.textContent = "Pick a person first.";
         return;
       }
-      const outcome = await act('confirm-face', { region_id: region.region_id, party_id: partyId });
+      const outcome = await act("confirm-face", {
+        region_id: region.region_id,
+        party_id: partyId,
+      });
       if (narrate(outcome, note)) await renderFaces(host, assetId, note);
     });
-    const reject = kitBtn('✕', async () => {
-      const outcome = await act('reject-face', { region_id: region.region_id });
+    const reject = kitBtn("✕", async () => {
+      const outcome = await act("reject-face", { region_id: region.region_id });
       if (narrate(outcome, note)) await renderFaces(host, assetId, note);
     });
-    reject.setAttribute('aria-label', 'Reject this face proposal');
+    reject.setAttribute("aria-label", "Reject this face proposal");
     row.append(picker, confirm, reject);
     host.appendChild(row);
   }

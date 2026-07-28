@@ -1,9 +1,10 @@
 // Small shared presentational bits used across the sidebar/modals. Pure
 // functions of props — no app state. Same role as tasks/notes'
 // components/Shared.tsx.
-import { useState } from 'react';
-import type { FC, ReactNode } from 'react';
-import shared from './shared.module.css';
+import { useState } from "react";
+import type { FC, ReactNode } from "react";
+
+import shared from "./shared.module.css";
 
 // The kit's native custom elements (`<kit-avatar>`, `<kit-skeleton>`, defined
 // in kit/elements.js). TSX has no intrinsic-element type for them, so we render
@@ -11,18 +12,23 @@ import shared from './shared.module.css';
 // string, so `jsx('kit-avatar', props)` emits the exact same DOM the JSX
 // original did (React sets the props as attributes on the custom element). The
 // cast is the one place the host tag becomes typed (pilot addendum 4).
-export const KitAvatar = 'kit-avatar' as unknown as FC<{
+export const KitAvatar = "kit-avatar" as unknown as FC<{
   name?: string;
   size?: string;
   color?: string;
   initials?: string;
 }>;
-export const KitSkeleton = 'kit-skeleton' as unknown as FC<{ rows?: number }>;
+export const KitSkeleton = "kit-skeleton" as unknown as FC<{ rows?: number }>;
 
 // A trusted static SVG string rendered inline, with no wrapper box in the
 // layout (`display:contents`) — see icons.ts for the glyph strings.
 export function Icon({ svg }: { svg: string }) {
-  return <i style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: svg }} />;
+  return (
+    <i
+      style={{ display: "contents" }}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
 }
 
 // A view is still loading: routed through the template itself, matching the
@@ -42,10 +48,21 @@ export function ExplistSkeleton({ rows }: { rows: number }) {
 // instead — `.kit-modal` is `position: relative`, so it paints above the scrim
 // and clicks inside it never reach the scrim at all. Same gesture, same
 // handler, now reachable by tab + Enter/Space (issue #573).
-export function ModalBackdrop({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+export function ModalBackdrop({
+  onClose,
+  children,
+}: {
+  onClose: () => void;
+  children: ReactNode;
+}) {
   return (
     <div className="kit-modal-back">
-      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <button
+        type="button"
+        className="kit-modal-scrim"
+        aria-label="Close"
+        onClick={onClose}
+      />
       {children}
     </div>
   );
@@ -60,7 +77,7 @@ export function ModalBackdrop({ onClose, children }: { onClose: () => void; chil
 export function ArmedButton({
   className,
   label,
-  armedLabel = 'Sure?',
+  armedLabel = "Sure?",
   disabled,
   onConfirm,
 }: {

@@ -12,10 +12,14 @@
 export default async ({ ctx, log }) => {
   const matches = Array.isArray(ctx.input?.rows) ? ctx.input.rows : [];
   const upcoming = matches
-    .filter((row) => typeof row.dtstart === 'string')
-    .map((row) => ({ summary: row.summary ?? 'Untitled deadline', due: row.dtstart.slice(0, 10) }))
+    .filter((row) => typeof row.dtstart === "string")
+    .map((row) => ({
+      summary: row.summary ?? "Untitled deadline",
+      due: row.dtstart.slice(0, 10),
+    }))
     .sort((a, b) => (a.due < b.due ? -1 : 1));
-  if (upcoming.length === 0) return { summary: 'nothing coming due in the next two weeks' };
+  if (upcoming.length === 0)
+    return { summary: "nothing coming due in the next two weeks" };
   for (const item of upcoming) log.info(`due ${item.due}: ${item.summary}`);
   const lead = upcoming[0];
   return {

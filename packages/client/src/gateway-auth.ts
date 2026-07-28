@@ -31,18 +31,18 @@ export class GatewayClientError extends Error {
   code: string;
   constructor(code: string, message: string) {
     super(message);
-    this.name = 'GatewayClientError';
+    this.name = "GatewayClientError";
     this.code = code;
   }
 }
 
 export function authHeaders(
   token: string | undefined,
-  contentType?: string,
+  contentType?: string
 ): Record<string, string> {
   const h: Record<string, string> = {};
   if (token) h.Authorization = `Bearer ${token}`;
-  if (contentType) h['Content-Type'] = contentType;
+  if (contentType) h["Content-Type"] = contentType;
   return h;
 }
 
@@ -51,7 +51,7 @@ export function href(baseUrl: string, pathname: string): string {
 }
 
 /** The canonical vault-addressing header (mirrors the gateway's constant). */
-export const VAULT_HEADER = 'x-centraid-vault';
+export const VAULT_HEADER = "x-centraid-vault";
 
 /**
  * Bearer headers that name their target space EXPLICITLY (issue #599).
@@ -66,7 +66,7 @@ export const VAULT_HEADER = 'x-centraid-vault';
 export function scopedAuthHeaders(
   token: string | undefined,
   scopeId: string | undefined,
-  contentType?: string,
+  contentType?: string
 ): Record<string, string> {
   const h = authHeaders(token, contentType);
   if (scopeId) h[VAULT_HEADER] = scopeId;

@@ -1,9 +1,12 @@
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
-export const DEFAULT_REPLICA_PURPOSE = 'dpv:ServiceProvision';
-export const REPLICA_SYNTHETIC_PRIMARY_KEY = '__centraid_row_id' as const;
+export const DEFAULT_REPLICA_PURPOSE = "dpv:ServiceProvision";
+export const REPLICA_SYNTHETIC_PRIMARY_KEY = "__centraid_row_id" as const;
 
 export type ReplicaScalar = null | boolean | number | string;
-export type ReplicaValue = ReplicaScalar | ReplicaValue[] | { [key: string]: ReplicaValue };
+export type ReplicaValue =
+  | ReplicaScalar
+  | ReplicaValue[]
+  | { [key: string]: ReplicaValue };
 export type ReplicaRow = Record<string, ReplicaValue>;
 
 export interface ReplicaIdentity {
@@ -61,11 +64,11 @@ export interface ReplicaSnapshot extends ReplicaBootstrapHeader {
 }
 
 export interface ReplicaUpsertChange extends ReplicaSnapshotRow {
-  op: 'upsert';
+  op: "upsert";
 }
 
 export interface ReplicaDeleteChange {
-  op: 'delete';
+  op: "delete";
   shapeId: string;
   entity: string;
   rowId: string;
@@ -73,7 +76,7 @@ export interface ReplicaDeleteChange {
 
 export type ReplicaChange = ReplicaUpsertChange | ReplicaDeleteChange;
 
-export type IntentOutcomeStatus = 'executed' | 'parked' | 'denied' | 'failed';
+export type IntentOutcomeStatus = "executed" | "parked" | "denied" | "failed";
 
 export interface IntentOutcome {
   intentId: string;
@@ -92,17 +95,17 @@ export interface ReplicaChangeBatch {
 }
 
 export type ReplicaFilterOperator =
-  | 'eq'
-  | 'ne'
-  | 'lt'
-  | 'lte'
-  | 'gt'
-  | 'gte'
-  | 'in'
-  | 'is-null'
-  | 'not-null'
-  | 'within-days'
-  | 'within-next-days';
+  | "eq"
+  | "ne"
+  | "lt"
+  | "lte"
+  | "gt"
+  | "gte"
+  | "in"
+  | "is-null"
+  | "not-null"
+  | "within-days"
+  | "within-next-days";
 
 export interface ReplicaFilterClause {
   column: string;
@@ -113,7 +116,7 @@ export interface ReplicaFilterClause {
 export interface ReplicaOrderBy {
   column: string;
   /** Default `asc`. Ties use an exposed scalar primary key ascending; opaque ties rerun online. */
-  dir?: 'asc' | 'desc';
+  dir?: "asc" | "desc";
 }
 
 export interface ReplicaReadRequest {
@@ -177,7 +180,7 @@ export interface ReplicaSearchResult {
   dependency: ReplicaDependency;
 }
 
-export type ReplicaMode = 'opfs-sahpool' | 'memory' | 'native';
+export type ReplicaMode = "opfs-sahpool" | "memory" | "native";
 
 export interface ReplicaWorkerOpenOptions {
   dbName: string;
@@ -194,7 +197,7 @@ export interface ReplicaStatus {
 }
 
 export interface OptimisticUpsert {
-  op: 'upsert';
+  op: "upsert";
   shapeId: string;
   entity: string;
   rowId: string;
@@ -202,7 +205,7 @@ export interface OptimisticUpsert {
 }
 
 export interface OptimisticDelete {
-  op: 'delete';
+  op: "delete";
   shapeId: string;
   entity: string;
   rowId: string;
@@ -211,13 +214,13 @@ export interface OptimisticDelete {
 export type OptimisticMutation = OptimisticUpsert | OptimisticDelete;
 
 export type IntentState =
-  | 'queued'
-  | 'sending'
-  | 'awaiting-change'
-  | 'parked'
-  | 'executed'
-  | 'denied'
-  | 'failed';
+  | "queued"
+  | "sending"
+  | "awaiting-change"
+  | "parked"
+  | "executed"
+  | "denied"
+  | "failed";
 
 export interface ReplicaIntent {
   intentId: string;
@@ -247,7 +250,7 @@ export interface EnqueueIntentInput {
 
 export interface ReplicaInvalidation extends ReplicaDependency {
   rowId?: string;
-  source: 'canonical' | 'overlay' | 'purge';
+  source: "canonical" | "overlay" | "purge";
   /** Present for local optimistic/outcome invalidations so apps can narrate settlement. */
   intentId?: string;
   intentState?: IntentState;

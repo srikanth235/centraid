@@ -1,11 +1,11 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    name: 'nightly-scale',
-    include: ['tests/scale/**/*.scale.test.ts'],
-    environment: 'node',
-    pool: 'forks',
+    name: "nightly-scale",
+    include: ["tests/scale/**/*.scale.test.ts"],
+    environment: "node",
+    pool: "forks",
     fileParallelism: false,
     // Nightly scale fixtures build real vaults / CAS files (fsync-per-blob) and
     // round-trip ~160 MiB through the backup engine; slow CI disks need more

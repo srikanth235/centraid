@@ -42,13 +42,13 @@ interface DecoratedAttachment {
   byte_size: number;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
-  const term = String(input?.term ?? '').trim();
+export default async function searchHandler({ input, ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
+  const term = String(input?.term ?? "").trim();
   if (!term) return { tasks: [] };
   try {
     const matches = await ctx.vault.search({
-      entity: 'schedule.task',
+      entity: "schedule.task",
       query: term,
       limit: 100,
       purpose,
@@ -59,20 +59,21 @@ export default async ({ input, ctx }: HandlerArgs) => {
     // Attachments only for the matched tasks — the join stays as narrow as
     // the match set, never a whole-table pull.
     const attachments = await ctx.vault.read({
-      entity: 'core.attachment',
+      entity: "core.attachment",
       where: [
-        { column: 'target_type', op: 'eq', value: 'schedule.task' },
-        { column: 'target_id', op: 'in', value: taskIds },
+        { column: "target_type", op: "eq", value: "schedule.task" },
+        { column: "target_id", op: "in", value: taskIds },
       ],
       purpose,
     });
-    const attachmentRows = (attachments.rows ?? []) as unknown as RawAttachment[];
+    const attachmentRows = (attachments.rows ??
+      []) as unknown as RawAttachment[];
     const contentIds = [...new Set(attachmentRows.map((a) => a.content_id))];
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.content_item',
-            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            entity: "core.content_item",
+            where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,
           })
         : { rows: [] };
@@ -80,7 +81,7 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const contentById = new Map(contentRows.map((c) => [c.content_id, c]));
     // Blob-backed bytes serve as same-origin URLs (issue #296).
     const srcOf = (c: RawContent | undefined): string | undefined =>
-      typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+      typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
         ? `/centraid/_vault/blobs/${c.content_id}`
         : c?.content_uri;
     const attByTask = new Map<string, DecoratedAttachment[]>();
@@ -92,9 +93,9 @@ export default async ({ input, ctx }: HandlerArgs) => {
         content_id: a.content_id,
         role: a.role,
         is_primary: a.is_primary,
-        media_type: content?.media_type ?? 'application/octet-stream',
+        media_type: content?.media_type ?? "application/octet-stream",
         title: content?.title ?? null,
-        content_uri: srcOf(content) ?? '',
+        content_uri: srcOf(content) ?? "",
         byte_size: content?.byte_size ?? 0,
       });
     }
@@ -105,11 +106,11 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const tasks = hits.map(({ _rank, _snippet, ...task }) => ({
       ...task,
       attachments: attByTask.get(task.task_id) ?? [],
-      snippet: typeof _snippet === 'string' ? _snippet : '',
+      snippet: typeof _snippet === "string" ? _snippet : "",
     }));
     return { tasks };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return { tasks: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

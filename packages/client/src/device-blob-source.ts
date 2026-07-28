@@ -12,7 +12,8 @@ import {
   cbsfDirectoryAad,
   cbsfFrameAad,
   decodeCbsfDirectory,
-} from '@centraid/blob-format';
+} from "@centraid/blob-format";
+
 type Bytes = Uint8Array<ArrayBuffer>;
 
 export interface DirectBlobDownloadPlan {
@@ -29,31 +30,43 @@ function magic(bytes: Uint8Array): string {
   return String.fromCharCode(...bytes.subarray(0, 4));
 }
 
-async function range(url: string, value: string): Promise<{ bytes: Bytes; total: number }> {
+async function range(
+  url: string,
+  value: string
+): Promise<{ bytes: Bytes; total: number }> {
   const response = await fetch(url, { headers: { Range: value } });
-  if (response.status !== 206) throw new Error('provider did not honor CBSF range read');
-  const match = response.headers.get('content-range')?.match(/\/([0-9]+)$/);
-  if (!match) throw new Error('provider did not expose Content-Range');
-  return { bytes: new Uint8Array(await response.arrayBuffer()), total: Number(match[1]) };
+  if (response.status !== 206)
+    throw new Error("provider did not honor CBSF range read");
+  const match = response.headers
+    .get("content-range")
+    ?.match(/\/(?<total>[0-9]+)$/u);
+  if (!match) throw new Error("provider did not expose Content-Range");
+  const total = Number(match.groups?.total);
+  return { bytes: new Uint8Array(await response.arrayBuffer()), total };
 }
 
 function aad(value: string): Bytes {
   return new TextEncoder().encode(value);
 }
 
-async function openGcm(key: CryptoKey, sealed: Bytes, additionalData: Bytes): Promise<Bytes> {
-  if (sealed.byteLength < NONCE_BYTES + 16) throw new Error('sealed CBSF value is truncated');
+async function openGcm(
+  key: CryptoKey,
+  sealed: Bytes,
+  additionalData: Bytes
+): Promise<Bytes> {
+  if (sealed.byteLength < NONCE_BYTES + 16)
+    throw new Error("sealed CBSF value is truncated");
   return new Uint8Array(
     await crypto.subtle.decrypt(
       {
-        name: 'AES-GCM',
+        name: "AES-GCM",
         iv: sealed.subarray(0, NONCE_BYTES),
         additionalData,
         tagLength: 128,
       },
       key,
-      sealed.subarray(NONCE_BYTES),
-    ),
+      sealed.subarray(NONCE_BYTES)
+    )
   );
 }
 
@@ -61,75 +74,104 @@ async function unpackFrame(body: Bytes): Promise<Bytes> {
   const algorithm = body[0];
   const payload = body.slice(1);
   if (algorithm === 0) return payload;
-  if (algorithm === 2 && typeof DecompressionStream !== 'undefined') {
+  if (algorithm === 2 && typeof DecompressionStream !== "undefined") {
     const stream = new Blob([payload.buffer])
       .stream()
-      .pipeThrough(new DecompressionStream('deflate-raw'));
+      .pipeThrough(new DecompressionStream("deflate-raw"));
     return new Uint8Array(await new Response(stream).arrayBuffer());
   }
-  throw new Error(`browser cannot open CBSF compression algorithm ${algorithm}`);
+  throw new Error(
+    `browser cannot open CBSF compression algorithm ${algorithm}`
+  );
 }
 
 /** Fetch and locally unseal a remote-primary blob using bounded provider ranges. */
 export async function readDirectBlob(
   plan: DirectBlobDownloadPlan,
   sha256: string,
-  mediaType: string,
+  mediaType: string
 ): Promise<Blob> {
-  if (!/^[0-9a-f]{64}$/.test(sha256)) throw new Error('direct read needs sha256');
+  if (!/^[0-9a-f]{64}$/u.test(sha256))
+    throw new Error("direct read needs sha256");
   const key = await crypto.subtle.importKey(
-    'raw',
+    "raw",
     base64Bytes(plan.keyBase64).buffer,
-    { name: 'AES-GCM' },
+    { name: "AES-GCM" },
     false,
-    ['decrypt'],
+    ["decrypt"]
   );
   const trailerRead = await range(plan.url, `bytes=-${TRAILER_BYTES}`);
   const trailer = trailerRead.bytes;
-  if (trailer.byteLength !== TRAILER_BYTES || magic(trailer) !== MAGIC || trailer[4] !== VERSION) {
-    throw new Error('provider object is not CBSF v2');
+  if (
+    trailer.byteLength !== TRAILER_BYTES ||
+    magic(trailer) !== MAGIC ||
+    trailer[4] !== VERSION
+  ) {
+    throw new Error("provider object is not CBSF v2");
   }
-  const trailerView = new DataView(trailer.buffer, trailer.byteOffset, trailer.byteLength);
+  const trailerView = new DataView(
+    trailer.buffer,
+    trailer.byteOffset,
+    trailer.byteLength
+  );
   const directoryLength = trailerView.getUint32(5, false);
   const frameCount = trailerView.getUint32(9, false);
   const directoryStart = trailerRead.total - TRAILER_BYTES - directoryLength;
-  if (directoryStart < HEADER_BYTES) throw new Error('CBSF directory offset is invalid');
+  if (directoryStart < HEADER_BYTES)
+    throw new Error("CBSF directory offset is invalid");
 
   const [headerRead, directoryRead] = await Promise.all([
     range(plan.url, `bytes=0-${HEADER_BYTES - 1}`),
-    range(plan.url, `bytes=${directoryStart}-${trailerRead.total - TRAILER_BYTES - 1}`),
+    range(
+      plan.url,
+      `bytes=${directoryStart}-${trailerRead.total - TRAILER_BYTES - 1}`
+    ),
   ]);
   const header = headerRead.bytes;
   const headerSha = [...header.subarray(5, HEADER_BYTES)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
   if (
     header.byteLength !== HEADER_BYTES ||
     magic(header) !== MAGIC ||
     header[4] !== VERSION ||
     headerSha !== sha256
   ) {
-    throw new Error('CBSF header identity mismatch');
+    throw new Error("CBSF header identity mismatch");
   }
   const directoryPlain = await openGcm(
     key,
     directoryRead.bytes,
-    aad(cbsfDirectoryAad(sha256, frameCount)),
+    aad(cbsfDirectoryAad(sha256, frameCount))
   );
   const directory = decodeCbsfDirectory(directoryPlain, frameCount);
   const parts: BlobPart[] = [];
   let offset = HEADER_BYTES;
   let plaintextBytes = 0;
-  for (let index = 0; index < directory.sealedLens.length; index += 1) {
+  async function readFrame(index: number): Promise<void> {
+    if (index >= directory.sealedLens.length) return;
     const length = directory.sealedLens[index]!;
-    const frame = await range(plan.url, `bytes=${offset}-${offset + length - 1}`);
-    if (frame.bytes.byteLength !== length) throw new Error('provider returned a short CBSF frame');
-    const opened = await openGcm(key, frame.bytes, aad(cbsfFrameAad(sha256, index, frameCount)));
+    const frame = await range(
+      plan.url,
+      `bytes=${offset}-${offset + length - 1}`
+    );
+    if (frame.bytes.byteLength !== length)
+      throw new Error("provider returned a short CBSF frame");
+    const opened = await openGcm(
+      key,
+      frame.bytes,
+      aad(cbsfFrameAad(sha256, index, frameCount))
+    );
     const plain = await unpackFrame(opened);
     parts.push(plain.buffer);
     plaintextBytes += plain.byteLength;
     offset += length;
+    return readFrame(index + 1);
   }
-  if (plaintextBytes !== directory.totalSize) throw new Error('CBSF plaintext size mismatch');
+  // Offset and authenticated-frame index advance together; this is a CBSF
+  // ordered-read boundary, not independent fetch work.
+  await readFrame(0);
+  if (plaintextBytes !== directory.totalSize)
+    throw new Error("CBSF plaintext size mismatch");
   return new Blob(parts, { type: mediaType });
 }

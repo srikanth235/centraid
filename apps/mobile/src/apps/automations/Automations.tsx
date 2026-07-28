@@ -1,14 +1,30 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import { Feather } from "@expo/vector-icons";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  Text,
+  View,
+} from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
-import { spacing, useTheme } from '../../kit/theme';
-import HomeKey from '../../kit/components/HomeKey';
-import { runAutomation, type AutomationRow } from '../../lib/automations';
-import type { AutomationsScreenProps } from '../../navigation';
-import { makeStyles } from './Automations.styles';
-import { useAutomations, type AutomationsState } from './useAutomations';
+import HomeKey from "../../kit/components/HomeKey";
+import { spacing, useTheme } from "../../kit/theme";
+import { runAutomation, type AutomationRow } from "../../lib/automations";
+import type { AutomationsScreenProps } from "../../navigation";
+import { makeStyles } from "./Automations.styles";
+import { useAutomations, type AutomationsState } from "./useAutomations";
 
 export default function AutomationsScreen({
   navigation,
@@ -18,15 +34,17 @@ export default function AutomationsScreen({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { state, refreshing, refresh, toggle } = useAutomations();
 
-  const rows = state.kind === 'ready' ? state.rows : [];
+  const rows = state.kind === "ready" ? state.rows : [];
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={() => navigation.goBack()} />
         <View style={styles.headerText}>
           <Text style={styles.title}>Automations</Text>
-          <Text style={styles.subtitle}>Conversations that run on their own</Text>
+          <Text style={styles.subtitle}>
+            Conversations that run on their own
+          </Text>
         </View>
       </View>
 
@@ -46,9 +64,16 @@ export default function AutomationsScreen({
             tintColor={colors.ink3}
           />
         }
-        ListEmptyComponent={<EmptyState state={state} styles={styles} colors={colors} />}
+        ListEmptyComponent={
+          <EmptyState state={state} styles={styles} colors={colors} />
+        }
         renderItem={({ item }) => (
-          <AutomationCard row={item} toggle={toggle} styles={styles} colors={colors} />
+          <AutomationCard
+            row={item}
+            toggle={toggle}
+            styles={styles}
+            colors={colors}
+          />
         )}
       />
     </SafeAreaView>
@@ -56,7 +81,7 @@ export default function AutomationsScreen({
 }
 
 type Styles = ReturnType<typeof makeStyles>;
-type Colors = ReturnType<typeof useTheme>['colors'];
+type Colors = ReturnType<typeof useTheme>["colors"];
 
 function EmptyState({
   state,
@@ -67,14 +92,14 @@ function EmptyState({
   styles: Styles;
   colors: Colors;
 }): React.JSX.Element {
-  if (state.kind === 'loading') {
+  if (state.kind === "loading") {
     return (
       <View style={styles.emptyWrap}>
         <Text style={styles.emptyCopy}>Opening your automations…</Text>
       </View>
     );
   }
-  if (state.kind === 'no-gateway') {
+  if (state.kind === "no-gateway") {
     return (
       <View style={styles.emptyWrap}>
         <Feather name="zap-off" size={30} color={colors.accent} />
@@ -85,7 +110,7 @@ function EmptyState({
       </View>
     );
   }
-  if (state.kind === 'error') {
+  if (state.kind === "error") {
     return (
       <View style={styles.emptyWrap}>
         <Feather name="alert-circle" size={30} color={colors.accent} />
@@ -101,13 +126,14 @@ function EmptyState({
       <Feather name="zap" size={30} color={colors.accent} />
       <Text style={styles.emptyTitle}>No automations yet</Text>
       <Text style={styles.emptyCopy}>
-        An automation is a saved conversation that fires on a trigger. Create one on your desktop.
+        An automation is a saved conversation that fires on a trigger. Create
+        one on your desktop.
       </Text>
     </View>
   );
 }
 
-type RunState = 'idle' | 'running' | 'started';
+type RunState = "idle" | "running" | "started";
 
 function AutomationCard({
   row,
@@ -120,7 +146,7 @@ function AutomationCard({
   styles: Styles;
   colors: Colors;
 }): React.JSX.Element {
-  const [run, setRun] = useState<RunState>('idle');
+  const [run, setRun] = useState<RunState>("idle");
   const [busyToggle, setBusyToggle] = useState(false);
   // A transient "Started" state settles back to "idle" on a timer; the mounted
   // ref keeps that late setState from firing after the card unmounts.
@@ -133,19 +159,22 @@ function AutomationCard({
   }, []);
 
   const fire = useCallback((): void => {
-    if (run === 'running') return;
-    setRun('running');
+    if (run === "running") return;
+    setRun("running");
     void runAutomation(row.ref)
       .then(() => {
         if (!mounted.current) return;
-        setRun('started');
+        setRun("started");
         setTimeout(() => {
-          if (mounted.current) setRun('idle');
+          if (mounted.current) setRun("idle");
         }, 2200);
       })
       .catch((err: unknown) => {
-        if (mounted.current) setRun('idle');
-        Alert.alert('Could not run', err instanceof Error ? err.message : 'Please try again.');
+        if (mounted.current) setRun("idle");
+        Alert.alert(
+          "Could not run",
+          err instanceof Error ? err.message : "Please try again."
+        );
       });
   }, [run, row.ref]);
 
@@ -155,8 +184,8 @@ function AutomationCard({
     void toggle(row.ref, !row.enabled)
       .catch((err: unknown) => {
         Alert.alert(
-          'Could not update',
-          err instanceof Error ? err.message : 'The change was not saved.',
+          "Could not update",
+          err instanceof Error ? err.message : "The change was not saved."
         );
       })
       .finally(() => {
@@ -164,7 +193,8 @@ function AutomationCard({
       });
   }, [busyToggle, toggle, row.ref, row.enabled]);
 
-  const runLabel = run === 'running' ? 'Running…' : run === 'started' ? 'Started' : 'Run now';
+  const runLabel =
+    run === "running" ? "Running…" : run === "started" ? "Started" : "Run now";
 
   return (
     <View style={styles.card}>
@@ -175,7 +205,7 @@ function AutomationCard({
         <Pressable
           accessibilityRole="switch"
           accessibilityState={{ checked: row.enabled, disabled: busyToggle }}
-          accessibilityLabel={`${row.enabled ? 'Disable' : 'Enable'} ${row.name}`}
+          accessibilityLabel={`${row.enabled ? "Disable" : "Enable"} ${row.name}`}
           onPress={flip}
           style={[
             styles.togglePill,
@@ -183,8 +213,13 @@ function AutomationCard({
             busyToggle && styles.dim,
           ]}
         >
-          <Text style={[styles.toggleText, { color: row.enabled ? colors.inkInv : colors.ink3 }]}>
-            {row.enabled ? 'On' : 'Off'}
+          <Text
+            style={[
+              styles.toggleText,
+              { color: row.enabled ? colors.inkInv : colors.ink3 },
+            ]}
+          >
+            {row.enabled ? "On" : "Off"}
           </Text>
         </Pressable>
       </View>
@@ -205,10 +240,18 @@ function AutomationCard({
           accessibilityRole="button"
           accessibilityLabel={`Run ${row.name} now`}
           onPress={fire}
-          disabled={run === 'running'}
-          style={[styles.runBtn, { borderColor: colors.lineStrong }, run !== 'idle' && styles.dim]}
+          disabled={run === "running"}
+          style={[
+            styles.runBtn,
+            { borderColor: colors.lineStrong },
+            run !== "idle" && styles.dim,
+          ]}
         >
-          <Feather name={run === 'started' ? 'check' : 'play'} size={13} color={colors.accent} />
+          <Feather
+            name={run === "started" ? "check" : "play"}
+            size={13}
+            color={colors.accent}
+          />
           <Text style={styles.runText}>{runLabel}</Text>
         </Pressable>
       </View>

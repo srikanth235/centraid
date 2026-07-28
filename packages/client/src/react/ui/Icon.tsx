@@ -1,6 +1,6 @@
-import type { JSX } from 'react';
-import { icons } from '@centraid/design-tokens';
-import type { IconName } from '@centraid/design-tokens';
+import { icons } from "@centraid/design-tokens";
+import type { IconName } from "@centraid/design-tokens";
+import type { JSX } from "react";
 
 export interface IconProps {
   name: IconName;
@@ -24,7 +24,7 @@ export interface IconProps {
 export default function Icon({
   name,
   size = 20,
-  color = 'currentColor',
+  color = "currentColor",
   strokeWidth = 1.5,
 }: IconProps): JSX.Element | null {
   const paths = icons[name];
@@ -43,11 +43,11 @@ export default function Icon({
       strokeLinejoin="round"
     >
       {paths.map((p, i) =>
-        p.fill === 'currentColor' ? (
+        p.fill === "currentColor" ? (
           <path key={i} d={p.d} fill={color} stroke="none" />
         ) : (
           <path key={i} d={p.d} />
-        ),
+        )
       )}
     </svg>
   );

@@ -2,43 +2,54 @@
 // Expo modules; the core is exercised here with fakes (the M0 injection rig),
 // so no React renderer or native module is loaded.
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from "vitest";
 
-import type { NativeReplicaSession } from '../../lib/replica/native-session';
+import type { NativeReplicaSession } from "../../lib/replica/native-session";
 import {
   ShareIntentGate,
   processShareIntent,
   type ShareIngestPorts,
   type SharedIntentFileLike,
-} from './share-ingest';
+} from "./share-ingest";
 
 const session = {} as NativeReplicaSession;
-const GATEWAY = 'http://127.0.0.1:8787';
+const GATEWAY = "http://127.0.0.1:8787";
 
-function fakePorts(overrides: Partial<ShareIngestPorts> = {}): ShareIngestPorts {
+function fakePorts(
+  overrides: Partial<ShareIngestPorts> = {}
+): ShareIngestPorts {
   return {
-    backupDeviceMedia: vi.fn(async () => 'sha-media'),
-    backupDocument: vi.fn(async () => 'sha-doc'),
-    fileSize: vi.fn(() => 1234),
-    reset: vi.fn(),
-    alert: vi.fn(),
+    backupDeviceMedia: vi.fn<ShareIngestPorts["backupDeviceMedia"]>(
+      async () => "sha-media"
+    ),
+    backupDocument: vi.fn<ShareIngestPorts["backupDocument"]>(
+      async () => "sha-doc"
+    ),
+    fileSize: vi.fn<ShareIngestPorts["fileSize"]>(() => 1234),
+    reset: vi.fn<ShareIngestPorts["reset"]>(),
+    alert: vi.fn<ShareIngestPorts["alert"]>(),
     ...overrides,
   };
 }
 
 function file(
-  overrides: Partial<SharedIntentFileLike> & { mimeType: string },
+  overrides: Partial<SharedIntentFileLike> & { mimeType: string }
 ): SharedIntentFileLike {
-  return { path: 'file:///share/x', fileName: 'x', size: 10, ...overrides };
+  return { path: "file:///share/x", fileName: "x", size: 10, ...overrides };
 }
 
-describe('processShareIntent routing', () => {
-  it('routes images and videos to the media producer with the right kind', async () => {
+describe("processShareIntent routing", () => {
+  it("routes images and videos to the media producer with the right kind", async () => {
     const ports = fakePorts();
     await processShareIntent(ports, session, GATEWAY, {
       files: [
-        file({ mimeType: 'image/jpeg', fileName: 'p.jpg', width: 4, height: 3 }),
-        file({ mimeType: 'video/mp4', fileName: 'v.mp4', duration: 12 }),
+        file({
+          mimeType: "image/jpeg",
+          fileName: "p.jpg",
+          width: 4,
+          height: 3,
+        }),
+        file({ mimeType: "video/mp4", fileName: "v.mp4", duration: 12 }),
       ],
     });
     expect(ports.backupDeviceMedia).toHaveBeenCalledTimes(2);
@@ -48,99 +59,113 @@ describe('processShareIntent routing', () => {
       session,
       GATEWAY,
       expect.objectContaining({
-        kind: 'photo',
+        kind: "photo",
         width: 4,
         height: 3,
         deleteSourceAfterSettle: true,
-      }),
+      })
     );
     expect(ports.backupDeviceMedia).toHaveBeenNthCalledWith(
       2,
       session,
       GATEWAY,
-      expect.objectContaining({ kind: 'video', durationS: 12, deleteSourceAfterSettle: true }),
+      expect.objectContaining({
+        kind: "video",
+        durationS: 12,
+        deleteSourceAfterSettle: true,
+      })
     );
   });
 
-  it('routes shared audio through the media producer as kind audio (F14e)', async () => {
+  it("routes shared audio through the media producer as kind audio (F14e)", async () => {
     const ports = fakePorts();
     await processShareIntent(ports, session, GATEWAY, {
-      files: [file({ mimeType: 'audio/mpeg', fileName: 'song.mp3' })],
+      files: [file({ mimeType: "audio/mpeg", fileName: "song.mp3" })],
     });
     expect(ports.backupDeviceMedia).toHaveBeenCalledWith(
       session,
       GATEWAY,
-      expect.objectContaining({ kind: 'audio', deleteSourceAfterSettle: true }),
+      expect.objectContaining({ kind: "audio", deleteSourceAfterSettle: true })
     );
     expect(ports.backupDocument).toHaveBeenCalledTimes(0);
   });
 
-  it('routes documents to the docs producer', async () => {
+  it("routes documents to the docs producer", async () => {
     const ports = fakePorts();
     await processShareIntent(ports, session, GATEWAY, {
-      files: [file({ mimeType: 'application/pdf', fileName: 'doc.pdf' })],
+      files: [file({ mimeType: "application/pdf", fileName: "doc.pdf" })],
     });
     expect(ports.backupDocument).toHaveBeenCalledWith(
       session,
       GATEWAY,
       expect.objectContaining({
-        title: 'doc.pdf',
-        mediaType: 'application/pdf',
+        title: "doc.pdf",
+        mediaType: "application/pdf",
         deleteSourceAfterSettle: true,
-      }),
+      })
     );
     expect(ports.backupDeviceMedia).toHaveBeenCalledTimes(0);
   });
 
-  it('falls back to fileSize when the intent carries no size', async () => {
+  it("falls back to fileSize when the intent carries no size", async () => {
     const ports = fakePorts();
     await processShareIntent(ports, session, GATEWAY, {
-      files: [file({ mimeType: 'application/pdf', size: null })],
+      files: [file({ mimeType: "application/pdf", size: null })],
     });
-    expect(ports.fileSize).toHaveBeenCalledWith('file:///share/x');
+    expect(ports.fileSize).toHaveBeenCalledWith("file:///share/x");
     expect(ports.backupDocument).toHaveBeenCalledWith(
       session,
       GATEWAY,
-      expect.objectContaining({ plaintextSize: 1234 }),
+      expect.objectContaining({ plaintextSize: 1234 })
     );
   });
 });
 
-describe('processShareIntent lifecycle', () => {
-  it('alerts honestly and resets on an unsupported (text) share, touching no producer', async () => {
+describe("processShareIntent lifecycle", () => {
+  it("alerts honestly and resets on an unsupported (text) share, touching no producer", async () => {
     const ports = fakePorts();
-    await processShareIntent(ports, session, GATEWAY, { files: [], text: 'hello' });
+    await processShareIntent(ports, session, GATEWAY, {
+      files: [],
+      text: "hello",
+    });
     expect(ports.backupDeviceMedia).toHaveBeenCalledTimes(0);
     expect(ports.backupDocument).toHaveBeenCalledTimes(0);
-    expect(ports.alert).toHaveBeenCalledTimes(1);
-    expect(ports.alert).toHaveBeenCalledWith('Can’t save this to Centraid', expect.any(String));
-    expect(ports.reset).toHaveBeenCalledTimes(1);
+    expect(ports.alert).toHaveBeenCalledExactlyOnceWith(
+      "Can’t save this to Centraid",
+      expect.any(String)
+    );
+    expect(ports.reset).toHaveBeenCalledOnce();
   });
 
-  it('always resets — on success', async () => {
+  it("always resets — on success", async () => {
     const ports = fakePorts();
     await processShareIntent(ports, session, GATEWAY, {
-      files: [file({ mimeType: 'image/png' })],
+      files: [file({ mimeType: "image/png" })],
     });
-    expect(ports.reset).toHaveBeenCalledTimes(1);
+    expect(ports.reset).toHaveBeenCalledOnce();
   });
 
-  it('always resets — and surfaces a paused alert on producer failure', async () => {
+  it("always resets — and surfaces a paused alert on producer failure", async () => {
     const ports = fakePorts({
-      backupDeviceMedia: vi.fn(async () => {
-        throw new Error('gateway unreachable');
-      }),
+      backupDeviceMedia: vi.fn<ShareIngestPorts["backupDeviceMedia"]>(
+        async () => {
+          throw new Error("gateway unreachable");
+        }
+      ),
     });
     await processShareIntent(ports, session, GATEWAY, {
-      files: [file({ mimeType: 'image/png' })],
+      files: [file({ mimeType: "image/png" })],
     });
-    expect(ports.alert).toHaveBeenCalledWith('Save to Centraid paused', 'gateway unreachable');
-    expect(ports.reset).toHaveBeenCalledTimes(1);
+    expect(ports.alert).toHaveBeenCalledWith(
+      "Save to Centraid paused",
+      "gateway unreachable"
+    );
+    expect(ports.reset).toHaveBeenCalledOnce();
   });
 });
 
-describe('ShareIntentGate', () => {
-  it('does not double-ingest while a pass is still in flight', async () => {
+describe(ShareIntentGate, () => {
+  it("does not double-ingest while a pass is still in flight", async () => {
     const gate = new ShareIntentGate();
     let started = 0;
     let release!: () => void;
@@ -157,9 +182,9 @@ describe('ShareIntentGate', () => {
     expect(started).toBe(1);
   });
 
-  it('runs again once the previous pass settled', async () => {
+  it("runs again once the previous pass settled", async () => {
     const gate = new ShareIntentGate();
-    const task = vi.fn(async () => {});
+    const task = vi.fn<() => Promise<void>>(async () => {});
     await gate.run(task);
     await gate.run(task);
     expect(task).toHaveBeenCalledTimes(2);

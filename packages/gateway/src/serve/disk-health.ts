@@ -25,10 +25,12 @@
  * event then clears so the FOLLOWING tick reflects statfs normally.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { sharedDiskFullTracker, type DiskFullTracker } from '@centraid/vault';
-import type { ComponentStatus, HealthProbe } from './health-registry.js';
+import fs from "node:fs";
+import path from "node:path";
+
+import { sharedDiskFullTracker, type DiskFullTracker } from "@centraid/vault";
+
+import type { ComponentStatus, HealthProbe } from "./health-registry.js";
 
 /** Free space below this absolute floor ⇒ `error`. */
 export const DISK_ERROR_BELOW_BYTES = 512 * 1024 ** 2; // 512 MiB
@@ -87,16 +89,25 @@ export interface DiskFreeEvaluation {
  * Pure free-space classifier (percent OR absolute floor). Exported so unit
  * tests drive the shipped thresholds without a full probe.
  */
-export function evaluateDiskFreeStatus(freeBytes: number, totalBytes: number): DiskFreeEvaluation {
+export function evaluateDiskFreeStatus(
+  freeBytes: number,
+  totalBytes: number
+): DiskFreeEvaluation {
   const safeTotal = totalBytes > 0 ? totalBytes : 0;
   const safeFree = Math.max(0, freeBytes);
   const freePercent = safeTotal > 0 ? (safeFree / safeTotal) * 100 : 0;
 
-  let status: ComponentStatus = 'ok';
-  if (safeFree < DISK_ERROR_BELOW_BYTES || freePercent < DISK_ERROR_BELOW_PERCENT) {
-    status = 'error';
-  } else if (safeFree < DISK_DEGRADED_BELOW_BYTES || freePercent < DISK_DEGRADED_BELOW_PERCENT) {
-    status = 'degraded';
+  let status: ComponentStatus = "ok";
+  if (
+    safeFree < DISK_ERROR_BELOW_BYTES ||
+    freePercent < DISK_ERROR_BELOW_PERCENT
+  ) {
+    status = "error";
+  } else if (
+    safeFree < DISK_DEGRADED_BELOW_BYTES ||
+    freePercent < DISK_DEGRADED_BELOW_PERCENT
+  ) {
+    status = "degraded";
   }
 
   return { status, freeBytes: safeFree, totalBytes: safeTotal, freePercent };
@@ -112,13 +123,13 @@ const defaultFileSize = (file: string): number => {
 
 /** `vault.db` + `journal.db` and their `-wal` siblings — cheap `statSync`s, never the blob CAS. */
 function vaultDbBytes(dir: string, fileSize: (file: string) => number): number {
-  const files = ['vault.db', 'vault.db-wal', 'journal.db', 'journal.db-wal'];
+  const files = ["vault.db", "vault.db-wal", "journal.db", "journal.db-wal"];
   return files.reduce((sum, name) => sum + fileSize(path.join(dir, name)), 0);
 }
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
+  const units = ["KB", "MB", "GB", "TB"];
   let value = bytes / 1024;
   let unit = 0;
   while (value >= 1024 && unit < units.length - 1) {
@@ -141,13 +152,14 @@ export function createDiskHealthProbe(options: DiskHealthOptions): HealthProbe {
     const perVault = options
       .vaults()
       .map(
-        ({ vaultId, dir }) => `${vaultId.slice(0, 8)}: ${formatBytes(vaultDbBytes(dir, fileSize))}`,
+        ({ vaultId, dir }) =>
+          `${vaultId.slice(0, 8)}: ${formatBytes(vaultDbBytes(dir, fileSize))}`
       )
-      .join(', ');
+      .join(", ");
     const detail =
       `${formatBytes(evaluation.freeBytes)} free of ${formatBytes(evaluation.totalBytes)}` +
       ` (${evaluation.freePercent.toFixed(1)}% free)` +
-      (perVault.length > 0 ? ` — ${perVault}` : '');
+      (perVault.length > 0 ? ` — ${perVault}` : "");
 
     // A prior ENOSPC/SQLITE_FULL write failure forces `error` — even on a
     // tick where statfs reports plenty free — for at least the one tick
@@ -155,14 +167,14 @@ export function createDiskHealthProbe(options: DiskHealthOptions): HealthProbe {
     // error floor so a tiny recovered pocket does not hide ENOSPC.
     const diskFull = diskFullTracker.current();
     if (evaluation.freeBytes >= DISK_ERROR_BELOW_BYTES) diskFullTracker.clear();
-    if (evaluation.status === 'error') return { status: 'error', detail };
+    if (evaluation.status === "error") return { status: "error", detail };
     if (diskFull) {
       return {
-        status: 'error',
+        status: "error",
         detail: `${detail} — ENOSPC observed at ${diskFull.at} in ${diskFull.context}`,
       };
     }
-    if (evaluation.status === 'degraded') return { status: 'degraded', detail };
-    return { status: 'ok', detail };
+    if (evaluation.status === "degraded") return { status: "degraded", detail };
+    return { status: "ok", detail };
   };
 }

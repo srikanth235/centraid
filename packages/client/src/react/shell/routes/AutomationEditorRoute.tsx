@@ -1,4 +1,5 @@
-import { type JSX, useRef } from 'react';
+import { type JSX, useRef } from "react";
+
 import {
   auth,
   compileAutomation,
@@ -18,79 +19,41 @@ import {
   searchVaultAnchors,
   searchVaultEntities,
   updateAutomation,
-} from '../../../gateway-client.js';
+} from "../../../gateway-client.js";
 import type {
   AuEditorCatalogConnectorDTO,
-  AuEditorTriggerDTO,
-  AuEditorTriggerInput,
   AutomationEditorData,
-} from '../../screen-contracts.js';
-import AutomationEditorScreen from '../../screens/AutomationEditorScreen.js';
-import { buildFeatured, type ConnectionRowDTO } from '../../screens/SettingsConnectionsScreen.js';
-import { useShellActions } from '../actions.js';
-import PageScroll from '../PageScroll.js';
-import { openWebhookReveal } from '../webhookReveal.js';
-import { buildAutomationAgentEditorData } from './automationEditorAgentData.js';
-import { loadCompileAttempts, loadTurnSteps, watchTurnSteps } from './automationCompileData.js';
-import { buildCreateAutomationEditorData } from './automationEditorCreateData.js';
-import { loadAutomationEditorData } from './automationEditorData.js';
-import { deriveAutomationHero } from './automationsData.js';
-import { decideConsentItem, filterConsentForAutomation } from './automationThreadData.js';
+} from "../../screen-contracts.js";
+import AutomationEditorScreen from "../../screens/AutomationEditorScreen.js";
+import {
+  buildFeatured,
+  type ConnectionRowDTO,
+} from "../../screens/SettingsConnectionsScreen.js";
+import { useShellActions } from "../actions.js";
+import PageScroll from "../PageScroll.js";
+import { openWebhookReveal } from "../webhookReveal.js";
+import {
+  loadCompileAttempts,
+  loadTurnSteps,
+  watchTurnSteps,
+} from "./automationCompileData.js";
+import { buildAutomationAgentEditorData } from "./automationEditorAgentData.js";
+import { buildCreateAutomationEditorData } from "./automationEditorCreateData.js";
+import { loadAutomationEditorData } from "./automationEditorData.js";
+import { triggerToDto, vaultForTriggers } from "./automationEditorTriggers.js";
+import { deriveAutomationHero } from "./automationsData.js";
+import {
+  decideConsentItem,
+  filterConsentForAutomation,
+} from "./automationThreadData.js";
 import {
   beginConnectionAuthorize,
   loadConnectionProvidersData,
   loadConnectionsData,
-} from './settingsConnectionsData.js';
-import { loadProviders } from './settingsProvidersData.js';
+} from "./settingsConnectionsData.js";
+import { loadProviders } from "./settingsProvidersData.js";
 
-/** Load-side trigger shape → the editor DTO's display shape (webhook needs
- *  its minted id + pending flag so the Connectors tab can render the URL). */
-function triggerToDto(t: CentraidAutomationRow['triggers'][number]): AuEditorTriggerDTO {
-  switch (t.kind) {
-    case 'webhook':
-      return { id: t.id ?? null, kind: 'webhook', pending: !!t.pending };
-    case 'cron':
-      return { expr: t.expr, kind: 'cron', ...(t.tz ? { tz: t.tz } : {}) };
-    case 'data':
-      return {
-        entities: [...t.entities],
-        kind: 'data',
-        ...(t.every ? { every: t.every } : {}),
-      };
-    case 'condition':
-      return {
-        entity: t.entity,
-        kind: 'condition',
-        ...(t.where !== undefined ? { where: t.where } : {}),
-        ...(t.every ? { every: t.every } : {}),
-      };
-    case 'event':
-      return {
-        connectorKind: t.connectorKind,
-        event: t.event,
-        filter: t.filter ? { ...t.filter } : undefined,
-        kind: 'event',
-        ...(t.every ? { every: t.every } : {}),
-      };
-  }
-}
-
-export function vaultForTriggers(triggers: readonly (AuEditorTriggerDTO | AuEditorTriggerInput)[]) {
-  const entities = triggers.flatMap((trigger) =>
-    trigger.kind === 'condition'
-      ? [trigger.entity]
-      : trigger.kind === 'data'
-        ? trigger.entities
-        : [],
-  );
-  const scopes = Array.from(new Set(entities)).map((entity) => {
-    const [schema, table] = entity.split('.', 2);
-    return { schema: schema || entity, ...(table ? { table } : {}), verbs: 'read' };
-  });
-  return scopes.length > 0
-    ? { purpose: 'dpv:ServiceProvision', why: 'Evaluate automation triggers.', scopes }
-    : undefined;
-}
+export { vaultForTriggers } from "./automationEditorTriggers.js";
 
 // React-owned automation editor — the instructions-first create/edit form
 // (Automations UI revamp, see receipts/issue-387-automations-ui-revamp.md). This is a real
@@ -109,10 +72,11 @@ let entityTypeCache: string[] | null = null;
 export function matchEditorConnection(
   connections: readonly ConnectionRowDTO[],
   providerId: string,
-  kind: string,
+  kind: string
 ): { match: ConnectionRowDTO | null; matches: ConnectionRowDTO[] } {
   const candidates = connections.filter(
-    (connection) => connection.kind === kind && connection.provider === providerId,
+    (connection) =>
+      connection.kind === kind && connection.provider === providerId
   );
   return {
     match: candidates.length === 1 ? candidates[0]! : null,
@@ -120,7 +84,9 @@ export function matchEditorConnection(
   };
 }
 
-async function loadEditorConnectorCatalog(): Promise<AuEditorCatalogConnectorDTO[]> {
+async function loadEditorConnectorCatalog(): Promise<
+  AuEditorCatalogConnectorDTO[]
+> {
   const [providers, connections] = await Promise.all([
     loadConnectionProvidersData(),
     loadConnectionsData(),
@@ -130,7 +96,11 @@ async function loadEditorConnectorCatalog(): Promise<AuEditorCatalogConnectorDTO
     // Provider is part of connection identity. Kind-only matching can lend
     // trusted catalog branding to a free-form credential; choosing the first
     // of multiple same-kind accounts silently binds the wrong principal.
-    const { match, matches } = matchEditorConnection(connections, f.providerId, f.kind);
+    const { match, matches } = matchEditorConnection(
+      connections,
+      f.providerId,
+      f.kind
+    );
     return {
       allowedHosts: f.provider.allowedHosts,
       authUrl: f.provider.authUrl,
@@ -201,8 +171,8 @@ export default function AutomationEditorRoute({
             ]);
             const template = templates.find((entry) => entry.id === templateId);
             const defaultCronTimeZone =
-              typeof prefs['automation.cron.defaultTimezone'] === 'string'
-                ? prefs['automation.cron.defaultTimezone']
+              typeof prefs["automation.cron.defaultTimezone"] === "string"
+                ? prefs["automation.cron.defaultTimezone"]
                 : null;
             return {
               ...buildCreateAutomationEditorData({
@@ -215,31 +185,33 @@ export default function AutomationEditorRoute({
               defaultCronTimeZone,
             };
           }
-          const [{ baseUrl }, blocking, grants, agents, agentStatus, prefs] = await Promise.all([
-            auth(),
-            getBlocking(),
-            listOutboxGrants(),
-            listAgents(),
-            loadProviders(),
-            getUserPrefs().catch(() => ({}) as Record<string, unknown>),
-          ]);
+          const [{ baseUrl }, blocking, grants, agents, agentStatus, prefs] =
+            await Promise.all([
+              auth(),
+              getBlocking(),
+              listOutboxGrants(),
+              listAgents(),
+              loadProviders(),
+              getUserPrefs().catch(() => ({}) as Record<string, unknown>),
+            ]);
           const hero = deriveAutomationHero(loaded.row, baseUrl);
           const defaultCronTimeZone =
-            typeof prefs['automation.cron.defaultTimezone'] === 'string'
-              ? prefs['automation.cron.defaultTimezone']
+            typeof prefs["automation.cron.defaultTimezone"] === "string"
+              ? prefs["automation.cron.defaultTimezone"]
               : null;
           return {
             automationId: loaded.row.ref,
             connectors: loaded.connectors,
             consent: filterConsentForAutomation(
-              agents.find((agent) => agent.hostKey === loaded.row?.ownerApp)?.agentId,
+              agents.find((agent) => agent.hostKey === loaded.row?.ownerApp)
+                ?.agentId,
               blocking,
-              grants,
+              grants
             ),
             defaultCronTimeZone,
             enabled: loaded.row.enabled,
             instructions: loaded.instructions,
-            mode: 'edit',
+            mode: "edit",
             model: loaded.model,
             name: loaded.name,
             onFailure: loaded.onFailure,
@@ -253,7 +225,9 @@ export default function AutomationEditorRoute({
         onSave={async (fields) => {
           try {
             const connections =
-              fields.connections && fields.connections.length > 0 ? fields.connections : undefined;
+              fields.connections && fields.connections.length > 0
+                ? fields.connections
+                : undefined;
             if (refIdRef.current) {
               const { row, webhook } = await updateAutomation({
                 automationId: refIdRef.current,
@@ -263,9 +237,13 @@ export default function AutomationEditorRoute({
                 ...(vaultForTriggers(fields.triggers)
                   ? { vault: vaultForTriggers(fields.triggers) }
                   : {}),
-                ...(connections !== undefined ? { connections } : { connections: [] }),
-                ...(fields.runner !== undefined ? { runner: fields.runner } : {}),
-                ...(fields.model !== undefined ? { model: fields.model } : {}),
+                ...(connections === undefined
+                  ? { connections: [] }
+                  : { connections }),
+                ...(fields.runner === undefined
+                  ? {}
+                  : { runner: fields.runner }),
+                ...(fields.model === undefined ? {} : { model: fields.model }),
               });
               if (row) rowRef.current = row;
               // A `{kind:'webhook'}` trigger that didn't exist before mints a
@@ -274,7 +252,7 @@ export default function AutomationEditorRoute({
               if (webhook) {
                 await openWebhookReveal(webhook, {
                   note: "This secret is shown once. Copy it now — you won't see it again.",
-                  title: 'Webhook minted',
+                  title: "Webhook minted",
                 });
               }
               showToast(`Saved · ${fields.name}`);
@@ -301,13 +279,15 @@ export default function AutomationEditorRoute({
             if (webhook) {
               await openWebhookReveal(webhook, {
                 note: "This secret is shown once. Copy it now — you won't see it again.",
-                title: 'Webhook minted',
+                title: "Webhook minted",
               });
             }
             showToast(`Created · ${fields.name}`);
             return true;
           } catch (err) {
-            showToast(`Could not save: ${err instanceof Error ? err.message : String(err)}`);
+            showToast(
+              `Could not save: ${err instanceof Error ? err.message : String(err)}`
+            );
             return false;
           }
         }}
@@ -324,7 +304,9 @@ export default function AutomationEditorRoute({
             });
             return compileTurnId;
           } catch (err) {
-            showToast(`Could not compile: ${err instanceof Error ? err.message : String(err)}`);
+            showToast(
+              `Could not compile: ${err instanceof Error ? err.message : String(err)}`
+            );
             return null;
           }
         }}
@@ -346,7 +328,12 @@ export default function AutomationEditorRoute({
           const typeHits = entityTypeCache
             .filter((name) => name.toLowerCase().includes(q))
             .slice(0, 6)
-            .map((name) => ({ id: '*', subtitle: 'Domain model', title: name, type: name }));
+            .map((name) => ({
+              id: "*",
+              subtitle: "Domain model",
+              title: name,
+              type: name,
+            }));
           const [anchorHits, instanceHits] = await Promise.all([
             searchVaultAnchors(term).catch(() => []),
             searchVaultEntities(term).catch(() => []),
@@ -396,7 +383,9 @@ export default function AutomationEditorRoute({
             const { turnId } = await runAutomationNow({ automationId: ref });
             return turnId;
           } catch (err) {
-            showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
+            showToast(
+              `Run failed: ${err instanceof Error ? err.message : String(err)}`
+            );
             return null;
           }
         }}
@@ -408,7 +397,7 @@ export default function AutomationEditorRoute({
             return true;
           } catch (err) {
             showToast(
-              `Could not ${next ? 'enable' : 'disable'}: ${err instanceof Error ? err.message : String(err)}`,
+              `Could not ${next ? "enable" : "disable"}: ${err instanceof Error ? err.message : String(err)}`
             );
             return false;
           }
@@ -419,49 +408,53 @@ export default function AutomationEditorRoute({
               decision,
               id,
               kind,
-              ...(alwaysAllow !== undefined ? { alwaysAllow } : {}),
+              ...(alwaysAllow === undefined ? {} : { alwaysAllow }),
             });
           } catch (err) {
-            showToast(`Could not update: ${err instanceof Error ? err.message : String(err)}`);
+            showToast(
+              `Could not update: ${err instanceof Error ? err.message : String(err)}`
+            );
             return false;
           }
         }}
         onOpenRun={(runId) => {
           const ref = refIdRef.current;
-          if (ref) navigate({ automationId: ref, kind: 'run-view', runId });
+          if (ref) navigate({ automationId: ref, kind: "run-view", runId });
         }}
         onOpenRuns={() => {
           const ref = refIdRef.current;
-          if (ref) navigate({ automationId: ref, kind: 'automation-view' });
+          if (ref) navigate({ automationId: ref, kind: "automation-view" });
         }}
         onCopyWebhook={(url) =>
           void navigator.clipboard
             .writeText(url)
-            .then(() => showToast('Webhook URL copied'))
-            .catch(() => showToast('Could not copy to clipboard'))
+            .then(() => showToast("Webhook URL copied"))
+            .catch(() => showToast("Could not copy to clipboard"))
         }
         onRotateWebhook={async () => {
           const ref = refIdRef.current;
           if (!ref) return false;
           const ok = await confirm({
-            confirmLabel: 'Regenerate',
+            confirmLabel: "Regenerate",
             danger: true,
             message:
-              'This invalidates the current secret — any caller using it starts failing until updated. The webhook URL stays the same.',
-            title: 'Regenerate webhook secret?',
+              "This invalidates the current secret — any caller using it starts failing until updated. The webhook URL stays the same.",
+            title: "Regenerate webhook secret?",
           });
           if (!ok) return false;
           try {
-            const { webhook } = await rotateAutomationWebhookSecret({ automationId: ref });
+            const { webhook } = await rotateAutomationWebhookSecret({
+              automationId: ref,
+            });
             await openWebhookReveal(webhook, {
               note: "This secret is shown once. Update your caller now — you won't see it again.",
-              title: 'New webhook secret',
+              title: "New webhook secret",
             });
-            showToast('Webhook secret regenerated');
+            showToast("Webhook secret regenerated");
             return true;
           } catch (err) {
             showToast(
-              `Could not regenerate secret: ${err instanceof Error ? err.message : String(err)}`,
+              `Could not regenerate secret: ${err instanceof Error ? err.message : String(err)}`
             );
             return false;
           }
@@ -471,27 +464,29 @@ export default function AutomationEditorRoute({
           const row = rowRef.current;
           if (!ref || !row) return false;
           const ok = await confirm({
-            confirmLabel: 'Delete',
+            confirmLabel: "Delete",
             danger: true,
             message: `Delete "${row.name}"? This removes it from the gateway and deletes its run history. This can't be undone.`,
-            title: 'Delete automation?',
+            title: "Delete automation?",
           });
           if (!ok) return false;
           try {
             await deleteAutomation({ automationId: ref });
             showToast(`Deleted "${row.name}"`);
-            navigate({ kind: 'automations' });
+            navigate({ kind: "automations" });
             return true;
           } catch (err) {
-            showToast(`Could not delete: ${err instanceof Error ? err.message : String(err)}`);
+            showToast(
+              `Could not delete: ${err instanceof Error ? err.message : String(err)}`
+            );
             return false;
           }
         }}
         onCancel={() =>
           navigate(
             refIdRef.current
-              ? { automationId: refIdRef.current, kind: 'automation-view' }
-              : { kind: 'automations' },
+              ? { automationId: refIdRef.current, kind: "automation-view" }
+              : { kind: "automations" }
           )
         }
       />

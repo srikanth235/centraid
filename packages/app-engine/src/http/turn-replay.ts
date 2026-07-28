@@ -13,8 +13,8 @@
  * Pure + tiny so it is unit-testable without a live stream.
  */
 
-import type { TurnStreamEvent } from '../conversation/runner.js';
-import type { RecordedTurnReplay } from '../conversation/history.js';
+import type { RecordedTurnReplay } from "../conversation/history.js";
+import type { TurnStreamEvent } from "../conversation/runner.js";
 
 /**
  * The ordered `TurnStreamEvent`s that replay a recorded turn. Both chat
@@ -22,26 +22,32 @@ import type { RecordedTurnReplay } from '../conversation/history.js';
  * `usage` → `final`, or a bare `error`), so a replay renders identically to
  * the turn's original stream.
  */
-export function buildReplayEvents(recorded: RecordedTurnReplay): TurnStreamEvent[] {
+export function buildReplayEvents(
+  recorded: RecordedTurnReplay
+): TurnStreamEvent[] {
   if (!recorded.ok) {
-    return [{ type: 'error', message: recorded.error ?? 'This turn failed.' }];
+    return [{ type: "error", message: recorded.error ?? "This turn failed." }];
   }
-  const text = recorded.finalText ?? '';
-  const events: TurnStreamEvent[] = [{ type: 'assistant.start' }];
-  if (text.length > 0) events.push({ type: 'assistant.delta', delta: text });
+  const text = recorded.finalText ?? "";
+  const events: TurnStreamEvent[] = [{ type: "assistant.start" }];
+  if (text.length > 0) events.push({ type: "assistant.delta", delta: text });
   if (recorded.usage) {
     events.push({
-      type: 'usage',
-      ...(recorded.usage.model !== undefined ? { model: recorded.usage.model } : {}),
-      ...(recorded.usage.effort !== undefined ? { effort: recorded.usage.effort } : {}),
-      ...(recorded.usage.inputTokens !== undefined
-        ? { inputTokens: recorded.usage.inputTokens }
-        : {}),
-      ...(recorded.usage.outputTokens !== undefined
-        ? { outputTokens: recorded.usage.outputTokens }
-        : {}),
+      type: "usage",
+      ...(recorded.usage.model === undefined
+        ? {}
+        : { model: recorded.usage.model }),
+      ...(recorded.usage.effort === undefined
+        ? {}
+        : { effort: recorded.usage.effort }),
+      ...(recorded.usage.inputTokens === undefined
+        ? {}
+        : { inputTokens: recorded.usage.inputTokens }),
+      ...(recorded.usage.outputTokens === undefined
+        ? {}
+        : { outputTokens: recorded.usage.outputTokens }),
     });
   }
-  events.push({ type: 'final', text });
+  events.push({ type: "final", text });
   return events;
 }

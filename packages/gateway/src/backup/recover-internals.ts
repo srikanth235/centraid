@@ -6,9 +6,10 @@
  * the fenced backup-state seed, and the warm-or-honestly-skip decision.
  */
 
-import { existsSync, promises as fs } from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { existsSync, promises as fs } from "node:fs";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
 import {
   openLocalBackupProvider,
   openRemoteBackupProvider,
@@ -18,21 +19,33 @@ import {
   type RestoreCurrentVersions,
   type SnapshotRow,
   type WalReplayOutcome,
-} from '@centraid/backup';
-import { bumpReplicaEpoch, ONTOLOGY_VERSION, VAULT_MIGRATIONS } from '@centraid/vault';
-import { run } from '../worktree-store/git.js';
-import { GATEWAY_VERSION } from '../version.js';
-import { loadBackupState, saveBackupState } from './backup-state.js';
-import type { GatewayDatabase } from '../serve/gateway-db.js';
-import { warmPreviewTinies } from './restore-warm.js';
-import type { PreviewsRecoverOutcome, RecoverAdoptContext, RecoverInput } from './recover.js';
+} from "@centraid/backup";
+import {
+  bumpReplicaEpoch,
+  ONTOLOGY_VERSION,
+  VAULT_MIGRATIONS,
+} from "@centraid/vault";
 
-const LOCAL_PROVIDER_PREFIX = 'local:';
+import type { GatewayDatabase } from "../serve/gateway-db.js";
+import { GATEWAY_VERSION } from "../version.js";
+import { run } from "../worktree-store/git.js";
+import { loadBackupState, saveBackupState } from "./backup-state.js";
+import type {
+  PreviewsRecoverOutcome,
+  RecoverAdoptContext,
+  RecoverInput,
+} from "./recover.js";
+import { warmPreviewTinies } from "./restore-warm.js";
+
+const LOCAL_PROVIDER_PREFIX = "local:";
 
 /** Build a provider from the kit target's addressing + the out-of-band api-key.
  *  A remote home carries its base URL in `provider`; an operator/test local
  *  provider carries `local:<dir>` (the api-key is irrelevant to it). */
-export function buildProviderFromTarget(target: RecoveryKitTarget, apiKey: string): BackupProvider {
+export function buildProviderFromTarget(
+  target: RecoveryKitTarget,
+  apiKey: string
+): BackupProvider {
   if (target.provider.startsWith(LOCAL_PROVIDER_PREFIX)) {
     return openLocalBackupProvider({
       rootDir: target.provider.slice(LOCAL_PROVIDER_PREFIX.length),
@@ -46,7 +59,7 @@ export function buildProviderFromTarget(target: RecoveryKitTarget, apiKey: strin
  *  silently picking one of several would be a footgun. */
 export function selectTarget(
   targets: RecoveryKitTarget[],
-  vaultId: string | undefined,
+  vaultId: string | undefined
 ): RecoveryKitTarget {
   if (vaultId !== undefined) {
     const match = targets.find((t) => t.vaultId === vaultId);
@@ -54,7 +67,7 @@ export function selectTarget(
       throw new Error(
         `recover: the recovery kit has no vault "${vaultId}" (it carries: ${targets
           .map((t) => t.vaultId)
-          .join(', ')})`,
+          .join(", ")})`
       );
     }
     return match;
@@ -62,7 +75,7 @@ export function selectTarget(
   if (targets.length === 1) return targets[0]!;
   throw new Error(
     `recover: the recovery kit carries ${targets.length} vaults — choose one with --vault ` +
-      `(${targets.map((t) => t.vaultId).join(', ')})`,
+      `(${targets.map((t) => t.vaultId).join(", ")})`
   );
 }
 
@@ -71,7 +84,7 @@ export function selectTarget(
  *  runs against; `restoreSnapshot` re-selects (by base tick) and re-gates. */
 export function pickSnapshotRow(
   rows: SnapshotRow[],
-  at: number | undefined,
+  at: number | undefined
 ): SnapshotRow | undefined {
   if (at !== undefined) return rows.find((r) => r.createdAt * 1000 <= at);
   return rows[0];
@@ -81,7 +94,8 @@ export function pickSnapshotRow(
  *  reconcile audit uses (`backup-cas-diff.ts`): objects land at
  *  `blobs/sha256/<sha>` under the cas prefix. */
 function casShaOf(key: string): string | undefined {
-  return /(?:^|\/)blobs\/(?:sha256\/)?([0-9a-f]{64})$/.exec(key)?.[1];
+  return /(?:^|\/)blobs\/(?:sha256\/)?(?<sha>[0-9a-f]{64})$/u.exec(key)?.groups
+    ?.sha;
 }
 
 /** Paginate the provider's ATTESTED cas inventory into the set of shas it holds
@@ -91,22 +105,23 @@ function casShaOf(key: string): string | undefined {
  *  not durable. */
 export async function collectRemoteCasShas(
   provider: BackupProvider,
-  targetId: string,
+  targetId: string
 ): Promise<Set<string>> {
   const shas = new Set<string>();
-  let cursor: string | undefined;
-  do {
+  const collectPage = async (cursor: string | undefined): Promise<void> => {
     const page = await provider.listInventory!(targetId, {
-      store: 'cas',
-      ...(cursor !== undefined ? { cursor } : {}),
+      store: "cas",
+      ...(cursor === undefined ? {} : { cursor }),
     });
     for (const object of page.objects) {
-      if (object.state !== 'live') continue;
+      if (object.state !== "live") continue;
       const sha = casShaOf(object.key);
       if (sha) shas.add(sha);
     }
-    cursor = page.nextCursor ?? undefined;
-  } while (cursor !== undefined);
+    const nextCursor = page.nextCursor ?? undefined;
+    if (nextCursor !== undefined) return collectPage(nextCursor);
+  };
+  await collectPage(undefined);
   return shas;
 }
 
@@ -134,17 +149,22 @@ export async function collectRemoteCasShas(
  * skips an empty bare repo), so this is a no-op for it (`existsSync` guard) and
  * `WorktreeStore.init()` plants the fresh empty repo as before.
  */
-export async function rehydrateCodeStore(vaultDir: string, log: EngineLogger): Promise<void> {
-  const bundle = path.join(vaultDir, 'apps.bundle');
+export async function rehydrateCodeStore(
+  vaultDir: string,
+  log: EngineLogger
+): Promise<void> {
+  const bundle = path.join(vaultDir, "apps.bundle");
   if (!existsSync(bundle)) return;
   // `<vaultDir>/code` is `VaultPlane.codeStoreRoot`; `apps.git` under it is the
   // bare repo `WorktreeStore` opens (both layout constants are private to their
   // owners, so they are spelled out here beside the KeyStore import path).
-  const bareDir = path.join(vaultDir, 'code', 'apps.git');
+  const bareDir = path.join(vaultDir, "code", "apps.git");
   await fs.mkdir(path.dirname(bareDir), { recursive: true });
-  await run(['clone', '--bare', bundle, bareDir], { cwd: vaultDir });
+  await run(["clone", "--bare", bundle, bareDir], { cwd: vaultDir });
   await fs.rm(bundle, { force: true });
-  log.info?.(`recover: rehydrated the app code store at ${bareDir} from apps.bundle`);
+  log.info?.(
+    `recover: rehydrated the app code store at ${bareDir} from apps.bundle`
+  );
 }
 
 /** A materialized restore is a NEW replica history, never a continuation — the
@@ -152,9 +172,9 @@ export async function rehydrateCodeStore(vaultDir: string, log: EngineLogger): P
  *  #439 gap 4). Bump the epoch so nothing trusts them; the R5 reconcile (wave 3)
  *  re-establishes truth against the live inventory. */
 export function invalidateRestoredReplica(destDir: string): void {
-  const vault = new DatabaseSync(path.join(destDir, 'vault.db'));
+  const vault = new DatabaseSync(path.join(destDir, "vault.db"));
   try {
-    bumpReplicaEpoch(vault, { reason: 'backup-restore' });
+    bumpReplicaEpoch(vault, { reason: "backup-restore" });
   } finally {
     vault.close();
   }
@@ -163,8 +183,13 @@ export function invalidateRestoredReplica(destDir: string): void {
 /** Recovered-as-of: the single instant both databases were coordinated-cut to
  *  (the honest "everything safe as of T"); the snapshot's registration time when
  *  the restore was base-pair-only (no WAL). */
-export function recoveredAsOfMs(walReplay: WalReplayOutcome, row: SnapshotRow): number {
-  return walReplay.coordinatedCutMs >= 0 ? walReplay.coordinatedCutMs : row.createdAt * 1000;
+export function recoveredAsOfMs(
+  walReplay: WalReplayOutcome,
+  row: SnapshotRow
+): number {
+  return walReplay.coordinatedCutMs >= 0
+    ? walReplay.coordinatedCutMs
+    : row.createdAt * 1000;
 }
 
 /** Truncated = a db could not be replayed to the newest tick the provider
@@ -172,8 +197,11 @@ export function recoveredAsOfMs(walReplay: WalReplayOutcome, row: SnapshotRow): 
  *  reports, plus the per-db chain signal. */
 export function walReplayTruncated(walReplay: WalReplayOutcome): boolean {
   const shortOfTip =
-    walReplay.expectedCutMs >= 0 && walReplay.coordinatedCutMs < walReplay.expectedCutMs;
-  return shortOfTip || Object.values(walReplay.perDb).some((db) => db.truncated);
+    walReplay.expectedCutMs >= 0 &&
+    walReplay.coordinatedCutMs < walReplay.expectedCutMs;
+  return (
+    shortOfTip || Object.values(walReplay.perDb).some((db) => db.truncated)
+  );
 }
 
 /** The current gateway's version ceiling — the compat gate's "what can this
@@ -195,19 +223,19 @@ export async function warmOrSkip(
   ctx: RecoverAdoptContext,
   deferredCount: number,
   now: () => number,
-  log: EngineLogger,
+  log: EngineLogger
 ): Promise<PreviewsRecoverOutcome> {
   if (input.full) {
     return {
       warmed: false,
-      reason: 'full restore — every blob was materialized, no warm pass needed',
+      reason: "full restore — every blob was materialized, no warm pass needed",
     };
   }
   if (!input.resolveRemoteTier) {
     return {
       warmed: false,
       reason:
-        'no remote CAS tier resolver in this context (headless recovery) — ' +
+        "no remote CAS tier resolver in this context (headless recovery) — " +
         `${deferredCount} deferred blob(s) and every preview stream in on demand after the vault mounts`,
     };
   }
@@ -215,7 +243,8 @@ export async function warmOrSkip(
   if (!remote) {
     return {
       warmed: false,
-      reason: 'the recovered vault has no durable remote CAS tier — previews stream in on demand',
+      reason:
+        "the recovered vault has no durable remote CAS tier — previews stream in on demand",
     };
   }
   const warm = await warmPreviewTinies({
@@ -257,7 +286,10 @@ export async function seedFencedBackupState(opts: {
   lastSeq: number;
   now: () => number;
 }): Promise<void> {
-  const state = await loadBackupState(opts.gatewayDatabase, opts.sourceInstanceId);
+  const state = await loadBackupState(
+    opts.gatewayDatabase,
+    opts.sourceInstanceId
+  );
   const stamp = new Date(opts.now()).toISOString();
   state.targets[opts.vaultId] = {
     targetId: opts.target.targetId,

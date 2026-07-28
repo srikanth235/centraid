@@ -1,33 +1,35 @@
 // governance: allow-repo-hygiene file-size-limit (#567) the Assistant screen is one stateful composition over the shared composer/status primitives; splitting its bridge state would duplicate fallible control coordination
-import { useEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from "react";
+
 import type {
   AsstModelPickerDTO,
   AssistantBridgeProps,
   AssistantSnapshot,
-} from '../screen-contracts.js';
-import styles from './AssistantScreen.module.css';
-import Icon from '../ui/Icon.js';
-import { cx } from '../ui/cx.js';
-import Message, { type MessageCallbacks } from './AssistantMessage.js';
-import { useAssistantScroll } from './useAssistantScroll.js';
-import { clearDraft, loadDraft, saveDraft } from './assistantDrafts.js';
-import { useComposerAutocomplete } from './ComposerAutocomplete.js';
-import ChatComposer from './ChatComposer.js';
-import { workspaceKindLabel } from './workspaceKindLabel.js';
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import { clearDraft, loadDraft, saveDraft } from "./assistantDrafts.js";
+import Message, { type MessageCallbacks } from "./AssistantMessage.js";
+import ChatComposer from "./ChatComposer.js";
+import { useComposerAutocomplete } from "./ComposerAutocomplete.js";
+import { useAssistantScroll } from "./useAssistantScroll.js";
+import { workspaceKindLabel } from "./workspaceKindLabel.js";
+
+import styles from "./AssistantScreen.module.css";
 
 const NO_ENTITIES = async (): Promise<never[]> => [];
 
 const EMPTY_MODEL_PICKER: AsstModelPickerDTO = {
   runners: [],
-  selectedRunnerKind: '',
-  workspaceKinds: ['vault-data'],
+  selectedRunnerKind: "",
+  workspaceKinds: ["vault-data"],
   connected: false,
   models: [],
-  defaultModelName: '',
-  selectedModelId: '',
+  defaultModelName: "",
+  selectedModelId: "",
   efforts: [],
-  defaultEffortName: '',
-  selectedEffortId: '',
+  defaultEffortName: "",
+  selectedEffortId: "",
 };
 
 export function RunnerPicker({
@@ -55,7 +57,7 @@ export function RunnerPicker({
         {picker.runners.map((runner) => (
           <option key={runner.kind} value={runner.kind} title={runner.hint}>
             {runner.title}
-            {!runner.sessionReady ? ' — setup or sign-in needed' : ''}
+            {runner.sessionReady ? "" : " — setup or sign-in needed"}
           </option>
         ))}
       </select>
@@ -83,26 +85,27 @@ export function ModelPicker({
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: MouseEvent): void => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(e.target as Node))
+        setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === "Escape") setOpen(false);
     };
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
     };
   }, [open]);
 
   if (picker.models.length === 0) return null;
   const selected = picker.models.find((m) => m.id === picker.selectedModelId);
-  const label = !loaded
-    ? 'Model'
-    : selected
+  const label = loaded
+    ? selected
       ? (selected.name ?? selected.id)
-      : `Default · ${picker.defaultModelName || 'gateway default'}`;
+      : `Default · ${picker.defaultModelName || "gateway default"}`
+    : "Model";
 
   const choose = (modelId: string): void => {
     onSelect(modelId);
@@ -118,28 +121,36 @@ export function ModelPicker({
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={!loaded || busy || picker.modelLocked}
-        title={picker.modelLocked ? 'Pinned by this automation manifest' : undefined}
+        title={
+          picker.modelLocked ? "Pinned by this automation manifest" : undefined
+        }
         onClick={() => setOpen((o) => !o)}
       >
         <span className={styles.modelBtnLabel}>{label}</span>
         <Icon name="ChevronDown" size={11} />
       </button>
       {open ? (
-        <div className={styles.modelMenu} role="menu" aria-label="Choose the assistant model">
+        <div
+          className={styles.modelMenu}
+          role="menu"
+          aria-label="Choose the assistant model"
+        >
           <button
             type="button"
             role="menuitemradio"
             aria-checked={!picker.selectedModelId}
             className={styles.modelItem}
-            data-active={!picker.selectedModelId ? 'true' : undefined}
-            onClick={() => choose('')}
+            data-active={picker.selectedModelId ? undefined : "true"}
+            onClick={() => choose("")}
           >
             <span>Use default</span>
             <span className={styles.modelItemHint}>
-              {picker.defaultModelName || 'gateway default'}
+              {picker.defaultModelName || "gateway default"}
             </span>
           </button>
-          {picker.models.length ? <div className={styles.modelDivider} /> : null}
+          {picker.models.length ? (
+            <div className={styles.modelDivider} />
+          ) : null}
           {picker.models.map((m) => (
             <button
               key={m.id}
@@ -147,11 +158,13 @@ export function ModelPicker({
               role="menuitemradio"
               aria-checked={picker.selectedModelId === m.id}
               className={styles.modelItem}
-              data-active={picker.selectedModelId === m.id ? 'true' : undefined}
+              data-active={picker.selectedModelId === m.id ? "true" : undefined}
               onClick={() => choose(m.id)}
             >
               <span>{m.name ?? m.id}</span>
-              {m.default ? <span className={styles.modelItemHint}>default</span> : null}
+              {m.default ? (
+                <span className={styles.modelItemHint}>default</span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -179,10 +192,12 @@ export function EffortPicker({
         aria-label="Assistant effort"
         value={picker.selectedEffortId}
         disabled={!loaded || busy || picker.effortLocked}
-        title={picker.effortLocked ? 'Pinned by this automation manifest' : undefined}
+        title={
+          picker.effortLocked ? "Pinned by this automation manifest" : undefined
+        }
         onChange={(event) => onSelect(event.target.value)}
       >
-        <option value="">{`Default · ${picker.defaultEffortName || 'agent effort'}`}</option>
+        <option value="">{`Default · ${picker.defaultEffortName || "agent effort"}`}</option>
         {picker.efforts.map((effort) => (
           <option key={effort.value} value={effort.value}>
             {effort.name ?? effort.value}
@@ -239,15 +254,20 @@ export default function AssistantScreen({
     messages: [],
     pendingAttachments: [],
   });
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState("");
   const [dragOver, setDragOver] = useState(false);
-  const [modelPicker, setModelPicker] = useState<AsstModelPickerDTO>(EMPTY_MODEL_PICKER);
+  const [modelPicker, setModelPicker] =
+    useState<AsstModelPickerDTO>(EMPTY_MODEL_PICKER);
   const [modelPickerLoaded, setModelPickerLoaded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  const { showJump, jumpToBottom } = useAssistantScroll(scrollRef, snap.messages, conversationId);
+  const { showJump, jumpToBottom } = useAssistantScroll(
+    scrollRef,
+    snap.messages,
+    conversationId
+  );
 
   useEffect(() => {
     onReady((s) => setSnap(s));
@@ -289,13 +309,15 @@ export default function AssistantScreen({
     onRunSlash: onRunSlash ?? (() => undefined),
   });
 
-  const hasReadyAttachment = snap.pendingAttachments.some((a) => a.state === 'ready');
+  const hasReadyAttachment = snap.pendingAttachments.some(
+    (a) => a.state === "ready"
+  );
 
   const send = (): void => {
     const t = draft.trim();
     if (snap.busy || (!t && !hasReadyAttachment)) return;
     clearDraft(conversationId);
-    setDraft('');
+    setDraft("");
     onSend(t);
   };
 
@@ -340,8 +362,8 @@ export default function AssistantScreen({
               <div className={styles.empty}>
                 <div className={styles.emptyTitle}>Ask your vault</div>
                 <div className={styles.emptySub}>
-                  Questions can span everything the vault holds — people, notes, money, events — and
-                  their connections.
+                  Questions can span everything the vault holds — people, notes,
+                  money, events — and their connections.
                 </div>
                 <div className={styles.suggest}>
                   {suggestions.map((q) => (
@@ -357,7 +379,9 @@ export default function AssistantScreen({
                 </div>
               </div>
             ) : (
-              snap.messages.map((m, i) => <Message key={i} m={m} index={i} cb={messageCallbacks} />)
+              snap.messages.map((m, i) => (
+                <Message key={i} m={m} index={i} cb={messageCallbacks} />
+              ))
             )}
           </div>
           {showJump ? (
@@ -374,7 +398,7 @@ export default function AssistantScreen({
         <div className={styles.composer}>
           <div
             className={styles.composerRow}
-            data-dragover={dragOver ? 'true' : undefined}
+            data-dragover={dragOver ? "true" : undefined}
             onDragOver={(e) => {
               e.preventDefault();
               setDragOver(true);
@@ -394,17 +418,32 @@ export default function AssistantScreen({
                 {snap.pendingAttachments.map((a) => (
                   <div
                     key={a.id}
-                    className={cx(styles.attachChip, a.previewUrl && styles.attachChipImage)}
+                    className={cx(
+                      styles.attachChip,
+                      a.previewUrl && styles.attachChipImage
+                    )}
                     data-state={a.state}
-                    title={a.state === 'error' ? (a.errorText ?? 'Upload failed') : a.filename}
+                    title={
+                      a.state === "error"
+                        ? (a.errorText ?? "Upload failed")
+                        : a.filename
+                    }
                   >
                     {a.previewUrl ? (
-                      <img className={styles.attachThumb} src={a.previewUrl} alt={a.filename} />
+                      <img
+                        className={styles.attachThumb}
+                        src={a.previewUrl}
+                        alt={a.filename}
+                      />
                     ) : null}
-                    {a.state === 'uploading' ? <span className={styles.attachSpinner} /> : null}
+                    {a.state === "uploading" ? (
+                      <span className={styles.attachSpinner} />
+                    ) : null}
                     <span className={styles.attachName}>{a.filename}</span>
                     <span className={styles.attachSize}>
-                      {a.state === 'error' ? 'failed' : formatBytes(a.sizeBytes)}
+                      {a.state === "error"
+                        ? "failed"
+                        : formatBytes(a.sizeBytes)}
                     </span>
                     <button
                       type="button"
@@ -419,12 +458,19 @@ export default function AssistantScreen({
               </div>
             ) : null}
             {snap.additionalDirectories?.length ? (
-              <div className={styles.attachRow} aria-label="Shared workspace folders">
+              <div
+                className={styles.attachRow}
+                aria-label="Shared workspace folders"
+              >
                 {snap.additionalDirectories.map((directory) => (
-                  <div key={directory} className={styles.attachChip} title={directory}>
+                  <div
+                    key={directory}
+                    className={styles.attachChip}
+                    title={directory}
+                  >
                     <Icon name="Folder" size={12} />
                     <span className={styles.attachName}>
-                      {directory.split(/[\\/]/).filter(Boolean).at(-1) ?? directory}
+                      {directory.match(/[^\\/]+$/u)?.[0] ?? directory}
                     </span>
                     <button
                       type="button"
@@ -449,7 +495,9 @@ export default function AssistantScreen({
               busy={snap.busy}
               canSend={
                 draft.trim().length > 0 ||
-                snap.pendingAttachments.some((attachment) => attachment.state === 'ready')
+                snap.pendingAttachments.some(
+                  (attachment) => attachment.state === "ready"
+                )
               }
               placeholder="Ask your vault anything…  (@ to mention, / for commands)"
               ariaLabel="Ask your vault"
@@ -485,7 +533,7 @@ export default function AssistantScreen({
                         onChange={(e) => {
                           const files = Array.from(e.target.files ?? []);
                           if (files.length) onAttachFiles(files);
-                          e.target.value = '';
+                          e.target.value = "";
                         }}
                       />
                     </>
@@ -525,10 +573,14 @@ export default function AssistantScreen({
                       <span className={styles.srOnly}>Assistant workspace</span>
                       <select
                         aria-label="Assistant workspace"
-                        value={snap.workspaceKind ?? modelPicker.workspaceKinds[0]}
+                        value={
+                          snap.workspaceKind ?? modelPicker.workspaceKinds[0]
+                        }
                         disabled={snap.busy}
                         onChange={(event) =>
-                          onSetWorkspaceKind?.(event.target.value as 'vault-data' | 'app' | 'draft')
+                          onSetWorkspaceKind?.(
+                            event.target.value as "vault-data" | "app" | "draft"
+                          )
                         }
                       >
                         {modelPicker.workspaceKinds.map((kind) => (

@@ -1,8 +1,11 @@
-import type { ReplicaValue } from '@centraid/client/replica/native';
+import type { ReplicaValue } from "@centraid/client/replica/native";
 
-import type { NativeReplicaSession } from '../replica/native-session';
-import { cleanupDeviceDerivatives, contributeDeviceDerivatives } from './derivatives-native';
-import type { UploadQueue } from './native-queue';
+import type { NativeReplicaSession } from "../replica/native-session";
+import {
+  cleanupDeviceDerivatives,
+  contributeDeviceDerivatives,
+} from "./derivatives-native";
+import type { UploadQueue } from "./native-queue";
 
 /** After this many failed replays a follow-up is quarantined, not retried (F4). */
 const MAX_FOLLOWUP_ATTEMPTS = 5;
@@ -27,21 +30,32 @@ export interface FollowupReplaySummary {
 export async function replaySettledUploadFollowups(
   queue: UploadQueue,
   session: NativeReplicaSession,
-  gatewayBase: string,
+  gatewayBase: string
 ): Promise<FollowupReplaySummary> {
   let replayed = 0;
   let poisoned = 0;
-  for (const followup of queue.pendingFollowups()) {
+  const followups = queue.pendingFollowups();
+  // Process the persisted follow-up queue in order: each canonical write may
+  // alter the replica state observed by the next durable mutation.
+  const replayNext = async (index: number): Promise<void> => {
+    const followup = followups[index];
+    if (!followup) return;
     try {
       // F14d: the parent sha addresses the derivatives and the canonical write.
       // A malformed value would POST `variant_of=undefined` and write garbage,
       // so fail this one follow-up into the poison path instead.
       const parentSha = followup.input.staged_sha;
-      if (typeof parentSha !== 'string' || parentSha.length === 0) {
-        throw new Error('follow-up input.staged_sha is missing or not a string');
+      if (typeof parentSha !== "string" || parentSha.length === 0) {
+        throw new Error(
+          "follow-up input.staged_sha is missing or not a string"
+        );
       }
       if (followup.derivatives) {
-        await contributeDeviceDerivatives(gatewayBase, parentSha, followup.derivatives);
+        await contributeDeviceDerivatives(
+          gatewayBase,
+          parentSha,
+          followup.derivatives
+        );
       }
       await session.write(followup.shape, {
         action: followup.action,
@@ -55,11 +69,14 @@ export async function replaySettledUploadFollowups(
       const attempts = queue.countFollowupAttempt(followup.followupId);
       if (attempts >= MAX_FOLLOWUP_ATTEMPTS) {
         queue.poisonFollowup(followup.followupId, messageOf(error));
-        if (followup.derivatives) cleanupDeviceDerivatives(followup.derivatives);
+        if (followup.derivatives)
+          cleanupDeviceDerivatives(followup.derivatives);
         poisoned += 1;
       }
     }
-  }
+    return replayNext(index + 1);
+  };
+  await replayNext(0);
   return { replayed, poisoned };
 }
 

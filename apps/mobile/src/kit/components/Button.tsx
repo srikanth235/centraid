@@ -1,11 +1,12 @@
-import React, { useMemo } from 'react';
-import { Pressable, View, Text, StyleSheet } from 'react-native';
-import type { StyleProp, ViewStyle } from 'react-native';
-import type { IconName } from '@centraid/design-tokens';
-import Icon from './Icon';
-import { radii, spacing, t, useTheme, type ThemeColors } from '../theme';
+import type { IconName } from "@centraid/design-tokens";
+import React, { useMemo } from "react";
+import { Pressable, View, Text, StyleSheet } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 
-export type ButtonVariant = 'primary' | 'soft' | 'ghost';
+import { radii, spacing, t, useTheme, type ThemeColors } from "../theme";
+import Icon from "./Icon";
+
+export type ButtonVariant = "primary" | "soft" | "ghost";
 
 export interface ButtonProps {
   label: string;
@@ -19,14 +20,14 @@ export interface ButtonProps {
 export default function Button({
   label,
   onPress,
-  variant = 'primary',
+  variant = "primary",
   icon,
   disabled,
   style,
 }: ButtonProps): React.JSX.Element {
-  const isPrimary = variant === 'primary';
-  const isSoft = variant === 'soft';
-  const isGhost = variant === 'ghost';
+  const isPrimary = variant === "primary";
+  const isSoft = variant === "soft";
+  const isGhost = variant === "ghost";
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -52,7 +53,9 @@ export default function Button({
             strokeWidth={isPrimary ? 2 : 1.75}
           />
         ) : null}
-        <Text style={[styles.label, isPrimary && styles.labelPrimary]}>{label}</Text>
+        <Text style={[styles.label, isPrimary && styles.labelPrimary]}>
+          {label}
+        </Text>
       </View>
     </Pressable>
   );
@@ -67,11 +70,16 @@ const makeStyles = (colors: ThemeColors) =>
       paddingVertical: 10,
     },
     disabled: { opacity: 0.4 },
-    ghost: { backgroundColor: 'transparent', borderColor: 'transparent' },
-    label: { ...t('small'), color: colors.ink, fontWeight: '500' },
+    ghost: { backgroundColor: "transparent", borderColor: "transparent" },
+    label: { ...t("small"), color: colors.ink, fontWeight: "500" },
     labelPrimary: { color: colors.inkInv },
     pressed: { opacity: 0.85 },
     primary: { backgroundColor: colors.ink, borderColor: colors.ink },
-    row: { alignItems: 'center', flexDirection: 'row', gap: spacing[2], justifyContent: 'center' },
+    row: {
+      alignItems: "center",
+      flexDirection: "row",
+      gap: spacing[2],
+      justifyContent: "center",
+    },
     soft: { backgroundColor: colors.bgElev, borderColor: colors.line },
   });

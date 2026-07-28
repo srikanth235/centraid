@@ -18,8 +18,9 @@
  * token has moments before its next lazy refresh.
  */
 
-import type { DatabaseSync } from 'node:sqlite';
-import type { HealthProbe } from './health-registry.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import type { HealthProbe } from "./health-registry.js";
 
 export interface BrokerHealthVaultEntry {
   readonly vaultId: string;
@@ -39,7 +40,7 @@ interface BrokerCredRow {
   connection_id: string;
   label: string;
   status: string;
-  cred_kind: 'oauth2' | 'api_key';
+  cred_kind: "oauth2" | "api_key";
   token_expires_at: string | null;
   auth_note: string | null;
 }
@@ -47,7 +48,9 @@ interface BrokerCredRow {
 const DEFAULT_OVERDUE_GRACE_MS = 60 * 60 * 1000;
 
 /** Builds the `broker` component's `HealthProbe` (registered in `build-gateway.ts`). */
-export function createBrokerHealthProbe(options: BrokerHealthOptions): HealthProbe {
+export function createBrokerHealthProbe(
+  options: BrokerHealthOptions
+): HealthProbe {
   const now = options.now ?? Date.now;
   const overdueGraceMs = options.overdueGraceMs ?? DEFAULT_OVERDUE_GRACE_MS;
 
@@ -63,7 +66,7 @@ export function createBrokerHealthProbe(options: BrokerHealthOptions): HealthPro
             `SELECT c.connection_id, c.label, c.status, cc.cred_kind, cc.token_expires_at, h.auth_note
                FROM sync_connection_credential cc
                JOIN sync_connection c ON c.connection_id = cc.connection_id
-               LEFT JOIN sync_connection_health h ON h.connection_id = cc.connection_id`,
+               LEFT JOIN sync_connection_health h ON h.connection_id = cc.connection_id`
           )
           .all() as unknown as BrokerCredRow[];
       } catch {
@@ -74,13 +77,16 @@ export function createBrokerHealthProbe(options: BrokerHealthOptions): HealthPro
       }
       for (const row of rows) {
         const tag = `${vault.vaultId.slice(0, 8)}/${row.label}`;
-        if (row.status === 'needs-auth') {
+        if (row.status === "needs-auth") {
           needsAuth.push(row.auth_note ? `${tag} (${row.auth_note})` : tag);
           continue;
         }
-        if (row.cred_kind === 'oauth2' && row.token_expires_at) {
+        if (row.cred_kind === "oauth2" && row.token_expires_at) {
           const expiresAtMs = Date.parse(row.token_expires_at);
-          if (Number.isFinite(expiresAtMs) && now() - expiresAtMs > overdueGraceMs) {
+          if (
+            Number.isFinite(expiresAtMs) &&
+            now() - expiresAtMs > overdueGraceMs
+          ) {
             overdue.push(tag);
           }
         }
@@ -88,15 +94,17 @@ export function createBrokerHealthProbe(options: BrokerHealthOptions): HealthPro
     }
 
     if (needsAuth.length === 0 && overdue.length === 0) {
-      return { status: 'ok', detail: 'broker-carried connections healthy' };
+      return { status: "ok", detail: "broker-carried connections healthy" };
     }
     const parts: string[] = [];
     if (needsAuth.length > 0) {
-      parts.push(`${needsAuth.length} need re-auth: ${needsAuth.join(', ')}`);
+      parts.push(`${needsAuth.length} need re-auth: ${needsAuth.join(", ")}`);
     }
     if (overdue.length > 0) {
-      parts.push(`${overdue.length} token refresh overdue: ${overdue.join(', ')}`);
+      parts.push(
+        `${overdue.length} token refresh overdue: ${overdue.join(", ")}`
+      );
     }
-    return { status: 'degraded', detail: parts.join('; ') };
+    return { status: "degraded", detail: parts.join("; ") };
   };
 }

@@ -1,11 +1,11 @@
+import { fmtBytes } from "./format.ts";
 // Document content lifecycle (issue #352): in-place text edits, whole-file
 // replacement, and version-history reads/restores. Split out of logic.ts
 // purely to keep both files under the file-size cap — same factory pattern,
 // closing over app.tsx's own `data`/`refresh` plus logic.ts's own
 // `act`/`narrate`/`notice` (passed in, never re-implemented).
-import { isPendingOffsite, stageFileBytes, toast } from './kit.ts';
-import { fmtBytes } from './format.ts';
-import type { AppData, DriveDoc, VersionEntry } from './types.ts';
+import { isPendingOffsite, stageFileBytes, toast } from "./kit.ts";
+import type { AppData, DriveDoc, VersionEntry } from "./types.ts";
 
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
@@ -17,12 +17,21 @@ interface HistoryResult {
 interface VersionsDeps {
   data: AppData;
   refresh: () => Promise<void> | void;
-  act: (action: string, input: Record<string, unknown>) => Promise<VaultOutcome | undefined>;
+  act: (
+    action: string,
+    input: Record<string, unknown>
+  ) => Promise<VaultOutcome | undefined>;
   narrate: (outcome: VaultOutcome | undefined) => boolean;
   notice: (text?: string) => void;
 }
 
-export function createVersions({ data, refresh, act, narrate, notice }: VersionsDeps) {
+export function createVersions({
+  data,
+  refresh,
+  act,
+  narrate,
+  notice,
+}: VersionsDeps) {
   function docById(documentId: string): DriveDoc | undefined {
     return data.documents.find((d) => d.document_id === documentId);
   }
@@ -41,19 +50,19 @@ export function createVersions({ data, refresh, act, narrate, notice }: Versions
   // banner on a routine save.
   async function editDocument(
     documentId: string,
-    bodyText: string,
+    bodyText: string
   ): Promise<VaultOutcome | undefined> {
     let outcome: VaultOutcome | undefined;
     try {
       outcome = await window.centraid.write({
-        action: 'edit',
+        action: "edit",
         input: { document_id: documentId, body_text: bodyText },
       });
     } catch (err) {
       notice(String((err as { message?: string })?.message ?? err));
       return undefined;
     }
-    if (outcome?.status === 'executed') {
+    if (outcome?.status === "executed") {
       const doc = docById(documentId);
       if (doc) {
         doc.byte_size = new TextEncoder().encode(bodyText).length;
@@ -68,7 +77,9 @@ export function createVersions({ data, refresh, act, narrate, notice }: Versions
   // 200 MB scan replaces just as well as a 20 KB one.
   async function replaceDocument(doc: DriveDoc, file: File) {
     if (file.size > MAX_UPLOAD_BYTES) {
-      notice(`“${file.name}” is ${fmtBytes(file.size)} — files up to 512 MB travel well.`);
+      notice(
+        `“${file.name}” is ${fmtBytes(file.size)} — files up to 512 MB travel well.`
+      );
       return;
     }
     let staged;
@@ -78,15 +89,15 @@ export function createVersions({ data, refresh, act, narrate, notice }: Versions
       notice(`Could not read “${file.name}”.`);
       return;
     }
-    const outcome = await act('replace', {
+    const outcome = await act("replace", {
       document_id: doc.document_id,
       staged_sha: staged.sha256,
     });
     if (narrate(outcome)) {
       toast(
         isPendingOffsite(staged)
-          ? 'Replaced locally · new version recorded · pending offsite.'
-          : 'Replaced · new version recorded · receipted.',
+          ? "Replaced locally · new version recorded · pending offsite."
+          : "Replaced · new version recorded · receipted."
       );
       await refresh();
     }
@@ -98,12 +109,12 @@ export function createVersions({ data, refresh, act, narrate, notice }: Versions
   // its own remount+refetch off of (the same trick QuickLook's stage
   // element uses for the identical reason).
   async function restoreVersion(doc: DriveDoc, contentId: string) {
-    const outcome = await act('restore-version', {
+    const outcome = await act("restore-version", {
       document_id: doc.document_id,
       content_id: contentId,
     });
     if (narrate(outcome)) {
-      toast('Restored that version · receipted.');
+      toast("Restored that version · receipted.");
       await refresh();
     }
   }
@@ -114,7 +125,7 @@ export function createVersions({ data, refresh, act, narrate, notice }: Versions
   async function loadHistory(documentId: string): Promise<HistoryResult> {
     try {
       return await window.centraid.read<HistoryResult>({
-        query: 'history',
+        query: "history",
         input: { document_id: documentId },
       });
     } catch {

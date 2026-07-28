@@ -1,9 +1,11 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { describe, expect, it } from 'vitest';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { Readable } from 'node:stream';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { readFileSync, writeFileSync } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
+import { Readable } from "node:stream";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { describe, expect, it } from "vitest";
+
 import {
   PrefsStore,
   makeUserStoreRouteHandler,
@@ -11,16 +13,19 @@ import {
   resolveSubsystemModel,
   resolveSubsystemRunner,
   resolveSubsystemRunnerLadder,
-} from './prefs-store.js';
+} from "./prefs-store.js";
 
 function freshFile(): string {
-  return join(tempDirSync('centraid-prefs-'), 'prefs.json');
+  return path.join(tempDirSync("centraid-prefs-"), "prefs.json");
 }
 
 /** A minimal async-iterable IncomingMessage carrying an optional JSON body. */
 function mockReq(method: string, url: string, body?: unknown): IncomingMessage {
   const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body))];
-  const req = Readable.from(chunks) as unknown as IncomingMessage & { url: string; method: string };
+  const req = Readable.from(chunks) as unknown as IncomingMessage & {
+    url: string;
+    method: string;
+  };
   req.url = url;
   req.method = method;
   return req;
@@ -46,189 +51,217 @@ function mockRes(): { res: ServerResponse; out: CapturedRes } {
   return { res, out };
 }
 
-describe('PrefsStore', () => {
-  it('starts empty on a missing file', () => {
-    expect(new PrefsStore(freshFile()).getAllPrefs()).toEqual({});
+describe(PrefsStore, () => {
+  it("starts empty on a missing file", () => {
+    expect(new PrefsStore(freshFile()).getAllPrefs()).toStrictEqual({});
   });
 
-  it('starts empty when the file holds a non-object (defensive)', () => {
+  it("starts empty when the file holds a non-object (defensive)", () => {
     const f = freshFile();
-    writeFileSync(f, JSON.stringify(['not', 'an', 'object']));
-    expect(new PrefsStore(f).getAllPrefs()).toEqual({});
+    writeFileSync(f, JSON.stringify(["not", "an", "object"]));
+    expect(new PrefsStore(f).getAllPrefs()).toStrictEqual({});
   });
 
-  it('starts empty when the file is unreadable JSON', () => {
+  it("starts empty when the file is unreadable JSON", () => {
     const f = freshFile();
-    writeFileSync(f, '{ not json');
-    expect(new PrefsStore(f).getAllPrefs()).toEqual({});
+    writeFileSync(f, "{ not json");
+    expect(new PrefsStore(f).getAllPrefs()).toStrictEqual({});
   });
 
-  it('merges a patch and persists atomically (survives a reload)', () => {
+  it("merges a patch and persists atomically (survives a reload)", () => {
     const f = freshFile();
     const store = new PrefsStore(f);
-    const after = store.setPrefs({ runner: 'codex', theme: 'night' });
-    expect(after).toEqual({ runner: 'codex', theme: 'night' });
+    const after = store.setPrefs({ runner: "codex", theme: "night" });
+    expect(after).toStrictEqual({ runner: "codex", theme: "night" });
     // A fresh instance reads the same bytes off disk (tmp + rename landed).
-    expect(new PrefsStore(f).getAllPrefs()).toEqual({ runner: 'codex', theme: 'night' });
+    expect(new PrefsStore(f).getAllPrefs()).toStrictEqual({
+      runner: "codex",
+      theme: "night",
+    });
     // getAllPrefs returns a defensive copy, not the live cache.
     const copy = store.getAllPrefs();
-    copy.runner = 'mutated';
-    expect(store.getAllPrefs().runner).toBe('codex');
+    copy.runner = "mutated";
+    expect(store.getAllPrefs().runner).toBe("codex");
   });
 
-  it('treats null / undefined values as key deletions', () => {
+  it("treats null / undefined values as key deletions", () => {
     const f = freshFile();
     const store = new PrefsStore(f);
     store.setPrefs({ a: 1, b: 2, c: 3 });
     const after = store.setPrefs({ a: null, b: undefined });
-    expect(after).toEqual({ c: 3 });
-    expect(JSON.parse(readFileSync(f, 'utf8'))).toEqual({ c: 3 });
+    expect(after).toStrictEqual({ c: 3 });
+    expect(JSON.parse(readFileSync(f, "utf8"))).toStrictEqual({ c: 3 });
   });
 
-  it('an empty patch is a no-op that still returns the current prefs', () => {
+  it("an empty patch is a no-op that still returns the current prefs", () => {
     const store = new PrefsStore(freshFile());
     store.setPrefs({ x: 1 });
-    expect(store.setPrefs({})).toEqual({ x: 1 });
+    expect(store.setPrefs({})).toStrictEqual({ x: 1 });
   });
 });
 
-describe('resolveSubsystemModel', () => {
-  it('prefers the explicit override over any pref', () => {
+describe(resolveSubsystemModel, () => {
+  it("prefers the explicit override over any pref", () => {
     const prefs = {
-      'model.claude-code.assistant': 'from-subsystem-pref',
-      'model.claude-code.default': 'from-default-pref',
+      "model.claude-code.assistant": "from-subsystem-pref",
+      "model.claude-code.default": "from-default-pref",
     };
-    expect(resolveSubsystemModel(prefs, 'claude-code', 'assistant', 'explicit-model')).toBe(
-      'explicit-model',
+    expect(
+      resolveSubsystemModel(prefs, "claude-code", "assistant", "explicit-model")
+    ).toBe("explicit-model");
+  });
+
+  it("falls through to the per-subsystem pref when there is no explicit value", () => {
+    const prefs = {
+      "model.claude-code.assistant": "from-subsystem-pref",
+      "model.claude-code.default": "from-default-pref",
+    };
+    expect(resolveSubsystemModel(prefs, "claude-code", "assistant")).toBe(
+      "from-subsystem-pref"
     );
   });
 
-  it('falls through to the per-subsystem pref when there is no explicit value', () => {
+  it("falls through to the runner-wide default when the subsystem pref is unset", () => {
+    const prefs = { "model.claude-code.default": "from-default-pref" };
+    expect(resolveSubsystemModel(prefs, "claude-code", "assistant")).toBe(
+      "from-default-pref"
+    );
+  });
+
+  it("treats an empty-string pref as unset and keeps falling through", () => {
     const prefs = {
-      'model.claude-code.assistant': 'from-subsystem-pref',
-      'model.claude-code.default': 'from-default-pref',
+      "model.claude-code.assistant": "",
+      "model.claude-code.default": "from-default-pref",
     };
-    expect(resolveSubsystemModel(prefs, 'claude-code', 'assistant')).toBe('from-subsystem-pref');
+    expect(resolveSubsystemModel(prefs, "claude-code", "assistant")).toBe(
+      "from-default-pref"
+    );
   });
 
-  it('falls through to the runner-wide default when the subsystem pref is unset', () => {
-    const prefs = { 'model.claude-code.default': 'from-default-pref' };
-    expect(resolveSubsystemModel(prefs, 'claude-code', 'assistant')).toBe('from-default-pref');
+  it("resolves to undefined when nothing is configured — the backend uses its own default", () => {
+    expect(
+      resolveSubsystemModel({}, "claude-code", "assistant")
+    ).toBeUndefined();
   });
 
-  it('treats an empty-string pref as unset and keeps falling through', () => {
-    const prefs = {
-      'model.claude-code.assistant': '',
-      'model.claude-code.default': 'from-default-pref',
-    };
-    expect(resolveSubsystemModel(prefs, 'claude-code', 'assistant')).toBe('from-default-pref');
+  it("scopes prefs by runner kind — a codex pref does not leak into claude-code resolution", () => {
+    const prefs = { "model.codex.assistant": "codex-only-model" };
+    expect(
+      resolveSubsystemModel(prefs, "claude-code", "assistant")
+    ).toBeUndefined();
   });
 
-  it('resolves to undefined when nothing is configured — the backend uses its own default', () => {
-    expect(resolveSubsystemModel({}, 'claude-code', 'assistant')).toBeUndefined();
+  it("scopes prefs by subsystem — an ask override does not leak into builder resolution", () => {
+    const prefs = { "model.codex.ask": "ask-only-model" };
+    expect(resolveSubsystemModel(prefs, "codex", "builder")).toBeUndefined();
   });
 
-  it('scopes prefs by runner kind — a codex pref does not leak into claude-code resolution', () => {
-    const prefs = { 'model.codex.assistant': 'codex-only-model' };
-    expect(resolveSubsystemModel(prefs, 'claude-code', 'assistant')).toBeUndefined();
-  });
-
-  it('scopes prefs by subsystem — an ask override does not leak into builder resolution', () => {
-    const prefs = { 'model.codex.ask': 'ask-only-model' };
-    expect(resolveSubsystemModel(prefs, 'codex', 'builder')).toBeUndefined();
-  });
-
-  it('ignores an empty-string explicit override (falls through like unset)', () => {
-    const prefs = { 'model.codex.automations': 'automations-model' };
-    expect(resolveSubsystemModel(prefs, 'codex', 'automations', '')).toBe('automations-model');
+  it("ignores an empty-string explicit override (falls through like unset)", () => {
+    const prefs = { "model.codex.automations": "automations-model" };
+    expect(resolveSubsystemModel(prefs, "codex", "automations", "")).toBe(
+      "automations-model"
+    );
   });
 });
 
-describe('resolveSubsystemConfigPins', () => {
+describe(resolveSubsystemConfigPins, () => {
   const prefs = {
-    'config.claude-code.default.thought_level': 'medium',
-    'config.claude-code.assistant.thought_level': 'high',
-    'config.claude-code.default.mode': 'plan',
-    'config.codex.assistant.thought_level': 'low',
+    "config.claude-code.default.thought_level": "medium",
+    "config.claude-code.assistant.thought_level": "high",
+    "config.claude-code.default.mode": "plan",
+    "config.codex.assistant.thought_level": "low",
   };
 
-  it('uses explicit category pins before subsystem and runner defaults', () => {
+  it("uses explicit category pins before subsystem and runner defaults", () => {
     expect(
-      resolveSubsystemConfigPins(prefs, 'claude-code', 'assistant', {
-        thought_level: 'max',
-      }),
-    ).toEqual({ thought_level: 'max', mode: 'plan' });
+      resolveSubsystemConfigPins(prefs, "claude-code", "assistant", {
+        thought_level: "max",
+      })
+    ).toStrictEqual({ thought_level: "max", mode: "plan" });
   });
 
-  it('keeps categories scoped to the selected runner and subsystem', () => {
-    expect(resolveSubsystemConfigPins(prefs, 'claude-code', 'assistant')).toEqual({
-      thought_level: 'high',
-      mode: 'plan',
+  it("keeps categories scoped to the selected runner and subsystem", () => {
+    expect(
+      resolveSubsystemConfigPins(prefs, "claude-code", "assistant")
+    ).toStrictEqual({
+      thought_level: "high",
+      mode: "plan",
     });
-    expect(resolveSubsystemConfigPins(prefs, 'claude-code', 'builder')).toEqual({
-      thought_level: 'medium',
-      mode: 'plan',
+    expect(
+      resolveSubsystemConfigPins(prefs, "claude-code", "builder")
+    ).toStrictEqual({
+      thought_level: "medium",
+      mode: "plan",
     });
-    expect(resolveSubsystemConfigPins(prefs, 'codex', 'assistant')).toEqual({
-      thought_level: 'low',
+    expect(
+      resolveSubsystemConfigPins(prefs, "codex", "assistant")
+    ).toStrictEqual({
+      thought_level: "low",
     });
   });
 });
 
-describe('resolveSubsystemRunner', () => {
-  it('prefers the per-subsystem pin over the default agent', () => {
-    const prefs = { 'runner.assistant': 'claude-code', 'agent.runner.kind': 'codex' };
-    expect(resolveSubsystemRunner(prefs, 'assistant')).toBe('claude-code');
+describe(resolveSubsystemRunner, () => {
+  it("prefers the per-subsystem pin over the default agent", () => {
+    const prefs = {
+      "runner.assistant": "claude-code",
+      "agent.runner.kind": "codex",
+    };
+    expect(resolveSubsystemRunner(prefs, "assistant")).toBe("claude-code");
   });
 
-  it('falls back to the default agent when the subsystem is unpinned', () => {
-    const prefs = { 'agent.runner.kind': 'claude-code' };
-    expect(resolveSubsystemRunner(prefs, 'assistant')).toBe('claude-code');
+  it("falls back to the default agent when the subsystem is unpinned", () => {
+    const prefs = { "agent.runner.kind": "claude-code" };
+    expect(resolveSubsystemRunner(prefs, "assistant")).toBe("claude-code");
   });
 
   it("falls back to 'codex' when nothing is configured at all", () => {
-    expect(resolveSubsystemRunner({}, 'assistant')).toBe('codex');
+    expect(resolveSubsystemRunner({}, "assistant")).toBe("codex");
   });
 
-  it('scopes pins by subsystem — an ask pin does not leak into builder resolution', () => {
-    const prefs = { 'runner.ask': 'claude-code', 'agent.runner.kind': 'codex' };
-    expect(resolveSubsystemRunner(prefs, 'ask')).toBe('claude-code');
+  it("scopes pins by subsystem — an ask pin does not leak into builder resolution", () => {
+    const prefs = { "runner.ask": "claude-code", "agent.runner.kind": "codex" };
+    expect(resolveSubsystemRunner(prefs, "ask")).toBe("claude-code");
     // Every other subsystem still inherits the default agent.
-    expect(resolveSubsystemRunner(prefs, 'builder')).toBe('codex');
-    expect(resolveSubsystemRunner(prefs, 'assistant')).toBe('codex');
-    expect(resolveSubsystemRunner(prefs, 'automations')).toBe('codex');
+    expect(resolveSubsystemRunner(prefs, "builder")).toBe("codex");
+    expect(resolveSubsystemRunner(prefs, "assistant")).toBe("codex");
+    expect(resolveSubsystemRunner(prefs, "automations")).toBe("codex");
   });
 
-  it('treats an empty-string pin as unset and keeps falling through', () => {
-    const prefs = { 'runner.builder': '', 'agent.runner.kind': 'claude-code' };
-    expect(resolveSubsystemRunner(prefs, 'builder')).toBe('claude-code');
+  it("treats an empty-string pin as unset and keeps falling through", () => {
+    const prefs = { "runner.builder": "", "agent.runner.kind": "claude-code" };
+    expect(resolveSubsystemRunner(prefs, "builder")).toBe("claude-code");
     // ...all the way to the built-in default when there's no default agent either.
-    expect(resolveSubsystemRunner({ 'runner.builder': '' }, 'builder')).toBe('codex');
+    expect(resolveSubsystemRunner({ "runner.builder": "" }, "builder")).toBe(
+      "codex"
+    );
   });
 
-  it('treats an empty-string default agent as unset (falls through to codex)', () => {
-    expect(resolveSubsystemRunner({ 'agent.runner.kind': '' }, 'automations')).toBe('codex');
+  it("treats an empty-string default agent as unset (falls through to codex)", () => {
+    expect(
+      resolveSubsystemRunner({ "agent.runner.kind": "" }, "automations")
+    ).toBe("codex");
   });
 
-  it('each subsystem can pin a different runner independently', () => {
+  it("each subsystem can pin a different runner independently", () => {
     const prefs = {
-      'runner.assistant': 'claude-code',
-      'runner.automations': 'codex',
-      'agent.runner.kind': 'claude-code',
+      "runner.assistant": "claude-code",
+      "runner.automations": "codex",
+      "agent.runner.kind": "claude-code",
     };
-    expect(resolveSubsystemRunner(prefs, 'assistant')).toBe('claude-code');
-    expect(resolveSubsystemRunner(prefs, 'automations')).toBe('codex');
+    expect(resolveSubsystemRunner(prefs, "assistant")).toBe("claude-code");
+    expect(resolveSubsystemRunner(prefs, "automations")).toBe("codex");
     // Unpinned subsystems still inherit the default agent.
-    expect(resolveSubsystemRunner(prefs, 'ask')).toBe('claude-code');
+    expect(resolveSubsystemRunner(prefs, "ask")).toBe("claude-code");
   });
 
-  it('is byte-identical to the old global behavior when no runner.* key is set', () => {
+  it("is byte-identical to the old global behavior when no runner.* key is set", () => {
     // Back-compat is the hard requirement: with only `agent.runner.kind`
     // present, EVERY subsystem resolves to it — exactly what the single
     // global active runner did before per-subsystem selection existed.
-    for (const kind of ['codex', 'claude-code'] as const) {
-      const prefs = { 'agent.runner.kind': kind };
-      for (const s of ['assistant', 'ask', 'builder', 'automations'] as const) {
+    for (const kind of ["codex", "claude-code"] as const) {
+      const prefs = { "agent.runner.kind": kind };
+      for (const s of ["assistant", "ask", "builder", "automations"] as const) {
         expect(resolveSubsystemRunner(prefs, s)).toBe(kind);
       }
     }
@@ -241,113 +274,129 @@ describe('resolveSubsystemRunner', () => {
  * THAT kind. Reading the model against the global kind instead is the bug
  * this pairing exists to prevent.
  */
-describe('resolveSubsystemRunner + resolveSubsystemModel compose', () => {
+describe("resolveSubsystemRunner + resolveSubsystemModel compose", () => {
   it("reads the model key of the subsystem's OWN runner, not the default agent's", () => {
     const prefs = {
-      'agent.runner.kind': 'codex',
-      'runner.ask': 'claude-code',
-      'model.codex.ask': 'codex-ask-model',
-      'model.claude-code.ask': 'claude-ask-model',
+      "agent.runner.kind": "codex",
+      "runner.ask": "claude-code",
+      "model.codex.ask": "codex-ask-model",
+      "model.claude-code.ask": "claude-ask-model",
     };
-    const kind = resolveSubsystemRunner(prefs, 'ask');
-    expect(kind).toBe('claude-code');
-    expect(resolveSubsystemModel(prefs, kind, 'ask')).toBe('claude-ask-model');
+    const kind = resolveSubsystemRunner(prefs, "ask");
+    expect(kind).toBe("claude-code");
+    expect(resolveSubsystemModel(prefs, kind, "ask")).toBe("claude-ask-model");
     // The builder, still unpinned, keeps reading the default agent's keys.
-    expect(resolveSubsystemModel(prefs, resolveSubsystemRunner(prefs, 'builder'), 'ask')).toBe(
-      'codex-ask-model',
-    );
+    expect(
+      resolveSubsystemModel(
+        prefs,
+        resolveSubsystemRunner(prefs, "builder"),
+        "ask"
+      )
+    ).toBe("codex-ask-model");
   });
 });
 
-describe('resolveSubsystemRunnerLadder', () => {
-  it('keeps the primary first and removes unknown and duplicate kinds', () => {
+describe(resolveSubsystemRunnerLadder, () => {
+  it("keeps the primary first and removes unknown and duplicate kinds", () => {
     expect(
       resolveSubsystemRunnerLadder(
         {
-          'runner.ladder.assistant': ['claude-code', 'codex', 'bogus', 'claude-code'],
+          "runner.ladder.assistant": [
+            "claude-code",
+            "codex",
+            "bogus",
+            "claude-code",
+          ],
         },
-        'assistant',
-        'codex',
-      ),
-    ).toEqual(['codex', 'claude-code']);
+        "assistant",
+        "codex"
+      )
+    ).toStrictEqual(["codex", "claude-code"]);
   });
 
-  it('accepts the CLI-friendly JSON representation and default ladder', () => {
+  it("accepts the CLI-friendly JSON representation and default ladder", () => {
     expect(
       resolveSubsystemRunnerLadder(
-        { 'runner.ladder.default': '["gemini","claude-code"]' },
-        'builder',
-        'codex',
-      ),
-    ).toEqual(['codex', 'gemini', 'claude-code']);
+        { "runner.ladder.default": '["gemini","claude-code"]' },
+        "builder",
+        "codex"
+      )
+    ).toStrictEqual(["codex", "gemini", "claude-code"]);
   });
 });
 
-describe('makeUserStoreRouteHandler', () => {
+describe(makeUserStoreRouteHandler, () => {
   const handlerFor = (ownerId?: () => string) => {
     const store = new PrefsStore(freshFile());
     return { handler: makeUserStoreRouteHandler(() => store, ownerId), store };
   };
 
-  it('ignores routes outside the /_centraid-user prefix', async () => {
+  it("ignores routes outside the /_centraid-user prefix", async () => {
     const { handler } = handlerFor();
     const { res, out } = mockRes();
-    expect(await handler(mockReq('GET', '/centraid/other'), res)).toBe(false);
+    await expect(handler(mockReq("GET", "/centraid/other"), res)).resolves.toBe(
+      false
+    );
     expect(out.statusCode).toBe(0);
   });
 
-  it('GET /id returns the owner id when a provider is wired', async () => {
-    const { handler } = handlerFor(() => 'party-42');
+  it("GET /id returns the owner id when a provider is wired", async () => {
+    const { handler } = handlerFor(() => "party-42");
     const { res, out } = mockRes();
-    expect(await handler(mockReq('GET', '/_centraid-user/id'), res)).toBe(true);
+    await expect(
+      handler(mockReq("GET", "/_centraid-user/id"), res)
+    ).resolves.toBe(true);
     expect(out.statusCode).toBe(200);
-    expect(out.json).toEqual({ id: 'party-42' });
+    expect(out.json).toStrictEqual({ id: "party-42" });
   });
 
-  it('GET /id 404s when no vault/owner provider is wired', async () => {
+  it("GET /id 404s when no vault/owner provider is wired", async () => {
     const { handler } = handlerFor();
     const { res, out } = mockRes();
-    await handler(mockReq('GET', '/_centraid-user/id'), res);
+    await handler(mockReq("GET", "/_centraid-user/id"), res);
     expect(out.statusCode).toBe(404);
   });
 
-  it('rejects a non-GET on /id', async () => {
-    const { handler } = handlerFor(() => 'x');
+  it("rejects a non-GET on /id", async () => {
+    const { handler } = handlerFor(() => "x");
     const { res, out } = mockRes();
-    await handler(mockReq('POST', '/_centraid-user/id'), res);
+    await handler(mockReq("POST", "/_centraid-user/id"), res);
     expect(out.statusCode).toBe(405);
   });
 
-  it('GET then PUT /prefs round-trips a patch', async () => {
+  it("GET then PUT /prefs round-trips a patch", async () => {
     const { handler } = handlerFor();
     let cap = mockRes();
-    await handler(mockReq('GET', '/_centraid-user/prefs'), cap.res);
-    expect(cap.out.json).toEqual({ prefs: {} });
+    await handler(mockReq("GET", "/_centraid-user/prefs"), cap.res);
+    expect(cap.out.json).toStrictEqual({ prefs: {} });
 
     cap = mockRes();
-    await handler(mockReq('PUT', '/_centraid-user/prefs', { patch: { theme: 'paper' } }), cap.res);
+    await handler(
+      mockReq("PUT", "/_centraid-user/prefs", { patch: { theme: "paper" } }),
+      cap.res
+    );
     expect(cap.out.statusCode).toBe(200);
-    expect(cap.out.json).toEqual({ prefs: { theme: 'paper' } });
+    expect(cap.out.json).toStrictEqual({ prefs: { theme: "paper" } });
   });
 
-  it('rejects a preflight-failed patch without changing prefs', async () => {
+  it("rejects a preflight-failed patch without changing prefs", async () => {
     const store = new PrefsStore(freshFile());
-    store.setPrefs({ 'agent.runner.kind': 'codex' });
+    store.setPrefs({ "agent.runner.kind": "codex" });
     const handler = makeUserStoreRouteHandler(() => store, undefined, {
-      validatePatch: async () => 'agent is unavailable',
+      validatePatch: async () => "agent is unavailable",
     });
     const { res, out } = mockRes();
     await handler(
-      mockReq('PUT', '/_centraid-user/prefs', {
-        patch: { 'agent.runner.kind': 'claude-code' },
+      mockReq("PUT", "/_centraid-user/prefs", {
+        patch: { "agent.runner.kind": "claude-code" },
       }),
-      res,
+      res
     );
     expect(out.statusCode).toBe(409);
-    expect(store.getAllPrefs()['agent.runner.kind']).toBe('codex');
+    expect(store.getAllPrefs()["agent.runner.kind"]).toBe("codex");
   });
 
-  it('runs post-commit hooks with before and after snapshots', async () => {
+  it("runs post-commit hooks with before and after snapshots", async () => {
     const store = new PrefsStore(freshFile());
     store.setPrefs({ a: 1 });
     let observed: unknown;
@@ -357,28 +406,35 @@ describe('makeUserStoreRouteHandler', () => {
       },
     });
     const { res } = mockRes();
-    await handler(mockReq('PUT', '/_centraid-user/prefs', { patch: { a: 2 } }), res);
-    expect(observed).toEqual({ patch: { a: 2 }, before: { a: 1 }, after: { a: 2 } });
+    await handler(
+      mockReq("PUT", "/_centraid-user/prefs", { patch: { a: 2 } }),
+      res
+    );
+    expect(observed).toStrictEqual({
+      patch: { a: 2 },
+      before: { a: 1 },
+      after: { a: 2 },
+    });
   });
 
-  it('PUT /prefs 400s without a patch object', async () => {
+  it("PUT /prefs 400s without a patch object", async () => {
     const { handler } = handlerFor();
     const { res, out } = mockRes();
-    await handler(mockReq('PUT', '/_centraid-user/prefs', { nope: true }), res);
+    await handler(mockReq("PUT", "/_centraid-user/prefs", { nope: true }), res);
     expect(out.statusCode).toBe(400);
   });
 
-  it('rejects an unsupported method on /prefs', async () => {
+  it("rejects an unsupported method on /prefs", async () => {
     const { handler } = handlerFor();
     const { res, out } = mockRes();
-    await handler(mockReq('DELETE', '/_centraid-user/prefs'), res);
+    await handler(mockReq("DELETE", "/_centraid-user/prefs"), res);
     expect(out.statusCode).toBe(405);
   });
 
-  it('404s an unknown sub-route under the prefix', async () => {
+  it("404s an unknown sub-route under the prefix", async () => {
     const { handler } = handlerFor();
     const { res, out } = mockRes();
-    await handler(mockReq('GET', '/_centraid-user/bogus'), res);
+    await handler(mockReq("GET", "/_centraid-user/bogus"), res);
     expect(out.statusCode).toBe(404);
   });
 });

@@ -1,3 +1,6 @@
+import { Fragment } from "react";
+import type { MouseEvent } from "react";
+
 // The Google-Photos-style justified timeline (replaces Grid.jsx): sticky
 // month headers, day sub-labels, and rows packed edge-to-edge by
 // `justify()` (layout.ts) — real aspect ratios, no more rigid squares. The
@@ -10,19 +13,18 @@
 // CSS split: React-owned classes live in Timeline.module.css; the tile's
 // imperatively-injected media guts (ph-tile-ph/video-badge/duration/
 // is-placeholder from media.ts) stay GLOBAL — see that module's header.
-import { assetKey } from '../asset-key.ts';
-import { restoreAsset, toggleFavorite } from '../assets-actions.ts';
-import { cls, dayKey, fmtDay, fmtMonth } from '../format.ts';
-import { CheckIcon, HeartIcon } from '../icons.tsx';
-import { justify } from '../layout.ts';
-import { mountMedia } from '../media.ts';
-import { act, narrate } from '../outcomes.ts';
-import { canWriteScope, scopeAttr } from '../scopes.ts';
-import { Fragment } from 'react';
-import type { MouseEvent } from 'react';
-import type { Asset } from '../types.ts';
-import type { JustifiedTile } from '../layout.ts';
-import styles from './Timeline.module.css';
+import { assetKey } from "../asset-key.ts";
+import { restoreAsset, toggleFavorite } from "../assets-actions.ts";
+import { cls, dayKey, fmtDay, fmtMonth } from "../format.ts";
+import { CheckIcon, HeartIcon } from "../icons.tsx";
+import { justify } from "../layout.ts";
+import type { JustifiedTile } from "../layout.ts";
+import { mountMedia } from "../media.ts";
+import { act, narrate } from "../outcomes.ts";
+import { canWriteScope, scopeAttr } from "../scopes.ts";
+import type { Asset } from "../types.ts";
+
+import styles from "./Timeline.module.css";
 
 interface TileCommon {
   inAlbum: boolean;
@@ -56,7 +58,12 @@ function Tile({
   onToggleSelect,
   onOpen,
   scopeLabel,
-}: TileCommon & { asset: Asset; width: number; height: number; selected: boolean }) {
+}: TileCommon & {
+  asset: Asset;
+  width: number;
+  height: number;
+  selected: boolean;
+}) {
   const badge = scopeLabel(asset.scope_id);
   // A photo shown from a read-only audience can be looked at, not changed
   // (issue #599) — so the controls that would write are disabled here rather
@@ -64,7 +71,11 @@ function Tile({
   const canWrite = canWriteScope(asset.scope_id);
   return (
     <div
-      className={cls(styles.tile, selected && styles.selected, isTrash && styles.trash)}
+      className={cls(
+        styles.tile,
+        selected && styles.selected,
+        isTrash && styles.trash
+      )}
       style={{ width: `${width}px`, height: `${height}px` }}
       data-asset-id={asset.asset_id}
       /* The scope these bytes belong to — see fillTileMedia's note. Stamped on
@@ -80,14 +91,14 @@ function Tile({
         /* The tile's only text is the <img> media.ts injects — and the
            placeholder branch injects none at all, so the name is stated here,
            identical to the alt fillTileMedia() writes. */
-        aria-label={asset.title ?? asset.kind ?? 'Photo'}
+        aria-label={asset.title ?? asset.kind ?? "Photo"}
         ref={(el) => mountMedia(el, asset)}
         onClick={() => {
           if (isTrash) return;
           if (selectMode) onToggleSelect(assetKey(asset));
           else onOpen(assetKey(asset));
         }}
-      ></button>
+      />
       <span className={styles.tileScrim} aria-hidden="true" />
       {badge ? (
         // Only tiles from somewhere else are labelled: the member's own photos
@@ -95,11 +106,11 @@ function Tile({
         // all and a merged timeline reads as "mine, plus these".
         <span className={styles.tileScope}>{badge}</span>
       ) : null}
-      {!isTrash ? (
+      {isTrash ? null : (
         <button
           type="button"
           className={styles.tileCheck}
-          aria-label={selected ? 'Deselect' : 'Select'}
+          aria-label={selected ? "Deselect" : "Select"}
           onClick={(e) => {
             e.stopPropagation();
             if (!selectMode) onEnterSelectMode();
@@ -108,14 +119,16 @@ function Tile({
         >
           {selected ? <CheckIcon size={12} /> : null}
         </button>
-      ) : null}
-      {!isTrash ? (
+      )}
+      {isTrash ? null : (
         <button
           type="button"
           className={styles.tileHeart}
           disabled={!canWrite}
-          aria-pressed={asset.favorite ? 'true' : 'false'}
-          aria-label={asset.favorite ? 'Remove from favorites' : 'Add to favorites'}
+          aria-pressed={asset.favorite ? "true" : "false"}
+          aria-label={
+            asset.favorite ? "Remove from favorites" : "Add to favorites"
+          }
           onClick={(e) => {
             e.stopPropagation();
             toggleFavorite(asset, refresh);
@@ -123,7 +136,7 @@ function Tile({
         >
           <HeartIcon size={16} filled={!!asset.favorite} />
         </button>
-      ) : null}
+      )}
       {inAlbum && !isTrash ? (
         <button
           type="button"
@@ -134,9 +147,9 @@ function Tile({
           onClick={async (e) => {
             e.stopPropagation();
             const outcome = await act(
-              'remove-from-album',
+              "remove-from-album",
               { album_id: albumId, asset_id: asset.asset_id },
-              asset.scope_id,
+              asset.scope_id
             );
             if (narrate(outcome)) await refresh();
           }}
@@ -148,19 +161,23 @@ function Tile({
         <div className={styles.tileTrashBar}>
           <span className={styles.tilePurge}>
             {asset.purge_in_days == null
-              ? ''
+              ? ""
               : asset.purge_in_days === 0
-                ? 'purges today'
+                ? "purges today"
                 : `purges in ${asset.purge_in_days}d`}
           </span>
           <button
             type="button"
             className={styles.tileRestore}
-            aria-label={`Restore ${asset.title ?? 'photo'}`}
+            aria-label={`Restore ${asset.title ?? "photo"}`}
             onClick={async (e) => {
               e.stopPropagation();
               e.currentTarget.disabled = true;
-              if (!(await restoreAsset(asset.asset_id, refresh, { scope: asset.scope_id }))) {
+              if (
+                !(await restoreAsset(asset.asset_id, refresh, {
+                  scope: asset.scope_id,
+                }))
+              ) {
                 e.currentTarget.disabled = false;
               }
             }}
@@ -186,7 +203,7 @@ function Row({
           // the same asset id (ids are per-scope, issue #599), and a bare id
           // key would make React reuse one tile's DOM — and its already loaded
           // bytes — for the other scope's photo.
-          key={`${t.asset.scope_id ?? ''}:${t.asset.asset_id}`}
+          key={`${t.asset.scope_id ?? ""}:${t.asset.asset_id}`}
           asset={t.asset}
           width={t.width}
           height={t.height}
@@ -232,7 +249,7 @@ export function TimelineBody({
   // trash shelf's own query sorts by deleted_at, not taken_at) — otherwise
   // bucketing by month/day below could scatter months out of order.
   const ordered = [...assets].sort((a, b) =>
-    String(b.taken_at ?? '').localeCompare(String(a.taken_at ?? '')),
+    String(b.taken_at ?? "").localeCompare(String(a.taken_at ?? ""))
   );
   const months = new Map<string, Map<string, Asset[]>>();
   for (const asset of ordered) {
@@ -269,9 +286,16 @@ export function TimelineBody({
           {[...days].map(([dk, dayAssets]) => (
             <Fragment key={dk}>
               <p className={styles.dayLabel}>{fmtDay(dk)}</p>
-              {justify(dayAssets, containerWidth, targetHeight).map((tiles, i) => (
-                <Row key={`${dk}-${i}`} tiles={tiles} selectedIds={selectedIds} {...rowProps} />
-              ))}
+              {justify(dayAssets, containerWidth, targetHeight).map(
+                (tiles, i) => (
+                  <Row
+                    key={`${dk}-${i}`}
+                    tiles={tiles}
+                    selectedIds={selectedIds}
+                    {...rowProps}
+                  />
+                )
+              )}
             </Fragment>
           ))}
         </Fragment>

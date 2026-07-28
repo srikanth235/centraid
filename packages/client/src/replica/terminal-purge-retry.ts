@@ -1,4 +1,7 @@
-import { retryTerminalReplicaPurges, type ReplicaStoragePurgeOptions } from './storage-manifest.js';
+import {
+  retryTerminalReplicaPurges,
+  type ReplicaStoragePurgeOptions,
+} from "./storage-manifest.js";
 
 const DEFAULT_RETRY_DELAY_MS = 5_000;
 
@@ -48,7 +51,7 @@ export class TerminalReplicaPurgeRetryLoop {
         this.#timer = undefined;
         void this.run();
       },
-      Math.max(0, delayMs),
+      Math.max(0, delayMs)
     );
   }
 
@@ -80,7 +83,9 @@ export class TerminalReplicaPurgeRetryLoop {
 
   private retryFloor(): number {
     const configured = this.#options.retryBaseDelayMs;
-    return typeof configured === 'number' && Number.isFinite(configured) && configured > 0
+    return typeof configured === "number" &&
+      Number.isFinite(configured) &&
+      configured > 0
       ? configured
       : DEFAULT_RETRY_DELAY_MS;
   }

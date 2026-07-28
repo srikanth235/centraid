@@ -17,22 +17,22 @@
  * the response. **Attachments** ride that inbound message.
  */
 
-import type { AdapterUsageSnapshot } from './turn.js';
+import type { AdapterUsageSnapshot } from "./turn.js";
 
 /** What kind of thread this conversation is. Insights groups `automation` by automation. */
-export type RunKind = 'automation' | 'chat' | 'build';
+export type RunKind = "automation" | "chat" | "build";
 
 /**
  * Why a turn fired. `interactive` is a chat turn; the rest are automation
  * fires.
  */
 export type AutomationTriggerKind =
-  | 'scheduled'
-  | 'manual'
-  | 'replay'
-  | 'on_failure'
-  | 'compile'
-  | 'interactive';
+  | "scheduled"
+  | "manual"
+  | "replay"
+  | "on_failure"
+  | "compile"
+  | "interactive";
 
 /**
  * What *source* fired a turn (issue #96). `cron` is a scheduler fire,
@@ -40,12 +40,12 @@ export type AutomationTriggerKind =
  * from `AutomationTriggerKind`, which records intent rather than transport.
  */
 export type AutomationTriggerOrigin =
-  | 'cron'
-  | 'webhook'
-  | 'manual'
-  | 'condition'
-  | 'data'
-  | 'event';
+  | "cron"
+  | "webhook"
+  | "manual"
+  | "condition"
+  | "data"
+  | "event";
 
 /**
  * Item discriminator. `message_in` is the inbound message — a person typing,
@@ -54,7 +54,7 @@ export type AutomationTriggerOrigin =
  * cost accounting lives at this grain. `tool` / `agent` are per-call audit
  * rows.
  */
-export type ItemKind = 'message_in' | 'step' | 'tool' | 'agent';
+export type ItemKind = "message_in" | "step" | "tool" | "agent";
 
 /**
  * The durable record holding the turns of one execution. Was `chat_sessions`,
@@ -116,12 +116,12 @@ export interface ConversationHarnessSession {
   readonly acpSessionId: string;
   readonly usageSnapshot?: AdapterUsageSnapshot;
   readonly hydratedThroughSeq: number;
-  readonly status: 'active' | 'warm' | 'cold' | 'stale';
+  readonly status: "active" | "warm" | "cold" | "stale";
   readonly lastUsedAt: number;
   readonly createdAt: number;
 }
 
-export type ConversationWorkspaceKind = 'vault-data' | 'app' | 'draft';
+export type ConversationWorkspaceKind = "vault-data" | "app" | "draft";
 
 /** Durable, consent-recorded workspace selection for one conversation. */
 export interface ConversationWorkspaceSelection {
@@ -166,7 +166,7 @@ export interface Turn {
   readonly ok: boolean;
   readonly error?: string;
   /** Message-level reader feedback on the turn's answer (issue #420). */
-  readonly feedback?: 'up' | 'down';
+  readonly feedback?: "up" | "down";
   readonly summary?: string;
   /**
    * The turn's structured result. For an automation it is the handler's
@@ -207,7 +207,7 @@ export interface Item {
   readonly batchId?: number;
   readonly kind: ItemKind;
   /** `message_in` messages: 'user' (incl. a webhook/cron trigger) | 'assistant'. */
-  readonly role?: 'user' | 'assistant';
+  readonly role?: "user" | "assistant";
   /** `message_in` payload text. (Assistant step text stays in `outputJson`.) */
   readonly text?: string;
   /** The tool name or `'agent'`. Absent for `kind: 'step'` / `'message_in'`. */
@@ -233,7 +233,7 @@ export interface Item {
   /** Frozen at write time; absent = no price known. Prefer agent-reported USD. */
   readonly costUsd?: number;
   /** Issue #514 — where `costUsd` came from. */
-  readonly costSource?: 'agent' | 'estimated';
+  readonly costSource?: "agent" | "estimated";
   /** `tool` / `agent` — the app whose data the call touched. */
   readonly appId?: string;
   /** `agent` — the turn id of a child turn this item spawned (sub-agent). */

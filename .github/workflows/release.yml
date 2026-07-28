@@ -21,15 +21,15 @@ name: release
 on:
   push:
     tags:
-      - 'v*.*.*'
-      - 'v*.*.*-beta.*'
-      - 'companion-v*'
+      - "v*.*.*"
+      - "v*.*.*-beta.*"
+      - "companion-v*"
   workflow_dispatch:
     inputs:
       surfaces:
-        description: 'Which surfaces to run (`all` covers the tag surfaces; `mobile` must be selected by name)'
+        description: "Which surfaces to run (`all` covers the tag surfaces; `mobile` must be selected by name)"
         required: true
-        default: 'all'
+        default: "all"
         type: choice
         options:
           - all
@@ -39,47 +39,47 @@ on:
           - mobile
           - companion
       dry_run:
-        description: 'npm: force dry-run even if NPM_TOKEN is set'
+        description: "npm: force dry-run even if NPM_TOKEN is set"
         required: false
-        default: 'true'
+        default: "true"
         type: choice
         options:
-          - 'true'
-          - 'false'
+          - "true"
+          - "false"
       ref:
-        description: 'gateway-image: git ref to build (default: current)'
+        description: "gateway-image: git ref to build (default: current)"
         required: false
-        default: ''
+        default: ""
       mobile_profile:
-        description: 'mobile: EAS profile (preview = TestFlight/Play internal)'
+        description: "mobile: EAS profile (preview = TestFlight/Play internal)"
         required: false
-        default: 'preview'
+        default: "preview"
         type: choice
         options:
           - preview
           - production
       mobile_platform:
-        description: 'mobile: platform'
+        description: "mobile: platform"
         required: false
-        default: 'all'
+        default: "all"
         type: choice
         options:
           - all
           - ios
           - android
       mobile_submit:
-        description: 'mobile: submit to TestFlight / Play internal after build'
+        description: "mobile: submit to TestFlight / Play internal after build"
         required: false
         default: false
         type: boolean
       restamp_rollout_hours:
-        description: 'desktop I8: re-stamp rollout window hours on an existing release (empty = skip)'
+        description: "desktop I8: re-stamp rollout window hours on an existing release (empty = skip)"
         required: false
-        default: ''
+        default: ""
       restamp_tag:
-        description: 'desktop I8: tag to restamp; required when restamp_rollout_hours is set'
+        description: "desktop I8: tag to restamp; required when restamp_rollout_hours is set"
         required: false
-        default: ''
+        default: ""
 
 # A tag is immutable — never cancel a release mid-flight for a "newer" one.
 concurrency:

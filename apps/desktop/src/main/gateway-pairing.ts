@@ -6,17 +6,14 @@
  * hint, and keep this device's iroh key in safeStorage under that EndpointId.
  */
 
-import os from 'node:os';
-import { createTunnelClient, inspectEndpointTicket, sanitizeDeviceName } from '@centraid/tunnel';
+import os from "node:os";
+
 import {
-  addGateway,
-  listGateways,
-  updateGatewayRelayHint,
-  updateGatewayRememberDevice,
-  type GatewayProfile,
-} from './gateway-store.js';
-import { ensureIrohDeviceKey } from './iroh-dialer.js';
-import { setActiveGatewayId, setActiveVaultId } from './settings.js';
+  createTunnelClient,
+  inspectEndpointTicket,
+  sanitizeDeviceName,
+} from "@centraid/tunnel";
+
 import {
   decodePairingTicket,
   findReusableProfile,
@@ -24,9 +21,18 @@ import {
   isFoldError,
   isTicketExpired,
   type RedeemGatewayPairingResult,
-} from './gateway-pairing-core.js';
+} from "./gateway-pairing-core.js";
+import {
+  addGateway,
+  listGateways,
+  updateGatewayRelayHint,
+  updateGatewayRememberDevice,
+  type GatewayProfile,
+} from "./gateway-store.js";
+import { ensureIrohDeviceKey } from "./iroh-dialer.js";
+import { setActiveGatewayId, setActiveVaultId } from "./settings.js";
 
-export type { RedeemGatewayPairingResult } from './gateway-pairing-core.js';
+export type { RedeemGatewayPairingResult } from "./gateway-pairing-core.js";
 
 export interface RedeemGatewayPairingInput {
   ticket: string;
@@ -35,25 +41,39 @@ export interface RedeemGatewayPairingInput {
 }
 
 function localDeviceName(label: string | undefined): string {
-  return sanitizeDeviceName(label?.trim() || os.hostname().replace(/\.local$/, ''));
+  return sanitizeDeviceName(
+    label?.trim() || os.hostname().replace(/\.local$/u, "")
+  );
 }
 
 export async function redeemGatewayPairing(
-  input: RedeemGatewayPairingInput,
+  input: RedeemGatewayPairingInput
 ): Promise<RedeemGatewayPairingResult> {
   const payload = decodePairingTicket(input.ticket);
   if (!payload) {
-    return { ok: false, error: 'invalid_ticket', message: 'That pairing code is not valid.' };
+    return {
+      ok: false,
+      error: "invalid_ticket",
+      message: "That pairing code is not valid.",
+    };
   }
   if (isTicketExpired(payload)) {
-    return { ok: false, error: 'ticket_expired', message: 'This pairing code has expired.' };
+    return {
+      ok: false,
+      error: "ticket_expired",
+      message: "This pairing code has expired.",
+    };
   }
 
   let hint: ReturnType<typeof inspectEndpointTicket>;
   try {
     hint = inspectEndpointTicket(payload.gw);
   } catch {
-    return { ok: false, error: 'invalid_ticket', message: 'That pairing code is not valid.' };
+    return {
+      ok: false,
+      error: "invalid_ticket",
+      message: "That pairing code is not valid.",
+    };
   }
 
   const rememberDevice = input.rememberDevice ?? false;
@@ -73,19 +93,20 @@ export async function redeemGatewayPairing(
     await client.close().catch(() => undefined);
     return {
       ok: false,
-      error: 'unreachable',
+      error: "unreachable",
       message: error instanceof Error ? error.message : String(error),
     };
   }
   await client.close().catch(() => undefined);
 
   const folded = foldIrohPairResponse(response);
-  if (isFoldError(folded)) return { ok: false, error: folded.error, message: folded.message };
+  if (isFoldError(folded))
+    return { ok: false, error: folded.error, message: folded.message };
   if (folded.gatewayId !== hint.endpointId) {
     return {
       ok: false,
-      error: 'bad_response',
-      message: 'The gateway identity did not match the pairing ticket.',
+      error: "bad_response",
+      message: "The gateway identity did not match the pairing ticket.",
     };
   }
 
@@ -95,7 +116,10 @@ export async function redeemGatewayPairing(
     existing ??
     (await addGateway({
       label:
-        input.label?.trim() || folded.gatewayName?.trim() || folded.vaultName || payload.vaultName,
+        input.label?.trim() ||
+        folded.gatewayName?.trim() ||
+        folded.vaultName ||
+        payload.vaultName,
       endpointId: hint.endpointId,
       ...(hint.relayHint ? { relayHint: hint.relayHint } : {}),
       rememberDevice,

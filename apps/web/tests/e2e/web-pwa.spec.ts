@@ -1,55 +1,56 @@
-import { expect, test } from '@playwright/test';
-import { installHarnessControlTransport } from './control-transport.js';
+import { expect, test } from "@playwright/test";
 
-const API_URL = 'http://127.0.0.1:48765';
-const ADMIN_TOKEN = 'centraid-web-e2e-token';
-const GATEWAY_ENDPOINT_ID = 'web-e2e-gateway';
-const GATEWAY_ENDPOINT_TICKET = 'web-e2e-control-transport';
+import { installHarnessControlTransport } from "./control-transport.js";
 
-test('boots as a PWA, establishes a cookie control session, and runs an isolated app', async ({
+const API_URL = "http://127.0.0.1:48765";
+const ADMIN_TOKEN = "centraid-web-e2e-token";
+const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
+const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
+
+test("boots as a PWA, establishes a cookie control session, and runs an isolated app", async ({
   page,
 }) => {
   const gatewayResponses: Array<{ url: string; status: number }> = [];
-  page.on('response', (response) => {
+  page.on("response", (response) => {
     if (response.url().startsWith(API_URL)) {
       gatewayResponses.push({ url: response.url(), status: response.status() });
     }
   });
   await installHarnessControlTransport(page, API_URL);
-  await page.goto('/');
+  await page.goto("/");
 
   const control = await page.evaluate(
     async ({ apiUrl, token }) => {
       const response = await fetch(`${apiUrl}/centraid/_web/control`, {
-        method: 'POST',
-        credentials: 'include',
+        method: "POST",
+        credentials: "include",
         headers: { Authorization: `Bearer ${token}` },
       });
       return { status: response.status, body: await response.json() };
     },
-    { apiUrl: API_URL, token: ADMIN_TOKEN },
+    { apiUrl: API_URL, token: ADMIN_TOKEN }
   );
   expect(control.status).toBe(200);
   const vaultId = (control.body as { vaultId: string }).vaultId;
-  const controlCookie = (await page.context().cookies(`${API_URL}/centraid/_web/control`)).find(
-    (cookie) => cookie.name === '__centraid_control',
-  );
-  expect(controlCookie).toMatchObject({ httpOnly: true, sameSite: 'Strict' });
+  const controlCookie = (
+    await page.context().cookies(`${API_URL}/centraid/_web/control`)
+  ).find((cookie) => cookie.name === "__centraid_control");
+  expect(controlCookie).toMatchObject({ httpOnly: true, sameSite: "Strict" });
 
   await page.evaluate(
     ({ endpointId, endpointTicket, vault }) => {
-      sessionStorage.removeItem('centraid.web.v1.connection');
+      sessionStorage.removeItem("centraid.web.v1.connection");
       localStorage.setItem(
-        'centraid.web.v1.connection',
+        "centraid.web.v1.connection",
         JSON.stringify({
           endpointId,
           endpointTicket,
-          label: 'Browser E2E',
-          displayName: 'Web owner',
-          avatarColor: '#6f5bf6',
+          label: "Browser E2E",
+          displayName: "Web owner",
+          avatarColor: "#6f5bf6",
           vaultId: vault,
           rememberDevice: true,
-        }),
+        })
       );
       // The fixture app is published to the app store but never *installed*
       // (no Home pin), so the shell classifies it as a DRAFT — and drafts,
@@ -57,23 +58,25 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
       // `builderEnabled` dev flag (issue #434, default false). This flow
       // exercises exactly those builder surfaces, so opt the harness in.
       localStorage.setItem(
-        'centraid.web.v1.settings',
+        "centraid.web.v1.settings",
         JSON.stringify({
           onboardingCompletedAt: new Date().toISOString(),
           builderEnabled: true,
-        }),
+        })
       );
     },
     {
       endpointId: GATEWAY_ENDPOINT_ID,
       endpointTicket: GATEWAY_ENDPOINT_TICKET,
       vault: vaultId,
-    },
+    }
   );
   await page.reload();
 
-  await expect(page.evaluate(() => window.CentraidApi.getGatewayAuth())).resolves.toMatchObject({
-    baseUrl: 'http://127.0.0.1:4173',
+  await expect(
+    page.evaluate(() => window.CentraidApi.getGatewayAuth())
+  ).resolves.toMatchObject({
+    baseUrl: "http://127.0.0.1:4173",
     gatewayId: GATEWAY_ENDPOINT_ID,
     vaultId,
     iroh: true,
@@ -82,57 +85,74 @@ test('boots as a PWA, establishes a cookie control session, and runs an isolated
 
   const appsProbe = await page.evaluate(async (apiUrl) => {
     const response = await fetch(
-      `${apiUrl}/centraid/_web/control?path=${encodeURIComponent('/centraid/_apps')}`,
-      { credentials: 'include' },
+      `${apiUrl}/centraid/_web/control?path=${encodeURIComponent("/centraid/_apps")}`,
+      { credentials: "include" }
     );
     return { status: response.status, text: await response.text() };
   }, API_URL);
   expect(appsProbe.status, appsProbe.text).toBe(200);
-  expect(appsProbe.text).toContain('web-e2e');
+  expect(appsProbe.text).toContain("web-e2e");
 
   await expect(
     page.locator('[data-app-id="web-e2e"]'),
-    JSON.stringify(gatewayResponses, null, 2),
+    JSON.stringify(gatewayResponses, null, 2)
   ).toBeVisible();
   expect(
-    await page.evaluate(() => localStorage.getItem('centraid.web.v1.connection')),
+    await page.evaluate(() =>
+      localStorage.getItem("centraid.web.v1.connection")
+    )
   ).not.toContain(ADMIN_TOKEN);
 
-  const manifest = await page.request.get('/manifest.webmanifest');
+  const manifest = await page.request.get("/manifest.webmanifest");
   expect(manifest.ok()).toBeTruthy();
   await expect
-    .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null))
+    .poll(() =>
+      page.evaluate(() => navigator.serviceWorker.controller !== null)
+    )
     .toBe(true);
 
-  await page.locator('[data-app-id="web-e2e"] [data-testid="app-tile"]').click();
+  await page
+    .locator('[data-app-id="web-e2e"] [data-testid="app-tile"]')
+    .click();
   const preview = page.frameLocator('iframe[title="App preview"]');
-  await expect(preview.getByRole('heading', { name: 'Web E2E App' })).toBeVisible();
-  await expect(preview.locator('#ready')).toHaveText('generated app ready');
+  await expect(
+    preview.getByRole("heading", { name: "Web E2E App" })
+  ).toBeVisible();
+  await expect(preview.locator("#ready")).toHaveText("generated app ready");
 
-  const previewPing = await preview.locator('body').evaluate(async () => {
-    return window.centraid.read({ query: 'ping', input: {} });
+  const previewPing = await preview.locator("body").evaluate(async () => {
+    return window.centraid.read({ query: "ping", input: {} });
   });
-  expect(previewPing).toEqual({ pong: true, surface: 'web' });
+  expect(previewPing).toEqual({ pong: true, surface: "web" });
 
-  await page.getByRole('button', { name: 'Publish', exact: true }).click();
-  await expect(page.getByText('Already up to date — added to Home.')).toBeVisible();
-  await page.getByRole('button', { name: 'Home', exact: true }).click();
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await expect(
+    page.getByText("Already up to date — added to Home.")
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Home", exact: true }).click();
   await expect(page.locator('[data-app-id="web-e2e"]').first()).toBeVisible();
-  await page.locator('[data-app-id="web-e2e"] [data-testid="app-tile"]').first().click();
+  await page
+    .locator('[data-app-id="web-e2e"] [data-testid="app-tile"]')
+    .first()
+    .click();
   const app = page.frameLocator('iframe[title="app"]');
-  await expect(app.getByRole('heading', { name: 'Web E2E App' })).toBeVisible();
-  await expect(app.locator('#ready')).toHaveText('generated app ready');
+  await expect(app.getByRole("heading", { name: "Web E2E App" })).toBeVisible();
+  await expect(app.locator("#ready")).toHaveText("generated app ready");
 
-  const ping = await app.locator('body').evaluate(async () => {
-    return window.centraid.read({ query: 'ping', input: {} });
+  const ping = await app.locator("body").evaluate(async () => {
+    return window.centraid.read({ query: "ping", input: {} });
   });
-  expect(ping).toEqual({ pong: true, surface: 'web' });
+  expect(ping).toEqual({ pong: true, surface: "web" });
 
-  const frame = page.frames().find((candidate) => candidate.url().includes('/centraid/web-e2e/'))!;
+  const frame = page
+    .frames()
+    .find((candidate) => candidate.url().includes("/centraid/web-e2e/"))!;
   const confinement = await frame.evaluate(async () => {
     const [apps, control] = await Promise.all([
-      fetch('/centraid/_apps'),
-      fetch('/centraid/_web/control?path=%2Fcentraid%2F_apps', { credentials: 'include' }),
+      fetch("/centraid/_apps"),
+      fetch("/centraid/_web/control?path=%2Fcentraid%2F_apps", {
+        credentials: "include",
+      }),
     ]);
     return { apps: apps.status, control: control.status };
   });

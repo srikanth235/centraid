@@ -8,12 +8,12 @@
 // remembers which `key`s it already surfaced an OS notification for, the
 // same posture as gateway-monitor.ts's in-memory downtime-alert state.
 
-import type { VaultDb } from '@centraid/vault';
+import type { VaultDb } from "@centraid/vault";
 
 export interface DueReminder {
   /** Stable per-reminder id: de-dup key for the poller. */
   key: string;
-  kind: 'task' | 'event';
+  kind: "task" | "event";
   id: string;
   title: string;
   /** ISO instant the reminder is anchored to (due_at or dtstart). */
@@ -45,9 +45,9 @@ function parseReminders(json: string): { minutes_before: number }[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
       (r): r is { minutes_before: number } =>
-        typeof r === 'object' &&
+        typeof r === "object" &&
         r !== null &&
-        typeof (r as { minutes_before?: unknown }).minutes_before === 'number',
+        typeof (r as { minutes_before?: unknown }).minutes_before === "number"
     );
   } catch {
     return [];
@@ -63,7 +63,7 @@ function parseReminders(json: string): { minutes_before: number }[] {
 export function computeDueReminders(
   db: VaultDb,
   nowIso: string,
-  staleAfterMinutes = DEFAULT_STALE_AFTER_MINUTES,
+  staleAfterMinutes = DEFAULT_STALE_AFTER_MINUTES
 ): DueReminder[] {
   const now = Date.parse(nowIso);
   const out: DueReminder[] = [];
@@ -72,7 +72,7 @@ export function computeDueReminders(
     .prepare(
       `SELECT task_id, title, due_at, remind_before_min FROM schedule_task
         WHERE status IN ('needs-action','in-process')
-          AND due_at IS NOT NULL AND remind_before_min IS NOT NULL`,
+          AND due_at IS NOT NULL AND remind_before_min IS NOT NULL`
     )
     .all() as unknown as TaskReminderRow[];
   for (const t of taskRows) {
@@ -83,7 +83,7 @@ export function computeDueReminders(
     if (fireAt <= now && now <= staleAt) {
       out.push({
         key: `task:${t.task_id}:${t.remind_before_min}`,
-        kind: 'task',
+        kind: "task",
         id: t.task_id,
         title: t.title,
         at: t.due_at,
@@ -96,7 +96,7 @@ export function computeDueReminders(
     .prepare(
       `SELECT e.event_id AS event_id, e.summary AS summary, e.dtstart AS dtstart, x.reminders_json AS reminders_json
          FROM core_event e JOIN schedule_event_ext x ON x.event_id = e.event_id
-        WHERE e.status != 'cancelled' AND x.reminders_json IS NOT NULL`,
+        WHERE e.status != 'cancelled' AND x.reminders_json IS NOT NULL`
     )
     .all() as unknown as EventReminderRow[];
   for (const e of eventRows) {
@@ -108,7 +108,7 @@ export function computeDueReminders(
       if (fireAt <= now && now <= staleAt) {
         out.push({
           key: `event:${e.event_id}:${r.minutes_before}`,
-          kind: 'event',
+          kind: "event",
           id: e.event_id,
           title: e.summary,
           at: e.dtstart,

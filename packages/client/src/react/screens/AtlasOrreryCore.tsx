@@ -1,8 +1,10 @@
-import type { JSX } from 'react';
-import type { AtlasGraphNode } from '../../gateway-client.js';
-import { cx } from '../ui/cx.js';
-import { ORRERY } from './atlasOrreryGeometry.js';
-import styles from './AtlasRelationsTab.module.css';
+import type { JSX } from "react";
+
+import type { AtlasGraphNode } from "../../gateway-client.js";
+import { cx } from "../ui/cx.js";
+import { ORRERY } from "./atlasOrreryGeometry.js";
+
+import styles from "./AtlasRelationsTab.module.css";
 
 // The orrery's brass centre plate (issue #519) — a presentational leaf split out
 // of AtlasOrreryChart to keep that file focused on the layered graph body. It
@@ -58,7 +60,12 @@ export default function AtlasOrreryCore({
 
   return (
     <g>
-      <circle className={styles.coreGlow} cx={ORRERY.cx} cy={ORRERY.cy} r={ORRERY.coreR + 26} />
+      <circle
+        className={styles.coreGlow}
+        cx={ORRERY.cx}
+        cy={ORRERY.cy}
+        r={ORRERY.coreR + 26}
+      />
       <g className={styles.coreBezel}>
         {CORE_TICKS.map((t) => (
           <line
@@ -71,14 +78,26 @@ export default function AtlasOrreryCore({
           />
         ))}
       </g>
-      <circle className={styles.coreRingOuter} cx={ORRERY.cx} cy={ORRERY.cy} r={ORRERY.coreR + 5} />
-      <circle className={styles.corePlate} cx={ORRERY.cx} cy={ORRERY.cy} r={ORRERY.coreR} />
+      <circle
+        className={styles.coreRingOuter}
+        cx={ORRERY.cx}
+        cy={ORRERY.cy}
+        r={ORRERY.coreR + 5}
+      />
+      <circle
+        className={styles.corePlate}
+        cx={ORRERY.cx}
+        cy={ORRERY.cy}
+        r={ORRERY.coreR}
+      />
       <text
         className={styles.coreName}
         x={ORRERY.cx}
         y={ORRERY.cy - 6}
         textAnchor="middle"
-        {...(est > max ? { textLength: max, lengthAdjust: 'spacingAndGlyphs' } : {})}
+        {...(est > max
+          ? { textLength: max, lengthAdjust: "spacingAndGlyphs" }
+          : {})}
       >
         {name}
       </text>
@@ -109,7 +128,8 @@ export default function AtlasOrreryCore({
           </>
         ) : (
           <tspan>
-            {inDeg} point in · {outDeg} point out · rings recomputed by hop distance
+            {inDeg} point in · {outDeg} point out · rings recomputed by hop
+            distance
           </tspan>
         )}
       </text>

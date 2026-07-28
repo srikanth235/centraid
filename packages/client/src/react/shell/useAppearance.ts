@@ -1,13 +1,14 @@
-import { Store } from './store.js';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AppearancePrefs } from '../../app-shell-context.js';
-import { getUserPrefs, saveUserPrefs } from '../../gateway-client.js';
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import type { AppearancePrefs } from "../../app-shell-context.js";
+import { getUserPrefs, saveUserPrefs } from "../../gateway-client.js";
 import {
   applyPrefsToDocument,
   DEFAULT_PREFS,
   pickAppearance,
   toRemoteShape,
-} from './appearance.js';
+} from "./appearance.js";
+import { Store } from "./store.js";
 
 export interface AppearanceController {
   prefs: AppearancePrefs;
@@ -21,9 +22,9 @@ export interface AppearanceController {
 // Settings). setPrefs writes through: state + Store + <html> + fire-and-forget
 // gateway mirror.
 export function useAppearance(): AppearanceController {
-  const [prefs, setPrefsState] = useState<AppearancePrefs>(() => ({
+  const [prefs, setPrefs] = useState<AppearancePrefs>(() => ({
     ...DEFAULT_PREFS,
-    ...Store.get<Partial<AppearancePrefs>>('appearance', {}),
+    ...Store.get<Partial<AppearancePrefs>>("appearance", {}),
     bgL: 5,
   }));
 
@@ -43,9 +44,9 @@ export function useAppearance(): AppearanceController {
       .then((remote) => {
         const recognised = pickAppearance(remote);
         if (alive && Object.keys(recognised).length > 0) {
-          setPrefsState((prev) => {
+          setPrefs((prev) => {
             const next = { ...prev, ...recognised, bgL: 5 };
-            Store.set('appearance', next);
+            Store.set("appearance", next);
             return next;
           });
         }
@@ -58,10 +59,10 @@ export function useAppearance(): AppearanceController {
     };
   }, []);
 
-  const setPrefs = useCallback((patch: Partial<AppearancePrefs>) => {
-    setPrefsState((prev) => {
+  const updatePrefs = useCallback((patch: Partial<AppearancePrefs>) => {
+    setPrefs((prev) => {
       const next = { ...prev, ...patch };
-      Store.set('appearance', next);
+      Store.set("appearance", next);
       return next;
     });
     const remotePatch = toRemoteShape(patch);
@@ -70,5 +71,5 @@ export function useAppearance(): AppearanceController {
     }
   }, []);
 
-  return { prefs, setPrefs };
+  return { prefs, setPrefs: updatePrefs };
 }

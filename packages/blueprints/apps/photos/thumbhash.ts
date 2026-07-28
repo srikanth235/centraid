@@ -16,7 +16,7 @@
 export function thumbHashFromRgba(
   w: number,
   h: number,
-  rgba: Uint8Array | Uint8ClampedArray,
+  rgba: Uint8Array | Uint8ClampedArray
 ): string | null {
   if (w > 100 || h > 100) return null;
   const { PI, round, max, cos, abs } = Math;
@@ -54,7 +54,11 @@ export function thumbHashFromRgba(
     q[i] = r - g;
     a[i] = alpha;
   }
-  const encodeChannel = (channel: number[], nx: number, ny: number): [number, number[], number] => {
+  const encodeChannel = (
+    channel: number[],
+    nx: number,
+    ny: number
+  ): [number, number[], number] => {
     let dc = 0;
     const ac: number[] = [];
     let scale = 0;
@@ -65,7 +69,8 @@ export function thumbHashFromRgba(
         for (let x = 0; x < w; x += 1) fx[x] = cos((PI / w) * cx * (x + 0.5));
         for (let y = 0; y < h; y += 1) {
           const fy = cos((PI / h) * cy * (y + 0.5));
-          for (let x = 0; x < w; x += 1) f += (channel[x + y * w] ?? 0) * (fx[x] ?? 0) * fy;
+          for (let x = 0; x < w; x += 1)
+            f += (channel[x + y * w] ?? 0) * (fx[x] ?? 0) * fy;
         }
         f /= w * h;
         if (cx || cy) {
@@ -76,13 +81,17 @@ export function thumbHashFromRgba(
         }
       }
     }
-    if (scale) for (let i = 0; i < ac.length; i += 1) ac[i] = 0.5 + (0.5 / scale) * (ac[i] ?? 0);
+    if (scale)
+      for (let i = 0; i < ac.length; i += 1)
+        ac[i] = 0.5 + (0.5 / scale) * (ac[i] ?? 0);
     return [dc, ac, scale];
   };
   const [lDc, lAc, lScale] = encodeChannel(l, max(3, lx), max(3, ly));
   const [pDc, pAc, pScale] = encodeChannel(p, 3, 3);
   const [qDc, qAc, qScale] = encodeChannel(q, 3, 3);
-  const [aDc, aAc, aScale] = hasAlpha ? encodeChannel(a, 5, 5) : [0, [] as number[], 0];
+  const [aDc, aAc, aScale] = hasAlpha
+    ? encodeChannel(a, 5, 5)
+    : [0, [] as number[], 0];
   const isLandscape = w > h;
   const header24 =
     round(63 * lDc) |
@@ -111,25 +120,27 @@ export function thumbHashFromRgba(
       hash[idx] = (hash[idx] ?? 0) | (round(15 * f) << ((acIndex++ & 1) << 2));
     }
   }
-  let binary = '';
+  let binary = "";
   for (const byte of hash) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/=+$/, '');
+  return btoa(binary).replace(/=+$/u, "");
 }
 
 /**
  * Decode one bitmap to ≤100 px RGBA on a canvas and hash it (issue #419) — the
  * same canvas raster codec the thumb/dHash use, so no extra image fetch.
  */
-export function thumbHashFromImage(img: HTMLImageElement | ImageBitmap): string | null {
+export function thumbHashFromImage(
+  img: HTMLImageElement | ImageBitmap
+): string | null {
   try {
     const long = Math.max(img.width, img.height);
     const scale = Math.min(1, 100 / long);
     const w = Math.max(1, Math.round(img.width * scale));
     const h = Math.max(1, Math.round(img.height * scale));
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
-    const g = canvas.getContext('2d')!;
+    const g = canvas.getContext("2d")!;
     g.drawImage(img, 0, 0, w, h);
     return thumbHashFromRgba(w, h, g.getImageData(0, 0, w, h).data);
   } catch {

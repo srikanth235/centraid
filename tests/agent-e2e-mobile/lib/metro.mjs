@@ -11,7 +11,7 @@
 // times out cryptically. Fail loudly instead.
 export async function metroReachable() {
   try {
-    const res = await fetch('http://127.0.0.1:8081/status', {
+    const res = await fetch("http://127.0.0.1:8081/status", {
       signal: AbortSignal.timeout(1500),
     });
     return res.ok;
@@ -44,20 +44,20 @@ export async function metroReachable() {
 function devClientBundleQuery(platform, appId) {
   return [
     `platform=${platform}`,
-    'dev=true',
-    'lazy=true',
-    'minify=false',
-    'inlineSourceMap=false',
-    'modulesOnly=false',
-    'runModule=true',
-    'excludeSource=true',
-    'sourcePaths=url-server',
+    "dev=true",
+    "lazy=true",
+    "minify=false",
+    "inlineSourceMap=false",
+    "modulesOnly=false",
+    "runModule=true",
+    "excludeSource=true",
+    "sourcePaths=url-server",
     `app=${appId}`,
-    'transform.routerRoot=app',
-    'transform.engine=hermes',
-    'transform.bytecode=1',
-    'unstable_transformProfile=hermes-stable',
-  ].join('&');
+    "transform.routerRoot=app",
+    "transform.engine=hermes",
+    "transform.bytecode=1",
+    "unstable_transformProfile=hermes-stable",
+  ].join("&");
 }
 
 // Build the JS bundle once, before any flow starts its clock.
@@ -82,19 +82,32 @@ export async function prewarmMetroBundle(platform, appId) {
     `http://127.0.0.1:8081/index.bundle?${query}`,
   ];
   const MIN_REAL_BUNDLE_BYTES = 1_000_000;
-  for (const url of candidates) {
+  // Fallback URLs must be tried in priority order; the first complete bundle
+  // establishes the Metro warmup result.
+  const prewarmNext = async (index) => {
+    const url = candidates[index];
+    if (!url) return false;
     const t0 = Date.now();
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(300_000) });
       // Drain the body: Metro streams the bundle and isn't done building until
       // the last byte is out.
       const bytes = (await res.arrayBuffer()).byteLength;
-      if (!res.ok || bytes < MIN_REAL_BUNDLE_BYTES) continue;
-      console.log(`  prewarm : bundle ready in ${Date.now() - t0}ms (${bytes} bytes)`);
-      return;
+      if (!res.ok || bytes < MIN_REAL_BUNDLE_BYTES)
+        return prewarmNext(index + 1);
+      console.log(
+        `  prewarm : bundle ready in ${Date.now() - t0}ms (${bytes} bytes)`
+      );
+      return true;
     } catch (err) {
-      console.log(`  prewarm : ${url.split('?')[0]} failed (${err.message ?? err})`);
+      console.log(
+        `  prewarm : ${url.split("?")[0]} failed (${err.message ?? err})`
+      );
+      return prewarmNext(index + 1);
     }
-  }
-  console.log('  prewarm : no bundle endpoint matched — flows will pay the cold build');
+  };
+  if (!(await prewarmNext(0)))
+    console.log(
+      "  prewarm : no bundle endpoint matched — flows will pay the cold build"
+    );
 }

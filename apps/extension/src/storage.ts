@@ -1,13 +1,15 @@
-import type { PairingState } from './types.js';
+import type { PairingState } from "./types.js";
 
-const PAIRING_KEY = 'centraid.companion.v1.pairing';
-const DEVICE_KEY = 'centraid.companion.v1.device-key';
-const LOCKED_KEY = 'centraid.companion.v1.locked';
+const PAIRING_KEY = "centraid.companion.v1.pairing";
+const DEVICE_KEY = "centraid.companion.v1.device-key";
+const LOCKED_KEY = "centraid.companion.v1.locked";
 
 export async function loadPairing(): Promise<PairingState | undefined> {
   const values = await chrome.storage.local.get(PAIRING_KEY);
   const value = values[PAIRING_KEY];
-  return value && typeof value === 'object' ? (value as PairingState) : undefined;
+  return value && typeof value === "object"
+    ? (value as PairingState)
+    : undefined;
 }
 
 export async function savePairing(pairing: PairingState): Promise<void> {
@@ -16,7 +18,9 @@ export async function savePairing(pairing: PairingState): Promise<void> {
 
 export async function loadDeviceKey(): Promise<string | undefined> {
   const values = await chrome.storage.local.get(DEVICE_KEY);
-  return typeof values[DEVICE_KEY] === 'string' ? values[DEVICE_KEY] : undefined;
+  return typeof values[DEVICE_KEY] === "string"
+    ? values[DEVICE_KEY]
+    : undefined;
 }
 
 export async function saveDeviceKey(key: string): Promise<void> {

@@ -180,7 +180,8 @@
 .cmpModeActive {
   background: color-mix(in oklab, var(--accent) 12%, transparent);
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in oklab, var(--accent) 30%, transparent);
 }
 .cmpModeActive .cmpName,
 .cmpModeActive .cmpPick {

@@ -2,8 +2,9 @@
 // sidecars. The derivative row is the typed/provenance-bearing source; these
 // rows are the indexes existing search code already consumes.
 
-import type { DatabaseSync } from 'node:sqlite';
-import { encodeVector } from '../enrich/similarity.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import { encodeVector } from "../enrich/similarity.js";
 
 interface EmbeddingPayload {
   model: string;
@@ -17,7 +18,7 @@ export function upsertContentEmbedding(
     canonicalPayload: string;
     embeddingId: string;
     createdAt: string;
-  },
+  }
 ): void {
   const payload = JSON.parse(input.canonicalPayload) as EmbeddingPayload;
   // One typed `embedding` slot represents the current configured model. If
@@ -26,7 +27,7 @@ export function upsertContentEmbedding(
   vault
     .prepare(
       `DELETE FROM enrich_embedding
-        WHERE target_type = 'core.content_item' AND target_id = ? AND model <> ?`,
+        WHERE target_type = 'core.content_item' AND target_id = ? AND model <> ?`
     )
     .run(input.contentId, payload.model);
   vault
@@ -36,7 +37,7 @@ export function upsertContentEmbedding(
        VALUES (?, 'core.content_item', ?, ?, ?, ?, ?)
        ON CONFLICT (target_type, target_id, model) DO UPDATE SET
          dim = excluded.dim, vector = excluded.vector,
-         created_at = excluded.created_at`,
+         created_at = excluded.created_at`
     )
     .run(
       input.embeddingId,
@@ -44,6 +45,6 @@ export function upsertContentEmbedding(
       payload.model,
       payload.vector.length,
       encodeVector(payload.vector),
-      input.createdAt,
+      input.createdAt
     );
 }

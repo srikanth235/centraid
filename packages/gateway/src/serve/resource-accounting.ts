@@ -114,13 +114,17 @@ export class ResourceAccounting {
     this.now = options.now ?? Date.now;
     this.cpuUsage = options.cpuUsage ?? (() => process.cpuUsage());
     this.rss = options.rss ?? (() => process.memoryUsage().rss);
-    this.workerPoolStats = options.workerPoolStats ?? (() => ({ tasks: 0, busyMs: 0 }));
+    this.workerPoolStats =
+      options.workerPoolStats ?? (() => ({ tasks: 0, busyMs: 0 }));
     this.sinceMs = this.now();
     this.sampleRss();
   }
 
   /** One blob-replication sweep completed on a vault plane. */
-  recordReplicationPass(info: { bytesReplicated: number; durationMs: number }): void {
+  recordReplicationPass(info: {
+    bytesReplicated: number;
+    durationMs: number;
+  }): void {
     this.replicationPasses += 1;
     this.replicationBytes += Math.max(0, info.bytesReplicated);
     this.replicationBusyMs += Math.max(0, info.durationMs);
@@ -216,7 +220,8 @@ export class ResourceAccounting {
   private pruneTimerFires(): void {
     const cutoff = this.now() - HOUR_MS;
     let drop = 0;
-    while (drop < this.timerFires.length && this.timerFires[drop]! <= cutoff) drop += 1;
+    while (drop < this.timerFires.length && this.timerFires[drop]! <= cutoff)
+      drop += 1;
     if (drop > 0) this.timerFires.splice(0, drop);
   }
 }

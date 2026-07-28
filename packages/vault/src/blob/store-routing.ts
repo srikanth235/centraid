@@ -18,13 +18,14 @@
 // records a local receipt for binary variants). So this only ever sees shas that
 // have a real CAS object.
 
-import type { DatabaseSync } from 'node:sqlite';
-import type { BackupPolicy } from '../backup-policy.js';
-import { BINARY_DERIVATIVE_SQL } from './derivatives.js';
-import type { RemoteTier } from './custody-types.js';
-import { storeForClass } from './custody-types.js';
-import type { BlobStore } from './store.js';
-import type { ReplicaStore } from './replica-index.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import type { BackupPolicy } from "../backup-policy.js";
+import type { RemoteTier } from "./custody-types.js";
+import { storeForClass } from "./custody-types.js";
+import { BINARY_DERIVATIVE_SQL } from "./derivatives.js";
+import type { ReplicaStore } from "./replica-index.js";
+import type { BlobStore } from "./store.js";
 
 /**
  * Binary derivatives that never take the multipart/streaming path stay under
@@ -45,19 +46,22 @@ export const DERIVED_DIRECT_PUT_MAX_BYTES = 32 * 1024 * 1024;
  * are written before the local receipt that drives replication, so this
  * drain-time lookup is race-safe.
  */
-export function desiredStoreForSha(db: DatabaseSync, sha256: string): ReplicaStore {
+export function desiredStoreForSha(
+  db: DatabaseSync,
+  sha256: string
+): ReplicaStore {
   const original = db
     .prepare(
       `SELECT 1 AS present FROM core_content_item WHERE sha256 = ?
        UNION ALL
        SELECT 1 AS present FROM blob_staging WHERE sha256 = ? AND variant IS NULL
-       LIMIT 1`,
+       LIMIT 1`
     )
     .get(sha256, sha256) as { present: 1 } | undefined;
   // Original custody wins the dedup edge: a sha that is both an original and a
   // derivative stays on cas, so a content item's bytes are never stranded on the
   // reconstructible-derivatives prefix.
-  if (original) return 'cas';
+  if (original) return "cas";
   const derivative = db
     .prepare(
       `SELECT 1 AS present FROM core_content_derivative
@@ -65,10 +69,10 @@ export function desiredStoreForSha(db: DatabaseSync, sha256: string): ReplicaSto
        UNION ALL
        SELECT 1 AS present FROM blob_staging
         WHERE sha256 = ? AND variant IN (${BINARY_DERIVATIVE_SQL})
-       LIMIT 1`,
+       LIMIT 1`
     )
     .get(sha256, sha256) as { present: 1 } | undefined;
-  return derivative ? 'derived' : 'cas';
+  return derivative ? "derived" : "cas";
 }
 
 /**
@@ -85,22 +89,27 @@ export function desiredStoreForSha(db: DatabaseSync, sha256: string): ReplicaSto
 export function resolveWriteStore(
   remote: RemoteTier,
   desired: ReplicaStore,
-  byteSize: number,
+  byteSize: number
 ): { store: BlobStore; storeClass: ReplicaStore } {
   const useDerived =
-    desired === 'derived' && !!remote.derivedStore && byteSize <= DERIVED_DIRECT_PUT_MAX_BYTES;
-  const storeClass: ReplicaStore = useDerived ? 'derived' : 'cas';
+    desired === "derived" &&
+    !!remote.derivedStore &&
+    byteSize <= DERIVED_DIRECT_PUT_MAX_BYTES;
+  const storeClass: ReplicaStore = useDerived ? "derived" : "cas";
   return { store: storeForClass(remote, storeClass), storeClass };
 }
 
 // --- Direct-to-cold heuristic for large media originals (issue #425 Wave 3) ---
 
 /** The cold storage class an eligible original's object-creating write carries. */
-export const COLD_ORIGINAL_STORAGE_CLASS = 'STANDARD_IA';
+export const COLD_ORIGINAL_STORAGE_CLASS = "STANDARD_IA";
 /** Default size floor: below this an original stays class-less (Standard). */
 export const DEFAULT_COLD_ORIGINAL_MIN_BYTES = 25 * 1024 * 1024;
 /** Default MIME prefixes — video/audio only (images/stills stay warm in v0). */
-export const DEFAULT_COLD_ORIGINAL_MIME_PREFIXES: readonly string[] = ['video/', 'audio/'];
+export const DEFAULT_COLD_ORIGINAL_MIME_PREFIXES: readonly string[] = [
+  "video/",
+  "audio/",
+];
 
 /**
  * Media type + byte size for a sha IFF it is an ORIGINAL (mirrors
@@ -113,7 +122,7 @@ export const DEFAULT_COLD_ORIGINAL_MIME_PREFIXES: readonly string[] = ['video/',
  */
 export function originalMediaForSha(
   db: DatabaseSync,
-  sha256: string,
+  sha256: string
 ): { mediaType: string; byteSize: number } | null {
   const row = db
     .prepare(
@@ -122,7 +131,7 @@ export function originalMediaForSha(
        UNION ALL
        SELECT media_type AS mediaType, byte_size AS byteSize
          FROM blob_staging WHERE sha256 = ? AND variant IS NULL
-       LIMIT 1`,
+       LIMIT 1`
     )
     .get(sha256, sha256) as { mediaType: string; byteSize: number } | undefined;
   return row ?? null;
@@ -152,19 +161,26 @@ export interface StorageClassForWriteInput {
  *   - the sha is an original with a media type matching a configured prefix,
  *   - its size is at or above the configured floor.
  */
-export function resolveStorageClassForWrite(input: StorageClassForWriteInput): string | undefined {
-  const { desiredStore, policy, supportedStorageClasses, mediaType, byteSize } = input;
-  if (desiredStore !== 'cas') return undefined;
+export function resolveStorageClassForWrite(
+  input: StorageClassForWriteInput
+): string | undefined {
+  const { desiredStore, policy, supportedStorageClasses, mediaType, byteSize } =
+    input;
+  if (desiredStore !== "cas") return undefined;
   // An explicit vault-level class wins — but treat empty/whitespace as unset, in
   // agreement with db.ts (which reads it as a falsy header) and resolveBackupPolicy.
-  if (policy.storageClass !== undefined && policy.storageClass.trim() !== '') return undefined;
+  if (policy.storageClass !== undefined && policy.storageClass.trim() !== "")
+    return undefined;
   const knob = policy.directToColdOriginals;
   if (knob?.enabled === false) return undefined;
-  if (!supportedStorageClasses?.includes(COLD_ORIGINAL_STORAGE_CLASS)) return undefined;
+  if (!supportedStorageClasses?.includes(COLD_ORIGINAL_STORAGE_CLASS))
+    return undefined;
   if (mediaType === undefined || byteSize === undefined) return undefined;
-  if (byteSize < (knob?.minBytes ?? DEFAULT_COLD_ORIGINAL_MIN_BYTES)) return undefined;
+  if (byteSize < (knob?.minBytes ?? DEFAULT_COLD_ORIGINAL_MIN_BYTES))
+    return undefined;
   const prefixes = knob?.mimePrefixes ?? DEFAULT_COLD_ORIGINAL_MIME_PREFIXES;
-  if (!prefixes.some((prefix) => mediaType.startsWith(prefix))) return undefined;
+  if (!prefixes.some((prefix) => mediaType.startsWith(prefix)))
+    return undefined;
   return COLD_ORIGINAL_STORAGE_CLASS;
 }
 
@@ -188,16 +204,18 @@ export function storageClassForShaWrite(
   storeClass: ReplicaStore,
   supportedStorageClasses: readonly string[] | undefined,
   policy: BackupPolicy,
-  originalHint?: { mediaType: string; byteSize: number },
+  originalHint?: { mediaType: string; byteSize: number }
 ): string | undefined {
   // Cheap gates first — none of these need the sha's media row, so short-circuit
   // before the `originalMediaForSha` UNION query when the heuristic can't fire:
   // a non-cas write, an explicit vault-level class, the knob disabled, or a
   // target that never declared STANDARD_IA. Only an eligible write hits the DB.
-  if (storeClass !== 'cas') return undefined;
-  if (policy.storageClass !== undefined && policy.storageClass.trim() !== '') return undefined;
+  if (storeClass !== "cas") return undefined;
+  if (policy.storageClass !== undefined && policy.storageClass.trim() !== "")
+    return undefined;
   if (policy.directToColdOriginals?.enabled === false) return undefined;
-  if (!supportedStorageClasses?.includes(COLD_ORIGINAL_STORAGE_CLASS)) return undefined;
+  if (!supportedStorageClasses?.includes(COLD_ORIGINAL_STORAGE_CLASS))
+    return undefined;
   const media = originalMediaForSha(db, sha256) ?? originalHint;
   return resolveStorageClassForWrite({
     desiredStore: storeClass,

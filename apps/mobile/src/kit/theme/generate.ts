@@ -21,12 +21,19 @@
  *  JetBrains Mono, so we map the same three roles onto those families. Keep
  *  in sync with the `useFonts(...)` call in App.tsx. */
 const FONT_ROLES = {
-  sans: { regular: 'Geist_400Regular', medium: 'Geist_500Medium', semibold: 'Geist_600SemiBold' },
-  title: { medium: 'SpaceGrotesk_500Medium', semibold: 'SpaceGrotesk_600SemiBold' },
+  sans: {
+    regular: "Geist_400Regular",
+    medium: "Geist_500Medium",
+    semibold: "Geist_600SemiBold",
+  },
+  title: {
+    medium: "SpaceGrotesk_500Medium",
+    semibold: "SpaceGrotesk_600SemiBold",
+  },
   mono: {
-    regular: 'JetBrainsMono_400Regular',
-    medium: 'JetBrainsMono_500Medium',
-    semibold: 'JetBrainsMono_600SemiBold',
+    regular: "JetBrainsMono_400Regular",
+    medium: "JetBrainsMono_500Medium",
+    semibold: "JetBrainsMono_600SemiBold",
   },
 } as const;
 
@@ -38,7 +45,7 @@ const SPACING = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 24, 6: 32, 7: 48 } as const;
 // Dark `--bg` is `var(--bg-wall)`, which the browser host supplies at runtime
 // and the portable CSS never defines. Substitute a concrete dark wall derived from
 // the same hue/lightness knobs so the native theme has a real background.
-const BG_WALL_FALLBACK = 'hsl(var(--app-hue) 12% var(--bg-l))';
+const BG_WALL_FALLBACK = "hsl(var(--app-hue) 12% var(--bg-l))";
 
 export interface TokenBlocks {
   /** `:root { … }` — the light defaults. */
@@ -58,9 +65,11 @@ export interface GeneratedTheme {
 /** Extract the `--name: value;` pairs from a single `{ … }` block body. */
 function parseDeclarations(body: string): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const decl of body.split(';')) {
-    const m = /^\s*(--[\w-]+)\s*:\s*(.+?)\s*$/.exec(decl);
-    if (m?.[1] !== undefined && m[2] !== undefined) out[m[1]] = m[2].trim();
+  for (const decl of body.split(";")) {
+    const m = /^\s*(?<name>--[\w-]+)\s*:\s*(?<value>.+?)\s*$/u.exec(decl);
+    const name = m?.groups?.name;
+    const value = m?.groups?.value;
+    if (name !== undefined && value !== undefined) out[name] = value.trim();
   }
   return out;
 }
@@ -70,11 +79,13 @@ function parseDeclarations(body: string): Record<string, string> {
  *  overrides, which we already read from the attribute selector. */
 export function parseTokensCss(css: string): TokenBlocks {
   // `[^}]*` is safe: these blocks contain no nested braces.
-  const light = /:root\s*\{([^}]*)\}/.exec(css);
-  const dark = /:root\[data-theme='dark'\]\s*\{([^}]*)\}/.exec(css);
+  const light = /:root\s*\{(?<body>[^}]*)\}/u.exec(css)?.groups?.body;
+  const dark = /:root\[data-theme=['"]dark['"]\]\s*\{(?<body>[^}]*)\}/u.exec(
+    css
+  )?.groups?.body;
   return {
-    light: light?.[1] !== undefined ? parseDeclarations(light[1]) : {},
-    darkOverride: dark?.[1] !== undefined ? parseDeclarations(dark[1]) : {},
+    light: light === undefined ? {} : parseDeclarations(light),
+    darkOverride: dark === undefined ? {} : parseDeclarations(dark),
   };
 }
 
@@ -83,26 +94,30 @@ function topLevelComma(s: string): number {
   let depth = 0;
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
-    if (ch === '(') depth++;
-    else if (ch === ')') depth--;
-    else if (ch === ',' && depth === 0) return i;
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    else if (ch === "," && depth === 0) return i;
   }
   return -1;
 }
 
 /** Recursively replace `var(--x[, fallback])` using `scope`, honoring the
  *  fallback (which may itself contain `var()`). Unresolved refs become ''. */
-function resolveVars(input: string, scope: Record<string, string>, seen: Set<string>): string {
+function resolveVars(
+  input: string,
+  scope: Record<string, string>,
+  seen: Set<string>
+): string {
   let s = input;
   for (;;) {
-    const idx = s.indexOf('var(');
+    const idx = s.indexOf("var(");
     if (idx === -1) break;
     // Match the paren that opens right after `var`.
     let depth = 0;
     let end = -1;
     for (let k = idx + 3; k < s.length; k++) {
-      if (s[k] === '(') depth++;
-      else if (s[k] === ')') {
+      if (s[k] === "(") depth++;
+      else if (s[k] === ")") {
         depth--;
         if (depth === 0) {
           end = k;
@@ -116,7 +131,7 @@ function resolveVars(input: string, scope: Record<string, string>, seen: Set<str
     const name = (comma === -1 ? inner : inner.slice(0, comma)).trim();
     const fallback = comma === -1 ? undefined : inner.slice(comma + 1).trim();
 
-    let replacement = '';
+    let replacement = "";
     if (scope[name] !== undefined && !seen.has(name)) {
       replacement = resolveVars(scope[name], scope, new Set([...seen, name]));
     } else if (fallback !== undefined) {
@@ -131,14 +146,16 @@ function resolveVars(input: string, scope: Record<string, string>, seen: Set<str
  *  (only `%` appears in the token source). Repeats until no `calc(` remains. */
 function evalCalc(input: string): string {
   let s = input;
-  const re = /calc\(\s*(-?[\d.]+)(%?)\s*([+-])\s*(-?[\d.]+)(%?)\s*\)/;
+  const re =
+    /calc\(\s*(?<left>-?[\d.]+)(?<leftUnit>%?)\s*(?<op>[+-])\s*(?<right>-?[\d.]+)(?<rightUnit>%?)\s*\)/u;
   for (;;) {
     const m = re.exec(s);
     if (!m) break;
-    const a = parseFloat(m[1] ?? '0');
-    const b = parseFloat(m[4] ?? '0');
-    const unit = m[2] || m[5] || '';
-    const val = m[3] === '+' ? a + b : a - b;
+    const g: Record<string, string | undefined> = m.groups ?? {};
+    const a = Number(g.left ?? "0");
+    const b = Number(g.right ?? "0");
+    const unit = g.leftUnit || g.rightUnit || "";
+    const val = g.op === "+" ? a + b : a - b;
     s = s.slice(0, m.index) + `${val}${unit}` + s.slice(m.index + m[0].length);
   }
   return s;
@@ -167,11 +184,15 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   else if (hp < 5) [r, b] = [x, c];
   else [r, b] = [c, x];
   const m = l - c / 2;
-  return [clampByte((r + m) * 255), clampByte((g + m) * 255), clampByte((b + m) * 255)];
+  return [
+    clampByte((r + m) * 255),
+    clampByte((g + m) * 255),
+    clampByte((b + m) * 255),
+  ];
 }
 
 function toHex(r: number, g: number, b: number): string {
-  return '#' + [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('');
+  return "#" + [r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("");
 }
 
 function roundAlpha(a: number): number {
@@ -183,29 +204,30 @@ function roundAlpha(a: number): number {
 export function cssColorToRn(resolved: string): string | null {
   const v = resolved.trim();
   if (!v) return null;
-  if (/^#[0-9a-fA-F]{3}$/.test(v)) {
+  if (/^#[0-9a-fA-F]{3}$/u.test(v)) {
     return (
-      '#' +
+      "#" +
       v
         .slice(1)
-        .replace(/./g, (c) => c + c)
+        .replace(/./gu, (c) => c + c)
         .toLowerCase()
     );
   }
-  if (/^#[0-9a-fA-F]{6}$/.test(v)) return v.toLowerCase();
-  if (/^rgba?\([^)]*\)$/.test(v)) return v;
+  if (/^#[0-9a-fA-F]{6}$/u.test(v)) return v.toLowerCase();
+  if (/^rgba?\([^)]*\)$/u.test(v)) return v;
 
-  const hsl = /^hsla?\(\s*([^)]*)\)$/.exec(v);
-  if (hsl?.[1] !== undefined) {
-    const segments = hsl[1].split('/').map((p) => p.trim());
-    const parts = (segments[0] ?? '').split(/[\s,]+/).filter(Boolean);
+  const hsl = /^hsla?\(\s*(?<body>[^)]*)\)$/u.exec(v)?.groups?.body;
+  if (hsl !== undefined) {
+    const segments = hsl.split("/").map((p) => p.trim());
+    const parts = (segments[0] ?? "").split(/[\s,]+/u).filter(Boolean);
     if (parts.length < 3) return null;
-    const h = parseFloat(parts[0] ?? '');
-    const s = parseFloat(parts[1] ?? '') / 100;
-    const l = parseFloat(parts[2] ?? '') / 100;
+    const h = Number(parts[0] ?? "");
+    const s = Number((parts[1] ?? "").replace(/%$/u, "")) / 100;
+    const l = Number((parts[2] ?? "").replace(/%$/u, "")) / 100;
     if ([h, s, l].some((n) => Number.isNaN(n))) return null;
     const alphaPart = segments[1];
-    const alpha = alphaPart !== undefined && alphaPart !== '' ? parseFloat(alphaPart) : 1;
+    const alpha =
+      alphaPart !== undefined && alphaPart !== "" ? Number(alphaPart) : 1;
     const [r, g, b] = hslToRgb(h, s, l);
     if (Number.isNaN(alpha) || alpha >= 1) return toHex(r, g, b);
     return `rgba(${r}, ${g}, ${b}, ${roundAlpha(alpha)})`;
@@ -215,39 +237,45 @@ export function cssColorToRn(resolved: string): string | null {
 
 /** A resolved length (`14px`, `0.75rem`) → pixels, or null. rem = 16px. */
 export function cssLengthToPx(resolved: string): number | null {
-  const px = /^(-?[\d.]+)px$/.exec(resolved.trim());
-  if (px?.[1] !== undefined) return parseFloat(px[1]);
-  const rem = /^(-?[\d.]+)rem$/.exec(resolved.trim());
-  if (rem?.[1] !== undefined) return parseFloat(rem[1]) * 16;
+  const px = /^(?<value>-?[\d.]+)px$/u.exec(resolved.trim())?.groups?.value;
+  if (px !== undefined) return Number(px);
+  const rem = /^(?<value>-?[\d.]+)rem$/u.exec(resolved.trim())?.groups?.value;
+  if (rem !== undefined) return Number(rem) * 16;
   return null;
 }
 
 /** `--ink-2` → `ink2`, `--bg-elev` → `bgElev`, `--on-accent` → `onAccent`. */
 function camelKey(name: string): string {
-  return name.replace(/^--/, '').replace(/-([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+  return name
+    .replace(/^--/u, "")
+    .replace(/-(?<char>[a-z0-9])/gu, (_, char: string) => char.toUpperCase());
 }
 
 /** `--r-card` → `card`, `--radius-sm` → `radiusSm` (drop the `r-` prefix). */
 function radiusKey(name: string): string {
-  return camelKey(name.replace(/^--r-/, '--'));
+  return camelKey(name.replace(/^--r-/u, "--"));
 }
 
 // Internal (`--_accent`) and swatch (`--c-amber`) vars are excluded from the
 // neutral/semantic palette: the former is a plumbing alias, the latter are the
 // app-icon hues already owned by @centraid/design-tokens' `palette`.
 function isPaletteCandidate(name: string): boolean {
-  return !name.startsWith('--_') && !name.startsWith('--c-');
+  return !name.startsWith("--_") && !name.startsWith("--c-");
 }
 
 function isRadiusName(name: string): boolean {
-  return name.startsWith('--r-') || name === '--radius' || name.startsWith('--radius-');
+  return (
+    name.startsWith("--r-") ||
+    name === "--radius" ||
+    name.startsWith("--radius-")
+  );
 }
 
 export function buildTheme(css: string): GeneratedTheme {
   const { light, darkOverride } = parseTokensCss(css);
   const lightScope = light;
   const darkScope: Record<string, string> = {
-    '--bg-wall': BG_WALL_FALLBACK,
+    "--bg-wall": BG_WALL_FALLBACK,
     ...light,
     ...darkOverride,
   };
@@ -277,13 +305,20 @@ export function buildTheme(css: string): GeneratedTheme {
   const darkColors: Record<string, string> = {};
   for (const { name, key, lightValue } of colorTokens) {
     const raw = darkScope[name] ?? light[name];
-    const color = raw === undefined ? null : cssColorToRn(resolveValue(raw, darkScope));
+    const color =
+      raw === undefined ? null : cssColorToRn(resolveValue(raw, darkScope));
     // Fall back to the light value if a dark token resolves to something
     // non-color (keeps light/dark key sets identical).
     darkColors[key] = color ?? lightValue;
   }
 
-  return { light: lightColors, dark: darkColors, radii, spacing: SPACING, fonts: FONT_ROLES };
+  return {
+    light: lightColors,
+    dark: darkColors,
+    radii,
+    spacing: SPACING,
+    fonts: FONT_ROLES,
+  };
 }
 
 // ---- Rendering ----
@@ -296,34 +331,45 @@ function sortedEntries<T>(obj: Record<string, T>): [string, T][] {
 // strings) so `bun run generate:theme` followed by `bun run format` is a
 // no-op — otherwise every regeneration would show a spurious quoting diff.
 function keyLiteral(k: string): string {
-  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k) ? k : `'${k}'`;
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/u.test(k) ? k : `'${k}'`;
 }
 
 function stringLiteral(v: string): string {
-  return `'${v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+  return `'${v.replace(/\\/gu, "\\\\").replace(/'/gu, "\\'")}'`;
 }
 
-function renderRecord(obj: Record<string, string | number>, indent: string): string {
+function renderRecord(
+  obj: Record<string, string | number>,
+  indent: string
+): string {
   return sortedEntries(obj)
-    .map(([k, v]) => `${indent}${keyLiteral(k)}: ${typeof v === 'number' ? v : stringLiteral(v)},`)
-    .join('\n');
+    .map(
+      ([k, v]) =>
+        `${indent}${keyLiteral(k)}: ${typeof v === "number" ? v : stringLiteral(v)},`
+    )
+    .join("\n");
 }
 
 function renderFonts(indent: string): string {
   const lines: string[] = [];
   for (const [role, weights] of sortedEntries(
-    FONT_ROLES as unknown as Record<string, Record<string, string>>,
+    FONT_ROLES as unknown as Record<string, Record<string, string>>
   )) {
-    lines.push(`${indent}${role}: {`);
-    lines.push(renderRecord(weights, indent + '  '));
-    lines.push(`${indent}},`);
+    lines.push(
+      `${indent}${role}: {`,
+      renderRecord(weights, indent + "  "),
+      `${indent}},`
+    );
   }
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 /** Render the checked-in `tokens.generated.ts` source. Deterministic:
  *  every object has alphabetically sorted keys, so regeneration is diff-clean. */
-export function renderTokensModule(theme: GeneratedTheme, sourcePath: string): string {
+export function renderTokensModule(
+  theme: GeneratedTheme,
+  sourcePath: string
+): string {
   return `// GENERATED — do not edit by hand.
 // Source: ${sourcePath}
 // Regenerate: bun run generate:theme
@@ -332,23 +378,23 @@ export function renderTokensModule(theme: GeneratedTheme, sourcePath: string): s
 // See src/theme/generate.ts for the translation rules.
 
 export const lightPalette = {
-${renderRecord(theme.light, '  ')}
+${renderRecord(theme.light, "  ")}
 } as const;
 
 export const darkPalette = {
-${renderRecord(theme.dark, '  ')}
+${renderRecord(theme.dark, "  ")}
 } as const;
 
 export const radii = {
-${renderRecord(theme.radii, '  ')}
+${renderRecord(theme.radii, "  ")}
 } as const;
 
 export const spacing = {
-${renderRecord(theme.spacing as unknown as Record<string, number>, '  ')}
+${renderRecord(theme.spacing as unknown as Record<string, number>, "  ")}
 } as const;
 
 export const fonts = {
-${renderFonts('  ')}
+${renderFonts("  ")}
 } as const;
 
 `;

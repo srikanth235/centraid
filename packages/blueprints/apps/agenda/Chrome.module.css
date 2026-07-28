@@ -25,7 +25,7 @@
   --accent-deep-fg: var(--accent-deep);
   --warn: #b06a12;
 }
-:global(:root[data-theme='dark']) .root {
+:global(:root[data-theme="dark"]) .root {
   --warn: #e0a13c;
   --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
 }

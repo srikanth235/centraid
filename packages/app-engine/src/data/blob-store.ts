@@ -16,17 +16,18 @@
  * it after a delete-conversation cascade (which drops the `attachments` rows).
  */
 
-import { promises as fs } from 'node:fs';
-import { createHash } from 'node:crypto';
-import path from 'node:path';
-import { isValidAppOrAssistantId } from '../registry/app-paths.js';
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { isValidAppOrAssistantId } from "../registry/app-paths.js";
 
 /** A sha256 hex digest — the CAS key + blob filename. */
-const HASH_RE = /^[a-f0-9]{64}$/;
+const HASH_RE = /^[a-f0-9]{64}$/u;
 
 /** Compute the CAS key (sha256 hex) for a byte buffer. */
 export function hashBytes(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex');
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 /**
@@ -49,7 +50,7 @@ export class BlobStore {
 
   /** `appsDir` resolves the CAS root per call (the active vault's workspace). */
   constructor(appsDir: string | (() => string)) {
-    this.appsDir = typeof appsDir === 'string' ? () => appsDir : appsDir;
+    this.appsDir = typeof appsDir === "string" ? () => appsDir : appsDir;
   }
 
   private blobDir(appId: string): string {
@@ -59,12 +60,13 @@ export class BlobStore {
     if (!isValidAppOrAssistantId(appId)) {
       throw new Error(`blob-store: invalid app id "${appId}"`);
     }
-    return path.join(this.appsDir(), appId, 'blobs');
+    return path.join(this.appsDir(), appId, "blobs");
   }
 
   /** Absolute on-disk path for a blob. Throws on a non-sha256 hash (traversal guard). */
   pathFor(appId: string, hash: string): string {
-    if (!HASH_RE.test(hash)) throw new Error(`blob-store: invalid hash "${hash}"`);
+    if (!HASH_RE.test(hash))
+      throw new Error(`blob-store: invalid hash "${hash}"`);
     return path.join(this.blobDir(appId), hash);
   }
 
@@ -109,24 +111,33 @@ export class BlobStore {
    * conversation ledger). Returns the count removed. A missing blobs dir is a
    * no-op. `.tmp-*` leftovers from an interrupted `put` are swept too.
    */
-  async gc(appId: string, referenced: Set<string>): Promise<{ removed: number }> {
+  async gc(
+    appId: string,
+    referenced: Set<string>
+  ): Promise<{ removed: number }> {
     let entries: string[];
     try {
       entries = await fs.readdir(this.blobDir(appId));
     } catch {
       return { removed: 0 };
     }
-    let removed = 0;
-    for (const name of entries) {
-      const stale = name.includes('.tmp-') || (HASH_RE.test(name) && !referenced.has(name));
-      if (!stale) continue;
-      try {
-        await fs.unlink(path.join(this.blobDir(appId), name));
-        removed++;
-      } catch {
-        /* best-effort */
-      }
-    }
+    const removals = await Promise.all(
+      entries
+        .filter(
+          (name) =>
+            name.includes(".tmp-") ||
+            (HASH_RE.test(name) && !referenced.has(name))
+        )
+        .map(async (name) => {
+          try {
+            await fs.unlink(path.join(this.blobDir(appId), name));
+            return 1;
+          } catch {
+            return 0; // best-effort
+          }
+        })
+    );
+    const removed = removals.filter(Boolean).length;
     return { removed };
   }
 }

@@ -29,7 +29,7 @@
   background: var(--bg-sunken);
   color: var(--ink);
 }
-.navItem[aria-current='true'] {
+.navItem[aria-current="true"] {
   background: var(--accs);
   color: var(--accd-fg);
   font-weight: 600;

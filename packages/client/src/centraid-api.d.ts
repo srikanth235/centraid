@@ -21,7 +21,7 @@ export interface CentraidAppInfo {
    * `'app'` / undefined a normal UI app. Replaces the legacy `auto.`
    * id-prefix convention as the automation signal.
    */
-  kind?: 'app' | 'automation';
+  kind?: "app" | "automation";
   /** Whether the app root has an `index.html` (preview-ready). */
   hasIndex?: boolean;
 }
@@ -47,7 +47,7 @@ export interface CentraidSettings {
    */
   activeGatewayId: string;
   /** Kind of the active gateway. */
-  activeGatewayKind: 'local' | 'remote';
+  activeGatewayKind: "local" | "remote";
   /** User-facing label for the active gateway (shown in the switcher). */
   activeGatewayLabel: string;
   /**
@@ -175,7 +175,7 @@ export interface CentraidGatewayOutage {
  */
 export interface CentraidGatewayAlertHistoryEntry {
   at: number;
-  kind: 'down' | 'degraded' | 'component-error' | 'version-skew' | 'recovered';
+  kind: "down" | "degraded" | "component-error" | "version-skew" | "recovered";
   /** Component name / error message / version string — kind-dependent. */
   detail?: string;
   /** Downtime length for `recovered`; time-at-error for `component-error`. */
@@ -192,10 +192,10 @@ export interface CentraidGatewayAlertHistoryEntry {
 export interface CentraidGatewayRuntime {
   gatewayId: string;
   gatewayLabel: string;
-  gatewayKind: 'local' | 'remote';
+  gatewayKind: "local" | "remote";
   /** When tracking began (app launch or gateway switch), epoch ms. */
   trackingSince: number;
-  status: 'unknown' | 'up' | 'down';
+  status: "unknown" | "up" | "down";
   /** When the current status began. */
   statusSince?: number;
   lastCheckAt?: number;
@@ -227,7 +227,7 @@ export interface CentraidGatewayRuntime {
    * only answer `/info`); persists at its last value while unreachable, same
    * posture as `version`.
    */
-  healthStatus?: 'ok' | 'degraded' | 'error';
+  healthStatus?: "ok" | "degraded" | "error";
   /** Non-'ok' components from the most recent `/health` snapshot. */
   componentIssues?: { component: string; status: string; message?: string }[];
   /** True when recent probe latency has sustained above the degraded-latency threshold (~2s). */
@@ -251,7 +251,7 @@ export interface CentraidGatewayRuntime {
 /** Lightweight profile describing one gateway (issue #109, metadata #113). */
 export interface CentraidGatewayProfile {
   id: string;
-  kind: 'local' | 'remote';
+  kind: "local" | "remote";
   label: string;
   /**
    * Friendly name for the profile. Read-time defaulted to `label` when not
@@ -284,7 +284,12 @@ export type CentraidRedeemGatewayPairingResult =
   | {
       ok: false;
       /** Stable error code — safe to switch on for copy. */
-      error: 'invalid_ticket' | 'ticket_expired' | 'invalid_input' | 'unreachable' | 'bad_response';
+      error:
+        | "invalid_ticket"
+        | "ticket_expired"
+        | "invalid_input"
+        | "unreachable"
+        | "bad_response";
       /** Human-readable detail, safe to show as-is if there's no copy for `error`. */
       message: string;
     };
@@ -306,7 +311,7 @@ export interface CentraidGatewayVaultEntry {
 /** Result of `listGatewayVaults` — a preview read, never mutates active state. */
 export type CentraidListGatewayVaultsResult =
   | { ok: true; vaults: CentraidGatewayVaultEntry[] }
-  | { ok: false; error: 'unreachable' | 'auth_failed' | 'bad_response' };
+  | { ok: false; error: "unreachable" | "auth_failed" | "bad_response" };
 
 /**
  * Input to `testGatewayConnection` (issue #382) — the ConnectFlow wizard's
@@ -316,14 +321,14 @@ export type CentraidListGatewayVaultsResult =
  * method (issue #603).
  */
 export type CentraidTestConnectionInput =
-  | { kind: 'ticket'; ticket: string }
-  | { kind: 'gateway'; gatewayId: string };
+  | { kind: "ticket"; ticket: string }
+  | { kind: "gateway"; gatewayId: string };
 
 /** One step of the connectivity-test "handshake ladder". */
 export interface CentraidConnectivityStage {
-  id: 'reach' | 'identify' | 'auth' | 'vaults' | 'decode';
+  id: "reach" | "identify" | "auth" | "vaults" | "decode";
   label: string;
-  status: 'pass' | 'fail' | 'skip';
+  status: "pass" | "fail" | "skip";
   /** Human-actionable detail — always present on `fail`, sometimes on `pass`. */
   detail?: string;
 }
@@ -346,7 +351,12 @@ export interface CentraidConnectivityReport {
     instanceId: string;
     compatible: boolean;
   };
-  vaults?: Array<{ vaultId: string; name: string; color?: string; icon?: string }>;
+  vaults?: Array<{
+    vaultId: string;
+    name: string;
+    color?: string;
+    icon?: string;
+  }>;
   ticket?: { vaultName: string; expiresAt: string; gatewayEndpointId: string };
   /** Stable code for the FIRST failing stage — absent when `ok`. */
   error?: string;
@@ -421,7 +431,7 @@ export interface CentraidAgentStatusEntry {
     runnerKind: string;
     failureClass: string;
     consecutiveFailures: number;
-    state: 'closed' | 'open' | 'half-open';
+    state: "closed" | "open" | "half-open";
     breakerUntil?: number;
     retryAfterMs?: number;
     lastFailureAt?: number;
@@ -465,7 +475,7 @@ export interface CentraidConversationSummary {
 }
 
 export interface CentraidConversationWorkspaceSelection {
-  primaryKind: 'vault-data' | 'app' | 'draft';
+  primaryKind: "vault-data" | "app" | "draft";
   additionalDirectories: string[];
   updatedAt: number;
 }
@@ -501,7 +511,7 @@ export interface CentraidConversationHistoryRetryAttempt {
   turnId: string;
   text: string;
   error?: boolean;
-  feedback: 'up' | 'down' | null;
+  feedback: "up" | "down" | null;
   usage?: CentraidConversationTurnUsage;
 }
 
@@ -513,20 +523,20 @@ export interface CentraidConversationHistoryRetryAttempt {
  */
 export type CentraidConversationHistoryMessage =
   | {
-      kind: 'user';
+      kind: "user";
       text: string;
       attachments?: CentraidConversationHistoryAttachment[];
       fromArchive?: boolean;
     }
   | {
-      kind: 'ai';
+      kind: "ai";
       text: string;
       error?: boolean;
       /** The turn this answer belongs to — the target for feedback/regenerate
        *  (issue #420). Only the terminal answer row of a turn carries it. */
       turnId?: string;
       /** Reader 👍/👎 on this answer, if set. */
-      feedback?: 'up' | 'down' | null;
+      feedback?: "up" | "down" | null;
       /** Retry pager: present when the turn has been regenerated; carries every
        *  attempt oldest→newest, with `index`/`count` for the active (latest). */
       retry?: {
@@ -540,18 +550,18 @@ export type CentraidConversationHistoryMessage =
       fromArchive?: boolean;
     }
   | {
-      kind: 'notice';
-      level: 'warn' | 'info';
+      kind: "notice";
+      level: "warn" | "info";
       text: string;
       fromArchive?: boolean;
     }
   | {
-      kind: 'tool';
+      kind: "tool";
       id: string;
       tool: string;
       sql?: string;
       args?: unknown;
-      state: 'ok' | 'error';
+      state: "ok" | "error";
       result?: unknown;
       errorText?: string;
       artifacts?: CentraidConversationHistoryAttachment[];
@@ -572,7 +582,7 @@ export interface CentraidAppFile {
   path: string;
   content: string;
   size: number;
-  language: 'ts' | 'js' | 'html' | 'css' | 'json' | 'md' | 'other';
+  language: "ts" | "js" | "html" | "css" | "json" | "md" | "other";
 }
 
 /**
@@ -585,14 +595,14 @@ export interface CentraidAppFile {
  */
 export type CentraidAppSettings = Record<string, unknown>;
 
-export type CentraidLogLevel = 'info' | 'warn' | 'error';
+export type CentraidLogLevel = "info" | "warn" | "error";
 
 /** A single line written by `log.info/warn/error` (or a handler failure). */
 export interface CentraidLogEntry {
   ts: number;
   level: CentraidLogLevel;
   msg: string;
-  source: 'query' | 'action';
+  source: "query" | "action";
   handler: string;
 }
 
@@ -613,14 +623,14 @@ export interface CentraidTemplateMeta {
    * (an app folder marked `app.json#kind: 'automation'`, no UI, surfaced on
    * the Automations gallery). Defaults to 'app' when absent.
    */
-  kind?: 'app' | 'automation';
+  kind?: "app" | "automation";
   // ----- automation-only display fields ('automation' kind) -----
   /** Emoji on the gallery card (e.g. '🌤'). */
   emoji?: string;
   /** Gallery section header (e.g. 'Daily rhythm'). */
   category?: string;
   /** Trigger-style glyph picker on the card. */
-  triggerKind?: 'cron' | 'webhook';
+  triggerKind?: "cron" | "webhook";
   /** Human-readable trigger label (e.g. 'Weekdays · 6:00 PM'). */
   triggerLabel?: string;
   /** Integration chip labels (e.g. ['Gmail', 'Slack']). */
@@ -647,7 +657,7 @@ export interface CentraidMintedWebhook {
  */
 export interface CentraidCloneTemplateResult {
   app: CentraidAppInfo;
-  template: CentraidTemplateMeta & { kind: 'app' | 'automation' };
+  template: CentraidTemplateMeta & { kind: "app" | "automation" };
   /** Empty array for app templates and automation templates with no webhook triggers. */
   webhooks: CentraidMintedWebhook[];
 }
@@ -683,8 +693,8 @@ export interface CentraidPhonePairingInfo {
 
 interface CentraidApi {
   /** Host capabilities used where browser security differs from Electron. */
-  getHostCapabilities?(): Promise<{
-    platform: 'desktop' | 'web';
+  getHostCapabilities?: () => Promise<{
+    platform: "desktop" | "web";
     appSessions: boolean;
     compute?: {
       previews: boolean;
@@ -698,22 +708,22 @@ interface CentraidApi {
     };
   }>;
   /** Desktop-only device-local file ASR; present only on a host with an adapter seam. */
-  transcribeMedia?(input: {
+  transcribeMedia?: (input: {
     bytes: ArrayBuffer;
     mediaType: string;
     filename?: string;
-  }): Promise<string>;
-  getSettings(): Promise<CentraidSettings>;
-  saveSettings(patch: Partial<CentraidSettings>): Promise<CentraidSettings>;
+  }) => Promise<string>;
+  getSettings: () => Promise<CentraidSettings>;
+  saveSettings: (patch: Partial<CentraidSettings>) => Promise<CentraidSettings>;
   /** Desktop protocol courier. Values are delivered in-memory and never logged. */
-  onDeepLink?(cb: (url: string) => void): () => void;
+  onDeepLink?: (cb: (url: string) => void) => () => void;
 
   // App list/create/files/write/delete/update-meta + publish moved to the
   // renderer's direct HTTP client (renderer/gateway-client.ts) under the
   // thin-client pivot. The preview iframe points at the gateway draft URL
   // (Phase 4: renderer-side `draftPreviewUrl`), so only the local-only
   // reveal-in-Finder stays on IPC.
-  openAppFolder(input: { id: string }): Promise<{ ok: true }>;
+  openAppFolder: (input: { id: string }) => Promise<{ ok: true }>;
 
   // The in-process AGENT_* builder retired with the unified chat (issue
   // #141, Phase 3): the builder streams `/centraid/<id>/_turn` SSE directly
@@ -733,7 +743,7 @@ interface CentraidApi {
    * read surfaces the in-flight flag, the last error string (if any),
    * and the timestamp of the last successful publish.
    */
-  getPublishStatus(input: { id: string }): Promise<{
+  getPublishStatus: (input: { id: string }) => Promise<{
     inFlight: boolean;
     lastError?: string;
     lastPublishedAt?: number;
@@ -742,22 +752,27 @@ interface CentraidApi {
    * Subscribe to per-app publish events. Fired once per auto-publish
    * resolution (success or failure). Returns the unsubscribe.
    */
-  onPublishEvent(
-    cb: (msg: { id: string; ok: boolean; error?: string; publishedAt?: number }) => void,
-  ): () => void;
+  onPublishEvent: (
+    cb: (msg: {
+      id: string;
+      ok: boolean;
+      error?: string;
+      publishedAt?: number;
+    }) => void
+  ) => () => void;
 
   // ----- Gateways (issue #109) -----
   /** List every gateway profile (local + remote). Sorted local-first. */
-  listGateways(): Promise<CentraidGatewayProfile[]>;
+  listGateways: () => Promise<CentraidGatewayProfile[]>;
   /** Register an iroh connection by stable EndpointId. */
-  addGateway(input: {
+  addGateway: (input: {
     label: string;
     endpointId: string;
     relayHint?: string;
     displayName?: string;
     avatarColor?: string;
     rememberDevice?: boolean;
-  }): Promise<CentraidGatewayProfile>;
+  }) => Promise<CentraidGatewayProfile>;
   /**
    * Remove a gateway (connection). Refuses to remove the primordial
    * `'local'` gateway; remote connections can be removed. Returns the
@@ -765,33 +780,38 @@ interface CentraidApi {
    * the removed gateway was active). (#280 removed additional local
    * workspaces — a second space is a second VAULT.)
    */
-  removeGateway(input: { id: string }): Promise<{ activeGatewayId: string }>;
+  removeGateway: (input: {
+    id: string;
+  }) => Promise<{ activeGatewayId: string }>;
   /** Rename a gateway's user-facing label. Id and paths never change. */
-  renameGateway(input: { id: string; label: string }): Promise<CentraidGatewayProfile>;
+  renameGateway: (input: {
+    id: string;
+    label: string;
+  }) => Promise<CentraidGatewayProfile>;
   /**
    * Patch profile metadata (`displayName` and/or `avatarColor`). Pass empty
    * string for `displayName` to reset to label-derived default; pass the
    * field as `undefined` (omit) to leave it untouched. `avatarColor` must
    * be a `#RRGGBB` string when provided.
    */
-  updateProfileMetadata(input: {
+  updateProfileMetadata: (input: {
     id: string;
     displayName?: string;
     avatarColor?: string;
-  }): Promise<CentraidGatewayProfile>;
+  }) => Promise<CentraidGatewayProfile>;
   /**
    * Switch the active gateway. The renderer should treat the response
    * as the new authoritative settings and drop gateway-scoped state
    * (app list, agent session, iframe).
    */
-  setActiveGateway(input: { id: string }): Promise<CentraidSettings>;
+  setActiveGateway: (input: { id: string }) => Promise<CentraidSettings>;
   /**
    * Active gateway's HTTP base URL + bearer token for the renderer's
    * direct data-plane client (`renderer/gateway-client.ts`). The token
    * lives in keychain-backed settings on main; this is the only path it
    * crosses to the renderer. Re-fetched on every gateway switch.
    */
-  getGatewayAuth(): Promise<{
+  getGatewayAuth: () => Promise<{
     baseUrl: string;
     /** Stable gateway/profile identity, independent of its current transport URL. */
     gatewayId?: string;
@@ -812,56 +832,66 @@ interface CentraidApi {
    * state; the same `onGatewayChanged` / `onVaultChanged` broadcasts fire.
    * Never rejects — failures come back as `{ok:false, error, message}`.
    */
-  redeemGatewayPairing(input: {
+  redeemGatewayPairing: (input: {
     /** The pasted/scanned one-line pairing token. */
     ticket: string;
     /** Optional profile label; falls back to the gateway/vault's own name. */
     label?: string;
     /** Explicit consent for a durable replica, outbox, and preview cache. */
     rememberDevice?: boolean;
-  }): Promise<CentraidRedeemGatewayPairingResult>;
+  }) => Promise<CentraidRedeemGatewayPairingResult>;
   /**
    * Read a gateway's vault list WITHOUT switching to it (issue #376) — the
    * flat (gateway, vault) switcher's preview. `~3s` timeout; a resolvable
    * but unauthenticated/unreachable gateway comes back `ok:false`, never a
    * rejection.
    */
-  listGatewayVaults(input: { gatewayId: string }): Promise<CentraidListGatewayVaultsResult>;
+  listGatewayVaults: (input: {
+    gatewayId: string;
+  }) => Promise<CentraidListGatewayVaultsResult>;
   /**
    * ConnectFlow "handshake ladder" (issue #382): stage-by-stage
    * connectivity check for a method the user just supplied coordinates
    * for, OR an already-known gateway (`kind:'gateway'`). Never rejects.
    */
-  testGatewayConnection(input: CentraidTestConnectionInput): Promise<CentraidConnectivityReport>;
+  testGatewayConnection: (
+    input: CentraidTestConnectionInput
+  ) => Promise<CentraidConnectivityReport>;
   /**
    * Latest gateway-runtime snapshot from the main-process heartbeat
    * monitor. Resolves immediately from the last poll (≤5s old); the first
    * call after launch may run a probe.
    */
-  getGatewayRuntime(): Promise<CentraidGatewayRuntime>;
+  getGatewayRuntime: () => Promise<CentraidGatewayRuntime>;
   /**
    * Subscribe to per-poll runtime snapshots (every ~5s, plus immediately
    * after settings writes and gateway switches). Returns the unsubscribe.
    */
-  onGatewayRuntime(cb: (snapshot: CentraidGatewayRuntime) => void): () => void;
+  onGatewayRuntime: (
+    cb: (snapshot: CentraidGatewayRuntime) => void
+  ) => () => void;
   /**
    * Restart the local embedded gateway (issue #351): graceful stop (WAL
    * checkpoint + close) then relaunch. Refused for remote gateways —
    * `ok: false` with an explanatory error.
    */
-  restartGateway(): Promise<{ ok: boolean; error?: string }>;
+  restartGateway: () => Promise<{ ok: boolean; error?: string }>;
   /**
    * Fetch `/centraid/_gateway/diagnostics` from the active gateway and save
    * it through a native save dialog (issue #351). `canceled` when the user
    * dismissed the dialog.
    */
-  exportGatewayDiagnostics(): Promise<
-    { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+  exportGatewayDiagnostics: () => Promise<
+    | { ok: true; path: string }
+    | { ok: false; canceled?: boolean; error?: string }
   >;
   /** Export a passphrase-wrapped recovery kit through a native 0600 file save. */
-  exportGatewayRecoveryKit(input: {
+  exportGatewayRecoveryKit: (input: {
     password: string;
-  }): Promise<{ ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }>;
+  }) => Promise<
+    | { ok: true; path: string }
+    | { ok: false; canceled?: boolean; error?: string }
+  >;
   /**
    * Switch the vault this client addresses on the active gateway (issue
    * #289). A pure client-side pointer flip — no server call, no re-root:
@@ -869,7 +899,7 @@ interface CentraidApi {
    * `undefined` to clear (let the gateway pick). The renderer keeps its
    * per-(gateway,vault) state and re-renders on `onVaultChanged`.
    */
-  setActiveVault(input: { vaultId?: string }): Promise<CentraidSettings>;
+  setActiveVault: (input: { vaultId?: string }) => Promise<CentraidSettings>;
   /**
    * Create a vault on the active gateway (issue #289). Admin act: works for
    * the desktop's own LOCAL gateway (the desktop is its landlord); rejects
@@ -878,13 +908,16 @@ interface CentraidApi {
    * Optional: a host that cannot administer vaults (the web PWA) omits it,
    * and callers gate on `typeof createVault === 'function'`.
    */
-  createVault?(input: { name?: string }): Promise<{ vaultId: string }>;
+  createVault?: (input: { name?: string }) => Promise<{ vaultId: string }>;
   /**
    * Delete a vault on the active LOCAL gateway (issue #289). Rejects for a
    * remote gateway. Clears the client's active-vault pointer first if it
    * names the vault being deleted.
    */
-  deleteVault(input: { vaultId: string; name: string }): Promise<{ deleted: true }>;
+  deleteVault: (input: {
+    vaultId: string;
+    name: string;
+  }) => Promise<{ deleted: true }>;
   /**
    * Notify-only (issue #382 follow-up): call after a metadata-only
    * `updateVault()` HTTP call succeeds (rename/retheme) so every window's
@@ -895,17 +928,21 @@ interface CentraidApi {
    * vault changed" and drives a navigate-Home + full re-scope, which is
    * wrong for a same-vault rename.
    */
-  notifyVaultMetadataChanged(): Promise<void>;
+  notifyVaultMetadataChanged: () => Promise<void>;
   // ----- Phone link (issue #263) -----
   /** Tunnel status + the paired-device allowlist. */
-  getPhoneLinkStatus(): Promise<CentraidPhoneLinkStatus>;
+  getPhoneLinkStatus: () => Promise<CentraidPhoneLinkStatus>;
   /** Mint a fresh one-time pairing code; returns the QR as a data URL. */
-  beginPhonePairing(): Promise<CentraidPhonePairingInfo>;
-  cancelPhonePairing(): Promise<{ ok: true }>;
+  beginPhonePairing: () => Promise<CentraidPhonePairingInfo>;
+  cancelPhonePairing: () => Promise<{ ok: true }>;
   /** Revoke a paired phone — drops its live connections at the transport. */
-  revokePhoneDevice(input: { deviceId: string }): Promise<{ removed: boolean }>;
+  revokePhoneDevice: (input: {
+    deviceId: string;
+  }) => Promise<{ removed: boolean }>;
   /** Subscribe to pairing completions. Returns the unsubscribe. */
-  onPhonePaired(cb: (msg: { device: CentraidPhoneDevice }) => void): () => void;
+  onPhonePaired: (
+    cb: (msg: { device: CentraidPhoneDevice }) => void
+  ) => () => void;
 
   // ----- Relaunch to update -----
   /**
@@ -913,29 +950,35 @@ interface CentraidApi {
    * one is on disk, and the version a relaunch would load. Optional so
    * test harnesses can mock a partial bridge.
    */
-  getUpdateStatus?(): Promise<{
+  getUpdateStatus?: () => Promise<{
     available: boolean;
     version: string;
     /** Packaged: true only after download finished (#501). */
     readyToInstall?: boolean;
   }>;
   /** Manual "check for updates" (I6 — always admits when a feed candidate exists). */
-  checkForUpdates?(): Promise<{
+  checkForUpdates?: () => Promise<{
     available: boolean;
     version: string;
     readyToInstall?: boolean;
   }>;
   /** Restart the app so it loads the new build (app.relaunch + exit). */
-  relaunchToUpdate?(): Promise<{ ok: true }>;
+  relaunchToUpdate?: () => Promise<{ ok: true }>;
   /** Subscribe to "a new build landed on disk". Returns the unsubscribe. */
-  onUpdateAvailable?(
-    cb: (msg: { available: boolean; version: string; readyToInstall?: boolean }) => void,
-  ): () => void;
+  onUpdateAvailable?: (
+    cb: (msg: {
+      available: boolean;
+      version: string;
+      readyToInstall?: boolean;
+    }) => void
+  ) => () => void;
   /**
    * H5 — opt-in OS service install for the detached local gateway
    * (`centraid-gateway service install`). Never silent; onboarding offers it.
    */
-  installGatewayService?(): Promise<{ ok: true } | { ok: false; error: string }>;
+  installGatewayService?: () => Promise<
+    { ok: true } | { ok: false; error: string }
+  >;
 
   /**
    * Whether the OS will show a keychain/keyring dialog on this host's first
@@ -943,7 +986,7 @@ interface CentraidApi {
    * #603). Onboarding uses it to precede that write with a one-line note so
    * the OS prompt is expected, not spooky. Desktop-only; web omits it.
    */
-  keychainPromptExpected?(): Promise<boolean>;
+  keychainPromptExpected?: () => Promise<boolean>;
 
   // ----- "What's new" changelog -----
   /**
@@ -951,16 +994,16 @@ interface CentraidApi {
    * running build version. Optional so test harnesses can mock a partial
    * bridge (the modal shows an error/empty state when it's absent).
    */
-  getChangelog?(): Promise<CentraidChangelogResult>;
+  getChangelog?: () => Promise<CentraidChangelogResult>;
 
   /**
    * Subscribe to active-gateway changes (any cause — add/remove/rename
    * of the active one, or explicit switch). Returns the unsubscribe.
    */
-  onGatewayChanged(
+  onGatewayChanged: (
     cb: (msg: {
       activeGatewayId: string;
-      activeGatewayKind: 'local' | 'remote';
+      activeGatewayKind: "local" | "remote";
       activeGatewayLabel: string;
       activeProfileDisplayName: string;
       activeProfileAvatarColor: string;
@@ -970,8 +1013,8 @@ interface CentraidApi {
       removedGatewayId?: string;
       /** Present when durable replica consent was explicitly withdrawn. */
       purgeReplicaGatewayId?: string;
-    }) => void,
-  ): () => void;
+    }) => void
+  ) => () => void;
 
   /**
    * Subscribe to vault-address changes on the active gateway (issue #289).
@@ -979,9 +1022,13 @@ interface CentraidApi {
    * vault header) and re-renders the vault's world WITHOUT the wholesale
    * wipe a gateway switch triggers. Returns the unsubscribe.
    */
-  onVaultChanged(
-    cb: (msg: { activeGatewayId: string; gatewayId?: string; activeVaultId?: string }) => void,
-  ): () => void;
+  onVaultChanged: (
+    cb: (msg: {
+      activeGatewayId: string;
+      gatewayId?: string;
+      activeVaultId?: string;
+    }) => void
+  ) => () => void;
 
   /**
    * Subscribe to vault METADATA changes (name/color/icon/blurb) on the
@@ -991,7 +1038,7 @@ interface CentraidApi {
    * this must NOT trigger a navigate-Home/full re-scope. Returns the
    * unsubscribe.
    */
-  onVaultMetadataChanged(cb: () => void): () => void;
+  onVaultMetadataChanged: (cb: () => void) => () => void;
 
   // listTemplates + cloneTemplate moved to the renderer's direct HTTP client
   // (renderer/gateway-client.ts) under the thin-client pivot — the gateway
@@ -1057,7 +1104,7 @@ export interface CentraidInsightsDailyPoint {
 export interface CentraidInsightsSourceRow {
   key: string;
   label: string;
-  kind: 'automation' | 'chat' | 'build' | string;
+  kind: "automation" | "chat" | "build" | string;
   runs: number;
   tokens: number;
   costUsd: number;
@@ -1093,7 +1140,7 @@ export interface CentraidInsightsEffortRow {
 /** One entry of the recent-activity feed. */
 export interface CentraidInsightsActivityRow {
   runId: string;
-  kind: 'automation' | 'chat' | 'build' | string;
+  kind: "automation" | "chat" | "build" | string;
   label: string;
   automationRef?: string;
   automationName?: string;
@@ -1121,7 +1168,7 @@ export interface CentraidInsightsPeakDay {
 }
 
 export interface CentraidInsightsAttention {
-  kind: 'top_source';
+  kind: "top_source";
   key: string;
   label: string;
   kindLabel: string;
@@ -1155,9 +1202,15 @@ export interface CentraidAutomationTurnRecord {
   automationName?: string;
   /** Active runner binding on the stable automation conversation. */
   adapterKind?: string;
-  triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'compile' | 'interactive';
+  triggerKind:
+    | "scheduled"
+    | "manual"
+    | "replay"
+    | "on_failure"
+    | "compile"
+    | "interactive";
   /** Source that fired the run (`cron` / `webhook` / `data` / `condition` / `manual`). */
-  triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
+  triggerOrigin?: "cron" | "webhook" | "data" | "condition" | "manual";
   parentTurnId?: string;
   note?: string;
   retryOf?: string;
@@ -1166,7 +1219,7 @@ export interface CentraidAutomationTurnRecord {
   endedAt?: number;
   ok: boolean;
   error?: string;
-  feedback?: 'up' | 'down';
+  feedback?: "up" | "down";
   summary?: string;
   outputJson?: string;
   /** True when the run is pinned as a replay fixture. */
@@ -1188,8 +1241,8 @@ export interface CentraidAutomationItem {
   ordinal: number;
   callId?: string;
   batchId?: number;
-  kind: 'message_in' | 'step' | 'tool' | 'agent';
-  role?: 'user' | 'assistant';
+  kind: "message_in" | "step" | "tool" | "agent";
+  role?: "user" | "assistant";
   text?: string;
   /** Tool target. Absent for `kind: 'step'` / `message_in`. */
   name?: string;
@@ -1210,7 +1263,7 @@ export interface CentraidAutomationItem {
   provider?: string;
   /** Frozen at write time; NULL = no price known. */
   costUsd?: number;
-  costSource?: 'agent' | 'estimated';
+  costSource?: "agent" | "estimated";
   appId?: string;
   childTurnId?: string;
 }
@@ -1223,12 +1276,12 @@ export interface CentraidAutomationManifest {
   enabled: boolean;
   prompt: string;
   triggers: Array<
-    | { kind: 'cron'; expr: string; tz?: string }
-    | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
-    | { kind: 'data'; entities: readonly string[]; every?: string }
-    | { kind: 'condition'; entity: string; where?: unknown; every?: string }
+    | { kind: "cron"; expr: string; tz?: string }
+    | { kind: "webhook"; id?: string; secretHash?: string; pending?: true }
+    | { kind: "data"; entities: readonly string[]; every?: string }
+    | { kind: "condition"; entity: string; where?: unknown; every?: string }
     | {
-        kind: 'event';
+        kind: "event";
         connectorKind: string;
         event: string;
         filter?: Record<string, unknown>;
@@ -1245,7 +1298,7 @@ export interface CentraidAutomationManifest {
   apps?: readonly string[];
   costEstimate?: { model: string; tokensPerFire: number };
   onFailure?: string;
-  history: { keep: { count: number } | { days: number } | 'all' | 'errors' };
+  history: { keep: { count: number } | { days: number } | "all" | "errors" };
   generated: { by: string; at: string };
 }
 
@@ -1257,12 +1310,12 @@ export interface CentraidAutomationRow {
   dir: string;
   name: string;
   triggers: Array<
-    | { kind: 'cron'; expr: string; tz?: string }
-    | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
-    | { kind: 'data'; entities: readonly string[]; every?: string }
-    | { kind: 'condition'; entity: string; where?: unknown; every?: string }
+    | { kind: "cron"; expr: string; tz?: string }
+    | { kind: "webhook"; id?: string; secretHash?: string; pending?: true }
+    | { kind: "data"; entities: readonly string[]; every?: string }
+    | { kind: "condition"; entity: string; where?: unknown; every?: string }
     | {
-        kind: 'event';
+        kind: "event";
         connectorKind: string;
         event: string;
         filter?: Record<string, unknown>;
@@ -1311,7 +1364,7 @@ export interface CentraidRunnerModel {
   name?: string;
   default?: boolean;
   /** Capability tier for grouping concrete models in the picker. */
-  tier?: 'smart' | 'balanced' | 'fast';
+  tier?: "smart" | "balanced" | "fast";
 }
 
 /**
@@ -1319,7 +1372,7 @@ export interface CentraidRunnerModel {
  * enumerates, `ready` once cached, `empty` when nothing was found / the CLI is
  * unavailable. The picker shows a loading placeholder and polls while `loading`.
  */
-export type CentraidSurfaceStatus = 'loading' | 'ready' | 'empty';
+export type CentraidSurfaceStatus = "loading" | "ready" | "empty";
 
 // The per-agent host-tool listing (`CentraidHostTool`) retired with the
 // Settings → Agents tools drawer — Connections is where the user reasons about
@@ -1349,7 +1402,7 @@ export interface CentraidRunnerStatus {
 /** One subsystem's health in `GET /centraid/_gateway/health`. */
 export interface CentraidHealthComponent {
   component: string;
-  status: 'ok' | 'degraded' | 'error';
+  status: "ok" | "degraded" | "error";
   detail?: string;
   lastOkAt?: string;
   lastErrorAt?: string;
@@ -1361,24 +1414,28 @@ export interface CentraidHealthComponent {
 export interface CentraidHealthEvent {
   at: string;
   component: string;
-  level: 'warn' | 'error';
+  level: "warn" | "error";
   message: string;
 }
 
 /** Knob keys the resolver derives + the L3 "Tune" rung can override (issue #528 Phase F). */
 export type CentraidResourceKnobKey =
-  | 'workerMaxConcurrent'
-  | 'workerMaxOldGenerationMb'
-  | 'workerPoolSize'
-  | 'replicationConcurrency'
-  | 'staticBrotliQuality'
-  | 'staticGzipQuality';
+  | "workerMaxConcurrent"
+  | "workerMaxOldGenerationMb"
+  | "workerPoolSize"
+  | "replicationConcurrency"
+  | "staticBrotliQuality"
+  | "staticGzipQuality";
 
 /** Structured resource contract on health metrics (issue #528 Phase A). */
 export interface CentraidResourceProfile {
-  class: 'constrained' | 'standard';
-  mode: 'auto' | 'conserve' | 'balanced' | 'performance';
-  host: { cores: number; totalMemoryBytes: number; storageFsyncMs: number | null };
+  class: "constrained" | "standard";
+  mode: "auto" | "conserve" | "balanced" | "performance";
+  host: {
+    cores: number;
+    totalMemoryBytes: number;
+    storageFsyncMs: number | null;
+  };
   resolved: {
     workerMaxConcurrent: number;
     workerMaxOldGenerationMb: number;
@@ -1386,7 +1443,7 @@ export interface CentraidResourceProfile {
     replicationConcurrency: number;
     staticBrotliQuality: number;
     staticGzipQuality: number;
-    sqliteSynchronous: 'FULL' | 'NORMAL';
+    sqliteSynchronous: "FULL" | "NORMAL";
     vaultSweepIntervalMs: number;
     outboxIdleIntervalMs: number;
   };
@@ -1399,7 +1456,7 @@ export interface CentraidResourceProfile {
    */
   sources?: Record<
     CentraidResourceKnobKey,
-    { source: 'env' | 'prefs' | 'preset'; envVar?: string }
+    { source: "env" | "prefs" | "preset"; envVar?: string }
   >;
   /** Accepted range per knob (issue #528 Phase F) — inclusive. Additive. */
   bounds?: Record<CentraidResourceKnobKey, { min: number; max: number }>;
@@ -1448,12 +1505,12 @@ export interface CentraidResourceUsage {
  * Optional so older gateways (which never send it) render unchanged.
  */
 export interface CentraidPowerContext {
-  kind: 'battery' | 'mains' | 'server';
+  kind: "battery" | "mains" | "server";
   /** `null` ⇒ host has no battery — no battery chrome, ever. */
   battery: { percent: number | null; charging: boolean | null } | null;
   deferringBackgroundWork: boolean;
-  reason: 'on-battery' | 'low-battery' | 'thermal' | null;
-  source: 'os-probe' | 'client-push' | 'none';
+  reason: "on-battery" | "low-battery" | "thermal" | null;
+  source: "os-probe" | "client-push" | "none";
   /** Observed CPU steal % on a shared server host, or `null` when unknown. */
   stealPercent: number | null;
   updatedAt: number | null;
@@ -1485,7 +1542,7 @@ export interface CentraidHealthMetrics {
 
 /** Aggregate payload of `GET /centraid/_gateway/health`. */
 export interface CentraidGatewayHealth {
-  status: 'ok' | 'degraded' | 'error';
+  status: "ok" | "degraded" | "error";
   startedAt: string;
   uptimeMs: number;
   components: CentraidHealthComponent[];
@@ -1511,12 +1568,12 @@ declare global {
     current?: boolean;
   }
   type CentraidAppSettings = Record<string, unknown>;
-  type CentraidLogLevel = 'info' | 'warn' | 'error';
+  type CentraidLogLevel = "info" | "warn" | "error";
   interface CentraidLogEntry {
     ts: number;
     level: CentraidLogLevel;
     msg: string;
-    source: 'query' | 'action';
+    source: "query" | "action";
     handler: string;
   }
   interface CentraidConversationSummary {
@@ -1533,7 +1590,7 @@ declare global {
     messageCount: number;
   }
   interface CentraidConversationWorkspaceSelection {
-    primaryKind: 'vault-data' | 'app' | 'draft';
+    primaryKind: "vault-data" | "app" | "draft";
     additionalDirectories: string[];
     updatedAt: number;
   }
@@ -1560,22 +1617,22 @@ declare global {
     turnId: string;
     text: string;
     error?: boolean;
-    feedback: 'up' | 'down' | null;
+    feedback: "up" | "down" | null;
     usage?: CentraidConversationTurnUsage;
   }
   type CentraidConversationHistoryMessage =
     | {
-        kind: 'user';
+        kind: "user";
         text: string;
         attachments?: CentraidConversationHistoryAttachment[];
         fromArchive?: boolean;
       }
     | {
-        kind: 'ai';
+        kind: "ai";
         text: string;
         error?: boolean;
         turnId?: string;
-        feedback?: 'up' | 'down' | null;
+        feedback?: "up" | "down" | null;
         retry?: {
           index: number;
           count: number;
@@ -1585,18 +1642,18 @@ declare global {
         fromArchive?: boolean;
       }
     | {
-        kind: 'notice';
-        level: 'warn' | 'info';
+        kind: "notice";
+        level: "warn" | "info";
         text: string;
         fromArchive?: boolean;
       }
     | {
-        kind: 'tool';
+        kind: "tool";
         id: string;
         tool: string;
         sql?: string;
         args?: unknown;
-        state: 'ok' | 'error';
+        state: "ok" | "error";
         result?: unknown;
         errorText?: string;
         artifacts?: CentraidConversationHistoryAttachment[];
@@ -1611,12 +1668,12 @@ declare global {
     enabled: boolean;
     prompt: string;
     triggers: Array<
-      | { kind: 'cron'; expr: string; tz?: string }
-      | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
-      | { kind: 'data'; entities: readonly string[]; every?: string }
-      | { kind: 'condition'; entity: string; where?: unknown; every?: string }
+      | { kind: "cron"; expr: string; tz?: string }
+      | { kind: "webhook"; id?: string; secretHash?: string; pending?: true }
+      | { kind: "data"; entities: readonly string[]; every?: string }
+      | { kind: "condition"; entity: string; where?: unknown; every?: string }
       | {
-          kind: 'event';
+          kind: "event";
           connectorKind: string;
           event: string;
           filter?: Record<string, unknown>;
@@ -1632,7 +1689,7 @@ declare global {
     apps?: readonly string[];
     costEstimate?: { model: string; tokensPerFire: number };
     onFailure?: string;
-    history: { keep: { count: number } | { days: number } | 'all' | 'errors' };
+    history: { keep: { count: number } | { days: number } | "all" | "errors" };
     generated: { by: string; at: string };
   }
   interface CentraidAutomationRow {
@@ -1640,12 +1697,12 @@ declare global {
     dir: string;
     name: string;
     triggers: Array<
-      | { kind: 'cron'; expr: string; tz?: string }
-      | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
-      | { kind: 'data'; entities: readonly string[]; every?: string }
-      | { kind: 'condition'; entity: string; where?: unknown; every?: string }
+      | { kind: "cron"; expr: string; tz?: string }
+      | { kind: "webhook"; id?: string; secretHash?: string; pending?: true }
+      | { kind: "data"; entities: readonly string[]; every?: string }
+      | { kind: "condition"; entity: string; where?: unknown; every?: string }
       | {
-          kind: 'event';
+          kind: "event";
           connectorKind: string;
           event: string;
           filter?: Record<string, unknown>;
@@ -1674,8 +1731,14 @@ declare global {
     automationId?: string;
     automationName?: string;
     adapterKind?: string;
-    triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'compile' | 'interactive';
-    triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
+    triggerKind:
+      | "scheduled"
+      | "manual"
+      | "replay"
+      | "on_failure"
+      | "compile"
+      | "interactive";
+    triggerOrigin?: "cron" | "webhook" | "data" | "condition" | "manual";
     parentTurnId?: string;
     note?: string;
     retryOf?: string;
@@ -1684,7 +1747,7 @@ declare global {
     endedAt?: number;
     ok: boolean;
     error?: string;
-    feedback?: 'up' | 'down';
+    feedback?: "up" | "down";
     summary?: string;
     outputJson?: string;
     pinned: boolean;
@@ -1702,8 +1765,8 @@ declare global {
     ordinal: number;
     callId?: string;
     batchId?: number;
-    kind: 'message_in' | 'step' | 'tool' | 'agent';
-    role?: 'user' | 'assistant';
+    kind: "message_in" | "step" | "tool" | "agent";
+    role?: "user" | "assistant";
     text?: string;
     name?: string;
     argsJson?: string;
@@ -1721,7 +1784,7 @@ declare global {
     model?: string;
     provider?: string;
     costUsd?: number;
-    costSource?: 'agent' | 'estimated';
+    costSource?: "agent" | "estimated";
     appId?: string;
     childTurnId?: string;
   }
@@ -1803,7 +1866,7 @@ declare global {
     }>;
   }
   interface CentraidInsightsAttention {
-    kind: 'top_source';
+    kind: "top_source";
     key: string;
     label: string;
     kindLabel: string;
@@ -1825,7 +1888,7 @@ declare global {
   }
   interface CentraidHealthComponent {
     component: string;
-    status: 'ok' | 'degraded' | 'error';
+    status: "ok" | "degraded" | "error";
     detail?: string;
     lastOkAt?: string;
     lastErrorAt?: string;
@@ -1835,7 +1898,7 @@ declare global {
   interface CentraidHealthEvent {
     at: string;
     component: string;
-    level: 'warn' | 'error';
+    level: "warn" | "error";
     message: string;
   }
   /** Coarse numeric signals on gateway health (issue #521) — mirrors module export. */
@@ -1858,7 +1921,7 @@ declare global {
     uptimeMs: number;
   }
   interface CentraidGatewayHealth {
-    status: 'ok' | 'degraded' | 'error';
+    status: "ok" | "degraded" | "error";
     startedAt: string;
     uptimeMs: number;
     components: CentraidHealthComponent[];

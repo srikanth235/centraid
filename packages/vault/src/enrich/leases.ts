@@ -7,17 +7,18 @@
 // second device can claim the row. Completion is token + device bound and an
 // already-completed duplicate is a harmless `false`.
 
-import { randomUUID } from 'node:crypto';
-import type { DatabaseSync } from 'node:sqlite';
-import type { DerivativeVariant } from '../blob/derivatives.js';
+import { randomUUID } from "node:crypto";
+import type { DatabaseSync } from "node:sqlite";
+
+import type { DerivativeVariant } from "../blob/derivatives.js";
 
 export const ENRICHMENT_CAPABILITIES = [
-  'previews',
-  'poster',
-  'pdfText',
-  'ocr',
-  'transcript',
-  'embedding',
+  "previews",
+  "poster",
+  "pdfText",
+  "ocr",
+  "transcript",
+  "embedding",
 ] as const;
 export type EnrichmentCapability = (typeof ENRICHMENT_CAPABILITIES)[number];
 
@@ -29,7 +30,7 @@ export interface EnrichmentLease {
   requestId: string;
   entityType: string;
   entityId: string | null;
-  reason: 'search-miss' | 'on-view' | 'manual';
+  reason: "search-miss" | "on-view" | "manual";
   detail: string | null;
   capability: EnrichmentCapability;
   contributionVariant: DerivativeVariant | null;
@@ -55,7 +56,7 @@ interface LeaseRow {
   request_id: string;
   target_type: string;
   target_id: string | null;
-  reason: EnrichmentLease['reason'];
+  reason: EnrichmentLease["reason"];
   detail: string | null;
   required_capability: EnrichmentCapability;
   contribution_variant: DerivativeVariant | null;
@@ -66,20 +67,26 @@ interface LeaseRow {
 }
 
 function iso(value: string | Date | undefined): string {
-  const date = value instanceof Date ? value : value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) throw new Error('invalid lease clock');
+  const date =
+    value instanceof Date ? value : value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) throw new Error("invalid lease clock");
   return date.toISOString();
 }
 
 function ttl(value: number | undefined): number {
   const requested = value ?? DEFAULT_ENRICHMENT_LEASE_TTL_MS;
-  if (!Number.isFinite(requested)) throw new Error('lease ttl must be finite');
-  return Math.min(MAX_ENRICHMENT_LEASE_TTL_MS, Math.max(MIN_ENRICHMENT_LEASE_TTL_MS, requested));
+  if (!Number.isFinite(requested)) throw new Error("lease ttl must be finite");
+  return Math.min(
+    MAX_ENRICHMENT_LEASE_TTL_MS,
+    Math.max(MIN_ENRICHMENT_LEASE_TTL_MS, requested)
+  );
 }
 
-function knownCapabilities(values: readonly EnrichmentCapability[]): EnrichmentCapability[] {
+function knownCapabilities(
+  values: readonly EnrichmentCapability[]
+): EnrichmentCapability[] {
   return [...new Set(values)].filter((value) =>
-    (ENRICHMENT_CAPABILITIES as readonly string[]).includes(value),
+    (ENRICHMENT_CAPABILITIES as readonly string[]).includes(value)
   );
 }
 
@@ -106,14 +113,16 @@ export function queueDeviceEnrichmentRequest(
     requestId: string;
     entityType: string;
     entityId?: string;
-    reason?: 'search-miss' | 'on-view' | 'manual';
+    reason?: "search-miss" | "on-view" | "manual";
     detail?: string;
     capability: EnrichmentCapability;
     contributionVariant?: DerivativeVariant;
     requestedAt?: string | Date;
-  },
+  }
 ): void {
-  if (!(ENRICHMENT_CAPABILITIES as readonly string[]).includes(input.capability)) {
+  if (
+    !(ENRICHMENT_CAPABILITIES as readonly string[]).includes(input.capability)
+  ) {
     throw new Error(`unknown enrichment capability: ${input.capability}`);
   }
   vault
@@ -121,48 +130,50 @@ export function queueDeviceEnrichmentRequest(
       `INSERT INTO enrich_request
          (request_id, target_type, target_id, reason, detail, required_capability,
           contribution_variant, requested_at, drained_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`
     )
     .run(
       input.requestId,
       input.entityType,
       input.entityId ?? null,
-      input.reason ?? 'manual',
+      input.reason ?? "manual",
       input.detail ?? null,
       input.capability,
       input.contributionVariant ?? null,
-      iso(input.requestedAt),
+      iso(input.requestedAt)
     );
 }
 
 const DEVICE_DERIVATIVE_RULES: readonly {
-  matches(mediaType: string): boolean;
+  matches: (mediaType: string) => boolean;
   sqlPredicate: string;
   wanted: readonly WantedDerivative[];
 }[] = [
   {
-    matches: (mediaType) => mediaType.startsWith('video/'),
+    matches: (mediaType) => mediaType.startsWith("video/"),
     sqlPredicate: "media_type LIKE 'video/%'",
     wanted: [
-      { capability: 'poster', variant: 'poster' },
-      { capability: 'transcript', variant: 'transcript' },
+      { capability: "poster", variant: "poster" },
+      { capability: "transcript", variant: "transcript" },
     ],
   },
   {
-    matches: (mediaType) => mediaType.startsWith('audio/'),
+    matches: (mediaType) => mediaType.startsWith("audio/"),
     sqlPredicate: "media_type LIKE 'audio/%'",
-    wanted: [{ capability: 'transcript', variant: 'transcript' }],
+    wanted: [{ capability: "transcript", variant: "transcript" }],
   },
   {
-    matches: (mediaType) => mediaType === 'application/pdf',
+    matches: (mediaType) => mediaType === "application/pdf",
     sqlPredicate: "media_type = 'application/pdf'",
-    wanted: [{ capability: 'pdfText', variant: 'text' }],
+    wanted: [{ capability: "pdfText", variant: "text" }],
   },
 ];
 
 function wantedDerivatives(mediaType: string): readonly WantedDerivative[] {
   const type = mediaType.toLowerCase();
-  return DEVICE_DERIVATIVE_RULES.find((rule) => rule.matches(type))?.wanted ?? [];
+  return (
+    DEVICE_DERIVATIVE_RULES.find((rule) => rule.matches(type))?.wanted ?? []
+  );
 }
 
 function missingDerivativeSql(wanted: WantedDerivative): string {
@@ -179,8 +190,9 @@ function missingDerivativeSql(wanted: WantedDerivative): string {
 }
 
 const DEVICE_BACKLOG_SQL = DEVICE_DERIVATIVE_RULES.map(
-  (rule) => `(${rule.sqlPredicate} AND (${rule.wanted.map(missingDerivativeSql).join(' OR ')}))`,
-).join(' OR ');
+  (rule) =>
+    `(${rule.sqlPredicate} AND (${rule.wanted.map(missingDerivativeSql).join(" OR ")}))`
+).join(" OR ");
 
 /**
  * Queue only the device rungs one claimed content item still lacks. The
@@ -191,20 +203,21 @@ const DEVICE_BACKLOG_SQL = DEVICE_DERIVATIVE_RULES.map(
 export function queueMissingDeviceEnrichmentRequests(
   vault: DatabaseSync,
   input: DeviceEnrichmentSource & {
-    newId(): string;
+    newId: () => string;
     requestedAt?: string | Date;
-  },
+  }
 ): string[] {
-  if (!/^[0-9a-f]{64}$/.test(input.sha256)) throw new Error('device work source needs sha256');
+  if (!/^[0-9a-f]{64}$/u.test(input.sha256))
+    throw new Error("device work source needs sha256");
   const queued: string[] = [];
   const hasDerivative = vault.prepare(
-    'SELECT 1 AS present FROM core_content_derivative WHERE content_id = ? AND variant = ?',
+    "SELECT 1 AS present FROM core_content_derivative WHERE content_id = ? AND variant = ?"
   );
   const hasOpenRequest = vault.prepare(
     `SELECT 1 AS present FROM enrich_request
       WHERE target_type = 'core.content_item' AND target_id = ?
         AND required_capability = ? AND contribution_variant = ?
-        AND drained_at IS NULL`,
+        AND drained_at IS NULL`
   );
   const source: DeviceEnrichmentSource = {
     contentId: input.contentId,
@@ -213,13 +226,14 @@ export function queueMissingDeviceEnrichmentRequests(
   };
   for (const wanted of wantedDerivatives(input.mediaType)) {
     if (hasDerivative.get(input.contentId, wanted.variant)) continue;
-    if (hasOpenRequest.get(input.contentId, wanted.capability, wanted.variant)) continue;
+    if (hasOpenRequest.get(input.contentId, wanted.capability, wanted.variant))
+      continue;
     const requestId = input.newId();
     queueDeviceEnrichmentRequest(vault, {
       requestId,
-      entityType: 'core.content_item',
+      entityType: "core.content_item",
       entityId: input.contentId,
-      reason: 'manual',
+      reason: "manual",
       detail: JSON.stringify(source),
       capability: wanted.capability,
       contributionVariant: wanted.variant,
@@ -236,7 +250,7 @@ export function queueMissingDeviceEnrichmentRequests(
  */
 export function queueMissingDeviceEnrichmentBacklog(
   vault: DatabaseSync,
-  input: { newId(): string; requestedAt?: string | Date; limit?: number },
+  input: { newId: () => string; requestedAt?: string | Date; limit?: number }
 ): string[] {
   const limit = Math.max(1, Math.min(500, Math.trunc(input.limit ?? 100)));
   const rows = vault
@@ -246,7 +260,7 @@ export function queueMissingDeviceEnrichmentBacklog(
         WHERE deleted_at IS NULL AND sha256 IS NOT NULL
           AND (${DEVICE_BACKLOG_SQL})
         ORDER BY content_id
-        LIMIT ?`,
+        LIMIT ?`
     )
     .all(limit) as { content_id: string; sha256: string; media_type: string }[];
   const queued: string[] = [];
@@ -258,7 +272,7 @@ export function queueMissingDeviceEnrichmentBacklog(
         mediaType: row.media_type,
         newId: input.newId,
         ...(input.requestedAt ? { requestedAt: input.requestedAt } : {}),
-      }),
+      })
     );
   }
   return queued;
@@ -273,14 +287,14 @@ export function leaseNextEnrichmentRequest(
     now?: string | Date;
     ttlMs?: number;
     token?: string;
-  },
+  }
 ): EnrichmentLease | null {
   const capabilities = knownCapabilities(input.capabilities);
   if (!input.deviceId || capabilities.length === 0) return null;
   const now = iso(input.now);
   const expiresAt = new Date(Date.parse(now) + ttl(input.ttlMs)).toISOString();
   const token = input.token ?? randomUUID();
-  const placeholders = capabilities.map(() => '?').join(',');
+  const placeholders = capabilities.map(() => "?").join(",");
   const row = vault
     .prepare(
       `UPDATE enrich_request
@@ -296,9 +310,11 @@ export function leaseNextEnrichmentRequest(
         )
         RETURNING request_id, target_type, target_id, reason, detail,
           required_capability, contribution_variant, lease_device_id,
-          lease_token, lease_expires_at, lease_attempts`,
+          lease_token, lease_expires_at, lease_attempts`
     )
-    .get(input.deviceId, token, expiresAt, ...capabilities, now) as LeaseRow | undefined;
+    .get(input.deviceId, token, expiresAt, ...capabilities, now) as
+    | LeaseRow
+    | undefined;
   return row ? leaseOf(row) : null;
 }
 
@@ -314,7 +330,7 @@ export function completeEnrichmentLease(
     deviceId: string;
     token: string;
     now?: string | Date;
-  },
+  }
 ): boolean {
   const now = iso(input.now);
   const changed = vault
@@ -329,7 +345,7 @@ export function completeEnrichmentLease(
             SELECT 1 FROM core_content_derivative d
              WHERE d.content_id = enrich_request.target_id
                AND d.variant = enrich_request.contribution_variant
-          )`,
+          )`
     )
     .run(now, input.requestId, input.deviceId, input.token, now).changes;
   if (Number(changed) === 1) return true;
@@ -346,7 +362,7 @@ export function completeEnrichmentLease(
             SELECT 1 FROM core_content_derivative d
              WHERE d.content_id = enrich_request.target_id
                AND d.variant = enrich_request.contribution_variant
-          )`,
+          )`
     )
     .run(input.requestId, input.deviceId, input.token, now);
   return false;
@@ -355,14 +371,14 @@ export function completeEnrichmentLease(
 /** Voluntarily return one live lease to the pool (conditions changed). */
 export function releaseEnrichmentLease(
   vault: DatabaseSync,
-  input: { requestId: string; deviceId: string; token: string },
+  input: { requestId: string; deviceId: string; token: string }
 ): boolean {
   const changed = vault
     .prepare(
       `UPDATE enrich_request
           SET lease_device_id = NULL, lease_token = NULL, lease_expires_at = NULL
         WHERE request_id = ? AND drained_at IS NULL
-          AND lease_device_id = ? AND lease_token = ?`,
+          AND lease_device_id = ? AND lease_token = ?`
     )
     .run(input.requestId, input.deviceId, input.token).changes;
   return Number(changed) === 1;
@@ -371,13 +387,13 @@ export function releaseEnrichmentLease(
 /** Clear expired ownership for automation/backstop readers that only see NULL. */
 export function releaseExpiredEnrichmentLeases(
   vault: DatabaseSync,
-  now: string | Date = new Date(),
+  now: string | Date = new Date()
 ): number {
   const changed = vault
     .prepare(
       `UPDATE enrich_request
           SET lease_device_id = NULL, lease_token = NULL, lease_expires_at = NULL
-        WHERE drained_at IS NULL AND lease_expires_at <= ?`,
+        WHERE drained_at IS NULL AND lease_expires_at <= ?`
     )
     .run(iso(now)).changes;
   return Number(changed);
@@ -386,7 +402,7 @@ export function releaseExpiredEnrichmentLeases(
 /** Close expired/unowned typed jobs whose gateway backstop filled the rung. */
 export function drainSatisfiedEnrichmentRequests(
   vault: DatabaseSync,
-  now: string | Date = new Date(),
+  now: string | Date = new Date()
 ): number {
   const at = iso(now);
   const changed = vault
@@ -401,7 +417,7 @@ export function drainSatisfiedEnrichmentRequests(
             SELECT 1 FROM core_content_derivative d
              WHERE d.content_id = enrich_request.target_id
                AND d.variant = enrich_request.contribution_variant
-          )`,
+          )`
     )
     .run(at, at).changes;
   return Number(changed);
@@ -409,7 +425,7 @@ export function drainSatisfiedEnrichmentRequests(
 
 export function enrichmentQueueDepth(
   vault: DatabaseSync,
-  now: string | Date = new Date(),
+  now: string | Date = new Date()
 ): { total: number; available: number; leased: number } {
   const row = vault
     .prepare(
@@ -417,8 +433,16 @@ export function enrichmentQueueDepth(
               sum(CASE WHEN lease_expires_at IS NULL OR lease_expires_at <= ? THEN 1 ELSE 0 END) AS available,
               sum(CASE WHEN lease_expires_at > ? THEN 1 ELSE 0 END) AS leased
          FROM enrich_request
-        WHERE drained_at IS NULL AND required_capability IS NOT NULL`,
+        WHERE drained_at IS NULL AND required_capability IS NOT NULL`
     )
-    .get(iso(now), iso(now)) as { total: number; available: number | null; leased: number | null };
-  return { total: row.total, available: row.available ?? 0, leased: row.leased ?? 0 };
+    .get(iso(now), iso(now)) as {
+    total: number;
+    available: number | null;
+    leased: number | null;
+  };
+  return {
+    total: row.total,
+    available: row.available ?? 0,
+    leased: row.leased ?? 0,
+  };
 }

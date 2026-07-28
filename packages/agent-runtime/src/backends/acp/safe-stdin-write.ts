@@ -1,6 +1,10 @@
-import type { Writable } from 'node:stream';
+import type { Writable } from "node:stream";
 
-const IGNORED_CODES = new Set(['EPIPE', 'ERR_STREAM_DESTROYED', 'ERR_STREAM_WRITE_AFTER_END']);
+const IGNORED_CODES = new Set([
+  "EPIPE",
+  "ERR_STREAM_DESTROYED",
+  "ERR_STREAM_WRITE_AFTER_END",
+]);
 
 /**
  * Write a line to a child process stdin without letting late EPIPE (or other
@@ -9,7 +13,10 @@ const IGNORED_CODES = new Set(['EPIPE', 'ERR_STREAM_DESTROYED', 'ERR_STREAM_WRIT
  * Node can surface EPIPE asynchronously even when `writable` was true a moment
  * earlier — attach a one-shot error sink and use the write callback.
  */
-export function safeStdinWrite(stdin: Writable | null | undefined, line: string): void {
+export function safeStdinWrite(
+  stdin: Writable | null | undefined,
+  line: string
+): void {
   if (!stdin || !stdin.writable) return;
   ensureStdinErrorSink(stdin);
   try {
@@ -24,14 +31,16 @@ export function safeStdinWrite(stdin: Writable | null | undefined, line: string)
 }
 
 function ensureStdinErrorSink(stdin: Writable): void {
-  const marker = '__centraidSafeStdinSink';
+  const marker = "__centraidSafeStdinSink";
   if ((stdin as { [marker]?: boolean })[marker]) return;
   (stdin as { [marker]?: boolean })[marker] = true;
   // Swallow stream errors so Node does not promote them to uncaughtException.
-  stdin.on('error', () => undefined);
+  stdin.on("error", () => undefined);
 }
 
 /** Test helper: is this error code one we intentionally ignore on stdin? */
-export function isIgnorableStdinError(err: { code?: string } | null | undefined): boolean {
+export function isIgnorableStdinError(
+  err: { code?: string } | null | undefined
+): boolean {
   return Boolean(err?.code && IGNORED_CODES.has(err.code));
 }

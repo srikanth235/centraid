@@ -14,7 +14,7 @@
  */
 
 /** Device-prefs key for the gateway-wide default cron timezone. */
-export const CRON_DEFAULT_TIMEZONE_PREF = 'automation.cron.defaultTimezone';
+export const CRON_DEFAULT_TIMEZONE_PREF = "automation.cron.defaultTimezone";
 
 export type WallClockFields = {
   readonly year: number;
@@ -38,12 +38,12 @@ const WEEKDAY_SHORT: Record<string, number> = {
 
 /** True when `name` is a non-empty IANA zone known to this runtime's `Intl`. */
 export function isValidIanaTimeZone(name: string): boolean {
-  if (typeof name !== 'string') return false;
+  if (typeof name !== "string") return false;
   const trimmed = name.trim();
   if (!trimmed) return false;
   try {
     // Throws RangeError on unknown zones (ECMA-402).
-    new Intl.DateTimeFormat('en-US', { timeZone: trimmed }).format();
+    new Intl.DateTimeFormat("en-US", { timeZone: trimmed }).format();
     return true;
   } catch {
     return false;
@@ -58,10 +58,10 @@ export function isValidIanaTimeZone(name: string): boolean {
  */
 export function resolveCronTimezone(
   triggerTz?: string | null,
-  gatewayDefaultTz?: string | null,
+  gatewayDefaultTz?: string | null
 ): string | undefined {
   for (const candidate of [triggerTz, gatewayDefaultTz]) {
-    if (typeof candidate !== 'string') continue;
+    if (typeof candidate !== "string") continue;
     const trimmed = candidate.trim();
     if (!trimmed) continue;
     if (isValidIanaTimeZone(trimmed)) return trimmed;
@@ -74,7 +74,10 @@ export function resolveCronTimezone(
  * calendar when `timeZone` is omitted. Host-local uses Date getters so the
  * absent-`tz` path stays byte-identical to pre-#570 matching.
  */
-export function wallClockFields(date: Date, timeZone?: string): WallClockFields {
+export function wallClockFields(
+  date: Date,
+  timeZone?: string
+): WallClockFields {
   if (!timeZone) {
     return {
       year: date.getFullYear(),
@@ -85,28 +88,28 @@ export function wallClockFields(date: Date, timeZone?: string): WallClockFields 
       weekday: date.getDay(),
     };
   }
-  const parts = new Intl.DateTimeFormat('en-US', {
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
-    weekday: 'short',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    hourCycle: 'h23',
+    weekday: "short",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h23",
   }).formatToParts(date);
   const pick = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((p) => p.type === type)?.value ?? '';
-  const weekdayName = pick('weekday');
+    parts.find((p) => p.type === type)?.value ?? "";
+  const weekdayName = pick("weekday");
   // Some engines emit hour "24" at midnight under h23 — normalise to 0.
-  let hour = Number(pick('hour'));
+  let hour = Number(pick("hour"));
   if (hour === 24) hour = 0;
   return {
-    year: Number(pick('year')),
-    month: Number(pick('month')),
-    day: Number(pick('day')),
+    year: Number(pick("year")),
+    month: Number(pick("month")),
+    day: Number(pick("day")),
     hour,
-    minute: Number(pick('minute')),
+    minute: Number(pick("minute")),
     weekday: WEEKDAY_SHORT[weekdayName] ?? 0,
   };
 }
@@ -114,5 +117,7 @@ export function wallClockFields(date: Date, timeZone?: string): WallClockFields 
 /** Compact wall-clock identity of a minute in the given zone (DST dedupe key). */
 export function wallClockMinuteKey(date: Date, timeZone?: string): string {
   const w = wallClockFields(date, timeZone);
-  return [w.year, w.month, w.day, w.hour, w.minute, timeZone ?? 'local'].join(':');
+  return [w.year, w.month, w.day, w.hour, w.minute, timeZone ?? "local"].join(
+    ":"
+  );
 }

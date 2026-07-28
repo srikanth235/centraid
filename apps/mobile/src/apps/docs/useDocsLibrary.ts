@@ -1,31 +1,32 @@
-import { useMemo } from 'react';
-import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
-import { buildDrive } from './docs-model';
+import { useMemo } from "react";
+
+import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { buildDrive } from "./docs-model";
 
 export function useDocsLibrary() {
   const documents = useReplicaQuery(
-    'docs',
-    useMemo(() => ({ entity: 'core.document' }), []),
+    "docs",
+    useMemo(() => ({ entity: "core.document" }), [])
   );
   const contents = useReplicaQuery(
-    'docs',
-    useMemo(() => ({ entity: 'core.content_item' }), []),
+    "docs",
+    useMemo(() => ({ entity: "core.content_item" }), [])
   );
   const tags = useReplicaQuery(
-    'docs',
-    useMemo(() => ({ entity: 'core.tag' }), []),
+    "docs",
+    useMemo(() => ({ entity: "core.tag" }), [])
   );
   const concepts = useReplicaQuery(
-    'docs',
-    useMemo(() => ({ entity: 'core.concept' }), []),
+    "docs",
+    useMemo(() => ({ entity: "core.concept" }), [])
   );
   const schemes = useReplicaQuery(
-    'docs',
-    useMemo(() => ({ entity: 'core.concept_scheme' }), []),
+    "docs",
+    useMemo(() => ({ entity: "core.concept_scheme" }), [])
   );
   const custody = useReplicaQuery(
-    'docs',
-    useMemo(() => ({ entity: 'blob.custody_state' }), []),
+    "docs",
+    useMemo(() => ({ entity: "blob.custody_state" }), [])
   );
   return useMemo(
     () => ({
@@ -35,7 +36,7 @@ export function useDocsLibrary() {
         tags.rows,
         concepts.rows,
         schemes.rows,
-        custody.rows,
+        custody.rows
       ),
       loading: documents.loading || contents.loading,
       error: documents.error ?? contents.error,
@@ -51,6 +52,6 @@ export function useDocsLibrary() {
       documents.rows,
       schemes.rows,
       tags.rows,
-    ],
+    ]
   );
 }

@@ -1,7 +1,8 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import type { AppId, RegistryEntry } from '../types.js';
-import { isReservedAppId } from '../http/security.js';
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { isReservedAppId } from "../http/security.js";
+import type { AppId, RegistryEntry } from "../types.js";
 
 /**
  * Persistent registry of registered apps stored at `<appsDir>/_registry.json`.
@@ -19,25 +20,29 @@ export class Registry {
   constructor(private readonly appsDir: string) {}
 
   private get filePath(): string {
-    return path.join(this.appsDir, '_registry.json');
+    return path.join(this.appsDir, "_registry.json");
   }
 
   async load(): Promise<void> {
     if (this.loaded) return;
     await fs.mkdir(this.appsDir, { recursive: true });
     try {
-      const raw = await fs.readFile(this.filePath, 'utf8');
+      const raw = await fs.readFile(this.filePath, "utf8");
       const parsed = JSON.parse(raw) as {
         apps: Array<{ id: string; path: string; registeredAt: string }>;
       };
       this.cache = new Map(
         parsed.apps.map((a) => [
           a.id,
-          { id: a.id, path: a.path, registeredAt: a.registeredAt } as RegistryEntry,
-        ]),
+          {
+            id: a.id,
+            path: a.path,
+            registeredAt: a.registeredAt,
+          } as RegistryEntry,
+        ])
       );
     } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
       this.cache = new Map();
       await this.persist();
     }
@@ -67,7 +72,10 @@ export class Registry {
    */
   async ensureUploaded(id: AppId): Promise<RegistryEntry> {
     if (isReservedAppId(id)) {
-      throw new RegistryError('invalid_id', `App id "${id}" is reserved or invalid.`);
+      throw new RegistryError(
+        "invalid_id",
+        `App id "${id}" is reserved or invalid.`
+      );
     }
     const existing = this.cache.get(id);
     if (existing) return existing;
@@ -94,10 +102,10 @@ export class Registry {
 
 export class RegistryError extends Error {
   constructor(
-    public readonly code: 'invalid_id' | 'already_registered',
-    message: string,
+    public readonly code: "invalid_id" | "already_registered",
+    message: string
   ) {
     super(message);
-    this.name = 'RegistryError';
+    this.name = "RegistryError";
   }
 }

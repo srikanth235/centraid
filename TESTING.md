@@ -355,6 +355,78 @@ agent to self-check and for review to enforce.
 When in doubt, apply the adversarial check: _could the code be wrong and this
 test still pass?_ If yes, the test is not yet meaningful.
 
+### ultracite vitest preset (#573)
+
+The convention above is now mechanically enforced where it can be: as of #573
+the repo lints test files with **ultracite's `vitest` oxlint preset**, on top of
+the `core` + `react` presets it already composed. Wiring and caveats:
+
+- **It is spliced, not extended.** The preset delivers every rule through a
+  single `overrides` entry, and an extended preset's overrides outrank the
+  consumer's — so `extends: [vitest]` would leave no way to scope it. Its
+  override is therefore spread into `overrides` in `oxlint.config.mjs`
+  verbatim (same rules, same `**/*.{test,spec}.*` glob); only the ordering is
+  ours. This is what makes the two scoping decisions below expressible at all.
+  Partial adoption is otherwise impossible: you cannot turn one of its rules off
+  from the top-level `rules` block the way the core/react opinions are pinned.
+- **Playwright e2e is out of scope.** The preset's glob also matches
+  `apps/*/tests/e2e/**.spec.ts`, which are Playwright, not vitest. Left in
+  scope, `prefer-importing-vitest-globals` autofixes a `from 'vitest'` import on
+  top of the `@playwright/test` one and the files stop parsing. A later override
+  turns the `vitest/*` rules off there. This is about which runner owns the
+  file, not about opting out of a rule.
+- **`prefer-to-be-truthy` / `prefer-to-be-falsy` are off.** They are the only
+  two rules in the preset that contradict the convention above —
+  `expect(x).toBe(true)` asserts `x` is exactly `true`, `toBeTruthy()` also
+  passes for `1`, `'x'`, `[]`, `{}`. Autofixing them over this suite rewrote
+  1,117 `toBe(true)` and 720 `toBe(false)` into strictly weaker assertions, so
+  they stay off and `toBe(true)` / `toBe(false)` remain the house style.
+- **`prefer-strict-equal` rewrites were hand-reviewed.** The autofix converted
+  2,436 `toEqual` call sites to `toStrictEqual`, which additionally compares
+  prototypes, `undefined`-valued keys, and array sparseness. Every test the
+  rewrite broke was fixed by tightening the assertion, never by reverting the
+  matcher.
+- **Null-prototype rows.** `node:sqlite` returns rows as null-prototype
+  objects, so `expect(stmt.get()).toStrictEqual({ … })` fails against an object
+  literal even when every column matches. The house fix is to spread the actual
+  — `expect({ ...stmt.get() }).toStrictEqual({ … })` — which compares the column
+  data (the contract) without asserting the driver's choice of prototype, and
+  keeps strictness over keys and values. Do not reach for `toEqual` here.
+- **`prefer-called-with` autofixes are unsound.** It rewrites
+  `expect(fn).toHaveBeenCalled()` to `expect(fn).toHaveBeenCalledWith()`, which
+  asserts the mock was called with *zero* arguments. Comply by naming the real
+  arguments, which is what the rule is actually asking for — and what the
+  convention above wants anyway.
+- **`valid-expect` is configured with `maxArgs: 2`.** The rule defaults to
+  jest's signature; vitest's `expect` takes an optional second argument, the
+  message printed on failure — `expect(res.status, JSON.stringify(body)).toBe(400)`.
+  Complying with the default would mean deleting those messages. Reach for that
+  second argument when a bare boolean assertion would otherwise print nothing
+  useful — comparing two ordered strings, say, where `toBeGreaterThan` cannot be
+  used because it only accepts a number or bigint:
+
+  ```ts
+  expect(a > b, `${a} > ${b}`).toBe(true);
+  ```
+- **`prefer-import-in-mock` is a type upgrade, so expect fallout.** Rewriting
+  `vi.mock('m', factory)` to `vi.mock(import('m'), factory)` makes vitest
+  typecheck the factory against the real module. That caught 53 mock factories
+  whose stand-ins did not match the module's real types (most often because
+  `Parameters<typeof x>` captures only the *last* overload of an overloaded
+  export). Fix the factory rather than reverting the form; assert on the single
+  offending property, never the whole module. Two further notes: drop any now-
+  redundant `importOriginal<typeof import('m')>()` type argument, and be aware
+  that the typed form pulls the target into the TS program — for a module
+  outside the package's `rootDir` that breaks typecheck, which is why
+  `packages/blueprints/src/photos-media.test.ts` carries the repo's one
+  justified suppression of this rule.
+- **`prefer-describe-function-title` can produce invalid code.** It swaps a
+  string title for a same-named import without checking that the import is
+  callable, so `describe('WAL_CAPTURE_ORDER', …)` became
+  `describe(WAL_CAPTURE_ORDER, …)` — `describe` takes a string or a function,
+  so that fails typecheck. Title such blocks in prose instead. Three sites hit
+  this, and only `typecheck` catches it: the tests still *run*.
+
 ### Diff coverage (#532)
 
 After `bun run coverage`, CI `verify` runs `bun run test:diff-coverage`. It

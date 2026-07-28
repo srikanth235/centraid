@@ -4,13 +4,15 @@
 // / #listList / #journalNav / #storage), so this file exports several
 // top-level components rather than one. The static containers stay global in
 // app.css; the JSX-only rows moved into Sidebar.module.css.
-import { useEffect, useRef } from 'react';
-import { armConfirm } from '../kit.ts';
-import { I } from '../icons.ts';
-import { listColor, daysSince } from '../format.ts';
-import type { Nav, Person, PersonList } from '../types.ts';
-import { Icon } from './Shared.tsx';
-import styles from './Sidebar.module.css';
+import { useEffect, useRef } from "react";
+
+import { listColor, daysSince } from "../format.ts";
+import { I } from "../icons.ts";
+import { armConfirm } from "../kit.ts";
+import type { Nav, Person, PersonList } from "../types.ts";
+import { Icon } from "./Shared.tsx";
+
+import styles from "./Sidebar.module.css";
 
 function NavItem({
   icon,
@@ -26,10 +28,15 @@ function NavItem({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className={styles.navItem} aria-current={!!active} onClick={onClick}>
+    <button
+      type="button"
+      className={styles.navItem}
+      aria-current={!!active}
+      onClick={onClick}
+    >
       <Icon svg={icon} />
       <span className={styles.lbl}>{label}</span>
-      {count != null ? <span className={styles.navCount}>{count}</span> : null}
+      {count == null ? null : <span className={styles.navCount}>{count}</span>}
     </button>
   );
 }
@@ -39,13 +46,14 @@ export function SmartNav({
   people,
   onSelectNav,
 }: {
-  navKind: Nav['kind'];
+  navKind: Nav["kind"];
   people: Person[];
   onSelectNav: (nav: Nav) => void;
 }) {
   const counts = {
     all: people.length,
-    reconnect: people.filter((p) => daysSince(p) >= (p.cadence_days ?? 30)).length,
+    reconnect: people.filter((p) => daysSince(p) >= (p.cadence_days ?? 30))
+      .length,
     upcoming: people.filter((p) => (p.reminders || []).length > 0).length,
     starred: people.filter((p) => p.starred).length,
   };
@@ -54,30 +62,30 @@ export function SmartNav({
       <NavItem
         icon={I.people}
         label="All people"
-        active={navKind === 'all'}
+        active={navKind === "all"}
         count={counts.all}
-        onClick={() => onSelectNav({ kind: 'all' })}
+        onClick={() => onSelectNav({ kind: "all" })}
       />
       <NavItem
         icon={I.clock}
         label="Reconnect"
-        active={navKind === 'reconnect'}
+        active={navKind === "reconnect"}
         count={counts.reconnect}
-        onClick={() => onSelectNav({ kind: 'reconnect' })}
+        onClick={() => onSelectNav({ kind: "reconnect" })}
       />
       <NavItem
         icon={I.bell}
         label="Upcoming"
-        active={navKind === 'upcoming'}
+        active={navKind === "upcoming"}
         count={counts.upcoming}
-        onClick={() => onSelectNav({ kind: 'upcoming' })}
+        onClick={() => onSelectNav({ kind: "upcoming" })}
       />
       <NavItem
         icon={I.star}
         label="Favorites"
-        active={navKind === 'starred'}
+        active={navKind === "starred"}
         count={counts.starred}
-        onClick={() => onSelectNav({ kind: 'starred' })}
+        onClick={() => onSelectNav({ kind: "starred" })}
       />
     </>
   );
@@ -97,7 +105,7 @@ function ListCreateEdit({
     inputRef.current?.focus();
   }, []);
   const commit = () => {
-    const name = inputRef.current?.value.trim() ?? '';
+    const name = inputRef.current?.value.trim() ?? "";
     if (name) onCommit(name);
     else onCancel();
   };
@@ -109,11 +117,11 @@ function ListCreateEdit({
         aria-label="New list name"
         ref={inputRef}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === "Enter") {
             e.preventDefault();
             commit();
           }
-          if (e.key === 'Escape') onCancel();
+          if (e.key === "Escape") onCancel();
         }}
       />
       <button type="button" onClick={commit}>
@@ -141,7 +149,7 @@ function ListRenameEdit({
     }
   }, []);
   const commit = () => {
-    const name = inputRef.current?.value.trim() ?? '';
+    const name = inputRef.current?.value.trim() ?? "";
     if (name && name !== c.name) onCommit(c.list_id, name);
     else onCancel();
   };
@@ -153,11 +161,11 @@ function ListRenameEdit({
         defaultValue={c.name}
         ref={inputRef}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
+          if (e.key === "Enter") {
             e.preventDefault();
             commit();
           }
-          if (e.key === 'Escape') onCancel();
+          if (e.key === "Escape") onCancel();
         }}
       />
       <button type="button" onClick={commit}>
@@ -181,7 +189,7 @@ function ListNavRow({
 }: {
   c: PersonList;
   people: Person[];
-  navKind: Nav['kind'];
+  navKind: Nav["kind"];
   navListId?: string;
   renamingListId: string | null;
   onSelectNav: (nav: Nav) => void;
@@ -191,20 +199,29 @@ function ListNavRow({
   onRenameCancel: () => void;
 }) {
   if (renamingListId === c.list_id)
-    return <ListRenameEdit c={c} onCommit={onRenameCommit} onCancel={onRenameCancel} />;
+    return (
+      <ListRenameEdit
+        c={c}
+        onCommit={onRenameCommit}
+        onCancel={onRenameCancel}
+      />
+    );
   const count = people.filter((p) => (p.list_id ?? null) === c.list_id).length;
-  const active = navKind === 'list' && navListId === c.list_id;
+  const active = navKind === "list" && navListId === c.list_id;
   return (
     <div className={styles.folder}>
       <button
         type="button"
         className={styles.navItem}
         aria-current={active}
-        onClick={() => onSelectNav({ kind: 'list', listId: c.list_id })}
+        onClick={() => onSelectNav({ kind: "list", listId: c.list_id })}
       >
-        <span className={styles.navDot} style={{ background: listColor(c.list_id) }}></span>
+        <span
+          className={styles.navDot}
+          style={{ background: listColor(c.list_id) }}
+        />
         <span className={styles.lbl}>{c.name}</span>
-        <span className={styles.navCount}>{count || ''}</span>
+        <span className={styles.navCount}>{count || ""}</span>
       </button>
       <span className={styles.folderTools}>
         <button
@@ -224,7 +241,7 @@ function ListNavRow({
           aria-label={`Delete ${c.name}`}
           onClick={(e) => {
             e.stopPropagation();
-            if (!armConfirm(e.currentTarget, { armedLabel: '×?' })) return;
+            if (!armConfirm(e.currentTarget, { armedLabel: "×?" })) return;
             onDeleteList(c);
           }}
         >
@@ -252,7 +269,7 @@ export function ListList({
 }: {
   lists: PersonList[];
   people: Person[];
-  navKind: Nav['kind'];
+  navKind: Nav["kind"];
   navListId?: string;
   renamingListId: string | null;
   creatingList: boolean;
@@ -281,7 +298,9 @@ export function ListList({
           onRenameCancel={onRenameCancel}
         />
       ))}
-      {creatingList ? <ListCreateEdit onCommit={onCreateCommit} onCancel={onCreateCancel} /> : null}
+      {creatingList ? (
+        <ListCreateEdit onCommit={onCreateCommit} onCancel={onCreateCancel} />
+      ) : null}
     </>
   );
 }
@@ -290,7 +309,7 @@ export function JournalNav({
   navKind,
   onSelectNav,
 }: {
-  navKind: Nav['kind'];
+  navKind: Nav["kind"];
   onSelectNav: (nav: Nav) => void;
 }) {
   return (
@@ -298,20 +317,26 @@ export function JournalNav({
       <NavItem
         icon={I.journal}
         label="Journal"
-        active={navKind === 'journal'}
-        onClick={() => onSelectNav({ kind: 'journal' })}
+        active={navKind === "journal"}
+        onClick={() => onSelectNav({ kind: "journal" })}
       />
       <NavItem
         icon={I.activity}
         label="Activity"
-        active={navKind === 'activity'}
-        onClick={() => onSelectNav({ kind: 'activity' })}
+        active={navKind === "activity"}
+        onClick={() => onSelectNav({ kind: "activity" })}
       />
     </>
   );
 }
 
-export function Storage({ people, lists }: { people: Person[]; lists: PersonList[] }) {
+export function Storage({
+  people,
+  lists,
+}: {
+  people: Person[];
+  lists: PersonList[];
+}) {
   const count = people.length;
   return (
     <>
@@ -320,8 +345,8 @@ export function Storage({ people, lists }: { people: Person[]; lists: PersonList
         <span className={styles.val}>{count}</span>
       </div>
       <div className={styles.storageLabel}>
-        {count} {count === 1 ? 'person' : 'people'} across {lists.length} list
-        {lists.length === 1 ? '' : 's'}
+        {count} {count === 1 ? "person" : "people"} across {lists.length} list
+        {lists.length === 1 ? "" : "s"}
       </div>
     </>
   );

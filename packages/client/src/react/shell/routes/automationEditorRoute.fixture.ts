@@ -1,0 +1,39 @@
+export function automationRow(): CentraidAutomationRow {
+  const triggers: CentraidAutomationManifest["triggers"] = [
+    { kind: "webhook", id: "hook-1" },
+    { kind: "cron", expr: "0 9 * * *" },
+    { kind: "data", entities: ["business.invoice"], every: "5m" },
+    {
+      kind: "condition",
+      entity: "business.invoice",
+      every: "10m",
+      where: [{ column: "status", op: "eq", value: "open" }],
+    },
+    {
+      kind: "event",
+      connectorKind: "github",
+      event: "issues.opened",
+      filter: { label: "bug" },
+      every: "15m",
+    },
+  ];
+  return {
+    id: "daily",
+    dir: "/apps/daily",
+    name: "Daily",
+    triggers,
+    enabled: true,
+    ownerApp: "daily",
+    ref: "daily/daily",
+    manifest: {
+      name: "Daily",
+      version: "0.1.0",
+      enabled: true,
+      prompt: "Run daily.",
+      triggers,
+      requires: {},
+      history: { keep: { count: 10 } },
+      generated: { by: "agent", at: "2026-07-25T00:00:00.000Z" },
+    },
+  };
+}

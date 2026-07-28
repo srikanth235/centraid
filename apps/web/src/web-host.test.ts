@@ -1,184 +1,220 @@
-import { beforeEach, expect, test, vi } from 'vitest';
-import { installWebHost } from './web-host.js';
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
-const pairGatewayOverIroh = vi.hoisted(() => vi.fn());
-const purgeIrohDeviceState = vi.hoisted(() => vi.fn());
-vi.mock('./iroh-transport.js', () => ({ pairGatewayOverIroh, purgeIrohDeviceState }));
+import { installWebHost } from "./web-host.js";
+
+const { pairGatewayOverIroh, purgeIrohDeviceState } = vi.hoisted(() => ({
+  pairGatewayOverIroh:
+    vi.fn<typeof import("./iroh-transport.js").pairGatewayOverIroh>(),
+  purgeIrohDeviceState:
+    vi.fn<typeof import("./iroh-transport.js").purgeIrohDeviceState>(),
+}));
+vi.mock(import("./iroh-transport.js"), () => ({
+  pairGatewayOverIroh,
+  purgeIrohDeviceState,
+}));
 
 function ticket(): string {
   return btoa(
     JSON.stringify({
       v: 1,
-      kind: 'centraid-gw-pair',
-      gw: 'endpoint',
-      t: 'ticket',
-      s: 'secret',
-      vaultName: 'Personal',
+      kind: "centraid-gw-pair",
+      gw: "endpoint",
+      t: "ticket",
+      s: "secret",
+      vaultName: "Personal",
       exp: Date.now() + 60_000,
-    }),
+    })
   );
 }
 
-beforeEach(() => {
-  localStorage.clear();
-  sessionStorage.clear();
-  vi.restoreAllMocks();
-  pairGatewayOverIroh.mockReset();
-  installWebHost();
-});
+describe("web-host", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+    pairGatewayOverIroh.mockReset();
+    installWebHost();
+  });
 
-test('ticket-only pairing enrolls the stable browser identity over Iroh', async () => {
-  pairGatewayOverIroh.mockResolvedValue({
-    endpointId: 'browser-endpoint',
-    response: {
+  test("ticket-only pairing enrolls the stable browser identity over Iroh", async () => {
+    pairGatewayOverIroh.mockResolvedValue({
+      endpointId: "browser-endpoint",
+      response: {
+        ok: true,
+        gatewayId: "gateway-endpoint",
+        gatewayName: "Home gateway",
+        vaultId: "vault-1",
+        vaultName: "Personal",
+      },
+    });
+
+    await expect(
+      window.CentraidApi.redeemGatewayPairing({ ticket: ticket() })
+    ).resolves.toMatchObject({
       ok: true,
-      gatewayId: 'gateway-endpoint',
-      gatewayName: 'Home gateway',
-      vaultId: 'vault-1',
-      vaultName: 'Personal',
-    },
+      vaultId: "vault-1",
+      vaultName: "Personal",
+    });
+    expect(pairGatewayOverIroh).toHaveBeenCalledWith({
+      endpointTicket: "endpoint",
+      ticketId: "ticket",
+      secret: "secret",
+      deviceName: "Web browser",
+      rememberDevice: false,
+    });
+    const persisted = JSON.parse(
+      sessionStorage.getItem("centraid.web.v1.connection") ?? "{}"
+    ) as Record<string, unknown>;
+    expect(persisted).toMatchObject({
+      endpointTicket: "endpoint",
+      endpointId: "gateway-endpoint",
+      vaultId: "vault-1",
+    });
+    expect(JSON.stringify(persisted)).not.toContain("secret");
+    await expect(window.CentraidApi.getGatewayAuth()).resolves.toMatchObject({
+      gatewayId: "gateway-endpoint",
+      vaultId: "vault-1",
+    });
   });
 
-  await expect(
-    window.CentraidApi.redeemGatewayPairing({ ticket: ticket() }),
-  ).resolves.toMatchObject({ ok: true, vaultId: 'vault-1', vaultName: 'Personal' });
-  expect(pairGatewayOverIroh).toHaveBeenCalledWith({
-    endpointTicket: 'endpoint',
-    ticketId: 'ticket',
-    secret: 'secret',
-    deviceName: 'Web browser',
-    rememberDevice: false,
-  });
-  const persisted = JSON.parse(
-    sessionStorage.getItem('centraid.web.v1.connection') ?? '{}',
-  ) as Record<string, unknown>;
-  expect(persisted).toMatchObject({
-    endpointTicket: 'endpoint',
-    endpointId: 'gateway-endpoint',
-    vaultId: 'vault-1',
-  });
-  expect(JSON.stringify(persisted)).not.toContain('secret');
-  await expect(window.CentraidApi.getGatewayAuth()).resolves.toMatchObject({
-    gatewayId: 'gateway-endpoint',
-    vaultId: 'vault-1',
-  });
-});
+  test("remembered pairing opts the connection into durable browser storage", async () => {
+    pairGatewayOverIroh.mockResolvedValue({
+      endpointId: "browser-endpoint",
+      response: {
+        ok: true,
+        gatewayId: "gateway-endpoint",
+        vaultId: "vault-1",
+        vaultName: "Personal",
+      },
+    });
 
-test('remembered pairing opts the connection into durable browser storage', async () => {
-  pairGatewayOverIroh.mockResolvedValue({
-    endpointId: 'browser-endpoint',
-    response: {
+    await expect(
+      window.CentraidApi.redeemGatewayPairing({
+        ticket: ticket(),
+        rememberDevice: true,
+      })
+    ).resolves.toMatchObject({ ok: true, vaultId: "vault-1" });
+    expect(pairGatewayOverIroh).toHaveBeenCalledWith(
+      expect.objectContaining({ rememberDevice: true })
+    );
+    expect(localStorage.getItem("centraid.web.v1.connection")).toContain(
+      '"rememberDevice":true'
+    );
+    expect(sessionStorage.getItem("centraid.web.v1.connection")).toBeNull();
+  });
+
+  test("expired pairing tickets fail before any network request", async () => {
+    const expired = btoa(
+      JSON.stringify({
+        v: 1,
+        kind: "centraid-gw-pair",
+        gw: "endpoint",
+        t: "ticket",
+        s: "secret",
+        vaultName: "Personal",
+        exp: Date.now() - 1,
+      })
+    );
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    await expect(
+      window.CentraidApi.redeemGatewayPairing({
+        ticket: expired,
+      })
+    ).resolves.toMatchObject({ ok: false, error: "ticket_expired" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("vault previews use the canonical gateway vault-list route", async () => {
+    sessionStorage.setItem(
+      "centraid.web.v1.connection",
+      JSON.stringify({
+        endpointId: "gateway-endpoint",
+        endpointTicket: "endpoint-ticket",
+        label: "Gateway",
+        displayName: "Gateway",
+        avatarColor: "#123456",
+      })
+    );
+    const tunnelFetch = vi
+      .fn<(path: string, init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ vaults: [{ vaultId: "v1", name: "Personal" }] }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }
+        )
+      );
+    window.CentraidIroh = {
+      fetch: tunnelFetch,
+      url: async (path: string) => path,
+    };
+    await expect(
+      window.CentraidApi.listGatewayVaults({ gatewayId: "web" })
+    ).resolves.toStrictEqual({
       ok: true,
-      gatewayId: 'gateway-endpoint',
-      vaultId: 'vault-1',
-      vaultName: 'Personal',
-    },
+      vaults: [{ vaultId: "v1", name: "Personal" }],
+    });
+    expect(tunnelFetch).toHaveBeenCalledWith(
+      "/centraid/_vault/vaults",
+      expect.any(Object)
+    );
   });
 
-  await expect(
-    window.CentraidApi.redeemGatewayPairing({ ticket: ticket(), rememberDevice: true }),
-  ).resolves.toMatchObject({ ok: true, vaultId: 'vault-1' });
-  expect(pairGatewayOverIroh).toHaveBeenCalledWith(
-    expect.objectContaining({ rememberDevice: true }),
-  );
-  expect(localStorage.getItem('centraid.web.v1.connection')).toContain('"rememberDevice":true');
-  expect(sessionStorage.getItem('centraid.web.v1.connection')).toBeNull();
-});
-
-test('expired pairing tickets fail before any network request', async () => {
-  const expired = btoa(
-    JSON.stringify({
-      v: 1,
-      kind: 'centraid-gw-pair',
-      gw: 'endpoint',
-      t: 'ticket',
-      s: 'secret',
-      vaultName: 'Personal',
-      exp: Date.now() - 1,
-    }),
-  );
-  const fetchMock = vi.spyOn(globalThis, 'fetch');
-  await expect(
-    window.CentraidApi.redeemGatewayPairing({
-      ticket: expired,
-    }),
-  ).resolves.toMatchObject({ ok: false, error: 'ticket_expired' });
-  expect(fetchMock).not.toHaveBeenCalled();
-});
-
-test('vault previews use the canonical gateway vault-list route', async () => {
-  sessionStorage.setItem(
-    'centraid.web.v1.connection',
-    JSON.stringify({
-      endpointId: 'gateway-endpoint',
-      endpointTicket: 'endpoint-ticket',
-      label: 'Gateway',
-      displayName: 'Gateway',
-      avatarColor: '#123456',
-    }),
-  );
-  const tunnelFetch = vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ vaults: [{ vaultId: 'v1', name: 'Personal' }] }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    }),
-  );
-  window.CentraidIroh = { fetch: tunnelFetch, url: async (path: string) => path };
-  await expect(window.CentraidApi.listGatewayVaults({ gatewayId: 'web' })).resolves.toEqual({
-    ok: true,
-    vaults: [{ vaultId: 'v1', name: 'Personal' }],
-  });
-  expect(tunnelFetch).toHaveBeenCalledWith('/centraid/_vault/vaults', expect.any(Object));
-});
-
-test('connection replacement and consent downgrade publish targeted replica purge hints', async () => {
-  const changed = vi.fn();
-  const off = window.CentraidApi.onGatewayChanged(changed);
-  await window.CentraidApi.addGateway({
-    label: 'First',
-    endpointId: 'endpoint-one',
-    rememberDevice: true,
-  });
-  await window.CentraidApi.addGateway({
-    label: 'Second',
-    endpointId: 'endpoint-two',
-    rememberDevice: false,
-  });
-  off();
-
-  expect(changed).toHaveBeenLastCalledWith({
-    activeGatewayId: 'web',
-    gatewayId: 'endpoint-two',
-    removedGatewayId: 'endpoint-one',
-    purgeReplicaGatewayId: 'endpoint-two',
-  });
-});
-
-test('removing a remembered gateway clears durable consent and device state', async () => {
-  localStorage.setItem(
-    'centraid.web.v1.connection',
-    JSON.stringify({
-      endpointId: 'gateway-endpoint',
-      endpointTicket: 'ticket',
-      label: 'Gateway',
-      displayName: 'Gateway',
-      avatarColor: '#123456',
+  test("connection replacement and consent downgrade publish targeted replica purge hints", async () => {
+    const changed =
+      vi.fn<Parameters<typeof window.CentraidApi.onGatewayChanged>[0]>();
+    const off = window.CentraidApi.onGatewayChanged(changed);
+    await window.CentraidApi.addGateway({
+      label: "First",
+      endpointId: "endpoint-one",
       rememberDevice: true,
-    }),
-  );
-  const changed = vi.fn();
-  const off = window.CentraidApi.onGatewayChanged(changed);
+    });
+    await window.CentraidApi.addGateway({
+      label: "Second",
+      endpointId: "endpoint-two",
+      rememberDevice: false,
+    });
+    off();
 
-  await window.CentraidApi.removeGateway({ id: 'web' });
-  off();
-
-  expect(purgeIrohDeviceState).toHaveBeenCalledOnce();
-  expect(localStorage.getItem('centraid.web.v1.connection')).toBeNull();
-  expect(JSON.parse(sessionStorage.getItem('centraid.web.v1.connection') ?? '{}')).toMatchObject({
-    rememberDevice: false,
+    expect(changed).toHaveBeenLastCalledWith({
+      activeGatewayId: "web",
+      gatewayId: "endpoint-two",
+      removedGatewayId: "endpoint-one",
+      purgeReplicaGatewayId: "endpoint-two",
+    });
   });
-  expect(changed).toHaveBeenLastCalledWith({
-    activeGatewayId: 'web',
-    removedGatewayId: 'gateway-endpoint',
+
+  test("removing a remembered gateway clears durable consent and device state", async () => {
+    localStorage.setItem(
+      "centraid.web.v1.connection",
+      JSON.stringify({
+        endpointId: "gateway-endpoint",
+        endpointTicket: "ticket",
+        label: "Gateway",
+        displayName: "Gateway",
+        avatarColor: "#123456",
+        rememberDevice: true,
+      })
+    );
+    const changed =
+      vi.fn<Parameters<typeof window.CentraidApi.onGatewayChanged>[0]>();
+    const off = window.CentraidApi.onGatewayChanged(changed);
+
+    await window.CentraidApi.removeGateway({ id: "web" });
+    off();
+
+    expect(purgeIrohDeviceState).toHaveBeenCalledOnce();
+    expect(localStorage.getItem("centraid.web.v1.connection")).toBeNull();
+    expect(
+      JSON.parse(sessionStorage.getItem("centraid.web.v1.connection") ?? "{}")
+    ).toMatchObject({
+      rememberDevice: false,
+    });
+    expect(changed).toHaveBeenLastCalledWith({
+      activeGatewayId: "web",
+      removedGatewayId: "gateway-endpoint",
+    });
   });
 });

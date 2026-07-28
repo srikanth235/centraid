@@ -9,13 +9,13 @@
 
 /** The current directory/journal navigation selection. */
 export type Nav =
-  | { kind: 'all' }
-  | { kind: 'reconnect' }
-  | { kind: 'upcoming' }
-  | { kind: 'starred' }
-  | { kind: 'journal' }
-  | { kind: 'activity' }
-  | { kind: 'list'; listId: string };
+  | { kind: "all" }
+  | { kind: "reconnect" }
+  | { kind: "upcoming" }
+  | { kind: "starred" }
+  | { kind: "journal" }
+  | { kind: "activity" }
+  | { kind: "list"; listId: string };
 
 /** An active reminder date carried on a list row (drives Upcoming). */
 export interface Reminder {
@@ -117,7 +117,7 @@ export interface DetailPerson {
 // ---------- Journal + activity ----------
 
 export interface JournalOwnerItem {
-  kind: 'entry';
+  kind: "entry";
   id?: string;
   sort_at?: string;
   date?: string;
@@ -125,7 +125,7 @@ export interface JournalOwnerItem {
   text?: string;
 }
 export interface JournalAutoItem {
-  kind: 'auto';
+  kind: "auto";
   id?: string;
   sort_at?: string;
   date?: string;
@@ -156,8 +156,8 @@ export interface DashboardData {
 
 // ---------- Module-level state + data bags ----------
 
-export type ChipKey = 'all' | 'overdue' | 'due' | 'ok';
-export type SortKey = 'last' | 'name' | 'cadence';
+export type ChipKey = "all" | "overdue" | "due" | "ok";
+export type SortKey = "last" | "name" | "cadence";
 
 export interface AppData {
   people: Person[];
@@ -165,7 +165,7 @@ export interface AppData {
 }
 
 export interface AppState {
-  view: 'grid' | 'list';
+  view: "grid" | "list";
   nav: Nav;
   chip: ChipKey;
   sortKey: SortKey;

@@ -1,8 +1,8 @@
-import type { ConversationHistoryStore } from '../conversation/history.js';
-import type { ConversationWorkspaceKind } from '../conversation/schema.js';
-import { promises as fs } from 'node:fs';
-import { statSync } from 'node:fs';
-import path from 'node:path';
+import { promises as fs, statSync } from "node:fs";
+import path from "node:path";
+
+import type { ConversationHistoryStore } from "../conversation/history.js";
+import type { ConversationWorkspaceKind } from "../conversation/schema.js";
 
 /** A file uploaded to the blob CAS before the turn, referenced by its hash. */
 export interface TurnAttachmentRef {
@@ -12,7 +12,7 @@ export interface TurnAttachmentRef {
   sizeBytes?: number;
 }
 
-const ATTACHMENT_HASH_RE = /^[a-f0-9]{64}$/;
+const ATTACHMENT_HASH_RE = /^[a-f0-9]{64}$/u;
 
 /**
  * Parse+validate the `attachments` field of a `_turn` POST body (issue
@@ -24,10 +24,12 @@ const ATTACHMENT_HASH_RE = /^[a-f0-9]{64}$/;
 export function parseTurnAttachmentRefs(raw: unknown): TurnAttachmentRef[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter((a): a is TurnAttachmentRef => {
-    if (!a || typeof a !== 'object') return false;
+    if (!a || typeof a !== "object") return false;
     const r = a as Partial<TurnAttachmentRef>;
     return (
-      typeof r.hash === 'string' && ATTACHMENT_HASH_RE.test(r.hash) && typeof r.mime === 'string'
+      typeof r.hash === "string" &&
+      ATTACHMENT_HASH_RE.test(r.hash) &&
+      typeof r.mime === "string"
     );
   });
 }
@@ -37,27 +39,42 @@ export function parseTurnAttachmentRefs(raw: unknown): TurnAttachmentRef[] {
  * Persistence of the returned realpaths is the per-conversation consent
  * receipt; a symlink swap therefore cannot widen a later turn's authority.
  */
-export async function parseAdditionalDirectories(raw: unknown): Promise<string[]> {
+export async function parseAdditionalDirectories(
+  raw: unknown
+): Promise<string[]> {
   if (raw === undefined) return [];
-  if (!Array.isArray(raw)) throw new Error('additionalDirectories must be an array.');
+  if (!Array.isArray(raw))
+    throw new Error("additionalDirectories must be an array.");
+  const resolvedDirectories = await Promise.all(
+    raw.map(async (value) => {
+      if (typeof value !== "string" || !path.isAbsolute(value)) {
+        throw new Error("Each additional directory must be an absolute path.");
+      }
+      const resolved = await fs.realpath(value);
+      const stat = await fs.stat(resolved);
+      if (!stat.isDirectory() || resolved === path.parse(resolved).root) {
+        throw new Error(
+          "Each additional directory must name a non-root directory."
+        );
+      }
+      return resolved;
+    })
+  );
   const out: string[] = [];
-  for (const value of raw) {
-    if (typeof value !== 'string' || !path.isAbsolute(value)) {
-      throw new Error('Each additional directory must be an absolute path.');
-    }
-    const resolved = await fs.realpath(value);
-    const stat = await fs.stat(resolved);
-    if (!stat.isDirectory() || resolved === path.parse(resolved).root) {
-      throw new Error('Each additional directory must name a non-root directory.');
-    }
+  for (const resolved of resolvedDirectories) {
     if (!out.includes(resolved)) out.push(resolved);
-    if (out.length > 8) throw new Error('At most eight additional directories may be shared.');
+    if (out.length > 8)
+      throw new Error("At most eight additional directories may be shared.");
   }
   return out;
 }
 
-export function parseWorkspaceKind(raw: unknown): ConversationWorkspaceKind | undefined {
-  return raw === 'vault-data' || raw === 'app' || raw === 'draft' ? raw : undefined;
+export function parseWorkspaceKind(
+  raw: unknown
+): ConversationWorkspaceKind | undefined {
+  return raw === "vault-data" || raw === "app" || raw === "draft"
+    ? raw
+    : undefined;
 }
 
 /**
@@ -68,14 +85,16 @@ export function parseWorkspaceKind(raw: unknown): ConversationWorkspaceKind | un
 export function resolveTurnAttachments(
   conversationStore: ConversationHistoryStore | undefined,
   appId: string,
-  refs: readonly TurnAttachmentRef[],
+  refs: readonly TurnAttachmentRef[]
 ): { path: string; mime: string; filename?: string }[] {
   if (!conversationStore) return [];
-  return validateTurnAttachmentRefs(conversationStore, appId, refs).map((a) => ({
-    path: conversationStore.blobPathFor(appId, a.hash),
-    mime: a.mime,
-    ...(a.filename !== undefined ? { filename: a.filename } : {}),
-  }));
+  return validateTurnAttachmentRefs(conversationStore, appId, refs).map(
+    (a) => ({
+      path: conversationStore.blobPathFor(appId, a.hash),
+      mime: a.mime,
+      ...(a.filename === undefined ? {} : { filename: a.filename }),
+    })
+  );
 }
 
 /**
@@ -86,13 +105,16 @@ export function resolveTurnAttachments(
 export function validateTurnAttachmentRefs(
   conversationStore: ConversationHistoryStore | undefined,
   appId: string,
-  refs: readonly TurnAttachmentRef[],
+  refs: readonly TurnAttachmentRef[]
 ): TurnAttachmentRef[] {
   if (!conversationStore || refs.length === 0) return [];
   return refs.filter((ref) => {
     try {
       const stat = statSync(conversationStore.blobPathFor(appId, ref.hash));
-      return stat.isFile() && (ref.sizeBytes === undefined || stat.size === ref.sizeBytes);
+      return (
+        stat.isFile() &&
+        (ref.sizeBytes === undefined || stat.size === ref.sizeBytes)
+      );
     } catch {
       return false;
     }
@@ -113,7 +135,7 @@ export async function withConversationLock<T>(
   conversationLocks: Map<string, Promise<void>>,
   appId: string,
   conversationId: string,
-  fn: () => Promise<T>,
+  fn: () => Promise<T>
 ): Promise<T> {
   const key = `${appId}::${conversationId}`;
   const previous = conversationLocks.get(key) ?? Promise.resolve();

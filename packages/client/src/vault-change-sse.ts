@@ -14,14 +14,14 @@ export interface VaultChangeEntry {
   cursor: VaultChangeCursor;
   entity: string;
   rowId: string;
-  op: 'insert' | 'update' | 'delete';
+  op: "insert" | "update" | "delete";
   changedAt: string;
 }
 
 export type VaultChangeMessage =
-  | { type: 'centraid:vault-change'; detail: VaultChangeEntry }
-  | { type: 'centraid:vault-cursor'; cursor: VaultChangeCursor }
-  | { type: 'centraid:vault-rebootstrap'; detail: unknown };
+  | { type: "centraid:vault-change"; detail: VaultChangeEntry }
+  | { type: "centraid:vault-cursor"; cursor: VaultChangeCursor }
+  | { type: "centraid:vault-rebootstrap"; detail: unknown };
 
 export interface SseFrame {
   event: string;
@@ -29,53 +29,60 @@ export interface SseFrame {
   id?: string;
 }
 
-export const INITIAL_VAULT_CURSOR: VaultChangeCursor = { epoch: '0', seq: 0 };
+export const INITIAL_VAULT_CURSOR: VaultChangeCursor = { epoch: "0", seq: 0 };
 
-export function frameBoundary(buffer: string): { index: number; length: number } | undefined {
-  const match = /\r?\n\r?\n/.exec(buffer);
+export function frameBoundary(
+  buffer: string
+): { index: number; length: number } | undefined {
+  const match = /\r?\n\r?\n/u.exec(buffer);
   return match ? { index: match.index, length: match[0].length } : undefined;
 }
 
 export function decodeFrame(raw: string): SseFrame | undefined {
-  let event = 'message';
+  let event = "message";
   let id: string | undefined;
   const data: string[] = [];
-  for (const rawLine of raw.split(/\r?\n/)) {
-    if (!rawLine || rawLine.startsWith(':')) continue;
-    const colon = rawLine.indexOf(':');
+  for (const rawLine of raw.split(/\r?\n/u)) {
+    if (!rawLine || rawLine.startsWith(":")) continue;
+    const colon = rawLine.indexOf(":");
     const field = colon < 0 ? rawLine : rawLine.slice(0, colon);
-    let value = colon < 0 ? '' : rawLine.slice(colon + 1);
-    if (value.startsWith(' ')) value = value.slice(1);
-    if (field === 'event') event = value || 'message';
-    else if (field === 'data') data.push(value);
-    else if (field === 'id') id = value;
+    let value = colon < 0 ? "" : rawLine.slice(colon + 1);
+    if (value.startsWith(" ")) value = value.slice(1);
+    if (field === "event") event = value || "message";
+    else if (field === "data") data.push(value);
+    else if (field === "id") id = value;
   }
   if (data.length === 0) return undefined;
-  return { event, data: data.join('\n'), ...(id === undefined ? {} : { id }) };
+  return { event, data: data.join("\n"), ...(id === undefined ? {} : { id }) };
 }
 
 export function parseCursor(value: unknown): VaultChangeCursor | undefined {
-  if (typeof value === 'string') {
-    const separator = value.lastIndexOf(':');
+  if (typeof value === "string") {
+    const separator = value.lastIndexOf(":");
     if (separator <= 0) return undefined;
     const seq = Number(value.slice(separator + 1));
     if (!Number.isSafeInteger(seq) || seq < 0) return undefined;
     return { epoch: value.slice(0, separator), seq };
   }
-  if (!value || typeof value !== 'object') return undefined;
-  const candidate = value as { epoch?: unknown; seq?: unknown; cursor?: unknown };
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as {
+    epoch?: unknown;
+    seq?: unknown;
+    cursor?: unknown;
+  };
   if (candidate.cursor) return parseCursor(candidate.cursor);
-  if (typeof candidate.epoch !== 'string') return undefined;
-  const seq = typeof candidate.seq === 'number' ? candidate.seq : Number(candidate.seq);
+  if (typeof candidate.epoch !== "string") return undefined;
+  const seq =
+    typeof candidate.seq === "number" ? candidate.seq : Number(candidate.seq);
   if (!Number.isSafeInteger(seq) || seq < 0) return undefined;
   return { epoch: candidate.epoch, seq };
 }
 
 export function parseChange(
   value: unknown,
-  fallbackCursor: VaultChangeCursor,
+  fallbackCursor: VaultChangeCursor
 ): VaultChangeEntry | undefined {
-  if (!value || typeof value !== 'object') return undefined;
+  if (!value || typeof value !== "object") return undefined;
   const change = value as Record<string, unknown>;
   const cursor =
     parseCursor(change.cursor) ??
@@ -86,9 +93,9 @@ export function parseChange(
   const op = change.op;
   const changedAt = change.changedAt ?? change.changed_at;
   if (
-    typeof entity !== 'string' ||
-    typeof rowId !== 'string' ||
-    (op !== 'insert' && op !== 'update' && op !== 'delete')
+    typeof entity !== "string" ||
+    typeof rowId !== "string" ||
+    (op !== "insert" && op !== "update" && op !== "delete")
   ) {
     return undefined;
   }
@@ -97,7 +104,8 @@ export function parseChange(
     entity,
     rowId,
     op,
-    changedAt: typeof changedAt === 'string' ? changedAt : new Date().toISOString(),
+    changedAt:
+      typeof changedAt === "string" ? changedAt : new Date().toISOString(),
   };
 }
 
@@ -105,37 +113,41 @@ export function parseChange(
 export async function consumeVaultChangeSse(
   body: ReadableStream<Uint8Array>,
   onFrame: (frame: SseFrame) => void,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  let buffer = "";
   const abort = (): void => {
     void reader.cancel().catch(() => undefined);
   };
-  signal?.addEventListener('abort', abort, { once: true });
-  try {
-    for (;;) {
-      if (signal?.aborted) return;
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      for (;;) {
-        const boundary = frameBoundary(buffer);
-        if (!boundary) break;
-        const raw = buffer.slice(0, boundary.index);
-        buffer = buffer.slice(boundary.index + boundary.length);
-        const frame = decodeFrame(raw);
+  signal?.addEventListener("abort", abort, { once: true });
+  async function readNextFrame(): Promise<void> {
+    if (signal?.aborted) return;
+    const { done, value } = await reader.read();
+    if (done) {
+      buffer += decoder.decode();
+      if (!signal?.aborted && buffer.trim()) {
+        const frame = decodeFrame(buffer);
         if (frame) onFrame(frame);
       }
+      return;
     }
-    buffer += decoder.decode();
-    if (!signal?.aborted && buffer.trim()) {
-      const frame = decodeFrame(buffer);
+    buffer += decoder.decode(value, { stream: true });
+    for (;;) {
+      const boundary = frameBoundary(buffer);
+      if (!boundary) break;
+      const raw = buffer.slice(0, boundary.index);
+      buffer = buffer.slice(boundary.index + boundary.length);
+      const frame = decodeFrame(raw);
       if (frame) onFrame(frame);
     }
+    return await readNextFrame();
+  }
+  try {
+    return await readNextFrame();
   } finally {
-    signal?.removeEventListener('abort', abort);
+    signal?.removeEventListener("abort", abort);
     reader.releaseLock();
   }
 }

@@ -13,25 +13,26 @@
 // that one bounds the whole inline-payload door; this one specifically
 // targets the text/* case the door check cannot redirect away from.
 
-import type { DatabaseSync } from 'node:sqlite';
-import { decodeDataUri } from '../blob/mint.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import { decodeDataUri } from "../blob/mint.js";
 
 /** Default inline-body budget: ~64KB of decoded text. */
 export const INLINE_BODY_BUDGET_BYTES = 64 * 1024;
 
 export class InlineBodyTooLargeError extends Error {
-  readonly code = 'INLINE_BODY_TOO_LARGE';
+  readonly code = "INLINE_BODY_TOO_LARGE";
   constructor(
     readonly byteSize: number,
     readonly budgetBytes: number,
-    readonly mediaType: string,
+    readonly mediaType: string
   ) {
     super(
       `inline ${mediaType} body is ${byteSize} bytes, over the ${budgetBytes}-byte inline budget — ` +
-        'text bodies cannot redirect to blob storage (the search index reads them in-transaction), ' +
-        'so this one is refused rather than silently bloating the vault',
+        "text bodies cannot redirect to blob storage (the search index reads them in-transaction), " +
+        "so this one is refused rather than silently bloating the vault"
     );
-    this.name = 'InlineBodyTooLargeError';
+    this.name = "InlineBodyTooLargeError";
   }
 }
 
@@ -39,10 +40,11 @@ export class InlineBodyTooLargeError extends Error {
 export function assertTextBodyWithinBudget(
   bodyText: string,
   mediaType: string,
-  budgetBytes: number = INLINE_BODY_BUDGET_BYTES,
+  budgetBytes: number = INLINE_BODY_BUDGET_BYTES
 ): void {
-  const byteSize = Buffer.byteLength(bodyText, 'utf8');
-  if (byteSize > budgetBytes) throw new InlineBodyTooLargeError(byteSize, budgetBytes, mediaType);
+  const byteSize = Buffer.byteLength(bodyText, "utf8");
+  if (byteSize > budgetBytes)
+    throw new InlineBodyTooLargeError(byteSize, budgetBytes, mediaType);
 }
 
 /**
@@ -54,10 +56,10 @@ export function assertTextBodyWithinBudget(
  */
 export function assertInlineDataUriWithinBudget(
   dataUri: string,
-  budgetBytes: number = INLINE_BODY_BUDGET_BYTES,
+  budgetBytes: number = INLINE_BODY_BUDGET_BYTES
 ): void {
   const { mediaType, bytes } = decodeDataUri(dataUri);
-  if (mediaType.startsWith('text/') && bytes.length > budgetBytes) {
+  if (mediaType.startsWith("text/") && bytes.length > budgetBytes) {
     throw new InlineBodyTooLargeError(bytes.length, budgetBytes, mediaType);
   }
 }
@@ -84,12 +86,12 @@ export interface InlineBodyViolationScan {
  */
 export function scanInlineBodyViolations(
   vault: DatabaseSync,
-  budgetBytes: number = INLINE_BODY_BUDGET_BYTES,
+  budgetBytes: number = INLINE_BODY_BUDGET_BYTES
 ): InlineBodyViolationScan {
   const rows = vault
     .prepare(
       `SELECT content_id, byte_size FROM core_content_item
-        WHERE content_uri LIKE 'data:%' AND byte_size > ? AND deleted_at IS NULL`,
+        WHERE content_uri LIKE 'data:%' AND byte_size > ? AND deleted_at IS NULL`
     )
     .all(budgetBytes) as { content_id: string; byte_size: number }[];
   if (rows.length === 0) {
@@ -108,15 +110,15 @@ export function scanInlineBodyViolations(
     byEntity.set(entity, acc);
   };
   const ids = [...byContent.keys()];
-  const placeholders = ids.map(() => '?').join(', ');
+  const placeholders = ids.map(() => "?").join(", ");
   for (const [entity, table, column] of [
-    ['knowledge.note', 'knowledge_note', 'body_content_id'],
-    ['social.message', 'social_message', 'body_content_id'],
-    ['core.document', 'core_document', 'current_content_id'],
+    ["knowledge.note", "knowledge_note", "body_content_id"],
+    ["social.message", "social_message", "body_content_id"],
+    ["core.document", "core_document", "current_content_id"],
   ] as const) {
     const hits = vault
       .prepare(
-        `SELECT DISTINCT ${column} AS content_id FROM ${table} WHERE ${column} IN (${placeholders})`,
+        `SELECT DISTINCT ${column} AS content_id FROM ${table} WHERE ${column} IN (${placeholders})`
       )
       .all(...ids) as { content_id: string }[];
     for (const h of hits) add(entity, h.content_id);
@@ -125,11 +127,11 @@ export function scanInlineBodyViolations(
   // above (e.g. an attachment/media asset whose declared media type is
   // text/* — rare, but real) still counts, bucketed generically.
   for (const contentId of ids) {
-    if (!attributed.has(contentId)) add('core.content_item', contentId);
+    if (!attributed.has(contentId)) add("core.content_item", contentId);
   }
   const total = [...byEntity.values()].reduce(
     (acc, v) => ({ count: acc.count + v.count, bytes: acc.bytes + v.bytes }),
-    { count: 0, bytes: 0 },
+    { count: 0, bytes: 0 }
   );
   return {
     budgetBytes,

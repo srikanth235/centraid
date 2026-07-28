@@ -1,8 +1,8 @@
-import { defineConfig } from '@playwright/test';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import path from "node:path";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { defineConfig } from "@playwright/test";
+
+const __dirname = import.meta.dirname;
 
 /**
  * Playwright config for the Centraid desktop E2E suite.
@@ -24,18 +24,18 @@ export default defineConfig({
   // `path: artifacts/` and generate.mjs readPlaywright agree (#535 F2).
   reporter: process.env.CI
     ? [
-        ['list'],
+        ["list"],
         [
-          'json',
+          "json",
           {
             outputFile: path.resolve(
               __dirname,
-              '../../../../artifacts/test-results/desktop-playwright.json',
+              "../../../../artifacts/test-results/desktop-playwright.json"
             ),
           },
         ],
       ]
-    : 'list',
+    : "list",
   timeout: 60_000,
   // Suite-level backstop, CI only. The job's `timeout-minutes` is NOT a
   // substitute: a job-level cancel is unconditional and kills the reporter
@@ -50,7 +50,7 @@ export default defineConfig({
   globalTimeout: process.env.CI ? 22 * 60_000 : undefined,
   expect: { timeout: 5_000 },
   use: {
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
 });

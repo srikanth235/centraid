@@ -22,27 +22,30 @@
  * transcript uniformly from items. Exposed over HTTP at `/_centraid-conversations`.
  */
 
-import { randomUUID } from 'node:crypto';
-import type { WorkspaceProvider } from '../stores/vault-workspace.js';
-import { ConversationStore, type ConversationMeta } from './store.js';
-import type { AdapterUsageSnapshot } from './turn.js';
+import { randomUUID } from "node:crypto";
+
+import { BlobStore, blobUrl, type PutResult } from "../data/blob-store.js";
+import { resolveItemCost } from "../model-pricing.js";
+import { isValidAppOrAssistantId } from "../registry/app-paths.js";
+import type { WorkspaceProvider } from "../stores/vault-workspace.js";
+import { collectArchivedRows, type ArchiveBlobReader } from "./rehydrate.js";
 import type {
   ConversationWorkspaceKind,
   ConversationWorkspaceSelection,
   Item,
   RunKind,
   Turn,
-} from './schema.js';
-import { ASSISTANT_APP_ID, isValidAppOrAssistantId } from '../registry/app-paths.js';
-import { resolveItemCost } from '../model-pricing.js';
+} from "./schema.js";
+import { ConversationStore, type ConversationMeta } from "./store.js";
 import {
   groupRetryFamilies,
   parseStepOutput,
   parseToolArgs,
   parseToolOutput,
-} from './transcript.js';
-import { collectArchivedRows, type ArchiveBlobReader } from './rehydrate.js';
-import { BlobStore, blobUrl, type PutResult } from '../data/blob-store.js';
+} from "./transcript.js";
+import type { AdapterUsageSnapshot } from "./turn.js";
+
+export { ASSISTANT_APP_ID } from "../registry/app-paths.js";
 
 export interface ConversationSummary {
   id: string;
@@ -162,13 +165,13 @@ export interface ConversationTurnAttachment {
  */
 export type TurnNode =
   | {
-      kind: 'step';
+      kind: "step";
       /** Accumulated assistant text for the turn. */
       text: string;
       /** True when this step carries a runner/turn error message. */
       isError?: boolean;
       /** Durable runner/failover/self-heal notice rather than model prose. */
-      notice?: { level: 'info' | 'warn'; code?: string };
+      notice?: { level: "info" | "warn"; code?: string };
       model?: string;
       provider?: string;
       effort?: string;
@@ -178,12 +181,12 @@ export type TurnNode =
       cacheWriteTokens?: number;
       /** Agent/ACP-reported USD when present (issue #514). */
       costUsd?: number;
-      costSource?: 'agent' | 'estimated';
+      costSource?: "agent" | "estimated";
       startedAt: number;
       endedAt: number;
     }
   | {
-      kind: 'tool';
+      kind: "tool";
       toolName: string;
       sql?: string;
       args?: unknown;
@@ -248,7 +251,6 @@ export interface RecordTurnInput {
 // Re-exported for back-compat — every existing import site pulls this from
 // the package root (`@centraid/app-engine`), which re-exports it from here.
 // The value now lives in `app-paths.ts` (see there for why).
-export { ASSISTANT_APP_ID };
 
 export class ConversationHistoryStore {
   private readonly workspace: WorkspaceProvider;
@@ -270,7 +272,7 @@ export class ConversationHistoryStore {
 
   constructor(
     workspace: WorkspaceProvider,
-    options: { archiveBlobReader?: ArchiveBlobReader } = {},
+    options: { archiveBlobReader?: ArchiveBlobReader } = {}
   ) {
     this.workspace = workspace;
     this.store = new ConversationStore(() => workspace().journal());
@@ -307,7 +309,11 @@ export class ConversationHistoryStore {
   }
 
   /** Create a fresh chat session in `appId`. */
-  createSession(appId: string, title: string = '', kind: RunKind = 'chat'): ConversationSummary {
+  createSession(
+    appId: string,
+    title: string = "",
+    kind: RunKind = "chat"
+  ): ConversationSummary {
     const { store } = this.appConversation(appId);
     const conv = store.createConversation({
       kind,
@@ -332,7 +338,8 @@ export class ConversationHistoryStore {
 
     const turns = store.listTurns(id);
     const itemsByTurn = new Map<string, Item[]>();
-    for (const turn of turns) itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));
+    for (const turn of turns)
+      itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));
 
     const messages = foldTranscript({
       turns,
@@ -359,7 +366,10 @@ export class ConversationHistoryStore {
    * rows are gone. A fetch failure yields the live rows + `archiveUnavailable`
    * rather than a silently partial thread.
    */
-  async getSessionRehydrated(appId: string, id: string): Promise<SessionTranscript | undefined> {
+  async getSessionRehydrated(
+    appId: string,
+    id: string
+  ): Promise<SessionTranscript | undefined> {
     const { store } = this.appConversation(appId);
     const meta = this.ownedMeta(appId, id);
     if (!meta) return undefined;
@@ -369,15 +379,22 @@ export class ConversationHistoryStore {
     // archived-but-unpruned range serves from live rows too, no blob fetch).
     if (prunedRefs.length === 0) return this.getSession(appId, id);
 
-    const archived = await collectArchivedRows(this.archiveBlobReader, prunedRefs);
+    const archived = await collectArchivedRows(
+      this.archiveBlobReader,
+      prunedRefs
+    );
 
     const liveTurns = store.listTurns(id);
     const itemsByTurn = new Map<string, Item[]>();
-    for (const turn of liveTurns) itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));
+    for (const turn of liveTurns)
+      itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));
     // Archived turns can never collide with live ids (pruned rows are gone).
-    for (const [turnId, items] of archived.itemsByTurn) itemsByTurn.set(turnId, items);
+    for (const [turnId, items] of archived.itemsByTurn)
+      itemsByTurn.set(turnId, items);
 
-    const turns = [...archived.turns, ...liveTurns].sort((a, b) => a.seq - b.seq);
+    const turns = [...archived.turns, ...liveTurns].sort(
+      (a, b) => a.seq - b.seq
+    );
 
     const messages = foldTranscript({
       turns,
@@ -389,11 +406,13 @@ export class ConversationHistoryStore {
             hash: a.hash,
             mime: a.mime,
             sizeBytes: a.sizeBytes,
-            ...(a.filename !== undefined ? { filename: a.filename } : {}),
-            ...(a.source !== undefined && a.source !== 'upload' ? { source: a.source } : {}),
-            ...(a.workspacePath !== undefined
-              ? { workspacePath: a.workspacePath }
-              : { url: blobUrl(appId, a.hash) }),
+            ...(a.filename === undefined ? {} : { filename: a.filename }),
+            ...(a.source !== undefined && a.source !== "upload"
+              ? { source: a.source }
+              : {}),
+            ...(a.workspacePath === undefined
+              ? { url: blobUrl(appId, a.hash) }
+              : { workspacePath: a.workspacePath }),
           }));
         }
         return this.attachmentsPayload(appId, itemId);
@@ -405,7 +424,9 @@ export class ConversationHistoryStore {
       ...toMeta(meta),
       messageCount: messages.length,
       messages,
-      ...(store.getWorkspaceSelection(id) ? { workspace: store.getWorkspaceSelection(id)! } : {}),
+      ...(store.getWorkspaceSelection(id)
+        ? { workspace: store.getWorkspaceSelection(id)! }
+        : {}),
       hasArchivedHistory: true,
       archivedTurnCount: archived.turnIds.size,
       ...(archived.unavailable ? { archiveUnavailable: true } : {}),
@@ -413,17 +434,22 @@ export class ConversationHistoryStore {
   }
 
   /** Attachment metadata + download URL for a message item's attachments. */
-  private attachmentsPayload(appId: string, itemId: string): ConversationAttachmentPayload[] {
+  private attachmentsPayload(
+    appId: string,
+    itemId: string
+  ): ConversationAttachmentPayload[] {
     const { store } = this.appConversation(appId);
     return store.listAttachmentsForItem(itemId).map((a) => ({
       hash: a.hash,
       mime: a.mime,
       sizeBytes: a.sizeBytes,
-      ...(a.filename !== undefined ? { filename: a.filename } : {}),
-      ...(a.source !== undefined && a.source !== 'upload' ? { source: a.source } : {}),
-      ...(a.workspacePath !== undefined
-        ? { workspacePath: a.workspacePath }
-        : { url: blobUrl(appId, a.hash) }),
+      ...(a.filename === undefined ? {} : { filename: a.filename }),
+      ...(a.source !== undefined && a.source !== "upload"
+        ? { source: a.source }
+        : {}),
+      ...(a.workspacePath === undefined
+        ? { url: blobUrl(appId, a.hash) }
+        : { workspacePath: a.workspacePath }),
     }));
   }
 
@@ -447,10 +473,15 @@ export class ConversationHistoryStore {
     return meta ? toMeta(meta) : undefined;
   }
 
-  renameSession(appId: string, id: string, title: string): ConversationSummary | undefined {
+  renameSession(
+    appId: string,
+    id: string,
+    title: string
+  ): ConversationSummary | undefined {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, id)) return undefined;
-    if (!store.renameConversation(id, this.currentUserId(), title)) return undefined;
+    if (!store.renameConversation(id, this.currentUserId(), title))
+      return undefined;
     return this.getSessionMeta(appId, id);
   }
 
@@ -459,7 +490,11 @@ export class ConversationHistoryStore {
    * text (issue #420). Powers the ⌘K palette's "Conversations" category. Each
    * result carries a highlighted `snippet` for match context.
    */
-  searchSessions(appId: string, query: string, limit = 20): ConversationSearchResult[] {
+  searchSessions(
+    appId: string,
+    query: string,
+    limit = 20
+  ): ConversationSearchResult[] {
     const { store } = this.appConversation(appId);
     return store
       .searchConversations(this.currentUserId(), query, appId, limit)
@@ -467,10 +502,15 @@ export class ConversationHistoryStore {
   }
 
   /** Pin/unpin a session `appId` owns; returns the fresh summary or undefined. */
-  setSessionPinned(appId: string, id: string, pinned: boolean): ConversationSummary | undefined {
+  setSessionPinned(
+    appId: string,
+    id: string,
+    pinned: boolean
+  ): ConversationSummary | undefined {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, id)) return undefined;
-    if (!store.setConversationPinned(id, this.currentUserId(), pinned)) return undefined;
+    if (!store.setConversationPinned(id, this.currentUserId(), pinned))
+      return undefined;
     return this.getSessionMeta(appId, id);
   }
 
@@ -478,11 +518,12 @@ export class ConversationHistoryStore {
   setSessionArchived(
     appId: string,
     id: string,
-    archived: boolean,
+    archived: boolean
   ): ConversationSummary | undefined {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, id)) return undefined;
-    if (!store.setConversationArchived(id, this.currentUserId(), archived)) return undefined;
+    if (!store.setConversationArchived(id, this.currentUserId(), archived))
+      return undefined;
     return this.getSessionMeta(appId, id);
   }
 
@@ -501,7 +542,7 @@ export class ConversationHistoryStore {
     appId: string,
     id: string,
     turnId: string,
-    feedback: 'up' | 'down' | null,
+    feedback: "up" | "down" | null
   ): boolean {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, id)) return false;
@@ -514,7 +555,10 @@ export class ConversationHistoryStore {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, id)) return false;
     const ok = store.deleteConversation(id, this.currentUserId());
-    if (ok) void this.blobs.gc(appId, store.referencedHashes()).catch(() => undefined);
+    if (ok)
+      void this.blobs
+        .gc(appId, store.referencedHashes())
+        .catch(() => undefined);
     return ok;
   }
 
@@ -526,7 +570,10 @@ export class ConversationHistoryStore {
    * closed (#280) — or is owned by another user. The first turn names the
    * conversation.
    */
-  recordTurn(appId: string, input: RecordTurnInput): { turnId: string } | undefined {
+  recordTurn(
+    appId: string,
+    input: RecordTurnInput
+  ): { turnId: string } | undefined {
     const { store } = this.appConversation(appId);
     const userId = this.currentUserId();
     if (!this.ownedMeta(appId, input.conversationId)) return undefined;
@@ -535,21 +582,25 @@ export class ConversationHistoryStore {
 
     const turnId = randomUUID();
     store.runInTransaction(() => {
-      if (input.kind && input.kind !== 'chat') {
+      if (input.kind && input.kind !== "chat") {
         store.setKind(input.conversationId, userId, input.kind);
       }
       store.insertTurn({
         turnId,
         conversationId: input.conversationId,
-        triggerKind: 'interactive',
+        triggerKind: "interactive",
         startedAt: input.startedAt,
-        ...(input.hydrationTokens !== undefined ? { hydrationTokens: input.hydrationTokens } : {}),
-        ...(input.retryOf !== undefined ? { retryOf: input.retryOf } : {}),
-        ...(input.idempotencyKey !== undefined ? { idempotencyKey: input.idempotencyKey } : {}),
+        ...(input.hydrationTokens === undefined
+          ? {}
+          : { hydrationTokens: input.hydrationTokens }),
+        ...(input.retryOf === undefined ? {} : { retryOf: input.retryOf }),
+        ...(input.idempotencyKey === undefined
+          ? {}
+          : { idempotencyKey: input.idempotencyKey }),
       });
       const messageItemId = store.insertMessageIn({
         turnId,
-        role: 'user',
+        role: "user",
         text: input.userMessage,
         startedAt: input.startedAt,
       });
@@ -559,26 +610,30 @@ export class ConversationHistoryStore {
           hash: att.hash,
           mime: att.mime,
           sizeBytes: att.sizeBytes,
-          source: att.source ?? 'upload',
-          ...(att.filename !== undefined ? { filename: att.filename } : {}),
-          ...(att.workspacePath !== undefined ? { workspacePath: att.workspacePath } : {}),
+          source: att.source ?? "upload",
+          ...(att.filename === undefined ? {} : { filename: att.filename }),
+          ...(att.workspacePath === undefined
+            ? {}
+            : { workspacePath: att.workspacePath }),
         });
       }
       // Trace items start at ordinal 1 — the inbound message is ordinal 0.
       input.nodes.forEach((node, i) => {
         const itemId = recordNode(store, turnId, i + 1, node);
-        if (node.kind !== 'tool') return;
+        if (node.kind !== "tool") return;
         for (const artifact of node.artifacts ?? []) {
           store.insertAttachment({
             itemId,
             hash: artifact.hash,
             mime: artifact.mime,
             sizeBytes: artifact.sizeBytes,
-            source: artifact.source ?? 'agent',
-            ...(artifact.filename !== undefined ? { filename: artifact.filename } : {}),
-            ...(artifact.workspacePath !== undefined
-              ? { workspacePath: artifact.workspacePath }
-              : {}),
+            source: artifact.source ?? "agent",
+            ...(artifact.filename === undefined
+              ? {}
+              : { filename: artifact.filename }),
+            ...(artifact.workspacePath === undefined
+              ? {}
+              : { workspacePath: artifact.workspacePath }),
           });
         }
       });
@@ -586,10 +641,10 @@ export class ConversationHistoryStore {
         turnId,
         endedAt: input.endedAt,
         ok: input.ok,
-        ...(input.error !== undefined ? { error: input.error } : {}),
-        ...(input.finalText !== undefined
-          ? { outputJson: JSON.stringify({ text: input.finalText }) }
-          : {}),
+        ...(input.error === undefined ? {} : { error: input.error }),
+        ...(input.finalText === undefined
+          ? {}
+          : { outputJson: JSON.stringify({ text: input.finalText }) }),
       });
       if (input.failedAdapter) {
         store.noteFailedTurn(input.conversationId, userId, input.failedAdapter);
@@ -597,10 +652,15 @@ export class ConversationHistoryStore {
         store.noteTurn(input.conversationId, userId, input.adapter);
       }
       const now = Date.now();
-      if (!existingTitle) {
-        store.setTitle(input.conversationId, userId, deriveTitle(input.userMessage), now);
-      } else {
+      if (existingTitle) {
         store.touchConversation(input.conversationId, userId, now);
+      } else {
+        store.setTitle(
+          input.conversationId,
+          userId,
+          deriveTitle(input.userMessage),
+          now
+        );
       }
     });
     return { turnId };
@@ -616,18 +676,26 @@ export class ConversationHistoryStore {
   findRecordedTurn(
     appId: string,
     conversationId: string,
-    idempotencyKey: string,
+    idempotencyKey: string
   ): RecordedTurnReplay | undefined {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, conversationId)) return undefined;
     const turn = store.getTurnByIdempotencyKey(conversationId, idempotencyKey);
     if (!turn) return undefined;
     const parsed = parseStepOutput(turn.outputJson);
-    const step = store.listItems(turn.turnId).findLast((it) => it.kind === 'step');
+    const step = store
+      .listItems(turn.turnId)
+      .findLast((it) => it.kind === "step");
     const usage: ConversationTurnUsage = {
-      ...(turn.totalInputTokens !== undefined ? { inputTokens: turn.totalInputTokens } : {}),
-      ...(turn.totalOutputTokens !== undefined ? { outputTokens: turn.totalOutputTokens } : {}),
-      ...(turn.totalCostUsd !== undefined ? { costUsd: turn.totalCostUsd } : {}),
+      ...(turn.totalInputTokens === undefined
+        ? {}
+        : { inputTokens: turn.totalInputTokens }),
+      ...(turn.totalOutputTokens === undefined
+        ? {}
+        : { outputTokens: turn.totalOutputTokens }),
+      ...(turn.totalCostUsd === undefined
+        ? {}
+        : { costUsd: turn.totalCostUsd }),
       ...(step?.model ? { model: step.model } : {}),
       ...(step?.effort ? { effort: step.effort } : {}),
     };
@@ -635,7 +703,7 @@ export class ConversationHistoryStore {
       turnId: turn.turnId,
       ok: turn.ok,
       ...(parsed.text ? { finalText: parsed.text } : {}),
-      ...(turn.error !== undefined ? { error: turn.error } : {}),
+      ...(turn.error === undefined ? {} : { error: turn.error }),
       ...(Object.keys(usage).length > 0 ? { usage } : {}),
     };
   }
@@ -649,11 +717,12 @@ export class ConversationHistoryStore {
       sessionId?: string;
       usageSnapshot?: AdapterUsageSnapshot;
       hydrated?: boolean;
-    },
+    }
   ): ConversationSummary | undefined {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, sessionId)) return undefined;
-    if (!store.noteTurn(sessionId, this.currentUserId(), adapter)) return undefined;
+    if (!store.noteTurn(sessionId, this.currentUserId(), adapter))
+      return undefined;
     return this.getSessionMeta(appId, sessionId);
   }
 
@@ -661,7 +730,7 @@ export class ConversationHistoryStore {
   getAdapterResumeState(
     appId: string,
     sessionId: string,
-    runnerKind?: string,
+    runnerKind?: string
   ):
     | {
         bindingId?: string;
@@ -681,7 +750,9 @@ export class ConversationHistoryStore {
         bindingId: binding.id,
         kind: binding.kind,
         sessionId: binding.acpSessionId,
-        ...(binding.usageSnapshot ? { usageSnapshot: binding.usageSnapshot } : {}),
+        ...(binding.usageSnapshot
+          ? { usageSnapshot: binding.usageSnapshot }
+          : {}),
         hydratedThroughSeq: binding.hydratedThroughSeq,
       };
     }
@@ -694,11 +765,17 @@ export class ConversationHistoryStore {
     return {
       ...(meta.adapterKind ? { kind: meta.adapterKind } : {}),
       ...(meta.adapterSessionId ? { sessionId: meta.adapterSessionId } : {}),
-      ...(meta.adapterUsageSnapshot ? { usageSnapshot: meta.adapterUsageSnapshot } : {}),
+      ...(meta.adapterUsageSnapshot
+        ? { usageSnapshot: meta.adapterUsageSnapshot }
+        : {}),
     };
   }
 
-  markAdapterBindingStale(appId: string, conversationId: string, bindingId: string): void {
+  markAdapterBindingStale(
+    appId: string,
+    conversationId: string,
+    bindingId: string
+  ): void {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, conversationId)) return;
     store.markHarnessBindingStale(bindingId);
@@ -712,7 +789,7 @@ export class ConversationHistoryStore {
   getHydrationDelta(
     appId: string,
     conversationId: string,
-    afterSeq: number,
+    afterSeq: number
   ): { messages: ConversationMessageRow[]; throughSeq: number } | undefined {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, conversationId)) return undefined;
@@ -722,7 +799,8 @@ export class ConversationHistoryStore {
     const throughSeq = all.at(-1)?.seq ?? -1;
     const turns = all.filter((turn) => turn.seq > afterSeq);
     const itemsByTurn = new Map<string, Item[]>();
-    for (const turn of turns) itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));
+    for (const turn of turns)
+      itemsByTurn.set(turn.turnId, store.listItems(turn.turnId));
     return {
       messages: foldTranscript({
         turns,
@@ -734,7 +812,11 @@ export class ConversationHistoryStore {
     };
   }
 
-  acquireTurnLock(appId: string, conversationId: string, token: string): boolean {
+  acquireTurnLock(
+    appId: string,
+    conversationId: string,
+    token: string
+  ): boolean {
     const { store } = this.appConversation(appId);
     return (
       this.ownedMeta(appId, conversationId) !== undefined &&
@@ -742,7 +824,11 @@ export class ConversationHistoryStore {
     );
   }
 
-  refreshTurnLock(appId: string, conversationId: string, token: string): boolean {
+  refreshTurnLock(
+    appId: string,
+    conversationId: string,
+    token: string
+  ): boolean {
     const { store } = this.appConversation(appId);
     return (
       this.ownedMeta(appId, conversationId) !== undefined &&
@@ -757,7 +843,7 @@ export class ConversationHistoryStore {
 
   getWorkspaceSelection(
     appId: string,
-    conversationId: string,
+    conversationId: string
   ): ConversationWorkspaceSelection | undefined {
     const { store } = this.appConversation(appId);
     if (!this.ownedMeta(appId, conversationId)) return undefined;
@@ -768,11 +854,16 @@ export class ConversationHistoryStore {
     appId: string,
     conversationId: string,
     primaryKind: ConversationWorkspaceKind,
-    additionalDirectories: readonly string[],
+    additionalDirectories: readonly string[]
   ): void {
     const { store } = this.appConversation(appId);
-    if (!this.ownedMeta(appId, conversationId)) throw new Error('No such conversation.');
-    store.setWorkspaceSelection(conversationId, primaryKind, additionalDirectories);
+    if (!this.ownedMeta(appId, conversationId))
+      throw new Error("No such conversation.");
+    store.setWorkspaceSelection(
+      conversationId,
+      primaryKind,
+      additionalDirectories
+    );
   }
 }
 
@@ -804,7 +895,9 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
   // The terminal `step` item's parsed answer for a turn — the one attempt text
   // the retry pager flips between (issue #420).
   const answerOf = (turnId: string): { text: string; error: boolean } => {
-    const last = (itemsByTurn.get(turnId) ?? []).findLast((it) => it.kind === 'step');
+    const last = (itemsByTurn.get(turnId) ?? []).findLast(
+      (it) => it.kind === "step"
+    );
     return parseStepOutput(last?.outputJson);
   };
 
@@ -812,11 +905,19 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
   // Wave 2). Token sums + cost are the frozen denormalized rollup on the turn;
   // the serving model comes off the terminal step. Absent on unpriced/legacy.
   const usageOf = (turn: Turn): ConversationTurnUsage | undefined => {
-    const step = (itemsByTurn.get(turn.turnId) ?? []).findLast((it) => it.kind === 'step');
+    const step = (itemsByTurn.get(turn.turnId) ?? []).findLast(
+      (it) => it.kind === "step"
+    );
     const usage: ConversationTurnUsage = {
-      ...(turn.totalInputTokens !== undefined ? { inputTokens: turn.totalInputTokens } : {}),
-      ...(turn.totalOutputTokens !== undefined ? { outputTokens: turn.totalOutputTokens } : {}),
-      ...(turn.totalCostUsd !== undefined ? { costUsd: turn.totalCostUsd } : {}),
+      ...(turn.totalInputTokens === undefined
+        ? {}
+        : { inputTokens: turn.totalInputTokens }),
+      ...(turn.totalOutputTokens === undefined
+        ? {}
+        : { outputTokens: turn.totalOutputTokens }),
+      ...(turn.totalCostUsd === undefined
+        ? {}
+        : { costUsd: turn.totalCostUsd }),
       ...(step?.model ? { model: step.model } : {}),
       ...(step?.effort ? { effort: step.effort } : {}),
     };
@@ -832,7 +933,9 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
     // the root's archived state stands for the whole family.
     const arch = isArchived(root.turnId);
     const activeItems = itemsByTurn.get(active.turnId) ?? [];
-    const terminalStepId = activeItems.findLast((it) => it.kind === 'step')?.itemId;
+    const terminalStepId = activeItems.findLast(
+      (it) => it.kind === "step"
+    )?.itemId;
     const retry =
       family.length > 1
         ? {
@@ -854,14 +957,16 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
 
     // The user message rides once, from the root attempt (every retry
     // re-sends the same prompt).
-    const userItem = (itemsByTurn.get(root.turnId) ?? []).find((it) => it.kind === 'message_in');
+    const userItem = (itemsByTurn.get(root.turnId) ?? []).find(
+      (it) => it.kind === "message_in"
+    );
     if (userItem) {
       const attachments = attachmentsOf(userItem.itemId);
       messages.push({
         idx: idx++,
         payload: {
-          kind: 'user',
-          text: userItem.text ?? '',
+          kind: "user",
+          text: userItem.text ?? "",
           ...(attachments.length > 0 ? { attachments } : {}),
           ...(arch ? { fromArchive: true } : {}),
         },
@@ -870,15 +975,15 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
     }
 
     for (const item of activeItems) {
-      if (item.kind === 'step') {
+      if (item.kind === "step") {
         const parsed = parseStepOutput(item.outputJson);
-        if (item.name?.startsWith('notice:')) {
-          const [, level] = item.name.split(':');
+        if (item.name?.startsWith("notice:")) {
+          const [, level] = item.name.split(":");
           messages.push({
             idx: idx++,
             payload: {
-              kind: 'notice',
-              level: level === 'warn' ? 'warn' : 'info',
+              kind: "notice",
+              level: level === "warn" ? "warn" : "info",
               text: parsed.text,
               ...(arch ? { fromArchive: true } : {}),
             },
@@ -892,7 +997,7 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
         messages.push({
           idx: idx++,
           payload: {
-            kind: 'ai',
+            kind: "ai",
             text: parsed.text,
             ...(parsed.error ? { error: true } : {}),
             ...(arch ? { fromArchive: true } : {}),
@@ -907,21 +1012,23 @@ function foldTranscript(src: TranscriptSources): ConversationMessageRow[] {
           },
           createdAt: item.startedAt,
         });
-      } else if (item.kind === 'tool') {
+      } else if (item.kind === "tool") {
         const args = parseToolArgs(item.argsJson);
         const out = parseToolOutput(item.outputJson);
         const artifacts = attachmentsOf(item.itemId);
         messages.push({
           idx: idx++,
           payload: {
-            kind: 'tool',
+            kind: "tool",
             id: item.itemId,
-            tool: item.name ?? 'tool',
-            ...(args.sql !== undefined ? { sql: args.sql } : {}),
-            ...(args.args !== undefined ? { args: args.args } : {}),
-            state: item.ok ? 'ok' : 'error',
-            ...(out.result !== undefined ? { result: out.result } : {}),
-            ...(out.errorText !== undefined ? { errorText: out.errorText } : {}),
+            tool: item.name ?? "tool",
+            ...(args.sql === undefined ? {} : { sql: args.sql }),
+            ...(args.args === undefined ? {} : { args: args.args }),
+            state: item.ok ? "ok" : "error",
+            ...(out.result === undefined ? {} : { result: out.result }),
+            ...(out.errorText === undefined
+              ? {}
+              : { errorText: out.errorText }),
             ...(artifacts.length > 0 ? { artifacts } : {}),
             ...(arch ? { fromArchive: true } : {}),
           },
@@ -937,24 +1044,34 @@ function recordNode(
   store: ConversationStore,
   turnId: string,
   ordinal: number,
-  node: TurnNode,
+  node: TurnNode
 ): string {
   const itemId = randomUUID();
-  if (node.kind === 'step') {
+  if (node.kind === "step") {
     // Prefer agent/ACP cost; else catalog estimate; else NULL (issue #514).
     const usage = {
-      ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
-      ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
-      ...(node.cacheReadTokens !== undefined ? { cacheReadTokens: node.cacheReadTokens } : {}),
-      ...(node.cacheWriteTokens !== undefined ? { cacheWriteTokens: node.cacheWriteTokens } : {}),
+      ...(node.inputTokens === undefined
+        ? {}
+        : { inputTokens: node.inputTokens }),
+      ...(node.outputTokens === undefined
+        ? {}
+        : { outputTokens: node.outputTokens }),
+      ...(node.cacheReadTokens === undefined
+        ? {}
+        : { cacheReadTokens: node.cacheReadTokens }),
+      ...(node.cacheWriteTokens === undefined
+        ? {}
+        : { cacheWriteTokens: node.cacheWriteTokens }),
     };
     const resolved =
-      node.costSource === 'agent' && node.costUsd !== undefined
-        ? { costUsd: node.costUsd, costSource: 'agent' as const }
-        : node.costSource === 'estimated' && node.costUsd !== undefined
-          ? { costUsd: node.costUsd, costSource: 'estimated' as const }
+      node.costSource === "agent" && node.costUsd !== undefined
+        ? { costUsd: node.costUsd, costSource: "agent" as const }
+        : node.costSource === "estimated" && node.costUsd !== undefined
+          ? { costUsd: node.costUsd, costSource: "estimated" as const }
           : resolveItemCost({
-              ...(node.costUsd !== undefined ? { agentCostUsd: node.costUsd } : {}),
+              ...(node.costUsd === undefined
+                ? {}
+                : { agentCostUsd: node.costUsd }),
               model: node.model,
               usage,
             });
@@ -962,21 +1079,36 @@ function recordNode(
       itemId,
       turnId,
       ordinal,
-      kind: 'step',
+      kind: "step",
       ...(node.notice
-        ? { name: `notice:${node.notice.level}:${node.notice.code ?? 'runner'}` }
+        ? {
+            name: `notice:${node.notice.level}:${node.notice.code ?? "runner"}`,
+          }
         : {}),
-      outputJson: JSON.stringify({ text: node.text, ...(node.isError ? { error: true } : {}) }),
+      outputJson: JSON.stringify({
+        text: node.text,
+        ...(node.isError ? { error: true } : {}),
+      }),
       ok: !node.isError,
-      ...(node.model !== undefined ? { model: node.model } : {}),
-      ...(node.provider !== undefined ? { provider: node.provider } : {}),
-      ...(node.effort !== undefined ? { effort: node.effort } : {}),
-      ...(node.inputTokens !== undefined ? { inputTokens: node.inputTokens } : {}),
-      ...(node.outputTokens !== undefined ? { outputTokens: node.outputTokens } : {}),
-      ...(node.cacheReadTokens !== undefined ? { cacheReadTokens: node.cacheReadTokens } : {}),
-      ...(node.cacheWriteTokens !== undefined ? { cacheWriteTokens: node.cacheWriteTokens } : {}),
-      ...(resolved.costUsd !== undefined ? { costUsd: resolved.costUsd } : {}),
-      ...(resolved.costSource !== undefined ? { costSource: resolved.costSource } : {}),
+      ...(node.model === undefined ? {} : { model: node.model }),
+      ...(node.provider === undefined ? {} : { provider: node.provider }),
+      ...(node.effort === undefined ? {} : { effort: node.effort }),
+      ...(node.inputTokens === undefined
+        ? {}
+        : { inputTokens: node.inputTokens }),
+      ...(node.outputTokens === undefined
+        ? {}
+        : { outputTokens: node.outputTokens }),
+      ...(node.cacheReadTokens === undefined
+        ? {}
+        : { cacheReadTokens: node.cacheReadTokens }),
+      ...(node.cacheWriteTokens === undefined
+        ? {}
+        : { cacheWriteTokens: node.cacheWriteTokens }),
+      ...(resolved.costUsd === undefined ? {} : { costUsd: resolved.costUsd }),
+      ...(resolved.costSource === undefined
+        ? {}
+        : { costSource: resolved.costSource }),
       startedAt: node.startedAt,
       endedAt: node.endedAt,
       durationMs: Math.max(0, node.endedAt - node.startedAt),
@@ -986,19 +1118,19 @@ function recordNode(
       itemId,
       turnId,
       ordinal,
-      kind: 'tool',
+      kind: "tool",
       name: node.toolName,
       argsJson: JSON.stringify({
-        ...(node.sql !== undefined ? { sql: node.sql } : {}),
-        ...(node.args !== undefined ? { args: node.args } : {}),
+        ...(node.sql === undefined ? {} : { sql: node.sql }),
+        ...(node.args === undefined ? {} : { args: node.args }),
       }),
       outputJson: JSON.stringify({
-        ...(node.result !== undefined ? { result: node.result } : {}),
-        ...(node.errorText !== undefined ? { errorText: node.errorText } : {}),
+        ...(node.result === undefined ? {} : { result: node.result }),
+        ...(node.errorText === undefined ? {} : { errorText: node.errorText }),
       }),
       ok: node.ok,
-      ...(node.errorText !== undefined ? { error: node.errorText } : {}),
-      ...(node.appId !== undefined ? { appId: node.appId } : {}),
+      ...(node.errorText === undefined ? {} : { error: node.errorText }),
+      ...(node.appId === undefined ? {} : { appId: node.appId }),
       startedAt: node.startedAt,
       endedAt: node.endedAt,
       durationMs: Math.max(0, node.endedAt - node.startedAt),
@@ -1016,7 +1148,9 @@ function toMeta(c: ConversationMeta): ConversationSummary {
     adapterSessionId: c.adapterSessionId ?? null,
     turnCount: c.turnCount,
     hydrationCount: c.hydrationCount,
-    ...(c.lastHydratedAt !== undefined ? { lastHydratedAt: c.lastHydratedAt } : {}),
+    ...(c.lastHydratedAt === undefined
+      ? {}
+      : { lastHydratedAt: c.lastHydratedAt }),
     pinned: c.pinned,
     archived: c.archived,
     createdAt: c.createdAt,
@@ -1026,8 +1160,8 @@ function toMeta(c: ConversationMeta): ConversationSummary {
 }
 
 export function deriveTitle(text: string): string {
-  const cleaned = text.replace(/\s+/g, ' ').trim();
-  if (cleaned.length === 0) return '';
+  const cleaned = text.replace(/\s+/gu, " ").trim();
+  if (cleaned.length === 0) return "";
   if (cleaned.length <= 60) return cleaned;
   return `${cleaned.slice(0, 57)}…`;
 }

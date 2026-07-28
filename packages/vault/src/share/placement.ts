@@ -29,13 +29,18 @@
 // handler path: a share spans two vault scopes, so it belongs beside that
 // path, not inside it.
 
-import { liveBlobShas } from '../blob/read.js';
-import type { LocalBlobStore } from '../blob/local.js';
-import type { DatabaseSync } from 'node:sqlite';
-import { VaultShareError } from '../errors.js';
-import { placeBlob, type BlobPlacement } from './blobs.js';
-import { projectShareClosure, readShareClosure, type ShareableItemType } from './closure.js';
-import { deleteProjectedClosure } from './removal.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import type { LocalBlobStore } from "../blob/local.js";
+import { liveBlobShas } from "../blob/read.js";
+import { VaultShareError } from "../errors.js";
+import { placeBlob, type BlobPlacement } from "./blobs.js";
+import {
+  projectShareClosure,
+  readShareClosure,
+  type ShareableItemType,
+} from "./closure.js";
+import { deleteProjectedClosure } from "./removal.js";
 
 /**
  * The narrow slice of an open vault a share touches: its canonical database
@@ -106,12 +111,12 @@ export interface ShareOriginRecord {
 export function readShareOrigin(
   audience: DatabaseSync,
   itemType: string,
-  itemId: string,
+  itemId: string
 ): ShareOriginRecord | undefined {
   const row = audience
     .prepare(
       `SELECT origin_vault_id, origin_item_id, shared_by_member, shared_at
-         FROM core_share_origin WHERE item_type = ? AND item_id = ?`,
+         FROM core_share_origin WHERE item_type = ? AND item_id = ?`
     )
     .get(itemType, itemId) as
     | {
@@ -142,23 +147,31 @@ export function readShareOrigin(
 export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
   if (input.origin.vault === input.audience.vault) {
     throw new VaultShareError(
-      'cannot share a vault into itself — sharing crosses a vault boundary',
+      "cannot share a vault into itself — sharing crosses a vault boundary"
     );
   }
   // Resolve everything out of the origin BEFORE touching the audience, so an
   // unknown item is refused with nothing placed anywhere.
-  const closure = readShareClosure(input.origin.vault, input.itemType, input.itemId);
+  const closure = readShareClosure(
+    input.origin.vault,
+    input.itemType,
+    input.itemId
+  );
 
   // (a) Bytes first — a link is idempotent, and a failure after this point
   // leaves at most an orphaned link the audience's own sweep reclaims.
   const blobs: BlobPlacement[] = closure.shas.map((sha256) => ({
     sha256,
-    mode: placeBlob(input.origin.blobs.local, input.audience.blobs.local, sha256),
+    mode: placeBlob(
+      input.origin.blobs.local,
+      input.audience.blobs.local,
+      sha256
+    ),
   }));
 
   // (b) One transaction, audience vault only.
   const audience = input.audience.vault;
-  audience.exec('BEGIN IMMEDIATE');
+  audience.exec("BEGIN IMMEDIATE");
   try {
     const projection = projectShareClosure(audience, closure);
     audience
@@ -166,7 +179,7 @@ export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
         `INSERT INTO core_share_origin
            (item_type, item_id, origin_vault_id, origin_item_id, shared_by_member, shared_at)
          VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT (item_type, item_id) DO NOTHING`,
+         ON CONFLICT (item_type, item_id) DO NOTHING`
       )
       .run(
         input.itemType,
@@ -174,9 +187,9 @@ export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
         input.originVaultId,
         closure.itemId,
         input.sharedByMember,
-        (input.now ?? Date.now)(),
+        (input.now ?? Date.now)()
       );
-    audience.exec('COMMIT');
+    audience.exec("COMMIT");
     return {
       itemType: input.itemType,
       itemId: projection.itemId,
@@ -186,7 +199,7 @@ export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
   } catch (err) {
     // Roll the audience back to exactly where it was — the origin was never
     // written, so the whole share is undone bar the orphaned link above.
-    audience.exec('ROLLBACK');
+    audience.exec("ROLLBACK");
     throw err;
   }
 }
@@ -199,22 +212,30 @@ export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
  * Refuses to touch a row the audience AUTHORED (no `core_share_origin`
  * record): unshare removes placements, never someone's own data.
  */
-export function unshareFromVault(input: UnshareFromVaultInput): UnshareFromVaultResult {
+export function unshareFromVault(
+  input: UnshareFromVaultInput
+): UnshareFromVaultResult {
   const audience = input.audience.vault;
   if (!readShareOrigin(audience, input.itemType, input.itemId)) {
     return { removed: false, orphanedShas: [] };
   }
-  audience.exec('BEGIN IMMEDIATE');
+  audience.exec("BEGIN IMMEDIATE");
   let shas: string[];
   try {
-    const removal = deleteProjectedClosure(audience, input.itemType, input.itemId);
+    const removal = deleteProjectedClosure(
+      audience,
+      input.itemType,
+      input.itemId
+    );
     audience
-      .prepare('DELETE FROM core_share_origin WHERE item_type = ? AND item_id = ?')
+      .prepare(
+        "DELETE FROM core_share_origin WHERE item_type = ? AND item_id = ?"
+      )
       .run(input.itemType, input.itemId);
     shas = removal.shas;
-    audience.exec('COMMIT');
+    audience.exec("COMMIT");
   } catch (err) {
-    audience.exec('ROLLBACK');
+    audience.exec("ROLLBACK");
     throw err;
   }
   // Which of those addresses the vault no longer claims — read from the live

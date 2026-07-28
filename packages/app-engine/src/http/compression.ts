@@ -26,9 +26,9 @@
  * stacks add it and decode the result. No custom gate header is needed.
  */
 
-import zlib from 'node:zlib';
-import { availableParallelism, totalmem } from 'node:os';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from "node:http";
+import { availableParallelism, totalmem } from "node:os";
+import zlib from "node:zlib";
 
 /**
  * Below this raw-body size, compression's header + framing overhead and CPU
@@ -37,7 +37,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
  */
 export const MIN_COMPRESS_BYTES = 1024;
 
-export type Encoding = 'br' | 'gzip';
+export type Encoding = "br" | "gzip";
 
 /**
  * Content types worth compressing: text, JSON, JS, and SVG all shrink 3-10x.
@@ -52,7 +52,7 @@ export type Encoding = 'br' | 'gzip';
  * future caller.
  */
 const COMPRESSIBLE_TYPE_RE =
-  /^(?:text\/(?!event-stream)|application\/(?:json|javascript|manifest\+json|xml)|image\/svg\+xml)/i;
+  /^(?:text\/(?!event-stream)|application\/(?:json|javascript|manifest\+json|xml)|image\/svg\+xml)/iu;
 
 export function isCompressibleType(contentType: string | undefined): boolean {
   return contentType !== undefined && COMPRESSIBLE_TYPE_RE.test(contentType);
@@ -69,25 +69,28 @@ export function isCompressibleType(contentType: string | undefined): boolean {
  * the service-worker and browser-transport paths opt out (see the file
  * header).
  */
-export function negotiateEncoding(header: string | string[] | undefined): Encoding | null {
-  const raw = Array.isArray(header) ? header.join(',') : header;
+export function negotiateEncoding(
+  header: string | string[] | undefined
+): Encoding | null {
+  const raw = Array.isArray(header) ? header.join(",") : header;
   if (!raw) return null;
   const q = new Map<string, number>();
-  for (const part of raw.split(',')) {
-    const [nameRaw, ...params] = part.trim().split(';');
+  for (const part of raw.split(",")) {
+    const [nameRaw, ...params] = part.trim().split(";");
     const name = nameRaw?.trim().toLowerCase();
     if (!name) continue;
     let weight = 1;
     for (const p of params) {
-      const m = /^\s*q=([0-9.]+)\s*$/i.exec(p);
-      if (m) weight = Number.parseFloat(m[1]!);
+      const m = /^\s*q=(?<weight>[0-9.]+)\s*$/iu.exec(p);
+      const parsed = m?.groups?.weight;
+      if (parsed !== undefined) weight = Number(parsed);
     }
     q.set(name, Number.isNaN(weight) ? 0 : weight);
   }
-  const br = q.get('br') ?? q.get('*');
-  if (br !== undefined && br > 0) return 'br';
-  const gzip = q.get('gzip') ?? q.get('*');
-  if (gzip !== undefined && gzip > 0) return 'gzip';
+  const br = q.get("br") ?? q.get("*");
+  if (br !== undefined && br > 0) return "br";
+  const gzip = q.get("gzip") ?? q.get("*");
+  if (gzip !== undefined && gzip > 0) return "gzip";
   return null;
 }
 
@@ -115,16 +118,24 @@ export function staticQualityForHost(
     cores: availableParallelism(),
     totalMemoryBytes: totalmem(),
   },
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): CompressQuality {
-  const resolvedProfile = env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
+  const resolvedProfile =
+    env.CENTRAID_HARDWARE_PROFILE ?? env.CENTRAID_RESOLVED_HARDWARE_PROFILE;
   const constrained =
-    resolvedProfile === 'constrained' ||
-    (resolvedProfile !== 'standard' && (host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3));
-  const parse = (raw: string | undefined, fallback: number, ceiling: number): number => {
-    if (raw === undefined || raw === '') return fallback;
-    const parsed = Number.parseInt(raw, 10);
-    return Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, ceiling) : fallback;
+    resolvedProfile === "constrained" ||
+    (resolvedProfile !== "standard" &&
+      (host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3));
+  const parse = (
+    raw: string | undefined,
+    fallback: number,
+    ceiling: number
+  ): number => {
+    if (raw === undefined || raw === "") return fallback;
+    const parsed = Math.trunc(Number(raw));
+    return Number.isFinite(parsed) && parsed >= 0
+      ? Math.min(parsed, ceiling)
+      : fallback;
   };
   const fallback = constrained ? { brotli: 5, gzip: 6 } : STATIC_QUALITY;
   return {
@@ -137,7 +148,7 @@ export function staticQualityForHost(
 export function compress(
   buf: Buffer,
   encoding: Encoding,
-  quality: CompressQuality,
+  quality: CompressQuality
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const done = (error: Error | null, result: Buffer): void => {
@@ -147,7 +158,7 @@ export function compress(
       }
       resolve(result);
     };
-    if (encoding === 'br') {
+    if (encoding === "br") {
       zlib.brotliCompress(
         buf,
         {
@@ -156,7 +167,7 @@ export function compress(
             [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length,
           },
         },
-        done,
+        done
       );
       return;
     }
@@ -174,20 +185,22 @@ export async function sendJsonNegotiated(
   req: IncomingMessage,
   res: ServerResponse,
   status: number,
-  body: unknown,
+  body: unknown
 ): Promise<true> {
-  const raw = Buffer.from(JSON.stringify(body), 'utf8');
+  const raw = Buffer.from(JSON.stringify(body), "utf8");
   res.statusCode = status;
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Vary', 'Accept-Encoding');
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Vary", "Accept-Encoding");
   const encoding =
-    raw.length >= MIN_COMPRESS_BYTES ? negotiateEncoding(req.headers['accept-encoding']) : null;
+    raw.length >= MIN_COMPRESS_BYTES
+      ? negotiateEncoding(req.headers["accept-encoding"])
+      : null;
   if (!encoding) {
     res.end(raw);
     return true;
   }
-  res.setHeader('Content-Encoding', encoding);
+  res.setHeader("Content-Encoding", encoding);
   res.end(await compress(raw, encoding, DYNAMIC_QUALITY));
   return true;
 }

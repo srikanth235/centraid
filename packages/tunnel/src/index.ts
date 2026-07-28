@@ -5,38 +5,41 @@ export {
   inspectEndpointTicket,
   startLocalProxy,
   tunnelRequest,
-} from './client.js';
+} from "./client.js";
 export type {
   EndpointTicketHint,
   LocalProxyHandle,
   TunnelClient,
   TunnelClientOptions,
   TunnelResponse,
-} from './client.js';
-export type { Connection, PathSnapshot } from './iroh.js';
-export { startDesktopTunnel, startPreferredDesktopTunnel } from './desktop-tunnel.js';
-export { startNativeDesktopTunnel } from './native-relay.js';
+} from "./client.js";
+export type { Connection, PathSnapshot } from "./iroh.js";
+export {
+  startDesktopTunnel,
+  startPreferredDesktopTunnel,
+} from "./desktop-tunnel.js";
+export { startNativeDesktopTunnel } from "./native-relay.js";
 export type {
   ActivePairing,
   DesktopTunnelHandle,
   DesktopTunnelOptions,
   TunnelUpstream,
-} from './desktop-tunnel.js';
-export { DeviceStore, sanitizeDeviceName } from './device-store.js';
-export type { PairedDevice } from './device-store.js';
-export { EndpointSecretError, loadEndpointSecret } from './endpoint-secret.js';
+} from "./desktop-tunnel.js";
+export { DeviceStore, sanitizeDeviceName } from "./device-store.js";
+export type { PairedDevice } from "./device-store.js";
+export { EndpointSecretError, loadEndpointSecret } from "./endpoint-secret.js";
 export type {
   EndpointSecretCorruptionPolicy,
   EndpointSecretPersistence,
   LoadEndpointSecretOptions,
-} from './endpoint-secret.js';
-export { startGatewayEndpoint, GW_PAIR_ALPN } from './gateway-endpoint.js';
+} from "./endpoint-secret.js";
+export { startGatewayEndpoint, GW_PAIR_ALPN } from "./gateway-endpoint.js";
 export type {
   GatewayEndpointHandle,
   GatewayEndpointOptions,
   GatewayPairRequest,
   GatewayPairResponse,
-} from './gateway-endpoint.js';
+} from "./gateway-endpoint.js";
 export {
   DEVICE_IDENTITY_HEADER,
   DEVICE_PROOF_HEADER,
@@ -44,7 +47,7 @@ export {
   PAIR_ALPN,
   TUNNEL_ALPN,
   TUNNEL_FORWARDED_HEADER,
-} from './protocol.js';
+} from "./protocol.js";
 export type {
   HeaderMap,
   PairQrPayload,
@@ -52,4 +55,4 @@ export type {
   PairResponse,
   TunnelRequestHeader,
   TunnelResponseHeader,
-} from './protocol.js';
+} from "./protocol.js";

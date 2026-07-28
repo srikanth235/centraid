@@ -18,15 +18,17 @@
 // `fetch()`-ing a data: URI is blocked by the app's own CSP (`connect-src`
 // inherits `default-src 'self'`, and data: isn't 'self'), so that branch is
 // load-bearing, not an optimization.
-import { useEffect, useRef, useState } from 'react';
-import { decodeDataUri, fmtFull } from '../format.ts';
-import { I } from '../icons.ts';
-import type { DriveDoc } from '../types.ts';
-import { Icon } from './Shared.tsx';
-import styles from './Editor.module.css';
+import { useEffect, useMemo, useRef, useState } from "react";
 
-type LoadState = 'loading' | 'ready' | 'error';
-type SaveState = '' | 'saving' | 'saved' | 'pending' | 'error';
+import { decodeDataUri, fmtFull } from "../format.ts";
+import { I } from "../icons.ts";
+import type { DriveDoc } from "../types.ts";
+import { Icon } from "./Shared.tsx";
+
+import styles from "./Editor.module.css";
+
+type LoadState = "loading" | "ready" | "error";
+type SaveState = "" | "saving" | "saved" | "pending" | "error";
 
 export function Editor({
   doc,
@@ -37,23 +39,30 @@ export function Editor({
   doc: DriveDoc;
   registerFlush: (fn: () => Promise<void>) => void;
   onClose: () => void;
-  onSave: (documentId: string, body: string) => Promise<VaultOutcome | undefined>;
+  onSave: (
+    documentId: string,
+    body: string
+  ) => Promise<VaultOutcome | undefined>;
 }) {
   // The inline data: branch is synchronous, so it is decoded during the first
   // render instead of in an effect — the effect below then only owns the async
-  // blob: fetch. Lazy useState reads content_uri exactly once at mount, which is
-  // the same "read once at open time" contract the file header describes (#573).
-  const [inline] = useState<{ state: LoadState; text: string } | null>(() => {
+  // blob: fetch. This derived inline value follows the keyed document's URI;
+  // the editor component itself is remounted for a different document.
+  const inline = useMemo<{ state: LoadState; text: string } | null>(() => {
     const uri = doc.content_uri;
-    if (typeof uri !== 'string' || !uri.startsWith('data:')) return null;
+    if (typeof uri !== "string" || !uri.startsWith("data:")) return null;
     const text = decodeDataUri(uri);
-    return text == null ? { state: 'error', text: '' } : { state: 'ready', text };
-  });
-  const [body, setBodyState] = useState(inline?.text ?? '');
-  const [loadState, setLoadState] = useState<LoadState>(inline?.state ?? 'loading');
-  const [saveState, setSaveState] = useState<SaveState>('');
-  const bodyRef = useRef(inline?.text ?? '');
-  const lastSavedRef = useRef(inline?.text ?? '');
+    return text == null
+      ? { state: "error", text: "" }
+      : { state: "ready", text };
+  }, [doc.content_uri]);
+  const [body, setBody] = useState(inline?.text ?? "");
+  const [loadState, setLoadState] = useState<LoadState>(
+    inline?.state ?? "loading"
+  );
+  const [saveState, setSaveState] = useState<SaveState>("");
+  const bodyRef = useRef(inline?.text ?? "");
+  const lastSavedRef = useRef(inline?.text ?? "");
   const saveTimerRef = useRef(0);
   const savingRef = useRef<Promise<void> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -65,8 +74,8 @@ export function Editor({
     function loaded(text: string) {
       bodyRef.current = text;
       lastSavedRef.current = text;
-      setBodyState(text);
-      setLoadState('ready');
+      setBody(text);
+      setLoadState("ready");
     }
     let cancelled = false;
     fetch(doc.content_uri!)
@@ -78,16 +87,16 @@ export function Editor({
         if (!cancelled) loaded(text);
       })
       .catch(() => {
-        if (!cancelled) setLoadState('error');
+        if (!cancelled) setLoadState("error");
       });
     return () => {
       cancelled = true;
     };
     // (#360) doc is read once at mount by design (see file header): app.tsx keys this component by document_id, so re-firing when doc's content_uri changes mid-edit would reload over an in-flight draft instead of leaving the autosave in control
-  }, []);
+  }, [inline, doc.content_uri]);
 
   useEffect(() => {
-    if (loadState === 'ready') textareaRef.current?.focus();
+    if (loadState === "ready") textareaRef.current?.focus();
   }, [loadState]);
 
   // Declared as consts, in dependency order: `function` declarations that
@@ -98,12 +107,12 @@ export function Editor({
     const p = (async () => {
       const snap = bodyRef.current;
       if (snap === lastSavedRef.current) return;
-      setSaveState('saving');
+      setSaveState("saving");
       const outcome = await onSave(doc.document_id, snap);
       lastSavedRef.current = snap;
       const stillDirty = bodyRef.current !== snap;
-      if (outcome?.status === 'executed') {
-        setSaveState(stillDirty ? 'saving' : 'saved');
+      if (outcome?.status === "executed") {
+        setSaveState(stillDirty ? "saving" : "saved");
         // Re-armed inline rather than through scheduleSave(): a forward
         // reference between the two trips the compiler's hoisted-context
         // analysis and bails out the whole component; self-recursion doesn't.
@@ -111,10 +120,10 @@ export function Editor({
           clearTimeout(saveTimerRef.current);
           saveTimerRef.current = window.setTimeout(performSave, 700);
         }
-      } else if (outcome?.status === 'parked') {
-        setSaveState('pending');
+      } else if (outcome?.status === "parked") {
+        setSaveState("pending");
       } else {
-        setSaveState('error');
+        setSaveState("error");
       }
     })();
     savingRef.current = p;
@@ -139,26 +148,26 @@ export function Editor({
     registerFlush?.(flush);
     return () => clearTimeout(saveTimerRef.current);
     // (#360) registered once; this component remounts on document_id change (see file header), so the closed-over doc/onSave props flush() reads can never go stale without a fresh registration
-  }, []);
+  }, [flush, registerFlush]);
 
-  const setBody = (v: string): void => {
+  const updateBody = (v: string): void => {
     bodyRef.current = v;
-    setBodyState(v);
+    setBody(v);
     scheduleSave();
   };
 
   const saveLabel =
-    saveState === 'saving'
-      ? 'Saving…'
-      : saveState === 'saved'
-        ? 'Saved · receipt'
-        : saveState === 'pending'
-          ? 'Pending approval'
-          : saveState === 'error'
-            ? 'Not saved'
+    saveState === "saving"
+      ? "Saving…"
+      : saveState === "saved"
+        ? "Saved · receipt"
+        : saveState === "pending"
+          ? "Pending approval"
+          : saveState === "error"
+            ? "Not saved"
             : doc.updated_at
               ? `Edited ${fmtFull(doc.updated_at)}`
-              : '';
+              : "";
 
   return (
     <div className={styles.editorBackdrop}>
@@ -166,25 +175,37 @@ export function Editor({
           card (the card is `position: relative`), so it has a keyboard
           equivalent — this replaces the old `e.target === e.currentTarget`
           guard on the backdrop div. */}
-      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <button
+        type="button"
+        className="kit-modal-scrim"
+        aria-label="Close"
+        onClick={onClose}
+      />
       <dialog
         open
         className={styles.editor}
         aria-modal="true"
-        aria-label={`Edit ${doc.title ?? 'document'}`}
+        aria-label={`Edit ${doc.title ?? "document"}`}
       >
         <div className={styles.editorTop}>
-          <button type="button" className="kit-icon-btn" aria-label="Close" onClick={onClose}>
+          <button
+            type="button"
+            className="kit-icon-btn"
+            aria-label="Close"
+            onClick={onClose}
+          >
             <Icon svg={I.close!} />
           </button>
-          <span className={styles.editorTitle}>{doc.title ?? 'Untitled'}</span>
+          <span className={styles.editorTitle}>{doc.title ?? "Untitled"}</span>
           <span className={styles.editorSave}>{saveLabel}</span>
         </div>
         <div className={styles.editorBody}>
-          {loadState === 'loading' ? (
+          {loadState === "loading" ? (
             <div className={styles.editorStatus}>Loading…</div>
-          ) : loadState === 'error' ? (
-            <div className={styles.editorStatus}>Could not load this document's text.</div>
+          ) : loadState === "error" ? (
+            <div className={styles.editorStatus}>
+              Could not load this document's text.
+            </div>
           ) : (
             <textarea
               ref={textareaRef}
@@ -192,7 +213,7 @@ export function Editor({
               aria-label="Document body"
               spellCheck={true}
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={(e) => updateBody(e.target.value)}
               onBlur={flush}
             />
           )}

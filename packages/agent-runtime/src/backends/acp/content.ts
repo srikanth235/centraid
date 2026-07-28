@@ -10,29 +10,29 @@
 
 /** Extract text from an ACP content block or array of blocks. */
 export function textOf(content: unknown): string {
-  if (!content) return '';
-  if (typeof content === 'string') return content;
+  if (!content) return "";
+  if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    let s = '';
+    let s = "";
     for (const c of content) s += textOf(c);
     return s;
   }
-  if (typeof content === 'object') {
+  if (typeof content === "object") {
     const rec = content as Record<string, unknown>;
-    if (typeof rec.text === 'string') return rec.text;
+    if (typeof rec.text === "string") return rec.text;
     // tool_call_update content blocks wrap a `content` payload.
     if (rec.content !== undefined) return textOf(rec.content);
   }
-  return '';
+  return "";
 }
 
 export function firstString(...vals: unknown[]): string | undefined {
   for (const v of vals) {
-    if (typeof v === 'string' && v.trim()) return v.trim();
+    if (typeof v === "string" && v.trim()) return v.trim();
   }
   return undefined;
 }
 
 export function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null;
+  return typeof v === "object" && v !== null;
 }

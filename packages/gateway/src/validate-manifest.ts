@@ -3,11 +3,26 @@
 // call `validateManifestAt` before a draft goes live, so a structurally-broken
 // or replay-unsafe app is rejected at publish time rather than at run/fire time.
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { ManifestError, parseAppManifest } from '@centraid/app-engine';
-import * as automation from '@centraid/automation';
-import { fileExists } from './routes/route-helpers.js';
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { ManifestError, parseAppManifest } from "@centraid/app-engine";
+import * as automation from "@centraid/automation";
+
+import { fileExists } from "./routes/route-helpers.js";
+
+function findFirstInOrder<T, R>(
+  values: readonly T[],
+  check: (value: T) => R | PromiseLike<R | undefined>
+): Promise<R | undefined> {
+  const visit = async (index: number): Promise<R | undefined> => {
+    const value = values[index];
+    if (value === undefined) return undefined;
+    const found = await check(value);
+    return found === undefined ? visit(index + 1) : found;
+  };
+  return visit(0);
+}
 
 /**
  * Validate an app dir's `app.json` and the files it declares. Returns a
@@ -16,37 +31,43 @@ import { fileExists } from './routes/route-helpers.js';
  * its `.js`, and — for automation apps — every `automations/<id>/automation.json`
  * parses against the automation manifest schema and every handler is replay-safe.
  */
-export async function validateManifestAt(appDir: string): Promise<string | undefined> {
+export async function validateManifestAt(
+  appDir: string
+): Promise<string | undefined> {
   let raw: string;
   try {
-    raw = await fs.readFile(path.join(appDir, 'app.json'), 'utf8');
+    raw = await fs.readFile(path.join(appDir, "app.json"), "utf8");
   } catch {
-    return 'app.json is missing';
+    return "app.json is missing";
   }
   let manifest;
   try {
     manifest = parseAppManifest(raw);
   } catch (err) {
     if (err instanceof ManifestError) {
-      return `app.json invalid (${err.code})${err.path ? ` at ${err.path}` : ''}: ${err.message}`;
+      return `app.json invalid (${err.code})${err.path ? ` at ${err.path}` : ""}: ${err.message}`;
     }
     return err instanceof Error ? err.message : String(err);
   }
-  for (const a of manifest.actions) {
-    if (!(await fileExists(path.join(appDir, 'actions', `${a.name}.js`)))) {
-      return `app.json declares action "${a.name}" but actions/${a.name}.js does not exist`;
-    }
-  }
-  for (const q of manifest.queries) {
-    if (!(await fileExists(path.join(appDir, 'queries', `${q.name}.js`)))) {
-      return `app.json declares query "${q.name}" but queries/${q.name}.js does not exist`;
-    }
-  }
+  const actionError = await findFirstInOrder(
+    manifest.actions,
+    async (action) =>
+      (await fileExists(path.join(appDir, "actions", `${action.name}.js`)))
+        ? undefined
+        : `app.json declares action "${action.name}" but actions/${action.name}.js does not exist`
+  );
+  if (actionError) return actionError;
+  const queryError = await findFirstInOrder(manifest.queries, async (query) =>
+    (await fileExists(path.join(appDir, "queries", `${query.name}.js`)))
+      ? undefined
+      : `app.json declares query "${query.name}" but queries/${query.name}.js does not exist`
+  );
+  if (queryError) return queryError;
   // Automation apps carry handlers under `automations/<id>/handler.js` that run
   // under the #166 journal/replay runtime — they must be deterministic between
   // ctx.* calls. Lint each for replay-unsafe patterns (issue #167) so a bad
   // handler is rejected at publish time, not silently mis-resumed at fire time.
-  if (manifest.kind === 'automation') {
+  if (manifest.kind === "automation") {
     // Every `automations/<id>/automation.json` must itself parse against
     // @centraid/automation's manifest schema (trigger shapes, vault scopes,
     // cron exprs, webhook slugs, …). The dedicated POST /centraid/_automations
@@ -72,33 +93,37 @@ export async function validateManifestAt(appDir: string): Promise<string | undef
  * exist — structural gaps like a missing manifest are a builder concern,
  * not this validator's).
  */
-async function validateAutomationManifestsAt(appDir: string): Promise<string | undefined> {
-  const automationsDir = path.join(appDir, 'automations');
-  let ids: import('node:fs').Dirent[];
+async function validateAutomationManifestsAt(
+  appDir: string
+): Promise<string | undefined> {
+  const automationsDir = path.join(appDir, "automations");
+  let ids: import("node:fs").Dirent[];
   try {
     ids = await fs.readdir(automationsDir, { withFileTypes: true });
   } catch {
     return undefined; // no automations/ dir — nothing to validate
   }
-  for (const ent of ids) {
-    if (!ent.isDirectory()) continue;
-    const rel = `automations/${ent.name}/${automation.MANIFEST_FILE}`;
-    let raw: string;
-    try {
-      raw = await fs.readFile(path.join(appDir, rel), 'utf8');
-    } catch {
-      continue; // manifest absent — nothing to validate here
-    }
-    try {
-      automation.parseManifest(raw);
-    } catch (err) {
-      if (err instanceof automation.ManifestError) {
-        return `${rel} invalid (${err.code})${err.field ? ` at ${err.field}` : ''}: ${err.message}`;
+  return findFirstInOrder(
+    ids.filter((ent) => ent.isDirectory()),
+    async (ent) => {
+      const rel = `automations/${ent.name}/${automation.MANIFEST_FILE}`;
+      let raw: string;
+      try {
+        raw = await fs.readFile(path.join(appDir, rel), "utf8");
+      } catch {
+        return undefined; // manifest absent — nothing to validate here
       }
-      return err instanceof Error ? err.message : String(err);
+      try {
+        automation.parseManifest(raw);
+      } catch (err) {
+        if (err instanceof automation.ManifestError) {
+          return `${rel} invalid (${err.code})${err.field ? ` at ${err.field}` : ""}: ${err.message}`;
+        }
+        return err instanceof Error ? err.message : String(err);
+      }
+      return undefined;
     }
-  }
-  return undefined;
+  );
 }
 
 /**
@@ -106,26 +131,29 @@ async function validateAutomationManifestsAt(appDir: string): Promise<string | u
  * automation app dir. Returns the first handler's formatted authoring error,
  * or `undefined` when all handlers are clean (or none exist).
  */
-async function lintAutomationHandlersAt(appDir: string): Promise<string | undefined> {
-  const automationsDir = path.join(appDir, 'automations');
-  let ids: import('node:fs').Dirent[];
+async function lintAutomationHandlersAt(
+  appDir: string
+): Promise<string | undefined> {
+  const automationsDir = path.join(appDir, "automations");
+  let ids: import("node:fs").Dirent[];
   try {
     ids = await fs.readdir(automationsDir, { withFileTypes: true });
   } catch {
     return undefined; // no automations/ dir — nothing to lint
   }
-  for (const ent of ids) {
-    if (!ent.isDirectory()) continue;
-    const rel = `automations/${ent.name}/${automation.HANDLER_FILE}`;
-    let source: string;
-    try {
-      source = await fs.readFile(path.join(appDir, rel), 'utf8');
-    } catch {
-      continue; // handler absent — manifest validation handles structural gaps
+  return findFirstInOrder(
+    ids.filter((ent) => ent.isDirectory()),
+    async (ent) => {
+      const rel = `automations/${ent.name}/${automation.HANDLER_FILE}`;
+      let source: string;
+      try {
+        source = await fs.readFile(path.join(appDir, rel), "utf8");
+      } catch {
+        return undefined; // handler absent — manifest validation handles structural gaps
+      }
+      const findings = automation.lintHandlerSource(source);
+      const error = automation.formatHandlerLintError(findings, rel);
+      return error || undefined;
     }
-    const findings = automation.lintHandlerSource(source);
-    const error = automation.formatHandlerLintError(findings, rel);
-    if (error) return error;
-  }
-  return undefined;
+  );
 }

@@ -1,22 +1,31 @@
+import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#325) single cohesive screen component (Name/Instructions/trigger-picker/tabs form for one surface); splitting would fragment one visual unit
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type JSX } from 'react';
-import type { IconName } from '@centraid/design-tokens';
-import { relativeRunLabel } from '../../app-format.js';
-import { glyphForId, hueForId } from '../../automation-identity.js';
-import { cronNextRuns, cronRunLabel, resolveCronTimezone } from '../../cron.js';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type JSX,
+} from "react";
+
+import { relativeRunLabel } from "../../app-format.js";
+import { glyphForId, hueForId } from "../../automation-identity.js";
+import { cronNextRuns, cronRunLabel, resolveCronTimezone } from "../../cron.js";
 import type {
   AuEditorCatalogConnectorDTO,
   AuEditorTriggerInput,
   AutomationEditorBridgeProps,
   AutomationEditorData,
-} from '../screen-contracts.js';
-import { Button, Icon, IconButton } from '../ui/index.js';
-import { cx } from '../ui/cx.js';
-import au from '../styles/automation.module.css';
-import AutomationCompilePane from './AutomationCompilePane.js';
-import { AutomationEditorConnectorsPicker } from './AutomationEditorConnectorsPicker.js';
-import { AutomationEditorAgentPicker } from './AutomationEditorAgentPicker.js';
-import styles from './AutomationEditorScreen.module.css';
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Button, Icon, IconButton } from "../ui/index.js";
+import AutomationCompilePane from "./AutomationCompilePane.js";
+import { AutomationEditorAgentPicker } from "./AutomationEditorAgentPicker.js";
+import { AutomationEditorConnectorsPicker } from "./AutomationEditorConnectorsPicker.js";
+
+import au from "../styles/automation.module.css";
+import styles from "./AutomationEditorScreen.module.css";
 
 // The COMPILE SCREEN — one of the two automation surfaces, and the only one
 // that may change an automation.
@@ -33,7 +42,7 @@ import styles from './AutomationEditorScreen.module.css';
 // to the run screen, which is why a failed compile had nowhere to be read —
 // Save now compiles WITHOUT leaving, and the rail owns the loop.
 
-type TriggerKind = 'cron' | 'webhook' | 'condition' | 'data' | 'event';
+type TriggerKind = "cron" | "webhook" | "condition" | "data" | "event";
 /** One row of a condition trigger's `where` builder. `value` is the raw text
  *  the user typed; it is coerced per-op into the manifest clause shape at save
  *  time (see `whereClauseOf`). */
@@ -57,87 +66,105 @@ type TriggerDraft = {
 // runtime package (main-process-only dependency today), same as
 // BuilderAutomationTriggers.tsx.
 const CONDITION_OPS = [
-  'eq',
-  'ne',
-  'lt',
-  'lte',
-  'gt',
-  'gte',
-  'in',
-  'is-null',
-  'not-null',
-  'within-days',
-  'within-next-days',
+  "eq",
+  "ne",
+  "lt",
+  "lte",
+  "gt",
+  "gte",
+  "in",
+  "is-null",
+  "not-null",
+  "within-days",
+  "within-next-days",
 ] as const;
 type ConditionOp = (typeof CONDITION_OPS)[number];
 /** Kinds the owner can add from the create/edit form. Webhook + condition
  *  remain editable when already present on a loaded automation, but new
  *  authoring matches the Grok-style surface: schedule (cron) and vault data
  *  changes only. */
-const BASE_ADDABLE_TRIGGER_KINDS = ['cron', 'data'] as const satisfies readonly TriggerKind[];
-const TRIGGER_ADD_LABEL: Record<'cron' | 'data' | 'event', string> = {
-  cron: 'Schedule',
-  data: 'Data change',
-  event: 'Connector event',
+const BASE_ADDABLE_TRIGGER_KINDS = [
+  "cron",
+  "data",
+] as const satisfies readonly TriggerKind[];
+const TRIGGER_ADD_LABEL: Record<"cron" | "data" | "event", string> = {
+  cron: "Schedule",
+  data: "Data change",
+  event: "Connector event",
 };
 const TRIGGER_KIND_LABEL: Record<TriggerKind, string> = {
-  cron: 'Schedule',
-  webhook: 'Webhook',
-  data: 'Data change',
-  condition: 'Condition',
-  event: 'Connector event',
+  cron: "Schedule",
+  webhook: "Webhook",
+  data: "Data change",
+  condition: "Condition",
+  event: "Connector event",
 };
 const EVENTS_BY_CONNECTOR = {
-  'pull.gmail': [{ id: 'new-message', label: 'New email' }],
-  'pull.github': [
-    { id: 'pull-request', label: 'Pull request event' },
-    { id: 'issue', label: 'Issue event' },
+  "pull.gmail": [{ id: "new-message", label: "New email" }],
+  "pull.github": [
+    { id: "pull-request", label: "Pull request event" },
+    { id: "issue", label: "Issue event" },
   ],
 } as const;
 /** Run-outcome notifications. Centraid surfaces failures on Home under needs
  *  attention today — only App / Off are real. (Email options were removed so
  *  the control doesn't promise a channel that isn't wired yet.) */
-type NotifyMode = 'app' | 'off';
+type NotifyMode = "app" | "off";
 const NOTIFY_OPTIONS: readonly { id: NotifyMode; label: string }[] = [
-  { id: 'app', label: 'In the app' },
-  { id: 'off', label: 'Off' },
+  { id: "app", label: "In the app" },
+  { id: "off", label: "Off" },
 ];
 /** Ops that take no `value` (unary null checks). */
-const NO_VALUE_OPS: ReadonlySet<string> = new Set(['is-null', 'not-null']);
+const NO_VALUE_OPS: ReadonlySet<string> = new Set(["is-null", "not-null"]);
 /** Ops whose value is a comma-separated list. */
-const LIST_OPS: ReadonlySet<string> = new Set(['in']);
+const LIST_OPS: ReadonlySet<string> = new Set(["in"]);
 /** Ops whose value is a bare day count (a number). */
-const NUMERIC_OPS: ReadonlySet<string> = new Set(['within-days', 'within-next-days']);
+const NUMERIC_OPS: ReadonlySet<string> = new Set([
+  "within-days",
+  "within-next-days",
+]);
+
+/** An `@[<entityType>/<entityId>]` mention token, exactly as `insertMention`
+ *  writes it into the instructions. Global, but every read goes through
+ *  `matchAll`, which clones the regex — no shared `lastIndex`. */
+const ENTITY_TOKEN_RE = /@\[(?<entityType>[^/\]]+)\/(?<entityId>[^\]]+)\]/gu;
 
 /** Turn a clean numeric string into a number; leave everything else a string
  *  (so `eq status open` stays `"open"`, `eq amount 100` becomes `100`). */
 function coerceScalar(raw: string): string | number {
   const t = raw.trim();
-  return t !== '' && /^-?\d+(?:\.\d+)?$/.test(t) ? Number(t) : t;
+  return t !== "" && /^-?\d+(?:\.\d+)?$/u.test(t) ? Number(t) : t;
 }
 
 /** A DTO where clause (value is `unknown` on the wire) → an editable row. */
 function whereRowOf(raw: unknown): WhereRowDraft {
-  const c = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const c = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
   const op = (CONDITION_OPS as readonly string[]).includes(c.op as string)
     ? (c.op as ConditionOp)
-    : 'eq';
-  let value = '';
+    : "eq";
+  let value = "";
   if (!NO_VALUE_OPS.has(op) && c.value !== undefined && c.value !== null) {
-    value = Array.isArray(c.value) ? c.value.map(String).join(', ') : String(c.value);
+    value = Array.isArray(c.value)
+      ? c.value.map(String).join(", ")
+      : String(c.value);
   }
-  return { column: typeof c.column === 'string' ? c.column : '', op, value };
+  return { column: typeof c.column === "string" ? c.column : "", op, value };
 }
 
 /** An editable row → a manifest where clause, coerced per-op. Drops the row
  *  (returns null) when it has no column. */
-function whereClauseOf(row: WhereRowDraft): { column: string; op: string; value?: unknown } | null {
+function whereClauseOf(
+  row: WhereRowDraft
+): { column: string; op: string; value?: unknown } | null {
   const column = row.column.trim();
   if (!column) return null;
   if (NO_VALUE_OPS.has(row.op)) return { column, op: row.op };
   if (LIST_OPS.has(row.op)) {
     const list = row.value
-      .split(',')
+      .split(",")
       .map((s) => s.trim())
       .filter(Boolean)
       .map(coerceScalar);
@@ -146,7 +173,11 @@ function whereClauseOf(row: WhereRowDraft): { column: string; op: string; value?
   if (NUMERIC_OPS.has(row.op)) {
     const t = row.value.trim();
     const n = Number(t);
-    return { column, op: row.op, value: t !== '' && Number.isFinite(n) ? n : t };
+    return {
+      column,
+      op: row.op,
+      value: t !== "" && Number.isFinite(n) ? n : t,
+    };
   }
   return { column, op: row.op, value: coerceScalar(row.value) };
 }
@@ -156,44 +187,46 @@ function draftTrigger(kind: TriggerKind): TriggerDraft {
   return {
     key: `trigger-${triggerKey++}`,
     kind,
-    expr: kind === 'cron' ? '0 9 * * *' : '',
-    tz: '',
-    entity: '',
+    expr: kind === "cron" ? "0 9 * * *" : "",
+    tz: "",
+    entity: "",
     whereRows: [],
-    every: '',
-    entities: '',
-    connectorKind: '',
-    event: '',
-    filterRepo: '',
+    every: "",
+    entities: "",
+    connectorKind: "",
+    event: "",
+    filterRepo: "",
   };
 }
 
-function loadedTrigger(t: AutomationEditorData['triggers'][number]): TriggerDraft {
+function loadedTrigger(
+  t: AutomationEditorData["triggers"][number]
+): TriggerDraft {
   const draft = draftTrigger(t.kind);
-  if (t.kind === 'cron') {
+  if (t.kind === "cron") {
     draft.expr = t.expr;
-    draft.tz = t.tz ?? '';
+    draft.tz = t.tz ?? "";
   }
-  if (t.kind === 'condition') {
+  if (t.kind === "condition") {
     draft.entity = t.entity;
-    draft.every = t.every ?? '';
+    draft.every = t.every ?? "";
     draft.whereRows = Array.isArray(t.where) ? t.where.map(whereRowOf) : [];
   }
-  if (t.kind === 'data') {
-    draft.entities = t.entities.join(', ');
-    draft.every = t.every ?? '';
+  if (t.kind === "data") {
+    draft.entities = t.entities.join(", ");
+    draft.every = t.every ?? "";
   }
-  if (t.kind === 'event') {
+  if (t.kind === "event") {
     draft.connectorKind = t.connectorKind;
     draft.event = t.event;
-    draft.every = t.every ?? '';
-    draft.filterRepo = typeof t.filter?.repo === 'string' ? t.filter.repo : '';
+    draft.every = t.every ?? "";
+    draft.filterRepo = typeof t.filter?.repo === "string" ? t.filter.repo : "";
   }
   return draft;
 }
 
 function autogrow(el: HTMLTextAreaElement): void {
-  el.style.height = 'auto';
+  el.style.height = "auto";
   el.style.height = `${el.scrollHeight}px`;
 }
 
@@ -225,18 +258,20 @@ function EntityKindPicker({
 
   // For a comma-separated value everything up to and including the last comma
   // is a fixed prefix; the trailing segment is what we match and complete.
-  const lastComma = segmented ? value.lastIndexOf(',') : -1;
+  const lastComma = segmented ? value.lastIndexOf(",") : -1;
   const prefix = value.slice(0, lastComma + 1);
   const query = value
     .slice(lastComma + 1)
     .trim()
     .toLowerCase();
-  const matches = (query ? list.filter((k) => k.toLowerCase().includes(query)) : list).slice(0, 8);
+  const matches = (
+    query ? list.filter((k) => k.toLowerCase().includes(query)) : list
+  ).slice(0, 8);
   const activeIndex = matches.length ? Math.min(active, matches.length - 1) : 0;
   const showList = open && matches.length > 0;
 
   const accept = (kind: string): void => {
-    onChange(segmented ? `${prefix}${prefix ? ' ' : ''}${kind}` : kind);
+    onChange(segmented ? `${prefix}${prefix ? " " : ""}${kind}` : kind);
     setOpen(false);
     setActive(0);
   };
@@ -254,22 +289,22 @@ function EntityKindPicker({
         onFocus={() => setOpen(true)}
         onKeyDown={(event) => {
           if (!showList) {
-            if (event.key === 'ArrowDown') {
+            if (event.key === "ArrowDown") {
               setOpen(true);
               event.preventDefault();
             }
             return;
           }
-          if (event.key === 'ArrowDown') {
+          if (event.key === "ArrowDown") {
             setActive((activeIndex + 1) % matches.length);
             event.preventDefault();
-          } else if (event.key === 'ArrowUp') {
+          } else if (event.key === "ArrowUp") {
             setActive((activeIndex - 1 + matches.length) % matches.length);
             event.preventDefault();
-          } else if (event.key === 'Enter') {
+          } else if (event.key === "Enter") {
             accept(matches[activeIndex]!);
             event.preventDefault();
-          } else if (event.key === 'Escape') {
+          } else if (event.key === "Escape") {
             setOpen(false);
             event.stopPropagation();
           }
@@ -336,10 +371,10 @@ function NotificationsPanel({
           <>
             On failure, also runs <code>{onFailure}</code>
           </>
-        ) : notifyMode === 'off' ? (
-          'Failures stay in this automation’s run history only.'
+        ) : notifyMode === "off" ? (
+          "Failures stay in this automation’s run history only."
         ) : (
-          'Failed runs surface on Home under needs attention.'
+          "Failed runs surface on Home under needs attention."
         )}
       </p>
       {model ? (
@@ -374,16 +409,26 @@ export default function AutomationEditorScreen({
   onDelete,
   onCancel,
 }: AutomationEditorBridgeProps): JSX.Element {
-  const [state, setState] = useState<AutomationEditorData | 'loading' | 'error'>('loading');
-  const [name, setName] = useState('');
-  const [instructions, setInstructions] = useState('');
+  const [state, setState] = useState<
+    AutomationEditorData | "loading" | "error"
+  >("loading");
+  const [name, setName] = useState("");
+  const [instructions, setInstructions] = useState("");
   const [runner, setRunner] = useState<string | null | undefined>(undefined);
   const [model, setModel] = useState<string | null | undefined>(undefined);
   const [triggers, setTriggers] = useState<TriggerDraft[]>([]);
   const [entityTypes, setEntityTypes] = useState<string[]>([]);
-  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [mention, setMention] = useState<{
+    start: number;
+    query: string;
+  } | null>(null);
   const [mentionHits, setMentionHits] = useState<
-    Array<{ type: string; id: string; title: string | null; subtitle: string | null }>
+    Array<{
+      type: string;
+      id: string;
+      title: string | null;
+      subtitle: string | null;
+    }>
   >([]);
   const [enabled, setEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -394,11 +439,13 @@ export default function AutomationEditorScreen({
   const [toggleBusy, setToggleBusy] = useState(false);
   const [regenBusy, setRegenBusy] = useState(false);
   const [addTriggerOpen, setAddTriggerOpen] = useState(false);
-  const [notifyMode, setNotifyMode] = useState<NotifyMode>('app');
+  const [notifyMode, setNotifyMode] = useState<NotifyMode>("app");
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [catalog, setCatalog] = useState<AuEditorCatalogConnectorDTO[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
-  const [selectedConnectors, setSelectedConnectors] = useState<Set<string>>(() => new Set());
+  const [selectedConnectors, setSelectedConnectors] = useState<Set<string>>(
+    () => new Set()
+  );
   /** Durable connection bindings keyed by catalog kind (connection id + label). */
   const [connectionBindings, setConnectionBindings] = useState<
     Map<string, { connectionId: string; kind: string; label: string }>
@@ -415,7 +462,7 @@ export default function AutomationEditorScreen({
   // The last persisted instructions. State, not a ref: `dirty` is computed
   // during render from it, and a ref read during render is not a value React
   // can keep the UI consistent with.
-  const [baselineInstructions, setBaselineInstructions] = useState('');
+  const [baselineInstructions, setBaselineInstructions] = useState("");
   const instructionsRef = useRef<HTMLTextAreaElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const connectorsWrapRef = useRef<HTMLDivElement | null>(null);
@@ -428,30 +475,36 @@ export default function AutomationEditorScreen({
   // just-earned "Recompile plan" affordance (see `doSave`, which
   // deliberately does NOT reload after a successful save: the local form
   // state is already authoritative for what was just persisted).
-  const applyLoaded = useCallback((d: AutomationEditorData, resetForm: boolean): void => {
-    setState(d);
-    setEnabled(d.enabled);
-    if (!resetForm) return;
-    setName(d.name);
-    setInstructions(d.instructions);
-    setRunner(d.runner);
-    setModel(d.model);
-    setBaselineInstructions(d.instructions);
-    setTriggers(d.triggers.map(loadedTrigger));
-    const bound = d.connectors?.connections ?? [];
-    setSelectedConnectors(new Set(bound.map((b) => b.kind)));
-    setConnectionBindings(
-      new Map(
-        bound.map((b) => [b.kind, { connectionId: b.connectionId, kind: b.kind, label: b.label }]),
-      ),
-    );
-  }, []);
+  const applyLoaded = useCallback(
+    (d: AutomationEditorData, resetForm: boolean): void => {
+      setState(d);
+      setEnabled(d.enabled);
+      if (!resetForm) return;
+      setName(d.name);
+      setInstructions(d.instructions);
+      setRunner(d.runner);
+      setModel(d.model);
+      setBaselineInstructions(d.instructions);
+      setTriggers(d.triggers.map(loadedTrigger));
+      const bound = d.connectors?.connections ?? [];
+      setSelectedConnectors(new Set(bound.map((b) => b.kind)));
+      setConnectionBindings(
+        new Map(
+          bound.map((b) => [
+            b.kind,
+            { connectionId: b.connectionId, kind: b.kind, label: b.label },
+          ])
+        )
+      );
+    },
+    []
+  );
 
   const reload = useCallback(async () => {
     try {
       applyLoaded(await loadData(), true);
     } catch {
-      setState('error');
+      setState("error");
     }
   }, [applyLoaded, loadData]);
 
@@ -476,10 +529,13 @@ export default function AutomationEditorScreen({
   // trigger is present — feeds the `EntityKindPicker` autocomplete on their
   // entity inputs. The route caches the underlying gateway read, so re-fetches
   // are cheap even if this fires again after a reload.
-  const needsEntityTypes = triggers.some((t) => t.kind === 'data' || t.kind === 'condition');
+  const needsEntityTypes = triggers.some(
+    (t) => t.kind === "data" || t.kind === "condition"
+  );
   const entityTypesLoaded = useRef(false);
   useEffect(() => {
-    if (!needsEntityTypes || entityTypesLoaded.current || !loadEntityTypes) return;
+    if (!needsEntityTypes || entityTypesLoaded.current || !loadEntityTypes)
+      return;
     entityTypesLoaded.current = true;
     let active = true;
     void loadEntityTypes()
@@ -524,7 +580,7 @@ export default function AutomationEditorScreen({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [mention, onSearchEntities]);
+  }, [mention, onSearchEntities, mentionIdle]);
 
   const refreshCatalog = useCallback(async (): Promise<void> => {
     if (!loadConnectorCatalog) {
@@ -580,13 +636,13 @@ export default function AutomationEditorScreen({
       setConnectorsOpen(false);
     };
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setConnectorsOpen(false);
+      if (event.key === "Escape") setConnectorsOpen(false);
     };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
     };
   }, [connectorsOpen]);
 
@@ -594,17 +650,21 @@ export default function AutomationEditorScreen({
   const createFocused = useRef(false);
   useEffect(() => {
     if (createFocused.current) return;
-    if (typeof state !== 'object' || state.mode !== 'create') return;
+    if (typeof state !== "object" || state.mode !== "create") return;
     createFocused.current = true;
-    const id = window.requestAnimationFrame(() => nameInputRef.current?.focus());
+    const id = window.requestAnimationFrame(() =>
+      nameInputRef.current?.focus()
+    );
     return () => window.cancelAnimationFrame(id);
   }, [state]);
 
-  if (state === 'loading' || state === 'error') {
+  if (state === "loading" || state === "error") {
     return (
       <div className={styles.page}>
         <output className={styles.loadingBody}>
-          {state === 'loading' ? 'Loading automation…' : 'Could not load automation.'}
+          {state === "loading"
+            ? "Loading automation…"
+            : "Could not load automation."}
         </output>
       </div>
     );
@@ -617,27 +677,27 @@ export default function AutomationEditorScreen({
   // the rest of the app. `rowId` is optional/additive on the DTO, so a
   // `loadData` that hasn't been updated to populate it falls back to
   // `automationId`.
-  const identityId = d.rowId ?? d.automationId ?? 'draft';
+  const identityId = d.rowId ?? d.automationId ?? "draft";
   const hue = hueForId(identityId);
   const glyph = glyphForId(identityId);
 
   function buildTriggers(): AuEditorTriggerInput[] {
     return triggers.flatMap((trigger): AuEditorTriggerInput[] => {
-      if (trigger.kind === 'cron') {
+      if (trigger.kind === "cron") {
         if (!trigger.expr.trim()) return [];
         const tz = trigger.tz.trim();
         return [
           {
             expr: trigger.expr.trim(),
-            kind: 'cron',
+            kind: "cron",
             ...(tz ? { tz } : {}),
           },
         ];
       }
-      if (trigger.kind === 'webhook') return [{ kind: 'webhook' }];
-      if (trigger.kind === 'data') {
+      if (trigger.kind === "webhook") return [{ kind: "webhook" }];
+      if (trigger.kind === "data") {
         const entities = trigger.entities
-          .split(',')
+          .split(",")
           .map((e) => e.trim())
           .filter(Boolean);
         // Skip an empty data trigger — same spirit as the cron empty-expr skip.
@@ -645,20 +705,24 @@ export default function AutomationEditorScreen({
           ? [
               {
                 entities,
-                kind: 'data',
-                ...(trigger.every.trim() ? { every: trigger.every.trim() } : {}),
+                kind: "data",
+                ...(trigger.every.trim()
+                  ? { every: trigger.every.trim() }
+                  : {}),
               },
             ]
           : [];
       }
-      if (trigger.kind === 'event') {
+      if (trigger.kind === "event") {
         if (!trigger.connectorKind || !trigger.event) return [];
         return [
           {
             connectorKind: trigger.connectorKind,
             event: trigger.event,
-            filter: trigger.filterRepo.trim() ? { repo: trigger.filterRepo.trim() } : undefined,
-            kind: 'event',
+            filter: trigger.filterRepo.trim()
+              ? { repo: trigger.filterRepo.trim() }
+              : undefined,
+            kind: "event",
             ...(trigger.every.trim() ? { every: trigger.every.trim() } : {}),
           },
         ];
@@ -671,7 +735,7 @@ export default function AutomationEditorScreen({
       return [
         {
           entity: trigger.entity.trim(),
-          kind: 'condition',
+          kind: "condition",
           ...(trigger.every.trim() ? { every: trigger.every.trim() } : {}),
           ...(where.length ? { where } : {}),
         },
@@ -686,15 +750,15 @@ export default function AutomationEditorScreen({
     try {
       const builtTriggers = buildTriggers();
       const connections = [...connectionBindings.values()].filter((b) =>
-        selectedConnectors.has(b.kind),
+        selectedConnectors.has(b.kind)
       );
       const ok = await onSave({
         instructions,
         name: name.trim(),
         triggers: builtTriggers,
         connections,
-        ...(runner !== undefined ? { runner } : {}),
-        ...(model !== undefined ? { model } : {}),
+        ...(runner === undefined ? {} : { runner }),
+        ...(model === undefined ? {} : { model }),
       });
       if (ok) {
         setBaselineInstructions(instructions);
@@ -703,7 +767,7 @@ export default function AutomationEditorScreen({
         // retiming a trigger does not invalidate the compiled handler). The
         // rail takes it from here — the owner stays on this screen and
         // watches, which is the whole point of the split.
-        if (d.mode === 'create') {
+        if (d.mode === "create") {
           // The automation exists on the gateway now — reload so the form
           // leaves create mode and the rail becomes live. Compiling is left
           // to the rail's own nonce below, after the reload settles.
@@ -757,13 +821,16 @@ export default function AutomationEditorScreen({
     autogrow(e.target);
     const cursor = e.target.selectionStart;
     const before = e.target.value.slice(0, cursor);
-    const match = /(?:^|\s)@([^\s@\]]*)$/.exec(before);
-    setMention(match ? { start: cursor - match[1]!.length - 1, query: match[1]! } : null);
+    const query = /(?:^|\s)@(?<query>[^\s@\]]*)$/u.exec(before)?.groups?.query;
+    setMention(
+      query === undefined ? null : { start: cursor - query.length - 1, query }
+    );
   };
 
   const insertMention = (hit: { type: string; id: string }): void => {
     if (!mention) return;
-    const cursor = instructionsRef.current?.selectionStart ?? instructions.length;
+    const cursor =
+      instructionsRef.current?.selectionStart ?? instructions.length;
     const token = `@[${hit.type}/${hit.id}]`;
     const next = `${instructions.slice(0, mention.start)}${token}${instructions.slice(cursor)}`;
     setInstructions(next);
@@ -777,7 +844,7 @@ export default function AutomationEditorScreen({
   };
 
   const connectorCount = selectedConnectors.size;
-  const isCreate = d.mode === 'create';
+  const isCreate = d.mode === "create";
   /**
    * Bound connections that no longer exist in the live catalog — the owner
    * revoked the account after this automation was saved. The binding is kept
@@ -788,23 +855,27 @@ export default function AutomationEditorScreen({
   const danglingConnectorKinds = new Set(
     [...connectionBindings.values()]
       .filter((binding) => {
-        const entry = catalog.find((candidate) => candidate.kind === binding.kind);
+        const entry = catalog.find(
+          (candidate) => candidate.kind === binding.kind
+        );
         return (
           entry !== undefined &&
-          !entry.connections.some((c) => c.connectionId === binding.connectionId)
+          !entry.connections.some(
+            (c) => c.connectionId === binding.connectionId
+          )
         );
       })
-      .map((binding) => binding.kind),
+      .map((binding) => binding.kind)
   );
   const eventConnectorKinds = [...connectionBindings.keys()].filter(
     (kind): kind is keyof typeof EVENTS_BY_CONNECTOR =>
       selectedConnectors.has(kind) &&
       !danglingConnectorKinds.has(kind) &&
-      kind in EVENTS_BY_CONNECTOR,
+      kind in EVENTS_BY_CONNECTOR
   );
-  const addableTriggerKinds: Array<'cron' | 'data' | 'event'> =
+  const addableTriggerKinds: Array<"cron" | "data" | "event"> =
     eventConnectorKinds.length > 0
-      ? [...BASE_ADDABLE_TRIGGER_KINDS, 'event']
+      ? [...BASE_ADDABLE_TRIGGER_KINDS, "event"]
       : [...BASE_ADDABLE_TRIGGER_KINDS];
 
   const addTriggerMenu = (
@@ -819,7 +890,11 @@ export default function AutomationEditorScreen({
         + Add Trigger
       </button>
       {addTriggerOpen ? (
-        <div className={styles.addTriggerMenu} role="menu" aria-label="Trigger kinds">
+        <div
+          className={styles.addTriggerMenu}
+          role="menu"
+          aria-label="Trigger kinds"
+        >
           {addableTriggerKinds.map((kind) => (
             <button
               key={kind}
@@ -828,12 +903,12 @@ export default function AutomationEditorScreen({
               className={styles.addTriggerItem}
               onClick={() => {
                 const draft = draftTrigger(kind);
-                if (kind === 'event') {
-                  draft.connectorKind = eventConnectorKinds[0] ?? '';
+                if (kind === "event") {
+                  draft.connectorKind = eventConnectorKinds[0] ?? "";
                   draft.event =
                     EVENTS_BY_CONNECTOR[
                       draft.connectorKind as keyof typeof EVENTS_BY_CONNECTOR
-                    ]?.[0]?.id ?? '';
+                    ]?.[0]?.id ?? "";
                 }
                 setTriggers((current) => [...current, draft]);
                 setAddTriggerOpen(false);
@@ -852,37 +927,54 @@ export default function AutomationEditorScreen({
       {triggers.map((trigger, index) => {
         const update = (patch: Partial<TriggerDraft>): void =>
           setTriggers((current) =>
-            current.map((item) => (item.key === trigger.key ? { ...item, ...patch } : item)),
+            current.map((item) =>
+              item.key === trigger.key ? { ...item, ...patch } : item
+            )
           );
         const cronTz =
-          trigger.kind === 'cron'
-            ? resolveCronTimezone(trigger.tz.trim() || undefined, d.defaultCronTimeZone)
+          trigger.kind === "cron"
+            ? resolveCronTimezone(
+                trigger.tz.trim() || undefined,
+                d.defaultCronTimeZone
+              )
             : undefined;
         const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
         const preview =
-          trigger.kind === 'cron' && trigger.expr.trim()
-            ? cronNextRuns(trigger.expr.trim(), 3, new Date(), cronTz).map((dt) =>
-                cronTz
-                  ? cronRunLabel(dt, { timeZone: cronTz, viewerTimeZone: viewerTz })
-                  : relativeRunLabel(dt),
+          trigger.kind === "cron" && trigger.expr.trim()
+            ? cronNextRuns(trigger.expr.trim(), 3, new Date(), cronTz).map(
+                (dt) =>
+                  cronTz
+                    ? cronRunLabel(dt, {
+                        timeZone: cronTz,
+                        viewerTimeZone: viewerTz,
+                      })
+                    : relativeRunLabel(dt)
               )
             : [];
         const everyPreview =
-          (trigger.kind === 'data' || trigger.kind === 'condition' || trigger.kind === 'event') &&
+          (trigger.kind === "data" ||
+            trigger.kind === "condition" ||
+            trigger.kind === "event") &&
           trigger.every.trim()
             ? cronNextRuns(trigger.every.trim(), 3).map(relativeRunLabel)
             : [];
         // New authoring only offers cron + data; keep legacy kinds when loaded.
         const kindOptions: TriggerKind[] =
-          trigger.kind === 'webhook' || trigger.kind === 'condition'
+          trigger.kind === "webhook" || trigger.kind === "condition"
             ? [trigger.kind, ...addableTriggerKinds]
-            : trigger.kind === 'event' && !addableTriggerKinds.includes('event')
-              ? ['event', ...addableTriggerKinds]
+            : trigger.kind === "event" && !addableTriggerKinds.includes("event")
+              ? ["event", ...addableTriggerKinds]
               : [...addableTriggerKinds];
         return (
-          <div key={trigger.key} className={styles.triggerRow} data-trigger-kind={trigger.kind}>
+          <div
+            key={trigger.key}
+            className={styles.triggerRow}
+            data-trigger-kind={trigger.kind}
+          >
             <div className={styles.triggerRowHead}>
-              <span className={styles.triggerIndex}>{String(index + 1).padStart(2, '0')}</span>
+              <span className={styles.triggerIndex}>
+                {String(index + 1).padStart(2, "0")}
+              </span>
               <select
                 className={styles.triggerSelect}
                 value={trigger.kind}
@@ -903,11 +995,13 @@ export default function AutomationEditorScreen({
                 ariaLabel={`Remove trigger ${index + 1}`}
                 title="Remove trigger"
                 onClick={() =>
-                  setTriggers((current) => current.filter((item) => item.key !== trigger.key))
+                  setTriggers((current) =>
+                    current.filter((item) => item.key !== trigger.key)
+                  )
                 }
               />
             </div>
-            {trigger.kind === 'cron' ? (
+            {trigger.kind === "cron" ? (
               <div className={styles.trigFields}>
                 <label className={styles.subField}>
                   <span className={styles.microLabel}>Cron expression</span>
@@ -924,20 +1018,26 @@ export default function AutomationEditorScreen({
                     className={cx(styles.input, styles.mono)}
                     value={trigger.tz}
                     onChange={(event) => update({ tz: event.target.value })}
-                    placeholder={d.defaultCronTimeZone || 'Host local / gateway default'}
+                    placeholder={
+                      d.defaultCronTimeZone || "Host local / gateway default"
+                    }
                     list="centraid-cron-timezones"
                     spellCheck={false}
                     aria-label={`Trigger ${index + 1} timezone`}
                     data-testid="cron-timezone"
                   />
                   <span className={styles.trigHint}>
-                    IANA name (e.g. America/New_York). Empty uses the gateway default, then the host
-                    clock.
+                    IANA name (e.g. America/New_York). Empty uses the gateway
+                    default, then the host clock.
                   </span>
                 </label>
                 {preview.length > 0 ? (
                   <div className={styles.cronPreview}>
-                    <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
+                    <span
+                      className={cx(styles.microLabel, styles.cronPreviewLbl)}
+                    >
+                      Next
+                    </span>
                     {preview.map((label) => (
                       <span key={label} className={styles.cronPreviewPill}>
                         {label}
@@ -947,7 +1047,7 @@ export default function AutomationEditorScreen({
                 ) : null}
               </div>
             ) : null}
-            {trigger.kind === 'data' ? (
+            {trigger.kind === "data" ? (
               <div className={styles.trigFields}>
                 <div className={styles.subField}>
                   <span className={styles.microLabel}>Entities</span>
@@ -959,11 +1059,14 @@ export default function AutomationEditorScreen({
                     placeholder="core.transaction, billing.invoice"
                   />
                   <span className={styles.trigHint}>
-                    Comma-separated <code>schema.table</code> names to watch for changes.
+                    Comma-separated <code>schema.table</code> names to watch for
+                    changes.
                   </span>
                 </div>
                 <label className={styles.subField}>
-                  <span className={styles.microLabel}>Poll every (optional)</span>
+                  <span className={styles.microLabel}>
+                    Poll every (optional)
+                  </span>
                   <input
                     className={cx(styles.input, styles.mono)}
                     value={trigger.every}
@@ -977,7 +1080,11 @@ export default function AutomationEditorScreen({
                 </label>
                 {everyPreview.length > 0 ? (
                   <div className={styles.cronPreview}>
-                    <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
+                    <span
+                      className={cx(styles.microLabel, styles.cronPreviewLbl)}
+                    >
+                      Next
+                    </span>
                     {everyPreview.map((label) => (
                       <span key={label} className={styles.cronPreviewPill}>
                         {label}
@@ -987,7 +1094,7 @@ export default function AutomationEditorScreen({
                 ) : null}
               </div>
             ) : null}
-            {trigger.kind === 'condition' ? (
+            {trigger.kind === "condition" ? (
               <div className={styles.trigFields}>
                 <div className={styles.subField}>
                   <span className={styles.microLabel}>Entity</span>
@@ -1005,16 +1112,22 @@ export default function AutomationEditorScreen({
                       const setRow = (patch: Partial<WhereRowDraft>): void =>
                         update({
                           whereRows: trigger.whereRows.map((r, i) =>
-                            i === rowIndex ? { ...r, ...patch } : r,
+                            i === rowIndex ? { ...r, ...patch } : r
                           ),
                         });
                       const takesValue = !NO_VALUE_OPS.has(row.op);
                       return (
                         <div key={rowIndex} className={styles.whereRow}>
                           <input
-                            className={cx(styles.input, styles.mono, styles.whereField)}
+                            className={cx(
+                              styles.input,
+                              styles.mono,
+                              styles.whereField
+                            )}
                             value={row.column}
-                            onChange={(event) => setRow({ column: event.target.value })}
+                            onChange={(event) =>
+                              setRow({ column: event.target.value })
+                            }
                             placeholder="column"
                             aria-label="Filter column"
                             spellCheck={false}
@@ -1023,7 +1136,9 @@ export default function AutomationEditorScreen({
                             className={styles.whereSelect}
                             value={row.op}
                             aria-label="Filter operator"
-                            onChange={(event) => setRow({ op: event.target.value as ConditionOp })}
+                            onChange={(event) =>
+                              setRow({ op: event.target.value as ConditionOp })
+                            }
                           >
                             {CONDITION_OPS.map((op) => (
                               <option key={op} value={op}>
@@ -1033,22 +1148,32 @@ export default function AutomationEditorScreen({
                           </select>
                           {takesValue ? (
                             <input
-                              className={cx(styles.input, styles.mono, styles.whereField)}
+                              className={cx(
+                                styles.input,
+                                styles.mono,
+                                styles.whereField
+                              )}
                               value={row.value}
-                              onChange={(event) => setRow({ value: event.target.value })}
+                              onChange={(event) =>
+                                setRow({ value: event.target.value })
+                              }
                               placeholder={
                                 LIST_OPS.has(row.op)
-                                  ? 'a, b, c'
+                                  ? "a, b, c"
                                   : NUMERIC_OPS.has(row.op)
-                                    ? 'days'
-                                    : 'value'
+                                    ? "days"
+                                    : "value"
                               }
-                              inputMode={NUMERIC_OPS.has(row.op) ? 'numeric' : undefined}
+                              inputMode={
+                                NUMERIC_OPS.has(row.op) ? "numeric" : undefined
+                              }
                               aria-label="Filter value"
                               spellCheck={false}
                             />
                           ) : (
-                            <span className={styles.whereValueOff}>no value</span>
+                            <span className={styles.whereValueOff}>
+                              no value
+                            </span>
                           )}
                           <IconButton
                             icon="Trash"
@@ -1056,7 +1181,9 @@ export default function AutomationEditorScreen({
                             title="Remove filter"
                             onClick={() =>
                               update({
-                                whereRows: trigger.whereRows.filter((_, i) => i !== rowIndex),
+                                whereRows: trigger.whereRows.filter(
+                                  (_, i) => i !== rowIndex
+                                ),
                               })
                             }
                           />
@@ -1068,7 +1195,10 @@ export default function AutomationEditorScreen({
                       className={styles.whereAddBtn}
                       onClick={() =>
                         update({
-                          whereRows: [...trigger.whereRows, { column: '', op: 'eq', value: '' }],
+                          whereRows: [
+                            ...trigger.whereRows,
+                            { column: "", op: "eq", value: "" },
+                          ],
                         })
                       }
                     >
@@ -1077,7 +1207,9 @@ export default function AutomationEditorScreen({
                   </div>
                 </div>
                 <label className={styles.subField}>
-                  <span className={styles.microLabel}>Evaluate every (optional)</span>
+                  <span className={styles.microLabel}>
+                    Evaluate every (optional)
+                  </span>
                   <input
                     className={cx(styles.input, styles.mono)}
                     value={trigger.every}
@@ -1091,7 +1223,11 @@ export default function AutomationEditorScreen({
                 </label>
                 {everyPreview.length > 0 ? (
                   <div className={styles.cronPreview}>
-                    <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
+                    <span
+                      className={cx(styles.microLabel, styles.cronPreviewLbl)}
+                    >
+                      Next
+                    </span>
                     {everyPreview.map((label) => (
                       <span key={label} className={styles.cronPreviewPill}>
                         {label}
@@ -1101,7 +1237,7 @@ export default function AutomationEditorScreen({
                 ) : null}
               </div>
             ) : null}
-            {trigger.kind === 'event' ? (
+            {trigger.kind === "event" ? (
               <div className={styles.trigFields}>
                 <label className={styles.subField}>
                   <span className={styles.microLabel}>Bound account</span>
@@ -1112,18 +1248,22 @@ export default function AutomationEditorScreen({
                     onChange={(event) => {
                       const connectorKind = event.target.value;
                       const options =
-                        EVENTS_BY_CONNECTOR[connectorKind as keyof typeof EVENTS_BY_CONNECTOR] ??
-                        [];
+                        EVENTS_BY_CONNECTOR[
+                          connectorKind as keyof typeof EVENTS_BY_CONNECTOR
+                        ] ?? [];
                       update({
                         connectorKind,
-                        event: options[0]?.id ?? '',
-                        filterRepo: connectorKind === 'pull.github' ? trigger.filterRepo : '',
+                        event: options[0]?.id ?? "",
+                        filterRepo:
+                          connectorKind === "pull.github"
+                            ? trigger.filterRepo
+                            : "",
                       });
                     }}
                   >
                     {(trigger.connectorKind &&
                     !eventConnectorKinds.includes(
-                      trigger.connectorKind as keyof typeof EVENTS_BY_CONNECTOR,
+                      trigger.connectorKind as keyof typeof EVENTS_BY_CONNECTOR
                     )
                       ? [trigger.connectorKind, ...eventConnectorKinds]
                       : eventConnectorKinds
@@ -1134,7 +1274,8 @@ export default function AutomationEditorScreen({
                     ))}
                   </select>
                   <span className={styles.trigHint}>
-                    Events use this exact configured account and its existing read scopes.
+                    Events use this exact configured account and its existing
+                    read scopes.
                   </span>
                 </label>
                 <label className={styles.subField}>
@@ -1156,20 +1297,24 @@ export default function AutomationEditorScreen({
                     ))}
                   </select>
                 </label>
-                {trigger.connectorKind === 'pull.github' ? (
+                {trigger.connectorKind === "pull.github" ? (
                   <label className={styles.subField}>
                     <span className={styles.microLabel}>Repository</span>
                     <input
                       className={cx(styles.input, styles.mono)}
                       value={trigger.filterRepo}
-                      onChange={(event) => update({ filterRepo: event.target.value })}
+                      onChange={(event) =>
+                        update({ filterRepo: event.target.value })
+                      }
                       placeholder="owner/repository"
                       spellCheck={false}
                     />
                   </label>
                 ) : null}
                 <label className={styles.subField}>
-                  <span className={styles.microLabel}>Poll every (optional)</span>
+                  <span className={styles.microLabel}>
+                    Poll every (optional)
+                  </span>
                   <input
                     className={cx(styles.input, styles.mono)}
                     value={trigger.every}
@@ -1178,12 +1323,17 @@ export default function AutomationEditorScreen({
                     spellCheck={false}
                   />
                   <span className={styles.trigHint}>
-                    Polling works behind NAT; provider cursors prevent duplicate fires.
+                    Polling works behind NAT; provider cursors prevent duplicate
+                    fires.
                   </span>
                 </label>
                 {everyPreview.length > 0 ? (
                   <div className={styles.cronPreview}>
-                    <span className={cx(styles.microLabel, styles.cronPreviewLbl)}>Next</span>
+                    <span
+                      className={cx(styles.microLabel, styles.cronPreviewLbl)}
+                    >
+                      Next
+                    </span>
                     {everyPreview.map((label) => (
                       <span key={label} className={styles.cronPreviewPill}>
                         {label}
@@ -1193,7 +1343,7 @@ export default function AutomationEditorScreen({
                 ) : null}
               </div>
             ) : null}
-            {trigger.kind === 'webhook' ? (
+            {trigger.kind === "webhook" ? (
               <div className={styles.trigFields}>
                 {d.webhook && !d.webhook.pending && d.webhook.url ? (
                   <div className={styles.webhookRow}>
@@ -1202,7 +1352,9 @@ export default function AutomationEditorScreen({
                       icon="Copy"
                       ariaLabel="Copy webhook URL"
                       title="Copy webhook URL"
-                      onClick={() => d.webhook?.url && onCopyWebhook(d.webhook.url)}
+                      onClick={() =>
+                        d.webhook?.url && onCopyWebhook(d.webhook.url)
+                      }
                     />
                     <button
                       type="button"
@@ -1211,7 +1363,9 @@ export default function AutomationEditorScreen({
                       onClick={doRegenerate}
                     >
                       <Icon name="Refresh" size={12} />
-                      <span>{regenBusy ? 'Regenerating…' : 'Regenerate secret'}</span>
+                      <span>
+                        {regenBusy ? "Regenerating…" : "Regenerate secret"}
+                      </span>
                     </button>
                   </div>
                 ) : (
@@ -1231,7 +1385,10 @@ export default function AutomationEditorScreen({
     setSelectedConnectors((prev) => {
       const next = new Set(prev);
       const existing = connectionBindings.get(kind);
-      if (next.has(kind) && (!connectionId || existing?.connectionId === connectionId)) {
+      if (
+        next.has(kind) &&
+        (!connectionId || existing?.connectionId === connectionId)
+      ) {
         next.delete(kind);
         setConnectionBindings((m) => {
           const copy = new Map(m);
@@ -1242,7 +1399,9 @@ export default function AutomationEditorScreen({
         next.add(kind);
         const cat = catalog.find((c) => c.kind === kind);
         const connection = connectionId
-          ? cat?.connections.find((candidate) => candidate.connectionId === connectionId)
+          ? cat?.connections.find(
+              (candidate) => candidate.connectionId === connectionId
+            )
           : cat?.connection;
         if (connection) {
           setConnectionBindings((m) => {
@@ -1261,7 +1420,11 @@ export default function AutomationEditorScreen({
   };
 
   /** After picker configure/authorize — always select + persist durable id. */
-  const bindConnection = (binding: { connectionId: string; kind: string; label: string }): void => {
+  const bindConnection = (binding: {
+    connectionId: string;
+    kind: string;
+    label: string;
+  }): void => {
     setSelectedConnectors((prev) => new Set(prev).add(binding.kind));
     setConnectionBindings((m) => {
       const copy = new Map(m);
@@ -1270,11 +1433,21 @@ export default function AutomationEditorScreen({
     });
   };
 
-  const selectedConnectorItems = catalog.filter((c) => selectedConnectors.has(c.kind));
+  const selectedConnectorItems = catalog.filter((c) =>
+    selectedConnectors.has(c.kind)
+  );
 
   const instructionsBlock = (
-    <div className={cx(styles.field, styles.instructionsField, styles.instructionsCard)}>
-      <span className={cx(styles.fieldLabel, styles.instructionsLabel)}>Instructions</span>
+    <div
+      className={cx(
+        styles.field,
+        styles.instructionsField,
+        styles.instructionsCard
+      )}
+    >
+      <span className={cx(styles.fieldLabel, styles.instructionsLabel)}>
+        Instructions
+      </span>
       <textarea
         ref={instructionsRef}
         className={styles.textarea}
@@ -1287,17 +1460,22 @@ export default function AutomationEditorScreen({
         placeholder="Read my unread emails and summarize…"
         aria-label="Instructions"
       />
-      {Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g)).length > 0 ? (
+      {Array.from(instructions.matchAll(ENTITY_TOKEN_RE)).length > 0 ? (
         <div className={styles.entityTokens} aria-label="Tagged data">
-          {Array.from(instructions.matchAll(/@\[([^/\]]+)\/([^\]]+)\]/g), (match) => (
+          {Array.from(instructions.matchAll(ENTITY_TOKEN_RE), (match) => (
             <span key={match[0]} className={styles.entityToken}>
-              <code>@{match[1] === 'core.link_anchor' ? 'anchor' : match[1]}</code>
+              <code>
+                @
+                {match.groups?.entityType === "core.link_anchor"
+                  ? "anchor"
+                  : match.groups?.entityType}
+              </code>
               <span>
-                {match[1] === 'core.link_anchor'
-                  ? 'row · field · span'
-                  : match[2] === '*'
-                    ? 'type'
-                    : match[2]}
+                {match.groups?.entityType === "core.link_anchor"
+                  ? "row · field · span"
+                  : match.groups?.entityId === "*"
+                    ? "type"
+                    : match.groups?.entityId}
               </span>
             </span>
           ))}
@@ -1322,14 +1500,17 @@ export default function AutomationEditorScreen({
         </div>
       ) : null}
       {selectedConnectorItems.length > 0 ? (
-        <div className={styles.selectedConnectors} aria-label="Selected connectors">
+        <div
+          className={styles.selectedConnectors}
+          aria-label="Selected connectors"
+        >
           {selectedConnectorItems.map((c) => (
             <button
               key={c.key}
               type="button"
               className={styles.selectedConnChip}
               title={
-                c.connection?.health === 'ok'
+                c.connection?.health === "ok"
                   ? `${c.name} · connected — click to remove`
                   : `${c.name} · not fully connected — click to remove`
               }
@@ -1339,7 +1520,7 @@ export default function AutomationEditorScreen({
                 <Icon name="Plug" size={11} />
               </span>
               <span>{c.name}</span>
-              {c.connection?.health === 'ok' ? (
+              {c.connection?.health === "ok" ? (
                 <span className={styles.selectedConnOk} aria-hidden="true">
                   ✓
                 </span>
@@ -1383,13 +1564,16 @@ export default function AutomationEditorScreen({
         </button>
         <span className={styles.instrHint}>
           {connectorCount === 0
-            ? 'Optional — attach Gmail, GitHub, …'
+            ? "Optional — attach Gmail, GitHub, …"
             : `${connectorCount} selected`}
         </span>
         {danglingConnectorKinds.size > 0 ? (
-          <output className={styles.connDanglingNote} data-testid="connector-binding-dangling">
-            {[...danglingConnectorKinds].join(', ')} — the bound account is no longer configured.
-            Open Connectors and choose a replacement.
+          <output
+            className={styles.connDanglingNote}
+            data-testid="connector-binding-dangling"
+          >
+            {[...danglingConnectorKinds].join(", ")} — the bound account is no
+            longer configured. Open Connectors and choose a replacement.
           </output>
         ) : null}
         <AutomationEditorConnectorsPicker
@@ -1413,7 +1597,11 @@ export default function AutomationEditorScreen({
   const dirty = instructions !== baselineInstructions;
 
   return (
-    <div className={styles.page} data-testid="automation-editor" data-mode={d.mode}>
+    <div
+      className={styles.page}
+      data-testid="automation-editor"
+      data-mode={d.mode}
+    >
       {/* Each suggestion carries its zone as text, not just as `value`: a
           value-only <option> has no accessible name, so a screen reader
           announces an unlabelled list. Label and value are identical, which
@@ -1435,37 +1623,55 @@ export default function AutomationEditorScreen({
       </datalist>
       <div className={styles.head} data-hue={hue}>
         <div className={styles.headIdentity}>
-          <span className={au.auGlyph} data-hue={hue} data-size="lg" aria-hidden="true">
+          <span
+            className={au.auGlyph}
+            data-hue={hue}
+            data-size="lg"
+            aria-hidden="true"
+          >
             <Icon name={glyph as IconName} size={20} />
           </span>
           <div>
             <div className={styles.headName}>
-              {name.trim() || (isCreate ? 'New Automation' : d.name)}
+              {name.trim() || (isCreate ? "New Automation" : d.name)}
             </div>
             <span
               className={cx(au.auStatus, styles.headStatus)}
-              data-tone={isCreate ? 'draft' : enabled ? 'active' : 'paused'}
+              data-tone={isCreate ? "draft" : enabled ? "active" : "paused"}
             >
               <span className={au.auStatusIc} aria-hidden="true">
-                <Icon name={isCreate ? 'Pencil' : enabled ? 'Power' : 'Pause'} size={11} />
+                <Icon
+                  name={isCreate ? "Pencil" : enabled ? "Power" : "Pause"}
+                  size={11}
+                />
               </span>
-              <span>{isCreate ? 'Draft' : enabled ? 'Active' : 'Paused'}</span>
+              <span>{isCreate ? "Draft" : enabled ? "Active" : "Paused"}</span>
             </span>
           </div>
         </div>
         <div className={styles.headActions}>
           {isCreate ? (
-            <IconButton icon="X" ariaLabel="Close" title="Close" onClick={onCancel} />
+            <IconButton
+              icon="X"
+              ariaLabel="Close"
+              title="Close"
+              onClick={onCancel}
+            />
           ) : (
             <>
-              <label className={styles.enableControl} title={enabled ? 'Disable' : 'Enable'}>
-                <span className={styles.enableText}>{enabled ? 'On' : 'Off'}</span>
+              <label
+                className={styles.enableControl}
+                title={enabled ? "Disable" : "Enable"}
+              >
+                <span className={styles.enableText}>
+                  {enabled ? "On" : "Off"}
+                </span>
                 <span className={styles.switch}>
                   <input
                     type="checkbox"
                     role="switch"
                     aria-checked={enabled}
-                    aria-label={`${enabled ? 'Disable' : 'Enable'} automation`}
+                    aria-label={`${enabled ? "Disable" : "Enable"} automation`}
                     checked={enabled}
                     disabled={toggleBusy}
                     onChange={(e) => doToggle(e.target.checked)}
@@ -1517,7 +1723,8 @@ export default function AutomationEditorScreen({
               <div>
                 <h2 className={styles.sectionTitle}>Triggers</h2>
                 <p className={styles.sectionHint}>
-                  Optional. Without a trigger, this only runs when you fire it by hand.
+                  Optional. Without a trigger, this only runs when you fire it
+                  by hand.
                 </p>
               </div>
               {addTriggerMenu}
@@ -1525,20 +1732,25 @@ export default function AutomationEditorScreen({
             {triggers.length === 0 ? (
               <div className={styles.triggerEmptyCard}>
                 <p className={styles.triggerEmpty}>
-                  Manual only for now — add a schedule or watch vault data to run automatically.
+                  Manual only for now — add a schedule or watch vault data to
+                  run automatically.
                 </p>
                 <div className={styles.triggerEmptyActions}>
                   <button
                     type="button"
                     className={styles.triggerEmptyBtn}
-                    onClick={() => setTriggers((t) => [...t, draftTrigger('cron')])}
+                    onClick={() =>
+                      setTriggers((t) => [...t, draftTrigger("cron")])
+                    }
                   >
                     + Schedule
                   </button>
                   <button
                     type="button"
                     className={styles.triggerEmptyBtn}
-                    onClick={() => setTriggers((t) => [...t, draftTrigger('data')])}
+                    onClick={() =>
+                      setTriggers((t) => [...t, draftTrigger("data")])
+                    }
                   >
                     + Data change
                   </button>
@@ -1552,7 +1764,9 @@ export default function AutomationEditorScreen({
             <div className={styles.sectionHeading}>
               <div>
                 <h2 className={styles.sectionTitle}>Notifications</h2>
-                <p className={styles.sectionHint}>What happens when a run fails.</p>
+                <p className={styles.sectionHint}>
+                  What happens when a run fails.
+                </p>
               </div>
             </div>
             <NotificationsPanel
@@ -1565,13 +1779,13 @@ export default function AutomationEditorScreen({
 
           <div className={styles.footer}>
             <p className={styles.footerHint}>
-              {!name.trim()
-                ? 'Name required to save'
-                : isCreate
-                  ? 'Saves, then compiles your instructions into a plan'
+              {name.trim()
+                ? isCreate
+                  ? "Saves, then compiles your instructions into a plan"
                   : dirty
-                    ? 'Saves and recompiles — the instructions changed'
-                    : 'Saves name, triggers, and connectors'}
+                    ? "Saves and recompiles — the instructions changed"
+                    : "Saves name, triggers, and connectors"
+                : "Name required to save"}
             </p>
             <div className={styles.footerActions}>
               <Button variant="ghost" label="Cancel" onClick={onCancel} />
@@ -1580,13 +1794,13 @@ export default function AutomationEditorScreen({
                 label={
                   isCreate
                     ? saving
-                      ? 'Creating…'
-                      : 'Create automation'
+                      ? "Creating…"
+                      : "Create automation"
                     : saving
-                      ? 'Saving…'
+                      ? "Saving…"
                       : dirty
-                        ? 'Save & recompile'
-                        : 'Save changes'
+                        ? "Save & recompile"
+                        : "Save changes"
                 }
                 disabled={!name.trim() || saving}
                 onClick={() => void doSave()}
@@ -1604,7 +1818,7 @@ export default function AutomationEditorScreen({
           onEditInstructions={() => {
             const el = instructionsRef.current;
             if (!el) return;
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
             el.focus();
           }}
           loadAttempts={loadCompileAttempts}

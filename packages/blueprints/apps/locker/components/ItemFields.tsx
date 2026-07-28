@@ -1,22 +1,29 @@
+import { catOf, fmtDate, monoOf, subOf } from "../format.ts";
 // Field descriptors + rows for the detail pane's read view, keyed by the
 // vault's field names — the per-type shape app.js's `fieldDescriptors()` /
 // `fieldRowTpl()` rendered. `secret` fields hide behind a reveal toggle and
 // carry copy; the password field grows a strength meter on reveal; the OTP
 // row runs the real client-side TOTP tick via totp.ts's `useTotp` hook.
-import { armConfirm } from '../kit.ts';
-import { copy } from '../logic.ts';
-import { catOf, fmtDate, monoOf, subOf } from '../format.ts';
-import { strength, useTotp } from '../totp.ts';
-import type { LockerDetail } from '../types.ts';
-import { Icon, KitMeter } from './Shared.tsx';
-import styles from './ItemFields.module.css';
-import shared from './shared.module.css';
+import { armConfirm } from "../kit.ts";
+import { copy } from "../logic.ts";
+import { strength, useTotp } from "../totp.ts";
+import type { LockerDetail } from "../types.ts";
+import { Icon, KitMeter } from "./Shared.tsx";
+
+import styles from "./ItemFields.module.css";
+import shared from "./shared.module.css";
 
 type FieldDesc =
-  | { kind: 'plain'; k: string; val: string; mono: boolean; canCopy: boolean }
-  | { kind: 'link'; k: string; val: string }
-  | { kind: 'secret'; fid: string; k: string; val: string | null | undefined; strength: boolean }
-  | { kind: 'otp'; seed: string };
+  | { kind: "plain"; k: string; val: string; mono: boolean; canCopy: boolean }
+  | { kind: "link"; k: string; val: string }
+  | {
+      kind: "secret";
+      fid: string;
+      k: string;
+      val: string | null | undefined;
+      strength: boolean;
+    }
+  | { kind: "otp"; seed: string };
 
 // Field descriptors for the read view, keyed by the vault's field names.
 function fieldDescriptors(sel: LockerDetail): FieldDesc[] {
@@ -24,50 +31,64 @@ function fieldDescriptors(sel: LockerDetail): FieldDesc[] {
   const plain = (
     k: string,
     val: string | null | undefined,
-    opts: { mono?: boolean } = {},
+    opts: { mono?: boolean } = {}
   ): FieldDesc => ({
-    kind: 'plain',
+    kind: "plain",
     k,
-    val: val || '—',
+    val: val || "—",
     mono: !!opts.mono,
     canCopy: !!val,
   });
-  const link = (k: string, val: string): FieldDesc => ({ kind: 'link', k, val });
+  const link = (k: string, val: string): FieldDesc => ({
+    kind: "link",
+    k,
+    val,
+  });
   const secret = (
     fid: string,
     k: string,
     val: string | null | undefined,
-    opts: { strength?: boolean } = {},
+    opts: { strength?: boolean } = {}
   ): FieldDesc => ({
-    kind: 'secret',
+    kind: "secret",
     fid,
     k,
     val,
     strength: !!opts.strength,
   });
-  const otp = (seed: string): FieldDesc => ({ kind: 'otp', seed });
+  const otp = (seed: string): FieldDesc => ({ kind: "otp", seed });
 
-  if (sel.type === 'login') {
-    fields.push(plain('Username', sel.username));
-    fields.push(secret('pw-' + sel.item_id, 'Password', sel.password, { strength: true }));
-    if (sel.url) fields.push(link('Website', sel.url));
+  if (sel.type === "login") {
+    fields.push(
+      plain("Username", sel.username),
+      secret("pw-" + sel.item_id, "Password", sel.password, { strength: true })
+    );
+    if (sel.url) fields.push(link("Website", sel.url));
     if (sel.otp_seed) fields.push(otp(sel.otp_seed));
-  } else if (sel.type === 'card') {
-    fields.push(secret('num-' + sel.item_id, 'Card number', sel.card_number));
-    fields.push(plain('Cardholder', sel.cardholder));
-    fields.push(plain('Expiry', sel.expiry, { mono: true }));
-    fields.push(secret('cvv-' + sel.item_id, 'CVV', sel.cvv));
-    if (sel.brand) fields.push(plain('Brand', sel.brand));
-  } else if (sel.type === 'identity') {
-    fields.push(plain('Full name', sel.fullname));
-    fields.push(plain('Email', sel.email));
-    fields.push(plain('Phone', sel.phone, { mono: true }));
-    fields.push(plain('Address', sel.address));
-  } else if (sel.type === 'wifi') {
-    fields.push(plain('Network', sel.network));
-    fields.push(secret('wf-' + sel.item_id, 'Password', sel.password, { strength: true }));
-  } else if (sel.type === 'password') {
-    fields.push(secret('pw-' + sel.item_id, 'Password', sel.password, { strength: true }));
+  } else if (sel.type === "card") {
+    fields.push(
+      secret("num-" + sel.item_id, "Card number", sel.card_number),
+      plain("Cardholder", sel.cardholder),
+      plain("Expiry", sel.expiry, { mono: true }),
+      secret("cvv-" + sel.item_id, "CVV", sel.cvv)
+    );
+    if (sel.brand) fields.push(plain("Brand", sel.brand));
+  } else if (sel.type === "identity") {
+    fields.push(
+      plain("Full name", sel.fullname),
+      plain("Email", sel.email),
+      plain("Phone", sel.phone, { mono: true }),
+      plain("Address", sel.address)
+    );
+  } else if (sel.type === "wifi") {
+    fields.push(
+      plain("Network", sel.network),
+      secret("wf-" + sel.item_id, "Password", sel.password, { strength: true })
+    );
+  } else if (sel.type === "password") {
+    fields.push(
+      secret("pw-" + sel.item_id, "Password", sel.password, { strength: true })
+    );
   }
   return fields;
 }
@@ -79,7 +100,7 @@ function OtpFieldRow({ seed }: { seed: string }) {
       <div className={styles.fieldMain}>
         <div className={styles.fieldK}>One-time password</div>
         <div className={styles.otp}>
-          <span className={styles.otpCode}>{code || '••• •••'}</span>
+          <span className={styles.otpCode}>{code || "••• •••"}</span>
           <svg className={styles.ring} viewBox="0 0 36 36">
             <circle
               cx="18"
@@ -109,7 +130,7 @@ function OtpFieldRow({ seed }: { seed: string }) {
           type="button"
           className={styles.fbtn}
           aria-label="Copy"
-          onClick={() => copy(code.replace(' ', ''), 'Code', true)}
+          onClick={() => copy(code.replace(" ", ""), "Code", true)}
         >
           <Icon name="copy" sw={1.6} />
         </button>
@@ -127,9 +148,9 @@ function FieldRow({
   reveal: Record<string, boolean>;
   onToggleReveal: (fid: string) => void;
 }) {
-  if (f.kind === 'otp') return <OtpFieldRow seed={f.seed} />;
+  if (f.kind === "otp") return <OtpFieldRow seed={f.seed} />;
 
-  if (f.kind === 'link') {
+  if (f.kind === "link") {
     return (
       <div className={styles.field}>
         <div className={styles.fieldMain}>
@@ -152,12 +173,18 @@ function FieldRow({
     );
   }
 
-  if (f.kind === 'plain') {
+  if (f.kind === "plain") {
     return (
       <div className={styles.field}>
         <div className={styles.fieldMain}>
           <div className={styles.fieldK}>{f.k}</div>
-          <div className={f.mono ? `${styles.fieldV} ${styles.mono}` : styles.fieldV}>{f.val}</div>
+          <div
+            className={
+              f.mono ? `${styles.fieldV} ${styles.mono}` : styles.fieldV
+            }
+          >
+            {f.val}
+          </div>
         </div>
         {f.canCopy ? (
           <button
@@ -181,12 +208,18 @@ function FieldRow({
       <div className={styles.fieldMain}>
         <div className={styles.fieldK}>{f.k}</div>
         <div className={`${styles.fieldV} ${styles.mono}`}>
-          {f.val ? (revealed ? f.val : '••••••••••••') : '—'}
+          {f.val ? (revealed ? f.val : "••••••••••••") : "—"}
         </div>
         {st ? (
           <div className={shared.strength}>
             <KitMeter ratio={st.ratio} tone={st.tone} />
-            <span style={{ font: 'var(--t-mono)', fontSize: '10px', color: st.color }}>
+            <span
+              style={{
+                font: "var(--t-mono)",
+                fontSize: "10px",
+                color: st.color,
+              }}
+            >
               {st.label}
             </span>
           </div>
@@ -200,7 +233,7 @@ function FieldRow({
             aria-label="Reveal"
             onClick={() => onToggleReveal(f.fid)}
           >
-            <Icon name={revealed ? 'eyeOff' : 'eye'} sw={1.6} />
+            <Icon name={revealed ? "eyeOff" : "eye"} sw={1.6} />
           </button>
           <button
             type="button"
@@ -238,31 +271,38 @@ export function ItemPane({
   if (!sel) {
     return (
       <div className={shared.detailInner}>
-        <div className={shared.listEmpty} style={{ padding: '40px' }}>
+        <div className={shared.listEmpty} style={{ padding: "40px" }}>
           Opening…
         </div>
       </div>
     );
   }
   const fields = fieldDescriptors(sel);
-  const noteText = sel.type === 'note' ? sel.content : sel.notes;
+  const noteText = sel.type === "note" ? sel.content : sel.notes;
   const tags = sel.tags ?? [];
   return (
     <div className={shared.detailInner}>
       <div className={shared.dhead}>
-        <span className={shared.dtile} style={{ background: catOf(sel.type).color }}>
+        <span
+          className={shared.dtile}
+          style={{ background: catOf(sel.type).color }}
+        >
           {monoOf(sel)}
         </span>
         <div style={{ minWidth: 0 }}>
           <div className={shared.dtitle}>{sel.title}</div>
-          <div className={shared.dsub}>{subOf(sel) || catOf(sel.type).label}</div>
+          <div className={shared.dsub}>
+            {subOf(sel) || catOf(sel.type).label}
+          </div>
         </div>
         <div className={styles.dheadTools}>
           {sel.trashed ? null : (
             <>
               <button
                 type="button"
-                className={sel.favorite ? `${styles.dtool} ${styles.on}` : styles.dtool}
+                className={
+                  sel.favorite ? `${styles.dtool} ${styles.on}` : styles.dtool
+                }
                 aria-label="Favorite"
                 onClick={() => onToggleFav(sel)}
               >
@@ -270,7 +310,7 @@ export function ItemPane({
                   name="starFill"
                   size={17}
                   sw={1.6}
-                  fill={sel.favorite ? 'currentColor' : 'none'}
+                  fill={sel.favorite ? "currentColor" : "none"}
                 />
               </button>
               <button
@@ -288,13 +328,13 @@ export function ItemPane({
 
       <div className={shared.fields}>
         {fields.length === 0 ? (
-          <div className={shared.listEmpty} style={{ padding: '20px' }}>
+          <div className={shared.listEmpty} style={{ padding: "20px" }}>
             No fields.
           </div>
         ) : (
           fields.map((f) => (
             <FieldRow
-              key={f.kind === 'secret' ? f.fid : f.kind === 'otp' ? 'otp' : f.k}
+              key={f.kind === "secret" ? f.fid : f.kind === "otp" ? "otp" : f.k}
               f={f}
               reveal={reveal}
               onToggleReveal={onToggleReveal}
@@ -322,10 +362,14 @@ export function ItemPane({
 
       <div className={styles.meta}>Updated {fmtDate(sel.updated_at)}</div>
 
-      <div style={{ display: 'flex', gap: '8px', marginTop: '20px' }}>
+      <div style={{ display: "flex", gap: "8px", marginTop: "20px" }}>
         {sel.trashed ? (
           <>
-            <button type="button" className="kit-btn" onClick={() => onRestore(sel)}>
+            <button
+              type="button"
+              className="kit-btn"
+              onClick={() => onRestore(sel)}
+            >
               Restore
             </button>
             <button
@@ -333,7 +377,12 @@ export function ItemPane({
               className={`kit-btn danger ${styles.del}`}
               style={{ marginRight: 0 }}
               onClick={(e) => {
-                if (!armConfirm(e.currentTarget, { armedLabel: 'Delete forever — sure?' })) return;
+                if (
+                  !armConfirm(e.currentTarget, {
+                    armedLabel: "Delete forever — sure?",
+                  })
+                )
+                  return;
                 onPurge(sel);
               }}
             >

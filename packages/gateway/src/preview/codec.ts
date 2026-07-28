@@ -15,10 +15,11 @@
 // #404, covers the miss). Gateway-side VIDEO decode is deliberately out of v0
 // — poster frames are client-only where cheap.
 
-import jpegJs from 'jpeg-js';
-import { PNG } from 'pngjs';
-import type { PreviewCodec, PreviewOutput } from '@centraid/vault';
-import { rgbaToThumbHash } from './thumbhash.js';
+import type { PreviewCodec, PreviewOutput } from "@centraid/vault";
+import jpegJs from "jpeg-js";
+import { PNG } from "pngjs";
+
+import { rgbaToThumbHash } from "./thumbhash.js";
 
 /** ThumbHash requires ≤100 px on each edge; the placeholder is coarse anyway. */
 const THUMBHASH_EDGE = 100;
@@ -49,7 +50,7 @@ interface Raster {
 function decode(source: Buffer, mediaType: string): Raster | null {
   const type = mediaType.toLowerCase();
   try {
-    if (type === 'image/jpeg' || type === 'image/jpg') {
+    if (type === "image/jpeg" || type === "image/jpg") {
       // `useTArray` returns a Uint8Array (no Buffer copy); the decoder's own
       // resolution/memory caps are a first line of defense before ours.
       const img = jpegJs.decode(source, {
@@ -62,7 +63,7 @@ function decode(source: Buffer, mediaType: string): Raster | null {
         ? { width: img.width, height: img.height, data: img.data }
         : null;
     }
-    if (type === 'image/png') {
+    if (type === "image/png") {
       const png = PNG.sync.read(source);
       return withinCaps(png.width, png.height)
         ? { width: png.width, height: png.height, data: png.data }
@@ -147,9 +148,19 @@ function luminance(src: Raster, x: number, y: number): number {
 }
 
 /** Browser canvas scales every source to the fixed 9×8 dHash sample grid. */
-function sampledLuminance(src: Raster, targetX: number, targetY: number): number {
-  const sx = Math.max(0, Math.min(src.width - 1, ((targetX + 0.5) * src.width) / 9 - 0.5));
-  const sy = Math.max(0, Math.min(src.height - 1, ((targetY + 0.5) * src.height) / 8 - 0.5));
+function sampledLuminance(
+  src: Raster,
+  targetX: number,
+  targetY: number
+): number {
+  const sx = Math.max(
+    0,
+    Math.min(src.width - 1, ((targetX + 0.5) * src.width) / 9 - 0.5)
+  );
+  const sy = Math.max(
+    0,
+    Math.min(src.height - 1, ((targetY + 0.5) * src.height) / 8 - 0.5)
+  );
   const x0 = Math.floor(sx);
   const y0 = Math.floor(sy);
   const x1 = Math.min(src.width - 1, x0 + 1);
@@ -157,13 +168,14 @@ function sampledLuminance(src: Raster, targetX: number, targetY: number): number
   const fx = sx - x0;
   const fy = sy - y0;
   const top = luminance(src, x0, y0) * (1 - fx) + luminance(src, x1, y0) * fx;
-  const bottom = luminance(src, x0, y1) * (1 - fx) + luminance(src, x1, y1) * fx;
+  const bottom =
+    luminance(src, x0, y1) * (1 - fx) + luminance(src, x1, y1) * fx;
   return top * (1 - fy) + bottom * fy;
 }
 
 /** 64-bit difference hash: left sample brighter than its right neighbour. */
 function perceptualHash(src: Raster): string {
-  let hex = '';
+  let hex = "";
   for (let row = 0; row < 8; row += 1) {
     let byte = 0;
     for (let col = 0; col < 8; col += 1) {
@@ -171,7 +183,7 @@ function perceptualHash(src: Raster): string {
       const right = sampledLuminance(src, col + 1, row);
       byte = (byte << 1) | (left > right ? 1 : 0);
     }
-    hex += byte.toString(16).padStart(2, '0');
+    hex += byte.toString(16).padStart(2, "0");
   }
   return hex;
 }
@@ -185,18 +197,22 @@ function perceptualHash(src: Raster): string {
  */
 export function createPortableImagePreviewCodec(): PreviewCodec {
   return {
-    downscale(source: Buffer, mediaType: string, maxEdge: number): PreviewOutput | null {
+    downscale(
+      source: Buffer,
+      mediaType: string,
+      maxEdge: number
+    ): PreviewOutput | null {
       const raster = decode(source, mediaType);
       if (!raster) return null;
       try {
         const scaled = downscaleRaster(raster, maxEdge);
         const encoded = jpegJs.encode(
           { data: scaled.data, width: scaled.width, height: scaled.height },
-          OUTPUT_QUALITY,
+          OUTPUT_QUALITY
         );
         return {
           bytes: Buffer.from(encoded.data),
-          mediaType: 'image/jpeg',
+          mediaType: "image/jpeg",
           width: scaled.width,
           height: scaled.height,
         };
@@ -218,7 +234,7 @@ export function createPortableImagePreviewCodec(): PreviewCodec {
         const bytes = rgbaToThumbHash(small.width, small.height, small.data);
         // Canonical form: unpadded standard base64 (validated the same way on
         // the ingress side, so a device- and a codec-produced hash match).
-        return Buffer.from(bytes).toString('base64').replace(/=+$/, '');
+        return Buffer.from(bytes).toString("base64").replace(/=+$/u, "");
       } catch {
         return null;
       }
@@ -229,9 +245,9 @@ export function createPortableImagePreviewCodec(): PreviewCodec {
 /** Production default: native libvips work stays off the gateway JS thread. */
 export function createImagePreviewCodec(
   nativeLoader: () => Promise<PreviewCodec | undefined> = () =>
-    import('./native-codec.js').then(({ createNativeImagePreviewCodec }) =>
-      createNativeImagePreviewCodec(),
-    ),
+    import("./native-codec.js").then(({ createNativeImagePreviewCodec }) =>
+      createNativeImagePreviewCodec()
+    )
 ): PreviewCodec {
   const portable = createPortableImagePreviewCodec();
   let native: Promise<PreviewCodec | undefined> | undefined;
@@ -241,7 +257,7 @@ export function createImagePreviewCodec(
   };
   const withFallback = async <T>(
     nativeCall: (codec: PreviewCodec) => T | Promise<T>,
-    portableCall: () => T | Promise<T>,
+    portableCall: () => T | Promise<T>
   ): Promise<T> => {
     const codec = await loadNative();
     if (!codec) return await portableCall();
@@ -255,17 +271,17 @@ export function createImagePreviewCodec(
     downscale: (source, mediaType, maxEdge) =>
       withFallback(
         (codec) => codec.downscale(source, mediaType, maxEdge),
-        () => portable.downscale(source, mediaType, maxEdge),
+        () => portable.downscale(source, mediaType, maxEdge)
       ),
     perceptualHash: (source, mediaType) =>
       withFallback(
         (codec) => codec.perceptualHash(source, mediaType),
-        () => portable.perceptualHash(source, mediaType),
+        () => portable.perceptualHash(source, mediaType)
       ),
     thumbhash: (source, mediaType) =>
       withFallback(
         (codec) => codec.thumbhash(source, mediaType),
-        () => portable.thumbhash(source, mediaType),
+        () => portable.thumbhash(source, mediaType)
       ),
   };
 }

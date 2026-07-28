@@ -1,26 +1,35 @@
-import { beforeEach, expect, test, vi } from 'vitest';
-import { runAutomation } from './automations';
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
-const { fetchJson } = vi.hoisted(() => ({ fetchJson: vi.fn() }));
+import { runAutomation } from "./automations";
 
-vi.mock('./gateway', () => ({
-  authHeader: () => ({ authorization: 'Bearer paired' }),
-  fetchJson,
-  requireGatewayBase: async () => 'https://gateway.example',
+const { fetchJson } = vi.hoisted(() => ({
+  // `fetchJson` is generic (`<T>(href, init?) => Promise<T>`); a typed mock erases
+  // the type parameter, so `Mock<...>` stops being assignable to the export.
+  fetchJson: vi.fn<(href: string, init?: RequestInit) => Promise<unknown>>(),
 }));
 
-beforeEach(() => {
-  fetchJson.mockReset();
-});
+vi.mock(import("./gateway") as Promise<unknown>, () => ({
+  authHeader: () => ({ authorization: "Bearer paired" }),
+  fetchJson,
+  requireGatewayBase: async () => "https://gateway.example",
+}));
 
-test('runAutomation consumes the native turnId response contract', async () => {
-  fetchJson.mockResolvedValue({ turnId: 'brief/main:manual:1' });
-  await expect(runAutomation('brief/main')).resolves.toBe('brief/main:manual:1');
-  expect(fetchJson).toHaveBeenCalledWith(
-    'https://gateway.example/centraid/_automations/turn-now?ref=brief%2Fmain',
-    {
-      headers: { authorization: 'Bearer paired' },
-      method: 'POST',
-    },
-  );
+describe("automations", () => {
+  beforeEach(() => {
+    fetchJson.mockReset();
+  });
+
+  test("runAutomation consumes the native turnId response contract", async () => {
+    fetchJson.mockResolvedValue({ turnId: "brief/main:manual:1" });
+    await expect(runAutomation("brief/main")).resolves.toBe(
+      "brief/main:manual:1"
+    );
+    expect(fetchJson).toHaveBeenCalledWith(
+      "https://gateway.example/centraid/_automations/turn-now?ref=brief%2Fmain",
+      {
+        headers: { authorization: "Bearer paired" },
+        method: "POST",
+      }
+    );
+  });
 });

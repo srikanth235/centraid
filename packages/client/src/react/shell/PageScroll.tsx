@@ -1,7 +1,9 @@
-import type { JSX, ReactNode } from 'react';
-import mainScrollCss from '../styles/mainScroll.module.css';
-import { cx } from '../ui/cx.js';
-import styles from './PageScroll.module.css';
+import type { JSX, ReactNode } from "react";
+
+import { cx } from "../ui/cx.js";
+
+import mainScrollCss from "../styles/mainScroll.module.css";
+import styles from "./PageScroll.module.css";
 
 // Port of the vanilla `pageScroll` — the standard `.has-wall > .cd-main-scroll`
 // page body the shell frame hosts, with an optional `.cd-page-head` title row.
@@ -21,7 +23,12 @@ export default function PageScroll({
 }): JSX.Element {
   return (
     <div className={mainScrollCss.hasWall}>
-      <div className={cx(mainScrollCss.mainScroll, flush ? mainScrollCss.flush : undefined)}>
+      <div
+        className={cx(
+          mainScrollCss.mainScroll,
+          flush ? mainScrollCss.flush : undefined
+        )}
+      >
         {title !== undefined || subtitle !== undefined ? (
           <div className={styles.pageHead}>
             <h1>{title}</h1>

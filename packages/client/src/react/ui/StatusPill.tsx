@@ -1,6 +1,8 @@
-import type { JSX, ReactNode } from 'react';
-import { cx } from './cx.js';
-import styles from './StatusPill.module.css';
+import type { JSX, ReactNode } from "react";
+
+import { cx } from "./cx.js";
+
+import styles from "./StatusPill.module.css";
 
 /** Known tones: 'new' | 'draft' | 'live' (anything else renders ink-3). */
 export type StatusTone = string;

@@ -1,14 +1,13 @@
-import { open, type DB } from '@op-engineering/op-sqlite';
-
 import {
   replicaDatabaseName,
   type ReplicaBindValue,
   type ReplicaDigest,
   type ReplicaIdentity,
   type ReplicaSqliteDriver,
-} from '@centraid/client/replica/native';
+} from "@centraid/client/replica/native";
+import { open, type DB } from "@op-engineering/op-sqlite";
 
-import { ReplicaFts5UnavailableError } from './replica-fts5-error';
+import { ReplicaFts5UnavailableError } from "./replica-fts5-error";
 
 /** Drives the shared replica store core against an in-process op-sqlite handle. */
 export class OpSqliteDriver implements ReplicaSqliteDriver {
@@ -30,7 +29,10 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
     this.db.executeSync(sql, bind as ReplicaBindValue[]);
   }
 
-  all<T extends object>(sql: string, bind: readonly ReplicaBindValue[] = []): T[] {
+  all<T extends object>(
+    sql: string,
+    bind: readonly ReplicaBindValue[] = []
+  ): T[] {
     return this.db.executeSync(sql, bind as ReplicaBindValue[]).rows as T[];
   }
 
@@ -38,7 +40,8 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
     // op-sqlite's synchronous path runs one statement per call; the store core
     // only passes multi-statement scripts to `exec` (DDL, PRAGMA blocks, tx
     // control), so split on `;` and skip blank fragments.
-    for (const statement of splitStatements(sql)) this.db.executeSync(statement);
+    for (const statement of splitStatements(sql))
+      this.db.executeSync(statement);
   }
 
   close(): void {
@@ -47,8 +50,10 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
 
   assertCapabilities(): void {
     try {
-      this.db.executeSync('CREATE VIRTUAL TABLE IF NOT EXISTS temp.__fts5_probe USING fts5(x)');
-      this.db.executeSync('DROP TABLE IF EXISTS temp.__fts5_probe');
+      this.db.executeSync(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS temp.__fts5_probe USING fts5(x)"
+      );
+      this.db.executeSync("DROP TABLE IF EXISTS temp.__fts5_probe");
     } catch {
       throw new ReplicaFts5UnavailableError();
     }
@@ -63,16 +68,19 @@ export class OpSqliteDriver implements ReplicaSqliteDriver {
  */
 export async function openNativeReplicaDriver(
   identity: ReplicaIdentity,
-  digest?: ReplicaDigest,
+  digest?: ReplicaDigest
 ): Promise<OpSqliteDriver> {
-  const name = (await replicaDatabaseName(identity, digest)).replace(/^\/+/, '');
+  const name = (await replicaDatabaseName(identity, digest)).replace(
+    /^\/+/u,
+    ""
+  );
   return OpSqliteDriver.open({ name });
 }
 
 /** Split a SQL script into executable statements, ignoring blank fragments. */
 function splitStatements(sql: string): string[] {
   return sql
-    .split(';')
+    .split(";")
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
 }

@@ -9,19 +9,28 @@
  * squarely owner-facing, not liveness-probe material).
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { DiagnosticsBundle } from '../serve/gateway-diagnostics.js';
-import { sendError, sendJson } from './route-helpers.js';
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-const DIAGNOSTICS_PATH = '/centraid/_gateway/diagnostics';
+import type { RouteHandler } from "../serve/build-gateway.js";
+import type { DiagnosticsBundle } from "../serve/gateway-diagnostics.js";
+import { sendError, sendJson } from "./route-helpers.js";
 
-export function makeDiagnosticsRouteHandler(build: () => Promise<DiagnosticsBundle>): RouteHandler {
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
+const DIAGNOSTICS_PATH = "/centraid/_gateway/diagnostics";
+
+export function makeDiagnosticsRouteHandler(
+  build: () => Promise<DiagnosticsBundle>
+): RouteHandler {
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
+    const url = new URL(req.url ?? "/", "http://gateway.local");
     if (url.pathname !== DIAGNOSTICS_PATH) return false;
-    if ((req.method ?? 'GET') !== 'GET') {
-      return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+    if ((req.method ?? "GET") !== "GET") {
+      return sendJson(res, 405, {
+        error: "method_not_allowed",
+        message: "GET only",
+      });
     }
     try {
       return sendJson(res, 200, await build());

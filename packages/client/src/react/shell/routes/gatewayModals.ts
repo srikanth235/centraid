@@ -1,4 +1,4 @@
-import type { CentraidRedeemGatewayPairingResult } from '../../../centraid-api.js';
+import type { CentraidRedeemGatewayPairingResult } from "../../../centraid-api.js";
 
 // Gateway I/O for the "Add gateway" flow (issue #376), mirroring spaceModals.ts's
 // split: chrome (GatewayModal / GatewayPairingForm) is React, the gateway I/O
@@ -19,10 +19,12 @@ export interface GatewayConnectFailure {
   /** Already run through `friendlyGatewayError` — safe to show as-is. */
   message: string;
 }
-export type GatewayConnectResult = GatewayConnectSuccess | GatewayConnectFailure;
+export type GatewayConnectResult =
+  | GatewayConnectSuccess
+  | GatewayConnectFailure;
 
 export type GatewayPairingInput = {
-  kind: 'ticket';
+  kind: "ticket";
   ticket: string;
   label?: string;
   rememberDevice?: boolean;
@@ -32,11 +34,13 @@ export type GatewayPairingInput = {
 // Anything not in this map (or the raw `addGateway` throw path) falls back to
 // the server-supplied message, which is itself written to be shown as-is.
 const FRIENDLY_ERRORS: Record<string, string> = {
-  invalid_ticket: "That pairing code isn't valid — double-check you copied the whole thing.",
-  ticket_expired: 'This ticket has expired — ask for a new one.',
-  invalid_input: 'That ticket looks malformed — double-check it and try again.',
+  invalid_ticket:
+    "That pairing code isn't valid — double-check you copied the whole thing.",
+  ticket_expired: "This ticket has expired — ask for a new one.",
+  invalid_input: "That ticket looks malformed — double-check it and try again.",
   unreachable: "Couldn't reach that gateway — check that it's running.",
-  bad_response: 'The gateway sent back something unexpected. Try again in a moment.',
+  bad_response:
+    "The gateway sent back something unexpected. Try again in a moment.",
 };
 
 /** Map a stable error code to friendly copy; falls back to the raw message. */
@@ -44,11 +48,13 @@ export function friendlyGatewayError(error: string, message: string): string {
   return FRIENDLY_ERRORS[error] ?? message;
 }
 
-function foldRedeemResult(res: CentraidRedeemGatewayPairingResult): GatewayConnectResult {
+function foldRedeemResult(
+  res: CentraidRedeemGatewayPairingResult
+): GatewayConnectResult {
   if (res.ok) {
     return {
       gatewayId: res.gatewayId,
-      label: res.vaultName || 'your vault',
+      label: res.vaultName || "your vault",
       ok: true,
       vaultId: res.vaultId,
     };
@@ -63,7 +69,9 @@ function foldRedeemResult(res: CentraidRedeemGatewayPairingResult): GatewayConne
  * throws — the `redeemGatewayPairing` IPC already resolves failures as
  * `{ok:false}`.
  */
-export async function connectGateway(input: GatewayPairingInput): Promise<GatewayConnectResult> {
+export async function connectGateway(
+  input: GatewayPairingInput
+): Promise<GatewayConnectResult> {
   const res = await window.CentraidApi.redeemGatewayPairing({
     label: input.label,
     rememberDevice: input.rememberDevice ?? false,

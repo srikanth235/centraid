@@ -12,9 +12,12 @@
  * ledger and only then goes live — see `automations-routes.ts`.
  */
 
-import type { AutomationTurnStreamEvent } from '@centraid/app-engine';
+import type { AutomationTurnStreamEvent } from "@centraid/app-engine";
 
-export type RunEventListener = (ev: AutomationTurnStreamEvent, serialized: string) => void;
+export type RunEventListener = (
+  ev: AutomationTurnStreamEvent,
+  serialized: string
+) => void;
 
 export class RunEventBus {
   private readonly listeners = new Map<string, Set<RunEventListener>>();

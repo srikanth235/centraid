@@ -5,14 +5,14 @@
 // kitAsk. The `./queries/*` imports live ONLY here so they never reach the
 // served/browser bundle (the gateway refuses to serve node-side handlers).
 
-import { Root, CHANGE_TABLES } from './app-root.tsx';
-import libraryQuery from './queries/library.ts';
-import noteQuery from './queries/note.ts';
-import searchQuery from './queries/search.ts';
-import type { InlineAppModule } from '../inline-types.ts';
+import type { InlineAppModule } from "../inline-types.ts";
+import { Root, CHANGE_TABLES } from "./app-root.tsx";
+import libraryQuery from "./queries/library.ts";
+import noteQuery from "./queries/note.ts";
+import searchQuery from "./queries/search.ts";
 
 const notesInlineApp: InlineAppModule = {
-  appId: 'notes',
+  appId: "notes",
   changeTables: CHANGE_TABLES,
   // The query defaults are typed against the ambient `HandlerArgs`; the inline
   // contract types `ctx` as `unknown`, so bridge the two here (the shell builds
@@ -21,16 +21,16 @@ const notesInlineApp: InlineAppModule = {
     library: { default: libraryQuery },
     note: { default: noteQuery },
     search: { default: searchQuery },
-  } as unknown as InlineAppModule['queries'],
+  } as unknown as InlineAppModule["queries"],
   kitAsk: {
-    scope: 'notes',
-    placeholder: 'Ask your notes…',
+    scope: "notes",
+    placeholder: "Ask your notes…",
     intro:
-      'Ask me to write, find, summarise or file a note. New notes show for your approval before they touch the vault.',
+      "Ask me to write, find, summarise or file a note. New notes show for your approval before they touch the vault.",
     suggest: [
-      'Summarise my Q3 roadmap note',
-      'New note from this',
-      'What did I note about the offline story?',
+      "Summarise my Q3 roadmap note",
+      "New note from this",
+      "What did I note about the offline story?",
     ],
   },
   Root,

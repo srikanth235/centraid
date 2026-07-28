@@ -39,20 +39,20 @@
 // stale, not clean — and a self-test of its own rules runs first so the linter
 // cannot rot into always-passing.
 
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve, relative } from 'node:path';
+import { readFileSync, existsSync } from "node:fs";
+import path from "node:path";
 
-const ROOT = resolve(import.meta.dirname, '..');
+const ROOT = path.resolve(import.meta.dirname, "..");
 
 // Every file that embeds Maestro YAML in a template literal. The flows plus the
 // harness helpers (configureGateway/restart) that emit YAML on their behalf.
 // A flow that lives elsewhere is unchecked — add it here, exactly like
 // lint-css-classes.mjs's TARGETS.
 const FILES = [
-  'tests/agent-e2e-mobile/flows/home-loads.mjs',
-  'tests/agent-e2e-mobile/flows/native-v0-resilience.mjs',
-  'tests/agent-e2e-mobile/flows/template-gate.mjs',
-  'tests/agent-e2e-mobile/lib/harness.mjs',
+  "tests/agent-e2e-mobile/flows/home-loads.mjs",
+  "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
+  "tests/agent-e2e-mobile/flows/template-gate.mjs",
+  "tests/agent-e2e-mobile/lib/harness.mjs",
 ];
 
 // Tab-bar labels + route names. These come from apps/mobile/App.tsx (Tab.Screen
@@ -61,43 +61,58 @@ const FILES = [
 // assertion on any of these cannot distinguish one screen from another. Keep in
 // sync with the navigator; drift only ever makes this MORE permissive, which a
 // stale-list review will catch when a renamed tab stops being flagged.
-const ROUTE_NAMES = new Set(['Home', 'Photos', 'Docs', 'Agenda', 'Settings', 'Apps']);
+const ROUTE_NAMES = new Set([
+  "Home",
+  "Photos",
+  "Docs",
+  "Agenda",
+  "Settings",
+  "Apps",
+]);
 
 // Maestro commands this linter reasons about. Others (takeScreenshot, hideKeyboard,
 // scrollUntilVisible, runFlow, back, …) are stepped over.
-const INPUT_CMDS = new Set(['inputText']);
-const ASSERT_CMDS = new Set(['assertVisible', 'assertNotVisible', 'extendedWaitUntil']);
-const CLEAR_CMDS = new Set(['launchApp']); // may reset a field's content (clearState)
+const INPUT_CMDS = new Set(["inputText"]);
+const ASSERT_CMDS = new Set([
+  "assertVisible",
+  "assertNotVisible",
+  "extendedWaitUntil",
+]);
+const CLEAR_CMDS = new Set(["launchApp"]); // may reset a field's content (clearState)
 const ALL_CMDS = new Set([
   ...INPUT_CMDS,
   ...ASSERT_CMDS,
   ...CLEAR_CMDS,
-  'tapOn',
-  'eraseText',
-  'stopApp',
+  "tapOn",
+  "eraseText",
+  "stopApp",
 ]);
 
-const STEP_RE = /^(\s*)-\s+([A-Za-z]+)\s*:?(.*)$/;
+const STEP_RE = /^(?<indent>\s*)-\s+(?<cmd>[A-Za-z]+)\s*:?(?<rest>.*)$/u;
 
 /** Pull the primary matcher value out of a step: the inline value, or the
  * `text:`/`visible:` child a line or two below. Returns the raw token — the
  * contents of a "quoted" literal, or a `${interpolation}` verbatim — or null. */
 function stepValue(lines, i) {
   const m = STEP_RE.exec(lines[i]);
-  if (!m) return null;
-  const inline = m[3].trim();
+  if (!m?.groups) return null;
+  const inline = (m.groups.rest ?? "").trim();
   const fromInline = literalOrInterp(inline);
   if (fromInline != null) return fromInline;
   // Block form: scan the immediate children for `text:` / `visible:`.
-  const baseIndent = m[1].length;
+  const baseIndent = (m.groups.indent ?? "").length;
   for (let j = i + 1; j < lines.length && j <= i + 4; j += 1) {
-    const child = /^(\s*)(text|visible)\s*:(.*)$/.exec(lines[j]);
+    const child = /^\s*(?:text|visible)\s*:(?<rest>.*)$/u.exec(lines[j]);
     if (!child) {
       // Stop at a dedent back to sibling level — we have left this step.
-      if (/^\s*-\s/.test(lines[j]) && (lines[j].match(/^\s*/)[0].length ?? 0) <= baseIndent) break;
+      if (
+        /^\s*-\s/u.test(lines[j]) &&
+        (lines[j].match(/^\s*/u)[0].length ?? 0) <= baseIndent
+      )
+        break;
       continue;
     }
-    const v = literalOrInterp(child[3].trim());
+    const v = literalOrInterp((child.groups?.rest ?? "").trim());
     if (v != null) return v;
     // `visible:` with a nested `text:` on the following line.
   }
@@ -107,18 +122,18 @@ function stepValue(lines, i) {
 /** A `"literal"` → its inner text; a `${expr}` → the expr verbatim; else null. */
 function literalOrInterp(s) {
   if (!s) return null;
-  const q = /^"([^"]*)"/.exec(s);
-  if (q) return q[1];
-  const sq = /^'([^']*)'/.exec(s);
-  if (sq) return sq[1];
-  if (s.startsWith('${')) return s; // interpolation — compared by identity
+  const q = /^"(?<inner>[^"]*)"/u.exec(s);
+  if (q) return q.groups?.inner ?? null;
+  const sq = /^'(?<inner>[^']*)'/u.exec(s);
+  if (sq) return sq.groups?.inner ?? null;
+  if (s.startsWith("${")) return s; // interpolation — compared by identity
   return null;
 }
 
-const isInterp = (v) => v != null && v.startsWith('${');
+const isInterp = (v) => v != null && v.startsWith("${");
 /** Strip a trailing Maestro regex `.*` and surrounding whitespace for the
  * route-name exact match ("Docs.*" is still an assertion on the Docs label). */
-const asPlain = (v) => (isInterp(v) ? v : v.replace(/\.\*$/, '').trim());
+const asPlain = (v) => (isInterp(v) ? v : v.replace(/\.\*$/u, "").trim());
 
 /** Does a later assertion `a` observe the value `typed`? Interpolations match by
  * identity (same `${expr}`); literals match if the assertion's text contains the
@@ -135,12 +150,12 @@ function observes(typed, a) {
  * upward across contiguous `#` comment (and blank) lines — a reason can wrap
  * onto more than one line — and stops at the first line that is neither. */
 function isAllowed(lines, i, rule) {
-  const marker = new RegExp(`#\\s*e2e-lint-allow:\\s*${rule}\\b`);
+  const marker = new RegExp(`#\\s*e2e-lint-allow:\\s*${rule}\\b`, "u");
   if (marker.test(lines[i])) return true;
   for (let j = i - 1; j >= 0; j -= 1) {
     const t = lines[j].trim();
-    if (t === '') continue;
-    if (!t.startsWith('#')) break; // left the comment block above the step
+    if (t === "") continue;
+    if (!t.startsWith("#")) break; // left the comment block above the step
     if (marker.test(lines[j])) return true;
   }
   return false;
@@ -151,14 +166,14 @@ function isAllowed(lines, i, rule) {
  * the caller can enforce the silent-no-op guard. Exported for the self-test.
  */
 export function lintFlowSource(text) {
-  const lines = text.split('\n');
+  const lines = text.split("\n");
   const findings = [];
   // Parse the ordered list of Maestro steps we care about.
   const steps = [];
   for (let i = 0; i < lines.length; i += 1) {
     const m = STEP_RE.exec(lines[i]);
-    if (!m) continue;
-    const cmd = m[2];
+    if (!m?.groups) continue;
+    const cmd = m.groups.cmd;
     if (!ALL_CMDS.has(cmd)) continue;
     steps.push({ i, cmd, value: stepValue(lines, i) });
   }
@@ -169,10 +184,10 @@ export function lintFlowSource(text) {
     // RULE route-name — an assertion keyed on a bare tab/route label.
     if (ASSERT_CMDS.has(step.cmd) && step.value != null) {
       const plain = asPlain(step.value);
-      if (ROUTE_NAMES.has(plain) && !isAllowed(lines, step.i, 'route-name')) {
+      if (ROUTE_NAMES.has(plain) && !isAllowed(lines, step.i, "route-name")) {
         findings.push({
           line: step.i + 1,
-          rule: 'route-name',
+          rule: "route-name",
           message:
             `${step.cmd} keys on "${plain}", a tab-bar label / route name drawn on every ` +
             `screen — it passes even when navigation did nothing. Assert a string this ` +
@@ -183,14 +198,14 @@ export function lintFlowSource(text) {
 
     // RULE input-asserted — a typed value never observed before it could be wiped.
     if (INPUT_CMDS.has(step.cmd) && step.value != null) {
-      if (isAllowed(lines, step.i, 'unasserted-input')) continue;
+      if (isAllowed(lines, step.i, "unasserted-input")) continue;
       let observed = false;
       for (let t = s + 1; t < steps.length; t += 1) {
         const later = steps[t];
         // A clearState launch wipes the field — stop looking past it.
-        if (later.cmd === 'launchApp') {
-          const block = lines.slice(later.i, later.i + 4).join('\n');
-          if (/clearState:\s*true/.test(block)) break;
+        if (later.cmd === "launchApp") {
+          const block = lines.slice(later.i, later.i + 4).join("\n");
+          if (/clearState:\s*true/u.test(block)) break;
         }
         if (ASSERT_CMDS.has(later.cmd) && observes(step.value, later.value)) {
           observed = true;
@@ -201,7 +216,7 @@ export function lintFlowSource(text) {
         const shown = isInterp(step.value) ? step.value : `"${step.value}"`;
         findings.push({
           line: step.i + 1,
-          rule: 'unasserted-input',
+          rule: "unasserted-input",
           message:
             `inputText ${shown} is never asserted — nothing proves it landed in the field. ` +
             `Follow it with assertVisible on that value, or mark it ` +
@@ -220,45 +235,45 @@ export function lintFlowSource(text) {
 function selfTest() {
   const cases = [
     {
-      name: 'route-name assertion flagged',
+      name: "route-name assertion flagged",
       src: '- tapOn:\n    text: "Docs.*"\n- assertVisible: "Docs"\n',
-      want: ['route-name'],
+      want: ["route-name"],
     },
     {
-      name: 'screen-unique assertion clean',
+      name: "screen-unique assertion clean",
       src: '- tapOn:\n    text: "Docs.*"\n- assertVisible: "Add document or folder"\n',
       want: [],
     },
     {
-      name: 'unasserted literal input flagged',
+      name: "unasserted literal input flagged",
       src: '- inputText: "hello"\n- tapOn: "Save"\n',
-      want: ['unasserted-input'],
+      want: ["unasserted-input"],
     },
     {
-      name: 'asserted literal input clean',
+      name: "asserted literal input clean",
       src: '- inputText: "hello"\n- assertVisible:\n    text: "hello"\n',
       want: [],
     },
     {
-      name: 'interpolated input asserted by same token clean',
+      name: "interpolated input asserted by same token clean",
       // The `${…}` here MUST stay an uninterpolated literal — the linter compares
       // interpolation tokens by identity, so this fixture feeds it the raw token.
       // oxlint-disable-next-line no-template-curly-in-string
-      src: '- inputText: ${JSON.stringify(url)}\n- assertVisible:\n    text: ${JSON.stringify(url)}\n',
+      src: "- inputText: ${JSON.stringify(url)}\n- assertVisible:\n    text: ${JSON.stringify(url)}\n",
       want: [],
     },
     {
-      name: 'assertion after clearState does not count',
+      name: "assertion after clearState does not count",
       src: '- inputText: "hello"\n- launchApp:\n    clearState: true\n- assertVisible: "hello"\n',
-      want: ['unasserted-input'],
+      want: ["unasserted-input"],
     },
     {
-      name: 'allow-annotation on line above suppresses',
+      name: "allow-annotation on line above suppresses",
       src: '# e2e-lint-allow: unasserted-input — throwaway\n- inputText: "x"\n- tapOn: "Save"\n',
       want: [],
     },
     {
-      name: 'route-name allow-annotation suppresses',
+      name: "route-name allow-annotation suppresses",
       src: '# e2e-lint-allow: route-name — deliberate\n- assertVisible: "Docs"\n',
       want: [],
     },
@@ -270,7 +285,7 @@ function selfTest() {
     const want = [...c.want].sort();
     if (JSON.stringify(got) !== JSON.stringify(want)) {
       console.error(
-        `FAIL — lint-e2e-flows self-test "${c.name}": expected [${want}], got [${got}]`,
+        `FAIL — lint-e2e-flows self-test "${c.name}": expected [${want}], got [${got}]`
       );
       process.exit(1);
     }
@@ -283,13 +298,15 @@ function main() {
   let filesScanned = 0;
   const findings = [];
   for (const rel of FILES) {
-    const abs = resolve(ROOT, rel);
+    const abs = path.resolve(ROOT, rel);
     if (!existsSync(abs)) {
-      console.error(`FAIL — listed flow file is missing: ${rel}. Update FILES in this linter.`);
+      console.error(
+        `FAIL — listed flow file is missing: ${rel}. Update FILES in this linter.`
+      );
       process.exit(1);
     }
     filesScanned += 1;
-    const { findings: fs, steps } = lintFlowSource(readFileSync(abs, 'utf8'));
+    const { findings: fs, steps } = lintFlowSource(readFileSync(abs, "utf8"));
     stepsScanned += steps;
     for (const f of fs) findings.push({ file: rel, ...f });
   }
@@ -298,25 +315,29 @@ function main() {
   if (stepsScanned === 0) {
     console.error(
       `FAIL — scanned ${filesScanned} file(s) but matched zero Maestro steps. ` +
-        `The step grammar or FILES list is stale, not clean.`,
+        `The step grammar or FILES list is stale, not clean.`
     );
     process.exit(1);
   }
 
   if (findings.length > 0) {
     console.error(
-      `\nFAIL — ${findings.length} agent-e2e flow assertion(s) observe the wrong thing:\n`,
+      `\nFAIL — ${findings.length} agent-e2e flow assertion(s) observe the wrong thing:\n`
     );
     for (const f of findings) {
-      console.error(`  ${relative(ROOT, resolve(ROOT, f.file))}:${f.line} [${f.rule}]`);
+      console.error(
+        `  ${path.relative(ROOT, path.resolve(ROOT, f.file))}:${f.line} [${f.rule}]`
+      );
       console.error(`    ${f.message}\n`);
     }
-    console.error(`See tests/agent-e2e-mobile/AGENTS.md "Flow authoring rules" and issue #483.\n`);
+    console.error(
+      `See tests/agent-e2e-mobile/AGENTS.md "Flow authoring rules" and issue #483.\n`
+    );
     process.exit(1);
   }
 
   console.log(
-    `ok   e2e-flows — ${stepsScanned} Maestro step(s) across ${filesScanned} file(s), no vacuous assertions`,
+    `ok   e2e-flows — ${stepsScanned} Maestro step(s) across ${filesScanned} file(s), no vacuous assertions`
   );
 }
 

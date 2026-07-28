@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from "vitest/config";
 
 /**
  * Unit tests for pure test-report / mutation helpers + agent-e2e harness
@@ -7,25 +7,25 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
-    name: 'test-report-scripts',
+    name: "test-report-scripts",
     include: [
-      'scripts/test-report/**/*.test.mjs',
-      'scripts/mutation/**/*.test.mjs',
-      'tests/agent-e2e-shared/**/*.test.mjs',
+      "scripts/test-report/**/*.test.mjs",
+      "scripts/mutation/**/*.test.mjs",
+      "tests/agent-e2e-shared/**/*.test.mjs",
     ],
-    environment: 'node',
-    pool: 'forks',
+    environment: "node",
+    pool: "forks",
     expect: { requireAssertions: true },
     coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json-summary'],
-      reportsDirectory: './artifacts/coverage-scripts',
+      provider: "v8",
+      reporter: ["text", "json-summary"],
+      reportsDirectory: "./artifacts/coverage-scripts",
       include: [
-        'scripts/test-report/**/*.{mjs,js,ts}',
-        'scripts/mutation/**/*.{mjs,js,ts}',
-        'tests/agent-e2e-shared/**/*.{mjs,js}',
+        "scripts/test-report/**/*.{mjs,js,ts}",
+        "scripts/mutation/**/*.{mjs,js,ts}",
+        "tests/agent-e2e-shared/**/*.{mjs,js}",
       ],
-      exclude: ['**/*.test.mjs', '**/*.test.ts', '**/vitest.config.ts'],
+      exclude: ["**/*.test.mjs", "**/*.test.ts", "**/vitest.config.ts"],
       // Conservative seed under realistic unit coverage of pure helpers
       // (~36% lines measured with current unit set); ratchet upward once
       // more script modules gain tests (up-only floors live elsewhere).

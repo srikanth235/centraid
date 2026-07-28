@@ -8,13 +8,14 @@
 // App.tsx (nav container + status bar) and `useTheme()` resolve through
 // `resolveScheme` here so the whole app agrees on one scheme.
 
-import { useSyncExternalStore } from 'react';
-import { Store } from '../../storage';
-import type { Scheme } from './resolve';
+import { useSyncExternalStore } from "react";
 
-export type Appearance = 'system' | 'light' | 'dark';
+import { Store } from "../../storage";
+import type { Scheme } from "./resolve";
 
-const KEY = 'settings.appearance';
+export type Appearance = "system" | "light" | "dark";
+
+const KEY = "settings.appearance";
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -22,17 +23,17 @@ function emit(): void {
 }
 
 function coerce(value: unknown): Appearance {
-  return value === 'light' || value === 'dark' ? value : 'system';
+  return value === "light" || value === "dark" ? value : "system";
 }
 
 // Synchronous read off the Store's in-memory cache — call `hydrateAppearance()`
 // once at boot so this reflects the persisted choice from the first render.
 export function getAppearance(): Appearance {
-  return coerce(Store.get<Appearance>(KEY, 'system'));
+  return coerce(Store.get<Appearance>(KEY, "system"));
 }
 
 export async function hydrateAppearance(): Promise<Appearance> {
-  const value = coerce(await Store.hydrate<Appearance>(KEY, 'system'));
+  const value = coerce(await Store.hydrate<Appearance>(KEY, "system"));
   emit();
   return value;
 }
@@ -50,7 +51,11 @@ export function subscribeAppearance(cb: () => void): () => void {
 }
 
 export function useAppearance(): Appearance {
-  return useSyncExternalStore(subscribeAppearance, getAppearance, getAppearance);
+  return useSyncExternalStore(
+    subscribeAppearance,
+    getAppearance,
+    getAppearance
+  );
 }
 
 // Fold the preference over the live OS scheme into the single scheme the theme
@@ -60,8 +65,8 @@ export function useAppearance(): Appearance {
 // light default below; null/undefined stay accepted for non-hook callers.
 export function resolveScheme(
   pref: Appearance,
-  osScheme: 'light' | 'dark' | 'unspecified' | null | undefined,
+  osScheme: "light" | "dark" | "unspecified" | null | undefined
 ): Scheme {
-  if (pref === 'light' || pref === 'dark') return pref;
-  return osScheme === 'dark' ? 'dark' : 'light';
+  if (pref === "light" || pref === "dark") return pref;
+  return osScheme === "dark" ? "dark" : "light";
 }

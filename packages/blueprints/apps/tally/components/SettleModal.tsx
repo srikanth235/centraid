@@ -2,10 +2,11 @@
 // amount, and a live "X pays Y $Z" hint. `st` is app.tsx's mutable
 // `state.settle`; `onPatch` mutates it in place and re-renders, same pattern
 // as ExpenseModal's `onPatch`.
-import { curSymbolFor, first, money, toCents } from '../format.ts';
-import type { Member, Person, SettleModel } from '../types.ts';
-import { ModalBackdrop } from './Shared.tsx';
-import shared from './shared.module.css';
+import { curSymbolFor, first, money, toCents } from "../format.ts";
+import type { Member, Person, SettleModel } from "../types.ts";
+import { ModalBackdrop } from "./Shared.tsx";
+
+import shared from "./shared.module.css";
 
 function SettleSelect({
   people,
@@ -18,9 +19,13 @@ function SettleSelect({
   me: string | null;
   onChange: (value: string) => void;
 }) {
-  const nameFor = (p: Member) => (p.party_id === me ? 'You' : p.name);
+  const nameFor = (p: Member) => (p.party_id === me ? "You" : p.name);
   return (
-    <select className={shared.select} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select
+      className={shared.select}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
       {people.map((p) => (
         <option key={p.party_id} value={p.party_id}>
           {nameFor(p)}
@@ -49,12 +54,12 @@ export function SettleModal({
 }) {
   const cents = toCents(st.amount);
   const hint =
-    `${st.from === me ? 'You' : first(personOf(st.from).name)} pays ${st.to === me ? 'you' : first(personOf(st.to).name)}` +
-    (cents > 0 ? ' ' + money(cents, currency) : '');
+    `${st.from === me ? "You" : first(personOf(st.from).name)} pays ${st.to === me ? "you" : first(personOf(st.to).name)}` +
+    (cents > 0 ? " " + money(cents, currency) : "");
 
   return (
     <ModalBackdrop onClose={onClose}>
-      <div className="kit-modal" style={{ maxWidth: '420px' }}>
+      <div className="kit-modal" style={{ maxWidth: "420px" }}>
         <h2>Settle up</h2>
         <div className={shared.row2}>
           <div className={shared.field} style={{ flex: 1 }}>
@@ -89,7 +94,7 @@ export function SettleModal({
             />
           </div>
         </div>
-        <div className="s-sub" style={{ marginTop: '10px' }}>
+        <div className="s-sub" style={{ marginTop: "10px" }}>
           {hint}
         </div>
         <div className="kit-modal-foot">

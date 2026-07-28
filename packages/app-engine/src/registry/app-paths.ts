@@ -1,4 +1,4 @@
-import type { RegistryEntry } from '../types.js';
+import type { RegistryEntry } from "../types.js";
 
 /**
  * Validate an app folder id. A filesystem-safe slug — alnum / `-` / `_`,
@@ -12,9 +12,9 @@ import type { RegistryEntry } from '../types.js';
  * `scaffold-automation`), and anything else that keys on an app folder.
  */
 export function isValidAppId(id: string): boolean {
-  if (typeof id !== 'string' || id.length === 0) return false;
-  if (id.startsWith('_')) return false;
-  return /^[A-Za-z0-9_-]+$/.test(id);
+  if (typeof id !== "string" || id.length === 0) return false;
+  if (id.startsWith("_")) return false;
+  return /^[A-Za-z0-9_-]+$/u.test(id);
 }
 
 /**
@@ -28,7 +28,7 @@ export function isValidAppId(id: string): boolean {
  * module — can allow it through its own `isValidAppId` gate without a
  * circular import.
  */
-export const ASSISTANT_APP_ID = '_assistant';
+export const ASSISTANT_APP_ID = "_assistant";
 
 /**
  * `isValidAppId`, plus the one reserved exception: the vault assistant's

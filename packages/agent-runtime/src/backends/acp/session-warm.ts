@@ -11,9 +11,10 @@
  * reused. Concurrent turns never share a slot.
  */
 
-import type { ChildProcessByStdio } from 'node:child_process';
-import type { Readable, Writable } from 'node:stream';
-import type { AcpConnection } from './json-rpc.js';
+import type { ChildProcessByStdio } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
+
+import type { AcpConnection } from "./json-rpc.js";
 
 const IDLE_MS = 120_000;
 const MAX_WARM_SLOTS = 8;
@@ -56,7 +57,7 @@ export function warmKey(
   kind: string,
   cwd: string,
   sessionId: string,
-  conversationId = sessionId,
+  conversationId = sessionId
 ): string {
   return `${conversationId}\0${kind}\0${cwd}\0${sessionId}`;
 }
@@ -65,7 +66,7 @@ export function takeWarmSlot(
   kind: string,
   cwd: string,
   sessionId: string,
-  conversationId?: string,
+  conversationId?: string
 ): WarmAgentSlot | undefined {
   const key = warmKey(kind, cwd, sessionId, conversationId);
   const slot = pool.get(key);
@@ -80,13 +81,18 @@ export function takeWarmSlot(
   return slot;
 }
 
-export function putWarmSlot(slot: Omit<WarmAgentSlot, 'timer' | 'key' | 'lastUsed'>): void {
+export function putWarmSlot(
+  slot: Omit<WarmAgentSlot, "timer" | "key" | "lastUsed">
+): void {
   const conversationId = slot.conversationId ?? slot.sessionId;
   const key = warmKey(slot.kind, slot.cwd, slot.sessionId, conversationId);
   // A conversation keeps exactly one warm process. cwd is not an identity:
   // unrelated conversations can legitimately share the same workspace.
   for (const [existingKey, existing] of pool) {
-    if (existingKey === key || (existing.conversationId ?? existing.sessionId) !== conversationId)
+    if (
+      existingKey === key ||
+      (existing.conversationId ?? existing.sessionId) !== conversationId
+    )
       continue;
     pool.delete(existingKey);
     clearTimeout(existing.timer);
@@ -128,13 +134,15 @@ export function putWarmSlot(slot: Omit<WarmAgentSlot, 'timer' | 'key' | 'lastUse
 }
 
 export async function disposeSlot(
-  slot: WarmAgentSlot | Omit<WarmAgentSlot, 'timer' | 'key' | 'lastUsed'>,
+  slot: WarmAgentSlot | Omit<WarmAgentSlot, "timer" | "key" | "lastUsed">
 ): Promise<void> {
   const conn = slot.conn;
   const child = slot.child;
-  if ('canClose' in slot && slot.canClose && !conn.hasExited()) {
+  if ("canClose" in slot && slot.canClose && !conn.hasExited()) {
     try {
-      await bounded(conn.request('session/close', { sessionId: slot.sessionId }));
+      await bounded(
+        conn.request("session/close", { sessionId: slot.sessionId })
+      );
     } catch {
       // ignore — kill path follows
     }
@@ -144,17 +152,17 @@ export async function disposeSlot(
   } catch {
     // ignore
   }
-  if (!child.killed) child.kill('SIGTERM');
+  if (!child.killed) child.kill("SIGTERM");
   const exited = await bounded(
     conn.exited.then(
       () => true,
-      () => true,
-    ),
+      () => true
+    )
   );
   if (!exited) {
     // SIGTERM is a request. An agent that ignores it would leak one warm
     // child per evicted slot, so the dispose path escalates.
-    child.kill('SIGKILL');
+    child.kill("SIGKILL");
     await conn.exited.catch(() => undefined);
   }
 }
@@ -163,8 +171,10 @@ export async function disposeSlot(
 export async function clearWarmPool(): Promise<void> {
   const all = [...pool.values()];
   pool.clear();
-  for (const s of all) {
-    clearTimeout(s.timer);
-    await disposeSlot(s);
-  }
+  await Promise.all(
+    all.map(async (slot) => {
+      clearTimeout(slot.timer);
+      await disposeSlot(slot);
+    })
+  );
 }

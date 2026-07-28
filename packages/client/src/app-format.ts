@@ -11,25 +11,27 @@
 // drafts and freshly-prompted apps before an icon is inferred — it gets the
 // violet sub-accent.
 const CANONICAL_ICON_COLOR_KEY: Record<string, ColorKeyType> = {
-  Gift: 'violet',
-  Habit: 'rose',
-  Journal: 'amber',
-  Mood: 'violet',
-  Plant: 'slate',
-  Pomodoro: 'forest',
-  Sparkle: 'violet',
-  Spend: 'ochre',
-  Todo: 'indigo',
-  Water: 'teal',
+  Gift: "violet",
+  Habit: "rose",
+  Journal: "amber",
+  Mood: "violet",
+  Plant: "slate",
+  Pomodoro: "forest",
+  Sparkle: "violet",
+  Spend: "ochre",
+  Todo: "indigo",
+  Water: "teal",
 };
 
 export function colorKeyForIcon(iconKey: IconNameType | string): ColorKeyType {
-  return CANONICAL_ICON_COLOR_KEY[iconKey] ?? 'violet';
+  return CANONICAL_ICON_COLOR_KEY[iconKey] ?? "violet";
 }
 
 export function colorForIcon(iconKey: IconNameType | string): ColorHexType {
-  const c = (ICON_PALETTE as unknown as Record<string, ColorHexType>)[colorKeyForIcon(iconKey)];
-  return c ?? ('#7C5BD9' as ColorHexType);
+  const c = (ICON_PALETTE as unknown as Record<string, ColorHexType>)[
+    colorKeyForIcon(iconKey)
+  ];
+  return c ?? ("#7C5BD9" as ColorHexType);
 }
 
 /**
@@ -42,28 +44,39 @@ export function colorForIcon(iconKey: IconNameType | string): ColorHexType {
 export function tileVisualFromListing(row: {
   iconKey?: string;
   colorKey?: string;
-}): { iconKey: IconNameType; colorKey: ColorKeyType; color: ColorHexType } | null {
-  const iconOk = !!row.iconKey && !!(Icon as Record<string, unknown>)[row.iconKey];
+}): {
+  iconKey: IconNameType;
+  colorKey: ColorKeyType;
+  color: ColorHexType;
+} | null {
+  const iconOk =
+    !!row.iconKey && !!(Icon as Record<string, unknown>)[row.iconKey];
   const palette = ICON_PALETTE as unknown as Record<string, ColorHexType>;
   const colorOk = !!row.colorKey && !!palette[row.colorKey];
   if (!iconOk && !colorOk) return null;
-  const iconKey = (iconOk ? row.iconKey : 'Sparkle') as IconNameType;
-  const colorKey = (colorOk ? row.colorKey : colorKeyForIcon(iconKey)) as ColorKeyType;
-  return { iconKey, colorKey, color: palette[colorKey] ?? colorForIcon(iconKey) };
+  const iconKey = (iconOk ? row.iconKey : "Sparkle") as IconNameType;
+  const colorKey = (
+    colorOk ? row.colorKey : colorKeyForIcon(iconKey)
+  ) as ColorKeyType;
+  return {
+    iconKey,
+    colorKey,
+    color: palette[colorKey] ?? colorForIcon(iconKey),
+  };
 }
 
 // Prompt-keyword icon inference for freshly generated apps. The pool is
 // the canonical set above; colour follows the icon (never random) so the
 // same kind of app always lands with the same identity.
 const ICON_KEYS_POOL: IconNameType[] = [
-  'Todo',
-  'Habit',
-  'Journal',
-  'Pomodoro',
-  'Plant',
-  'Water',
-  'Gift',
-  'Mood',
+  "Todo",
+  "Habit",
+  "Journal",
+  "Pomodoro",
+  "Plant",
+  "Water",
+  "Gift",
+  "Mood",
 ];
 
 /**
@@ -79,17 +92,17 @@ export function inferAppVisual(prompt: string): {
 } {
   const p = prompt.toLowerCase();
   const map: [IconNameType, RegExp][] = [
-    ['Todo', /\b(todo|to-do|task|grocery|list|shopping)\b/],
-    ['Habit', /\b(habit|streak|daily)\b/],
-    ['Journal', /\b(journal|diary|note|writing|log|read|reading)\b/],
-    ['Pomodoro', /\b(pomodoro|timer|focus|work\s*block)\b/],
-    ['Plant', /\b(plant|water|garden)\b/],
-    ['Water', /\b(hydrate|water|cup|drink)\b/],
-    ['Gift', /\b(gift|present|idea|wish)\b/],
-    ['Mood', /\b(mood|feel|emotion|check[- ]?in)\b/],
+    ["Todo", /\b(?:todo|to-do|task|grocery|list|shopping)\b/u],
+    ["Habit", /\b(?:habit|streak|daily)\b/u],
+    ["Journal", /\b(?:journal|diary|note|writing|log|read|reading)\b/u],
+    ["Pomodoro", /\b(?:pomodoro|timer|focus|work\s*block)\b/u],
+    ["Plant", /\b(?:plant|water|garden)\b/u],
+    ["Water", /\b(?:hydrate|water|cup|drink)\b/u],
+    ["Gift", /\b(?:gift|present|idea|wish)\b/u],
+    ["Mood", /\b(?:mood|feel|emotion|check[- ]?in)\b/u],
   ];
   let iconKey: IconNameType =
-    ICON_KEYS_POOL[Math.floor(Math.random() * ICON_KEYS_POOL.length)] ?? 'Todo';
+    ICON_KEYS_POOL[Math.floor(Math.random() * ICON_KEYS_POOL.length)] ?? "Todo";
   for (const [k, re] of map) {
     if (re.test(p)) {
       iconKey = k;
@@ -101,21 +114,26 @@ export function inferAppVisual(prompt: string): {
   // keywords hit, `iconKey` falls back to a random pool entry; that entry
   // still has a canonical colour via colorKeyForIcon().
   const colorKey = colorKeyForIcon(iconKey);
-  const cleaned = prompt.replace(/^\s*(a|an)\s+/i, '').trim();
-  const words = cleaned.split(/\s+/).slice(0, 3).join(' ');
+  const cleaned = prompt.replace(/^\s*(?:a|an)\s+/iu, "").trim();
+  const words = cleaned.split(/\s+/u).slice(0, 3).join(" ");
   const name = words.charAt(0).toUpperCase() + words.slice(1);
-  return { iconKey, colorKey, color: colorForIcon(iconKey), name: name || 'New app' };
+  return {
+    iconKey,
+    colorKey,
+    color: colorForIcon(iconKey),
+    name: name || "New app",
+  };
 }
 
 // "X ago" relative-time formatter. Mirrors builder.ts:relativeWhen, but
 // co-located here so app.ts doesn't need to reach into the builder IIFE.
 export function relativeTime(iso?: string): string {
-  if (!iso) return 'Recently';
+  if (!iso) return "Recently";
   try {
     const t = new Date(iso).getTime();
-    if (Number.isNaN(t)) return 'Recently';
+    if (Number.isNaN(t)) return "Recently";
     const s = Math.max(0, Math.floor((Date.now() - t) / 1000));
-    if (s < 60) return 'just now';
+    if (s < 60) return "just now";
     const m = Math.floor(s / 60);
     if (m < 60) return `${m}m ago`;
     const h = Math.floor(m / 60);
@@ -124,13 +142,13 @@ export function relativeTime(iso?: string): string {
     if (d < 30) return `${d}d ago`;
     return new Date(iso).toLocaleDateString();
   } catch {
-    return 'Recently';
+    return "Recently";
   }
 }
 
 // Compact token count for the standing-order list / run rail.
 export function fmtTokens(n: number): string {
-  if (n <= 0) return '—';
+  if (n <= 0) return "—";
   if (n < 1000) return String(n);
   return `${(n / 1000).toFixed(1)}k`;
 }
@@ -140,37 +158,44 @@ export function fmtTokens(n: number): string {
 export function relativeRunLabel(d: Date): string {
   const startOfDay = (x: Date): number =>
     new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const dayDiff = Math.round((startOfDay(d) - startOfDay(new Date())) / 86_400_000);
-  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const dayDiff = Math.round(
+    (startOfDay(d) - startOfDay(new Date())) / 86_400_000
+  );
+  const time = d.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
   const day =
     dayDiff === 0
-      ? 'Today'
+      ? "Today"
       : dayDiff === 1
-        ? 'Tomorrow'
+        ? "Tomorrow"
         : dayDiff > 1 && dayDiff < 7
-          ? d.toLocaleDateString(undefined, { weekday: 'short' })
-          : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+          ? d.toLocaleDateString(undefined, { weekday: "short" })
+          : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return `${day}, ${time}`;
 }
 
 // Trigger-origin/kind → human label for a run row.
 export function runTriggerLabel(run: CentraidAutomationTurnRecord): string {
-  if (run.triggerOrigin === 'webhook') return 'Webhook trigger';
+  if (run.triggerOrigin === "webhook") return "Webhook trigger";
   const byKind: Record<string, string> = {
-    scheduled: 'Scheduled run',
-    manual: 'Manual run',
-    replay: 'Replayed run',
-    on_failure: 'Failure-triggered run',
-    interactive: 'Interactive run',
+    scheduled: "Scheduled run",
+    manual: "Manual run",
+    replay: "Replayed run",
+    on_failure: "Failure-triggered run",
+    interactive: "Interactive run",
   };
-  return byKind[run.triggerKind] ?? 'Run';
+  return byKind[run.triggerKind] ?? "Run";
 }
 
 // A node is still in flight when it has started but not ended (and hasn't
 // errored). Drives the pulsing accent spinner on its rail circle.
-export function nodeRunStatus(node: CentraidAutomationItem): 'ok' | 'running' | 'fail' {
-  if (node.endedAt === undefined && !node.error) return 'running';
-  return node.ok ? 'ok' : 'fail';
+export function nodeRunStatus(
+  node: CentraidAutomationItem
+): "ok" | "running" | "fail" {
+  if (node.endedAt === undefined && !node.error) return "running";
+  return node.ok ? "ok" : "fail";
 }
 
 /**
@@ -185,9 +210,15 @@ export function nodeRunStatus(node: CentraidAutomationItem): 'ok' | 'running' | 
  * actually feel.
  */
 export function cronToHuman(expr: string): string {
-  const fields = expr.trim().split(/\s+/);
+  const fields = expr.trim().split(/\s+/u);
   if (fields.length !== 5) return expr;
-  const [min, hour, dom, month, dow] = fields as [string, string, string, string, string];
+  const [min, hour, dom, month, dow] = fields as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
 
   // The cron digits are UTC; anchor them with the UTC setter so
   // toLocaleTimeString performs the actual UTC→local conversion.
@@ -199,9 +230,9 @@ export function cronToHuman(expr: string): string {
   // Force en-US 12-hour clock so host locale (24h vs 12h, AM vs am) cannot
   // drift product copy or the app-format unit suite.
   const fmtTime = (h: number, m: number): string =>
-    utcAnchor(h, m).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
+    utcAnchor(h, m).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
       hour12: true,
     });
   // When the conversion crosses midnight, day-of-week labels shift too:
@@ -212,31 +243,45 @@ export function cronToHuman(expr: string): string {
     return diff === 6 ? -1 : diff;
   };
 
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayNames = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
 
   // Every N minutes
-  const stepMin = min.match(/^\*\/(\d+)$/);
-  if (stepMin && hour === '*' && dom === '*' && month === '*' && dow === '*') {
-    const n = Number(stepMin[1]);
-    return n === 1 ? 'Every minute' : `Every ${n} minutes`;
+  const stepMin = min.match(/^\*\/(?<step>\d+)$/u);
+  if (stepMin && hour === "*" && dom === "*" && month === "*" && dow === "*") {
+    const n = Number(stepMin.groups?.step);
+    return n === 1 ? "Every minute" : `Every ${n} minutes`;
   }
 
   // Hourly on the dot
-  if (min === '0' && hour === '*' && dom === '*' && month === '*' && dow === '*') {
-    return 'Hourly';
+  if (
+    min === "0" &&
+    hour === "*" &&
+    dom === "*" &&
+    month === "*" &&
+    dow === "*"
+  ) {
+    return "Hourly";
   }
 
   const minNum = Number(min);
   const hourNum = Number(hour);
   const isExactTime = !Number.isNaN(minNum) && !Number.isNaN(hourNum);
 
-  if (isExactTime && dom === '*' && month === '*') {
+  if (isExactTime && dom === "*" && month === "*") {
     const time = fmtTime(hourNum, minNum);
-    if (dow === '*') return `Daily at ${time}`;
+    if (dow === "*") return `Daily at ${time}`;
     const shift = dayShift(hourNum, minNum);
     if (shift === 0) {
-      if (dow === '1-5') return `Weekdays at ${time}`;
-      if (dow === '0,6' || dow === '6,0') return `Weekends at ${time}`;
+      if (dow === "1-5") return `Weekdays at ${time}`;
+      if (dow === "0,6" || dow === "6,0") return `Weekends at ${time}`;
     }
     // Crossing midnight turns "weekdays"/"weekends" into an off-by-one set
     // with no honest compact label — fall through to the raw-expr fallback.
@@ -252,18 +297,21 @@ export function cronToHuman(expr: string): string {
 // Human-readable summary of an automation's trigger list. One cron → its
 // `cronToHuman` form; many crons → a count; webhook/data/condition triggers
 // each add a tag; an empty list reads "Manual only".
-export function triggersSummary(triggers: ReadonlyArray<{ kind: string; expr?: string }>): string {
-  const crons = triggers.filter((t) => t.kind === 'cron');
-  const hasWebhook = triggers.some((t) => t.kind === 'webhook');
-  const hasData = triggers.some((t) => t.kind === 'data');
-  const hasCondition = triggers.some((t) => t.kind === 'condition');
+export function triggersSummary(
+  triggers: ReadonlyArray<{ kind: string; expr?: string }>
+): string {
+  const crons = triggers.filter((t) => t.kind === "cron");
+  const hasWebhook = triggers.some((t) => t.kind === "webhook");
+  const hasData = triggers.some((t) => t.kind === "data");
+  const hasCondition = triggers.some((t) => t.kind === "condition");
   const parts: string[] = [];
-  if (crons.length === 1 && crons[0]!.expr) parts.push(cronToHuman(crons[0]!.expr));
+  if (crons.length === 1 && crons[0]!.expr)
+    parts.push(cronToHuman(crons[0]!.expr));
   else if (crons.length > 1) parts.push(`${crons.length} schedules`);
-  if (hasWebhook) parts.push('Webhook');
-  if (hasData) parts.push('On data changes');
-  if (hasCondition) parts.push('On condition');
-  return parts.join(' · ') || 'Manual only';
+  if (hasWebhook) parts.push("Webhook");
+  if (hasData) parts.push("On data changes");
+  if (hasCondition) parts.push("On condition");
+  return parts.join(" · ") || "Manual only";
 }
 
 /**
@@ -280,14 +328,16 @@ export function formatWhereClauses(where: unknown): string | null {
   if (!Array.isArray(where) || where.length === 0) return null;
   const lines: string[] = [];
   for (const raw of where) {
-    if (!raw || typeof raw !== 'object') return JSON.stringify(where, null, 2);
+    if (!raw || typeof raw !== "object") return JSON.stringify(where, null, 2);
     const c = raw as Record<string, unknown>;
-    if (typeof c.column !== 'string' || typeof c.op !== 'string') {
+    if (typeof c.column !== "string" || typeof c.op !== "string") {
       return JSON.stringify(where, null, 2);
     }
-    lines.push(`${c.column} ${c.op}${c.value !== undefined ? ` ${JSON.stringify(c.value)}` : ''}`);
+    lines.push(
+      `${c.column} ${c.op}${c.value === undefined ? "" : ` ${JSON.stringify(c.value)}`}`
+    );
   }
-  return lines.join('\n');
+  return lines.join("\n");
 }
 
 // Duration in ms → "950ms" / "1.4s" / "2m 5s".
@@ -310,6 +360,8 @@ export function prettyJson(raw: string): string {
 }
 
 /** True when the template is an automation app (`kind: 'automation'`). */
-export function isAutomationTemplate(t: { kind?: 'app' | 'automation' }): boolean {
-  return t.kind === 'automation';
+export function isAutomationTemplate(t: {
+  kind?: "app" | "automation";
+}): boolean {
+  return t.kind === "automation";
 }

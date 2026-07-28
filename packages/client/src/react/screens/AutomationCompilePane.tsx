@@ -1,10 +1,18 @@
-import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
-import { Icon } from '../ui/index.js';
-import { cx } from '../ui/cx.js';
-import au from '../styles/automation.module.css';
-import styles from './AutomationCompilePane.module.css';
-import AutomationCompileArtifacts, { type ArtifactFile } from './AutomationCompileArtifacts.js';
-import type { CompileAttemptDTO, CompileStepDTO, TurnWatchOutcome } from '../screen-contracts.js';
+import { type JSX, useCallback, useEffect, useRef, useState } from "react";
+
+import type {
+  CompileAttemptDTO,
+  CompileStepDTO,
+  TurnWatchOutcome,
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Icon } from "../ui/index.js";
+import AutomationCompileArtifacts, {
+  type ArtifactFile,
+} from "./AutomationCompileArtifacts.js";
+
+import au from "../styles/automation.module.css";
+import styles from "./AutomationCompilePane.module.css";
 
 /*
  * The compiler readout — the right rail of the compile screen.
@@ -31,7 +39,7 @@ import type { CompileAttemptDTO, CompileStepDTO, TurnWatchOutcome } from '../scr
 export interface AutomationCompilePaneProps {
   /** Create mode has no automation to compile yet — the rail explains itself
    *  instead of offering dead buttons. */
-  mode: 'create' | 'edit';
+  mode: "create" | "edit";
   /** Instructions differ from the last compiled baseline: the plan is stale. */
   dirty: boolean;
   /**
@@ -50,40 +58,55 @@ export interface AutomationCompilePaneProps {
   watchTurnSteps: (
     turnId: string,
     onSteps: (steps: CompileStepDTO[]) => void,
-    signal: AbortSignal,
+    signal: AbortSignal
   ) => Promise<TurnWatchOutcome>;
-  onReadSource: () => Promise<{ manifest: string | null; handler: string | null }>;
+  onReadSource: () => Promise<{
+    manifest: string | null;
+    handler: string | null;
+  }>;
   onOpenRun: (runId: string) => void;
   onOpenRuns: () => void;
 }
 
-type Phase = 'idle' | 'compiling' | 'testing';
+type Phase = "idle" | "compiling" | "testing";
 /** What the rail is currently watching — a compile attempt or a test run. The
  *  step list is shared; only the framing differs. */
-type Watched = { turnId: string; kind: 'compile' | 'test' } | null;
+type Watched = { turnId: string; kind: "compile" | "test" } | null;
 
 function fmtDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const s = ms / 1000;
-  return s < 60 ? `${s.toFixed(s < 10 ? 1 : 0)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
+  return s < 60
+    ? `${s.toFixed(s < 10 ? 1 : 0)}s`
+    : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
 }
 
 function StepRow({ step }: { step: CompileStepDTO }): JSX.Element {
   return (
-    <li className={styles.step} data-status={step.status} data-testid="compile-step">
+    <li
+      className={styles.step}
+      data-status={step.status}
+      data-testid="compile-step"
+    >
       <span className={styles.stepMark} aria-hidden="true">
         <Icon
           name={
-            step.status === 'running' ? 'Loader' : step.status === 'ok' ? 'Check' : 'AlertTriangle'
+            step.status === "running"
+              ? "Loader"
+              : step.status === "ok"
+                ? "Check"
+                : "AlertTriangle"
           }
           size={11}
         />
       </span>
       <span className={styles.stepLabel}>{step.label}</span>
-      {step.durationMs !== null ? (
+      {step.durationMs === null ? null : (
         <span className={styles.stepTime}>{fmtDuration(step.durationMs)}</span>
+      )}
+      {step.detail ? (
+        <span className={styles.stepDetail}>{step.detail}</span>
       ) : null}
-      {step.detail ? <span className={styles.stepDetail}>{step.detail}</span> : null}
     </li>
   );
 }
@@ -107,7 +130,7 @@ function useElapsedLabel(startedAt: number | null): string | null {
   // rail already reads "0:00" until the first tick lands.
   if (startedAt === null) return null;
   const secs = Math.max(0, Math.floor((now - startedAt) / 1000));
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 }
 
 export default function AutomationCompilePane({
@@ -127,15 +150,16 @@ export default function AutomationCompilePane({
   const [attempts, setAttempts] = useState<CompileAttemptDTO[]>([]);
   const [steps, setSteps] = useState<CompileStepDTO[]>([]);
   const [watched, setWatched] = useState<Watched>(null);
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [source, setSource] = useState<{ manifest: string | null; handler: string | null } | null>(
-    null,
-  );
-  const [file, setFile] = useState<ArtifactFile>('handler');
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [source, setSource] = useState<{
+    manifest: string | null;
+    handler: string | null;
+  } | null>(null);
+  const [file, setFile] = useState<ArtifactFile>("handler");
   const [showArtifacts, setShowArtifacts] = useState(false);
   const watchRef = useRef<AbortController | null>(null);
 
-  const isCreate = mode === 'create';
+  const isCreate = mode === "create";
   const latest = attempts[0] ?? null;
 
   const refreshAttempts = useCallback(async () => {
@@ -150,8 +174,10 @@ export default function AutomationCompilePane({
 
   const refreshSource = useCallback(
     (): Promise<void> =>
-      onReadSource().then(setSource, () => setSource({ handler: null, manifest: null })),
-    [onReadSource],
+      onReadSource()
+        .then(setSource)
+        .catch(() => setSource({ handler: null, manifest: null })),
+    [onReadSource]
   );
 
   /**
@@ -161,14 +187,18 @@ export default function AutomationCompilePane({
    * minus its rejoin ladder (a compile is short, and the owner is watching).
    */
   const follow = useCallback(
-    async (turnId: string, kind: 'compile' | 'test'): Promise<void> => {
+    async (turnId: string, kind: "compile" | "test"): Promise<void> => {
       watchRef.current?.abort();
       const controller = new AbortController();
       watchRef.current = controller;
       setWatched({ kind, turnId });
       setSteps([]);
       try {
-        const { settled } = await watchTurnSteps(turnId, setSteps, controller.signal);
+        const { settled } = await watchTurnSteps(
+          turnId,
+          setSteps,
+          controller.signal
+        );
         if (!settled && !controller.signal.aborted) {
           setSteps(await loadTurnSteps(turnId).catch(() => []));
         }
@@ -179,9 +209,9 @@ export default function AutomationCompilePane({
       }
       if (controller.signal.aborted) return;
       await refreshAttempts();
-      if (kind === 'compile') await refreshSource();
+      if (kind === "compile") await refreshSource();
     },
-    [loadTurnSteps, refreshAttempts, refreshSource, watchTurnSteps],
+    [loadTurnSteps, refreshAttempts, refreshSource, watchTurnSteps]
   );
 
   // On mount (edit mode), show the last attempt cold. A compile still running
@@ -195,11 +225,11 @@ export default function AutomationCompilePane({
       if (!active) return;
       const last = next[0];
       if (!last) return;
-      if (last.status === 'running') {
-        void follow(last.turnId, 'compile');
+      if (last.status === "running") {
+        void follow(last.turnId, "compile");
         return;
       }
-      setWatched({ kind: 'compile', turnId: last.turnId });
+      setWatched({ kind: "compile", turnId: last.turnId });
       setSteps(await loadTurnSteps(last.turnId).catch(() => []));
     })();
     return () => {
@@ -215,12 +245,12 @@ export default function AutomationCompilePane({
   useEffect(() => () => watchRef.current?.abort(), []);
 
   const doCompile = useCallback((): void => {
-    setPhase('compiling');
+    setPhase("compiling");
     void onCompile()
       .then(async (turnId) => {
-        if (turnId) await follow(turnId, 'compile');
+        if (turnId) await follow(turnId, "compile");
       })
-      .finally(() => setPhase('idle'));
+      .finally(() => setPhase("idle"));
   }, [follow, onCompile]);
 
   // Save asks for a compile by bumping the nonce. Guarded on the seen value so
@@ -234,12 +264,12 @@ export default function AutomationCompilePane({
   }, [compileNonce, doCompile]);
 
   const doTest = (): void => {
-    setPhase('testing');
+    setPhase("testing");
     void onTestRun()
       .then(async (turnId) => {
-        if (turnId) await follow(turnId, 'test');
+        if (turnId) await follow(turnId, "test");
       })
-      .finally(() => setPhase('idle'));
+      .finally(() => setPhase("idle"));
   };
 
   // `phase` only knows about compiles THIS mount started. A compile that was
@@ -248,9 +278,10 @@ export default function AutomationCompilePane({
   // coding-agent compile runs for minutes, so that window is wide. Keying
   // "busy" off `phase` alone left Compile clickable during one, which starts a
   // second concurrent compile of the same automation.
-  const attemptRunning = latest?.status === 'running';
-  const busy = phase !== 'idle' || attemptRunning;
-  const failure = latest?.status === 'fail' ? (latest.error ?? 'Compile failed.') : null;
+  const attemptRunning = latest?.status === "running";
+  const busy = phase !== "idle" || attemptRunning;
+  const failure =
+    latest?.status === "fail" ? (latest.error ?? "Compile failed.") : null;
   // A compile is a real coding-agent run and routinely takes minutes, not
   // seconds. Without a clock, "Compiling…" over an indeterminate spinner is
   // indistinguishable from a hang, and the honest answer ("it has been 4
@@ -259,51 +290,62 @@ export default function AutomationCompilePane({
   const elapsed = useElapsedLabel(attemptRunning ? latest.startedAt : null);
   const verdict: { tone: string; label: string; detail: string } = isCreate
     ? {
-        detail: 'Save this automation to compile your instructions into a runnable plan.',
-        label: 'Not compiled',
-        tone: 'draft',
+        detail:
+          "Save this automation to compile your instructions into a runnable plan.",
+        label: "Not compiled",
+        tone: "draft",
       }
-    : phase === 'compiling' || latest?.status === 'running'
+    : phase === "compiling" || latest?.status === "running"
       ? {
-          detail: 'Turning your instructions into a deterministic plan.',
-          label: 'Compiling…',
-          tone: 'running',
+          detail: "Turning your instructions into a deterministic plan.",
+          label: "Compiling…",
+          tone: "running",
         }
       : failure
         ? {
-            detail: 'The instructions could not be turned into a plan.',
-            label: 'Compile failed',
-            tone: 'failed',
+            detail: "The instructions could not be turned into a plan.",
+            label: "Compile failed",
+            tone: "failed",
           }
-        : !latest
-          ? {
-              detail: 'Compile once to turn these instructions into a plan that can run.',
-              label: 'No plan yet',
-              tone: 'draft',
-            }
-          : dirty
+        : latest
+          ? dirty
             ? {
-                detail: 'The instructions changed since the last compile. Recompile to apply them.',
-                label: 'Plan is stale',
-                tone: 'paused',
+                detail:
+                  "The instructions changed since the last compile. Recompile to apply them.",
+                label: "Plan is stale",
+                tone: "paused",
               }
-            : { detail: `Compiled ${latest.whenLabel}.`, label: 'Plan ready', tone: 'active' };
+            : {
+                detail: `Compiled ${latest.whenLabel}.`,
+                label: "Plan ready",
+                tone: "active",
+              }
+          : {
+              detail:
+                "Compile once to turn these instructions into a plan that can run.",
+              label: "No plan yet",
+              tone: "draft",
+            };
 
   return (
-    <aside className={styles.rail} data-testid="automation-compile-pane" data-tone={verdict.tone}>
+    <aside
+      className={styles.rail}
+      data-testid="automation-compile-pane"
+      data-tone={verdict.tone}
+    >
       <section className={styles.verdict}>
         <div className={styles.verdictHead}>
           <span className={au.auStatus} data-tone={verdict.tone}>
             <span className={au.auStatusIc} aria-hidden="true">
               <Icon
                 name={
-                  verdict.tone === 'running'
-                    ? 'Loader'
-                    : verdict.tone === 'failed'
-                      ? 'AlertTriangle'
-                      : verdict.tone === 'active'
-                        ? 'CheckCircle'
-                        : 'Braces'
+                  verdict.tone === "running"
+                    ? "Loader"
+                    : verdict.tone === "failed"
+                      ? "AlertTriangle"
+                      : verdict.tone === "active"
+                        ? "CheckCircle"
+                        : "Braces"
                 }
                 size={11}
               />
@@ -316,7 +358,7 @@ export default function AutomationCompilePane({
             </span>
           ) : null}
           <span className={styles.verdictSpacer} />
-          {!isCreate ? (
+          {isCreate ? null : (
             <button
               type="button"
               className={styles.runsLink}
@@ -326,7 +368,7 @@ export default function AutomationCompilePane({
               <span>Runs</span>
               <Icon name="ArrowRight" size={12} />
             </button>
-          ) : null}
+          )}
         </div>
         <p className={styles.verdictDetail}>{verdict.detail}</p>
         {failure ? (
@@ -347,7 +389,7 @@ export default function AutomationCompilePane({
             </button>
           </div>
         ) : null}
-        {!isCreate ? (
+        {isCreate ? null : (
           <div className={styles.verdictActions}>
             <button
               type="button"
@@ -358,37 +400,37 @@ export default function AutomationCompilePane({
             >
               <Icon name="Bolt" size={14} />
               <span>
-                {phase === 'compiling' || attemptRunning
-                  ? 'Compiling…'
+                {phase === "compiling" || attemptRunning
+                  ? "Compiling…"
                   : dirty
-                    ? 'Recompile'
-                    : 'Compile'}
+                    ? "Recompile"
+                    : "Compile"}
               </span>
             </button>
             <button
               type="button"
               className={cx(au.auBtn, au.auBtnGhost)}
-              disabled={busy || !latest || latest.status !== 'ok'}
+              disabled={busy || !latest || latest.status !== "ok"}
               data-testid="compile-test-run"
               title={
-                latest?.status === 'ok'
-                  ? 'Run the compiled plan once, here'
-                  : 'Compile successfully first'
+                latest?.status === "ok"
+                  ? "Run the compiled plan once, here"
+                  : "Compile successfully first"
               }
               onClick={doTest}
             >
               <Icon name="Beaker" size={14} />
-              <span>{phase === 'testing' ? 'Testing…' : 'Test run'}</span>
+              <span>{phase === "testing" ? "Testing…" : "Test run"}</span>
             </button>
           </div>
-        ) : null}
+        )}
       </section>
 
-      {!isCreate ? (
+      {isCreate ? null : (
         <section className={styles.stepsBand}>
           <div className={styles.bandHead}>
             <h3 className={styles.bandTitle}>
-              {watched?.kind === 'test' ? 'Test run' : 'Compile steps'}
+              {watched?.kind === "test" ? "Test run" : "Compile steps"}
             </h3>
             {watched ? (
               <button
@@ -410,8 +452,8 @@ export default function AutomationCompilePane({
           ) : (
             <p className={styles.bandEmpty}>
               {busy
-                ? 'Waiting for the first step…'
-                : 'Compile to watch each step of the plan being built.'}
+                ? "Waiting for the first step…"
+                : "Compile to watch each step of the plan being built."}
             </p>
           )}
           {attempts.length > 1 ? (
@@ -426,7 +468,7 @@ export default function AutomationCompilePane({
                       data-status={attempt.status}
                       data-active={String(watched?.turnId === attempt.turnId)}
                       onClick={() => {
-                        setWatched({ kind: 'compile', turnId: attempt.turnId });
+                        setWatched({ kind: "compile", turnId: attempt.turnId });
                         void loadTurnSteps(attempt.turnId)
                           .then(setSteps)
                           .catch(() => setSteps([]));
@@ -435,11 +477,11 @@ export default function AutomationCompilePane({
                       <span className={styles.historyDot} aria-hidden="true" />
                       <span>{attempt.whenLabel}</span>
                       <span className={styles.historyOutcome}>
-                        {attempt.status === 'ok'
-                          ? 'succeeded'
-                          : attempt.status === 'fail'
-                            ? 'failed'
-                            : 'running'}
+                        {attempt.status === "ok"
+                          ? "succeeded"
+                          : attempt.status === "fail"
+                            ? "failed"
+                            : "running"}
                       </span>
                     </button>
                   </li>
@@ -448,9 +490,9 @@ export default function AutomationCompilePane({
             </details>
           ) : null}
         </section>
-      ) : null}
+      )}
 
-      {!isCreate ? (
+      {isCreate ? null : (
         <section className={styles.artifactBand}>
           <button
             type="button"
@@ -458,15 +500,24 @@ export default function AutomationCompilePane({
             aria-expanded={showArtifacts}
             onClick={() => setShowArtifacts((v) => !v)}
           >
-            <Icon name={showArtifacts ? 'ChevronDown' : 'ChevronRight'} size={12} />
+            <Icon
+              name={showArtifacts ? "ChevronDown" : "ChevronRight"}
+              size={12}
+            />
             <span>Compiled plan</span>
-            <span className={styles.bandToggleHint}>handler.js · automation.json</span>
+            <span className={styles.bandToggleHint}>
+              handler.js · automation.json
+            </span>
           </button>
           {showArtifacts ? (
-            <AutomationCompileArtifacts source={source} file={file} onFile={setFile} />
+            <AutomationCompileArtifacts
+              source={source}
+              file={file}
+              onFile={setFile}
+            />
           ) : null}
         </section>
-      ) : null}
+      )}
     </aside>
   );
 }

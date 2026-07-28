@@ -8,11 +8,12 @@ import {
   loadable,
   tintBg,
   typeMeta,
-} from '../format.ts';
-import { I } from '../icons.ts';
-import type { DriveDoc } from '../types.ts';
-import { Icon } from './Shared.tsx';
-import styles from './QuickLook.module.css';
+} from "../format.ts";
+import { I } from "../icons.ts";
+import type { DriveDoc } from "../types.ts";
+import { Icon } from "./Shared.tsx";
+
+import styles from "./QuickLook.module.css";
 
 // The iframe (PDF) / img stage is load-bearing: content_uri is a same-origin
 // vault blob URL or data: URI (CSP `default-src 'self'` — issue #296), and
@@ -50,7 +51,7 @@ export function QuickLook({
         key={doc.content_id}
         className={styles.quickImage}
         src={doc.content_uri}
-        alt={doc.title ?? 'Image'}
+        alt={doc.title ?? "Image"}
       />
     );
   } else if (isVideo(doc)) {
@@ -63,7 +64,7 @@ export function QuickLook({
         controls
         playsInline
         preload="metadata"
-        aria-label={doc.title ?? 'Video'}
+        aria-label={doc.title ?? "Video"}
       >
         {/* The vault has no caption sidecar for a document yet; this is the
             wiring point for its `src` when it does. */}
@@ -74,20 +75,29 @@ export function QuickLook({
     stage = (
       <div className={styles.quickAudio} key={doc.content_id}>
         <span aria-hidden="true">♪</span>
-        <audio src={doc.content_uri} controls preload="metadata" aria-label={doc.title ?? 'Audio'}>
+        <audio
+          src={doc.content_uri}
+          controls
+          preload="metadata"
+          aria-label={doc.title ?? "Audio"}
+        >
           {/* The vault has no caption sidecar for a document yet; this is the
               wiring point for its `src` when it does. */}
           <track kind="captions" />
         </audio>
       </div>
     );
-  } else if (String(doc.media_type ?? '') === 'application/pdf' && loadable(doc.content_uri)) {
+  } else if (
+    String(doc.media_type ?? "") === "application/pdf" &&
+    loadable(doc.content_uri)
+  ) {
     stage = (
       <iframe
         key={doc.content_id}
         className={styles.quickFrame}
         src={doc.content_uri}
-        title={doc.title ?? 'PDF'}
+        title={doc.title ?? "PDF"}
+        sandbox=""
       />
     );
   } else {
@@ -97,30 +107,35 @@ export function QuickLook({
       <div className={styles.quickPage} key={doc.content_id}>
         <i
           style={{
-            height: '11px',
-            width: '44%',
+            height: "11px",
+            width: "44%",
             background: `var(${m.cv})`,
             opacity: 0.85,
-            marginBottom: '22px',
+            marginBottom: "22px",
           }}
-        ></i>
+        />
         {widths.map((w, i) => (
           <i
             key={i}
             style={{
-              height: '7px',
+              height: "7px",
               width: `${w}%`,
-              background: i < 4 ? '#e6e7ea' : '#eceef1',
+              background: i < 4 ? "#e6e7ea" : "#eceef1",
               marginBottom: `${i === 3 ? 26 : 11}px`,
             }}
-          ></i>
+          />
         ))}
       </div>
     );
   }
 
   return (
-    <dialog open className={styles.quick} aria-modal="true" aria-label="Quick look">
+    <dialog
+      open
+      className={styles.quick}
+      aria-modal="true"
+      aria-label="Quick look"
+    >
       <div className={styles.quickTop}>
         <span
           className={styles.quickBadge}
@@ -128,8 +143,12 @@ export function QuickLook({
         >
           {m.label}
         </span>
-        <span className={styles.quickTitle}>{doc.title ?? 'Untitled'}</span>
-        <a className={styles.quickBtn} href={doc.content_uri} download={doc.title ?? 'file'}>
+        <span className={styles.quickTitle}>{doc.title ?? "Untitled"}</span>
+        <a
+          className={styles.quickBtn}
+          href={doc.content_uri}
+          download={doc.title ?? "file"}
+        >
           <Icon svg={I.download!} />
           Download
         </a>
@@ -164,7 +183,8 @@ export function QuickLook({
         </button>
       </div>
       <div className={styles.quickFoot}>
-        {folderName(doc.folder_id)} · {fmtBytes(doc.byte_size)} · added {fmtFull(doc.created_at)}
+        {folderName(doc.folder_id)} · {fmtBytes(doc.byte_size)} · added{" "}
+        {fmtFull(doc.created_at)}
       </div>
     </dialog>
   );

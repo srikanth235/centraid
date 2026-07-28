@@ -27,12 +27,13 @@
 // dropped. Passing anything narrower here would delete the only durable copy
 // of an archived segment.
 
-import type { DatabaseSync } from 'node:sqlite';
-import { conversationArchiveShas } from '../conversation-archive-roots.js';
-import { archivedSegmentShas } from '../journal-archive.js';
-import { liveBlobShas } from './read.js';
-import type { LocalBlobStore } from './local.js';
-import { OrphanTombstoneIndex } from './orphan-tombstone.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import { conversationArchiveShas } from "../conversation-archive-roots.js";
+import { archivedSegmentShas } from "../journal-archive.js";
+import type { LocalBlobStore } from "./local.js";
+import { OrphanTombstoneIndex } from "./orphan-tombstone.js";
+import { liveBlobShas } from "./read.js";
 
 /**
  * The narrow slice of an open vault the sweep touches. `VaultDb` satisfies it
@@ -42,8 +43,8 @@ export interface LocalOrphanSweepTarget {
   vault: DatabaseSync;
   journal: DatabaseSync;
   blobs: {
-    local: Pick<LocalBlobStore, 'listSync'>;
-    deleteLocalSync(sha: string): void;
+    local: Pick<LocalBlobStore, "listSync">;
+    deleteLocalSync: (sha: string) => void;
   };
 }
 
@@ -78,7 +79,7 @@ export interface LocalOrphanSweepResult {
  */
 export function sweepLocalOrphans(
   db: LocalOrphanSweepTarget,
-  options: LocalOrphanSweepOptions,
+  options: LocalOrphanSweepOptions
 ): LocalOrphanSweepResult {
   const now = options.now ?? Date.now();
   const live = liveBlobShas(db.vault);

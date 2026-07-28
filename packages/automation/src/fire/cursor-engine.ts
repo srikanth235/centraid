@@ -9,12 +9,11 @@
  * are injected readers over the same contract.
  */
 
-import type { ReconcileResult } from './host.js';
-import type { Row } from '../scaffold/app.js';
-import type { Trigger } from '../manifest/manifest.js';
-import { floorMinute, readCronCursor } from './cron-cursor.js';
-import { cronMatches } from './cron-match.js';
-import { MemoryCursorStore } from './memory-cursor-store.js';
+import type { Trigger } from "../manifest/manifest.js";
+import type { Row } from "../scaffold/app.js";
+import { floorMinute, readCronCursor } from "./cron-cursor.js";
+import { cronMatches } from "./cron-match.js";
+import { applyInOrder, eventSourceKey } from "./cursor-engine-order.js";
 import {
   DEFAULT_TRIGGER_CATCH_UP_CAP,
   cursorIdentity,
@@ -30,13 +29,15 @@ import {
   type PendingFireBatch,
   type TriggerCursorFireInput,
   type VaultCursorEngineOptions,
-} from './cursor-engine-support.js';
+} from "./cursor-engine-support.js";
+import type { ReconcileResult } from "./host.js";
+import { MemoryCursorStore } from "./memory-cursor-store.js";
 
 export {
   DEFAULT_TRIGGER_CATCH_UP_CAP,
   assertTriggerCursorAllowed,
   isDeniedCursorEntity,
-} from './cursor-engine-support.js';
+} from "./cursor-engine-support.js";
 export type {
   CursorElement,
   CursorReadResult,
@@ -45,19 +46,19 @@ export type {
   TriggerCursorFireInput,
   TriggerCursorReadInput,
   VaultCursorEngineOptions,
-} from './cursor-engine-support.js';
+} from "./cursor-engine-support.js";
 
 export class VaultCursorEngine implements LocalCursorScheduler {
   private readonly registrations = new Map<string, CursorRegistration>();
-  private readonly fire: VaultCursorEngineOptions['fire'];
-  private readonly fireCursor?: VaultCursorEngineOptions['fireCursor'];
-  private readonly readCursor?: VaultCursorEngineOptions['readCursor'];
-  private readonly evaluate?: VaultCursorEngineOptions['evaluate'];
+  private readonly fire: VaultCursorEngineOptions["fire"];
+  private readonly fireCursor?: VaultCursorEngineOptions["fireCursor"];
+  private readonly readCursor?: VaultCursorEngineOptions["readCursor"];
+  private readonly evaluate?: VaultCursorEngineOptions["evaluate"];
   private readonly store: CursorStore;
   private readonly now: () => Date;
-  private readonly onError?: VaultCursorEngineOptions['onError'];
-  private readonly onTick?: VaultCursorEngineOptions['onTick'];
-  private readonly onDormancyChange?: VaultCursorEngineOptions['onDormancyChange'];
+  private readonly onError?: VaultCursorEngineOptions["onError"];
+  private readonly onTick?: VaultCursorEngineOptions["onTick"];
+  private readonly onDormancyChange?: VaultCursorEngineOptions["onDormancyChange"];
   private readonly nudgeDelayMs: number;
   private readonly catchUpCap: number;
   private readonly defaultCronTimeZone?: () => string | undefined;
@@ -67,7 +68,10 @@ export class VaultCursorEngine implements LocalCursorScheduler {
   private nudgeAll = false;
   private readonly nudgedEntities = new Set<string>();
   private lastProcessedMinute?: number;
-  private readonly inFlight = new Map<string, { promise: Promise<void>; dirty: boolean }>();
+  private readonly inFlight = new Map<
+    string,
+    { promise: Promise<void>; dirty: boolean }
+  >();
 
   constructor(options: VaultCursorEngineOptions) {
     this.fire = options.fire;
@@ -91,8 +95,14 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       // Disabling drops registrations but deliberately keeps the stored
       // cursors: re-enabling resumes from the recorded position instead of
       // bootstrapping past everything that happened while it was off.
-      for (const registration of registrationsFor(row, this.defaultCronTimeZone?.())) {
-        this.registrations.set(this.key(row.ref, registration.triggerIndex), registration);
+      for (const registration of registrationsFor(
+        row,
+        this.defaultCronTimeZone?.()
+      )) {
+        this.registrations.set(
+          this.key(row.ref, registration.triggerIndex),
+          registration
+        );
       }
     }
     await this.bootstrapTriggers(row.ref, false);
@@ -106,7 +116,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
   }
 
   async list(): Promise<readonly string[]> {
-    return [...new Set([...this.registrations.values()].map((entry) => entry.ref))].sort();
+    return [
+      ...new Set([...this.registrations.values()].map((entry) => entry.ref)),
+    ].sort();
   }
 
   async reconcile(rows: ReadonlyArray<Row>): Promise<ReconcileResult> {
@@ -132,7 +144,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     this.registrations.clear();
     for (const [key, value] of next) this.registrations.set(key, value);
     try {
-      for (const ref of [...added, ...updated]) await this.bootstrapTriggers(ref, true);
+      await applyInOrder([...added, ...updated], (ref) =>
+        this.bootstrapTriggers(ref, true)
+      );
     } catch (error) {
       this.registrations.clear();
       for (const [key, value] of previous) this.registrations.set(key, value);
@@ -159,7 +173,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     try {
       this.onTick?.(at);
     } catch (error) {
-      this.onError?.(error, '__scheduler');
+      this.onError?.(error, "__scheduler");
     }
     for (const registration of this.registrations.values()) {
       const expr = scheduleExpr(registration.trigger);
@@ -168,7 +182,10 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       // resumes at 10:00; current-minute matching would defer it for a day.
       // Non-cron gated readers (condition/data/event) match their gate on
       // host-local wall clock — only pure cron triggers carry a zone.
-      if (registration.trigger.kind === 'cron' || (expr !== undefined && cronMatches(expr, at))) {
+      if (
+        registration.trigger.kind === "cron" ||
+        (expr !== undefined && cronMatches(expr, at))
+      ) {
         this.processSafely(registration, at);
       }
     }
@@ -189,7 +206,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     for (const registration of this.registrations.values()) {
       const trigger = registration.trigger;
       const selected =
-        (trigger.kind === 'webhook' && 'id' in trigger && trigger.id === sourceKey) ||
+        (trigger.kind === "webhook" &&
+          "id" in trigger &&
+          trigger.id === sourceKey) ||
         // An event source's durable ingress key is per-connection: the host
         // appends the bound `connectionId` and the trigger's filter hash onto
         // `eventSourceKey(trigger)` so a multi-account connector cannot deliver
@@ -197,7 +216,8 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         // rather than the bare key, so a nudge always wakes the right
         // registration; a same-kind sibling that wakes too reads its own cursor
         // and finds nothing (issue #541 review).
-        (trigger.kind === 'event' && sourceKey.startsWith(`${eventSourceKey(trigger)}:`));
+        (trigger.kind === "event" &&
+          sourceKey.startsWith(`${eventSourceKey(trigger)}:`));
       if (selected) this.processSafely(registration, at);
     }
   }
@@ -224,7 +244,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     this.nudgeTimer = undefined;
     this.nudgeAll = false;
     this.nudgedEntities.clear();
-    await Promise.allSettled([...this.inFlight.values()].map((state) => state.promise));
+    await Promise.allSettled(
+      [...this.inFlight.values()].map((state) => state.promise)
+    );
   }
 
   private armNudge(): void {
@@ -239,7 +261,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       for (const registration of this.registrations.values()) {
         const trigger = registration.trigger;
         const selected =
-          trigger.kind === 'data' &&
+          trigger.kind === "data" &&
           (all || trigger.entities.some((entity) => entities.has(entity)));
         if (selected) this.processSafely(registration, at);
       }
@@ -248,7 +270,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
   }
 
   private processSafely(registration: CursorRegistration, at: Date): void {
-    void this.serialize(registration, at).catch((error) => this.onError?.(error, registration.ref));
+    void this.serialize(registration, at).catch((error) =>
+      this.onError?.(error, registration.ref)
+    );
   }
 
   private serialize(registration: CursorRegistration, at: Date): Promise<void> {
@@ -261,7 +285,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     const state = { promise: Promise.resolve(), dirty: false };
     state.promise = (async () => {
       let failure: { error: unknown } | undefined;
-      for (;;) {
+      const drainDirtyWork = async (): Promise<void> => {
         state.dirty = false;
         try {
           await this.process(registration, at);
@@ -272,9 +296,10 @@ export class VaultCursorEngine implements LocalCursorScheduler {
           // POST or a restart. Drain it, then surface the first failure.
           failure ??= { error };
         }
-        if (!state.dirty) break;
-      }
-      if (failure) throw failure.error;
+        if (state.dirty) return drainDirtyWork();
+        if (failure) throw failure.error;
+      };
+      await drainDirtyWork();
     })().finally(() => {
       if (this.inFlight.get(key) === state) this.inFlight.delete(key);
     });
@@ -282,12 +307,20 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     return state.promise;
   }
 
-  private async process(registration: CursorRegistration, at: Date): Promise<void> {
-    const storedCursor = this.store.getCursor(registration.ref, registration.triggerIndex);
+  private async process(
+    registration: CursorRegistration,
+    at: Date
+  ): Promise<void> {
+    const storedCursor = this.store.getCursor(
+      registration.ref,
+      registration.triggerIndex
+    );
     // If a trigger changed in place at the same array index, the previous
     // source position is meaningless to its replacement.
     const cursor =
-      storedCursor?.sourceKind === cursorIdentity(registration.trigger) ? storedCursor : undefined;
+      storedCursor?.sourceKind === cursorIdentity(registration.trigger)
+        ? storedCursor
+        : undefined;
     const priorPending = readPendingBatch(cursor?.pendingJson);
     let result: CursorReadResult;
     if (priorPending) {
@@ -296,18 +329,26 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       // retention remove ingress payloads before restart delivery.
       result = {
         elements: priorPending.elements,
-        ...(priorPending.targetPositionJson !== undefined
-          ? { positionJson: priorPending.targetPositionJson }
-          : {}),
+        ...(priorPending.targetPositionJson === undefined
+          ? {}
+          : { positionJson: priorPending.targetPositionJson }),
         skipped: priorPending.skipped,
-        ...(priorPending.windowFrom !== undefined ? { windowFrom: priorPending.windowFrom } : {}),
-        ...(priorPending.windowTo !== undefined ? { windowTo: priorPending.windowTo } : {}),
-        ...(priorPending.gapReason !== undefined ? { gapReason: priorPending.gapReason } : {}),
+        ...(priorPending.windowFrom === undefined
+          ? {}
+          : { windowFrom: priorPending.windowFrom }),
+        ...(priorPending.windowTo === undefined
+          ? {}
+          : { windowTo: priorPending.windowTo }),
+        ...(priorPending.gapReason === undefined
+          ? {}
+          : { gapReason: priorPending.gapReason }),
       };
-    } else if (registration.trigger.kind === 'cron') {
+    } else if (registration.trigger.kind === "cron") {
       const schedules =
         registration.cronSchedules ??
-        (registration.cronExprs ?? [registration.trigger.expr]).map((expr) => ({ expr }));
+        (registration.cronExprs ?? [registration.trigger.expr]).map((expr) => ({
+          expr,
+        }));
       result = readCronCursor(schedules, cursor, at);
     } else if (this.readCursor) {
       result = await this.readCursor({
@@ -342,17 +383,21 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         triggerIndex: registration.triggerIndex,
         sourceKind: identity,
         ...(pending
-          ? cursor?.positionJson !== undefined
-            ? { positionJson: cursor.positionJson }
-            : {}
-          : targetPositionJson !== undefined
-            ? { positionJson: targetPositionJson }
-            : {}),
+          ? cursor?.positionJson === undefined
+            ? {}
+            : { positionJson: cursor.positionJson }
+          : targetPositionJson === undefined
+            ? {}
+            : { positionJson: targetPositionJson }),
         ...(pending ? { pendingJson: JSON.stringify(pending) } : {}),
-        ...(result.windowFrom !== undefined ? { windowFrom: result.windowFrom } : {}),
-        ...(result.windowTo !== undefined ? { windowTo: result.windowTo } : {}),
+        ...(result.windowFrom === undefined
+          ? {}
+          : { windowFrom: result.windowFrom }),
+        ...(result.windowTo === undefined ? {} : { windowTo: result.windowTo }),
         skipped,
-        ...(result.gapReason !== undefined ? { gapReason: result.gapReason } : {}),
+        ...(result.gapReason === undefined
+          ? {}
+          : { gapReason: result.gapReason }),
         updatedAt: at.getTime(),
       });
     };
@@ -360,25 +405,38 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       // Nothing was delivered, so only a real state change earns a write. An
       // idle cron minute would otherwise upsert this row 1,440 times a day.
       const positionMoved =
-        targetPositionJson !== undefined && targetPositionJson !== cursor?.positionJson;
-      const identityMoved = storedCursor !== undefined && storedCursor.sourceKind !== identity;
-      if (positionMoved || identityMoved || storedCursor?.pendingJson !== undefined) put();
+        targetPositionJson !== undefined &&
+        targetPositionJson !== cursor?.positionJson;
+      const identityMoved =
+        storedCursor !== undefined && storedCursor.sourceKind !== identity;
+      if (
+        positionMoved ||
+        identityMoved ||
+        storedCursor?.pendingJson !== undefined
+      )
+        put();
       return;
     }
     const pending = (): PendingFireBatch => ({
-      ...(targetPositionJson !== undefined ? { targetPositionJson } : {}),
+      ...(targetPositionJson === undefined ? {} : { targetPositionJson }),
       elements,
       acknowledged: [...acknowledged],
       skipped,
-      ...(result.windowFrom !== undefined ? { windowFrom: result.windowFrom } : {}),
-      ...(result.windowTo !== undefined ? { windowTo: result.windowTo } : {}),
-      ...(result.gapReason !== undefined ? { gapReason: result.gapReason } : {}),
+      ...(result.windowFrom === undefined
+        ? {}
+        : { windowFrom: result.windowFrom }),
+      ...(result.windowTo === undefined ? {} : { windowTo: result.windowTo }),
+      ...(result.gapReason === undefined
+        ? {}
+        : { gapReason: result.gapReason }),
     });
     // Durable intent precedes any side effect. The committed source position
     // deliberately stays unchanged until all terminal turns are receipted.
     put(pending());
-    for (const element of elements) {
-      if (acknowledged.has(element.position)) continue;
+    const deliverNext = async (index: number): Promise<void> => {
+      const element = elements[index];
+      if (element === undefined) return;
+      if (acknowledged.has(element.position)) return deliverNext(index + 1);
       const fireInput: TriggerCursorFireInput = {
         automationRef: registration.ref,
         trigger: registration.trigger,
@@ -386,36 +444,46 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         sourceKind: cursorSourceKind(registration.trigger),
         element,
         skipped,
-        ...(result.windowFrom !== undefined ? { windowFrom: result.windowFrom } : {}),
-        ...(result.windowTo !== undefined ? { windowTo: result.windowTo } : {}),
-        ...(result.gapReason !== undefined ? { gapReason: result.gapReason } : {}),
+        ...(result.windowFrom === undefined
+          ? {}
+          : { windowFrom: result.windowFrom }),
+        ...(result.windowTo === undefined ? {} : { windowTo: result.windowTo }),
+        ...(result.gapReason === undefined
+          ? {}
+          : { gapReason: result.gapReason }),
       };
       if (this.fireCursor) await this.fireCursor(fireInput);
-      else if (registration.trigger.kind === 'cron') await this.fire(registration.ref);
+      else if (registration.trigger.kind === "cron")
+        await this.fire(registration.ref);
       acknowledged.add(element.position);
       put(pending());
-    }
+      return deliverNext(index + 1);
+    };
+    await deliverNext(0);
     put();
   }
 
-  private async bootstrapTriggers(ref: string, allowLegacyEvaluate: boolean): Promise<void> {
+  private async bootstrapTriggers(
+    ref: string,
+    allowLegacyEvaluate: boolean
+  ): Promise<void> {
     const canReadExternal =
-      this.readCursor !== undefined || (allowLegacyEvaluate && this.evaluate !== undefined);
+      this.readCursor !== undefined ||
+      (allowLegacyEvaluate && this.evaluate !== undefined);
     const at = this.now();
-    for (const registration of this.registrations.values()) {
-      if (
-        registration.ref !== ref ||
-        (registration.trigger.kind !== 'data' &&
-          registration.trigger.kind !== 'webhook' &&
-          registration.trigger.kind !== 'event')
-      ) {
-        // Cron is deliberately absent: its window includes the current minute,
-        // so bootstrapping it would run a `0 9 * * *` automation the instant it
-        // is created (or re-enabled) at 09:00:30. Cron catches up on the next
-        // tick instead — the same no-fire bootstrap data triggers get.
-        continue;
-      }
-      if (!canReadExternal) continue;
+    const eligible = [...this.registrations.values()].filter(
+      (registration) =>
+        registration.ref === ref &&
+        (registration.trigger.kind === "data" ||
+          registration.trigger.kind === "webhook" ||
+          registration.trigger.kind === "event")
+    );
+    await applyInOrder(eligible, async (registration) => {
+      // Cron is deliberately absent: its window includes the current minute,
+      // so bootstrapping it would run a `0 9 * * *` automation the instant it
+      // is created (or re-enabled) at 09:00:30. Cron catches up on the next
+      // tick instead — the same no-fire bootstrap data triggers get.
+      if (!canReadExternal) return;
       try {
         await this.process(registration, at);
       } catch (error) {
@@ -424,10 +492,10 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         // or needs auth; the next cadence retries through the same cursor.
         // Data/condition bootstrap remains strict because its initial vault
         // position is part of install-time grant readiness.
-        if (registration.trigger.kind !== 'event') throw error;
+        if (registration.trigger.kind !== "event") throw error;
         this.onError?.(error, registration.ref);
       }
-    }
+    });
   }
 
   private dropRegistrations(ref: string): void {
@@ -445,7 +513,7 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       // A dormancy ledger write is observability, not registration state. It
       // is surfaced, never swallowed, but it must not fail the reconcile that
       // just settled every automation.
-      this.onError?.(error, '<scheduler-dormancy>');
+      this.onError?.(error, "<scheduler-dormancy>");
     }
   }
 
@@ -453,14 +521,16 @@ export class VaultCursorEngine implements LocalCursorScheduler {
     return `${ref}\u0000${triggerIndex}`;
   }
 
-  private signatureByRef(rows: ReadonlyMap<string, CursorRegistration>): Map<string, string> {
+  private signatureByRef(
+    rows: ReadonlyMap<string, CursorRegistration>
+  ): Map<string, string> {
     const grouped = new Map<
       string,
       Array<{
         index: number;
         trigger: Trigger;
         cronExprs?: readonly string[];
-        cronSchedules?: CursorRegistration['cronSchedules'];
+        cronSchedules?: CursorRegistration["cronSchedules"];
       }>
     >();
     for (const registration of rows.values()) {
@@ -470,8 +540,12 @@ export class VaultCursorEngine implements LocalCursorScheduler {
         trigger: registration.trigger,
         // Collapsed cron expressions + zones are part of the definition:
         // editing the second cron or its timezone must still read as "updated".
-        ...(registration.cronExprs ? { cronExprs: registration.cronExprs } : {}),
-        ...(registration.cronSchedules ? { cronSchedules: registration.cronSchedules } : {}),
+        ...(registration.cronExprs
+          ? { cronExprs: registration.cronExprs }
+          : {}),
+        ...(registration.cronSchedules
+          ? { cronSchedules: registration.cronSchedules }
+          : {}),
       });
       grouped.set(registration.ref, list);
     }
@@ -479,11 +553,9 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       [...grouped].map(([ref, triggers]) => [
         ref,
         JSON.stringify(triggers.sort((a, b) => a.index - b.index)),
-      ]),
+      ])
     );
   }
 }
 
-export function eventSourceKey(trigger: Extract<Trigger, { kind: 'event' }>): string {
-  return `event:${trigger.connectorKind}:${trigger.event}`;
-}
+export { eventSourceKey } from "./cursor-engine-order.js";

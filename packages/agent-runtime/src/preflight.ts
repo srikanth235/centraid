@@ -11,14 +11,16 @@
  * for sure on a fresh-empirically-tested version).
  */
 
-import { spawn } from 'node:child_process';
-import type { RunnerStatus } from '@centraid/app-engine';
-import type { RunnerKind, RunnerPrefs } from './types.js';
-import { getRunnerBackend } from './registry.js';
-import { readRunnerModels } from './models/catalog.js';
-import { agentSpawnEnv } from './spawn-env.js';
-import { lowPriorityCommand } from './low-priority.js';
-import { resolveAcpCapabilities } from './backends/acp/capabilities-cache.js';
+import { spawn } from "node:child_process";
+
+import type { RunnerStatus } from "@centraid/app-engine";
+
+import { resolveAcpCapabilities } from "./backends/acp/capabilities-cache.js";
+import { lowPriorityCommand } from "./low-priority.js";
+import { readRunnerModels } from "./models/catalog.js";
+import { getRunnerBackend } from "./registry.js";
+import { agentSpawnEnv } from "./spawn-env.js";
+import type { RunnerKind, RunnerPrefs } from "./types.js";
 
 const VERSION_TIMEOUT_MS = 5_000;
 
@@ -48,7 +50,7 @@ interface CachedStatus {
 let cached: CachedStatus | undefined;
 
 function cacheKey(prefs: RunnerPrefs): string {
-  return `${prefs.kind}::${prefs.binPath ?? ''}::${JSON.stringify(prefs.extraArgs ?? [])}`;
+  return `${prefs.kind}::${prefs.binPath ?? ""}::${JSON.stringify(prefs.extraArgs ?? [])}`;
 }
 
 export function invalidatePreflightCache(): void {
@@ -71,7 +73,7 @@ export interface CliAvailability {
  */
 export async function probeCliAvailability(
   kind: RunnerKind,
-  binPath?: string,
+  binPath?: string
 ): Promise<CliAvailability> {
   const bin = binPath ?? getRunnerBackend(kind).defaultBin;
   // The custom `acp` kind has no default binary — unavailable until configured.
@@ -96,10 +98,15 @@ export async function probeCliAvailability(
  */
 export async function runPreflight(
   prefs: RunnerPrefs,
-  opts: { catalogPath?: string; refresh?: boolean; requireSessionReady?: boolean } = {},
+  opts: {
+    catalogPath?: string;
+    refresh?: boolean;
+    requireSessionReady?: boolean;
+  } = {}
 ): Promise<RunnerStatus> {
   const key = cacheKey(prefs);
-  const status = cached && cached.cacheKey === key ? cached.status : await probe(prefs);
+  const status =
+    cached && cached.cacheKey === key ? cached.status : await probe(prefs);
   cached = { status, cacheKey: key };
 
   if (status.ok && opts.requireSessionReady) {
@@ -119,14 +126,17 @@ export async function runPreflight(
         ...status,
         ok: false,
         reason: caps?.authRequired
-          ? `agent session is not authenticated${caps.reason ? `: ${caps.reason}` : ''}`
-          : (caps?.reason ?? 'agent did not complete ACP initialize/session readiness'),
+          ? `agent session is not authenticated${caps.reason ? `: ${caps.reason}` : ""}`
+          : (caps?.reason ??
+            "agent did not complete ACP initialize/session readiness"),
         hint: getRunnerBackend(prefs.kind).installHint,
       };
     }
   }
   if (status.ok) {
-    status.models = opts.catalogPath ? await readRunnerModels(opts.catalogPath, prefs.kind) : [];
+    status.models = opts.catalogPath
+      ? await readRunnerModels(opts.catalogPath, prefs.kind)
+      : [];
   }
   return status;
 }
@@ -140,17 +150,23 @@ async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
     return {
       kind: prefs.kind,
       ok: false,
-      reason: 'no binary configured for this runner — set its path in Settings → Agents',
+      reason:
+        "no binary configured for this runner — set its path in Settings → Agents",
       hint: backend.installHint,
       minVersion: minVersionString(prefs.kind),
     };
   }
   try {
-    const raw = await execVersion(bin, agentSpawnEnv({ binPath: prefs.binPath }));
+    const raw = await execVersion(
+      bin,
+      agentSpawnEnv({ binPath: prefs.binPath })
+    );
     const trimmed = raw.trim().slice(0, 200);
     const parsed = parseSemver(trimmed);
     const minV = backend.minVersion;
-    const versionAtLeast = parsed ? compareSemver(parsed, minV) >= 0 : undefined;
+    const versionAtLeast = parsed
+      ? compareSemver(parsed, minV) >= 0
+      : undefined;
     const status: RunnerStatus = {
       kind: prefs.kind,
       ok: true,
@@ -165,7 +181,7 @@ async function probe(prefs: RunnerPrefs): Promise<RunnerStatus> {
     return status;
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
+    if (code === "ENOENT") {
       return {
         kind: prefs.kind,
         ok: false,
@@ -196,12 +212,12 @@ export function parseSemver(text: string): SemVer | undefined {
   // No leading `\b` — strings like `v1.2.3` have a word char before the
   // digit, which would block the boundary. We still want `1.2.3` out of
   // them.
-  const m = text.match(/(\d+)\.(\d+)\.(\d+)/);
+  const m = text.match(/(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)/u);
   if (!m) return undefined;
   return {
-    major: Number(m[1]),
-    minor: Number(m[2]),
-    patch: Number(m[3]),
+    major: Number(m.groups?.major),
+    minor: Number(m.groups?.minor),
+    patch: Number(m.groups?.patch),
   };
 }
 
@@ -211,11 +227,14 @@ export function compareSemver(a: SemVer, b: SemVer): number {
   return a.patch - b.patch;
 }
 
-async function execVersion(bin: string, env: NodeJS.ProcessEnv): Promise<string> {
+async function execVersion(
+  bin: string,
+  env: NodeJS.ProcessEnv
+): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const command = lowPriorityCommand(bin, ['--version']);
+    const command = lowPriorityCommand(bin, ["--version"]);
     const child = spawn(command.bin, command.args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ["ignore", "pipe", "pipe"],
       env,
     });
     const stdoutChunks: Buffer[] = [];
@@ -228,28 +247,29 @@ async function execVersion(bin: string, env: NodeJS.ProcessEnv): Promise<string>
     };
     const timer = setTimeout(() => {
       settle(() => {
-        child.kill('SIGKILL');
-        reject(new Error('--version timed out'));
+        child.kill("SIGKILL");
+        reject(new Error("--version timed out"));
       });
     }, VERSION_TIMEOUT_MS);
     timer.unref?.();
 
-    child.stdout.on('data', (c: Buffer) => stdoutChunks.push(c));
-    child.stderr.on('data', (c: Buffer) => stderrChunks.push(c));
-    child.on('error', (err) => {
+    child.stdout.on("data", (c: Buffer) => stdoutChunks.push(c));
+    child.stderr.on("data", (c: Buffer) => stderrChunks.push(c));
+    child.on("error", (err) => {
       clearTimeout(timer);
       settle(() => reject(err));
     });
-    child.on('exit', (code) => {
+    child.on("exit", (code) => {
       clearTimeout(timer);
       if (code === 0) {
-        const stdout = Buffer.concat(stdoutChunks).toString('utf8');
-        const stderr = Buffer.concat(stderrChunks).toString('utf8');
+        const stdout = Buffer.concat(stdoutChunks).toString("utf8");
+        const stderr = Buffer.concat(stderrChunks).toString("utf8");
         // `nice` can report a harmless setpriority denial on stderr inside a
         // sandbox. Successful CLIs normally put their version on stdout; fall
         // back to stderr only for CLIs that intentionally version there.
         settle(() => resolve(stdout.trim() ? stdout : stderr));
-      } else settle(() => reject(new Error(`--version exited ${code ?? 'null'}`)));
+      } else
+        settle(() => reject(new Error(`--version exited ${code ?? "null"}`)));
     });
   });
 }

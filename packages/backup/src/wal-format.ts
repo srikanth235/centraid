@@ -41,11 +41,11 @@
  * `@centraid/vault` (WalShipper), materialization in `wal-restore.ts`.
  */
 
-import { decrypt, deriveNonce, encryptWithNonce } from './crypto.js';
+import { decrypt, deriveNonce, encryptWithNonce } from "./crypto.js";
 
 /** The two shipped databases. Part of the format — object keys embed these names. */
-export type WalDbName = 'vault' | 'journal';
-export const WAL_DB_NAMES: readonly WalDbName[] = ['vault', 'journal'];
+export type WalDbName = "vault" | "journal";
+export const WAL_DB_NAMES: readonly WalDbName[] = ["vault", "journal"];
 
 /**
  * The order the two databases MUST be cut in, at every cut: checkpoint,
@@ -58,12 +58,12 @@ export const WAL_DB_NAMES: readonly WalDbName[] = ['vault', 'journal'];
  * 'journal']` — the WRONG order — and any ordering-sensitive loop that reaches
  * for it is silently, invisibly wrong. Grep for this name before writing one.
  */
-export const WAL_CAPTURE_ORDER: readonly WalDbName[] = ['journal', 'vault'];
+export const WAL_CAPTURE_ORDER: readonly WalDbName[] = ["journal", "vault"];
 
 /** `vault` ↔ `vault.db` (manifest entry path / on-disk file name). */
 export const WAL_DB_FILES: Record<WalDbName, string> = {
-  vault: 'vault.db',
-  journal: 'journal.db',
+  vault: "vault.db",
+  journal: "journal.db",
 };
 
 export interface WalSegmentAddress {
@@ -126,7 +126,7 @@ export interface WalPairMarker {
   journal: WalPairPosition;
 }
 
-const GENERATION_RE = /^[0-9a-f]{32}$/;
+const GENERATION_RE = /^[0-9a-f]{32}$/u;
 
 /**
  * Mint a WAL stream generation id: 128 random bits, hex. Random — not a
@@ -134,15 +134,18 @@ const GENERATION_RE = /^[0-9a-f]{32}$/;
  * collide with its own past (the #116 `measurementEpoch` trap); 128 random
  * bits cannot.
  */
-export function newWalGeneration(randomBytes: (n: number) => Uint8Array): string {
-  return Buffer.from(randomBytes(16)).toString('hex');
+export function newWalGeneration(
+  randomBytes: (n: number) => Uint8Array
+): string {
+  return Buffer.from(randomBytes(16)).toString("hex");
 }
 
 export function isWalGeneration(value: string): boolean {
   return GENERATION_RE.test(value);
 }
 
-const pad = (n: number, width: number): string => String(n).padStart(width, '0');
+const pad = (n: number, width: number): string =>
+  String(n).padStart(width, "0");
 
 /**
  * Segment: `wal/{db}/{generation}/{group:08}/{start:012}-{end:012}-{tick:013}`.
@@ -167,8 +170,13 @@ export function walGroupCloserKey(closer: WalGroupCloser): string {
 }
 
 /** List prefix for one database's generation (or one group of it). */
-export function walSegmentPrefix(db: WalDbName, generation: string, group?: number): string {
-  if (!GENERATION_RE.test(generation)) throw new Error(`invalid wal generation "${generation}"`);
+export function walSegmentPrefix(
+  db: WalDbName,
+  generation: string,
+  group?: number
+): string {
+  if (!GENERATION_RE.test(generation))
+    throw new Error(`invalid wal generation "${generation}"`);
   const base = `wal/${db}/${generation}/`;
   return group === undefined ? base : `${base}${pad(group, 8)}/`;
 }
@@ -189,22 +197,32 @@ export function walPairMarkerKey(marker: {
 }
 
 /** List prefix for one BASE PAIR's markers — the only ones a restore may use. */
-export function walPairMarkerPrefix(vaultGeneration: string, journalGeneration: string): string {
-  if (!GENERATION_RE.test(vaultGeneration) || !GENERATION_RE.test(journalGeneration)) {
-    throw new Error(`invalid wal generation pair "${vaultGeneration}-${journalGeneration}"`);
+export function walPairMarkerPrefix(
+  vaultGeneration: string,
+  journalGeneration: string
+): string {
+  if (
+    !GENERATION_RE.test(vaultGeneration) ||
+    !GENERATION_RE.test(journalGeneration)
+  ) {
+    throw new Error(
+      `invalid wal generation pair "${vaultGeneration}-${journalGeneration}"`
+    );
   }
   return `wal/tick/${vaultGeneration}-${journalGeneration}/`;
 }
 
 /** List prefix for EVERY pair marker (GC discovery — the key names both generations). */
 export function walPairMarkerRootPrefix(): string {
-  return 'wal/tick/';
+  return "wal/tick/";
 }
 
 const SEGMENT_KEY_RE =
-  /^wal\/(vault|journal)\/([0-9a-f]{32})\/(\d{8})\/(\d{12})-(\d{12})-(\d{13})$/;
-const CLOSER_KEY_RE = /^wal\/(vault|journal)\/([0-9a-f]{32})\/(\d{8})\/closed-(\d{12})$/;
-const PAIR_MARKER_KEY_RE = /^wal\/tick\/([0-9a-f]{32})-([0-9a-f]{32})\/(\d{13})$/;
+  /^wal\/(?<db>vault|journal)\/(?<generation>[0-9a-f]{32})\/(?<group>\d{8})\/(?<startOffset>\d{12})-(?<endOffset>\d{12})-(?<tickMs>\d{13})$/u;
+const CLOSER_KEY_RE =
+  /^wal\/(?<db>vault|journal)\/(?<generation>[0-9a-f]{32})\/(?<group>\d{8})\/closed-(?<endOffset>\d{12})$/u;
+const PAIR_MARKER_KEY_RE =
+  /^wal\/tick\/(?<vaultGeneration>[0-9a-f]{32})-(?<journalGeneration>[0-9a-f]{32})\/(?<tickMs>\d{13})$/u;
 
 /** The addressing fields of a pair marker — everything its key carries. */
 export interface WalPairMarkerAddress {
@@ -214,13 +232,16 @@ export interface WalPairMarkerAddress {
 }
 
 /** Parse a pair-marker key. Returns null for keys that are not pair markers. */
-export function parseWalPairMarkerKey(key: string): WalPairMarkerAddress | null {
+export function parseWalPairMarkerKey(
+  key: string
+): WalPairMarkerAddress | null {
   const m = PAIR_MARKER_KEY_RE.exec(key);
   if (!m) return null;
+  const g = m.groups!;
   return {
-    vaultGeneration: m[1]!,
-    journalGeneration: m[2]!,
-    tickMs: Number.parseInt(m[3]!, 10),
+    vaultGeneration: g.vaultGeneration!,
+    journalGeneration: g.journalGeneration!,
+    tickMs: Math.trunc(Number(g.tickMs!)),
   };
 }
 
@@ -228,13 +249,14 @@ export function parseWalPairMarkerKey(key: string): WalPairMarkerAddress | null 
 export function parseWalSegmentKey(key: string): WalSegmentAddress | null {
   const m = SEGMENT_KEY_RE.exec(key);
   if (!m) return null;
+  const g = m.groups!;
   const addr: WalSegmentAddress = {
-    db: m[1] as WalDbName,
-    generation: m[2]!,
-    group: Number.parseInt(m[3]!, 10),
-    startOffset: Number.parseInt(m[4]!, 10),
-    endOffset: Number.parseInt(m[5]!, 10),
-    tickMs: Number.parseInt(m[6]!, 10),
+    db: g.db as WalDbName,
+    generation: g.generation!,
+    group: Math.trunc(Number(g.group!)),
+    startOffset: Math.trunc(Number(g.startOffset!)),
+    endOffset: Math.trunc(Number(g.endOffset!)),
+    tickMs: Math.trunc(Number(g.tickMs!)),
   };
   return addr.endOffset > addr.startOffset ? addr : null;
 }
@@ -243,11 +265,12 @@ export function parseWalSegmentKey(key: string): WalSegmentAddress | null {
 export function parseWalCloserKey(key: string): WalGroupCloser | null {
   const m = CLOSER_KEY_RE.exec(key);
   if (!m) return null;
+  const g = m.groups!;
   return {
-    db: m[1] as WalDbName,
-    generation: m[2]!,
-    group: Number.parseInt(m[3]!, 10),
-    endOffset: Number.parseInt(m[4]!, 10),
+    db: g.db as WalDbName,
+    generation: g.generation!,
+    group: Math.trunc(Number(g.group!)),
+    endOffset: Math.trunc(Number(g.endOffset!)),
   };
 }
 
@@ -264,7 +287,9 @@ function assertValidAddress(addr: WalSegmentAddress): void {
     addr.startOffset < 0 ||
     addr.endOffset <= addr.startOffset
   ) {
-    throw new Error(`invalid wal segment range ${addr.startOffset}-${addr.endOffset}`);
+    throw new Error(
+      `invalid wal segment range ${addr.startOffset}-${addr.endOffset}`
+    );
   }
   if (!Number.isInteger(addr.tickMs) || addr.tickMs < 0) {
     throw new Error(`invalid wal segment tick ${addr.tickMs}`);
@@ -284,9 +309,12 @@ function assertValidCloser(closer: WalGroupCloser): void {
 }
 
 function assertValidPairAddress(addr: WalPairMarkerAddress): void {
-  if (!GENERATION_RE.test(addr.vaultGeneration) || !GENERATION_RE.test(addr.journalGeneration)) {
+  if (
+    !GENERATION_RE.test(addr.vaultGeneration) ||
+    !GENERATION_RE.test(addr.journalGeneration)
+  ) {
     throw new Error(
-      `invalid wal generation pair "${addr.vaultGeneration}-${addr.journalGeneration}"`,
+      `invalid wal generation pair "${addr.vaultGeneration}-${addr.journalGeneration}"`
     );
   }
   if (!Number.isInteger(addr.tickMs) || addr.tickMs < 0) {
@@ -316,8 +344,12 @@ const FRAME_HEADER_BYTES = 24;
 
 /** Read the page size from a WAL file header (bytes 8..12, big-endian). */
 export function walPageSize(header: Uint8Array): number {
-  if (header.length < WAL_HEADER_BYTES) throw new Error('wal header truncated');
-  const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
+  if (header.length < WAL_HEADER_BYTES) throw new Error("wal header truncated");
+  const view = new DataView(
+    header.buffer,
+    header.byteOffset,
+    header.byteLength
+  );
   const magic = view.getUint32(0);
   if (magic !== 0x377f0682 && magic !== 0x377f0683) {
     throw new Error(`not a wal header (magic 0x${magic.toString(16)})`);
@@ -331,8 +363,12 @@ export function walPageSize(header: Uint8Array): number {
 
 /** WAL salts (header bytes 16/20) — the G5 foreign-checkpoint detector reads these. */
 export function walSalts(header: Uint8Array): { salt1: number; salt2: number } {
-  if (header.length < WAL_HEADER_BYTES) throw new Error('wal header truncated');
-  const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
+  if (header.length < WAL_HEADER_BYTES) throw new Error("wal header truncated");
+  const view = new DataView(
+    header.buffer,
+    header.byteOffset,
+    header.byteLength
+  );
   return { salt1: view.getUint32(16), salt2: view.getUint32(20) };
 }
 
@@ -353,14 +389,16 @@ export function walSalts(header: Uint8Array): { salt1: number; salt2: number } {
 export function lastCommitBoundary(
   bytes: Uint8Array,
   baseOffset: number,
-  pageSize: number,
+  pageSize: number
 ): number {
   const frameBytes = FRAME_HEADER_BYTES + pageSize;
   // Frames start after the 32-byte WAL header; our ranges start at 0 (header
   // included) or at a prior commit boundary, so within `bytes` the first
   // frame header sits at 32 (when baseOffset is 0) or at 0.
   if (baseOffset !== 0 && (baseOffset - WAL_HEADER_BYTES) % frameBytes !== 0) {
-    throw new Error(`wal offset ${baseOffset} is not frame-aligned for page size ${pageSize}`);
+    throw new Error(
+      `wal offset ${baseOffset} is not frame-aligned for page size ${pageSize}`
+    );
   }
   let at = baseOffset === 0 ? WAL_HEADER_BYTES : 0;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -386,7 +424,7 @@ function checksumRange(
   start: number,
   end: number,
   littleEndian: boolean,
-  seed: { s1: number; s2: number },
+  seed: { s1: number; s2: number }
 ): void {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   for (let at = start; at < end; at += 8) {
@@ -401,7 +439,7 @@ function checksumRange(
  * being restored is rejected by `validateCommittedWal` below.
  */
 export function scanWalPrefix(bytes: Uint8Array): WalPrefixScan {
-  if (bytes.length < WAL_HEADER_BYTES) throw new Error('wal header truncated');
+  if (bytes.length < WAL_HEADER_BYTES) throw new Error("wal header truncated");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const magic = view.getUint32(0);
   if (magic !== 0x377f0682 && magic !== 0x377f0683) {
@@ -412,7 +450,7 @@ export function scanWalPrefix(bytes: Uint8Array): WalPrefixScan {
   const seed = { s1: 0, s2: 0 };
   checksumRange(bytes, 0, 24, littleEndian, seed);
   if (seed.s1 !== view.getUint32(24) || seed.s2 !== view.getUint32(28)) {
-    throw new Error('wal header checksum mismatch');
+    throw new Error("wal header checksum mismatch");
   }
   const salt1 = view.getUint32(16);
   const salt2 = view.getUint32(20);
@@ -421,10 +459,21 @@ export function scanWalPrefix(bytes: Uint8Array): WalPrefixScan {
   let validEndOffset = WAL_HEADER_BYTES;
   let lastCommitOffset = 0;
   while (at + frameBytes <= bytes.length) {
-    if (view.getUint32(at + 8) !== salt1 || view.getUint32(at + 12) !== salt2) break;
+    if (view.getUint32(at + 8) !== salt1 || view.getUint32(at + 12) !== salt2)
+      break;
     checksumRange(bytes, at, at + 8, littleEndian, seed);
-    checksumRange(bytes, at + FRAME_HEADER_BYTES, at + frameBytes, littleEndian, seed);
-    if (seed.s1 !== view.getUint32(at + 16) || seed.s2 !== view.getUint32(at + 20)) break;
+    checksumRange(
+      bytes,
+      at + FRAME_HEADER_BYTES,
+      at + frameBytes,
+      littleEndian,
+      seed
+    );
+    if (
+      seed.s1 !== view.getUint32(at + 16) ||
+      seed.s2 !== view.getUint32(at + 20)
+    )
+      break;
     at += frameBytes;
     validEndOffset = at;
     if (view.getUint32(at - frameBytes + 4) !== 0) lastCommitOffset = at;
@@ -437,11 +486,11 @@ export function validateCommittedWal(bytes: Uint8Array): WalPrefixScan {
   const scan = scanWalPrefix(bytes);
   if (scan.validEndOffset !== bytes.length) {
     throw new Error(
-      `wal frame checksum/salt mismatch at offset ${scan.validEndOffset} (length ${bytes.length})`,
+      `wal frame checksum/salt mismatch at offset ${scan.validEndOffset} (length ${bytes.length})`
     );
   }
   if (scan.lastCommitOffset !== bytes.length) {
-    throw new Error('wal bytes do not end at a commit boundary');
+    throw new Error("wal bytes do not end at a commit boundary");
   }
   return scan;
 }
@@ -491,8 +540,8 @@ function segmentAad(vaultId: string, addr: WalSegmentAddress): Uint8Array {
   return new Uint8Array(
     Buffer.from(
       `centraid-wal/1:${vaultId}:${addr.db}:${addr.generation}:${addr.group}:${addr.startOffset}:${addr.endOffset}:${addr.tickMs}`,
-      'utf8',
-    ),
+      "utf8"
+    )
   );
 }
 
@@ -501,12 +550,12 @@ export function sealWalSegment(
   dataKey: Uint8Array,
   vaultId: string,
   addr: WalSegmentAddress,
-  plain: Uint8Array,
+  plain: Uint8Array
 ): Uint8Array {
   assertValidAddress(addr);
   if (plain.length !== addr.endOffset - addr.startOffset) {
     throw new Error(
-      `sealWalSegment: ${plain.length} bytes for range ${addr.startOffset}-${addr.endOffset}`,
+      `sealWalSegment: ${plain.length} bytes for range ${addr.startOffset}-${addr.endOffset}`
     );
   }
   const nonce = deriveNonce(dataKey, nonceInfo(addr));
@@ -518,12 +567,12 @@ export function openWalSegment(
   dataKey: Uint8Array,
   vaultId: string,
   addr: WalSegmentAddress,
-  sealed: Uint8Array,
+  sealed: Uint8Array
 ): Uint8Array {
   const plain = decrypt(dataKey, sealed, segmentAad(vaultId, addr));
   if (plain.length !== addr.endOffset - addr.startOffset) {
     throw new Error(
-      `openWalSegment: ${plain.length} bytes for range ${addr.startOffset}-${addr.endOffset}`,
+      `openWalSegment: ${plain.length} bytes for range ${addr.startOffset}-${addr.endOffset}`
     );
   }
   return plain;
@@ -537,8 +586,8 @@ function closerAad(vaultId: string, closer: WalGroupCloser): Uint8Array {
   return new Uint8Array(
     Buffer.from(
       `centraid-wal/1:${vaultId}:${closer.db}:${closer.generation}:${closer.group}:${closer.endOffset}:closed`,
-      'utf8',
-    ),
+      "utf8"
+    )
   );
 }
 
@@ -550,11 +599,16 @@ function closerAad(vaultId: string, closer: WalGroupCloser): Uint8Array {
 export function sealWalCloser(
   dataKey: Uint8Array,
   vaultId: string,
-  closer: WalGroupCloser,
+  closer: WalGroupCloser
 ): Uint8Array {
   assertValidCloser(closer);
   const nonce = deriveNonce(dataKey, closerNonceInfo(closer));
-  return encryptWithNonce(dataKey, nonce, new Uint8Array(0), closerAad(vaultId, closer));
+  return encryptWithNonce(
+    dataKey,
+    nonce,
+    new Uint8Array(0),
+    closerAad(vaultId, closer)
+  );
 }
 
 /** Verify a closer object. Throws on tampering or address swap. */
@@ -562,10 +616,10 @@ export function openWalCloser(
   dataKey: Uint8Array,
   vaultId: string,
   closer: WalGroupCloser,
-  sealed: Uint8Array,
+  sealed: Uint8Array
 ): void {
   const plain = decrypt(dataKey, sealed, closerAad(vaultId, closer));
-  if (plain.length !== 0) throw new Error('openWalCloser: unexpected payload');
+  if (plain.length !== 0) throw new Error("openWalCloser: unexpected payload");
 }
 
 function pairNonceInfo(addr: WalPairMarkerAddress): string {
@@ -581,8 +635,8 @@ function pairAad(vaultId: string, addr: WalPairMarkerAddress): Uint8Array {
   return new Uint8Array(
     Buffer.from(
       `centraid-wal/1:${vaultId}:tick:${addr.vaultGeneration}:${addr.journalGeneration}:${addr.tickMs}`,
-      'utf8',
-    ),
+      "utf8"
+    )
   );
 }
 
@@ -595,9 +649,10 @@ function pairAad(vaultId: string, addr: WalPairMarkerAddress): Uint8Array {
  * exactly once, and this encoding makes an honest retry converge.
  */
 function pairPayload(marker: WalPairMarker): Uint8Array {
-  const pos = (p: WalPairPosition): string => `{"endOffset":${p.endOffset},"group":${p.group}}`;
+  const pos = (p: WalPairPosition): string =>
+    `{"endOffset":${p.endOffset},"group":${p.group}}`;
   return new TextEncoder().encode(
-    `{"journal":${pos(marker.journal)},"tickMs":${marker.tickMs},"v":1,"vault":${pos(marker.vault)}}`,
+    `{"journal":${pos(marker.journal)},"tickMs":${marker.tickMs},"v":1,"vault":${pos(marker.vault)}}`
   );
 }
 
@@ -605,13 +660,18 @@ function pairPayload(marker: WalPairMarker): Uint8Array {
 export function sealWalPairMarker(
   dataKey: Uint8Array,
   vaultId: string,
-  marker: WalPairMarker,
+  marker: WalPairMarker
 ): Uint8Array {
   assertValidPairAddress(marker);
-  assertValidPosition(marker.vault, 'vault');
-  assertValidPosition(marker.journal, 'journal');
+  assertValidPosition(marker.vault, "vault");
+  assertValidPosition(marker.journal, "journal");
   const nonce = deriveNonce(dataKey, pairNonceInfo(marker));
-  return encryptWithNonce(dataKey, nonce, pairPayload(marker), pairAad(vaultId, marker));
+  return encryptWithNonce(
+    dataKey,
+    nonce,
+    pairPayload(marker),
+    pairAad(vaultId, marker)
+  );
 }
 
 /**
@@ -624,7 +684,7 @@ export function openWalPairMarker(
   dataKey: Uint8Array,
   vaultId: string,
   addr: WalPairMarkerAddress,
-  sealed: Uint8Array,
+  sealed: Uint8Array
 ): WalPairMarker {
   const plain = decrypt(dataKey, sealed, pairAad(vaultId, addr));
   const parsed = JSON.parse(new TextDecoder().decode(plain)) as {
@@ -633,22 +693,27 @@ export function openWalPairMarker(
     vault?: WalPairPosition;
     journal?: WalPairPosition;
   };
-  if (parsed.v !== 1) throw new Error(`openWalPairMarker: unknown payload version ${parsed.v}`);
+  if (parsed.v !== 1)
+    throw new Error(`openWalPairMarker: unknown payload version ${parsed.v}`);
   if (parsed.tickMs !== addr.tickMs) {
     throw new Error(
-      `openWalPairMarker: payload tick ${parsed.tickMs} disagrees with key tick ${addr.tickMs}`,
+      `openWalPairMarker: payload tick ${parsed.tickMs} disagrees with key tick ${addr.tickMs}`
     );
   }
-  if (!parsed.vault || !parsed.journal) throw new Error('openWalPairMarker: missing positions');
+  if (!parsed.vault || !parsed.journal)
+    throw new Error("openWalPairMarker: missing positions");
   const marker: WalPairMarker = {
     vaultGeneration: addr.vaultGeneration,
     journalGeneration: addr.journalGeneration,
     tickMs: addr.tickMs,
     vault: { group: parsed.vault.group, endOffset: parsed.vault.endOffset },
-    journal: { group: parsed.journal.group, endOffset: parsed.journal.endOffset },
+    journal: {
+      group: parsed.journal.group,
+      endOffset: parsed.journal.endOffset,
+    },
   };
-  assertValidPosition(marker.vault, 'vault');
-  assertValidPosition(marker.journal, 'journal');
+  assertValidPosition(marker.vault, "vault");
+  assertValidPosition(marker.journal, "journal");
   return marker;
 }
 
@@ -705,16 +770,22 @@ export interface WalStreamListing {
  */
 export function planWalReplay(
   listing: WalStreamListing,
-  opts: { generation: string; db: WalDbName; cutTickMs?: number },
+  opts: { generation: string; db: WalDbName; cutTickMs?: number }
 ): WalReplayPlan {
   const cut = opts.cutTickMs ?? Number.POSITIVE_INFINITY;
   const relevant = listing.segments
     // Filter by PITR eligibility BEFORE resolving duplicate starts. A longer
     // retry captured after the requested instant must not hide a shorter
     // same-start segment that was already durable at the cut.
-    .filter((s) => s.db === opts.db && s.generation === opts.generation && s.tickMs <= cut)
+    .filter(
+      (s) =>
+        s.db === opts.db && s.generation === opts.generation && s.tickMs <= cut
+    )
     .sort(
-      (a, b) => a.group - b.group || a.startOffset - b.startOffset || b.endOffset - a.endOffset,
+      (a, b) =>
+        a.group - b.group ||
+        a.startOffset - b.startOffset ||
+        b.endOffset - a.endOffset
     );
   const closerEnd = new Map<number, number>();
   for (const c of listing.closers) {
@@ -748,7 +819,11 @@ export function planWalReplay(
       }
       planned.push(seg);
       offset = seg.endOffset;
-    } else if (seg.group === group + 1 && closedAt() === offset && seg.startOffset === 0) {
+    } else if (
+      seg.group === group + 1 &&
+      closedAt() === offset &&
+      seg.startOffset === 0
+    ) {
       planned.push(seg);
       group = seg.group;
       offset = seg.endOffset;
@@ -766,7 +841,11 @@ export function planWalReplay(
 }
 
 const EMPTY_LISTING: WalStreamListing = { segments: [], closers: [] };
-const EMPTY_PLAN: WalReplayPlan = { segments: [], lastTickMs: -1, truncatedByHole: false };
+const EMPTY_PLAN: WalReplayPlan = {
+  segments: [],
+  lastTickMs: -1,
+  truncatedByHole: false,
+};
 
 /**
  * The `(group, endOffset)` a planned chain actually REACHES — the quantity a
@@ -784,7 +863,7 @@ const EMPTY_PLAN: WalReplayPlan = { segments: [], lastTickMs: -1, truncatedByHol
 export function reachedPosition(
   plan: WalReplayPlan,
   listing: WalStreamListing,
-  opts: { db: WalDbName; generation: string },
+  opts: { db: WalDbName; generation: string }
 ): WalPairPosition {
   const last = plan.segments[plan.segments.length - 1];
   // No planned segment ⇒ the base itself, which is always group 0, offset 0.
@@ -796,7 +875,7 @@ export function reachedPosition(
       c.db === opts.db &&
       c.generation === opts.generation &&
       c.group === last.group &&
-      c.endOffset === last.endOffset,
+      c.endOffset === last.endOffset
   );
   return closed
     ? { group: last.group + 1, endOffset: 0 }
@@ -852,14 +931,21 @@ export function planCoordinatedReplay(opts: {
 }): CoordinatedReplayResult {
   const { listingByDb, generationByDb } = opts;
   const cut = opts.cutTickMs ?? Number.POSITIVE_INFINITY;
-  const plan = (db: WalDbName, generation: string, cutTickMs: number): WalReplayPlan =>
+  const plan = (
+    db: WalDbName,
+    generation: string,
+    cutTickMs: number
+  ): WalReplayPlan =>
     planWalReplay(listingByDb[db] ?? EMPTY_LISTING, {
       db,
       generation,
       ...(Number.isFinite(cutTickMs) ? { cutTickMs } : {}),
     });
 
-  if (generationByDb.vault === undefined || generationByDb.journal === undefined) {
+  if (
+    generationByDb.vault === undefined ||
+    generationByDb.journal === undefined
+  ) {
     // Not a pair: one database (or neither) has a stream, so there is nothing
     // to coordinate and no marker to consult. Unreachable from a real /1
     // snapshot — the producer refuses to register a manifest without both db
@@ -870,13 +956,22 @@ export function planCoordinatedReplay(opts: {
     let reached = -1;
     for (const db of WAL_DB_NAMES) {
       const generation = generationByDb[db];
-      plans[db] = generation === undefined ? EMPTY_PLAN : plan(db, generation, cut);
+      plans[db] =
+        generation === undefined ? EMPTY_PLAN : plan(db, generation, cut);
       reached = Math.max(reached, plans[db].lastTickMs);
     }
-    return { plans, coordinatedCutMs: reached, newestMarkerTickMs: -1, coordinated: false };
+    return {
+      plans,
+      coordinatedCutMs: reached,
+      newestMarkerTickMs: -1,
+      coordinated: false,
+    };
   }
 
-  const generations = { vault: generationByDb.vault, journal: generationByDb.journal };
+  const generations = {
+    vault: generationByDb.vault,
+    journal: generationByDb.journal,
+  };
   // Re-filter by generation even though the restore LISTs a pair-scoped prefix
   // and cannot see a foreign marker: a marker's positions are believed
   // ABSOLUTELY, and one minted under a different base pair describes offsets
@@ -889,7 +984,7 @@ export function planCoordinatedReplay(opts: {
       (m) =>
         m.vaultGeneration === generations.vault &&
         m.journalGeneration === generations.journal &&
-        m.tickMs <= cut,
+        m.tickMs <= cut
     )
     .sort((a, b) => b.tickMs - a.tickMs);
   const newestMarkerTickMs = candidates[0]?.tickMs ?? -1;
@@ -907,7 +1002,10 @@ export function planCoordinatedReplay(opts: {
         satisfied = false;
         break;
       }
-      const at = reachedPosition(candidate, listingByDb[db] ?? EMPTY_LISTING, { db, generation });
+      const at = reachedPosition(candidate, listingByDb[db] ?? EMPTY_LISTING, {
+        db,
+        generation,
+      });
       const want = marker[db];
       if (at.group !== want.group || at.endOffset !== want.endOffset) {
         satisfied = false;

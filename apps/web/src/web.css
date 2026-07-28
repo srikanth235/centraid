@@ -55,7 +55,7 @@ body {
 @media (display-mode: browser) and (max-width: 720px) {
   body::before {
     background: var(--accent, #c9ff74);
-    content: '';
+    content: "";
     display: block;
     height: env(safe-area-inset-top, 0);
   }

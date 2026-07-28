@@ -1,9 +1,14 @@
-import { type JSX } from 'react';
-import type { BrowseColumn, BrowseColumnsResult } from '../../gateway-client.js';
-import Icon from '../ui/Icon.js';
-import { cx } from '../ui/cx.js';
-import styles from './AtlasBrowseTab.module.css';
-import { cellText, isSealedValue, rowIdOf } from './atlasBrowseData.js';
+import { type JSX } from "react";
+
+import type {
+  BrowseColumn,
+  BrowseColumnsResult,
+} from "../../gateway-client.js";
+import { cx } from "../ui/cx.js";
+import Icon from "../ui/Icon.js";
+import { cellText, isSealedValue, rowIdOf } from "./atlasBrowseData.js";
+
+import styles from "./AtlasBrowseTab.module.css";
 
 // The machinery lock bar and the keyset-paginated grid (issue #441 B3), split
 // out of AtlasBrowseTab. Machinery bands are read-only until an explicit unlock;
@@ -19,12 +24,14 @@ export function MachineryBar({
   onToggle: () => void;
 }): JSX.Element {
   return (
-    <div className={cx(styles.machineryBar, unlocked && styles.machineryBarOpen)}>
+    <div
+      className={cx(styles.machineryBar, unlocked && styles.machineryBarOpen)}
+    >
       <Icon name="AlertTriangle" size={14} />
       <p className={styles.machineryNote} data-testid="atlas-machinery-locked">
         {unlocked
-          ? 'Machinery edits unlocked — hand-editing plumbing rows can break vault invariants.'
-          : 'This is a machinery band — browsing only. Editing plumbing rows can brick invariants.'}
+          ? "Machinery edits unlocked — hand-editing plumbing rows can break vault invariants."
+          : "This is a machinery band — browsing only. Editing plumbing rows can brick invariants."}
       </p>
       <button
         type="button"
@@ -34,7 +41,7 @@ export function MachineryBar({
         onClick={onToggle}
         data-testid="atlas-machinery-unlock"
       >
-        {unlocked ? 'Lock' : 'Unlock machinery edits'}
+        {unlocked ? "Lock" : "Unlock machinery edits"}
       </button>
     </div>
   );
@@ -59,7 +66,7 @@ export function Grid({
   cols: BrowseColumnsResult;
   rows: Record<string, unknown>[];
   orderBy: string | null;
-  dir: 'asc' | 'desc';
+  dir: "asc" | "desc";
   loading: boolean;
   expanded: Set<string>;
   onSort: (col: string) => void;
@@ -68,7 +75,9 @@ export function Grid({
   onEdit: (row: Record<string, unknown>) => void;
   onDelete: (row: Record<string, unknown>) => void;
 }): JSX.Element {
-  const fkByName = new Map(cols.columns.filter((c) => c.fkTable).map((c) => [c.name, c]));
+  const fkByName = new Map(
+    cols.columns.filter((c) => c.fkTable).map((c) => [c.name, c])
+  );
   const colOrder = cols.columns.map((c) => c.name);
 
   if (!loading && rows.length === 0) {
@@ -95,10 +104,16 @@ export function Grid({
                   data-sorted={orderBy === c.name ? dir : undefined}
                 >
                   <span className={styles.colName}>{c.name}</span>
-                  {c.pk > 0 ? <span className={styles.colBadge}>pk</span> : null}
-                  {c.fkTable ? <span className={styles.colBadge}>fk</span> : null}
+                  {c.pk > 0 ? (
+                    <span className={styles.colBadge}>pk</span>
+                  ) : null}
+                  {c.fkTable ? (
+                    <span className={styles.colBadge}>fk</span>
+                  ) : null}
                   {orderBy === c.name ? (
-                    <span className={styles.sortArrow}>{dir === 'asc' ? '▲' : '▼'}</span>
+                    <span className={styles.sortArrow}>
+                      {dir === "asc" ? "▲" : "▼"}
+                    </span>
                   ) : null}
                 </button>
               </th>
@@ -110,7 +125,12 @@ export function Grid({
           {rows.map((row) => {
             const id = rowIdOf(row, cols.columns);
             return (
-              <tr key={id} className={styles.gridRow} data-testid="atlas-browse-row" data-id={id}>
+              <tr
+                key={id}
+                className={styles.gridRow}
+                data-testid="atlas-browse-row"
+                data-id={id}
+              >
                 {colOrder.map((name) => {
                   const value = row[name];
                   const key = `${id}::${name}`;
@@ -176,7 +196,7 @@ function Cell({
     );
   }
   const text = cellText(value);
-  if (text === '') return <span className={styles.nullCell}>null</span>;
+  if (text === "") return <span className={styles.nullCell}>null</span>;
 
   if (fk) {
     return (
@@ -194,7 +214,7 @@ function Cell({
       className={styles.expandCell}
       onClick={onToggle}
       data-testid="atlas-cell-expand"
-      title={expanded ? 'Collapse' : 'Expand'}
+      title={expanded ? "Collapse" : "Expand"}
     >
       {expanded ? text : `${text.slice(0, TRUNCATE_AT)}…`}
     </button>

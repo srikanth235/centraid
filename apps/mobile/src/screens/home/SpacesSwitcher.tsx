@@ -16,7 +16,8 @@
 // accents, a prominent active card. Mechanics mirror the Space/Photos drawers (a
 // transparent Modal, an Animated slide, a fading scrim that closes on tap).
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { icons as ICON_SET, type IconName } from "@centraid/design-tokens";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Animated,
@@ -27,16 +28,15 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { icons as ICON_SET, type IconName } from '@centraid/design-tokens';
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import Grabber from '../../kit/components/Grabber';
-import Icon from '../../kit/components/Icon';
-import { useAnimatedValue } from '../../kit/hooks/useAnimatedValue';
-import { family, radii, t, useTheme, type ThemeColors } from '../../kit/theme';
-import { listVaults, type VaultRow } from '../../lib/gateway';
-import { forgetSpace, switchSpace } from '../../lib/phone-link';
+import Grabber from "../../kit/components/Grabber";
+import Icon from "../../kit/components/Icon";
+import { useAnimatedValue } from "../../kit/hooks/useAnimatedValue";
+import { family, radii, t, useTheme, type ThemeColors } from "../../kit/theme";
+import { listVaults, type VaultRow } from "../../lib/gateway";
+import { forgetSpace, switchSpace } from "../../lib/phone-link";
 import {
   addActiveGatewayVault,
   getActiveSpace,
@@ -44,23 +44,30 @@ import {
   noteActiveVaultMeta,
   subscribeSpaces,
   type Space,
-} from '../../lib/spaces';
+} from "../../lib/spaces";
 
-const DEFAULT_ICON: IconName = 'Sparkle';
+const DEFAULT_ICON: IconName = "Sparkle";
 const SHEET_TRAVEL = 720; // ≥ max sheet height, so the closed sheet sits fully off-screen.
 
 export interface SpacesSwitcherProps {
   open: boolean;
-  onClose(): void;
+  onClose: () => void;
   /** Route to the desktop-pairing flow (Settings owns the QR scanner). */
-  onPairDesktop(): void;
+  onPairDesktop: () => void;
 }
 
 /** A saved Space, or a vault the active gateway offers that isn't saved yet. */
-type AddableVault = { vaultId: string; name: string; color?: string; icon?: string };
+type AddableVault = {
+  vaultId: string;
+  name: string;
+  color?: string;
+  icon?: string;
+};
 
 function iconOf(value: string | undefined): IconName {
-  return value !== undefined && value in ICON_SET ? (value as IconName) : DEFAULT_ICON;
+  return value !== undefined && value in ICON_SET
+    ? (value as IconName)
+    : DEFAULT_ICON;
 }
 
 // Re-read the registry into the sheet's local mirrors. Outside the component so
@@ -68,7 +75,7 @@ function iconOf(value: string | undefined): IconName {
 // effects stay plain external-system reads.
 function syncFromRegistry(
   setSpaces: (next: Space[]) => void,
-  setActiveId: (next: string | undefined) => void,
+  setActiveId: (next: string | undefined) => void
 ): void {
   setSpaces([...listSpaces()]);
   setActiveId(getActiveSpace()?.id);
@@ -88,11 +95,16 @@ export default function SpacesSwitcher({
   // Local mirrors of the registry, kept live via subscribeSpaces so a switch/add/
   // forget from within this sheet re-renders it immediately.
   const [spaces, setSpaces] = useState<Space[]>(() => listSpaces());
-  const [activeId, setActiveId] = useState<string | undefined>(() => getActiveSpace()?.id);
+  const [activeId, setActiveId] = useState<string | undefined>(
+    () => getActiveSpace()?.id
+  );
   const [addable, setAddable] = useState<AddableVault[]>([]);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => subscribeSpaces(() => syncFromRegistry(setSpaces, setActiveId)), []);
+  useEffect(
+    () => subscribeSpaces(() => syncFromRegistry(setSpaces, setActiveId)),
+    []
+  );
 
   // On open: animate in, and refresh the addable list from the active gateway.
   useEffect(() => {
@@ -122,7 +134,8 @@ export default function SpacesSwitcher({
         // Enrich the active Space's cached presentation so its card shows the
         // vault's real name/colour/icon even before the next connect.
         const active = getActiveSpace();
-        const activeRow = active && vaults.find((v) => v.vaultId === active.vaultId);
+        const activeRow =
+          active && vaults.find((v) => v.vaultId === active.vaultId);
         if (activeRow) {
           void noteActiveVaultMeta({
             vaultName: activeRow.name,
@@ -133,12 +146,17 @@ export default function SpacesSwitcher({
         const saved = new Set(
           listSpaces()
             .map((s) => s.vaultId)
-            .filter(Boolean),
+            .filter(Boolean)
         );
         setAddable(
           vaults
             .filter((v: VaultRow) => !saved.has(v.vaultId))
-            .map((v) => ({ vaultId: v.vaultId, name: v.name, color: v.color, icon: v.icon })),
+            .map((v) => ({
+              vaultId: v.vaultId,
+              name: v.name,
+              color: v.color,
+              icon: v.icon,
+            }))
         );
       })
       .catch(() => {
@@ -160,7 +178,7 @@ export default function SpacesSwitcher({
         setBusy(false);
       }
     },
-    [busy],
+    [busy]
   );
 
   const onSwitch = useCallback(
@@ -174,7 +192,7 @@ export default function SpacesSwitcher({
         onClose();
       });
     },
-    [activeId, onClose, runExclusive],
+    [activeId, onClose, runExclusive]
   );
 
   const onAdd = useCallback(
@@ -189,35 +207,40 @@ export default function SpacesSwitcher({
         onClose();
       });
     },
-    [onClose, runExclusive],
+    [onClose, runExclusive]
   );
 
   const onForget = useCallback(
     (space: Space): void => {
-      const label = space.vaultName || space.desktopName || 'this space';
+      const label = space.vaultName || space.desktopName || "this space";
       Alert.alert(
-        'Remove from this phone?',
+        "Remove from this phone?",
         `“${label}” will be removed from this iPhone. The vault itself stays on ${
-          space.desktopName || 'the desktop'
+          space.desktopName || "the desktop"
         } — you can add it again by pairing.`,
         [
-          { style: 'cancel', text: 'Cancel' },
+          { style: "cancel", text: "Cancel" },
           {
-            style: 'destructive',
-            text: 'Remove',
+            style: "destructive",
+            text: "Remove",
             onPress: () => void runExclusive(() => forgetSpace(space.id)),
           },
-        ],
+        ]
       );
     },
-    [runExclusive],
+    [runExclusive]
   );
 
   const active = spaces.find((s) => s.id === activeId);
   const others = spaces.filter((s) => s.id !== activeId);
 
   return (
-    <Modal visible={open} transparent animationType="none" onRequestClose={onClose}>
+    <Modal
+      visible={open}
+      transparent
+      animationType="none"
+      onRequestClose={onClose}
+    >
       <View style={styles.root}>
         <Animated.View style={[styles.scrim, { opacity: fade }]}>
           <Pressable
@@ -230,7 +253,10 @@ export default function SpacesSwitcher({
         <Animated.View
           style={[
             styles.sheet,
-            { paddingBottom: insets.bottom + 14, transform: [{ translateY: slide }] },
+            {
+              paddingBottom: insets.bottom + 14,
+              transform: [{ translateY: slide }],
+            },
           ]}
         >
           <Grabber />
@@ -270,7 +296,10 @@ export default function SpacesSwitcher({
             {addable.length > 0 ? (
               <>
                 <Text style={styles.sectionLabel}>
-                  ADD {active?.desktopName ? `FROM ${active.desktopName.toUpperCase()}` : 'A VAULT'}
+                  ADD{" "}
+                  {active?.desktopName
+                    ? `FROM ${active.desktopName.toUpperCase()}`
+                    : "A VAULT"}
                 </Text>
                 {addable.map((vault) => (
                   <AddRow
@@ -292,10 +321,18 @@ export default function SpacesSwitcher({
                 onClose();
                 onPairDesktop();
               }}
-              style={({ pressed }) => [styles.pairRow, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.pairRow,
+                pressed && styles.pressed,
+              ]}
             >
               <View style={styles.pairIcon}>
-                <Icon name="Bolt" size={18} color={colors.accent} strokeWidth={1.75} />
+                <Icon
+                  name="Bolt"
+                  size={18}
+                  color={colors.accent}
+                  strokeWidth={1.75}
+                />
               </View>
               <View style={styles.rowMeta}>
                 <Text style={styles.pairTitle}>Pair another desktop</Text>
@@ -303,7 +340,12 @@ export default function SpacesSwitcher({
                   Scan a “Connect phone” code to add a gateway
                 </Text>
               </View>
-              <Icon name="ChevronRight" size={16} color={colors.ink4} strokeWidth={1.75} />
+              <Icon
+                name="ChevronRight"
+                size={16}
+                color={colors.ink4}
+                strokeWidth={1.75}
+              />
             </Pressable>
           </ScrollView>
         </Animated.View>
@@ -323,18 +365,28 @@ function ActiveCard({
   space: Space;
 }): React.JSX.Element {
   const tint = space.color ?? colors.accent;
-  const resolving = space.vaultId === '';
+  const resolving = space.vaultId === "";
   return (
-    <View style={[styles.activeCard, { backgroundColor: washFor(tint), borderColor: tint }]}>
+    <View
+      style={[
+        styles.activeCard,
+        { backgroundColor: washFor(tint), borderColor: tint },
+      ]}
+    >
       <View style={[styles.emblem, { backgroundColor: tint }]}>
-        <Icon name={iconOf(space.icon)} size={24} color={colors.inkInv} strokeWidth={1.75} />
+        <Icon
+          name={iconOf(space.icon)}
+          size={24}
+          color={colors.inkInv}
+          strokeWidth={1.75}
+        />
       </View>
       <View style={styles.rowMeta}>
         <Text style={styles.activeName} numberOfLines={1}>
-          {space.vaultName || space.desktopName || 'Your space'}
+          {space.vaultName || space.desktopName || "Your space"}
         </Text>
         <Text style={styles.activeSub} numberOfLines={1}>
-          {resolving ? 'Setting up…' : space.desktopName || 'This space'}
+          {resolving ? "Setting up…" : space.desktopName || "This space"}
         </Text>
       </View>
       <View style={[styles.activePill, { backgroundColor: tint }]}>
@@ -357,34 +409,40 @@ function SpaceRow({
   styles: ReturnType<typeof makeStyles>;
   space: Space;
   disabled: boolean;
-  onPress(): void;
-  onForget(): void;
+  onPress: () => void;
+  onForget: () => void;
 }): React.JSX.Element {
   const tint = space.color ?? colors.accent;
   return (
     <View style={styles.row}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Switch to ${space.vaultName || space.desktopName || 'space'}`}
+        accessibilityLabel={`Switch to ${space.vaultName || space.desktopName || "space"}`}
         disabled={disabled}
         onPress={onPress}
         style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
       >
         <View style={[styles.dot, { backgroundColor: tint }]}>
-          <Icon name={iconOf(space.icon)} size={16} color={colors.inkInv} strokeWidth={1.75} />
+          <Icon
+            name={iconOf(space.icon)}
+            size={16}
+            color={colors.inkInv}
+            strokeWidth={1.75}
+          />
         </View>
         <View style={styles.rowMeta}>
           <Text style={styles.rowName} numberOfLines={1}>
-            {space.vaultName || space.desktopName || 'Space'}
+            {space.vaultName || space.desktopName || "Space"}
           </Text>
           <Text style={styles.rowSub} numberOfLines={1}>
-            {space.desktopName || (space.vaultId === '' ? 'Setting up…' : 'Saved')}
+            {space.desktopName ||
+              (space.vaultId === "" ? "Setting up…" : "Saved")}
           </Text>
         </View>
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Remove ${space.vaultName || space.desktopName || 'space'} from this phone`}
+        accessibilityLabel={`Remove ${space.vaultName || space.desktopName || "space"} from this phone`}
         hitSlop={10}
         disabled={disabled}
         onPress={onForget}
@@ -408,7 +466,7 @@ function AddRow({
   styles: ReturnType<typeof makeStyles>;
   vault: AddableVault;
   disabled: boolean;
-  onPress(): void;
+  onPress: () => void;
 }): React.JSX.Element {
   const tint = vault.color ?? colors.accent;
   return (
@@ -417,10 +475,19 @@ function AddRow({
       accessibilityLabel={`Add ${vault.name}`}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, styles.addRow, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.row,
+        styles.addRow,
+        pressed && styles.pressed,
+      ]}
     >
       <View style={[styles.dot, styles.dotHollow, { borderColor: tint }]}>
-        <Icon name={iconOf(vault.icon)} size={16} color={tint} strokeWidth={1.75} />
+        <Icon
+          name={iconOf(vault.icon)}
+          size={16}
+          color={tint}
+          strokeWidth={1.75}
+        />
       </View>
       <View style={styles.rowMeta}>
         <Text style={styles.rowName} numberOfLines={1}>
@@ -439,45 +506,55 @@ function AddRow({
 // are opaque, so append an alpha byte (~12%) to the #rrggbb; non-hex tints fall
 // back to a neutral elevated surface handled by the caller's border.
 function washFor(hex: string): string {
-  return /^#[0-9a-fA-F]{6}$/.test(hex) ? `${hex}1f` : 'transparent';
+  return /^#[0-9a-fA-F]{6}$/u.test(hex) ? `${hex}1f` : "transparent";
 }
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     activeCard: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: radii.lg,
       borderWidth: 1,
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: 14,
       marginBottom: 20,
       padding: 16,
     },
-    activeName: { ...t('title'), color: colors.ink, fontFamily: family.serif },
+    activeName: { ...t("title"), color: colors.ink, fontFamily: family.serif },
     activePill: {
       borderRadius: 8,
       paddingHorizontal: 8,
       paddingVertical: 3,
     },
-    activePillText: { color: '#fff', fontFamily: family.monoBold, fontSize: 9, letterSpacing: 1 },
-    activeSub: { ...t('small'), color: colors.ink3, marginTop: 3 },
+    activePillText: {
+      color: "#fff",
+      fontFamily: family.monoBold,
+      fontSize: 9,
+      letterSpacing: 1,
+    },
+    activeSub: { ...t("small"), color: colors.ink3, marginTop: 3 },
     addRow: { marginBottom: 8 },
     dot: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: 12,
       height: 40,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 40,
     },
-    dotHollow: { backgroundColor: 'transparent', borderWidth: 1.5 },
+    dotHollow: { backgroundColor: "transparent", borderWidth: 1.5 },
     emblem: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: 15,
       height: 52,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 52,
     },
-    empty: { ...t('body'), color: colors.ink3, marginBottom: 20, paddingVertical: 8 },
+    empty: {
+      ...t("body"),
+      color: colors.ink3,
+      marginBottom: 20,
+      paddingVertical: 8,
+    },
     eyebrow: {
       color: colors.ink3,
       fontFamily: family.monoMedium,
@@ -487,51 +564,51 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: 20,
     },
     forget: {
-      alignItems: 'center',
+      alignItems: "center",
       height: 44,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 44,
     },
     pairIcon: {
-      alignItems: 'center',
+      alignItems: "center",
       backgroundColor: colors.bg,
       borderColor: colors.line,
       borderRadius: 12,
       borderWidth: 1,
       height: 40,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: 40,
     },
     pairRow: {
-      alignItems: 'center',
+      alignItems: "center",
       backgroundColor: colors.bg,
       borderColor: colors.line,
       borderRadius: radii.md,
       borderWidth: 1,
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: 13,
       marginTop: 12,
       paddingHorizontal: 12,
       paddingVertical: 12,
     },
-    pairTitle: { ...t('bodyStrong'), color: colors.ink },
+    pairTitle: { ...t("bodyStrong"), color: colors.ink },
     pressed: { opacity: 0.55 },
-    root: { flex: 1, justifyContent: 'flex-end' },
+    root: { flex: 1, justifyContent: "flex-end" },
     row: {
-      alignItems: 'center',
-      flexDirection: 'row',
+      alignItems: "center",
+      flexDirection: "row",
       gap: 4,
     },
     rowMain: {
-      alignItems: 'center',
+      alignItems: "center",
       flex: 1,
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: 13,
       paddingVertical: 10,
     },
     rowMeta: { flex: 1, minWidth: 0 },
-    rowName: { ...t('bodyStrong'), color: colors.ink },
-    rowSub: { ...t('small'), color: colors.ink3, marginTop: 2 },
+    rowName: { ...t("bodyStrong"), color: colors.ink },
+    rowSub: { ...t("small"), color: colors.ink3, marginTop: 2 },
     scroll: { flexGrow: 0 },
     scrollBody: { paddingHorizontal: 20, paddingTop: 18 },
     sectionLabel: {
@@ -546,10 +623,10 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: colors.bgElev,
       borderTopLeftRadius: 26,
       borderTopRightRadius: 26,
-      maxHeight: '86%',
+      maxHeight: "86%",
       paddingTop: 6,
     },
-    scrim: { backgroundColor: 'rgba(0,0,0,.42)', ...StyleSheet.absoluteFill },
+    scrim: { backgroundColor: "rgba(0,0,0,.42)", ...StyleSheet.absoluteFill },
     title: {
       color: colors.ink,
       fontFamily: family.serif,

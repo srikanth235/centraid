@@ -1,8 +1,8 @@
-import { readdir, readFile } from 'node:fs/promises';
-import path from 'node:path';
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
 
-const root = path.resolve(import.meta.dir, '..', 'src');
-const sourceExtensions = new Set(['.ts', '.tsx']);
+const root = path.resolve(import.meta.dir, "..", "src");
+const sourceExtensions = new Set([".ts", ".tsx"]);
 
 async function filesUnder(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -12,23 +12,30 @@ async function filesUnder(dir: string): Promise<string[]> {
         const target = path.join(dir, entry.name);
         if (entry.isDirectory()) return filesUnder(target);
         return sourceExtensions.has(path.extname(entry.name)) ? [target] : [];
-      }),
+      })
     )
   ).flat();
 }
 
 function appOf(file: string): string | undefined {
-  const relative = path.relative(path.join(root, 'apps'), file);
-  return relative.startsWith('..') ? undefined : relative.split(path.sep)[0];
+  const relative = path.relative(path.join(root, "apps"), file);
+  return relative.startsWith("..") ? undefined : relative.split(path.sep)[0];
 }
 
 const errors: string[] = [];
-for (const file of await filesUnder(root)) {
-  const source = await readFile(file, 'utf8');
+const sources = await Promise.all(
+  (await filesUnder(root)).map(async (file) => ({
+    file,
+    source: await readFile(file, "utf8"),
+  }))
+);
+for (const { file, source } of sources) {
   const fromApp = appOf(file);
-  for (const match of source.matchAll(/(?:from\s+|import\s*\()(['"])([^'"]+)\1/g)) {
-    const specifier = match[2]!;
-    if (!specifier.startsWith('.')) continue;
+  for (const match of source.matchAll(
+    /(?:from\s+|import\s*\()(?<quote>['"])(?<specifier>[^'"]+)\k<quote>/gu
+  )) {
+    const specifier = match.groups?.specifier;
+    if (specifier === undefined || !specifier.startsWith(".")) continue;
     const targetApp = appOf(path.resolve(path.dirname(file), specifier));
     const label = path.relative(root, file);
     if (!fromApp && targetApp)
@@ -39,4 +46,5 @@ for (const file of await filesUnder(root)) {
   }
 }
 
-if (errors.length > 0) throw new Error(`Mobile import boundaries failed:\n${errors.join('\n')}`);
+if (errors.length > 0)
+  throw new Error(`Mobile import boundaries failed:\n${errors.join("\n")}`);

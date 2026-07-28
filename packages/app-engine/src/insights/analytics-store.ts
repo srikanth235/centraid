@@ -26,10 +26,11 @@
  * rehydration (wave 3) serves an archived run's transcript on demand.
  */
 
-import { type DatabaseSync, type StatementSync } from 'node:sqlite';
-import type { DatabaseProvider } from '../stores/gateway-db.js';
-import type { RunKind } from '../conversation/schema.js';
-import type { RunSummary } from '../conversation/run-summary-sink.js';
+import { type DatabaseSync, type StatementSync } from "node:sqlite";
+
+import type { RunSummary } from "../conversation/run-summary-sink.js";
+import type { RunKind } from "../conversation/schema.js";
+import type { DatabaseProvider } from "../stores/gateway-db.js";
 
 export interface ListSummariesOptions {
   /** Scope to one automation handle. */
@@ -69,33 +70,47 @@ function fromRaw(raw: RawSummary): RunSummary {
   return {
     runId: raw.run_id,
     kind: raw.kind as RunKind,
-    ...(raw.automation_ref !== null ? { automationRef: raw.automation_ref } : {}),
-    ...(raw.automation_name !== null ? { automationName: raw.automation_name } : {}),
-    ...(raw.app_id !== null ? { appId: raw.app_id } : {}),
+    ...(raw.automation_ref === null
+      ? {}
+      : { automationRef: raw.automation_ref }),
+    ...(raw.automation_name === null
+      ? {}
+      : { automationName: raw.automation_name }),
+    ...(raw.app_id === null ? {} : { appId: raw.app_id }),
     trigger: raw.trigger,
-    ...(raw.trigger_origin !== null ? { triggerOrigin: raw.trigger_origin } : {}),
+    ...(raw.trigger_origin === null
+      ? {}
+      : { triggerOrigin: raw.trigger_origin }),
     ok: raw.ok !== 0,
     pinned: raw.pinned !== 0,
-    ...(raw.summary !== null ? { summary: raw.summary } : {}),
-    ...(raw.note !== null ? { note: raw.note } : {}),
-    ...(raw.error !== null ? { error: raw.error } : {}),
-    ...(raw.retry_of !== null ? { retryOf: raw.retry_of } : {}),
-    ...(raw.model !== null ? { model: raw.model } : {}),
-    ...(raw.effort !== null ? { effort: raw.effort } : {}),
+    ...(raw.summary === null ? {} : { summary: raw.summary }),
+    ...(raw.note === null ? {} : { note: raw.note }),
+    ...(raw.error === null ? {} : { error: raw.error }),
+    ...(raw.retry_of === null ? {} : { retryOf: raw.retry_of }),
+    ...(raw.model === null ? {} : { model: raw.model }),
+    ...(raw.effort === null ? {} : { effort: raw.effort }),
     startedAt: raw.started_at,
-    ...(raw.ended_at !== null ? { endedAt: raw.ended_at } : {}),
-    ...(raw.total_input_tokens !== null ? { totalInputTokens: raw.total_input_tokens } : {}),
-    ...(raw.total_output_tokens !== null ? { totalOutputTokens: raw.total_output_tokens } : {}),
-    ...(raw.total_cache_read_tokens !== null
-      ? { totalCacheReadTokens: raw.total_cache_read_tokens }
-      : {}),
-    ...(raw.total_cache_write_tokens !== null
-      ? { totalCacheWriteTokens: raw.total_cache_write_tokens }
-      : {}),
-    ...(raw.hydration_tokens !== null ? { hydrationTokens: raw.hydration_tokens } : {}),
-    ...(raw.total_cost_usd !== null ? { totalCostUsd: raw.total_cost_usd } : {}),
-    ...(raw.step_count !== null ? { stepCount: raw.step_count } : {}),
-    ...(raw.tool_count !== null ? { toolCount: raw.tool_count } : {}),
+    ...(raw.ended_at === null ? {} : { endedAt: raw.ended_at }),
+    ...(raw.total_input_tokens === null
+      ? {}
+      : { totalInputTokens: raw.total_input_tokens }),
+    ...(raw.total_output_tokens === null
+      ? {}
+      : { totalOutputTokens: raw.total_output_tokens }),
+    ...(raw.total_cache_read_tokens === null
+      ? {}
+      : { totalCacheReadTokens: raw.total_cache_read_tokens }),
+    ...(raw.total_cache_write_tokens === null
+      ? {}
+      : { totalCacheWriteTokens: raw.total_cache_write_tokens }),
+    ...(raw.hydration_tokens === null
+      ? {}
+      : { hydrationTokens: raw.hydration_tokens }),
+    ...(raw.total_cost_usd === null
+      ? {}
+      : { totalCostUsd: raw.total_cost_usd }),
+    ...(raw.step_count === null ? {} : { stepCount: raw.step_count }),
+    ...(raw.tool_count === null ? {} : { toolCount: raw.tool_count }),
   };
 }
 
@@ -150,9 +165,9 @@ export class AnalyticsStore {
     const { listAll, listByRef } = this.ensureReady();
     const limit = opts.limit ?? 100;
     const rows =
-      opts.automationRef !== undefined
-        ? (listByRef.all(opts.automationRef, limit) as unknown as RawSummary[])
-        : (listAll.all(limit) as unknown as RawSummary[]);
+      opts.automationRef === undefined
+        ? (listAll.all(limit) as unknown as RawSummary[])
+        : (listByRef.all(opts.automationRef, limit) as unknown as RawSummary[]);
     return rows.map(fromRaw);
   }
 }

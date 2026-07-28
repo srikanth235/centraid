@@ -14,7 +14,28 @@ import {
   useState,
   type KeyboardEvent,
   type ReactElement,
-} from 'react';
+} from "react";
+
+import type { InlineAppProps } from "../inline-types.ts";
+import { Chrome } from "./Chrome.tsx";
+import { Activity } from "./components/Activity.tsx";
+import { AddPersonModal } from "./components/AddPersonModal.tsx";
+import { BulkBar } from "./components/BulkBar.tsx";
+import { Details } from "./components/Details.tsx";
+import { GridCard } from "./components/Grid.tsx";
+import { Journal } from "./components/Journal.tsx";
+import { ListHead, ListRow, WindowFoot } from "./components/List.tsx";
+import { NewMenu } from "./components/NewMenu.tsx";
+import { Icon } from "./components/Shared.tsx";
+import {
+  JournalNav,
+  ListList,
+  SmartNav,
+  Storage,
+} from "./components/Sidebar.tsx";
+import { StatusChips } from "./components/Toolbar.tsx";
+import { avatarColor, hashInt, listName, PALETTE } from "./format.ts";
+import { I } from "./icons.ts";
 import {
   closePopover,
   debounce,
@@ -24,40 +45,26 @@ import {
   onFocusRefresh,
   readFailed,
   wireThemeToggle,
-} from './kit.ts';
-import { createLogic } from './logic.ts';
-import { avatarColor, hashInt, listName, PALETTE } from './format.ts';
-import { I } from './icons.ts';
-import { JournalNav, ListList, SmartNav, Storage } from './components/Sidebar.tsx';
-import { StatusChips } from './components/Toolbar.tsx';
-import { BulkBar } from './components/BulkBar.tsx';
-import { NewMenu } from './components/NewMenu.tsx';
-import { GridCard } from './components/Grid.tsx';
-import { ListHead, ListRow, WindowFoot } from './components/List.tsx';
-import { Details } from './components/Details.tsx';
-import { Journal } from './components/Journal.tsx';
-import { Activity } from './components/Activity.tsx';
-import { AddPersonModal } from './components/AddPersonModal.tsx';
-import { Icon } from './components/Shared.tsx';
-import { Chrome } from './Chrome.tsx';
-import type { AppData, AppState, Nav, Person, PersonList } from './types.ts';
-import type { InlineAppProps } from '../inline-types.ts';
-import styles from './Chrome.module.css';
+} from "./kit.ts";
+import { createLogic } from "./logic.ts";
+import type { AppData, AppState, Nav, Person, PersonList } from "./types.ts";
+
+import styles from "./Chrome.module.css";
 
 export const CHANGE_TABLES = [
-  'people.profile',
-  'people.important_date',
-  'tally.obligation',
-  'schedule.task',
-  'core.party',
-  'core.activity',
-  'core.link',
-  'core.content_item',
-  'core.party_identifier',
-  'core.tag',
-  'core.concept',
-  'knowledge.note',
-  'knowledge.annotation',
+  "people.profile",
+  "people.important_date",
+  "tally.obligation",
+  "schedule.task",
+  "core.party",
+  "core.activity",
+  "core.link",
+  "core.content_item",
+  "core.party_identifier",
+  "core.tag",
+  "core.concept",
+  "knowledge.note",
+  "knowledge.annotation",
 ];
 
 interface PeoplePayload {
@@ -72,18 +79,18 @@ interface SearchPayload {
 
 // Knobs: read the initial default view from the app ROOT element (the host sets
 // data-app-* there), not documentElement (#505 trap 5).
-function initialView(rootEl: HTMLElement | null): 'grid' | 'list' {
-  return rootEl?.getAttribute('data-app-view') === 'list' ? 'list' : 'grid';
+function initialView(rootEl: HTMLElement | null): "grid" | "list" {
+  return rootEl?.dataset.appView === "list" ? "list" : "grid";
 }
 
-function makeState(view: 'grid' | 'list'): AppState {
+function makeState(view: "grid" | "list"): AppState {
   return {
     view,
-    nav: { kind: 'all' },
-    chip: 'all',
-    sortKey: 'last',
+    nav: { kind: "all" },
+    chip: "all",
+    sortKey: "last",
     sortDir: -1,
-    search: '',
+    search: "",
     searchResults: null,
     searchSeq: 0,
     selected: new Set<string>(),
@@ -103,18 +110,18 @@ function makeState(view: 'grid' | 'list'): AppState {
   };
 }
 
-const TOOLBAR_TITLES: Record<Exclude<Nav['kind'], 'list'>, string> = {
-  all: 'All people',
-  reconnect: 'Reconnect',
-  upcoming: 'Upcoming',
-  starred: 'Favorites',
-  journal: 'Journal',
-  activity: 'Activity',
+const TOOLBAR_TITLES: Record<Exclude<Nav["kind"], "list">, string> = {
+  all: "All people",
+  reconnect: "Reconnect",
+  upcoming: "Upcoming",
+  starred: "Favorites",
+  journal: "Journal",
+  activity: "Activity",
 };
-const SORT_NAMES: Record<AppState['sortKey'], string> = {
-  last: 'Last spoke',
-  name: 'Name',
-  cadence: 'Cadence',
+const SORT_NAMES: Record<AppState["sortKey"], string> = {
+  last: "Last spoke",
+  name: "Name",
+  cadence: "Cadence",
 };
 
 export function Root({ rootRef }: InlineAppProps): ReactElement {
@@ -137,20 +144,20 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     let next: PeoplePayload | undefined;
     try {
       next = await window.centraid.read<PeoplePayload>({
-        query: 'people',
+        query: "people",
         input: { limit: state.peopleWindow },
       });
     } catch {
-      readFailed(document.getElementById('noticeBanner'));
+      readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       readFailedShownRef.current = true;
       return;
     }
     if (readFailedShownRef.current) {
       readFailedShownRef.current = false;
-      logic?.notice('');
+      logic?.notice("");
     }
     const denied = next?.vaultDenied;
-    consentRef.current = denied ? { message: denied.message ?? '' } : null;
+    consentRef.current = denied ? { message: denied.message ?? "" } : null;
     if (denied) {
       bump();
       return;
@@ -160,9 +167,14 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     data.lists = incoming.lists ?? [];
     state.peopleTruncated = Boolean(next?.truncated);
     state.selected = new Set(
-      [...state.selected].filter((id) => data.people.some((p) => p.party_id === id)),
+      [...state.selected].filter((id) =>
+        data.people.some((p) => p.party_id === id)
+      )
     );
-    if (state.detailsId && !data.people.some((p) => p.party_id === state.detailsId)) {
+    if (
+      state.detailsId &&
+      !data.people.some((p) => p.party_id === state.detailsId)
+    ) {
       state.detailsId = null;
       state.detailPerson = null;
     }
@@ -182,6 +194,29 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     });
   }
   const logic = logicRef.current;
+  const {
+    addJournalEntry: handleAddJournalEntry,
+    addPerson: handleAddPerson,
+    cancelCreateList: handleCancelCreateList,
+    cancelRenameList: handleCancelRenameList,
+    clearSelected: handleClearSelected,
+    closeAddModal: handleCloseAddModal,
+    closeDetails: handleCloseDetails,
+    createList: handleCreateList,
+    deleteList: handleDeleteList,
+    favoriteSelected: handleFavoriteSelected,
+    openAddModal: handleOpenAddModal,
+    openDetails: handleOpenDetails,
+    openPersonMenu: handleOpenPersonMenu,
+    renameList: handleRenameList,
+    showMorePeople: handleShowMorePeople,
+    startCreateList: handleStartCreateList,
+    startRenameList: handleStartRenameList,
+    toggleAdder: handleToggleAdder,
+    toggleAllVisible: handleToggleAllVisible,
+    toggleSelect: handleToggleSelect,
+    toggleStar: handleToggleStar,
+  } = logic;
 
   const setRoot = useCallback(
     (el: HTMLDivElement | null) => {
@@ -195,7 +230,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         }
       }
     },
-    [rootRef],
+    [rootRef]
   );
 
   // Nav select is logic.selectNav (verbatim); wrap only to also close the React-
@@ -205,15 +240,17 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       setSideOpen(false);
       void logic.selectNav(nav);
     },
-    [logic],
+    [logic]
   );
 
   const applySearch = useMemo(
     () =>
       debounce(async () => {
         const state = stateRef.current;
-        const input = document.getElementById('searchInput') as HTMLInputElement | null;
-        const q = (input?.value ?? '').trim();
+        const input = document.querySelector(
+          "#searchInput"
+        ) as HTMLInputElement | null;
+        const q = (input?.value ?? "").trim();
         if (q === state.search) return;
         state.search = q;
         logic.clearSelection();
@@ -222,13 +259,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           bump();
           return;
         }
-        if (state.nav.kind === 'journal' || state.nav.kind === 'activity')
-          state.nav = { kind: 'all' };
+        if (state.nav.kind === "journal" || state.nav.kind === "activity")
+          state.nav = { kind: "all" };
         const seq = ++state.searchSeq;
         let rows: Person[] = [];
         try {
           const res = await window.centraid.read<SearchPayload>({
-            query: 'search',
+            query: "search",
             input: { term: q },
           });
           rows = res?.people ?? [];
@@ -239,18 +276,18 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         state.searchResults = rows;
         bump();
       }, 150),
-    [logic],
+    [logic]
   );
 
   const onSearchKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== 'Escape') return;
+    if (e.key !== "Escape") return;
     e.preventDefault();
     const inp = e.currentTarget;
     const state = stateRef.current;
     if (!inp.value && !state.search) return;
-    inp.value = '';
+    inp.value = "";
     state.searchSeq += 1;
-    state.search = '';
+    state.search = "";
     state.searchResults = null;
     state.selected.clear();
     bump();
@@ -258,14 +295,14 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
   const onSort = useCallback(() => {
     const state = stateRef.current;
-    const keys: AppState['sortKey'][] = ['last', 'name', 'cadence'];
+    const keys: AppState["sortKey"][] = ["last", "name", "cadence"];
     const next = keys[(keys.indexOf(state.sortKey) + 1) % keys.length]!;
     state.sortKey = next;
-    state.sortDir = next === 'name' || next === 'cadence' ? 1 : -1;
+    state.sortDir = next === "name" || next === "cadence" ? 1 : -1;
     bump();
   }, []);
 
-  const onSelectView = useCallback((view: 'grid' | 'list') => {
+  const onSelectView = useCallback((view: "grid" | "list") => {
     stateRef.current.view = view;
     bump();
   }, []);
@@ -282,18 +319,18 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const stopFocus = onFocusRefresh(() => void refresh());
 
     const onKey = (e: globalThis.KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== "Escape") return;
       if (isPopoverOpen()) {
         closePopover();
         return;
       }
       const state = stateRef.current;
       if (state.addModalOpen) {
-        logic.closeAddModal();
+        handleCloseAddModal();
         return;
       }
       if (state.detailsId) {
-        logic.closeDetails();
+        handleCloseDetails();
         return;
       }
       if (state.newMenuOpen) {
@@ -315,8 +352,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         bump();
       }
     };
-    window.addEventListener('keydown', onKey);
-    document.addEventListener('click', onDocClick);
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("click", onDocClick);
     const stopWidth = rootElRef.current
       ? observeWidth(rootElRef.current, 860, (isNarrow: boolean) => {
           stateRef.current.narrow = isNarrow;
@@ -327,8 +364,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
 
     void refresh();
     return () => {
-      window.removeEventListener('keydown', onKey);
-      document.removeEventListener('click', onDocClick);
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("click", onDocClick);
       stopDoorbell();
       stopFocus();
       stopWidth();
@@ -348,58 +385,69 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const data = dataRef.current;
 
   // A list can vanish under us (deleted elsewhere) — fall back to All.
-  if (state.nav.kind === 'list') {
+  if (state.nav.kind === "list") {
     const listId = state.nav.listId;
-    if (!data.lists.some((c) => c.list_id === listId)) state.nav = { kind: 'all' };
+    if (!data.lists.some((c) => c.list_id === listId))
+      state.nav = { kind: "all" };
   }
   const nav = state.nav;
   const rows = logic.currentRows();
   state.visibleRows = rows;
 
-  const isPeople = ['all', 'reconnect', 'upcoming', 'starred', 'list'].includes(nav.kind);
-  let title = nav.kind === 'list' ? listName(data, nav.listId) : TOOLBAR_TITLES[nav.kind];
+  const isPeople = ["all", "reconnect", "upcoming", "starred", "list"].includes(
+    nav.kind
+  );
+  let title =
+    nav.kind === "list" ? listName(data, nav.listId) : TOOLBAR_TITLES[nav.kind];
   if (state.search.trim()) title = `Results for "${state.search.trim()}"`;
 
   const n = rows.length;
   let sub: string;
-  if (nav.kind === 'journal') sub = 'A private line about your days and the people in them';
-  else if (nav.kind === 'activity') sub = 'Every touch you have logged, most recent first';
-  else if (state.search.trim()) sub = `${n} ${n === 1 ? 'match' : 'matches'}`;
-  else if (nav.kind === 'reconnect') sub = `${n} overdue · sorted by how long it has been`;
-  else if (nav.kind === 'upcoming') sub = `${n} with reminders · birthdays and dates`;
-  else if (nav.kind === 'starred') sub = `${n} favorite${n === 1 ? '' : 's'}`;
-  else sub = `${n} ${n === 1 ? 'person' : 'people'}`;
+  if (nav.kind === "journal")
+    sub = "A private line about your days and the people in them";
+  else if (nav.kind === "activity")
+    sub = "Every touch you have logged, most recent first";
+  else if (state.search.trim()) sub = `${n} ${n === 1 ? "match" : "matches"}`;
+  else if (nav.kind === "reconnect")
+    sub = `${n} overdue · sorted by how long it has been`;
+  else if (nav.kind === "upcoming")
+    sub = `${n} with reminders · birthdays and dates`;
+  else if (nav.kind === "starred") sub = `${n} favorite${n === 1 ? "" : "s"}`;
+  else sub = `${n} ${n === 1 ? "person" : "people"}`;
 
-  const sortLabel = `${SORT_NAMES[state.sortKey]} ${state.sortDir === 1 ? '↑' : '↓'}`;
+  const sortLabel = `${SORT_NAMES[state.sortKey]} ${state.sortDir === 1 ? "↑" : "↓"}`;
 
   // ---------- Board (scroll contents — journal / activity / empty / grid / list) ----------
   let board: ReactElement;
-  if (nav.kind === 'journal') {
+  if (nav.kind === "journal") {
     board = (
       <Journal
         entries={state.journalData?.entries ?? []}
-        onSubmit={logic.addJournalEntry}
-        onOpenDetails={logic.openDetails}
+        onSubmit={handleAddJournalEntry}
+        onOpenDetails={handleOpenDetails}
       />
     );
-  } else if (nav.kind === 'activity') {
+  } else if (nav.kind === "activity") {
     board = (
-      <Activity recent={state.dashboardData?.recent ?? []} onOpenDetails={logic.openDetails} />
+      <Activity
+        recent={state.dashboardData?.recent ?? []}
+        onOpenDetails={handleOpenDetails}
+      />
     );
   } else if (rows.length === 0) {
     const searching = !!state.search.trim();
     const emptyTitle = searching
-      ? 'No matches'
-      : nav.kind === 'starred'
-        ? 'No favorites yet'
-        : nav.kind === 'reconnect'
-          ? 'All caught up'
-          : 'No one here yet';
+      ? "No matches"
+      : nav.kind === "starred"
+        ? "No favorites yet"
+        : nav.kind === "reconnect"
+          ? "All caught up"
+          : "No one here yet";
     const emptySub = searching
-      ? 'Try fewer words.'
-      : nav.kind === 'reconnect'
-        ? 'Nobody is overdue right now — nice.'
-        : 'Add someone from the New button to start keeping in touch.';
+      ? "Try fewer words."
+      : nav.kind === "reconnect"
+        ? "Nobody is overdue right now — nice."
+        : "Add someone from the New button to start keeping in touch.";
     board = (
       <div className="kit-empty">
         <div className="kit-empty-icon">
@@ -413,11 +461,14 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     const foot =
       state.peopleTruncated && !state.search.trim() ? (
         <div className={styles.windowFoot}>
-          <WindowFoot peopleWindow={state.peopleWindow} onShowMore={logic.showMorePeople} />
+          <WindowFoot
+            peopleWindow={state.peopleWindow}
+            onShowMore={handleShowMorePeople}
+          />
         </div>
       ) : null;
     board =
-      state.view === 'grid' ? (
+      state.view === "grid" ? (
         <>
           <div className={styles.grid}>
             {rows.map((p) => (
@@ -425,9 +476,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                 key={p.party_id}
                 p={p}
                 selectedIds={state.selected}
-                onOpenDetails={logic.openDetails}
-                onToggleSelect={logic.toggleSelect}
-                onToggleStar={logic.toggleStar}
+                onOpenDetails={handleOpenDetails}
+                onToggleSelect={handleToggleSelect}
+                onToggleStar={handleToggleStar}
               />
             ))}
           </div>
@@ -436,15 +487,15 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
       ) : (
         <>
           <div className={styles.listwrap}>
-            {!state.narrow ? (
+            {state.narrow ? null : (
               <div className={styles.listHead}>
                 <ListHead
                   rows={rows}
                   selectedIds={state.selected}
-                  onToggleAll={logic.toggleAllVisible}
+                  onToggleAll={handleToggleAllVisible}
                 />
               </div>
-            ) : null}
+            )}
             <div>
               {rows.map((p) => (
                 <ListRow
@@ -453,9 +504,9 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
                   data={data}
                   selectedIds={state.selected}
                   search={state.search}
-                  onOpenDetails={logic.openDetails}
-                  onToggleSelect={logic.toggleSelect}
-                  onOpenMenu={logic.openPersonMenu}
+                  onOpenDetails={handleOpenDetails}
+                  onToggleSelect={handleToggleSelect}
+                  onOpenMenu={handleOpenPersonMenu}
                 />
               ))}
             </div>
@@ -470,8 +521,12 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   if (state.detailsId) {
     const dp = state.detailPerson;
     const nameGuess =
-      dp?.name ?? data.people.find((p) => p.party_id === state.detailsId)?.name ?? '';
-    const color = dp ? avatarColor(dp) : PALETTE[hashInt(nameGuess) % PALETTE.length]!;
+      dp?.name ??
+      data.people.find((p) => p.party_id === state.detailsId)?.name ??
+      "";
+    const color = dp
+      ? avatarColor(dp)
+      : PALETTE[hashInt(nameGuess) % PALETTE.length]!;
     details = (
       <Details
         key={state.detailsId}
@@ -479,52 +534,80 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         nameGuess={nameGuess}
         color={color}
         adders={{ ...state.detailAdders }}
-        onClose={logic.closeDetails}
-        onMove={(anchor) => logic.openPersonMenu(anchor, dp!)}
-        onMessage={() => logic.logInteraction(dp!, 'Message', 'Sent a message')}
-        onCall={() => logic.logInteraction(dp!, 'Call', 'Gave them a call')}
-        onToggleStar={() => logic.toggleStar(dp!)}
-        onToggleAdder={logic.toggleAdder}
+        onClose={handleCloseDetails}
+        onMove={(anchor) => handleOpenPersonMenu(anchor, dp!)}
+        onMessage={() => logic.logInteraction(dp!, "Message", "Sent a message")}
+        onCall={() => logic.logInteraction(dp!, "Call", "Gave them a call")}
+        onToggleStar={() => handleToggleStar(dp!)}
+        onToggleAdder={handleToggleAdder}
         onAddRelationship={(fields) =>
           logic.drawerAct(
-            'add-relationship',
+            "add-relationship",
             { party_id: dp!.party_id, ...fields },
-            'Relationship added',
+            "Relationship added"
           )
         }
         onAddDate={(fields) =>
-          logic.drawerAct('add-important-date', { party_id: dp!.party_id, ...fields }, 'Date added')
+          logic.drawerAct(
+            "add-important-date",
+            { party_id: dp!.party_id, ...fields },
+            "Date added"
+          )
         }
         onToggleReminder={(dateId) =>
-          logic.drawerAct('toggle-reminder', { date_id: dateId }, 'Reminder updated')
+          logic.drawerAct(
+            "toggle-reminder",
+            { date_id: dateId },
+            "Reminder updated"
+          )
         }
         onAddTask={(fields) =>
-          logic.drawerAct('add-task', { party_id: dp!.party_id, ...fields }, 'Task added')
+          logic.drawerAct(
+            "add-task",
+            { party_id: dp!.party_id, ...fields },
+            "Task added"
+          )
         }
         onToggleTask={(taskId) =>
-          logic.drawerAct('toggle-task', { task_id: taskId }, 'Task updated')
+          logic.drawerAct("toggle-task", { task_id: taskId }, "Task updated")
         }
         onAddNote={(fields) =>
-          logic.drawerAct('add-note', { party_id: dp!.party_id, ...fields }, 'Note added')
+          logic.drawerAct(
+            "add-note",
+            { party_id: dp!.party_id, ...fields },
+            "Note added"
+          )
         }
         onAddGift={(fields) =>
-          logic.drawerAct('add-gift', { party_id: dp!.party_id, ...fields }, 'Gift idea added')
+          logic.drawerAct(
+            "add-gift",
+            { party_id: dp!.party_id, ...fields },
+            "Gift idea added"
+          )
         }
         onToggleGift={(giftId) =>
-          logic.drawerAct('toggle-gift', { gift_id: giftId }, 'Gift updated')
+          logic.drawerAct("toggle-gift", { gift_id: giftId }, "Gift updated")
         }
         onAddDebt={(fields) =>
-          logic.drawerAct('add-debt', { party_id: dp!.party_id, ...fields }, 'Debt added')
+          logic.drawerAct(
+            "add-debt",
+            { party_id: dp!.party_id, ...fields },
+            "Debt added"
+          )
         }
         onSettleDebt={(debtId) =>
-          logic.drawerAct('settle-debt', { debt_id: debtId }, 'Debt settled')
+          logic.drawerAct("settle-debt", { debt_id: debtId }, "Debt settled")
         }
       />
     );
   }
 
   const modal = state.addModalOpen ? (
-    <AddPersonModal lists={data.lists} onSubmit={logic.addPerson} onClose={logic.closeAddModal} />
+    <AddPersonModal
+      lists={data.lists}
+      onSubmit={handleAddPerson}
+      onClose={handleCloseAddModal}
+    />
   ) : null;
 
   return (
@@ -536,7 +619,13 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     <div
       ref={setRoot}
       className={styles.appRoot}
-      style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0 }}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        flex: 1,
+        minWidth: 0,
+        minHeight: 0,
+      }}
     >
       <Chrome
         narrow={narrow}
@@ -563,30 +652,39 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
           newWrapRef.current = el;
         }}
         sidebarNav={
-          <SmartNav navKind={nav.kind} people={data.people} onSelectNav={handleSelectNav} />
+          <SmartNav
+            navKind={nav.kind}
+            people={data.people}
+            onSelectNav={handleSelectNav}
+          />
         }
         sidebarLists={
           <ListList
             lists={data.lists}
             people={data.people}
             navKind={nav.kind}
-            navListId={nav.kind === 'list' ? nav.listId : undefined}
+            navListId={nav.kind === "list" ? nav.listId : undefined}
             renamingListId={state.renamingListId}
             creatingList={state.creatingList}
             onSelectNav={handleSelectNav}
-            onStartRename={logic.startRenameList}
-            onDeleteList={logic.deleteList}
-            onRenameCommit={logic.renameList}
-            onRenameCancel={logic.cancelRenameList}
-            onCreateCommit={logic.createList}
-            onCreateCancel={logic.cancelCreateList}
+            onStartRename={handleStartRenameList}
+            onDeleteList={handleDeleteList}
+            onRenameCommit={handleRenameList}
+            onRenameCancel={handleCancelRenameList}
+            onCreateCommit={handleCreateList}
+            onCreateCancel={handleCancelCreateList}
           />
         }
-        sidebarJournalNav={<JournalNav navKind={nav.kind} onSelectNav={handleSelectNav} />}
+        sidebarJournalNav={
+          <JournalNav navKind={nav.kind} onSelectNav={handleSelectNav} />
+        }
         sidebarStorage={<Storage people={data.people} lists={data.lists} />}
         newMenu={
           state.newMenuOpen ? (
-            <NewMenu onAddPerson={logic.openAddModal} onNewList={logic.startCreateList} />
+            <NewMenu
+              onAddPerson={handleOpenAddModal}
+              onNewList={handleStartCreateList}
+            />
           ) : null
         }
         statusChips={
@@ -602,8 +700,8 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
         bulk={
           <BulkBar
             n={state.selected.size}
-            onFavorite={logic.favoriteSelected}
-            onClear={logic.clearSelected}
+            onFavorite={handleFavoriteSelected}
+            onClear={handleClearSelected}
           />
         }
         board={board}

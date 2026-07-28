@@ -55,22 +55,25 @@ export type ActionHandler = HandlerFn<ActionHandlerArgs, ActionResult>;
 
 /** The handler-side `ctx.vault` surface (see worker/runner.ts). */
 export interface ScopedVault {
-  read(request: Record<string, unknown>): Promise<unknown>;
-  search(request: Record<string, unknown>): Promise<unknown>;
-  invoke(request: Record<string, unknown>): Promise<unknown>;
-  query(view: string, purpose: string): Promise<unknown>;
-  describe(): Promise<unknown>;
-  parked(): Promise<unknown>;
-  resolve(request: Record<string, unknown>): Promise<unknown>;
+  read: (request: Record<string, unknown>) => Promise<unknown>;
+  search: (request: Record<string, unknown>) => Promise<unknown>;
+  invoke: (request: Record<string, unknown>) => Promise<unknown>;
+  query: (view: string, purpose: string) => Promise<unknown>;
+  describe: () => Promise<unknown>;
+  parked: () => Promise<unknown>;
+  resolve: (request: Record<string, unknown>) => Promise<unknown>;
 }
 
 export interface ScopedLog {
-  info(msg: string): void;
-  warn(msg: string): void;
-  error(msg: string): void;
+  info: (msg: string) => void;
+  warn: (msg: string) => void;
+  error: (msg: string) => void;
 }
 
-export type ScopedFetch = (input: string, init?: RequestInit) => Promise<Response>;
+export type ScopedFetch = (
+  input: string,
+  init?: RequestInit
+) => Promise<Response>;
 
 export interface AppRef {
   readonly id: AppId;

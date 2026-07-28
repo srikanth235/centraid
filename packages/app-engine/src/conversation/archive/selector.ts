@@ -2,8 +2,9 @@
 // conversation can seal away WITHOUT ever touching a live, pinned, in-flight, or
 // already-archived turn. Reads only — no lock held, no mutation.
 
-import type { DatabaseSync } from 'node:sqlite';
-import type { Row } from './types.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import type { Row } from "./types.js";
 
 /** A contiguous seq-range of one conversation eligible for one segment. */
 export interface EligibleRange {
@@ -22,16 +23,22 @@ interface ConversationHead {
 }
 
 /** seq-ranges [from,to] already covered by a conversation_archive row. */
-function archivedRanges(journal: DatabaseSync, conversationId: string): Array<[number, number]> {
+function archivedRanges(
+  journal: DatabaseSync,
+  conversationId: string
+): Array<[number, number]> {
   const rows = journal
     .prepare(
-      `SELECT seq_from, seq_to FROM conversation_archive WHERE conversation_id = ? ORDER BY seq_from`,
+      `SELECT seq_from, seq_to FROM conversation_archive WHERE conversation_id = ? ORDER BY seq_from`
     )
     .all(conversationId) as { seq_from: number; seq_to: number }[];
   return rows.map((r) => [r.seq_from, r.seq_to]);
 }
 
-function seqAlreadyArchived(ranges: Array<[number, number]>, seq: number): boolean {
+function seqAlreadyArchived(
+  ranges: Array<[number, number]>,
+  seq: number
+): boolean {
   for (const [from, to] of ranges) if (seq >= from && seq <= to) return true;
   return false;
 }
@@ -41,11 +48,14 @@ function seqAlreadyArchived(ranges: Array<[number, number]>, seq: number): boole
  * turn is retrying (`retry_of`) must not be archived out from under the live
  * retry. Unfinished turns are themselves never eligible (they are not finished).
  */
-function retryProtectedTurnIds(journal: DatabaseSync, conversationId: string): Set<string> {
+function retryProtectedTurnIds(
+  journal: DatabaseSync,
+  conversationId: string
+): Set<string> {
   const rows = journal
     .prepare(
       `SELECT retry_of FROM turns
-        WHERE conversation_id = ? AND ended_at IS NULL AND retry_of IS NOT NULL`,
+        WHERE conversation_id = ? AND ended_at IS NULL AND retry_of IS NOT NULL`
     )
     .all(conversationId) as { retry_of: string }[];
   return new Set(rows.map((r) => r.retry_of));
@@ -60,7 +70,7 @@ function retryProtectedTurnIds(journal: DatabaseSync, conversationId: string): S
 function toContiguousRanges(
   conversationId: string,
   kind: string,
-  eligible: Row[],
+  eligible: Row[]
 ): EligibleRange[] {
   const out: EligibleRange[] = [];
   let run: Row[] = [];
@@ -98,7 +108,7 @@ function toContiguousRanges(
 export function eligibleRangesForConversation(
   journal: DatabaseSync,
   head: ConversationHead,
-  cutoffMs: number,
+  cutoffMs: number
 ): EligibleRange[] {
   const turns = journal
     .prepare(`SELECT * FROM turns WHERE conversation_id = ? ORDER BY seq ASC`)
@@ -108,7 +118,7 @@ export function eligibleRangesForConversation(
   const newestSeq = turns[turns.length - 1]!.seq as number;
   const archived = archivedRanges(journal, head.id);
   const retryProtected = retryProtectedTurnIds(journal, head.id);
-  const isAutomation = head.kind === 'automation';
+  const isAutomation = head.kind === "automation";
 
   if (!isAutomation) {
     // chat/build: whole-conversation gate. Any pinned or unfinished turn, or a
@@ -143,7 +153,7 @@ export function eligibleRangesForConversation(
 export function selectEligibleRanges(
   journal: DatabaseSync,
   cutoffMs: number,
-  maxConversations: number,
+  maxConversations: number
 ): EligibleRange[] {
   // Automations are eternal (always "live"), so they are never idle-filtered;
   // chat/build only qualify once wholly idle. One pass over the heads, bounded.
@@ -151,7 +161,7 @@ export function selectEligibleRanges(
     .prepare(
       `SELECT id, kind, updated_at FROM conversations
         WHERE kind = 'automation' OR updated_at < ?
-        ORDER BY updated_at ASC`,
+        ORDER BY updated_at ASC`
     )
     .all(cutoffMs) as unknown as ConversationHead[];
 

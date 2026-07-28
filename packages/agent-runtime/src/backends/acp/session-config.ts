@@ -26,13 +26,14 @@
  * the request, we emit a `notice` rather than silently ignoring the pin.
  */
 
-import type { TurnStreamEvent } from '@centraid/app-engine';
-import { isObject } from './content.js';
+import type { TurnStreamEvent } from "@centraid/app-engine";
+
+import { isObject } from "./content.js";
 
 /** Wire method for pinning a session config option (e.g. the model). */
-export const SET_CONFIG_OPTION = 'session/set_config_option';
+export const SET_CONFIG_OPTION = "session/set_config_option";
 /** Wire method for selecting a session mode (e.g. claude's `bypassPermissions`). */
-export const SET_MODE = 'session/set_mode';
+export const SET_MODE = "session/set_mode";
 
 /** Session lifecycle capabilities from `initialize` (ACP v1 stable extensions). */
 export interface SessionCapabilities {
@@ -56,7 +57,7 @@ export interface InitializeResult {
 /** True when the agent advertises a structured session capability object. */
 export function hasSessionCapability(
   caps: SessionCapabilities | undefined,
-  key: keyof SessionCapabilities,
+  key: keyof SessionCapabilities
 ): boolean {
   if (!caps) return false;
   const v = caps[key];
@@ -83,7 +84,9 @@ export interface SessionSetupResult {
   modes?: SessionModes | null;
 }
 
-export function readConfigOptions(result: SessionSetupResult | undefined): SessionConfigOption[] {
+export function readConfigOptions(
+  result: SessionSetupResult | undefined
+): SessionConfigOption[] {
   const raw = result?.configOptions;
   return Array.isArray(raw) ? raw.filter(isObject) : [];
 }
@@ -98,10 +101,12 @@ export function readConfigOptions(result: SessionSetupResult | undefined): Sessi
  * the result REPLACES the tracked set — an option missing from an update is
  * gone, not retained from an earlier snapshot.
  */
-export function readConfigOptionUpdate(params: unknown): SessionConfigOption[] | undefined {
+export function readConfigOptionUpdate(
+  params: unknown
+): SessionConfigOption[] | undefined {
   if (!isObject(params) || !isObject(params.update)) return undefined;
   const update = params.update;
-  if (update.sessionUpdate !== 'config_option_update') return undefined;
+  if (update.sessionUpdate !== "config_option_update") return undefined;
   const options = update.configOptions;
   return Array.isArray(options) ? options.filter(isObject) : undefined;
 }
@@ -109,14 +114,19 @@ export function readConfigOptionUpdate(params: unknown): SessionConfigOption[] |
 /** The `currentValue` the session advertises for one semantic category. */
 export function readCurrentConfigValue(
   options: SessionConfigOption[],
-  category: string,
+  category: string
 ): string | undefined {
   const option = findConfigOption(options, category);
-  return typeof option?.currentValue === 'string' ? option.currentValue : undefined;
+  return typeof option?.currentValue === "string"
+    ? option.currentValue
+    : undefined;
 }
 
 /** Does the agent advertise `modeId` among its available session modes? */
-export function modeAvailable(modes: SessionModes | undefined, modeId: string): boolean {
+export function modeAvailable(
+  modes: SessionModes | undefined,
+  modeId: string
+): boolean {
   if (!modes) return false;
   if (modes.currentModeId === modeId) return true;
   const list = modes.availableModes;
@@ -136,7 +146,7 @@ export type OfferedModel = OfferedConfigValue;
 /** Find one config selector by ACP semantic category. */
 export function findConfigOption(
   options: SessionConfigOption[],
-  category: string,
+  category: string
 ): SessionConfigOption | undefined {
   return options.find(
     (option) =>
@@ -144,7 +154,7 @@ export function findConfigOption(
       // ACP's model option historically shipped with id="model" before the
       // semantic category field became universal. This is the one spec-level
       // compatibility alias; thought_level remains category-only.
-      (category === 'model' && option.id === 'model'),
+      (category === "model" && option.id === "model")
   );
 }
 
@@ -158,10 +168,10 @@ export function flattenSelectOptions(raw: unknown): OfferedConfigValue[] {
       out.push(...flattenSelectOptions(entry.options));
       continue;
     }
-    if (typeof entry.value === 'string') {
+    if (typeof entry.value === "string") {
       out.push({
         value: entry.value,
-        ...(typeof entry.name === 'string' ? { name: entry.name } : {}),
+        ...(typeof entry.name === "string" ? { name: entry.name } : {}),
       });
     }
   }
@@ -183,11 +193,13 @@ export function readOfferedModels(configOptions: SessionConfigOption[]): {
   models: OfferedConfigValue[];
   currentValue?: string;
 } {
-  const option = findConfigOption(configOptions, 'model');
+  const option = findConfigOption(configOptions, "model");
   if (!option) return { models: [] };
   return {
     models: flattenSelectOptions(option.options),
-    ...(typeof option.currentValue === 'string' ? { currentValue: option.currentValue } : {}),
+    ...(typeof option.currentValue === "string"
+      ? { currentValue: option.currentValue }
+      : {}),
   };
 }
 
@@ -199,19 +211,20 @@ export function readOfferedModels(configOptions: SessionConfigOption[]): {
  */
 function matchModelValue(
   offered: Array<{ value: string; name?: string }>,
-  wanted: string,
+  wanted: string
 ): string | undefined {
   const needle = wanted.trim().toLowerCase();
   if (!needle) return undefined;
   const exact = offered.find((o) => o.value === wanted);
   if (exact) return exact.value;
   const byName = offered.find(
-    (o) => o.value.toLowerCase() === needle || o.name?.toLowerCase() === needle,
+    (o) => o.value.toLowerCase() === needle || o.name?.toLowerCase() === needle
   );
   if (byName) return byName.value;
   const partial = offered.find(
     (o) =>
-      o.value.toLowerCase().includes(needle) || (o.name?.toLowerCase().includes(needle) ?? false),
+      o.value.toLowerCase().includes(needle) ||
+      (o.name?.toLowerCase().includes(needle) ?? false)
   );
   return partial?.value;
 }
@@ -229,8 +242,9 @@ export async function pinModel(args: {
   requested?: string;
   resolveModel?: (model: string) => string;
 }): Promise<string | undefined> {
-  const option = findConfigOption(args.configOptions, 'model');
-  const current = typeof option?.currentValue === 'string' ? option.currentValue : undefined;
+  const option = findConfigOption(args.configOptions, "model");
+  const current =
+    typeof option?.currentValue === "string" ? option.currentValue : undefined;
 
   if (!args.requested) return current;
 
@@ -238,21 +252,23 @@ export async function pinModel(args: {
     // User explicitly picked a model — surface as warn so the composer notice
     // is hard to miss (model switch reliability).
     args.emit({
-      type: 'notice',
-      level: 'warn',
-      code: 'model_unsupported',
+      type: "notice",
+      level: "warn",
+      code: "model_unsupported",
       message: `This runner picks its own model — the selected model (${args.requested}) was ignored.`,
     });
     return current;
   }
 
-  const wanted = args.resolveModel ? args.resolveModel(args.requested) : args.requested;
+  const wanted = args.resolveModel
+    ? args.resolveModel(args.requested)
+    : args.requested;
   const value = matchModelValue(flattenSelectOptions(option.options), wanted);
   if (!value) {
     args.emit({
-      type: 'notice',
-      level: 'warn',
-      code: 'model_not_offered',
+      type: "notice",
+      level: "warn",
+      code: "model_not_offered",
       message:
         `This runner doesn’t offer the selected model (${args.requested}) — ` +
         `it used its own default instead.`,
@@ -270,12 +286,12 @@ export async function pinModel(args: {
     // D4 confirmation: a RESOLVED `session/set_config_option` IS the agent
     // confirming the pin — the spec's result echo is optional. Only an echo
     // that CONTRADICTS the request leaves the active value unknown.
-    const echoed = readCurrentConfigValue(readConfigOptions(result), 'model');
+    const echoed = readCurrentConfigValue(readConfigOptions(result), "model");
     if (echoed !== undefined && echoed !== value) {
       args.emit({
-        type: 'notice',
-        level: 'warn',
-        code: 'model_unconfirmed',
+        type: "notice",
+        level: "warn",
+        code: "model_unconfirmed",
         message:
           `This runner accepted the selected model (${args.requested}) but reported ` +
           `a different active model, so Centraid will record the model as unknown.`,
@@ -287,9 +303,9 @@ export async function pinModel(args: {
     // The agent rejected the pin (stale option list, provider hiccup). The
     // turn is still runnable on its default — say so instead of failing it.
     args.emit({
-      type: 'notice',
-      level: 'warn',
-      code: 'model_not_offered',
+      type: "notice",
+      level: "warn",
+      code: "model_not_offered",
       message:
         `This runner refused the selected model (${args.requested}) — ` +
         `it used its own default instead.`,
@@ -310,14 +326,15 @@ export async function pinThoughtLevel(args: {
   configOptions: SessionConfigOption[];
   requested?: string;
 }): Promise<string | undefined> {
-  const option = findConfigOption(args.configOptions, 'thought_level');
-  const current = typeof option?.currentValue === 'string' ? option.currentValue : undefined;
+  const option = findConfigOption(args.configOptions, "thought_level");
+  const current =
+    typeof option?.currentValue === "string" ? option.currentValue : undefined;
   if (!args.requested) return current;
   if (!option) {
     args.emit({
-      type: 'notice',
-      level: 'warn',
-      code: 'thought_level_unsupported',
+      type: "notice",
+      level: "warn",
+      code: "thought_level_unsupported",
       message: `This runner does not advertise an effort control — the selected effort (${args.requested}) was ignored.`,
     });
     return current;
@@ -328,13 +345,13 @@ export async function pinThoughtLevel(args: {
     (entry) =>
       entry.value === args.requested ||
       entry.value.toLowerCase() === needle ||
-      entry.name?.toLowerCase() === needle,
+      entry.name?.toLowerCase() === needle
   )?.value;
   if (!selected) {
     args.emit({
-      type: 'notice',
-      level: 'warn',
-      code: 'thought_level_not_offered',
+      type: "notice",
+      level: "warn",
+      code: "thought_level_not_offered",
       message: `This runner does not offer the selected effort (${args.requested}) for its active model — it used its own default instead.`,
     });
     return current;
@@ -349,12 +366,15 @@ export async function pinThoughtLevel(args: {
     });
     // Same D4 rule as `pinModel`: the resolved RPC confirms the request; only
     // a contradicting echo makes the active value unknown.
-    const echoed = readCurrentConfigValue(readConfigOptions(result), 'thought_level');
+    const echoed = readCurrentConfigValue(
+      readConfigOptions(result),
+      "thought_level"
+    );
     if (echoed !== undefined && echoed !== selected) {
       args.emit({
-        type: 'notice',
-        level: 'warn',
-        code: 'thought_level_unconfirmed',
+        type: "notice",
+        level: "warn",
+        code: "thought_level_unconfirmed",
         message: `The runner accepted the effort request but reported a different active effort, so Centraid will record effort as unknown.`,
       });
       return undefined;
@@ -362,9 +382,9 @@ export async function pinThoughtLevel(args: {
     return selected;
   } catch {
     args.emit({
-      type: 'notice',
-      level: 'warn',
-      code: 'thought_level_not_offered',
+      type: "notice",
+      level: "warn",
+      code: "thought_level_not_offered",
       message: `This runner refused the selected effort (${args.requested}) — it used its own default instead.`,
     });
     return current;

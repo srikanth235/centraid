@@ -1,4 +1,5 @@
-import { type JSX, useRef } from 'react';
+import { type JSX, useRef } from "react";
+
 import {
   auth,
   deleteAutomation,
@@ -11,48 +12,69 @@ import {
   setAutomationEnabled,
   streamAutomationConversationTurn,
   uploadConversationAttachment,
-} from '../../../gateway-client.js';
-import AutomationThreadScreen, {
-  type AutomationThreadDataEx,
-} from '../../screens/AutomationThreadScreen.js';
+} from "../../../gateway-client.js";
+import {
+  providerConsentWire,
+  withProviderConsent,
+} from "../../providerConsent.js";
 import type {
   AgentsStatusDTO,
   AsstModelPickerDTO,
   AsstMsgDTO,
   BuilderAttachmentRef,
-} from '../../screen-contracts.js';
-import { useShellActions } from '../actions.js';
-import PageScroll from '../PageScroll.js';
-import { openWebhookReveal } from '../webhookReveal.js';
-import { deriveAutomationHero } from './automationsData.js';
-import { decideConsentItem, loadAutomationThreadData } from './automationThreadData.js';
-import { loadTurnTrace, watchTurnMessages } from './automationTurnWatch.js';
+} from "../../screen-contracts.js";
+import AutomationThreadScreen, {
+  type AutomationThreadDataEx,
+} from "../../screens/AutomationThreadScreen.js";
+import { useShellActions } from "../actions.js";
+import PageScroll from "../PageScroll.js";
+import { openWebhookReveal } from "../webhookReveal.js";
 import {
   automationLiveMessages,
   createAutomationLiveTrace,
   reduceAutomationTurnEvent,
-} from './automationLiveMessages.js';
-import { loadProviders, resolveReportedRunnerKind } from './settingsProvidersData.js';
-import { providerConsentWire, withProviderConsent } from '../../providerConsent.js';
+} from "./automationLiveMessages.js";
+import { deriveAutomationHero } from "./automationsData.js";
+import {
+  decideConsentItem,
+  loadAutomationThreadData,
+} from "./automationThreadData.js";
+import { loadTurnTrace, watchTurnMessages } from "./automationTurnWatch.js";
+import {
+  loadProviders,
+  resolveReportedRunnerKind,
+} from "./settingsProvidersData.js";
 
 export function automationPicker(
   status: AgentsStatusDTO,
   requestedRunner?: string,
-  manifestPins?: { runner?: string; model?: string; thoughtLevel?: string },
+  manifestPins?: { runner?: string; model?: string; thoughtLevel?: string }
 ): AsstModelPickerDTO {
-  const runnerKind = resolveReportedRunnerKind(status, requestedRunner, 'automations');
-  const manifestRunnerKind = resolveReportedRunnerKind(status, manifestPins?.runner, 'automations');
+  const runnerKind = resolveReportedRunnerKind(
+    status,
+    requestedRunner,
+    "automations"
+  );
+  const manifestRunnerKind = resolveReportedRunnerKind(
+    status,
+    manifestPins?.runner,
+    "automations"
+  );
   const applyManifestPins = runnerKind === manifestRunnerKind;
   const card = status.cards.find((entry) => entry.kind === runnerKind);
   const models = card?.modelConfigurable ? card.models : [];
-  const defaultId = status.savedModelByKind[runnerKind] ?? '';
+  const defaultId = status.savedModelByKind[runnerKind] ?? "";
   const defaultModel =
     models.find((model) => model.id === defaultId) ??
     models.find((model) => model.default) ??
     models[0];
-  const effortOption = card?.configOptions?.find((option) => option.category === 'thought_level');
+  const effortOption = card?.configOptions?.find(
+    (option) => option.category === "thought_level"
+  );
   const defaultEffort =
-    status.defaultConfigPinsByKind[runnerKind]?.thought_level ?? effortOption?.currentValue ?? '';
+    status.defaultConfigPinsByKind[runnerKind]?.thought_level ??
+    effortOption?.currentValue ??
+    "";
   return {
     runners: status.cards.map((runner) => ({
       kind: runner.kind,
@@ -61,8 +83,10 @@ export function automationPicker(
       sessionReady: runner.sessionReady,
       hint: [
         runner.subtitle,
-        ...(runner.breakerStates ?? []).map((state) => `${state.failureClass} ${state.state}`),
-      ].join(' · '),
+        ...(runner.breakerStates ?? []).map(
+          (state) => `${state.failureClass} ${state.state}`
+        ),
+      ].join(" · "),
     })),
     selectedRunnerKind: runnerKind,
     workspaceKinds: [],
@@ -72,20 +96,25 @@ export function automationPicker(
       ...(model.name ? { name: model.name } : {}),
       ...(model.default ? { default: true } : {}),
     })),
-    defaultModelName: defaultModel?.name ?? defaultModel?.id ?? 'gateway default',
+    defaultModelName:
+      defaultModel?.name ?? defaultModel?.id ?? "gateway default",
     selectedModelId:
       (applyManifestPins ? manifestPins?.model : undefined) ??
       status.subsystemModelByKind[runnerKind]?.automations ??
-      '',
+      "",
     ...(applyManifestPins && manifestPins?.model ? { modelLocked: true } : {}),
     efforts: effortOption?.values ?? [],
     defaultEffortName:
-      effortOption?.values.find((value) => value.value === defaultEffort)?.name ?? defaultEffort,
+      effortOption?.values.find((value) => value.value === defaultEffort)
+        ?.name ?? defaultEffort,
     selectedEffortId:
       (applyManifestPins ? manifestPins?.thoughtLevel : undefined) ??
-      status.subsystemConfigPinsByKind[runnerKind]?.automations?.thought_level ??
-      '',
-    ...(applyManifestPins && manifestPins?.thoughtLevel ? { effortLocked: true } : {}),
+      status.subsystemConfigPinsByKind[runnerKind]?.automations
+        ?.thought_level ??
+      "",
+    ...(applyManifestPins && manifestPins?.thoughtLevel
+      ? { effortLocked: true }
+      : {}),
     supportsAttachments: card?.supportsAttachments === true,
     supportsContext: card?.supportsContext === true,
   };
@@ -97,7 +126,7 @@ export function automationPicker(
  * silently inherits that ordering — so pick the latest run explicitly (#567).
  */
 export function latestAdapterKind(
-  runs: readonly CentraidAutomationTurnRecord[],
+  runs: readonly CentraidAutomationTurnRecord[]
 ): string | undefined {
   let latest: CentraidAutomationTurnRecord | undefined;
   for (const run of runs) {
@@ -125,22 +154,33 @@ async function askAutomationWithConsent(input: {
     thinking?: string;
     onContext?: (context: { used: number; size: number }) => void;
   };
-  confirm: (input: { confirmLabel: string; message: string; title: string }) => Promise<boolean>;
+  confirm: (input: {
+    confirmLabel: string;
+    message: string;
+    title: string;
+  }) => Promise<boolean>;
 }): Promise<string | null> {
   let live = createAutomationLiveTrace(input.text);
   input.onMessages(automationLiveMessages(live));
   // Approvals accumulate across this ask: consent for provider A then a
   // failover to B must resend BOTH, or the server re-asks for A forever (#567).
   let approvedProviders: string[] = [];
-  for (;;) {
+  // A consent request changes the credentials for the next transport attempt,
+  // so this is a serial retry state machine rather than parallel asks.
+  const requestTurn = async (): Promise<string | null> => {
     let requiredProvider: string | undefined;
     const result = await streamAutomationConversationTurn(
       input.automationRef,
       input.text,
       (event) => {
-        if (event.type === 'consent.required') requiredProvider = event.provider;
+        if (event.type === "consent.required")
+          requiredProvider = event.provider;
         else {
-          if (event.type === 'context' && event.used !== undefined && event.size !== undefined) {
+          if (
+            event.type === "context" &&
+            event.used !== undefined &&
+            event.size !== undefined
+          ) {
             input.turn.onContext?.({ used: event.used, size: event.size });
           }
           live = reduceAutomationTurnEvent(live, event);
@@ -150,11 +190,13 @@ async function askAutomationWithConsent(input: {
       input.signal,
       providerConsentWire(approvedProviders),
       {
-        ...(input.turn.attachments?.length ? { attachments: input.turn.attachments } : {}),
+        ...(input.turn.attachments?.length
+          ? { attachments: input.turn.attachments }
+          : {}),
         ...(input.turn.runnerKind ? { runnerKind: input.turn.runnerKind } : {}),
         ...(input.turn.model ? { model: input.turn.model } : {}),
         ...(input.turn.thinking ? { thinking: input.turn.thinking } : {}),
-      },
+      }
     );
     if (!requiredProvider) {
       if (result.turnId && !input.signal.aborted) {
@@ -163,15 +205,20 @@ async function askAutomationWithConsent(input: {
       return result.turnId ?? null;
     }
     const approved = await input.confirm({
-      confirmLabel: 'Allow provider',
+      confirmLabel: "Allow provider",
       message:
         `Allow this automation conversation to be sent to ${requiredProvider}? ` +
-        'This can include the question, standing instructions, recent run context, and scoped tool results.',
+        "This can include the question, standing instructions, recent run context, and scoped tool results.",
       title: `Send to ${requiredProvider}?`,
     });
     if (!approved) return null;
-    approvedProviders = withProviderConsent(approvedProviders, requiredProvider);
-  }
+    approvedProviders = withProviderConsent(
+      approvedProviders,
+      requiredProvider
+    );
+    return requestTurn();
+  };
+  return requestTurn();
 }
 
 // The RUN SCREEN's route wrapper. It wires exactly the reading surface:
@@ -211,7 +258,8 @@ export default function AutomationViewRoute({
           const hero = deriveAutomationHero(result.row, baseUrl);
           const runTokens: Record<string, number> = {};
           for (const r of runs) {
-            const tokens = (r.totalInputTokens ?? 0) + (r.totalOutputTokens ?? 0);
+            const tokens =
+              (r.totalInputTokens ?? 0) + (r.totalOutputTokens ?? 0);
             if (tokens > 0) runTokens[r.turnId] = tokens;
           }
           return {
@@ -223,7 +271,7 @@ export default function AutomationViewRoute({
                   runnerConfig: automationPicker(
                     providers,
                     runnerRef.current ?? result.row.manifest.requires?.runner,
-                    result.row.manifest.requires,
+                    result.row.manifest.requires
                   ),
                 }
               : {}),
@@ -234,14 +282,15 @@ export default function AutomationViewRoute({
             },
           };
         }}
-        onBack={() => navigate({ kind: 'automations' })}
+        onBack={() => navigate({ kind: "automations" })}
         onOpenCompiler={() => {
           const row = rowRef.current;
-          if (row) navigate({ kind: 'automation-editor', automationId: row.ref });
+          if (row)
+            navigate({ kind: "automation-editor", automationId: row.ref });
         }}
         onOpenRun={(runId) => {
           const row = rowRef.current;
-          if (row) navigate({ automationId: row.ref, kind: 'run-view', runId });
+          if (row) navigate({ automationId: row.ref, kind: "run-view", runId });
         }}
         loadTurnTrace={loadTurnTrace}
         watchTurn={async (turnId, onMessages, signal) =>
@@ -250,27 +299,27 @@ export default function AutomationViewRoute({
         onCopyWebhook={(url) =>
           void navigator.clipboard
             .writeText(url)
-            .then(() => showToast('Webhook URL copied'))
-            .catch(() => showToast('Could not copy to clipboard'))
+            .then(() => showToast("Webhook URL copied"))
+            .catch(() => showToast("Could not copy to clipboard"))
         }
         onDelete={async () => {
           const row = rowRef.current;
           if (!row) return false;
           const ok = await confirm({
-            confirmLabel: 'Delete',
+            confirmLabel: "Delete",
             danger: true,
             message: `Delete "${row.name}"? This removes it from the gateway and deletes its run history. This can't be undone.`,
-            title: 'Delete automation?',
+            title: "Delete automation?",
           });
           if (!ok) return false;
           try {
             await deleteAutomation({ automationId: row.ref });
             showToast(`Deleted "${row.name}"`);
-            navigate({ kind: 'automations' });
+            navigate({ kind: "automations" });
             return true;
           } catch (err) {
             showToast(
-              `Could not delete ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+              `Could not delete ${row.name}: ${err instanceof Error ? err.message : String(err)}`
             );
             return false;
           }
@@ -279,11 +328,15 @@ export default function AutomationViewRoute({
           const row = rowRef.current;
           if (!row) return null;
           try {
-            const { turnId } = await runAutomationNow({ automationId: row.ref });
-            showToast('Run started');
+            const { turnId } = await runAutomationNow({
+              automationId: row.ref,
+            });
+            showToast("Run started");
             return turnId;
           } catch (err) {
-            showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
+            showToast(
+              `Run failed: ${err instanceof Error ? err.message : String(err)}`
+            );
             return null;
           }
         }}
@@ -291,11 +344,14 @@ export default function AutomationViewRoute({
           const row = rowRef.current;
           if (!row) return false;
           try {
-            await setAutomationEnabled({ automationId: row.ref, enabled: next });
+            await setAutomationEnabled({
+              automationId: row.ref,
+              enabled: next,
+            });
             return true;
           } catch (err) {
             showToast(
-              `Could not ${next ? 'enable' : 'disable'} ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+              `Could not ${next ? "enable" : "disable"} ${row.name}: ${err instanceof Error ? err.message : String(err)}`
             );
             return false;
           }
@@ -306,30 +362,35 @@ export default function AutomationViewRoute({
               decision,
               id,
               kind,
-              ...(alwaysAllow !== undefined ? { alwaysAllow } : {}),
+              ...(alwaysAllow === undefined ? {} : { alwaysAllow }),
             });
           } catch (err) {
-            showToast(`Could not update: ${err instanceof Error ? err.message : String(err)}`);
+            showToast(
+              `Could not update: ${err instanceof Error ? err.message : String(err)}`
+            );
             return false;
           }
         }}
         onUploadAttachment={async (file) => {
           const row = rowRef.current;
-          if (!row) throw new Error('Automation is no longer available.');
+          if (!row) throw new Error("Automation is no longer available.");
           if (file.size > MAX_ATTACHMENT_BYTES) {
-            throw new Error('Attachments must be 25 MB or smaller.');
+            throw new Error("Attachments must be 25 MB or smaller.");
           }
           const ref = await uploadConversationAttachment(
             row.ownerApp,
             new Uint8Array(await file.arrayBuffer()),
-            file.type || 'application/octet-stream',
-            file.name,
+            file.type || "application/octet-stream",
+            file.name
           );
           return ref;
         }}
         loadAttachmentImage={(hash, mime) => {
           const row = rowRef.current;
-          if (!row) return Promise.reject(new Error('Automation is no longer available.'));
+          if (!row)
+            return Promise.reject(
+              new Error("Automation is no longer available.")
+            );
           return fetchAssistantAttachmentUrl(row.ownerApp, hash, mime);
         }}
         onSetRunner={async (runnerKind) => {
@@ -339,16 +400,25 @@ export default function AutomationViewRoute({
           if (!target?.sessionReady) {
             showToast(
               [
-                target?.subtitle ?? `${runnerKind} did not complete its session preflight.`,
+                target?.subtitle ??
+                  `${runnerKind} did not complete its session preflight.`,
                 ...(target?.breakerStates ?? []).map(
-                  (state) => `${state.failureClass} ${state.state}`,
+                  (state) => `${state.failureClass} ${state.state}`
                 ),
-              ].join(' · '),
+              ].join(" · ")
             );
-            return automationPicker(status, previous, rowRef.current?.manifest.requires);
+            return automationPicker(
+              status,
+              previous,
+              rowRef.current?.manifest.requires
+            );
           }
           runnerRef.current = runnerKind;
-          return automationPicker(status, runnerKind, rowRef.current?.manifest.requires);
+          return automationPicker(
+            status,
+            runnerKind,
+            rowRef.current?.manifest.requires
+          );
         }}
         onAskAboutRuns={async (text, turn, onMessages, signal) => {
           const row = rowRef.current;
@@ -371,9 +441,9 @@ export default function AutomationViewRoute({
             if (!signal.aborted) {
               const message = err instanceof Error ? err.message : String(err);
               onMessages([
-                { kind: 'user', text },
+                { kind: "user", text },
                 {
-                  kind: 'ai',
+                  kind: "ai",
                   streaming: false,
                   html: message,
                   error: true,
@@ -390,24 +460,26 @@ export default function AutomationViewRoute({
           const row = rowRef.current;
           if (!row) return false;
           const ok = await confirm({
-            confirmLabel: 'Regenerate',
+            confirmLabel: "Regenerate",
             danger: true,
             message:
-              'This invalidates the current secret — any caller using it starts failing until updated. The webhook URL stays the same.',
-            title: 'Regenerate webhook secret?',
+              "This invalidates the current secret — any caller using it starts failing until updated. The webhook URL stays the same.",
+            title: "Regenerate webhook secret?",
           });
           if (!ok) return false;
           try {
-            const { webhook } = await rotateAutomationWebhookSecret({ automationId: row.ref });
+            const { webhook } = await rotateAutomationWebhookSecret({
+              automationId: row.ref,
+            });
             await openWebhookReveal(webhook, {
               note: "This secret is shown once. Update your caller now — you won't see it again.",
-              title: 'New webhook secret',
+              title: "New webhook secret",
             });
-            showToast('Webhook secret regenerated');
+            showToast("Webhook secret regenerated");
             return true;
           } catch (err) {
             showToast(
-              `Could not regenerate secret: ${err instanceof Error ? err.message : String(err)}`,
+              `Could not regenerate secret: ${err instanceof Error ? err.message : String(err)}`
             );
             return false;
           }

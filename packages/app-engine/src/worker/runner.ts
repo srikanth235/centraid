@@ -31,11 +31,11 @@
  *    previous request runs, off the acquiring request's critical path.
  */
 
-import { existsSync } from 'node:fs';
-import { register } from 'node:module';
-import path from 'node:path';
-import { parentPort, workerData } from 'node:worker_threads';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { existsSync } from "node:fs";
+import { register } from "node:module";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { parentPort, workerData } from "node:worker_threads";
 
 /**
  * Install the `.ts`/`.tsx` module-customization hooks (worker/ts-loader-hooks)
@@ -50,42 +50,44 @@ let tsLoaderRegistered = false;
 function ensureTsLoader(): void {
   if (tsLoaderRegistered) return;
   tsLoaderRegistered = true;
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const jsHooks = path.join(here, 'ts-loader-hooks.js');
-  const hooksFile = existsSync(jsHooks) ? jsHooks : path.join(here, 'ts-loader-hooks.ts');
+  const here = import.meta.dirname;
+  const jsHooks = path.join(here, "ts-loader-hooks.js");
+  const hooksFile = existsSync(jsHooks)
+    ? jsHooks
+    : path.join(here, "ts-loader-hooks.ts");
   register(pathToFileURL(hooksFile).href);
 }
 
 interface WorkerRequest {
   handlerFile: string;
-  handlerKind: 'query' | 'action';
+  handlerKind: "query" | "action";
   args: unknown;
 }
 
 /** Parent → pooled-worker kickoff carrying the handler to run. */
 interface RunMessage {
-  type: 'run';
+  type: "run";
   request: WorkerRequest;
 }
 
 interface VaultCallMessage {
-  type: 'vault';
+  type: "vault";
   id: number;
   op:
-    | 'read'
-    | 'search'
-    | 'invoke'
-    | 'query'
-    | 'describe'
-    | 'parked'
-    | 'changes'
-    | 'resolve'
-    | 'reveal';
+    | "read"
+    | "search"
+    | "invoke"
+    | "query"
+    | "describe"
+    | "parked"
+    | "changes"
+    | "resolve"
+    | "reveal";
   payload: unknown;
 }
 
 interface VaultReplyMessage {
-  type: 'vault-reply';
+  type: "vault-reply";
   id: number;
   ok: boolean;
   result?: unknown;
@@ -94,37 +96,39 @@ interface VaultReplyMessage {
 }
 
 interface LogMessage {
-  type: 'log';
-  level: 'info' | 'warn' | 'error';
+  type: "log";
+  level: "info" | "warn" | "error";
   msg: string;
 }
 
 interface ResultMessage {
-  type: 'result';
+  type: "result";
   ok: boolean;
   value?: unknown;
   error?: string;
 }
 
 if (!parentPort) {
-  throw new Error('centraid handler worker must be run as a worker_thread');
+  throw new Error("centraid handler worker must be run as a worker_thread");
 }
 
 const port = parentPort;
 const boot = workerData as { pooled?: boolean } & Partial<WorkerRequest>;
 
-port.on('message', (msg: VaultReplyMessage | RunMessage) => {
-  if (msg.type === 'vault-reply') {
+port.on("message", (msg: VaultReplyMessage | RunMessage) => {
+  if (msg.type === "vault-reply") {
     const pending = pendingVaultCalls.get(msg.id);
     if (!pending) return;
     pendingVaultCalls.delete(msg.id);
     if (msg.ok) pending.resolve(msg.result);
     else {
-      const err = new Error(msg.error ?? 'vault call failed') as Error & { code?: string };
+      const err = new Error(msg.error ?? "vault call failed") as Error & {
+        code?: string;
+      };
       if (msg.code) err.code = msg.code;
       pending.reject(err);
     }
-  } else if (msg.type === 'run') {
+  } else if (msg.type === "run") {
     // Pooled kickoff — exactly one per worker (single-use, see header).
     execute(msg.request);
   }
@@ -143,11 +147,14 @@ const pendingVaultCalls = new Map<
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
 >();
 
-function vaultCall(op: VaultCallMessage['op'], payload: unknown): Promise<unknown> {
+function vaultCall(
+  op: VaultCallMessage["op"],
+  payload: unknown
+): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const id = nextVaultCallId++;
     pendingVaultCalls.set(id, { resolve, reject });
-    const m: VaultCallMessage = { type: 'vault', id, op, payload };
+    const m: VaultCallMessage = { type: "vault", id, op, payload };
     port.postMessage(m);
   });
 }
@@ -155,7 +162,7 @@ function vaultCall(op: VaultCallMessage['op'], payload: unknown): Promise<unknow
 const vault = {
   /** Consent-checked read of a canonical entity: `{entity, where?, limit?, purpose}`. */
   read(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('read', request);
+    return vaultCall("read", request);
   },
   /**
    * Full-text search over a text-indexed entity:
@@ -165,19 +172,19 @@ const vault = {
    * entity to grep it in memory.
    */
   search(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('search', request);
+    return vaultCall("search", request);
   },
   /** Typed-command invocation: `{command, input, purpose}` → outcome `{status, output, …}`. */
   invoke(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('invoke', request);
+    return vaultCall("invoke", request);
   },
   /** Query a registered app view, clamped to this app's grants. */
   query(view: string, purpose: string): Promise<unknown> {
-    return vaultCall('query', { view, purpose });
+    return vaultCall("query", { view, purpose });
   },
   /** Commands discoverable by this app (name, schema, risk, confirmation). */
   describe(): Promise<unknown> {
-    return vaultCall('describe', {});
+    return vaultCall("describe", {});
   },
   /**
    * This app's own invocations awaiting owner confirmation — the "my
@@ -185,7 +192,7 @@ const vault = {
    * send can render as durable state instead of a session-local guess.
    */
   parked(): Promise<unknown> {
-    return vaultCall('parked', {});
+    return vaultCall("parked", {});
   },
   /**
    * The card resolver (issue #272): `{refs: [{type, id}], purpose}` →
@@ -194,19 +201,21 @@ const vault = {
    * this caller reads. Denials arrive as per-ref `status: 'denied'` cards.
    */
   resolve(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('resolve', request);
+    return vaultCall("resolve", request);
   },
   /** Plaintext of one entity's sealed columns — `reveal` verb, receipted per item (issue #293). */
   reveal(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('reveal', request);
+    return vaultCall("reveal", request);
   },
 };
 
 const log = {
-  info: (msg: string) => port.postMessage({ type: 'log', level: 'info', msg } satisfies LogMessage),
-  warn: (msg: string) => port.postMessage({ type: 'log', level: 'warn', msg } satisfies LogMessage),
+  info: (msg: string) =>
+    port.postMessage({ type: "log", level: "info", msg } satisfies LogMessage),
+  warn: (msg: string) =>
+    port.postMessage({ type: "log", level: "warn", msg } satisfies LogMessage),
   error: (msg: string) =>
-    port.postMessage({ type: 'log', level: 'error', msg } satisfies LogMessage),
+    port.postMessage({ type: "log", level: "error", msg } satisfies LogMessage),
 };
 
 const abortController = new AbortController();
@@ -222,19 +231,23 @@ function execute(req: WorkerRequest): void {
     try {
       // A TS handler graph needs the esbuild loader hook before it can import
       // under plain Node; a JS handler skips this entirely.
-      if (/\.tsx?$/.test(req.handlerFile)) ensureTsLoader();
+      if (/\.tsx?$/u.test(req.handlerFile)) ensureTsLoader();
       const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
         default?: (args: unknown) => Promise<unknown>;
       };
-      if (typeof mod.default !== 'function') {
+      if (typeof mod.default !== "function") {
         throw new Error(`${req.handlerFile} has no default export`);
       }
       const fullArgs = { ...(req.args as object), log, ctx };
       const value = await mod.default(fullArgs);
-      port.postMessage({ type: 'result', ok: true, value } satisfies ResultMessage);
+      port.postMessage({
+        type: "result",
+        ok: true,
+        value,
+      } satisfies ResultMessage);
     } catch (err) {
       port.postMessage({
-        type: 'result',
+        type: "result",
         ok: false,
         error: err instanceof Error ? (err.stack ?? err.message) : String(err),
       } satisfies ResultMessage);
@@ -247,7 +260,7 @@ function execute(req: WorkerRequest): void {
 if (boot.pooled) {
   // Warm spare: booted and idle. Announce readiness (the parent ignores this
   // until it hands over a run), then wait for the single `run` kickoff above.
-  port.postMessage({ type: 'ready' });
+  port.postMessage({ type: "ready" });
 } else {
   // Inline boot: the request rode in on workerData — run it now.
   execute(boot as WorkerRequest);

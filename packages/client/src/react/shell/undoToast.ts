@@ -1,4 +1,4 @@
-import toastCss from '../styles/toast.module.css';
+import toastCss from "../styles/toast.module.css";
 
 // Undo toast (issue #420 §3) — a transient confirmation with an "Undo" action,
 // the deferred-delete pattern claude.ai/Gmail use. Sibling of `showToast`: it
@@ -31,28 +31,32 @@ export interface UndoToastOpts {
   onExpire?: () => void;
 }
 
-export function showUndoToast(message: string, onUndo: () => void, opts: UndoToastOpts = {}): void {
+export function showUndoToast(
+  message: string,
+  onUndo: () => void,
+  opts: UndoToastOpts = {}
+): void {
   // Supersede any pending toast by committing it first.
   activeFinish?.(false);
 
-  const toast = document.createElement('div');
-  toast.className = toastCss.toast ?? '';
-  toast.dataset.undoToast = 'true';
+  const toast = document.createElement("div");
+  toast.className = toastCss.toast ?? "";
+  toast.dataset.undoToast = "true";
 
-  const text = document.createElement('span');
+  const text = document.createElement("span");
   text.textContent = message;
 
-  const action = document.createElement('button');
-  action.type = 'button';
-  action.textContent = opts.actionLabel ?? 'Undo';
+  const action = document.createElement("button");
+  action.type = "button";
+  action.textContent = opts.actionLabel ?? "Undo";
   Object.assign(action.style, {
-    background: 'transparent',
-    border: '0',
-    color: 'var(--accent)',
-    cursor: 'pointer',
-    font: 'inherit',
-    fontWeight: '600',
-    padding: '0 2px',
+    background: "transparent",
+    border: "0",
+    color: "var(--accent)",
+    cursor: "pointer",
+    font: "inherit",
+    fontWeight: "600",
+    padding: "0 2px",
   });
 
   let settled = false;
@@ -64,15 +68,15 @@ export function showUndoToast(message: string, onUndo: () => void, opts: UndoToa
     else opts.onExpire?.();
   };
 
-  action.addEventListener('click', () => finish(true));
+  action.addEventListener("click", () => finish(true));
   toast.append(text, action);
 
   Object.assign(toast.style, {
-    left: '50%',
-    position: 'fixed',
-    top: '60px',
-    transform: 'translateX(-50%)',
-    zIndex: '90',
+    left: "50%",
+    position: "fixed",
+    top: "60px",
+    transform: "translateX(-50%)",
+    zIndex: "90",
   });
   document.body.append(toast);
   undoToastEl = toast;

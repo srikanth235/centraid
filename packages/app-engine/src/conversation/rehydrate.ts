@@ -8,7 +8,8 @@
 // history stays sealed, and the archived turns are read-only (mutation paths
 // keyed by turn id fail cleanly — the pruned rows simply no longer exist).
 
-import { readArchivedConversationSegment } from './archive/index.js';
+import { readArchivedConversationSegment } from "./archive/index.js";
+import type { Attachment, Item, Turn } from "./schema.js";
 import {
   attachmentFromRaw,
   itemFromRaw,
@@ -16,8 +17,7 @@ import {
   type RawAttachment,
   type RawItem,
   type RawTurn,
-} from './store-sql.js';
-import type { Attachment, Item, Turn } from './schema.js';
+} from "./store-sql.js";
 
 /**
  * Injectable read-back of an archived segment blob by content hash. The gateway
@@ -65,7 +65,7 @@ export interface ArchivedRows {
  */
 export async function collectArchivedRows(
   reader: ArchiveBlobReader | undefined,
-  prunedRefs: ArchiveSegmentRef[],
+  prunedRefs: ArchiveSegmentRef[]
 ): Promise<ArchivedRows> {
   const out: ArchivedRows = {
     turns: [],
@@ -81,22 +81,19 @@ export async function collectArchivedRows(
     return out;
   }
 
-  for (const ref of prunedRefs) {
-    let bytes: Uint8Array | null;
-    try {
-      bytes = await reader(ref.segmentSha256);
-    } catch {
-      out.unavailable = true;
-      continue;
-    }
-    if (!bytes) {
-      out.unavailable = true;
-      continue;
-    }
-    let segment: ReturnType<typeof readArchivedConversationSegment>;
-    try {
-      segment = readArchivedConversationSegment(Buffer.from(bytes));
-    } catch {
+  const segments = await Promise.all(
+    prunedRefs.map(async (ref) => {
+      try {
+        const bytes = await reader(ref.segmentSha256);
+        if (!bytes) return undefined;
+        return readArchivedConversationSegment(Buffer.from(bytes));
+      } catch {
+        return undefined;
+      }
+    })
+  );
+  for (const segment of segments) {
+    if (!segment) {
       out.unavailable = true;
       continue;
     }
@@ -120,6 +117,7 @@ export async function collectArchivedRows(
   }
   // Items are serialized `ORDER BY turn_id, ordinal`, but sort defensively so the
   // transcript fold sees each turn's items ordinal-ascending regardless.
-  for (const list of out.itemsByTurn.values()) list.sort((x, y) => x.ordinal - y.ordinal);
+  for (const list of out.itemsByTurn.values())
+    list.sort((x, y) => x.ordinal - y.ordinal);
   return out;
 }

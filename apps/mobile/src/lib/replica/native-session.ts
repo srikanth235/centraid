@@ -31,20 +31,24 @@ import {
   type ReplicaStatus,
   type ReplicaValue,
   validateOptimisticMutation,
-} from '@centraid/client/replica/native';
+} from "@centraid/client/replica/native";
 
-import { NativeReplicaStore } from './native-replica-store';
-import { SqliteIntentStore } from './sqlite-intent-store';
+import { NativeReplicaStore } from "./native-replica-store";
+import { SqliteIntentStore } from "./sqlite-intent-store";
 
-export type NativeReadRequest = Omit<ReplicaReadRequest, 'shapeId'> & { shapeId?: string };
-export type NativeSearchRequest = Omit<ReplicaSearchRequest, 'shapeId'> & { shapeId?: string };
+export type NativeReadRequest = Omit<ReplicaReadRequest, "shapeId"> & {
+  shapeId?: string;
+};
+export type NativeSearchRequest = Omit<ReplicaSearchRequest, "shapeId"> & {
+  shapeId?: string;
+};
 
 export type NativeOptimisticMutation =
-  | (Omit<Extract<OptimisticMutation, { op: 'upsert' }>, 'shapeId'> & {
+  | (Omit<Extract<OptimisticMutation, { op: "upsert" }>, "shapeId"> & {
       shapeId?: string;
       purpose?: string;
     })
-  | (Omit<Extract<OptimisticMutation, { op: 'delete' }>, 'shapeId'> & {
+  | (Omit<Extract<OptimisticMutation, { op: "delete" }>, "shapeId"> & {
       shapeId?: string;
       purpose?: string;
     });
@@ -58,17 +62,20 @@ export interface NativeWriteInput {
 
 export type NativeWriteResult =
   | IntentOutcome
-  | { intentId: string; status: 'queued' | 'in-flight'; reason?: string };
+  | { intentId: string; status: "queued" | "in-flight"; reason?: string };
 
 /** AppState-shaped foreground signal; RN's `AppState` satisfies it. */
 export interface AppStateLike {
   readonly currentState: string | null;
-  addEventListener(type: 'change', handler: (state: string) => void): { remove(): void };
+  addEventListener: (
+    type: "change",
+    handler: (state: string) => void
+  ) => { remove: () => void };
 }
 
 /** The change-feed adapter plus the session's foreground pause/resume control. */
 export interface NativeChangeFeed extends ReplicaChangeFeedAdapter {
-  setActive(active: boolean): void;
+  setActive: (active: boolean) => void;
 }
 
 export interface CreateNativeReplicaSessionOptions {
@@ -101,8 +108,8 @@ export interface CreateNativeReplicaSessionOptions {
 }
 
 interface Waiter {
-  resolve(result: NativeWriteResult): void;
-  reject(error: unknown): void;
+  resolve: (result: NativeWriteResult) => void;
+  reject: (error: unknown) => void;
 }
 
 /**
@@ -130,21 +137,21 @@ export class NativeReplicaSession {
   #drainPromise: Promise<void> | undefined;
   #drainRequested = false;
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
-  #appStateSub: { remove(): void } | undefined;
+  #appStateSub: { remove: () => void } | undefined;
   #closed = false;
 
   constructor(
     coordinator: ReplicaCoordinator,
     options: Pick<
       CreateNativeReplicaSessionOptions,
-      | 'gatewayAuth'
-      | 'fetcher'
-      | 'changeFeed'
-      | 'appState'
-      | 'isConnected'
-      | 'retryDelayMs'
-      | 'bootstrapWindow'
-    >,
+      | "gatewayAuth"
+      | "fetcher"
+      | "changeFeed"
+      | "appState"
+      | "isConnected"
+      | "retryDelayMs"
+      | "bootstrapWindow"
+    >
   ) {
     this.#coordinator = coordinator;
     this.#gatewayAuth = options.gatewayAuth;
@@ -166,44 +173,76 @@ export class NativeReplicaSession {
     this.#hasCursor = status.cursor !== null;
     if (status.cursor) this.#catalog = await this.#coordinator.catalog();
     else await this.bootstrapWhenReachable();
-    const foreground = this.#appState ? this.#appState.currentState !== 'background' : true;
+    const foreground = this.#appState
+      ? this.#appState.currentState !== "background"
+      : true;
     this.#feed.setActive(foreground);
     if (this.#appState) {
-      this.#appStateSub = this.#appState.addEventListener('change', this.onAppStateChange);
+      this.#appStateSub = this.#appState.addEventListener(
+        "change",
+        this.onAppStateChange
+      );
     }
     void this.flushIntents();
     return this;
   }
 
-  async read(appId: string, request: NativeReadRequest): Promise<ReplicaReadWireResult> {
+  async read(
+    appId: string,
+    request: NativeReadRequest
+  ): Promise<ReplicaReadWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(appId, request.entity, request.shapeId, request.purpose);
+    const shapeId = this.resolveShapeId(
+      appId,
+      request.entity,
+      request.shapeId,
+      request.purpose
+    );
     return this.#coordinator.readWire({ ...request, shapeId });
   }
 
-  async search(appId: string, request: NativeSearchRequest): Promise<ReplicaSearchWireResult> {
+  async search(
+    appId: string,
+    request: NativeSearchRequest
+  ): Promise<ReplicaSearchWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(appId, request.entity, request.shapeId, request.purpose);
+    const shapeId = this.resolveShapeId(
+      appId,
+      request.entity,
+      request.shapeId,
+      request.purpose
+    );
     return this.#coordinator.searchWire({ ...request, shapeId });
   }
 
-  async write(appId: string, input: NativeWriteInput): Promise<NativeWriteResult> {
+  async write(
+    appId: string,
+    input: NativeWriteInput
+  ): Promise<NativeWriteResult> {
     this.assertOpen();
-    if (!input.action) throw new ReplicaProtocolError('Replica action is required');
+    if (!input.action)
+      throw new ReplicaProtocolError("Replica action is required");
     const optimistic = (input.optimistic ?? []).map((mutation) => {
       const { purpose, shapeId, ...rest } = mutation;
-      return { ...rest, shapeId: this.resolveShapeId(appId, mutation.entity, shapeId, purpose) };
+      return {
+        ...rest,
+        shapeId: this.resolveShapeId(appId, mutation.entity, shapeId, purpose),
+      };
     }) as OptimisticMutation[];
     // Validate at enqueue time exactly as the web shell session does. The native
     // write path never re-checked, so an invalid optimistic mutation (e.g. a
     // synthetic __rowId column spread into the values) was silently dropped by
     // applyOptimisticMutations and the edit simply never rendered. Reject loudly.
     for (const mutation of optimistic) {
-      const shape = this.#catalog.find((candidate) => candidate.shapeId === mutation.shapeId);
-      const schema = shape?.entities.find((candidate) => candidate.entity === mutation.entity);
+      const shape = this.#catalog.find(
+        (candidate) => candidate.shapeId === mutation.shapeId
+      );
+      const schema = shape?.entities.find(
+        (candidate) => candidate.entity === mutation.entity
+      );
       if (!schema) {
         throw new ReplicaProtocolError(
-          `Optimistic mutation targets unavailable shape ${mutation.shapeId}/${mutation.entity}`,
+          `Optimistic mutation targets unavailable shape ${mutation.shapeId}/${mutation.entity}`
         );
       }
       validateOptimisticMutation(mutation, schema);
@@ -211,7 +250,10 @@ export class NativeReplicaSession {
     const dependencies = this.#catalog
       .filter((shape) => shape.appId === appId)
       .flatMap((shape) =>
-        shape.entities.map((entity) => ({ shapeId: shape.shapeId, entity: entity.entity })),
+        shape.entities.map((entity) => ({
+          shapeId: shape.shapeId,
+          entity: entity.entity,
+        }))
       );
     const intent = await this.#coordinator.enqueue({
       ...(input.intentId ? { intentId: input.intentId } : {}),
@@ -224,7 +266,11 @@ export class NativeReplicaSession {
     const settled = terminalResult(intent);
     if (settled) return settled;
     if (!this.#isConnected()) {
-      return { intentId: intent.intentId, status: 'queued', reason: 'waiting for a connection' };
+      return {
+        intentId: intent.intentId,
+        status: "queued",
+        reason: "waiting for a connection",
+      };
     }
     const admitted = new Promise<NativeWriteResult>((resolve, reject) => {
       const waiters = this.#waiters.get(intent.intentId) ?? new Set<Waiter>();
@@ -237,17 +283,21 @@ export class NativeReplicaSession {
 
   subscribe(
     appId: string,
-    listener: (invalidations: readonly ReplicaInvalidation[]) => void,
+    listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ): () => void {
     this.assertOpen();
     return this.#coordinator.subscribeInvalidations((invalidations) => {
       const appShapes = new Set(
-        this.#catalog.filter((shape) => shape.appId === appId).map((shape) => shape.shapeId),
+        this.#catalog
+          .filter((shape) => shape.appId === appId)
+          .map((shape) => shape.shapeId)
       );
       const relevant = invalidations.filter(
-        (invalidation) => invalidation.source === 'purge' || appShapes.has(invalidation.shapeId),
+        (invalidation) =>
+          invalidation.source === "purge" || appShapes.has(invalidation.shapeId)
       );
-      if (relevant.length > 0) listener(relevant.map((entry) => ({ ...entry })));
+      if (relevant.length > 0)
+        listener(relevant.map((entry) => ({ ...entry })));
     });
   }
 
@@ -262,8 +312,11 @@ export class NativeReplicaSession {
   /** Wake the one coordinator after the platform reports connectivity. */
   notifyReachable(): void {
     if (!this.#isConnected() || this.#closed) return;
-    if (!this.#hasCursor) void this.bootstrapWhenReachable();
-    else void this.pullNow().catch(() => undefined);
+    if (this.#hasCursor) {
+      void this.pullNow().catch(() => undefined);
+    } else {
+      void this.bootstrapWhenReachable();
+    }
     void this.flushIntents();
   }
 
@@ -271,7 +324,9 @@ export class NativeReplicaSession {
   updateGatewayBase(baseUrl: string): void {
     if (this.#closed || this.#gatewayAuth.baseUrl === baseUrl) return;
     this.#gatewayAuth.baseUrl = baseUrl;
-    const foreground = this.#appState ? this.#appState.currentState !== 'background' : true;
+    const foreground = this.#appState
+      ? this.#appState.currentState !== "background"
+      : true;
     this.#feed.setActive(false);
     if (foreground) this.#feed.setActive(true);
   }
@@ -316,18 +371,21 @@ export class NativeReplicaSession {
     this.#appStateSub?.remove();
     this.#appStateSub = undefined;
     this.#feed.setActive(false);
-    this.rejectWaiters(new ReplicaProtocolError('Replica session closed'));
+    this.rejectWaiters(new ReplicaProtocolError("Replica session closed"));
     await this.#coordinator.close();
   }
 
   private readonly onAppStateChange = (state: string): void => {
     if (this.#closed) return;
-    if (state === 'active') {
+    if (state === "active") {
       this.#feed.setActive(true);
-      if (!this.#hasCursor) void this.bootstrapWhenReachable();
-      else void this.pullNow().catch(() => undefined);
+      if (this.#hasCursor) {
+        void this.pullNow().catch(() => undefined);
+      } else {
+        void this.bootstrapWhenReachable();
+      }
       void this.flushIntents();
-    } else if (state === 'background') {
+    } else if (state === "background") {
       this.#feed.setActive(false);
     }
   };
@@ -352,35 +410,53 @@ export class NativeReplicaSession {
       gatewayAuth: this.#gatewayAuth,
       target: this.#coordinator,
       fetcher: this.#fetcher,
-      ...(this.#bootstrapWindow !== undefined ? { window: this.#bootstrapWindow } : {}),
+      ...(this.#bootstrapWindow === undefined
+        ? {}
+        : { window: this.#bootstrapWindow }),
       reconcileOutcomes: async (cursor) => {
         const pending = await this.#coordinator.pendingIntents();
         const exact = await fetchReplicaIntentOutcomes(
           this.#gatewayAuth,
           pending.map((intent) => intent.intentId),
           cursor,
-          this.#fetcher,
+          this.#fetcher
         );
         resolved.push(...exact);
         return exact;
       },
       pullChanges: async (cursor, signal) => {
-        const shapeIds = (await this.#coordinator.catalog()).map((shape) => shape.shapeId);
-        return fetchReplicaChanges(this.#gatewayAuth, cursor, signal, shapeIds, this.#fetcher);
+        const shapeIds = (await this.#coordinator.catalog()).map(
+          (shape) => shape.shapeId
+        );
+        return fetchReplicaChanges(
+          this.#gatewayAuth,
+          cursor,
+          signal,
+          shapeIds,
+          this.#fetcher
+        );
       },
     });
     this.#hasCursor = true;
     this.#catalog = await this.#coordinator.catalog();
-    for (const outcome of resolved) this.resolveWaiter(outcome.intentId, outcome);
+    for (const outcome of resolved)
+      this.resolveWaiter(outcome.intentId, outcome);
   }
 
   private pullChanges = (cursor: ReplicaCursor, signal: AbortSignal) => {
     const shapeIds = this.#catalog.map((shape) => shape.shapeId);
-    return fetchReplicaChanges(this.#gatewayAuth, cursor, signal, shapeIds, this.#fetcher);
+    return fetchReplicaChanges(
+      this.#gatewayAuth,
+      cursor,
+      signal,
+      shapeIds,
+      this.#fetcher
+    );
   };
 
   private async drainLoop(): Promise<void> {
-    while (!this.#closed && this.#isConnected()) {
+    const drainNextIntent = async (): Promise<void> => {
+      if (this.#closed || !this.#isConnected()) return;
       let intent: ReplicaIntent | undefined;
       try {
         intent = await this.#coordinator.claimNextIntent();
@@ -390,8 +466,12 @@ export class NativeReplicaSession {
       }
       if (!intent) return;
       try {
-        const { outcome } = await postReplicaIntent(this.#gatewayAuth, intent, this.#fetcher);
-        if (outcome.status === 'executed' || outcome.status === 'in-flight') {
+        const { outcome } = await postReplicaIntent(
+          this.#gatewayAuth,
+          intent,
+          this.#fetcher
+        );
+        if (outcome.status === "executed" || outcome.status === "in-flight") {
           await this.#coordinator.markIntentAwaitingChange(intent.intentId);
         } else {
           await this.#coordinator.applyIntentOutcome(outcome);
@@ -406,25 +486,27 @@ export class NativeReplicaSession {
         if (isPermanentIntentRejection(error)) {
           const outcome: IntentOutcome = {
             intentId: intent.intentId,
-            status: error.status === 403 ? 'denied' : 'failed',
+            status: error.status === 403 ? "denied" : "failed",
             reason: error.message,
           };
           await this.#coordinator.applyIntentOutcome(outcome);
           this.resolveWaiter(intent.intentId, outcome);
-          continue;
+          return drainNextIntent();
         }
         await this.#coordinator
           .markIntentTransportFailed(intent.intentId, errorMessage(error))
           .catch(() => undefined);
         this.resolveWaiter(intent.intentId, {
           intentId: intent.intentId,
-          status: 'queued',
-          reason: 'saved locally; retrying when the gateway is reachable',
+          status: "queued",
+          reason: "saved locally; retrying when the gateway is reachable",
         });
         this.scheduleRetry();
         return;
       }
-    }
+      return drainNextIntent();
+    };
+    return drainNextIntent();
   }
 
   private scheduleRetry(): void {
@@ -439,7 +521,8 @@ export class NativeReplicaSession {
     const waiters = this.#waiters.get(intentId);
     if (!waiters) return;
     this.#waiters.delete(intentId);
-    for (const waiter of waiters) waiter.resolve({ ...result } as NativeWriteResult);
+    for (const waiter of waiters)
+      waiter.resolve({ ...result } as NativeWriteResult);
   }
 
   private rejectWaiter(intentId: string, error: unknown): void {
@@ -459,18 +542,21 @@ export class NativeReplicaSession {
     appId: string,
     entity: string,
     requested?: string,
-    purpose?: string,
+    purpose?: string
   ): string {
-    const resolvedPurpose = purpose ?? (requested ? undefined : DEFAULT_REPLICA_PURPOSE);
+    const resolvedPurpose =
+      purpose ?? (requested ? undefined : DEFAULT_REPLICA_PURPOSE);
     const candidates = this.#catalog.filter(
       (shape) =>
         shape.appId === appId &&
         (resolvedPurpose === undefined || shape.purpose === resolvedPurpose) &&
-        shape.entities.some((item) => item.entity === entity),
+        shape.entities.some((item) => item.entity === entity)
     );
     if (requested) {
       if (!candidates.some((shape) => shape.shapeId === requested)) {
-        throw new ReplicaProtocolError(`Shape ${requested} is not available to app ${appId}`);
+        throw new ReplicaProtocolError(
+          `Shape ${requested} is not available to app ${appId}`
+        );
       }
       return requested;
     }
@@ -478,14 +564,15 @@ export class NativeReplicaSession {
       throw new ReplicaProtocolError(
         candidates.length === 0
           ? `No offline shape for ${appId}/${entity}`
-          : `Multiple offline shapes match ${appId}/${entity}; shapeId is required`,
+          : `Multiple offline shapes match ${appId}/${entity}; shapeId is required`
       );
     }
     return candidates[0]!.shapeId;
   }
 
   private assertOpen(): void {
-    if (this.#closed) throw new ReplicaProtocolError('Replica session is closed');
+    if (this.#closed)
+      throw new ReplicaProtocolError("Replica session is closed");
   }
 }
 
@@ -495,12 +582,15 @@ export class NativeReplicaSession {
  * feed and transport, and start the sync loop.
  */
 export async function createNativeReplicaSession(
-  options: CreateNativeReplicaSessionOptions,
+  options: CreateNativeReplicaSessionOptions
 ): Promise<NativeReplicaSession> {
   if (!options.gatewayAuth.vaultId) {
-    throw new ReplicaProtocolError('An addressed vault is required');
+    throw new ReplicaProtocolError("An addressed vault is required");
   }
-  const store = NativeReplicaStore.create(options.driver, options.gatewayAuth.vaultId);
+  const store = NativeReplicaStore.create(
+    options.driver,
+    options.gatewayAuth.vaultId
+  );
   const intentStore = SqliteIntentStore.create(options.driver);
   const feed = options.changeFeed;
   // Loaded only when the caller supplies neither, so `node:test` runs (which
@@ -508,7 +598,8 @@ export async function createNativeReplicaSession(
   let digest = options.digest;
   let idFactory = options.idFactory;
   if (!digest || !idFactory) {
-    const { nativeReplicaDigest, nativeReplicaIdFactory } = await import('./native-hash');
+    const { nativeReplicaDigest, nativeReplicaIdFactory } =
+      await import("./native-hash");
     digest ??= nativeReplicaDigest;
     idFactory ??= nativeReplicaIdFactory;
   }
@@ -518,12 +609,21 @@ export async function createNativeReplicaSession(
     changeFeed: feed,
     pullChanges: (cursor, signal) => {
       const shapeIds = (session?.catalog() ?? []).map((shape) => shape.shapeId);
-      return fetchReplicaChanges(options.gatewayAuth, cursor, signal, shapeIds, options.fetcher);
+      return fetchReplicaChanges(
+        options.gatewayAuth,
+        cursor,
+        signal,
+        shapeIds,
+        options.fetcher
+      );
     },
     onCursorAdvanced: (cursor, schemaEpoch) => {
-      void postReplicaCheckpoint(options.gatewayAuth, cursor, schemaEpoch, options.fetcher).catch(
-        () => undefined,
-      );
+      void postReplicaCheckpoint(
+        options.gatewayAuth,
+        cursor,
+        schemaEpoch,
+        options.fetcher
+      ).catch(() => undefined);
     },
     onRebootstrapRequired: () => session?.requireBootstrap(),
   });
@@ -533,12 +633,13 @@ export async function createNativeReplicaSession(
 }
 
 function terminalResult(intent: ReplicaIntent): NativeWriteResult | undefined {
-  if (intent.state === 'awaiting-change') return { intentId: intent.intentId, status: 'in-flight' };
+  if (intent.state === "awaiting-change")
+    return { intentId: intent.intentId, status: "in-flight" };
   if (
-    intent.state !== 'parked' &&
-    intent.state !== 'executed' &&
-    intent.state !== 'denied' &&
-    intent.state !== 'failed'
+    intent.state !== "parked" &&
+    intent.state !== "executed" &&
+    intent.state !== "denied" &&
+    intent.state !== "failed"
   ) {
     return undefined;
   }
@@ -546,15 +647,17 @@ function terminalResult(intent: ReplicaIntent): NativeWriteResult | undefined {
     intentId: intent.intentId,
     status: intent.state,
     ...(intent.reason ? { reason: intent.reason } : {}),
-    ...(intent.output !== undefined ? { output: intent.output } : {}),
+    ...(intent.output === undefined ? {} : { output: intent.output }),
   };
 }
 
 function isAuthorizationError(error: unknown): boolean {
-  return error instanceof GatewayClientError && error.code === 'auth_required';
+  return error instanceof GatewayClientError && error.code === "auth_required";
 }
 
-function isPermanentIntentRejection(error: unknown): error is ReplicaTransportError {
+function isPermanentIntentRejection(
+  error: unknown
+): error is ReplicaTransportError {
   return (
     error instanceof ReplicaTransportError &&
     error.status >= 400 &&

@@ -16,31 +16,36 @@
  * no-hardcoded-model-ids directive is satisfied without a waiver.
  */
 
-import type { PricingCatalog, PricingEntry } from './types.js';
+import type { PricingCatalog, PricingEntry } from "./types.js";
 
-const REGIONAL_BEDROCK = /^(us|eu|apac|jp|au)\./;
-const PROVIDER_DOT = /^(anthropic|openai)\./;
-const VERSION_SUFFIX = /-v\d+$/;
-const DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$|-\d{8}$/;
+const REGIONAL_BEDROCK = /^(?:us|eu|apac|jp|au)\./u;
+const PROVIDER_DOT = /^(?:anthropic|openai)\./u;
+const VERSION_SUFFIX = /-v\d+$/u;
+const DATE_SUFFIX = /-\d{4}-\d{2}-\d{2}$|-\d{8}$/u;
 
 /** Ordered candidate ids to try for an exact catalog hit, most→least specific. */
 function candidates(model: string): string[] {
   const lower = model.trim().toLowerCase();
-  const afterSlash = lower.slice(lower.lastIndexOf('/') + 1);
-  const noVersion = afterSlash.split(':')[0] ?? afterSlash;
-  const stripped = noVersion.replace(REGIONAL_BEDROCK, '').replace(PROVIDER_DOT, '');
-  const noDate = stripped.replace(VERSION_SUFFIX, '').replace(DATE_SUFFIX, '');
+  const afterSlash = lower.slice(lower.lastIndexOf("/") + 1);
+  const noVersion = afterSlash.split(":")[0] ?? afterSlash;
+  const stripped = noVersion
+    .replace(REGIONAL_BEDROCK, "")
+    .replace(PROVIDER_DOT, "");
+  const noDate = stripped.replace(VERSION_SUFFIX, "").replace(DATE_SUFFIX, "");
   // De-dup while preserving order.
   return [...new Set([lower, afterSlash, noVersion, stripped, noDate])];
 }
 
 function isBoundary(ch: string | undefined): boolean {
   // End-of-string or a non-alphanumeric separator both count as a boundary.
-  return ch === undefined || !/[a-z0-9]/i.test(ch);
+  return ch === undefined || !/[a-z0-9]/iu.test(ch);
 }
 
 /** Longest catalog key that is a boundary-safe prefix of `id` (or equals it). */
-function longestBoundaryMatch(catalog: PricingCatalog, id: string): string | undefined {
+function longestBoundaryMatch(
+  catalog: PricingCatalog,
+  id: string
+): string | undefined {
   let best: string | undefined;
   for (const key of Object.keys(catalog)) {
     if (key.length <= (best?.length ?? 0)) continue;
@@ -54,7 +59,10 @@ function longestBoundaryMatch(catalog: PricingCatalog, id: string): string | und
 }
 
 /** Resolve a model id to its catalog entry, or `undefined` when unknown. */
-export function matchEntry(catalog: PricingCatalog, model: string): PricingEntry | undefined {
+export function matchEntry(
+  catalog: PricingCatalog,
+  model: string
+): PricingEntry | undefined {
   const cands = candidates(model);
   for (const c of cands) {
     const hit = catalog[c];
@@ -62,8 +70,10 @@ export function matchEntry(catalog: PricingCatalog, model: string): PricingEntry
   }
   // Fall back to boundary-safe longest match on the fully-normalized id first,
   // then the pre-date-strip form (a catalog that only carries dated keys).
-  const noDate = cands[cands.length - 1] ?? '';
+  const noDate = cands[cands.length - 1] ?? "";
   const stripped = cands[cands.length - 2] ?? noDate;
-  const key = longestBoundaryMatch(catalog, stripped) ?? longestBoundaryMatch(catalog, noDate);
+  const key =
+    longestBoundaryMatch(catalog, stripped) ??
+    longestBoundaryMatch(catalog, noDate);
   return key ? catalog[key] : undefined;
 }

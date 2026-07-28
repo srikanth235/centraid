@@ -46,7 +46,9 @@ export async function catchUpAfterDrop(opts: CatchUpOptions): Promise<boolean> {
   const sleep = opts.sleep ?? defaultSleep;
   const deadline = Date.now() + timeoutMs;
   const target = opts.baselineTurnCount + 1;
-  for (;;) {
+  // Sequential polls preserve the deadline and cancellation semantics for one
+  // dropped turn; overlapping status reads would not improve recovery.
+  const poll = async (): Promise<boolean> => {
     if (opts.isCancelled?.()) return false;
     try {
       const status = await opts.getStatus();
@@ -56,5 +58,7 @@ export async function catchUpAfterDrop(opts: CatchUpOptions): Promise<boolean> {
     }
     if (Date.now() >= deadline) return false;
     await sleep(intervalMs);
-  }
+    return poll();
+  };
+  return poll();
 }

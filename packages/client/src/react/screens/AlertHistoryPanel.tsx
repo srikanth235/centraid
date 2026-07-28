@@ -1,6 +1,8 @@
-import type { JSX } from 'react';
-import type { AlertHistoryRowDTO } from '../shell/routes/gatewayData.js';
-import styles from './GatewayScreen.module.css';
+import type { JSX } from "react";
+
+import type { AlertHistoryRowDTO } from "../shell/routes/gatewayData.js";
+
+import styles from "./GatewayScreen.module.css";
 
 /**
  * Alert history — the durable counterpart of the Gateway page Overview
@@ -10,7 +12,11 @@ import styles from './GatewayScreen.module.css';
  * component errors, and version skew land here too, each entry marked when
  * it predates this launch.
  */
-export default function AlertHistoryPanel({ rows }: { rows: AlertHistoryRowDTO[] }): JSX.Element {
+export default function AlertHistoryPanel({
+  rows,
+}: {
+  rows: AlertHistoryRowDTO[];
+}): JSX.Element {
   return (
     <section className={styles.panel} data-testid="alert-history-panel">
       <div className={styles.panelHead}>
@@ -20,13 +26,17 @@ export default function AlertHistoryPanel({ rows }: { rows: AlertHistoryRowDTO[]
       {rows.length > 0 ? (
         <div className={styles.outages}>
           {rows.map((row) => (
-            <div key={row.id} className={styles.outage} data-testid="alert-history-row">
+            <div
+              key={row.id}
+              className={styles.outage}
+              data-testid="alert-history-row"
+            >
               <span className={styles.outageDot} data-kind={row.kind} />
               <span className={styles.outageStart}>{row.timeLabel}</span>
               <span className={styles.outageDuration}>
                 {row.kindLabel}
-                {row.detail ? ` — ${row.detail}` : ''}
-                {row.durationLabel ? ` (${row.durationLabel})` : ''}
+                {row.detail ? ` — ${row.detail}` : ""}
+                {row.durationLabel ? ` (${row.durationLabel})` : ""}
               </span>
               {row.previousSession ? (
                 <span className={styles.outageBadge}>earlier session</span>
@@ -36,8 +46,9 @@ export default function AlertHistoryPanel({ rows }: { rows: AlertHistoryRowDTO[]
         </div>
       ) : (
         <div className={styles.panelEmpty}>
-          No alerts recorded yet. Down/degraded/recovered transitions and component or
-          version-mismatch alerts land here, and stick around across restarts.
+          No alerts recorded yet. Down/degraded/recovered transitions and
+          component or version-mismatch alerts land here, and stick around
+          across restarts.
         </div>
       )}
     </section>

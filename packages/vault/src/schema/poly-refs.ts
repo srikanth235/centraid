@@ -19,7 +19,7 @@
 // dependent-aware deletes, since polymorphic dependents are invisible to
 // `PRAGMA foreign_key_list`.)
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
 /**
  * What happens to a live polymorphic pointer when its target row is purged:
@@ -30,7 +30,7 @@ import type { DatabaseSync } from 'node:sqlite';
  *   - `revoke`: a standing consent grant — stamp `revoked_at = now` on
  *     un-revoked rows (a share of nothing must stop reading live).
  */
-export type PolyRefPolicy = 'end-date' | 'delete' | 'revoke';
+export type PolyRefPolicy = "end-date" | "delete" | "revoke";
 
 export interface PolyRefPair {
   /** Column holding the logical entity name, e.g. `target_type`. */
@@ -67,74 +67,74 @@ export interface PolyRefEntry {
  */
 export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
   {
-    table: 'core_link',
+    table: "core_link",
     pairs: [
-      { typeCol: 'from_type', idCol: 'from_id' },
-      { typeCol: 'to_type', idCol: 'to_id' },
+      { typeCol: "from_type", idCol: "from_id" },
+      { typeCol: "to_type", idCol: "to_id" },
     ],
-    policy: 'end-date',
-    note: 'A relation onto a purged row ends rather than dangles (issue #272). An open link matching EITHER endpoint is end-dated.',
+    policy: "end-date",
+    note: "A relation onto a purged row ends rather than dangles (issue #272). An open link matching EITHER endpoint is end-dated.",
   },
   {
-    table: 'core_tag',
-    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
-    policy: 'delete',
-    note: 'Classification says nothing once the row is gone (issue #274).',
+    table: "core_tag",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    policy: "delete",
+    note: "Classification says nothing once the row is gone (issue #274).",
   },
   {
-    table: 'core_collection_entry',
-    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
-    policy: 'delete',
-    note: 'Curation membership says nothing once the row is gone (issue #274).',
+    table: "core_collection_entry",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    policy: "delete",
+    note: "Curation membership says nothing once the row is gone (issue #274).",
   },
   {
-    table: 'core_share_origin',
-    pairs: [{ typeCol: 'item_type', idCol: 'item_id' }],
-    policy: 'delete',
-    note: 'Share-by-placement provenance (issue #599 decision 11): the record of where a PROJECTED row came from. Once that row is purged out of the audience vault there is nothing left to attribute, exactly like a tag — and a stale record would keep an audience badge claiming a shared item that no longer exists.',
+    table: "core_share_origin",
+    pairs: [{ typeCol: "item_type", idCol: "item_id" }],
+    policy: "delete",
+    note: "Share-by-placement provenance (issue #599 decision 11): the record of where a PROJECTED row came from. Once that row is purged out of the audience vault there is nothing left to attribute, exactly like a tag — and a stale record would keep an audience badge claiming a shared item that no longer exists.",
   },
   {
-    table: 'core_attachment',
-    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
-    policy: 'delete',
-    note: 'An attachment ON a purged target dangles; previously cleaned ONLY for notes (issue #441 A1 — now for every target).',
+    table: "core_attachment",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    policy: "delete",
+    note: "An attachment ON a purged target dangles; previously cleaned ONLY for notes (issue #441 A1 — now for every target).",
   },
   {
-    table: 'knowledge_annotation',
-    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
-    policy: 'delete',
-    note: 'A margin note on a purged target dangles; previously cleaned ONLY for notes (issue #441 A1 — now for photos, documents, transactions…).',
+    table: "knowledge_annotation",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    policy: "delete",
+    note: "A margin note on a purged target dangles; previously cleaned ONLY for notes (issue #441 A1 — now for photos, documents, transactions…).",
   },
   {
-    table: 'enrich_embedding',
-    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
-    policy: 'delete',
-    note: 'Never cleaned before (issue #441 A1): an orphan vector lets deleted content resurface in vector search — the worst-feeling class of vault bug.',
+    table: "enrich_embedding",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    policy: "delete",
+    note: "Never cleaned before (issue #441 A1): an orphan vector lets deleted content resurface in vector search — the worst-feeling class of vault bug.",
   },
   {
-    table: 'enrich_request',
-    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
-    policy: 'delete',
-    predicate: 'drained_at IS NULL',
-    note: 'Open queue rows only (issue #441 A1): drop pending enrichment for a purged entity so no enricher chases a dead row. Drained rows are inert completed history.',
+    table: "enrich_request",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    policy: "delete",
+    predicate: "drained_at IS NULL",
+    note: "Open queue rows only (issue #441 A1): drop pending enrichment for a purged entity so no enricher chases a dead row. Drained rows are inert completed history.",
   },
   {
-    table: 'sync_external_entity',
-    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
-    policy: 'delete',
-    note: 'Never cleaned before (issue #441 A1): a stale map row makes the next import believe a purged entity is still known, so re-import SILENTLY skips it — silent data loss.',
+    table: "sync_external_entity",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    policy: "delete",
+    note: "Never cleaned before (issue #441 A1): a stale map row makes the next import believe a purged entity is still known, so re-import SILENTLY skips it — silent data loss.",
   },
   {
-    table: 'consent_seed_row',
-    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
-    policy: 'delete',
-    note: 'Judgment call beyond the A1 brief (see below): a demo marker has no meaning once its entity is gone, like a tag. gateway/demo.ts already drops it on its OWN purge path; the general sweep does too now, so a demo row purged via the normal lifecycle (owner trashes a demo photo) leaves no stale marker and demoStatus stays honest.',
+    table: "consent_seed_row",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    policy: "delete",
+    note: "Judgment call beyond the A1 brief (see below): a demo marker has no meaning once its entity is gone, like a tag. gateway/demo.ts already drops it on its OWN purge path; the general sweep does too now, so a demo row purged via the normal lifecycle (owner trashes a demo photo) leaves no stale marker and demoStatus stays honest.",
   },
   {
-    table: 'consent_share',
-    pairs: [{ typeCol: 'target_type', idCol: 'target_id' }],
-    policy: 'revoke',
-    note: 'Never cleaned before (issue #441 A1): only expires_at lapsed a share, so a share of a purged row kept looking live — a consent-surface correctness bug.',
+    table: "consent_share",
+    pairs: [{ typeCol: "target_type", idCol: "target_id" }],
+    policy: "revoke",
+    note: "Never cleaned before (issue #441 A1): only expires_at lapsed a share, so a share of a purged row kept looking live — a consent-surface correctness bug.",
   },
 ];
 
@@ -152,32 +152,32 @@ export const POLY_REF_REGISTRY: readonly PolyRefEntry[] = [
  */
 export const POLY_REF_EXCLUSIONS: ReadonlyMap<string, string> = new Map([
   [
-    'consent_provenance',
-    'journal.db, append-only audit stream (§03). The provenance trail of a purged row is exactly what must survive it — NEVER cleaned by design.',
+    "consent_provenance",
+    "journal.db, append-only audit stream (§03). The provenance trail of a purged row is exactly what must survive it — NEVER cleaned by design.",
   ],
   [
-    'consent_receipt',
-    'journal.db, append-only audit stream. object_type/object_id is the receipted subject; history is never rewritten (writeReceipt has no update path). NEVER cleaned.',
+    "consent_receipt",
+    "journal.db, append-only audit stream. object_type/object_id is the receipted subject; history is never rewritten (writeReceipt has no update path). NEVER cleaned.",
   ],
   [
-    'agent_evidence',
-    'journal.db, append-only audit stream. Evidence citing a since-purged entity is a historical claim about a past invocation — NEVER cleaned.',
+    "agent_evidence",
+    "journal.db, append-only audit stream. Evidence citing a since-purged entity is a historical claim about a past invocation — NEVER cleaned.",
   ],
   [
-    'agent_correction',
-    'The historical record of a human correcting the agent (before/after JSON). It documents a past act on the target and stays true after the target is purged — a learning-plane audit fact, not a live pointer.',
+    "agent_correction",
+    "The historical record of a human correcting the agent (before/after JSON). It documents a past act on the target and stays true after the target is purged — a learning-plane audit fact, not a live pointer.",
   ],
   [
-    'outbox_item',
-    'The external-write outbox owns its own drain lifecycle (pending → sent/discarded). target_type/target_id is the canonical row the artifact was ABOUT; a sent-message record stays meaningful after its target is purged.',
+    "outbox_item",
+    "The external-write outbox owns its own drain lifecycle (pending → sent/discarded). target_type/target_id is the canonical row the artifact was ABOUT; a sent-message record stays meaningful after its target is purged.",
   ],
   [
-    'sync_import_row',
-    'Immutable import history — the row-by-row ledger of what a connector proposed. entity_type records the kind that was imported; the row is never mutated after its batch resolves.',
+    "sync_import_row",
+    "Immutable import history — the row-by-row ledger of what a connector proposed. entity_type records the kind that was imported; the row is never mutated after its batch resolves.",
   ],
   [
-    'replica_change',
-    'Replication machinery with its own epoch/floor lifecycle (change-log.ts). It records past mutations (entity/row_id) for replica catch-up and is trimmed by epoch, not by target liveness.',
+    "replica_change",
+    "Replication machinery with its own epoch/floor lifecycle (change-log.ts). It records past mutations (entity/row_id) for replica catch-up and is trimmed by epoch, not by target liveness.",
   ],
 ]);
 
@@ -195,23 +195,29 @@ export function cleanupPolyRefs(
   vault: DatabaseSync,
   now: string,
   entityType: string,
-  entityId: string,
+  entityId: string
 ): void {
   for (const entry of POLY_REF_REGISTRY) {
-    const match = entry.pairs.map((p) => `("${p.typeCol}" = ? AND "${p.idCol}" = ?)`).join(' OR ');
+    const match = entry.pairs
+      .map((p) => `("${p.typeCol}" = ? AND "${p.idCol}" = ?)`)
+      .join(" OR ");
     const matchParams = entry.pairs.flatMap(() => [entityType, entityId]);
-    const extra = entry.predicate ? ` AND ${entry.predicate}` : '';
-    if (entry.policy === 'delete') {
-      vault.prepare(`DELETE FROM "${entry.table}" WHERE (${match})${extra}`).run(...matchParams);
-    } else if (entry.policy === 'end-date') {
+    const extra = entry.predicate ? ` AND ${entry.predicate}` : "";
+    if (entry.policy === "delete") {
       vault
-        .prepare(`UPDATE "${entry.table}" SET valid_to = ? WHERE valid_to IS NULL AND (${match})`)
+        .prepare(`DELETE FROM "${entry.table}" WHERE (${match})${extra}`)
+        .run(...matchParams);
+    } else if (entry.policy === "end-date") {
+      vault
+        .prepare(
+          `UPDATE "${entry.table}" SET valid_to = ? WHERE valid_to IS NULL AND (${match})`
+        )
         .run(now, ...matchParams);
     } else {
       // revoke
       vault
         .prepare(
-          `UPDATE "${entry.table}" SET revoked_at = ? WHERE revoked_at IS NULL AND (${match})`,
+          `UPDATE "${entry.table}" SET revoked_at = ? WHERE revoked_at IS NULL AND (${match})`
         )
         .run(now, ...matchParams);
     }

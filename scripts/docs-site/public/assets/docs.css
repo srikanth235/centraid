@@ -30,9 +30,9 @@
   --night-accent: #4ed0bc;
   --night-amber: #dfa044;
 
-  --display: 'Fraunces', georgia, serif;
-  --body: 'Newsreader', georgia, serif;
-  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --display: "Fraunces", georgia, serif;
+  --body: "Newsreader", georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
 
   --rail-w: 224px;
   /* One shared shell gutter. The header, the section rail, and the prose
@@ -50,7 +50,7 @@
   --col-pad: clamp(20px, 2.2vw, 40px);
   --max: 1120px;
 }
-[data-theme='night'] {
+[data-theme="night"] {
   --paper: #111612;
   --paper-2: #0c110d;
   --card: #171d17;
@@ -117,7 +117,7 @@ body {
     color 0.4s ease;
 }
 body::after {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
   z-index: 80;
@@ -235,7 +235,7 @@ button {
 .head-nav a:hover {
   color: var(--accent);
 }
-.head-nav a[aria-current='page'] {
+.head-nav a[aria-current="page"] {
   color: var(--paper);
   background: var(--ink);
 }
@@ -295,13 +295,13 @@ button {
     transform 0.25s ease,
     opacity 0.2s ease;
 }
-.nav-toggle[aria-expanded='true'] .bars i:nth-child(1) {
+.nav-toggle[aria-expanded="true"] .bars i:nth-child(1) {
   transform: translateY(6px) rotate(45deg);
 }
-.nav-toggle[aria-expanded='true'] .bars i:nth-child(2) {
+.nav-toggle[aria-expanded="true"] .bars i:nth-child(2) {
   opacity: 0;
 }
-.nav-toggle[aria-expanded='true'] .bars i:nth-child(3) {
+.nav-toggle[aria-expanded="true"] .bars i:nth-child(3) {
   transform: translateY(-6px) rotate(-45deg);
 }
 
@@ -367,7 +367,7 @@ button {
 .mm-rail a:hover {
   background: color-mix(in oklab, var(--accent) 8%, transparent);
 }
-.mm-pages a[aria-current='page'] {
+.mm-pages a[aria-current="page"] {
   border-color: var(--line);
   background: color-mix(in oklab, var(--accent) 7%, transparent);
 }
@@ -525,7 +525,7 @@ button {
   text-decoration: none;
   color: inherit;
 }
-.search-hit[aria-selected='true'],
+.search-hit[aria-selected="true"],
 .search-hit:hover {
   background: color-mix(in oklab, var(--accent) 10%, transparent);
 }
@@ -609,7 +609,7 @@ button {
   background: color-mix(in oklab, var(--accent) 9%, transparent);
 }
 .rail a.on::before {
-  content: '';
+  content: "";
   position: absolute;
   left: -5px;
   top: 8px;
@@ -702,7 +702,7 @@ section.sec + section.sec {
   margin-bottom: 16px;
 }
 .eyebrow::after {
-  content: '';
+  content: "";
   height: 1px;
   width: 56px;
   background: currentColor;
@@ -1142,7 +1142,7 @@ body:not(.ontology-page) section.dark .pill {
   margin-top: 10px;
 }
 .steps::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 19px;
   top: 14px;
@@ -1238,7 +1238,7 @@ table.dt {
   color: var(--ink-2);
 }
 .dt td:first-child,
-.dt th[scope='row'] {
+.dt th[scope="row"] {
   font-family: var(--mono);
   font-size: 12.5px;
   color: var(--ink);
@@ -1365,7 +1365,7 @@ section.dark .dt td:first-child {
   border-color: var(--accent);
   color: var(--accent);
 }
-.chip[aria-pressed='true'] {
+.chip[aria-pressed="true"] {
   background: var(--ink);
   color: var(--paper);
   border-color: var(--ink);
@@ -1374,7 +1374,7 @@ section.dark .chip {
   border-color: var(--night-line);
   color: var(--night-ink-2);
 }
-section.dark .chip[aria-pressed='true'] {
+section.dark .chip[aria-pressed="true"] {
   background: var(--night-amber);
   color: var(--night);
   border-color: var(--night-amber);

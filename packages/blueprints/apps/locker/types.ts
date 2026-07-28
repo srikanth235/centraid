@@ -29,7 +29,7 @@ export interface LockerDetail {
   username?: string | null;
   password?: string | null;
   url?: string | null;
-  url_match_policy?: 'registrable-domain' | 'exact-host' | null;
+  url_match_policy?: "registrable-domain" | "exact-host" | null;
   otp_seed?: string | null;
   notes?: string | null;
   cardholder?: string | null;
@@ -55,12 +55,12 @@ export interface LockerDetail {
 
 /** The current sidebar navigation selection. */
 export type Nav =
-  | { kind: 'all' }
-  | { kind: 'fav' }
-  | { kind: 'watch' }
-  | { kind: 'trash' }
-  | { kind: 'cat'; type: string }
-  | { kind: 'tag'; tag: string };
+  | { kind: "all" }
+  | { kind: "fav" }
+  | { kind: "watch" }
+  | { kind: "trash" }
+  | { kind: "cat"; type: string }
+  | { kind: "tag"; tag: string };
 
 /** Watchtower summary + needs-attention rows (from the `items` query). */
 export interface WatchState {
@@ -72,25 +72,25 @@ export interface WatchState {
 
 /** The seed the edit modal opens from (built by openNew/openEdit). */
 export interface EditSeed {
-  mode: 'new' | 'edit';
+  mode: "new" | "edit";
   id?: string;
   type: string;
   title: string;
   fields: Record<string, string>;
   tags: string;
   alias: string;
-  urlMatchPolicy: 'registrable-domain' | 'exact-host';
+  urlMatchPolicy: "registrable-domain" | "exact-host";
 }
 
 /** The payload the edit modal hands back to `saveItem`. */
 export interface SavePayload {
-  mode: 'new' | 'edit';
+  mode: "new" | "edit";
   id?: string;
   type: string;
   title: string;
   tags: string;
   alias?: string;
-  urlMatchPolicy: 'registrable-domain' | 'exact-host';
+  urlMatchPolicy: "registrable-domain" | "exact-host";
   fields: Record<string, string>;
   allowedKeys: string[];
 }

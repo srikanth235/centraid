@@ -1,6 +1,8 @@
-import type { JSX } from 'react';
-import { roleBadge, type MemberScope } from '../memberScope.js';
-import styles from './ScopePicker.module.css';
+import type { JSX } from "react";
+
+import { roleBadge, type MemberScope } from "../memberScope.js";
+
+import styles from "./ScopePicker.module.css";
 
 // "Which space?" — the explicit target every creation flow names (issue #599,
 // Decision 14).
@@ -38,7 +40,8 @@ export default function ScopePicker({
   locked,
 }: ScopePickerProps): JSX.Element | null {
   const writable = scopes.filter((s) => s.canWrite);
-  const selected = writable.find((s) => s.id === value) ?? scopes.find((s) => s.id === value);
+  const selected =
+    writable.find((s) => s.id === value) ?? scopes.find((s) => s.id === value);
   if (scopes.length === 0) return null;
   if (locked || writable.length < 2) {
     const name = selected?.label ?? writable[0]?.label ?? scopes[0]?.label;

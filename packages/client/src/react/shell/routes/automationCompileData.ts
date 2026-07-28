@@ -12,18 +12,18 @@
  * compiler; keeping the derivation here is what stops them leaking back into
  * the run history (see automationThreadData.ts).
  */
-import { relativeTime } from '../../../app-format.js';
+import { relativeTime } from "../../../app-format.js";
 import {
   listAutomationTurns,
   readAutomationTurnExpanded,
   streamAutomationTurn,
   type AutomationTurnStreamEvent,
-} from '../../../gateway-client.js';
+} from "../../../gateway-client.js";
 import type {
   CompileAttemptDTO,
   CompileStepDTO,
   TurnWatchOutcome,
-} from '../../screen-contracts.js';
+} from "../../screen-contracts.js";
 
 /** How much of a tool payload or assistant sentence a step row carries. Long
  *  enough to recognise the step, short enough that ten of them still read as
@@ -32,8 +32,10 @@ import type {
 const DETAIL_CHARS = 160;
 
 function clip(text: string): string {
-  const flat = text.replace(/\s+/g, ' ').trim();
-  return flat.length > DETAIL_CHARS ? `${flat.slice(0, DETAIL_CHARS - 1)}…` : flat;
+  const flat = text.replace(/\s+/gu, " ").trim();
+  return flat.length > DETAIL_CHARS
+    ? `${flat.slice(0, DETAIL_CHARS - 1)}…`
+    : flat;
 }
 
 /** First readable line out of a tool payload — the JSON `{"path": …}` blob a
@@ -43,11 +45,11 @@ function payloadDetail(raw: string | undefined): string | null {
   if (!raw) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed === 'string') return clip(parsed);
-    if (parsed && typeof parsed === 'object') {
-      for (const key of ['path', 'file', 'message', 'summary', 'text']) {
+    if (typeof parsed === "string") return clip(parsed);
+    if (parsed && typeof parsed === "object") {
+      for (const key of ["path", "file", "message", "summary", "text"]) {
         const value = (parsed as Record<string, unknown>)[key];
-        if (typeof value === 'string' && value.trim()) return clip(value);
+        if (typeof value === "string" && value.trim()) return clip(value);
       }
       return null;
     }
@@ -59,9 +61,10 @@ function payloadDetail(raw: string | undefined): string | null {
 
 function stepLabel(item: CentraidAutomationItem): string {
   if (item.name) return item.name;
-  if (item.kind === 'step') return item.model ? `Model · ${item.model}` : 'Model step';
-  if (item.kind === 'agent') return 'Agent';
-  return 'Step';
+  if (item.kind === "step")
+    return item.model ? `Model · ${item.model}` : "Model step";
+  if (item.kind === "agent") return "Agent";
+  return "Step";
 }
 
 /**
@@ -69,8 +72,10 @@ function stepLabel(item: CentraidAutomationItem): string {
  * is the instructions the compiler was handed, and those are already the
  * left-hand pane of the screen showing this list.
  */
-export function compileStepOf(item: CentraidAutomationItem): CompileStepDTO | null {
-  if (item.kind === 'message_in') return null;
+export function compileStepOf(
+  item: CentraidAutomationItem
+): CompileStepDTO | null {
+  if (item.kind === "message_in") return null;
   const running = item.endedAt === undefined && !item.error;
   const detail = item.error
     ? clip(item.error)
@@ -82,13 +87,15 @@ export function compileStepOf(item: CentraidAutomationItem): CompileStepDTO | nu
     ordinal: item.ordinal,
     kind: item.kind,
     label: stepLabel(item),
-    status: running ? 'running' : item.ok ? 'ok' : 'fail',
+    status: running ? "running" : item.ok ? "ok" : "fail",
     durationMs: item.durationMs ?? null,
     detail,
   };
 }
 
-export function compileSteps(items: readonly CentraidAutomationItem[]): CompileStepDTO[] {
+export function compileSteps(
+  items: readonly CentraidAutomationItem[]
+): CompileStepDTO[] {
   return items
     .slice()
     .sort((a, b) => a.ordinal - b.ordinal || a.startedAt - b.startedAt)
@@ -96,12 +103,14 @@ export function compileSteps(items: readonly CentraidAutomationItem[]): CompileS
     .filter((step): step is CompileStepDTO => step !== null);
 }
 
-export function compileAttemptOf(turn: CentraidAutomationTurnRecord): CompileAttemptDTO {
+export function compileAttemptOf(
+  turn: CentraidAutomationTurnRecord
+): CompileAttemptDTO {
   return {
     turnId: turn.turnId,
     startedAt: turn.startedAt,
     endedAt: turn.endedAt ?? null,
-    status: turn.endedAt === undefined ? 'running' : turn.ok ? 'ok' : 'fail',
+    status: turn.endedAt === undefined ? "running" : turn.ok ? "ok" : "fail",
     error: turn.error ?? null,
     summary: turn.summary ?? null,
     whenLabel: relativeTime(new Date(turn.startedAt).toISOString()),
@@ -109,10 +118,12 @@ export function compileAttemptOf(turn: CentraidAutomationTurnRecord): CompileAtt
 }
 
 /** This automation's compile attempts, newest first. */
-export async function loadCompileAttempts(automationId: string): Promise<CompileAttemptDTO[]> {
+export async function loadCompileAttempts(
+  automationId: string
+): Promise<CompileAttemptDTO[]> {
   const turns = await listAutomationTurns({ automationId, limit: 40 });
   return turns
-    .filter((turn) => turn.triggerKind === 'compile')
+    .filter((turn) => turn.triggerKind === "compile")
     .sort((a, b) => b.startedAt - a.startedAt)
     .map(compileAttemptOf);
 }
@@ -135,7 +146,7 @@ export async function loadTurnSteps(turnId: string): Promise<CompileStepDTO[]> {
 export async function watchTurnSteps(
   turnId: string,
   onSteps: (steps: CompileStepDTO[]) => void,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): Promise<TurnWatchOutcome> {
   const items = new Map<string, CentraidAutomationItem>();
   const initial = await readAutomationTurnExpanded({ turnId }).catch(() => ({
@@ -148,37 +159,46 @@ export async function watchTurnSteps(
   let ended = false;
   let terminalOk: boolean | undefined;
   const apply = (event: AutomationTurnStreamEvent): void => {
-    if (event.type === 'item.start') {
+    if (event.type === "item.start") {
       const prev = items.get(event.itemId);
       items.set(event.itemId, {
         itemId: event.itemId,
         turnId,
         ordinal: event.ordinal,
         kind: event.kind,
-        ...(event.name !== undefined ? { name: event.name } : {}),
-        ...(event.args !== undefined ? { argsJson: JSON.stringify(event.args) } : {}),
+        ...(event.name === undefined ? {} : { name: event.name }),
+        ...(event.args === undefined
+          ? {}
+          : { argsJson: JSON.stringify(event.args) }),
         ok: true,
         startedAt: prev?.startedAt ?? Date.now(),
       });
       onSteps(compileSteps([...items.values()]));
-    } else if (event.type === 'item.end') {
+    } else if (event.type === "item.end") {
       const prev = items.get(event.itemId);
       const startedAt = prev?.startedAt ?? Date.now() - event.durationMs;
       items.set(event.itemId, {
-        ...(prev ?? { itemId: event.itemId, turnId, ordinal: event.ordinal, kind: 'tool' }),
+        ...(prev ?? {
+          itemId: event.itemId,
+          turnId,
+          ordinal: event.ordinal,
+          kind: "tool",
+        }),
         itemId: event.itemId,
         turnId,
         ordinal: event.ordinal,
-        kind: prev?.kind ?? 'tool',
-        ...(event.result !== undefined ? { outputJson: JSON.stringify(event.result) } : {}),
+        kind: prev?.kind ?? "tool",
+        ...(event.result === undefined
+          ? {}
+          : { outputJson: JSON.stringify(event.result) }),
         ok: event.ok,
-        ...(event.error !== undefined ? { error: event.error } : {}),
+        ...(event.error === undefined ? {} : { error: event.error }),
         startedAt,
         endedAt: startedAt + event.durationMs,
         durationMs: event.durationMs,
       });
       onSteps(compileSteps([...items.values()]));
-    } else if (event.type === 'turn.end') {
+    } else if (event.type === "turn.end") {
       ended = true;
       terminalOk = event.ok;
     }

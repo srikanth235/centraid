@@ -9,19 +9,21 @@
  * is not re-rolled every check.
  */
 
-import { app } from 'electron';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { shouldAdmitUpdate, stableBucketId } from './update-rollout-core.js';
+import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-const INSTALL_ID_FILE = 'install-id';
+import { app } from "electron";
+
+import { shouldAdmitUpdate, stableBucketId } from "./update-rollout-core.js";
+
+const INSTALL_ID_FILE = "install-id";
 
 /** Resolve (or mint) the stable install id used for rollout bucketing. */
 export async function getOrCreateInstallId(): Promise<string> {
-  const file = path.join(app.getPath('userData'), INSTALL_ID_FILE);
+  const file = path.join(app.getPath("userData"), INSTALL_ID_FILE);
   try {
-    const existing = (await fs.readFile(file, 'utf8')).trim();
+    const existing = (await fs.readFile(file, "utf8")).trim();
     if (existing.length > 0) return existing;
   } catch {
     // mint below
@@ -52,7 +54,9 @@ export async function admitUpdate(input: {
     bucket,
     releasedAtMs: input.releasedAtMs,
     nowMs: input.nowMs ?? Date.now(),
-    ...(input.windowMs !== undefined ? { windowMs: input.windowMs } : {}),
-    ...(input.manualCheck !== undefined ? { manualCheck: input.manualCheck } : {}),
+    ...(input.windowMs === undefined ? {} : { windowMs: input.windowMs }),
+    ...(input.manualCheck === undefined
+      ? {}
+      : { manualCheck: input.manualCheck }),
   });
 }

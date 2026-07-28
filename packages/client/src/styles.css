@@ -23,7 +23,7 @@ body {
 }
 body {
   font-family: var(--font-sans);
-  font-feature-settings: 'ss01', 'cv11';
+  font-feature-settings: "ss01", "cv11";
   background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;

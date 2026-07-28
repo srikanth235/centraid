@@ -63,11 +63,11 @@ interface DecoratedAttendee {
 function attachmentsBySubject(
   subjectType: string,
   attachments: RawAttachment[],
-  contentById: Map<string, RawContent>,
+  contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
   // Blob-backed bytes serve as same-origin URLs (issue #296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
-    typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+    typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
       : c?.content_uri;
   const bySubject = new Map<string, DecoratedAttachment[]>();
@@ -80,9 +80,9 @@ function attachmentsBySubject(
       content_id: a.content_id,
       role: a.role,
       is_primary: a.is_primary,
-      media_type: content?.media_type ?? 'application/octet-stream',
+      media_type: content?.media_type ?? "application/octet-stream",
       title: content?.title ?? null,
-      content_uri: srcOf(content) ?? '',
+      content_uri: srcOf(content) ?? "",
       byte_size: content?.byte_size ?? 0,
     });
   }
@@ -96,14 +96,14 @@ function attachmentsBySubject(
 function attendeesByEvent(
   attendees: RawAttendee[],
   nameById: Map<string, unknown>,
-  mePartyId: string | null,
+  mePartyId: string | null
 ): Map<string, DecoratedAttendee[]> {
   const byEvent = new Map<string, DecoratedAttendee[]>();
   for (const a of attendees) {
     if (!byEvent.has(a.event_id)) byEvent.set(a.event_id, []);
     byEvent.get(a.event_id)!.push({
       party_id: a.party_id,
-      name: (nameById.get(a.party_id) as string | undefined) ?? 'Guest',
+      name: (nameById.get(a.party_id) as string | undefined) ?? "Guest",
       partstat: a.partstat,
       role: a.role,
       is_you: mePartyId != null && a.party_id === mePartyId,
@@ -112,26 +112,27 @@ function attendeesByEvent(
   for (const list of byEvent.values()) {
     list.sort(
       (x, y) =>
-        (y.is_you ? 1 : 0) - (x.is_you ? 1 : 0) || String(x.name).localeCompare(String(y.name)),
+        (y.is_you ? 1 : 0) - (x.is_you ? 1 : 0) ||
+        String(x.name).localeCompare(String(y.name))
     );
   }
   return byEvent;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
-  const term = String(input?.term ?? '').trim();
+export default async function searchHandler({ input, ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
+  const term = String(input?.term ?? "").trim();
   if (!term) return { events: [] };
   try {
     const matches = await ctx.vault.search({
-      entity: 'core.event',
+      entity: "core.event",
       query: term,
       limit: 100,
       purpose,
     });
     // Same semantics as upcoming: cancelled events never reach the agenda.
     const hits = ((matches.rows ?? []) as unknown as RawSearchHit[]).filter(
-      (e) => e.status !== 'cancelled',
+      (e) => e.status !== "cancelled"
     );
     if (hits.length === 0) return { events: [] };
     const eventIds = hits.map((e) => e.event_id);
@@ -141,57 +142,74 @@ export default async ({ input, ctx }: HandlerArgs) => {
     // own party (core.vault) drives the `is_you` RSVP row (issue #337).
     const [exts, attachments, attendeesRes, vaultRes] = await Promise.all([
       ctx.vault.read({
-        entity: 'schedule.event_ext',
-        where: [{ column: 'event_id', op: 'in', value: eventIds }],
+        entity: "schedule.event_ext",
+        where: [{ column: "event_id", op: "in", value: eventIds }],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.attachment',
+        entity: "core.attachment",
         where: [
-          { column: 'target_type', op: 'eq', value: 'core.event' },
-          { column: 'target_id', op: 'in', value: eventIds },
+          { column: "target_type", op: "eq", value: "core.event" },
+          { column: "target_id", op: "in", value: eventIds },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'schedule.attendee',
-        where: [{ column: 'event_id', op: 'in', value: eventIds }],
+        entity: "schedule.attendee",
+        where: [{ column: "event_id", op: "in", value: eventIds }],
         purpose,
       }),
-      ctx.vault.read({ entity: 'core.vault', purpose }),
+      ctx.vault.read({ entity: "core.vault", purpose }),
     ]);
     const attendeeRows = (attendeesRes.rows ?? []) as unknown as RawAttendee[];
-    const mePartyId = ((vaultRes.rows ?? [])[0]?.owner_party_id as string | undefined) ?? null;
-    const attendeePartyIds = [...new Set(attendeeRows.map((a) => a.party_id))].filter(Boolean);
+    const mePartyId =
+      ((vaultRes.rows ?? [])[0]?.owner_party_id as string | undefined) ?? null;
+    const attendeePartyIds = [
+      ...new Set(attendeeRows.map((a) => a.party_id)),
+    ].filter(Boolean);
     const partiesRes =
       attendeePartyIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.party',
-            where: [{ column: 'party_id', op: 'in', value: attendeePartyIds }],
+            entity: "core.party",
+            where: [{ column: "party_id", op: "in", value: attendeePartyIds }],
             purpose,
           })
         : { rows: [] };
     const partyNameById = new Map<string, unknown>(
-      (partiesRes.rows ?? []).map((p) => [p.party_id as string, p.display_name]),
+      (partiesRes.rows ?? []).map((p) => [p.party_id as string, p.display_name])
     );
-    const guestsByEvent = attendeesByEvent(attendeeRows, partyNameById, mePartyId);
+    const guestsByEvent = attendeesByEvent(
+      attendeeRows,
+      partyNameById,
+      mePartyId
+    );
     // One bounded pull covers only the bytes those attachments reference.
-    const attachmentRows = (attachments.rows ?? []) as unknown as RawAttachment[];
-    const contentIds = [...new Set(attachmentRows.map((a) => a.content_id))].filter(Boolean);
+    const attachmentRows = (attachments.rows ??
+      []) as unknown as RawAttachment[];
+    const contentIds = [
+      ...new Set(attachmentRows.map((a) => a.content_id)),
+    ].filter(Boolean);
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.content_item',
-            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            entity: "core.content_item",
+            where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,
           })
         : { rows: [] };
     const contentById = new Map<string, RawContent>(
-      ((contents.rows ?? []) as unknown as RawContent[]).map((c) => [c.content_id, c]),
+      ((contents.rows ?? []) as unknown as RawContent[]).map((c) => [
+        c.content_id,
+        c,
+      ])
     );
-    const attByEvent = attachmentsBySubject('core.event', attachmentRows, contentById);
+    const attByEvent = attachmentsBySubject(
+      "core.event",
+      attachmentRows,
+      contentById
+    );
     const calByEvent = new Map<string, unknown>(
-      (exts.rows ?? []).map((x) => [x.event_id as string, x.calendar_id]),
+      (exts.rows ?? []).map((x) => [x.event_id as string, x.calendar_id])
     );
     // Vault order is rank order (best match first) — keep it. The UI already
     // holds the calendars from `upcoming`, so none ride along here.
@@ -200,11 +218,11 @@ export default async ({ input, ctx }: HandlerArgs) => {
       calendar_id: calByEvent.get(e.event_id) ?? null,
       attachments: attByEvent.get(e.event_id) ?? [],
       attendees: guestsByEvent.get(e.event_id) ?? [],
-      snippet: typeof _snippet === 'string' ? _snippet : '',
+      snippet: typeof _snippet === "string" ? _snippet : "",
     }));
     return { events };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return { events: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

@@ -6,10 +6,12 @@ import type {
   ReactNode,
   RefObject,
   ClipboardEventHandler,
-} from 'react';
-import Icon from '../ui/Icon.js';
-import SessionStatusStrip from './SessionStatusStrip.js';
-import styles from './ChatComposer.module.css';
+} from "react";
+
+import Icon from "../ui/Icon.js";
+import SessionStatusStrip from "./SessionStatusStrip.js";
+
+import styles from "./ChatComposer.module.css";
 
 export interface ChatComposerProps {
   value: string;
@@ -69,7 +71,7 @@ export default function ChatComposer({
     if (!disabled && canSend) onSend();
   };
   return (
-    <div className={styles.root} data-embedded={embedded ? 'true' : undefined}>
+    <div className={styles.root} data-embedded={embedded ? "true" : undefined}>
       {above}
       <textarea
         ref={textareaRef}
@@ -79,12 +81,12 @@ export default function ChatComposer({
         aria-label={ariaLabel}
         value={value}
         disabled={disabled}
-        data-busy={busy ? 'true' : undefined}
+        data-busy={busy ? "true" : undefined}
         onChange={(event) => onChange(event.target.value, event)}
         onKeyDown={(event) => {
           onKeyDown?.(event);
           if (event.defaultPrevented) return;
-          if (event.key === 'Enter' && !event.shiftKey) {
+          if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             submit();
           }
@@ -103,11 +105,11 @@ export default function ChatComposer({
             <button
               type="button"
               className={styles.send}
-              aria-label={busy ? 'Stop' : 'Send'}
+              aria-label={busy ? "Stop" : "Send"}
               disabled={!busy && (disabled || !canSend)}
               onClick={submit}
             >
-              <Icon name={busy ? 'Stop' : 'Send'} size={14} />
+              <Icon name={busy ? "Stop" : "Send"} size={14} />
             </button>
           </>
         }

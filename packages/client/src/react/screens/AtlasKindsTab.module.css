@@ -64,7 +64,7 @@
     color 0.15s var(--ease, ease),
     background 0.15s var(--ease, ease);
 }
-.metricOption[data-active='true'] {
+.metricOption[data-active="true"] {
   color: var(--ink);
   background: var(--bg-elev);
 }

@@ -1,9 +1,17 @@
-import type { IconName } from '@centraid/design-tokens';
-import { type CSSProperties, type JSX, useEffect, useRef, useState } from 'react';
-import { iconSvg } from '../iconSvg.js';
-import styles from './SpaceModal.module.css';
-import { cx } from '../../ui/cx.js';
-import controlsCss from '../../styles/controls.module.css';
+import type { IconName } from "@centraid/design-tokens";
+import {
+  type CSSProperties,
+  type JSX,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import { cx } from "../../ui/cx.js";
+import { iconSvg } from "../iconSvg.js";
+
+import controlsCss from "../../styles/controls.module.css";
+import styles from "./SpaceModal.module.css";
 
 // The Spaces add/rename modal, ported to React (issue #325, R5) from the vanilla
 // `window.Profiles.openModal`. A space IS a vault (#280); this is a name + icon +
@@ -12,34 +20,34 @@ import controlsCss from '../../styles/controls.module.css';
 // the delete flow live in the caller (SettingsRoute); this is pure presentation.
 
 export const PROFILE_COLORS: readonly string[] = [
-  '#4E68DD',
-  '#E55772',
-  '#7C5BD9',
-  '#2EA098',
-  '#5C8A4E',
-  '#E89A3C',
-  '#B47B3F',
-  '#5C677D',
+  "#4E68DD",
+  "#E55772",
+  "#7C5BD9",
+  "#2EA098",
+  "#5C8A4E",
+  "#E89A3C",
+  "#B47B3F",
+  "#5C677D",
 ];
 export const PROFILE_ICONS: readonly IconName[] = [
-  'Home',
-  'Bolt',
-  'Sparkle',
-  'Compass',
-  'Book',
-  'Music',
-  'Gym',
-  'Plant',
-  'Calendar',
-  'Camera',
-  'Mood',
-  'Gift',
+  "Home",
+  "Bolt",
+  "Sparkle",
+  "Compass",
+  "Book",
+  "Music",
+  "Gym",
+  "Plant",
+  "Calendar",
+  "Camera",
+  "Mood",
+  "Gift",
 ];
-export const DEFAULT_SPACE_ICON: IconName = 'Sparkle';
+export const DEFAULT_SPACE_ICON: IconName = "Sparkle";
 
 export function randomSpaceColor(): string {
   const i = Math.floor(Math.random() * PROFILE_COLORS.length);
-  return PROFILE_COLORS[i] ?? PROFILE_COLORS[0] ?? '#4E68DD';
+  return PROFILE_COLORS[i] ?? PROFILE_COLORS[0] ?? "#4E68DD";
 }
 
 export interface SpaceModalInitial {
@@ -55,7 +63,7 @@ export interface SpaceModalCommit {
   blurb: string;
 }
 export interface SpaceModalProps {
-  mode: 'add' | 'edit';
+  mode: "add" | "edit";
   initial: SpaceModalInitial;
   onCancel: () => void;
   onCommit: (data: SpaceModalCommit) => void;
@@ -75,7 +83,9 @@ function Avatar({
   return (
     <span
       style={{ background: color, width: size, height: size } as CSSProperties}
-      dangerouslySetInnerHTML={{ __html: iconSvg(icon, Math.round(size * 0.42), 1.7) }}
+      dangerouslySetInnerHTML={{
+        __html: iconSvg(icon, Math.round(size * 0.42), 1.7),
+      }}
     />
   );
 }
@@ -87,10 +97,12 @@ export default function SpaceModal({
   onCommit,
   onDelete,
 }: SpaceModalProps): JSX.Element {
-  const [name, setName] = useState(initial.name ?? '');
-  const [icon, setIcon] = useState<IconName>(initial.icon ?? DEFAULT_SPACE_ICON);
+  const [name, setName] = useState(initial.name ?? "");
+  const [icon, setIcon] = useState<IconName>(
+    initial.icon ?? DEFAULT_SPACE_ICON
+  );
   const [color, setColor] = useState(initial.color ?? PROFILE_COLORS[0]!);
-  const [blurb, setBlurb] = useState(initial.blurb ?? '');
+  const [blurb, setBlurb] = useState(initial.blurb ?? "");
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -99,15 +111,15 @@ export default function SpaceModal({
       nameRef.current?.select();
     });
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         onCancel();
       }
     };
-    document.addEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
     return () => {
       cancelAnimationFrame(id);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("keydown", onKey);
     };
   }, [onCancel]);
 
@@ -130,10 +142,10 @@ export default function SpaceModal({
         <div className={styles.profModalHead}>
           <span
             className={styles.profModalHeadIcon}
-            dangerouslySetInnerHTML={{ __html: iconSvg('Users', 14) }}
+            dangerouslySetInnerHTML={{ __html: iconSvg("Users", 14) }}
           />
           <h2 className={styles.profModalTitle}>
-            {mode === 'add' ? 'New profile' : 'Edit profile'}
+            {mode === "add" ? "New profile" : "Edit profile"}
           </h2>
           <button
             type="button"
@@ -141,7 +153,7 @@ export default function SpaceModal({
             title="Close"
             aria-label="Close"
             onClick={onCancel}
-            dangerouslySetInnerHTML={{ __html: iconSvg('X', 14) }}
+            dangerouslySetInnerHTML={{ __html: iconSvg("X", 14) }}
           />
         </div>
         <div className={styles.profModalBody}>
@@ -150,9 +162,11 @@ export default function SpaceModal({
               <Avatar icon={icon} color={color} size={46} />
             </span>
             <div className={styles.profModalPreviewText}>
-              <div className={styles.profModalPreviewName}>{name.trim() || 'Untitled'}</div>
+              <div className={styles.profModalPreviewName}>
+                {name.trim() || "Untitled"}
+              </div>
               <div className={styles.profModalPreviewSub}>
-                {blurb.trim() || 'How this profile appears in the switcher.'}
+                {blurb.trim() || "How this profile appears in the switcher."}
               </div>
             </div>
           </div>
@@ -167,7 +181,7 @@ export default function SpaceModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === "Enter") {
                   e.preventDefault();
                   submit();
                 }
@@ -185,7 +199,7 @@ export default function SpaceModal({
                   className={styles.profIconBtn}
                   title={ic}
                   aria-label={ic}
-                  data-selected={ic === icon ? 'true' : 'false'}
+                  data-selected={ic === icon ? "true" : "false"}
                   onClick={() => setIcon(ic)}
                   dangerouslySetInnerHTML={{ __html: iconSvg(ic, 16) }}
                 />
@@ -203,7 +217,7 @@ export default function SpaceModal({
                   className={styles.profColorBtn}
                   title={c}
                   aria-label={`Color ${c}`}
-                  data-selected={c === color ? 'true' : 'false'}
+                  data-selected={c === color ? "true" : "false"}
                   style={{ background: c }}
                   onClick={() => setColor(c)}
                 />
@@ -213,7 +227,8 @@ export default function SpaceModal({
 
           <label className={styles.profField}>
             <span className={styles.profFieldLabel}>
-              Description<span className={styles.profFieldOptional}>optional</span>
+              Description
+              <span className={styles.profFieldOptional}>optional</span>
             </span>
             <input
               className={styles.profFieldInput}
@@ -231,7 +246,9 @@ export default function SpaceModal({
               className={cx(controlsCss.chip, styles.profModalDelete)}
               onClick={onDelete}
             >
-              <span dangerouslySetInnerHTML={{ __html: iconSvg('Trash', 12) }} />
+              <span
+                dangerouslySetInnerHTML={{ __html: iconSvg("Trash", 12) }}
+              />
               Delete
             </button>
           ) : null}
@@ -243,10 +260,10 @@ export default function SpaceModal({
             type="button"
             className={styles.profModalSave}
             disabled={!ready}
-            data-enabled={ready ? 'true' : 'false'}
+            data-enabled={ready ? "true" : "false"}
             onClick={submit}
           >
-            {mode === 'add' ? 'Create profile' : 'Save changes'}
+            {mode === "add" ? "Create profile" : "Save changes"}
           </button>
         </div>
       </dialog>

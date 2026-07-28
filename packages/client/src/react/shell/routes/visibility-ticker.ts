@@ -15,7 +15,7 @@ const TICK_INTERVAL_MS = 1000;
  * teardown that clears the interval and detaches the listener.
  */
 export function startVisibilityTicker(tick: () => void): () => void {
-  if (typeof document === 'undefined') {
+  if (typeof document === "undefined") {
     const t = setInterval(tick, TICK_INTERVAL_MS);
     return () => clearInterval(t);
   }
@@ -31,7 +31,7 @@ export function startVisibilityTicker(tick: () => void): () => void {
     }
   };
   const onVisibilityChange = (): void => {
-    if (document.visibilityState === 'hidden') {
+    if (document.visibilityState === "hidden") {
       stop();
     } else {
       tick(); // catch the counters up the moment the tab returns
@@ -39,10 +39,10 @@ export function startVisibilityTicker(tick: () => void): () => void {
     }
   };
 
-  if (document.visibilityState !== 'hidden') start();
-  document.addEventListener('visibilitychange', onVisibilityChange);
+  if (document.visibilityState !== "hidden") start();
+  document.addEventListener("visibilitychange", onVisibilityChange);
   return () => {
     stop();
-    document.removeEventListener('visibilitychange', onVisibilityChange);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
   };
 }

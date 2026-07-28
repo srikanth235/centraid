@@ -5,7 +5,7 @@
 // (`custodyProven`) — through the seams below. No user-facing knobs: every
 // bound is an internal constant (five-metric discipline, #436 §6).
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
 /**
  * Turns whose FINISH time is older than this many days are cold enough to
@@ -37,8 +37,8 @@ export function windowCutoffMs(nowMs: number, windowDays: number): number {
  * assert a segment actually landed locally before it writes the index row.
  */
 export interface BlobSink {
-  ingestSync(bytes: Buffer): { sha256: string; byteSize: number };
-  has(sha: string): boolean;
+  ingestSync: (bytes: Buffer) => { sha256: string; byteSize: number };
+  has: (sha: string) => boolean;
 }
 
 /**
@@ -87,7 +87,7 @@ export interface ConversationArchivalResult {
   /** Phase B — archive rows whose raw turns were custody-gated-deleted. */
   segmentsPruned: number;
   turnsPruned: number;
-  reclaim: { mode: 'incremental' | 'full' | 'none'; ranVacuum: boolean };
+  reclaim: { mode: "incremental" | "full" | "none"; ranVacuum: boolean };
 }
 
 /** A raw sqlite row (`SELECT *` shape) — stored verbatim in a segment. */

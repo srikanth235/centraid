@@ -58,11 +58,11 @@ interface CollectionRow {
 function attachmentsBySubject(
   subjectType: string,
   attachments: AttachmentRow[],
-  contentById: Map<string, ContentRow>,
+  contentById: Map<string, ContentRow>
 ) {
   // Blob-backed bytes serve as same-origin URLs (issue #296).
   const srcOf = (c: ContentRow | undefined) =>
-    typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+    typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
       : c?.content_uri;
   const bySubject = new Map<string, Array<Record<string, unknown>>>();
@@ -75,90 +75,96 @@ function attachmentsBySubject(
       content_id: a.content_id,
       role: a.role,
       is_primary: a.is_primary,
-      media_type: content?.media_type ?? 'application/octet-stream',
+      media_type: content?.media_type ?? "application/octet-stream",
       title: content?.title ?? null,
-      content_uri: srcOf(content) ?? '',
+      content_uri: srcOf(content) ?? "",
       byte_size: content?.byte_size ?? 0,
     });
   }
   for (const list of bySubject.values()) {
-    list.sort((x, y) => (Number(y.is_primary) || 0) - (Number(x.is_primary) || 0));
+    list.sort(
+      (x, y) => (Number(y.is_primary) || 0) - (Number(x.is_primary) || 0)
+    );
   }
   return bySubject;
 }
 
 function decodeBody(uri: unknown): string {
-  if (typeof uri !== 'string' || !uri.startsWith('data:')) return '(external content)';
-  const comma = uri.indexOf(',');
-  if (comma === -1) return '(external content)';
+  if (typeof uri !== "string" || !uri.startsWith("data:"))
+    return "(external content)";
+  const comma = uri.indexOf(",");
+  if (comma === -1) return "(external content)";
   const meta = uri.slice(0, comma);
   const payload = uri.slice(comma + 1);
   try {
-    if (meta.includes(';base64')) {
-      return typeof Buffer !== 'undefined'
-        ? Buffer.from(payload, 'base64').toString('utf8')
-        : atob(payload);
+    if (meta.includes(";base64")) {
+      return typeof Buffer === "undefined"
+        ? atob(payload)
+        : Buffer.from(payload, "base64").toString("utf8");
     }
     return decodeURIComponent(payload);
   } catch {
-    return '(external content)';
+    return "(external content)";
   }
 }
 
 // Same list-row discipline as library.ts: results carry a short preview + the
 // checklist tally, never the whole body (issue #404). See library.ts for the
 // shape's home.
-const CHECK_RE = /^\s*[-*] \[( |x|X)\]\s?(.*)$/;
+const CHECK_RE = /^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u;
 
 function previewOf(body: unknown): string {
-  const lines = String(body ?? '').split('\n');
+  const lines = String(body ?? "").split("\n");
   const out: string[] = [];
   for (const line of lines) {
     if (out.length >= 6) break;
     const check = CHECK_RE.exec(line);
     if (check) {
-      out.push((/x/i.test(check[1]!) ? '☑ ' : '☐ ') + check[2]);
+      out.push(
+        (/x/iu.test(check.groups?.mark ?? "") ? "☑ " : "☐ ") +
+          (check.groups?.text ?? "")
+      );
       continue;
     }
-    if (/^#{1,3}\s+/.test(line)) continue;
-    const li = /^\s*(?:[-*]|\d+\.)\s+(.*)$/.exec(line);
+    if (/^#{1,3}\s+/u.test(line)) continue;
+    const li = /^\s*(?:[-*]|\d+\.)\s+(?<text>.*)$/u.exec(line);
     if (li) {
-      out.push('• ' + li[1]);
+      out.push("• " + (li.groups?.text ?? ""));
       continue;
     }
-    if (line.trim() === '') continue;
+    if (line.trim() === "") continue;
     out.push(line);
   }
   const text = out
-    .join('\n')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1');
+    .join("\n")
+    .replace(/\*\*(?<bold>.+?)\*\*/gu, "$<bold>")
+    .replace(/\*(?<italic>.+?)\*/gu, "$<italic>")
+    .replace(/`(?<code>.+?)`/gu, "$<code>");
   return text.length > 200 ? text.slice(0, 200) : text;
 }
 
 function checkOf(body: unknown): { total: number; done: number } {
   let total = 0;
   let done = 0;
-  for (const line of String(body ?? '').split('\n')) {
+  for (const line of String(body ?? "").split("\n")) {
     const m = CHECK_RE.exec(line);
     if (!m) continue;
     total += 1;
-    if (/x/i.test(m[1]!)) done += 1;
+    if (/x/iu.test(m.groups?.mark ?? "")) done += 1;
   }
   return { total, done };
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
-  const term = String(input?.term ?? '').trim();
+export default async function searchHandler({ input, ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
+  const term = String(input?.term ?? "").trim();
   if (!term) return { notes: [] };
   try {
     const matches = await ctx.vault.search({
-      entity: 'knowledge.note',
+      entity: "knowledge.note",
       query: term,
       // Trashed notes (issue #308: delete is reversible) never match.
-      where: [{ column: 'deleted_at', op: 'is-null' }],
+      where: [{ column: "deleted_at", op: "is-null" }],
       limit: 100,
       purpose,
     });
@@ -167,26 +173,27 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const noteIds = hits.map((n) => n.note_id);
     const [placements, notebooks, attachments] = await Promise.all([
       ctx.vault.read({
-        entity: 'core.collection_entry',
+        entity: "core.collection_entry",
         where: [
-          { column: 'target_type', op: 'eq', value: 'knowledge.note' },
-          { column: 'target_id', op: 'in', value: noteIds },
+          { column: "target_type", op: "eq", value: "knowledge.note" },
+          { column: "target_id", op: "in", value: noteIds },
         ],
         purpose,
       }),
       // Notebooks are collections (issue #274) — the one curation mechanism.
-      ctx.vault.read({ entity: 'core.collection', purpose }),
+      ctx.vault.read({ entity: "core.collection", purpose }),
       ctx.vault.read({
-        entity: 'core.attachment',
+        entity: "core.attachment",
         where: [
-          { column: 'target_type', op: 'eq', value: 'knowledge.note' },
-          { column: 'target_id', op: 'in', value: noteIds },
+          { column: "target_type", op: "eq", value: "knowledge.note" },
+          { column: "target_id", op: "in", value: noteIds },
         ],
         purpose,
       }),
     ]);
     // One bounded pull covers both the note bodies and any attachment bytes.
-    const attachmentRows = (attachments.rows ?? []) as unknown as AttachmentRow[];
+    const attachmentRows = (attachments.rows ??
+      []) as unknown as AttachmentRow[];
     const contentIds = [
       ...new Set([
         ...hits.map((n) => n.body_content_id),
@@ -194,29 +201,39 @@ export default async ({ input, ctx }: HandlerArgs) => {
       ]),
     ].filter((id): id is string => Boolean(id));
     const contents = await ctx.vault.read({
-      entity: 'core.content_item',
-      where: [{ column: 'content_id', op: 'in', value: contentIds }],
+      entity: "core.content_item",
+      where: [{ column: "content_id", op: "in", value: contentIds }],
       purpose,
     });
     const contentById = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [c.content_id, c]),
+      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
+        c.content_id,
+        c,
+      ])
     );
-    const attByNote = attachmentsBySubject('knowledge.note', attachmentRows, contentById);
+    const attByNote = attachmentsBySubject(
+      "knowledge.note",
+      attachmentRows,
+      contentById
+    );
     const nameByNotebook = new Map(
       ((notebooks.rows ?? []) as unknown as CollectionRow[]).map((nb) => [
         nb.collection_id,
         nb.name,
-      ]),
+      ])
     );
     const notebooksByNote = new Map<string, string[]>();
     for (const p of (placements.rows ?? []) as unknown as PlacementRow[]) {
-      if (!notebooksByNote.has(p.target_id)) notebooksByNote.set(p.target_id, []);
+      if (!notebooksByNote.has(p.target_id))
+        notebooksByNote.set(p.target_id, []);
       notebooksByNote.get(p.target_id)!.push(p.collection_id);
     }
     // Vault order is rank order (best match first) — keep it.
     const notes = hits.map((n) => {
       const notebookIds = notebooksByNote.get(n.note_id) ?? [];
-      const decoded = decodeBody(contentById.get(n.body_content_id ?? '')?.content_uri);
+      const decoded = decodeBody(
+        contentById.get(n.body_content_id ?? "")?.content_uri
+      );
       return {
         note_id: n.note_id,
         title: n.title,
@@ -227,9 +244,11 @@ export default async ({ input, ctx }: HandlerArgs) => {
         preview: previewOf(decoded),
         check: checkOf(decoded),
         notebook_ids: notebookIds,
-        notebook_names: notebookIds.map((id) => nameByNotebook.get(id) ?? 'Notebook'),
+        notebook_names: notebookIds.map(
+          (id) => nameByNotebook.get(id) ?? "Notebook"
+        ),
         attachments: attByNote.get(n.note_id) ?? [],
-        snippet: typeof n._snippet === 'string' ? n._snippet : '',
+        snippet: typeof n._snippet === "string" ? n._snippet : "",
       };
     });
     return { notes };
@@ -237,4 +256,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { notes: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

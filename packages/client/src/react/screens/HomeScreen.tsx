@@ -1,29 +1,31 @@
+import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Home surface (apps grid + drafts + templates); splitting would fragment one visual unit
-import { useRef, useState, type JSX } from 'react';
-import { Icon, KindBadge, StatusPill } from '../ui/index.js';
-import type { IconName } from '@centraid/design-tokens';
+import { useRef, useState, type JSX } from "react";
+
+import { INTEGRATION_HUES } from "../format.js";
 import type {
   AuStatusKind,
   HomeAppItemDTO,
   HomeAutoItemDTO,
   HomeBridgeProps,
   HomeMenuAnchor,
-} from '../screen-contracts.js';
-import { INTEGRATION_HUES } from '../format.js';
-import styles from './HomeScreen.module.css';
-import { cx } from '../ui/cx.js';
-import au from '../styles/automation.module.css';
-import cardCss from '../ui/AppCard.module.css';
-import libCss from '../styles/library.module.css';
-import controlsCss from '../styles/controls.module.css';
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Icon, KindBadge, StatusPill } from "../ui/index.js";
+
+import au from "../styles/automation.module.css";
+import controlsCss from "../styles/controls.module.css";
+import libCss from "../styles/library.module.css";
+import cardCss from "../ui/AppCard.module.css";
+import styles from "./HomeScreen.module.css";
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
-  active: 'Power',
-  paused: 'Pause',
-  draft: 'Pencil',
-  running: 'Loader',
-  success: 'CheckCircle',
-  failed: 'AlertTriangle',
+  active: "Power",
+  paused: "Pause",
+  draft: "Pencil",
+  running: "Loader",
+  success: "CheckCircle",
+  failed: "AlertTriangle",
 };
 
 // Microphone glyph — not in the shared icon set; inlined to match the
@@ -45,7 +47,13 @@ function MicGlyph(): JSX.Element {
     </svg>
   );
 }
-function GridGlyph({ size = 15, sw = 1.75 }: { size?: number; sw?: number }): JSX.Element {
+function GridGlyph({
+  size = 15,
+  sw = 1.75,
+}: {
+  size?: number;
+  sw?: number;
+}): JSX.Element {
   return (
     <svg
       width={size}
@@ -85,7 +93,7 @@ function RowsGlyph(): JSX.Element {
 function rectAnchor(e: { currentTarget: HTMLElement }): HomeMenuAnchor {
   const r = e.currentTarget.getBoundingClientRect();
   return {
-    kind: 'rect',
+    kind: "rect",
     rect: {
       top: r.top,
       right: r.right,
@@ -97,7 +105,11 @@ function rectAnchor(e: { currentTarget: HTMLElement }): HomeMenuAnchor {
   };
 }
 
-function MoreButton({ onOpen }: { onOpen: (a: HomeMenuAnchor) => void }): JSX.Element {
+function MoreButton({
+  onOpen,
+}: {
+  onOpen: (a: HomeMenuAnchor) => void;
+}): JSX.Element {
   return (
     <button
       type="button"
@@ -128,7 +140,11 @@ export function AppCard({
   onContext: (id: string, anchor: HomeMenuAnchor) => void;
 }): JSX.Element {
   return (
-    <div className={cardCss.wrap} data-app-id={a.id} data-starred={String(a.starred)}>
+    <div
+      className={cardCss.wrap}
+      data-app-id={a.id}
+      data-starred={String(a.starred)}
+    >
       <button
         type="button"
         className={cx(cardCss.card, cardCss.small)}
@@ -142,7 +158,7 @@ export function AppCard({
         onClick={() => (a.draft ? onEnterDraft(a.id) : onOpen(a.id))}
         onContextMenu={(e) => {
           e.preventDefault();
-          onContext(a.id, { kind: 'point', x: e.clientX, y: e.clientY });
+          onContext(a.id, { kind: "point", x: e.clientX, y: e.clientY });
         }}
       >
         <div className={cardCss.head}>
@@ -155,7 +171,9 @@ export function AppCard({
             }}
           >
             <Icon name={a.iconKey as IconName} size={24} strokeWidth={1.9} />
-            {a.tone ? <span className={cardCss.iconDot} data-tone={a.tone} /> : null}
+            {a.tone ? (
+              <span className={cardCss.iconDot} data-tone={a.tone} />
+            ) : null}
           </div>
           <div className={cardCss.headText}>
             <div className={cardCss.nameRow}>
@@ -164,7 +182,9 @@ export function AppCard({
               </div>
               {a.tone ? <StatusPill tone={a.tone}>{a.tone}</StatusPill> : null}
             </div>
-            <div className={cardCss.desc}>{a.desc || 'No description yet.'}</div>
+            <div className={cardCss.desc}>
+              {a.desc || "No description yet."}
+            </div>
           </div>
         </div>
         <div className={cardCss.foot}>
@@ -205,7 +225,11 @@ export function AutoCard({
         onClick={() => onOpen(r.ref)}
       >
         <div className={cardCss.head}>
-          <span className={au.auGlyph} data-hue={r.hue} style={{ width: 52, height: 52 }}>
+          <span
+            className={au.auGlyph}
+            data-hue={r.hue}
+            style={{ width: 52, height: 52 }}
+          >
             <Icon name={r.glyphIcon as IconName} size={24} />
           </span>
           <div className={cardCss.headText}>
@@ -235,7 +259,9 @@ export function AutoCard({
                   key={name}
                   className={au.auOvDot}
                   title={name}
-                  style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
+                  style={{
+                    background: `var(--c-${INTEGRATION_HUES[name] ?? "slate"})`,
+                  }}
                 />
               ))}
             </div>
@@ -245,7 +271,10 @@ export function AutoCard({
           <KindBadge kind="automation">
             <span>Automation</span>
           </KindBadge>
-          <span className={cardCss.footTime} data-ok={r.footOk ? 'true' : undefined}>
+          <span
+            className={cardCss.footTime}
+            data-ok={r.footOk ? "true" : undefined}
+          >
             {r.footOk ? (
               <span aria-hidden="true">
                 <Icon name="CheckCircle" size={13} />
@@ -271,34 +300,34 @@ function EmptyState({
   kind,
   builderEnabled,
 }: {
-  kind: 'all' | 'app' | 'automation';
+  kind: "all" | "app" | "automation";
   builderEnabled: boolean;
 }): JSX.Element {
   // With the builder hidden (issue #434, Phase 3) the empty states can't tell
   // the reader to "describe an app" — apps arrive via Discover instead.
   const [icon, title, sub]: [IconName, string, string] =
-    kind === 'automation'
+    kind === "automation"
       ? [
-          'Bolt',
-          'No automations yet',
+          "Bolt",
+          "No automations yet",
           builderEnabled
-            ? 'A saved conversation that fires on a trigger. Start from a template, or describe one from scratch.'
-            : 'A saved conversation that fires on a trigger. Start from a template.',
+            ? "A saved conversation that fires on a trigger. Start from a template, or describe one from scratch."
+            : "A saved conversation that fires on a trigger. Start from a template.",
         ]
-      : kind === 'app'
+      : kind === "app"
         ? [
-            'Sparkle',
-            'No apps yet',
+            "Sparkle",
+            "No apps yet",
             builderEnabled
-              ? 'Describe an app in the box above — Centraid will build it for you.'
-              : 'Install an app from Discover to get started.',
+              ? "Describe an app in the box above — Centraid will build it for you."
+              : "Install an app from Discover to get started.",
           ]
         : [
-            'Sparkle',
-            'Nothing here yet',
+            "Sparkle",
+            "Nothing here yet",
             builderEnabled
-              ? 'Describe an app or automation in the box above to get started.'
-              : 'Install an app or automation from Discover to get started.',
+              ? "Describe an app or automation in the box above to get started."
+              : "Install an app or automation from Discover to get started.",
           ];
   return (
     <div className={styles.shelfEmpty} data-testid="shelf-empty">
@@ -335,9 +364,9 @@ export default function HomeScreen({
   onAutomationMenu,
   onBrowseTemplates,
 }: HomeBridgeProps): JSX.Element {
-  const [prompt, setPrompt] = useState('');
-  const [kind, setKind] = useState<'all' | 'app' | 'automation'>('all');
-  const [layout, setLayout] = useState<'tiles' | 'rows'>('tiles');
+  const [prompt, setPrompt] = useState("");
+  const [kind, setKind] = useState<"all" | "app" | "automation">("all");
+  const [layout, setLayout] = useState<"tiles" | "rows">("tiles");
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const submit = (): void => {
@@ -345,18 +374,24 @@ export default function HomeScreen({
     if (v) onBuild(v);
   };
 
-  const showApps = kind === 'all' || kind === 'app';
-  const showAutos = kind === 'all' || kind === 'automation';
-  const cardCount = (showApps ? appItems.length : 0) + (showAutos ? automationItems.length : 0);
+  const showApps = kind === "all" || kind === "app";
+  const showAutos = kind === "all" || kind === "automation";
+  const cardCount =
+    (showApps ? appItems.length : 0) + (showAutos ? automationItems.length : 0);
 
   const segDefs = [
-    { k: 'all' as const, label: 'All', count: counts.all, icon: null },
-    { k: 'app' as const, label: 'Apps', count: counts.apps, icon: 'Home' as IconName },
+    { k: "all" as const, label: "All", count: counts.all, icon: null },
     {
-      k: 'automation' as const,
-      label: 'Automations',
+      k: "app" as const,
+      label: "Apps",
+      count: counts.apps,
+      icon: "Home" as IconName,
+    },
+    {
+      k: "automation" as const,
+      label: "Automations",
       count: counts.automations,
-      icon: 'Bolt' as IconName,
+      icon: "Bolt" as IconName,
     },
   ];
 
@@ -382,7 +417,7 @@ export default function HomeScreen({
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault();
                     submit();
                   }
@@ -484,7 +519,11 @@ export default function HomeScreen({
               </span>
             </div>
           ) : null}
-          <button type="button" className={styles.hsecBrowse} onClick={onBrowseTemplates}>
+          <button
+            type="button"
+            className={styles.hsecBrowse}
+            onClick={onBrowseTemplates}
+          >
             <span>Browse apps</span>
             <span aria-hidden="true">
               <Icon name="ChevronRight" size={14} />
@@ -496,9 +535,9 @@ export default function HomeScreen({
               className={libCss.libLayoutBtn}
               title="Tiles"
               aria-label="Tiles"
-              aria-pressed={layout === 'tiles'}
+              aria-pressed={layout === "tiles"}
               data-layout="tiles"
-              onClick={() => setLayout('tiles')}
+              onClick={() => setLayout("tiles")}
             >
               <GridGlyph />
             </button>
@@ -507,9 +546,9 @@ export default function HomeScreen({
               className={libCss.libLayoutBtn}
               title="Rows"
               aria-label="Rows"
-              aria-pressed={layout === 'rows'}
+              aria-pressed={layout === "rows"}
               data-layout="rows"
-              onClick={() => setLayout('rows')}
+              onClick={() => setLayout("rows")}
             >
               <RowsGlyph />
             </button>

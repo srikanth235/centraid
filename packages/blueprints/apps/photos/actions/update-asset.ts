@@ -5,22 +5,27 @@
  *
  * @type {import('@centraid/app-engine').ActionHandler}
  */
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function updateAsset({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'media.update_asset',
+      command: "media.update_asset",
       input: {
-        asset_id: String(input.asset_id ?? ''),
-        ...(input.captured_at != null ? { captured_at: String(input.captured_at) } : {}),
-        ...(input.title != null ? { title: String(input.title) } : {}),
-        ...(input.favorite != null ? { favorite: Number(input.favorite) } : {}),
+        asset_id: String(input.asset_id ?? ""),
+        ...(input.captured_at == null
+          ? {}
+          : { captured_at: String(input.captured_at) }),
+        ...(input.title == null ? {} : { title: String(input.title) }),
+        ...(input.favorite == null ? {} : { favorite: Number(input.favorite) }),
       },
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
+    return {
+      status: 200,
+      body: { status: "denied", reason: e.message, code: e.code },
+    };
   }
-};
+}

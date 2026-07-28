@@ -3,8 +3,8 @@ import {
   resolveSubsystemConfigPins,
   resolveSubsystemModel,
   type RunnerKind,
-} from '@centraid/app-engine';
-import type { ManifestRequires } from '@centraid/automation';
+} from "@centraid/app-engine";
+import type { ManifestRequires } from "@centraid/automation";
 
 /**
  * Where the selected runner came from. `prefs` means the user's own
@@ -14,7 +14,7 @@ import type { ManifestRequires } from '@centraid/automation';
  * so that selection is NOT consent and must be checked against the user's
  * ladder before anything leaves the device (#567 D13/D5).
  */
-type AutomationRunnerSelectionSource = 'prefs' | 'manifest';
+type AutomationRunnerSelectionSource = "prefs" | "manifest";
 
 export interface AutomationAgentSelection {
   runner: RunnerKind;
@@ -32,25 +32,28 @@ export function resolveAutomationAgentSelection(
   requires: ManifestRequires,
   prefs: Record<string, unknown>,
   fallbackRunner: RunnerKind,
-  options: { includeManifestProviderPins?: boolean } = {},
+  options: { includeManifestProviderPins?: boolean } = {}
 ): AutomationAgentSelection {
-  const runner = isRunnerKind(requires.runner) ? requires.runner : fallbackRunner;
+  const runner = isRunnerKind(requires.runner)
+    ? requires.runner
+    : fallbackRunner;
   const selectionSource: AutomationRunnerSelectionSource =
-    runner === fallbackRunner ? 'prefs' : 'manifest';
-  const includeManifestProviderPins = options.includeManifestProviderPins ?? true;
+    runner === fallbackRunner ? "prefs" : "manifest";
+  const includeManifestProviderPins =
+    options.includeManifestProviderPins ?? true;
   const model = resolveSubsystemModel(
     prefs,
     runner,
-    'automations',
-    includeManifestProviderPins ? requires.model : undefined,
+    "automations",
+    includeManifestProviderPins ? requires.model : undefined
   );
   const configPins = resolveSubsystemConfigPins(
     prefs,
     runner,
-    'automations',
+    "automations",
     includeManifestProviderPins && requires.thoughtLevel
       ? { thought_level: requires.thoughtLevel }
-      : {},
+      : {}
   );
   return {
     runner,
@@ -73,10 +76,11 @@ export function resolveAutomationRewriteModel(
     configPins?: Readonly<Record<string, string>>;
   },
   configuredRewrite: unknown,
-  fastModel?: string,
+  fastModel?: string
 ): string | undefined {
   if (requires.model) return requires.model;
-  if (typeof configuredRewrite === 'string' && configuredRewrite) return configuredRewrite;
+  if (typeof configuredRewrite === "string" && configuredRewrite)
+    return configuredRewrite;
   if (fastModel) return fastModel;
-  return selection.runner === 'claude-code' ? 'fast' : selection.model;
+  return selection.runner === "claude-code" ? "fast" : selection.model;
 }

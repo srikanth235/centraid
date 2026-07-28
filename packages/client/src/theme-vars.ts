@@ -11,11 +11,13 @@
 (function () {
   const tokens = window.CentraidTokens;
   if (!tokens?.cssText) {
-    console.error('CentraidTokens.cssText missing — design-tokens preload may be stale.');
+    console.error(
+      "CentraidTokens.cssText missing — design-tokens preload may be stale."
+    );
     return;
   }
-  const style = document.createElement('style');
-  style.id = 'centraid-tokens';
+  const style = document.createElement("style");
+  style.id = "centraid-tokens";
   style.textContent = tokens.cssText;
   // Prepend so anything in styles.css can override (e.g., density-aware
   // component rules). The token rules themselves only define vars.

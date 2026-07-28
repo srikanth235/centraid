@@ -34,7 +34,7 @@
 // All tables STRICT; PKs are TEXT UUIDv7; money is fixed-scale INTEGER minor
 // units; timestamps are TEXT ISO-8601 UTC — the core spine's conventions.
 
-import { UPDATED_AT_DEFAULT, touchUpdatedAt } from './updated-at.js';
+import { UPDATED_AT_DEFAULT, touchUpdatedAt } from "./updated-at.js";
 
 export const PEOPLE_DDL = `
 CREATE TABLE people_profile (
@@ -71,6 +71,6 @@ CREATE TABLE people_important_date (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_important_date_party ON people_important_date(party_id);
 
-${touchUpdatedAt('people_profile', 'profile_id')}
-${touchUpdatedAt('people_important_date', 'date_id')}
+${touchUpdatedAt("people_profile", "profile_id")}
+${touchUpdatedAt("people_important_date", "date_id")}
 `;

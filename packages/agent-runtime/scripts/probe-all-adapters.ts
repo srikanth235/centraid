@@ -4,15 +4,20 @@
  * than omissions, so the dump always proves full registry coverage.
  */
 
-import type { RunnerKind } from '@centraid/app-engine';
-import { probeAcpCapabilities } from '../src/backends/acp/probe-capabilities.js';
-import { acpConfigFor, getRunnerBackend, RUNNER_BACKENDS } from '../src/registry.js';
-import { probeCliAvailability } from '../src/preflight.js';
+import type { RunnerKind } from "@centraid/app-engine";
+
+import { probeAcpCapabilities } from "../src/backends/acp/probe-capabilities.js";
+import { probeCliAvailability } from "../src/preflight.js";
+import {
+  acpConfigFor,
+  getRunnerBackend,
+  RUNNER_BACKENDS,
+} from "../src/registry.js";
 
 const runnerKinds = Object.keys(RUNNER_BACKENDS) as RunnerKind[];
 
 const envKey = (kind: RunnerKind): string =>
-  `CENTRAID_${kind.replaceAll('-', '_').toUpperCase()}_BIN`;
+  `CENTRAID_${kind.replaceAll("-", "_").toUpperCase()}_BIN`;
 
 /**
  * Each probed kind spawns a CLI and (when reachable) sends one live
@@ -35,14 +40,14 @@ async function probeOne(kind: RunnerKind): Promise<Row> {
       reachable: false,
       reason: configured
         ? `${configured} did not pass the version preflight`
-        : 'runner binary is not installed or configured on this host',
+        : "runner binary is not installed or configured on this host",
     };
   }
   const capabilities = await probeAcpCapabilities(
     acpConfigFor(kind, configured ? { binPath: configured } : {}),
     // This dump is the one place that WANTS the live prompt: the observed
     // usage/config-update/locations signals are its whole point.
-    { timeoutMs: 20_000, probeLivePrompt: true },
+    { timeoutMs: 20_000, probeLivePrompt: true }
   );
   return {
     kind,
@@ -56,11 +61,18 @@ async function probeOne(kind: RunnerKind): Promise<Row> {
 const rows: Row[] = [];
 let next = 0;
 await Promise.all(
-  Array.from({ length: Math.min(MAX_CONCURRENT_PROBES, runnerKinds.length) }, async () => {
-    for (let index = next++; index < runnerKinds.length; index = next++) {
-      rows[index] = await probeOne(runnerKinds[index]!);
+  Array.from(
+    { length: Math.min(MAX_CONCURRENT_PROBES, runnerKinds.length) },
+    () => {
+      const probeNext = async (): Promise<void> => {
+        const index = next++;
+        if (index >= runnerKinds.length) return;
+        rows[index] = await probeOne(runnerKinds[index]!);
+        return probeNext();
+      };
+      return probeNext();
     }
-  }),
+  )
 );
 
 for (const row of rows) process.stdout.write(`${JSON.stringify(row)}\n`);

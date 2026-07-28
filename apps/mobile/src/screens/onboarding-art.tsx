@@ -2,10 +2,19 @@
 // Split out so the flow file stays under the repo file-size limit; these are
 // pure, stateless SVG marks with no onboarding logic in them.
 
-import React from 'react';
-import Svg, { Circle, Defs, Ellipse, G, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
+import React from "react";
+import Svg, {
+  Circle,
+  Defs,
+  Ellipse,
+  G,
+  Path,
+  RadialGradient,
+  Rect,
+  Stop,
+} from "react-native-svg";
 
-import { BRAND_TEAL } from '../lib/profile';
+import { BRAND_TEAL } from "../lib/profile";
 
 export function BrandMark({ size = 22 }: { size?: number }): React.JSX.Element {
   return (
@@ -66,7 +75,14 @@ export function OrbitArt(): React.JSX.Element {
         <Rect x={45.5} y={97.5} width={13} height={13} rx={4} fill="#5C8A4E" />
       </G>
       <Circle cx={100} cy={76} r={21} fill="url(#core)" />
-      <Circle cx={100} cy={76} r={7.6} stroke="#fff" strokeWidth={1.8} fill="none" />
+      <Circle
+        cx={100}
+        cy={76}
+        r={7.6}
+        stroke="#fff"
+        strokeWidth={1.8}
+        fill="none"
+      />
       <Circle cx={100} cy={76} r={2.4} fill="#fff" />
     </Svg>
   );

@@ -37,10 +37,11 @@
  * raw-row mappers live in `store-sql.ts`.
  */
 
-import { randomUUID } from 'node:crypto';
-import { type DatabaseSync } from 'node:sqlite';
-import type { DatabaseProvider } from '../stores/gateway-db.js';
-import type { AdapterUsageSnapshot } from './turn.js';
+import { randomUUID } from "node:crypto";
+import { type DatabaseSync } from "node:sqlite";
+
+import type { DatabaseProvider } from "../stores/gateway-db.js";
+import type { ArchiveSegmentRef } from "./rehydrate.js";
 import type {
   Conversation,
   Turn,
@@ -54,8 +55,7 @@ import type {
   ConversationWorkspaceSelection,
   ItemKind,
   RunKind,
-} from './schema.js';
-import type { ArchiveSegmentRef } from './rehydrate.js';
+} from "./schema.js";
 import {
   prepare,
   conversationFromRaw,
@@ -69,7 +69,8 @@ import {
   type RawItem,
   type RawAttachment,
   type RawState,
-} from './store-sql.js';
+} from "./store-sql.js";
+import type { AdapterUsageSnapshot } from "./turn.js";
 
 export interface CreateConversationInput {
   /** Defaults to a fresh UUID. Automation conversations use the stable ref. */
@@ -111,7 +112,7 @@ export interface InsertMessageInInput {
   readonly turnId: string;
   /** Defaults to a fresh UUID — returned so attachments can FK to it. */
   readonly itemId?: string;
-  readonly role: 'user' | 'assistant';
+  readonly role: "user" | "assistant";
   readonly text: string;
   readonly startedAt: number;
 }
@@ -123,7 +124,7 @@ export interface InsertItemInput {
   readonly callId?: string;
   readonly batchId?: number;
   readonly kind: ItemKind;
-  readonly role?: 'user' | 'assistant';
+  readonly role?: "user" | "assistant";
   readonly text?: string;
   readonly name?: string;
   readonly argsJson?: string;
@@ -144,7 +145,7 @@ export interface InsertItemInput {
   readonly effort?: string;
   readonly costUsd?: number;
   /** Issue #514 — `agent` (ACP) or `estimated` (catalog). */
-  readonly costSource?: 'agent' | 'estimated';
+  readonly costSource?: "agent" | "estimated";
   readonly appId?: string;
 }
 
@@ -181,7 +182,7 @@ export interface CloseItemInput {
   readonly effort?: string;
   readonly costUsd?: number;
   /** Issue #514 — `agent` (ACP) or `estimated` (catalog). */
-  readonly costSource?: 'agent' | 'estimated';
+  readonly costSource?: "agent" | "estimated";
 }
 
 export interface InsertAttachmentInput {
@@ -196,7 +197,7 @@ export interface InsertAttachmentInput {
 }
 
 export interface ListTurnsOptions {
-  readonly status?: 'ok' | 'error';
+  readonly status?: "ok" | "error";
   readonly since?: number;
   readonly limit?: number;
 }
@@ -205,7 +206,9 @@ export interface ListTurnsOptions {
 export type ConversationMeta = Conversation & { readonly messageCount: number };
 
 /** A search hit: the conversation meta plus a highlighted match snippet. */
-export type ConversationSearchHit = ConversationMeta & { readonly snippet: string };
+export type ConversationSearchHit = ConversationMeta & {
+  readonly snippet: string;
+};
 
 /**
  * Compile owner-typed words into an FTS5 MATCH expression: each word becomes a
@@ -217,12 +220,12 @@ export type ConversationSearchHit = ConversationMeta & { readonly snippet: strin
  */
 export function conversationMatchExpression(query: string): string | null {
   const tokens = query
-    .split(/\s+/)
-    .map((t) => t.replaceAll('"', ''))
+    .split(/\s+/u)
+    .map((t) => t.replaceAll('"', ""))
     .filter((t) => /[\p{L}\p{N}]/u.test(t))
     .slice(0, 16);
   if (tokens.length === 0) return null;
-  return tokens.map((t) => `"${t}"*`).join(' ');
+  return tokens.map((t) => `"${t}"*`).join(" ");
 }
 
 /**
@@ -255,12 +258,17 @@ function rawJsonForensics(raw: string): Record<string, unknown> {
   } catch {
     return {};
   }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+    return {};
   const kept: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(parsed)) {
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       if (value.length <= RAW_JSON_KEPT_FIELD_MAX_CHARS) kept[key] = value;
-    } else if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+    } else if (
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      value === null
+    ) {
       kept[key] = value;
     }
   }
@@ -270,13 +278,15 @@ function rawJsonForensics(raw: string): Record<string, unknown> {
 /** `raw_json` as it may be written: verbatim under the cap, else forensics + marker. */
 function cappedRawJson(raw: string | undefined): string | null {
   if (raw === undefined) return null;
-  const originalBytes = Buffer.byteLength(raw, 'utf8');
+  const originalBytes = Buffer.byteLength(raw, "utf8");
   if (originalBytes <= RAW_JSON_MAX_BYTES) return raw;
   const marker = { rawTruncated: true, rawOriginalBytes: originalBytes };
   const kept = JSON.stringify({ ...rawJsonForensics(raw), ...marker });
   // A pathological envelope (thousands of short scalar keys) can still exceed
   // the cap; the marker on its own always fits.
-  return Buffer.byteLength(kept, 'utf8') <= RAW_JSON_MAX_BYTES ? kept : JSON.stringify(marker);
+  return Buffer.byteLength(kept, "utf8") <= RAW_JSON_MAX_BYTES
+    ? kept
+    : JSON.stringify(marker);
 }
 
 export class ConversationStore {
@@ -303,14 +313,14 @@ export class ConversationStore {
   /** Run `fn` inside one `IMMEDIATE` transaction; rolls back on throw. */
   runInTransaction<T>(fn: () => T): T {
     const { db } = this.ensureReady();
-    db.exec('BEGIN IMMEDIATE');
+    db.exec("BEGIN IMMEDIATE");
     try {
       const out = fn();
-      db.exec('COMMIT');
+      db.exec("COMMIT");
       return out;
     } catch (err) {
       try {
-        db.exec('ROLLBACK');
+        db.exec("ROLLBACK");
       } catch {
         /* already rolled back */
       }
@@ -330,19 +340,23 @@ export class ConversationStore {
       input.userId,
       input.appId ?? null,
       input.automationId ?? null,
-      input.title ?? '',
+      input.title ?? "",
       input.adapterKind ?? null,
       now,
-      now,
+      now
     );
     return {
       id,
       kind: input.kind,
       userId: input.userId,
-      ...(input.appId !== undefined ? { appId: input.appId } : {}),
-      ...(input.automationId !== undefined ? { automationId: input.automationId } : {}),
-      title: input.title ?? '',
-      ...(input.adapterKind !== undefined ? { adapterKind: input.adapterKind } : {}),
+      ...(input.appId === undefined ? {} : { appId: input.appId }),
+      ...(input.automationId === undefined
+        ? {}
+        : { automationId: input.automationId }),
+      title: input.title ?? "",
+      ...(input.adapterKind === undefined
+        ? {}
+        : { adapterKind: input.adapterKind }),
       hydrationCount: 0,
       turnCount: 0,
       pinned: false,
@@ -362,24 +376,29 @@ export class ConversationStore {
     automationRef: string,
     appId?: string,
     name?: string,
-    runnerKind?: string,
+    runnerKind?: string
   ): string {
     const conversationId = automationRef;
     const existing = this.getConversation(conversationId);
     if (!existing) {
       this.createConversation({
         id: conversationId,
-        kind: 'automation',
-        userId: '',
+        kind: "automation",
+        userId: "",
         automationId: automationRef,
-        ...(appId !== undefined ? { appId } : {}),
-        ...(name !== undefined ? { title: name } : {}),
-        ...(runnerKind !== undefined ? { adapterKind: runnerKind } : {}),
+        ...(appId === undefined ? {} : { appId }),
+        ...(name === undefined ? {} : { title: name }),
+        ...(runnerKind === undefined ? {} : { adapterKind: runnerKind }),
       });
       return conversationId;
     }
-    if (existing.kind !== 'automation' || existing.automationId !== automationRef) {
-      throw new Error(`conversation id collision for automation "${conversationId}"`);
+    if (
+      existing.kind !== "automation" ||
+      existing.automationId !== automationRef
+    ) {
+      throw new Error(
+        `conversation id collision for automation "${conversationId}"`
+      );
     }
     const { stmts } = this.ensureReady();
     stmts.updateAutomationConversation.run(
@@ -387,7 +406,7 @@ export class ConversationStore {
       name ?? null,
       Date.now(),
       conversationId,
-      automationRef,
+      automationRef
     );
     return conversationId;
   }
@@ -397,7 +416,7 @@ export class ConversationStore {
     _conversationId: string,
     automationRef: string,
     appId?: string,
-    name?: string,
+    name?: string
   ): void {
     this.ensureAutomationConversation(automationRef, appId, name);
   }
@@ -408,7 +427,10 @@ export class ConversationStore {
     return raw ? conversationFromRaw(raw) : undefined;
   }
 
-  getConversationMeta(id: string, userId: string): ConversationMeta | undefined {
+  getConversationMeta(
+    id: string,
+    userId: string
+  ): ConversationMeta | undefined {
     const { stmts } = this.ensureReady();
     const raw = stmts.getConversationWithCount.get(id, userId) as
       | (RawConversation & { msg_count: number })
@@ -427,11 +449,14 @@ export class ConversationStore {
     const rows = stmts.listConversations.all(
       userId,
       appId ?? null,
-      appId ?? null,
+      appId ?? null
     ) as unknown as (RawConversation & {
       msg_count: number;
     })[];
-    return rows.map((r) => ({ ...conversationFromRaw(r), messageCount: Number(r.msg_count) }));
+    return rows.map((r) => ({
+      ...conversationFromRaw(r),
+      messageCount: Number(r.msg_count),
+    }));
   }
 
   /**
@@ -444,7 +469,7 @@ export class ConversationStore {
     userId: string,
     query: string,
     appId?: string,
-    limit = 20,
+    limit = 20
   ): ConversationSearchHit[] {
     const match = conversationMatchExpression(query);
     if (!match) return [];
@@ -454,34 +479,54 @@ export class ConversationStore {
       userId,
       appId ?? null,
       appId ?? null,
-      Math.min(Math.max(limit, 1), 100),
-    ) as unknown as (RawConversation & { msg_count: number; snippet: string })[];
+      Math.min(Math.max(limit, 1), 100)
+    ) as unknown as (RawConversation & {
+      msg_count: number;
+      snippet: string;
+    })[];
     return rows.map((r) => ({
       ...conversationFromRaw(r),
       messageCount: Number(r.msg_count),
-      snippet: r.snippet ?? '',
+      snippet: r.snippet ?? "",
     }));
   }
 
   renameConversation(id: string, userId: string, title: string): boolean {
     const { stmts } = this.ensureReady();
-    return Number(stmts.renameConversation.run(title, Date.now(), id, userId).changes) > 0;
+    return (
+      Number(
+        stmts.renameConversation.run(title, Date.now(), id, userId).changes
+      ) > 0
+    );
   }
 
   /** Pin (or unpin) a conversation for a user — pinned threads list first. */
   setConversationPinned(id: string, userId: string, pinned: boolean): boolean {
     const { stmts } = this.ensureReady();
     return (
-      Number(stmts.setConversationPinned.run(pinned ? 1 : 0, Date.now(), id, userId).changes) > 0
+      Number(
+        stmts.setConversationPinned.run(pinned ? 1 : 0, Date.now(), id, userId)
+          .changes
+      ) > 0
     );
   }
 
   /** Archive (or unarchive) a conversation for a user. */
-  setConversationArchived(id: string, userId: string, archived: boolean): boolean {
+  setConversationArchived(
+    id: string,
+    userId: string,
+    archived: boolean
+  ): boolean {
     const { stmts } = this.ensureReady();
     return (
-      Number(stmts.setConversationArchived.run(archived ? 1 : 0, Date.now(), id, userId).changes) >
-      0
+      Number(
+        stmts.setConversationArchived.run(
+          archived ? 1 : 0,
+          Date.now(),
+          id,
+          userId
+        ).changes
+      ) > 0
     );
   }
 
@@ -528,7 +573,7 @@ export class ConversationStore {
       sessionId?: string;
       usageSnapshot?: AdapterUsageSnapshot;
       hydrated?: boolean;
-    },
+    }
   ): boolean {
     const { db, stmts } = this.ensureReady();
     const now = Date.now();
@@ -541,9 +586,11 @@ export class ConversationStore {
       const maxSeq = Number(
         (
           db
-            .prepare(`SELECT COALESCE(MAX(seq), -1) AS seq FROM turns WHERE conversation_id = ?`)
+            .prepare(
+              `SELECT COALESCE(MAX(seq), -1) AS seq FROM turns WHERE conversation_id = ?`
+            )
             .get(id) as { seq: number }
-        ).seq,
+        ).seq
       );
       // Preserve one active + at most one warm process candidate without
       // discarding older valid resume handles. A displaced warm binding
@@ -554,24 +601,25 @@ export class ConversationStore {
           `SELECT runner_kind, acp_session_id
              FROM conversation_harness_sessions
             WHERE conversation_id = ? AND status = 'active'
-            LIMIT 1`,
+            LIMIT 1`
         )
         .get(id) as { runner_kind: string; acp_session_id: string } | undefined;
       const activeChanges =
         active !== undefined &&
-        (active.runner_kind !== adapter.kind || active.acp_session_id !== adapter.sessionId);
+        (active.runner_kind !== adapter.kind ||
+          active.acp_session_id !== adapter.sessionId);
       if (activeChanges) {
         db.prepare(
           `UPDATE conversation_harness_sessions
               SET status = 'cold'
             WHERE conversation_id = ? AND status = 'warm'
-              AND NOT (runner_kind = ? AND acp_session_id = ?)`,
+              AND NOT (runner_kind = ? AND acp_session_id = ?)`
         ).run(id, adapter.kind, adapter.sessionId);
         db.prepare(
           `UPDATE conversation_harness_sessions
               SET status = 'warm'
             WHERE conversation_id = ? AND status = 'active'
-              AND NOT (runner_kind = ? AND acp_session_id = ?)`,
+              AND NOT (runner_kind = ? AND acp_session_id = ?)`
         ).run(id, adapter.kind, adapter.sessionId);
       }
       db.prepare(
@@ -586,7 +634,7 @@ export class ConversationStore {
              excluded.hydrated_through_seq
            ),
            status = 'active',
-           last_used_at = excluded.last_used_at`,
+           last_used_at = excluded.last_used_at`
       ).run(
         randomUUID(),
         id,
@@ -595,7 +643,7 @@ export class ConversationStore {
         adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
         maxSeq,
         now,
-        now,
+        now
       );
       // A runner can have only one resumable binding. Superseded opaque ids
       // stay as `stale` audit rows rather than silently disappearing.
@@ -605,7 +653,7 @@ export class ConversationStore {
           WHERE conversation_id = ?
             AND runner_kind = ?
             AND acp_session_id <> ?
-            AND status <> 'stale'`,
+            AND status <> 'stale'`
       ).run(id, adapter.kind, adapter.sessionId);
       res = stmts.noteTurnWithAdapter.run(
         now,
@@ -616,7 +664,7 @@ export class ConversationStore {
         hydrated,
         now,
         id,
-        userId,
+        userId
       );
       // `noteTurn` is normally called from the same transaction that inserted
       // the just-completed turn. Set the watermark after the conversation
@@ -627,10 +675,18 @@ export class ConversationStore {
               hydrated_through_seq,
               (SELECT COALESCE(MAX(seq), -1) FROM turns WHERE conversation_id = ?)
             )
-          WHERE conversation_id = ? AND runner_kind = ? AND acp_session_id = ?`,
+          WHERE conversation_id = ? AND runner_kind = ? AND acp_session_id = ?`
       ).run(id, id, adapter.kind, adapter.sessionId);
     } else if (adapter) {
-      res = stmts.noteTurnKindOnly.run(now, adapter.kind, hydrated, hydrated, now, id, userId);
+      res = stmts.noteTurnKindOnly.run(
+        now,
+        adapter.kind,
+        hydrated,
+        hydrated,
+        now,
+        id,
+        userId
+      );
     } else {
       res = stmts.noteTurnNoAdapter.run(now, id, userId);
     }
@@ -658,7 +714,7 @@ export class ConversationStore {
       sessionId?: string;
       usageSnapshot?: AdapterUsageSnapshot;
       hydrated?: boolean;
-    },
+    }
   ): boolean {
     const { db, stmts } = this.ensureReady();
     const now = Date.now();
@@ -670,13 +726,13 @@ export class ConversationStore {
             SET usage_snapshot_json = COALESCE(?, usage_snapshot_json),
                 last_used_at = ?
           WHERE conversation_id = ? AND runner_kind = ? AND acp_session_id = ?
-            AND status <> 'stale'`,
+            AND status <> 'stale'`
       ).run(
         adapter.usageSnapshot ? JSON.stringify(adapter.usageSnapshot) : null,
         now,
         id,
         adapter.kind,
-        adapter.sessionId,
+        adapter.sessionId
       );
     }
     if (adapter?.hydrated) {
@@ -684,7 +740,7 @@ export class ConversationStore {
         `UPDATE conversations
             SET hydration_count = hydration_count + 1,
                 last_hydrated_at = ?
-          WHERE id = ? AND user_id = ?`,
+          WHERE id = ? AND user_id = ?`
       ).run(now, id, userId);
     }
     return true;
@@ -693,7 +749,7 @@ export class ConversationStore {
   /** Latest non-stale resumable session for this conversation + runner. */
   getHarnessBinding(
     conversationId: string,
-    runnerKind: string,
+    runnerKind: string
   ): ConversationHarnessSession | undefined {
     const { db } = this.ensureReady();
     const raw = db
@@ -704,7 +760,7 @@ export class ConversationStore {
            FROM conversation_harness_sessions
           WHERE conversation_id = ? AND runner_kind = ? AND status <> 'stale'
           ORDER BY CASE status WHEN 'active' THEN 0 ELSE 1 END, last_used_at DESC
-          LIMIT 1`,
+          LIMIT 1`
       )
       .get(conversationId, runnerKind) as
       | {
@@ -714,7 +770,7 @@ export class ConversationStore {
           acp_session_id: string;
           usage_snapshot_json: string | null;
           hydrated_through_seq: number;
-          status: 'active' | 'warm' | 'cold';
+          status: "active" | "warm" | "cold";
           last_used_at: number;
           created_at: number;
         }
@@ -723,7 +779,9 @@ export class ConversationStore {
     let usageSnapshot: AdapterUsageSnapshot | undefined;
     if (raw.usage_snapshot_json) {
       try {
-        usageSnapshot = JSON.parse(raw.usage_snapshot_json) as AdapterUsageSnapshot;
+        usageSnapshot = JSON.parse(
+          raw.usage_snapshot_json
+        ) as AdapterUsageSnapshot;
       } catch {
         // A corrupt optional accounting snapshot cannot hide the resume handle.
       }
@@ -746,13 +804,17 @@ export class ConversationStore {
       .db.prepare(
         `UPDATE conversation_harness_sessions
             SET status = 'stale'
-          WHERE id = ?`,
+          WHERE id = ?`
       )
       .run(id);
   }
 
   /** Persisted cross-process single-writer claim. */
-  acquireTurnLock(conversationId: string, token: string, now = Date.now()): boolean {
+  acquireTurnLock(
+    conversationId: string,
+    token: string,
+    now = Date.now()
+  ): boolean {
     const { db } = this.ensureReady();
     const staleBefore = now - 30 * 60_000;
     const result = db
@@ -762,7 +824,7 @@ export class ConversationStore {
          ON CONFLICT(conversation_id) DO UPDATE SET
            lock_token = excluded.lock_token,
            acquired_at = excluded.acquired_at
-         WHERE conversation_turn_locks.acquired_at < ?`,
+         WHERE conversation_turn_locks.acquired_at < ?`
       )
       .run(conversationId, token, now, staleBefore);
     return Number(result.changes) > 0;
@@ -772,12 +834,16 @@ export class ConversationStore {
    * Renew a live turn lease without letting a stale owner revive a lock that
    * another process has already taken over.
    */
-  refreshTurnLock(conversationId: string, token: string, now = Date.now()): boolean {
+  refreshTurnLock(
+    conversationId: string,
+    token: string,
+    now = Date.now()
+  ): boolean {
     const result = this.ensureReady()
       .db.prepare(
         `UPDATE conversation_turn_locks
             SET acquired_at = ?
-          WHERE conversation_id = ? AND lock_token = ?`,
+          WHERE conversation_id = ? AND lock_token = ?`
       )
       .run(now, conversationId, token);
     return Number(result.changes) > 0;
@@ -787,17 +853,19 @@ export class ConversationStore {
     this.ensureReady()
       .db.prepare(
         `DELETE FROM conversation_turn_locks
-          WHERE conversation_id = ? AND lock_token = ?`,
+          WHERE conversation_id = ? AND lock_token = ?`
       )
       .run(conversationId, token);
   }
 
-  getWorkspaceSelection(conversationId: string): ConversationWorkspaceSelection | undefined {
+  getWorkspaceSelection(
+    conversationId: string
+  ): ConversationWorkspaceSelection | undefined {
     const raw = this.ensureReady()
       .db.prepare(
         `SELECT conversation_id, primary_kind, additional_directories_json, updated_at
            FROM conversation_workspace_selection
-          WHERE conversation_id = ?`,
+          WHERE conversation_id = ?`
       )
       .get(conversationId) as
       | {
@@ -815,7 +883,7 @@ export class ConversationStore {
       // Corrupt optional selections fail closed to no additional roots.
     }
     const additionalDirectories = Array.isArray(parsed)
-      ? parsed.filter((value): value is string => typeof value === 'string')
+      ? parsed.filter((value): value is string => typeof value === "string")
       : [];
     return {
       conversationId: raw.conversation_id,
@@ -829,10 +897,15 @@ export class ConversationStore {
     conversationId: string,
     primaryKind: ConversationWorkspaceKind,
     additionalDirectories: readonly string[],
-    now = Date.now(),
+    now = Date.now()
   ): void {
-    const allowed: readonly ConversationWorkspaceKind[] = ['vault-data', 'app', 'draft'];
-    if (!allowed.includes(primaryKind)) throw new Error('invalid Centraid workspace kind');
+    const allowed: readonly ConversationWorkspaceKind[] = [
+      "vault-data",
+      "app",
+      "draft",
+    ];
+    if (!allowed.includes(primaryKind))
+      throw new Error("invalid Centraid workspace kind");
     const selected = [...new Set(additionalDirectories)];
     this.ensureReady()
       .db.prepare(
@@ -842,7 +915,7 @@ export class ConversationStore {
          ON CONFLICT(conversation_id) DO UPDATE SET
            primary_kind = excluded.primary_kind,
            additional_directories_json = excluded.additional_directories_json,
-           updated_at = excluded.updated_at`,
+           updated_at = excluded.updated_at`
       )
       .run(conversationId, primaryKind, JSON.stringify(selected), now);
   }
@@ -863,7 +936,7 @@ export class ConversationStore {
       input.idempotencyKey ?? null,
       input.note ?? null,
       input.hydrationTokens ?? null,
-      input.startedAt,
+      input.startedAt
     );
   }
 
@@ -872,11 +945,15 @@ export class ConversationStore {
    * `idempotencyKey`, or undefined (issue #420). Backs replay-on-duplicate at
    * the turn route — a re-POST with the same key never re-runs the model.
    */
-  getTurnByIdempotencyKey(conversationId: string, idempotencyKey: string): Turn | undefined {
+  getTurnByIdempotencyKey(
+    conversationId: string,
+    idempotencyKey: string
+  ): Turn | undefined {
     const { stmts } = this.ensureReady();
-    const raw = stmts.getTurnByIdempotency.get(conversationId, idempotencyKey) as
-      | RawTurn
-      | undefined;
+    const raw = stmts.getTurnByIdempotency.get(
+      conversationId,
+      idempotencyKey
+    ) as RawTurn | undefined;
     return raw ? turnFromRaw(raw) : undefined;
   }
 
@@ -895,7 +972,9 @@ export class ConversationStore {
   /** Stamp the explicit D4 handoff marker after a host-owned dispatch settles. */
   setTurnHydrationTokens(turnId: string, hydrationTokens: number): void {
     this.ensureReady()
-      .db.prepare(`UPDATE turns SET hydration_tokens = ? WHERE id = ? AND ended_at IS NOT NULL`)
+      .db.prepare(
+        `UPDATE turns SET hydration_tokens = ? WHERE id = ? AND ended_at IS NOT NULL`
+      )
       .run(Math.max(0, Math.floor(hydrationTokens)), turnId);
   }
 
@@ -919,7 +998,11 @@ export class ConversationStore {
    */
   deleteTurn(turnId: string, userId?: string): boolean {
     const { stmts } = this.ensureReady();
-    return Number(stmts.deleteTurn.run(turnId, userId ?? null, userId ?? null).changes) > 0;
+    return (
+      Number(
+        stmts.deleteTurn.run(turnId, userId ?? null, userId ?? null).changes
+      ) > 0
+    );
   }
 
   /** Every turn of a conversation, oldest-first (seq ASC) — the thread's turns. */
@@ -930,18 +1013,22 @@ export class ConversationStore {
   }
 
   /** Newest-first, filtered turns of a conversation — the activity feed. */
-  listTurnsFiltered(conversationId: string, opts: ListTurnsOptions = {}): Turn[] {
+  listTurnsFiltered(
+    conversationId: string,
+    opts: ListTurnsOptions = {}
+  ): Turn[] {
     const { stmts } = this.ensureReady();
     const limit = opts.limit ?? 50;
     const since = opts.since ?? null;
-    const okFilter = opts.status === undefined ? null : opts.status === 'ok' ? 1 : 0;
+    const okFilter =
+      opts.status === undefined ? null : opts.status === "ok" ? 1 : 0;
     const rows = stmts.listTurnsFiltered.all(
       conversationId,
       since,
       since,
       okFilter,
       okFilter,
-      limit,
+      limit
     ) as unknown as RawTurn[];
     return rows.map(turnFromRaw);
   }
@@ -950,18 +1037,22 @@ export class ConversationStore {
    * An automation's history — every turn in its stable conversation, newest-first. The
    * handler-facing `ctx.runs` feed and any "recent runs" view read this.
    */
-  listAutomationTurns(automationRef: string, opts: ListTurnsOptions = {}): Turn[] {
+  listAutomationTurns(
+    automationRef: string,
+    opts: ListTurnsOptions = {}
+  ): Turn[] {
     const { stmts } = this.ensureReady();
     const limit = opts.limit ?? 50;
     const since = opts.since ?? null;
-    const okFilter = opts.status === undefined ? null : opts.status === 'ok' ? 1 : 0;
+    const okFilter =
+      opts.status === undefined ? null : opts.status === "ok" ? 1 : 0;
     const rows = stmts.listTurnsByAutomation.all(
       automationRef,
       since,
       since,
       okFilter,
       okFilter,
-      limit,
+      limit
     ) as unknown as RawTurn[];
     return rows.map(turnFromRaw);
   }
@@ -969,7 +1060,9 @@ export class ConversationStore {
   /** Every currently executing automation turn across the vault, newest-first. */
   listInFlightAutomationTurns(limit = 50): Turn[] {
     const { stmts } = this.ensureReady();
-    return (stmts.listInFlightAutomationTurns.all(limit) as unknown as RawTurn[]).map(turnFromRaw);
+    return (
+      stmts.listInFlightAutomationTurns.all(limit) as unknown as RawTurn[]
+    ).map(turnFromRaw);
   }
 
   setTurnPinned(turnId: string, pinned: boolean): void {
@@ -982,7 +1075,11 @@ export class ConversationStore {
    * to its conversation (issue #420). Returns whether a row was updated — false
    * when the turn isn't in that conversation.
    */
-  setTurnFeedback(conversationId: string, turnId: string, feedback: 'up' | 'down' | null): boolean {
+  setTurnFeedback(
+    conversationId: string,
+    turnId: string,
+    feedback: "up" | "down" | null
+  ): boolean {
     const { stmts } = this.ensureReady();
     const info = stmts.setTurnFeedback.run(feedback, turnId, conversationId);
     return Number(info.changes) > 0;
@@ -994,7 +1091,7 @@ export class ConversationStore {
    */
   pruneAutomation(
     automationRef: string,
-    keep: { count?: number; days?: number; errorsOnly?: boolean; all?: boolean },
+    keep: { count?: number; days?: number; errorsOnly?: boolean; all?: boolean }
   ): void {
     const { stmts } = this.ensureReady();
     if (keep.all) return;
@@ -1003,11 +1100,18 @@ export class ConversationStore {
       return;
     }
     if (keep.count !== undefined && keep.count >= 0) {
-      stmts.pruneAutomationByCount.run(automationRef, automationRef, keep.count);
+      stmts.pruneAutomationByCount.run(
+        automationRef,
+        automationRef,
+        keep.count
+      );
       return;
     }
     if (keep.days !== undefined && keep.days >= 0) {
-      stmts.pruneAutomationByDays.run(automationRef, Date.now() - keep.days * 24 * 60 * 60 * 1000);
+      stmts.pruneAutomationByDays.run(
+        automationRef,
+        Date.now() - keep.days * 24 * 60 * 60 * 1000
+      );
     }
   }
 
@@ -1017,7 +1121,14 @@ export class ConversationStore {
   insertMessageIn(input: InsertMessageInInput): string {
     const { stmts } = this.ensureReady();
     const itemId = input.itemId ?? randomUUID();
-    stmts.insertMessageIn.run(itemId, input.turnId, 0, input.role, input.text, input.startedAt);
+    stmts.insertMessageIn.run(
+      itemId,
+      input.turnId,
+      0,
+      input.role,
+      input.text,
+      input.startedAt
+    );
     return itemId;
   }
 
@@ -1051,7 +1162,7 @@ export class ConversationStore {
       input.error ?? null,
       input.startedAt,
       input.endedAt,
-      input.durationMs,
+      input.durationMs
     );
   }
 
@@ -1068,7 +1179,7 @@ export class ConversationStore {
       input.name ?? null,
       input.argsJson ?? null,
       cappedRawJson(input.rawJson),
-      input.startedAt,
+      input.startedAt
     );
   }
 
@@ -1104,7 +1215,9 @@ export class ConversationStore {
   /** The turn's inbound `message_in` payload text, if any. */
   messageInText(turnId: string): string | undefined {
     const { stmts } = this.ensureReady();
-    const row = stmts.messageInText.get(turnId) as { text: string | null } | undefined;
+    const row = stmts.messageInText.get(turnId) as
+      | { text: string | null }
+      | undefined;
     return row?.text ?? undefined;
   }
 
@@ -1122,20 +1235,24 @@ export class ConversationStore {
       input.source ?? null,
       input.filename ?? null,
       input.workspacePath ?? null,
-      Date.now(),
+      Date.now()
     );
     return id;
   }
 
   listAttachmentsForItem(itemId: string): Attachment[] {
     const { stmts } = this.ensureReady();
-    const rows = stmts.listAttachmentsForItem.all(itemId) as unknown as RawAttachment[];
+    const rows = stmts.listAttachmentsForItem.all(
+      itemId
+    ) as unknown as RawAttachment[];
     return rows.map(attachmentFromRaw);
   }
 
   listAttachmentsForTurn(turnId: string): Attachment[] {
     const { stmts } = this.ensureReady();
-    const rows = stmts.listAttachmentsForTurn.all(turnId) as unknown as RawAttachment[];
+    const rows = stmts.listAttachmentsForTurn.all(
+      turnId
+    ) as unknown as RawAttachment[];
     return rows.map(attachmentFromRaw);
   }
 
@@ -1172,13 +1289,21 @@ export class ConversationStore {
 
   // ─── automation state KV ────────────────────────────────────────────
 
-  stateGet(automationId: string, key: string): AutomationStateEntry | undefined {
+  stateGet(
+    automationId: string,
+    key: string
+  ): AutomationStateEntry | undefined {
     const { stmts } = this.ensureReady();
     const raw = stmts.getState.get(automationId, key) as RawState | undefined;
     return raw ? stateFromRaw(raw) : undefined;
   }
 
-  stateSet(automationId: string, key: string, valueJson: string, updatedAt: number): void {
+  stateSet(
+    automationId: string,
+    key: string,
+    valueJson: string,
+    updatedAt: number
+  ): void {
     const { stmts } = this.ensureReady();
     stmts.upsertState.run(automationId, key, valueJson, updatedAt);
   }

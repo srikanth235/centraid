@@ -1,30 +1,31 @@
-import { type JSX, useCallback, useEffect, useState } from 'react';
+import { type JSX, useCallback, useEffect, useState } from "react";
+
 import {
   getUserPrefs,
   pauseBackgroundWork,
   resumeBackgroundWork,
   saveUserPrefs,
   streamGatewayLogs,
-} from '../../../gateway-client.js';
-import GatewayScreen from '../../screens/GatewayScreen.js';
-import {
-  parseResourceModePref,
-  RESOURCE_MODE_PREF_KEY,
-  type ResourceMode,
-} from '../../screens/ResourceModeCard.js';
+} from "../../../gateway-client.js";
+import GatewayScreen from "../../screens/GatewayScreen.js";
 import {
   knobPrefKey,
   parseResourceKnobPrefs,
   type ResourceKnobPrefs,
   type TunableKnobKey,
-} from '../../screens/resource-summary.js';
-import { useShellActions } from '../actions.js';
-import PageScroll from '../PageScroll.js';
-import { PageLoading } from '../status.js';
-import { startVisibilityTicker } from './visibility-ticker.js';
-import { loadDiagnosticsData } from './settingsDiagnosticsData.js';
-import { useGatewayHealth } from '../useGatewayHealth.js';
-import { useGatewayRuntime } from '../useGatewayRuntime.js';
+} from "../../screens/resource-summary.js";
+import {
+  parseResourceModePref,
+  RESOURCE_MODE_PREF_KEY,
+  type ResourceMode,
+} from "../../screens/ResourceModeCard.js";
+import { useShellActions } from "../actions.js";
+import PageScroll from "../PageScroll.js";
+import { PageLoading } from "../status.js";
+import { useGatewayHealth } from "../useGatewayHealth.js";
+import { useGatewayRuntime } from "../useGatewayRuntime.js";
+import { loadDiagnosticsData } from "./settingsDiagnosticsData.js";
+import { startVisibilityTicker } from "./visibility-ticker.js";
 
 // React-owned Gateway route — the runtime page over the main-process
 // heartbeat monitor, plus the component-health poll and the log stream
@@ -61,13 +62,16 @@ export default function GatewayRoute(): JSX.Element {
     };
   }, []);
 
-  const save = async (patch: { gatewayAlertSeconds?: number; gatewayAlertsEnabled?: boolean }) => {
+  const save = async (patch: {
+    gatewayAlertSeconds?: number;
+    gatewayAlertsEnabled?: boolean;
+  }) => {
     setSaving(true);
     try {
       await window.CentraidApi.saveSettings(patch);
     } catch (err) {
       showToast(
-        `Couldn’t save the alert setting: ${err instanceof Error ? err.message : String(err)}`,
+        `Couldn’t save the alert setting: ${err instanceof Error ? err.message : String(err)}`
       );
     } finally {
       setSaving(false);
@@ -83,7 +87,7 @@ export default function GatewayRoute(): JSX.Element {
     } catch (err) {
       setLaunchAtLogin(prev);
       showToast(
-        `Couldn’t save the login setting: ${err instanceof Error ? err.message : String(err)}`,
+        `Couldn’t save the login setting: ${err instanceof Error ? err.message : String(err)}`
       );
     } finally {
       setSavingLaunchAtLogin(false);
@@ -93,8 +97,9 @@ export default function GatewayRoute(): JSX.Element {
   // Stable identity so ResourceModeCard does not re-fetch prefs on every
   // 1s uptime tick (or any other parent re-render).
   const loadResourceMode = useCallback(
-    async (): Promise<ResourceMode> => parseResourceModePref(await getUserPrefs()),
-    [],
+    async (): Promise<ResourceMode> =>
+      parseResourceModePref(await getUserPrefs()),
+    []
   );
   const saveResourceMode = useCallback(async (mode: ResourceMode) => {
     await saveUserPrefs({ [RESOURCE_MODE_PREF_KEY]: mode });
@@ -102,8 +107,9 @@ export default function GatewayRoute(): JSX.Element {
   // L3 "Tune" rung knob overrides (issue #528 Phase F) — plain prefs read/write.
   // Stable identities so the 1s uptime tick doesn't re-fetch or re-create them.
   const loadKnobPrefs = useCallback(
-    async (): Promise<ResourceKnobPrefs> => parseResourceKnobPrefs(await getUserPrefs()),
-    [],
+    async (): Promise<ResourceKnobPrefs> =>
+      parseResourceKnobPrefs(await getUserPrefs()),
+    []
   );
   const saveKnobPrefs = useCallback(
     async (patch: Partial<Record<TunableKnobKey, number | null>>) => {
@@ -113,7 +119,7 @@ export default function GatewayRoute(): JSX.Element {
       }
       await saveUserPrefs(prefPatch);
     },
-    [],
+    []
   );
   // Pause/resume hot-apply, then nudge the health poll so the paused state
   // reconciles quickly. Stable identities (same discipline as loadResourceMode)
@@ -124,7 +130,7 @@ export default function GatewayRoute(): JSX.Element {
       refreshHealth();
       return res;
     },
-    [refreshHealth],
+    [refreshHealth]
   );
   const resumeBackground = useCallback(async () => {
     const res = await resumeBackgroundWork();
@@ -146,8 +152,12 @@ export default function GatewayRoute(): JSX.Element {
         snapshot={snapshot}
         now={now}
         savingAlert={saving}
-        onAlertSecondsChange={(seconds) => void save({ gatewayAlertSeconds: seconds })}
-        onAlertsEnabledChange={(enabled) => void save({ gatewayAlertsEnabled: enabled })}
+        onAlertSecondsChange={(seconds) =>
+          void save({ gatewayAlertSeconds: seconds })
+        }
+        onAlertsEnabledChange={(enabled) =>
+          void save({ gatewayAlertsEnabled: enabled })
+        }
         launchAtLogin={launchAtLogin}
         savingLaunchAtLogin={savingLaunchAtLogin}
         onLaunchAtLoginChange={(enabled) => void saveLaunchAtLogin(enabled)}
@@ -155,7 +165,9 @@ export default function GatewayRoute(): JSX.Element {
         loadHealth={loadDiagnosticsData}
         streamLogs={streamGatewayLogs}
         onRestartGateway={() => window.CentraidApi.restartGateway()}
-        onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
+        onExportDiagnostics={() =>
+          window.CentraidApi.exportGatewayDiagnostics()
+        }
         loadResourceMode={loadResourceMode}
         saveResourceMode={saveResourceMode}
         onPauseBackgroundWork={pauseBackground}

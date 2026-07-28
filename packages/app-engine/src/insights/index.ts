@@ -10,8 +10,11 @@
  *   - InsightsStore — transparency + control aggregates for the Insights UI (#514)
  */
 
-export { AnalyticsStore, type ListSummariesOptions } from './analytics-store.js';
-export { InsightsStore } from './insights-store.js';
+export {
+  AnalyticsStore,
+  type ListSummariesOptions,
+} from "./analytics-store.js";
+export { InsightsStore } from "./insights-store.js";
 export type {
   InsightsSummary,
   InsightsKpis,
@@ -22,6 +25,6 @@ export type {
   InsightsActivityRow,
   InsightsPeakDay,
   InsightsAttention,
-} from './insights-types.js';
+} from "./insights-types.js";
 /** @deprecated Prefer InsightsSourceRow (#514). */
-export type { InsightsSourceRow as InsightsAutomationRow } from './insights-types.js';
+export type { InsightsSourceRow as InsightsAutomationRow } from "./insights-types.js";

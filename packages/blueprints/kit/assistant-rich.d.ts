@@ -40,7 +40,9 @@ export interface ResolvedRefCard {
   subtitle?: string | null;
 }
 
-export type ResolveRefs = (refs: Array<{ type: string; id: string }>) => Promise<ResolvedRefCard[]>;
+export type ResolveRefs = (
+  refs: Array<{ type: string; id: string }>
+) => Promise<ResolvedRefCard[]>;
 
 /**
  * A caller's class-name overrides. Values may be `undefined` (a CSS-module
@@ -54,18 +56,24 @@ export type AssistantRichClassOverrides = Partial<
 export const DEFAULT_CLASSES: AssistantRichClasses;
 
 /** Full answer → prose + typed blocks + code fences, as an HTML string. */
-export function richAnswerHtml(text: string, classes?: AssistantRichClassOverrides): string;
+export function richAnswerHtml(
+  text: string,
+  classes?: AssistantRichClassOverrides
+): string;
 
 /** The kit's default ref resolver (POST /centraid/_vault/assistant/resolve). */
 export function defaultResolveRefs(
-  refs: Array<{ type: string; id: string }>,
+  refs: Array<{ type: string; id: string }>
 ): Promise<ResolvedRefCard[]>;
 
 /** Resolve every ref chip under `host` to a live card title, batched. */
 export function hydrateRefs(
   host: HTMLElement,
-  options?: { resolveRefs?: ResolveRefs; refClass?: string },
+  options?: { resolveRefs?: ResolveRefs; refClass?: string }
 ): void;
 
 /** Delegate code-block "Copy" clicks under `host` to the clipboard (idempotent). */
-export function wireCodeCopy(host: HTMLElement, options?: { copyClass?: string }): void;
+export function wireCodeCopy(
+  host: HTMLElement,
+  options?: { copyClass?: string }
+): void;

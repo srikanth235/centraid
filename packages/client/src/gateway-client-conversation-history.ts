@@ -15,32 +15,37 @@
  */
 
 import {
+  conversationsPath,
+  conversationPath,
+  conversationSearchPath,
+  blobsPath,
+} from "@centraid/blueprints/kit/conversation-client.js";
+
+import {
   auth,
   authHeaders,
   doFetch,
   readJson,
   scopedAuthHeaders,
   GatewayClientError,
-} from './gateway-client-core.js';
-import {
-  conversationsPath,
-  conversationPath,
-  conversationSearchPath,
-  blobsPath,
-} from '@centraid/blueprints/kit/conversation-client.js';
-import type { ConversationAttachmentRef } from './gateway-client-conversation.js';
+} from "./gateway-client-core.js";
 
 // ───────────────────────── chat history ─────────────────────
 // Routes single-sourced in @centraid/blueprints/kit/conversation-client.js (#420).
 
 /** List this app's persisted chat sessions, newest first. */
-export async function listConversations(appId: string): Promise<CentraidConversationSummary[]> {
+export async function listConversations(
+  appId: string
+): Promise<CentraidConversationSummary[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, conversationsPath(appId), {
-    method: 'GET',
+    method: "GET",
     headers: authHeaders(token),
   });
-  const out = await readJson<{ sessions: CentraidConversationSummary[] }>(res, 'list chats');
+  const out = await readJson<{ sessions: CentraidConversationSummary[] }>(
+    res,
+    "list chats"
+  );
   return out.sessions ?? [];
 }
 
@@ -49,16 +54,16 @@ export async function listConversations(appId: string): Promise<CentraidConversa
  *  written there, so every later load/turn must name the same space. */
 export async function createConversation(
   appId: string,
-  title = '',
-  scopeId?: string,
+  title = "",
+  scopeId?: string
 ): Promise<CentraidConversationSummary> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, conversationsPath(appId), {
-    method: 'POST',
-    headers: scopedAuthHeaders(token, scopeId, 'application/json'),
+    method: "POST",
+    headers: scopedAuthHeaders(token, scopeId, "application/json"),
     body: JSON.stringify({ title }),
   });
-  return readJson<CentraidConversationSummary>(res, 'create chat');
+  return readJson<CentraidConversationSummary>(res, "create chat");
 }
 
 /**
@@ -71,13 +76,19 @@ export async function createConversation(
 export async function fetchAssistantAttachmentUrl(
   appId: string,
   hash: string,
-  mime: string,
+  mime: string
 ): Promise<string> {
   const { baseUrl, token } = await auth();
   const path = `${blobsPath(appId)}/${encodeURIComponent(hash)}?mime=${encodeURIComponent(mime)}`;
-  const res = await doFetch(baseUrl, path, { method: 'GET', headers: authHeaders(token) });
+  const res = await doFetch(baseUrl, path, {
+    method: "GET",
+    headers: authHeaders(token),
+  });
   if (!res.ok) {
-    throw new GatewayClientError('gateway_error', `attachment fetch failed (HTTP ${res.status})`);
+    throw new GatewayClientError(
+      "gateway_error",
+      `attachment fetch failed (HTTP ${res.status})`
+    );
   }
   const blob = await res.blob();
   return URL.createObjectURL(blob);
@@ -93,7 +104,7 @@ export async function fetchAssistantAttachmentUrl(
 export async function loadConversation(
   appId: string,
   sessionId: string,
-  scopeId?: string,
+  scopeId?: string
 ): Promise<
   CentraidConversationSummary & {
     messages: Array<{
@@ -110,7 +121,7 @@ export async function loadConversation(
      * conversations created before the selector existed.
      */
     workspace?: {
-      primaryKind: 'vault-data' | 'app' | 'draft';
+      primaryKind: "vault-data" | "app" | "draft";
       additionalDirectories: string[];
       updatedAt: number;
     };
@@ -118,10 +129,10 @@ export async function loadConversation(
 > {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
-    method: 'GET',
+    method: "GET",
     headers: scopedAuthHeaders(token, scopeId),
   });
-  return readJson(res, 'load chat');
+  return readJson(res, "load chat");
 }
 
 /** Rename a chat session. */
@@ -129,15 +140,15 @@ export async function renameConversation(
   appId: string,
   sessionId: string,
   title: string,
-  scopeId?: string,
+  scopeId?: string
 ): Promise<void> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
-    method: 'PATCH',
-    headers: scopedAuthHeaders(token, scopeId, 'application/json'),
+    method: "PATCH",
+    headers: scopedAuthHeaders(token, scopeId, "application/json"),
     body: JSON.stringify({ title }),
   });
-  await readJson(res, 'rename chat');
+  await readJson(res, "rename chat");
 }
 
 /**
@@ -149,15 +160,22 @@ export async function renameConversation(
 export async function searchConversations(
   appId: string,
   query: string,
-  limit = 20,
+  limit = 20
 ): Promise<CentraidConversationSearchResult[]> {
   if (!query.trim()) return [];
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, conversationSearchPath(appId, query, limit), {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  const out = await readJson<{ results: CentraidConversationSearchResult[] }>(res, 'search chats');
+  const res = await doFetch(
+    baseUrl,
+    conversationSearchPath(appId, query, limit),
+    {
+      method: "GET",
+      headers: authHeaders(token),
+    }
+  );
+  const out = await readJson<{ results: CentraidConversationSearchResult[] }>(
+    res,
+    "search chats"
+  );
   return out.results ?? [];
 }
 
@@ -166,15 +184,15 @@ export async function setConversationPinned(
   appId: string,
   sessionId: string,
   pinned: boolean,
-  scopeId?: string,
+  scopeId?: string
 ): Promise<void> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
-    method: 'PATCH',
-    headers: scopedAuthHeaders(token, scopeId, 'application/json'),
+    method: "PATCH",
+    headers: scopedAuthHeaders(token, scopeId, "application/json"),
     body: JSON.stringify({ pinned }),
   });
-  await readJson(res, 'pin chat');
+  await readJson(res, "pin chat");
 }
 
 /** Archive or unarchive a chat session. */
@@ -182,15 +200,15 @@ export async function setConversationArchived(
   appId: string,
   sessionId: string,
   archived: boolean,
-  scopeId?: string,
+  scopeId?: string
 ): Promise<void> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
-    method: 'PATCH',
-    headers: scopedAuthHeaders(token, scopeId, 'application/json'),
+    method: "PATCH",
+    headers: scopedAuthHeaders(token, scopeId, "application/json"),
     body: JSON.stringify({ archived }),
   });
-  await readJson(res, 'archive chat');
+  await readJson(res, "archive chat");
 }
 
 /**
@@ -201,28 +219,28 @@ export async function setConversationFeedback(
   appId: string,
   sessionId: string,
   turnId: string,
-  feedback: 'up' | 'down' | null,
+  feedback: "up" | "down" | null
 ): Promise<void> {
   const { baseUrl, token } = await auth();
   const path = `${conversationPath(appId, sessionId)}/turns/${encodeURIComponent(turnId)}/feedback`;
   const res = await doFetch(baseUrl, path, {
-    method: 'PATCH',
-    headers: authHeaders(token, 'application/json'),
+    method: "PATCH",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify({ feedback }),
   });
-  await readJson(res, 'set feedback');
+  await readJson(res, "set feedback");
 }
 
 /** Delete a chat session. */
 export async function deleteConversation(
   appId: string,
   sessionId: string,
-  scopeId?: string,
+  scopeId?: string
 ): Promise<void> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, conversationPath(appId, sessionId), {
-    method: 'DELETE',
+    method: "DELETE",
     headers: scopedAuthHeaders(token, scopeId),
   });
-  await readJson(res, 'delete chat').catch(() => undefined);
+  await readJson(res, "delete chat").catch(() => undefined);
 }

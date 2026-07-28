@@ -13,50 +13,52 @@
  */
 
 const RELEASE_NOTE_SCHEMA = {
-  type: 'object',
-  required: ['headline', 'body'],
+  type: "object",
+  required: ["headline", "body"],
   additionalProperties: false,
   properties: {
     headline: {
-      type: 'string',
-      description: 'One line, the most visible user-facing change first.',
+      type: "string",
+      description: "One line, the most visible user-facing change first.",
     },
     body: {
-      type: 'string',
-      description: 'A short paragraph in plain language -- no internals, no refactor talk.',
+      type: "string",
+      description:
+        "A short paragraph in plain language -- no internals, no refactor talk.",
     },
   },
 };
 
 export default async ({ ctx, log }) => {
   const payload = ctx.input;
-  const pr = payload && typeof payload === 'object' ? payload.pull_request : null;
+  const pr =
+    payload && typeof payload === "object" ? payload.pull_request : null;
 
-  if (!pr || payload.action !== 'closed' || pr.merged !== true) {
-    return { summary: 'skipped: not a merge event' };
+  if (!pr || payload.action !== "closed" || pr.merged !== true) {
+    return { summary: "skipped: not a merge event" };
   }
 
   const repo = payload.repository && payload.repository.full_name;
   const number = pr.number;
-  const title = String(pr.title || '').slice(0, 300);
-  const body = String(pr.body || '').slice(0, 4000);
-  const where = [repo, number ? `#${number}` : null].filter(Boolean).join(' ');
+  const title = String(pr.title || "").slice(0, 300);
+  const body = String(pr.body || "").slice(0, 4000);
+  const where = [repo, number ? `#${number}` : null].filter(Boolean).join(" ");
 
   const draft = await ctx.agent({
     prompt:
-      `A pull request just merged${where ? ` in ${where}` : ''}.\n\n` +
-      `Title: ${title}\n\nDescription:\n${body || '(none)'}\n\n` +
-      'Draft one short release note for end users: lead with the most visible change, ' +
-      'skip internal refactors and implementation detail, plain language. If the PR is ' +
-      'purely internal (refactor, tests, tooling, CI) with nothing user-visible, say so ' +
-      'plainly instead of inventing a change.',
+      `A pull request just merged${where ? ` in ${where}` : ""}.\n\n` +
+      `Title: ${title}\n\nDescription:\n${body || "(none)"}\n\n` +
+      "Draft one short release note for end users: lead with the most visible change, " +
+      "skip internal refactors and implementation detail, plain language. If the PR is " +
+      "purely internal (refactor, tests, tooling, CI) with nothing user-visible, say so " +
+      "plainly instead of inventing a change.",
     json: RELEASE_NOTE_SCHEMA,
   });
 
   const headline =
-    draft && typeof draft.headline === 'string' && draft.headline.trim()
+    draft && typeof draft.headline === "string" && draft.headline.trim()
       ? draft.headline.trim()
-      : 'release note drafted';
-  log.info(`drafted release note for ${where || 'merge'}: ${headline}`);
+      : "release note drafted";
+  log.info(`drafted release note for ${where || "merge"}: ${headline}`);
   return { summary: headline, output: draft };
 };

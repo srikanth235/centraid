@@ -93,7 +93,7 @@
   font: inherit;
   color: inherit;
 }
-.row[data-active='true'] {
+.row[data-active="true"] {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   border-left-color: var(--accent);
 }
@@ -108,7 +108,7 @@
   border: 0.5px solid var(--line);
   color: var(--ink-2);
 }
-.rowIcon[data-accent='true'] {
+.rowIcon[data-accent="true"] {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   border-color: color-mix(in srgb, var(--accent) 38%, transparent);
   color: var(--accent);
@@ -134,7 +134,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.row[data-variant='chat'] .rowLabel {
+.row[data-variant="chat"] .rowLabel {
   font-weight: 400;
 }
 .rowSub {
@@ -145,7 +145,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.row[data-variant='chat'] .rowSub {
+.row[data-variant="chat"] .rowSub {
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--ink-4);

@@ -5,15 +5,22 @@
  * read). All balances come from the shared engine in dashboard.ts.
  */
 
-import { groupNet, ledgerRow, loadTally, personOf } from './dashboard.ts';
+import { groupNet, ledgerRow, loadTally, personOf } from "./dashboard.ts";
 
-export default async ({ input, ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
-  const groupId = String(input?.group_id ?? '');
+export default async function groupHandler({ input, ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
+  const groupId = String(input?.group_id ?? "");
   try {
     const data = await loadTally(ctx, purpose);
     const g = data.groups.find((x) => x.group_id === groupId);
-    if (!g) return { me: data.me, currency: data.currency, group: null, members: [], ledger: [] };
+    if (!g)
+      return {
+        me: data.me,
+        currency: data.currency,
+        group: null,
+        members: [],
+        ledger: [],
+      };
     const net = groupNet(data, groupId);
     const members = (data.membersByGroup.get(groupId) ?? []).map((pid) => {
       const p = personOf(data, pid);
@@ -32,7 +39,12 @@ export default async ({ input, ctx }: HandlerArgs) => {
     return {
       me: data.me,
       currency: data.currency,
-      group: { group_id: g.group_id, name: g.name, icon: g.icon, color: g.color },
+      group: {
+        group_id: g.group_id,
+        name: g.name,
+        icon: g.icon,
+        color: g.color,
+      },
       members,
       ledger,
     };
@@ -40,11 +52,11 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return {
       me: null,
-      currency: 'USD',
+      currency: "USD",
       group: null,
       members: [],
       ledger: [],
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

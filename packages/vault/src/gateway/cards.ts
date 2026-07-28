@@ -13,11 +13,12 @@
 // authorized by the link itself. Everything else is a per-ref 'denied' card,
 // and the whole batch is receipted either way.
 
-import type { DatabaseSync } from 'node:sqlite';
-import { resolveEntity } from '../schema/tables.js';
-import { evaluateConsent } from './consent.js';
-import { writeReceipt } from './evidence.js';
-import type { Identity } from './types.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import { resolveEntity } from "../schema/tables.js";
+import { evaluateConsent } from "./consent.js";
+import { writeReceipt } from "./evidence.js";
+import type { Identity } from "./types.js";
 
 export interface RefRequest {
   refs: { type: string; id: string }[];
@@ -34,7 +35,7 @@ export interface RefCard {
    * `denied` means consent did not cover this ref for this caller;
    * `unknown` means the type is not in the entity registry.
    */
-  status: 'live' | 'trashed' | 'missing' | 'denied' | 'unknown';
+  status: "live" | "trashed" | "missing" | "denied" | "unknown";
   title: string | null;
   subtitle: string | null;
   /** A core.content_item id renderable as a thumbnail, when the entity has one. */
@@ -56,48 +57,48 @@ const MAX_REFS = 100;
  * while curated cards grow as projections need them.
  */
 const CARD_SQL: Record<string, string> = {
-  'core.party': `SELECT display_name AS title, kind AS subtitle, avatar_content_id AS thumb, 0 AS trashed
+  "core.party": `SELECT display_name AS title, kind AS subtitle, avatar_content_id AS thumb, 0 AS trashed
                    FROM core_party WHERE party_id = ?`,
-  'core.place': `SELECT name AS title, kind AS subtitle, NULL AS thumb, 0 AS trashed
+  "core.place": `SELECT name AS title, kind AS subtitle, NULL AS thumb, 0 AS trashed
                    FROM core_place WHERE place_id = ?`,
-  'core.event': `SELECT summary AS title, dtstart AS subtitle, NULL AS thumb, 0 AS trashed
+  "core.event": `SELECT summary AS title, dtstart AS subtitle, NULL AS thumb, 0 AS trashed
                    FROM core_event WHERE event_id = ?`,
-  'core.transaction': `SELECT description AS title,
+  "core.transaction": `SELECT description AS title,
                               printf('%s %.2f', currency, amount_minor / 100.0) AS subtitle,
                               NULL AS thumb, 0 AS trashed
                          FROM core_transaction WHERE txn_id = ?`,
-  'core.content_item': `SELECT coalesce(title, media_type) AS title, media_type AS subtitle,
+  "core.content_item": `SELECT coalesce(title, media_type) AS title, media_type AS subtitle,
                                CASE WHEN media_type LIKE 'image/%' THEN content_id END AS thumb,
                                (deleted_at IS NOT NULL) AS trashed
                           FROM core_content_item WHERE content_id = ?`,
-  'core.document': `SELECT d.title AS title, c.media_type AS subtitle,
+  "core.document": `SELECT d.title AS title, c.media_type AS subtitle,
                             CASE WHEN c.media_type LIKE 'image/%' THEN c.content_id END AS thumb,
                             (d.deleted_at IS NOT NULL) AS trashed
                        FROM core_document d JOIN core_content_item c ON c.content_id = d.current_content_id
                       WHERE d.document_id = ?`,
-  'schedule.task': `SELECT title, status AS subtitle, NULL AS thumb, 0 AS trashed
+  "schedule.task": `SELECT title, status AS subtitle, NULL AS thumb, 0 AS trashed
                       FROM schedule_task WHERE task_id = ?`,
-  'knowledge.note': `SELECT title, NULL AS subtitle, NULL AS thumb, 0 AS trashed
+  "knowledge.note": `SELECT title, NULL AS subtitle, NULL AS thumb, 0 AS trashed
                        FROM knowledge_note WHERE note_id = ?`,
-  'core.collection': `SELECT name AS title, NULL AS subtitle, cover_content_id AS thumb, 0 AS trashed
+  "core.collection": `SELECT name AS title, NULL AS subtitle, cover_content_id AS thumb, 0 AS trashed
                         FROM core_collection WHERE collection_id = ?`,
-  'social.thread': `SELECT coalesce(subject, channel) AS title, channel AS subtitle,
+  "social.thread": `SELECT coalesce(subject, channel) AS title, channel AS subtitle,
                            NULL AS thumb, 0 AS trashed
                       FROM social_thread WHERE thread_id = ?`,
-  'media.media_asset': `SELECT coalesce(ci.title, a.kind) AS title,
+  "media.media_asset": `SELECT coalesce(ci.title, a.kind) AS title,
                                coalesce(a.captured_at, ci.created_at) AS subtitle,
                                a.content_id AS thumb, (a.deleted_at IS NOT NULL) AS trashed
                           FROM media_media_asset a
                           JOIN core_content_item ci ON ci.content_id = a.content_id
                          WHERE a.asset_id = ?`,
-  'home.asset_item': `SELECT name AS title, serial_no AS subtitle, NULL AS thumb, 0 AS trashed
+  "home.asset_item": `SELECT name AS title, serial_no AS subtitle, NULL AS thumb, 0 AS trashed
                         FROM home_asset_item WHERE item_id = ?`,
-  'business.client': `SELECT p.display_name AS title, c.status AS subtitle, NULL AS thumb, 0 AS trashed
+  "business.client": `SELECT p.display_name AS title, c.status AS subtitle, NULL AS thumb, 0 AS trashed
                         FROM business_client c JOIN core_party p ON p.party_id = c.party_id
                        WHERE c.client_id = ?`,
-  'business.project': `SELECT name AS title, status AS subtitle, NULL AS thumb, 0 AS trashed
+  "business.project": `SELECT name AS title, status AS subtitle, NULL AS thumb, 0 AS trashed
                          FROM business_project WHERE project_id = ?`,
-  'business.invoice': `SELECT number AS title, status AS subtitle, NULL AS thumb, 0 AS trashed
+  "business.invoice": `SELECT number AS title, status AS subtitle, NULL AS thumb, 0 AS trashed
                          FROM business_invoice WHERE invoice_id = ?`,
 };
 
@@ -109,29 +110,31 @@ export const CARDED_ENTITIES: readonly string[] = Object.keys(CARD_SQL);
  * recent-first — what a picker's no-term browse wants (issue #262 rules).
  */
 export const CARD_PK: Readonly<Record<string, string>> = {
-  'core.party': 'party_id',
-  'core.place': 'place_id',
-  'core.event': 'event_id',
-  'core.transaction': 'txn_id',
-  'core.content_item': 'content_id',
-  'core.document': 'document_id',
-  'schedule.task': 'task_id',
-  'knowledge.note': 'note_id',
-  'core.collection': 'collection_id',
-  'social.thread': 'thread_id',
-  'media.media_asset': 'asset_id',
-  'home.asset_item': 'item_id',
-  'business.client': 'client_id',
-  'business.project': 'project_id',
-  'business.invoice': 'invoice_id',
+  "core.party": "party_id",
+  "core.place": "place_id",
+  "core.event": "event_id",
+  "core.transaction": "txn_id",
+  "core.content_item": "content_id",
+  "core.document": "document_id",
+  "schedule.task": "task_id",
+  "knowledge.note": "note_id",
+  "core.collection": "collection_id",
+  "social.thread": "thread_id",
+  "media.media_asset": "asset_id",
+  "home.asset_item": "item_id",
+  "business.client": "client_id",
+  "business.project": "project_id",
+  "business.invoice": "invoice_id",
 };
 
 function pkColumn(vault: DatabaseSync, physical: string): string {
-  const rows = vault.prepare(`PRAGMA table_info(${JSON.stringify(physical)})`).all() as {
+  const rows = vault
+    .prepare(`PRAGMA table_info(${JSON.stringify(physical)})`)
+    .all() as {
     name: string;
     pk: number;
   }[];
-  return rows.find((r) => r.pk === 1)?.name ?? 'rowid';
+  return rows.find((r) => r.pk === 1)?.name ?? "rowid";
 }
 
 /**
@@ -145,7 +148,7 @@ function linkedAndVisible(
   identity: Identity,
   type: string,
   id: string,
-  purpose: string,
+  purpose: string
 ): boolean {
   const others = vault
     .prepare(
@@ -153,33 +156,52 @@ function linkedAndVisible(
         WHERE to_type = ? AND to_id = ? AND valid_to IS NULL
        UNION
        SELECT DISTINCT to_type AS t FROM core_link
-        WHERE from_type = ? AND from_id = ? AND valid_to IS NULL`,
+        WHERE from_type = ? AND from_id = ? AND valid_to IS NULL`
     )
     .all(type, id, type, id) as { t: string }[];
   for (const other of others) {
     const ref = resolveEntity(other.t, vault);
     if (!ref) continue;
-    const consent = evaluateConsent(vault, identity, ref.schema, ref.table, 'read', purpose);
-    if (consent.decision === 'allow') return true;
+    const consent = evaluateConsent(
+      vault,
+      identity,
+      ref.schema,
+      ref.table,
+      "read",
+      purpose
+    );
+    if (consent.decision === "allow") return true;
   }
   return false;
 }
 
 function cardFor(vault: DatabaseSync, type: string, id: string): RefCard {
   const ref = resolveEntity(type, vault);
-  if (!ref || ref.file !== 'vault') {
-    return { type, id, status: 'unknown', title: null, subtitle: null, thumbnail_content_id: null };
+  if (!ref || ref.file !== "vault") {
+    return {
+      type,
+      id,
+      status: "unknown",
+      title: null,
+      subtitle: null,
+      thumbnail_content_id: null,
+    };
   }
   const sql = CARD_SQL[type];
   if (sql) {
     const row = vault.prepare(sql).get(id) as
-      | { title: string | null; subtitle: string | null; thumb: string | null; trashed: number }
+      | {
+          title: string | null;
+          subtitle: string | null;
+          thumb: string | null;
+          trashed: number;
+        }
       | undefined;
     if (!row) {
       return {
         type,
         id,
-        status: 'missing',
+        status: "missing",
         title: null,
         subtitle: null,
         thumbnail_content_id: null,
@@ -188,19 +210,21 @@ function cardFor(vault: DatabaseSync, type: string, id: string): RefCard {
     return {
       type,
       id,
-      status: row.trashed ? 'trashed' : 'live',
+      status: row.trashed ? "trashed" : "live",
       title: row.title ?? null,
-      subtitle: row.subtitle != null ? String(row.subtitle) : null,
+      subtitle: row.subtitle == null ? null : String(row.subtitle),
       thumbnail_content_id: row.thumb ?? null,
     };
   }
   // Uncurated entity: existence + status only.
   const pk = pkColumn(vault, ref.physical);
-  const live = vault.prepare(`SELECT 1 AS x FROM "${ref.physical}" WHERE "${pk}" = ?`).get(id);
+  const live = vault
+    .prepare(`SELECT 1 AS x FROM "${ref.physical}" WHERE "${pk}" = ?`)
+    .get(id);
   return {
     type,
     id,
-    status: live ? 'live' : 'missing',
+    status: live ? "live" : "missing",
     title: null,
     subtitle: null,
     thumbnail_content_id: null,
@@ -216,16 +240,16 @@ export function resolveRefCards(
   vault: DatabaseSync,
   journal: DatabaseSync,
   identity: Identity,
-  request: RefRequest,
+  request: RefRequest
 ): ResolveResult {
   const refs = (request.refs ?? []).slice(0, MAX_REFS);
   const cards: RefCard[] = [];
   for (const { type, id } of refs) {
-    if (typeof type !== 'string' || typeof id !== 'string' || !type || !id) {
+    if (typeof type !== "string" || typeof id !== "string" || !type || !id) {
       cards.push({
-        type: String(type ?? ''),
-        id: String(id ?? ''),
-        status: 'unknown',
+        type: String(type ?? ""),
+        id: String(id ?? ""),
+        status: "unknown",
         title: null,
         subtitle: null,
         thumbnail_content_id: null,
@@ -233,25 +257,33 @@ export function resolveRefCards(
       continue;
     }
     const ref = resolveEntity(type, vault);
-    if (!ref || ref.file !== 'vault') {
+    if (!ref || ref.file !== "vault") {
       cards.push({
         type,
         id,
-        status: 'unknown',
+        status: "unknown",
         title: null,
         subtitle: null,
         thumbnail_content_id: null,
       });
       continue;
     }
-    const direct = evaluateConsent(vault, identity, ref.schema, ref.table, 'read', request.purpose);
+    const direct = evaluateConsent(
+      vault,
+      identity,
+      ref.schema,
+      ref.table,
+      "read",
+      request.purpose
+    );
     const allowed =
-      direct.decision === 'allow' || linkedAndVisible(vault, identity, type, id, request.purpose);
+      direct.decision === "allow" ||
+      linkedAndVisible(vault, identity, type, id, request.purpose);
     if (!allowed) {
       cards.push({
         type,
         id,
-        status: 'denied',
+        status: "denied",
         title: null,
         subtitle: null,
         thumbnail_content_id: null,
@@ -263,14 +295,14 @@ export function resolveRefCards(
   const receiptId = writeReceipt(journal, {
     grantId: null,
     invocationId: null,
-    action: 'read resolve_refs',
-    objectType: 'core.link',
+    action: "read resolve_refs",
+    objectType: "core.link",
     objectId: null,
     purpose: request.purpose,
-    decision: 'allow',
+    decision: "allow",
     detail: {
       refs: refs.map((r) => `${r.type}/${r.id}`),
-      denied: cards.filter((c) => c.status === 'denied').length,
+      denied: cards.filter((c) => c.status === "denied").length,
     },
   });
   return { cards, receiptId };

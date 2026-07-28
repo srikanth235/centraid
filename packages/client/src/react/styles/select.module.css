@@ -19,11 +19,11 @@
   display: flex;
   min-width: 0;
 }
-.selectWrap[data-disabled='true']::after {
+.selectWrap[data-disabled="true"]::after {
   opacity: 0.5;
 }
 .selectWrap::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   right: 11px;

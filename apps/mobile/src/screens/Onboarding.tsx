@@ -1,11 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import * as Haptics from 'expo-haptics';
+import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Haptics from "expo-haptics";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { BrandMark, DoneCheck, ForwardArrow, OrbitArt } from './onboarding-art';
-import { family } from '../kit/theme';
+import { family } from "../kit/theme";
+import { isTunnelAvailable, pair } from "../lib/phone-link";
 import {
   BRAND_TEAL,
   PROFILE_COLORS,
@@ -13,8 +21,8 @@ import {
   setOnboarded,
   setProfileColor,
   setProfileName,
-} from '../lib/profile';
-import { isTunnelAvailable, pair } from '../lib/phone-link';
+} from "../lib/profile";
+import { BrandMark, DoneCheck, ForwardArrow, OrbitArt } from "./onboarding-art";
 
 // First-run onboarding — a self-contained, always-dark flow rendered ahead of
 // the tab shell (App.tsx gates on `profile.onboarded`).
@@ -25,39 +33,43 @@ import { isTunnelAvailable, pair } from '../lib/phone-link';
 // Once the enrollment is real we collect the person's display name and accent
 // colour (the same fields Settings → You edits), then hand off to the shell.
 
-type Step = 'connect' | 'profile' | 'done';
+type Step = "connect" | "profile" | "done";
 
 // Always-dark onboarding palette (independent of the OS theme). Settings'
 // ColorSwatchRow resolves against the OS scheme, so onboarding renders its own
 // swatch row here over the shared PROFILE_COLORS set.
 const C = {
-  bg: '#0b0e13',
-  panel: 'rgba(255,255,255,.055)',
-  panelLine: 'rgba(255,255,255,.12)',
-  fieldBg: 'rgba(255,255,255,.06)',
-  fieldLine: 'rgba(255,255,255,.14)',
-  ink: '#ffffff',
-  ink2: 'rgba(255,255,255,.8)',
-  ink3: 'rgba(255,255,255,.55)',
-  ink4: 'rgba(255,255,255,.4)',
+  bg: "#0b0e13",
+  panel: "rgba(255,255,255,.055)",
+  panelLine: "rgba(255,255,255,.12)",
+  fieldBg: "rgba(255,255,255,.06)",
+  fieldLine: "rgba(255,255,255,.14)",
+  ink: "#ffffff",
+  ink2: "rgba(255,255,255,.8)",
+  ink3: "rgba(255,255,255,.55)",
+  ink4: "rgba(255,255,255,.4)",
   brand: BRAND_TEAL,
 };
 
 function defaultDeviceName(): string {
-  return Platform.OS === 'ios' ? 'iPhone' : 'Android phone';
+  return Platform.OS === "ios" ? "iPhone" : "Android phone";
 }
 
-export default function Onboarding({ onDone }: { onDone: () => void }): React.JSX.Element {
-  const [step, setStep] = useState<Step>('connect');
+export default function Onboarding({
+  onDone,
+}: {
+  onDone: () => void;
+}): React.JSX.Element {
+  const [step, setStep] = useState<Step>("connect");
   const [deviceName, setDeviceName] = useState(defaultDeviceName());
-  const [displayName, setDisplayName] = useState('');
+  const [displayName, setDisplayName] = useState("");
 
   const saveProfile = (name: string, color: string): void => {
     setProfileName(name);
     setProfileColor(color);
     setOnboarded(true);
     setDisplayName(name);
-    setStep('done');
+    setStep("done");
   };
 
   const enter = (): void => {
@@ -66,7 +78,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }): React.JS
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <ScrollView
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
@@ -83,13 +95,13 @@ export default function Onboarding({ onDone }: { onDone: () => void }): React.JS
           <OrbitArt />
         </View>
 
-        {step === 'connect' ? (
+        {step === "connect" ? (
           <ConnectionStep
             deviceName={deviceName}
             onDeviceName={setDeviceName}
-            onPaired={() => setStep('profile')}
+            onPaired={() => setStep("profile")}
           />
-        ) : step === 'profile' ? (
+        ) : step === "profile" ? (
           <ProfileStep onSave={saveProfile} />
         ) : (
           <Done name={displayName} onEnter={enter} />
@@ -110,14 +122,19 @@ function ConnectionStep({
 }): React.JSX.Element {
   const available = isTunnelAvailable();
   const [scanning, setScanning] = useState(false);
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState("");
   const [pairing, setPairing] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
 
   useEffect(() => {
-    if (scanning && permission && !permission.granted && permission.canAskAgain) {
+    if (
+      scanning &&
+      permission &&
+      !permission.granted &&
+      permission.canAskAgain
+    ) {
       void requestPermission();
     }
   }, [scanning, permission, requestPermission]);
@@ -131,7 +148,9 @@ function ConnectionStep({
     const run = async (): Promise<void> => {
       try {
         await pair(payload, deviceName);
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success
+        );
         onPaired();
       } catch (err) {
         scannedRef.current = false;
@@ -151,7 +170,7 @@ function ConnectionStep({
           <CameraView
             style={StyleSheet.absoluteFill}
             facing="back"
-            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
             onBarcodeScanned={({ data }) => submit(data)}
           />
         </View>
@@ -168,7 +187,8 @@ function ConnectionStep({
         Connect your <Text style={styles.h1Accent}>gateway</Text>.
       </Text>
       <Text style={styles.lede}>
-        Scan the QR from your desktop&apos;s Connect phone screen, or paste the ticket printed by{' '}
+        Scan the QR from your desktop&apos;s Connect phone screen, or paste the
+        ticket printed by{" "}
         <Text style={styles.ledeStrong}>centraid-gateway pair</Text>.
       </Text>
       <Text style={styles.fieldLabel}>DEVICE NAME</Text>
@@ -192,17 +212,17 @@ function ConnectionStep({
       />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {!available ? (
+      {available ? null : (
         <Text style={styles.note}>
-          Pairing needs a development build — the tunnel isn&apos;t available in Expo Go. You can
-          pair later from Settings.
+          Pairing needs a development build — the tunnel isn&apos;t available in
+          Expo Go. You can pair later from Settings.
         </Text>
-      ) : null}
+      )}
 
       {available ? (
         <>
           <PrimaryButton
-            label={pairing ? 'Connecting…' : 'Continue with pasted code'}
+            label={pairing ? "Connecting…" : "Continue with pasted code"}
             onPress={() => (pairing ? undefined : submit(code))}
           />
           <Pressable
@@ -227,14 +247,14 @@ function ProfileStep({
 }: {
   onSave: (name: string, color: string) => void;
 }): React.JSX.Element {
-  const [name, setName] = useState('');
+  const [name, setName] = useState("");
   const [color, setColor] = useState<string>(BRAND_TEAL);
   const [error, setError] = useState<string>();
 
   const save = (): void => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('Enter a name so the people you share with know who you are.');
+      setError("Enter a name so the people you share with know who you are.");
       return;
     }
     setError(undefined);
@@ -247,8 +267,8 @@ function ProfileStep({
         Who&apos;s using <Text style={styles.h1Accent}>this phone</Text>?
       </Text>
       <Text style={styles.lede}>
-        Your name and colour show on your avatar here and to anyone you share a space with. You can
-        change both later in Settings.
+        Your name and colour show on your avatar here and to anyone you share a
+        space with. You can change both later in Settings.
       </Text>
 
       <View style={styles.identity}>
@@ -282,11 +302,14 @@ function ProfileStep({
               onPress={() => setColor(hex)}
               style={({ pressed }) => [
                 styles.swatch,
-                { backgroundColor: hex, borderColor: active ? C.ink : 'transparent' },
+                {
+                  backgroundColor: hex,
+                  borderColor: active ? C.ink : "transparent",
+                },
                 pressed && styles.pressed,
               ]}
             >
-              <Text style={styles.swatchMark}>{active ? '✓' : ''}</Text>
+              <Text style={styles.swatchMark}>{active ? "✓" : ""}</Text>
             </Pressable>
           );
         })}
@@ -298,8 +321,14 @@ function ProfileStep({
   );
 }
 
-function Done({ name, onEnter }: { name: string; onEnter: () => void }): React.JSX.Element {
-  const greet = name.trim().split(/\s+/).find(Boolean) ?? 'friend';
+function Done({
+  name,
+  onEnter,
+}: {
+  name: string;
+  onEnter: () => void;
+}): React.JSX.Element {
+  const greet = name.trim().split(/\s+/u).find(Boolean) ?? "friend";
   return (
     <View style={styles.center}>
       <View style={styles.doneBadge}>
@@ -309,7 +338,8 @@ function Done({ name, onEnter }: { name: string; onEnter: () => void }): React.J
         You&apos;re all set, <Text style={styles.h1Accent}>{greet}</Text>.
       </Text>
       <Text style={[styles.lede, styles.center]}>
-        Your space is ready. Everything you build lands on your home screen — yours, on this phone.
+        Your space is ready. Everything you build lands on your home screen —
+        yours, on this phone.
       </Text>
       <PrimaryButton label="Enter Centraid" onPress={onEnter} />
     </View>
@@ -343,24 +373,29 @@ const SWATCH = 34;
 
 const styles = StyleSheet.create({
   avatar: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: AVATAR / 2,
     height: AVATAR,
-    justifyContent: 'center',
+    justifyContent: "center",
     width: AVATAR,
   },
-  avatarInitial: { color: '#fff', fontFamily: family.sansBold, fontSize: 19 },
-  center: { alignItems: 'center' },
+  avatarInitial: { color: "#fff", fontFamily: family.sansBold, fontSize: 19 },
+  center: { alignItems: "center" },
   doneBadge: {
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: C.brand,
     borderRadius: 38,
     height: 76,
-    justifyContent: 'center',
+    justifyContent: "center",
     marginBottom: 22,
     width: 76,
   },
-  error: { color: '#E88', fontFamily: family.sansRegular, fontSize: 13, marginTop: 14 },
+  error: {
+    color: "#E88",
+    fontFamily: family.sansRegular,
+    fontSize: 13,
+    marginTop: 14,
+  },
   fieldLabel: {
     color: C.ink4,
     fontFamily: family.monoMedium,
@@ -378,8 +413,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   h1Accent: { color: C.brand },
-  hero: { alignItems: 'center', justifyContent: 'center', paddingVertical: 18 },
-  identity: { alignItems: 'center', flexDirection: 'row', gap: 13 },
+  hero: { alignItems: "center", justifyContent: "center", paddingVertical: 18 },
+  identity: { alignItems: "center", flexDirection: "row", gap: 13 },
   identityInput: { flex: 1 },
   input: {
     backgroundColor: C.fieldBg,
@@ -421,39 +456,58 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.82 },
   primary: {
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: C.brand,
     borderRadius: 14,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 8,
     height: 52,
-    justifyContent: 'center',
+    justifyContent: "center",
     marginTop: 28,
   },
-  primaryLabel: { color: '#fff', fontFamily: family.sansBold, fontSize: 16 },
+  primaryLabel: { color: "#fff", fontFamily: family.sansBold, fontSize: 16 },
   safe: { backgroundColor: C.bg, flex: 1 },
   scanFrame: {
     aspectRatio: 1,
-    backgroundColor: '#000',
+    backgroundColor: "#000",
     borderRadius: 22,
     marginTop: 8,
-    overflow: 'hidden',
-    width: '100%',
+    overflow: "hidden",
+    width: "100%",
   },
-  scroll: { flexGrow: 1, paddingHorizontal: 26, paddingTop: 20, paddingBottom: 34 },
+  scroll: {
+    flexGrow: 1,
+    paddingHorizontal: 26,
+    paddingTop: 20,
+    paddingBottom: 34,
+  },
   swatch: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: SWATCH / 2,
     borderWidth: 2,
     height: SWATCH,
-    justifyContent: 'center',
+    justifyContent: "center",
     width: SWATCH,
   },
-  swatchMark: { color: '#fff', fontFamily: family.sansBold, fontSize: 14 },
-  swatchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  textBtn: { alignItems: 'center', height: 48, justifyContent: 'center', marginTop: 10 },
+  swatchMark: { color: "#fff", fontFamily: family.sansBold, fontSize: 14 },
+  swatchRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  textBtn: {
+    alignItems: "center",
+    height: 48,
+    justifyContent: "center",
+    marginTop: 10,
+  },
   textBtnLabel: { color: C.ink3, fontFamily: family.sansMedium, fontSize: 15 },
-  topRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  wordmark: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  wordmarkText: { color: C.ink3, fontFamily: family.monoMedium, fontSize: 11, letterSpacing: 2 },
+  topRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  wordmark: { alignItems: "center", flexDirection: "row", gap: 8 },
+  wordmarkText: {
+    color: C.ink3,
+    fontFamily: family.monoMedium,
+    fontSize: 11,
+    letterSpacing: 2,
+  },
 });

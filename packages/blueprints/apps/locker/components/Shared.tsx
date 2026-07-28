@@ -1,7 +1,8 @@
 // Small shared presentational bits used across Sidebar/List/Detail/overlays.
 // Pure functions of props — no app state.
-import type { FC } from 'react';
-import { CAT_ICON_PATHS, ICON_PATHS } from '../icons.ts';
+import type { FC } from "react";
+
+import { CAT_ICON_PATHS, ICON_PATHS } from "../icons.ts";
 
 // A trusted static SVG path fragment wrapped in a real <svg> sized/stroked
 // for the call site — the React analogue of app.js's `iconSvg()`. Setting
@@ -12,8 +13,8 @@ export function Icon({
   name,
   size = 16,
   sw = 1.7,
-  stroke = 'currentColor',
-  fill = 'none',
+  stroke = "currentColor",
+  fill = "none",
 }: {
   name: string;
   size?: number;
@@ -31,7 +32,7 @@ export function Icon({
       strokeWidth={sw}
       strokeLinecap="round"
       strokeLinejoin="round"
-      dangerouslySetInnerHTML={{ __html: ICON_PATHS[name] ?? '' }}
+      dangerouslySetInnerHTML={{ __html: ICON_PATHS[name] ?? "" }}
     />
   );
 }
@@ -55,7 +56,7 @@ export function CatIcon({
       strokeWidth={sw}
       strokeLinecap="round"
       strokeLinejoin="round"
-      dangerouslySetInnerHTML={{ __html: CAT_ICON_PATHS[type] ?? '' }}
+      dangerouslySetInnerHTML={{ __html: CAT_ICON_PATHS[type] ?? "" }}
     />
   );
 }
@@ -66,4 +67,7 @@ export function CatIcon({
 // 'kit-meter', so `jsx('kit-meter', {ratio, tone})` emits the exact same host
 // element the JSX original did (React sets ratio/tone as attributes on a custom
 // element). The cast is the one place that host tag becomes typed.
-export const KitMeter = 'kit-meter' as unknown as FC<{ ratio: number; tone: string }>;
+export const KitMeter = "kit-meter" as unknown as FC<{
+  ratio: number;
+  tone: string;
+}>;

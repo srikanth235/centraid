@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
-import type { AtlasAuthoredLink, AtlasFkEdge, AtlasGraphPayload } from '../../gateway-client.js';
-import Icon from '../ui/Icon.js';
-import AtlasOrreryChart, { type AtlasHighlight, type Readout } from './AtlasOrreryChart.js';
-import AtlasOrreryPanel from './AtlasOrreryPanel.js';
-import { useOrreryCamera } from './atlasOrreryCamera.js';
-import { useRecenterAnimation, usePrefersReducedMotion } from './atlasOrreryMotion.js';
-import { useSampleRows, type SampleRowsFetcher } from './atlasSampleRows.js';
+import { useCallback, useMemo, useState, type JSX } from "react";
+
+import type {
+  AtlasAuthoredLink,
+  AtlasFkEdge,
+  AtlasGraphPayload,
+} from "../../gateway-client.js";
+import Icon from "../ui/Icon.js";
+import { useOrreryCamera } from "./atlasOrreryCamera.js";
+import AtlasOrreryChart, {
+  type AtlasHighlight,
+  type Readout,
+} from "./AtlasOrreryChart.js";
 import {
   type AtlasDetailLevel,
   aggregateRelationChips,
@@ -19,9 +24,21 @@ import {
   rowsByTable,
   sortedPacks,
   visibleAtLevel,
-} from './atlasOrreryGeometry.js';
-import { LEVELS, QUESTIONS, fmt, type QuestionKey } from './atlasRelationsMeta.js';
-import styles from './AtlasRelationsTab.module.css';
+} from "./atlasOrreryGeometry.js";
+import {
+  useRecenterAnimation,
+  usePrefersReducedMotion,
+} from "./atlasOrreryMotion.js";
+import AtlasOrreryPanel from "./AtlasOrreryPanel.js";
+import {
+  LEVELS,
+  QUESTIONS,
+  fmt,
+  type QuestionKey,
+} from "./atlasRelationsMeta.js";
+import { useSampleRows, type SampleRowsFetcher } from "./atlasSampleRows.js";
+
+import styles from "./AtlasRelationsTab.module.css";
 
 // Relations tab — the orrery (issue #441 B2, "Map" redesign #519). A
 // party-centred radial star chart of the vault's kinds (inline SVG). Kinds sit
@@ -57,9 +74,15 @@ export default function AtlasRelationsTab({
   const packs = useMemo(() => sortedPacks(nodes), [nodes]);
   const layout = useMemo(() => allocateBearings(nodes), [nodes]);
   const rows = useMemo(() => rowsByTable(edges), [edges]);
-  const nodeByPhysical = useMemo(() => new Map(nodes.map((n) => [n.physical, n])), [nodes]);
+  const nodeByPhysical = useMemo(
+    () => new Map(nodes.map((n) => [n.physical, n])),
+    [nodes]
+  );
   const allTables = useMemo(() => nodes.map((n) => n.physical), [nodes]);
-  const maxFill = useMemo(() => edges.reduce((m, e) => Math.max(m, e.fill), 1), [edges]);
+  const maxFill = useMemo(
+    () => edges.reduce((m, e) => Math.max(m, e.fill), 1),
+    [edges]
+  );
   // Authored-link endpoints are typed by the ontology type string; match it
   // against a node's logical OR physical name so an arc can be placed.
   const nodeByType = useMemo(() => {
@@ -72,9 +95,9 @@ export default function AtlasRelationsTab({
   }, [nodes]);
 
   // ── Centre + breadcrumb state ───────────────────────────────────────────
-  const [center, setCenter] = useState<string>(graph?.center ?? '');
+  const [center, setCenter] = useState<string>(graph?.center ?? "");
   const [trail, setTrail] = useState<string[]>(graph ? [graph.center] : []);
-  const [readout, setReadout] = useState<Readout>({ kind: 'idle' });
+  const [readout, setReadout] = useState<Readout>({ kind: "idle" });
   const [activeRels, setActiveRels] = useState<Set<string>>(new Set());
   // The active question-chip lens, or `null` when none is toggled.
   const [question, setQuestion] = useState<QuestionKey | null>(null);
@@ -82,7 +105,7 @@ export default function AtlasRelationsTab({
   // Defaults to `simple` (the "your data" lens). Turning it never resets the
   // camera or the centre; nodes at fixed bearings appearing/disappearing is the
   // whole transition (the existing bloom animation covers it).
-  const [level, setLevel] = useState<AtlasDetailLevel>('simple');
+  const [level, setLevel] = useState<AtlasDetailLevel>("simple");
 
   // ── Pan/zoom camera ─────────────────────────────────────────────────────
   // A lens over the chart body, never a layout change (see atlasOrreryCamera.ts).
@@ -99,7 +122,7 @@ export default function AtlasRelationsTab({
     if (graph) {
       setCenter(graph.center);
       setTrail([graph.center]);
-      setReadout({ kind: 'idle' });
+      setReadout({ kind: "idle" });
       setActiveRels(new Set());
       setQuestion(null);
       resetView();
@@ -107,10 +130,14 @@ export default function AtlasRelationsTab({
   }
 
   // Hop distances from the current centre — undirected BFS, memoized per centre.
-  const hops = useMemo(() => bfsHops(center, edges, allTables), [center, edges, allTables]);
+  const hops = useMemo(
+    () => bfsHops(center, edges, allTables),
+    [center, edges, allTables]
+  );
   const targetRadius = useMemo(() => {
     const m = new Map<string, number>();
-    for (const n of nodes) m.set(n.physical, ringRadius(hops.get(n.physical) ?? null));
+    for (const n of nodes)
+      m.set(n.physical, ringRadius(hops.get(n.physical) ?? null));
     return m;
   }, [nodes, hops]);
 
@@ -129,12 +156,14 @@ export default function AtlasRelationsTab({
       setTrail((prev) => {
         const i = prev.indexOf(physical);
         const next = i >= 0 ? prev.slice(0, i + 1) : [...prev, physical];
-        return next.length > 6 ? [...next.slice(0, 1), ...next.slice(-5)] : next;
+        return next.length > 6
+          ? [...next.slice(0, 1), ...next.slice(-5)]
+          : next;
       });
       const node = nodeByPhysical.get(physical);
-      if (node) setReadout({ kind: 'node', node, hop: 0 });
+      if (node) setReadout({ kind: "node", node, hop: 0 });
     },
-    [center, nodeByPhysical, resetView],
+    [center, nodeByPhysical, resetView]
   );
 
   // Node activation from the chart, guarded against the click a drag fires: a
@@ -145,7 +174,7 @@ export default function AtlasRelationsTab({
       if (consumeDrag()) return;
       recenter(physical);
     },
-    [recenter, consumeDrag],
+    [recenter, consumeDrag]
   );
 
   const backToRoot = useCallback(() => {
@@ -153,7 +182,10 @@ export default function AtlasRelationsTab({
   }, [graph, recenter]);
 
   // ── Relation vocabulary chips (authored links) ──────────────────────────
-  const relChips = useMemo(() => aggregateRelationChips(graph?.authoredLinks ?? []), [graph]);
+  const relChips = useMemo(
+    () => aggregateRelationChips(graph?.authoredLinks ?? []),
+    [graph]
+  );
 
   // Authored arcs to overlay for the toggled-on relations, resolved to node
   // endpoints. A pair that names two kinds neither of which is rendered is
@@ -199,23 +231,27 @@ export default function AtlasRelationsTab({
 
   const highlight = useMemo<AtlasHighlight | null>(() => {
     if (question === null) return null;
-    if (question === 'connected') {
+    if (question === "connected") {
       // The centre's direct FK neighbours (hop 1) + the edges touching it.
       const lit = new Set<string>([center]);
       for (const [t, h] of hops) if (h === 1) lit.add(t);
       return {
         lit,
-        edgeLit: (e: AtlasFkEdge) => e.fromTable === center || e.toTable === center,
+        edgeLit: (e: AtlasFkEdge) =>
+          e.fromTable === center || e.toTable === center,
       };
     }
-    if (question === 'heaviest') {
+    if (question === "heaviest") {
       // Kinds whose row count is >= 40% of the busiest kind's.
       let max = 0;
       for (const v of rows.values()) if (v > max) max = v;
       const threshold = max * 0.4;
       const lit = new Set<string>();
       for (const [t, v] of rows) if (v > 0 && v >= threshold) lit.add(t);
-      return { lit, edgeLit: (e: AtlasFkEdge) => lit.has(e.fromTable) && lit.has(e.toTable) };
+      return {
+        lit,
+        edgeLit: (e: AtlasFkEdge) => lit.has(e.fromTable) && lit.has(e.toTable),
+      };
     }
     // unused — ghost edges + kinds with zero or unknown row counts.
     const lit = new Set<string>();
@@ -238,16 +274,21 @@ export default function AtlasRelationsTab({
           <Icon name="Globe" size={22} />
         </span>
         <p className={styles.emptyText}>
-          The relations graph hasn’t loaded. It maps every kind by how much each structural
-          reference actually carries.
+          The relations graph hasn’t loaded. It maps every kind by how much each
+          structural reference actually carries.
         </p>
       </div>
     );
   }
 
-  const pct = graph.edgeCount > 0 ? Math.round((graph.centerEdgeCount / graph.edgeCount) * 100) : 0;
+  const pct =
+    graph.edgeCount > 0
+      ? Math.round((graph.centerEdgeCount / graph.edgeCount) * 100)
+      : 0;
   const inDeg = edges.filter((e) => e.toTable === center).length;
-  const outDeg = edges.filter((e) => e.fromTable === center && !e.selfRef).length;
+  const outDeg = edges.filter(
+    (e) => e.fromTable === center && !e.selfRef
+  ).length;
   const notnullCount = edges.filter((e) => e.notnull).length;
   const ghostCount = edges.filter((e) => e.ghost).length;
   const isRoot = center === graph.center;
@@ -260,14 +301,16 @@ export default function AtlasRelationsTab({
   // the dial only makes nodes appear/disappear at their fixed bearings.
   const visCtx = { center, hops, rows, edges };
   const visibleNodes = nodes.filter(
-    (n) => n.physical !== center && visibleAtLevel(level, n, visCtx),
+    (n) => n.physical !== center && visibleAtLevel(level, n, visCtx)
   );
 
   // Rendered edges: both endpoints visible, self-refs dropped (a glyph, not a
   // loop), and — at Simple only — ghost edges nothing fills yet are hidden.
   const visibleSet = new Set(visibleNodes.map((n) => n.physical));
   visibleSet.add(center);
-  const drawEdges = edges.filter((e) => edgeVisibleAtLevel(level, e, visibleSet));
+  const drawEdges = edges.filter((e) =>
+    edgeVisibleAtLevel(level, e, visibleSet)
+  );
 
   // ── Honest tally of what this lens hides ─────────────────────────────────
   // Every number derived, never hardcoded. Compared against the FULL schema:
@@ -281,29 +324,39 @@ export default function AtlasRelationsTab({
   const drawableEdges = edges.filter((e) => !e.selfRef).length;
   const hiddenEdges = drawableEdges - drawEdges.length;
   const unreachableMachinery = nodes.filter(
-    (n) => n.physical !== center && n.packKind === 'machinery' && hops.get(n.physical) == null,
+    (n) =>
+      n.physical !== center &&
+      n.packKind === "machinery" &&
+      hops.get(n.physical) == null
   ).length;
   const lensExtras: { key: string; num: number; label: string }[] = [];
-  if (level === 'everything') {
+  if (level === "everything") {
     if (unreachableMachinery > 0)
       lensExtras.push({
-        key: 'revealed',
+        key: "revealed",
         num: unreachableMachinery,
-        label: 'plumbing kinds beyond reach, now shown',
+        label: "plumbing kinds beyond reach, now shown",
       });
   } else {
     if (hiddenKinds > 0)
       lensExtras.push({
-        key: 'hidden-kinds',
+        key: "hidden-kinds",
         num: hiddenKinds,
         label:
-          level === 'simple' ? 'kinds hidden (empty or plumbing)' : 'plumbing kinds beyond reach',
+          level === "simple"
+            ? "kinds hidden (empty or plumbing)"
+            : "plumbing kinds beyond reach",
       });
     if (hiddenEdges > 0)
-      lensExtras.push({ key: 'hidden-edges', num: hiddenEdges, label: 'connections hidden' });
+      lensExtras.push({
+        key: "hidden-edges",
+        num: hiddenEdges,
+        label: "connections hidden",
+      });
   }
 
-  const rootFriendly = nodeByPhysical.get(graph.center)?.friendly ?? graph.center;
+  const rootFriendly =
+    nodeByPhysical.get(graph.center)?.friendly ?? graph.center;
   const centerRows = rows.get(center);
 
   return (
@@ -375,7 +428,7 @@ export default function AtlasRelationsTab({
             hops={hops}
             rows={rows}
             packs={packs}
-            showPhysical={level === 'everything'}
+            showPhysical={level === "everything"}
             overlayArcs={overlayArcs}
             readout={readout}
             highlight={highlight}
@@ -445,33 +498,44 @@ export default function AtlasRelationsTab({
           only the labels are plain-language (built-in connections, People, …) */}
       <div className={styles.caption} data-testid="atlas-caption">
         <span className={styles.captionItem}>
-          <b className={styles.captionNum}>{fmt(graph.edgeCount)}</b> built-in connections
+          <b className={styles.captionNum}>{fmt(graph.edgeCount)}</b> built-in
+          connections
         </span>
         <span className={styles.captionItem}>
-          <b className={styles.captionNum}>{fmt(notnullCount)}</b> always filled in
+          <b className={styles.captionNum}>{fmt(notnullCount)}</b> always filled
+          in
         </span>
         <span className={styles.captionItem}>
-          <b className={styles.captionNum}>{fmt(graph.edgeCount - notnullCount)}</b> optional
+          <b className={styles.captionNum}>
+            {fmt(graph.edgeCount - notnullCount)}
+          </b>{" "}
+          optional
         </span>
         <span className={styles.captionItem}>
-          <b className={styles.captionNum}>{fmt(graph.centerEdgeCount)}</b> point to {rootFriendly}{' '}
-          ({pct}%)
+          <b className={styles.captionNum}>{fmt(graph.centerEdgeCount)}</b>{" "}
+          point to {rootFriendly} ({pct}%)
         </span>
         <span className={styles.captionItem}>
-          <b className={styles.captionNum}>{fmt(ghostCount)}</b> nothing uses yet
+          <b className={styles.captionNum}>{fmt(ghostCount)}</b> nothing uses
+          yet
         </span>
         <span className={styles.captionItem}>
-          <b className={styles.captionNum}>{fmt(graph.selfRefCount)}</b> point to their own kind
+          <b className={styles.captionNum}>{fmt(graph.selfRefCount)}</b> point
+          to their own kind
         </span>
         <span className={styles.captionItem}>
-          <b className={styles.captionNum}>{fmt(graph.island.length)}</b> not reachable from{' '}
-          {rootFriendly}
+          <b className={styles.captionNum}>{fmt(graph.island.length)}</b> not
+          reachable from {rootFriendly}
         </span>
         {/* the lens tally — what the active detail level hides (or, at
             Everything, what it just revealed). Derived from the same visible
             sets the chart draws, never hardcoded. */}
         {lensExtras.map((x) => (
-          <span key={x.key} className={styles.captionItem} data-testid="atlas-caption-lens">
+          <span
+            key={x.key}
+            className={styles.captionItem}
+            data-testid="atlas-caption-lens"
+          >
             <b className={styles.captionNum}>{fmt(x.num)}</b> {x.label}
           </span>
         ))}

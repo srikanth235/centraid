@@ -11,13 +11,16 @@
 // unchanged on the wire.
 
 /** Append `provider` to the attempt's approved set, preserving order, deduped. */
-export function withProviderConsent(approved: readonly string[], provider: string): string[] {
+export function withProviderConsent(
+  approved: readonly string[],
+  provider: string
+): string[] {
   return approved.includes(provider) ? [...approved] : [...approved, provider];
 }
 
 /** Shape the approved set for the wire: absent, one, or many. */
 export function providerConsentWire(
-  approved: readonly string[] | undefined,
+  approved: readonly string[] | undefined
 ): string | string[] | undefined {
   if (!approved || approved.length === 0) return undefined;
   return approved.length === 1 ? approved[0] : [...approved];

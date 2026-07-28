@@ -38,18 +38,19 @@
 // that never calls this never archives (window-gated AND call-gated), so
 // fresh dev vaults are unaffected either way.
 
-import { gunzipSync, gzipSync } from 'node:zlib';
-import type { DatabaseSync } from 'node:sqlite';
-import type { VaultDb } from './db.js';
-import { sha256OfBytes } from './blob/store.js';
-import { nowIso, sha256Hex, uuidv7 } from './ids.js';
+import type { DatabaseSync } from "node:sqlite";
+import { gunzipSync, gzipSync } from "node:zlib";
+
+import { sha256OfBytes } from "./blob/store.js";
+import type { VaultDb } from "./db.js";
+import { nowIso, sha256Hex, uuidv7 } from "./ids.js";
 
 /** Rows older than this are eligible for archival, unless overridden. */
 export const DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS = 90;
 
 const SEGMENT_VERSION = 1;
 
-export type JournalArchiveStream = 'provenance' | 'invocation_cluster';
+export type JournalArchiveStream = "provenance" | "invocation_cluster";
 
 export interface JournalArchiveManifestRow {
   manifestId: string;
@@ -77,7 +78,7 @@ export interface JournalArchivalResult {
   /** One manifest per stream that produced a segment this run (0, 1, or 2). */
   manifests: JournalArchiveManifestRow[];
   rowsArchived: number;
-  reclaim: { mode: 'incremental' | 'full' | 'none'; ranVacuum: boolean };
+  reclaim: { mode: "incremental" | "full" | "none"; ranVacuum: boolean };
 }
 
 export interface ArchivedSegmentRows {
@@ -121,16 +122,16 @@ function selectByIds(
   journal: DatabaseSync,
   table: string,
   column: string,
-  ids: readonly string[],
+  ids: readonly string[]
 ): Row[] {
   if (ids.length === 0) return [];
   const out: Row[] = [];
   for (const part of chunk(ids, ID_CHUNK)) {
-    const placeholders = part.map(() => '?').join(', ');
+    const placeholders = part.map(() => "?").join(", ");
     out.push(
       ...(journal
         .prepare(`SELECT * FROM ${table} WHERE ${column} IN (${placeholders})`)
-        .all(...part) as Row[]),
+        .all(...part) as Row[])
     );
   }
   return out;
@@ -140,11 +141,13 @@ function deleteByIds(
   journal: DatabaseSync,
   table: string,
   column: string,
-  ids: readonly string[],
+  ids: readonly string[]
 ): void {
   for (const part of chunk(ids, ID_CHUNK)) {
-    const placeholders = part.map(() => '?').join(', ');
-    journal.prepare(`DELETE FROM ${table} WHERE ${column} IN (${placeholders})`).run(...part);
+    const placeholders = part.map(() => "?").join(", ");
+    journal
+      .prepare(`DELETE FROM ${table} WHERE ${column} IN (${placeholders})`)
+      .run(...part);
   }
 }
 
@@ -159,22 +162,29 @@ function deleteByIds(
  */
 function computeEligibleCluster(
   journal: DatabaseSync,
-  cutoff: string,
+  cutoff: string
 ): { invocationIds: Set<string>; receiptIds: Set<string> } {
   const candidates = journal
-    .prepare(`SELECT invocation_id FROM agent_command_invocation WHERE requested_at < ?`)
+    .prepare(
+      `SELECT invocation_id FROM agent_command_invocation WHERE requested_at < ?`
+    )
     .all(cutoff) as { invocation_id: string }[];
   const eligible = new Set(candidates.map((r) => r.invocation_id));
-  if (eligible.size === 0) return { invocationIds: eligible, receiptIds: new Set() };
+  if (eligible.size === 0)
+    return { invocationIds: eligible, receiptIds: new Set() };
 
   const receiptRows = journal
     .prepare(
-      `SELECT receipt_id, invocation_id, occurred_at FROM consent_receipt WHERE invocation_id IS NOT NULL`,
+      `SELECT receipt_id, invocation_id, occurred_at FROM consent_receipt WHERE invocation_id IS NOT NULL`
     )
-    .all() as { receipt_id: string; invocation_id: string; occurred_at: string }[];
+    .all() as {
+    receipt_id: string;
+    invocation_id: string;
+    occurred_at: string;
+  }[];
   const invRows = journal
     .prepare(
-      `SELECT invocation_id, receipt_id FROM agent_command_invocation WHERE receipt_id IS NOT NULL`,
+      `SELECT invocation_id, receipt_id FROM agent_command_invocation WHERE receipt_id IS NOT NULL`
     )
     .all() as { invocation_id: string; receipt_id: string }[];
 
@@ -190,7 +200,9 @@ function computeEligibleCluster(
   for (const r of receiptRows) addLink(r.invocation_id, r.receipt_id);
   for (const r of invRows) addLink(r.invocation_id, r.receipt_id);
 
-  const receiptTime = new Map(receiptRows.map((r) => [r.receipt_id, r.occurred_at]));
+  const receiptTime = new Map(
+    receiptRows.map((r) => [r.receipt_id, r.occurred_at])
+  );
   const referrers = new Map<string, Set<string>>(); // receiptId -> invocationIds that touch it
   for (const [inv, recs] of linked) {
     for (const rec of recs) {
@@ -211,9 +223,11 @@ function computeEligibleCluster(
       if (!recs) continue;
       for (const rec of recs) {
         const t = receiptTime.get(rec);
-        const tooYoung = t === undefined || !(t < cutoff);
+        const tooYoung = t === undefined || t >= cutoff;
         const refs = referrers.get(rec) ?? new Set([inv]);
-        const referrerNotYetEligible = [...refs].some((other) => !eligible.has(other));
+        const referrerNotYetEligible = [...refs].some(
+          (other) => !eligible.has(other)
+        );
         if (tooYoung || referrerNotYetEligible) {
           eligible.delete(inv);
           changed = true;
@@ -224,27 +238,31 @@ function computeEligibleCluster(
   }
 
   const receiptIds = new Set<string>();
-  for (const inv of eligible) for (const rec of linked.get(inv) ?? []) receiptIds.add(rec);
+  for (const inv of eligible)
+    for (const rec of linked.get(inv) ?? []) receiptIds.add(rec);
   return { invocationIds: eligible, receiptIds };
 }
 
 /** prov_id values a LIVE (not-being-archived) agent_evidence row still points at. */
 function liveEvidenceProvRefs(
   journal: DatabaseSync,
-  eligibleInvocationIds: Set<string>,
+  eligibleInvocationIds: Set<string>
 ): Set<string> {
   const rows = journal
-    .prepare(`SELECT prov_id, invocation_id FROM agent_evidence WHERE prov_id IS NOT NULL`)
+    .prepare(
+      `SELECT prov_id, invocation_id FROM agent_evidence WHERE prov_id IS NOT NULL`
+    )
     .all() as { prov_id: string; invocation_id: string }[];
   const blocked = new Set<string>();
-  for (const r of rows) if (!eligibleInvocationIds.has(r.invocation_id)) blocked.add(r.prov_id);
+  for (const r of rows)
+    if (!eligibleInvocationIds.has(r.invocation_id)) blocked.add(r.prov_id);
   return blocked;
 }
 
 function selectProvenanceCandidates(
   journal: DatabaseSync,
   cutoff: string,
-  blockedByEvidence: Set<string>,
+  blockedByEvidence: Set<string>
 ): Row[] {
   const rows = journal
     .prepare(
@@ -254,7 +272,7 @@ function selectProvenanceCandidates(
             SELECT 1 FROM consent_provenance c
              WHERE c.prev_prov_id = p.prov_id AND c.occurred_at >= ?
           )
-        ORDER BY p.occurred_at, p.prov_id`,
+        ORDER BY p.occurred_at, p.prov_id`
     )
     .all(cutoff, cutoff) as Row[];
   return rows.filter((r) => !blockedByEvidence.has(r.prov_id as string));
@@ -270,14 +288,14 @@ interface SegmentBuild {
 }
 
 function gzipJson(payload: ArchivedSegmentRows): Buffer {
-  return gzipSync(Buffer.from(JSON.stringify(payload), 'utf8'));
+  return gzipSync(Buffer.from(JSON.stringify(payload), "utf8"));
 }
 
 function buildProvenanceSegment(rows: Row[]): SegmentBuild | null {
   if (rows.length === 0) return null;
   const bytes = gzipJson({
     version: SEGMENT_VERSION,
-    stream: 'provenance',
+    stream: "provenance",
     rows: { consent_provenance: rows },
   });
   const ids = rows.map((r) => r.prov_id as string).sort();
@@ -305,11 +323,15 @@ function buildClusterSegment(tables: ClusterTables): SegmentBuild | null {
   if (total === 0) return null;
   const bytes = gzipJson({
     version: SEGMENT_VERSION,
-    stream: 'invocation_cluster',
+    stream: "invocation_cluster",
     rows: tables as unknown as Record<string, Row[]>,
   });
-  const invIds = tables.agent_command_invocation.map((r) => r.invocation_id as string).sort();
-  const invTimes = tables.agent_command_invocation.map((r) => r.requested_at as string).sort();
+  const invIds = tables.agent_command_invocation
+    .map((r) => r.invocation_id as string)
+    .sort();
+  const invTimes = tables.agent_command_invocation
+    .map((r) => r.requested_at as string)
+    .sort();
   return {
     bytes,
     rowCount: total,
@@ -321,14 +343,16 @@ function buildClusterSegment(tables: ClusterTables): SegmentBuild | null {
 }
 
 function lastManifestChain(
-  journal: DatabaseSync,
+  journal: DatabaseSync
 ): { manifestId: string; chainHash: string } | undefined {
   const row = journal
     .prepare(
-      `SELECT manifest_id, chain_hash FROM journal_archive_manifest ORDER BY rowid DESC LIMIT 1`,
+      `SELECT manifest_id, chain_hash FROM journal_archive_manifest ORDER BY rowid DESC LIMIT 1`
     )
     .get() as { manifest_id: string; chain_hash: string } | undefined;
-  return row ? { manifestId: row.manifest_id, chainHash: row.chain_hash } : undefined;
+  return row
+    ? { manifestId: row.manifest_id, chainHash: row.chain_hash }
+    : undefined;
 }
 
 function computeChainHash(args: {
@@ -349,18 +373,23 @@ function computeChainHash(args: {
       args.fromTime,
       args.toTime,
       args.segmentSha256,
-    ]),
+    ])
   );
 }
 
 function insertManifest(
   journal: DatabaseSync,
-  args: { stream: JournalArchiveStream; seg: SegmentBuild; sha256: string; createdAt: string },
+  args: {
+    stream: JournalArchiveStream;
+    seg: SegmentBuild;
+    sha256: string;
+    createdAt: string;
+  }
 ): JournalArchiveManifestRow {
   const prev = lastManifestChain(journal);
   const manifestId = uuidv7();
   const chainHash = computeChainHash({
-    prevChainHash: prev?.chainHash ?? '',
+    prevChainHash: prev?.chainHash ?? "",
     manifestId,
     stream: args.stream,
     rowCount: args.seg.rowCount,
@@ -372,7 +401,7 @@ function insertManifest(
     .prepare(
       `INSERT INTO journal_archive_manifest
          (manifest_id, stream, from_id, to_id, from_time, to_time, row_count, segment_sha256, segment_bytes, prev_manifest_id, chain_hash, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       manifestId,
@@ -386,7 +415,7 @@ function insertManifest(
       args.seg.bytes.length,
       prev?.manifestId ?? null,
       chainHash,
-      args.createdAt,
+      args.createdAt
     );
   return {
     manifestId,
@@ -404,9 +433,11 @@ function insertManifest(
   };
 }
 
-function reclaimModeOf(journal: DatabaseSync): 'incremental' | 'full' | 'none' {
-  const av = (journal.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum;
-  return av === 2 ? 'incremental' : av === 1 ? 'full' : 'none';
+function reclaimModeOf(journal: DatabaseSync): "incremental" | "full" | "none" {
+  const av = (
+    journal.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }
+  ).auto_vacuum;
+  return av === 2 ? "incremental" : av === 1 ? "full" : "none";
 }
 
 /**
@@ -420,19 +451,20 @@ function reclaimModeOf(journal: DatabaseSync): 'incremental' | 'full' | 'none' {
  * anything to reclaim (`freelist_count > 0`).
  */
 function reclaimSpace(journal: DatabaseSync): {
-  mode: 'incremental' | 'full' | 'none';
+  mode: "incremental" | "full" | "none";
   ranVacuum: boolean;
 } {
-  const freelist = (journal.prepare('PRAGMA freelist_count').get() as { freelist_count: number })
-    .freelist_count;
+  const freelist = (
+    journal.prepare("PRAGMA freelist_count").get() as { freelist_count: number }
+  ).freelist_count;
   const mode = reclaimModeOf(journal);
   if (freelist === 0) return { mode, ranVacuum: false };
-  if (mode === 'incremental') {
-    journal.exec('PRAGMA incremental_vacuum');
+  if (mode === "incremental") {
+    journal.exec("PRAGMA incremental_vacuum");
     return { mode, ranVacuum: true };
   }
-  journal.exec('VACUUM');
-  return { mode: 'full', ranVacuum: true };
+  journal.exec("VACUUM");
+  return { mode: "full", ranVacuum: true };
 }
 
 /**
@@ -443,7 +475,9 @@ function reclaimSpace(journal: DatabaseSync): {
  */
 export function archivedSegmentShas(journal: DatabaseSync): Set<string> {
   const shas = new Set<string>();
-  const rows = journal.prepare(`SELECT segment_sha256 FROM journal_archive_manifest`).all() as {
+  const rows = journal
+    .prepare(`SELECT segment_sha256 FROM journal_archive_manifest`)
+    .all() as {
     segment_sha256: string;
   }[];
   for (const r of rows) shas.add(r.segment_sha256);
@@ -458,11 +492,13 @@ export function archivedSegmentShas(journal: DatabaseSync): Set<string> {
  */
 export function runJournalArchival(
   db: VaultDb,
-  options: JournalArchivalOptions = {},
+  options: JournalArchivalOptions = {}
 ): JournalArchivalResult {
   const windowDays = options.windowDays ?? DEFAULT_JOURNAL_ARCHIVE_WINDOW_DAYS;
-  if (!(windowDays > 0))
-    throw new Error('journal archival window must be a positive number of days');
+  if (windowDays <= 0)
+    throw new Error(
+      "journal archival window must be a positive number of days"
+    );
   const now = options.now ?? nowIso();
   const cutoff = daysBeforeIso(now, windowDays);
   const journal = db.journal;
@@ -474,27 +510,46 @@ export function runJournalArchival(
       ? {
           agent_command_invocation: selectByIds(
             journal,
-            'agent_command_invocation',
-            'invocation_id',
-            [...cluster.invocationIds],
+            "agent_command_invocation",
+            "invocation_id",
+            [...cluster.invocationIds]
           ),
-          consent_receipt: selectByIds(journal, 'consent_receipt', 'receipt_id', [
-            ...cluster.receiptIds,
-          ]),
-          agent_invocation_check: selectByIds(journal, 'agent_invocation_check', 'invocation_id', [
-            ...cluster.invocationIds,
-          ]),
-          agent_evidence: selectByIds(journal, 'agent_evidence', 'invocation_id', [
-            ...cluster.invocationIds,
-          ]),
-          agent_explanation: selectByIds(journal, 'agent_explanation', 'invocation_id', [
-            ...cluster.invocationIds,
-          ]),
+          consent_receipt: selectByIds(
+            journal,
+            "consent_receipt",
+            "receipt_id",
+            [...cluster.receiptIds]
+          ),
+          agent_invocation_check: selectByIds(
+            journal,
+            "agent_invocation_check",
+            "invocation_id",
+            [...cluster.invocationIds]
+          ),
+          agent_evidence: selectByIds(
+            journal,
+            "agent_evidence",
+            "invocation_id",
+            [...cluster.invocationIds]
+          ),
+          agent_explanation: selectByIds(
+            journal,
+            "agent_explanation",
+            "invocation_id",
+            [...cluster.invocationIds]
+          ),
         }
       : null;
 
-  const blockedByEvidence = liveEvidenceProvRefs(journal, cluster.invocationIds);
-  const provRows = selectProvenanceCandidates(journal, cutoff, blockedByEvidence);
+  const blockedByEvidence = liveEvidenceProvRefs(
+    journal,
+    cluster.invocationIds
+  );
+  const provRows = selectProvenanceCandidates(
+    journal,
+    cutoff,
+    blockedByEvidence
+  );
 
   const provSeg = buildProvenanceSegment(provRows);
   const clusterSeg = clusterTables ? buildClusterSegment(clusterTables) : null;
@@ -511,82 +566,86 @@ export function runJournalArchival(
   // address) BEFORE opening the SQL write transaction, so the write lock's
   // held window is just the manifest insert + deletes.
   const provIngest = provSeg ? db.blobs.ingestSync(provSeg.bytes) : null;
-  const clusterIngest = clusterSeg ? db.blobs.ingestSync(clusterSeg.bytes) : null;
+  const clusterIngest = clusterSeg
+    ? db.blobs.ingestSync(clusterSeg.bytes)
+    : null;
 
   const manifests: JournalArchiveManifestRow[] = [];
   let rowsArchived = 0;
 
-  journal.exec('BEGIN');
+  journal.exec("BEGIN");
   try {
     // Deferred FK checking (checked at COMMIT, not per-statement) is what
     // makes the invocation⇄receipt mutual reference deletable at all — see
     // the module header.
-    journal.exec('PRAGMA defer_foreign_keys = ON');
+    journal.exec("PRAGMA defer_foreign_keys = ON");
 
     if (provSeg && provIngest) {
       manifests.push(
         insertManifest(journal, {
-          stream: 'provenance',
+          stream: "provenance",
           seg: provSeg,
           sha256: provIngest.sha256,
           createdAt: now,
-        }),
+        })
       );
       rowsArchived += provSeg.rowCount;
       deleteByIds(
         journal,
-        'consent_provenance',
-        'prov_id',
-        provRows.map((r) => r.prov_id as string),
+        "consent_provenance",
+        "prov_id",
+        provRows.map((r) => r.prov_id as string)
       );
     }
 
     if (clusterSeg && clusterIngest && clusterTables) {
       manifests.push(
         insertManifest(journal, {
-          stream: 'invocation_cluster',
+          stream: "invocation_cluster",
           seg: clusterSeg,
           sha256: clusterIngest.sha256,
           createdAt: now,
-        }),
+        })
       );
       rowsArchived += clusterSeg.rowCount;
       // Children first (pure leaves — nothing references them).
       deleteByIds(
         journal,
-        'agent_invocation_check',
-        'check_id',
-        clusterTables.agent_invocation_check.map((r) => r.check_id as string),
+        "agent_invocation_check",
+        "check_id",
+        clusterTables.agent_invocation_check.map((r) => r.check_id as string)
       );
       deleteByIds(
         journal,
-        'agent_evidence',
-        'evidence_id',
-        clusterTables.agent_evidence.map((r) => r.evidence_id as string),
+        "agent_evidence",
+        "evidence_id",
+        clusterTables.agent_evidence.map((r) => r.evidence_id as string)
       );
       deleteByIds(
         journal,
-        'agent_explanation',
-        'explanation_id',
-        clusterTables.agent_explanation.map((r) => r.explanation_id as string),
+        "agent_explanation",
+        "explanation_id",
+        clusterTables.agent_explanation.map((r) => r.explanation_id as string)
       );
       // The mutual pair — order doesn't matter under defer_foreign_keys.
       deleteByIds(
         journal,
-        'consent_receipt',
-        'receipt_id',
-        clusterTables.consent_receipt.map((r) => r.receipt_id as string),
+        "consent_receipt",
+        "receipt_id",
+        clusterTables.consent_receipt.map((r) => r.receipt_id as string)
       );
       deleteByIds(
         journal,
-        'agent_command_invocation',
-        'invocation_id',
-        clusterTables.agent_command_invocation.map((r) => r.invocation_id as string),
+        "agent_command_invocation",
+        "invocation_id",
+        clusterTables.agent_command_invocation.map(
+          (r) => r.invocation_id as string
+        )
       );
     }
-    journal.exec('COMMIT');
+    journal.exec("COMMIT");
   } catch (err) {
-    journal.exec('ROLLBACK');
+    journal.exec("ROLLBACK");
     throw err;
   }
 
@@ -614,7 +673,7 @@ function rowToManifest(row: Row): JournalArchiveManifestRow {
 /** One manifest by id, or undefined. */
 export function findArchiveManifest(
   journal: DatabaseSync,
-  manifestId: string,
+  manifestId: string
 ): JournalArchiveManifestRow | undefined {
   const row = journal
     .prepare(`SELECT * FROM journal_archive_manifest WHERE manifest_id = ?`)
@@ -625,14 +684,18 @@ export function findArchiveManifest(
 /** Every archive manifest, oldest first — the audit trail of what got sealed away. */
 export function listArchiveManifests(
   journal: DatabaseSync,
-  stream?: JournalArchiveStream,
+  stream?: JournalArchiveStream
 ): JournalArchiveManifestRow[] {
   const rows = (
     stream
       ? journal
-          .prepare(`SELECT * FROM journal_archive_manifest WHERE stream = ? ORDER BY rowid`)
+          .prepare(
+            `SELECT * FROM journal_archive_manifest WHERE stream = ? ORDER BY rowid`
+          )
           .all(stream)
-      : journal.prepare(`SELECT * FROM journal_archive_manifest ORDER BY rowid`).all()
+      : journal
+          .prepare(`SELECT * FROM journal_archive_manifest ORDER BY rowid`)
+          .all()
   ) as Row[];
   return rows.map(rowToManifest);
 }
@@ -640,15 +703,15 @@ export function listArchiveManifests(
 /** Decode one archived segment back into its rows — the round-trip read. */
 export function readArchivedSegment(
   db: VaultDb,
-  manifest: JournalArchiveManifestRow,
+  manifest: JournalArchiveManifestRow
 ): ArchivedSegmentRows {
   const bytes = db.blobs.getSync(manifest.segmentSha256);
   if (!bytes) {
     throw new Error(
-      `archive segment ${manifest.segmentSha256} for manifest ${manifest.manifestId} is missing from the blob CAS`,
+      `archive segment ${manifest.segmentSha256} for manifest ${manifest.manifestId} is missing from the blob CAS`
     );
   }
-  return JSON.parse(gunzipSync(bytes).toString('utf8')) as ArchivedSegmentRows;
+  return JSON.parse(gunzipSync(bytes).toString("utf8")) as ArchivedSegmentRows;
 }
 
 /**
@@ -659,16 +722,22 @@ export function readArchivedSegment(
  */
 export function verifyArchivedSegment(
   db: VaultDb,
-  manifest: JournalArchiveManifestRow,
+  manifest: JournalArchiveManifestRow
 ): ArchiveVerification {
   const bytes = db.blobs.getSync(manifest.segmentSha256);
   const segmentPresent = bytes !== null;
-  const segmentHashOk = segmentPresent && sha256OfBytes(bytes!) === manifest.segmentSha256;
+  const segmentHashOk =
+    segmentPresent && sha256OfBytes(bytes!) === manifest.segmentSha256;
   let rowCountOk = false;
   if (segmentPresent && segmentHashOk) {
     try {
-      const parsed = JSON.parse(gunzipSync(bytes!).toString('utf8')) as ArchivedSegmentRows;
-      const total = Object.values(parsed.rows).reduce((n, rs) => n + rs.length, 0);
+      const parsed = JSON.parse(
+        gunzipSync(bytes!).toString("utf8")
+      ) as ArchivedSegmentRows;
+      const total = Object.values(parsed.rows).reduce(
+        (n, rs) => n + rs.length,
+        0
+      );
       rowCountOk = total === manifest.rowCount;
     } catch {
       rowCountOk = false;
@@ -678,7 +747,7 @@ export function verifyArchivedSegment(
     ? findArchiveManifest(db.journal, manifest.prevManifestId)
     : undefined;
   const expectedChainHash = computeChainHash({
-    prevChainHash: prev?.chainHash ?? '',
+    prevChainHash: prev?.chainHash ?? "",
     manifestId: manifest.manifestId,
     stream: manifest.stream,
     rowCount: manifest.rowCount,

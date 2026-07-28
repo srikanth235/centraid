@@ -11,14 +11,14 @@
 export function coerceAgentAnswer(text: string, json: unknown): unknown {
   const trimmed = text.trim();
   if (!json) return trimmed;
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(trimmed);
-  const candidate = fenced ? fenced[1]!.trim() : trimmed;
+  const fenced = /```(?:json)?\s*(?<body>[\s\S]*?)```/u.exec(trimmed);
+  const candidate = fenced?.groups?.body?.trim() ?? trimmed;
   try {
     return JSON.parse(candidate) as unknown;
   } catch (err) {
     throw new Error(
       `ctx.agent expected JSON but got: ${trimmed.slice(0, 500)} (${err instanceof Error ? err.message : String(err)})`,
-      { cause: err },
+      { cause: err }
     );
   }
 }

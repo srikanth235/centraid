@@ -1,4 +1,4 @@
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath } from "node:url";
 
 // Resolve-alias entries that rewrite a blueprint app's served sibling imports
 // (`./kit.ts` and its `../` forms) to the shell-side adapter when a bundled app
@@ -18,17 +18,18 @@ export interface InlineAliasEntry {
 }
 
 export function inlineBlueprintAliases(): InlineAliasEntry[] {
-  const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
+  const here = (path: string): string =>
+    fileURLToPath(new URL(path, import.meta.url));
   return [
     {
-      find: /^\.\.?\/(?:.*\/)?kit\.ts$/,
-      replacement: here('./kit-inline.ts'),
+      find: /^\.\.?\/(?:.*\/)?kit\.ts$/u,
+      replacement: here("./kit-inline.ts"),
     },
     {
       // Photos retains a relative browser-module specifier; inline it resolves
       // directly to the client's canonical TypeScript implementation.
-      find: /^\.\.?\/(?:.*\/)?video-frame\.js$/,
-      replacement: here('../../video-frame.ts'),
+      find: /^\.\.?\/(?:.*\/)?video-frame\.js$/u,
+      replacement: here("../../video-frame.ts"),
     },
   ];
 }

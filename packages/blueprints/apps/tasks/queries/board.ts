@@ -75,11 +75,11 @@ interface DecoratedAttachment {
 function attachmentsBySubject(
   subjectType: string,
   attachments: RawAttachment[],
-  contentById: Map<string, RawContent>,
+  contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
   // Blob-backed bytes serve as same-origin URLs (issue #296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
-    typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+    typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
       : c?.content_uri;
   const bySubject = new Map<string, DecoratedAttachment[]>();
@@ -92,9 +92,9 @@ function attachmentsBySubject(
       content_id: a.content_id,
       role: a.role,
       is_primary: a.is_primary,
-      media_type: content?.media_type ?? 'application/octet-stream',
+      media_type: content?.media_type ?? "application/octet-stream",
       title: content?.title ?? null,
-      content_uri: srcOf(content) ?? '',
+      content_uri: srcOf(content) ?? "",
       byte_size: content?.byte_size ?? 0,
     });
   }
@@ -104,26 +104,26 @@ function attachmentsBySubject(
   return bySubject;
 }
 
-const OPEN_STATUSES = ['needs-action', 'in-process'];
-const CLOSED_STATUSES = ['completed', 'cancelled'];
+const OPEN_STATUSES = ["needs-action", "in-process"];
+const CLOSED_STATUSES = ["completed", "cancelled"];
 
-export default async ({ input, ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
+export default async function boardHandler({ input, ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
   const OPEN = new Set(OPEN_STATUSES);
   const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
   try {
     const [openResult, closedResult] = await Promise.all([
       ctx.vault.read({
-        entity: 'schedule.task',
-        where: [{ column: 'status', op: 'in', value: OPEN_STATUSES }],
-        orderBy: { column: 'task_id', dir: 'desc' },
+        entity: "schedule.task",
+        where: [{ column: "status", op: "in", value: OPEN_STATUSES }],
+        orderBy: { column: "task_id", dir: "desc" },
         limit: window,
         purpose,
       }),
       ctx.vault.read({
-        entity: 'schedule.task',
-        where: [{ column: 'status', op: 'in', value: CLOSED_STATUSES }],
-        orderBy: { column: 'completed_at', dir: 'desc' },
+        entity: "schedule.task",
+        where: [{ column: "status", op: "in", value: CLOSED_STATUSES }],
+        orderBy: { column: "completed_at", dir: "desc" },
         limit: 50,
         purpose,
       }),
@@ -143,30 +143,34 @@ export default async ({ input, ctx }: HandlerArgs) => {
       ...new Set(
         [...byId.values()]
           .map((t) => t.parent_task_id)
-          .filter((id): id is string => Boolean(id) && !byId.has(id as string)),
+          .filter((id): id is string => Boolean(id) && !byId.has(id as string))
       ),
     ];
     if (missingParentIds.length > 0) {
       const parents = await ctx.vault.read({
-        entity: 'schedule.task',
-        where: [{ column: 'task_id', op: 'in', value: missingParentIds }],
+        entity: "schedule.task",
+        where: [{ column: "task_id", op: "in", value: missingParentIds }],
         purpose,
       });
-      for (const t of (parents.rows ?? []) as unknown as RawTask[]) byId.set(t.task_id, t);
+      for (const t of (parents.rows ?? []) as unknown as RawTask[])
+        byId.set(t.task_id, t);
     }
 
     // …then the reverse edge: every subtask of a fetched top-level task —
     // open ones so a windowed parent never renders with its still-to-do work
     // silently gone, closed ones so `done_children` counts the truth (the
     // read stays bounded: children of the windowed parents only).
-    const topLevelIds = [...byId.values()].filter((t) => !t.parent_task_id).map((t) => t.task_id);
+    const topLevelIds = [...byId.values()]
+      .filter((t) => !t.parent_task_id)
+      .map((t) => t.task_id);
     if (topLevelIds.length > 0) {
       const children = await ctx.vault.read({
-        entity: 'schedule.task',
-        where: [{ column: 'parent_task_id', op: 'in', value: topLevelIds }],
+        entity: "schedule.task",
+        where: [{ column: "parent_task_id", op: "in", value: topLevelIds }],
         purpose,
       });
-      for (const t of (children.rows ?? []) as unknown as RawTask[]) byId.set(t.task_id, t);
+      for (const t of (children.rows ?? []) as unknown as RawTask[])
+        byId.set(t.task_id, t);
     }
     const rows = [...byId.values()];
     const taskIds = rows.map((t) => t.task_id);
@@ -176,27 +180,34 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const attachments =
       taskIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.attachment',
+            entity: "core.attachment",
             where: [
-              { column: 'target_type', op: 'eq', value: 'schedule.task' },
-              { column: 'target_id', op: 'in', value: taskIds },
+              { column: "target_type", op: "eq", value: "schedule.task" },
+              { column: "target_id", op: "in", value: taskIds },
             ],
             purpose,
           })
         : { rows: [] };
-    const attachmentRows = (attachments.rows ?? []) as unknown as RawAttachment[];
-    const contentIds = [...new Set(attachmentRows.map((a) => a.content_id))].filter(Boolean);
+    const attachmentRows = (attachments.rows ??
+      []) as unknown as RawAttachment[];
+    const contentIds = [
+      ...new Set(attachmentRows.map((a) => a.content_id)),
+    ].filter(Boolean);
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.content_item',
-            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            entity: "core.content_item",
+            where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,
           })
         : { rows: [] };
     const contentRows = (contents.rows ?? []) as unknown as RawContent[];
     const contentById = new Map(contentRows.map((c) => [c.content_id, c]));
-    const attByTask = attachmentsBySubject('schedule.task', attachmentRows, contentById);
+    const attByTask = attachmentsBySubject(
+      "schedule.task",
+      attachmentRows,
+      contentById
+    );
 
     // Cross-references (issues #272 + #282): a task's description can @-mention
     // any vault entity. Read the live outbound links + their standoff anchors
@@ -205,11 +216,11 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const links =
       taskIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.link',
+            entity: "core.link",
             where: [
-              { column: 'from_type', op: 'eq', value: 'schedule.task' },
-              { column: 'from_id', op: 'in', value: taskIds },
-              { column: 'valid_to', op: 'is-null' },
+              { column: "from_type", op: "eq", value: "schedule.task" },
+              { column: "from_id", op: "in", value: taskIds },
+              { column: "valid_to", op: "is-null" },
             ],
             purpose,
           })
@@ -217,10 +228,10 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const tags =
       taskIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.tag',
+            entity: "core.tag",
             where: [
-              { column: 'target_type', op: 'eq', value: 'schedule.task' },
-              { column: 'target_id', op: 'in', value: taskIds },
+              { column: "target_type", op: "eq", value: "schedule.task" },
+              { column: "target_id", op: "in", value: taskIds },
             ],
             purpose,
           })
@@ -230,8 +241,8 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const tagConcepts =
       tagConceptIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.concept',
-            where: [{ column: 'concept_id', op: 'in', value: tagConceptIds }],
+            entity: "core.concept",
+            where: [{ column: "concept_id", op: "in", value: tagConceptIds }],
             purpose,
           })
         : { rows: [] };
@@ -239,7 +250,9 @@ export default async ({ input, ctx }: HandlerArgs) => {
       concept_id: string;
       pref_label: string;
     }>;
-    const tagLabelByConcept = new Map(tagConceptRows.map((c) => [c.concept_id, c.pref_label]));
+    const tagLabelByConcept = new Map(
+      tagConceptRows.map((c) => [c.concept_id, c.pref_label])
+    );
     const tagsByTask = new Map<
       string,
       Array<{ tag_id: string; concept_id: string; label: string }>
@@ -249,7 +262,7 @@ export default async ({ input, ctx }: HandlerArgs) => {
       tagsByTask.get(t.target_id)!.push({
         tag_id: t.tag_id,
         concept_id: t.concept_id,
-        label: tagLabelByConcept.get(t.concept_id) ?? '?',
+        label: tagLabelByConcept.get(t.concept_id) ?? "?",
       });
     }
     const allTags = [...tagLabelByConcept.entries()]
@@ -259,7 +272,10 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const linkRows = (links.rows ?? []) as unknown as RawLink[];
     const uniqueRefs = [
       ...new Map(
-        linkRows.map((l) => [`${l.to_type}/${l.to_id}`, { type: l.to_type, id: l.to_id }]),
+        linkRows.map((l) => [
+          `${l.to_type}/${l.to_id}`,
+          { type: l.to_type, id: l.to_id },
+        ])
       ).values(),
     ];
     const [resolved, anchors] = await Promise.all([
@@ -268,14 +284,23 @@ export default async ({ input, ctx }: HandlerArgs) => {
         : Promise.resolve({ cards: [] as Array<Record<string, unknown>> }),
       linkRows.length > 0
         ? ctx.vault.read({
-            entity: 'core.link_anchor',
-            where: [{ column: 'link_id', op: 'in', value: linkRows.map((l) => l.link_id) }],
+            entity: "core.link_anchor",
+            where: [
+              {
+                column: "link_id",
+                op: "in",
+                value: linkRows.map((l) => l.link_id),
+              },
+            ],
             purpose,
           })
         : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
     ]);
     const cardByRef = new Map(
-      (resolved.cards ?? []).map((c) => [`${c.type as string}/${c.id as string}`, c]),
+      (resolved.cards ?? []).map((c) => [
+        `${c.type as string}/${c.id as string}`,
+        c,
+      ])
     );
     const anchorRows = (anchors.rows ?? []) as unknown as Array<{
       link_id: string;
@@ -298,7 +323,7 @@ export default async ({ input, ctx }: HandlerArgs) => {
         card: cardByRef.get(`${l.to_type}/${l.to_id}`) ?? {
           type: l.to_type,
           id: l.to_id,
-          status: 'unknown',
+          status: "unknown",
           title: null,
           subtitle: null,
           thumbnail_content_id: null,
@@ -309,7 +334,8 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const childrenOf = new Map<string, RawTask[]>();
     for (const task of rows) {
       if (!task.parent_task_id) continue;
-      if (!childrenOf.has(task.parent_task_id)) childrenOf.set(task.parent_task_id, []);
+      if (!childrenOf.has(task.parent_task_id))
+        childrenOf.set(task.parent_task_id, []);
       childrenOf.get(task.parent_task_id)!.push(task);
     }
 
@@ -353,7 +379,9 @@ export default async ({ input, ctx }: HandlerArgs) => {
       .map(withChildren);
     const logbook = topLevel
       .filter((t) => !OPEN.has(t.status))
-      .toSorted((a, b) => String(b.completed_at ?? '').localeCompare(String(a.completed_at ?? '')))
+      .toSorted((a, b) =>
+        String(b.completed_at ?? "").localeCompare(String(a.completed_at ?? ""))
+      )
       .slice(0, 50)
       .map(withChildren);
 
@@ -380,4 +408,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

@@ -6,10 +6,10 @@
  * Stages (OpenClaw-like): check Node → npm install package or local packs →
  * print next steps. Never silently installs OS services.
  */
-import { spawnSync } from 'node:child_process';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+
 import {
   buildNpmInstallArgs,
   defaultInstallPrefix,
@@ -17,9 +17,9 @@ import {
   minNodeMajorFromEngines,
   nodeVersionSatisfies,
   parseInstallArgs,
-} from './gateway-npm/pack-helpers.mjs';
+} from "./gateway-npm/pack-helpers.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = import.meta.dirname;
 
 function usage() {
   console.log(`Centraid gateway installer (npm path)
@@ -47,11 +47,11 @@ Options:
 function listPackFiles(fromPackDir) {
   const dir = path.resolve(fromPackDir);
   if (!fs.existsSync(dir)) throw new Error(`pack dir missing: ${dir}`);
-  const manifestPath = path.join(dir, 'manifest.json');
+  const manifestPath = path.join(dir, "manifest.json");
   /** @type {string[]} */
   let packFiles = [];
   if (fs.existsSync(manifestPath)) {
-    const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    const m = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     for (const t of m.tarballs || []) {
       const full = path.join(dir, t);
       if (fs.existsSync(full)) packFiles.push(full);
@@ -60,7 +60,7 @@ function listPackFiles(fromPackDir) {
   if (packFiles.length === 0) {
     packFiles = fs
       .readdirSync(dir)
-      .filter((n) => n.endsWith('.tgz'))
+      .filter((n) => n.endsWith(".tgz"))
       .sort()
       .map((n) => path.join(dir, n));
   }
@@ -80,17 +80,17 @@ function main(argv) {
     return;
   }
 
-  const minMajor = minNodeMajorFromEngines('>=22.5');
+  const minMajor = minNodeMajorFromEngines(">=22.5");
   if (!nodeVersionSatisfies(process.version, minMajor)) {
     console.error(`Node.js >= ${minMajor} required (found ${process.version})`);
     process.exit(1);
   }
-  if (!spawnSync('npm', ['--version'], { encoding: 'utf8' }).stdout) {
-    console.error('npm is required on PATH');
+  if (!spawnSync("npm", ["--version"], { encoding: "utf8" }).stdout) {
+    console.error("npm is required on PATH");
     process.exit(1);
   }
 
-  const home = process.env.HOME || '';
+  const home = process.env.HOME || "";
   let prefix = args.prefix;
   let useGlobal = args.global && !prefix;
   if (!useGlobal && !prefix) {
@@ -111,44 +111,46 @@ function main(argv) {
   }
 
   /** @type {string[]} */
-  const npmArgs = ['install'];
-  if (useGlobal) npmArgs.push('-g');
+  const npmArgs = ["install"];
+  if (useGlobal) npmArgs.push("-g");
   else {
-    npmArgs.push('--prefix', /** @type {string} */ (prefix));
+    npmArgs.push("--prefix", /** @type {string} */ (prefix));
     fs.mkdirSync(/** @type {string} */ (prefix), { recursive: true });
   }
   npmArgs.push(...installTargets);
 
   console.log(`==> Centraid gateway install (node ${process.version})`);
-  console.log(`==> npm ${npmArgs.join(' ')}`);
+  console.log(`==> npm ${npmArgs.join(" ")}`);
 
   if (args.dryRun) {
     console.log(
       formatPostInstallMessage({
-        bin: 'centraid-gateway',
+        bin: "centraid-gateway",
         prefix: useGlobal ? null : prefix,
         withService: args.withService,
-      }),
+      })
     );
-    console.log('OK dry-run complete');
+    console.log("OK dry-run complete");
     return;
   }
 
-  const r = spawnSync('npm', npmArgs, { stdio: 'inherit', env: process.env });
+  const r = spawnSync("npm", npmArgs, { stdio: "inherit", env: process.env });
   if (r.status !== 0) process.exit(r.status ?? 1);
 
   // npm --prefix puts bins under <prefix>/node_modules/.bin; global under npm bin -g.
   // Symlink into <prefix>/bin for OpenClaw-like PATH (~/.centraid/bin).
-  let binPath = '';
+  let binPath = "";
   if (useGlobal) {
-    const gbin = (spawnSync('npm', ['bin', '-g'], { encoding: 'utf8' }).stdout || '').trim();
-    binPath = path.join(gbin, 'centraid-gateway');
+    const gbin = (
+      spawnSync("npm", ["bin", "-g"], { encoding: "utf8" }).stdout || ""
+    ).trim();
+    binPath = path.join(gbin, "centraid-gateway");
   } else {
     const p = /** @type {string} */ (prefix);
-    const nmBin = path.join(p, 'node_modules', '.bin', 'centraid-gateway');
-    const userBin = path.join(p, 'bin');
+    const nmBin = path.join(p, "node_modules", ".bin", "centraid-gateway");
+    const userBin = path.join(p, "bin");
     fs.mkdirSync(userBin, { recursive: true });
-    const dest = path.join(userBin, 'centraid-gateway');
+    const dest = path.join(userBin, "centraid-gateway");
     if (fs.existsSync(nmBin)) {
       try {
         fs.rmSync(dest, { force: true });
@@ -162,26 +164,26 @@ function main(argv) {
   }
   if (binPath && fs.existsSync(binPath)) {
     console.log(`OK centraid-gateway → ${binPath}`);
-    spawnSync(binPath, ['--help'], { stdio: 'inherit' });
+    spawnSync(binPath, ["--help"], { stdio: "inherit" });
   } else {
-    console.log('OK install finished; ensure npm bin dir is on PATH');
+    console.log("OK install finished; ensure npm bin dir is on PATH");
   }
 
   console.log(
     formatPostInstallMessage({
-      bin: 'centraid-gateway',
+      bin: "centraid-gateway",
       prefix: useGlobal ? null : prefix,
       withService: args.withService,
-    }),
+    })
   );
 
   if (args.withService) {
-    console.log('==> Opt-in service install (existing CLI writer only):');
+    console.log("==> Opt-in service install (existing CLI writer only):");
     console.log(
-      `  ${fs.existsSync(binPath) ? binPath : 'centraid-gateway'} service install --data-dir ~/.local/share/centraid/gateway`,
+      `  ${fs.existsSync(binPath) ? binPath : "centraid-gateway"} service install --data-dir ~/.local/share/centraid/gateway`
     );
   }
-  console.log('OK gateway install complete');
+  console.log("OK gateway install complete");
 }
 
 main(process.argv.slice(2));

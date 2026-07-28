@@ -7,11 +7,12 @@
  * identity, and device secrets live separately behind safeStorage.
  */
 
-import { randomBytes } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { connectionsFile, LOCAL_GATEWAY_ID } from './gateway-paths.js';
-import { clearGatewayCredentials } from './gateway-secrets.js';
+import { randomBytes } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { connectionsFile, LOCAL_GATEWAY_ID } from "./gateway-paths.js";
+import { clearGatewayCredentials } from "./gateway-secrets.js";
 import {
   defaultAvatarColor,
   isValidAvatarColor,
@@ -20,11 +21,10 @@ import {
   sortGatewayProfiles,
   validateAddGatewayFields,
   type GatewayProfileShape,
-} from './gateway-store-core.js';
-import { ensureIrohProxy } from './iroh-dialer.js';
+} from "./gateway-store-core.js";
+import { ensureIrohProxy } from "./iroh-dialer.js";
 
 export type GatewayProfile = GatewayProfileShape;
-export { defaultAvatarColor };
 
 export interface ResolvedGateway {
   readonly profile: GatewayProfile;
@@ -37,54 +37,63 @@ export interface ResolvedGateway {
 class GatewayError extends Error {
   constructor(
     public readonly code:
-      | 'unknown_gateway'
-      | 'local_not_removable'
-      | 'invalid_input'
-      | 'already_exists',
-    message: string,
+      | "unknown_gateway"
+      | "local_not_removable"
+      | "invalid_input"
+      | "already_exists",
+    message: string
   ) {
     super(message);
-    this.name = 'GatewayError';
+    this.name = "GatewayError";
   }
 }
 
-let localGatewayInfo: (gatewayId: string) => { url: string; token: string } | undefined = () =>
-  undefined;
+let localGatewayInfo: (
+  gatewayId: string
+) => { url: string; token: string } | undefined = () => undefined;
 
 export function setLocalGatewayInfoProvider(
-  fn: (gatewayId: string) => { url: string; token: string } | undefined,
+  fn: (gatewayId: string) => { url: string; token: string } | undefined
 ): void {
   localGatewayInfo = fn;
 }
 
-const DEFAULT_LOCAL_LABEL = 'Local';
+const DEFAULT_LOCAL_LABEL = "Local";
 
 async function readProfiles(): Promise<GatewayProfile[]> {
   let raw: string;
   try {
-    raw = await fs.readFile(connectionsFile(), 'utf8');
+    raw = await fs.readFile(connectionsFile(), "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
   const parsed = JSON.parse(raw) as unknown;
   if (!Array.isArray(parsed)) {
-    throw new GatewayError('invalid_input', 'connections.json must contain an array.');
+    throw new GatewayError(
+      "invalid_input",
+      "connections.json must contain an array."
+    );
   }
   return parsed.flatMap((row) => {
-    if (!row || typeof row !== 'object') return [];
+    if (!row || typeof row !== "object") return [];
     const id = (row as { id?: unknown }).id;
-    if (typeof id !== 'string') return [];
+    if (typeof id !== "string") return [];
     const profile = normalizeProfile(id, row as Partial<GatewayProfile>);
     return profile ? [profile] : [];
   });
 }
 
-async function writeProfiles(profiles: readonly GatewayProfile[]): Promise<void> {
+async function writeProfiles(
+  profiles: readonly GatewayProfile[]
+): Promise<void> {
   const file = connectionsFile();
   await fs.mkdir(path.dirname(file), { recursive: true });
-  const temp = `${file}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
-  await fs.writeFile(temp, `${JSON.stringify(profiles, null, 2)}\n`, { mode: 0o600, flag: 'wx' });
+  const temp = `${file}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  await fs.writeFile(temp, `${JSON.stringify(profiles, null, 2)}\n`, {
+    mode: 0o600,
+    flag: "wx",
+  });
   try {
     await fs.rename(temp, file);
     await fs.chmod(file, 0o600);
@@ -110,7 +119,7 @@ export async function ensureLocalGateway(): Promise<GatewayProfile> {
   if (existing) return existing;
   const profile: GatewayProfile = {
     id: LOCAL_GATEWAY_ID,
-    kind: 'local',
+    kind: "local",
     label: DEFAULT_LOCAL_LABEL,
     createdAt: new Date().toISOString(),
   };
@@ -133,16 +142,21 @@ export interface AddGatewayInput {
   rememberDevice?: boolean;
 }
 
-export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile> {
+export async function addGateway(
+  input: AddGatewayInput
+): Promise<GatewayProfile> {
   const fields = validateAddGatewayFields(input);
   if (!fields.ok) throw new GatewayError(fields.code, fields.message);
   const { endpointId, label, relayHint, displayName } = fields;
   if (await readProfile(endpointId)) {
-    throw new GatewayError('already_exists', `Gateway "${endpointId}" already exists.`);
+    throw new GatewayError(
+      "already_exists",
+      `Gateway "${endpointId}" already exists.`
+    );
   }
   const profile: GatewayProfile = {
     id: endpointId,
-    kind: 'remote',
+    kind: "remote",
     label,
     displayName,
     avatarColor: isValidAvatarColor(input.avatarColor)
@@ -159,10 +173,11 @@ export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile
 
 export async function updateGatewayRememberDevice(
   id: string,
-  rememberDevice: boolean,
+  rememberDevice: boolean
 ): Promise<GatewayProfile> {
   const current = await readProfile(id);
-  if (!current) throw new GatewayError('unknown_gateway', `Unknown gateway "${id}".`);
+  if (!current)
+    throw new GatewayError("unknown_gateway", `Unknown gateway "${id}".`);
   const next = { ...current, rememberDevice };
   await replaceProfile(next);
   return next;
@@ -171,10 +186,11 @@ export async function updateGatewayRememberDevice(
 /** Refresh address cache without changing a gateway's identity. */
 export async function updateGatewayRelayHint(
   id: string,
-  relayHint: string | undefined,
+  relayHint: string | undefined
 ): Promise<GatewayProfile> {
   const current = await readProfile(id);
-  if (!current) throw new GatewayError('unknown_gateway', `Unknown gateway "${id}".`);
+  if (!current)
+    throw new GatewayError("unknown_gateway", `Unknown gateway "${id}".`);
   const { relayHint: _old, ...rest } = current;
   const next: GatewayProfile = relayHint ? { ...rest, relayHint } : rest;
   await replaceProfile(next);
@@ -183,10 +199,11 @@ export async function updateGatewayRelayHint(
 
 export async function updateProfileMetadata(
   id: string,
-  patch: { displayName?: string; avatarColor?: string },
+  patch: { displayName?: string; avatarColor?: string }
 ): Promise<GatewayProfile> {
   const current = await readProfile(id);
-  if (!current) throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
+  if (!current)
+    throw new GatewayError("unknown_gateway", `No such gateway: ${id}`);
   const next: GatewayProfile = { ...current };
   if (patch.displayName !== undefined) {
     const displayName = patch.displayName.trim() || current.label;
@@ -195,8 +212,8 @@ export async function updateProfileMetadata(
   if (patch.avatarColor !== undefined) {
     if (!isValidAvatarColor(patch.avatarColor)) {
       throw new GatewayError(
-        'invalid_input',
-        `Avatar color "${patch.avatarColor}" must match #RRGGBB.`,
+        "invalid_input",
+        `Avatar color "${patch.avatarColor}" must match #RRGGBB.`
       );
     }
     (next as { avatarColor: string }).avatarColor = patch.avatarColor;
@@ -207,44 +224,58 @@ export async function updateProfileMetadata(
 
 export async function removeGateway(id: string): Promise<void> {
   if (id === LOCAL_GATEWAY_ID) {
-    throw new GatewayError('local_not_removable', 'The default local profile cannot be removed.');
+    throw new GatewayError(
+      "local_not_removable",
+      "The default local profile cannot be removed."
+    );
   }
   if (!isValidGatewayId(id)) {
-    throw new GatewayError('invalid_input', `Invalid gateway id "${id}".`);
+    throw new GatewayError("invalid_input", `Invalid gateway id "${id}".`);
   }
   const profiles = await readProfiles();
   if (!profiles.some((profile) => profile.id === id)) {
-    throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
+    throw new GatewayError("unknown_gateway", `No such gateway: ${id}`);
   }
-  const { closeIrohDialer } = await import('./iroh-dialer.js');
+  const { closeIrohDialer } = await import("./iroh-dialer.js");
   await closeIrohDialer(id);
   clearGatewayCredentials(id);
   await writeProfiles(profiles.filter((profile) => profile.id !== id));
 }
 
-export async function renameGateway(id: string, nextLabel: string): Promise<GatewayProfile> {
+export async function renameGateway(
+  id: string,
+  nextLabel: string
+): Promise<GatewayProfile> {
   const label = nextLabel.trim();
-  if (!label) throw new GatewayError('invalid_input', 'Gateway label cannot be empty.');
+  if (!label)
+    throw new GatewayError("invalid_input", "Gateway label cannot be empty.");
   const current = await readProfile(id);
-  if (!current) throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
+  if (!current)
+    throw new GatewayError("unknown_gateway", `No such gateway: ${id}`);
   const next: GatewayProfile = { ...current, label };
   await replaceProfile(next);
   return next;
 }
 
-export async function resolveGateway(id: string): Promise<ResolvedGateway | undefined> {
+export async function resolveGateway(
+  id: string
+): Promise<ResolvedGateway | undefined> {
   const profile = await readProfile(id);
   if (!profile) return undefined;
-  if (profile.kind === 'local') {
+  if (profile.kind === "local") {
     const info = localGatewayInfo(profile.id);
-    return { profile, url: info?.url ?? '', token: info?.token ?? '' };
+    return { profile, url: info?.url ?? "", token: info?.token ?? "" };
   }
-  if (!profile.endpointId) return { profile, url: '', token: '' };
+  if (!profile.endpointId) return { profile, url: "", token: "" };
   try {
-    const url = await ensureIrohProxy(profile.id, profile.endpointId, profile.relayHint);
-    return { profile, url, token: '' };
+    const url = await ensureIrohProxy(
+      profile.id,
+      profile.endpointId,
+      profile.relayHint
+    );
+    return { profile, url, token: "" };
   } catch {
-    return { profile, url: '', token: '' };
+    return { profile, url: "", token: "" };
   }
 }
 

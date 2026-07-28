@@ -20,25 +20,25 @@
  *   default: local:default
  */
 
-import { useId, type JSX } from 'react';
+import { useId, type JSX } from "react";
 
 export type ConnectorTone =
-  | 'gmail'
-  | 'gcal'
-  | 'gcontacts'
-  | 'gdrive'
-  | 'github'
-  | 'outlook'
-  | 'outlookcal'
-  | 'outlookcontacts'
-  | 'onedrive'
-  | 'gitlab'
-  | 'linear'
-  | 'notion'
-  | 'todoist'
-  | 'slack'
-  | 'dropbox'
-  | 'default';
+  | "gmail"
+  | "gcal"
+  | "gcontacts"
+  | "gdrive"
+  | "github"
+  | "outlook"
+  | "outlookcal"
+  | "outlookcontacts"
+  | "onedrive"
+  | "gitlab"
+  | "linear"
+  | "notion"
+  | "todoist"
+  | "slack"
+  | "dropbox"
+  | "default";
 
 /** Raw SVG markup keyed by Featured tone (Iconify, offline-embedded). */
 export const CONNECTOR_BRAND_SVG: Record<string, string> = {
@@ -86,24 +86,24 @@ export function ConnectorBrandGlyph({
   tone: string;
   size?: number;
 }): JSX.Element {
-  const reactId = useId().replace(/:/g, '');
+  const reactId = useId().replace(/:/gu, "");
   const svg = CONNECTOR_BRAND_SVG[tone] ?? CONNECTOR_BRAND_SVG.default!;
   // Prefix gradient/filter IDs so multiple marks on one page don't collide.
-  const uid = `cb-${tone.replace(/[^a-z0-9]+/gi, '')}-${reactId}`;
+  const uid = `cb-${tone.replace(/[^a-z0-9]+/giu, "")}-${reactId}`;
   const unique = svg
-    .replace(/id="([^"]+)"/g, (_m, id) => `id="${uid}-${id}"`)
-    .replace(/url\(#([^)]+)\)/g, (_m, id) => `url(#${uid}-${id})`)
-    .replace(/href="#([^"]+)"/g, (_m, id) => `href="#${uid}-${id}"`);
+    .replace(/id="(?<id>[^"]+)"/gu, (_m, id) => `id="${uid}-${id}"`)
+    .replace(/url\(#(?<id>[^)]+)\)/gu, (_m, id) => `url(#${uid}-${id})`)
+    .replace(/href="#(?<id>[^"]+)"/gu, (_m, id) => `href="#${uid}-${id}"`);
 
   return (
     <span
       style={{
-        display: 'inline-grid',
-        placeItems: 'center',
+        display: "inline-grid",
+        placeItems: "center",
         width: size,
         height: size,
         lineHeight: 0,
-        color: 'currentColor',
+        color: "currentColor",
       }}
       // Embedded Iconify SVG — static markup, no user content.
       dangerouslySetInnerHTML={{ __html: unique }}

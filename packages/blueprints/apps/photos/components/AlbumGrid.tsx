@@ -3,9 +3,10 @@
 // view — `albums` already carries `count`/`coverUri` (computed once by
 // sidebar.tsx's renderSidebar, reused here so the two views never disagree
 // on a cover/count).
-import { PlusIcon } from '../icons.tsx';
-import type { Album } from '../types.ts';
-import styles from './AlbumGrid.module.css';
+import { PlusIcon } from "../icons.tsx";
+import type { Album } from "../types.ts";
+
+import styles from "./AlbumGrid.module.css";
 
 export function AlbumGridView({
   albums,
@@ -27,11 +28,15 @@ export function AlbumGridView({
         >
           <span
             className={styles.albumCardCover}
-            style={album.coverUri ? { backgroundImage: `url(${album.coverUri})` } : undefined}
+            style={
+              album.coverUri
+                ? { backgroundImage: `url(${album.coverUri})` }
+                : undefined
+            }
           />
-          <span className={styles.albumCardName}>{album.title ?? 'Album'}</span>
+          <span className={styles.albumCardName}>{album.title ?? "Album"}</span>
           <span className={styles.albumCardCount}>
-            {album.count} photo{album.count === 1 ? '' : 's'}
+            {album.count} photo{album.count === 1 ? "" : "s"}
           </span>
         </button>
       ))}

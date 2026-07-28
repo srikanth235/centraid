@@ -3,15 +3,17 @@
 // load-bearing claims are filesystem facts (inode identity, link counts,
 // per-vault GC). Split from placement.test.ts for the 500-line file cap.
 
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { expect } from 'vitest';
-import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
-import { sweepLocalOrphans } from '../blob/local-orphan-sweep.js';
-import { blobUriFor } from '../blob/store.js';
-import { openVaultDb, type VaultDb } from '../db.js';
-import { nowIso, uuidv7 } from '../ids.js';
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { expect } from "vitest";
+
+import { sweepLocalOrphans } from "../blob/local-orphan-sweep.js";
+import { blobUriFor } from "../blob/store.js";
+import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
+import { openVaultDb, type VaultDb } from "../db.js";
+import { nowIso, uuidv7 } from "../ids.js";
 
 const open: VaultDb[] = [];
 
@@ -29,9 +31,9 @@ export interface Household {
 
 /** Two vaults side by side under ONE gateway root — the deployed topology. */
 export function household(): Household {
-  const root = tempDirSync('centraid-share-');
-  const originDir = path.join(root, 'vaults', 'priya');
-  const audienceDir = path.join(root, 'vaults', 'family');
+  const root = tempDirSync("centraid-share-");
+  const originDir = path.join(root, "vaults", "priya");
+  const audienceDir = path.join(root, "vaults", "family");
   mkdirSync(originDir, { recursive: true });
   mkdirSync(audienceDir, { recursive: true });
   const origin = openVaultDb({ dir: originDir });
@@ -40,9 +42,15 @@ export function household(): Household {
   return {
     root,
     origin,
-    originBoot: bootstrapVault(origin, { ownerName: 'Priya', vaultId: 'vault-priya' }),
+    originBoot: bootstrapVault(origin, {
+      ownerName: "Priya",
+      vaultId: "vault-priya",
+    }),
     audience,
-    audienceBoot: bootstrapVault(audience, { ownerName: 'Family', vaultId: 'vault-family' }),
+    audienceBoot: bootstrapVault(audience, {
+      ownerName: "Family",
+      vaultId: "vault-family",
+    }),
   };
 }
 
@@ -56,7 +64,11 @@ export interface SeededPhoto {
 }
 
 /** A photo as Photos actually stores one: content item + thumb + media asset. */
-export function seedPhoto(db: VaultDb, boot: BootstrapResult, label: string): SeededPhoto {
+export function seedPhoto(
+  db: VaultDb,
+  boot: BootstrapResult,
+  label: string
+): SeededPhoto {
   const bytes = Buffer.from(`original-bytes-${label}`);
   const thumbBytes = Buffer.from(`thumb-bytes-${label}`);
   const original = db.blobs.ingestSync(bytes);
@@ -68,7 +80,7 @@ export function seedPhoto(db: VaultDb, boot: BootstrapResult, label: string): Se
       `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, title, language,
           creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, 'image/jpeg', ?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?)`,
+       VALUES (?, 'image/jpeg', ?, ?, ?, ?, NULL, ?, ?, NULL, NULL, ?)`
     )
     .run(
       contentId,
@@ -78,13 +90,13 @@ export function seedPhoto(db: VaultDb, boot: BootstrapResult, label: string): Se
       `Photo ${label}`,
       boot.ownerPartyId,
       boot.deviceId,
-      now,
+      now
     );
   db.vault
     .prepare(
       `INSERT INTO core_content_derivative
          (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
-       VALUES (?, ?, 'thumb', ?, 'image/jpeg', ?, NULL, ?)`,
+       VALUES (?, ?, 'thumb', ?, 'image/jpeg', ?, NULL, ?)`
     )
     .run(uuidv7(), contentId, thumb.sha256, thumb.byteSize, now);
   const assetId = uuidv7();
@@ -94,7 +106,7 @@ export function seedPhoto(db: VaultDb, boot: BootstrapResult, label: string): Se
          (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id,
           place_id, camera_device_id, width, height, duration_s, exif_json,
           favorite, archived_at, deleted_at, purge_at)
-       VALUES (?, ?, 'photo', ?, NULL, NULL, NULL, ?, 800, 600, NULL, NULL, 1, NULL, NULL, NULL)`,
+       VALUES (?, ?, 'photo', ?, NULL, NULL, NULL, ?, 800, 600, NULL, NULL, 1, NULL, NULL, NULL)`
     )
     .run(assetId, contentId, now, boot.deviceId);
   return {
@@ -120,6 +132,8 @@ export function casPath(db: VaultDb, sha: string): string {
  * second pass reclaimed.
  */
 export function reclaimOrphans(db: VaultDb): string[] {
-  expect(sweepLocalOrphans(db, { graceWindowMs: 0, now: 1_000 }).deleted).toEqual([]);
+  expect(
+    sweepLocalOrphans(db, { graceWindowMs: 0, now: 1_000 }).deleted
+  ).toEqual([]);
   return sweepLocalOrphans(db, { graceWindowMs: 0, now: 2_000 }).deleted;
 }

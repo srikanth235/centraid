@@ -21,39 +21,43 @@
 export interface RegistryGateway {
   gatewayId: string;
   gatewayLabel: string;
-  gatewayKind: 'local' | 'remote';
+  gatewayKind: "local" | "remote";
 }
 
 /** Why a gateway's probe didn't come back, plus `'loading'` for one still in
  *  flight. Mirrors `CentraidListGatewayVaultsResult`'s error union. */
-export type GatewayProbeStatus = 'loading' | 'unreachable' | 'auth_failed' | 'bad_response';
+export type GatewayProbeStatus =
+  | "loading"
+  | "unreachable"
+  | "auth_failed"
+  | "bad_response";
 
 export type GatewayProbeOutcome =
-  | { status: 'loading' }
-  | { status: 'ready'; spaceCount: number }
-  | { status: 'error'; error: Exclude<GatewayProbeStatus, 'loading'> };
+  | { status: "loading" }
+  | { status: "ready"; spaceCount: number }
+  | { status: "error"; error: Exclude<GatewayProbeStatus, "loading"> };
 
 /** Cached probe state for one gateway. `spaceCount` survives a later
  *  `'loading'`/`'error'` outcome so a background refresh failure never blanks
  *  out a number the owner already saw. */
 export interface GatewayProbeEntry {
   spaceCount: number | undefined;
-  status: 'loading' | 'ready' | 'error';
-  error?: Exclude<GatewayProbeStatus, 'loading'>;
+  status: "loading" | "ready" | "error";
+  error?: Exclude<GatewayProbeStatus, "loading">;
 }
 
 export type GatewayProbeCache = Record<string, GatewayProbeEntry>;
 
 /** User-facing transport chip. */
-export type GatewayTransportBadge = 'This Mac' | 'iroh';
+export type GatewayTransportBadge = "This Mac" | "iroh";
 
 /** One row of the gateway switcher. */
 export interface GatewayRow {
   gatewayId: string;
   gatewayLabel: string;
-  gatewayKind: 'local' | 'remote';
+  gatewayKind: "local" | "remote";
   transportBadge: GatewayTransportBadge;
-  status: GatewayProbeStatus | 'ready';
+  status: GatewayProbeStatus | "ready";
   /** Known space count, once a probe succeeded. */
   spaceCount: number | undefined;
   isActive: boolean;
@@ -66,16 +70,20 @@ export interface GatewayRow {
 export function applyProbeOutcome(
   cache: GatewayProbeCache,
   gatewayId: string,
-  outcome: GatewayProbeOutcome,
+  outcome: GatewayProbeOutcome
 ): GatewayProbeCache {
   const prev = cache[gatewayId];
   let next: GatewayProbeEntry;
-  if (outcome.status === 'loading') {
-    next = { spaceCount: prev?.spaceCount, status: 'loading' };
-  } else if (outcome.status === 'ready') {
-    next = { spaceCount: outcome.spaceCount, status: 'ready' };
+  if (outcome.status === "loading") {
+    next = { spaceCount: prev?.spaceCount, status: "loading" };
+  } else if (outcome.status === "ready") {
+    next = { spaceCount: outcome.spaceCount, status: "ready" };
   } else {
-    next = { spaceCount: prev?.spaceCount, status: 'error', error: outcome.error };
+    next = {
+      spaceCount: prev?.spaceCount,
+      status: "error",
+      error: outcome.error,
+    };
   }
   return { ...cache, [gatewayId]: next };
 }
@@ -83,7 +91,7 @@ export function applyProbeOutcome(
 function transportBadgeFor(gw: RegistryGateway): GatewayTransportBadge {
   // Every remote gateway is reached over iroh — the SSH admin channel and its
   // chip were deleted with the SSH connect method (issue #603).
-  return gw.gatewayKind === 'local' ? 'This Mac' : 'iroh';
+  return gw.gatewayKind === "local" ? "This Mac" : "iroh";
 }
 
 /**
@@ -93,23 +101,23 @@ function transportBadgeFor(gw: RegistryGateway): GatewayTransportBadge {
 export function buildGatewayRows(
   gateways: readonly RegistryGateway[],
   cache: GatewayProbeCache,
-  activeGatewayId: string,
+  activeGatewayId: string
 ): GatewayRow[] {
   const rows = gateways.map((gw): GatewayRow => {
     const entry = cache[gw.gatewayId];
     return {
-      canRemove: gw.gatewayKind !== 'local',
+      canRemove: gw.gatewayKind !== "local",
       gatewayId: gw.gatewayId,
       gatewayKind: gw.gatewayKind,
       gatewayLabel: gw.gatewayLabel,
       isActive: gw.gatewayId === activeGatewayId,
       spaceCount: entry?.spaceCount,
       status:
-        entry?.status === 'ready'
-          ? 'ready'
-          : entry?.status === 'error'
-            ? (entry.error ?? 'unreachable')
-            : 'loading',
+        entry?.status === "ready"
+          ? "ready"
+          : entry?.status === "error"
+            ? (entry.error ?? "unreachable")
+            : "loading",
       transportBadge: transportBadgeFor(gw),
     };
   });
@@ -127,7 +135,7 @@ let lastGateways: RegistryGateway[] = [];
 type ProfileShape = {
   id: string;
   label: string;
-  kind: 'local' | 'remote';
+  kind: "local" | "remote";
 };
 
 function toRegistryGateway(p: ProfileShape): RegistryGateway {
@@ -141,7 +149,8 @@ function toRegistryGateway(p: ProfileShape): RegistryGateway {
 /** How many gateways this client knows about — the >1 gate on showing the
  *  switcher at all. Resolves `0` when the host exposes no gateway list. */
 export async function countGateways(): Promise<number> {
-  const profiles = (await window.CentraidApi.listGateways?.().catch(() => [])) ?? [];
+  const profiles =
+    (await window.CentraidApi.listGateways?.().catch(() => [])) ?? [];
   lastGateways = profiles.map(toRegistryGateway);
   return lastGateways.length;
 }
@@ -154,18 +163,21 @@ export function getCachedGatewayRows(activeGatewayId: string): GatewayRow[] {
 /** Probe one gateway into the shared cache. Never throws — folds any rejection
  *  to the same `'unreachable'` outcome `listGatewayVaults` reports itself. */
 async function probeOneGateway(gatewayId: string): Promise<void> {
-  cache = applyProbeOutcome(cache, gatewayId, { status: 'loading' });
+  cache = applyProbeOutcome(cache, gatewayId, { status: "loading" });
   try {
     const result = await window.CentraidApi.listGatewayVaults({ gatewayId });
     cache = applyProbeOutcome(
       cache,
       gatewayId,
       result.ok
-        ? { status: 'ready', spaceCount: result.vaults.length }
-        : { status: 'error', error: result.error },
+        ? { status: "ready", spaceCount: result.vaults.length }
+        : { status: "error", error: result.error }
     );
   } catch {
-    cache = applyProbeOutcome(cache, gatewayId, { status: 'error', error: 'unreachable' });
+    cache = applyProbeOutcome(cache, gatewayId, {
+      status: "error",
+      error: "unreachable",
+    });
   }
 }
 
@@ -176,7 +188,7 @@ async function probeOneGateway(gatewayId: string): Promise<void> {
  */
 export async function openGatewayRegistry(
   activeGatewayId: string,
-  onUpdate: (rows: GatewayRow[]) => void,
+  onUpdate: (rows: GatewayRow[]) => void
 ): Promise<GatewayRow[]> {
   await countGateways();
   const gateways = lastGateways;
@@ -184,7 +196,7 @@ export async function openGatewayRegistry(
     gateways.map(async (gw) => {
       await probeOneGateway(gw.gatewayId);
       onUpdate(buildGatewayRows(gateways, cache, activeGatewayId));
-    }),
+    })
   );
   return buildGatewayRows(gateways, cache, activeGatewayId);
 }

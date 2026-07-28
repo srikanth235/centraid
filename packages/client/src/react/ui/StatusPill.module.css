@@ -14,17 +14,17 @@
   font-weight: 500;
   color: var(--ink-3);
 }
-.status[data-tone='new'] {
+.status[data-tone="new"] {
   color: var(--accent-light);
 }
-.status[data-tone='draft'] {
+.status[data-tone="draft"] {
   color: var(--icon-amber);
 }
-.status[data-tone='live'] {
+.status[data-tone="live"] {
   color: var(--success);
 }
 /* Gateway heartbeat pill (sidebar): unreachable. */
-.status[data-tone='down'] {
+.status[data-tone="down"] {
   color: var(--danger);
 }
 /* Tighter tracking for dense contexts (card footers). */

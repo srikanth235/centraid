@@ -8,14 +8,15 @@
 // the folded People token layer) + the global kit-* vocabulary (kit.css, loaded
 // once by the route host). The profile drawer + add-person modal render as slots
 // after the shell, inside the token-scoped app root.
-import type { KeyboardEvent, ReactNode } from 'react';
-import styles from './Chrome.module.css';
+import type { KeyboardEvent, ReactNode } from "react";
+
+import styles from "./Chrome.module.css";
 
 export interface ChromeProps {
   narrow: boolean;
   sideOpen: boolean;
   newMenuOpen: boolean;
-  view: 'grid' | 'list';
+  view: "grid" | "list";
   title: string;
   sub: string;
   showPeopleTools: boolean;
@@ -25,7 +26,7 @@ export interface ChromeProps {
   onOpenSide: () => void;
   onCloseSide: () => void;
   onToggleNewMenu: () => void;
-  onSelectView: (view: 'grid' | 'list') => void;
+  onSelectView: (view: "grid" | "list") => void;
   onSort: () => void;
   onSearchInput: () => void;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -51,11 +52,11 @@ export function Chrome(props: ChromeProps): ReactNode {
 
   const shellClass = [
     styles.shell,
-    props.narrow ? styles.isNarrow : '',
-    props.sideOpen ? styles.sideOpen : '',
+    props.narrow ? styles.isNarrow : "",
+    props.sideOpen ? styles.sideOpen : "",
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
   return (
     <>
       <div className={shellClass}>
@@ -136,7 +137,11 @@ export function Chrome(props: ChromeProps): ReactNode {
                 <path d="m6 9 6 6 6-6" />
               </svg>
             </button>
-            <div className={styles.newMenu} role="menu" hidden={!props.newMenuOpen}>
+            <div
+              className={styles.newMenu}
+              role="menu"
+              hidden={!props.newMenuOpen}
+            >
               {props.newMenu}
             </div>
           </div>
@@ -150,7 +155,7 @@ export function Chrome(props: ChromeProps): ReactNode {
 
           <nav
             className={styles.nav}
-            style={{ marginTop: '8px' }}
+            style={{ marginTop: "8px" }}
             aria-label="Journal and activity"
           >
             {props.sidebarJournalNav}
@@ -231,13 +236,16 @@ export function Chrome(props: ChromeProps): ReactNode {
               />
             </div>
             <div className={styles.topbarTools}>
-              <fieldset className={`kit-seg ${styles.viewtoggle}`} aria-label="View">
+              <fieldset
+                className={`kit-seg ${styles.viewtoggle}`}
+                aria-label="View"
+              >
                 <button
                   type="button"
                   className={styles.viewbtn}
                   aria-label="Grid view"
-                  aria-pressed={props.view === 'grid'}
-                  onClick={() => props.onSelectView('grid')}
+                  aria-pressed={props.view === "grid"}
+                  onClick={() => props.onSelectView("grid")}
                 >
                   <svg
                     width="17"
@@ -259,8 +267,8 @@ export function Chrome(props: ChromeProps): ReactNode {
                   type="button"
                   className={styles.viewbtn}
                   aria-label="List view"
-                  aria-pressed={props.view === 'list'}
-                  onClick={() => props.onSelectView('list')}
+                  aria-pressed={props.view === "list"}
+                  onClick={() => props.onSelectView("list")}
                 >
                   <svg
                     width="17"
@@ -292,7 +300,7 @@ export function Chrome(props: ChromeProps): ReactNode {
             // (the served islands exposed the same id). Without it, a refocus
             // after a revoke would be throttled and never retry the read (#505).
             <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
-              <strong>No vault access yet.</strong>{' '}
+              <strong>No vault access yet.</strong>{" "}
               <span>
                 {props.consent.message ||
                   "Ask the owner to approve this app's requested scopes in vault settings."}
@@ -315,11 +323,18 @@ export function Chrome(props: ChromeProps): ReactNode {
             </div>
             {props.showPeopleTools ? (
               <div className={styles.toolbarTools}>
-                <fieldset className={styles.chips} aria-label="Filter by status">
+                <fieldset
+                  className={styles.chips}
+                  aria-label="Filter by status"
+                >
                   {props.statusChips}
                 </fieldset>
                 <span className={styles.toolbarDiv} aria-hidden="true" />
-                <button type="button" className={styles.sort} onClick={props.onSort}>
+                <button
+                  type="button"
+                  className={styles.sort}
+                  onClick={props.onSort}
+                >
                   <svg
                     width="15"
                     height="15"
@@ -339,7 +354,11 @@ export function Chrome(props: ChromeProps): ReactNode {
           </div>
 
           {props.bulkCount > 0 ? (
-            <div className={styles.bulk} role="toolbar" aria-label="Selection actions">
+            <div
+              className={styles.bulk}
+              role="toolbar"
+              aria-label="Selection actions"
+            >
               {props.bulk}
             </div>
           ) : null}

@@ -5,13 +5,13 @@
 // focus/select guard mirrors `mountMedia`'s once-only pattern. Renders only
 // kit vocabulary (`kit-input`, `bare`), so it owns no CSS module.
 export function InlineInput({
-  value = '',
+  value = "",
   placeholder,
   label,
   // kit-input is the text-input primitive (app.css no longer styles a bare
   // `input` element) — every caller gets it unless it composes its own
   // (the new-album chip rides `kit-input bare`).
-  className = 'kit-input',
+  className = "kit-input",
   autoSelect = false,
   onSubmit,
   onCancel,
@@ -33,16 +33,16 @@ export function InlineInput({
       aria-label={label}
       ref={(el) => {
         if (!el || el.dataset.wired) return;
-        el.dataset.wired = '1';
+        el.dataset.wired = "1";
         el.focus();
         if (autoSelect) el.select();
       }}
       onKeyDown={(e) => {
-        if (e.key === 'Escape') {
+        if (e.key === "Escape") {
           onCancel();
           return;
         }
-        if (e.key !== 'Enter') return;
+        if (e.key !== "Enter") return;
         const title = e.currentTarget.value.trim();
         if (!title) {
           onCancel();

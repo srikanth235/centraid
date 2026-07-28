@@ -41,15 +41,17 @@ export const DEFAULT_GATEWAY_CAPABILITIES: GatewayCapabilities = Object.freeze({
   automationTurns: true,
 });
 
-export function isGatewayCapabilities(value: unknown): value is GatewayCapabilities {
-  if (value === null || typeof value !== 'object') return false;
+export function isGatewayCapabilities(
+  value: unknown
+): value is GatewayCapabilities {
+  if (value === null || typeof value !== "object") return false;
   const c = value as Record<string, unknown>;
   return (
-    typeof c.webSessions === 'boolean' &&
-    typeof c.devicePairing === 'boolean' &&
-    typeof c.tunnel === 'boolean' &&
-    typeof c.backupWal === 'boolean' &&
-    (c.assistOAuth === undefined || typeof c.assistOAuth === 'boolean') &&
-    (c.automationTurns === undefined || typeof c.automationTurns === 'boolean')
+    typeof c.webSessions === "boolean" &&
+    typeof c.devicePairing === "boolean" &&
+    typeof c.tunnel === "boolean" &&
+    typeof c.backupWal === "boolean" &&
+    (c.assistOAuth === undefined || typeof c.assistOAuth === "boolean") &&
+    (c.automationTurns === undefined || typeof c.automationTurns === "boolean")
   );
 }

@@ -2,11 +2,17 @@
 // place where a turn is deliberately re-sent, so the resend's shape is the whole
 // contract: same idempotency key, no second user bubble, and EVERY provider
 // approved so far — a consent-gated failover asks twice.
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AssistantBridgeProps, AssistantSnapshot } from '../../screen-contracts.js';
-import type { TurnStreamEvent } from '../../../gateway-client.js';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { CentraidConversationSummary } from "../../../centraid-api.js";
+import type { TurnStreamEvent } from "../../../gateway-client.js";
+import type {
+  AssistantBridgeProps,
+  AssistantSnapshot,
+} from "../../screen-contracts.js";
+import type { ShellActions } from "../actions.js";
 
 const captured = vi.hoisted(() => ({
   props: null as AssistantBridgeProps | null,
@@ -14,42 +20,69 @@ const captured = vi.hoisted(() => ({
   snapshots: [] as AssistantSnapshot[],
 }));
 const actions = vi.hoisted(() => ({
-  confirm: vi.fn(),
-  navigate: vi.fn(),
-  replace: vi.fn(),
-  refreshAssistantThreads: vi.fn(),
-  showToast: vi.fn(),
+  confirm: vi.fn<ShellActions["confirm"]>(),
+  navigate: vi.fn<ShellActions["navigate"]>(),
+  replace: vi.fn<NonNullable<ShellActions["replace"]>>(),
+  refreshAssistantThreads:
+    vi.fn<NonNullable<ShellActions["refreshAssistantThreads"]>>(),
+  showToast: vi.fn<ShellActions["showToast"]>(),
 }));
 const api = vi.hoisted(() => ({
-  ASSISTANT_APP_ID: '_assistant',
+  ASSISTANT_APP_ID: "_assistant",
   MAX_ATTACHMENT_BYTES: 25 * 1024 * 1024,
-  conversationStatus: vi.fn(),
-  createConversation: vi.fn(),
-  fetchAssistantAttachmentUrl: vi.fn(),
-  getUserPrefs: vi.fn(),
-  loadConversation: vi.fn(),
-  renameConversation: vi.fn(),
-  searchVaultEntities: vi.fn(),
-  setConversationFeedback: vi.fn(),
-  streamAssistantTurn: vi.fn(),
-  uploadConversationAttachment: vi.fn(),
+  conversationStatus:
+    vi.fn<typeof import("../../../gateway-client.js").conversationStatus>(),
+  createConversation:
+    vi.fn<typeof import("../../../gateway-client.js").createConversation>(),
+  fetchAssistantAttachmentUrl:
+    vi.fn<
+      typeof import("../../../gateway-client.js").fetchAssistantAttachmentUrl
+    >(),
+  getUserPrefs:
+    vi.fn<typeof import("../../../gateway-client.js").getUserPrefs>(),
+  loadConversation:
+    vi.fn<typeof import("../../../gateway-client.js").loadConversation>(),
+  renameConversation:
+    vi.fn<typeof import("../../../gateway-client.js").renameConversation>(),
+  searchVaultEntities:
+    vi.fn<typeof import("../../../gateway-client.js").searchVaultEntities>(),
+  setConversationFeedback:
+    vi.fn<
+      typeof import("../../../gateway-client.js").setConversationFeedback
+    >(),
+  streamAssistantTurn:
+    vi.fn<typeof import("../../../gateway-client.js").streamAssistantTurn>(),
+  uploadConversationAttachment:
+    vi.fn<
+      typeof import("../../../gateway-client.js").uploadConversationAttachment
+    >(),
 }));
 const providers = vi.hoisted(() => ({
-  loadProviders: vi.fn(),
-  setSubsystemConfigPin: vi.fn(),
-  setSubsystemModel: vi.fn(),
+  loadProviders:
+    vi.fn<typeof import("./settingsProvidersData.js").loadProviders>(),
+  setSubsystemConfigPin:
+    vi.fn<typeof import("./settingsProvidersData.js").setSubsystemConfigPin>(),
+  setSubsystemModel:
+    vi.fn<typeof import("./settingsProvidersData.js").setSubsystemModel>(),
 }));
 
-vi.mock('../../../gateway-client.js', () => api);
-vi.mock('../actions.js', () => ({ useShellActions: () => actions }));
-vi.mock('../prompt.js', () => ({ openPrompt: vi.fn() }));
-vi.mock('./settingsProvidersData.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./settingsProvidersData.js')>()),
-  loadProviders: providers.loadProviders,
-  setSubsystemConfigPin: providers.setSubsystemConfigPin,
-  setSubsystemModel: providers.setSubsystemModel,
+vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => api);
+vi.mock(import("../actions.js") as Promise<unknown>, () => ({
+  useShellActions: () => actions,
 }));
-vi.mock('../../screens/AssistantScreen.js', () => ({
+vi.mock(import("../prompt.js") as Promise<unknown>, () => ({
+  openPrompt: vi.fn<typeof import("../prompt.js").openPrompt>(),
+}));
+vi.mock(
+  import("./settingsProvidersData.js") as Promise<unknown>,
+  async (importOriginal) => ({
+    ...(await importOriginal<typeof import("./settingsProvidersData.js")>()),
+    loadProviders: providers.loadProviders,
+    setSubsystemConfigPin: providers.setSubsystemConfigPin,
+    setSubsystemModel: providers.setSubsystemModel,
+  })
+);
+vi.mock(import("../../screens/AssistantScreen.js") as Promise<unknown>, () => ({
   default: (props: AssistantBridgeProps) => {
     captured.props = props;
     props.onReady((snapshot) => {
@@ -60,11 +93,11 @@ vi.mock('../../screens/AssistantScreen.js', () => ({
   },
 }));
 
-const { default: AssistantRoute } = await import('./AssistantRoute.js');
+const { default: AssistantRoute } = await import("./AssistantRoute.js");
 
 type Stream = (
   input: { providerConsent?: string | string[]; idempotencyKey?: string },
-  onEvent: (event: TurnStreamEvent) => void,
+  onEvent: (event: TurnStreamEvent) => void
 ) => Promise<{ ended: boolean }>;
 
 /** Each entry is one turn attempt: the providers it must ask consent for. */
@@ -74,14 +107,14 @@ function streamAskingFor(...consentPerAttempt: Array<string | null>): Stream {
     const provider = consentPerAttempt[attempt++] ?? null;
     if (provider) {
       onEvent({
-        type: 'consent.required',
-        consentKind: 'provider-egress',
+        type: "consent.required",
+        consentKind: "provider-egress",
         provider,
-        reason: 'ladder',
+        reason: "ladder",
         message: `${provider} needs approval.`,
       });
     } else {
-      onEvent({ type: 'final', text: 'Answered.' });
+      onEvent({ type: "final", text: "Answered." });
     }
     return { ended: true };
   };
@@ -90,144 +123,185 @@ function streamAskingFor(...consentPerAttempt: Array<string | null>): Stream {
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
+function conversation(
+  overrides: Partial<CentraidConversationSummary> = {}
+): CentraidConversationSummary {
+  return {
+    id: "conversation-1",
+    originAppId: null,
+    title: "Assistant",
+    adapterKind: null,
+    adapterSessionId: null,
+    turnCount: 0,
+    pinned: false,
+    archived: false,
+    createdAt: 1,
+    updatedAt: 1,
+    messageCount: 0,
+    hydrationCount: 0,
+    ...overrides,
+  };
+}
+
 async function mount(): Promise<AssistantBridgeProps> {
-  container = document.createElement('div');
+  container = document.createElement("div");
   document.body.appendChild(container);
   await act(async () => {
     root = createRoot(container as HTMLDivElement);
     root.render(<AssistantRoute />);
   });
-  if (!captured.props) throw new Error('assistant bridge was not captured');
+  if (!captured.props) throw new Error("assistant bridge was not captured");
   return captured.props;
 }
 
 /** Every `providerConsent` the route put on the wire, attempt by attempt. */
 function consentPerCall(): Array<string | string[] | undefined> {
   return api.streamAssistantTurn.mock.calls.map(
-    (call) => (call[0] as { providerConsent?: string | string[] }).providerConsent,
+    (call) =>
+      (call[0] as { providerConsent?: string | string[] }).providerConsent
   );
 }
+describe("AssistantRoute suite", () => {
+  beforeEach(() => {
+    captured.props = null;
+    captured.snapshot = null;
+    captured.snapshots = [];
+    actions.confirm.mockReset().mockResolvedValue(true);
+    actions.navigate.mockReset();
+    actions.replace.mockReset();
+    actions.refreshAssistantThreads.mockReset();
+    actions.showToast.mockReset();
 
-beforeEach(() => {
-  captured.props = null;
-  captured.snapshot = null;
-  captured.snapshots = [];
-  actions.confirm.mockReset().mockResolvedValue(true);
-  actions.navigate.mockReset();
-  actions.replace.mockReset();
-  actions.refreshAssistantThreads.mockReset();
-  actions.showToast.mockReset();
-
-  api.conversationStatus.mockReset().mockResolvedValue({ settled: true, turnCount: 1 });
-  api.createConversation.mockReset().mockResolvedValue({ id: 'conversation-1' });
-  api.getUserPrefs.mockReset().mockResolvedValue({});
-  api.loadConversation.mockReset().mockResolvedValue({ messages: [], turnCount: 1 });
-  api.searchVaultEntities.mockReset().mockResolvedValue([]);
-  api.setConversationFeedback.mockReset().mockResolvedValue(undefined);
-  api.streamAssistantTurn.mockReset().mockImplementation(streamAskingFor(null));
-  api.uploadConversationAttachment.mockReset();
-  providers.loadProviders.mockReset().mockResolvedValue({
-    selectedKind: 'codex',
-    anyLoading: false,
-    savedModelByKind: {},
-    subsystemModelByKind: {},
-    defaultConfigPinsByKind: {},
-    subsystemConfigPinsByKind: {},
-    diagnosticsJson: '{}',
-    subsystemRunnerByKey: { assistant: 'codex' },
-    subsystemRunnerLadders: {},
-    cards: [
-      {
-        kind: 'codex',
-        title: 'Codex',
-        accent: '#10b981',
-        subtitle: 'ready',
-        connected: true,
-        sessionReady: true,
-        modelsLoading: false,
-        models: [],
-        breakerStates: [{ failureClass: 'quota', state: 'open' }],
-      },
-    ],
-  });
-});
-
-afterEach(() => {
-  act(() => root?.unmount());
-  root = null;
-  container?.remove();
-  container = null;
-  vi.clearAllMocks();
-});
-
-describe('AssistantRoute provider consent', () => {
-  it('resends after approval with the same idempotency key and no second user bubble', async () => {
-    api.streamAssistantTurn.mockImplementation(streamAskingFor('claude-code', null));
-    const bridge = await mount();
-
-    await act(async () => bridge.onSend('what changed?'));
-
-    expect(actions.confirm).toHaveBeenCalledTimes(1);
-    expect(api.streamAssistantTurn).toHaveBeenCalledTimes(2);
-    const [first, second] = api.streamAssistantTurn.mock.calls.map(
-      (call) => call[0] as { idempotencyKey: string; message: string },
-    );
-    expect(second!.idempotencyKey).toBe(first!.idempotencyKey);
-    expect(second!.message).toBe('what changed?');
-    expect(consentPerCall()).toEqual([undefined, 'claude-code']);
-    // appendUser:false on the resend — the transcript never held two copies of
-    // the message (checked across every snapshot, since the post-turn reload
-    // replaces the live rows with the ledger's).
-    const userBubbles = captured.snapshots.map(
-      (snapshot) => snapshot.messages.filter((message) => message.kind === 'user').length,
-    );
-    expect(Math.max(...userBubbles)).toBe(1);
-  });
-
-  it('accumulates approvals so a consent-gated failover keeps the first provider', async () => {
-    api.streamAssistantTurn.mockImplementation(streamAskingFor('claude-code', 'copilot', null));
-    const bridge = await mount();
-
-    await act(async () => bridge.onSend('what changed?'));
-
-    expect(actions.confirm).toHaveBeenCalledTimes(2);
-    expect(consentPerCall()).toEqual([undefined, 'claude-code', ['claude-code', 'copilot']]);
-  });
-
-  it('sends nothing more when the owner declines, and says so in the transcript', async () => {
-    api.streamAssistantTurn.mockImplementation(streamAskingFor('claude-code', null));
-    actions.confirm.mockResolvedValue(false);
-    const bridge = await mount();
-
-    await act(async () => bridge.onSend('what changed?'));
-
-    expect(api.streamAssistantTurn).toHaveBeenCalledTimes(1);
-    expect(captured.snapshot?.messages.at(-1)).toMatchObject({
-      kind: 'notice',
-      text: 'Nothing was sent to claude-code.',
-    });
-  });
-});
-
-describe('AssistantRoute picker + workspace', () => {
-  it('carries breaker health in the runner hint, like the builder and automation pickers', async () => {
-    const bridge = await mount();
-    await expect(bridge.loadModelPicker()).resolves.toMatchObject({
-      runners: [{ kind: 'codex', hint: 'ready · quota open' }],
+    api.conversationStatus
+      .mockReset()
+      .mockResolvedValue({ turnCount: 1, updatedAt: 1 });
+    api.createConversation.mockReset().mockResolvedValue(conversation());
+    api.getUserPrefs.mockReset().mockResolvedValue({});
+    api.loadConversation
+      .mockReset()
+      .mockResolvedValue({ ...conversation({ turnCount: 1 }), messages: [] });
+    api.searchVaultEntities.mockReset().mockResolvedValue([]);
+    api.setConversationFeedback.mockReset().mockResolvedValue(undefined);
+    api.streamAssistantTurn
+      .mockReset()
+      .mockImplementation(streamAskingFor(null));
+    api.uploadConversationAttachment.mockReset();
+    providers.loadProviders.mockReset().mockResolvedValue({
+      selectedKind: "codex",
+      anyLoading: false,
+      savedModelByKind: {},
+      subsystemModelByKind: {},
+      defaultConfigPinsByKind: {},
+      subsystemConfigPinsByKind: {},
+      diagnosticsJson: "{}",
+      subsystemRunnerByKey: { assistant: "codex" },
+      subsystemRunnerLadders: {},
+      cards: [
+        {
+          kind: "codex",
+          title: "Codex",
+          accent: "#10b981",
+          subtitle: "ready",
+          connected: true,
+          sessionReady: true,
+          modelsLoading: false,
+          models: [],
+          breakerStates: [{ failureClass: "quota", state: "open" }],
+        },
+      ],
     });
   });
 
-  it('refuses a relative scoped folder and keeps the shared list unchanged', async () => {
-    const { openPrompt } = await import('../prompt.js');
-    vi.mocked(openPrompt).mockResolvedValue('relative/path');
-    const bridge = await mount();
+  afterEach(() => {
+    act(() => root?.unmount());
+    root = null;
+    container?.remove();
+    container = null;
+    vi.clearAllMocks();
+  });
 
-    await act(async () => {
-      bridge.onAddWorkspace?.();
-      await Promise.resolve();
+  describe("AssistantRoute provider consent", () => {
+    it("resends after approval with the same idempotency key and no second user bubble", async () => {
+      api.streamAssistantTurn.mockImplementation(
+        streamAskingFor("claude-code", null)
+      );
+      const bridge = await mount();
+
+      await act(async () => bridge.onSend("what changed?"));
+
+      expect(actions.confirm).toHaveBeenCalledOnce();
+      expect(api.streamAssistantTurn).toHaveBeenCalledTimes(2);
+      const [first, second] = api.streamAssistantTurn.mock.calls.map(
+        (call) => call[0] as { idempotencyKey: string; message: string }
+      );
+      expect(second!.idempotencyKey).toBe(first!.idempotencyKey);
+      expect(second!.message).toBe("what changed?");
+      expect(consentPerCall()).toStrictEqual([undefined, "claude-code"]);
+      // appendUser:false on the resend — the transcript never held two copies of
+      // the message (checked across every snapshot, since the post-turn reload
+      // replaces the live rows with the ledger's).
+      const userBubbles = captured.snapshots.map(
+        (snapshot) =>
+          snapshot.messages.filter((message) => message.kind === "user").length
+      );
+      expect(Math.max(...userBubbles)).toBe(1);
     });
 
-    expect(actions.showToast).toHaveBeenCalledWith(expect.stringContaining('absolute path'));
-    expect(captured.snapshot?.additionalDirectories).toBeUndefined();
+    it("accumulates approvals so a consent-gated failover keeps the first provider", async () => {
+      api.streamAssistantTurn.mockImplementation(
+        streamAskingFor("claude-code", "copilot", null)
+      );
+      const bridge = await mount();
+
+      await act(async () => bridge.onSend("what changed?"));
+
+      expect(actions.confirm).toHaveBeenCalledTimes(2);
+      expect(consentPerCall()).toStrictEqual([
+        undefined,
+        "claude-code",
+        ["claude-code", "copilot"],
+      ]);
+    });
+
+    it("sends nothing more when the owner declines, and says so in the transcript", async () => {
+      api.streamAssistantTurn.mockImplementation(
+        streamAskingFor("claude-code", null)
+      );
+      actions.confirm.mockResolvedValue(false);
+      const bridge = await mount();
+
+      await act(async () => bridge.onSend("what changed?"));
+
+      expect(api.streamAssistantTurn).toHaveBeenCalledOnce();
+      expect(captured.snapshot?.messages.at(-1)).toMatchObject({
+        kind: "notice",
+        text: "Nothing was sent to claude-code.",
+      });
+    });
+  });
+
+  describe("AssistantRoute picker + workspace", () => {
+    it("carries breaker health in the runner hint, like the builder and automation pickers", async () => {
+      const bridge = await mount();
+      await expect(bridge.loadModelPicker()).resolves.toMatchObject({
+        runners: [{ kind: "codex", hint: "ready · quota open" }],
+      });
+    });
+
+    it("refuses a relative scoped folder and keeps the shared list unchanged", async () => {
+      const { openPrompt } = await import("../prompt.js");
+      vi.mocked(openPrompt).mockResolvedValue("relative/path");
+      const bridge = await mount();
+
+      await act(async () => {
+        bridge.onAddWorkspace?.();
+        await Promise.resolve();
+      });
+
+      expect(actions.showToast).toHaveBeenCalledWith(
+        expect.stringContaining("absolute path")
+      );
+      expect(captured.snapshot?.additionalDirectories).toBeUndefined();
+    });
   });
 });

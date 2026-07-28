@@ -5,7 +5,13 @@
  * character, its own file so each stays within the repo's file-size cap.
  */
 
-import { auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
+import {
+  auth,
+  authHeaders,
+  doFetch,
+  enc,
+  readJson,
+} from "./gateway-client-core.js";
 
 /*
  * The Vault Atlas (issue #441 Part B): three read-only owner census surfaces
@@ -28,8 +34,8 @@ export interface AtlasCensusTable {
 export interface AtlasCensusPack {
   pack: string;
   packLabel: string;
-  packKind: 'ontology' | 'machinery';
-  file: 'vault' | 'journal';
+  packKind: "ontology" | "machinery";
+  file: "vault" | "journal";
   tables: AtlasCensusTable[];
   rows: number;
   bytes: number | null;
@@ -38,7 +44,7 @@ export interface AtlasCensusPack {
 /** The grouped census payload from `GET /_vault/atlas/stats`. */
 export interface AtlasCensusPayload {
   generatedAt: string;
-  method: 'dbstat' | 'estimate';
+  method: "dbstat" | "estimate";
   fileBytesTotal: number;
   packs: AtlasCensusPack[];
   totals: {
@@ -72,7 +78,7 @@ export interface AtlasGraphNode {
   table: string;
   label: string;
   pack: string;
-  packKind: 'ontology' | 'machinery';
+  packKind: "ontology" | "machinery";
   packLabel: string;
   /**
    * Curated human-friendly display name — always present. The Relations page
@@ -141,31 +147,31 @@ export interface AtlasPulsePayload {
 /** Kinds census — per-pack rows/bytes grouping (issue #441 B1). */
 export async function vaultAtlasStats(): Promise<AtlasCensusPayload> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/atlas/stats', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/atlas/stats", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<AtlasCensusPayload>(res, 'read atlas stats');
+  return readJson<AtlasCensusPayload>(res, "read atlas stats");
 }
 
 /** Relations graph — FK edges (with fill) + authored links (issue #441 B2). */
 export async function vaultAtlasGraph(): Promise<AtlasGraphPayload> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/atlas/graph', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/atlas/graph", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<AtlasGraphPayload>(res, 'read atlas graph');
+  return readJson<AtlasGraphPayload>(res, "read atlas graph");
 }
 
 /** 30-day per-table write pulse from the journal (issue #441 B1 sparklines). */
 export async function vaultAtlasPulse(): Promise<AtlasPulsePayload> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/atlas/pulse', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/atlas/pulse", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<AtlasPulsePayload>(res, 'read atlas pulse');
+  return readJson<AtlasPulsePayload>(res, "read atlas pulse");
 }
 
 // ---------------------------------------------------------------------------
@@ -183,7 +189,7 @@ export interface BrowseTableEntry {
   physical: string;
   pack: string;
   packLabel: string;
-  packKind: 'ontology' | 'machinery';
+  packKind: "ontology" | "machinery";
   label: string;
   rows: number;
   machinery: boolean;
@@ -219,7 +225,7 @@ export interface BrowseRowsResult {
   columns: string[];
   nextCursor: string | null;
   orderBy: string;
-  dir: 'asc' | 'desc';
+  dir: "asc" | "desc";
   keysetKey: string;
 }
 
@@ -239,7 +245,7 @@ export interface BrowseDependent {
   table: string;
   via: string;
   count: number;
-  mechanism: 'fk' | 'poly';
+  mechanism: "fk" | "poly";
 }
 
 export interface BrowseDependentsResult {
@@ -254,22 +260,31 @@ export interface BrowseDependentsResult {
 /** The whole table picker, grouped ontology-packs-first client-side. */
 export async function browseTables(): Promise<BrowseTableEntry[]> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/atlas/browse/tables', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_vault/atlas/browse/tables", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  const body = await readJson<{ tables: BrowseTableEntry[] }>(res, 'browse tables');
+  const body = await readJson<{ tables: BrowseTableEntry[] }>(
+    res,
+    "browse tables"
+  );
   return body.tables;
 }
 
 /** Column metadata (type, notnull, pk, FK target, sealed) for one table. */
-export async function browseColumns(table: string): Promise<BrowseColumnsResult> {
+export async function browseColumns(
+  table: string
+): Promise<BrowseColumnsResult> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/atlas/browse/columns?table=${enc(table)}`, {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  return readJson<BrowseColumnsResult>(res, 'browse columns');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/atlas/browse/columns?table=${enc(table)}`,
+    {
+      method: "GET",
+      headers: authHeaders(token),
+    }
+  );
+  return readJson<BrowseColumnsResult>(res, "browse columns");
 }
 
 /** One keyset-paginated page of rows. Pass `after` from a prior nextCursor. */
@@ -278,53 +293,69 @@ export async function browseRows(input: {
   limit?: number;
   after?: string;
   orderBy?: string;
-  dir?: 'asc' | 'desc';
+  dir?: "asc" | "desc";
 }): Promise<BrowseRowsResult> {
   const { baseUrl, token } = await auth();
   const params = new URLSearchParams({ table: input.table });
-  if (input.limit !== undefined) params.set('limit', String(input.limit));
-  if (input.after !== undefined) params.set('after', input.after);
-  if (input.orderBy !== undefined) params.set('orderBy', input.orderBy);
-  if (input.dir !== undefined) params.set('dir', input.dir);
-  const res = await doFetch(baseUrl, `/centraid/_vault/atlas/browse/rows?${params.toString()}`, {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  return readJson<BrowseRowsResult>(res, 'browse rows');
+  if (input.limit !== undefined) params.set("limit", String(input.limit));
+  if (input.after !== undefined) params.set("after", input.after);
+  if (input.orderBy !== undefined) params.set("orderBy", input.orderBy);
+  if (input.dir !== undefined) params.set("dir", input.dir);
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/atlas/browse/rows?${params.toString()}`,
+    {
+      method: "GET",
+      headers: authHeaders(token),
+    }
+  );
+  return readJson<BrowseRowsResult>(res, "browse rows");
 }
 
 /** One row by primary key (composite pks take a JSON array id). */
-export async function browseRow(table: string, id: string): Promise<BrowseRowResult> {
+export async function browseRow(
+  table: string,
+  id: string
+): Promise<BrowseRowResult> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
     `/centraid/_vault/atlas/browse/row?table=${enc(table)}&id=${enc(id)}`,
-    { method: 'GET', headers: authHeaders(token) },
+    { method: "GET", headers: authHeaders(token) }
   );
-  return readJson<BrowseRowResult>(res, 'browse row');
+  return readJson<BrowseRowResult>(res, "browse row");
 }
 
 /** Search a FK target table for the reference picker: `{ id, display }` hits. */
-export async function browseRefSearch(table: string, query: string): Promise<BrowseRefHit[]> {
+export async function browseRefSearch(
+  table: string,
+  query: string
+): Promise<BrowseRefHit[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
     `/centraid/_vault/atlas/browse/ref-search?table=${enc(table)}&query=${enc(query)}`,
-    { method: 'GET', headers: authHeaders(token) },
+    { method: "GET", headers: authHeaders(token) }
   );
-  const body = await readJson<{ hits: BrowseRefHit[] }>(res, 'browse ref search');
+  const body = await readJson<{ hits: BrowseRefHit[] }>(
+    res,
+    "browse ref search"
+  );
   return body.hits;
 }
 
 /** Rows that reference `(table, id)` — engine FKs + polymorphic dependents. */
-export async function browseDependents(table: string, id: string): Promise<BrowseDependentsResult> {
+export async function browseDependents(
+  table: string,
+  id: string
+): Promise<BrowseDependentsResult> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
     `/centraid/_vault/atlas/browse/dependents?table=${enc(table)}&id=${enc(id)}`,
-    { method: 'GET', headers: authHeaders(token) },
+    { method: "GET", headers: authHeaders(token) }
   );
-  return readJson<BrowseDependentsResult>(res, 'browse dependents');
+  return readJson<BrowseDependentsResult>(res, "browse dependents");
 }
 
 /** The result shape of a Browse write — expected validation failures and the
@@ -346,12 +377,12 @@ export interface BrowseWriteResult {
  */
 async function browseWrite(
   path: string,
-  input: Record<string, unknown>,
+  input: Record<string, unknown>
 ): Promise<BrowseWriteResult> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_vault/atlas/browse/${path}`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
+    method: "POST",
+    headers: authHeaders(token, "application/json"),
     body: JSON.stringify(input),
   });
   const text = await res.text();
@@ -359,16 +390,20 @@ async function browseWrite(
   try {
     body = JSON.parse(text) as Record<string, unknown>;
   } catch {
-    throw new Error(`browse ${path} returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200)}`);
+    throw new Error(
+      `browse ${path} returned non-JSON (HTTP ${res.status}): ${text.slice(0, 200)}`
+    );
   }
   return {
-    ok: res.ok && body['ok'] !== false,
-    ...(typeof body['id'] === 'string' ? { id: body['id'] } : {}),
-    ...(typeof body['error'] === 'string' ? { error: body['error'] } : {}),
-    ...(Array.isArray(body['dependents'])
-      ? { dependents: body['dependents'] as BrowseDependent[] }
+    ok: res.ok && body["ok"] !== false,
+    ...(typeof body["id"] === "string" ? { id: body["id"] } : {}),
+    ...(typeof body["error"] === "string" ? { error: body["error"] } : {}),
+    ...(Array.isArray(body["dependents"])
+      ? { dependents: body["dependents"] as BrowseDependent[] }
       : {}),
-    ...(typeof body['totalRows'] === 'number' ? { totalRows: body['totalRows'] } : {}),
+    ...(typeof body["totalRows"] === "number"
+      ? { totalRows: body["totalRows"] }
+      : {}),
   };
 }
 
@@ -378,7 +413,7 @@ export async function browseInsertRow(input: {
   values: Record<string, unknown>;
   unlockMachinery?: boolean;
 }): Promise<BrowseWriteResult> {
-  return browseWrite('insert', input);
+  return browseWrite("insert", input);
 }
 
 /** Update a row (journalled operator write). */
@@ -388,7 +423,7 @@ export async function browseUpdateRow(input: {
   set: Record<string, unknown>;
   unlockMachinery?: boolean;
 }): Promise<BrowseWriteResult> {
-  return browseWrite('update', input);
+  return browseWrite("update", input);
 }
 
 /**
@@ -401,17 +436,24 @@ export async function browseDeleteRow(input: {
   id: string;
   unlockMachinery?: boolean;
 }): Promise<BrowseWriteResult> {
-  return browseWrite('delete', input);
+  return browseWrite("delete", input);
 }
 
 /** Purge demo rows — one app's, or every app's when appId is omitted. */
 export async function vaultDemoPurge(
-  appId?: string,
+  appId?: string
 ): Promise<{ purged: number; blocked: unknown[] }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/demo${appId ? `/${enc(appId)}` : ''}`, {
-    method: 'DELETE',
-    headers: authHeaders(token),
-  });
-  return readJson<{ purged: number; blocked: unknown[] }>(res, 'purge demo data');
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/demo${appId ? `/${enc(appId)}` : ""}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(token),
+    }
+  );
+  return readJson<{ purged: number; blocked: unknown[] }>(
+    res,
+    "purge demo data"
+  );
 }

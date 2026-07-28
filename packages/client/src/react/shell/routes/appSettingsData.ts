@@ -14,8 +14,11 @@ import {
   vaultStatus,
   type VaultDemoApp,
   type VaultScope,
-} from '../../../gateway-client.js';
-import type { VaultBlockDTO, VaultBridgeProps } from '../../screen-contracts.js';
+} from "../../../gateway-client.js";
+import type {
+  VaultBlockDTO,
+  VaultBridgeProps,
+} from "../../screen-contracts.js";
 
 // The gateway I/O + manifest parsing behind the React app-settings popover —
 // the successor to the helpers that lived in the deleted app-appview.ts /
@@ -25,7 +28,7 @@ import type { VaultBlockDTO, VaultBridgeProps } from '../../screen-contracts.js'
 export interface AppKnob {
   key: string;
   label: string;
-  type: 'segmented' | 'swatch';
+  type: "segmented" | "swatch";
   default: string;
   options: { value: string; label: string }[];
 }
@@ -36,47 +39,58 @@ export interface AppKnobsManifest {
 }
 
 /** Fetch the app's own `app.json` (next to its index.html), or null. */
-export async function fetchAppManifestRaw(appId: string): Promise<Record<string, unknown> | null> {
+export async function fetchAppManifestRaw(
+  appId: string
+): Promise<Record<string, unknown> | null> {
   try {
     const live = await appLiveUrl({ id: appId });
-    const url = `${live.url.replace(/\/?$/, '/')}app.json`;
+    const url = `${live.url.replace(/\/?$/u, "/")}app.json`;
     const res = await fetch(url);
     if (!res.ok) return null;
     const parsed = (await res.json()) as unknown;
-    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : null;
   } catch {
     return null;
   }
 }
 
 /** Parse the appearance-knobs array out of a fetched manifest. */
-export function knobsManifestFrom(raw: Record<string, unknown> | null): AppKnobsManifest | null {
+export function knobsManifestFrom(
+  raw: Record<string, unknown> | null
+): AppKnobsManifest | null {
   if (!raw || !Array.isArray(raw.knobs)) return null;
-  const version = typeof raw.manifestVersion === 'number' ? raw.manifestVersion : 1;
+  const version =
+    typeof raw.manifestVersion === "number" ? raw.manifestVersion : 1;
   return { version, knobs: raw.knobs as AppKnob[] };
 }
 
 /** Parse the manifest `vault` request block, if declared + sound. */
-export function manifestVaultBlock(raw: Record<string, unknown> | null): VaultBlockDTO | null {
-  if (!raw || typeof raw !== 'object') return null;
+export function manifestVaultBlock(
+  raw: Record<string, unknown> | null
+): VaultBlockDTO | null {
+  if (!raw || typeof raw !== "object") return null;
   const vault = (raw as { vault?: unknown }).vault;
-  if (!vault || typeof vault !== 'object') return null;
+  if (!vault || typeof vault !== "object") return null;
   const v = vault as Record<string, unknown>;
-  if (typeof v.purpose !== 'string' || !Array.isArray(v.scopes)) return null;
+  if (typeof v.purpose !== "string" || !Array.isArray(v.scopes)) return null;
   return {
     purpose: v.purpose,
-    why: typeof v.why === 'string' ? v.why : '',
+    why: typeof v.why === "string" ? v.why : "",
     scopes: v.scopes as VaultScope[],
   };
 }
 
 /** Read the app's stored knob values from its settings.json (strings only). */
-export async function fetchAppKnobValues(appId: string): Promise<Record<string, string>> {
+export async function fetchAppKnobValues(
+  appId: string
+): Promise<Record<string, string>> {
   try {
     const settings = await appSettings({ id: appId });
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(settings)) {
-      if (typeof value === 'string' && !key.startsWith('__')) out[key] = value;
+      if (typeof value === "string" && !key.startsWith("__")) out[key] = value;
     }
     return out;
   } catch {
@@ -85,7 +99,11 @@ export async function fetchAppKnobValues(appId: string): Promise<Record<string, 
 }
 
 /** Persist one knob value (the runtime kebab-cases at bake time). */
-export async function writeAppKnobValue(appId: string, key: string, value: string): Promise<void> {
+export async function writeAppKnobValue(
+  appId: string,
+  key: string,
+  value: string
+): Promise<void> {
   await appSettingWrite({ id: appId, key, value });
 }
 
@@ -93,13 +111,13 @@ export async function writeAppKnobValue(appId: string, key: string, value: strin
 // data-attr and CSS-var paths. Mirrors camelTailToKebab in app-engine's
 // settings-merge so a live edit lands on the same target a reload will bake.
 function appKnobKebab(key: string): string {
-  const tail = key.startsWith('app') ? key.slice(3) : key;
-  return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
+  const tail = key.startsWith("app") ? key.slice(3) : key;
+  return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`)}`;
 }
 
 /** The single visible sandboxed app iframe (only one app-view is mounted). */
 function appFrame(): HTMLIFrameElement | null {
-  return document.querySelector<HTMLIFrameElement>('iframe[data-centraid-app]');
+  return document.querySelector<HTMLIFrameElement>("iframe[data-centraid-app]");
 }
 
 /** Live-push a knob to the running app frame (no reload). */
@@ -109,10 +127,13 @@ export function pushKnobToAppFrame(key: string, value: string): void {
   const name = appKnobKebab(key);
   // Keys ending Color/Accent are continuous colour values → CSS vars; the rest
   // are discrete states → data attributes. Keeps live edit + reload identical.
-  const isCss = /(?:Color|Accent)$/.test(key);
+  const isCss = /(?:Color|Accent)$/u.test(key);
   const dataAttrs = isCss ? {} : { [name]: value };
   const cssVars = isCss ? { [name]: value } : {};
-  frame.contentWindow?.postMessage({ type: 'centraid:settings', dataAttrs, cssVars }, '*');
+  frame.contentWindow?.postMessage(
+    { type: "centraid:settings", dataAttrs, cssVars },
+    "*"
+  );
 }
 
 /**
@@ -121,9 +142,14 @@ export function pushKnobToAppFrame(key: string, value: string): void {
  * to the element the inline app reads (no iframe, no postMessage). The app's own
  * CSS + `data-app-*` reads react in place.
  */
-export function pushKnobToInlineRoot(root: HTMLElement, key: string, value: string): void {
+export function pushKnobToInlineRoot(
+  root: HTMLElement,
+  key: string,
+  value: string
+): void {
   const name = appKnobKebab(key);
-  if (/(?:Color|Accent)$/.test(key)) root.style.setProperty(`--${name}`, value);
+  if (/(?:Color|Accent)$/u.test(key))
+    root.style.setProperty(`--${name}`, value);
   else root.setAttribute(`data-${name}`, value);
 }
 
@@ -137,14 +163,21 @@ export function reloadAppFrame(): void {
 }
 
 /** Poll a just-started automation run to completion (6-minute ceiling). */
-export async function waitForAutomationRun(runId: string): Promise<CentraidAutomationTurnRecord> {
+export async function waitForAutomationRun(
+  runId: string
+): Promise<CentraidAutomationTurnRecord> {
   const deadline = Date.now() + 6 * 60 * 1000;
-  while (Date.now() < deadline) {
+  // This is one run's settlement timeline; start the next observation only
+  // after the previous status and retry interval have completed.
+  const poll = async (): Promise<CentraidAutomationTurnRecord> => {
+    if (Date.now() >= deadline)
+      throw new Error("run did not finish within 6 minutes");
     const rec = await readAutomationTurn({ turnId: runId });
     if (rec && rec.endedAt !== undefined) return rec;
     await new Promise((resolve) => setTimeout(resolve, 1500));
-  }
-  throw new Error('run did not finish within 6 minutes');
+    return poll();
+  };
+  return poll();
 }
 
 /** Build the VaultScreen props for one app's consent pane (all gateway I/O). */
@@ -155,7 +188,7 @@ export function buildVaultProps(
     onAccessChanged?: () => void;
     onParkedCount?: (count: number) => void;
     showToast?: (message: string) => void;
-  },
+  }
 ): VaultBridgeProps {
   return {
     block,
@@ -164,9 +197,11 @@ export function buildVaultProps(
     demoLoad: () => vaultDemoLoad(appId).then(() => undefined),
     demoPurge: () => vaultDemoPurge(appId).then(() => undefined),
     grant: () =>
-      approveVaultGrant({ appId, purpose: block.purpose, scopes: block.scopes }).then(
-        () => undefined,
-      ),
+      approveVaultGrant({
+        appId,
+        purpose: block.purpose,
+        scopes: block.scopes,
+      }).then(() => undefined),
     loadData: async () => {
       const s = await vaultStatus().catch(() => undefined);
       if (!s) return null;
@@ -184,7 +219,9 @@ export function buildVaultProps(
       return {
         demo: demoApps.find((d) => d.appId === appId),
         grants: apps.find((a) => a.name === appId)?.grants ?? [],
-        parked: allParked.filter((p) => p.callerKind === 'app' && p.callerId === enrolledAppId),
+        parked: allParked.filter(
+          (p) => p.callerKind === "app" && p.callerId === enrolledAppId
+        ),
         vaultName: s.name,
       };
     },

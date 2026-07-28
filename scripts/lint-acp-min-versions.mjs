@@ -5,38 +5,46 @@
  * and every kind declares a minVersion object.
  */
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const registry = readFileSync(path.join(root, 'packages/agent-runtime/src/registry.ts'), 'utf8');
-const runnersDoc = readFileSync(path.join(root, 'docs/runners.md'), 'utf8');
+const root = path.resolve(import.meta.dirname, "..");
+const registry = readFileSync(
+  path.join(root, "packages/agent-runtime/src/registry.ts"),
+  "utf8"
+);
+const runnersDoc = readFileSync(path.join(root, "docs/runners.md"), "utf8");
 
-const minVersionObjs = [...registry.matchAll(/minVersion:\s*\{\s*major:\s*\d+/g)];
+const minVersionObjs = [
+  ...registry.matchAll(/minVersion:\s*\{\s*major:\s*\d+/gu),
+];
 if (minVersionObjs.length < 5) {
   process.stderr.write(
-    `lint-acp-min-versions: expected several minVersion objects, found ${minVersionObjs.length}\n`,
+    `lint-acp-min-versions: expected several minVersion objects, found ${minVersionObjs.length}\n`
   );
   process.exit(1);
 }
 
-const bins = [...registry.matchAll(/defaultBin:\s*['"]([^'"]+)['"]/g)].map((m) => m[1]);
+const bins = [
+  ...registry.matchAll(/defaultBin:\s*['"](?<bin>[^'"]+)['"]/gu),
+].map((m) => m.groups?.bin ?? "");
 if (bins.length < 5) {
-  process.stderr.write(`lint-acp-min-versions: expected several defaultBin entries\n`);
+  process.stderr.write(
+    `lint-acp-min-versions: expected several defaultBin entries\n`
+  );
   process.exit(1);
 }
 
 const missing = bins.filter(
-  (b) => b && !runnersDoc.includes(`\`${b}\``) && !runnersDoc.includes(b),
+  (b) => b && !runnersDoc.includes(`\`${b}\``) && !runnersDoc.includes(b)
 );
 if (missing.length) {
   process.stderr.write(
-    `lint-acp-min-versions: defaultBin missing from docs/runners.md: ${missing.join(', ')}\n`,
+    `lint-acp-min-versions: defaultBin missing from docs/runners.md: ${missing.join(", ")}\n`
   );
   process.exit(1);
 }
 
 process.stdout.write(
-  `lint-acp-min-versions: ok (${minVersionObjs.length} minVersions, ${bins.length} defaultBins)\n`,
+  `lint-acp-min-versions: ok (${minVersionObjs.length} minVersions, ${bins.length} defaultBins)\n`
 );

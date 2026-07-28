@@ -12,8 +12,8 @@
  * same picks instead of each desktop install keeping its own.
  */
 
-import { clampAlertSeconds } from './gateway-monitor-core.js';
-import type { PersistedSettings } from './settings.js';
+import { clampAlertSeconds } from "./gateway-monitor-core.js";
+import type { PersistedSettings } from "./settings.js";
 
 /** The persistable subset of a settings patch. */
 export interface PersistedSettingsPatch {
@@ -48,62 +48,71 @@ export interface PersistedSettingsPatch {
 function preserveOrSet<K extends string>(
   key: K,
   patched: string | undefined,
-  currentValue: string | undefined,
+  currentValue: string | undefined
 ): Record<K, string> | Record<string, never> {
   if (patched !== undefined) return { [key]: patched } as Record<K, string>;
-  if (currentValue !== undefined) return { [key]: currentValue } as Record<K, string>;
+  if (currentValue !== undefined)
+    return { [key]: currentValue } as Record<K, string>;
   return {};
 }
 
 /** Compute the next persisted settings from the current value + a patch. */
 export function mergePersistedSettings(
   current: PersistedSettings,
-  patch: PersistedSettingsPatch,
+  patch: PersistedSettingsPatch
 ): PersistedSettings {
   // Whole-map preserve-or-set: the vault pointer map is edited through
   // `setActiveVaultId`, so a plain `saveSettings` must carry it verbatim.
-  const activeVaultByGateway = patch.activeVaultByGateway ?? current.activeVaultByGateway;
+  const activeVaultByGateway =
+    patch.activeVaultByGateway ?? current.activeVaultByGateway;
   return {
     activeGatewayId: patch.activeGatewayId?.trim() || current.activeGatewayId,
-    ...(patch.builderEnabled !== undefined
-      ? { builderEnabled: patch.builderEnabled }
-      : current.builderEnabled !== undefined
-        ? { builderEnabled: current.builderEnabled }
-        : {}),
-    ...preserveOrSet('remoteTemplatesUrl', patch.remoteTemplatesUrl, current.remoteTemplatesUrl),
-    ...(activeVaultByGateway !== undefined && Object.keys(activeVaultByGateway).length
+    ...(patch.builderEnabled === undefined
+      ? current.builderEnabled === undefined
+        ? {}
+        : { builderEnabled: current.builderEnabled }
+      : { builderEnabled: patch.builderEnabled }),
+    ...preserveOrSet(
+      "remoteTemplatesUrl",
+      patch.remoteTemplatesUrl,
+      current.remoteTemplatesUrl
+    ),
+    ...(activeVaultByGateway !== undefined &&
+    Object.keys(activeVaultByGateway).length
       ? { activeVaultByGateway }
       : {}),
     ...preserveOrSet(
-      'onboardingCompletedAt',
+      "onboardingCompletedAt",
       patch.onboardingCompletedAt,
-      current.onboardingCompletedAt,
+      current.onboardingCompletedAt
     ),
     ...(() => {
       // Preserve-or-set with write-time clamping; a garbage patch value
       // (NaN, wrong type) falls back to the current value.
-      const next = clampAlertSeconds(patch.gatewayAlertSeconds) ?? current.gatewayAlertSeconds;
-      return next !== undefined ? { gatewayAlertSeconds: next } : {};
+      const next =
+        clampAlertSeconds(patch.gatewayAlertSeconds) ??
+        current.gatewayAlertSeconds;
+      return next === undefined ? {} : { gatewayAlertSeconds: next };
     })(),
-    ...(patch.gatewayAlertsEnabled !== undefined
-      ? { gatewayAlertsEnabled: patch.gatewayAlertsEnabled }
-      : current.gatewayAlertsEnabled !== undefined
-        ? { gatewayAlertsEnabled: current.gatewayAlertsEnabled }
-        : {}),
+    ...(patch.gatewayAlertsEnabled === undefined
+      ? current.gatewayAlertsEnabled === undefined
+        ? {}
+        : { gatewayAlertsEnabled: current.gatewayAlertsEnabled }
+      : { gatewayAlertsEnabled: patch.gatewayAlertsEnabled }),
     ...preserveOrSet(
-      'changelogSeenVersion',
+      "changelogSeenVersion",
       patch.changelogSeenVersion,
-      current.changelogSeenVersion,
+      current.changelogSeenVersion
     ),
-    ...(patch.launchAtLogin !== undefined
-      ? { launchAtLogin: patch.launchAtLogin }
-      : current.launchAtLogin !== undefined
-        ? { launchAtLogin: current.launchAtLogin }
-        : {}),
-    ...(patch.offerGatewayService !== undefined
-      ? { offerGatewayService: patch.offerGatewayService }
-      : current.offerGatewayService !== undefined
-        ? { offerGatewayService: current.offerGatewayService }
-        : {}),
+    ...(patch.launchAtLogin === undefined
+      ? current.launchAtLogin === undefined
+        ? {}
+        : { launchAtLogin: current.launchAtLogin }
+      : { launchAtLogin: patch.launchAtLogin }),
+    ...(patch.offerGatewayService === undefined
+      ? current.offerGatewayService === undefined
+        ? {}
+        : { offerGatewayService: current.offerGatewayService }
+      : { offerGatewayService: patch.offerGatewayService }),
   };
 }

@@ -7,13 +7,13 @@
  * Gateway page's Backup card.
  */
 
-import { auth, authHeaders, doFetch, readJson } from './gateway-client-core.js';
+import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
 
 export interface GatewayBackupPolicyDTO {
   rpoSeconds: number;
   snapshotIntervalHours: number;
   verifyEveryDays: number;
-  casAck: 'receipt' | 'replicated';
+  casAck: "receipt" | "replicated";
   outboxBudgetBytes: number;
   reservedHeadroomBytes: number;
   cacheBudgetBytes?: number;
@@ -31,13 +31,13 @@ export interface GatewayBackupPolicyDTO {
  * gateway's `POLICY_KEYS` allow-list is the authority; this type mirrors it.
  */
 export type GatewayBackupPolicyPatchDTO = {
-  [K in keyof Omit<GatewayBackupPolicyDTO, 'casAck' | 'storageClass'>]?:
+  [K in keyof Omit<GatewayBackupPolicyDTO, "casAck" | "storageClass">]?:
     | GatewayBackupPolicyDTO[K]
     | null;
 };
 
 export interface GatewayBackupDestinationDTO {
-  kind: 'gateway-local' | 'provider';
+  kind: "gateway-local" | "provider";
   connectionId?: string;
 }
 
@@ -48,7 +48,7 @@ export interface GatewayBackupDriftDTO {
 
 export interface GatewayBackupStoreInventoryDTO {
   configured: boolean;
-  source: 'provider' | 'bucket' | 'not-configured' | 'unavailable';
+  source: "provider" | "bucket" | "not-configured" | "unavailable";
   providerAttested: boolean;
   objectCount: number;
   bytes: number;
@@ -75,8 +75,8 @@ export interface GatewayBackupSnapshotInventoryDTO {
 
 export interface GatewayBackupReconciliationDTO {
   checkedAt: string;
-  mode: 'scheduled' | 'bucket';
-  status: 'ok' | 'degraded' | 'error';
+  mode: "scheduled" | "bucket";
+  status: "ok" | "degraded" | "error";
   backup: GatewayBackupStoreInventoryDTO;
   cas: GatewayBackupStoreInventoryDTO;
   walGaps: GatewayBackupDriftDTO;
@@ -93,15 +93,19 @@ export interface GatewayBackupReconciliationDTO {
     markerCount: number;
   };
   audit: {
-    source: 'provider' | 'unavailable';
+    source: "provider" | "unavailable";
     eventCount: number;
-    recent: Array<{ at: number; kind: string; detail: Record<string, unknown> }>;
+    recent: Array<{
+      at: number;
+      kind: string;
+      detail: Record<string, unknown>;
+    }>;
     error?: string;
   };
 }
 
 export interface GatewayProviderPolicyStatusDTO {
-  status: 'pending' | 'synced' | 'drift' | 'rejected' | 'unsupported' | 'error';
+  status: "pending" | "synced" | "drift" | "rejected" | "unsupported" | "error";
   checkedAt: string;
   error?: string;
   errorCode?: string;
@@ -137,14 +141,19 @@ export interface GatewayRecoveryKitStatusDTO {
  *  Recovery-window metric's source (#436 §6). Structural subset of
  *  `@centraid/backup`'s `Retention` (drops `neverPruneNewest`, always true). */
 export type GatewayRetentionDTO =
-  | { kind: 'ladder'; keepAllDays: number; dailyDays: number; weeklyDays: number }
-  | { kind: 'none' };
+  | {
+      kind: "ladder";
+      keepAllDays: number;
+      dailyDays: number;
+      weeklyDays: number;
+    }
+  | { kind: "none" };
 
 /** The home bundle's provider-declared promises for the five-metric contract
  *  (#436 §6): Recovery window (`retention`) and Exit (`restoreCostClass`). */
 export interface GatewayHomeDiscoveryDTO {
   retention: GatewayRetentionDTO;
-  restoreCostClass: 'free-egress' | 'metered-egress';
+  restoreCostClass: "free-egress" | "metered-egress";
 }
 
 export interface GatewayBackupStatusDTO {
@@ -161,31 +170,31 @@ export interface GatewayBackupStatusDTO {
  *  when the gateway has no `backup` block. */
 export async function getGatewayBackupStatus(): Promise<GatewayBackupStatusDTO> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/backup', {
-    method: 'GET',
+  const res = await doFetch(baseUrl, "/centraid/_gateway/backup", {
+    method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<GatewayBackupStatusDTO>(res, 'gateway backup status');
+  return readJson<GatewayBackupStatusDTO>(res, "gateway backup status");
 }
 
 /** Replace the supplied fields in one vault's unified backup/bytes policy. */
 export async function updateGatewayBackupPolicy(
   vaultId: string,
-  patch: GatewayBackupPolicyPatchDTO,
+  patch: GatewayBackupPolicyPatchDTO
 ): Promise<{ vaultId: string; policy: GatewayBackupPolicyDTO }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
     `/centraid/_gateway/backup/policy/${encodeURIComponent(vaultId)}`,
     {
-      method: 'PUT',
-      headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+      method: "PUT",
+      headers: { ...authHeaders(token), "Content-Type": "application/json" },
       body: JSON.stringify(patch),
-    },
+    }
   );
   return readJson<{ vaultId: string; policy: GatewayBackupPolicyDTO }>(
     res,
-    'update gateway backup policy',
+    "update gateway backup policy"
   );
 }
 
@@ -204,37 +213,38 @@ export interface GatewayBackupRunResultDTO {
  */
 export async function runGatewayBackupNow(): Promise<GatewayBackupRunResultDTO> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/backup/run', {
-    method: 'POST',
+  const res = await doFetch(baseUrl, "/centraid/_gateway/backup/run", {
+    method: "POST",
     headers: authHeaders(token),
   });
-  return readJson<GatewayBackupRunResultDTO>(res, 'run gateway backup');
+  return readJson<GatewayBackupRunResultDTO>(res, "run gateway backup");
 }
 
 /** Trigger an integrity verification of the newest snapshot for every backed-up vault. */
 export async function verifyGatewayBackupsNow(): Promise<GatewayBackupRunResultDTO> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/backup/verify', {
-    method: 'POST',
+  const res = await doFetch(baseUrl, "/centraid/_gateway/backup/verify", {
+    method: "POST",
     headers: authHeaders(token),
   });
-  return readJson<GatewayBackupRunResultDTO>(res, 'verify gateway backups');
+  return readJson<GatewayBackupRunResultDTO>(res, "verify gateway backups");
 }
 
 /** Cross-check provider-attested inventory against a raw bucket LIST for one vault. */
-export async function verifyGatewayBackupBucket(
-  vaultId: string,
-): Promise<{ vaultId: string; reconciliation: GatewayBackupReconciliationDTO }> {
+export async function verifyGatewayBackupBucket(vaultId: string): Promise<{
+  vaultId: string;
+  reconciliation: GatewayBackupReconciliationDTO;
+}> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(
     baseUrl,
     `/centraid/_gateway/backup/verify-bucket/${encodeURIComponent(vaultId)}`,
-    { method: 'POST', headers: authHeaders(token) },
+    { method: "POST", headers: authHeaders(token) }
   );
-  return readJson<{ vaultId: string; reconciliation: GatewayBackupReconciliationDTO }>(
-    res,
-    'verify backup inventory against bucket',
-  );
+  return readJson<{
+    vaultId: string;
+    reconciliation: GatewayBackupReconciliationDTO;
+  }>(res, "verify backup inventory against bucket");
 }
 
 /**
@@ -252,10 +262,17 @@ export async function confirmGatewayRecoveryKit(input: {
   lossConsent: true;
 }): Promise<{ confirmedAt: number }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_gateway/backup/kit-confirmed', {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify(input),
-  });
-  return readJson<{ ok: true; confirmedAt: number }>(res, 'confirm gateway recovery kit');
+  const res = await doFetch(
+    baseUrl,
+    "/centraid/_gateway/backup/kit-confirmed",
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify(input),
+    }
+  );
+  return readJson<{ ok: true; confirmedAt: number }>(
+    res,
+    "confirm gateway recovery kit"
+  );
 }

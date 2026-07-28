@@ -1,10 +1,16 @@
-import { app } from 'electron';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { clampAlertSeconds } from './gateway-monitor-core.js';
-import { gatewayTemplatesCacheDir, LOCAL_GATEWAY_ID } from './gateway-paths.js';
-import { ensureLocalGateway, listGateways, resolveGateway } from './gateway-store.js';
-import { mergePersistedSettings } from './settings-merge.js';
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { app } from "electron";
+
+import { clampAlertSeconds } from "./gateway-monitor-core.js";
+import { gatewayTemplatesCacheDir, LOCAL_GATEWAY_ID } from "./gateway-paths.js";
+import {
+  ensureLocalGateway,
+  listGateways,
+  resolveGateway,
+} from "./gateway-store.js";
+import { mergePersistedSettings } from "./settings-merge.js";
 
 /**
  * Persisted desktop settings live at `<userData>/centraid-settings.json`
@@ -118,7 +124,7 @@ export interface DesktopSettings {
    * desktop runtime owns the loopback listener; `'remote'` means the
    * connection is addressed by its persisted iroh EndpointId.
    */
-  activeGatewayKind: 'local' | 'remote';
+  activeGatewayKind: "local" | "remote";
   /** Derived — the active gateway's user-facing label. */
   activeGatewayLabel: string;
   /**
@@ -156,10 +162,10 @@ export interface DesktopSettings {
   offerGatewayService?: boolean;
 }
 
-const FILE_NAME = 'centraid-settings.json';
+const FILE_NAME = "centraid-settings.json";
 
 function settingsPath(): string {
-  return path.join(app.getPath('userData'), FILE_NAME);
+  return path.join(app.getPath("userData"), FILE_NAME);
 }
 
 function persistedDefaults(): PersistedSettings {
@@ -179,27 +185,33 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
   const activeRaw = raw.activeGatewayId;
   return {
     activeGatewayId:
-      typeof activeRaw === 'string' && activeRaw.length > 0 ? activeRaw : base.activeGatewayId,
-    ...(typeof raw.builderEnabled === 'boolean' ? { builderEnabled: raw.builderEnabled } : {}),
-    ...(typeof raw.remoteTemplatesUrl === 'string'
+      typeof activeRaw === "string" && activeRaw.length > 0
+        ? activeRaw
+        : base.activeGatewayId,
+    ...(typeof raw.builderEnabled === "boolean"
+      ? { builderEnabled: raw.builderEnabled }
+      : {}),
+    ...(typeof raw.remoteTemplatesUrl === "string"
       ? { remoteTemplatesUrl: raw.remoteTemplatesUrl }
       : {}),
     ...sanitizeVaultMap(raw.activeVaultByGateway),
-    ...(typeof raw.onboardingCompletedAt === 'string'
+    ...(typeof raw.onboardingCompletedAt === "string"
       ? { onboardingCompletedAt: raw.onboardingCompletedAt }
       : {}),
     ...(() => {
       const clamped = clampAlertSeconds(raw.gatewayAlertSeconds);
-      return clamped !== undefined ? { gatewayAlertSeconds: clamped } : {};
+      return clamped === undefined ? {} : { gatewayAlertSeconds: clamped };
     })(),
-    ...(typeof raw.gatewayAlertsEnabled === 'boolean'
+    ...(typeof raw.gatewayAlertsEnabled === "boolean"
       ? { gatewayAlertsEnabled: raw.gatewayAlertsEnabled }
       : {}),
-    ...(typeof raw.changelogSeenVersion === 'string'
+    ...(typeof raw.changelogSeenVersion === "string"
       ? { changelogSeenVersion: raw.changelogSeenVersion }
       : {}),
-    ...(typeof raw.launchAtLogin === 'boolean' ? { launchAtLogin: raw.launchAtLogin } : {}),
-    ...(typeof raw.offerGatewayService === 'boolean'
+    ...(typeof raw.launchAtLogin === "boolean"
+      ? { launchAtLogin: raw.launchAtLogin }
+      : {}),
+    ...(typeof raw.offerGatewayService === "boolean"
       ? { offerGatewayService: raw.offerGatewayService }
       : {}),
   };
@@ -211,24 +223,26 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
  * migration.
  */
 function sanitizeVaultMap(
-  raw: unknown,
+  raw: unknown
 ): { activeVaultByGateway: Record<string, string> } | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
+  if (!raw || typeof raw !== "object") return undefined;
   const out: Record<string, string> = {};
-  for (const [gatewayId, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof value === 'string' && value.length > 0) out[gatewayId] = value;
+  for (const [gatewayId, value] of Object.entries(
+    raw as Record<string, unknown>
+  )) {
+    if (typeof value === "string" && value.length > 0) out[gatewayId] = value;
   }
   return Object.keys(out).length ? { activeVaultByGateway: out } : undefined;
 }
 
 async function readPersisted(): Promise<PersistedSettings> {
   try {
-    const raw = await fs.readFile(settingsPath(), 'utf8');
+    const raw = await fs.readFile(settingsPath(), "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     return narrow(parsed);
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      console.error('[centraid] failed to read settings:', err);
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.error("[centraid] failed to read settings:", err);
     }
     return persistedDefaults();
   }
@@ -275,7 +289,9 @@ export function requestLocalGatewayStart(): void {
   localGatewayStartRequested = true;
 }
 
-async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> {
+async function resolveEffective(
+  p: PersistedSettings
+): Promise<DesktopSettings> {
   // The local gateway must exist before we resolve — its profile
   // is auto-created on first read. If the persisted `activeGatewayId`
   // is stale (gateway was removed externally), fall back to local
@@ -284,14 +300,14 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
   let resolved = await resolveGateway(p.activeGatewayId);
   if (!resolved) {
     console.warn(
-      `[centraid] active gateway "${p.activeGatewayId}" not found; falling back to local.`,
+      `[centraid] active gateway "${p.activeGatewayId}" not found; falling back to local.`
     );
     resolved = await resolveGateway(LOCAL_GATEWAY_ID);
   }
   if (!resolved) {
     // Should be impossible after ensureLocalGateway, but TypeScript
     // can't see that. Throw with a useful message.
-    throw new Error('Local gateway resolution failed unexpectedly.');
+    throw new Error("Local gateway resolution failed unexpectedly.");
   }
   // For local gateways, the URL/token are minted by the in-process
   // runtime. If the runtime hasn't started yet we still return the
@@ -299,9 +315,10 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
   // need `appsDir` don't deadlock waiting for it — which is exactly the
   // state a deferred first run stays in until the user picks "Start fresh
   // on this Mac" (see `localGatewayStartRequested` above).
-  const deferLocalStart = p.onboardingCompletedAt === undefined && !localGatewayStartRequested;
-  if (resolved.profile.kind === 'local' && !resolved.url && !deferLocalStart) {
-    const { ensureLocalGateway } = await import('./local-gateway.js');
+  const deferLocalStart =
+    p.onboardingCompletedAt === undefined && !localGatewayStartRequested;
+  if (resolved.profile.kind === "local" && !resolved.url && !deferLocalStart) {
+    const { ensureLocalGateway } = await import("./local-gateway.js");
     const handle = await ensureLocalGateway(resolved.profile.id);
     resolved = {
       ...resolved,
@@ -317,25 +334,36 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     activeGatewayKind: resolved.profile.kind,
     activeGatewayLabel: resolved.profile.label,
     // `readProfile` thread defaults — these are always populated.
-    activeProfileDisplayName: resolved.profile.displayName ?? resolved.profile.label,
-    activeProfileAvatarColor: resolved.profile.avatarColor ?? '#5B8DEF',
+    activeProfileDisplayName:
+      resolved.profile.displayName ?? resolved.profile.label,
+    activeProfileAvatarColor: resolved.profile.avatarColor ?? "#5B8DEF",
     gatewayUrl: resolved.url,
     gatewayToken: resolved.token,
-    ...(p.builderEnabled !== undefined ? { builderEnabled: p.builderEnabled } : {}),
-    ...(activeVaultId !== undefined ? { activeVaultId } : {}),
-    ...(p.remoteTemplatesUrl !== undefined ? { remoteTemplatesUrl: p.remoteTemplatesUrl } : {}),
-    ...(p.onboardingCompletedAt !== undefined
-      ? { onboardingCompletedAt: p.onboardingCompletedAt }
-      : {}),
-    ...(p.gatewayAlertSeconds !== undefined ? { gatewayAlertSeconds: p.gatewayAlertSeconds } : {}),
-    ...(p.gatewayAlertsEnabled !== undefined
-      ? { gatewayAlertsEnabled: p.gatewayAlertsEnabled }
-      : {}),
-    ...(p.changelogSeenVersion !== undefined
-      ? { changelogSeenVersion: p.changelogSeenVersion }
-      : {}),
-    ...(p.launchAtLogin !== undefined ? { launchAtLogin: p.launchAtLogin } : {}),
-    ...(p.offerGatewayService !== undefined ? { offerGatewayService: p.offerGatewayService } : {}),
+    ...(p.builderEnabled === undefined
+      ? {}
+      : { builderEnabled: p.builderEnabled }),
+    ...(activeVaultId === undefined ? {} : { activeVaultId }),
+    ...(p.remoteTemplatesUrl === undefined
+      ? {}
+      : { remoteTemplatesUrl: p.remoteTemplatesUrl }),
+    ...(p.onboardingCompletedAt === undefined
+      ? {}
+      : { onboardingCompletedAt: p.onboardingCompletedAt }),
+    ...(p.gatewayAlertSeconds === undefined
+      ? {}
+      : { gatewayAlertSeconds: p.gatewayAlertSeconds }),
+    ...(p.gatewayAlertsEnabled === undefined
+      ? {}
+      : { gatewayAlertsEnabled: p.gatewayAlertsEnabled }),
+    ...(p.changelogSeenVersion === undefined
+      ? {}
+      : { changelogSeenVersion: p.changelogSeenVersion }),
+    ...(p.launchAtLogin === undefined
+      ? {}
+      : { launchAtLogin: p.launchAtLogin }),
+    ...(p.offerGatewayService === undefined
+      ? {}
+      : { offerGatewayService: p.offerGatewayService }),
   };
 }
 
@@ -361,17 +389,19 @@ export async function loadPersistedSettings(): Promise<PersistedSettings> {
  * etc.). The patch is rejected for any of those fields with an error
  * loud enough to fail fast in tests.
  */
-export async function saveSettings(patch: Partial<DesktopSettings>): Promise<DesktopSettings> {
+export async function saveSettings(
+  patch: Partial<DesktopSettings>
+): Promise<DesktopSettings> {
   const forbidden = [
-    'gatewayUrl',
-    'gatewayToken',
-    'activeGatewayKind',
-    'activeGatewayLabel',
+    "gatewayUrl",
+    "gatewayToken",
+    "activeGatewayKind",
+    "activeGatewayLabel",
   ] as const;
   for (const key of forbidden) {
     if (key in patch) {
       throw new Error(
-        `Cannot patch "${key}" through saveSettings — use the gateways IPC surface instead.`,
+        `Cannot patch "${key}" through saveSettings — use the gateways IPC surface instead.`
       );
     }
   }
@@ -405,11 +435,14 @@ export async function setActiveGatewayId(id: string): Promise<DesktopSettings> {
  * header. Pass `undefined` to clear (let the gateway pick). Keyed by
  * gateway id, so switching gateways restores each one's last vault.
  */
-export async function setActiveVaultId(vaultId: string | undefined): Promise<DesktopSettings> {
+export async function setActiveVaultId(
+  vaultId: string | undefined
+): Promise<DesktopSettings> {
   const persisted = await readPersisted();
   const activeGatewayId = persisted.activeGatewayId;
   const map = { ...persisted.activeVaultByGateway };
-  if (vaultId === undefined || vaultId.length === 0) delete map[activeGatewayId];
+  if (vaultId === undefined || vaultId.length === 0)
+    delete map[activeGatewayId];
   else map[activeGatewayId] = vaultId;
   const next: PersistedSettings = {
     ...persisted,

@@ -1,14 +1,15 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Registry } from '../registry/registry.js';
-import { appDataDir } from '../registry/app-paths.js';
-import { readLogs, type LogLevel } from '../data/log-store.js';
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+import { readLogs, type LogLevel } from "../data/log-store.js";
+import { appDataDir } from "../registry/app-paths.js";
+import type { Registry } from "../registry/registry.js";
 import {
   deleteAppSetting,
   readAppSettings,
   RUNTIME_KEY_PREFIX,
   writeAppSetting,
-} from '../settings/app-settings.js';
-import { readBody, sendError, sendJson } from './http-utils.js';
+} from "../settings/app-settings.js";
+import { readBody, sendError, sendJson } from "./http-utils.js";
 
 /**
  * Handlers for the Cloud-panel logs route and the per-app settings.json
@@ -26,20 +27,40 @@ import { readBody, sendError, sendJson } from './http-utils.js';
 export async function handleSettingsWrite(
   req: IncomingMessage,
   res: ServerResponse,
-  appDir: string,
+  appDir: string
 ): Promise<true> {
   let body: { key?: unknown; value?: unknown };
   try {
-    body = JSON.parse((await readBody(req)).toString('utf8')) as { key?: unknown; value?: unknown };
+    body = JSON.parse((await readBody(req)).toString("utf8")) as {
+      key?: unknown;
+      value?: unknown;
+    };
   } catch {
-    return sendError(res, 400, 'bad_request', 'Body must be JSON: { key, value }.');
+    return sendError(
+      res,
+      400,
+      "bad_request",
+      "Body must be JSON: { key, value }."
+    );
   }
-  const key = typeof body.key === 'string' ? body.key : '';
-  if (!key) return sendError(res, 400, 'bad_request', 'Body must include a string `key`.');
+  const key = typeof body.key === "string" ? body.key : "";
+  if (!key)
+    return sendError(
+      res,
+      400,
+      "bad_request",
+      "Body must include a string `key`."
+    );
   if (key.startsWith(RUNTIME_KEY_PREFIX)) {
-    return sendError(res, 400, 'bad_request', 'Keys starting with "__" are runtime-owned.');
+    return sendError(
+      res,
+      400,
+      "bad_request",
+      'Keys starting with "__" are runtime-owned.'
+    );
   }
-  if (body.value === null || body.value === undefined) deleteAppSetting(appDir, key);
+  if (body.value === null || body.value === undefined)
+    deleteAppSetting(appDir, key);
   else writeAppSetting(appDir, key, body.value);
   return sendJson(res, 200, { settings: readAppSettings(appDir) });
 }
@@ -48,10 +69,10 @@ export async function handleLogsRoute(
   res: ServerResponse,
   registry: Registry,
   appId: string,
-  query: Record<string, string>,
+  query: Record<string, string>
 ): Promise<true> {
   const entry = registry.get(appId);
-  if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
+  if (!entry) return sendError(res, 404, "not_found", "App not registered.");
 
   const limit = parseIntOpt(query.limit);
   const sinceTs = parseIntOpt(query.sinceTs);
@@ -63,10 +84,10 @@ export async function handleLogsRoute(
 
 function parseIntOpt(s: string | undefined): number | undefined {
   if (!s) return undefined;
-  const n = Number.parseInt(s, 10);
+  const n = Math.trunc(Number(s));
   return Number.isFinite(n) ? n : undefined;
 }
 
 function isLogLevel(s: string | undefined): s is LogLevel {
-  return s === 'info' || s === 'warn' || s === 'error';
+  return s === "info" || s === "warn" || s === "error";
 }

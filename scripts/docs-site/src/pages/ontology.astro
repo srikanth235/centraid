@@ -33,10 +33,10 @@ const footer = {
 };
 const ontologyBody = ontologyBodyRaw
   .replaceAll('__DOCS_BASE__', base)
-  .replace(/<header class="topbar">[\s\S]*?<\/header>\s*/, '')
-  .replace(/<nav class="rail"[\s\S]*?<\/nav>\s*/, '')
-  .replace(/^\s*<main>\s*/, '')
-  .replace(/\s*<\/main>\s*<footer>[\s\S]*?<\/footer>\s*/, '\n');
+  .replace(/<header class="topbar">[\s\S]*?<\/header>\s*/u, '')
+  .replace(/<nav class="rail"[\s\S]*?<\/nav>\s*/u, '')
+  .replace(/^\s*<main>\s*/u, '')
+  .replace(/\s*<\/main>\s*<footer>[\s\S]*?<\/footer>\s*/u, '\n');
 ---
 
 <DocsLayout

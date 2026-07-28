@@ -35,11 +35,11 @@ import {
   type ConceptRow,
   type SchemeRow,
   type TagRow,
-} from './_shared.ts';
+} from "./_shared.ts";
 
-const FOLDER_SCHEME_URI = 'https://centraid.dev/schemes/folders';
-const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
-const DOCUMENT_TARGET_TYPE = 'core.document';
+const FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
+const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
+const DOCUMENT_TARGET_TYPE = "core.document";
 
 interface DocumentRow {
   document_id: string;
@@ -57,22 +57,24 @@ interface ContentRow {
   content_uri?: string | null;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
+export default async function driveHandler({ input, ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
     // Structural reads first: concepts and schemes are owner-curated and
     // small, so they stay unbounded — and they bound everything below.
     const [concepts, schemes] = await Promise.all([
-      ctx.vault.read({ entity: 'core.concept', purpose }),
-      ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
+      ctx.vault.read({ entity: "core.concept", purpose }),
+      ctx.vault.read({ entity: "core.concept_scheme", purpose }),
     ]);
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
     const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
 
     const scheme = schemeRows.find((s) => s.uri === FOLDER_SCHEME_URI);
-    const schemeConcepts = conceptRows.filter((c) => scheme && c.scheme_id === scheme.scheme_id);
-    const root = schemeConcepts.find((c) => c.notation === 'root');
+    const schemeConcepts = conceptRows.filter(
+      (c) => scheme && c.scheme_id === scheme.scheme_id
+    );
+    const root = schemeConcepts.find((c) => c.notation === "root");
     const rootFolderId = root?.concept_id ?? null;
 
     const folders = schemeConcepts
@@ -93,15 +95,21 @@ export default async ({ input, ctx }: HandlerArgs) => {
     // an empty drive, not an error.
     const folderConceptIds = schemeConcepts.map((c) => c.concept_id);
     if (folderConceptIds.length === 0) {
-      return { folders, documents: [], root_folder_id: rootFolderId, truncated: false, window };
+      return {
+        folders,
+        documents: [],
+        root_folder_id: rootFolderId,
+        truncated: false,
+        window,
+      };
     }
     const tags = await ctx.vault.read({
-      entity: 'core.tag',
+      entity: "core.tag",
       where: [
-        { column: 'target_type', op: 'eq', value: DOCUMENT_TARGET_TYPE },
-        { column: 'concept_id', op: 'in', value: folderConceptIds },
+        { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
+        { column: "concept_id", op: "in", value: folderConceptIds },
       ],
-      orderBy: { column: 'tagged_at', dir: 'desc' },
+      orderBy: { column: "tagged_at", dir: "desc" },
       limit: window,
       purpose,
     });
@@ -110,7 +118,13 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const folderByDoc = new Map<string, string>();
     for (const t of tagRows) folderByDoc.set(t.target_id, t.concept_id);
     if (folderByDoc.size === 0) {
-      return { folders, documents: [], root_folder_id: rootFolderId, truncated: false, window };
+      return {
+        folders,
+        documents: [],
+        root_folder_id: rootFolderId,
+        truncated: false,
+        window,
+      };
     }
 
     // Starred is a flags-scheme tag on the wrapper (issue #274) — one
@@ -118,7 +132,10 @@ export default async ({ input, ctx }: HandlerArgs) => {
     // means nothing has ever been starred.
     const flagsScheme = schemeRows.find((s) => s.uri === FLAGS_SCHEME_URI);
     const starredConcept = flagsScheme
-      ? conceptRows.find((c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred')
+      ? conceptRows.find(
+          (c) =>
+            c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
+        )
       : undefined;
 
     // The wrapper join is `in`-bounded by the windowed tags — only the
@@ -127,17 +144,21 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const windowedIds = [...folderByDoc.keys()];
     const [documentsRes, starTags, tagsByDoc] = await Promise.all([
       ctx.vault.read({
-        entity: 'core.document',
-        where: [{ column: 'document_id', op: 'in', value: windowedIds }],
+        entity: "core.document",
+        where: [{ column: "document_id", op: "in", value: windowedIds }],
         purpose,
       }),
       starredConcept
         ? ctx.vault.read({
-            entity: 'core.tag',
+            entity: "core.tag",
             where: [
-              { column: 'concept_id', op: 'eq', value: starredConcept.concept_id },
-              { column: 'target_type', op: 'eq', value: DOCUMENT_TARGET_TYPE },
-              { column: 'target_id', op: 'in', value: windowedIds },
+              {
+                column: "concept_id",
+                op: "eq",
+                value: starredConcept.concept_id,
+              },
+              { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
+              { column: "target_id", op: "in", value: windowedIds },
             ],
             purpose,
           })
@@ -151,7 +172,7 @@ export default async ({ input, ctx }: HandlerArgs) => {
       }),
     ]);
     const starredIds = new Set(
-      ((starTags.rows ?? []) as unknown as TagRow[]).map((t) => t.target_id),
+      ((starTags.rows ?? []) as unknown as TagRow[]).map((t) => t.target_id)
     );
 
     // The current content join is bounded by the windowed wrappers' own
@@ -159,30 +180,35 @@ export default async ({ input, ctx }: HandlerArgs) => {
     // content item is canonical right now, never the whole content table.
     // Custody (issue #352 phase 4) rides the same content id set.
     const documentRows = (documentsRes.rows ?? []) as unknown as DocumentRow[];
-    const contentIds = [...new Set(documentRows.map((d) => d.current_content_id))];
+    const contentIds = [
+      ...new Set(documentRows.map((d) => d.current_content_id)),
+    ];
     const [contents, custodyByContent] = await Promise.all([
       contentIds.length > 0
         ? ctx.vault.read({
-            entity: 'core.content_item',
-            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            entity: "core.content_item",
+            where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,
           })
         : { rows: [] as Record<string, unknown>[] },
       readCustodyByContent({ ctx, purpose, contentIds }),
     ]);
     const contentById = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [c.content_id, c]),
+      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
+        c.content_id,
+        c,
+      ])
     );
 
     // Blob-backed bytes (issue #296) leave the row as `blob:` addresses —
     // the client gets same-origin serve URLs (Range, immutable caching, and
     // iframe-able PDF previews); inline data: URIs pass through.
     const srcOf = (c: ContentRow | undefined) =>
-      typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+      typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
         ? `/centraid/_vault/blobs/${c.content_id}`
         : c?.content_uri;
     const posterOf = (c: ContentRow | undefined) =>
-      typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+      typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
         ? `/centraid/_vault/blobs/${c.content_id}?variant=poster`
         : null;
 
@@ -212,12 +238,20 @@ export default async ({ input, ctx }: HandlerArgs) => {
           custody_state: custodyByContent.get(d.current_content_id) ?? null,
         };
       })
-      .toSorted((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      .toSorted((a, b) =>
+        String(b.created_at).localeCompare(String(a.created_at))
+      );
 
     // A full window means there may be older documents beyond it — the UI
     // offers "Show more" (a re-read with a larger window) and search.
     const truncated = tagRows.length >= window;
-    return { folders, documents, root_folder_id: rootFolderId, truncated, window };
+    return {
+      folders,
+      documents,
+      root_folder_id: rootFolderId,
+      truncated,
+      window,
+    };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return {
@@ -227,4 +261,4 @@ export default async ({ input, ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

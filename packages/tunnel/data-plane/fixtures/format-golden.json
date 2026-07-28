@@ -60,7 +60,9 @@
           "kind": "db",
           "size": 12,
           "mtimeMs": 1721280000000,
-          "chunks": ["d37385d8b16fb7a1972293bed4ba14065ad3f88084940d5587c8780214ddf530"],
+          "chunks": [
+            "d37385d8b16fb7a1972293bed4ba14065ad3f88084940d5587c8780214ddf530"
+          ],
           "sha256": "d37385d8b16fb7a1972293bed4ba14065ad3f88084940d5587c8780214ddf530",
           "walGeneration": "0123456789abcdef0123456789abcdef",
           "baseTickMs": 1721280000456
@@ -73,7 +75,9 @@
         "kind": "db",
         "size": 12,
         "mtimeMs": 1721280000000,
-        "chunks": ["d37385d8b16fb7a1972293bed4ba14065ad3f88084940d5587c8780214ddf530"],
+        "chunks": [
+          "d37385d8b16fb7a1972293bed4ba14065ad3f88084940d5587c8780214ddf530"
+        ],
         "sha256": "d37385d8b16fb7a1972293bed4ba14065ad3f88084940d5587c8780214ddf530",
         "walGeneration": "0123456789abcdef0123456789abcdef",
         "baseTickMs": 1721280000456

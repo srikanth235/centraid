@@ -1,5 +1,3 @@
-import { fetch as expoFetch } from 'expo/fetch';
-
 import {
   authHeaders,
   consumeVaultChangeSse,
@@ -12,13 +10,14 @@ import {
   type SseFrame,
   type VaultChangeCursor,
   type VaultChangeMessage,
-} from '@centraid/client/replica/native';
+} from "@centraid/client/replica/native";
+import { fetch as expoFetch } from "expo/fetch";
 
 /** The subset of `@react-native-async-storage/async-storage` the cursor uses. */
 export interface AsyncStorageLike {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-  removeItem(key: string): Promise<void>;
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
 }
 
 export type StreamFetch = typeof expoFetch;
@@ -68,7 +67,7 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     this.#minReconnectMs = options.minReconnectMs ?? MIN_RECONNECT_MS;
     this.#maxReconnectMs = options.maxReconnectMs ?? MAX_RECONNECT_MS;
     this.#storageKey = `centraid:vault-change-cursor:${encodeURIComponent(
-      `${this.#gatewayAuth.gatewayId ?? this.#gatewayAuth.baseUrl} ${this.#gatewayAuth.vaultId ?? '<default>'}`,
+      `${this.#gatewayAuth.gatewayId ?? this.#gatewayAuth.baseUrl} ${this.#gatewayAuth.vaultId ?? "<default>"}`
     )}`;
   }
 
@@ -82,7 +81,9 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
   }
 
   async setShapeIds(shapeIds: readonly string[]): Promise<void> {
-    this.#shapeIds = [...new Set(shapeIds.filter((id) => id.length > 0))].sort();
+    this.#shapeIds = [
+      ...new Set(shapeIds.filter((id) => id.length > 0)),
+    ].sort();
     this.reconnect();
   }
 
@@ -109,7 +110,13 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
   }
 
   private connect(): void {
-    if (!this.#active || !this.#listener || this.#abort || this.#rebootstrapRequired) return;
+    if (
+      !this.#active ||
+      !this.#listener ||
+      this.#abort ||
+      this.#rebootstrapRequired
+    )
+      return;
     void this.run();
   }
 
@@ -123,18 +130,27 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
         this.#cursorLoaded = true;
       }
       const response = await this.#streamFetch(this.streamUrl(this.#cursor), {
-        method: 'GET',
-        headers: { ...authHeaders(this.#gatewayAuth.token), Accept: 'text/event-stream' },
+        method: "GET",
+        headers: {
+          ...authHeaders(this.#gatewayAuth.token),
+          Accept: "text/event-stream",
+        },
         signal: abort.signal,
       });
       if (!this.isCurrent(abort, generation)) return;
       if (response.status === 401 || response.status === 403) {
-        this.emit({ type: 'centraid:vault-rebootstrap', detail: { status: response.status } });
+        this.emit({
+          type: "centraid:vault-rebootstrap",
+          detail: { status: response.status },
+        });
         this.#rebootstrapRequired = true;
         return;
       }
       if (response.status === 409 || response.status === 410) {
-        this.emit({ type: 'centraid:vault-rebootstrap', detail: { status: response.status } });
+        this.emit({
+          type: "centraid:vault-rebootstrap",
+          detail: { status: response.status },
+        });
         this.#rebootstrapRequired = true;
         return;
       }
@@ -147,13 +163,14 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
         (frame) => {
           if (this.isCurrent(abort, generation)) this.handleFrame(frame);
         },
-        abort.signal,
+        abort.signal
       );
     } catch {
       /* Reconnect below unless the session paused or a newer generation started. */
     } finally {
       if (this.#abort === abort) this.#abort = undefined;
-      if (generation === this.#generation && !abort.signal.aborted) this.scheduleReconnect();
+      if (generation === this.#generation && !abort.signal.aborted)
+        this.scheduleReconnect();
     }
   }
 
@@ -164,21 +181,23 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
     } catch {
       return;
     }
-    if (frame.event === 'rebootstrap') {
+    if (frame.event === "rebootstrap") {
       this.#rebootstrapRequired = true;
-      this.emit({ type: 'centraid:vault-rebootstrap', detail: payload });
+      this.emit({ type: "centraid:vault-rebootstrap", detail: payload });
       this.#abort?.abort();
       return;
     }
-    if (frame.event === 'cursor') {
+    if (frame.event === "cursor") {
       const cursor = parseCursor(payload);
       if (!cursor) return;
       this.acceptCursor(cursor);
-      this.emit({ type: 'centraid:vault-cursor', cursor });
+      this.emit({ type: "centraid:vault-cursor", cursor });
       return;
     }
-    if (frame.event !== 'change' && frame.event !== 'message') return;
-    const page = payload as { changes?: unknown; cursor?: unknown; next?: unknown } | undefined;
+    if (frame.event !== "change" && frame.event !== "message") return;
+    const page = payload as
+      | { changes?: unknown; cursor?: unknown; next?: unknown }
+      | undefined;
     const pageCursor = parseCursor(page?.cursor ?? page?.next);
     const values = Array.isArray(payload)
       ? payload
@@ -189,13 +208,14 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
       const change = parseChange(value, pageCursor ?? this.#cursor);
       if (!change) continue;
       this.acceptCursor(change.cursor);
-      this.emit({ type: 'centraid:vault-change', detail: change });
+      this.emit({ type: "centraid:vault-change", detail: change });
     }
     if (pageCursor) this.acceptCursor(pageCursor);
   }
 
   private acceptCursor(cursor: VaultChangeCursor): void {
-    if (cursor.epoch === this.#cursor.epoch && cursor.seq < this.#cursor.seq) return;
+    if (cursor.epoch === this.#cursor.epoch && cursor.seq < this.#cursor.seq)
+      return;
     this.#cursor = cursor;
     void this.persistCursor(cursor);
   }
@@ -209,18 +229,29 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
   }
 
   private streamUrl(cursor: VaultChangeCursor): string {
-    const params = new URLSearchParams({ since: `${cursor.epoch}:${cursor.seq}`, stream: '1' });
+    const params = new URLSearchParams({
+      since: `${cursor.epoch}:${cursor.seq}`,
+      stream: "1",
+    });
     // Presence is significant: `shapeIds=` attests a persisted empty catalog.
-    if (this.#shapeIds) params.set('shapeIds', this.#shapeIds.join(','));
+    if (this.#shapeIds) params.set("shapeIds", this.#shapeIds.join(","));
     return `${this.#gatewayAuth.baseUrl}/centraid/_vault/changes?${params}`;
   }
 
   private scheduleReconnect(): void {
-    if (!this.#active || !this.#listener || this.#rebootstrapRequired || this.#reconnectTimer) {
+    if (
+      !this.#active ||
+      !this.#listener ||
+      this.#rebootstrapRequired ||
+      this.#reconnectTimer
+    ) {
       return;
     }
     const wait = Math.round(this.#reconnectDelay * (0.5 + Math.random()));
-    this.#reconnectDelay = Math.min(this.#maxReconnectMs, this.#reconnectDelay * 2);
+    this.#reconnectDelay = Math.min(
+      this.#maxReconnectMs,
+      this.#reconnectDelay * 2
+    );
     this.#reconnectTimer = setTimeout(() => {
       this.#reconnectTimer = undefined;
       this.connect();
@@ -237,13 +268,20 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
   }
 
   private isCurrent(abort: AbortController, generation: number): boolean {
-    return !abort.signal.aborted && generation === this.#generation && this.#abort === abort;
+    return (
+      !abort.signal.aborted &&
+      generation === this.#generation &&
+      this.#abort === abort
+    );
   }
 
   private async loadCursor(): Promise<VaultChangeCursor> {
     try {
       const stored = await this.#storage.getItem(this.#storageKey);
-      if (stored) return parseCursor(JSON.parse(stored) as unknown) ?? INITIAL_VAULT_CURSOR;
+      if (stored)
+        return (
+          parseCursor(JSON.parse(stored) as unknown) ?? INITIAL_VAULT_CURSOR
+        );
     } catch {
       /* A missing/corrupt cursor just restarts the stream from the beginning. */
     }

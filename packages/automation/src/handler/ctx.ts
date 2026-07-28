@@ -7,20 +7,25 @@
  * matches the worker's expected wire shape.
  */
 
-import type { AgentAttachment, AgentDispatcher, DispatchContext } from './runner.js';
 import type {
   ConversationStore,
   TurnStreamEvent,
   VaultBridge,
   VaultOp,
-} from '@centraid/app-engine';
+} from "@centraid/app-engine";
+
 import {
   closeRunNode,
   openRunNode,
   rowToRunRef,
   usageCloseFields,
   type RunEventSink,
-} from './audit.js';
+} from "./audit.js";
+import type {
+  AgentAttachment,
+  AgentDispatcher,
+  DispatchContext,
+} from "./runner.js";
 
 export interface AuditState {
   store: ConversationStore;
@@ -57,50 +62,55 @@ export interface AgentContentRef {
  */
 async function resolveAgentAttachments(
   vault: VaultBridge | undefined,
-  refs: readonly AgentContentRef[],
+  refs: readonly AgentContentRef[]
 ): Promise<AgentAttachment[]> {
   if (!vault) {
     throw new Error(
-      'ctx.agent content refs need a vault surface — the host mounted no vault plane',
+      "ctx.agent content refs need a vault surface — the host mounted no vault plane"
     );
   }
-  const attachments: AgentAttachment[] = [];
-  for (const [i, ref] of refs.entries()) {
-    const reply = await vault({
-      op: 'content',
-      payload: {
-        contentId: ref.contentId,
-        variant: ref.variant,
-        ...(ref.maxBytes !== undefined ? { maxBytes: ref.maxBytes } : {}),
-      },
-    });
-    if (!reply.ok) {
-      throw new Error(`ctx.agent content[${i}] (${ref.contentId} ${ref.variant}): ${reply.error}`);
-    }
-    const out = reply.result as
-      | { status: 'ok'; kind: 'bytes'; mediaType: string; base64: string }
-      | { status: 'ok'; kind: 'text'; mediaType: string; text: string }
-      | { status: string };
-    if (out.status !== 'ok') {
-      throw new Error(
-        `ctx.agent content[${i}] (${ref.contentId} ${ref.variant}) did not resolve: ${out.status}`,
-      );
-    }
-    const resolved = out as {
-      kind: 'bytes' | 'text';
-      mediaType: string;
-      base64?: string;
-      text?: string;
-    };
-    const ext = resolved.kind === 'text' ? 'txt' : (resolved.mediaType.split('/')[1] ?? 'bin');
-    attachments.push({
-      name: `content-${i}-${ref.contentId.slice(0, 8)}.${ext}`,
-      mediaType: resolved.mediaType,
-      ...(resolved.base64 !== undefined ? { base64: resolved.base64 } : {}),
-      ...(resolved.text !== undefined ? { text: resolved.text } : {}),
-    });
-  }
-  return attachments;
+  return Promise.all(
+    refs.map(async (ref, i) => {
+      const reply = await vault({
+        op: "content",
+        payload: {
+          contentId: ref.contentId,
+          variant: ref.variant,
+          ...(ref.maxBytes === undefined ? {} : { maxBytes: ref.maxBytes }),
+        },
+      });
+      if (!reply.ok) {
+        throw new Error(
+          `ctx.agent content[${i}] (${ref.contentId} ${ref.variant}): ${reply.error}`
+        );
+      }
+      const out = reply.result as
+        | { status: "ok"; kind: "bytes"; mediaType: string; base64: string }
+        | { status: "ok"; kind: "text"; mediaType: string; text: string }
+        | { status: string };
+      if (out.status !== "ok") {
+        throw new Error(
+          `ctx.agent content[${i}] (${ref.contentId} ${ref.variant}) did not resolve: ${out.status}`
+        );
+      }
+      const resolved = out as {
+        kind: "bytes" | "text";
+        mediaType: string;
+        base64?: string;
+        text?: string;
+      };
+      const ext =
+        resolved.kind === "text"
+          ? "txt"
+          : (resolved.mediaType.split("/")[1] ?? "bin");
+      return {
+        name: `content-${i}-${ref.contentId.slice(0, 8)}.${ext}`,
+        mediaType: resolved.mediaType,
+        ...(resolved.base64 === undefined ? {} : { base64: resolved.base64 }),
+        ...(resolved.text === undefined ? {} : { text: resolved.text }),
+      };
+    })
+  );
 }
 
 /**
@@ -117,7 +127,7 @@ export async function handleAgentMessage(
   prompt: string,
   json: unknown,
   content?: readonly AgentContentRef[],
-  vault?: VaultBridge,
+  vault?: VaultBridge
 ): Promise<CtxReply> {
   const ordinal = nextOrdinal(audit);
   const started = Date.now();
@@ -127,8 +137,8 @@ export async function handleAgentMessage(
     emit: audit.emit,
     runId: audit.runId,
     ordinal,
-    kind: 'agent',
-    name: 'agent',
+    kind: "agent",
+    name: "agent",
     args: { prompt, ...(content?.length ? { content } : {}) },
     started,
   });
@@ -137,21 +147,24 @@ export async function handleAgentMessage(
   // `closeRunNode` can persist the token/model rollup. ACP tool calls become
   // their own durable items keyed by toolCallId: parallel calls can share a
   // name and finish out of order, so ordinal/name correlation is invalid.
-  let lastUsage: Extract<TurnStreamEvent, { type: 'usage' }> | undefined;
+  let lastUsage: Extract<TurnStreamEvent, { type: "usage" }> | undefined;
   let finalRawJson: string | undefined;
   const toolItems = new Map<
     string,
     { itemId: string; ordinal: number; started: number; name: string }
   >();
   const onEvent = (ev: TurnStreamEvent): void => {
-    if (ev.type === 'usage') lastUsage = ev;
+    if (ev.type === "usage") lastUsage = ev;
     // Keep the last envelope that HAS one: an `error` following a `final`
     // would otherwise blank the captured `final` envelope with its undefined.
-    if ((ev.type === 'final' || ev.type === 'error') && ev.rawJson !== undefined) {
+    if (
+      (ev.type === "final" || ev.type === "error") &&
+      ev.rawJson !== undefined
+    ) {
       finalRawJson = ev.rawJson;
     }
     try {
-      if (ev.type === 'tool.start') {
+      if (ev.type === "tool.start") {
         const toolOrdinal = nextOrdinal(audit);
         const toolStarted = Date.now();
         const itemId = openRunNode({
@@ -160,10 +173,10 @@ export async function handleAgentMessage(
           runId: audit.runId,
           ordinal: toolOrdinal,
           callId: ev.toolCallId,
-          kind: 'tool',
+          kind: "tool",
           name: ev.toolName,
-          ...(ev.args !== undefined ? { args: ev.args } : {}),
-          ...(ev.rawJson !== undefined ? { rawJson: ev.rawJson } : {}),
+          ...(ev.args === undefined ? {} : { args: ev.args }),
+          ...(ev.rawJson === undefined ? {} : { rawJson: ev.rawJson }),
           started: toolStarted,
         });
         toolItems.set(ev.toolCallId, {
@@ -173,7 +186,7 @@ export async function handleAgentMessage(
           name: ev.toolName,
         });
         audit.emit({
-          type: 'item.delta',
+          type: "item.delta",
           itemId,
           ordinal: toolOrdinal,
           callId: ev.toolCallId,
@@ -181,11 +194,11 @@ export async function handleAgentMessage(
         });
         return;
       }
-      if (ev.type === 'tool.result') {
+      if (ev.type === "tool.result") {
         const open = toolItems.get(ev.toolCallId);
         if (open) {
           audit.emit({
-            type: 'item.delta',
+            type: "item.delta",
             itemId: open.itemId,
             ordinal: open.ordinal,
             callId: ev.toolCallId,
@@ -198,9 +211,9 @@ export async function handleAgentMessage(
             ordinal: open.ordinal,
             callId: ev.toolCallId,
             ok: ev.ok,
-            ...(ev.result !== undefined ? { result: ev.result } : {}),
-            ...(ev.errorText !== undefined ? { error: ev.errorText } : {}),
-            ...(ev.rawJson !== undefined ? { rawJson: ev.rawJson } : {}),
+            ...(ev.result === undefined ? {} : { result: ev.result }),
+            ...(ev.errorText === undefined ? {} : { error: ev.errorText }),
+            ...(ev.rawJson === undefined ? {} : { rawJson: ev.rawJson }),
             started: open.started,
             ended: Date.now(),
           });
@@ -208,7 +221,7 @@ export async function handleAgentMessage(
           return;
         }
       }
-      audit.emit({ type: 'item.delta', itemId: nodeId, ordinal, event: ev });
+      audit.emit({ type: "item.delta", itemId: nodeId, ordinal, event: ev });
     } catch {
       /* swallow */
     }
@@ -230,12 +243,14 @@ export async function handleAgentMessage(
     toolItems.clear();
   };
   try {
-    const attachments = content?.length ? await resolveAgentAttachments(vault, content) : undefined;
+    const attachments = content?.length
+      ? await resolveAgentAttachments(vault, content)
+      : undefined;
     const result = await agentDispatcher(
       { prompt, json, ...(attachments ? { attachments } : {}), onEvent },
-      dispatchCtx,
+      dispatchCtx
     );
-    closeDanglingTools('Tool call ended without a terminal result.');
+    closeDanglingTools("Tool call ended without a terminal result.");
     closeRunNode({
       store: audit.store,
       emit: audit.emit,
@@ -243,7 +258,7 @@ export async function handleAgentMessage(
       ordinal,
       ok: true,
       result,
-      ...(finalRawJson !== undefined ? { rawJson: finalRawJson } : {}),
+      ...(finalRawJson === undefined ? {} : { rawJson: finalRawJson }),
       started,
       ended: Date.now(),
       ...usageCloseFields(lastUsage),
@@ -259,7 +274,7 @@ export async function handleAgentMessage(
       ordinal,
       ok: false,
       error,
-      ...(finalRawJson !== undefined ? { rawJson: finalRawJson } : {}),
+      ...(finalRawJson === undefined ? {} : { rawJson: finalRawJson }),
       started,
       ended: Date.now(),
       ...usageCloseFields(lastUsage),
@@ -286,12 +301,12 @@ export async function handleVaultMessage(
   audit: AuditState,
   vault: VaultBridge | undefined,
   op: VaultOp,
-  payload: Record<string, unknown>,
+  payload: Record<string, unknown>
 ): Promise<CtxReply & { code?: string }> {
   const ordinal = nextOrdinal(audit);
   const started = Date.now();
   let effective = payload;
-  if (op === 'invoke' && typeof effective.invocationId !== 'string') {
+  if (op === "invoke" && typeof effective.invocationId !== "string") {
     effective = { ...effective, invocationId: `${audit.runId}:v${ordinal}` };
   }
   const nodeId = openRunNode({
@@ -299,20 +314,22 @@ export async function handleVaultMessage(
     emit: audit.emit,
     runId: audit.runId,
     ordinal,
-    kind: 'tool',
+    kind: "tool",
     name: `vault.${op}`,
     args: effective,
     started,
   });
-  const settle = (reply: CtxReply & { code?: string }): CtxReply & { code?: string } => {
+  const settle = (
+    reply: CtxReply & { code?: string }
+  ): CtxReply & { code?: string } => {
     closeRunNode({
       store: audit.store,
       emit: audit.emit,
       nodeId,
       ordinal,
       ok: reply.ok,
-      ...(reply.result !== undefined ? { result: reply.result } : {}),
-      ...(reply.error !== undefined ? { error: reply.error } : {}),
+      ...(reply.result === undefined ? {} : { result: reply.result }),
+      ...(reply.error === undefined ? {} : { error: reply.error }),
       started,
       ended: Date.now(),
     });
@@ -321,8 +338,9 @@ export async function handleVaultMessage(
   if (!vault) {
     return settle({
       ok: false,
-      code: 'VAULT_UNAVAILABLE',
-      error: 'this automation has no vault surface — the host mounted no vault plane',
+      code: "VAULT_UNAVAILABLE",
+      error:
+        "this automation has no vault surface — the host mounted no vault plane",
     });
   }
   try {
@@ -331,23 +349,26 @@ export async function handleVaultMessage(
       return settle({
         ok: false,
         ...(result.code ? { code: result.code } : {}),
-        error: result.error ?? 'vault call failed',
+        error: result.error ?? "vault call failed",
       });
     }
     return settle({ ok: true, result: result.result });
   } catch (err) {
-    return settle({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    return settle({
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
 export function handleStateMessage(
   audit: AuditState,
-  method: 'get' | 'set' | 'delete',
+  method: "get" | "set" | "delete",
   key: string,
-  value: unknown,
+  value: unknown
 ): CtxReply {
   try {
-    if (method === 'get') {
+    if (method === "get") {
       const entry = audit.store.stateGet(audit.automationId, key);
       if (!entry) return { ok: true, result: undefined };
       try {
@@ -356,25 +377,33 @@ export function handleStateMessage(
         return { ok: true, result: entry.valueJson };
       }
     }
-    if (method === 'set') {
+    if (method === "set") {
       const json = JSON.stringify(value === undefined ? null : value);
       audit.store.stateSet(audit.automationId, key, json, Date.now());
       return { ok: true };
     }
-    if (method === 'delete') {
+    if (method === "delete") {
       audit.store.stateDelete(audit.automationId, key);
       return { ok: true };
     }
     return { ok: false, error: `unknown state method: ${String(method)}` };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
 export function handleRunsMessage(
   audit: AuditState,
-  method: 'last' | 'list',
-  filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number },
+  method: "last" | "list",
+  filter: {
+    automationId?: string;
+    status?: "ok" | "error";
+    since?: number;
+    limit?: number;
+  }
 ): CtxReply {
   try {
     // An automation's runs are the turns of its stable ref-keyed conversation.
@@ -385,19 +414,22 @@ export function handleRunsMessage(
     const rows = audit.store
       .listAutomationTurns(automationRef, {
         ...(filter.status ? { status: filter.status } : {}),
-        ...(filter.since !== undefined ? { since: filter.since } : {}),
+        ...(filter.since === undefined ? {} : { since: filter.since }),
         limit: limit + 1,
       })
       .filter((r) => r.turnId !== audit.runId)
       .slice(0, limit);
     const toRef = (r: (typeof rows)[number]): ReturnType<typeof rowToRunRef> =>
       rowToRunRef(r, automationRef, audit.store.messageInText(r.turnId));
-    if (method === 'last') {
+    if (method === "last") {
       const first = rows[0];
       return { ok: true, result: first ? toRef(first) : undefined };
     }
     return { ok: true, result: rows.map(toRef) };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }

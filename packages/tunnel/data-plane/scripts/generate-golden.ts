@@ -1,35 +1,48 @@
-import { createCipheriv, createHash, createHmac } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { deflateRawSync, zstdCompressSync } from 'node:zlib';
-import { cbsfFrameAad } from '@centraid/blob-format';
-import { deriveDataKey, type Keyring } from '../../backup/src/crypto.ts';
-import { sealManifest } from '../../backup/src/manifest.ts';
-import { sealWalSegment, type WalSegmentAddress } from '../../backup/src/wal-format.ts';
+import { createCipheriv, createHash, createHmac } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { deflateRawSync, zstdCompressSync } from "node:zlib";
+
+import { cbsfFrameAad } from "@centraid/blob-format";
+
+import { deriveDataKey, type Keyring } from "../../backup/src/crypto.ts";
+import { sealManifest } from "../../backup/src/manifest.ts";
+import {
+  sealWalSegment,
+  type WalSegmentAddress,
+} from "../../backup/src/wal-format.ts";
 import {
   encodeHeader,
   encodeTrailer,
   sealDirectory,
   sealStoredFrame,
-} from '../../vault/src/blob/seal-frames.ts';
+} from "../../vault/src/blob/seal-frames.ts";
 
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const root = path.dirname(import.meta.dirname);
 const key = Buffer.from(Array.from({ length: 32 }, (_, index) => index));
-const plain = Buffer.from('CBSF v2 cross-language golden bytes span several frames.');
-const frameSize = 13;
-const sha = createHash('sha256').update(plain).digest('hex');
-const chunks = Array.from({ length: Math.ceil(plain.length / frameSize) }, (_, index) =>
-  plain.subarray(index * frameSize, Math.min(plain.length, (index + 1) * frameSize)),
+const plain = Buffer.from(
+  "CBSF v2 cross-language golden bytes span several frames."
 );
-const frames = chunks.map((chunk, index) => sealStoredFrame(key, sha, index, chunks.length, chunk));
+const frameSize = 13;
+const sha = createHash("sha256").update(plain).digest("hex");
+const chunks = Array.from(
+  { length: Math.ceil(plain.length / frameSize) },
+  (_, index) =>
+    plain.subarray(
+      index * frameSize,
+      Math.min(plain.length, (index + 1) * frameSize)
+    )
+);
+const frames = chunks.map((chunk, index) =>
+  sealStoredFrame(key, sha, index, chunks.length, chunk)
+);
 const directory = sealDirectory(
   key,
   sha,
   chunks.length,
   frameSize,
   plain.length,
-  frames.map((frame) => frame.length),
+  frames.map((frame) => frame.length)
 );
 const cbsf = Buffer.concat([
   encodeHeader(sha),
@@ -42,18 +55,18 @@ function sealForcedFrame(
   frameKey: Buffer,
   frameSha: string,
   algoId: 1 | 2,
-  payload: Buffer,
+  payload: Buffer
 ): Buffer {
   const body = Buffer.concat([Buffer.from([algoId]), payload]);
   const aad = Buffer.from(cbsfFrameAad(frameSha, 0, 1));
-  const nonce = createHmac('sha256', frameKey)
-    .update('cbsf-nonce\0')
+  const nonce = createHmac("sha256", frameKey)
+    .update("cbsf-nonce\0")
     .update(aad)
-    .update('\0')
-    .update(createHmac('sha256', frameKey).update(body).digest())
+    .update("\0")
+    .update(createHmac("sha256", frameKey).update(body).digest())
     .digest()
     .subarray(0, 12);
-  const cipher = createCipheriv('aes-256-gcm', frameKey, nonce);
+  const cipher = createCipheriv("aes-256-gcm", frameKey, nonce);
   cipher.setAAD(aad);
   const ciphertext = Buffer.concat([cipher.update(body), cipher.final()]);
   return Buffer.concat([nonce, ciphertext, cipher.getAuthTag()]);
@@ -64,30 +77,40 @@ function compressedCbsf(algoId: 1 | 2): {
   plainBase64: string;
   sealedBase64: string;
 } {
-  const bytes = Buffer.from('compressed golden frame '.repeat(512));
-  const digest = createHash('sha256').update(bytes).digest('hex');
-  const payload = algoId === 1 ? zstdCompressSync(bytes) : deflateRawSync(bytes);
+  const bytes = Buffer.from("compressed golden frame ".repeat(512));
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  const payload =
+    algoId === 1 ? zstdCompressSync(bytes) : deflateRawSync(bytes);
   const frame = sealForcedFrame(key, digest, algoId, payload);
-  const sealedDirectory = sealDirectory(key, digest, 1, bytes.length, bytes.length, [frame.length]);
+  const sealedDirectory = sealDirectory(
+    key,
+    digest,
+    1,
+    bytes.length,
+    bytes.length,
+    [frame.length]
+  );
   return {
     algorithm: algoId,
-    plainBase64: bytes.toString('base64'),
+    plainBase64: bytes.toString("base64"),
     sealedBase64: Buffer.concat([
       encodeHeader(digest),
       frame,
       sealedDirectory,
       encodeTrailer(sealedDirectory.length, 1),
-    ]).toString('base64'),
+    ]).toString("base64"),
   };
 }
 
-const masterKey = Buffer.from(Array.from({ length: 32 }, (_, index) => 255 - index));
-const vaultId = '00000000-0000-7000-8000-000000000456';
+const masterKey = Buffer.from(
+  Array.from({ length: 32 }, (_, index) => 255 - index)
+);
+const vaultId = "00000000-0000-7000-8000-000000000456";
 const dataKey = deriveDataKey(masterKey, vaultId);
-const walPlain = Buffer.from('authenticated WAL bytes from Node!!');
+const walPlain = Buffer.from("authenticated WAL bytes from Node!!");
 const walAddress: WalSegmentAddress = {
-  db: 'vault',
-  generation: '0123456789abcdef0123456789abcdef',
+  db: "vault",
+  generation: "0123456789abcdef0123456789abcdef",
   group: 7,
   startOffset: 32,
   endOffset: 32 + walPlain.length,
@@ -98,13 +121,19 @@ const walSealed = sealWalSegment(dataKey, vaultId, walAddress, walPlain);
 const keyring: Keyring = {
   version: 1,
   active: 1,
-  epochs: [{ epoch: 1, key: masterKey.toString('base64'), createdAt: '2026-07-18T00:00:00.000Z' }],
+  epochs: [
+    {
+      epoch: 1,
+      key: masterKey.toString("base64"),
+      createdAt: "2026-07-18T00:00:00.000Z",
+    },
+  ],
 };
-const chunkId = createHash('sha256').update('golden chunk').digest('hex');
+const chunkId = createHash("sha256").update("golden chunk").digest("hex");
 const entries = [
   {
-    path: 'vault.db',
-    kind: 'db' as const,
+    path: "vault.db",
+    kind: "db" as const,
     size: 12,
     mtimeMs: 1_721_280_000_000,
     chunks: [chunkId],
@@ -120,44 +149,44 @@ const manifest = sealManifest({
   generation: 3,
   prevManifestHash: null,
   chunkIndex: [{ id: chunkId, size: 12 }],
-  appMeta: { source: 'node-golden', version: '456' },
+  appMeta: { source: "node-golden", version: "456" },
   entries,
-  createdAt: '2026-07-18T00:00:00.000Z',
+  createdAt: "2026-07-18T00:00:00.000Z",
 });
 const { sealedPayload: _sealedPayload, ...publicEnvelope } = manifest.manifest;
 
 const fixture = {
-  schema: 'centraid-cross-language-golden/1',
+  schema: "centraid-cross-language-golden/1",
   cbsf: {
-    keyHex: key.toString('hex'),
-    plainBase64: plain.toString('base64'),
+    keyHex: key.toString("hex"),
+    plainBase64: plain.toString("base64"),
     frameSize,
-    sealedBase64: cbsf.toString('base64'),
+    sealedBase64: cbsf.toString("base64"),
   },
   cbsfCompressed: {
     zstd: compressedCbsf(1),
     deflate: compressedCbsf(2),
   },
   wal: {
-    masterKeyHex: masterKey.toString('hex'),
-    dataKeyHex: Buffer.from(dataKey).toString('hex'),
+    masterKeyHex: masterKey.toString("hex"),
+    dataKeyHex: Buffer.from(dataKey).toString("hex"),
     vaultId,
     address: walAddress,
-    plainBase64: walPlain.toString('base64'),
-    sealedBase64: Buffer.from(walSealed).toString('base64'),
+    plainBase64: walPlain.toString("base64"),
+    sealedBase64: Buffer.from(walSealed).toString("base64"),
   },
   snapshot: {
-    masterKeyHex: masterKey.toString('hex'),
+    masterKeyHex: masterKey.toString("hex"),
     vaultId,
     publicEnvelope,
     payload: { entries },
     entries,
-    storedBase64: Buffer.from(manifest.bytes).toString('base64'),
+    storedBase64: Buffer.from(manifest.bytes).toString("base64"),
     manifestHash: manifest.manifestHash,
   },
 };
-await fs.mkdir(path.join(root, 'fixtures'), { recursive: true });
+await fs.mkdir(path.join(root, "fixtures"), { recursive: true });
 await fs.writeFile(
-  path.join(root, 'fixtures', 'format-golden.json'),
-  `${JSON.stringify(fixture, null, 2)}\n`,
+  path.join(root, "fixtures", "format-golden.json"),
+  `${JSON.stringify(fixture, null, 2)}\n`
 );

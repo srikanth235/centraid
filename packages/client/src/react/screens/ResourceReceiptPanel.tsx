@@ -1,12 +1,14 @@
-import type { JSX } from 'react';
-import { relativeTime } from '../format.js';
+import type { JSX } from "react";
+
+import { relativeTime } from "../format.js";
 import {
   processUsageRows,
   subsystemUsageRows,
   type ResourceUsageDTO,
   type ResourceUsageRow,
-} from './resource-summary.js';
-import styles from './ResourceReceiptPanel.module.css';
+} from "./resource-summary.js";
+
+import styles from "./ResourceReceiptPanel.module.css";
 
 // Resource receipt (issue #528 Phase C): "what this vault's gateway host
 // actually used" — measured proxies (CPU time, bytes, activity), rendered
@@ -36,7 +38,9 @@ function UsageRow({ row }: { row: ResourceUsageRow }): JSX.Element {
   );
 }
 
-export default function ResourceReceiptPanel({ usage }: ResourceReceiptPanelProps): JSX.Element {
+export default function ResourceReceiptPanel({
+  usage,
+}: ResourceReceiptPanelProps): JSX.Element {
   if (!usage) {
     return (
       <section className={styles.panel} data-testid="resource-receipt">
@@ -44,7 +48,8 @@ export default function ResourceReceiptPanel({ usage }: ResourceReceiptPanelProp
           <h2>Resource receipt</h2>
         </header>
         <p className={styles.unavailable}>
-          Not available from this gateway. Update the gateway host to see what it actually used.
+          Not available from this gateway. Update the gateway host to see what
+          it actually used.
         </p>
       </section>
     );
@@ -62,8 +67,8 @@ export default function ResourceReceiptPanel({ usage }: ResourceReceiptPanelProp
         <span className={styles.meta}>since {since}</span>
       </header>
       <p className={styles.intro}>
-        What this vault’s gateway host actually used — measured, not the browser or phone you’re
-        reading this on.
+        What this vault’s gateway host actually used — measured, not the browser
+        or phone you’re reading this on.
       </p>
 
       <dl className={styles.list}>
@@ -77,17 +82,21 @@ export default function ResourceReceiptPanel({ usage }: ResourceReceiptPanelProp
         {subsystems.map((row) => (
           <UsageRow key={row.label} row={row} />
         ))}
-        {wakeups !== null ? (
+        {wakeups === null ? null : (
           <UsageRow
             key="wakeups"
-            row={{ label: 'Background wakeups (last hour)', value: String(wakeups) }}
+            row={{
+              label: "Background wakeups (last hour)",
+              value: String(wakeups),
+            }}
           />
-        ) : null}
+        )}
       </dl>
 
       <p className={styles.footnote}>
-        These are measured proxies — CPU time, bytes moved, and time spent active. We don’t show
-        watts because software alone can’t measure power draw.
+        These are measured proxies — CPU time, bytes moved, and time spent
+        active. We don’t show watts because software alone can’t measure power
+        draw.
       </p>
     </section>
   );

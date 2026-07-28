@@ -1,7 +1,15 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignore": ["tests/**"],
-  "ignoreBinaries": ["actionlint", "eas", "hdiutil", "pmset", "sqlite3", "strace", "systemd-creds"],
+  "ignoreBinaries": [
+    "actionlint",
+    "eas",
+    "hdiutil",
+    "pmset",
+    "sqlite3",
+    "strace",
+    "systemd-creds"
+  ],
   "ignoreExportsUsedInFile": true,
   "exclude": ["enumMembers"],
   "workspaces": {
@@ -9,7 +17,10 @@
       "entry": ["scripts/**/*.{js,mjs,ts}", ".github/workflows/*.{yml,yaml}"],
       "project": ["scripts/**/*.{js,mjs,ts}"],
       "ignoreUnresolved": ["react", "react-native"],
-      "ignoreDependencies": ["@stryker-mutator/core", "@stryker-mutator/vitest-runner"]
+      "ignoreDependencies": [
+        "@stryker-mutator/core",
+        "@stryker-mutator/vitest-runner"
+      ]
     },
     "packages/*": {
       "entry": ["src/index.ts"],
@@ -37,7 +48,11 @@
       "project": ["src/**/*.{ts,tsx}"]
     },
     "packages/app-engine": {
-      "entry": ["src/index.ts", "src/worker/runner.ts", "src/worker/ts-loader-hooks.ts"],
+      "entry": [
+        "src/index.ts",
+        "src/worker/runner.ts",
+        "src/worker/ts-loader-hooks.ts"
+      ],
       "project": ["src/**/*.{ts,tsx}"]
     },
     "packages/automation": {
@@ -45,13 +60,22 @@
       "project": ["src/**/*.{ts,tsx}"]
     },
     "packages/client": {
-      "entry": ["src/index.ts", "src/replica/index.ts", "src/replica/sqlite-worker.ts"],
+      "entry": [
+        "src/index.ts",
+        "src/replica/index.ts",
+        "src/replica/sqlite-worker.ts"
+      ],
       "project": ["src/**/*.{ts,tsx}"]
     },
     "packages/blueprints": {
       "entry": ["src/index.ts"],
       "project": ["src/**/*.{ts,tsx}"],
-      "ignoreDependencies": ["@centraid/blob-format", "esbuild", "pdfjs-dist", "tldts"]
+      "ignoreDependencies": [
+        "@centraid/blob-format",
+        "esbuild",
+        "pdfjs-dist",
+        "tldts"
+      ]
     },
     "packages/test-kit": {
       "entry": ["src/*.ts"],
@@ -70,7 +94,12 @@
     },
     "apps/web": {
       "project": ["src/**/*.{ts,tsx}"],
-      "ignoreDependencies": ["react", "react-dom", "@types/react", "@types/react-dom"]
+      "ignoreDependencies": [
+        "react",
+        "react-dom",
+        "@types/react",
+        "@types/react-dom"
+      ]
     },
     "apps/mobile": {
       "entry": ["index.ts", "App.tsx", "scripts/*.mjs"],

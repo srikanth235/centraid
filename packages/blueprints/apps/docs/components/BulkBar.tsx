@@ -1,6 +1,7 @@
 // Bulk-selection action bar (#bulkBar root).
-import { armConfirm } from '../kit.ts';
-import styles from './BulkBar.module.css';
+import { armConfirm } from "../kit.ts";
+
+import styles from "./BulkBar.module.css";
 
 export function BulkBar({
   n,
@@ -27,14 +28,23 @@ export function BulkBar({
           </button>
         ) : (
           <>
-            <button type="button" className="kit-btn" onClick={(e) => onMoveTo(e.currentTarget)}>
+            <button
+              type="button"
+              className="kit-btn"
+              onClick={(e) => onMoveTo(e.currentTarget)}
+            >
               Move to…
             </button>
             <button
               type="button"
               className="kit-btn danger"
               onClick={(e) => {
-                if (!armConfirm(e.currentTarget, { armedLabel: `Trash ${n} — sure?` })) return;
+                if (
+                  !armConfirm(e.currentTarget, {
+                    armedLabel: `Trash ${n} — sure?`,
+                  })
+                )
+                  return;
                 onTrashSelected();
               }}
             >

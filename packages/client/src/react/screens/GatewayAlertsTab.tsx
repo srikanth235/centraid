@@ -1,13 +1,15 @@
-import { type JSX } from 'react';
-import { cx } from '../ui/cx.js';
+import { type JSX } from "react";
+
 import {
   ALERT_PRESETS,
   buildAlertHistoryRows,
   thresholdLabel,
   type GatewayRuntimeSnapshot,
-} from '../shell/routes/gatewayData.js';
-import AlertHistoryPanel from './AlertHistoryPanel.js';
-import styles from './GatewayScreen.module.css';
+} from "../shell/routes/gatewayData.js";
+import { cx } from "../ui/cx.js";
+import AlertHistoryPanel from "./AlertHistoryPanel.js";
+
+import styles from "./GatewayScreen.module.css";
 
 // Gateway → Alerts tab, extracted verbatim from GatewayScreen (issue #528
 // Phase F) so the Overview wiring can grow without pushing GatewayScreen past
@@ -27,10 +29,14 @@ export interface GatewayAlertsTabProps {
   savingLaunchAtLogin?: boolean;
 }
 
-export default function GatewayAlertsTab(props: GatewayAlertsTabProps): JSX.Element {
+export default function GatewayAlertsTab(
+  props: GatewayAlertsTabProps
+): JSX.Element {
   const { snapshot } = props;
   const alert = snapshot.alert;
-  const hasPreset = ALERT_PRESETS.some((p) => p.seconds === alert.thresholdSeconds);
+  const hasPreset = ALERT_PRESETS.some(
+    (p) => p.seconds === alert.thresholdSeconds
+  );
   const alertHistoryRows = buildAlertHistoryRows(snapshot);
 
   return (
@@ -44,10 +50,12 @@ export default function GatewayAlertsTab(props: GatewayAlertsTabProps): JSX.Elem
         <div className={styles.alertBody}>
           <div className={styles.alertToggleRow}>
             <div>
-              <div className={styles.alertToggleLabel}>Alert when unreachable</div>
+              <div className={styles.alertToggleLabel}>
+                Alert when unreachable
+              </div>
               <div className={styles.alertToggleSub}>
-                A system notification fires once per outage — even with this window in the
-                background — and again when the gateway recovers.
+                A system notification fires once per outage — even with this
+                window in the background — and again when the gateway recovers.
               </div>
             </div>
             <button
@@ -63,7 +71,10 @@ export default function GatewayAlertsTab(props: GatewayAlertsTabProps): JSX.Elem
               <span className={styles.switchThumb} />
             </button>
           </div>
-          <div className={styles.alertAfter} data-disabled={!alert.enabled || undefined}>
+          <div
+            className={styles.alertAfter}
+            data-disabled={!alert.enabled || undefined}
+          >
             <div className={styles.alertAfterLabel}>after unreachable for</div>
             <div className={styles.presets}>
               {ALERT_PRESETS.map((p) => (
@@ -72,7 +83,7 @@ export default function GatewayAlertsTab(props: GatewayAlertsTabProps): JSX.Elem
                   type="button"
                   className={cx(
                     styles.preset,
-                    p.seconds === alert.thresholdSeconds && styles.presetActive,
+                    p.seconds === alert.thresholdSeconds && styles.presetActive
                   )}
                   disabled={props.savingAlert || !alert.enabled}
                   onClick={() => props.onAlertSecondsChange(p.seconds)}
@@ -80,11 +91,11 @@ export default function GatewayAlertsTab(props: GatewayAlertsTabProps): JSX.Elem
                   {p.label}
                 </button>
               ))}
-              {!hasPreset ? (
+              {hasPreset ? null : (
                 <span className={cx(styles.preset, styles.presetActive)}>
                   {thresholdLabel(alert.thresholdSeconds)}
                 </span>
-              ) : null}
+              )}
             </div>
           </div>
         </div>
@@ -100,9 +111,12 @@ export default function GatewayAlertsTab(props: GatewayAlertsTabProps): JSX.Elem
         <div className={styles.alertBody}>
           <div className={styles.alertToggleRow}>
             <div>
-              <div className={styles.alertToggleLabel}>Start Centraid at login</div>
+              <div className={styles.alertToggleLabel}>
+                Start Centraid at login
+              </div>
               <div className={styles.alertToggleSub}>
-                Keeps your gateway available without having to open Centraid by hand.
+                Keeps your gateway available without having to open Centraid by
+                hand.
               </div>
             </div>
             <button
@@ -113,7 +127,9 @@ export default function GatewayAlertsTab(props: GatewayAlertsTabProps): JSX.Elem
               className={styles.switch}
               data-on={props.launchAtLogin || undefined}
               disabled={props.savingLaunchAtLogin}
-              onClick={() => props.onLaunchAtLoginChange?.(!(props.launchAtLogin ?? false))}
+              onClick={() =>
+                props.onLaunchAtLoginChange?.(!(props.launchAtLogin ?? false))
+              }
             >
               <span className={styles.switchThumb} />
             </button>

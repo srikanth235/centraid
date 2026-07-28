@@ -56,36 +56,41 @@
  * sealed or not.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from "node:http";
+
+import { requestCasGrant } from "@centraid/backup";
 import {
   S3BlobStore,
   custodyStateByteCounts,
   custodyStateCounts,
   readBackupPolicy,
   readBlobStoreSettings,
-} from '@centraid/vault';
-import { requestCasGrant } from '@centraid/backup';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
+} from "@centraid/vault";
+
+import type { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import {
   StorageConnectionError,
   type CreateStorageConnectionInput,
   type StorageConnectionStore,
-} from '../backup/storage-connections.js';
+} from "../backup/storage-connections.js";
 import {
   assertProviderHomeProfile,
   ensureProviderCasTarget,
   fetchProviderProfileStatus,
-} from '../backup/storage-credentials.js';
-import type { StorageUsagePoller } from '../backup/storage-usage.js';
-import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
-import { readJson, sendError, sendJson } from './route-helpers.js';
-import { tryStorageLocalRoutes, type StorageLocalRouteDeps } from './storage-local-routes.js';
+} from "../backup/storage-credentials.js";
+import type { StorageUsagePoller } from "../backup/storage-usage.js";
+import type { RouteHandler } from "../serve/build-gateway.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
+import { readJson, sendError, sendJson } from "./route-helpers.js";
+import {
+  tryStorageLocalRoutes,
+  type StorageLocalRouteDeps,
+} from "./storage-local-routes.js";
 
-const CONNECTIONS_PATH = '/centraid/_gateway/storage/connections';
-const STATUS_PATH = '/centraid/_gateway/storage/status';
-const STATUS_EVENTS_PATH = '/centraid/_gateway/storage/status/events';
-const USAGE_PATH = '/centraid/_gateway/storage/usage';
+const CONNECTIONS_PATH = "/centraid/_gateway/storage/connections";
+const STATUS_PATH = "/centraid/_gateway/storage/status";
+const STATUS_EVENTS_PATH = "/centraid/_gateway/storage/status/events";
+const USAGE_PATH = "/centraid/_gateway/storage/usage";
 
 export interface StorageRouteDeps extends StorageLocalRouteDeps {
   storageConnections: StorageConnectionStore;
@@ -102,25 +107,35 @@ export interface StorageRouteDeps extends StorageLocalRouteDeps {
  *  (bytes custody has actually confirmed are off-box), deliberately NOT
  *  `local-only` (not yet replicated, so not a fair comparison against a
  *  provider's own "bytes stored" figure). */
-function localReplicatedBytesByConnection(vaults: VaultRegistry): Map<string, number> {
+function localReplicatedBytesByConnection(
+  vaults: VaultRegistry
+): Map<string, number> {
   const totals = new Map<string, number>();
   for (const plane of vaults.planesList()) {
     const settings = readBlobStoreSettings(plane.db.vault);
-    if (settings.kind !== 's3' || !settings.connectionId) continue;
+    if (settings.kind !== "s3" || !settings.connectionId) continue;
     const bytes = custodyStateByteCounts(plane.db.vault);
-    const replicated = bytes.replicated + bytes['remote-only'];
-    totals.set(settings.connectionId, (totals.get(settings.connectionId) ?? 0) + replicated);
+    const replicated = bytes.replicated + bytes["remote-only"];
+    totals.set(
+      settings.connectionId,
+      (totals.get(settings.connectionId) ?? 0) + replicated
+    );
   }
   return totals;
 }
 
 function looksLikeCreateInput(body: Record<string, unknown>): boolean {
-  return body.kind === 'provider' && typeof body.name === 'string';
+  return body.kind === "provider" && typeof body.name === "string";
 }
 
 function sendConnectionError(res: ServerResponse, err: unknown): true {
   if (err instanceof StorageConnectionError) {
-    const status = err.code === 'not_found' ? 404 : err.code === 'already_exists' ? 409 : 400;
+    const status =
+      err.code === "not_found"
+        ? 404
+        : err.code === "already_exists"
+          ? 409
+          : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
   }
   return sendError(res, err);
@@ -132,23 +147,28 @@ function sendConnectionError(res: ServerResponse, err: unknown): true {
  *  so the Test action shows whether this provider is a full home bundle. */
 async function probeConnection(
   store: StorageConnectionStore,
-  id: string,
+  id: string
 ): Promise<{ ok: true; detail: string } | { ok: false; error: string }> {
   const connection = await store.get(id);
-  if (!connection) return { ok: false, error: `unknown storage connection "${id}"` };
-  if (!connection.baseUrl) return { ok: false, error: 'connection is missing baseUrl' };
-  const probeKey = '0'.repeat(64);
+  if (!connection)
+    return { ok: false, error: `unknown storage connection "${id}"` };
+  if (!connection.baseUrl)
+    return { ok: false, error: "connection is missing baseUrl" };
+  const probeKey = "0".repeat(64);
   try {
     const apiKey = await store.resolveProviderApiKey(id);
     // Home-profile status first: a non-home provider is a hard failure (a
     // home connection requires the full bundle), reported with the exact
     // missing capabilities rather than a generic reachability error.
-    const profile = await fetchProviderProfileStatus(connection.baseUrl, apiKey);
+    const profile = await fetchProviderProfileStatus(
+      connection.baseUrl,
+      apiKey
+    );
     if (!profile.isHome) {
       const missing =
         profile.missingCapabilities.length > 0
-          ? ` (missing ${profile.missingCapabilities.join(', ')})`
-          : '';
+          ? ` (missing ${profile.missingCapabilities.join(", ")})`
+          : "";
       return {
         ok: false,
         error: `provider does not advertise the "home" profile${missing}`,
@@ -160,7 +180,7 @@ async function probeConnection(
       baseUrl: connection.baseUrl,
       apiKey,
       targetId: refreshed!.targetId!,
-      mode: 'read-write',
+      mode: "read-write",
     });
     const s3 = new S3BlobStore({
       endpoint: target.endpoint,
@@ -177,14 +197,17 @@ async function probeConnection(
     return {
       ok: true,
       detail:
-        'signed request reached the bucket and was accepted; provider advertises the home profile',
+        "signed request reached the bucket and was accepted; provider advertises the home profile",
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
-type StoragePlane = ReturnType<VaultRegistry['planesList']>[number];
+type StoragePlane = ReturnType<VaultRegistry["planesList"]>[number];
 
 function storageStatus(plane: StoragePlane) {
   const settings = readBlobStoreSettings(plane.db.vault);
@@ -197,13 +220,13 @@ function storageStatus(plane: StoragePlane) {
   return {
     vaultId: plane.boot.vaultId,
     name: plane.name,
-    configured: settings.kind === 's3',
+    configured: settings.kind === "s3",
     ...(settings.connectionId ? { connectionId: settings.connectionId } : {}),
     // `remote-only` is confirmed provider custody and therefore ackable;
     // pending-offsite/outbox is the only undrained state (#414).
     replicated: {
-      count: counts.replicated + counts['remote-only'],
-      bytes: bytes.replicated + bytes['remote-only'],
+      count: counts.replicated + counts["remote-only"],
+      bytes: bytes.replicated + bytes["remote-only"],
     },
     backlog: { count: outbox.pendingCount, bytes: outbox.pendingBytes },
     pendingOffsite: {
@@ -212,7 +235,7 @@ function storageStatus(plane: StoragePlane) {
       uploading: outbox.uploadingCount,
       lastError: outbox.lastError,
     },
-    localOnly: { count: counts['local-only'], bytes: bytes['local-only'] },
+    localOnly: { count: counts["local-only"], bytes: bytes["local-only"] },
     casAck: policy.casAck,
     outboxBudgetBytes: policy.outboxBudgetBytes,
     reservedHeadroomBytes: policy.reservedHeadroomBytes,
@@ -222,10 +245,15 @@ function storageStatus(plane: StoragePlane) {
       error: sweep.lastError,
       consecutiveFailures: sweep.consecutiveFailures,
     },
-    ...(policy.throttleBytesPerSec ? { throttleBytesPerSec: policy.throttleBytesPerSec } : {}),
+    ...(policy.throttleBytesPerSec
+      ? { throttleBytesPerSec: policy.throttleBytesPerSec }
+      : {}),
     cache: {
       spoolBytes: metrics.spoolBytes,
-      budgetBytes: metrics.budgetBytes === Number.MAX_SAFE_INTEGER ? null : metrics.budgetBytes,
+      budgetBytes:
+        metrics.budgetBytes === Number.MAX_SAFE_INTEGER
+          ? null
+          : metrics.budgetBytes,
       localHits: metrics.localHits,
       readThroughs: metrics.readThroughs,
       rangedRemoteReads: metrics.rangedRemoteReads,
@@ -241,25 +269,27 @@ function storageStatus(plane: StoragePlane) {
 function streamStorageStatus(
   req: IncomingMessage,
   res: ServerResponse,
-  planes: StoragePlane[],
+  planes: StoragePlane[]
 ): true {
   res.writeHead(200, {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
-    Connection: 'keep-alive',
-    'X-Accel-Buffering': 'no',
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
   });
   const write = (): void => {
     if (!res.writableEnded) {
       res.write(
-        `event: custody\ndata: ${JSON.stringify({ vaults: planes.map(storageStatus) })}\n\n`,
+        `event: custody\ndata: ${JSON.stringify({ vaults: planes.map(storageStatus) })}\n\n`
       );
     }
   };
   write();
-  const unsubscribers = planes.map((plane) => plane.db.blobTransfers.subscribe(write));
+  const unsubscribers = planes.map((plane) =>
+    plane.db.blobTransfers.subscribe(write)
+  );
   const heartbeat = setInterval(() => {
-    if (!res.writableEnded) res.write(': ping\n\n');
+    if (!res.writableEnded) res.write(": ping\n\n");
   }, 30_000);
   heartbeat.unref();
   let closed = false;
@@ -270,22 +300,29 @@ function streamStorageStatus(
     for (const unsubscribe of unsubscribers) unsubscribe();
     if (!res.writableEnded) res.end();
   };
-  req.on('close', cleanup);
-  res.on('error', cleanup);
+  req.on("close", cleanup);
+  res.on("error", cleanup);
   return true;
 }
 
 export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
+    const url = new URL(req.url ?? "/", "http://gateway.local");
 
     if (url.pathname === STATUS_PATH || url.pathname === STATUS_EVENTS_PATH) {
-      if ((req.method ?? 'GET') !== 'GET') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+      if ((req.method ?? "GET") !== "GET") {
+        return sendJson(res, 405, {
+          error: "method_not_allowed",
+          message: "GET only",
+        });
       }
       try {
         const planes = deps.vaults.planesList();
-        if (url.pathname === STATUS_EVENTS_PATH) return streamStorageStatus(req, res, planes);
+        if (url.pathname === STATUS_EVENTS_PATH)
+          return streamStorageStatus(req, res, planes);
         const vaults = planes.map(storageStatus);
         return sendJson(res, 200, { vaults });
       } catch (err) {
@@ -294,8 +331,11 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
     }
 
     if (url.pathname === USAGE_PATH) {
-      if ((req.method ?? 'GET') !== 'GET') {
-        return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET only' });
+      if ((req.method ?? "GET") !== "GET") {
+        return sendJson(res, 405, {
+          error: "method_not_allowed",
+          message: "GET only",
+        });
       }
       try {
         const connections = await deps.storageConnections.list();
@@ -303,7 +343,7 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
         const results = await Promise.all(
           connections.map(async (connection) => {
             const usage =
-              connection.kind === 'provider'
+              connection.kind === "provider"
                 ? await deps.storageUsage.usageFor(connection.id)
                 : { providerReported: null, fetchedAt: null };
             return {
@@ -312,9 +352,11 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
               providerReported: usage.providerReported,
               localReplicatedBytes: localBytes.get(connection.id) ?? 0,
               ...(usage.fetchedAt ? { fetchedAt: usage.fetchedAt } : {}),
-              ...('error' in usage && usage.error ? { error: usage.error } : {}),
+              ...("error" in usage && usage.error
+                ? { error: usage.error }
+                : {}),
             };
-          }),
+          })
         );
         return sendJson(res, 200, { connections: results });
       } catch (err) {
@@ -328,20 +370,23 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
     if (await tryStorageLocalRoutes(url, req, res, deps)) return true;
 
     if (url.pathname === CONNECTIONS_PATH) {
-      if ((req.method ?? 'GET') === 'GET') {
+      if ((req.method ?? "GET") === "GET") {
         try {
-          return sendJson(res, 200, { connections: await deps.storageConnections.list() });
+          return sendJson(res, 200, {
+            connections: await deps.storageConnections.list(),
+          });
         } catch (err) {
           return sendError(res, err);
         }
       }
-      if ((req.method ?? 'GET') === 'POST') {
+      if ((req.method ?? "GET") === "POST") {
         try {
           const raw = await readJson(req);
           if (!looksLikeCreateInput(raw)) {
             return sendJson(res, 400, {
-              error: 'bad_request',
-              message: 'body must carry {kind: "provider", name, baseUrl, apiKey}',
+              error: "bad_request",
+              message:
+                'body must carry {kind: "provider", name, baseUrl, apiKey}',
             });
           }
           const body = raw as unknown as CreateStorageConnectionInput;
@@ -351,10 +396,10 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           const recoveryKitConfirmed = status.confirmedAt !== null;
           if (!recoveryKitConfirmed) {
             return sendJson(res, 409, {
-              error: 'recovery_kit_not_confirmed',
+              error: "recovery_kit_not_confirmed",
               recoveryKitConfirmed: false,
               message:
-                'export, re-select, and verify the recovery kit before enabling a remote storage tier',
+                "export, re-select, and verify the recovery kit before enabling a remote storage tier",
             });
           }
           // Home-profile gate (#436 §1): only a provider advertising the
@@ -368,28 +413,31 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           return sendConnectionError(res, err);
         }
       }
-      return sendJson(res, 405, { error: 'method_not_allowed', message: 'GET, POST only' });
+      return sendJson(res, 405, {
+        error: "method_not_allowed",
+        message: "GET, POST only",
+      });
     }
 
     if (url.pathname.startsWith(`${CONNECTIONS_PATH}/`)) {
       const rest = url.pathname.slice(CONNECTIONS_PATH.length + 1);
-      const segments = rest.split('/').filter(Boolean).map(decodeURIComponent);
+      const segments = rest.split("/").filter(Boolean).map(decodeURIComponent);
       const id = segments[0];
       if (!id) return false;
 
       if (segments.length === 1) {
-        const method = req.method ?? 'GET';
-        if (method === 'GET') {
+        const method = req.method ?? "GET";
+        if (method === "GET") {
           const connection = await deps.storageConnections.get(id);
           if (!connection) {
             return sendJson(res, 404, {
-              error: 'not_found',
+              error: "not_found",
               message: `unknown storage connection "${id}"`,
             });
           }
           return sendJson(res, 200, { connection });
         }
-        if (method === 'PATCH') {
+        if (method === "PATCH") {
           try {
             const body = await readJson(req);
             const connection = await deps.storageConnections.update(id, body);
@@ -399,7 +447,7 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
             return sendConnectionError(res, err);
           }
         }
-        if (method === 'DELETE') {
+        if (method === "DELETE") {
           try {
             await deps.storageConnections.delete(id);
             await deps.onConnectionsChanged?.();
@@ -409,14 +457,17 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           }
         }
         return sendJson(res, 405, {
-          error: 'method_not_allowed',
-          message: 'GET, PATCH, DELETE only',
+          error: "method_not_allowed",
+          message: "GET, PATCH, DELETE only",
         });
       }
 
-      if (segments.length === 2 && segments[1] === 'test') {
-        if ((req.method ?? 'GET') !== 'POST') {
-          return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
+      if (segments.length === 2 && segments[1] === "test") {
+        if ((req.method ?? "GET") !== "POST") {
+          return sendJson(res, 405, {
+            error: "method_not_allowed",
+            message: "POST only",
+          });
         }
         try {
           const result = await probeConnection(deps.storageConnections, id);

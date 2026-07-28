@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Page } from "@playwright/test";
 
 /**
  * The web E2E harness owns a loopback gateway but does not start an iroh relay.
@@ -7,19 +7,26 @@ import type { Page } from '@playwright/test';
  * control proxy. The init script intercepts main.ts's transport installation,
  * so the adapter survives the reload that applies the persisted connection.
  */
-export async function installHarnessControlTransport(page: Page, apiUrl: string): Promise<void> {
+export async function installHarnessControlTransport(
+  page: Page,
+  apiUrl: string
+): Promise<void> {
   await page.addInitScript(
     ({ gatewayUrl }) => {
       const transport = {
         fetch: async (pathname: string, init: RequestInit = {}) =>
-          fetch(`${gatewayUrl}/centraid/_web/control?path=${encodeURIComponent(pathname)}`, {
-            ...init,
-            credentials: 'include',
-          }),
-        url: async (pathname: string) => new URL(pathname, `${gatewayUrl}/`).toString(),
+          fetch(
+            `${gatewayUrl}/centraid/_web/control?path=${encodeURIComponent(pathname)}`,
+            {
+              ...init,
+              credentials: "include",
+            }
+          ),
+        url: async (pathname: string) =>
+          new URL(pathname, `${gatewayUrl}/`).toString(),
       };
 
-      Object.defineProperty(window, 'CentraidIroh', {
+      Object.defineProperty(window, "CentraidIroh", {
         configurable: true,
         get: () => transport,
         // main.ts installs the production WASM transport on every navigation.
@@ -27,6 +34,6 @@ export async function installHarnessControlTransport(page: Page, apiUrl: string)
         set: () => undefined,
       });
     },
-    { gatewayUrl: apiUrl },
+    { gatewayUrl: apiUrl }
   );
 }

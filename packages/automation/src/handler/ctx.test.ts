@@ -2,28 +2,38 @@
  * Direct unit tests for automation handler ctx message handlers (issue #545 B5).
  */
 
-import { describe, expect, it, vi } from 'vitest';
-import { handleRunsMessage, handleStateMessage, nextOrdinal, type AuditState } from './ctx.js';
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  handleRunsMessage,
+  handleStateMessage,
+  nextOrdinal,
+  type AuditState,
+} from "./ctx.js";
 
 function audit(over: Partial<AuditState> = {}): AuditState {
   return {
     store: {
-      stateGet: vi.fn(),
-      stateSet: vi.fn(),
-      stateDelete: vi.fn(),
-      listAutomationTurns: vi.fn(() => []),
-      messageInText: vi.fn(() => undefined),
+      stateGet: vi.fn<AuditState["store"]["stateGet"]>(),
+      stateSet: vi.fn<AuditState["store"]["stateSet"]>(),
+      stateDelete: vi.fn<AuditState["store"]["stateDelete"]>(),
+      listAutomationTurns: vi.fn<AuditState["store"]["listAutomationTurns"]>(
+        () => []
+      ),
+      messageInText: vi.fn<AuditState["store"]["messageInText"]>(
+        () => undefined
+      ),
     } as never,
-    runId: 'current-run',
-    automationId: 'app/digest',
+    runId: "current-run",
+    automationId: "app/digest",
     ordinal: 0,
     emit: () => undefined,
     ...over,
   };
 }
 
-describe('nextOrdinal', () => {
-  it('increments the audit ordinal and returns the previous value', () => {
+describe(nextOrdinal, () => {
+  it("increments the audit ordinal and returns the previous value", () => {
     const a = audit({ ordinal: 3 });
     expect(nextOrdinal(a)).toBe(3);
     expect(nextOrdinal(a)).toBe(4);
@@ -31,118 +41,134 @@ describe('nextOrdinal', () => {
   });
 });
 
-describe('handleStateMessage', () => {
-  it('get/set/delete against the automation state map', () => {
+describe(handleStateMessage, () => {
+  it("get/set/delete against the automation state map", () => {
     const store = {
-      stateGet: vi.fn((automationId: string, key: string) =>
-        key === 'cursor' && automationId === 'app/digest'
+      stateGet: vi.fn<AuditState["store"]["stateGet"]>((automationId, key) =>
+        key === "cursor" && automationId === "app/digest"
           ? { automationId, key, valueJson: '{"n":1}', updatedAt: 1 }
-          : undefined,
+          : undefined
       ),
-      stateSet: vi.fn(),
-      stateDelete: vi.fn(),
+      stateSet: vi.fn<AuditState["store"]["stateSet"]>(),
+      stateDelete: vi.fn<AuditState["store"]["stateDelete"]>(),
     };
     const a = audit({ store: store as never });
 
-    expect(handleStateMessage(a, 'get', 'missing', undefined)).toEqual({
+    expect(handleStateMessage(a, "get", "missing", undefined)).toStrictEqual({
       ok: true,
       result: undefined,
     });
-    expect(handleStateMessage(a, 'get', 'cursor', undefined)).toEqual({
+    expect(handleStateMessage(a, "get", "cursor", undefined)).toStrictEqual({
       ok: true,
       result: { n: 1 },
     });
 
     // Non-JSON valueJson is returned as the raw string.
     store.stateGet.mockReturnValueOnce({
-      automationId: 'app/digest',
-      key: 'raw',
-      valueJson: 'not-json',
+      automationId: "app/digest",
+      key: "raw",
+      valueJson: "not-json",
       updatedAt: 1,
     });
-    expect(handleStateMessage(a, 'get', 'raw', undefined).result).toBe('not-json');
-
-    expect(handleStateMessage(a, 'set', 'cursor', { n: 2 })).toEqual({ ok: true });
-    expect(store.stateSet).toHaveBeenCalledWith(
-      'app/digest',
-      'cursor',
-      JSON.stringify({ n: 2 }),
-      expect.any(Number),
+    expect(handleStateMessage(a, "get", "raw", undefined).result).toBe(
+      "not-json"
     );
 
-    expect(handleStateMessage(a, 'delete', 'cursor', undefined)).toEqual({ ok: true });
-    expect(store.stateDelete).toHaveBeenCalledWith('app/digest', 'cursor');
+    expect(handleStateMessage(a, "set", "cursor", { n: 2 })).toStrictEqual({
+      ok: true,
+    });
+    expect(store.stateSet).toHaveBeenCalledWith(
+      "app/digest",
+      "cursor",
+      JSON.stringify({ n: 2 }),
+      expect.any(Number)
+    );
 
-    expect(handleStateMessage(a, 'nope' as 'get', 'k', undefined)).toMatchObject({
+    expect(handleStateMessage(a, "delete", "cursor", undefined)).toStrictEqual({
+      ok: true,
+    });
+    expect(store.stateDelete).toHaveBeenCalledWith("app/digest", "cursor");
+
+    expect(
+      handleStateMessage(a, "nope" as "get", "k", undefined)
+    ).toMatchObject({
       ok: false,
-      error: expect.stringMatching(/unknown state method/),
+      error: expect.stringMatching(/unknown state method/u),
     });
   });
 
-  it('surfaces store exceptions as ok:false', () => {
+  it("surfaces store exceptions as ok:false", () => {
     const a = audit({
       store: {
         stateGet: () => {
-          throw new Error('db down');
+          throw new Error("db down");
         },
       } as never,
     });
-    expect(handleStateMessage(a, 'get', 'k', undefined)).toEqual({
+    expect(handleStateMessage(a, "get", "k", undefined)).toStrictEqual({
       ok: false,
-      error: 'db down',
+      error: "db down",
     });
   });
 });
 
-describe('handleRunsMessage', () => {
-  it('lists / last-s the automation turns excluding the in-progress self-turn', () => {
+describe(handleRunsMessage, () => {
+  it("lists / last-s the automation turns excluding the in-progress self-turn", () => {
     const turns = [
       {
-        turnId: 'current-run',
-        conversationId: 'app/digest',
+        turnId: "current-run",
+        conversationId: "app/digest",
         seq: 2,
-        triggerKind: 'scheduled' as const,
+        triggerKind: "scheduled" as const,
         startedAt: 30,
         ok: false,
         pinned: false,
       },
       {
-        turnId: 't1',
-        conversationId: 'app/digest',
+        turnId: "t1",
+        conversationId: "app/digest",
         seq: 1,
-        triggerKind: 'scheduled' as const,
+        triggerKind: "scheduled" as const,
         startedAt: 20,
         ok: true,
         pinned: false,
-        summary: 'ok',
+        summary: "ok",
       },
       {
-        turnId: 't0',
-        conversationId: 'app/digest',
+        turnId: "t0",
+        conversationId: "app/digest",
         seq: 0,
-        triggerKind: 'scheduled' as const,
+        triggerKind: "scheduled" as const,
         startedAt: 10,
         ok: false,
         pinned: false,
       },
     ];
     const store = {
-      listAutomationTurns: vi.fn(() => turns),
-      messageInText: vi.fn((id: string) => (id === 't1' ? '{"x":1}' : undefined)),
+      listAutomationTurns: vi.fn<AuditState["store"]["listAutomationTurns"]>(
+        () => turns
+      ),
+      messageInText: vi.fn<AuditState["store"]["messageInText"]>((id) =>
+        id === "t1" ? '{"x":1}' : undefined
+      ),
     };
     const a = audit({ store: store as never });
 
-    const list = handleRunsMessage(a, 'list', { limit: 10 });
+    const list = handleRunsMessage(a, "list", { limit: 10 });
     expect(list.ok).toBe(true);
-    expect((list.result as { runId: string }[]).map((r) => r.runId)).toEqual(['t1', 't0']);
-    expect((list.result as { input?: unknown }[])[0]?.input).toEqual({ x: 1 });
+    expect(
+      (list.result as { runId: string }[]).map((r) => r.runId)
+    ).toStrictEqual(["t1", "t0"]);
+    expect((list.result as { input?: unknown }[])[0]?.input).toStrictEqual({
+      x: 1,
+    });
 
-    const last = handleRunsMessage(a, 'last', {});
+    const last = handleRunsMessage(a, "last", {});
     expect(last.ok).toBe(true);
-    expect((last.result as { runId: string }).runId).toBe('t1');
+    expect((last.result as { runId: string }).runId).toBe("t1");
 
     // Empty history → last is undefined.
     store.listAutomationTurns.mockReturnValueOnce([]);
-    expect(handleRunsMessage(a, 'last', {}).result).toBeUndefined();
+    expect(handleRunsMessage(a, "last", {}).result).toBeUndefined();
   });
 });

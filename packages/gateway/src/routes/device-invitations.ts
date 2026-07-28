@@ -17,9 +17,12 @@
  * both, and `PairingTicketStore.mint` burns the decision into the ticket.
  */
 
-import type { EnrollmentStore, GrantableRole } from '../serve/enrollment-store.js';
-import { roleWithin } from '../serve/enrollment-store.js';
-import type { MemberGrant } from '../serve/member-store.js';
+import type {
+  EnrollmentStore,
+  GrantableRole,
+} from "../serve/enrollment-store.js";
+import { roleWithin } from "../serve/enrollment-store.js";
+import type { MemberGrant } from "../serve/member-store.js";
 
 export interface InvitationRefusal {
   error: string;
@@ -43,9 +46,11 @@ export function parseGrants(raw: unknown): MemberGrant[] | null {
   for (const entry of raw) {
     const grant = entry as { vaultId?: unknown; role?: unknown };
     if (
-      typeof grant.vaultId !== 'string' ||
+      typeof grant.vaultId !== "string" ||
       grant.vaultId.length === 0 ||
-      (grant.role !== 'admin' && grant.role !== 'write' && grant.role !== 'read')
+      (grant.role !== "admin" &&
+        grant.role !== "write" &&
+        grant.role !== "read")
     ) {
       return null;
     }
@@ -67,27 +72,36 @@ export interface ResolveInvitationInput {
   grants: MemberGrant[];
 }
 
-export function resolveInvitation(input: ResolveInvitationInput): InvitationDecision {
+export function resolveInvitation(
+  input: ResolveInvitationInput
+): InvitationDecision {
   const members = input.enrollments.members;
-  const callerMember = input.callerKey ? input.enrollments.memberFor(input.callerKey) : undefined;
+  const callerMember = input.callerKey
+    ? input.enrollments.memberFor(input.callerKey)
+    : undefined;
 
-  const requestedMember = typeof input.body.memberId === 'string' ? input.body.memberId : undefined;
+  const requestedMember =
+    typeof input.body.memberId === "string" ? input.body.memberId : undefined;
   const rawNewLabel =
-    typeof input.body.newMemberLabel === 'string' ? input.body.newMemberLabel.trim() : undefined;
+    typeof input.body.newMemberLabel === "string"
+      ? input.body.newMemberLabel.trim()
+      : undefined;
   const newMemberLabel =
-    rawNewLabel !== undefined && rawNewLabel.length > 0 ? rawNewLabel : undefined;
+    rawNewLabel !== undefined && rawNewLabel.length > 0
+      ? rawNewLabel
+      : undefined;
   if (requestedMember !== undefined && newMemberLabel !== undefined) {
     return {
       status: 400,
-      error: 'ambiguous_member',
-      message: 'name an existing memberId or a newMemberLabel, never both',
+      error: "ambiguous_member",
+      message: "name an existing memberId or a newMemberLabel, never both",
     };
   }
   if (rawNewLabel !== undefined && newMemberLabel === undefined) {
     return {
       status: 400,
-      error: 'invalid_member_label',
-      message: 'newMemberLabel must not be blank',
+      error: "invalid_member_label",
+      message: "newMemberLabel must not be blank",
     };
   }
 
@@ -95,19 +109,20 @@ export function resolveInvitation(input: ResolveInvitationInput): InvitationDeci
   // resolves an id (or an exact label, for the CLI's `--member`) and 404s
   // otherwise, so a typo can never mint a phantom member with live access.
   const existing =
-    requestedMember !== undefined
-      ? members.find(requestedMember)
-      : newMemberLabel
+    requestedMember === undefined
+      ? newMemberLabel
         ? undefined
-        : callerMember;
+        : callerMember
+      : members.find(requestedMember);
   if (requestedMember !== undefined && !existing) {
     return {
       status: 404,
-      error: 'member_not_found',
+      error: "member_not_found",
       message: `no member matches "${requestedMember}"`,
     };
   }
-  const isSelfPair = existing !== undefined && existing.memberId === callerMember?.memberId;
+  const isSelfPair =
+    existing !== undefined && existing.memberId === callerMember?.memberId;
 
   const grants =
     input.grants.length > 0
@@ -118,13 +133,17 @@ export function resolveInvitation(input: ResolveInvitationInput): InvitationDeci
   if (grants.length === 0) {
     return {
       status: 400,
-      error: 'grants_required',
-      message: 'an invitation must grant at least one vault role',
+      error: "grants_required",
+      message: "an invitation must grant at least one vault role",
     };
   }
   for (const grant of grants) {
     if (input.vaultName(grant.vaultId) === undefined) {
-      return { status: 404, error: 'not_found', message: 'unknown vault in grants' };
+      return {
+        status: 404,
+        error: "not_found",
+        message: "unknown vault in grants",
+      };
     }
   }
 
@@ -132,8 +151,9 @@ export function resolveInvitation(input: ResolveInvitationInput): InvitationDeci
     if (!callerMember) {
       return {
         status: 403,
-        error: 'device_identity_required',
-        message: 'pairing tickets require an enrolled device or direct host custody',
+        error: "device_identity_required",
+        message:
+          "pairing tickets require an enrolled device or direct host custody",
       };
     }
     for (const grant of grants) {
@@ -144,25 +164,28 @@ export function resolveInvitation(input: ResolveInvitationInput): InvitationDeci
         if (!own || !roleWithin(grant.role, own)) {
           return {
             status: 403,
-            error: 'role_above_own',
-            message: 'a self-pairing ticket cannot grant more than the member already holds',
+            error: "role_above_own",
+            message:
+              "a self-pairing ticket cannot grant more than the member already holds",
           };
         }
-      } else if (own !== 'admin') {
+      } else if (own !== "admin") {
         return {
           status: 403,
-          error: 'not_admin',
-          message: 'inviting another person requires admin in every granted vault',
+          error: "not_admin",
+          message:
+            "inviting another person requires admin in every granted vault",
         };
       }
     }
   }
 
-  const member = existing ?? members.create(newMemberLabel ?? defaultMemberLabel(input));
+  const member =
+    existing ?? members.create(newMemberLabel ?? defaultMemberLabel(input));
   return { memberId: member.memberId, memberLabel: member.label, grants };
 }
 
 function defaultMemberLabel(input: ResolveInvitationInput): string {
   const vaultName = input.vaultName(input.target);
-  return vaultName ? `New member (${vaultName})` : 'New member';
+  return vaultName ? `New member (${vaultName})` : "New member";
 }

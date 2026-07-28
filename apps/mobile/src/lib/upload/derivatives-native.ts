@@ -1,18 +1,18 @@
-import { Directory, File, Paths } from 'expo-file-system';
-import * as ImageManipulator from 'expo-image-manipulator';
-import * as VideoThumbnails from 'expo-video-thumbnails';
-import jpeg from 'jpeg-js';
-import { rgbaToThumbHash } from 'thumbhash';
+import { Directory, File, Paths } from "expo-file-system";
+import * as ImageManipulator from "expo-image-manipulator";
+import * as VideoThumbnails from "expo-video-thumbnails";
+import jpeg from "jpeg-js";
+import { rgbaToThumbHash } from "thumbhash";
 
-import { authHeader } from '../gateway';
-import { bytesToBase64 } from './bytes';
+import { authHeader } from "../gateway";
+import { bytesToBase64 } from "./bytes";
 
-export type DeviceDerivativeVariant = 'thumb' | 'preview' | 'poster';
+export type DeviceDerivativeVariant = "thumb" | "preview" | "poster";
 
 export interface DeviceDerivative {
   variant: DeviceDerivativeVariant;
   uri: string;
-  mediaType: 'image/jpeg';
+  mediaType: "image/jpeg";
 }
 
 export interface DeviceDerivativeSet {
@@ -28,7 +28,7 @@ export interface DeviceDerivativeSet {
  * forever and starve the record (F3). Copy each rung into a durable directory
  * under the document root instead, and delete it once the follow-up settles.
  */
-const DERIVATIVES_DIRNAME = 'centraid-upload-derivatives';
+const DERIVATIVES_DIRNAME = "centraid-upload-derivatives";
 
 function durableDerivativesDir(): Directory {
   const dir = new Directory(Paths.document, DERIVATIVES_DIRNAME);
@@ -47,11 +47,19 @@ function persistDurably(cacheUri: string, name: string): string {
   return destination.uri;
 }
 
-async function jpegRung(uri: string, width: number, compress: number): Promise<string> {
-  const result = await ImageManipulator.manipulateAsync(uri, [{ resize: { width } }], {
-    compress,
-    format: ImageManipulator.SaveFormat.JPEG,
-  });
+async function jpegRung(
+  uri: string,
+  width: number,
+  compress: number
+): Promise<string> {
+  const result = await ImageManipulator.manipulateAsync(
+    uri,
+    [{ resize: { width } }],
+    {
+      compress,
+      format: ImageManipulator.SaveFormat.JPEG,
+    }
+  );
   return result.uri;
 }
 
@@ -68,49 +76,60 @@ export function dhash(width: number, height: number, data: Uint8Array): string {
       const rightX = Math.min(width - 1, Math.floor(((x + 1) * width) / 9));
       const left = (sy * width + leftX) * 4;
       const right = (sy * width + rightX) * 4;
-      const a = data[left]! * 299 + data[left + 1]! * 587 + data[left + 2]! * 114;
-      const b = data[right]! * 299 + data[right + 1]! * 587 + data[right + 2]! * 114;
+      const a =
+        data[left]! * 299 + data[left + 1]! * 587 + data[left + 2]! * 114;
+      const b =
+        data[right]! * 299 + data[right + 1]! * 587 + data[right + 2]! * 114;
       bits = (bits << 1n) | (a > b ? 1n : 0n);
     }
   }
-  return bits.toString(16).padStart(16, '0');
+  return bits.toString(16).padStart(16, "0");
 }
 
 /** HEIC/video-safe device derivatives: native decode first, tiny JPEG decode second. */
 export async function generateDeviceDerivatives(
   localUri: string,
-  mediaType: string,
+  mediaType: string
 ): Promise<DeviceDerivativeSet> {
-  const source = mediaType.startsWith('video/')
-    ? (await VideoThumbnails.getThumbnailAsync(localUri, { time: 0, quality: 0.9 })).uri
+  const source = mediaType.startsWith("video/")
+    ? (
+        await VideoThumbnails.getThumbnailAsync(localUri, {
+          time: 0,
+          quality: 0.9,
+        })
+      ).uri
     : localUri;
   const thumb = await jpegRung(source, 256, 0.82);
   const preview = await jpegRung(source, 2_048, 0.86);
-  const poster = mediaType.startsWith('video/') ? await jpegRung(source, 1_024, 0.86) : undefined;
-  const decoded = jpeg.decode(await new File(thumb).bytes(), { useTArray: true });
+  const poster = mediaType.startsWith("video/")
+    ? await jpegRung(source, 1_024, 0.86)
+    : undefined;
+  const decoded = jpeg.decode(await new File(thumb).bytes(), {
+    useTArray: true,
+  });
   const thumbhash = bytesToBase64(
-    rgbaToThumbHash(decoded.width, decoded.height, decoded.data),
-  ).replace(/=+$/, '');
+    rgbaToThumbHash(decoded.width, decoded.height, decoded.data)
+  ).replace(/=+$/u, "");
   // A per-set token keeps concurrent producers from colliding on durable names.
   const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   return {
     binary: [
       {
-        variant: 'thumb',
+        variant: "thumb",
         uri: persistDurably(thumb, `${token}-thumb.jpg`),
-        mediaType: 'image/jpeg',
+        mediaType: "image/jpeg",
       },
       {
-        variant: 'preview',
+        variant: "preview",
         uri: persistDurably(preview, `${token}-preview.jpg`),
-        mediaType: 'image/jpeg',
+        mediaType: "image/jpeg",
       },
       ...(poster
         ? [
             {
-              variant: 'poster' as const,
+              variant: "poster" as const,
               uri: persistDurably(poster, `${token}-poster.jpg`),
-              mediaType: 'image/jpeg' as const,
+              mediaType: "image/jpeg" as const,
             },
           ]
         : []),
@@ -123,31 +142,40 @@ export async function generateDeviceDerivatives(
 export async function contributeDeviceDerivatives(
   gatewayBase: string,
   parentSha: string,
-  derivatives: readonly DeviceDerivative[],
+  derivatives: readonly DeviceDerivative[]
 ): Promise<void> {
-  for (const derivative of derivatives) {
-    const file = new File(derivative.uri);
-    // Derivatives are gateway-regenerable accelerators, not correctness. If the
-    // durable copy is somehow gone, skip it rather than throw — a thrown error
-    // would poison the whole follow-up, including its canonical replica write.
-    if (!file.exists) continue;
-    const params = new URLSearchParams({
-      variant: derivative.variant,
-      variant_of: parentSha,
-      media_type: derivative.mediaType,
-    });
-    const response = await fetch(`${gatewayBase}/centraid/_vault/blobs?${params}`, {
-      method: 'POST',
-      headers: { 'content-type': derivative.mediaType, ...authHeader() },
-      body: (await file.bytes()).buffer as ArrayBuffer,
-    });
-    if (!response.ok)
-      throw new Error(`Derivative ${derivative.variant} failed (${response.status})`);
-  }
+  await Promise.all(
+    derivatives.map(async (derivative) => {
+      const file = new File(derivative.uri);
+      // Derivatives are gateway-regenerable accelerators, not correctness. If the
+      // durable copy is somehow gone, skip it rather than throw — a thrown error
+      // would poison the whole follow-up, including its canonical replica write.
+      if (!file.exists) return;
+      const params = new URLSearchParams({
+        variant: derivative.variant,
+        variant_of: parentSha,
+        media_type: derivative.mediaType,
+      });
+      const response = await fetch(
+        `${gatewayBase}/centraid/_vault/blobs?${params}`,
+        {
+          method: "POST",
+          headers: { "content-type": derivative.mediaType, ...authHeader() },
+          body: (await file.bytes()).buffer as ArrayBuffer,
+        }
+      );
+      if (!response.ok)
+        throw new Error(
+          `Derivative ${derivative.variant} failed (${response.status})`
+        );
+    })
+  );
 }
 
 /** Delete durable derivative copies once their follow-up has settled (F3/F10). */
-export function cleanupDeviceDerivatives(derivatives: readonly DeviceDerivative[]): void {
+export function cleanupDeviceDerivatives(
+  derivatives: readonly DeviceDerivative[]
+): void {
   for (const derivative of derivatives) {
     try {
       const file = new File(derivative.uri);

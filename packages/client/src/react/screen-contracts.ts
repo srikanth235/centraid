@@ -10,8 +10,9 @@
 // field. The `*BridgeProps` names are retained only to avoid churning ~50
 // import sites.
 
-import type { TileVariant } from '@centraid/design-tokens';
-import type { ResourceUsageDTO } from './screens/resource-summary.js';
+import type { TileVariant } from "@centraid/design-tokens";
+
+import type { ResourceUsageDTO } from "./screens/resource-summary.js";
 
 // The bridge is intentionally self-contained — it must not import the vanilla
 // shell modules, whose ambient globals aren't in the React island's tsconfig.
@@ -24,7 +25,7 @@ export interface DiscoverTemplate {
   colorKey: string;
   iconKey: string;
   version: string;
-  kind?: 'app' | 'automation';
+  kind?: "app" | "automation";
   /** App-kind template already installed in the addressed vault (issue #434) —
    *  the card shows Open instead of Install. */
   installed?: boolean;
@@ -36,14 +37,14 @@ export interface DiscoverTemplate {
   };
   emoji?: string;
   category?: string;
-  triggerKind?: 'cron' | 'webhook' | 'data' | 'condition';
+  triggerKind?: "cron" | "webhook" | "data" | "condition";
   triggerLabel?: string;
   integrations?: readonly string[];
 }
 
 /** Right-click anchor passed back to the shell's template context menu. */
 export interface DiscoverMenuAnchor {
-  kind: 'point';
+  kind: "point";
   x: number;
   y: number;
 }
@@ -137,7 +138,7 @@ export interface InsightsPeakDay {
   }>;
 }
 export interface InsightsAttention {
-  kind: 'top_source';
+  kind: "top_source";
   key: string;
   label: string;
   kindLabel: string;
@@ -188,7 +189,7 @@ export interface VaultParkedDTO {
   invocationId: string;
   command: string;
   parkedAt: string;
-  callerKind: 'app' | 'agent' | 'assistant' | 'owner-device';
+  callerKind: "app" | "agent" | "assistant" | "owner-device";
   caller: string | null;
   input: Record<string, unknown>;
 }
@@ -249,7 +250,7 @@ export interface PaletteRowDTO {
   sub?: string;
   /** Pre-rendered icon SVG markup (from the vanilla `Icon` set). */
   iconHtml: string;
-  variant: 'action' | 'app' | 'chat';
+  variant: "action" | "app" | "chat";
   /** For `variant: 'app'` — the gradient tile paint. */
   tile?: PaletteTileDTO;
   meta?: string;
@@ -297,7 +298,7 @@ export interface PhoneBridgeProps {
    * completes. Resolves to pairing info + a `cancel` fn, or `null` on failure.
    */
   beginPairing: (
-    onPaired: (deviceName: string) => void,
+    onPaired: (deviceName: string) => void
   ) => Promise<{ info: PhonePairingDTO; cancel: () => void } | null>;
   revoke: (deviceId: string) => Promise<boolean>;
   showToast?: (message: string) => void;
@@ -306,7 +307,7 @@ export interface PhoneBridgeProps {
 // ── Import pane ─────────────────────────────────────────────────────────────
 export interface ImportBatchDTO {
   batchId: string;
-  status: 'draft' | 'published' | 'discarded';
+  status: "draft" | "published" | "discarded";
   createdAt: string;
   summary: Record<string, number>;
   kind: string | null;
@@ -317,14 +318,14 @@ export interface ImportConnectionDTO {
   kind: string;
   label: string;
   principal: string | null;
-  status: 'active' | 'needs-auth' | 'failing' | 'paused';
+  status: "active" | "needs-auth" | "failing" | "paused";
   lastRunAt: string | null;
   lastRunError: string | null;
 }
 export interface ImportRowDTO {
   entityType: string;
   externalId: string;
-  disposition: 'create' | 'update' | 'skip' | 'merge-candidate';
+  disposition: "create" | "update" | "skip" | "merge-candidate";
   note: string | null;
 }
 export interface ImportData {
@@ -346,7 +347,10 @@ export interface ImportBridgeProps {
   loadRows: (batchId: string) => Promise<ImportRowDTO[]>;
   publish: (batchId: string) => Promise<void>;
   discard: (batchId: string) => Promise<void>;
-  setConnectionStatus: (connectionId: string, status: 'active' | 'paused') => Promise<void>;
+  setConnectionStatus: (
+    connectionId: string,
+    status: "active" | "paused"
+  ) => Promise<void>;
   showToast?: (message: string) => void;
 }
 
@@ -354,7 +358,13 @@ export interface ImportBridgeProps {
 // The vanilla side derives every display value (hue, glyph, trigger + status
 // labels, formatted run meta) so the React screen needs no app-format /
 // automation-identity imports.
-export type AuStatusKind = 'active' | 'paused' | 'draft' | 'running' | 'success' | 'failed';
+export type AuStatusKind =
+  | "active"
+  | "paused"
+  | "draft"
+  | "running"
+  | "success"
+  | "failed";
 export interface AuOverviewRowDTO {
   ref: string;
   id: string;
@@ -449,8 +459,8 @@ export interface AuViewConditionDetailDTO {
 // by the route layer (`automationThreadData.ts`), so these DTOs carry no
 // actor/actorKind field — filtering already happened before the screen sees
 // them.
-export type ConsentKind = 'outbox' | 'parked' | 'grant';
-export type ConsentDecision = 'approve' | 'discard' | 'revoke';
+export type ConsentKind = "outbox" | "parked" | "grant";
+export type ConsentDecision = "approve" | "discard" | "revoke";
 /** A Tier 3/4 invocation parked for owner confirmation (vault write above
  *  the automation's install-time ceiling). */
 export interface ParkedItemDTO {
@@ -497,24 +507,24 @@ export interface AuConsentDTO {
 // `CentraidCreateTrigger` — a webhook entry carries no fields, minting
 // happens server-side).
 export type AuEditorTriggerDTO =
-  | { kind: 'cron'; expr: string; tz?: string }
-  | { kind: 'webhook'; id: string | null; pending: boolean }
-  | { kind: 'condition'; entity: string; where?: unknown; every?: string }
-  | { kind: 'data'; entities: string[]; every?: string }
+  | { kind: "cron"; expr: string; tz?: string }
+  | { kind: "webhook"; id: string | null; pending: boolean }
+  | { kind: "condition"; entity: string; where?: unknown; every?: string }
+  | { kind: "data"; entities: string[]; every?: string }
   | {
-      kind: 'event';
+      kind: "event";
       connectorKind: string;
       event: string;
       filter?: Record<string, unknown>;
       every?: string;
     };
 export type AuEditorTriggerInput =
-  | { kind: 'cron'; expr: string; tz?: string }
-  | { kind: 'webhook' }
-  | { kind: 'condition'; entity: string; where?: unknown; every?: string }
-  | { kind: 'data'; entities: string[]; every?: string }
+  | { kind: "cron"; expr: string; tz?: string }
+  | { kind: "webhook" }
+  | { kind: "condition"; entity: string; where?: unknown; every?: string }
+  | { kind: "data"; entities: string[]; every?: string }
   | {
-      kind: 'event';
+      kind: "event";
       connectorKind: string;
       event: string;
       filter?: Record<string, unknown>;
@@ -544,7 +554,7 @@ export interface AuEditorCatalogConnectorDTO {
   kind: string;
   name: string;
   tone: string;
-  credKind: 'oauth2' | 'api_key';
+  credKind: "oauth2" | "api_key";
   providerId: string;
   providerName: string;
   templateId: string;
@@ -559,7 +569,7 @@ export interface AuEditorCatalogConnectorDTO {
     connectionId: string;
     label: string;
     principal: string | null;
-    health: 'ok' | 'needs-auth' | 'paused' | 'failing';
+    health: "ok" | "needs-auth" | "paused" | "failing";
   } | null;
   /** Every configured account for this exact provider + connector kind.
    *  The editor renders an account chooser when more than one exists. */
@@ -567,11 +577,11 @@ export interface AuEditorCatalogConnectorDTO {
     connectionId: string;
     label: string;
     principal: string | null;
-    health: 'ok' | 'needs-auth' | 'paused' | 'failing';
+    health: "ok" | "needs-auth" | "paused" | "failing";
   }>;
 }
 export interface AutomationEditorData {
-  mode: 'create' | 'edit';
+  mode: "create" | "edit";
   /** The `ref` once the automation exists on the gateway; `null` for a
    *  not-yet-scaffolded create flow. */
   automationId: string | null;
@@ -644,7 +654,7 @@ export interface AuEditorConnectFormInput {
   providerId: string;
   connectorKind: string;
   label: string;
-  credKind: 'oauth2' | 'api_key';
+  credKind: "oauth2" | "api_key";
   authUrl?: string;
   tokenUrl?: string;
   scopes?: string;
@@ -671,7 +681,7 @@ export interface CompileStepDTO {
   kind: string;
   /** Human label: the tool name, or the phase for a model step. */
   label: string;
-  status: 'ok' | 'fail' | 'running';
+  status: "ok" | "fail" | "running";
   durationMs: number | null;
   detail: string | null;
 }
@@ -683,7 +693,7 @@ export interface CompileAttemptDTO {
   turnId: string;
   startedAt: number;
   endedAt: number | null;
-  status: 'ok' | 'fail' | 'running';
+  status: "ok" | "fail" | "running";
   /** Failure text from the ledger — shown verbatim in the rail's failure block.
    *  (It used to seed a fix-it assistant; there is no second editor now.) */
   error: string | null;
@@ -726,7 +736,7 @@ export interface AutomationEditorBridgeProps {
   watchTurnSteps: (
     turnId: string,
     onSteps: (steps: CompileStepDTO[]) => void,
-    signal: AbortSignal,
+    signal: AbortSignal
   ) => Promise<TurnWatchOutcome>;
   /* No conversational edit path. The compile screen has exactly ONE editable
      surface — the instructions field — and the run screen has none. An
@@ -737,9 +747,14 @@ export interface AutomationEditorBridgeProps {
   /** Fire a test execution of the compiled plan and return its turn id. Stays
    *  on this screen; `onOpenRun` is the explicit way out to the run viewer. */
   onTestRun: () => Promise<string | null>;
-  onSearchEntities: (
-    term: string,
-  ) => Promise<Array<{ type: string; id: string; title: string | null; subtitle: string | null }>>;
+  onSearchEntities: (term: string) => Promise<
+    Array<{
+      type: string;
+      id: string;
+      title: string | null;
+      subtitle: string | null;
+    }>
+  >;
   /** Canonical vault entity-type names (e.g. `core.transaction`) for the
    *  data/condition trigger editors' `<datalist>` autocomplete. Fetched
    *  lazily the first time a data/condition trigger is present. Optional so a
@@ -752,13 +767,16 @@ export interface AutomationEditorBridgeProps {
   /** Attach BYO oauth2 client or api_key credential for a connector kind.
    *  Resolves with the new/updated `connectionId` so oauth2 can start PKCE. */
   configureConnection?: (
-    input: AuEditorConnectFormInput,
+    input: AuEditorConnectFormInput
   ) => Promise<{ connectionId: string } | void>;
   /** Start PKCE authorize for an oauth2 connection; returns the URL to open. */
   beginAuthorize?: (connectionId: string) => Promise<string>;
   showToast?: (message: string) => void;
   /** The compiled plan (automation.json + handler.js) for the read-only viewer. */
-  onReadSource: () => Promise<{ manifest: string | null; handler: string | null }>;
+  onReadSource: () => Promise<{
+    manifest: string | null;
+    handler: string | null;
+  }>;
   onToggleEnabled: (next: boolean) => Promise<boolean>;
   /** Standing-grant consent review (edit mode) — same decision surface the
    *  thread uses. Kept on the bridge for future surfaces; not shown as a
@@ -767,7 +785,7 @@ export interface AutomationEditorBridgeProps {
     kind: ConsentKind,
     id: string,
     decision: ConsentDecision,
-    alwaysAllow?: boolean,
+    alwaysAllow?: boolean
   ) => Promise<boolean>;
   onOpenRun: (runId: string) => void;
   /** Leave the compiler for this automation's run history. */
@@ -801,7 +819,7 @@ export interface AutomationThreadHeaderDTO {
   /** Stable manifest tokens shown as entity chips. */
   entityTags: Array<{ type: string; id: string }>;
 }
-export type ThreadRunStatus = 'ok' | 'fail' | 'running' | 'pending';
+export type ThreadRunStatus = "ok" | "fail" | "running" | "pending";
 /**
  * What a thread entry IS. The run screen shows exactly two things:
  *
@@ -815,7 +833,7 @@ export type ThreadRunStatus = 'ok' | 'fail' | 'running' | 'pending';
  * they belong to the editor route, and mixing them in here is what made a
  * "Compile" card sit in the run history pretending to be a run.
  */
-export type ThreadEntryKind = 'run' | 'ask';
+export type ThreadEntryKind = "run" | "ask";
 export interface ThreadRunDTO {
   runId: string;
   entryKind: ThreadEntryKind;
@@ -835,7 +853,7 @@ export interface ThreadRunDTO {
  * plan — and nothing to act on. Every remedy is a link to the compiler.
  */
 export interface AuPlanStatusDTO {
-  state: 'ready' | 'compiling' | 'failed' | 'never';
+  state: "ready" | "compiling" | "failed" | "never";
   /** Headline for the banner ("Compile failed", "Plan ready"). */
   label: string;
   /** One line of context — the failure, or when the plan was built. */
@@ -874,7 +892,7 @@ export interface AutomationThreadBridgeProps {
   watchTurn: (
     turnId: string,
     onMessages: (messages: AsstMsgDTO[]) => void,
-    signal: AbortSignal,
+    signal: AbortSignal
   ) => Promise<boolean>;
   /** Start a manual fire and return its native turn id. */
   onRunNow: () => Promise<string | null>;
@@ -883,7 +901,7 @@ export interface AutomationThreadBridgeProps {
     kind: ConsentKind,
     id: string,
     decision: ConsentDecision,
-    alwaysAllow?: boolean,
+    alwaysAllow?: boolean
   ) => Promise<boolean>;
   /**
    * Ask a question about this automation's executions and stream the answer.
@@ -901,7 +919,7 @@ export interface AutomationThreadBridgeProps {
       onContext?: (context: { used: number; size: number }) => void;
     },
     onMessages: (messages: AsstMsgDTO[]) => void,
-    signal: AbortSignal,
+    signal: AbortSignal
   ) => Promise<string | null>;
   /** Upload into the automation owner's CAS before the question is sent. */
   onUploadAttachment?: (file: File) => Promise<BuilderAttachmentRef>;
@@ -916,7 +934,7 @@ export interface AutomationThreadBridgeProps {
 }
 
 // ── Settings: appearance + layout pages ─────────────────────────────────────
-export type SettingsTileVariant = 'solid' | 'gradient' | 'glassy' | 'flat';
+export type SettingsTileVariant = "solid" | "gradient" | "glassy" | "flat";
 export interface SettingsAppearanceBridgeProps {
   theme: string;
   coolBlueCast: boolean;
@@ -930,11 +948,11 @@ export interface SettingsAppearanceBridgeProps {
   onMatchSystem: () => string;
 }
 export interface SettingsLayoutBridgeProps {
-  density: 'compact' | 'regular' | 'comfy';
-  cardVariant: 'flat' | 'outlined' | 'elevated';
+  density: "compact" | "regular" | "comfy";
+  cardVariant: "flat" | "outlined" | "elevated";
   sidebarOpen: boolean;
-  onSetDensity: (v: 'compact' | 'regular' | 'comfy') => void;
-  onSetCards: (v: 'flat' | 'outlined' | 'elevated') => void;
+  onSetDensity: (v: "compact" | "regular" | "comfy") => void;
+  onSetCards: (v: "flat" | "outlined" | "elevated") => void;
   onSetSidebar: (open: boolean) => void;
 }
 
@@ -953,7 +971,7 @@ export interface AgentModelDTO {
   id: string;
   name?: string;
   default?: boolean;
-  tier?: 'smart' | 'balanced' | 'fast';
+  tier?: "smart" | "balanced" | "fast";
 }
 export interface AgentCardDTO {
   kind: AgentRunnerKind;
@@ -990,7 +1008,7 @@ export interface AgentCardDTO {
   /** Active breaker states, exposed so Settings can explain failover decisions. */
   breakerStates?: Array<{
     failureClass: string;
-    state: 'open' | 'half-open';
+    state: "open" | "half-open";
   }>;
 }
 /**
@@ -998,7 +1016,7 @@ export interface AgentCardDTO {
  * of the runner's default (issue: model config → gateway prefs store).
  * Mirrors the gateway prefs keys `model.<runnerKind>.<subsystem>`.
  */
-export type ModelSubsystem = 'assistant' | 'ask' | 'builder' | 'automations';
+export type ModelSubsystem = "assistant" | "ask" | "builder" | "automations";
 export interface AgentsStatusDTO {
   /** The DEFAULT agent (`agent.runner.kind`) — the runner every subsystem
    *  without its own pin inherits. */
@@ -1035,26 +1053,40 @@ export interface SettingsProvidersBridgeProps {
   /** Persist this agent's default model ('' = clears back to the backend default). */
   setAgentModel: (kind: AgentRunnerKind, modelId: string) => void;
   /** Persist this agent's per-subsystem model override ('' = clears back to the default model). */
-  setSubsystemModel: (kind: AgentRunnerKind, subsystem: ModelSubsystem, modelId: string) => void;
+  setSubsystemModel: (
+    kind: AgentRunnerKind,
+    subsystem: ModelSubsystem,
+    modelId: string
+  ) => void;
   /** Persist a semantic runner-default config pin ('' clears it). */
-  setAgentConfigPin: (kind: AgentRunnerKind, category: string, value: string) => void;
+  setAgentConfigPin: (
+    kind: AgentRunnerKind,
+    category: string,
+    value: string
+  ) => void;
   /** Persist a semantic per-subsystem config pin ('' clears it). */
   setSubsystemConfigPin: (
     kind: AgentRunnerKind,
     subsystem: ModelSubsystem,
     category: string,
-    value: string,
+    value: string
   ) => void;
   /**
    * Pin this subsystem to a runner, independent of the default agent.
    * `''` clears the pin, so the subsystem inherits `selectedKind` again.
    */
-  setSubsystemRunner: (subsystem: ModelSubsystem, kind: AgentRunnerKind | '') => Promise<boolean>;
+  setSubsystemRunner: (
+    subsystem: ModelSubsystem,
+    kind: AgentRunnerKind | ""
+  ) => Promise<boolean>;
   /**
    * Replace one lane's ordered automatic failover membership. Removing a
    * member also revokes ladder-derived provider grants at the gateway.
    */
-  setSubsystemRunnerLadder: (subsystem: ModelSubsystem, kinds: AgentRunnerKind[]) => void;
+  setSubsystemRunnerLadder: (
+    subsystem: ModelSubsystem,
+    kinds: AgentRunnerKind[]
+  ) => void;
 }
 
 // ── Settings: Space (issue #382) ─────────────────────────────────────────────
@@ -1067,7 +1099,7 @@ export interface SettingsProvidersBridgeProps {
 
 // ── Home ────────────────────────────────────────────────────────────────────
 export interface HomeMenuAnchor {
-  kind: 'point' | 'rect';
+  kind: "point" | "rect";
   x?: number;
   y?: number;
   rect?: {
@@ -1090,7 +1122,7 @@ export interface HomeAppItemDTO {
   desc: string;
   iconKey: string;
   tile: HomeTileDTO;
-  tone: 'new' | 'draft' | null;
+  tone: "new" | "draft" | null;
   stamp: string;
   starred: boolean;
   draft: boolean;
@@ -1166,7 +1198,7 @@ export interface RunViewSnapshot {
   /** Native automation items rendered by the shared conversation Message. */
   messages: AsstMsgDTO[];
   final: {
-    kind: 'pending' | 'ok' | 'fail';
+    kind: "pending" | "ok" | "fail";
     model: string;
     summary?: string;
     output?: string;
@@ -1197,13 +1229,13 @@ export interface RunViewSnapshot {
   logRows: RunLogRowDTO[];
 }
 export interface RunViewBridgeProps {
-  initialMode: 'timeline' | 'log';
+  initialMode: "timeline" | "log";
   /** Handed an `update` fn on mount; the vanilla side calls it per stream event. */
   onReady: (update: (snap: RunViewSnapshot | null) => void) => void;
   onBack: () => void;
   onOpenAutomation: () => void;
   onRunAgain: () => void;
-  onSetMode: (m: 'timeline' | 'log') => void;
+  onSetMode: (m: "timeline" | "log") => void;
 }
 
 // ── Assistant (streaming copilot) ───────────────────────────────────────────
@@ -1217,7 +1249,7 @@ export interface RunViewBridgeProps {
 export interface AsstToolCallDTO {
   tool: string;
   sql?: string;
-  state: 'run' | 'ok' | 'error';
+  state: "run" | "ok" | "error";
   meta: string;
   outputText?: string;
   artifacts?: Array<{ label: string; hash?: string; workspacePath?: string }>;
@@ -1258,22 +1290,28 @@ export interface AsstUsageDTO {
  */
 export type AsstMsgDTO =
   | {
-      kind: 'user';
+      kind: "user";
       text: string;
       attachments?: AsstAttachmentDTO[];
       createdAt?: number;
       msgId?: string;
     }
-  | { kind: 'tools'; label: string; calls: AsstToolCallDTO[]; msgId?: string }
+  | { kind: "tools"; label: string; calls: AsstToolCallDTO[]; msgId?: string }
   /** A live streaming reasoning/thinking row (issue #420, Wave 2). Live-only —
    *  reasoning is not persisted in the ledger, so it never comes back on reload. */
-  | { kind: 'thinking'; text: string; streaming: boolean; msgId?: string }
+  | { kind: "thinking"; text: string; streaming: boolean; msgId?: string }
   /** A non-fatal runner notice (issue #420) — e.g. "this model can't read PDF
    *  attachments". Persisted as a notice step and replayed on reload. */
-  | { kind: 'notice'; level: 'warn' | 'info'; text: string; msgId?: string }
-  | { kind: 'ai'; streaming: true; text: string; catchingUp?: boolean; msgId?: string }
+  | { kind: "notice"; level: "warn" | "info"; text: string; msgId?: string }
   | {
-      kind: 'ai';
+      kind: "ai";
+      streaming: true;
+      text: string;
+      catchingUp?: boolean;
+      msgId?: string;
+    }
+  | {
+      kind: "ai";
       streaming: false;
       html: string;
       error: boolean;
@@ -1287,7 +1325,7 @@ export type AsstMsgDTO =
        *  answer not yet reloaded from the ledger, or an error bubble. */
       turnId?: string;
       /** Reader 👍/👎 on this answer, if set. */
-      feedback?: 'up' | 'down' | null;
+      feedback?: "up" | "down" | null;
       /** Retry pager, present when the turn has been regenerated. */
       retry?: AsstRetryDTO;
       /** Only the last non-error answer — gates the Regenerate control. */
@@ -1303,7 +1341,7 @@ export interface AsstPendingAttachmentDTO {
   id: string;
   filename: string;
   sizeBytes: number;
-  state: 'uploading' | 'ready' | 'error';
+  state: "uploading" | "ready" | "error";
   errorText?: string;
   /** MIME type — drives the composer image thumbnail (issue #420, Wave 2). */
   mime?: string;
@@ -1320,7 +1358,7 @@ export interface AssistantSnapshot {
   /** Explicitly selected extra workspace roots for the next turn. */
   additionalDirectories?: string[];
   /** Durable Centraid-owned primary workspace selection. */
-  workspaceKind?: 'vault-data' | 'app' | 'draft';
+  workspaceKind?: "vault-data" | "app" | "draft";
 }
 /**
  * The composer's inline model picker (subsystem `assistant`, active runner
@@ -1345,7 +1383,7 @@ export interface AsstModelPickerDTO {
     hint?: string;
   }>;
   selectedRunnerKind: AgentRunnerKind;
-  workspaceKinds: Array<'vault-data' | 'app' | 'draft'>;
+  workspaceKinds: Array<"vault-data" | "app" | "draft">;
   connected: boolean;
   models: AsstModelOptionDTO[];
   defaultModelName: string;
@@ -1383,7 +1421,7 @@ export interface AssistantBridgeProps {
   /** Copy a message's source text to the clipboard (issue #420). */
   onCopyMessage: (text: string) => void;
   /** Set 👍/👎 on an answer turn (toggles off when re-clicking the same). */
-  onFeedback: (turnId: string, value: 'up' | 'down') => void;
+  onFeedback: (turnId: string, value: "up" | "down") => void;
   /** Regenerate the last answer (re-runs the last user message as a retry). */
   onRegenerate: () => void;
   /** Retry the failed message behind the error bubble at `messageIndex`. */
@@ -1399,7 +1437,7 @@ export interface AssistantBridgeProps {
   /** Select a runner for this conversation and reload its semantic controls. */
   onSetRunner: (runnerKind: AgentRunnerKind) => Promise<AsstModelPickerDTO>;
   /** Persist the Centraid-scoped working directory for this conversation. */
-  onSetWorkspaceKind?: (kind: 'vault-data' | 'app' | 'draft') => void;
+  onSetWorkspaceKind?: (kind: "vault-data" | "app" | "draft") => void;
   /** Composer entity-mention search (issue #420). Absent = mentions disabled. */
   searchEntities?: (term: string) => Promise<AsstComposerEntity[]>;
   /** Slash-command menu shown on a leading `/` (issue #420). */
@@ -1434,12 +1472,12 @@ export interface AsstSlashCommand {
 export interface AppKnobDTO {
   key: string;
   label: string;
-  type: 'segmented' | 'swatch';
+  type: "segmented" | "swatch";
   value: string;
   options: { value: string; label: string }[];
 }
 export interface AppOrderRunDTO {
-  kind: 'idle' | 'running' | 'done';
+  kind: "idle" | "running" | "done";
   ok?: boolean;
   /** e.g. "Ran in 1.2s" / "Failed: …" — present only when `kind === 'done'`. */
   label?: string;
@@ -1503,19 +1541,23 @@ export interface AppSettingsBridgeProps {
 // version-history view stays a vanilla async renderer, injected into a host div
 // via `onMountHistory`.
 export type BuilderMsgDTO =
-  | { kind: 'divider'; text: string }
-  | { kind: 'status'; text: string; spinning: boolean }
-  | { kind: 'user'; text: string }
-  | { kind: 'ai'; paras: string[] }
-  | { kind: 'thinking'; text: string; streaming: boolean; header: string }
+  | { kind: "divider"; text: string }
+  | { kind: "status"; text: string; spinning: boolean }
+  | { kind: "user"; text: string }
+  | { kind: "ai"; paras: string[] }
+  | { kind: "thinking"; text: string; streaming: boolean; header: string }
   | {
-      kind: 'toolGroup';
+      kind: "toolGroup";
       id: string;
       label: string;
       open: boolean;
       running: boolean;
       error: boolean;
-      rows: { state: 'running' | 'ok' | 'error'; verb: string; target: string }[];
+      rows: {
+        state: "running" | "ok" | "error";
+        verb: string;
+        target: string;
+      }[];
       change: { count: number; subtitle: string; version: string } | null;
     };
 export interface BuilderProgressDTO {
@@ -1525,7 +1567,7 @@ export interface BuilderProgressDTO {
   filled: number;
 }
 export interface BuilderChatSnapshot {
-  view: 'chat' | 'history';
+  view: "chat" | "history";
   messages: BuilderMsgDTO[];
   generating: boolean;
   /** Live turn progress; present only while `generating`. */
@@ -1540,8 +1582,8 @@ export interface BuilderChatSnapshot {
   effort?: string;
   /** Capability-backed attended runner controls for this builder conversation. */
   runnerConfig?: AsstModelPickerDTO;
-  workspaceKind: 'vault-data' | 'app' | 'draft';
-  workspaceKinds: Array<'vault-data' | 'app' | 'draft'>;
+  workspaceKind: "vault-data" | "app" | "draft";
+  workspaceKinds: Array<"vault-data" | "app" | "draft">;
 }
 /** A builder-composer attachment ref (mirrors ConversationAttachmentRef). */
 export interface BuilderAttachmentRef {
@@ -1556,8 +1598,8 @@ export interface BuilderChatBridgeProps {
   onSend: (text: string, attachments?: BuilderAttachmentRef[]) => void;
   onCancel: () => void;
   onToggleGroup: (id: string) => void;
-  onSetView: (view: 'chat' | 'history') => void;
-  onSetWorkspaceKind: (kind: 'vault-data' | 'app' | 'draft') => void;
+  onSetView: (view: "chat" | "history") => void;
+  onSetWorkspaceKind: (kind: "vault-data" | "app" | "draft") => void;
   onSetRunner: (runnerKind: AgentRunnerKind) => Promise<AsstModelPickerDTO>;
   onSetModel: (modelId: string) => void;
   onSetEffort: (effort: string) => void;

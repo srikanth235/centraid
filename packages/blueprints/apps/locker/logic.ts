@@ -1,3 +1,4 @@
+import { CAT_ORDER, byTitle, catOf } from "./format.ts";
 // Non-visual business logic: vault IO (write/act), item CRUD, nav/search,
 // the clipboard-clear timer and the pure list/sidebar derivations.
 // `createLogic` closes over app.tsx's own `state`/`data` (mutated in place,
@@ -5,10 +6,16 @@
 // the same factory shape tasks/notes/agenda's logic.ts use. The pure
 // derivations (`currentPool`/`sidebarCounts`/`catCounts`/`sidebarTags`) need
 // no closure and are exported standalone so components can call them too.
-import { debounce, outcomeMessage, toast } from './kit.ts';
-import { CAT_ORDER, byTitle, catOf } from './format.ts';
-import { genPassword } from './totp.ts';
-import type { AppData, AppState, LockerDetail, LockerRow, Nav, SavePayload } from './types.ts';
+import { debounce, outcomeMessage, toast } from "./kit.ts";
+import { genPassword } from "./totp.ts";
+import type {
+  AppData,
+  AppState,
+  LockerDetail,
+  LockerRow,
+  Nav,
+  SavePayload,
+} from "./types.ts";
 
 interface DeniedInfo {
   code?: string;
@@ -24,27 +31,27 @@ interface LogicDeps {
 
 export function createLogic({ state, data, render, refresh }: LogicDeps) {
   function notice(text?: string) {
-    const el = document.getElementById('noticeBanner');
+    const el = document.querySelector<HTMLElement>("#noticeBanner");
     if (!el) return;
-    el.textContent = text || '';
+    el.textContent = text || "";
     (el as HTMLElement).hidden = !text;
   }
 
   // Returns true when the write executed; otherwise narrates parked / failed
   // / denied honestly and returns false.
   function narrate(outcome: VaultOutcome | undefined): boolean {
-    if (outcome?.status === 'executed') {
-      notice('');
+    if (outcome?.status === "executed") {
+      notice("");
       return true;
     }
-    notice(outcomeMessage(outcome) ?? 'The write did not go through.');
+    notice(outcomeMessage(outcome) ?? "The write did not go through.");
     return false;
   }
 
   async function act(
     action: string,
     input: Record<string, unknown>,
-    { onlineOnly = false }: { onlineOnly?: boolean } = {},
+    { onlineOnly = false }: { onlineOnly?: boolean } = {}
   ): Promise<VaultOutcome | undefined> {
     try {
       return await window.centraid.write({
@@ -60,8 +67,8 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 
   function applyDenied(d: DeniedInfo | null | undefined) {
     state.denied = true;
-    (document.getElementById('consentBanner') as HTMLElement).hidden = false;
-    document.getElementById('consentDetail')!.textContent = d?.message ?? '';
+    (document.querySelector("#consentBanner") as HTMLElement).hidden = false;
+    document.querySelector("#consentDetail")!.textContent = d?.message ?? "";
     data.items = [];
     state.selectedId = null;
     state.detail = null;
@@ -71,9 +78,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // ---------- Item writes ----------
 
   async function toggleFav(sel: LockerDetail) {
-    const outcome = await act(sel.favorite ? 'unstar-item' : 'star-item', { item_id: sel.item_id });
+    const outcome = await act(sel.favorite ? "unstar-item" : "star-item", {
+      item_id: sel.item_id,
+    });
     if (!narrate(outcome)) return;
-    toast(sel.favorite ? 'Star removed · receipted.' : 'Starred · receipted.');
+    toast(sel.favorite ? "Star removed · receipted." : "Starred · receipted.");
     if (state.detail && state.detail.item_id === sel.item_id) {
       state.detail = { ...state.detail, favorite: !sel.favorite };
     }
@@ -81,12 +90,12 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }
 
   async function trashItem(sel: { item_id: string }) {
-    const outcome = await act('trash-item', { item_id: sel.item_id });
+    const outcome = await act("trash-item", { item_id: sel.item_id });
     if (!narrate(outcome)) return;
-    toast('Moved to trash · receipted.', {
-      undoLabel: 'Undo',
+    toast("Moved to trash · receipted.", {
+      undoLabel: "Undo",
       onUndo: async () => {
-        const back = await act('restore-item', { item_id: sel.item_id });
+        const back = await act("restore-item", { item_id: sel.item_id });
         if (narrate(back)) await refresh();
       },
     });
@@ -97,9 +106,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }
 
   async function restoreItem(sel: { item_id: string }) {
-    const outcome = await act('restore-item', { item_id: sel.item_id });
+    const outcome = await act("restore-item", { item_id: sel.item_id });
     if (!narrate(outcome)) return;
-    toast('Restored · receipted.');
+    toast("Restored · receipted.");
     state.selectedId = null;
     state.detail = null;
     state.showList = true;
@@ -107,9 +116,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }
 
   async function purgeItem(sel: { item_id: string }) {
-    const outcome = await act('purge-item', { item_id: sel.item_id });
+    const outcome = await act("purge-item", { item_id: sel.item_id });
     if (!narrate(outcome)) return;
-    toast('Deleted forever · receipted.');
+    toast("Deleted forever · receipted.");
     state.selectedId = null;
     state.detail = null;
     state.showList = true;
@@ -130,32 +139,41 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }: SavePayload): Promise<VaultOutcome | undefined> {
     if (!title.trim()) return undefined;
     const tagList = tags
-      .split(',')
+      .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
     // Only the fields belonging to the chosen type (the backend drops the
     // rest too, but keep the payload clean).
     const allowed = new Set(allowedKeys);
-    const input: Record<string, unknown> = { title: title.trim(), tags: tagList };
-    if (type === 'login') input.url_match_policy = urlMatchPolicy;
+    const input: Record<string, unknown> = {
+      title: title.trim(),
+      tags: tagList,
+    };
+    if (type === "login") input.url_match_policy = urlMatchPolicy;
     for (const [k, v] of Object.entries(fields)) {
-      if (allowed.has(k) && v != null && v !== '') input[k] = v;
+      if (allowed.has(k) && v != null && v !== "") input[k] = v;
     }
     // Alias is write-safe from the UI: a non-empty value sets/changes it; a
     // blank field is left untouched (never clobbers an existing binding).
     // Clearing or reassigning is an assistant/CLI gesture.
-    const aliasTrimmed = (alias || '').trim();
+    const aliasTrimmed = (alias || "").trim();
     if (aliasTrimmed) input.alias = aliasTrimmed;
     let outcome: VaultOutcome | undefined;
-    if (mode === 'edit') {
-      outcome = await act('edit-item', { item_id: id, ...input }, { onlineOnly: true });
+    if (mode === "edit") {
+      outcome = await act(
+        "edit-item",
+        { item_id: id, ...input },
+        { onlineOnly: true }
+      );
     } else {
-      outcome = await act('add-item', { type, ...input }, { onlineOnly: true });
+      outcome = await act("add-item", { type, ...input }, { onlineOnly: true });
     }
     if (!narrate(outcome)) return outcome;
     const savedId =
-      mode === 'edit' ? (id ?? null) : ((outcome?.output?.item_id as string | undefined) ?? null);
-    toast(mode === 'edit' ? 'Saved · receipted.' : 'Item saved · receipted.');
+      mode === "edit"
+        ? (id ?? null)
+        : ((outcome?.output?.item_id as string | undefined) ?? null);
+    toast(mode === "edit" ? "Saved · receipted." : "Item saved · receipted.");
     await refresh();
     // Re-open the item we just wrote so its (possibly changed) secrets reload.
     if (savedId) await selectItem(savedId);
@@ -172,13 +190,16 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     state.detail = null;
     state.detailLoading = true;
     state.reveal = {};
-    if (state.nav.kind === 'watch') state.nav = { kind: 'all' };
+    if (state.nav.kind === "watch") state.nav = { kind: "all" };
     state.showList = false;
     render();
     let res: { item?: LockerDetail | null; vaultDenied?: DeniedInfo } | null;
     try {
-      res = await window.centraid.read<{ item?: LockerDetail | null; vaultDenied?: DeniedInfo }>({
-        query: 'item',
+      res = await window.centraid.read<{
+        item?: LockerDetail | null;
+        vaultDenied?: DeniedInfo;
+      }>({
+        query: "item",
         input: { item_id: id },
       });
     } catch {
@@ -199,7 +220,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     state.nav = nav;
     state.selectedId = null;
     state.detail = null;
-    state.search = '';
+    state.search = "";
     state.searchResults = null;
     searchSeq += 1;
     state.sideOpen = false;
@@ -209,9 +230,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 
   function toggleTheme() {
     const dark = !state.dark;
-    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-    if (dark && !document.documentElement.style.getPropertyValue('--bg-l'))
-      document.documentElement.style.setProperty('--bg-l', '10%');
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    if (dark && !document.documentElement.style.getPropertyValue("--bg-l"))
+      document.documentElement.style.setProperty("--bg-l", "10%");
     state.dark = dark;
     render();
   }
@@ -226,7 +247,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // ---------- Generator ----------
 
   function regen() {
-    state.genValue = genPassword({ len: state.genLen, num: state.genNum, sym: state.genSym });
+    state.genValue = genPassword({
+      len: state.genLen,
+      num: state.genNum,
+      sym: state.genSym,
+    });
     render();
   }
 
@@ -260,8 +285,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     }
     let rows: LockerRow[] = [];
     try {
-      const res = await window.centraid.read<{ items?: LockerRow[]; vaultDenied?: DeniedInfo }>({
-        query: 'search',
+      const res = await window.centraid.read<{
+        items?: LockerRow[];
+        vaultDenied?: DeniedInfo;
+      }>({
+        query: "search",
         input: { term: q },
       });
       if (res?.vaultDenied) {
@@ -279,7 +307,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 
   function clearSearch() {
     searchSeq += 1;
-    state.search = '';
+    state.search = "";
     state.searchResults = null;
     render();
   }
@@ -322,12 +350,16 @@ function scheduleClipboardClear(secret: string) {
   if (!navigator.clipboard || !navigator.clipboard.writeText) return;
   clipClearTimer = setTimeout(() => {
     clipClearTimer = null;
-    const done = () => {};
     try {
       if (navigator.clipboard.readText) {
-        navigator.clipboard.readText().then((cur) => {
-          if (cur === secret) navigator.clipboard.writeText('').catch(done);
-        }, done);
+        void (async () => {
+          try {
+            const current = await navigator.clipboard.readText();
+            if (current === secret) await navigator.clipboard.writeText("");
+          } catch {
+            /* clipboard permissions changed — leave its current value alone */
+          }
+        })();
       }
       // No read permission → leave the clipboard alone rather than risk
       // wiping something the user copied since.
@@ -345,31 +377,38 @@ export function copy(text: string, label?: string, secret?: boolean) {
   // success only once the write actually lands; otherwise say so instead of
   // claiming a copy that never happened.
   const okToast = () =>
-    toast((label || 'Copied') + ' copied' + (secret ? ' · clears in ' + CLIP_CLEAR_S + 's' : ''));
+    toast(
+      (label || "Copied") +
+        " copied" +
+        (secret ? " · clears in " + CLIP_CLEAR_S + "s" : "")
+    );
   if (!navigator.clipboard || !navigator.clipboard.writeText) {
-    toast('Copy is unavailable here.');
+    toast("Copy is unavailable here.");
     return;
   }
-  navigator.clipboard.writeText(text).then(
-    () => {
+  navigator.clipboard
+    .writeText(text)
+    .then(() => {
       if (secret) scheduleClipboardClear(text);
       okToast();
-    },
-    () => toast('Copy is unavailable here.'),
-  );
+    })
+    .catch(() => toast("Copy is unavailable here."));
 }
 
 // ---------- Pure derivations (no closure — components may call directly) ----------
 
 // The rows for the current nav → search → filter → sort by title.
 export function currentPool(state: AppState, data: AppData): LockerRow[] {
-  if (state.nav.kind === 'trash') return [...state.trashRows].sort(byTitle);
-  let pool = state.searchResults != null ? state.searchResults.slice() : data.items.slice();
-  if (state.nav.kind === 'fav') pool = pool.filter((i) => i.favorite);
-  else if (state.nav.kind === 'cat') {
+  if (state.nav.kind === "trash") return [...state.trashRows].sort(byTitle);
+  let pool =
+    state.searchResults == null
+      ? data.items.slice()
+      : state.searchResults.slice();
+  if (state.nav.kind === "fav") pool = pool.filter((i) => i.favorite);
+  else if (state.nav.kind === "cat") {
     const nav = state.nav;
     pool = pool.filter((i) => i.type === nav.type);
-  } else if (state.nav.kind === 'tag') {
+  } else if (state.nav.kind === "tag") {
     const nav = state.nav;
     pool = pool.filter((i) => (i.tags || []).includes(nav.tag));
   }
@@ -378,7 +417,7 @@ export function currentPool(state: AppState, data: AppData): LockerRow[] {
 
 export function sidebarCounts(
   data: AppData,
-  state: AppState,
+  state: AppState
 ): { all: number; fav: number; watch: number } {
   const items = data.items;
   return {
@@ -390,11 +429,14 @@ export function sidebarCounts(
 
 export function catCounts(data: AppData): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const t of CAT_ORDER) counts[t] = data.items.filter((i) => i.type === t).length;
+  for (const t of CAT_ORDER)
+    counts[t] = data.items.filter((i) => i.type === t).length;
   return counts;
 }
 
-export function sidebarTags(data: AppData): Array<{ tag: string; count: number }> {
+export function sidebarTags(
+  data: AppData
+): Array<{ tag: string; count: number }> {
   const allTags = [...new Set(data.items.flatMap((i) => i.tags || []))].sort();
   return allTags.map((tag) => ({
     tag,
@@ -404,12 +446,12 @@ export function sidebarTags(data: AppData): Array<{ tag: string; count: number }
 
 export function listTitle(nav: Nav): string {
   const navTitles: Record<string, string> = {
-    all: 'All items',
-    fav: 'Favorites',
-    watch: 'Watchtower',
-    trash: 'Trash',
+    all: "All items",
+    fav: "Favorites",
+    watch: "Watchtower",
+    trash: "Trash",
   };
-  if (nav.kind === 'cat') return catOf(nav.type).label;
-  if (nav.kind === 'tag') return '#' + nav.tag;
-  return navTitles[nav.kind] || 'All items';
+  if (nav.kind === "cat") return catOf(nav.type).label;
+  if (nav.kind === "tag") return "#" + nav.tag;
+  return navTitles[nav.kind] || "All items";
 }

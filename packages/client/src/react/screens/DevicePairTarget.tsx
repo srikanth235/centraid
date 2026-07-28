@@ -1,8 +1,10 @@
-import type { JSX } from 'react';
-import type { GatewayDeviceRole, GatewayMember } from '../../gateway-client.js';
-import { cx } from '../ui/cx.js';
-import { DEFAULT_ROLE, ROLE_PRESETS } from './device-roles.js';
-import styles from './DevicePairPanel.module.css';
+import type { JSX } from "react";
+
+import type { GatewayDeviceRole, GatewayMember } from "../../gateway-client.js";
+import { cx } from "../ui/cx.js";
+import { DEFAULT_ROLE, ROLE_PRESETS } from "./device-roles.js";
+
+import styles from "./DevicePairPanel.module.css";
 
 /*
  * Who the ticket is for, and what it lets them reach (issue #599 Decision 10).
@@ -20,12 +22,12 @@ import styles from './DevicePairPanel.module.css';
 
 /** The person a ticket is being minted for. */
 export type PairTarget =
-  | { kind: 'self' }
-  | { kind: 'member'; memberId: string }
-  | { kind: 'new'; label: string };
+  | { kind: "self" }
+  | { kind: "member"; memberId: string }
+  | { kind: "new"; label: string };
 
-const NEW_PERSON_VALUE = '__new__';
-const SELF_VALUE = '__self__';
+const NEW_PERSON_VALUE = "__new__";
+const SELF_VALUE = "__self__";
 
 export interface PairGrant {
   vaultId: string;
@@ -65,18 +67,21 @@ export default function DevicePairTarget({
 }: DevicePairTargetProps): JSX.Element {
   // "For myself" is its own option rather than the caller's own row, so the
   // default state can never be read as "pairing a device for that person".
-  const others = members.filter((member) => member.memberId !== currentMemberId);
+  const others = members.filter(
+    (member) => member.memberId !== currentMemberId
+  );
   const selected =
-    target.kind === 'self'
+    target.kind === "self"
       ? SELF_VALUE
-      : target.kind === 'new'
+      : target.kind === "new"
         ? NEW_PERSON_VALUE
         : target.memberId;
 
   const setSelected = (value: string): void => {
-    if (value === SELF_VALUE) return onTargetChange({ kind: 'self' });
-    if (value === NEW_PERSON_VALUE) return onTargetChange({ kind: 'new', label: '' });
-    onTargetChange({ kind: 'member', memberId: value });
+    if (value === SELF_VALUE) return onTargetChange({ kind: "self" });
+    if (value === NEW_PERSON_VALUE)
+      return onTargetChange({ kind: "new", label: "" });
+    onTargetChange({ kind: "member", memberId: value });
   };
 
   const grantFor = (vaultId: string): PairGrant | undefined =>
@@ -86,12 +91,16 @@ export default function DevicePairTarget({
     onGrantsChange(
       on
         ? [...grants, { vaultId, role: DEFAULT_ROLE }]
-        : grants.filter((grant) => grant.vaultId !== vaultId),
+        : grants.filter((grant) => grant.vaultId !== vaultId)
     );
   };
 
   const setRole = (vaultId: string, role: GatewayDeviceRole): void => {
-    onGrantsChange(grants.map((grant) => (grant.vaultId === vaultId ? { vaultId, role } : grant)));
+    onGrantsChange(
+      grants.map((grant) =>
+        grant.vaultId === vaultId ? { vaultId, role } : grant
+      )
+    );
   };
 
   return (
@@ -114,7 +123,7 @@ export default function DevicePairTarget({
         </select>
       </label>
 
-      {target.kind === 'new' ? (
+      {target.kind === "new" ? (
         <label className={styles.pairField}>
           <span className={styles.pairFieldLabel}>Their name</span>
           <input
@@ -123,14 +132,17 @@ export default function DevicePairTarget({
             value={target.label}
             placeholder="e.g. Priya"
             disabled={disabled}
-            onChange={(event) => onTargetChange({ kind: 'new', label: event.target.value })}
+            onChange={(event) =>
+              onTargetChange({ kind: "new", label: event.target.value })
+            }
           />
         </label>
       ) : null}
 
-      {target.kind === 'self' ? (
+      {target.kind === "self" ? (
         <p className={styles.roleHint}>
-          The new device joins as you, with your current access. Nothing you can’t already reach.
+          The new device joins as you, with your current access. Nothing you
+          can’t already reach.
         </p>
       ) : (
         <fieldset className={styles.grantGroup}>
@@ -147,18 +159,23 @@ export default function DevicePairTarget({
                       type="checkbox"
                       checked={grant !== undefined}
                       disabled={disabled}
-                      onChange={(event) => toggleSpace(space.vaultId, event.target.checked)}
+                      onChange={(event) =>
+                        toggleSpace(space.vaultId, event.target.checked)
+                      }
                     />
                     <span>{spaceLabel(space)}</span>
                   </label>
-                  <fieldset className={styles.ttlGroup} aria-label={`Role in ${spaceLabel(space)}`}>
+                  <fieldset
+                    className={styles.ttlGroup}
+                    aria-label={`Role in ${spaceLabel(space)}`}
+                  >
                     {ROLE_PRESETS.map((preset) => (
                       <button
                         key={preset.role}
                         type="button"
                         className={cx(
                           styles.ttlPreset,
-                          grant?.role === preset.role && styles.ttlPresetOn,
+                          grant?.role === preset.role && styles.ttlPresetOn
                         )}
                         aria-pressed={grant?.role === preset.role}
                         disabled={disabled || grant === undefined}

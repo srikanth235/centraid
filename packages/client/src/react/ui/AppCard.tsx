@@ -1,13 +1,15 @@
-import type { JSX } from 'react';
-import { cx } from './cx.js';
-import { tileVisual } from './tile-visual.js';
-import type { AppMetaResolved, TileVariant } from '@centraid/design-tokens';
-import Icon from './Icon.js';
-import KindBadge from './KindBadge.js';
-import StatusPill from './StatusPill.js';
-import styles from './AppCard.module.css';
+import type { AppMetaResolved, TileVariant } from "@centraid/design-tokens";
+import type { JSX } from "react";
 
-export type AppCardTone = 'new' | 'draft' | null;
+import { cx } from "./cx.js";
+import Icon from "./Icon.js";
+import KindBadge from "./KindBadge.js";
+import StatusPill from "./StatusPill.js";
+import { tileVisual } from "./tile-visual.js";
+
+import styles from "./AppCard.module.css";
+
+export type AppCardTone = "new" | "draft" | null;
 
 export interface AppCardProps {
   app: AppMetaResolved;
@@ -32,7 +34,7 @@ export interface AppCardProps {
  */
 export default function AppCard({
   app,
-  variant = 'solid',
+  variant = "solid",
   tone = null,
   stamp,
   small = false,
@@ -64,7 +66,7 @@ export default function AppCard({
             <div className={styles.name}>{app.name}</div>
             {tone ? <StatusPill tone={tone}>{tone}</StatusPill> : null}
           </div>
-          <div className={styles.desc}>{app.desc || 'No description yet.'}</div>
+          <div className={styles.desc}>{app.desc || "No description yet."}</div>
         </div>
       </div>
       <div className={styles.foot}>

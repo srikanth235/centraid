@@ -60,7 +60,14 @@
             }
           }
         },
-        "required": ["group_id", "description", "amount_minor", "paid_by", "category", "splits"],
+        "required": [
+          "group_id",
+          "description",
+          "amount_minor",
+          "paid_by",
+          "category",
+          "splits"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -99,7 +106,14 @@
             }
           }
         },
-        "required": ["expense_id", "description", "amount_minor", "paid_by", "category", "splits"],
+        "required": [
+          "expense_id",
+          "description",
+          "amount_minor",
+          "paid_by",
+          "category",
+          "splits"
+        ],
         "additionalProperties": false
       },
       "output": {
@@ -319,7 +333,11 @@
     {
       "name": "dashboard",
       "description": "The home view: the owner party id (`me`), the base currency, per-friend net balances (positive = they owe you), the you-owe / you-are-owed totals, and each group's net for the owner. All balances are derived from expenses and settlements — never stored.",
-      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
       "output": {
         "type": "object",
         "properties": {
@@ -378,7 +396,11 @@
     {
       "name": "activity",
       "description": "Expenses and settlements interleaved, newest first, each carrying the owner's role and the display names needed to render a one-line entry.",
-      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
       "output": {
         "type": "object",
         "properties": {

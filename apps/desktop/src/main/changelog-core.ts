@@ -51,7 +51,7 @@ interface RawRelease {
   prerelease?: unknown;
 }
 
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
 /**
  * Normalize a raw GitHub Releases payload into `ChangelogRelease[]`. Defensive
@@ -63,7 +63,7 @@ export function normalizeReleases(raw: unknown): ChangelogRelease[] {
   if (!Array.isArray(raw)) return [];
   const out: ChangelogRelease[] = [];
   for (const entry of raw as RawRelease[]) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== "object") continue;
     if (entry.draft === true) continue; // unpublished drafts aren't "new" yet
     const tag = str(entry.tag_name).trim();
     const name = str(entry.name).trim();

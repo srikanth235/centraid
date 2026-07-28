@@ -7,42 +7,50 @@
  * derivatives only, stage-don't-write, cursor watermarks, honest skips.
  */
 
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
-import { describe, expect, it } from 'vitest';
-import { lintHandlerSource } from '../handler/lint.js';
-import { parseManifest } from './manifest.js';
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+import { describe, expect, it } from "vitest";
+
+import { lintHandlerSource } from "../handler/lint.js";
+import { parseManifest } from "./manifest.js";
 
 // Lives here beside bundled-templates.test.ts for the same reason: the
 // dependency points automation → blueprints, never the other way.
 const require = createRequire(import.meta.url);
-const PACKAGE_ROOT = path.dirname(require.resolve('@centraid/blueprints/package.json'));
+const PACKAGE_ROOT = path.dirname(
+  require.resolve("@centraid/blueprints/package.json")
+);
 
 const ENRICHERS = [
-  'photo-captioner',
-  'doc-text-extractor',
-  'screenshot-extractor',
-  'doc-filer',
-  'face-proposer',
-  'trip-albums',
-  'doc-entity-linker',
-  'obligation-extractor',
-  'renewal-reminders',
+  "photo-captioner",
+  "doc-text-extractor",
+  "screenshot-extractor",
+  "doc-filer",
+  "face-proposer",
+  "trip-albums",
+  "doc-entity-linker",
+  "obligation-extractor",
+  "renewal-reminders",
 ] as const;
 
 /** Trip clustering is deterministic code, so it wakes on cron, not data. */
-const CRON_ENRICHERS = new Set(['trip-albums']);
+const CRON_ENRICHERS = new Set(["trip-albums"]);
 /** The reminder's whole logic IS its condition trigger. */
-const CONDITION_ENRICHERS = new Set(['renewal-reminders']);
+const CONDITION_ENRICHERS = new Set(["renewal-reminders"]);
 
 function automationDir(id: string): string {
-  return path.join(PACKAGE_ROOT, 'automations', id, 'automations', id);
+  return path.join(PACKAGE_ROOT, "automations", id, "automations", id);
 }
 
-async function loadHandler(id: string): Promise<(args: unknown) => Promise<unknown>> {
-  const mod = (await import(pathToFileURL(path.join(automationDir(id), 'handler.js')).href)) as {
+async function loadHandler(
+  id: string
+): Promise<(args: unknown) => Promise<unknown>> {
+  const mod = (await import(
+    pathToFileURL(path.join(automationDir(id), "handler.js")).href
+  )) as {
     default: (args: unknown) => Promise<unknown>;
   };
   return mod.default;
@@ -59,19 +67,25 @@ function stubCtx(options: {
   }) => unknown;
 }) {
   const invokes: { command: string; input: Record<string, unknown> }[] = [];
-  const agentCalls: { prompt: string; content?: { contentId: string; variant: string }[] }[] = [];
+  const agentCalls: {
+    prompt: string;
+    content?: { contentId: string; variant: string }[];
+  }[] = [];
   const state = new Map<string, unknown>();
   const logs: string[] = [];
   const ctx = {
-    now: '2099-01-01T00:00:00.000Z',
+    now: "2099-01-01T00:00:00.000Z",
     vault: {
       read: async (request: { entity: string }) => ({
         rows: options.reads[request.entity] ?? [],
-        receiptId: 'r',
+        receiptId: "r",
       }),
-      invoke: async (request: { command: string; input: Record<string, unknown> }) => {
+      invoke: async (request: {
+        command: string;
+        input: Record<string, unknown>;
+      }) => {
         invokes.push({ command: request.command, input: request.input });
-        return { status: 'executed', output: { batch_id: 'b1' } };
+        return { status: "executed", output: { batch_id: "b1" } };
       },
     },
     agent: async (call: {
@@ -79,7 +93,10 @@ function stubCtx(options: {
       json?: unknown;
       content?: { contentId: string; variant: string }[];
     }) => {
-      agentCalls.push({ prompt: call.prompt, ...(call.content ? { content: call.content } : {}) });
+      agentCalls.push({
+        prompt: call.prompt,
+        ...(call.content ? { content: call.content } : {}),
+      });
       return options.agent ? options.agent(call) : {};
     },
     state: {
@@ -98,243 +115,309 @@ function stubCtx(options: {
   return { ctx, log, invokes, agentCalls, state, logs };
 }
 
-describe('enricher template hygiene', () => {
+describe("enricher template hygiene", () => {
   it.each(ENRICHERS.map((id) => [id] as const))(
-    '%s: manifest parses, data trigger + vault block cohere, ships disabled',
+    "%s: manifest parses, data trigger + vault block cohere, ships disabled",
     (id) => {
       const manifest = parseManifest(
-        readFileSync(path.join(automationDir(id), 'automation.json'), 'utf8'),
+        readFileSync(path.join(automationDir(id), "automation.json"), "utf8")
       );
       expect(manifest.enabled).toBe(false); // enabling IS the owner's opt-in
       expect(manifest.vault).toBeDefined();
       const wantKind = CRON_ENRICHERS.has(id)
-        ? 'cron'
+        ? "cron"
         : CONDITION_ENRICHERS.has(id)
-          ? 'condition'
-          : 'data';
+          ? "condition"
+          : "data";
       expect(manifest.triggers.some((t) => t.kind === wantKind)).toBe(true);
       expect(manifest.connector).toBeUndefined(); // enrichers use ctx.agent — connectors forbid it
-    },
+    }
   );
 
-  it.each(ENRICHERS.map((id) => [id] as const))('%s: handler passes the determinism lint', (id) => {
-    const source = readFileSync(path.join(automationDir(id), 'handler.js'), 'utf8');
-    expect(lintHandlerSource(source)).toEqual([]);
-  });
+  it.each(ENRICHERS.map((id) => [id] as const))(
+    "%s: handler passes the determinism lint",
+    (id) => {
+      const source = readFileSync(
+        path.join(automationDir(id), "handler.js"),
+        "utf8"
+      );
+      expect(lintHandlerSource(source)).toStrictEqual([]);
+    }
+  );
 });
 
-describe('photo-captioner behavior', () => {
-  it('captions via preview only, stages annotation + tags, advances the cursor', async () => {
-    const handler = await loadHandler('photo-captioner');
+describe("photo-captioner behavior", () => {
+  it("captions via preview only, stages annotation + tags, advances the cursor", async () => {
+    const handler = await loadHandler("photo-captioner");
     const harness = stubCtx({
       reads: {
-        'media.media_asset': [
-          { asset_id: 'a1', content_id: 'c1', kind: 'photo', deleted_at: null },
+        "media.media_asset": [
+          { asset_id: "a1", content_id: "c1", kind: "photo", deleted_at: null },
         ],
-        'core.content_derivative': [
-          { content_id: 'c1', variant: 'thumb' },
-          { content_id: 'c1', variant: 'preview' },
+        "core.content_derivative": [
+          { content_id: "c1", variant: "thumb" },
+          { content_id: "c1", variant: "preview" },
         ],
       },
       agent: () => ({
-        caption: 'Two kids at the beach',
-        tags: [{ label: 'Beach', confidence: 0.9 }],
+        caption: "Two kids at the beach",
+        tags: [{ label: "Beach", confidence: 0.9 }],
       }),
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
     // Preview wins over thumb; originals are never a spelling.
-    expect(harness.agentCalls[0]!.content).toEqual([{ contentId: 'c1', variant: 'preview' }]);
-    expect(harness.invokes.length).toBe(1);
+    expect(harness.agentCalls[0]!.content).toStrictEqual([
+      { contentId: "c1", variant: "preview" },
+    ]);
+    expect(harness.invokes).toHaveLength(1);
     const staged = harness.invokes[0]!;
-    expect(staged.command).toBe('sync.stage_rows');
-    expect(staged.input.kind).toBe('enrichment.vision');
-    const rows = staged.input.rows as { entity_type: string; external_id: string }[];
-    expect(rows.map((r) => r.entity_type)).toEqual(['knowledge.annotation', 'core.tag']);
-    expect(rows[0]!.external_id).toBe('a1:caption');
-    expect(harness.state.get('cursor')).toBe('a1');
-    expect(result.summary).toContain('captioned 1');
+    expect(staged.command).toBe("sync.stage_rows");
+    expect(staged.input.kind).toBe("enrichment.vision");
+    const rows = staged.input.rows as {
+      entity_type: string;
+      external_id: string;
+    }[];
+    expect(rows.map((r) => r.entity_type)).toStrictEqual([
+      "knowledge.annotation",
+      "core.tag",
+    ]);
+    expect(rows[0]!.external_id).toBe("a1:caption");
+    expect(harness.state.get("cursor")).toBe("a1");
+    expect(result.summary).toContain("captioned 1");
   });
 
-  it('open enrichment requests jump the backlog and are marked drained', async () => {
-    const handler = await loadHandler('photo-captioner');
+  it("open enrichment requests jump the backlog and are marked drained", async () => {
+    const handler = await loadHandler("photo-captioner");
     const harness = stubCtx({
       reads: {
-        'enrich.request': [
-          { request_id: 'rq1', entity_type: 'media.media_asset', entity_id: 'old1' },
+        "enrich.request": [
+          {
+            request_id: "rq1",
+            entity_type: "media.media_asset",
+            entity_id: "old1",
+          },
         ],
-        'media.media_asset': [{ asset_id: 'old1', content_id: 'oc1', kind: 'photo' }],
-        'core.content_derivative': [{ content_id: 'oc1', variant: 'thumb' }],
+        "media.media_asset": [
+          { asset_id: "old1", content_id: "oc1", kind: "photo" },
+        ],
+        "core.content_derivative": [{ content_id: "oc1", variant: "thumb" }],
       },
-      agent: () => ({ caption: 'An old photo, revisited on demand', tags: [] }),
+      agent: () => ({ caption: "An old photo, revisited on demand", tags: [] }),
     });
     await handler({ ctx: harness.ctx, log: harness.log });
     const commands = harness.invokes.map((i) => i.command);
-    expect(commands).toContain('sync.stage_rows');
-    expect(commands).toContain('enrich.mark_requests_drained');
-    const drained = harness.invokes.find((i) => i.command === 'enrich.mark_requests_drained')!;
-    expect(drained.input).toEqual({ request_ids: ['rq1'] });
+    expect(commands).toContain("sync.stage_rows");
+    expect(commands).toContain("enrich.mark_requests_drained");
+    const drained = harness.invokes.find(
+      (i) => i.command === "enrich.mark_requests_drained"
+    )!;
+    expect(drained.input).toStrictEqual({ request_ids: ["rq1"] });
   });
 
-  it('a photo without derivatives is skipped honestly — no bytes, no agent turn', async () => {
-    const handler = await loadHandler('photo-captioner');
+  it("a photo without derivatives is skipped honestly — no bytes, no agent turn", async () => {
+    const handler = await loadHandler("photo-captioner");
     const harness = stubCtx({
       reads: {
-        'media.media_asset': [{ asset_id: 'a2', content_id: 'c2', kind: 'photo' }],
-        'core.content_derivative': [],
+        "media.media_asset": [
+          { asset_id: "a2", content_id: "c2", kind: "photo" },
+        ],
+        "core.content_derivative": [],
       },
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.agentCalls.length).toBe(0);
-    expect(harness.invokes.length).toBe(0);
-    expect(result.summary).toContain('skipped 1');
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
+    expect(harness.agentCalls).toHaveLength(0);
+    expect(harness.invokes).toHaveLength(0);
+    expect(result.summary).toContain("skipped 1");
     // The cursor still advances — a later manual re-run can revisit.
-    expect(harness.state.get('cursor')).toBe('a2');
+    expect(harness.state.get("cursor")).toBe("a2");
   });
 });
 
-describe('doc-text-extractor behavior', () => {
-  it('OCRs a scan (no text variant) through core.set_extracted_text', async () => {
-    const handler = await loadHandler('doc-text-extractor');
+describe("doc-text-extractor behavior", () => {
+  it("OCRs a scan (no text variant) through core.set_extracted_text", async () => {
+    const handler = await loadHandler("doc-text-extractor");
     const harness = stubCtx({
       reads: {
-        'core.content_item': [{ content_id: 'd1', media_type: 'application/pdf' }],
-        'core.content_derivative': [{ content_id: 'd1', variant: 'preview' }],
+        "core.content_item": [
+          { content_id: "d1", media_type: "application/pdf" },
+        ],
+        "core.content_derivative": [{ content_id: "d1", variant: "preview" }],
       },
-      agent: () => ({ text: 'Warranty expires 2027-03-01' }),
+      agent: () => ({ text: "Warranty expires 2027-03-01" }),
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.agentCalls[0]!.content).toEqual([{ contentId: 'd1', variant: 'preview' }]);
-    expect(harness.invokes.map((i) => i.command)).toEqual(['core.set_extracted_text']);
-    expect(harness.invokes[0]!.input).toEqual({
-      content_id: 'd1',
-      text: 'Warranty expires 2027-03-01',
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
+    expect(harness.agentCalls[0]!.content).toStrictEqual([
+      { contentId: "d1", variant: "preview" },
+    ]);
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual([
+      "core.set_extracted_text",
+    ]);
+    expect(harness.invokes[0]!.input).toStrictEqual({
+      content_id: "d1",
+      text: "Warranty expires 2027-03-01",
     });
-    expect(result.summary).toContain('OCRed 1');
+    expect(result.summary).toContain("OCRed 1");
   });
 
-  it('summarizes a document that already has text, staged as an annotation', async () => {
-    const handler = await loadHandler('doc-text-extractor');
+  it("summarizes a document that already has text, staged as an annotation", async () => {
+    const handler = await loadHandler("doc-text-extractor");
     const harness = stubCtx({
       reads: {
-        'core.content_item': [{ content_id: 'd2', media_type: 'application/pdf' }],
-        'core.content_derivative': [{ content_id: 'd2', variant: 'text' }],
+        "core.content_item": [
+          { content_id: "d2", media_type: "application/pdf" },
+        ],
+        "core.content_derivative": [{ content_id: "d2", variant: "text" }],
       },
-      agent: () => ({ summary: 'Home insurance policy for 2026.' }),
+      agent: () => ({ summary: "Home insurance policy for 2026." }),
     });
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.agentCalls[0]!.content).toEqual([{ contentId: 'd2', variant: 'text' }]);
-    expect(harness.invokes.map((i) => i.command)).toEqual(['sync.stage_rows']);
+    expect(harness.agentCalls[0]!.content).toStrictEqual([
+      { contentId: "d2", variant: "text" },
+    ]);
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual([
+      "sync.stage_rows",
+    ]);
     const rows = harness.invokes[0]!.input.rows as {
       external_id: string;
       payload: { body: string };
     }[];
-    expect(rows[0]!.external_id).toBe('d2:summary');
-    expect(rows[0]!.payload.body).toContain('insurance');
+    expect(rows[0]!.external_id).toBe("d2:summary");
+    expect(rows[0]!.payload.body).toContain("insurance");
   });
 
-  it('inline text items and underivable binaries are skipped without agent turns', async () => {
-    const handler = await loadHandler('doc-text-extractor');
+  it("inline text items and underivable binaries are skipped without agent turns", async () => {
+    const handler = await loadHandler("doc-text-extractor");
     const harness = stubCtx({
       reads: {
-        'core.content_item': [
-          { content_id: 'd3', media_type: 'text/plain' },
-          { content_id: 'd4', media_type: 'application/pdf' },
+        "core.content_item": [
+          { content_id: "d3", media_type: "text/plain" },
+          { content_id: "d4", media_type: "application/pdf" },
         ],
-        'core.content_derivative': [],
+        "core.content_derivative": [],
       },
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.agentCalls.length).toBe(0);
-    expect(harness.invokes.length).toBe(0);
-    expect(result.summary).toContain('skipped 1');
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
+    expect(harness.agentCalls).toHaveLength(0);
+    expect(harness.invokes).toHaveLength(0);
+    expect(result.summary).toContain("skipped 1");
   });
 
-  it('re-enters a parent behind the content cursor when a visual derivative arrives late', async () => {
-    const handler = await loadHandler('doc-text-extractor');
+  it("re-enters a parent behind the content cursor when a visual derivative arrives late", async () => {
+    const handler = await loadHandler("doc-text-extractor");
     const reads: Record<string, Record<string, unknown>[]> = {
-      'core.content_item': [{ content_id: 'd5', media_type: 'application/pdf' }],
-      'core.content_derivative': [],
+      "core.content_item": [
+        { content_id: "d5", media_type: "application/pdf" },
+      ],
+      "core.content_derivative": [],
     };
     const harness = stubCtx({
       reads,
-      agent: () => ({ text: 'Late preview exposes the albatross renewal date' }),
+      agent: () => ({
+        text: "Late preview exposes the albatross renewal date",
+      }),
     });
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.state.get('cursor')).toBe('d5');
+    expect(harness.state.get("cursor")).toBe("d5");
     expect(harness.agentCalls).toHaveLength(0);
 
     // The parent no longer appears in the new-content page. Its independently
     // ordered derivative row must pull it back into the automation.
-    reads['core.content_item'] = [];
-    reads['core.content_derivative'] = [
-      { derivative_id: 'dv-1', content_id: 'd5', variant: 'preview' },
+    reads["core.content_item"] = [];
+    reads["core.content_derivative"] = [
+      { derivative_id: "dv-1", content_id: "d5", variant: "preview" },
     ];
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.agentCalls.at(-1)?.content).toEqual([{ contentId: 'd5', variant: 'preview' }]);
-    expect(harness.invokes.at(-1)).toEqual({
-      command: 'core.set_extracted_text',
-      input: { content_id: 'd5', text: 'Late preview exposes the albatross renewal date' },
+    expect(harness.agentCalls.at(-1)?.content).toStrictEqual([
+      { contentId: "d5", variant: "preview" },
+    ]);
+    expect(harness.invokes.at(-1)).toStrictEqual({
+      command: "core.set_extracted_text",
+      input: {
+        content_id: "d5",
+        text: "Late preview exposes the albatross renewal date",
+      },
     });
-    expect(harness.state.get('derivativeCursor')).toBe('dv-1');
+    expect(harness.state.get("derivativeCursor")).toBe("dv-1");
   });
 });
 
-describe('screenshot-extractor behavior', () => {
-  it('a receipt with a visible date stages a core.transaction; cross-domain rows always stage', async () => {
-    const handler = await loadHandler('screenshot-extractor');
+describe("screenshot-extractor behavior", () => {
+  it("a receipt with a visible date stages a core.transaction; cross-domain rows always stage", async () => {
+    const handler = await loadHandler("screenshot-extractor");
     const harness = stubCtx({
       reads: {
-        'media.media_asset': [{ asset_id: 's1', content_id: 'c1', kind: 'photo', exif_json: null }],
-        'core.content_derivative': [{ content_id: 'c1', variant: 'thumb' }],
+        "media.media_asset": [
+          { asset_id: "s1", content_id: "c1", kind: "photo", exif_json: null },
+        ],
+        "core.content_derivative": [{ content_id: "c1", variant: "thumb" }],
       },
       agent: () => ({
-        kind: 'receipt',
+        kind: "receipt",
         receipt: {
-          merchant: 'Blue Tokai',
+          merchant: "Blue Tokai",
           amount_minor: 45000,
-          currency: 'inr',
-          posted_at: '2026-07-01',
+          currency: "inr",
+          posted_at: "2026-07-01",
         },
       }),
     });
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.invokes.map((i) => i.command)).toEqual(['sync.stage_rows']);
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual([
+      "sync.stage_rows",
+    ]);
     const input = harness.invokes[0]!.input as {
       kind: string;
       rows: { entity_type: string; payload: Record<string, unknown> }[];
     };
-    expect(input.kind).toBe('enrichment.extraction');
-    expect(input.rows[0]!.entity_type).toBe('core.transaction');
+    expect(input.kind).toBe("enrichment.extraction");
+    expect(input.rows[0]!.entity_type).toBe("core.transaction");
     expect(input.rows[0]!.payload.amountMinor).toBe(45000);
-    expect(input.rows[0]!.payload.currency).toBe('INR');
-    expect(input.rows[0]!.payload.postedAt).toBe('2026-07-01');
+    expect(input.rows[0]!.payload.currency).toBe("INR");
+    expect(input.rows[0]!.payload.postedAt).toBe("2026-07-01");
   });
 
-  it('a dateless booking is dropped, never defaulted', async () => {
-    const handler = await loadHandler('screenshot-extractor');
+  it("a dateless booking is dropped, never defaulted", async () => {
+    const handler = await loadHandler("screenshot-extractor");
     const harness = stubCtx({
       reads: {
-        'media.media_asset': [{ asset_id: 's2', content_id: 'c2', kind: 'photo', exif_json: null }],
-        'core.content_derivative': [{ content_id: 'c2', variant: 'preview' }],
+        "media.media_asset": [
+          { asset_id: "s2", content_id: "c2", kind: "photo", exif_json: null },
+        ],
+        "core.content_derivative": [{ content_id: "c2", variant: "preview" }],
       },
-      agent: () => ({ kind: 'booking', booking: { summary: 'Flight BLR → GOI' } }),
+      agent: () => ({
+        kind: "booking",
+        booking: { summary: "Flight BLR → GOI" },
+      }),
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.invokes.length).toBe(0);
-    expect(result.summary).toContain('0 booking(s)');
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
+    expect(harness.invokes).toHaveLength(0);
+    expect(result.summary).toContain("0 booking(s)");
   });
 });
 
-describe('face-proposer behavior', () => {
-  it('proposes identity-blind regions with derived external ids', async () => {
-    const handler = await loadHandler('face-proposer');
+describe("face-proposer behavior", () => {
+  it("proposes identity-blind regions with derived external ids", async () => {
+    const handler = await loadHandler("face-proposer");
     const harness = stubCtx({
       reads: {
-        'media.media_asset': [{ asset_id: 'f1', content_id: 'c1', kind: 'photo' }],
-        'core.content_derivative': [{ content_id: 'c1', variant: 'preview' }],
+        "media.media_asset": [
+          { asset_id: "f1", content_id: "c1", kind: "photo" },
+        ],
+        "core.content_derivative": [{ content_id: "c1", variant: "preview" }],
       },
       agent: (call) => {
-        expect(call.prompt).toContain('never describe or identify');
+        expect(call.prompt).toContain("never describe or identify");
         return {
           faces: [
             { x: 0.1, y: 0.2, w: 0.2, h: 0.25, confidence: 0.9 },
@@ -346,130 +429,189 @@ describe('face-proposer behavior', () => {
     await handler({ ctx: harness.ctx, log: harness.log });
     const input = harness.invokes[0]!.input as {
       kind: string;
-      rows: { entity_type: string; external_id: string; payload: { party_id?: unknown } }[];
+      rows: {
+        entity_type: string;
+        external_id: string;
+        payload: { party_id?: unknown };
+      }[];
     };
-    expect(input.kind).toBe('enrichment.faces');
-    expect(input.rows.map((r) => r.external_id)).toEqual(['f1:face:0', 'f1:face:1']);
+    expect(input.kind).toBe("enrichment.faces");
+    expect(input.rows.map((r) => r.external_id)).toStrictEqual([
+      "f1:face:0",
+      "f1:face:1",
+    ]);
     // Identity-blind: proposals never carry a party.
-    expect(input.rows.every((r) => r.payload.party_id === undefined)).toBe(true);
+    expect(input.rows.every((r) => r.payload.party_id === undefined)).toBe(
+      true
+    );
   });
 });
 
-describe('trip-albums behavior', () => {
-  it('clusters by time gaps deterministically — no agent turns at all', async () => {
-    const handler = await loadHandler('trip-albums');
+describe("trip-albums behavior", () => {
+  it("clusters by time gaps deterministically — no agent turns at all", async () => {
+    const handler = await loadHandler("trip-albums");
     const trip = Array.from({ length: 6 }, (_, i) => ({
       asset_id: `t${i}`,
       content_id: `tc${i}`,
-      kind: 'photo',
+      kind: "photo",
       captured_at: `2026-06-1${Math.min(i, 4)}T10:0${i}:00.000Z`, // 5-day spread
     }));
     const homePhotos = [
-      { asset_id: 'h1', content_id: 'hc1', kind: 'photo', captured_at: '2026-05-01T09:00:00.000Z' },
-      { asset_id: 'h2', content_id: 'hc2', kind: 'photo', captured_at: '2026-05-01T10:00:00.000Z' },
+      {
+        asset_id: "h1",
+        content_id: "hc1",
+        kind: "photo",
+        captured_at: "2026-05-01T09:00:00.000Z",
+      },
+      {
+        asset_id: "h2",
+        content_id: "hc2",
+        kind: "photo",
+        captured_at: "2026-05-01T10:00:00.000Z",
+      },
     ];
     const harness = stubCtx({
-      reads: { 'media.media_asset': [...homePhotos, ...trip] },
+      reads: { "media.media_asset": [...homePhotos, ...trip] },
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.agentCalls.length).toBe(0); // deterministic code, no model
-    expect(harness.invokes.map((i) => i.command)).toEqual(['sync.stage_rows']);
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
+    expect(harness.agentCalls).toHaveLength(0); // deterministic code, no model
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual([
+      "sync.stage_rows",
+    ]);
     const input = harness.invokes[0]!.input as {
-      rows: { external_id: string; payload: { name: string; members: unknown[] } }[];
+      rows: {
+        external_id: string;
+        payload: { name: string; members: unknown[] };
+      }[];
     };
     // The two May photos are too few/short; the June run is one trip.
-    expect(input.rows.length).toBe(1);
-    expect(input.rows[0]!.external_id).toBe('trip:2026-06-10');
-    expect(input.rows[0]!.payload.name).toContain('Jun');
-    expect(input.rows[0]!.payload.members.length).toBe(6);
-    expect(result.summary).toContain('1 trip album');
+    expect(input.rows).toHaveLength(1);
+    expect(input.rows[0]!.external_id).toBe("trip:2026-06-10");
+    expect(input.rows[0]!.payload.name).toContain("Jun");
+    expect(input.rows[0]!.payload.members).toHaveLength(6);
+    expect(result.summary).toContain("1 trip album");
   });
 });
 
-describe('doc-entity-linker behavior', () => {
-  it('links only people already in the vault, anchored to the exact passage', async () => {
-    const handler = await loadHandler('doc-entity-linker');
+describe("doc-entity-linker behavior", () => {
+  it("links only people already in the vault, anchored to the exact passage", async () => {
+    const handler = await loadHandler("doc-entity-linker");
     const harness = stubCtx({
       reads: {
-        'core.content_derivative': [{ derivative_id: 'dv1', content_id: 'd1', variant: 'text' }],
-        'core.party': [
-          { party_id: 'p1', kind: 'person', display_name: 'Rahul Mehta' },
-          { party_id: 'p2', kind: 'org', display_name: 'Acme Corp' },
+        "core.content_derivative": [
+          { derivative_id: "dv1", content_id: "d1", variant: "text" },
+        ],
+        "core.party": [
+          { party_id: "p1", kind: "person", display_name: "Rahul Mehta" },
+          { party_id: "p2", kind: "org", display_name: "Acme Corp" },
         ],
       },
       agent: () => ({
         mentions: [
-          { name: 'Rahul Mehta', exact: 'payable to Rahul Mehta by June 30', prefix: 'is ' },
-          { name: 'Sunita Rao', exact: 'witnessed by Sunita Rao' },
+          {
+            name: "Rahul Mehta",
+            exact: "payable to Rahul Mehta by June 30",
+            prefix: "is ",
+          },
+          { name: "Sunita Rao", exact: "witnessed by Sunita Rao" },
         ],
       }),
     });
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(harness.invokes.map((i) => i.command)).toEqual(['core.link_entities']);
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual([
+      "core.link_entities",
+    ]);
     const input = harness.invokes[0]!.input as Record<string, unknown>;
-    expect(input.from_id).toBe('d1');
-    expect(input.to_id).toBe('p1'); // Rahul exists; Sunita doesn't — dropped
-    expect(input.relation).toBe('references');
-    expect((input.selector as { exact: string }).exact).toContain('Rahul Mehta');
-    expect(result.summary).toContain('1 named nobody');
+    expect(input.from_id).toBe("d1");
+    expect(input.to_id).toBe("p1"); // Rahul exists; Sunita doesn't — dropped
+    expect(input.relation).toBe("references");
+    expect((input.selector as { exact: string }).exact).toContain(
+      "Rahul Mehta"
+    );
+    expect(result.summary).toContain("1 named nobody");
   });
 
-  it('an identical-live-link refusal is caught, never a failed fire', async () => {
-    const handler = await loadHandler('doc-entity-linker');
+  it("an identical-live-link refusal is caught, never a failed fire", async () => {
+    const handler = await loadHandler("doc-entity-linker");
     const harness = stubCtx({
       reads: {
-        'core.content_derivative': [{ derivative_id: 'dv2', content_id: 'd2', variant: 'text' }],
-        'core.party': [{ party_id: 'p1', kind: 'person', display_name: 'Rahul Mehta' }],
+        "core.content_derivative": [
+          { derivative_id: "dv2", content_id: "d2", variant: "text" },
+        ],
+        "core.party": [
+          { party_id: "p1", kind: "person", display_name: "Rahul Mehta" },
+        ],
       },
-      agent: () => ({ mentions: [{ name: 'Rahul Mehta', exact: 'Rahul Mehta again' }] }),
+      agent: () => ({
+        mentions: [{ name: "Rahul Mehta", exact: "Rahul Mehta again" }],
+      }),
     });
     harness.ctx.vault.invoke = async () => {
-      throw new Error('precondition no_identical_live_link failed');
+      throw new Error("precondition no_identical_live_link failed");
     };
-    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
-    expect(result.summary).toContain('linked 0');
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+    };
+    expect(result.summary).toContain("linked 0");
   });
 });
 
-describe('obligation-extractor behavior', () => {
-  it('stages dated obligations as tentative events; dateless ones drop', async () => {
-    const handler = await loadHandler('obligation-extractor');
+describe("obligation-extractor behavior", () => {
+  it("stages dated obligations as tentative events; dateless ones drop", async () => {
+    const handler = await loadHandler("obligation-extractor");
     const harness = stubCtx({
       reads: {
-        'core.content_derivative': [{ derivative_id: 'dv1', content_id: 'd1', variant: 'text' }],
+        "core.content_derivative": [
+          { derivative_id: "dv1", content_id: "d1", variant: "text" },
+        ],
       },
       agent: () => ({
         obligations: [
-          { what: 'Home insurance renewal', kind: 'renewal', date: '2027-03-01' },
-          { what: 'Some vague thing', kind: 'due', date: 'soon' },
+          {
+            what: "Home insurance renewal",
+            kind: "renewal",
+            date: "2027-03-01",
+          },
+          { what: "Some vague thing", kind: "due", date: "soon" },
         ],
       }),
     });
     await handler({ ctx: harness.ctx, log: harness.log });
     const input = harness.invokes[0]!.input as {
       kind: string;
-      rows: { external_id: string; payload: { status: string; dtstart: string } }[];
+      rows: {
+        external_id: string;
+        payload: { status: string; dtstart: string };
+      }[];
     };
-    expect(input.kind).toBe('enrichment.obligations');
-    expect(input.rows.length).toBe(1); // "soon" is not a date
-    expect(input.rows[0]!.external_id).toBe('obligation:d1:0');
-    expect(input.rows[0]!.payload.status).toBe('tentative');
-    expect(input.rows[0]!.payload.dtstart).toBe('2027-03-01');
+    expect(input.kind).toBe("enrichment.obligations");
+    expect(input.rows).toHaveLength(1); // "soon" is not a date
+    expect(input.rows[0]!.external_id).toBe("obligation:d1:0");
+    expect(input.rows[0]!.payload.status).toBe("tentative");
+    expect(input.rows[0]!.payload.dtstart).toBe("2027-03-01");
   });
 });
 
-describe('renewal-reminders behavior', () => {
-  it('formats the brief from the condition trigger rows — reads nothing, writes nothing', async () => {
-    const handler = await loadHandler('renewal-reminders');
+describe("renewal-reminders behavior", () => {
+  it("formats the brief from the condition trigger rows — reads nothing, writes nothing", async () => {
+    const handler = await loadHandler("renewal-reminders");
     const harness = stubCtx({
       reads: {},
       input: {
         rows: [
-          { summary: 'Passport expiry', dtstart: '2026-07-18', status: 'tentative' },
           {
-            summary: 'Home insurance renewal (renewal)',
-            dtstart: '2026-07-12',
-            status: 'tentative',
+            summary: "Passport expiry",
+            dtstart: "2026-07-18",
+            status: "tentative",
+          },
+          {
+            summary: "Home insurance renewal (renewal)",
+            dtstart: "2026-07-12",
+            status: "tentative",
           },
         ],
       },
@@ -478,55 +620,74 @@ describe('renewal-reminders behavior', () => {
       summary: string;
       output: { upcoming: { due: string }[] };
     };
-    expect(harness.invokes.length).toBe(0);
-    expect(harness.agentCalls.length).toBe(0);
-    expect(result.summary).toContain('2 deadlines');
-    expect(result.output.upcoming[0]!.due).toBe('2026-07-12'); // soonest first
+    expect(harness.invokes).toHaveLength(0);
+    expect(harness.agentCalls).toHaveLength(0);
+    expect(result.summary).toContain("2 deadlines");
+    expect(result.output.upcoming[0]!.due).toBe("2026-07-12"); // soonest first
   });
 });
 
-describe('doc-filer behavior', () => {
-  it('proposes title + folder + doctype from the text variant, staged for review', async () => {
-    const handler = await loadHandler('doc-filer');
+describe("doc-filer behavior", () => {
+  it("proposes title + folder + doctype from the text variant, staged for review", async () => {
+    const handler = await loadHandler("doc-filer");
     const harness = stubCtx({
       reads: {
-        'core.content_derivative': [{ derivative_id: 'dv1', content_id: 'd1', variant: 'text' }],
-        'core.content_item': [
-          { content_id: 'd1', media_type: 'application/pdf', title: 'scan_001' },
+        "core.content_derivative": [
+          { derivative_id: "dv1", content_id: "d1", variant: "text" },
         ],
-        'core.concept_scheme': [{ scheme_id: 'sf', uri: 'https://centraid.dev/schemes/folders' }],
-        'core.concept': [
-          { scheme_id: 'sf', notation: 'insurance', pref_label: 'Insurance' },
-          { scheme_id: 'sf', notation: 'root', pref_label: 'Documents' },
+        "core.content_item": [
+          {
+            content_id: "d1",
+            media_type: "application/pdf",
+            title: "scan_001",
+          },
+        ],
+        "core.concept_scheme": [
+          { scheme_id: "sf", uri: "https://centraid.dev/schemes/folders" },
+        ],
+        "core.concept": [
+          { scheme_id: "sf", notation: "insurance", pref_label: "Insurance" },
+          { scheme_id: "sf", notation: "root", pref_label: "Documents" },
         ],
       },
       agent: (call) => {
         // The existing folder labels ride into the prompt.
-        expect(call.prompt).toContain('Insurance');
-        expect(call.prompt).not.toContain('Documents,');
+        expect(call.prompt).toContain("Insurance");
+        expect(call.prompt).not.toContain("Documents,");
         return {
-          title: 'Home insurance policy 2026',
-          folder: 'Insurance',
-          doctype: 'policy',
+          title: "Home insurance policy 2026",
+          folder: "Insurance",
+          doctype: "policy",
           confidence: 0.9,
         };
       },
     });
     await handler({ ctx: harness.ctx, log: harness.log });
-    expect(harness.agentCalls[0]!.content).toEqual([{ contentId: 'd1', variant: 'text' }]);
-    expect(harness.invokes.map((i) => i.command)).toEqual(['sync.stage_rows']);
+    expect(harness.agentCalls[0]!.content).toStrictEqual([
+      { contentId: "d1", variant: "text" },
+    ]);
+    expect(harness.invokes.map((i) => i.command)).toStrictEqual([
+      "sync.stage_rows",
+    ]);
     const input = harness.invokes[0]!.input as {
       kind: string;
-      rows: { entity_type: string; external_id: string; payload: Record<string, unknown> }[];
+      rows: {
+        entity_type: string;
+        external_id: string;
+        payload: Record<string, unknown>;
+      }[];
     };
-    expect(input.kind).toBe('enrichment.doctype');
-    expect(input.rows.map((r) => r.entity_type)).toEqual(['core.content_item', 'core.tag']);
-    expect(input.rows[0]!.payload).toEqual({
-      content_id: 'd1',
-      title: 'Home insurance policy 2026',
-      folder: 'Insurance',
+    expect(input.kind).toBe("enrichment.doctype");
+    expect(input.rows.map((r) => r.entity_type)).toStrictEqual([
+      "core.content_item",
+      "core.tag",
+    ]);
+    expect(input.rows[0]!.payload).toStrictEqual({
+      content_id: "d1",
+      title: "Home insurance policy 2026",
+      folder: "Insurance",
     });
-    expect(input.rows[1]!.payload.scheme_uri).toBe('urn:centraid:doctype');
-    expect(harness.state.get('cursor')).toBe('dv1');
+    expect(input.rows[1]!.payload.scheme_uri).toBe("urn:centraid:doctype");
+    expect(harness.state.get("cursor")).toBe("dv1");
   });
 });

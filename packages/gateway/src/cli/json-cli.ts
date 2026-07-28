@@ -17,10 +17,10 @@ export type Fail = (message: string, code?: number) => never;
 export class CliJsonError extends Error {
   constructor(
     message: string,
-    readonly code: number,
+    readonly code: number
   ) {
     super(message);
-    this.name = 'CliJsonError';
+    this.name = "CliJsonError";
   }
 }
 
@@ -47,7 +47,7 @@ export function jsonFail(json: boolean, fail: Fail): Fail {
 export async function runJson(
   json: boolean,
   realFail: Fail,
-  body: () => Promise<void> | void,
+  body: () => Promise<void> | void
 ): Promise<void> {
   if (!json) {
     await body();
@@ -59,7 +59,7 @@ export async function runJson(
     const code = err instanceof CliJsonError ? err.code : 1;
     const message = err instanceof Error ? err.message : String(err);
     process.stdout.write(
-      `${JSON.stringify({ ok: false, error: code === 2 ? 'usage' : 'error', message })}\n`,
+      `${JSON.stringify({ ok: false, error: code === 2 ? "usage" : "error", message })}\n`
     );
     realFail(message, code);
   }

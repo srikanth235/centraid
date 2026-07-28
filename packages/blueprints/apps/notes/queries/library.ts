@@ -90,20 +90,21 @@ interface CardRow extends Record<string, unknown> {
  * live inline as data: URIs; anything else is opaque to this projection.
  */
 function decodeBody(uri: unknown): string {
-  if (typeof uri !== 'string' || !uri.startsWith('data:')) return '(external content)';
-  const comma = uri.indexOf(',');
-  if (comma === -1) return '(external content)';
+  if (typeof uri !== "string" || !uri.startsWith("data:"))
+    return "(external content)";
+  const comma = uri.indexOf(",");
+  if (comma === -1) return "(external content)";
   const meta = uri.slice(0, comma);
   const payload = uri.slice(comma + 1);
   try {
-    if (meta.includes(';base64')) {
-      return typeof Buffer !== 'undefined'
-        ? Buffer.from(payload, 'base64').toString('utf8')
-        : atob(payload);
+    if (meta.includes(";base64")) {
+      return typeof Buffer === "undefined"
+        ? atob(payload)
+        : Buffer.from(payload, "base64").toString("utf8");
     }
     return decodeURIComponent(payload);
   } catch {
-    return '(external content)';
+    return "(external content)";
   }
 }
 
@@ -114,43 +115,46 @@ function decodeBody(uri: unknown): string {
 // (flatten the first blocks, glyph the checklist/bullets) capped to ~200
 // chars; `checkOf` mirrors checkStats via the same checklist regex. Both are
 // inlined here because query handlers are standalone modules.
-const CHECK_RE = /^\s*[-*] \[( |x|X)\]\s?(.*)$/;
+const CHECK_RE = /^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u;
 
 function previewOf(body: unknown): string {
-  const lines = String(body ?? '').split('\n');
+  const lines = String(body ?? "").split("\n");
   const out: string[] = [];
   for (const line of lines) {
     if (out.length >= 6) break;
     const check = CHECK_RE.exec(line);
     if (check) {
-      out.push((/x/i.test(check[1]!) ? '☑ ' : '☐ ') + check[2]);
+      out.push(
+        (/x/iu.test(check.groups?.mark ?? "") ? "☑ " : "☐ ") +
+          (check.groups?.text ?? "")
+      );
       continue;
     }
-    if (/^#{1,3}\s+/.test(line)) continue; // headings drop — the title carries them
-    const li = /^\s*(?:[-*]|\d+\.)\s+(.*)$/.exec(line);
+    if (/^#{1,3}\s+/u.test(line)) continue; // headings drop — the title carries them
+    const li = /^\s*(?:[-*]|\d+\.)\s+(?<text>.*)$/u.exec(line);
     if (li) {
-      out.push('• ' + li[1]);
+      out.push("• " + (li.groups?.text ?? ""));
       continue;
     }
-    if (line.trim() === '') continue;
+    if (line.trim() === "") continue;
     out.push(line);
   }
   const text = out
-    .join('\n')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1');
+    .join("\n")
+    .replace(/\*\*(?<bold>.+?)\*\*/gu, "$<bold>")
+    .replace(/\*(?<italic>.+?)\*/gu, "$<italic>")
+    .replace(/`(?<code>.+?)`/gu, "$<code>");
   return text.length > 200 ? text.slice(0, 200) : text;
 }
 
 function checkOf(body: unknown): { total: number; done: number } {
   let total = 0;
   let done = 0;
-  for (const line of String(body ?? '').split('\n')) {
+  for (const line of String(body ?? "").split("\n")) {
     const m = CHECK_RE.exec(line);
     if (!m) continue;
     total += 1;
-    if (/x/i.test(m[1]!)) done += 1;
+    if (/x/iu.test(m.groups?.mark ?? "")) done += 1;
   }
   return { total, done };
 }
@@ -164,11 +168,11 @@ function checkOf(body: unknown): { total: number; done: number } {
 function attachmentsBySubject(
   subjectType: string,
   attachments: AttachmentRow[],
-  contentById: Map<string, ContentRow>,
+  contentById: Map<string, ContentRow>
 ) {
   // Blob-backed bytes serve as same-origin URLs (issue #296).
   const srcOf = (c: ContentRow | undefined) =>
-    typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+    typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
       : c?.content_uri;
   const bySubject = new Map<string, Array<Record<string, unknown>>>();
@@ -181,20 +185,22 @@ function attachmentsBySubject(
       content_id: a.content_id,
       role: a.role,
       is_primary: a.is_primary,
-      media_type: content?.media_type ?? 'application/octet-stream',
+      media_type: content?.media_type ?? "application/octet-stream",
       title: content?.title ?? null,
-      content_uri: srcOf(content) ?? '',
+      content_uri: srcOf(content) ?? "",
       byte_size: content?.byte_size ?? 0,
     });
   }
   for (const list of bySubject.values()) {
-    list.sort((x, y) => (Number(y.is_primary) || 0) - (Number(x.is_primary) || 0));
+    list.sort(
+      (x, y) => (Number(y.is_primary) || 0) - (Number(x.is_primary) || 0)
+    );
   }
   return bySubject;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
+export default async function libraryHandler({ input, ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
     // Pinned notes ride beside the window, not inside it — a pin is the
@@ -202,25 +208,25 @@ export default async ({ input, ctx }: HandlerArgs) => {
     // of the recent slice.
     const [recent, pinnedNotes, notebooks] = await Promise.all([
       ctx.vault.read({
-        entity: 'knowledge.note',
+        entity: "knowledge.note",
         // Trashed notes (issue #308: delete is reversible) stay out of the library.
-        where: [{ column: 'deleted_at', op: 'is-null' }],
-        orderBy: { column: 'updated_at', dir: 'desc' },
+        where: [{ column: "deleted_at", op: "is-null" }],
+        orderBy: { column: "updated_at", dir: "desc" },
         limit: window,
         purpose,
       }),
       ctx.vault.read({
-        entity: 'knowledge.note',
+        entity: "knowledge.note",
         where: [
-          { column: 'pinned', op: 'eq', value: 1 },
-          { column: 'deleted_at', op: 'is-null' },
+          { column: "pinned", op: "eq", value: 1 },
+          { column: "deleted_at", op: "is-null" },
         ],
-        orderBy: { column: 'updated_at', dir: 'desc' },
+        orderBy: { column: "updated_at", dir: "desc" },
         limit: 200,
         purpose,
       }),
       // Notebooks are collections (issue #274) — the one curation mechanism.
-      ctx.vault.read({ entity: 'core.collection', purpose }),
+      ctx.vault.read({ entity: "core.collection", purpose }),
     ]);
     const byId = new Map<string, NoteRow>();
     for (const n of [
@@ -232,11 +238,21 @@ export default async ({ input, ctx }: HandlerArgs) => {
     // Keep the app's notebook row shape over collection rows: a collection
     // may also hold photos and documents; this surface renders its notes.
     const books = ((notebooks.rows ?? []) as unknown as CollectionRow[])
-      .map((c) => ({ notebook_id: c.collection_id, name: c.name, sort_order: c.sort_order }))
+      .map((c) => ({
+        notebook_id: c.collection_id,
+        name: c.name,
+        sort_order: c.sort_order,
+      }))
       .toSorted((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     const windowed = [...byId.values()];
     if (windowed.length === 0) {
-      return { notes: [], notebooks: books, tags: [], truncated: false, window };
+      return {
+        notes: [],
+        notebooks: books,
+        tags: [],
+        truncated: false,
+        window,
+      };
     }
     const noteIds = windowed.map((n) => n.note_id);
 
@@ -245,35 +261,35 @@ export default async ({ input, ctx }: HandlerArgs) => {
     // bodies and attachment bytes.
     const [placements, attachments, links, tags] = await Promise.all([
       ctx.vault.read({
-        entity: 'core.collection_entry',
+        entity: "core.collection_entry",
         where: [
-          { column: 'target_type', op: 'eq', value: 'knowledge.note' },
-          { column: 'target_id', op: 'in', value: noteIds },
+          { column: "target_type", op: "eq", value: "knowledge.note" },
+          { column: "target_id", op: "in", value: noteIds },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.attachment',
+        entity: "core.attachment",
         where: [
-          { column: 'target_type', op: 'eq', value: 'knowledge.note' },
-          { column: 'target_id', op: 'in', value: noteIds },
+          { column: "target_type", op: "eq", value: "knowledge.note" },
+          { column: "target_id", op: "in", value: noteIds },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.link',
+        entity: "core.link",
         where: [
-          { column: 'from_type', op: 'eq', value: 'knowledge.note' },
-          { column: 'from_id', op: 'in', value: noteIds },
-          { column: 'valid_to', op: 'is-null' },
+          { column: "from_type", op: "eq", value: "knowledge.note" },
+          { column: "from_id", op: "in", value: noteIds },
+          { column: "valid_to", op: "is-null" },
         ],
         purpose,
       }),
       ctx.vault.read({
-        entity: 'core.tag',
+        entity: "core.tag",
         where: [
-          { column: 'target_type', op: 'eq', value: 'knowledge.note' },
-          { column: 'target_id', op: 'in', value: noteIds },
+          { column: "target_type", op: "eq", value: "knowledge.note" },
+          { column: "target_id", op: "in", value: noteIds },
         ],
         purpose,
       }),
@@ -283,23 +299,29 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const concepts =
       conceptIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.concept',
-            where: [{ column: 'concept_id', op: 'in', value: conceptIds }],
+            entity: "core.concept",
+            where: [{ column: "concept_id", op: "in", value: conceptIds }],
             purpose,
           })
         : { rows: [] };
     const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
-    const labelByConcept = new Map(conceptRows.map((c) => [c.concept_id, c.pref_label]));
+    const labelByConcept = new Map(
+      conceptRows.map((c) => [c.concept_id, c.pref_label])
+    );
     const tagsByNote = new Map<string, Array<Record<string, unknown>>>();
     for (const t of tagRows) {
       if (!tagsByNote.has(t.target_id)) tagsByNote.set(t.target_id, []);
       tagsByNote.get(t.target_id)!.push({
         tag_id: t.tag_id,
         concept_id: t.concept_id,
-        label: labelByConcept.get(t.concept_id) ?? '?',
+        label: labelByConcept.get(t.concept_id) ?? "?",
       });
     }
-    const allTags = [...new Map(conceptRows.map((c) => [c.concept_id, c.pref_label])).entries()]
+    const allTags = [
+      ...new Map(
+        conceptRows.map((c) => [c.concept_id, c.pref_label])
+      ).entries(),
+    ]
       .map(([concept_id, label]) => ({ concept_id, label }))
       .toSorted((a, b) => a.label.localeCompare(b.label));
 
@@ -309,7 +331,10 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const linkRows = (links.rows ?? []) as unknown as LinkRow[];
     const uniqueRefs = [
       ...new Map(
-        linkRows.map((l) => [`${l.to_type}/${l.to_id}`, { type: l.to_type, id: l.to_id }]),
+        linkRows.map((l) => [
+          `${l.to_type}/${l.to_id}`,
+          { type: l.to_type, id: l.to_id },
+        ])
       ).values(),
     ];
     // Standoff anchors (issue #282): the inline locator a link may carry.
@@ -321,14 +346,23 @@ export default async ({ input, ctx }: HandlerArgs) => {
         : Promise.resolve({ cards: [] as Array<Record<string, unknown>> }),
       linkRows.length > 0
         ? ctx.vault.read({
-            entity: 'core.link_anchor',
-            where: [{ column: 'link_id', op: 'in', value: linkRows.map((l) => l.link_id) }],
+            entity: "core.link_anchor",
+            where: [
+              {
+                column: "link_id",
+                op: "in",
+                value: linkRows.map((l) => l.link_id),
+              },
+            ],
             purpose,
           })
         : Promise.resolve({ rows: [] }),
     ]);
     const cardByRef = new Map(
-      ((resolved.cards ?? []) as unknown as CardRow[]).map((c) => [`${c.type}/${c.id}`, c]),
+      ((resolved.cards ?? []) as unknown as CardRow[]).map((c) => [
+        `${c.type}/${c.id}`,
+        c,
+      ])
     );
     const selectorByLink = new Map<string, unknown>();
     for (const a of (anchors.rows ?? []) as unknown as AnchorRow[]) {
@@ -347,14 +381,15 @@ export default async ({ input, ctx }: HandlerArgs) => {
         card: cardByRef.get(`${l.to_type}/${l.to_id}`) ?? {
           type: l.to_type,
           id: l.to_id,
-          status: 'unknown',
+          status: "unknown",
           title: null,
           subtitle: null,
           thumbnail_content_id: null,
         },
       });
     }
-    const attachmentRows = (attachments.rows ?? []) as unknown as AttachmentRow[];
+    const attachmentRows = (attachments.rows ??
+      []) as unknown as AttachmentRow[];
     const contentIds = [
       ...new Set([
         ...windowed.map((n) => n.body_content_id),
@@ -364,26 +399,38 @@ export default async ({ input, ctx }: HandlerArgs) => {
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.content_item',
-            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            entity: "core.content_item",
+            where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,
           })
         : { rows: [] };
 
     const contentById = new Map(
-      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [c.content_id, c]),
+      ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
+        c.content_id,
+        c,
+      ])
     );
-    const attByNote = attachmentsBySubject('knowledge.note', attachmentRows, contentById);
-    const nameByNotebook = new Map(books.map((nb) => [nb.notebook_id, nb.name]));
+    const attByNote = attachmentsBySubject(
+      "knowledge.note",
+      attachmentRows,
+      contentById
+    );
+    const nameByNotebook = new Map(
+      books.map((nb) => [nb.notebook_id, nb.name])
+    );
     const notebooksByNote = new Map<string, string[]>();
     for (const p of (placements.rows ?? []) as unknown as PlacementRow[]) {
-      if (!notebooksByNote.has(p.target_id)) notebooksByNote.set(p.target_id, []);
+      if (!notebooksByNote.has(p.target_id))
+        notebooksByNote.set(p.target_id, []);
       notebooksByNote.get(p.target_id)!.push(p.collection_id);
     }
     const rows = windowed
       .map((n) => {
         const notebookIds = notebooksByNote.get(n.note_id) ?? [];
-        const decoded = decodeBody(contentById.get(n.body_content_id ?? '')?.content_uri);
+        const decoded = decodeBody(
+          contentById.get(n.body_content_id ?? "")?.content_uri
+        );
         return {
           note_id: n.note_id,
           title: n.title,
@@ -394,7 +441,9 @@ export default async ({ input, ctx }: HandlerArgs) => {
           preview: previewOf(decoded),
           check: checkOf(decoded),
           notebook_ids: notebookIds,
-          notebook_names: notebookIds.map((id) => nameByNotebook.get(id) ?? 'Notebook'),
+          notebook_names: notebookIds.map(
+            (id) => nameByNotebook.get(id) ?? "Notebook"
+          ),
           attachments: attByNote.get(n.note_id) ?? [],
           references: referencesByNote.get(n.note_id) ?? [],
           tags: tagsByNote.get(n.note_id) ?? [],
@@ -403,15 +452,20 @@ export default async ({ input, ctx }: HandlerArgs) => {
       .toSorted(
         (a, b) =>
           (b.pinned ?? 0) - (a.pinned ?? 0) ||
-          String(b.updated_at).localeCompare(String(a.updated_at)),
+          String(b.updated_at).localeCompare(String(a.updated_at))
       );
 
     // A full window means there may be older notes beyond it — the UI
     // offers "Show more" (a re-read with a larger window) and search.
-    const truncated = ((recent.rows ?? []) as unknown as NoteRow[]).length >= window;
+    const truncated =
+      ((recent.rows ?? []) as unknown as NoteRow[]).length >= window;
     return { notes: rows, notebooks: books, tags: allTags, truncated, window };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { notes: [], notebooks: [], vaultDenied: { code: e.code, message: e.message } };
+    return {
+      notes: [],
+      notebooks: [],
+      vaultDenied: { code: e.code, message: e.message },
+    };
   }
-};
+}

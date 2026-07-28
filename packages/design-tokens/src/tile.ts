@@ -5,13 +5,13 @@
 // CSS color-mix or RN-only color libraries) so light/dark, web/native all
 // produce the same pixels.
 
-export type TileVariant = 'solid' | 'gradient' | 'glassy' | 'flat';
+export type TileVariant = "solid" | "gradient" | "glassy" | "flat";
 
 export const TILE_VARIANTS = [
-  'solid',
-  'gradient',
-  'glassy',
-  'flat',
+  "solid",
+  "gradient",
+  "glassy",
+  "flat",
 ] as const satisfies readonly TileVariant[];
 
 export interface TileFinish {
@@ -29,25 +29,25 @@ export interface TileFinish {
 
 export function tileFinish(color: string, variant: TileVariant): TileFinish {
   switch (variant) {
-    case 'gradient':
+    case "gradient":
       // Top→bottom hue darkening — premium feel without an extra gradient
       // texture. -36 on each channel matches the design system's reference.
       return {
         background: `linear-gradient(180deg, ${color} 0%, ${shade(color, -36)} 100%)`,
         backgroundColor: color,
         boxShadow:
-          'inset 0 1px 0 rgba(255,255,255,.22), inset 0 0 0 0.5px rgba(255,255,255,.18), inset 0 -1px 0 rgba(0,0,0,.2), 0 6px 16px rgba(20,24,32,.10)',
-        glyphColor: '#ffffff',
+          "inset 0 1px 0 rgba(255,255,255,.22), inset 0 0 0 0.5px rgba(255,255,255,.18), inset 0 -1px 0 rgba(0,0,0,.2), 0 6px 16px rgba(20,24,32,.10)",
+        glyphColor: "#ffffff",
       };
-    case 'glassy':
+    case "glassy":
       return {
         background: withAlpha(color, 0.22),
-        backdropFilter: 'blur(14px) saturate(140%)',
+        backdropFilter: "blur(14px) saturate(140%)",
         backgroundColor: withAlpha(color, 0.22),
         boxShadow: `inset 0 0 0 0.5px ${withAlpha(color, 0.35)}, inset 0 1px 0 rgba(255,255,255,.30)`,
         glyphColor: color,
       };
-    case 'flat':
+    case "flat":
       return {
         background: withAlpha(color, 0.14),
         backgroundColor: withAlpha(color, 0.14),
@@ -59,19 +59,22 @@ export function tileFinish(color: string, variant: TileVariant): TileFinish {
         background: color,
         backgroundColor: color,
         boxShadow:
-          'inset 0 1px 0 rgba(255,255,255,.18), inset 0 -1px 0 rgba(0,0,0,.18), 0 1px 2px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.06)',
-        glyphColor: '#ffffff',
+          "inset 0 1px 0 rgba(255,255,255,.18), inset 0 -1px 0 rgba(0,0,0,.18), 0 1px 2px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.06)",
+        glyphColor: "#ffffff",
       };
   }
 }
 
-const HEX_RE = /^#([0-9a-f]{6})$/i;
+const HEX_RE = /^#(?<digits>[0-9a-f]{6})$/iu;
 
 function parseHex(hex: string): [number, number, number] | undefined {
-  const m = HEX_RE.exec(hex);
-  if (!m) return undefined;
-  const v = m[1] as string;
-  return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)];
+  const v = HEX_RE.exec(hex)?.groups?.digits;
+  if (v === undefined) return undefined;
+  return [
+    parseInt(v.slice(0, 2), 16),
+    parseInt(v.slice(2, 4), 16),
+    parseInt(v.slice(4, 6), 16),
+  ];
 }
 
 function withAlpha(hex: string, alpha: number): string {
@@ -84,6 +87,6 @@ function shade(hex: string, amount: number): string {
   const rgb = parseHex(hex);
   if (!rgb) return hex;
   const adj = (n: number): number => Math.max(0, Math.min(255, n + amount));
-  const out = rgb.map((n) => adj(n).toString(16).padStart(2, '0')).join('');
+  const out = rgb.map((n) => adj(n).toString(16).padStart(2, "0")).join("");
   return `#${out}`;
 }

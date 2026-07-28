@@ -4,4 +4,4 @@
  * VERSION. Bump this when either the worker protocol or shell cache buckets
  * need a hard refresh.
  */
-export const SERVICE_WORKER_VERSION = 'v11';
+export const SERVICE_WORKER_VERSION = "v11";

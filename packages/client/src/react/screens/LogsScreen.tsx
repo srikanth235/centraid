@@ -1,7 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { cx } from '../ui/cx.js';
-import styles from './LogsScreen.module.css';
-import controlsCss from '../styles/controls.module.css';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type JSX,
+} from "react";
+
+import { cx } from "../ui/cx.js";
+
+import controlsCss from "../styles/controls.module.css";
+import styles from "./LogsScreen.module.css";
 
 // Gateway → Logs: the gateway's realtime diagnostics surface. Streams
 // the gateway's log lines (SSE, replay-then-live) so a user whose
@@ -11,7 +20,7 @@ import controlsCss from '../styles/controls.module.css';
 // this file owns the view + stream lifecycle (reconnect, follow, filter).
 // Mounted from the Gateway page's Logs tab (GatewayScreen.tsx).
 
-export type LogLevelDTO = 'info' | 'warn' | 'error';
+export type LogLevelDTO = "info" | "warn" | "error";
 
 export interface LogEntryDTO {
   /** Monotonic gateway sequence — the resume/dedupe cursor. */
@@ -31,7 +40,7 @@ export interface LogsBridgeProps {
   streamLogs: (
     onEntry: (entry: LogEntryDTO) => void,
     signal: AbortSignal,
-    after?: number,
+    after?: number
   ) => Promise<void>;
   /**
    * A cross-link jump into a focused search — from a failing component in
@@ -46,11 +55,12 @@ export interface LogsBridgeProps {
    * screen usable standalone, e.g. in a future non-desktop host).
    */
   onExportDiagnostics?: () => Promise<
-    { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+    | { ok: true; path: string }
+    | { ok: false; canceled?: boolean; error?: string }
   >;
 }
 
-type StreamStatus = 'connecting' | 'live' | 'reconnecting';
+type StreamStatus = "connecting" | "live" | "reconnecting";
 
 /** Client-side cap — matches the gateway ring so memory stays bounded. */
 const MAX_ENTRIES = 2000;
@@ -58,30 +68,31 @@ const RECONNECT_MS = 2000;
 /** "At the bottom" slack for the follow toggle, in px. */
 const FOLLOW_SLACK = 48;
 
-type LevelFilter = 'all' | 'warn' | 'error';
+type LevelFilter = "all" | "warn" | "error";
 
 const FILTERS: readonly { id: LevelFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'warn', label: 'Warnings' },
-  { id: 'error', label: 'Errors' },
+  { id: "all", label: "All" },
+  { id: "warn", label: "Warnings" },
+  { id: "error", label: "Errors" },
 ];
 
 function matchesFilter(entry: LogEntryDTO, filter: LevelFilter): boolean {
-  if (filter === 'all') return true;
-  if (filter === 'warn') return entry.level === 'warn' || entry.level === 'error';
-  return entry.level === 'error';
+  if (filter === "all") return true;
+  if (filter === "warn")
+    return entry.level === "warn" || entry.level === "error";
+  return entry.level === "error";
 }
 
 function timeLabel(ts: number): string {
   const d = new Date(ts);
-  const pad = (n: number): string => String(n).padStart(2, '0');
+  const pad = (n: number): string => String(n).padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 const STATUS_LABEL: Record<StreamStatus, string> = {
-  connecting: 'Connecting…',
-  live: 'Live',
-  reconnecting: 'Reconnecting…',
+  connecting: "Connecting…",
+  live: "Live",
+  reconnecting: "Reconnecting…",
 };
 
 export default function LogsScreen({
@@ -90,24 +101,30 @@ export default function LogsScreen({
   onExportDiagnostics,
 }: LogsBridgeProps): JSX.Element {
   const [entries, setEntries] = useState<LogEntryDTO[]>([]);
-  const [status, setStatus] = useState<StreamStatus>('connecting');
-  const [filter, setFilter] = useState<LevelFilter>('all');
+  const [status, setStatus] = useState<StreamStatus>("connecting");
+  const [filter, setFilter] = useState<LevelFilter>("all");
   // The search box is a controlled field whose baseline is the incoming jump
   // request: the typed value only wins while it belongs to the CURRENT nonce.
   // A fresh jump (new nonce) therefore re-applies its text even when the text
   // is unchanged, without an effect that would paint the stale value first.
-  const [typed, setTyped] = useState<{ nonce: number | undefined; text: string } | null>(null);
+  const [typed, setTyped] = useState<{
+    nonce: number | undefined;
+    text: string;
+  } | null>(null);
   const query =
-    typed !== null && typed.nonce === focusQuery?.nonce ? typed.text : (focusQuery?.text ?? '');
-  const setQuery = (text: string): void => setTyped({ nonce: focusQuery?.nonce, text });
+    typed !== null && typed.nonce === focusQuery?.nonce
+      ? typed.text
+      : (focusQuery?.text ?? "");
+  const setQuery = (text: string): void =>
+    setTyped({ nonce: focusQuery?.nonce, text });
   const [follow, setFollow] = useState(true);
   const [copied, setCopied] = useState(false);
   const [exportState, setExportState] = useState<
-    | { kind: 'idle' }
-    | { kind: 'pending' }
-    | { kind: 'done'; path: string }
-    | { kind: 'error'; message: string }
-  >({ kind: 'idle' });
+    | { kind: "idle" }
+    | { kind: "pending" }
+    | { kind: "done"; path: string }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
 
   // The stream's resume cursor + the follow flag live in refs so the
   // long-lived stream effect never restarts on render-state changes.
@@ -138,7 +155,9 @@ export default function LogsScreen({
       lastSeqRef.current = entry.seq;
       setEntries((prev) => {
         const next =
-          prev.length >= MAX_ENTRIES ? prev.slice(prev.length - MAX_ENTRIES + 1) : [...prev];
+          prev.length >= MAX_ENTRIES
+            ? prev.slice(prev.length - MAX_ENTRIES + 1)
+            : [...prev];
         next.push(entry);
         return next;
       });
@@ -146,24 +165,24 @@ export default function LogsScreen({
 
     const connect = (): void => {
       if (signal.aborted) return;
-      setStatus((s) => (s === 'connecting' ? s : 'reconnecting'));
+      setStatus((s) => (s === "connecting" ? s : "reconnecting"));
       void streamLogs(
         (entry) => {
           // First delivered line = the stream is live.
-          setStatus('live');
+          setStatus("live");
           onEntry(entry);
         },
         signal,
-        lastSeqRef.current || undefined,
+        lastSeqRef.current || undefined
       )
         .catch(() => undefined)
         .then(() => {
           if (signal.aborted) return;
-          setStatus('reconnecting');
+          setStatus("reconnecting");
           retryTimer = setTimeout(connect, RECONNECT_MS);
         });
       // A silent-but-healthy stream (no lines yet) still counts as live.
-      setStatus((s) => (s === 'connecting' ? 'live' : s));
+      setStatus((s) => (s === "connecting" ? "live" : s));
     };
 
     connect();
@@ -176,7 +195,9 @@ export default function LogsScreen({
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return entries.filter(
-      (e) => matchesFilter(e, filter) && (q === '' || e.message.toLowerCase().includes(q)),
+      (e) =>
+        matchesFilter(e, filter) &&
+        (q === "" || e.message.toLowerCase().includes(q))
     );
   }, [entries, filter, query]);
 
@@ -189,7 +210,8 @@ export default function LogsScreen({
   const onScroll = useCallback((): void => {
     const el = scrollRef.current;
     if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_SLACK;
+    const atBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= FOLLOW_SLACK;
     setFollow(atBottom);
   }, []);
 
@@ -201,36 +223,45 @@ export default function LogsScreen({
 
   const copyVisible = (): void => {
     const text = visible
-      .map((e) => `${new Date(e.ts).toISOString()} [${e.level.toUpperCase()}] ${e.message}`)
-      .join('\n');
+      .map(
+        (e) =>
+          `${new Date(e.ts).toISOString()} [${e.level.toUpperCase()}] ${e.message}`
+      )
+      .join("\n");
     void navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
   };
 
-  const errorCount = useMemo(() => entries.filter((e) => e.level === 'error').length, [entries]);
+  const errorCount = useMemo(
+    () => entries.filter((e) => e.level === "error").length,
+    [entries]
+  );
 
   const exportDiagnostics = async (): Promise<void> => {
     if (!onExportDiagnostics) return;
-    setExportState({ kind: 'pending' });
+    setExportState({ kind: "pending" });
     try {
       const result = await onExportDiagnostics();
       if (!mountedRef.current) return;
       if (result.ok) {
-        setExportState({ kind: 'done', path: result.path });
+        setExportState({ kind: "done", path: result.path });
         setTimeout(() => {
-          if (mountedRef.current) setExportState({ kind: 'idle' });
+          if (mountedRef.current) setExportState({ kind: "idle" });
         }, 4000);
       } else if (result.canceled) {
-        setExportState({ kind: 'idle' });
+        setExportState({ kind: "idle" });
       } else {
-        setExportState({ kind: 'error', message: result.error ?? 'Export failed.' });
+        setExportState({
+          kind: "error",
+          message: result.error ?? "Export failed.",
+        });
       }
     } catch (err) {
       if (mountedRef.current) {
         setExportState({
-          kind: 'error',
+          kind: "error",
           message: err instanceof Error ? err.message : String(err),
         });
       }
@@ -245,15 +276,20 @@ export default function LogsScreen({
           {STATUS_LABEL[status]}
         </span>
         <span className={styles.countLabel}>
-          {entries.length} line{entries.length === 1 ? '' : 's'}
-          {errorCount > 0 ? ` · ${errorCount} error${errorCount === 1 ? '' : 's'}` : ''}
+          {entries.length} line{entries.length === 1 ? "" : "s"}
+          {errorCount > 0
+            ? ` · ${errorCount} error${errorCount === 1 ? "" : "s"}`
+            : ""}
         </span>
         <div className={styles.filters}>
           {FILTERS.map((f) => (
             <button
               key={f.id}
               type="button"
-              className={cx(controlsCss.chip, filter === f.id && styles.chipActive)}
+              className={cx(
+                controlsCss.chip,
+                filter === f.id && styles.chipActive
+              )}
               onClick={() => setFilter(f.id)}
             >
               {f.label}
@@ -273,7 +309,7 @@ export default function LogsScreen({
           onClick={copyVisible}
           disabled={visible.length === 0}
         >
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? "Copied" : "Copy"}
         </button>
         <button
           type="button"
@@ -288,17 +324,19 @@ export default function LogsScreen({
             type="button"
             className={controlsCss.chip}
             onClick={() => void exportDiagnostics()}
-            disabled={exportState.kind === 'pending'}
+            disabled={exportState.kind === "pending"}
           >
-            {exportState.kind === 'pending' ? 'Exporting…' : 'Export diagnostics'}
+            {exportState.kind === "pending"
+              ? "Exporting…"
+              : "Export diagnostics"}
           </button>
         ) : null}
       </div>
-      {exportState.kind === 'done' ? (
+      {exportState.kind === "done" ? (
         <div className={styles.exportStatus} data-tone="ok">
           Saved to {exportState.path}
         </div>
-      ) : exportState.kind === 'error' ? (
+      ) : exportState.kind === "error" ? (
         <div className={styles.exportStatus} data-tone="error">
           {exportState.message}
         </div>
@@ -309,8 +347,8 @@ export default function LogsScreen({
           {visible.length === 0 ? (
             <div className={styles.empty}>
               {entries.length === 0
-                ? 'No log lines yet — gateway activity shows up here as it happens.'
-                : 'No lines match the current filter.'}
+                ? "No log lines yet — gateway activity shows up here as it happens."
+                : "No lines match the current filter."}
             </div>
           ) : (
             visible.map((e) => (
@@ -325,7 +363,11 @@ export default function LogsScreen({
           )}
         </div>
         {!follow && visible.length > 0 ? (
-          <button type="button" className={styles.jumpBtn} onClick={jumpToLatest}>
+          <button
+            type="button"
+            className={styles.jumpBtn}
+            onClick={jumpToLatest}
+          >
             Jump to latest
           </button>
         ) : null}

@@ -1,9 +1,11 @@
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { promises as fs } from 'node:fs';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import path from 'node:path';
-import { Readable } from 'node:stream';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
+import { Readable } from "node:stream";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import {
   generateWebhookId,
   generateWebhookSecret,
@@ -14,191 +16,220 @@ import {
   verifyWebhookSecret,
   WEBHOOK_ROUTE_PREFIX,
   type WebhookFileMapEntry,
-} from './webhook.js';
+  type WebhookIngressFn,
+} from "./webhook.js";
 
 function manifest(triggers: unknown[]): string {
   return (
     JSON.stringify(
       {
-        name: 'Hook',
-        version: '0.1.0',
+        name: "Hook",
+        version: "0.1.0",
         enabled: true,
-        prompt: 'do the thing',
+        prompt: "do the thing",
         triggers,
         requires: {},
         history: { keep: { count: 100 } },
-        generated: { by: 'centraid-builder', at: '2026-01-01T00:00:00.000Z' },
+        generated: { by: "centraid-builder", at: "2026-01-01T00:00:00.000Z" },
       },
       null,
-      2,
-    ) + '\n'
+      2
+    ) + "\n"
   );
 }
 
-describe('provisionPendingWebhooksInFiles', () => {
-  it('mints id + secret for a pending webhook and rewrites the trigger', () => {
+describe(provisionPendingWebhooksInFiles, () => {
+  it("mints id + secret for a pending webhook and rewrites the trigger", () => {
     const files: WebhookFileMapEntry[] = [
-      { path: 'app.json', content: '{}' },
+      { path: "app.json", content: "{}" },
       {
-        path: 'automations/hook/automation.json',
-        content: manifest([{ kind: 'webhook', pending: true }]),
+        path: "automations/hook/automation.json",
+        content: manifest([{ kind: "webhook", pending: true }]),
       },
-      { path: 'automations/hook/handler.js', content: 'export default async () => ({});' },
+      {
+        path: "automations/hook/handler.js",
+        content: "export default async () => ({});",
+      },
     ];
-    const { files: out, minted } = provisionPendingWebhooksInFiles(files, 'auto.hook');
-    expect(minted.length).toBe(1);
-    expect(minted[0]!.ownerApp).toBe('auto.hook');
-    expect(minted[0]!.automationId).toBe('hook');
-    expect(minted[0]!.secret).toMatch(/^[0-9a-f]{48}$/);
+    const { files: out, minted } = provisionPendingWebhooksInFiles(
+      files,
+      "auto.hook"
+    );
+    expect(minted).toHaveLength(1);
+    expect(minted[0]!.ownerApp).toBe("auto.hook");
+    expect(minted[0]!.automationId).toBe("hook");
+    expect(minted[0]!.secret).toMatch(/^[0-9a-f]{48}$/u);
 
     const mf = JSON.parse(
-      out.find((f) => f.path === 'automations/hook/automation.json')!.content,
-    ) as { triggers: { kind: string; id: string; secretHash: string; pending?: boolean }[] };
-    expect(mf.triggers[0]!.kind).toBe('webhook');
+      out.find((f) => f.path === "automations/hook/automation.json")!.content
+    ) as {
+      triggers: {
+        kind: string;
+        id: string;
+        secretHash: string;
+        pending?: boolean;
+      }[];
+    };
+    expect(mf.triggers[0]!.kind).toBe("webhook");
     expect(mf.triggers[0]!.id).toBe(minted[0]!.webhookId);
-    expect(mf.triggers[0]!.pending).toBe(undefined);
+    expect(mf.triggers[0]!.pending).toBeUndefined();
     // The manifest stores only the hash; the plaintext verifies against it.
-    expect(verifyWebhookSecret(minted[0]!.secret, mf.triggers[0]!.secretHash)).toBeTruthy();
+    expect(
+      verifyWebhookSecret(minted[0]!.secret, mf.triggers[0]!.secretHash)
+    ).toBeTruthy();
     // Non-manifest files pass through untouched.
-    expect(out.find((f) => f.path === 'app.json')!.content).toBe('{}');
+    expect(out.find((f) => f.path === "app.json")!.content).toBe("{}");
   });
 
-  it('is a no-op when there is no pending webhook', () => {
+  it("is a no-op when there is no pending webhook", () => {
     const files: WebhookFileMapEntry[] = [
       {
-        path: 'automations/cron/automation.json',
-        content: manifest([{ kind: 'cron', expr: '0 9 * * *' }]),
+        path: "automations/cron/automation.json",
+        content: manifest([{ kind: "cron", expr: "0 9 * * *" }]),
       },
     ];
-    const { files: out, minted } = provisionPendingWebhooksInFiles(files, 'a');
-    expect(minted).toEqual([]);
+    const { files: out, minted } = provisionPendingWebhooksInFiles(files, "a");
+    expect(minted).toStrictEqual([]);
     expect(out[0]!.content).toBe(files[0]!.content);
   });
 
-  it('passes through an unparseable manifest', () => {
+  it("passes through an unparseable manifest", () => {
     const files: WebhookFileMapEntry[] = [
-      { path: 'automations/bad/automation.json', content: '{ not json' },
+      { path: "automations/bad/automation.json", content: "{ not json" },
     ];
-    const { minted, files: out } = provisionPendingWebhooksInFiles(files, 'a');
-    expect(minted).toEqual([]);
-    expect(out[0]!.content).toBe('{ not json');
+    const { minted, files: out } = provisionPendingWebhooksInFiles(files, "a");
+    expect(minted).toStrictEqual([]);
+    expect(out[0]!.content).toBe("{ not json");
   });
 });
 
-describe('rotateWebhookInFiles', () => {
-  it('mints a fresh secret over the SAME webhook id and rewrites only the hash', () => {
+describe(rotateWebhookInFiles, () => {
+  it("mints a fresh secret over the SAME webhook id and rewrites only the hash", () => {
     const files: WebhookFileMapEntry[] = [
-      { path: 'app.json', content: '{}' },
+      { path: "app.json", content: "{}" },
       {
-        path: 'automations/hook/automation.json',
-        content: manifest([{ kind: 'webhook', id: 'abc123', secretHash: 'stale-hash' }]),
+        path: "automations/hook/automation.json",
+        content: manifest([
+          { kind: "webhook", id: "abc123", secretHash: "stale-hash" },
+        ]),
       },
-      { path: 'automations/hook/handler.js', content: 'export default async () => ({});' },
+      {
+        path: "automations/hook/handler.js",
+        content: "export default async () => ({});",
+      },
     ];
-    const { changed, rotated } = rotateWebhookInFiles(files, 'hook');
+    const { changed, rotated } = rotateWebhookInFiles(files, "hook");
     expect(rotated).toBeTruthy();
-    expect(rotated!.webhookId).toBe('abc123'); // unchanged — any configured caller URL survives.
-    expect(rotated!.secret).toMatch(/^[0-9a-f]{48}$/);
-    expect(changed.length).toBe(1);
-    expect(changed[0]!.path).toBe('automations/hook/automation.json');
+    expect(rotated!.webhookId).toBe("abc123"); // unchanged — any configured caller URL survives.
+    expect(rotated!.secret).toMatch(/^[0-9a-f]{48}$/u);
+    expect(changed).toHaveLength(1);
+    expect(changed[0]!.path).toBe("automations/hook/automation.json");
 
     const mf = JSON.parse(changed[0]!.content) as {
       triggers: { kind: string; id: string; secretHash: string }[];
     };
-    expect(mf.triggers[0]!.id).toBe('abc123');
-    expect(mf.triggers[0]!.secretHash).not.toBe('stale-hash');
-    expect(verifyWebhookSecret(rotated!.secret, mf.triggers[0]!.secretHash)).toBeTruthy();
+    expect(mf.triggers[0]!.id).toBe("abc123");
+    expect(mf.triggers[0]!.secretHash).not.toBe("stale-hash");
+    expect(
+      verifyWebhookSecret(rotated!.secret, mf.triggers[0]!.secretHash)
+    ).toBeTruthy();
     // The old secret (whatever it was) no longer verifies against the new hash.
-    expect(verifyWebhookSecret('whatever-the-old-plaintext-was', mf.triggers[0]!.secretHash)).toBe(
-      false,
-    );
+    expect(
+      verifyWebhookSecret(
+        "whatever-the-old-plaintext-was",
+        mf.triggers[0]!.secretHash
+      )
+    ).toBe(false);
   });
 
-  it('is a no-op when the automation does not exist', () => {
+  it("is a no-op when the automation does not exist", () => {
     const files: WebhookFileMapEntry[] = [
       {
-        path: 'automations/other/automation.json',
-        content: manifest([{ kind: 'webhook', id: 'x', secretHash: 'h' }]),
+        path: "automations/other/automation.json",
+        content: manifest([{ kind: "webhook", id: "x", secretHash: "h" }]),
       },
     ];
-    const { changed, rotated } = rotateWebhookInFiles(files, 'missing');
-    expect(changed).toEqual([]);
+    const { changed, rotated } = rotateWebhookInFiles(files, "missing");
+    expect(changed).toStrictEqual([]);
     expect(rotated).toBeUndefined();
   });
 
-  it('is a no-op for an automation with no webhook trigger', () => {
+  it("is a no-op for an automation with no webhook trigger", () => {
     const files: WebhookFileMapEntry[] = [
       {
-        path: 'automations/cron/automation.json',
-        content: manifest([{ kind: 'cron', expr: '0 9 * * *' }]),
+        path: "automations/cron/automation.json",
+        content: manifest([{ kind: "cron", expr: "0 9 * * *" }]),
       },
     ];
-    const { changed, rotated } = rotateWebhookInFiles(files, 'cron');
-    expect(changed).toEqual([]);
+    const { changed, rotated } = rotateWebhookInFiles(files, "cron");
+    expect(changed).toStrictEqual([]);
     expect(rotated).toBeUndefined();
   });
 
-  it('is a no-op for a still-pending (never minted) webhook trigger', () => {
+  it("is a no-op for a still-pending (never minted) webhook trigger", () => {
     const files: WebhookFileMapEntry[] = [
       {
-        path: 'automations/hook/automation.json',
-        content: manifest([{ kind: 'webhook', pending: true }]),
+        path: "automations/hook/automation.json",
+        content: manifest([{ kind: "webhook", pending: true }]),
       },
     ];
-    const { changed, rotated } = rotateWebhookInFiles(files, 'hook');
-    expect(changed).toEqual([]);
+    const { changed, rotated } = rotateWebhookInFiles(files, "hook");
+    expect(changed).toStrictEqual([]);
     expect(rotated).toBeUndefined();
   });
 
-  it('passes through an unparseable manifest', () => {
+  it("passes through an unparseable manifest", () => {
     const files: WebhookFileMapEntry[] = [
-      { path: 'automations/bad/automation.json', content: '{ not json' },
+      { path: "automations/bad/automation.json", content: "{ not json" },
     ];
-    const { changed, rotated } = rotateWebhookInFiles(files, 'bad');
-    expect(changed).toEqual([]);
+    const { changed, rotated } = rotateWebhookInFiles(files, "bad");
+    expect(changed).toStrictEqual([]);
     expect(rotated).toBeUndefined();
   });
 });
 
-describe('webhook secret helpers', () => {
-  it('mints id + secret and verifies only the matching plaintext', () => {
+describe("webhook secret helpers", () => {
+  it("mints id + secret and verifies only the matching plaintext", () => {
     const id = generateWebhookId();
     const secret = generateWebhookSecret();
-    expect(id).toMatch(/^[0-9a-f]{24}$/);
-    expect(secret).toMatch(/^[0-9a-f]{48}$/);
+    expect(id).toMatch(/^[0-9a-f]{24}$/u);
+    expect(secret).toMatch(/^[0-9a-f]{48}$/u);
     const hash = hashWebhookSecret(secret);
     expect(verifyWebhookSecret(secret, hash)).toBe(true);
-    expect(verifyWebhookSecret('wrong', hash)).toBe(false);
+    expect(verifyWebhookSecret("wrong", hash)).toBe(false);
     // Length / empty-hash mismatches must fail closed without throwing.
-    expect(verifyWebhookSecret(secret, '')).toBe(false);
-    expect(verifyWebhookSecret(secret, 'ab')).toBe(false);
+    expect(verifyWebhookSecret(secret, "")).toBe(false);
+    expect(verifyWebhookSecret(secret, "ab")).toBe(false);
   });
 });
 
-describe('makeWebhookRouteHandler', () => {
+describe(makeWebhookRouteHandler, () => {
   let appsDir: string;
   const secret = generateWebhookSecret();
-  const webhookId = 'hookid1';
+  const webhookId = "hookid1";
   const secretHash = hashWebhookSecret(secret);
 
   beforeEach(async () => {
-    appsDir = await tempDir('centraid-webhook-route-');
-    const dir = path.join(appsDir, 'auto.hook', 'automations', 'hook');
+    appsDir = await tempDir("centraid-webhook-route-");
+    const dir = path.join(appsDir, "auto.hook", "automations", "hook");
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(
-      path.join(dir, 'automation.json'),
+      path.join(dir, "automation.json"),
       JSON.stringify({
-        name: 'Hook',
-        version: '0.1.0',
+        name: "Hook",
+        version: "0.1.0",
         enabled: true,
-        prompt: 'go',
-        triggers: [{ kind: 'webhook', id: webhookId, secretHash }],
+        prompt: "go",
+        triggers: [{ kind: "webhook", id: webhookId, secretHash }],
         requires: {},
         history: { keep: { count: 10 } },
-        generated: { by: 'test', at: '2026-01-01T00:00:00.000Z' },
-      }),
+        generated: { by: "test", at: "2026-01-01T00:00:00.000Z" },
+      })
     );
-    await fs.writeFile(path.join(dir, 'handler.js'), 'export default async () => ({});');
+    await fs.writeFile(
+      path.join(dir, "handler.js"),
+      "export default async () => ({});"
+    );
   });
 
   afterEach(async () => {
@@ -211,11 +242,13 @@ describe('makeWebhookRouteHandler', () => {
     headers?: Record<string, string>;
     body?: string | Buffer;
   }): IncomingMessage {
-    const body = over.body ?? '';
-    const stream = Readable.from([typeof body === 'string' ? Buffer.from(body) : body]);
+    const body = over.body ?? "";
+    const stream = Readable.from([
+      typeof body === "string" ? Buffer.from(body) : body,
+    ]);
     return Object.assign(stream, {
       url: over.url ?? `${WEBHOOK_ROUTE_PREFIX}/${webhookId}`,
-      method: over.method ?? 'POST',
+      method: over.method ?? "POST",
       headers: over.headers ?? { authorization: `Bearer ${secret}` },
     }) as IncomingMessage;
   }
@@ -232,165 +265,208 @@ describe('makeWebhookRouteHandler', () => {
       },
       end(chunk?: unknown) {
         if (chunk !== undefined && chunk !== null) {
-          res.bodyText = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+          res.bodyText = Buffer.isBuffer(chunk)
+            ? chunk.toString("utf8")
+            : String(chunk);
         }
         return res;
       },
     };
-    return res as unknown as ServerResponse & { status?: number; bodyText?: string };
+    return res as unknown as ServerResponse & {
+      status?: number;
+      bodyText?: string;
+    };
   }
 
-  it('returns false for non-webhook URLs', async () => {
+  it("returns false for non-webhook URLs", async () => {
     const handler = makeWebhookRouteHandler({
       appsDir,
-      ingress: vi.fn(),
+      ingress: vi.fn<WebhookIngressFn>(),
     });
     const res = mockRes();
-    expect(await handler(mockReq({ url: '/other' }), res)).toBe(false);
+    await expect(handler(mockReq({ url: "/other" }), res)).resolves.toBe(false);
   });
 
-  it('rejects non-POST and unknown slugs', async () => {
-    const handler = makeWebhookRouteHandler({ appsDir, ingress: vi.fn() });
+  it("rejects non-POST and unknown slugs", async () => {
+    const handler = makeWebhookRouteHandler({
+      appsDir,
+      ingress: vi.fn<WebhookIngressFn>(),
+    });
     const getRes = mockRes();
-    expect(await handler(mockReq({ method: 'GET' }), getRes)).toBe(true);
+    await expect(handler(mockReq({ method: "GET" }), getRes)).resolves.toBe(
+      true
+    );
     expect(getRes.status).toBe(405);
 
     const badRes = mockRes();
-    expect(await handler(mockReq({ url: `${WEBHOOK_ROUTE_PREFIX}/!!!` }), badRes)).toBe(true);
+    await expect(
+      handler(mockReq({ url: `${WEBHOOK_ROUTE_PREFIX}/!!!` }), badRes)
+    ).resolves.toBe(true);
     expect(badRes.status).toBe(404);
   });
 
-  it('rejects missing secret, unknown id, and accepts valid durable ingress', async () => {
-    const ingress = vi.fn().mockResolvedValue({ accepted: true });
+  it("rejects missing secret, unknown id, and accepts valid durable ingress", async () => {
+    const ingress = vi
+      .fn<WebhookIngressFn>()
+      .mockResolvedValue({ accepted: true });
     const handler = makeWebhookRouteHandler({ appsDir, ingress });
 
     const unauth = mockRes();
-    expect(await handler(mockReq({ headers: {} }), unauth)).toBe(true);
+    await expect(handler(mockReq({ headers: {} }), unauth)).resolves.toBe(true);
     expect(unauth.status).toBe(401);
 
     const missing = mockRes();
-    expect(await handler(mockReq({ url: `${WEBHOOK_ROUTE_PREFIX}/no-such-hook` }), missing)).toBe(
-      true,
-    );
+    await expect(
+      handler(mockReq({ url: `${WEBHOOK_ROUTE_PREFIX}/no-such-hook` }), missing)
+    ).resolves.toBe(true);
     expect(missing.status).toBe(404);
 
     const okRes = mockRes();
-    expect(
-      await handler(
+    await expect(
+      handler(
         mockReq({
           body: JSON.stringify({ hello: 1 }),
           headers: { authorization: `Bearer ${secret}` },
         }),
-        okRes,
-      ),
-    ).toBe(true);
+        okRes
+      )
+    ).resolves.toBe(true);
     expect(okRes.status).toBe(202);
     expect(ingress).toHaveBeenCalledWith(
       expect.objectContaining({
-        automationRef: 'auto.hook/hook',
+        automationRef: "auto.hook/hook",
         webhookId,
         body: { hello: 1 },
         deliveryId: expect.any(String),
         receivedAt: expect.any(Number),
-      }),
+      })
     );
-    expect(JSON.parse(okRes.bodyText ?? '{}')).toMatchObject({
+    expect(JSON.parse(okRes.bodyText ?? "{}")).toMatchObject({
       accepted: true,
       deliveryId: expect.any(String),
     });
   });
 
-  it('accepts the x-openclaw-webhook-secret header and non-JSON bodies', async () => {
-    const ingress = vi.fn().mockResolvedValue({ accepted: true });
+  it("accepts the x-openclaw-webhook-secret header and non-JSON bodies", async () => {
+    const ingress = vi
+      .fn<WebhookIngressFn>()
+      .mockResolvedValue({ accepted: true });
     const handler = makeWebhookRouteHandler({ appsDir, ingress });
     const res = mockRes();
-    expect(
-      await handler(
+    await expect(
+      handler(
         mockReq({
-          body: 'plain-text',
-          headers: { 'x-openclaw-webhook-secret': secret },
+          body: "plain-text",
+          headers: { "x-openclaw-webhook-secret": secret },
         }),
-        res,
-      ),
-    ).toBe(true);
+        res
+      )
+    ).resolves.toBe(true);
     expect(res.status).toBe(202);
     expect(ingress).toHaveBeenCalledWith(
       expect.objectContaining({
-        automationRef: 'auto.hook/hook',
+        automationRef: "auto.hook/hook",
         webhookId,
-        body: 'plain-text',
-      }),
+        body: "plain-text",
+      })
     );
   });
 
-  it('takes its delivery id only from per-delivery headers', async () => {
-    const ingress = vi.fn().mockResolvedValue({ accepted: true });
+  it("takes its delivery id only from per-delivery headers", async () => {
+    const ingress = vi
+      .fn<WebhookIngressFn>()
+      .mockResolvedValue({ accepted: true });
     const handler = makeWebhookRouteHandler({ appsDir, ingress });
 
-    for (const header of ['x-centraid-delivery-id', 'x-github-delivery']) {
-      expect(
-        await handler(
+    const verifyHeader = async (index: number): Promise<void> => {
+      const header = ["x-centraid-delivery-id", "x-github-delivery"][index];
+      if (!header) return;
+      await expect(
+        handler(
           mockReq({
-            body: '{}',
-            headers: { authorization: `Bearer ${secret}`, [header]: `delivery-${header}` },
+            body: "{}",
+            headers: {
+              authorization: `Bearer ${secret}`,
+              [header]: `delivery-${header}`,
+            },
           }),
-          mockRes(),
-        ),
-      ).toBe(true);
+          mockRes()
+        )
+      ).resolves.toBe(true);
       expect(ingress).toHaveBeenLastCalledWith(
-        expect.objectContaining({ deliveryId: `delivery-${header}` }),
+        expect.objectContaining({ deliveryId: `delivery-${header}` })
       );
-    }
+      return verifyHeader(index + 1);
+    };
+    await verifyHeader(0);
 
     // `x-request-id` is a transport correlation id; some proxies reuse one
     // across requests, and INSERT OR IGNORE would then swallow a real
     // delivery. Two posts sharing it must get two distinct ids.
-    const shared = { authorization: `Bearer ${secret}`, 'x-request-id': 'proxy-reused' };
-    expect(await handler(mockReq({ body: '{"n":1}', headers: shared }), mockRes())).toBe(true);
+    const shared = {
+      authorization: `Bearer ${secret}`,
+      "x-request-id": "proxy-reused",
+    };
+    await expect(
+      handler(mockReq({ body: '{"n":1}', headers: shared }), mockRes())
+    ).resolves.toBe(true);
     const first = ingress.mock.calls.at(-1)?.[0] as { deliveryId: string };
-    expect(await handler(mockReq({ body: '{"n":2}', headers: shared }), mockRes())).toBe(true);
+    await expect(
+      handler(mockReq({ body: '{"n":2}', headers: shared }), mockRes())
+    ).resolves.toBe(true);
     const second = ingress.mock.calls.at(-1)?.[0] as { deliveryId: string };
 
-    expect(first.deliveryId).not.toBe('proxy-reused');
+    expect(first.deliveryId).not.toBe("proxy-reused");
     expect(second.deliveryId).not.toBe(first.deliveryId);
   });
 
-  it('skips disabled automations and reports ingress failures', async () => {
-    const dir = path.join(appsDir, 'auto.hook', 'automations', 'hook');
-    const raw = JSON.parse(await fs.readFile(path.join(dir, 'automation.json'), 'utf8')) as {
+  it("skips disabled automations and reports ingress failures", async () => {
+    const dir = path.join(appsDir, "auto.hook", "automations", "hook");
+    const raw = JSON.parse(
+      await fs.readFile(path.join(dir, "automation.json"), "utf8")
+    ) as {
       enabled: boolean;
     };
     raw.enabled = false;
-    await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(raw));
+    await fs.writeFile(path.join(dir, "automation.json"), JSON.stringify(raw));
 
     const handler = makeWebhookRouteHandler({
       appsDir,
-      ingress: vi.fn().mockResolvedValue({ accepted: false, error: 'boom' }),
+      ingress: vi
+        .fn<WebhookIngressFn>()
+        .mockResolvedValue({ accepted: false, error: "boom" }),
     });
     const skipped = mockRes();
-    expect(await handler(mockReq({}), skipped)).toBe(true);
+    await expect(handler(mockReq({}), skipped)).resolves.toBe(true);
     expect(skipped.status).toBe(200);
-    expect(JSON.parse(skipped.bodyText ?? '{}')).toMatchObject({ skipped: 'automation disabled' });
+    expect(JSON.parse(skipped.bodyText ?? "{}")).toMatchObject({
+      skipped: "automation disabled",
+    });
 
     raw.enabled = true;
-    await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(raw));
+    await fs.writeFile(path.join(dir, "automation.json"), JSON.stringify(raw));
     const failHandler = makeWebhookRouteHandler({
       appsDir,
-      ingress: vi.fn().mockResolvedValue({ accepted: false, error: 'boom' }),
+      ingress: vi
+        .fn<WebhookIngressFn>()
+        .mockResolvedValue({ accepted: false, error: "boom" }),
     });
     const failed = mockRes();
-    expect(await handler(mockReq({}), failed)).toBe(true);
+    await expect(handler(mockReq({}), failed)).resolves.toBe(true);
     // Re-use failHandler for the actual ingress path.
     const failed2 = mockRes();
-    expect(await failHandler(mockReq({}), failed2)).toBe(true);
+    await expect(failHandler(mockReq({}), failed2)).resolves.toBe(true);
     expect(failed2.status).toBe(500);
   });
 
-  it('returns 413 when the body exceeds the cap', async () => {
-    const handler = makeWebhookRouteHandler({ appsDir, ingress: vi.fn() });
+  it("returns 413 when the body exceeds the cap", async () => {
+    const handler = makeWebhookRouteHandler({
+      appsDir,
+      ingress: vi.fn<WebhookIngressFn>(),
+    });
     const huge = Buffer.alloc(65 * 1024, 0x61);
     const res = mockRes();
-    expect(await handler(mockReq({ body: huge }), res)).toBe(true);
+    await expect(handler(mockReq({ body: huge }), res)).resolves.toBe(true);
     expect(res.status).toBe(413);
   });
 });

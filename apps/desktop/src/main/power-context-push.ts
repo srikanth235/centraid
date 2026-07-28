@@ -19,20 +19,24 @@
  * gateway-monitor.ts.
  */
 
-import { powerMonitor } from 'electron';
+import { powerMonitor } from "electron";
 
-const POWER_CONTEXT_PATH = '/centraid/_gateway/resource/power-context';
+const POWER_CONTEXT_PATH = "/centraid/_gateway/resource/power-context";
 const PUSH_TIMEOUT_MS = 3000;
 
-type ThermalPressure = 'nominal' | 'fair' | 'serious' | 'critical';
+type ThermalPressure = "nominal" | "fair" | "serious" | "critical";
 
 /** Map Electron's thermal state to the gateway's wire vocabulary; `unknown`/absent → null. */
 function currentThermalPressure(): ThermalPressure | null {
-  const get = (powerMonitor as { getCurrentThermalState?: () => string }).getCurrentThermalState;
-  if (typeof get !== 'function') return null;
+  const get = (powerMonitor as { getCurrentThermalState?: () => string })
+    .getCurrentThermalState;
+  if (typeof get !== "function") return null;
   try {
     const state = get.call(powerMonitor);
-    return state === 'nominal' || state === 'fair' || state === 'serious' || state === 'critical'
+    return state === "nominal" ||
+      state === "fair" ||
+      state === "serious" ||
+      state === "critical"
       ? state
       : null;
   } catch {
@@ -45,22 +49,28 @@ function currentThermalPressure(): ThermalPressure | null {
  * (gateway down, mid-boot, network) is swallowed — the gateway falls back to
  * its own boot probe and the next tick retries.
  */
-export async function pushPowerContext(baseUrl: string, token: string | undefined): Promise<void> {
+export async function pushPowerContext(
+  baseUrl: string,
+  token: string | undefined
+): Promise<void> {
   try {
-    const res = await fetch(new URL(POWER_CONTEXT_PATH, `${baseUrl}/`).toString(), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
-        onBattery: powerMonitor.isOnBatteryPower(),
-        batteryPercent: null,
-        charging: null,
-        thermalPressure: currentThermalPressure(),
-      }),
-      signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
-    });
+    const res = await fetch(
+      new URL(POWER_CONTEXT_PATH, `${baseUrl}/`).toString(),
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          onBattery: powerMonitor.isOnBatteryPower(),
+          batteryPercent: null,
+          charging: null,
+          thermalPressure: currentThermalPressure(),
+        }),
+        signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
+      }
+    );
     // Drain the body so the socket can be reused; status is advisory only.
     void res.body?.cancel().catch(() => {});
   } catch {
@@ -75,7 +85,7 @@ export async function pushPowerContext(baseUrl: string, token: string | undefine
  * other platforms is a harmless no-op.
  */
 export function registerPowerContextListeners(onChange: () => void): void {
-  powerMonitor.on('on-battery', onChange);
-  powerMonitor.on('on-ac', onChange);
-  powerMonitor.on('thermal-state-change', onChange);
+  powerMonitor.on("on-battery", onChange);
+  powerMonitor.on("on-ac", onChange);
+  powerMonitor.on("thermal-state-change", onChange);
 }

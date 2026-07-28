@@ -13,8 +13,9 @@
 // clustering (deterministic cluster ids — see below), so nothing here is
 // ever authored data an app or agent could disagree with.
 
-import type { DatabaseSync } from 'node:sqlite';
-import { hexHamming } from './similarity.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import { hexHamming } from "./similarity.js";
 
 /** Two phashes within this hamming distance cluster together (issue #352). */
 export const DUPLICATE_HAMMING_THRESHOLD = 6;
@@ -65,14 +66,14 @@ class UnionFind {
  */
 export function recomputeDuplicateClusters(
   vault: DatabaseSync,
-  options: { threshold?: number } = {},
+  options: { threshold?: number } = {}
 ): ClusterRecomputeResult {
   const threshold = options.threshold ?? DUPLICATE_HAMMING_THRESHOLD;
   const rows = vault
     .prepare(
       `SELECT p.asset_id AS asset_id, p.phash AS phash FROM media_asset_phash p
          JOIN media_media_asset a ON a.asset_id = p.asset_id
-        WHERE a.deleted_at IS NULL`,
+        WHERE a.deleted_at IS NULL`
     )
     .all() as { asset_id: string; phash: string }[];
 
@@ -81,7 +82,8 @@ export function recomputeDuplicateClusters(
   for (let i = 0; i < rows.length; i += 1) {
     for (let j = i + 1; j < rows.length; j += 1) {
       const d = hexHamming(rows[i]!.phash, rows[j]!.phash);
-      if (d !== null && d <= threshold) uf.union(rows[i]!.asset_id, rows[j]!.asset_id);
+      if (d !== null && d <= threshold)
+        uf.union(rows[i]!.asset_id, rows[j]!.asset_id);
     }
   }
   const groups = new Map<string, string[]>();
@@ -103,8 +105,10 @@ export function recomputeDuplicateClusters(
   // Wholesale reset first: a trashed asset, or one whose phash dropped out of
   // its old cluster, must not keep a stale cluster_id from a prior sweep —
   // this column has no independent lifecycle of its own (header comment).
-  vault.exec('UPDATE media_asset_phash SET cluster_id = NULL');
-  const update = vault.prepare('UPDATE media_asset_phash SET cluster_id = ? WHERE asset_id = ?');
+  vault.exec("UPDATE media_asset_phash SET cluster_id = NULL");
+  const update = vault.prepare(
+    "UPDATE media_asset_phash SET cluster_id = ? WHERE asset_id = ?"
+  );
   for (const [assetId, clusterId] of clusterOf) update.run(clusterId, assetId);
 
   return { clusters, clustered: clusterOf.size };

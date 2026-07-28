@@ -7,7 +7,7 @@
  * whole HTTP client to find out.
  */
 
-import type { CentraidGatewayDevice } from './gateway-client-devices.js';
+import type { CentraidGatewayDevice } from "./gateway-client-devices.js";
 
 /**
  * Is this row a tombstone rather than a live binding? Revoking a device no
@@ -16,5 +16,5 @@ import type { CentraidGatewayDevice } from './gateway-client-devices.js';
  * count, grouping, and action has to skip these.
  */
 export function isRevokedDevice(device: CentraidGatewayDevice): boolean {
-  return device.role === 'revoked';
+  return device.role === "revoked";
 }

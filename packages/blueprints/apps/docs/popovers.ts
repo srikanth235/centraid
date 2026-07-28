@@ -4,13 +4,17 @@
 // pattern as versions.ts): closes over data.folders (read-only) plus the
 // document-write functions logic.ts already owns, passed in rather than
 // re-implemented here.
-import { armConfirm, closePopover, h, openPopover, popItem } from './kit.ts';
-import type { AppData, DriveDoc } from './types.ts';
+import { armConfirm, closePopover, h, openPopover, popItem } from "./kit.ts";
+import type { AppData, DriveDoc } from "./types.ts";
 
 interface PopoverDeps {
   data: AppData;
   openQuick: (id: string) => void;
-  moveDocs: (ids: string[], folderId: string | null, name: string) => Promise<void>;
+  moveDocs: (
+    ids: string[],
+    folderId: string | null,
+    name: string
+  ) => Promise<void>;
   startRenameDoc: (doc: DriveDoc) => Promise<void> | void;
   toggleStar: (doc: DriveDoc) => Promise<void> | void;
   trashDoc: (doc: DriveDoc) => Promise<void> | void;
@@ -33,7 +37,7 @@ export function createPopovers({
     name: string,
     depth: number,
     ids: string[],
-    single: DriveDoc | null,
+    single: DriveDoc | null
   ): HTMLButtonElement {
     const btn = popItem(name, async () => {
       closePopover();
@@ -50,15 +54,19 @@ export function createPopovers({
     const single = docs.length === 1 ? docs[0]! : null;
     openPopover(anchor, (box) => {
       const head = h(
-        'p',
-        { class: 'kit-popover-head' },
-        single ? `Move “${single.title ?? 'document'}” to` : `Move ${docs.length} to`,
+        "p",
+        { class: "kit-popover-head" },
+        single
+          ? `Move “${single.title ?? "document"}” to`
+          : `Move ${docs.length} to`
       );
       const scroll = h(
-        'div',
-        { class: 'kit-popover-scroll' },
-        moveTargetBtn(null, 'Documents', 0, ids, single),
-        ...data.folders.map((f) => moveTargetBtn(f.folder_id, f.name, 1, ids, single)),
+        "div",
+        { class: "kit-popover-scroll" },
+        moveTargetBtn(null, "Documents", 0, ids, single),
+        ...data.folders.map((f) =>
+          moveTargetBtn(f.folder_id, f.name, 1, ids, single)
+        )
       );
       box.append(head, scroll);
     });
@@ -68,41 +76,41 @@ export function createPopovers({
     closePopover();
     openPopover(anchor, (box) => {
       box.append(
-        popItem('Open', () => {
+        popItem("Open", () => {
           closePopover();
           openQuick(doc.document_id);
         }),
         h(
-          'a',
+          "a",
           {
-            class: 'kit-popover-item',
-            role: 'menuitem',
+            class: "kit-popover-item",
+            role: "menuitem",
             href: doc.content_uri,
-            download: doc.title ?? 'file',
+            download: doc.title ?? "file",
             onclick: closePopover,
           },
-          'Download',
+          "Download"
         ),
-        popItem('Rename', () => {
+        popItem("Rename", () => {
           closePopover();
           startRenameDoc(doc);
         }),
-        popItem(doc.starred ? 'Remove star' : 'Star', () => {
+        popItem(doc.starred ? "Remove star" : "Star", () => {
           closePopover();
           toggleStar(doc);
         }),
-        popItem('Move to…', () => openMovePopover(anchor, [doc])),
-        h('div', { class: 'kit-popover-sep' }),
+        popItem("Move to…", () => openMovePopover(anchor, [doc])),
+        h("div", { class: "kit-popover-sep" }),
         popItem(
-          'Trash',
+          "Trash",
           async (e) => {
             const btn = e.currentTarget as HTMLElement;
-            if (!armConfirm(btn, { armedLabel: 'Trash — sure?' })) return;
+            if (!armConfirm(btn, { armedLabel: "Trash — sure?" })) return;
             closePopover();
             await trashDoc(doc);
           },
-          { danger: true },
-        ),
+          { danger: true }
+        )
       );
     });
   }

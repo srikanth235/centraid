@@ -108,7 +108,7 @@ export interface ActivityItem {
 /** Custody projection in owner words + the CSS tone key (format.js). */
 export interface CustodyMeta {
   label: string;
-  tone: 'ok' | 'warn' | 'danger';
+  tone: "ok" | "warn" | "danger";
 }
 
 /** The shape `queries/library.js` resolves to (page-side `refresh`). */

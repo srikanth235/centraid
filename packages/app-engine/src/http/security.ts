@@ -1,54 +1,54 @@
-import path from 'node:path';
+import path from "node:path";
 
 const STATIC_EXT_ALLOWLIST = new Set([
-  '.html',
-  '.htm',
-  '.css',
-  '.js',
-  '.jsx',
-  '.ts',
-  '.tsx',
-  '.mjs',
-  '.json',
-  '.svg',
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.webp',
-  '.gif',
-  '.ico',
-  '.woff',
-  '.woff2',
-  '.ttf',
-  '.otf',
-  '.map',
+  ".html",
+  ".htm",
+  ".css",
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".mjs",
+  ".json",
+  ".svg",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".ico",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".otf",
+  ".map",
 ]);
 
 const CONTENT_TYPES: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.htm': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.jsx': 'application/javascript; charset=utf-8',
+  ".html": "text/html; charset=utf-8",
+  ".htm": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".jsx": "application/javascript; charset=utf-8",
   // `.ts`/`.tsx` sources are compiled to JS at serve time (see
   // static-server.ts transformJsx / the whole-graph bundler), so they leave
   // this server as JavaScript — the browser never sees TypeScript syntax.
-  '.ts': 'application/javascript; charset=utf-8',
-  '.tsx': 'application/javascript; charset=utf-8',
-  '.mjs': 'application/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-  '.ico': 'image/x-icon',
-  '.woff': 'font/woff',
-  '.woff2': 'font/woff2',
-  '.ttf': 'font/ttf',
-  '.otf': 'font/otf',
-  '.map': 'application/json; charset=utf-8',
+  ".ts": "application/javascript; charset=utf-8",
+  ".tsx": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".map": "application/json; charset=utf-8",
 };
 
 /**
@@ -60,17 +60,28 @@ const CONTENT_TYPES: Record<string, string> = {
  * (app-bundle.ts) resolve through the SAME list without an import cycle.
  */
 export const SHARED_ASSET_FILES = new Set([
-  'kit.ts',
-  'kit.css',
-  'elements.js',
-  'edge-upload.js',
+  "kit.ts",
+  "kit.css",
+  "elements.js",
+  "elements-base.js",
+  "chart-utils.js",
+  "kit-avatar.js",
+  "kit-meter.js",
+  "kit-line-chart.js",
+  "kit-bar-chart.js",
+  "kit-skeleton.js",
+  "kit-toast.js",
+  "kit-mention-chip.js",
+  "kit-reference-strip.js",
+  "edge-upload.js",
+  "edge-upload-sha.js",
   // Shared chat-client core (issue #420) — vanilla ESM siblings kit.ts imports.
-  'turn-stream.js',
-  'assistant-rich.js',
-  'gfm.js',
-  'code-highlight.js',
-  'consent-cards.js',
-  'conversation-client.js',
+  "turn-stream.js",
+  "assistant-rich.js",
+  "gfm.js",
+  "code-highlight.js",
+  "consent-cards.js",
+  "conversation-client.js",
 ]);
 
 /** Files whose names are reserved and never served as static.
@@ -79,14 +90,16 @@ export const SHARED_ASSET_FILES = new Set([
  * settings popover fetches it to read the manifest's `knobs` array
  * (folded in from the old `app-knobs.json` sidecar). The manifest is the
  * agent-facing tool contract; nothing in it is secret. */
-const RESERVED_FILENAMES = new Set(['data.sqlite', '_registry.json']);
+const RESERVED_FILENAMES = new Set(["data.sqlite", "_registry.json"]);
 
 /** Directories whose contents are never served as static. */
-const RESERVED_DIRS = new Set(['queries', 'actions']);
+const RESERVED_DIRS = new Set(["queries", "actions"]);
 
 /** Apps whose ids start with `_` are reserved for plugin internals. */
 export function isReservedAppId(id: string): boolean {
-  return id.startsWith('_') || id === '' || id.includes('/') || id.includes('..');
+  return (
+    id.startsWith("_") || id === "" || id.includes("/") || id.includes("..")
+  );
 }
 
 /**
@@ -94,11 +107,14 @@ export function isReservedAppId(id: string): boolean {
  * the request escapes the folder, lands on a reserved name, or has an
  * extension outside the allowlist.
  */
-export function resolveStaticPath(appDir: string, relRequest: string): string | null {
+export function resolveStaticPath(
+  appDir: string,
+  relRequest: string
+): string | null {
   // Strip leading slash, normalize.
-  const rel = relRequest.replace(/^\/+/, '');
-  if (rel === '' || rel === '/') {
-    return path.join(appDir, 'index.html');
+  const rel = relRequest.replace(/^\/+/u, "");
+  if (rel === "" || rel === "/") {
+    return path.join(appDir, "index.html");
   }
 
   const resolved = path.resolve(appDir, rel);
@@ -108,7 +124,7 @@ export function resolveStaticPath(appDir: string, relRequest: string): string | 
   const segments = path.relative(appDir, resolved).split(path.sep);
   const first = segments[0];
   if (first && RESERVED_DIRS.has(first)) return null;
-  const last = segments[segments.length - 1] ?? '';
+  const last = segments[segments.length - 1] ?? "";
   if (RESERVED_FILENAMES.has(last)) return null;
 
   const ext = path.extname(resolved).toLowerCase();
@@ -119,7 +135,7 @@ export function resolveStaticPath(appDir: string, relRequest: string): string | 
 
 export function contentTypeFor(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
-  return CONTENT_TYPES[ext] ?? 'application/octet-stream';
+  return CONTENT_TYPES[ext] ?? "application/octet-stream";
 }
 
 /**
@@ -132,7 +148,7 @@ export function contentTypeFor(filePath: string): string {
  * plain `.css` file stays text/css and is served verbatim.
  */
 export function isCssModuleFile(filePath: string): boolean {
-  return filePath.toLowerCase().endsWith('.module.css');
+  return filePath.toLowerCase().endsWith(".module.css");
 }
 
 /**
@@ -147,14 +163,18 @@ export function isCssModuleFile(filePath: string): boolean {
  * so the runtime never needs to know which specific scripts an app contains.
  */
 export function staticSecurityHeaders(
-  opts: { inlineScriptNonce?: string; frameAncestor?: string } = {},
+  opts: { inlineScriptNonce?: string; frameAncestor?: string } = {}
 ): Record<string, string> {
-  const scriptSrc = opts.inlineScriptNonce ? `'self' 'nonce-${opts.inlineScriptNonce}'` : "'self'";
-  const frameAncestors = opts.frameAncestor ? `'self' ${opts.frameAncestor}` : "'self'";
+  const scriptSrc = opts.inlineScriptNonce
+    ? `'self' 'nonce-${opts.inlineScriptNonce}'`
+    : "'self'";
+  const frameAncestors = opts.frameAncestor
+    ? `'self' ${opts.frameAncestor}`
+    : "'self'";
   return {
-    'X-Content-Type-Options': 'nosniff',
-    'Content-Security-Policy': `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors ${frameAncestors}`,
-    'Referrer-Policy': 'no-referrer',
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": `default-src 'self'; script-src ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors ${frameAncestors}`,
+    "Referrer-Policy": "no-referrer",
   };
 }
 

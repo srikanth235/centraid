@@ -16,40 +16,43 @@
 
 /** Decode a note body from a content item's content_uri (see library.ts). */
 function decodeBody(uri: unknown): string {
-  if (typeof uri !== 'string' || !uri.startsWith('data:')) return '(external content)';
-  const comma = uri.indexOf(',');
-  if (comma === -1) return '(external content)';
+  if (typeof uri !== "string" || !uri.startsWith("data:"))
+    return "(external content)";
+  const comma = uri.indexOf(",");
+  if (comma === -1) return "(external content)";
   const meta = uri.slice(0, comma);
   const payload = uri.slice(comma + 1);
   try {
-    if (meta.includes(';base64')) {
-      return typeof Buffer !== 'undefined'
-        ? Buffer.from(payload, 'base64').toString('utf8')
-        : atob(payload);
+    if (meta.includes(";base64")) {
+      return typeof Buffer === "undefined"
+        ? atob(payload)
+        : Buffer.from(payload, "base64").toString("utf8");
     }
     return decodeURIComponent(payload);
   } catch {
-    return '(external content)';
+    return "(external content)";
   }
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
-  const noteId = String(input?.note_id ?? '').trim();
-  if (!noteId) return { note_id: noteId, body: '' };
+export default async function noteHandler({ input, ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
+  const noteId = String(input?.note_id ?? "").trim();
+  if (!noteId) return { note_id: noteId, body: "" };
   try {
     const notes = await ctx.vault.read({
-      entity: 'knowledge.note',
-      where: [{ column: 'note_id', op: 'eq', value: noteId }],
+      entity: "knowledge.note",
+      where: [{ column: "note_id", op: "eq", value: noteId }],
       limit: 1,
       purpose,
     });
     const note = (notes.rows ?? [])[0];
-    if (!note) return { note_id: noteId, body: '', format: null };
+    if (!note) return { note_id: noteId, body: "", format: null };
     const contents = note.body_content_id
       ? await ctx.vault.read({
-          entity: 'core.content_item',
-          where: [{ column: 'content_id', op: 'eq', value: note.body_content_id }],
+          entity: "core.content_item",
+          where: [
+            { column: "content_id", op: "eq", value: note.body_content_id },
+          ],
           limit: 1,
           purpose,
         })
@@ -58,6 +61,9 @@ export default async ({ input, ctx }: HandlerArgs) => {
     return { note_id: noteId, body, format: note.format };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { note_id: noteId, vaultDenied: { code: e.code, message: e.message } };
+    return {
+      note_id: noteId,
+      vaultDenied: { code: e.code, message: e.message },
+    };
   }
-};
+}

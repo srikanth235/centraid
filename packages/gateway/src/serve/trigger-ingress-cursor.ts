@@ -18,8 +18,11 @@
  * booting a gateway.
  */
 
-import type { AutomationTriggerStore, PruneIngressResult } from '@centraid/app-engine';
-import type { CursorReadResult } from '@centraid/automation';
+import type {
+  AutomationTriggerStore,
+  PruneIngressResult,
+} from "@centraid/app-engine";
+import type { CursorReadResult } from "@centraid/automation";
 
 /**
  * What the retention TTL cost *this* source, as the reader that owns it sees.
@@ -34,11 +37,11 @@ import type { CursorReadResult } from '@centraid/automation';
 export function ingressRetentionGap(
   prune: PruneIngressResult,
   sourceKey: string,
-  deliveredThrough: number,
+  deliveredThrough: number
 ): { skipped: number; gapReason: string } | undefined {
   const lost = prune.gaps.find((gap) => gap.sourceKey === sourceKey);
   if (!lost || lost.throughId <= deliveredThrough) return undefined;
-  return { skipped: lost.pruned, gapReason: 'ingress_retention' };
+  return { skipped: lost.pruned, gapReason: "ingress_retention" };
 }
 
 /** A `positionJson` for an ingress source is just the last delivered row id. */
@@ -73,9 +76,9 @@ export function ingressElement(record: {
     position: String(record.id),
     occurredAt: record.receivedAt,
     payload:
-      record.payloadJson !== undefined
-        ? parseIngressPayload(record.payloadJson)
-        : { payloadRef: record.payloadRef },
+      record.payloadJson === undefined
+        ? { payloadRef: record.payloadRef }
+        : parseIngressPayload(record.payloadJson),
   };
 }
 
@@ -84,17 +87,21 @@ export function ingressElement(record: {
  * cursor only as far as the last row returned.
  */
 export function readIngressCursor(
-  store: Pick<AutomationTriggerStore, 'listIngressAfter' | 'pruneIngress'>,
+  store: Pick<AutomationTriggerStore, "listIngressAfter" | "pruneIngress">,
   sourceKey: string,
   positionJson: string | undefined,
   limit: number,
-  now: number,
+  now: number
 ): CursorReadResult {
   const afterId = parseIngressPosition(positionJson);
   // Prune here, where the reader's own delivered position is known, so a row
   // that expired before it was ever delivered is accounted instead of silently
   // dropped.
-  const retention = ingressRetentionGap(store.pruneIngress(now), sourceKey, afterId);
+  const retention = ingressRetentionGap(
+    store.pruneIngress(now),
+    sourceKey,
+    afterId
+  );
   const records = store.listIngressAfter(sourceKey, afterId, limit);
   const deliveredId = records.at(-1)?.id ?? afterId;
   return {

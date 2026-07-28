@@ -7,16 +7,16 @@
 /** Integration name → app-icon hue. Mirrors INTEGRATION_HUES in
  * app-automations-ui.ts. */
 export const INTEGRATION_HUES: Readonly<Record<string, string>> = {
-  Datadog: 'violet',
-  Gmail: 'rose',
-  GitHub: 'slate',
-  'Google Calendar': 'indigo',
-  Linear: 'indigo',
-  Notion: 'slate',
-  PagerDuty: 'forest',
-  Sentry: 'ochre',
-  Slack: 'violet',
-  npm: 'ochre',
+  Datadog: "violet",
+  Gmail: "rose",
+  GitHub: "slate",
+  "Google Calendar": "indigo",
+  Linear: "indigo",
+  Notion: "slate",
+  PagerDuty: "forest",
+  Sentry: "ochre",
+  Slack: "violet",
+  npm: "ochre",
 };
 
 /** Compact token count — 12_300 → "12k", 2_500_000 → "2.50M". */
@@ -33,37 +33,40 @@ export function insK(v: number): string {
 /** USD with a sub-cent floor label. */
 export function insUsd(n: number): string {
   if (n > 0 && n < 0.01) {
-    return '<$0.01';
+    return "<$0.01";
   }
   return `$${n.toFixed(2)}`;
 }
 
 /** Run-kind → display label. */
 export function insKindLabel(kind: string): string {
-  if (kind === 'chat') {
-    return 'Chat';
+  if (kind === "chat") {
+    return "Chat";
   }
-  if (kind === 'build') {
-    return 'Build';
+  if (kind === "build") {
+    return "Build";
   }
-  if (kind === 'automation') {
-    return 'Automation';
+  if (kind === "automation") {
+    return "Automation";
   }
   return kind;
 }
 
 /** Coarse relative time. `now` is injectable so tests are deterministic. */
-export function relativeTime(iso: string | undefined, now: number = Date.now()): string {
+export function relativeTime(
+  iso: string | undefined,
+  now: number = Date.now()
+): string {
   if (!iso) {
-    return 'Recently';
+    return "Recently";
   }
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) {
-    return 'Recently';
+    return "Recently";
   }
   const s = Math.max(0, Math.floor((now - t) / 1000));
   if (s < 60) {
-    return 'just now';
+    return "just now";
   }
   const m = Math.floor(s / 60);
   if (m < 60) {

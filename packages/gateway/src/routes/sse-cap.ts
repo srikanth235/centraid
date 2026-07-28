@@ -8,8 +8,9 @@
  * `503` + `Retry-After` instead of joining the stream.
  */
 
-import type { ServerResponse } from 'node:http';
-import { sendJson } from './route-helpers.js';
+import type { ServerResponse } from "node:http";
+
+import { sendJson } from "./route-helpers.js";
 
 /** Concurrent subscribers a single SSE surface accepts. These are personal
  * gateways with a handful of devices, not a public streaming service. */
@@ -37,9 +38,9 @@ export class SseSubscriberCap {
    */
   admit(res: ServerResponse): (() => void) | undefined {
     if (this.count >= this.max) {
-      res.setHeader('Retry-After', String(SSE_RETRY_AFTER_SECONDS));
+      res.setHeader("Retry-After", String(SSE_RETRY_AFTER_SECONDS));
       sendJson(res, 503, {
-        error: 'sse_capacity',
+        error: "sse_capacity",
         message: `too many concurrent subscribers on this stream (max ${this.max}) — retry shortly`,
       });
       return undefined;

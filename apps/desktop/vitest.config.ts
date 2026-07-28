@@ -1,4 +1,4 @@
-import { jsdomProject } from '@centraid/test-kit/vitest';
+import { jsdomProject } from "@centraid/test-kit/vitest";
 
 // Environment is `jsdom` now that extracted renderer logic (format/cron/diff,
 // and future render-data/state) lives in testable modules — it gives those
@@ -6,7 +6,7 @@ import { jsdomProject } from '@centraid/test-kit/vitest';
 // stay available so the main-process logic tests keep working (TESTING.md §2).
 export default jsdomProject({
   test: {
-    name: '@centraid/desktop',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    name: "@centraid/desktop",
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
 });

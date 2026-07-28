@@ -14,15 +14,17 @@
 // #5). The app root deliberately does NOT carry `id="root"` — the host page's own
 // mount div owns that id, and the reused nav.ts only touches it as a harmless
 // no-op class toggle.
-import type { KeyboardEvent, ReactNode } from 'react';
-import type { AppState } from './types.ts';
-import styles from './Chrome.module.css';
+import type { KeyboardEvent, ReactNode } from "react";
+
+import type { AppState } from "./types.ts";
+
+import styles from "./Chrome.module.css";
 
 export interface ChromeProps {
   narrow: boolean;
   ready: boolean;
   sideOpen: boolean;
-  view: AppState['view'];
+  view: AppState["view"];
   newMenuOpen: boolean;
   consent: { message: string } | null;
   activeTitle: string;
@@ -33,7 +35,7 @@ export interface ChromeProps {
   onOpenSide: () => void;
   onCloseSide: () => void;
   onToggleNewMenu: (event: { stopPropagation: () => void }) => void;
-  onSelectView: (view: AppState['view']) => void;
+  onSelectView: (view: AppState["view"]) => void;
   onSort: () => void;
   onSearchInput: () => void;
   onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -60,20 +62,20 @@ export function Chrome(props: ChromeProps): ReactNode {
 
   const shellClass = [
     styles.shell,
-    props.narrow ? styles.isNarrow : '',
-    props.ready ? styles.ready : '',
-    props.sideOpen ? styles.sideOpen : '',
-    props.consent ? styles.denied : '',
+    props.narrow ? styles.isNarrow : "",
+    props.ready ? styles.ready : "",
+    props.sideOpen ? styles.sideOpen : "",
+    props.consent ? styles.denied : "",
     // Global classes the reused Grid/List/Editor .module.css
     // `:global(.docs.is-narrow)` rules key on — the module-scoped .isNarrow above
     // can't be seen from another module, so mirror the served app's static #root
     // classes here.
-    'docs',
-    props.narrow ? 'is-narrow' : '',
-    props.sideOpen ? 'side-open' : '',
+    "docs",
+    props.narrow ? "is-narrow" : "",
+    props.sideOpen ? "side-open" : "",
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
 
   return (
     <div className={shellClass} data-docs-root>
@@ -151,7 +153,11 @@ export function Chrome(props: ChromeProps): ReactNode {
               <path d="m6 9 6 6 6-6" />
             </svg>
           </button>
-          <div className={styles.newMenu} role="menu" hidden={!props.newMenuOpen}>
+          <div
+            className={styles.newMenu}
+            role="menu"
+            hidden={!props.newMenuOpen}
+          >
             {props.newMenu}
           </div>
         </div>
@@ -245,8 +251,8 @@ export function Chrome(props: ChromeProps): ReactNode {
               <button
                 type="button"
                 aria-label="Grid view"
-                aria-pressed={props.view === 'grid'}
-                onClick={() => props.onSelectView('grid')}
+                aria-pressed={props.view === "grid"}
+                onClick={() => props.onSelectView("grid")}
               >
                 <svg
                   width="17"
@@ -267,8 +273,8 @@ export function Chrome(props: ChromeProps): ReactNode {
               <button
                 type="button"
                 aria-label="List view"
-                aria-pressed={props.view === 'list'}
-                onClick={() => props.onSelectView('list')}
+                aria-pressed={props.view === "list"}
+                onClick={() => props.onSelectView("list")}
               >
                 <svg
                   width="17"
@@ -300,7 +306,8 @@ export function Chrome(props: ChromeProps): ReactNode {
           // served islands exposed the same id). Without it, a refocus after a
           // revoke would be throttled and never retry the read (#505).
           <div id="consentBanner" className={`kit-banner ${styles.banner}`}>
-            <strong>No vault access yet.</strong> <span>{props.consent.message}</span>
+            <strong>No vault access yet.</strong>{" "}
+            <span>{props.consent.message}</span>
           </div>
         ) : null}
         {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,
@@ -344,7 +351,11 @@ export function Chrome(props: ChromeProps): ReactNode {
         </div>
 
         {props.bulkBar ? (
-          <div className={styles.bulk} role="toolbar" aria-label="Selection actions">
+          <div
+            className={styles.bulk}
+            role="toolbar"
+            aria-label="Selection actions"
+          >
             {props.bulkBar}
           </div>
         ) : null}

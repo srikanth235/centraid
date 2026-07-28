@@ -19,7 +19,7 @@
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
-    'Segoe UI',
+    "Segoe UI",
     sans-serif;
   color: #e8eaf2;
   animation: fadeIn 480ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
@@ -45,7 +45,12 @@
       color-mix(in srgb, #1a1f33 80%, transparent),
       transparent 70%
     ),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(16, 18, 28, 1), transparent 70%), #07080d;
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(16, 18, 28, 1),
+      transparent 70%
+    ),
+    #07080d;
 }
 
 .stageGlow {
@@ -98,7 +103,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  font-family: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.22em;
@@ -153,7 +158,7 @@
   margin: 4px 0 6px;
 }
 .foundMeta {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 11.5px;
   letter-spacing: 0.02em;
   color: color-mix(in srgb, #b9bcd1 60%, transparent);
@@ -174,7 +179,7 @@
     border-color 160ms,
     background 160ms;
 }
-.dropZone[data-dragging='true'] {
+.dropZone[data-dragging="true"] {
   border-color: color-mix(in srgb, var(--rec-accent) 70%, transparent);
   background: color-mix(in srgb, var(--rec-accent) 10%, transparent);
 }
@@ -183,7 +188,7 @@
   min-height: 96px;
   resize: vertical;
   padding: 10px 12px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 12px;
   line-height: 1.5;
   color: #eef0f8;
@@ -227,7 +232,7 @@
   gap: 6px;
 }
 .fieldLabel {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.22em;
@@ -288,21 +293,21 @@
   color: color-mix(in srgb, #b9bcd1 55%, transparent);
   transition: color 200ms;
 }
-.stage[data-state='active'] .stageDot {
+.stage[data-state="active"] .stageDot {
   border-color: var(--rec-accent);
   background: var(--rec-accent);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--rec-accent) 22%, transparent);
   animation: pulseDot 1400ms ease-in-out infinite;
 }
-.stage[data-state='active'] .stageLabel {
+.stage[data-state="active"] .stageLabel {
   color: #f3f4fb;
   font-weight: 600;
 }
-.stage[data-state='done'] .stageDot {
+.stage[data-state="done"] .stageDot {
   border-color: color-mix(in srgb, var(--rec-accent) 70%, transparent);
   background: color-mix(in srgb, var(--rec-accent) 70%, transparent);
 }
-.stage[data-state='done'] .stageLabel {
+.stage[data-state="done"] .stageLabel {
   color: color-mix(in srgb, #b9bcd1 75%, transparent);
 }
 @keyframes pulseDot {
@@ -387,7 +392,7 @@
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
-    'Segoe UI',
+    "Segoe UI",
     sans-serif;
   font-size: 16px;
   font-weight: 600;

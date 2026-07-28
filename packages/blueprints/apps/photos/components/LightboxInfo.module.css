@@ -105,7 +105,7 @@
   font: var(--t-small);
   font-size: 12px;
 }
-.albumChip[data-active='true'] {
+.albumChip[data-active="true"] {
   border-color: var(--selb);
   background: var(--sel);
   color: var(--accent-deep-fg);

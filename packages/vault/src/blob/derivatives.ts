@@ -8,27 +8,34 @@
 // gateway owns when a backstop runs, while this module owns what exists and
 // what a contribution must look like.
 
-import { extractBlobMeta, sniffMediaType } from './pipeline.js';
+import { extractBlobMeta, sniffMediaType } from "./pipeline.js";
 
 export const DERIVATIVE_VARIANTS = [
-  'thumb',
-  'preview',
-  'poster',
-  'text',
-  'transcript',
-  'embedding',
-  'phash',
-  'thumbhash',
+  "thumb",
+  "preview",
+  "poster",
+  "text",
+  "transcript",
+  "embedding",
+  "phash",
+  "thumbhash",
 ] as const;
 
 export type DerivativeVariant = (typeof DERIVATIVE_VARIANTS)[number];
-export type BinaryDerivativeVariant = 'thumb' | 'preview' | 'poster';
-export type InlineDerivativeVariant = Exclude<DerivativeVariant, BinaryDerivativeVariant>;
-export type DerivativeBackstop = 'raster-codec' | 'cheap-text' | 'optional-model' | 'none';
+export type BinaryDerivativeVariant = "thumb" | "preview" | "poster";
+export type InlineDerivativeVariant = Exclude<
+  DerivativeVariant,
+  BinaryDerivativeVariant
+>;
+export type DerivativeBackstop =
+  | "raster-codec"
+  | "cheap-text"
+  | "optional-model"
+  | "none";
 
 export interface DerivativeSpec {
   readonly variant: DerivativeVariant;
-  readonly storage: 'cas' | 'inline';
+  readonly storage: "cas" | "inline";
   readonly mediaType: string;
   readonly maxBytes: number;
   readonly backstop: DerivativeBackstop;
@@ -36,80 +43,83 @@ export interface DerivativeSpec {
 
 const MIB = 1024 * 1024;
 
-export const DERIVATIVE_REGISTRY: Readonly<Record<DerivativeVariant, DerivativeSpec>> = {
+export const DERIVATIVE_REGISTRY: Readonly<
+  Record<DerivativeVariant, DerivativeSpec>
+> = {
   thumb: {
-    variant: 'thumb',
-    storage: 'cas',
-    mediaType: 'image/*',
+    variant: "thumb",
+    storage: "cas",
+    mediaType: "image/*",
     maxBytes: 2 * MIB,
-    backstop: 'raster-codec',
+    backstop: "raster-codec",
   },
   preview: {
-    variant: 'preview',
-    storage: 'cas',
-    mediaType: 'image/*',
+    variant: "preview",
+    storage: "cas",
+    mediaType: "image/*",
     maxBytes: 16 * MIB,
-    backstop: 'raster-codec',
+    backstop: "raster-codec",
   },
   poster: {
-    variant: 'poster',
-    storage: 'cas',
-    mediaType: 'image/*',
+    variant: "poster",
+    storage: "cas",
+    mediaType: "image/*",
     maxBytes: 16 * MIB,
-    backstop: 'none',
+    backstop: "none",
   },
   text: {
-    variant: 'text',
-    storage: 'inline',
-    mediaType: 'text/plain',
+    variant: "text",
+    storage: "inline",
+    mediaType: "text/plain",
     maxBytes: MIB,
-    backstop: 'cheap-text',
+    backstop: "cheap-text",
   },
   transcript: {
-    variant: 'transcript',
-    storage: 'inline',
-    mediaType: 'text/plain',
+    variant: "transcript",
+    storage: "inline",
+    mediaType: "text/plain",
     maxBytes: 4 * MIB,
-    backstop: 'optional-model',
+    backstop: "optional-model",
   },
   embedding: {
-    variant: 'embedding',
-    storage: 'inline',
-    mediaType: 'application/vnd.centraid.embedding+json',
+    variant: "embedding",
+    storage: "inline",
+    mediaType: "application/vnd.centraid.embedding+json",
     maxBytes: 128 * 1024,
-    backstop: 'optional-model',
+    backstop: "optional-model",
   },
   phash: {
-    variant: 'phash',
-    storage: 'inline',
-    mediaType: 'text/x-perceptual-hash',
+    variant: "phash",
+    storage: "inline",
+    mediaType: "text/x-perceptual-hash",
     maxBytes: 64,
-    backstop: 'raster-codec',
+    backstop: "raster-codec",
   },
   // ThumbHash (issue #419): a DCT placeholder a native client paints while a
   // real thumb streams. Canonical value is unpadded standard base64 of the
   // 5-49 byte hash; the cap covers base64 of 64 bytes (~88 chars) with slack.
   thumbhash: {
-    variant: 'thumbhash',
-    storage: 'inline',
-    mediaType: 'application/x-thumbhash',
+    variant: "thumbhash",
+    storage: "inline",
+    mediaType: "application/x-thumbhash",
     maxBytes: 100,
-    backstop: 'raster-codec',
+    backstop: "raster-codec",
   },
 };
 
 export const BINARY_DERIVATIVE_VARIANTS = DERIVATIVE_VARIANTS.filter(
-  (variant): variant is BinaryDerivativeVariant => DERIVATIVE_REGISTRY[variant].storage === 'cas',
+  (variant): variant is BinaryDerivativeVariant =>
+    DERIVATIVE_REGISTRY[variant].storage === "cas"
 );
 
 /** Trusted SQL literal generated from the registry, never hand-enumerated. */
 export const BINARY_DERIVATIVE_SQL = BINARY_DERIVATIVE_VARIANTS.map(
-  (variant) => `'${variant}'`,
-).join(',');
+  (variant) => `'${variant}'`
+).join(",");
 
 export interface ValidatedDerivative {
   readonly variant: DerivativeVariant;
-  readonly storage: 'cas' | 'inline';
+  readonly storage: "cas" | "inline";
   readonly mediaType: string;
   readonly byteSize: number;
   /** Canonical inline representation; absent for CAS-backed rungs. */
@@ -118,17 +128,24 @@ export interface ValidatedDerivative {
   readonly height?: number;
 }
 
-export function isDerivativeVariant(value: unknown): value is DerivativeVariant {
-  return typeof value === 'string' && (DERIVATIVE_VARIANTS as readonly string[]).includes(value);
+export function isDerivativeVariant(
+  value: unknown
+): value is DerivativeVariant {
+  return (
+    typeof value === "string" &&
+    (DERIVATIVE_VARIANTS as readonly string[]).includes(value)
+  );
 }
 
-export function isBinaryDerivative(variant: DerivativeVariant): variant is BinaryDerivativeVariant {
-  return DERIVATIVE_REGISTRY[variant].storage === 'cas';
+export function isBinaryDerivative(
+  variant: DerivativeVariant
+): variant is BinaryDerivativeVariant {
+  return DERIVATIVE_REGISTRY[variant].storage === "cas";
 }
 
 function decodeUtf8(bytes: Buffer, variant: DerivativeVariant): string {
   try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch {
     throw new Error(`${variant} derivative must be valid UTF-8`);
   }
@@ -137,10 +154,10 @@ function decodeUtf8(bytes: Buffer, variant: DerivativeVariant): string {
 function validateRaster(
   variant: BinaryDerivativeVariant,
   bytes: Buffer,
-  declaredMediaType?: string,
+  declaredMediaType?: string
 ): ValidatedDerivative {
   const mediaType = sniffMediaType(bytes, declaredMediaType);
-  if (!mediaType.startsWith('image/') || mediaType === 'image/svg+xml') {
+  if (!mediaType.startsWith("image/") || mediaType === "image/svg+xml") {
     throw new Error(`${variant} derivative must be a raster image`);
   }
   const meta = extractBlobMeta(bytes, mediaType);
@@ -154,34 +171,49 @@ function validateRaster(
     width > 32_768 ||
     height > 32_768
   ) {
-    throw new Error(`${variant} derivative has no plausible decodable dimensions`);
+    throw new Error(
+      `${variant} derivative has no plausible decodable dimensions`
+    );
   }
-  return { variant, storage: 'cas', mediaType, byteSize: bytes.length, width, height };
+  return {
+    variant,
+    storage: "cas",
+    mediaType,
+    byteSize: bytes.length,
+    width,
+    height,
+  };
 }
 
 function canonicalEmbedding(bytes: Buffer): string {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(decodeUtf8(bytes, 'embedding'));
+    parsed = JSON.parse(decodeUtf8(bytes, "embedding"));
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw new Error('embedding derivative must be valid JSON', { cause: error });
+      throw new Error("embedding derivative must be valid JSON", {
+        cause: error,
+      });
     }
     throw error;
   }
   const value = parsed as { model?: unknown; vector?: unknown };
   if (
     !value ||
-    typeof value !== 'object' ||
-    typeof value.model !== 'string' ||
+    typeof value !== "object" ||
+    typeof value.model !== "string" ||
     value.model.length < 1 ||
     value.model.length > 128 ||
     !Array.isArray(value.vector) ||
     value.vector.length < 1 ||
     value.vector.length > 4096 ||
-    !value.vector.every((item) => typeof item === 'number' && Number.isFinite(item))
+    !value.vector.every(
+      (item) => typeof item === "number" && Number.isFinite(item)
+    )
   ) {
-    throw new Error('embedding derivative must be {model, vector[1..4096 finite numbers]}');
+    throw new Error(
+      "embedding derivative must be {model, vector[1..4096 finite numbers]}"
+    );
   }
   return JSON.stringify({ model: value.model, vector: value.vector });
 }
@@ -192,16 +224,16 @@ function canonicalEmbedding(bytes: Buffer): string {
  * spelling (padding, whitespace, base64url) so the stored value is exact.
  */
 function canonicalThumbhash(text: string): string {
-  if (!/^[A-Za-z0-9+/]+$/.test(text)) {
-    throw new Error('thumbhash derivative must be unpadded standard base64');
+  if (!/^[A-Za-z0-9+/]+$/u.test(text)) {
+    throw new Error("thumbhash derivative must be unpadded standard base64");
   }
-  const bytes = Buffer.from(text, 'base64');
+  const bytes = Buffer.from(text, "base64");
   if (bytes.length < 5 || bytes.length > 64) {
-    throw new Error('thumbhash derivative must decode to 5..64 bytes');
+    throw new Error("thumbhash derivative must decode to 5..64 bytes");
   }
-  const canonical = bytes.toString('base64').replace(/=+$/, '');
+  const canonical = bytes.toString("base64").replace(/=+$/u, "");
   if (canonical !== text) {
-    throw new Error('thumbhash derivative is not canonical base64');
+    throw new Error("thumbhash derivative is not canonical base64");
   }
   return canonical;
 }
@@ -222,28 +254,34 @@ export function validateDerivativeContribution(input: {
   if (bytes.length > spec.maxBytes) {
     throw new Error(`${variant} derivative exceeds ${spec.maxBytes} bytes`);
   }
-  if (isBinaryDerivative(variant)) return validateRaster(variant, bytes, input.mediaType);
+  if (isBinaryDerivative(variant))
+    return validateRaster(variant, bytes, input.mediaType);
 
   let textContent: string;
-  if (variant === 'embedding') {
+  if (variant === "embedding") {
     textContent = canonicalEmbedding(bytes);
   } else {
     textContent = decodeUtf8(bytes, variant).trim();
-    if (variant === 'phash' && !/^[0-9a-f]{4,64}$/.test(textContent)) {
-      throw new Error('phash derivative must be 4..64 lowercase hexadecimal characters');
+    if (variant === "phash" && !/^[0-9a-f]{4,64}$/u.test(textContent)) {
+      throw new Error(
+        "phash derivative must be 4..64 lowercase hexadecimal characters"
+      );
     }
-    if (variant === 'thumbhash') {
+    if (variant === "thumbhash") {
       textContent = canonicalThumbhash(textContent);
     }
-    if ((variant === 'text' || variant === 'transcript') && textContent.length === 0) {
+    if (
+      (variant === "text" || variant === "transcript") &&
+      textContent.length === 0
+    ) {
       throw new Error(`${variant} derivative is empty`);
     }
   }
   return {
     variant,
-    storage: 'inline',
+    storage: "inline",
     mediaType: spec.mediaType,
-    byteSize: Buffer.byteLength(textContent, 'utf8'),
+    byteSize: Buffer.byteLength(textContent, "utf8"),
     textContent,
   };
 }

@@ -39,50 +39,53 @@
  * output is unchanged.
  */
 
-import { promises as fs, realpathSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { GatewayEndpointHandle } from '@centraid/tunnel';
-import { serve } from '../serve/serve.js';
-import { assistOAuthFromEnvironment } from '../serve/assist-oauth.js';
-import { daemonLayoutFor } from './paths.js';
-import { type DaemonConfig } from './config.js';
-import { resolveDaemonConfig } from './resolve-config.js';
-import { seedRunnerPrefs } from './runner-prefs.js';
-import { commandVault } from './vault-admin.js';
-import { commandDevices, commandPair } from './device-admin.js';
-import { commandMembers } from './member-admin.js';
-import { commandKey } from './key-admin.js';
-import { commandBackup } from './backup-admin.js';
-import { commandRecover } from './recover-admin.js';
-import { commandService } from './service-admin.js';
-import { commandStatus } from './status-admin.js';
-import { commandLockStatus } from './lock-admin.js';
-import { kitlessHostIdentity } from '../serve/host-identity.js';
-import { makeDaemonDevicePlane } from './endpoint-host.js';
-import { mergeAllowedHosts } from './allowed-hosts.js';
-import { parseServeArgsPure, type ParsedServe } from './cli-serve-args.js';
-import { GatewayDatabase } from '../serve/gateway-db.js';
-import { WebControlSessionStore } from '../serve/web-session-store.js';
-import { daemonKeyStore } from './key-store.js';
-import { landlordBearerForEndpointSecret } from './landlord-auth.js';
+import { promises as fs, realpathSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const PKG_VERSION = '0.1.0';
+import type { GatewayEndpointHandle } from "@centraid/tunnel";
+
+import { assistOAuthFromEnvironment } from "../serve/assist-oauth.js";
+import { GatewayDatabase } from "../serve/gateway-db.js";
+import { kitlessHostIdentity } from "../serve/host-identity.js";
+import { findSequentially } from "../serve/sequential.js";
+import { serve } from "../serve/serve.js";
+import { WebControlSessionStore } from "../serve/web-session-store.js";
+import { mergeAllowedHosts } from "./allowed-hosts.js";
+import { commandBackup } from "./backup-admin.js";
+import { parseServeArgsPure, type ParsedServe } from "./cli-serve-args.js";
+import { type DaemonConfig } from "./config.js";
+import { commandDevices, commandPair } from "./device-admin.js";
+import { makeDaemonDevicePlane } from "./endpoint-host.js";
+import { commandKey } from "./key-admin.js";
+import { daemonKeyStore } from "./key-store.js";
+import { landlordBearerForEndpointSecret } from "./landlord-auth.js";
+import { commandLockStatus } from "./lock-admin.js";
+import { commandMembers } from "./member-admin.js";
+import { daemonLayoutFor } from "./paths.js";
+import { commandRecover } from "./recover-admin.js";
+import { resolveDaemonConfig } from "./resolve-config.js";
+import { seedRunnerPrefs } from "./runner-prefs.js";
+import { commandService } from "./service-admin.js";
+import { commandStatus } from "./status-admin.js";
+import { commandVault } from "./vault-admin.js";
+
+const PKG_VERSION = "0.1.0";
 
 async function bundledWebRoot(): Promise<string | undefined> {
   const candidates = [
-    fileURLToPath(new URL('../web', import.meta.url)),
-    fileURLToPath(new URL('../../dist/web', import.meta.url)),
+    fileURLToPath(new URL("../web", import.meta.url)),
+    fileURLToPath(new URL("../../dist/web", import.meta.url)),
   ];
-  for (const candidate of candidates) {
+  return findSequentially(candidates, async (candidate) => {
     try {
-      await fs.access(path.join(candidate, 'index.html'));
-      return candidate;
+      await fs.access(path.join(candidate, "index.html"));
+      return true;
     } catch {
       // Try the source-runner/built-package alternative.
+      return false;
     }
-  }
-  return undefined;
+  });
 }
 
 function fail(message: string, code = 1): never {
@@ -93,84 +96,84 @@ function fail(message: string, code = 1): never {
 function usage(): never {
   process.stderr.write(
     [
-      'Usage:',
-      '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>] [--allowed-host <name>]…',
-      '  centraid-gateway vault list --data-dir <path> [--json]',
-      '  centraid-gateway vault create --data-dir <path> [--name <name>] [--json]',
-      '  centraid-gateway vault rename --data-dir <path> <vaultId> <name>',
-      '  centraid-gateway vault delete --data-dir <path> <vaultId>',
-      '  centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>] [--role admin|write|read] [--qr] [--json]',
-      '  centraid-gateway members list --data-dir <path>',
-      '  centraid-gateway members add --data-dir <path> <label>',
-      '  centraid-gateway members rename --data-dir <path> <member-id-or-label> --label <new-label>',
-      '  centraid-gateway members remove --data-dir <path> <member-id-or-label> [--confirm-last-admin <vault-id>]',
-      '  centraid-gateway devices list --data-dir <path> [--vault <name-or-id>]',
-      '  centraid-gateway devices add --data-dir <path> <endpoint-id> --vault <name-or-id> [--label <l>] [--role admin|write|read]',
-      '  centraid-gateway devices revoke --data-dir <path> <enrollment-or-endpoint-id>',
-      '  centraid-gateway key status  --data-dir <path> --vault <name-or-id>',
-      '  centraid-gateway key rotate  --data-dir <path> --vault <name-or-id>',
-      '  centraid-gateway backup status  [--config <path> | --data-dir <path>]',
-      '  centraid-gateway backup run     [--config <path> | --data-dir <path>] [--vault <id>]',
-      '  centraid-gateway backup list    [--config <path> | --data-dir <path>] [--vault <id>]',
-      '  centraid-gateway backup verify  [--config <path> | --data-dir <path>] [--vault <id>]',
-      '  centraid-gateway backup restore [--config <path> | --data-dir <path>] --vault <id> --dest <dir> [--seq <n>]',
-      '  centraid-gateway backup kit     [--config <path> | --data-dir <path>] --out <file>',
-      '  centraid-gateway recover --kit <file> --password-file <file> --api-key <key> --data-dir <path> [--at <iso>] [--full] [--vault <id>] [--yes]',
-      '  centraid-gateway service install   [--data-dir <path> | --config <path>] [--host <h>] [--port <p>] [--dry-run] [--label <id>]',
-      '  centraid-gateway service uninstall [--dry-run] [--label <id>]',
-      '  centraid-gateway service status    [--dry-run] [--label <id>]',
-      '  centraid-gateway status [--data-dir <path> | --config <path>] [--label <id>] [--json]',
-      '  centraid-gateway lock-status [--data-dir <path> | --config <path>] [--json]',
-      '  centraid-gateway --version',
-      '  centraid-gateway --help',
-      '',
-      'vault/pair/members/devices/key are stopped-daemon maintenance commands:',
+      "Usage:",
+      "  centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>] [--allowed-host <name>]…",
+      "  centraid-gateway vault list --data-dir <path> [--json]",
+      "  centraid-gateway vault create --data-dir <path> [--name <name>] [--json]",
+      "  centraid-gateway vault rename --data-dir <path> <vaultId> <name>",
+      "  centraid-gateway vault delete --data-dir <path> <vaultId>",
+      "  centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>] [--role admin|write|read] [--qr] [--json]",
+      "  centraid-gateway members list --data-dir <path>",
+      "  centraid-gateway members add --data-dir <path> <label>",
+      "  centraid-gateway members rename --data-dir <path> <member-id-or-label> --label <new-label>",
+      "  centraid-gateway members remove --data-dir <path> <member-id-or-label> [--confirm-last-admin <vault-id>]",
+      "  centraid-gateway devices list --data-dir <path> [--vault <name-or-id>]",
+      "  centraid-gateway devices add --data-dir <path> <endpoint-id> --vault <name-or-id> [--label <l>] [--role admin|write|read]",
+      "  centraid-gateway devices revoke --data-dir <path> <enrollment-or-endpoint-id>",
+      "  centraid-gateway key status  --data-dir <path> --vault <name-or-id>",
+      "  centraid-gateway key rotate  --data-dir <path> --vault <name-or-id>",
+      "  centraid-gateway backup status  [--config <path> | --data-dir <path>]",
+      "  centraid-gateway backup run     [--config <path> | --data-dir <path>] [--vault <id>]",
+      "  centraid-gateway backup list    [--config <path> | --data-dir <path>] [--vault <id>]",
+      "  centraid-gateway backup verify  [--config <path> | --data-dir <path>] [--vault <id>]",
+      "  centraid-gateway backup restore [--config <path> | --data-dir <path>] --vault <id> --dest <dir> [--seq <n>]",
+      "  centraid-gateway backup kit     [--config <path> | --data-dir <path>] --out <file>",
+      "  centraid-gateway recover --kit <file> --password-file <file> --api-key <key> --data-dir <path> [--at <iso>] [--full] [--vault <id>] [--yes]",
+      "  centraid-gateway service install   [--data-dir <path> | --config <path>] [--host <h>] [--port <p>] [--dry-run] [--label <id>]",
+      "  centraid-gateway service uninstall [--dry-run] [--label <id>]",
+      "  centraid-gateway service status    [--dry-run] [--label <id>]",
+      "  centraid-gateway status [--data-dir <path> | --config <path>] [--label <id>] [--json]",
+      "  centraid-gateway lock-status [--data-dir <path> | --config <path>] [--json]",
+      "  centraid-gateway --version",
+      "  centraid-gateway --help",
+      "",
+      "vault/pair/members/devices/key are stopped-daemon maintenance commands:",
       "mutations take gateway.db's exclusive lock and refuse while the",
-      'daemon is running. Recovery uses only a password-wrapped recovery kit;',
-      'no command emits a raw vault key.',
-      '',
-      'There is no shared gateway-wide credential and no direct HTTP pairing.',
-      'Admin capability is a per-device, revocable enrollment role.',
-      '`pair --qr` prints a UTF-8 block QR of the one-line iroh ticket for',
-      'phones over SSH; redemption proves the joining device EndpointId.',
-      '',
-      'backup is the offsite engine (PROTOCOL.md/FORMAT.md), config from the',
-      'same --config/--data-dir resolution `serve` uses (its JSON config',
+      "daemon is running. Recovery uses only a password-wrapped recovery kit;",
+      "no command emits a raw vault key.",
+      "",
+      "There is no shared gateway-wide credential and no direct HTTP pairing.",
+      "Admin capability is a per-device, revocable enrollment role.",
+      "`pair --qr` prints a UTF-8 block QR of the one-line iroh ticket for",
+      "phones over SSH; redemption proves the joining device EndpointId.",
+      "",
+      "backup is the offsite engine (PROTOCOL.md/FORMAT.md), config from the",
+      "same --config/--data-dir resolution `serve` uses (its JSON config",
       'file\'s "backup" key). restore materializes into --dest — it never',
-      'swaps the live vault; kit emits live key material, store it offline.',
-      '',
-      'recover (issue #439) is the recovery VERB for a blank machine: with',
-      'nothing but the recovery kit (--kit), its password file, and provider api-key',
-      '(--api-key), it restores the vault into --data-dir, seeds a fenced',
-      'backup state so the old machine is superseded, and adopts the result as',
-      'a live vault (its quarantine fires on first mount). Lazy by default;',
-      '--full materializes every blob; --at is point-in-time recovery. A',
-      'metered-egress home needs --yes.',
-      '',
-      'serve flags override the config file. --data-dir is required if no',
-      '--config is supplied (the config file otherwise carries dataDir).',
-      '',
-      'service install/uninstall/status generate and manage a real OS service',
-      'unit for the headless daemon — a macOS LaunchAgent (launchctl) or a',
-      'systemd --user unit — so it survives a reboot and restarts on crash',
-      '(issue #351). install writes the unit pointing `serve` at the SAME',
-      '--data-dir/--config it was given; --dry-run prints the unit and the',
-      'commands without writing or running anything.',
-      '',
-      'status (issue #382) is a one-shot combined read: the same OS service',
-      'probe `service status` runs, plus (when --data-dir/--config is given)',
-      'whether the data dir exists, its persisted iroh endpoint id, and its',
-      'vault count. No HTTP liveness check — serve() never persists which',
-      'host:port it bound to, so there is nothing on disk to dial.',
-      '',
-      'Bind defaults to 127.0.0.1:0 (loopback, OS-assigned port). Pass',
-      '--host 0.0.0.0 to bind LAN-reachable interfaces. Host header allowlist',
-      'still accepts only loopback names unless you pass --allowed-host <name>',
-      '(repeatable) and/or CENTRAID_ALLOWED_HOSTS=comma,separated. There is no',
-      'TLS terminator in v0; front with Caddy / Tailscale Funnel / Cloudflare',
-      'Tunnel if exposing beyond a trusted LAN.',
-      '',
-    ].join('\n'),
+      "swaps the live vault; kit emits live key material, store it offline.",
+      "",
+      "recover (issue #439) is the recovery VERB for a blank machine: with",
+      "nothing but the recovery kit (--kit), its password file, and provider api-key",
+      "(--api-key), it restores the vault into --data-dir, seeds a fenced",
+      "backup state so the old machine is superseded, and adopts the result as",
+      "a live vault (its quarantine fires on first mount). Lazy by default;",
+      "--full materializes every blob; --at is point-in-time recovery. A",
+      "metered-egress home needs --yes.",
+      "",
+      "serve flags override the config file. --data-dir is required if no",
+      "--config is supplied (the config file otherwise carries dataDir).",
+      "",
+      "service install/uninstall/status generate and manage a real OS service",
+      "unit for the headless daemon — a macOS LaunchAgent (launchctl) or a",
+      "systemd --user unit — so it survives a reboot and restarts on crash",
+      "(issue #351). install writes the unit pointing `serve` at the SAME",
+      "--data-dir/--config it was given; --dry-run prints the unit and the",
+      "commands without writing or running anything.",
+      "",
+      "status (issue #382) is a one-shot combined read: the same OS service",
+      "probe `service status` runs, plus (when --data-dir/--config is given)",
+      "whether the data dir exists, its persisted iroh endpoint id, and its",
+      "vault count. No HTTP liveness check — serve() never persists which",
+      "host:port it bound to, so there is nothing on disk to dial.",
+      "",
+      "Bind defaults to 127.0.0.1:0 (loopback, OS-assigned port). Pass",
+      "--host 0.0.0.0 to bind LAN-reachable interfaces. Host header allowlist",
+      "still accepts only loopback names unless you pass --allowed-host <name>",
+      "(repeatable) and/or CENTRAID_ALLOWED_HOSTS=comma,separated. There is no",
+      "TLS terminator in v0; front with Caddy / Tailscale Funnel / Cloudflare",
+      "Tunnel if exposing beyond a trusted LAN.",
+      "",
+    ].join("\n")
   );
   process.exit(2);
 }
@@ -178,7 +181,7 @@ function usage(): never {
 function parseServeArgs(args: string[]): ParsedServe {
   const parsed = parseServeArgsPure(args);
   if (parsed.ok) return parsed.value;
-  if ('help' in parsed) usage();
+  if ("help" in parsed) usage();
   fail(parsed.message, parsed.code);
 }
 
@@ -196,7 +199,9 @@ async function commandServe(args: string[]): Promise<void> {
   const layout = daemonLayoutFor(config.dataDir);
 
   await fs.mkdir(config.dataDir, { recursive: true });
-  const gatewayDatabase = GatewayDatabase.open(config.dataDir, { lock: 'exclusive' });
+  const gatewayDatabase = GatewayDatabase.open(config.dataDir, {
+    lock: "exclusive",
+  });
 
   // Loopback bearer (issue #505 phase 7, corrected by #568 item J). This is
   // the bearer the in-process iroh endpoint host forwards with when it hands a
@@ -212,7 +217,8 @@ async function commandServe(args: string[]): Promise<void> {
   // `CENTRAID_GATEWAY_TOKEN`.
   const dataPlaneSecret = process.env.CENTRAID_DATA_PLANE_SECRET;
   const dataPlaneHttpUrl = process.env.CENTRAID_DATA_PLANE_HTTP_URL;
-  const desktopEndpointId = process.env.CENTRAID_DESKTOP_ENDPOINT_ID?.trim() || undefined;
+  const desktopEndpointId =
+    process.env.CENTRAID_DESKTOP_ENDPOINT_ID?.trim() || undefined;
 
   // Device plane (issue #289): enrollment-scoped vault resolution for
   // requests arriving over the iroh endpoint. Constructed before serve()
@@ -228,12 +234,13 @@ async function commandServe(args: string[]): Promise<void> {
   });
   const loopbackSecret =
     process.env.CENTRAID_GATEWAY_TOKEN?.trim() ||
-    landlordBearerForEndpointSecret(keyStore.loadOrCreate('endpoint-key.bin'));
+    landlordBearerForEndpointSecret(keyStore.loadOrCreate("endpoint-key.bin"));
   // The daemon always has a host identity: it is the device the auto-founded
   // vaults are owned by (issue #603), and the identity `pair` mints against.
   const hostEndpointId =
-    desktopEndpointId ?? kitlessHostIdentity(keyStore.loadOrCreate('endpoint-key.bin'));
-  let vaultsRef: import('../serve/vault-registry.js').VaultRegistry | undefined;
+    desktopEndpointId ??
+    kitlessHostIdentity(keyStore.loadOrCreate("endpoint-key.bin"));
+  let vaultsRef: import("../serve/vault-registry.js").VaultRegistry | undefined;
   const devicePlane = makeDaemonDevicePlane({
     layout,
     gatewayDatabase,
@@ -254,13 +261,15 @@ async function commandServe(args: string[]): Promise<void> {
     assistOAuth: assistOAuthFromEnvironment(process.env),
     paths: layout,
     gatewayDatabase,
-    ...(config.host !== undefined ? { host: config.host } : {}),
-    ...(config.port !== undefined ? { port: config.port } : {}),
+    ...(config.host === undefined ? {} : { host: config.host }),
+    ...(config.port === undefined ? {} : { port: config.port }),
     ...(allowedHosts.length > 0 ? { allowedHosts } : {}),
     ...(config.backup ? { backup: config.backup } : {}),
-    ...(config.resourceMode !== undefined ? { resourceMode: config.resourceMode } : {}),
+    ...(config.resourceMode === undefined
+      ? {}
+      : { resourceMode: config.resourceMode }),
     token: loopbackSecret,
-    logTag: 'centraid-gateway',
+    logTag: "centraid-gateway",
     deviceAccess: devicePlane.deviceAccess,
     isHostCustody: devicePlane.isHostCustody,
     keyStore,
@@ -318,7 +327,9 @@ async function commandServe(args: string[]): Promise<void> {
           token: loopbackSecret,
         });
   if (endpoint) {
-    process.stdout.write(`[centraid-gateway] endpoint: ${endpoint.endpointId}\n`);
+    process.stdout.write(
+      `[centraid-gateway] endpoint: ${endpoint.endpointId}\n`
+    );
   }
 
   // Seed runner prefs *after* serve(). The write is an atomic JSON
@@ -327,70 +338,72 @@ async function commandServe(args: string[]): Promise<void> {
     seedRunnerPrefs(handle.prefs, config);
   } catch (err) {
     process.stderr.write(
-      `[centraid-gateway] warning: failed to seed runner prefs: ${err instanceof Error ? err.message : String(err)}\n`,
+      `[centraid-gateway] warning: failed to seed runner prefs: ${err instanceof Error ? err.message : String(err)}\n`
     );
   }
 
   // The loopback secret is deliberately NOT printed (issue #505 phase 7) — it
   // is ephemeral in-process plumbing, not a credential to paste anywhere.
   process.stdout.write(
-    `[centraid-gateway] listening on ${handle.url}\n${handle.webUrl ? `[centraid-gateway] web app: ${handle.webUrl}\n` : ''}[centraid-gateway] dataDir: ${path.resolve(config.dataDir)}\n`,
+    `[centraid-gateway] listening on ${handle.url}\n${handle.webUrl ? `[centraid-gateway] web app: ${handle.webUrl}\n` : ""}[centraid-gateway] dataDir: ${path.resolve(config.dataDir)}\n`
   );
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
-    process.stderr.write(`[centraid-gateway] ${signal} received — shutting down\n`);
+    process.stderr.write(
+      `[centraid-gateway] ${signal} received — shutting down\n`
+    );
     await endpoint?.close().catch(() => undefined);
     await handle.close().catch((err) => {
       process.stderr.write(
-        `[centraid-gateway] close error: ${err instanceof Error ? err.message : String(err)}\n`,
+        `[centraid-gateway] close error: ${err instanceof Error ? err.message : String(err)}\n`
       );
     });
     process.exit(0);
   };
-  process.on('SIGINT', (signal) => void shutdown(signal));
-  process.on('SIGTERM', (signal) => void shutdown(signal));
+  process.on("SIGINT", (signal) => void shutdown(signal));
+  process.on("SIGTERM", (signal) => void shutdown(signal));
 }
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const [sub, ...rest] = argv;
-  if (sub === '--version' || sub === '-v') {
+  if (sub === "--version" || sub === "-v") {
     process.stdout.write(`${PKG_VERSION}\n`);
     return;
   }
-  if (!sub || sub === '--help' || sub === '-h') usage();
+  if (!sub || sub === "--help" || sub === "-h") usage();
   switch (sub) {
-    case 'serve':
+    case "serve":
       await commandServe(rest);
       return;
-    case 'vault':
+    case "vault":
       await commandVault(rest, fail);
       return;
-    case 'pair':
+    case "pair":
       await commandPair(rest, fail);
       return;
-    case 'members':
+    case "members":
       commandMembers(rest, fail);
       break;
-    case 'devices':
+    case "devices":
       await commandDevices(rest, fail);
       return;
-    case 'key':
+    case "key":
       await commandKey(rest, fail);
       return;
-    case 'backup':
+    case "backup":
       await commandBackup(rest, fail);
       return;
-    case 'recover':
+    case "recover":
       await commandRecover(rest, fail);
       return;
-    case 'service':
+    case "service":
       await commandService(rest, fail);
       return;
-    case 'status':
+    case "status":
       await commandStatus(rest, fail);
       return;
-    case 'lock-status':
+    case "lock-status":
       await commandLockStatus(rest, fail);
       return;
     default:
@@ -406,15 +419,18 @@ async function main(): Promise<void> {
 if (isProcessMainModule(process.argv[1], import.meta.url)) {
   main().catch((err) => {
     process.stderr.write(
-      `centraid-gateway: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+      `centraid-gateway: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`
     );
     process.exit(1);
   });
 }
 
 /** True when argv[1] is this module after resolving install symlinks. */
-export function isProcessMainModule(argv1: string | undefined, moduleUrl: string | URL): boolean {
-  if (typeof argv1 !== 'string' || argv1.length === 0) return false;
+export function isProcessMainModule(
+  argv1: string | undefined,
+  moduleUrl: string | URL
+): boolean {
+  if (typeof argv1 !== "string" || argv1.length === 0) return false;
   const resolveReal = (p: string): string => {
     try {
       return realpathSync(p);
@@ -422,7 +438,9 @@ export function isProcessMainModule(argv1: string | undefined, moduleUrl: string
       return path.resolve(p);
     }
   };
-  return resolveReal(path.resolve(argv1)) === resolveReal(fileURLToPath(moduleUrl));
+  return (
+    resolveReal(path.resolve(argv1)) === resolveReal(fileURLToPath(moduleUrl))
+  );
 }
 
-export { parseServeArgsPure, timingSafeTokenEqual } from './cli-serve-args.js';
+export { parseServeArgsPure, timingSafeTokenEqual } from "./cli-serve-args.js";

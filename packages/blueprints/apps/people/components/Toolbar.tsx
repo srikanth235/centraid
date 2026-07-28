@@ -2,13 +2,13 @@
 // subtitle, view-toggle pressed state and sort label are plain text/attribute
 // writes the orchestrator makes directly (never React-owned), same as Docs.
 // No CSS module: the chips ride kit.css `.kit-chip.quiet` (global strings).
-import type { ChipKey } from '../types.ts';
+import type { ChipKey } from "../types.ts";
 
 const CHIP_DEFS: Array<[ChipKey, string]> = [
-  ['all', 'All'],
-  ['overdue', 'Overdue'],
-  ['due', 'Due soon'],
-  ['ok', 'On track'],
+  ["all", "All"],
+  ["overdue", "Overdue"],
+  ["due", "Due soon"],
+  ["ok", "On track"],
 ];
 
 export function StatusChips({

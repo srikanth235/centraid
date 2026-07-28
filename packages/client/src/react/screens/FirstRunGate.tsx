@@ -1,10 +1,12 @@
-import { useState, type JSX } from 'react';
+import { useState, type JSX } from "react";
+
+import { isWebHost } from "../host-platform.js";
 import OnboardingScreen, {
   type OnboardingCompleteInput,
   type OnboardingPath,
-} from './OnboardingScreen.js';
-import { isWebHost } from '../host-platform.js';
-import styles from './RecoverScreen.module.css';
+} from "./OnboardingScreen.js";
+
+import styles from "./RecoverScreen.module.css";
 
 /**
  * First run branches on PLATFORM, not on gateway state (issue #603).
@@ -26,18 +28,20 @@ import styles from './RecoverScreen.module.css';
 export interface FirstRunGateProps {
   /** Fresh path completion (identity + connected gateway) — boot writes the
    *  profile + onboarding stamp and swaps in the app. */
-  onOnboardingComplete: (input: OnboardingCompleteInput) => Promise<void> | void;
+  onOnboardingComplete: (
+    input: OnboardingCompleteInput
+  ) => Promise<void> | void;
   /** Override the platform decision. Defaults to `isWebHost()`. */
-  host?: 'desktop' | 'web';
+  host?: "desktop" | "web";
 }
 
 export default function FirstRunGate({
   onOnboardingComplete,
-  host = isWebHost() ? 'web' : 'desktop',
+  host = isWebHost() ? "web" : "desktop",
 }: FirstRunGateProps): JSX.Element {
   const [path, setPath] = useState<OnboardingPath | null>(null);
 
-  if (host === 'web') {
+  if (host === "web") {
     return <OnboardingScreen path="ticket" onComplete={onOnboardingComplete} />;
   }
   if (path) {
@@ -51,7 +55,11 @@ export default function FirstRunGate({
   }
 
   return (
-    <div className={styles.view} data-mounted="true" data-testid="first-run-choice">
+    <div
+      className={styles.view}
+      data-mounted="true"
+      data-testid="first-run-choice"
+    >
       <div className={styles.stageBg} aria-hidden="true" />
       <div className={styles.stageGlow} aria-hidden="true" />
       <div className={styles.card} data-theme="dark">
@@ -62,13 +70,27 @@ export default function FirstRunGate({
         <h1 className={styles.title}>
           Welcome to <em>Centraid</em>.
         </h1>
-        <p className={styles.sub}>Starting something new, or joining what you already run?</p>
+        <p className={styles.sub}>
+          Starting something new, or joining what you already run?
+        </p>
         <div className={styles.choiceGrid}>
-          <button type="button" className={styles.choiceBtn} onClick={() => setPath('fresh')}>
-            <span className={styles.choiceBtnTitle}>Start fresh on this Mac</span>
-            <span className={styles.choiceBtnSub}>Your data stays on this computer.</span>
+          <button
+            type="button"
+            className={styles.choiceBtn}
+            onClick={() => setPath("fresh")}
+          >
+            <span className={styles.choiceBtnTitle}>
+              Start fresh on this Mac
+            </span>
+            <span className={styles.choiceBtnSub}>
+              Your data stays on this computer.
+            </span>
           </button>
-          <button type="button" className={styles.choiceBtn} onClick={() => setPath('ticket')}>
+          <button
+            type="button"
+            className={styles.choiceBtn}
+            onClick={() => setPath("ticket")}
+          >
             <span className={styles.choiceBtnTitle}>Connect with a ticket</span>
             <span className={styles.choiceBtnSub}>
               Join a gateway you already run — paste or scan a pair ticket.

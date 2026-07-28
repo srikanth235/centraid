@@ -24,7 +24,7 @@
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
-    'Segoe UI',
+    "Segoe UI",
     sans-serif;
   color: #e8eaf2;
   animation: fadeIn 480ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
@@ -50,7 +50,12 @@
       color-mix(in srgb, #1a1f33 80%, transparent),
       transparent 70%
     ),
-    radial-gradient(ellipse 60% 50% at 50% 100%, rgba(16, 18, 28, 1), transparent 70%), #07080d;
+    radial-gradient(
+      ellipse 60% 50% at 50% 100%,
+      rgba(16, 18, 28, 1),
+      transparent 70%
+    ),
+    #07080d;
 }
 
 .stageGlow {
@@ -94,7 +99,7 @@
   transition: width 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 /* Step 2 hosts ConnectFlow's three-across method grid — wider stage. */
-.card[data-step='connect'] {
+.card[data-step="connect"] {
   width: min(560px, 94vw);
 }
 
@@ -113,7 +118,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  font-family: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.22em;
@@ -215,7 +220,7 @@
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
-    'Segoe UI',
+    "Segoe UI",
     sans-serif;
   font-size: 28px;
   font-weight: 600;
@@ -242,7 +247,7 @@
   gap: 8px;
 }
 .fieldLabel {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.22em;
@@ -315,7 +320,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     0 0 0 3px color-mix(in srgb, white 25%, transparent);
 }
-.swatch[data-selected='true'] {
+.swatch[data-selected="true"] {
   /* The selected swatch wears a tight white halo, matching the avatar
      ring's weight so the user sees the connection between swatch
      pick and avatar update. */

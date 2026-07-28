@@ -14,7 +14,7 @@
 //      `ph://` id but holds new bytes; deleting it there would destroy the only
 //      copy of the edit. Anything that changed is excluded and surfaced.
 
-import type { BackupState, PhotoAsset } from './timeline-model';
+import type { BackupState, PhotoAsset } from "./timeline-model";
 
 export interface FreeUpCandidate {
   assetId: string;
@@ -32,15 +32,15 @@ export interface FreeUpCandidate {
  */
 export function selectFreeUpCandidates(
   assets: readonly PhotoAsset[],
-  protectedAssetIds: ReadonlySet<string>,
+  protectedAssetIds: ReadonlySet<string>
 ): FreeUpCandidate[] {
   return assets.flatMap((asset) => {
     const localIds = asset.localIds ?? (asset.localId ? [asset.localId] : []);
     const eligible =
       asset.assetId !== undefined &&
       asset.sha256 !== undefined &&
-      asset.source === 'merged' &&
-      asset.backupState === ('backed-up' satisfies BackupState) &&
+      asset.source === "merged" &&
+      asset.backupState === ("backed-up" satisfies BackupState) &&
       asset.verifiedCasAck === true &&
       localIds.length > 0 &&
       !protectedAssetIds.has(asset.assetId);
@@ -65,8 +65,8 @@ export function selectFreeUpCandidates(
  * evidence of anything about the bytes.
  */
 export type DeviceByteProbe = (
-  localId: string,
-) => Promise<{ sha256: string; size: number } | 'in-cloud' | null>;
+  localId: string
+) => Promise<{ sha256: string; size: number } | "in-cloud" | null>;
 
 export interface RevalidationResult {
   /** Device copies whose current sha still equals the backed-up sha. */
@@ -88,22 +88,30 @@ export interface RevalidationResult {
  */
 export async function revalidateBackedUp(
   candidates: readonly FreeUpCandidate[],
-  probe: DeviceByteProbe,
+  probe: DeviceByteProbe
 ): Promise<RevalidationResult> {
   const deletableLocalIds: string[] = [];
   let eligibleBytes = 0;
   let changedCount = 0;
   let missingCount = 0;
   let inCloudCount = 0;
-  for (const candidate of candidates) {
-    for (const localId of candidate.localIds) {
-      let current: Awaited<ReturnType<DeviceByteProbe>>;
-      try {
-        current = await probe(localId);
-      } catch {
-        current = null;
-      }
-      if (current === 'in-cloud') {
+  const candidatesWithCopies = await Promise.all(
+    candidates.map(async (candidate) => ({
+      candidate,
+      currentCopies: await Promise.all(
+        candidate.localIds.map(async (localId) => {
+          try {
+            return { localId, current: await probe(localId) };
+          } catch {
+            return { localId, current: null };
+          }
+        })
+      ),
+    }))
+  );
+  for (const { candidate, currentCopies } of candidatesWithCopies) {
+    for (const { localId, current } of currentCopies) {
+      if (current === "in-cloud") {
         inCloudCount += 1;
         continue;
       }
@@ -119,5 +127,11 @@ export async function revalidateBackedUp(
       }
     }
   }
-  return { deletableLocalIds, eligibleBytes, changedCount, missingCount, inCloudCount };
+  return {
+    deletableLocalIds,
+    eligibleBytes,
+    changedCount,
+    missingCount,
+    inCloudCount,
+  };
 }

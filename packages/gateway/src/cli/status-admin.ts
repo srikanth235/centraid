@@ -18,17 +18,22 @@
  * service alive" doesn't need to know a data dir at all.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { handshakeGateway } from '@centraid/protocol';
-import { endpointIdForSecret } from '@centraid/tunnel';
-import { daemonLayoutFor } from './paths.js';
-import { daemonKeyStore } from './key-store.js';
-import { landlordBearerForEndpointSecret } from './landlord-auth.js';
-import { resolveDaemonConfig } from './resolve-config.js';
-import { openVaultRegistry, type FailedMount } from '../serve/vault-registry.js';
-import { queryServiceStatus, type ServiceStatusInfo } from './service-admin.js';
-import { jsonFail, runJson, type Fail } from './json-cli.js';
+import fs from "node:fs";
+import path from "node:path";
+
+import { handshakeGateway } from "@centraid/protocol";
+import { endpointIdForSecret } from "@centraid/tunnel";
+
+import {
+  openVaultRegistry,
+  type FailedMount,
+} from "../serve/vault-registry.js";
+import { jsonFail, runJson, type Fail } from "./json-cli.js";
+import { daemonKeyStore } from "./key-store.js";
+import { landlordBearerForEndpointSecret } from "./landlord-auth.js";
+import { daemonLayoutFor } from "./paths.js";
+import { resolveDaemonConfig } from "./resolve-config.js";
+import { queryServiceStatus, type ServiceStatusInfo } from "./service-admin.js";
 
 const quietLogger = {
   info: () => undefined,
@@ -48,26 +53,26 @@ function parseStatusArgs(args: string[], fail: Fail): StatusArgs {
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === undefined) continue;
-    const next = (): string => {
+    const readValue = (): string => {
       const v = args[++i];
-      if (v === undefined) fail(`flag "${flag}" requires a value`, 2);
+      if (v === undefined) return fail(`flag "${flag}" requires a value`, 2);
       return v;
     };
     switch (flag) {
-      case '--data-dir':
-        out.dataDir = next();
+      case "--data-dir":
+        out.dataDir = readValue();
         break;
-      case '--config':
-        out.configPath = next();
+      case "--config":
+        out.configPath = readValue();
         break;
-      case '--label':
-        out.label = next();
+      case "--label":
+        out.label = readValue();
         break;
-      case '--json':
+      case "--json":
         out.json = true;
         break;
       default:
-        fail(`unknown flag "${flag}"`, 2);
+        return fail(`unknown flag "${flag}"`, 2);
     }
   }
   return out;
@@ -93,7 +98,7 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
   if (!fs.existsSync(resolved)) return { dataDir: resolved, exists: false };
   const layout = daemonLayoutFor(resolved);
 
-  const secret = daemonKeyStore(layout.keysDir).load('endpoint-key.bin');
+  const secret = daemonKeyStore(layout.keysDir).load("endpoint-key.bin");
   const endpointId = secret ? endpointIdForSecret(secret) : undefined;
 
   let vaultCount: number | undefined;
@@ -124,27 +129,29 @@ function buildDataDirSummary(dataDir: string): DataDirSummary {
   return {
     dataDir: resolved,
     exists: true,
-    ...(endpointId !== undefined ? { endpointId } : {}),
-    ...(vaultCount !== undefined ? { vaultCount } : {}),
+    ...(endpointId === undefined ? {} : { endpointId }),
+    ...(vaultCount === undefined ? {} : { vaultCount }),
     ...(failedMounts.length > 0 ? { failedMounts } : {}),
-    ...(vaultReadError !== undefined ? { vaultReadError } : {}),
+    ...(vaultReadError === undefined ? {} : { vaultReadError }),
   };
 }
 
 function describeService(service: ServiceStatusInfo): string {
   if (!service.installed) return `not installed (label ${service.label})`;
-  const running = service.running ? 'running' : `installed, ${service.state ?? 'stopped'}`;
-  return `${running} (label ${service.label}${service.pid !== undefined ? `, pid ${service.pid}` : ''})`;
+  const running = service.running
+    ? "running"
+    : `installed, ${service.state ?? "stopped"}`;
+  return `${running} (label ${service.label}${service.pid === undefined ? "" : `, pid ${service.pid}`})`;
 }
 
 export async function commandStatus(
   args: string[],
   fail: Fail,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch
 ): Promise<void> {
   // Pre-scan for `--json` so it governs the whole run — including a
   // `fail()` triggered by argument parsing itself — regardless of flag order.
-  const json = args.includes('--json');
+  const json = args.includes("--json");
   // Explicit annotation: TS's never-return control-flow narrowing (used
   // below on `parsed.dataDir`) only kicks in when the call-derived const is
   // annotated — inferred-from-call-expression alone doesn't carry it.
@@ -155,20 +162,22 @@ export async function commandStatus(
 
     const config = await resolveDaemonConfig(
       { dataDir: parsed.dataDir, configPath: parsed.configPath },
-      localFail,
+      localFail
     );
     const dataDir = buildDataDirSummary(config.dataDir);
     if (config.port !== undefined && config.port !== 0) {
       // Live dial tickets are auth-gated (#568 item C). Present the host
       // custody bearer when we have the key so `status` can report them;
       // without a key, an anonymous handshake still answers "is the daemon up".
-      const endpointSecret = daemonKeyStore(daemonLayoutFor(config.dataDir).keysDir).load(
-        'endpoint-key.bin',
-      );
+      const endpointSecret = daemonKeyStore(
+        daemonLayoutFor(config.dataDir).keysDir
+      ).load("endpoint-key.bin");
       const live = await handshakeGateway(
         `http://127.0.0.1:${config.port}`,
-        endpointSecret ? landlordBearerForEndpointSecret(endpointSecret) : undefined,
-        fetchImpl,
+        endpointSecret
+          ? landlordBearerForEndpointSecret(endpointSecret)
+          : undefined,
+        fetchImpl
       );
       dataDir.daemonRunning = live.ok;
       if (
@@ -181,15 +190,20 @@ export async function commandStatus(
     }
 
     if (json) {
-      process.stdout.write(`${JSON.stringify({ ok: true, service, dataDir })}\n`);
+      process.stdout.write(
+        `${JSON.stringify({ ok: true, service, dataDir })}\n`
+      );
       return;
     }
 
     const lines = [`service: ${describeService(service)}`];
-    lines.push(`data dir: ${dataDir.dataDir} (${dataDir.exists ? 'exists' : 'missing'})`);
+    lines.push(
+      `data dir: ${dataDir.dataDir} (${dataDir.exists ? "exists" : "missing"})`
+    );
     if (dataDir.endpointId) lines.push(`endpoint: ${dataDir.endpointId}`);
-    lines.push(`daemon: ${dataDir.daemonRunning ? 'running' : 'not running'}`);
-    if (dataDir.vaultCount !== undefined) lines.push(`vaults: ${dataDir.vaultCount}`);
+    lines.push(`daemon: ${dataDir.daemonRunning ? "running" : "not running"}`);
+    if (dataDir.vaultCount !== undefined)
+      lines.push(`vaults: ${dataDir.vaultCount}`);
     if (dataDir.failedMounts?.length) {
       lines.push(`vaults that failed to mount: ${dataDir.failedMounts.length}`);
       for (const failure of dataDir.failedMounts) {
@@ -199,6 +213,6 @@ export async function commandStatus(
     if (dataDir.vaultReadError !== undefined) {
       lines.push(`vaults: unreadable — ${dataDir.vaultReadError}`);
     }
-    process.stdout.write(`${lines.join('\n')}\n`);
+    process.stdout.write(`${lines.join("\n")}\n`);
   });
 }

@@ -21,16 +21,25 @@
  * round-trip it on the next turn via `prevSessionId` to resume.
  */
 
-import type { TurnConfig, TurnInput, TurnResult } from '@centraid/app-engine';
-import { RUNNER_BACKENDS } from './registry.js';
+import type { TurnConfig, TurnInput, TurnResult } from "@centraid/app-engine";
+
+import { RUNNER_BACKENDS } from "./registry.js";
 
 // The turn-driver contract (`ToolContext`, `TurnInput/Config/Result`)
 // now lives in `@centraid/app-engine` so the backend-agnostic run engine can
 // speak it. Re-exported here so this package's modules + back-compat
 // consumers keep importing them from `@centraid/agent-runtime`.
-export type { ToolContext, TurnInput, TurnConfig, TurnResult } from '@centraid/app-engine';
+export type {
+  ToolContext,
+  TurnInput,
+  TurnConfig,
+  TurnResult,
+} from "@centraid/app-engine";
 
-export async function runTurn(input: TurnInput, config: TurnConfig): Promise<TurnResult> {
+export async function runTurn(
+  input: TurnInput,
+  config: TurnConfig
+): Promise<TurnResult> {
   const backend = RUNNER_BACKENDS[config.prefs.kind];
   if (!backend) {
     throw new Error(`unknown runner kind: ${String(config.prefs.kind)}`);

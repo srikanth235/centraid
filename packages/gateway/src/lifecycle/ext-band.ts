@@ -15,20 +15,22 @@
 // The composition root owns this: it is the one layer that sees both the
 // session worktree (which carries `app.json`) and the vault plane.
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import type { ExtApplyOutcome, ExtTableSpec } from '@centraid/vault';
-import type { WorktreeStore } from '../worktree-store/index.js';
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import type { ExtApplyOutcome, ExtTableSpec } from "@centraid/vault";
+
+import type { WorktreeStore } from "../worktree-store/index.js";
 
 /** The slice of the vault plane the lifecycle needs — injected, testable. */
 export interface ExtBandOps {
-  applyAppExt(appId: string, tables: ExtTableSpec[]): ExtApplyOutcome;
-  seedAppExtDraft(
+  applyAppExt: (appId: string, tables: ExtTableSpec[]) => ExtApplyOutcome;
+  seedAppExtDraft: (
     appId: string,
     tables: ExtTableSpec[],
-    opts?: { reset?: boolean },
-  ): ExtApplyOutcome;
-  dropAppExtDraft(appId: string): { dropped: string[] };
+    opts?: { reset?: boolean }
+  ) => ExtApplyOutcome;
+  dropAppExtDraft: (appId: string) => { dropped: string[] };
 }
 
 /**
@@ -39,7 +41,7 @@ export interface ExtBandOps {
  */
 export async function readExtSpecs(appDir: string): Promise<ExtTableSpec[]> {
   try {
-    const raw = await fs.readFile(path.join(appDir, 'app.json'), 'utf8');
+    const raw = await fs.readFile(path.join(appDir, "app.json"), "utf8");
     const parsed = JSON.parse(raw) as { ext?: { tables?: ExtTableSpec[] } };
     return Array.isArray(parsed.ext?.tables) ? parsed.ext.tables : [];
   } catch {
@@ -56,7 +58,7 @@ export async function readExtSpecs(appDir: string): Promise<ExtTableSpec[]> {
 export async function applyExtOnPublish(
   ops: ExtBandOps,
   appId: string,
-  worktreeAppDir: string,
+  worktreeAppDir: string
 ): Promise<ExtApplyOutcome> {
   const specs = await readExtSpecs(worktreeAppDir);
   const outcome = ops.applyAppExt(appId, specs);
@@ -74,7 +76,7 @@ export async function applyExtOnPublish(
  */
 export function makeDraftCodeDirResolver(
   store: WorktreeStore,
-  ext?: ExtBandOps,
+  ext?: ExtBandOps
 ): (appId: string, sessionId: string) => Promise<string | undefined> {
   return async (appId, sessionId) => {
     let worktreeAppDir: string;
@@ -97,7 +99,7 @@ export function makeDraftCodeDirResolver(
 export async function ensureDraftBand(
   ops: ExtBandOps,
   appId: string,
-  worktreeAppDir: string,
+  worktreeAppDir: string
 ): Promise<void> {
   const specs = await readExtSpecs(worktreeAppDir);
   if (specs.length === 0) {

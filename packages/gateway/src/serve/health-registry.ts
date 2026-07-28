@@ -21,17 +21,18 @@
  *   - overall = worst component (error > degraded > ok).
  */
 
-import type { RuntimeLogger } from '@centraid/app-engine';
-import type { StructuredResourceProfile } from './hardware-profile.js';
-import type { PowerContextState } from './power-context.js';
-import type { ResourceUsageActuals } from './resource-accounting.js';
+import type { RuntimeLogger } from "@centraid/app-engine";
+
+import type { StructuredResourceProfile } from "./hardware-profile.js";
+import type { PowerContextState } from "./power-context.js";
+import type { ResourceUsageActuals } from "./resource-accounting.js";
 import {
   formatBackgroundPausedDetail,
   formatBackgroundResumedDetail,
   formatLoadShedClearedDetail,
   formatLoadShedDeferringDetail,
   formatLoadShedForcedPassDetail,
-} from './resource-mode.js';
+} from "./resource-mode.js";
 
 /** Owner-triggered background-pause window (#528 Phase B) — in-memory only. */
 export interface BackgroundPauseState {
@@ -43,9 +44,9 @@ export interface BackgroundPauseState {
 /** Longest a single background pause may last before it auto-lifts (24h). */
 export const MAX_BACKGROUND_PAUSE_MS = 86_400_000;
 
-const BACKGROUND_PAUSE_COMPONENT = 'background-pause';
+const BACKGROUND_PAUSE_COMPONENT = "background-pause";
 
-export type ComponentStatus = 'ok' | 'degraded' | 'error';
+export type ComponentStatus = "ok" | "degraded" | "error";
 
 export interface ComponentHealth {
   component: string;
@@ -62,7 +63,7 @@ export interface ComponentHealth {
 export interface HealthEvent {
   at: string;
   component: string;
-  level: 'warn' | 'error';
+  level: "warn" | "error";
   message: string;
 }
 
@@ -132,13 +133,13 @@ export interface HealthMetrics {
 export type MetricsSourceResult = Partial<
   Pick<
     HealthMetrics,
-    | 'outboxPending'
-    | 'sseClients'
-    | 'hardwareProfileClass'
-    | 'resourceMode'
-    | 'resourceProfile'
-    | 'resourceUsage'
-    | 'powerContext'
+    | "outboxPending"
+    | "sseClients"
+    | "hardwareProfileClass"
+    | "resourceMode"
+    | "resourceProfile"
+    | "resourceUsage"
+    | "powerContext"
   >
 >;
 export type MetricsSource = () => MetricsSourceResult;
@@ -146,12 +147,12 @@ export type MetricsSource = () => MetricsSourceResult;
 export type PerformanceMetricsSourceResult = Partial<
   Pick<
     HealthMetrics,
-    | 'eventLoopLagP50Ms'
-    | 'eventLoopLagP99Ms'
-    | 'eventLoopLagMaxMs'
-    | 'eventLoopLagPeakP99Ms'
-    | 'eventLoopLagSamples'
-    | 'storageFsyncMs'
+    | "eventLoopLagP50Ms"
+    | "eventLoopLagP99Ms"
+    | "eventLoopLagMaxMs"
+    | "eventLoopLagPeakP99Ms"
+    | "eventLoopLagSamples"
+    | "storageFsyncMs"
   >
 >;
 export type PerformanceMetricsSource = () => PerformanceMetricsSourceResult;
@@ -174,9 +175,16 @@ export interface HealthSnapshot {
 }
 
 /** A snapshot-time check for state no subsystem pushes. */
-export type HealthProbe = () => Promise<{ status: ComponentStatus; detail?: string }>;
+export type HealthProbe = () => Promise<{
+  status: ComponentStatus;
+  detail?: string;
+}>;
 
-const SEVERITY: Record<ComponentStatus, number> = { ok: 0, degraded: 1, error: 2 };
+const SEVERITY: Record<ComponentStatus, number> = {
+  ok: 0,
+  degraded: 1,
+  error: 2,
+};
 
 const worseOf = (a: ComponentStatus, b: ComponentStatus): ComponentStatus =>
   SEVERITY[a] >= SEVERITY[b] ? a : b;
@@ -235,7 +243,10 @@ export class HealthRegistry {
     this.metricsSource = source;
   }
 
-  setPerformanceMetricsSource(source: PerformanceMetricsSource, reset?: () => void): void {
+  setPerformanceMetricsSource(
+    source: PerformanceMetricsSource,
+    reset?: () => void
+  ): void {
     this.performanceMetricsSource = source;
     this.resetPerformanceMetricsSource = reset;
   }
@@ -252,7 +263,7 @@ export class HealthRegistry {
     if (p99 === undefined || p99 < maxP99Ms) {
       if (this.loadShedSinceMs !== undefined) {
         this.loadShedSinceMs = undefined;
-        this.reportOk('load-shed', formatLoadShedClearedDetail());
+        this.reportOk("load-shed", formatLoadShedClearedDetail());
       }
       return false;
     }
@@ -262,14 +273,17 @@ export class HealthRegistry {
     if (deferredMs < this.maxLoadShedMs) {
       // Keep the component detail current while deferring so Diagnostics
       // shows owner-facing copy, not only the forced-pass line.
-      this.reportDegraded('load-shed', formatLoadShedDeferringDetail(p99));
+      this.reportDegraded("load-shed", formatLoadShedDeferringDetail(p99));
       return true;
     }
 
     // Never silently starve WAL/outbox/backup work forever. Permit one caller
     // through per max-age interval and retain a degraded health signal until
     // event-loop pressure clears.
-    this.reportDegraded('load-shed', formatLoadShedForcedPassDetail(p99, deferredMs));
+    this.reportDegraded(
+      "load-shed",
+      formatLoadShedForcedPassDetail(p99, deferredMs)
+    );
     this.loadShedSinceMs = now;
     return false;
   }
@@ -285,11 +299,12 @@ export class HealthRegistry {
    */
   pauseBackgroundWork(durationMs?: number): BackgroundPauseState {
     this.backgroundPaused = true;
-    this.backgroundPauseUntilMs = durationMs === undefined ? undefined : this.now() + durationMs;
+    this.backgroundPauseUntilMs =
+      durationMs === undefined ? undefined : this.now() + durationMs;
     const state = this.readBackgroundPause();
     const detail = formatBackgroundPausedDetail(state.until);
     this.reportDegraded(BACKGROUND_PAUSE_COMPONENT, detail);
-    this.pushEvent(BACKGROUND_PAUSE_COMPONENT, 'warn', detail);
+    this.pushEvent(BACKGROUND_PAUSE_COMPONENT, "warn", detail);
     return state;
   }
 
@@ -331,29 +346,29 @@ export class HealthRegistry {
     this.backgroundPauseUntilMs = undefined;
     const detail = formatBackgroundResumedDetail();
     this.reportOk(BACKGROUND_PAUSE_COMPONENT, detail);
-    this.pushEvent(BACKGROUND_PAUSE_COMPONENT, 'warn', detail);
+    this.pushEvent(BACKGROUND_PAUSE_COMPONENT, "warn", detail);
   }
 
   reportOk(component: string, detail?: string): void {
     const state = this.stateFor(component);
-    state.status = 'ok';
+    state.status = "ok";
     state.lastOkAt = this.now();
     if (detail !== undefined) state.detail = detail;
   }
 
   reportDegraded(component: string, detail: string): void {
     const state = this.stateFor(component);
-    state.status = 'degraded';
+    state.status = "degraded";
     state.detail = detail;
   }
 
   reportError(component: string, message: string): void {
     const state = this.stateFor(component);
-    state.status = 'error';
+    state.status = "error";
     state.lastErrorAt = this.now();
     state.lastError = message;
     state.errorCount += 1;
-    this.pushEvent(component, 'error', message);
+    this.pushEvent(component, "error", message);
   }
 
   /**
@@ -365,7 +380,7 @@ export class HealthRegistry {
       info: (m) => base.info(m),
       warn: (m) => {
         this.stateFor(component);
-        this.pushEvent(component, 'warn', m);
+        this.pushEvent(component, "warn", m);
         base.warn(m);
       },
       error: (m) => {
@@ -382,28 +397,35 @@ export class HealthRegistry {
   }
 
   async snapshot(): Promise<HealthSnapshot> {
-    for (const [component, probe] of this.probes) {
-      const state = this.stateFor(component);
-      try {
-        const result = await probe();
-        state.status = result.status;
-        if (result.detail !== undefined) state.detail = result.detail;
-        if (result.status === 'ok') state.lastOkAt = this.now();
-      } catch (err) {
-        this.reportError(component, err instanceof Error ? err.message : String(err));
-      }
-    }
+    await Promise.all(
+      [...this.probes].map(async ([component, probe]) => {
+        const state = this.stateFor(component);
+        try {
+          const result = await probe();
+          state.status = result.status;
+          if (result.detail !== undefined) state.detail = result.detail;
+          if (result.status === "ok") state.lastOkAt = this.now();
+        } catch (err) {
+          this.reportError(
+            component,
+            err instanceof Error ? err.message : String(err)
+          );
+        }
+      })
+    );
 
     const components: ComponentHealth[] = [...this.components.entries()]
       .map(([component, s]) => ({
         component,
         status: s.status,
-        ...(s.detail !== undefined ? { detail: s.detail } : {}),
-        ...(s.lastOkAt !== undefined ? { lastOkAt: new Date(s.lastOkAt).toISOString() } : {}),
-        ...(s.lastErrorAt !== undefined
-          ? { lastErrorAt: new Date(s.lastErrorAt).toISOString() }
-          : {}),
-        ...(s.lastError !== undefined ? { lastError: s.lastError } : {}),
+        ...(s.detail === undefined ? {} : { detail: s.detail }),
+        ...(s.lastOkAt === undefined
+          ? {}
+          : { lastOkAt: new Date(s.lastOkAt).toISOString() }),
+        ...(s.lastErrorAt === undefined
+          ? {}
+          : { lastErrorAt: new Date(s.lastErrorAt).toISOString() }),
+        ...(s.lastError === undefined ? {} : { lastError: s.lastError }),
         errorCount: s.errorCount,
       }))
       .sort((a, b) => a.component.localeCompare(b.component));
@@ -413,7 +435,10 @@ export class HealthRegistry {
     const sourced = this.metricsSource?.() ?? {};
     const performance = this.performanceMetricsSource?.() ?? {};
     return {
-      status: components.reduce<ComponentStatus>((acc, c) => worseOf(acc, c.status), 'ok'),
+      status: components.reduce<ComponentStatus>(
+        (acc, c) => worseOf(acc, c.status),
+        "ok"
+      ),
       startedAt: new Date(this.startedAtMs).toISOString(),
       uptimeMs,
       components,
@@ -421,16 +446,24 @@ export class HealthRegistry {
       metrics: {
         rssBytes: process.memoryUsage().rss,
         outboxPending: sourced.outboxPending ?? 0,
-        ...(sourced.sseClients !== undefined ? { sseClients: sourced.sseClients } : {}),
-        ...(sourced.hardwareProfileClass !== undefined
-          ? { hardwareProfileClass: sourced.hardwareProfileClass }
-          : {}),
-        ...(sourced.resourceMode !== undefined ? { resourceMode: sourced.resourceMode } : {}),
-        ...(sourced.resourceProfile !== undefined
-          ? { resourceProfile: sourced.resourceProfile }
-          : {}),
-        ...(sourced.resourceUsage !== undefined ? { resourceUsage: sourced.resourceUsage } : {}),
-        ...(sourced.powerContext !== undefined ? { powerContext: sourced.powerContext } : {}),
+        ...(sourced.sseClients === undefined
+          ? {}
+          : { sseClients: sourced.sseClients }),
+        ...(sourced.hardwareProfileClass === undefined
+          ? {}
+          : { hardwareProfileClass: sourced.hardwareProfileClass }),
+        ...(sourced.resourceMode === undefined
+          ? {}
+          : { resourceMode: sourced.resourceMode }),
+        ...(sourced.resourceProfile === undefined
+          ? {}
+          : { resourceProfile: sourced.resourceProfile }),
+        ...(sourced.resourceUsage === undefined
+          ? {}
+          : { resourceUsage: sourced.resourceUsage }),
+        ...(sourced.powerContext === undefined
+          ? {}
+          : { powerContext: sourced.powerContext }),
         backgroundPause: this.readBackgroundPause(),
         ...performance,
         uptimeMs,
@@ -441,14 +474,23 @@ export class HealthRegistry {
   private stateFor(component: string): ComponentState {
     let state = this.components.get(component);
     if (!state) {
-      state = { status: 'ok', errorCount: 0 };
+      state = { status: "ok", errorCount: 0 };
       this.components.set(component, state);
     }
     return state;
   }
 
-  private pushEvent(component: string, level: 'warn' | 'error', message: string): void {
-    this.events.push({ at: new Date(this.now()).toISOString(), component, level, message });
+  private pushEvent(
+    component: string,
+    level: "warn" | "error",
+    message: string
+  ): void {
+    this.events.push({
+      at: new Date(this.now()).toISOString(),
+      component,
+      level,
+      message,
+    });
     if (this.events.length > this.maxEvents)
       this.events.splice(0, this.events.length - this.maxEvents);
   }

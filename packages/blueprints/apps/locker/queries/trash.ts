@@ -4,15 +4,15 @@
  * same decorate() path as the live window.
  */
 
-import { decorate, readTags, readStarred, type RawItem } from './items.ts';
+import { decorate, readTags, readStarred, type RawItem } from "./items.ts";
 
-export default async ({ ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
+export default async function trash({ ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
   try {
     const res = await ctx.vault.read({
-      entity: 'locker.item',
-      where: [{ column: 'deleted_at', op: 'not-null' }],
-      orderBy: { column: 'updated_at', dir: 'desc' },
+      entity: "locker.item",
+      where: [{ column: "deleted_at", op: "not-null" }],
+      orderBy: { column: "updated_at", dir: "desc" },
       limit: 2000,
       purpose,
     });
@@ -27,4 +27,4 @@ export default async ({ ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

@@ -14,9 +14,15 @@
  * end of the turn.
  */
 
-import type { TurnStreamEvent } from '@centraid/app-engine';
-import { firstString, textOf } from './content.js';
-import { readCost, readTokenUsage, type TokenUsage, type UsageCost } from './usage.js';
+import type { TurnStreamEvent } from "@centraid/app-engine";
+
+import { firstString, textOf } from "./content.js";
+import {
+  readCost,
+  readTokenUsage,
+  type TokenUsage,
+  type UsageCost,
+} from "./usage.js";
 
 export interface SessionUpdateMapper {
   /** Feed one `session/update` notification's `params`. */
@@ -54,12 +60,14 @@ function normalizeLocations(value: unknown): ToolLocation[] {
   if (!Array.isArray(value)) return [];
   const out: ToolLocation[] = [];
   for (const entry of value) {
-    if (!entry || typeof entry !== 'object') continue;
+    if (!entry || typeof entry !== "object") continue;
     const rec = entry as Record<string, unknown>;
-    if (typeof rec.path !== 'string' || rec.path.length === 0) continue;
+    if (typeof rec.path !== "string" || rec.path.length === 0) continue;
     out.push({
       path: rec.path,
-      ...(typeof rec.line === 'number' && Number.isFinite(rec.line) ? { line: rec.line } : {}),
+      ...(typeof rec.line === "number" && Number.isFinite(rec.line)
+        ? { line: rec.line }
+        : {}),
     });
   }
   return out;
@@ -69,60 +77,73 @@ function normalizeLocations(value: unknown): ToolLocation[] {
 function extractInlineArtifacts(value: unknown): InlineArtifact[] {
   const content = Array.isArray(value)
     ? value
-    : value && typeof value === 'object' && Array.isArray((value as { content?: unknown }).content)
+    : value &&
+        typeof value === "object" &&
+        Array.isArray((value as { content?: unknown }).content)
       ? (value as { content: unknown[] }).content
       : [];
   const out: InlineArtifact[] = [];
   for (const block of content) {
-    if (!block || typeof block !== 'object') continue;
+    if (!block || typeof block !== "object") continue;
     const rec = block as Record<string, unknown>;
-    if (rec.type === 'content') {
+    if (rec.type === "content") {
       const text = textOf(rec.content);
       if (text) {
         out.push({
-          dataBase64: Buffer.from(text).toString('base64'),
-          mime: 'text/plain',
-          filename: 'tool-output.txt',
+          dataBase64: Buffer.from(text).toString("base64"),
+          mime: "text/plain",
+          filename: "tool-output.txt",
         });
       }
       continue;
     }
-    if (rec.type === 'terminal') {
+    if (rec.type === "terminal") {
       const text = firstString(rec.output, rec.text);
       if (text) {
         out.push({
-          dataBase64: Buffer.from(text).toString('base64'),
-          mime: 'text/plain',
-          filename: 'terminal-output.txt',
+          dataBase64: Buffer.from(text).toString("base64"),
+          mime: "text/plain",
+          filename: "terminal-output.txt",
         });
       }
       continue;
     }
     if (
-      (rec.type === 'image' || rec.type === 'audio') &&
-      typeof rec.data === 'string' &&
+      (rec.type === "image" || rec.type === "audio") &&
+      typeof rec.data === "string" &&
       rec.data.length > 0
     ) {
       out.push({
         dataBase64: rec.data,
-        mime: typeof rec.mimeType === 'string' ? rec.mimeType : 'application/octet-stream',
+        mime:
+          typeof rec.mimeType === "string"
+            ? rec.mimeType
+            : "application/octet-stream",
       });
       continue;
     }
-    if (rec.type !== 'resource' || !rec.resource || typeof rec.resource !== 'object') continue;
+    if (
+      rec.type !== "resource" ||
+      !rec.resource ||
+      typeof rec.resource !== "object"
+    )
+      continue;
     const resource = rec.resource as Record<string, unknown>;
     const blob =
-      typeof resource.blob === 'string'
+      typeof resource.blob === "string"
         ? resource.blob
-        : typeof resource.text === 'string'
-          ? Buffer.from(resource.text).toString('base64')
+        : typeof resource.text === "string"
+          ? Buffer.from(resource.text).toString("base64")
           : undefined;
     if (!blob) continue;
-    const uri = typeof resource.uri === 'string' ? resource.uri : undefined;
+    const uri = typeof resource.uri === "string" ? resource.uri : undefined;
     out.push({
       dataBase64: blob,
-      mime: typeof resource.mimeType === 'string' ? resource.mimeType : 'application/octet-stream',
-      ...(uri ? { filename: uri.split('/').at(-1) || 'artifact' } : {}),
+      mime:
+        typeof resource.mimeType === "string"
+          ? resource.mimeType
+          : "application/octet-stream",
+      ...(uri ? { filename: uri.split("/").at(-1) || "artifact" } : {}),
     });
   }
   return out;
@@ -131,20 +152,24 @@ function extractInlineArtifacts(value: unknown): InlineArtifact[] {
 function renderableToolContent(value: unknown): unknown[] {
   const content = Array.isArray(value)
     ? value
-    : value && typeof value === 'object' && Array.isArray((value as { content?: unknown }).content)
+    : value &&
+        typeof value === "object" &&
+        Array.isArray((value as { content?: unknown }).content)
       ? (value as { content: unknown[] }).content
       : [];
   return content.flatMap((block) => {
-    if (!block || typeof block !== 'object') return [];
+    if (!block || typeof block !== "object") return [];
     const rec = block as Record<string, unknown>;
-    if (rec.type === 'content') return [rec.content];
-    if (rec.type === 'terminal') {
+    if (rec.type === "content") return [rec.content];
+    if (rec.type === "terminal") {
       return [
         {
-          type: 'terminal',
-          ...(typeof rec.terminalId === 'string' ? { terminalId: rec.terminalId } : {}),
-          ...(typeof rec.output === 'string' ? { output: rec.output } : {}),
-          ...(typeof rec.text === 'string' ? { text: rec.text } : {}),
+          type: "terminal",
+          ...(typeof rec.terminalId === "string"
+            ? { terminalId: rec.terminalId }
+            : {}),
+          ...(typeof rec.output === "string" ? { output: rec.output } : {}),
+          ...(typeof rec.text === "string" ? { text: rec.text } : {}),
         },
       ];
     }
@@ -158,7 +183,7 @@ export function extractToolDiffs(content: unknown): ToolDiff[] {
     // Some agents put a single block or nest under { content: [...] }.
     if (
       content &&
-      typeof content === 'object' &&
+      typeof content === "object" &&
       Array.isArray((content as { content?: unknown }).content)
     ) {
       return extractToolDiffs((content as { content: unknown }).content);
@@ -167,19 +192,19 @@ export function extractToolDiffs(content: unknown): ToolDiff[] {
   }
   const out: ToolDiff[] = [];
   for (const block of content) {
-    if (!block || typeof block !== 'object') continue;
+    if (!block || typeof block !== "object") continue;
     const rec = block as Record<string, unknown>;
-    if (rec.type !== 'diff') continue;
+    if (rec.type !== "diff") continue;
     const path =
-      typeof rec.path === 'string'
+      typeof rec.path === "string"
         ? rec.path
-        : typeof rec.filePath === 'string'
+        : typeof rec.filePath === "string"
           ? rec.filePath
           : undefined;
     out.push({
       ...(path ? { path } : {}),
-      ...(typeof rec.oldText === 'string' ? { oldText: rec.oldText } : {}),
-      ...(typeof rec.newText === 'string' ? { newText: rec.newText } : {}),
+      ...(typeof rec.oldText === "string" ? { oldText: rec.oldText } : {}),
+      ...(typeof rec.newText === "string" ? { newText: rec.newText } : {}),
     });
   }
   return out;
@@ -190,31 +215,31 @@ export function normalizePlanEntries(entries: unknown): PlanEntry[] {
   if (!Array.isArray(entries)) return [];
   const out: PlanEntry[] = [];
   for (const e of entries) {
-    if (!e || typeof e !== 'object') continue;
+    if (!e || typeof e !== "object") continue;
     const rec = e as Record<string, unknown>;
     const content =
-      typeof rec.content === 'string'
+      typeof rec.content === "string"
         ? rec.content
-        : typeof rec.text === 'string'
+        : typeof rec.text === "string"
           ? rec.text
-          : typeof rec.title === 'string'
+          : typeof rec.title === "string"
             ? rec.title
             : undefined;
     if (!content) continue;
     out.push({
       content,
-      ...(typeof rec.status === 'string' ? { status: rec.status } : {}),
-      ...(typeof rec.priority === 'string' ? { priority: rec.priority } : {}),
+      ...(typeof rec.status === "string" ? { status: rec.status } : {}),
+      ...(typeof rec.priority === "string" ? { priority: rec.priority } : {}),
     });
   }
   return out;
 }
 
 export function createSessionUpdateMapper(
-  emit: (event: TurnStreamEvent) => void,
+  emit: (event: TurnStreamEvent) => void
 ): SessionUpdateMapper {
   let sentAssistantStart = false;
-  let finalText = '';
+  let finalText = "";
   const toolTitles = new Map<string, string>();
   const toolDone = new Set<string>();
   let usageTokens: TokenUsage = {};
@@ -224,7 +249,7 @@ export function createSessionUpdateMapper(
   const ensureStarted = (): void => {
     if (sentAssistantStart) return;
     sentAssistantStart = true;
-    emit({ type: 'assistant.start' });
+    emit({ type: "assistant.start" });
   };
 
   const agentStreamsTool = (toolName: string): boolean => {
@@ -237,15 +262,21 @@ export function createSessionUpdateMapper(
     return false;
   };
 
-  const maybeEmitToolResult = (id: string, update: Record<string, unknown>): void => {
-    const status = typeof update.status === 'string' ? update.status : undefined;
-    if (status !== 'completed' && status !== 'failed') return;
+  const maybeEmitToolResult = (
+    id: string,
+    update: Record<string, unknown>
+  ): void => {
+    const status =
+      typeof update.status === "string" ? update.status : undefined;
+    if (status !== "completed" && status !== "failed") return;
     if (toolDone.has(id)) return;
     toolDone.add(id);
-    const ok = status === 'completed';
+    const ok = status === "completed";
     const renderableContent = renderableToolContent(update.content);
     const result =
-      update.rawOutput && typeof update.rawOutput === 'object' && !Array.isArray(update.rawOutput)
+      update.rawOutput &&
+      typeof update.rawOutput === "object" &&
+      !Array.isArray(update.rawOutput)
         ? {
             ...(update.rawOutput as Record<string, unknown>),
             ...(renderableContent.length
@@ -254,16 +285,23 @@ export function createSessionUpdateMapper(
                   // The agent's own `rawOutput.content` is its payload, not
                   // our renderable projection — overwriting the key would
                   // silently drop tool output the agent chose to return.
-                  ...((update.rawOutput as Record<string, unknown>).content !== undefined
-                    ? { rawOutputContent: (update.rawOutput as Record<string, unknown>).content }
-                    : {}),
+                  ...((update.rawOutput as Record<string, unknown>).content ===
+                  undefined
+                    ? {}
+                    : {
+                        rawOutputContent: (
+                          update.rawOutput as Record<string, unknown>
+                        ).content,
+                      }),
                 }
               : {}),
           }
         : renderableContent.length
           ? { rawOutput: update.rawOutput ?? null, content: renderableContent }
           : (update.rawOutput ?? update.content ?? null);
-    const errorText = ok ? undefined : textOf(update.content) || 'tool call failed';
+    const errorText = ok
+      ? undefined
+      : textOf(update.content) || "tool call failed";
     let diffs = extractToolDiffs(update.content);
     // Also scan rawOutput for nested content blocks.
     if (diffs.length === 0 && update.rawOutput !== undefined) {
@@ -275,32 +313,39 @@ export function createSessionUpdateMapper(
       ? update.content.some(
           (block) =>
             !!block &&
-            typeof block === 'object' &&
-            (block as Record<string, unknown>).type === 'terminal',
+            typeof block === "object" &&
+            (block as Record<string, unknown>).type === "terminal"
         )
       : false;
     if (
       hasTerminal &&
-      !artifacts.some((artifact) => artifact.filename === 'terminal-output.txt') &&
+      !artifacts.some(
+        (artifact) => artifact.filename === "terminal-output.txt"
+      ) &&
       update.rawOutput !== undefined
     ) {
       const raw =
-        typeof update.rawOutput === 'string'
+        typeof update.rawOutput === "string"
           ? update.rawOutput
           : JSON.stringify(update.rawOutput, null, 2);
       if (raw) {
         artifacts.push({
-          dataBase64: Buffer.from(raw).toString('base64'),
-          mime: typeof update.rawOutput === 'string' ? 'text/plain' : 'application/json',
+          dataBase64: Buffer.from(raw).toString("base64"),
+          mime:
+            typeof update.rawOutput === "string"
+              ? "text/plain"
+              : "application/json",
           filename:
-            typeof update.rawOutput === 'string' ? 'terminal-output.txt' : 'terminal-output.json',
+            typeof update.rawOutput === "string"
+              ? "terminal-output.txt"
+              : "terminal-output.json",
         });
       }
     }
     emit({
-      type: 'tool.result',
+      type: "tool.result",
       toolCallId: id,
-      toolName: toolTitles.get(id) ?? 'tool',
+      toolName: toolTitles.get(id) ?? "tool",
       ok,
       result,
       rawJson: JSON.stringify(update),
@@ -312,67 +357,67 @@ export function createSessionUpdateMapper(
     // Builder-friendly parallel signal: each file change as a phase so UIs
     // that only listen for `phase` still see diffs.
     for (const d of diffs) {
-      emit({ type: 'phase', phase: 'diff', detail: d });
+      emit({ type: "phase", phase: "diff", detail: d });
     }
   };
 
   const handleSessionUpdate = (params: unknown): void => {
     const p = params as { update?: Record<string, unknown> } | undefined;
     const update = p?.update;
-    if (!update || typeof update !== 'object') return;
+    if (!update || typeof update !== "object") return;
     const kind = update.sessionUpdate;
 
-    if (kind === 'agent_message_chunk') {
+    if (kind === "agent_message_chunk") {
       const text = textOf(update.content);
       if (text) {
         ensureStarted();
         finalText += text;
-        emit({ type: 'assistant.delta', delta: text });
+        emit({ type: "assistant.delta", delta: text });
       }
       return;
     }
-    if (kind === 'agent_thought_chunk') {
+    if (kind === "agent_thought_chunk") {
       const text = textOf(update.content);
       if (text) {
         ensureStarted();
-        emit({ type: 'reasoning.delta', delta: text });
+        emit({ type: "reasoning.delta", delta: text });
       }
       return;
     }
-    if (kind === 'tool_call') {
-      const id = String(update.toolCallId ?? '');
+    if (kind === "tool_call") {
+      const id = String(update.toolCallId ?? "");
       if (!id) return;
-      const title = firstString(update.title, update.kind) ?? 'tool';
+      const title = firstString(update.title, update.kind) ?? "tool";
       toolTitles.set(id, title);
       ensureStarted();
       emit({
-        type: 'tool.start',
+        type: "tool.start",
         toolCallId: id,
         toolName: title,
         rawJson: JSON.stringify(update),
-        ...(update.rawInput !== undefined ? { args: update.rawInput } : {}),
-        ...(typeof update.kind === 'string' ? { kind: update.kind } : {}),
+        ...(update.rawInput === undefined ? {} : { args: update.rawInput }),
+        ...(typeof update.kind === "string" ? { kind: update.kind } : {}),
       });
       maybeEmitToolResult(id, update);
       return;
     }
-    if (kind === 'tool_call_update') {
-      const id = String(update.toolCallId ?? '');
+    if (kind === "tool_call_update") {
+      const id = String(update.toolCallId ?? "");
       if (!id) return;
       maybeEmitToolResult(id, update);
       return;
     }
-    if (kind === 'plan') {
+    if (kind === "plan") {
       const plan = normalizePlanEntries(update.entries);
       emit({
-        type: 'phase',
-        phase: 'plan',
-        ...(update.entries !== undefined ? { detail: update.entries } : {}),
+        type: "phase",
+        phase: "plan",
+        ...(update.entries === undefined ? {} : { detail: update.entries }),
         ...(plan.length ? { plan } : {}),
       });
       return;
     }
-    if (kind === 'usage_update') {
+    if (kind === "usage_update") {
       // Per schema, `usage_update` carries context-window used/size plus a
       // cumulative `cost`. Some agents also hang token counts here, so we
       // still merge whatever tokens we can read — the end-of-turn emit wins.
@@ -380,23 +425,26 @@ export function createSessionUpdateMapper(
       const cost = readCost(update.cost);
       if (cost) usageCost = cost;
       const used =
-        typeof update.used === 'number' && Number.isFinite(update.used) && update.used >= 0
+        typeof update.used === "number" &&
+        Number.isFinite(update.used) &&
+        update.used >= 0
           ? update.used
           : undefined;
       const size =
-        typeof update.size === 'number' && Number.isFinite(update.size) && update.size > 0
+        typeof update.size === "number" &&
+        Number.isFinite(update.size) &&
+        update.size > 0
           ? update.size
           : undefined;
       if (used !== undefined || size !== undefined) {
         // ACP sessions may self-compact, so `used` is deliberately a latest
         // snapshot rather than a monotonic max.
         contextUsage = {
-          ...(used !== undefined ? { used } : {}),
-          ...(size !== undefined ? { size } : {}),
+          ...(used === undefined ? {} : { used }),
+          ...(size === undefined ? {} : { size }),
         };
-        emit({ type: 'context', ...contextUsage });
+        emit({ type: "context", ...contextUsage });
       }
-      return;
     }
     // user_message_chunk / available_commands_update / current_mode_update /
     // config_option_update: product owns slash commands; config updates are
@@ -411,6 +459,10 @@ export function createSessionUpdateMapper(
     foldTokenUsage: (source) => {
       usageTokens = { ...usageTokens, ...readTokenUsage(source) };
     },
-    usage: () => ({ tokens: usageTokens, cost: usageCost, context: contextUsage }),
+    usage: () => ({
+      tokens: usageTokens,
+      cost: usageCost,
+      context: contextUsage,
+    }),
   };
 }

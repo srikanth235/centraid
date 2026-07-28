@@ -17,15 +17,19 @@
 //     plane (404) or the call fails. An older gateway must keep working exactly
 //     as it did before this issue.
 
-import { auth } from '../../../gateway-client-core.js';
-import { listAppScopes, type AppScopeEntry } from '../../../gateway-client-vault.js';
+import type { InlineScope } from "@centraid/blueprints/apps/inline-types";
+
+import { auth } from "../../../gateway-client-core.js";
+import {
+  listAppScopes,
+  type AppScopeEntry,
+} from "../../../gateway-client-vault.js";
 import {
   addressedGatewayAuth,
   replicaIdentityForGatewayAuth,
-} from '../../../replica/shell-session.js';
-import type { ReplicaIdentity } from '../../../replica/types.js';
-import type { InlineScope } from '@centraid/blueprints/apps/inline-types';
-import { useAsyncData, type AsyncState } from '../useAsyncData.js';
+} from "../../../replica/shell-session.js";
+import type { ReplicaIdentity } from "../../../replica/types.js";
+import { useAsyncData, type AsyncState } from "../useAsyncData.js";
 
 /**
  * The ceiling on concurrently hydrated scopes. Four is the measured comfort
@@ -42,7 +46,7 @@ export interface ResolvedAppScope {
 
 /** Mirrors the gateway's `canWrite` — admin is write's superset. */
 function roleCanWrite(role: string): boolean {
-  return role === 'admin' || role === 'write';
+  return role === "admin" || role === "write";
 }
 
 function toResolved(entry: AppScopeEntry, gatewayId: string): ResolvedAppScope {
@@ -62,7 +66,12 @@ function toResolved(entry: AppScopeEntry, gatewayId: string): ResolvedAppScope {
 async function ambientScope(): Promise<ResolvedAppScope[]> {
   const gatewayAuth = await addressedGatewayAuth();
   const identity = replicaIdentityForGatewayAuth(gatewayAuth);
-  return [{ scope: { id: identity.vaultId, label: 'Library', canWrite: true }, identity }];
+  return [
+    {
+      scope: { id: identity.vaultId, label: "Library", canWrite: true },
+      identity,
+    },
+  ];
 }
 
 /**
@@ -70,7 +79,9 @@ async function ambientScope(): Promise<ResolvedAppScope[]> {
  * absorb: a gateway without the plane, or a transient failure, degrades to the
  * ambient scope so the app still mounts.
  */
-export async function resolveAppScopes(appId: string): Promise<ResolvedAppScope[]> {
+export async function resolveAppScopes(
+  appId: string
+): Promise<ResolvedAppScope[]> {
   let entries: AppScopeEntry[] | undefined;
   try {
     entries = await listAppScopes(appId);
@@ -83,7 +94,9 @@ export async function resolveAppScopes(appId: string): Promise<ResolvedAppScope[
   // auto-installs where it can, so anything still false here genuinely is not
   // available. `undefined` means the gateway did not answer the question and is
   // taken at face value.
-  const mountable = (entries ?? []).filter((entry) => entry.installed !== false);
+  const mountable = (entries ?? []).filter(
+    (entry) => entry.installed !== false
+  );
   if (mountable.length === 0) return ambientScope();
   const base = await auth();
   const gatewayId = replicaIdentityForGatewayAuth({
@@ -99,7 +112,7 @@ export function scopeSetKey(scopes: readonly ResolvedAppScope[]): string {
   return scopes
     .map((entry) => entry.identity.vaultId)
     .sort()
-    .join(',');
+    .join(",");
 }
 
 /**

@@ -7,6 +7,8 @@
   "exports": {
     "./fake-clock": "./src/fake-clock.ts",
     "./flush": "./src/flush.ts",
+    "./sequential": "./src/sequential.ts",
+    "./sqlite": "./src/sqlite.ts",
     "./vitest": "./src/vitest.ts",
     "./quality-result": "./src/quality-result.ts",
     "./temp-dir": "./src/temp-dir.ts",

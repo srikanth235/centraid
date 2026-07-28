@@ -56,7 +56,7 @@ export {
   type OutputSchema,
   type HistoryConfig,
   type HistoryKeep,
-} from './manifest/manifest.js';
+} from "./manifest/manifest.js";
 
 // Cron timezone resolution (issue #570) — pure helpers shared by the matcher,
 // cursor reader, and gateway prefs wiring.
@@ -66,8 +66,8 @@ export {
   wallClockFields,
   wallClockMinuteKey,
   type WallClockFields,
-} from './cron-timezone.js';
-export { cronMatches } from './fire/cron-match.js';
+} from "./cron-timezone.js";
+export { cronMatches } from "./fire/cron-match.js";
 
 // Condition/data cursor sources — the engine reads one consented query per
 // gate tick and delivers unseen rows (duaility: time semantics live in the
@@ -79,11 +79,11 @@ export {
   readDataCursor,
   type ReadConditionCursorOptions,
   type ReadDataCursorOptions,
-} from './fire/condition.js';
+} from "./fire/condition.js";
 
 // Automation identity — the `<appId>/<id>` handle that scheduler labels,
 // webhook routing, and `onFailure` address an automation by (issue #98).
-export { parseRef, type Ref } from './manifest/ref.js';
+export { parseRef, type Ref } from "./manifest/ref.js";
 
 // Automation apps on disk (issue #98 unified model). An automation
 // always lives inside an app folder at `<appCodeDir>/automations/<id>/`;
@@ -96,11 +96,11 @@ export {
   type Row,
   type AppError,
   type ListAppsResult,
-} from './scaffold/app.js';
+} from "./scaffold/app.js";
 
 // The host interface every "thing that fires automations on a schedule"
 // implements — the local in-process scheduler (gateway) satisfies it.
-export type { Host, ReconcileResult } from './fire/host.js';
+export type { Host, ReconcileResult } from "./fire/host.js";
 
 // In-process cron scheduler (issue #149, n8n semantics): the gateway-owned
 // always-on minute timer that fires enabled cron automations while it runs.
@@ -109,7 +109,7 @@ export {
   InProcessScheduler,
   type InProcessSchedulerOptions,
   type LocalScheduler,
-} from './fire/in-process-scheduler.js';
+} from "./fire/in-process-scheduler.js";
 export {
   VaultCursorEngine,
   isDeniedCursorEntity,
@@ -122,8 +122,8 @@ export {
   type CursorReadResult,
   type CursorElement,
   type CursorStore,
-} from './fire/cursor-engine.js';
-export { dueInstants, type CronSchedule } from './fire/cron-cursor.js';
+} from "./fire/cursor-engine.js";
+export { dueInstants, type CronSchedule } from "./fire/cron-cursor.js";
 
 // Missed-automation-run ledger (issue #351 tier 2): the honest record a
 // downtime leaves behind now that the scheduler's "no backfill" silence is
@@ -142,7 +142,7 @@ export {
   type SchedulerLedgerSnapshot,
   type ComputeMissedWindowsOptions,
   type RecordSchedulerTickOptions,
-} from './fire/scheduler-ledger.js';
+} from "./fire/scheduler-ledger.js";
 
 // Webhook trigger dispatch (issue #96). A `webhook` trigger fires an
 // automation on an inbound HTTP POST; the gateway mounts the route
@@ -165,7 +165,7 @@ export {
   type WebhookIngressFn,
   type WebhookIngressResult,
   type WebhookRouteOptions,
-} from './scaffold/webhook.js';
+} from "./scaffold/webhook.js";
 
 // Automation handler runtime (issue #91). A fire executes the app's
 // generated `handler.js` in a worker thread; the host supplies the
@@ -179,10 +179,10 @@ export {
   type AgentDispatcher,
   type DispatchContext,
   type ConnectionAuth,
-} from './handler/runner.js';
+} from "./handler/runner.js";
 // Shared `ctx.agent` answer coercion — every host ends an agent turn with a
 // blob of text and must turn it into the value the handler awaits the same way.
-export { coerceAgentAnswer } from './handler/agent-answer.js';
+export { coerceAgentAnswer } from "./handler/agent-answer.js";
 // Authoring-time handler lint (issue #167): a static scan that flags ambient
 // I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a
 // handler — effects that bypass the audited `ctx.*` rails or make a re-run
@@ -192,7 +192,7 @@ export {
   lintHandlerSource,
   formatHandlerLintError,
   type HandlerLintFinding,
-} from './handler/lint.js';
+} from "./handler/lint.js";
 // The per-fire orchestration spine (issue #147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected
 // dispatch surface, cascade `onFailure`. agent-runtime's `runAutomation`
@@ -205,7 +205,7 @@ export {
   type OpenDispatch,
   type OpenDispatchArgs,
   type ResolveConnection,
-} from './fire/fire.js';
+} from "./fire/fire.js";
 
 // Automation-app scaffolders. The gateway lifecycle routes use the
 // file-map (`*Files`) variants; the disk wrappers back the CLI / local
@@ -217,4 +217,4 @@ export {
   deleteFromFiles,
   validateAppId,
   type ScaffoldOptions,
-} from './scaffold/scaffold.js';
+} from "./scaffold/scaffold.js";

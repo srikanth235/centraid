@@ -2,18 +2,18 @@
 // Watching the whole workspace works because watchman is installed; without
 // it macOS would EMFILE. nodeModulesPaths lets the resolver find both this
 // package's own deps and ones hoisted to the root.
-const { getDefaultConfig } = require('expo/metro-config');
-const path = require('node:path');
+const { getDefaultConfig } = require("expo/metro-config");
+const path = require("node:path");
 
 const projectRoot = __dirname;
-const workspaceRoot = path.resolve(projectRoot, '../..');
+const workspaceRoot = path.resolve(projectRoot, "../..");
 
 const config = getDefaultConfig(projectRoot);
 
 config.watchFolders = [workspaceRoot];
 config.resolver.nodeModulesPaths = [
-  path.resolve(projectRoot, 'node_modules'),
-  path.resolve(workspaceRoot, 'node_modules'),
+  path.resolve(projectRoot, "node_modules"),
+  path.resolve(workspaceRoot, "node_modules"),
 ];
 config.resolver.disableHierarchicalLookup = true;
 
@@ -27,7 +27,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   try {
     return resolve(context, moduleName, platform);
   } catch (error) {
-    if (/^\.{1,2}\/.+\.js$/.test(moduleName)) {
+    if (/^\.{1,2}\/.+\.js$/u.test(moduleName)) {
       return resolve(context, moduleName.slice(0, -3), platform);
     }
     throw error;

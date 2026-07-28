@@ -1,7 +1,7 @@
 ---
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import path from 'node:path';
 import SectionRail from '../components/SectionRail.astro';
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteHead from '../components/SiteHead.astro';
@@ -36,7 +36,7 @@ const shareImage = new URL('assets/og-docs.svg', Astro.site ?? 'https://centraid
 // where the un-fingerprinted source assets live under scripts/docs-site/public.
 const assetHash = (path) => {
   try {
-    const abs = join(process.cwd(), 'scripts', 'docs-site', 'public', path);
+    const abs = path.join(process.cwd(), 'scripts', 'docs-site', 'public', path);
     return createHash('sha1').update(readFileSync(abs)).digest('hex').slice(0, 10);
   } catch {
     return '';
@@ -46,7 +46,7 @@ const asset = (path) => {
   const v = assetHash(path);
   return `${base}${path}${v ? `?v=${v}` : ''}`;
 };
-const pageName = title.replace(/\s+[—-]\s+Centraid docs.*$/, '').trim();
+const pageName = title.replace(/\s+[—-]\s+Centraid docs.*$/u, '').trim();
 const pageLabel = searchLabel ?? pageName;
 const breadcrumbItems = [
   { name: 'Centraid', url: 'https://centraid.dev/' },

@@ -1,15 +1,20 @@
+import type { ReactNode } from "react";
+
 // The v2 sidebar's render orchestrator — replaces toolbar.jsx (and folds in
 // what Chips.jsx/AlbumTools.jsx used to own): the nav list, the album list's
 // inline new-album/rename editors, the narrow-width drawer's open/closed
 // state, and the storage footer. Same split as every other region here:
 // `selectedAlbum` stays app.tsx's own state (refresh/renderGrid/the picker
 // all read it directly), threaded through as a getter/setter pair.
-import { deleteAlbumConfirmed, submitNewAlbum, submitRenameAlbum } from './albums-actions.ts';
-import { fmtBytes } from './kit.ts';
-import { SidebarView } from './components/Sidebar.tsx';
-import { $ } from './dom.ts';
-import type { ReactNode } from 'react';
-import type { Album, Asset } from './types.ts';
+import {
+  deleteAlbumConfirmed,
+  submitNewAlbum,
+  submitRenameAlbum,
+} from "./albums-actions.ts";
+import { SidebarView } from "./components/Sidebar.tsx";
+import { $ } from "./dom.ts";
+import { fmtBytes } from "./kit.ts";
+import type { Album, Asset } from "./types.ts";
 
 type Root = { render: (node: ReactNode) => void };
 
@@ -81,13 +86,18 @@ export function createSidebar({
     const rawAlbums = getAlbums();
     const assets = getAssets();
     const own = getOwnAssets();
-    if (renamingAlbumForId && !rawAlbums.some((a) => a.album_id === renamingAlbumForId)) {
+    if (
+      renamingAlbumForId &&
+      !rawAlbums.some((a) => a.album_id === renamingAlbumForId)
+    ) {
       renamingAlbumForId = null;
     }
     // Mini cover thumb + live count per album, computed off the loaded
     // window (same reach every other album-scoped view already has).
     const albums: Album[] = rawAlbums.map((album) => {
-      const members = own.filter((a) => (a.album_ids ?? []).includes(album.album_id));
+      const members = own.filter((a) =>
+        (a.album_ids ?? []).includes(album.album_id)
+      );
       const cover = members[0];
       return {
         ...album,
@@ -101,14 +111,14 @@ export function createSidebar({
     const bytes = own.reduce((sum, a) => sum + (a.byte_size ?? 0), 0);
     const storageLabel =
       own.length === 0
-        ? 'Nothing uploaded yet'
-        : `${fmtBytes(bytes)} across ${own.length} photo${own.length === 1 ? '' : 's'}`;
+        ? "Nothing uploaded yet"
+        : `${fmtBytes(bytes)} across ${own.length} photo${own.length === 1 ? "" : "s"}`;
 
     sidebarRoot.render(
       <SidebarView
         open={sidebarOpen}
         onClose={closeSidebar}
-        onUpload={() => $('fileInput').click()}
+        onUpload={() => $("fileInput").click()}
         counts={{
           all: assets.length,
           favorites: assets.filter((a) => a.favorite).length,
@@ -136,7 +146,9 @@ export function createSidebar({
           renamingAlbumForId = null;
           renderSidebar();
         }}
-        onDeleteAlbum={(album) => deleteAlbumConfirmed(album, { refresh, setSelectedAlbum })}
+        onDeleteAlbum={(album) =>
+          deleteAlbumConfirmed(album, { refresh, setSelectedAlbum })
+        }
         newAlbumOpen={newAlbumOpen}
         onStartNewAlbum={() => {
           newAlbumOpen = true;
@@ -158,7 +170,7 @@ export function createSidebar({
         }}
         tagOptions={tagOptions}
         storageLabel={storageLabel}
-      />,
+      />
     );
   }
 

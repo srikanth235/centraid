@@ -4,12 +4,14 @@
 // CAS door. Test-only module — imported by archive.test.ts / selector.test.ts,
 // never shipped.
 
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
-import { createHash } from 'node:crypto';
-import path from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
-import { openJournalDb } from '../../stores/gateway-db.js';
-import type { BlobSink } from './types.js';
+import { createHash } from "node:crypto";
+import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
+
+import { openJournalDb } from "../../stores/gateway-db.js";
+import type { BlobSink } from "./types.js";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const now = Date.now();
@@ -18,7 +20,7 @@ export const daysAgo = (d: number): number => now - d * DAY_MS;
 export class MemoryBlobSink implements BlobSink {
   readonly store = new Map<string, Buffer>();
   ingestSync(bytes: Buffer): { sha256: string; byteSize: number } {
-    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
     if (!this.store.has(sha256)) this.store.set(sha256, Buffer.from(bytes));
     return { sha256, byteSize: bytes.length };
   }
@@ -31,8 +33,8 @@ export class MemoryBlobSink implements BlobSink {
 }
 
 export function openTempJournal(): { journal: DatabaseSync; dbPath: string } {
-  const dir = tempDirSync('centraid-conv-archive-');
-  const dbPath = path.join(dir, 'journal.db');
+  const dir = tempDirSync("centraid-conv-archive-");
+  const dbPath = path.join(dir, "journal.db");
   return { journal: openJournalDb(dbPath), dbPath };
 }
 
@@ -40,26 +42,26 @@ export function seedConversation(
   journal: DatabaseSync,
   a: {
     id: string;
-    kind: 'chat' | 'build' | 'automation';
+    kind: "chat" | "build" | "automation";
     appId?: string | null;
     automationId?: string | null;
     title?: string;
     updatedAt: number;
-  },
+  }
 ): void {
   journal
     .prepare(
       `INSERT INTO conversations (id, kind, user_id, app_id, automation_id, title, created_at, updated_at)
-       VALUES (?, ?, 'u1', ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, 'u1', ?, ?, ?, ?, ?)`
     )
     .run(
       a.id,
       a.kind,
       a.appId ?? null,
       a.automationId ?? null,
-      a.title ?? '',
+      a.title ?? "",
       a.updatedAt,
-      a.updatedAt,
+      a.updatedAt
     );
 }
 
@@ -88,7 +90,7 @@ export function seedTurn(journal: DatabaseSync, a: SeedTurnArgs): void {
     .prepare(
       `INSERT INTO turns (id, conversation_id, seq, trigger, retry_of, ok, pinned, started_at, ended_at,
          total_input_tokens, total_output_tokens, hydration_tokens, total_cost_usd, step_count, tool_count)
-       VALUES (?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       a.turnId,
@@ -104,19 +106,19 @@ export function seedTurn(journal: DatabaseSync, a: SeedTurnArgs): void {
       a.hydrationTokens ?? null,
       a.costUsd ?? 0,
       a.stepCount ?? 0,
-      a.toolCount ?? 0,
+      a.toolCount ?? 0
     );
   journal
     .prepare(
       `INSERT INTO items (id, turn_id, ordinal, kind, role, text, ok, started_at)
-       VALUES (?, ?, 0, 'message_in', 'user', ?, 1, ?)`,
+       VALUES (?, ?, 0, 'message_in', 'user', ?, 1, ?)`
     )
     .run(`${a.turnId}-msg`, a.turnId, `input ${a.turnId}`, a.startedAt);
   if (a.model !== undefined) {
     journal
       .prepare(
         `INSERT INTO items (id, turn_id, ordinal, kind, model, effort, input_tokens, output_tokens, cost_usd, ok, started_at)
-         VALUES (?, ?, 1, 'step', ?, ?, ?, ?, ?, 1, ?)`,
+         VALUES (?, ?, 1, 'step', ?, ?, ?, ?, ?, 1, ?)`
       )
       .run(
         `${a.turnId}-step`,
@@ -126,21 +128,28 @@ export function seedTurn(journal: DatabaseSync, a: SeedTurnArgs): void {
         a.inputTokens ?? 0,
         a.outputTokens ?? 0,
         a.costUsd ?? 0,
-        a.startedAt,
+        a.startedAt
       );
   }
 }
 
-export function seedAttachment(journal: DatabaseSync, turnId: string, hash: string): void {
+export function seedAttachment(
+  journal: DatabaseSync,
+  turnId: string,
+  hash: string
+): void {
   journal
     .prepare(
       `INSERT INTO attachments (id, item_id, hash, mime, size_bytes, created_at)
-       VALUES (?, ?, ?, 'image/png', 10, ?)`,
+       VALUES (?, ?, ?, 'image/png', 10, ?)`
     )
     .run(`${turnId}-att`, `${turnId}-msg`, hash, now);
 }
 
-export function countTurns(journal: DatabaseSync, conversationId: string): number {
+export function countTurns(
+  journal: DatabaseSync,
+  conversationId: string
+): number {
   return Number(
     (
       journal
@@ -148,6 +157,6 @@ export function countTurns(journal: DatabaseSync, conversationId: string): numbe
         .get(conversationId) as {
         n: number;
       }
-    ).n,
+    ).n
   );
 }

@@ -18,8 +18,9 @@
 // strings app.css owns (Enrichment.tsx / media.ts / faces.ts write them as plain
 // strings), and `kit-*` is the global kit vocabulary (kit.css, loaded once by the
 // route host). The served path (index.html + app.css) is untouched.
-import type { ReactNode } from 'react';
-import styles from './Chrome.module.css';
+import type { ReactNode } from "react";
+
+import styles from "./Chrome.module.css";
 
 export interface ChromeSlots {
   sidebar: ReactNode;
@@ -100,9 +101,13 @@ const playGlyph = (
 );
 
 export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
-  const shellClass = [styles.shell, narrow ? styles.isNarrow : '', ready ? styles.ready : '']
+  const shellClass = [
+    styles.shell,
+    narrow ? styles.isNarrow : "",
+    ready ? styles.ready : "",
+  ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
   return (
     <div className={shellClass}>
       {/* Sidebar host — the SidebarView Fragment (scrim + <aside>) renders here.
@@ -183,9 +188,10 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
         </div>
 
         <div id="consentBanner" className="kit-banner" hidden>
-          <strong>No access yet.</strong>{' '}
+          <strong>No access yet.</strong>{" "}
           <span id="consentDetail">
-            Ask the owner to approve this app&apos;s requested scopes in settings.
+            Ask the owner to approve this app&apos;s requested scopes in
+            settings.
           </span>
         </div>
         {/* <output>'s implicit role IS `status`, so the live region survives the
@@ -201,13 +207,22 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
           <div id="toolbarMount">{slots.toolbar}</div>
 
           <div id="scrollPane" className={styles.scroll}>
-            <section id="grid" className={styles.content} aria-label="Photo library">
+            <section
+              id="grid"
+              className={styles.content}
+              aria-label="Photo library"
+            >
               {slots.main}
             </section>
             <div id="empty" className="kit-empty" hidden>
               <div id="emptyText" className="kit-empty-title" />
               <div className="kit-empty-sub">
-                <button id="emptyUpload" type="button" className="kit-btn primary" hidden>
+                <button
+                  id="emptyUpload"
+                  type="button"
+                  className="kit-btn primary"
+                  hidden
+                >
                   ＋ Add media
                 </button>
               </div>
@@ -233,7 +248,13 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
       {/* Never focusable and never shown — `hidden` already keeps it out of the
           accessibility tree, so it carries no `aria-hidden`; upload.ts drives it
           with `.click()`. */}
-      <input id="fileInput" type="file" accept="image/*,video/*,audio/*" multiple hidden />
+      <input
+        id="fileInput"
+        type="file"
+        accept="image/*,video/*,audio/*"
+        multiple
+        hidden
+      />
 
       <div id="lightbox" className={styles.lightbox} hidden>
         {slots.lightbox}
@@ -260,7 +281,12 @@ export function Chrome({ narrow, ready, slots }: ChromeProps): ReactNode {
       >
         {slots.picker}
       </dialog>
-      <div id="dropOverlay" className={`kit-drop ${styles.dropOverlay}`} aria-hidden="true" hidden>
+      <div
+        id="dropOverlay"
+        className={`kit-drop ${styles.dropOverlay}`}
+        aria-hidden="true"
+        hidden
+      >
         <div className="kit-drop-card">Drop to add to your library</div>
       </div>
     </div>

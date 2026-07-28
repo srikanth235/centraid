@@ -16,8 +16,8 @@
  * Dependencies fold to per-shape/entity invalidations (no rowId); optimistic
  * mutations fold to per-row invalidations. A Map keyed on
  * `intentId\0shapeId\0entity\0rowId?` dedups repeats within a batch.
- * @param {readonly import('./intent-invalidations.js').IntentInvalidationInput[]} intents
- * @returns {import('./intent-invalidations.js').OverlayInvalidation[]}
+ * @param {readonly import('./intent-invalidations.js').IntentInvalidationInput[]} intents The durable intents to fold.
+ * @returns {import('./intent-invalidations.js').OverlayInvalidation[]} The deduplicated overlay invalidations.
  */
 export function replicaIntentInvalidations(intents) {
   const values = new Map();
@@ -25,13 +25,13 @@ export function replicaIntentInvalidations(intents) {
     for (const dependency of intent.dependencies ?? []) {
       const invalidation = {
         ...dependency,
-        source: 'overlay',
+        source: "overlay",
         intentId: intent.intentId,
         intentState: intent.state,
       };
       values.set(
         `${intent.intentId}\u0000${invalidation.shapeId}\u0000${invalidation.entity}\u0000`,
-        invalidation,
+        invalidation
       );
     }
     for (const mutation of intent.optimistic) {
@@ -39,13 +39,13 @@ export function replicaIntentInvalidations(intents) {
         shapeId: mutation.shapeId,
         entity: mutation.entity,
         rowId: mutation.rowId,
-        source: 'overlay',
+        source: "overlay",
         intentId: intent.intentId,
         intentState: intent.state,
       };
       values.set(
         `${intent.intentId}\u0000${invalidation.shapeId}\u0000${invalidation.entity}\u0000${invalidation.rowId}`,
-        invalidation,
+        invalidation
       );
     }
   }

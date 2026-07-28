@@ -1,19 +1,23 @@
-import { tempDirSync } from '@centraid/test-kit/temp-dir';
+import { createHash } from "node:crypto";
 // Digest parity (issue #438 decision 5): the numbers Insights reports must be
 // identical before archive (all live run_summary rows) and after archive+prune
 // (live rows + conversation_digest rollups), driven through the REAL
 // InsightsStore over the same journal handle. `recent` is live-only by design,
 // so this compares the aggregate surfaces the issue names: kpis, bySource,
 // byModel.
+import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 
-import { createHash } from 'node:crypto';
-import path from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it } from 'vitest';
-import { makeJournalDbProvider, openJournalDb } from '../../stores/gateway-db.js';
-import { InsightsStore } from '../../insights/insights-store.js';
-import { runConversationArchival } from './index.js';
-import type { BlobSink } from './types.js';
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import { describe, expect, it } from "vitest";
+
+import { InsightsStore } from "../../insights/insights-store.js";
+import {
+  makeJournalDbProvider,
+  openJournalDb,
+} from "../../stores/gateway-db.js";
+import { runConversationArchival } from "./index.js";
+import type { BlobSink } from "./types.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const now = Date.now();
@@ -22,7 +26,7 @@ const daysAgo = (d: number): number => now - d * DAY_MS;
 class MemoryBlobSink implements BlobSink {
   private readonly store = new Set<string>();
   ingestSync(bytes: Buffer): { sha256: string; byteSize: number } {
-    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
     this.store.add(sha256);
     return { sha256, byteSize: bytes.length };
   }
@@ -48,14 +52,14 @@ function seedFinishedTurn(
     tools: number;
     model: string;
     effort?: string;
-  },
+  }
 ): void {
   journal
     .prepare(
       `INSERT INTO turns (id, conversation_id, seq, trigger, retry_of, ok, started_at, ended_at,
          total_input_tokens, total_output_tokens, total_cache_read_tokens, total_cache_write_tokens,
          hydration_tokens, total_cost_usd, step_count, tool_count)
-       VALUES (?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)`
     )
     .run(
       a.turnId,
@@ -70,28 +74,36 @@ function seedFinishedTurn(
       a.hydration ?? null,
       a.cost,
       a.steps,
-      a.tools,
+      a.tools
     );
   // Two step items so the dominant-model pick is exercised: the model under
   // test carries the bulk of the tokens; a decoy model carries fewer.
   journal
     .prepare(
       `INSERT INTO items (id, turn_id, ordinal, kind, model, effort, input_tokens, output_tokens, ok, started_at)
-       VALUES (?, ?, 0, 'step', ?, ?, ?, ?, 1, ?)`,
+       VALUES (?, ?, 0, 'step', ?, ?, ?, ?, 1, ?)`
     )
-    .run(`${a.turnId}-s0`, a.turnId, a.model, a.effort ?? null, a.input, a.output, a.startedAt);
+    .run(
+      `${a.turnId}-s0`,
+      a.turnId,
+      a.model,
+      a.effort ?? null,
+      a.input,
+      a.output,
+      a.startedAt
+    );
   journal
     .prepare(
       `INSERT INTO items (id, turn_id, ordinal, kind, model, input_tokens, output_tokens, ok, started_at)
-       VALUES (?, ?, 1, 'step', 'decoy', 1, 0, 1, ?)`,
+       VALUES (?, ?, 1, 'step', 'decoy', 1, 0, 1, ?)`
     )
     .run(`${a.turnId}-s1`, a.turnId, a.startedAt);
 }
 
-describe('digest parity with pre-archive rollups', () => {
-  it('kpis / bySource / byModel are identical before archive and after prune', () => {
-    const dir = tempDirSync('centraid-digest-parity-');
-    const dbPath = path.join(dir, 'journal.db');
+describe("digest parity with pre-archive rollups", () => {
+  it("kpis / bySource / byModel are identical before archive and after prune", () => {
+    const dir = tempDirSync("centraid-digest-parity-");
+    const dbPath = path.join(dir, "journal.db");
     const journal = openJournalDb(dbPath);
     const blobSink = new MemoryBlobSink();
 
@@ -101,25 +113,25 @@ describe('digest parity with pre-archive rollups', () => {
     journal
       .prepare(
         `INSERT INTO conversations (id, kind, user_id, app_id, automation_id, title, created_at, updated_at)
-         VALUES ('app/digest','automation','u1','app','app/digest','Morning digest',?,?)`,
+         VALUES ('app/digest','automation','u1','app','app/digest','Morning digest',?,?)`
       )
       .run(daysAgo(200), now);
     journal
       .prepare(
         `INSERT INTO conversations (id, kind, user_id, app_id, automation_id, title, created_at, updated_at)
-         VALUES ('app/sync','automation','u1','app','app/sync','Nightly sync',?,?)`,
+         VALUES ('app/sync','automation','u1','app','app/sync','Nightly sync',?,?)`
       )
       .run(daysAgo(200), now);
     journal
       .prepare(
         `INSERT INTO conversations (id, kind, user_id, app_id, automation_id, title, created_at, updated_at)
-         VALUES ('chat1','chat','u1','app',NULL,'A chat',?,?)`,
+         VALUES ('chat1','chat','u1','app',NULL,'A chat',?,?)`
       )
       .run(daysAgo(200), daysAgo(120));
 
     seedFinishedTurn(journal, {
-      turnId: 'd0',
-      conversationId: 'app/digest',
+      turnId: "d0",
+      conversationId: "app/digest",
       seq: 0,
       startedAt: daysAgo(150),
       input: 100,
@@ -128,12 +140,12 @@ describe('digest parity with pre-archive rollups', () => {
       cost: 0.02,
       steps: 2,
       tools: 1,
-      model: 'sonnet',
-      effort: 'high',
+      model: "sonnet",
+      effort: "high",
     });
     seedFinishedTurn(journal, {
-      turnId: 'd1',
-      conversationId: 'app/digest',
+      turnId: "d1",
+      conversationId: "app/digest",
       seq: 1,
       startedAt: daysAgo(140),
       input: 200,
@@ -141,13 +153,13 @@ describe('digest parity with pre-archive rollups', () => {
       cost: 0.03,
       steps: 3,
       tools: 0,
-      model: 'opus',
-      effort: 'low',
+      model: "opus",
+      effort: "low",
       ok: false,
     });
     seedFinishedTurn(journal, {
-      turnId: 'd2',
-      conversationId: 'app/digest',
+      turnId: "d2",
+      conversationId: "app/digest",
       seq: 2,
       startedAt: daysAgo(130),
       input: 80,
@@ -155,12 +167,12 @@ describe('digest parity with pre-archive rollups', () => {
       cost: 0.01,
       steps: 1,
       tools: 2,
-      model: 'sonnet',
-      retryOf: 'd1',
+      model: "sonnet",
+      retryOf: "d1",
     });
     seedFinishedTurn(journal, {
-      turnId: 'd3',
-      conversationId: 'app/digest',
+      turnId: "d3",
+      conversationId: "app/digest",
       seq: 3,
       startedAt: daysAgo(2),
       input: 10,
@@ -168,12 +180,12 @@ describe('digest parity with pre-archive rollups', () => {
       cost: 0.001,
       steps: 1,
       tools: 0,
-      model: 'sonnet',
+      model: "sonnet",
     }); // live head
 
     seedFinishedTurn(journal, {
-      turnId: 's0',
-      conversationId: 'app/sync',
+      turnId: "s0",
+      conversationId: "app/sync",
       seq: 0,
       startedAt: daysAgo(160),
       input: 300,
@@ -181,11 +193,11 @@ describe('digest parity with pre-archive rollups', () => {
       cost: 0.05,
       steps: 4,
       tools: 3,
-      model: 'opus',
+      model: "opus",
     });
     seedFinishedTurn(journal, {
-      turnId: 's1',
-      conversationId: 'app/sync',
+      turnId: "s1",
+      conversationId: "app/sync",
       seq: 1,
       startedAt: daysAgo(1),
       input: 20,
@@ -193,12 +205,12 @@ describe('digest parity with pre-archive rollups', () => {
       cost: 0.002,
       steps: 1,
       tools: 0,
-      model: 'opus',
+      model: "opus",
     }); // live head
 
     seedFinishedTurn(journal, {
-      turnId: 'c0',
-      conversationId: 'chat1',
+      turnId: "c0",
+      conversationId: "chat1",
       seq: 0,
       startedAt: daysAgo(150),
       input: 60,
@@ -206,11 +218,11 @@ describe('digest parity with pre-archive rollups', () => {
       cost: 0.015,
       steps: 2,
       tools: 1,
-      model: 'sonnet',
+      model: "sonnet",
     });
     seedFinishedTurn(journal, {
-      turnId: 'c1',
-      conversationId: 'chat1',
+      turnId: "c1",
+      conversationId: "chat1",
       seq: 1,
       startedAt: daysAgo(140),
       input: 40,
@@ -218,7 +230,7 @@ describe('digest parity with pre-archive rollups', () => {
       cost: 0.005,
       steps: 1,
       tools: 0,
-      model: 'haiku',
+      model: "haiku",
     });
 
     const insights = new InsightsStore(makeJournalDbProvider(dbPath));
@@ -229,12 +241,18 @@ describe('digest parity with pre-archive rollups', () => {
 
     const r = runConversationArchival(
       { journal, blobSink, custodyProven: () => true },
-      { nowMs: now },
+      { nowMs: now }
     );
     expect(r.segmentsWritten).toBeGreaterThan(0);
     expect(r.turnsPruned).toBeGreaterThan(0);
     // Confirm raw archived rows are actually gone (Insights now leans on digests).
-    expect((journal.prepare(`SELECT COUNT(*) AS n FROM turns`).get() as { n: number }).n).toBe(2); // the two live heads
+    expect(
+      (
+        journal.prepare(`SELECT COUNT(*) AS n FROM turns`).get() as {
+          n: number;
+        }
+      ).n
+    ).toBe(2); // the two live heads
 
     const after = insights.summary(opts);
 
@@ -246,12 +264,16 @@ describe('digest parity with pre-archive rollups', () => {
     expect(after.kpis.appsTouched).toBe(before.kpis.appsTouched);
 
     const norm = <T extends { key?: string; model?: string }>(rows: T[]): T[] =>
-      [...rows].sort((a, b) => `${a.key ?? a.model}`.localeCompare(`${b.key ?? b.model}`));
-    expect(norm(after.bySource)).toEqual(norm(before.bySource));
-    expect(norm(after.byModel)).toEqual(norm(before.byModel));
+      [...rows].sort((a, b) =>
+        `${a.key ?? a.model}`.localeCompare(`${b.key ?? b.model}`)
+      );
+    expect(norm(after.bySource)).toStrictEqual(norm(before.bySource));
+    expect(norm(after.byModel)).toStrictEqual(norm(before.byModel));
     const normEffort = <T extends { effort: string }>(rows: T[]): T[] =>
       [...rows].sort((a, b) => a.effort.localeCompare(b.effort));
-    expect(normEffort(after.byEffort)).toEqual(normEffort(before.byEffort));
+    expect(normEffort(after.byEffort)).toStrictEqual(
+      normEffort(before.byEffort)
+    );
     journal.close();
   });
 });

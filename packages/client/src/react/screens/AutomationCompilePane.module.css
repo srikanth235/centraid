@@ -21,16 +21,16 @@
      inventing its own colour. */
   --rail-tone: var(--ink-3);
 }
-.rail[data-tone='active'] {
+.rail[data-tone="active"] {
   --rail-tone: var(--success);
 }
-.rail[data-tone='running'] {
+.rail[data-tone="running"] {
   --rail-tone: var(--accent);
 }
-.rail[data-tone='failed'] {
+.rail[data-tone="failed"] {
   --rail-tone: var(--danger);
 }
-.rail[data-tone='draft'] {
+.rail[data-tone="draft"] {
   --rail-tone: var(--c-amber);
 }
 
@@ -163,18 +163,18 @@
   background: var(--bg-sunken);
   color: var(--ink-3);
 }
-.step[data-status='ok'] .stepMark {
+.step[data-status="ok"] .stepMark {
   color: var(--success);
 }
-.step[data-status='fail'] .stepMark {
+.step[data-status="fail"] .stepMark {
   color: var(--danger);
 }
-.step[data-status='running'] .stepMark {
+.step[data-status="running"] .stepMark {
   color: var(--accent);
   animation: cd-spin 0.9s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {
-  .step[data-status='running'] .stepMark {
+  .step[data-status="running"] .stepMark {
     animation: none;
   }
 }
@@ -207,7 +207,7 @@
   -webkit-line-clamp: 4;
   overflow: hidden;
 }
-.step[data-status='fail'] .stepDetail {
+.step[data-status="fail"] .stepDetail {
   color: var(--danger);
 }
 
@@ -243,7 +243,7 @@
   cursor: pointer;
 }
 .historyRow:hover,
-.historyRow[data-active='true'] {
+.historyRow[data-active="true"] {
   background: var(--bg-elev);
 }
 .historyDot {
@@ -253,13 +253,13 @@
   flex: none;
   background: var(--ink-4);
 }
-.historyRow[data-status='ok'] .historyDot {
+.historyRow[data-status="ok"] .historyDot {
   background: var(--success);
 }
-.historyRow[data-status='fail'] .historyDot {
+.historyRow[data-status="fail"] .historyDot {
   background: var(--danger);
 }
-.historyRow[data-status='running'] .historyDot {
+.historyRow[data-status="running"] .historyDot {
   background: var(--accent);
 }
 .historyOutcome {
@@ -319,7 +319,7 @@
   border-radius: 6px;
   cursor: pointer;
 }
-.artifactTab[data-active='true'] {
+.artifactTab[data-active="true"] {
   background: var(--bg-sunken);
   color: var(--ink);
 }

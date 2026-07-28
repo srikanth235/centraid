@@ -5,32 +5,35 @@
  * Browse: https://icon-sets.iconify.design/
  * Usage:  node scripts/fetch-connector-brand-icons.mjs
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import https from 'node:https';
-import { fileURLToPath } from 'node:url';
-import { assertSafeConnectorSvg } from './lib/sanitize-connector-svg.mjs';
+import fs from "node:fs";
+import https from "node:https";
+import path from "node:path";
+
+import { assertSafeConnectorSvg } from "./lib/sanitize-connector-svg.mjs";
 
 const MAP = {
-  gmail: 'logos:google-gmail',
-  gcal: 'logos:google-calendar',
-  gcontacts: 'selfhst:google-contacts',
-  gdrive: 'logos:google-drive',
-  github: 'logos:github-icon',
-  outlook: 'vscode-icons:file-type-outlook',
-  outlookcal: 'fluent-color:calendar-16',
-  outlookcontacts: 'fluent-color:contact-card-16',
-  onedrive: 'logos:microsoft-onedrive',
-  gitlab: 'logos:gitlab-icon',
-  linear: 'logos:linear-icon',
-  notion: 'logos:notion-icon',
-  todoist: 'logos:todoist-icon',
-  slack: 'logos:slack-icon',
-  dropbox: 'logos:dropbox',
+  gmail: "logos:google-gmail",
+  gcal: "logos:google-calendar",
+  gcontacts: "selfhst:google-contacts",
+  gdrive: "logos:google-drive",
+  github: "logos:github-icon",
+  outlook: "vscode-icons:file-type-outlook",
+  outlookcal: "fluent-color:calendar-16",
+  outlookcontacts: "fluent-color:contact-card-16",
+  onedrive: "logos:microsoft-onedrive",
+  gitlab: "logos:gitlab-icon",
+  linear: "logos:linear-icon",
+  notion: "logos:notion-icon",
+  todoist: "logos:todoist-icon",
+  slack: "logos:slack-icon",
+  dropbox: "logos:dropbox",
 };
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const DEST = path.join(ROOT, 'packages/client/src/react/screens/connectorBrandMarks.tsx');
+const ROOT = path.resolve(import.meta.dirname, "..");
+const DEST = path.join(
+  ROOT,
+  "packages/client/src/react/screens/connectorBrandMarks.tsx"
+);
 
 function fetchSvg(url) {
   return new Promise((resolve, reject) => {
@@ -42,50 +45,58 @@ function fetchSvg(url) {
           return;
         }
         const chunks = [];
-        res.on('data', (c) => chunks.push(c));
-        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
       })
-      .on('error', reject);
+      .on("error", reject);
   });
 }
 
 function normalizeSvg(svg, tone) {
   assertSafeConnectorSvg(svg, tone);
-  let s = svg.trim().replace(/\s+/g, ' ').replace(/> </g, '><');
-  s = s.replace(/<svg\b([^>]*)>/, (_m, attrs) => {
-    const vb = attrs.match(/viewBox="([^"]+)"/);
-    const viewBox = vb ? vb[1] : '0 0 24 24';
+  let s = svg.trim().replace(/\s+/gu, " ").replace(/> </gu, "><");
+  s = s.replace(/<svg\b(?<attrs>[^>]*)>/u, (_m, attrs) => {
+    const vb = attrs.match(/viewBox="(?<viewBox>[^"]+)"/u);
+    const viewBox = vb?.groups?.viewBox ?? "0 0 24 24";
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="100%" height="100%" aria-hidden="true" focusable="false">`;
   });
-  if (tone === 'github' || tone === 'linear') {
+  if (tone === "github" || tone === "linear") {
     s = s
-      .replace(/fill="#161614"/gi, 'fill="currentColor"')
-      .replace(/fill="#222326"/gi, 'fill="currentColor"')
-      .replace(/fill="#000000?"/gi, 'fill="currentColor"')
-      .replace(/fill="black"/gi, 'fill="currentColor"');
+      .replace(/fill="#161614"/giu, 'fill="currentColor"')
+      .replace(/fill="#222326"/giu, 'fill="currentColor"')
+      .replace(/fill="#000000?"/giu, 'fill="currentColor"')
+      .replace(/fill="black"/giu, 'fill="currentColor"');
   }
-  if (tone === 'notion') {
+  if (tone === "notion") {
     s = s
-      .replace(/fill="#000000?"/gi, 'fill="currentColor"')
-      .replace(/fill="#191919"/gi, 'fill="currentColor"')
-      .replace(/stroke="#000000?"/gi, 'stroke="currentColor"');
+      .replace(/fill="#000000?"/giu, 'fill="currentColor"')
+      .replace(/fill="#191919"/giu, 'fill="currentColor"')
+      .replace(/stroke="#000000?"/giu, 'stroke="currentColor"');
   }
   return s;
 }
 
 const out = {};
 const sources = {};
-for (const [tone, id] of Object.entries(MAP)) {
-  const [prefix, name] = id.split(':');
-  const raw = await fetchSvg(`https://api.iconify.design/${prefix}/${name}.svg`);
-  if (!raw.startsWith('<svg') || raw.length < 40) throw new Error(`Bad svg for ${id}`);
-  out[tone] = normalizeSvg(raw, tone);
+const icons = await Promise.all(
+  Object.entries(MAP).map(async ([tone, id]) => {
+    const [prefix, name] = id.split(":");
+    const raw = await fetchSvg(
+      `https://api.iconify.design/${prefix}/${name}.svg`
+    );
+    if (!raw.startsWith("<svg") || raw.length < 40)
+      throw new Error(`Bad svg for ${id}`);
+    return { tone, id, svg: normalizeSvg(raw, tone) };
+  })
+);
+for (const { tone, id, svg } of icons) {
+  out[tone] = svg;
   sources[tone] = id;
-  console.log('OK', tone, '<-', id);
+  console.log("OK", tone, "<-", id);
 }
 out.default =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="5" fill="var(--accent, #6366f1)" opacity="0.15"/><path d="M8 12h8M12 8v8" stroke="var(--accent, #6366f1)" stroke-width="2" stroke-linecap="round"/></svg>';
-sources.default = 'local:default';
+sources.default = "local:default";
 
 const file = `/* Brand SVGs from Iconify (https://icon-sets.iconify.design/), offline-embedded.
  * Prefer regenerating with: node scripts/fetch-connector-brand-icons.mjs
@@ -93,7 +104,7 @@ const file = `/* Brand SVGs from Iconify (https://icon-sets.iconify.design/), of
  * Sources:
 ${Object.entries(sources)
   .map(([k, v]) => ` *   ${k}: ${v}`)
-  .join('\n')}
+  .join("\n")}
  */
 
 import { useId, type JSX } from 'react';
@@ -160,4 +171,4 @@ export function ConnectorBrandGlyph({
 `;
 
 fs.writeFileSync(DEST, file);
-console.log('Wrote', DEST);
+console.log("Wrote", DEST);

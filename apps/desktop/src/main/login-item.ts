@@ -14,7 +14,7 @@
  * rather than duplicating the platform guard.
  */
 
-import { app } from 'electron';
+import { app } from "electron";
 
 /**
  * Apply the `launchAtLogin` preference to the OS. A no-op on Linux — Electron
@@ -23,6 +23,6 @@ import { app } from 'electron';
  * skipping it explicitly keeps that a documented gap instead of a mystery.
  */
 export function applyLaunchAtLogin(enabled: boolean | undefined): void {
-  if (process.platform === 'linux') return;
+  if (process.platform === "linux") return;
   app.setLoginItemSettings({ openAtLogin: enabled === true });
 }

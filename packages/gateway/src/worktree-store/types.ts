@@ -94,20 +94,20 @@ export interface VersionEntry {
 }
 
 export type WorktreeStoreErrorCode =
-  | 'not_initialized'
-  | 'session_exists'
-  | 'session_missing'
-  | 'no_changes'
-  | 'tag_missing'
-  | 'invalid_app_id'
-  | 'invalid_session_id';
+  | "not_initialized"
+  | "session_exists"
+  | "session_missing"
+  | "no_changes"
+  | "tag_missing"
+  | "invalid_app_id"
+  | "invalid_session_id";
 
 export class WorktreeStoreError extends Error {
   constructor(
     public readonly code: WorktreeStoreErrorCode,
-    message: string,
+    message: string
   ) {
     super(message);
-    this.name = 'WorktreeStoreError';
+    this.name = "WorktreeStoreError";
   }
 }

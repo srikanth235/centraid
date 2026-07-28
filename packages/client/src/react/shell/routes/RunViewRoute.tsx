@@ -1,17 +1,18 @@
-import { Store } from '../store.js';
-import { type JSX, useEffect, useRef } from 'react';
+import { type JSX, useEffect, useRef } from "react";
+
 import {
   readAutomation,
   readAutomationTurnExpanded,
   runAutomationNow,
   streamAutomationTurn,
   type AutomationTurnStreamEvent,
-} from '../../../gateway-client.js';
-import type { RunViewSnapshot } from '../../screen-contracts.js';
-import RunViewScreen from '../../screens/RunViewScreen.js';
-import { useShellActions } from '../actions.js';
-import PageScroll from '../PageScroll.js';
-import { buildRunSnapshot } from './runViewData.js';
+} from "../../../gateway-client.js";
+import type { RunViewSnapshot } from "../../screen-contracts.js";
+import RunViewScreen from "../../screens/RunViewScreen.js";
+import { useShellActions } from "../actions.js";
+import PageScroll from "../PageScroll.js";
+import { Store } from "../store.js";
+import { buildRunSnapshot } from "./runViewData.js";
 
 // React-owned run viewer — replaces the vanilla renderRunView. The stream lives
 // here (SSE via streamAutomationTurn): a local node model keyed by ordinal +
@@ -45,57 +46,67 @@ export default function RunViewRoute({
     const itemsById = new Map<string, CentraidAutomationItem>();
     const liveTextByOrdinal = new Map<number, string>();
     const sortedNodes = (): CentraidAutomationItem[] =>
-      [...itemsById.values()].sort((a, b) => a.ordinal - b.ordinal || a.startedAt - b.startedAt);
+      [...itemsById.values()].sort(
+        (a, b) => a.ordinal - b.ordinal || a.startedAt - b.startedAt
+      );
 
     const rerender = (): void => {
       // `row` may be null — the automation was deleted but its run history
       // survives (the Automations overview keeps those runs visible too);
       // buildRunSnapshot degrades gracefully rather than requiring a row.
       if (stopped || !run || !updateRef.current) return;
-      updateRef.current(buildRunSnapshot(row, run, sortedNodes(), liveTextByOrdinal));
+      updateRef.current(
+        buildRunSnapshot(row, run, sortedNodes(), liveTextByOrdinal)
+      );
     };
 
     const applyEvent = (ev: AutomationTurnStreamEvent): void => {
-      if (ev.type === 'item.start') {
+      if (ev.type === "item.start") {
         const prev = itemsById.get(ev.itemId);
         itemsById.set(ev.itemId, {
           itemId: ev.itemId,
           turnId: runId,
           ordinal: ev.ordinal,
-          ...(ev.callId !== undefined ? { callId: ev.callId } : {}),
-          ...(ev.batchId !== undefined ? { batchId: ev.batchId } : {}),
+          ...(ev.callId === undefined ? {} : { callId: ev.callId }),
+          ...(ev.batchId === undefined ? {} : { batchId: ev.batchId }),
           kind: ev.kind,
-          ...(ev.name !== undefined ? { name: ev.name } : {}),
-          ...(ev.args !== undefined ? { argsJson: JSON.stringify(ev.args) } : {}),
-          ...(ev.rawJson !== undefined ? { rawJson: ev.rawJson } : {}),
+          ...(ev.name === undefined ? {} : { name: ev.name }),
+          ...(ev.args === undefined
+            ? {}
+            : { argsJson: JSON.stringify(ev.args) }),
+          ...(ev.rawJson === undefined ? {} : { rawJson: ev.rawJson }),
           ok: true,
           startedAt: prev?.startedAt ?? Date.now(),
         });
         rerender();
-      } else if (ev.type === 'item.end') {
+      } else if (ev.type === "item.end") {
         const prev = itemsById.get(ev.itemId);
         const startedAt = prev?.startedAt ?? Date.now() - ev.durationMs;
         itemsById.set(ev.itemId, {
           itemId: ev.itemId,
           turnId: runId,
           ordinal: ev.ordinal,
-          ...(ev.callId !== undefined ? { callId: ev.callId } : {}),
-          ...(prev?.batchId !== undefined ? { batchId: prev.batchId } : {}),
-          kind: prev?.kind ?? 'tool',
-          ...(prev?.name !== undefined ? { name: prev.name } : {}),
-          ...(prev?.argsJson !== undefined ? { argsJson: prev.argsJson } : {}),
-          ...(ev.result !== undefined ? { outputJson: JSON.stringify(ev.result) } : {}),
+          ...(ev.callId === undefined ? {} : { callId: ev.callId }),
+          ...(prev?.batchId === undefined ? {} : { batchId: prev.batchId }),
+          kind: prev?.kind ?? "tool",
+          ...(prev?.name === undefined ? {} : { name: prev.name }),
+          ...(prev?.argsJson === undefined ? {} : { argsJson: prev.argsJson }),
+          ...(ev.result === undefined
+            ? {}
+            : { outputJson: JSON.stringify(ev.result) }),
           ok: ev.ok,
-          ...(ev.error !== undefined ? { error: ev.error } : {}),
-          ...(ev.rawJson !== undefined ? { rawJson: ev.rawJson } : {}),
+          ...(ev.error === undefined ? {} : { error: ev.error }),
+          ...(ev.rawJson === undefined ? {} : { rawJson: ev.rawJson }),
           startedAt,
           endedAt: startedAt + ev.durationMs,
           durationMs: ev.durationMs,
         });
         rerender();
-      } else if (ev.type === 'turn.end') {
+      } else if (ev.type === "turn.end") {
         void (async () => {
-          const final = await readAutomationTurnExpanded({ turnId: runId }).catch(() => ({
+          const final = await readAutomationTurnExpanded({
+            turnId: runId,
+          }).catch(() => ({
             turn: null,
             items: [] as CentraidAutomationItem[],
           }));
@@ -114,12 +125,15 @@ export default function RunViewRoute({
           }
           rerender();
         })();
-      } else if (ev.type === 'item.delta') {
+      } else if (ev.type === "item.delta") {
         const inner = ev.event as { type?: string; delta?: string };
-        if (inner?.type === 'assistant.delta' && typeof inner.delta === 'string') {
+        if (
+          inner?.type === "assistant.delta" &&
+          typeof inner.delta === "string"
+        ) {
           liveTextByOrdinal.set(
             ev.ordinal,
-            (liveTextByOrdinal.get(ev.ordinal) ?? '') + inner.delta,
+            (liveTextByOrdinal.get(ev.ordinal) ?? "") + inner.delta
           );
           rerender();
         }
@@ -146,9 +160,9 @@ export default function RunViewRoute({
         // nothing recoverable to show. Bounce back to the overview (the only
         // place this run id could have been clicked from) instead of
         // stranding the user on a permanent loading screen.
-        actionsRef.current.navigate({ kind: 'automations' });
+        actionsRef.current.navigate({ kind: "automations" });
         actionsRef.current.showToast(
-          'That automation was deleted, and its run history is gone too.',
+          "That automation was deleted, and its run history is gone too."
         );
         return;
       }
@@ -158,7 +172,7 @@ export default function RunViewRoute({
           conversationId: automationId,
           seq: 0,
           automationId,
-          triggerKind: 'manual',
+          triggerKind: "manual",
           startedAt: Date.now(),
           ok: false,
           pinned: false,
@@ -170,7 +184,9 @@ export default function RunViewRoute({
       } catch {
         // Stream unavailable (older gateway) — one-shot ledger read fallback.
         if (stopped) return;
-        const expanded = await readAutomationTurnExpanded({ turnId: runId }).catch(() => ({
+        const expanded = await readAutomationTurnExpanded({
+          turnId: runId,
+        }).catch(() => ({
           turn: run,
           items: [] as CentraidAutomationItem[],
         }));
@@ -188,7 +204,8 @@ export default function RunViewRoute({
   }, [automationId, runId]);
 
   const initialMode =
-    Store.get<'timeline' | 'log'>('automations.runViewMode', 'timeline') ?? 'timeline';
+    Store.get<"timeline" | "log">("automations.runViewMode", "timeline") ??
+    "timeline";
 
   return (
     <PageScroll>
@@ -197,22 +214,26 @@ export default function RunViewRoute({
         onReady={(u) => {
           updateRef.current = u;
         }}
-        onBack={() => navigate({ kind: 'automations' })}
+        onBack={() => navigate({ kind: "automations" })}
         onOpenAutomation={() => {
           const row = rowRef.current;
-          if (row) navigate({ kind: 'automation-view', automationId: row.ref });
+          if (row) navigate({ kind: "automation-view", automationId: row.ref });
         }}
         onRunAgain={() => {
           const row = rowRef.current;
           if (!row) return;
           const ref = row.ref;
           void runAutomationNow({ automationId: ref })
-            .then(({ turnId }) => navigate({ kind: 'run-view', automationId: ref, runId: turnId }))
+            .then(({ turnId }) =>
+              navigate({ kind: "run-view", automationId: ref, runId: turnId })
+            )
             .catch((err: unknown) =>
-              showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`),
+              showToast(
+                `Run failed: ${err instanceof Error ? err.message : String(err)}`
+              )
             );
         }}
-        onSetMode={(m) => Store.set('automations.runViewMode', m)}
+        onSetMode={(m) => Store.set("automations.runViewMode", m)}
       />
     </PageScroll>
   );

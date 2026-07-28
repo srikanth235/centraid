@@ -54,13 +54,13 @@
   box-shadow: var(--kit-focus-ring);
   outline-offset: -2px;
 }
-.tile[aria-pressed='true'] {
+.tile[aria-pressed="true"] {
   outline: 3px solid var(--_accent);
   outline-offset: -3px;
   border-radius: var(--ph-tile-r-sel);
 }
-.tile[aria-pressed='true']::after {
-  content: '✓';
+.tile[aria-pressed="true"]::after {
+  content: "✓";
   position: absolute;
   top: 0.3rem;
   left: 0.3rem;

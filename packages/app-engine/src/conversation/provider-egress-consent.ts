@@ -8,25 +8,29 @@
  * evidence rather than deleting the row.
  */
 
-import type { ModelSubsystem } from '../stores/prefs-store.js';
-import type { DatabaseProvider } from '../stores/gateway-db.js';
-import type { RunnerKind } from './turn.js';
+import type { DatabaseProvider } from "../stores/gateway-db.js";
+import type { ModelSubsystem } from "../stores/prefs-store.js";
+import type { RunnerKind } from "./turn.js";
 
-export type ProviderConsentSource = 'direct' | 'ladder';
+export type ProviderConsentSource = "direct" | "ladder";
 
 export interface ProviderEgressConsentController {
-  has(conversationId: string, runnerKind: RunnerKind, subsystem?: ModelSubsystem): boolean;
+  has: (
+    conversationId: string,
+    runnerKind: RunnerKind,
+    subsystem?: ModelSubsystem
+  ) => boolean;
   /**
    * Attended consent: the user answered an egress prompt for this
    * conversation, so a prior revocation is deliberately cleared.
    */
-  grant(
+  grant: (
     conversationId: string,
     runnerKind: RunnerKind,
     source: ProviderConsentSource,
     subsystem?: ModelSubsystem,
-    now?: number,
-  ): void;
+    now?: number
+  ) => void;
   /**
    * Unattended consent derived from user authoring (a prefs-primary runner or
    * current ladder membership). No owner is present to answer a prompt, so
@@ -36,24 +40,33 @@ export interface ProviderEgressConsentController {
    * Optional so a host may inject a narrower controller; an absent
    * implementation means unattended egress is denied, never assumed.
    */
-  recordDerived?(
+  recordDerived?: (
     conversationId: string,
     runnerKind: RunnerKind,
     source: ProviderConsentSource,
     subsystem?: ModelSubsystem,
-    now?: number,
-  ): boolean;
-  revoke(conversationId: string, runnerKind: RunnerKind, now?: number): void;
+    now?: number
+  ) => boolean;
+  revoke: (
+    conversationId: string,
+    runnerKind: RunnerKind,
+    now?: number
+  ) => void;
   /** Revoke grants created by one subsystem's automatic ladder membership. */
-  revokeLadderProvider?(runnerKind: RunnerKind, subsystem: ModelSubsystem, now?: number): void;
+  revokeLadderProvider?: (
+    runnerKind: RunnerKind,
+    subsystem: ModelSubsystem,
+    now?: number
+  ) => void;
 }
 
 function consentSubsystemFor(
   source: ProviderConsentSource,
-  subsystem: ModelSubsystem | undefined,
+  subsystem: ModelSubsystem | undefined
 ): string {
-  if (source === 'direct') return '';
-  if (subsystem === undefined) throw new Error('ladder provider consent requires a subsystem');
+  if (source === "direct") return "";
+  if (subsystem === undefined)
+    throw new Error("ladder provider consent requires a subsystem");
   return subsystem;
 }
 
@@ -62,11 +75,15 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
     private readonly dbProvider: DatabaseProvider,
     private readonly isCurrentLadderMember: (
       runnerKind: RunnerKind,
-      subsystem: ModelSubsystem,
-    ) => boolean = () => true,
+      subsystem: ModelSubsystem
+    ) => boolean = () => true
   ) {}
 
-  has(conversationId: string, runnerKind: RunnerKind, subsystem?: ModelSubsystem): boolean {
+  has(
+    conversationId: string,
+    runnerKind: RunnerKind,
+    subsystem?: ModelSubsystem
+  ): boolean {
     const db = this.dbProvider();
     const direct =
       db
@@ -74,18 +91,19 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
           `SELECT 1
              FROM conversation_provider_consent
             WHERE conversation_id = ? AND runner_kind = ?
-              AND source = 'direct' AND subsystem = '' AND revoked_at IS NULL`,
+              AND source = 'direct' AND subsystem = '' AND revoked_at IS NULL`
         )
         .get(conversationId, runnerKind) !== undefined;
     if (direct) return true;
-    if (!subsystem || !this.isCurrentLadderMember(runnerKind, subsystem)) return false;
+    if (!subsystem || !this.isCurrentLadderMember(runnerKind, subsystem))
+      return false;
     return (
       db
         .prepare(
           `SELECT 1
              FROM conversation_provider_consent
             WHERE conversation_id = ? AND runner_kind = ?
-              AND source = 'ladder' AND subsystem = ? AND revoked_at IS NULL`,
+              AND source = 'ladder' AND subsystem = ? AND revoked_at IS NULL`
         )
         .get(conversationId, runnerKind, subsystem) !== undefined
     );
@@ -96,7 +114,7 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
     runnerKind: RunnerKind,
     source: ProviderConsentSource,
     subsystem?: ModelSubsystem,
-    now = Date.now(),
+    now = Date.now()
   ): void {
     const consentSubsystem = consentSubsystemFor(source, subsystem);
     this.dbProvider()
@@ -106,7 +124,7 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
          ) VALUES (?, ?, ?, ?, ?, NULL)
          ON CONFLICT(conversation_id, runner_kind, source, subsystem) DO UPDATE SET
            granted_at = excluded.granted_at,
-           revoked_at = NULL`,
+           revoked_at = NULL`
       )
       .run(conversationId, runnerKind, source, consentSubsystem, now);
   }
@@ -116,7 +134,7 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
     runnerKind: RunnerKind,
     source: ProviderConsentSource,
     subsystem?: ModelSubsystem,
-    now = Date.now(),
+    now = Date.now()
   ): boolean {
     const consentSubsystem = consentSubsystemFor(source, subsystem);
     const db = this.dbProvider();
@@ -128,11 +146,11 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
           `SELECT 1
              FROM conversation_provider_consent
             WHERE conversation_id = ? AND runner_kind = ?
-              AND source = 'direct' AND subsystem = '' AND revoked_at IS NOT NULL`,
+              AND source = 'direct' AND subsystem = '' AND revoked_at IS NOT NULL`
         )
         .get(conversationId, runnerKind) !== undefined;
     if (revokedDirectly) return false;
-    if (source === 'ladder' && subsystem !== undefined) {
+    if (source === "ladder" && subsystem !== undefined) {
       // Ladder membership IS the authorization (D13); the row is only its
       // receipt. A runner the user has (re-)placed in the live ladder is
       // consented, so a membership-removal revocation clears on re-add — but a
@@ -149,7 +167,7 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
        ) VALUES (?, ?, ?, ?, ?, NULL)
        ON CONFLICT(conversation_id, runner_kind, source, subsystem) DO UPDATE SET
          granted_at = excluded.granted_at
-       WHERE conversation_provider_consent.revoked_at IS NULL`,
+       WHERE conversation_provider_consent.revoked_at IS NULL`
     ).run(conversationId, runnerKind, source, consentSubsystem, now);
     return (
       db
@@ -157,13 +175,17 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
           `SELECT 1
              FROM conversation_provider_consent
             WHERE conversation_id = ? AND runner_kind = ? AND source = ? AND subsystem = ?
-              AND revoked_at IS NULL`,
+              AND revoked_at IS NULL`
         )
         .get(conversationId, runnerKind, source, consentSubsystem) !== undefined
     );
   }
 
-  revoke(conversationId: string, runnerKind: RunnerKind, now = Date.now()): void {
+  revoke(
+    conversationId: string,
+    runnerKind: RunnerKind,
+    now = Date.now()
+  ): void {
     const db = this.dbProvider();
     // The direct row doubles as the durable tombstone: it is what tells a
     // later unattended derivation that the user withdrew this provider from
@@ -173,22 +195,26 @@ export class ProviderEgressConsentStore implements ProviderEgressConsentControll
       `INSERT INTO conversation_provider_consent (
          conversation_id, runner_kind, source, subsystem, granted_at, revoked_at
        ) VALUES (?, ?, 'direct', '', ?, ?)
-       ON CONFLICT(conversation_id, runner_kind, source, subsystem) DO NOTHING`,
+       ON CONFLICT(conversation_id, runner_kind, source, subsystem) DO NOTHING`
     ).run(conversationId, runnerKind, now, now);
     db.prepare(
       `UPDATE conversation_provider_consent
           SET revoked_at = ?
-        WHERE conversation_id = ? AND runner_kind = ? AND revoked_at IS NULL`,
+        WHERE conversation_id = ? AND runner_kind = ? AND revoked_at IS NULL`
     ).run(now, conversationId, runnerKind);
   }
 
-  revokeLadderProvider(runnerKind: RunnerKind, subsystem: ModelSubsystem, now = Date.now()): void {
+  revokeLadderProvider(
+    runnerKind: RunnerKind,
+    subsystem: ModelSubsystem,
+    now = Date.now()
+  ): void {
     this.dbProvider()
       .prepare(
         `UPDATE conversation_provider_consent
             SET revoked_at = ?
           WHERE runner_kind = ? AND source = 'ladder' AND subsystem = ?
-            AND revoked_at IS NULL`,
+            AND revoked_at IS NULL`
       )
       .run(now, runnerKind, subsystem);
   }

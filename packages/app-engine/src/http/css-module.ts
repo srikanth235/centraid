@@ -27,9 +27,11 @@
  * absolute worktree layout (same concern handled in app-bundle.ts buildBundle).
  */
 
-import path from 'node:path';
-import * as esbuild from 'esbuild';
-import { computeEtag } from './asset-variants.js';
+import path from "node:path";
+
+import * as esbuild from "esbuild";
+
+import { computeEtag } from "./asset-variants.js";
 
 export interface CompiledCssModule {
   /** The style-injecting, map-exporting ES module body. */
@@ -51,7 +53,7 @@ export interface CompiledCssModule {
  */
 export async function compileCssModule(
   filePath: string,
-  appRoot: string,
+  appRoot: string
 ): Promise<CompiledCssModule> {
   // Build over a synthetic stdin entry so we get BOTH the JS class-map module
   // and the compiled CSS as separate outputs. `bundle: true` pulls the
@@ -60,36 +62,36 @@ export async function compileCssModule(
     stdin: {
       contents: `import m from ${JSON.stringify(filePath)};\nexport default m;`,
       resolveDir: appRoot,
-      loader: 'js',
-      sourcefile: 'centraid-css-module-entry.js',
+      loader: "js",
+      sourcefile: "centraid-css-module-entry.js",
     },
     bundle: true,
     write: false,
-    format: 'esm',
-    platform: 'browser',
+    format: "esm",
+    platform: "browser",
     // Scope the local-css loader to `.module.css` only — a plain `.css`
     // import (were one to appear) keeps esbuild's default CSS behavior.
-    loader: { '.module.css': 'local-css' },
+    loader: { ".module.css": "local-css" },
     absWorkingDir: appRoot,
     // A CSS-importing JS entry needs an output path so esbuild can name the
     // emitted CSS file. Virtual only — `write: false` keeps it off disk; we
     // read both outputs from `outputFiles` below.
-    outdir: '.centraid-cssmod',
-    logLevel: 'silent',
+    outdir: ".centraid-cssmod",
+    logLevel: "silent",
   });
 
-  let js = '';
-  let css = '';
+  let js = "";
+  let css = "";
   for (const out of result.outputFiles ?? []) {
-    if (out.path.endsWith('.css')) css = out.text;
+    if (out.path.endsWith(".css")) css = out.text;
     else js = out.text;
   }
 
   // The app-relative module key keys the injection guard so a module injected
   // more than once (bundle + a per-file request) adds exactly one <style>.
-  const moduleKey = path.relative(appRoot, filePath).split(path.sep).join('/');
+  const moduleKey = path.relative(appRoot, filePath).split(path.sep).join("/");
   const body = composeModule(js, css, moduleKey);
-  return { js: body, css, etag: computeEtag(Buffer.from(body, 'utf8')) };
+  return { js: body, css, etag: computeEtag(Buffer.from(body, "utf8")) };
 }
 
 /**
@@ -100,7 +102,11 @@ export async function compileCssModule(
  * `esbuildJs` ends in `export default <map>;`; we keep it verbatim so the
  * default export stays the class map.
  */
-function composeModule(esbuildJs: string, css: string, moduleKey: string): string {
+function composeModule(
+  esbuildJs: string,
+  css: string,
+  moduleKey: string
+): string {
   const guard = `data-centraid-css-module`;
   return (
     `// Compiled from ${moduleKey} — CSS module served as JS (see css-module.ts).\n` +

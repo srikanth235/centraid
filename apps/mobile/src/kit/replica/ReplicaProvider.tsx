@@ -1,36 +1,37 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AppState } from 'react-native';
-import * as Network from 'expo-network';
 import {
   fetchReplicaBootstrapPage,
   type GatewayAuth,
   type ReplicaFetcher,
-} from '@centraid/client/replica/native';
+} from "@centraid/client/replica/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Network from "expo-network";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { AppState } from "react-native";
 
-import { authHeader, resolveGatewayBase } from '../../lib/gateway';
-import { getDesktopName } from '../../lib/phone-link';
-import { NativeVaultChangeFeed } from '../../lib/replica/native-change-feed';
-import { nativeReplicaDigest } from '../../lib/replica/native-hash';
-import { openNativeReplicaDriver } from '../../lib/replica/op-sqlite-driver';
+import { authHeader, resolveGatewayBase } from "../../lib/gateway";
+import { getDesktopName } from "../../lib/phone-link";
+import { NativeVaultChangeFeed } from "../../lib/replica/native-change-feed";
+import { nativeReplicaDigest } from "../../lib/replica/native-hash";
 import {
   createNativeReplicaSession,
   type NativeReplicaSession,
-} from '../../lib/replica/native-session';
+} from "../../lib/replica/native-session";
+import { openNativeReplicaDriver } from "../../lib/replica/op-sqlite-driver";
 import {
   LAST_BASE,
   getActiveSpace,
   hydrateSpaces,
   noteActiveIdentity,
   subscribeSpaces,
-} from '../../lib/spaces';
-import { Store } from '../../storage';
+} from "../../lib/spaces";
+import { Store } from "../../storage";
 
 // Thrown when the device has never been paired (no cached gateway/vault and no
 // live base). This is an expected first-run state, not a failure — the Home
 // screen already invites pairing — so the error banner suppresses it by identity
 // rather than showing an alarming red bar. Exported as the single source of truth.
-export const REPLICA_UNPAIRED_MESSAGE = 'Pair a desktop once to create the local replica.';
+export const REPLICA_UNPAIRED_MESSAGE =
+  "Pair a desktop once to create the local replica.";
 
 interface ReplicaContextValue {
   session?: NativeReplicaSession;
@@ -50,9 +51,13 @@ const ReplicaContext = createContext<ReplicaContextValue>(REPLICA_LOADING);
 function fetcher(vaultId?: string): ReplicaFetcher {
   return async (baseUrl, pathname, init) => {
     const headers = new Headers(init.headers);
-    for (const [key, value] of Object.entries(authHeader())) headers.set(key, value);
-    if (vaultId) headers.set('x-centraid-vault', vaultId);
-    return fetch(new URL(pathname, `${baseUrl}/`), { ...init, headers } as RequestInit);
+    for (const [key, value] of Object.entries(authHeader()))
+      headers.set(key, value);
+    if (vaultId) headers.set("x-centraid-vault", vaultId);
+    return fetch(new URL(pathname, `${baseUrl}/`), {
+      ...init,
+      headers,
+    } as RequestInit);
   };
 }
 
@@ -67,7 +72,7 @@ async function resolveIdentity(): Promise<{
   // a first-pair bootstrap, never a prerequisite for native reads.
   await hydrateSpaces();
   const active = getActiveSpace();
-  const cachedBase = await Store.hydrate(LAST_BASE, 'http://127.0.0.1');
+  const cachedBase = await Store.hydrate(LAST_BASE, "http://127.0.0.1");
 
   if (active && active.gatewayId && active.vaultId) {
     // A fully-resolved tuple: open the local SQLite replica immediately. The
@@ -93,7 +98,7 @@ async function resolveIdentity(): Promise<{
   if (liveBase) {
     const probe = await fetchReplicaBootstrapPage(
       { baseUrl: liveBase },
-      { window: 1, fetcher: fetcher() },
+      { window: 1, fetcher: fetcher() }
     );
     const gatewayId = getDesktopName() || active?.gatewayId || liveBase;
     Store.set(LAST_BASE, liveBase);
@@ -111,12 +116,19 @@ async function resolveIdentity(): Promise<{
   throw new Error(REPLICA_UNPAIRED_MESSAGE);
 }
 
-export function ReplicaProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
+export function ReplicaProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.JSX.Element {
   // Tagged with the Space it was built for, so a switch drops back to the
   // loading value *during the render that changes the id* — consumers can never
   // read the previous vault's session, not even for the one frame it took the
   // old effect-body reset to land.
-  const [built, setBuilt] = useState<{ spaceId: string; value: ReplicaContextValue }>();
+  const [built, setBuilt] = useState<{
+    spaceId: string;
+    value: ReplicaContextValue;
+  }>();
 
   // Re-key the replica when the user switches the active Space. Keyed on the
   // active Space *id*: switching / forgetting / pairing changes the id, tearing
@@ -124,12 +136,16 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
   // provisional Space's vault keeps the same id, so it does NOT force an extra
   // rebuild — the in-flight init already resolved that vault. `undefined` means
   // "not read yet"; the main effect waits for it so mount builds exactly once.
-  const [activeSpaceId, setActiveSpaceId] = useState<string | undefined>(undefined);
+  const [activeSpaceId, setActiveSpaceId] = useState<string | undefined>(
+    undefined
+  );
   useEffect(() => {
     let unsubscribe = (): void => {};
     void hydrateSpaces().then(() => {
-      setActiveSpaceId(getActiveSpace()?.id ?? '');
-      unsubscribe = subscribeSpaces(() => setActiveSpaceId(getActiveSpace()?.id ?? ''));
+      setActiveSpaceId(getActiveSpace()?.id ?? "");
+      unsubscribe = subscribeSpaces(() =>
+        setActiveSpaceId(getActiveSpace()?.id ?? "")
+      );
     });
     return () => unsubscribe();
   }, []);
@@ -144,13 +160,13 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
     // native handle and change-feed stream instead of leaking them.
     let driver: Awaited<ReturnType<typeof openNativeReplicaDriver>> | undefined;
     let changeFeed: NativeVaultChangeFeed | undefined;
-    let networkSubscription: { remove(): void } | undefined;
+    let networkSubscription: { remove: () => void } | undefined;
     void (async () => {
       try {
         const identity = await resolveIdentity();
         driver = await openNativeReplicaDriver(
           { gatewayId: identity.gatewayId, vaultId: identity.auth.vaultId! },
-          nativeReplicaDigest,
+          nativeReplicaDigest
         );
         if (cancelled) return;
         changeFeed = new NativeVaultChangeFeed({
@@ -186,7 +202,9 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
             online: identity.online,
           },
         });
-        const refreshReachability = async (network: Network.NetworkState): Promise<void> => {
+        const refreshReachability = async (
+          network: Network.NetworkState
+        ): Promise<void> => {
           const liveBase =
             network.isConnected === true
               ? await resolveGatewayBase().catch(() => undefined)
@@ -208,7 +226,7 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
                     online: connected,
                   },
                 }
-              : current,
+              : current
           );
         };
         networkSubscription = Network.addNetworkStateListener((network) => {
@@ -238,8 +256,11 @@ export function ReplicaProvider({ children }: { children: React.ReactNode }): Re
     };
   }, [activeSpaceId]);
 
-  const value = built && built.spaceId === activeSpaceId ? built.value : REPLICA_LOADING;
-  return <ReplicaContext.Provider value={value}>{children}</ReplicaContext.Provider>;
+  const value =
+    built && built.spaceId === activeSpaceId ? built.value : REPLICA_LOADING;
+  return (
+    <ReplicaContext.Provider value={value}>{children}</ReplicaContext.Provider>
+  );
 }
 
 export function useReplica(): ReplicaContextValue {

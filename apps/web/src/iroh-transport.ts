@@ -2,13 +2,20 @@ import initWasm, {
   BrowserEndpoint,
   connect_failure_marker,
   type BrowserResponse,
-} from './generated/centraid_web_iroh.js';
-import { SERVICE_WORKER_VERSION } from './sw-version.js';
-import { loadConnection, webGatewayId } from './web-state.js';
+} from "./generated/centraid_web_iroh.js";
+import {
+  irohStats,
+  markConnectStart,
+  measureConnect,
+  measureRequest,
+  nowMs,
+} from "./iroh-metrics.js";
+import { SERVICE_WORKER_VERSION } from "./sw-version.js";
+import { loadConnection, webGatewayId } from "./web-state.js";
 
-const KEY_STORAGE = 'centraid.web.v1.iroh-device-key';
-const BRIDGE_STORAGE = 'centraid.web.v1.iroh-bridge';
-const VIRTUAL_PREFIX = '/__centraid_iroh__/';
+const KEY_STORAGE = "centraid.web.v1.iroh-device-key";
+const BRIDGE_STORAGE = "centraid.web.v1.iroh-bridge";
+const VIRTUAL_PREFIX = "/__centraid_iroh__/";
 // A versioned script URL prevents an older shell worker from being treated as
 // ready merely because it controls the page. The virtual Iroh route only
 // exists in this worker generation. VERSION is shared with public/sw.js via
@@ -26,84 +33,22 @@ const RETRY_BACKOFF_MS = [250, 750];
 // first-header, not the (possibly long-lived) body stream.
 const CONNECT_TIMEOUT_MS = 15_000;
 // Replaying these methods cannot duplicate a side effect.
-const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
+const IDEMPOTENT_METHODS = new Set(["GET", "HEAD", "OPTIONS", "PUT", "DELETE"]);
 
 let endpointPromise: Promise<BrowserEndpoint> | undefined;
-
-// --- Perf instrumentation (issue #404 workstream I) --------------------------
-// Lightweight, guarded probes proving the QUIC connection pool is reused: many
-// request STREAMS ride a single endpoint CONNECT. Surfaced two ways so a test
-// or a console can observe pool reuse without touching internals:
-//   * globalThis.__centraidIrohStats — running counters {connects, streams,
-//     reconnects}. After N pooled requests, connects should be ≪ streams.
-//   * performance marks/measures — `centraid:iroh-connect` (endpoint spawn) and
-//     `centraid:iroh-request` (stream open → first response header/byte), so
-//     the User Timing timeline carries per-phase durations.
-// These never change transport behavior and never throw (every call is wrapped).
-interface IrohStats {
-  /** Endpoint spawns — a fresh QUIC endpoint. Memoized, so this stays ~1. */
-  connects: number;
-  /** node.request() calls — one bidirectional QUIC stream each (retries included). */
-  streams: number;
-  /** Retry rounds after a transient connect/stream failure. */
-  reconnects: number;
-}
-
-function irohStats(): IrohStats {
-  const holder = globalThis as unknown as { __centraidIrohStats?: IrohStats };
-  if (!holder.__centraidIrohStats) {
-    holder.__centraidIrohStats = { connects: 0, streams: 0, reconnects: 0 };
-  }
-  return holder.__centraidIrohStats;
-}
-
-function markConnectStart(): number {
-  try {
-    performance.mark('centraid:iroh-connect-start');
-  } catch {
-    /* User Timing may be unavailable; instrumentation is best-effort. */
-  }
-  return nowMs();
-}
-
-function measureConnect(startMs: number): void {
-  irohStats().connects += 1;
-  try {
-    performance.mark('centraid:iroh-connect-end');
-    performance.measure('centraid:iroh-connect', { start: startMs, end: nowMs() });
-  } catch {
-    /* best-effort */
-  }
-}
-
-function measureRequest(startMs: number): void {
-  try {
-    performance.measure('centraid:iroh-request', { start: startMs, end: nowMs() });
-  } catch {
-    /* best-effort */
-  }
-}
-
-function nowMs(): number {
-  try {
-    return performance.now();
-  } catch {
-    return Date.now();
-  }
-}
 
 function decodeBytes(raw: string): Uint8Array {
   return Uint8Array.from(atob(raw), (char) => char.charCodeAt(0));
 }
 
 function encodeBytes(bytes: Uint8Array): string {
-  let binary = '';
+  let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary);
 }
 
 async function endpoint(
-  rememberDevice = loadConnection().rememberDevice === true,
+  rememberDevice = loadConnection().rememberDevice === true
 ): Promise<BrowserEndpoint> {
   const stored = moveIrohDeviceKeyForConsent(rememberDevice);
   // Consent changes move the same key between session/durable storage. Keep
@@ -113,7 +58,10 @@ async function endpoint(
       const connectStart = markConnectStart();
       await initWasm();
       const storage = rememberDevice ? localStorage : sessionStorage;
-      const node = await BrowserEndpoint.spawn(stored ? decodeBytes(stored) : undefined, undefined);
+      const node = await BrowserEndpoint.spawn(
+        stored ? decodeBytes(stored) : undefined,
+        undefined
+      );
       if (!stored) storage.setItem(KEY_STORAGE, encodeBytes(node.secret_key()));
       measureConnect(connectStart);
       return node;
@@ -130,7 +78,9 @@ async function endpoint(
 }
 
 /** Move (never copy) the stable browser device key into its consented bucket. */
-export function moveIrohDeviceKeyForConsent(rememberDevice: boolean): string | null {
+export function moveIrohDeviceKeyForConsent(
+  rememberDevice: boolean
+): string | null {
   const target = rememberDevice ? localStorage : sessionStorage;
   const stale = rememberDevice ? sessionStorage : localStorage;
   const stored = target.getItem(KEY_STORAGE) ?? stale.getItem(KEY_STORAGE);
@@ -159,7 +109,7 @@ export interface IrohPairingResponse {
 }
 
 export async function pairGatewayOverIroh(
-  input: IrohPairingInput,
+  input: IrohPairingInput
 ): Promise<{ response: IrohPairingResponse; endpointId: string }> {
   const node = await endpoint(input.rememberDevice);
   const response = JSON.parse(
@@ -169,10 +119,10 @@ export async function pairGatewayOverIroh(
         ticketId: input.ticketId,
         secret: input.secret,
         deviceName: input.deviceName,
-        platform: 'web',
+        platform: "web",
         rememberDevice: input.rememberDevice,
-      }),
-    ),
+      })
+    )
   ) as IrohPairingResponse;
   return { response, endpointId: node.endpoint_id() };
 }
@@ -192,12 +142,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function withConnectTimeout(pending: Promise<BrowserResponse>): Promise<BrowserResponse> {
+async function withConnectTimeout(
+  pending: Promise<BrowserResponse>
+): Promise<BrowserResponse> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(
-      () => reject(new Error('Iroh gateway connect timed out.')),
-      CONNECT_TIMEOUT_MS,
+      () => reject(new Error("Iroh gateway connect timed out.")),
+      CONNECT_TIMEOUT_MS
     );
   });
   try {
@@ -219,17 +171,17 @@ async function requestWithRetry(
   method: string,
   target: string,
   headersJson: string,
-  body: Uint8Array,
+  body: Uint8Array
 ): Promise<BrowserResponse> {
   const idempotent = IDEMPOTENT_METHODS.has(method);
-  for (let attempt = 0; ; attempt += 1) {
+  const attemptRequest = async (attempt: number): Promise<BrowserResponse> => {
     // Each node.request() opens one QUIC stream on the pooled endpoint; count
     // it (retries included) so a probe can prove streams ≫ connects.
     irohStats().streams += 1;
     const requestStart = nowMs();
     try {
       const response = await withConnectTimeout(
-        node.request(endpointTicket, method, target, headersJson, body),
+        node.request(endpointTicket, method, target, headersJson, body)
       );
       measureRequest(requestStart);
       return response;
@@ -238,8 +190,10 @@ async function requestWithRetry(
       if (attempt >= MAX_RETRIES || !retryable) throw error;
       irohStats().reconnects += 1;
       await sleep(jitteredBackoff(RETRY_BACKOFF_MS[attempt] ?? 750));
+      return attemptRequest(attempt + 1);
     }
-  }
+  };
+  return attemptRequest(0);
 }
 
 function responseHeaders(raw: string): Headers {
@@ -260,33 +214,36 @@ async function requestParts(init: RequestInit): Promise<{
   headers: Record<string, string>;
   body: Uint8Array;
 }> {
-  const method = (init.method ?? 'GET').toUpperCase();
+  const method = (init.method ?? "GET").toUpperCase();
   const request = new Request(window.location.href, {
     ...init,
     method,
-    ...(method === 'GET' || method === 'HEAD' ? { body: undefined } : {}),
+    ...(method === "GET" || method === "HEAD" ? { body: undefined } : {}),
   });
   const headers = Object.fromEntries(request.headers.entries());
   // The transport bypasses browser HTTP, so stamp the trusted shell origin
   // explicitly for gateway-minted browser app sessions.
-  headers['origin'] = window.location.origin;
+  headers["origin"] = window.location.origin;
   // Browsers never expose Accept-Encoding to JS, so advertise gzip explicitly
   // — otherwise the gateway ships raw bytes. irohFetch decodes the reply. Skip
   // SSE (the server exempts text/event-stream anyway; keep the request honest).
-  if (!(headers['accept'] || '').toLowerCase().includes('text/event-stream')) {
-    headers['accept-encoding'] = 'gzip';
+  if (!(headers["accept"] || "").toLowerCase().includes("text/event-stream")) {
+    headers["accept-encoding"] = "gzip";
   }
   const body =
-    method === 'GET' || method === 'HEAD'
+    method === "GET" || method === "HEAD"
       ? new Uint8Array()
       : new Uint8Array(await request.arrayBuffer());
   return { method, headers, body };
 }
 
-export async function irohFetch(pathname: string, init: RequestInit = {}): Promise<Response> {
+export async function irohFetch(
+  pathname: string,
+  init: RequestInit = {}
+): Promise<Response> {
   const connection = loadConnection();
   if (!connection.endpointId || !connection.endpointTicket) {
-    throw new Error('No Iroh gateway is connected.');
+    throw new Error("No Iroh gateway is connected.");
   }
   const node = await endpoint();
   const parts = await requestParts(init);
@@ -296,7 +253,7 @@ export async function irohFetch(pathname: string, init: RequestInit = {}): Promi
     parts.method,
     pathname,
     JSON.stringify(parts.headers),
-    parts.body,
+    parts.body
   );
   const headers = responseHeaders(response.headers_json);
   let body: ReadableStream = response.take_body();
@@ -305,10 +262,10 @@ export async function irohFetch(pathname: string, init: RequestInit = {}): Promi
   // content-length (they describe the compressed form); ETag is kept — the
   // gateway keys it to the RAW bytes, so revalidation stays correct. gzip only:
   // DecompressionStream has no brotli, and requestParts only offers gzip.
-  if ((headers.get('content-encoding') || '').toLowerCase() === 'gzip') {
-    headers.delete('content-encoding');
-    headers.delete('content-length');
-    body = body.pipeThrough(new DecompressionStream('gzip'));
+  if ((headers.get("content-encoding") || "").toLowerCase() === "gzip") {
+    headers.delete("content-encoding");
+    headers.delete("content-length");
+    body = body.pipeThrough(new DecompressionStream("gzip"));
   }
   return new Response(body, { status: response.status, headers });
 }
@@ -316,7 +273,7 @@ export async function irohFetch(pathname: string, init: RequestInit = {}): Promi
 async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
   const connection = loadConnection();
   if (!connection.endpointId || !connection.endpointTicket) {
-    throw new Error('No Iroh gateway is connected.');
+    throw new Error("No Iroh gateway is connected.");
   }
   const headers = { ...message.headers };
   // Every request on this path originates from a generated app in the SW
@@ -327,9 +284,9 @@ async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
   // would let an idle app's requests fall through to the full device bearer —
   // a privilege escalation. No cookie means the gateway rejects with 401,
   // never an escalation. Do not "optimize" this back behind the cookie check.
-  headers['x-centraid-tunnel-auth-mode'] = 'web-session';
+  headers["x-centraid-tunnel-auth-mode"] = "web-session";
   if (message.sessionCookie) {
-    headers['cookie'] = message.sessionCookie;
+    headers["cookie"] = message.sessionCookie;
   }
   return requestWithRetry(
     await endpoint(),
@@ -337,7 +294,7 @@ async function bridgeFetch(message: BridgeRequest): Promise<BrowserResponse> {
     message.method,
     message.target,
     JSON.stringify(headers),
-    new Uint8Array(message.body),
+    new Uint8Array(message.body)
   );
 }
 
@@ -348,14 +305,14 @@ function bridgeId(): string {
   const stale = durable ? sessionStorage : localStorage;
   // Relay-bearing endpoint tickets can be refreshed without changing the
   // sovereign gateway. Keep the cache namespace warm across those re-dials.
-  const scope = `${webGatewayId(connection) ?? connection.endpointTicket ?? ''}\u0000${connection.vaultId ?? ''}`;
+  const scope = `${webGatewayId(connection) ?? connection.endpointTicket ?? ""}\u0000${connection.vaultId ?? ""}`;
   let saved: { scope?: string; id?: string } = {};
   try {
-    saved = JSON.parse(storage.getItem(BRIDGE_STORAGE) ?? '{}') as typeof saved;
+    saved = JSON.parse(storage.getItem(BRIDGE_STORAGE) ?? "{}") as typeof saved;
   } catch {
     saved = {};
   }
-  const prefix = durable ? 'd-' : 'e-';
+  const prefix = durable ? "d-" : "e-";
   const id =
     saved.scope === scope && saved.id?.startsWith(prefix)
       ? saved.id
@@ -371,9 +328,9 @@ function bridgeId(): string {
 /** The service worker treats only `d-` bridge scopes as cache-readable/writable. */
 export function irohBridgeIdForConsent(
   rememberDevice: boolean,
-  randomId = crypto.randomUUID(),
+  randomId = crypto.randomUUID()
 ): string {
-  return `${rememberDevice ? 'd' : 'e'}-${randomId}`;
+  return `${rememberDevice ? "d" : "e"}-${randomId}`;
 }
 
 /** Wipe all device-key/bridge state after unpair or remote revocation. */
@@ -401,38 +358,42 @@ function isIrohWorker(worker: ServiceWorker | null): boolean {
 }
 
 export async function ensureIrohServiceWorker(): Promise<void> {
-  if (!('serviceWorker' in navigator))
-    throw new Error('This browser does not support PWA workers.');
-  const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL);
+  if (!("serviceWorker" in navigator))
+    throw new Error("This browser does not support PWA workers.");
+  const registration =
+    await navigator.serviceWorker.register(SERVICE_WORKER_URL);
   await registration.update();
   await navigator.serviceWorker.ready;
   if (isIrohWorker(navigator.serviceWorker.controller)) return;
   await new Promise<void>((resolve, reject) => {
     const timeout = window.setTimeout(
-      () => reject(new Error('Iroh PWA worker did not activate.')),
-      5000,
+      () => reject(new Error("Iroh PWA worker did not activate.")),
+      5000
     );
     navigator.serviceWorker.addEventListener(
-      'controllerchange',
+      "controllerchange",
       () => {
         if (isIrohWorker(navigator.serviceWorker.controller)) {
           window.clearTimeout(timeout);
           resolve();
         }
       },
-      { once: true },
+      { once: true }
     );
   });
 }
 
 export async function irohVirtualUrl(target: string): Promise<string> {
   await ensureIrohServiceWorker();
-  const path = target.startsWith('/') ? target : `/${target}`;
-  return new URL(`${VIRTUAL_PREFIX}${bridgeId()}${path}`, window.location.origin).toString();
+  const path = target.startsWith("/") ? target : `/${target}`;
+  return new URL(
+    `${VIRTUAL_PREFIX}${bridgeId()}${path}`,
+    window.location.origin
+  ).toString();
 }
 
 interface BridgeRequest {
-  type: 'centraid:iroh-request' | 'centraid:iroh-claim';
+  type: "centraid:iroh-request" | "centraid:iroh-claim";
   bridgeId: string;
   target: string;
   method: string;
@@ -443,7 +404,7 @@ interface BridgeRequest {
 
 function postError(port: MessagePort, error: unknown): void {
   port.postMessage({
-    type: 'error',
+    type: "error",
     message: error instanceof Error ? error.message : String(error),
   });
 }
@@ -453,31 +414,44 @@ export function installIrohServiceWorkerBridge(): void {
   // so a probe can tell an instrumented bundle apart from a stale one before
   // any request has run. Creating the object changes no transport behavior.
   irohStats();
-  if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.addEventListener('message', (event: MessageEvent<BridgeRequest>) => {
-    const message = event.data;
-    const port = event.ports[0];
-    if (!port || message?.bridgeId !== bridgeId()) return;
-    if (message.type === 'centraid:iroh-claim') {
-      port.postMessage({ type: 'claim' });
-      return;
-    }
-    if (message.type !== 'centraid:iroh-request') return;
-    void (async () => {
-      const response = await bridgeFetch(message);
-      port.postMessage({
-        type: 'head',
-        status: response.status,
-        headers: JSON.parse(response.headers_json) as Record<string, string | string[]>,
-      });
-      const reader = response.take_body().getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const bytes = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
-        port.postMessage({ type: 'chunk', body: bytes }, [bytes]);
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.addEventListener(
+    "message",
+    (event: MessageEvent<BridgeRequest>) => {
+      const message = event.data;
+      const port = event.ports[0];
+      if (!port || message?.bridgeId !== bridgeId()) return;
+      if (message.type === "centraid:iroh-claim") {
+        port.postMessage({ type: "claim" });
+        return;
       }
-      port.postMessage({ type: 'end' });
-    })().catch((error: unknown) => postError(port, error));
-  });
+      if (message.type !== "centraid:iroh-request") return;
+      void (async () => {
+        const response = await bridgeFetch(message);
+        port.postMessage({
+          type: "head",
+          status: response.status,
+          headers: JSON.parse(response.headers_json) as Record<
+            string,
+            string | string[]
+          >,
+        });
+        const reader = response.take_body().getReader();
+        // A MessagePort is an ordered byte stream: do not read the next chunk
+        // until the current one has been posted to the service worker.
+        const pump = async (): Promise<void> => {
+          const { done, value } = await reader.read();
+          if (done) return;
+          const bytes = value.buffer.slice(
+            value.byteOffset,
+            value.byteOffset + value.byteLength
+          );
+          port.postMessage({ type: "chunk", body: bytes }, [bytes]);
+          return pump();
+        };
+        await pump();
+        port.postMessage({ type: "end" });
+      })().catch((error: unknown) => postError(port, error));
+    }
+  );
 }

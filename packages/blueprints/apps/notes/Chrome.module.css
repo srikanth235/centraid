@@ -23,7 +23,7 @@
 /* Dark override for the folded token — mirrors app.css's dark block, emitted for
    both the explicit [data-theme='dark'] and the standalone prefers-color-scheme
    fallback (the same two-selector shape the token layer uses). */
-:global(:root[data-theme='dark']) .shell {
+:global(:root[data-theme="dark"]) .shell {
   --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
 }
 @media (prefers-color-scheme: dark) {
@@ -35,13 +35,14 @@
 /* Knob: appFont swaps the body/UI sans face. The host sets data-app-font on the
    inline scope wrapper (pushKnobToInlineRoot); app.css's :root[data-app-font]
    rules aren't loaded inline, so re-express them here keyed on that wrapper. */
-:global(.centraid-inline-scope[data-app-font='sans']) {
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+:global(.centraid-inline-scope[data-app-font="sans"]) {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
-:global(.centraid-inline-scope[data-app-font='serif']) {
-  --font-sans: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
+:global(.centraid-inline-scope[data-app-font="serif"]) {
+  --font-sans: "New York", "Iowan Old Style", Georgia, Cambria, serif;
 }
-:global(.centraid-inline-scope[data-app-font='mono']) {
+:global(.centraid-inline-scope[data-app-font="mono"]) {
   --font-sans: var(--mono);
 }
 
@@ -160,7 +161,7 @@
   background: none;
   color: var(--ink-3);
 }
-.viewToggle button[aria-pressed='true'] {
+.viewToggle button[aria-pressed="true"] {
   background: var(--accent-deep);
   color: #fff;
 }

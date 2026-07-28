@@ -44,7 +44,9 @@ export function shouldAdmitUpdate(input: ShouldAdmitUpdateInput): boolean {
   if (elapsed < 0) return false;
 
   const windowMs =
-    typeof input.windowMs === 'number' && Number.isFinite(input.windowMs) && input.windowMs > 0
+    typeof input.windowMs === "number" &&
+    Number.isFinite(input.windowMs) &&
+    input.windowMs > 0
       ? input.windowMs
       : ROLLOUT_WINDOW_MS;
 

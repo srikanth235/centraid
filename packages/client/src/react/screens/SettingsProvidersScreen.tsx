@@ -1,19 +1,33 @@
 // governance: allow-repo-hygiene file-size-limit (#567) the provider settings screen coordinates one atomic runner/preflight/capability/ladder state surface whose optimistic rollback must remain centralized
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import Button from '../ui/Button.js';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type JSX,
+} from "react";
+
 import type {
   AgentCardDTO,
   AgentRunnerKind,
   AgentsStatusDTO,
   ModelSubsystem,
   SettingsProvidersBridgeProps,
-} from '../screen-contracts.js';
-import { DrawerGroup } from './settings-controls.js';
-import AgentEntry from './SettingsProvidersAgents.js';
-import { ConfigSelect, ModelSelect, Select, modelLabel } from './SettingsProvidersSelects.js';
-import styles from './SettingsProvidersScreen.module.css';
-import controlsCss from '../styles/controls.module.css';
-import { openConfirm } from '../shell/confirm.js';
+} from "../screen-contracts.js";
+import { openConfirm } from "../shell/confirm.js";
+import Button from "../ui/Button.js";
+import { DrawerGroup } from "./settings-controls.js";
+import AgentEntry from "./SettingsProvidersAgents.js";
+import {
+  ConfigSelect,
+  ModelSelect,
+  Select,
+  modelLabel,
+} from "./SettingsProvidersSelects.js";
+
+import controlsCss from "../styles/controls.module.css";
+import styles from "./SettingsProvidersScreen.module.css";
 
 const POLL_MS = 800;
 const POLL_WINDOW_MS = 30_000;
@@ -30,7 +44,7 @@ function schedulePoll(
   timerRef: { current: ReturnType<typeof setTimeout> | null },
   deadlineRef: { current: number },
   loadStatus: () => Promise<AgentsStatusDTO>,
-  onStatus: (s: AgentsStatusDTO) => void,
+  onStatus: (s: AgentsStatusDTO) => void
 ): void {
   if (timerRef.current) clearTimeout(timerRef.current);
   timerRef.current = setTimeout(() => {
@@ -49,11 +63,23 @@ function schedulePoll(
  * a lane left unset inherits the default lane. Before per-subsystem runners
  * these were model-only overrides hanging off one globally-active agent.
  */
-const SUBSYSTEM_ROWS: ReadonlyArray<{ key: ModelSubsystem; label: string; hint: string }> = [
-  { key: 'assistant', label: 'Assistant', hint: 'Global Ask across your vault.' },
-  { key: 'ask', label: 'In-app Ask', hint: 'The Ask panel inside each app.' },
-  { key: 'builder', label: 'Builder', hint: 'The app-building agent.' },
-  { key: 'automations', label: 'Automations', hint: 'Background automations & enrichers.' },
+const SUBSYSTEM_ROWS: ReadonlyArray<{
+  key: ModelSubsystem;
+  label: string;
+  hint: string;
+}> = [
+  {
+    key: "assistant",
+    label: "Assistant",
+    hint: "Global Ask across your vault.",
+  },
+  { key: "ask", label: "In-app Ask", hint: "The Ask panel inside each app." },
+  { key: "builder", label: "Builder", hint: "The app-building agent." },
+  {
+    key: "automations",
+    label: "Automations",
+    hint: "Background automations & enrichers.",
+  },
 ];
 
 /**
@@ -82,7 +108,7 @@ function RouteRow({
   label: string;
   hint: string;
   cards: AgentCardDTO[];
-  runner: AgentRunnerKind | '';
+  runner: AgentRunnerKind | "";
   model: string;
   effort: string;
   resolvedCard: AgentCardDTO | undefined;
@@ -99,18 +125,22 @@ function RouteRow({
   // D13: ladder membership IS the consent record, so the row shows exactly what
   // is stored — including a member that currently resolves as this lane's
   // primary. Hiding it made the UI disagree with the consent the gateway holds.
-  const activeLadder = ladder.filter((kind, index) => ladder.indexOf(kind) === index);
+  const activeLadder = ladder.filter(
+    (kind, index) => ladder.indexOf(kind) === index
+  );
   // Unattended failover runs with no one watching, so a fallback must be past
   // its session preflight — `connected` alone admits an agent that will stop
   // and ask for auth mid-run.
   const availableFallbacks = cards.filter(
     (card) =>
-      card.sessionReady && card.kind !== resolvedCard?.kind && !activeLadder.includes(card.kind),
+      card.sessionReady &&
+      card.kind !== resolvedCard?.kind &&
+      !activeLadder.includes(card.kind)
   );
   return (
     <div
       className={styles.routeRow}
-      style={{ '--route-accent': resolvedCard?.accent } as CSSProperties}
+      style={{ "--route-accent": resolvedCard?.accent } as CSSProperties}
     >
       <div className={styles.routeMeta}>
         <div className={styles.routeName}>
@@ -127,7 +157,7 @@ function RouteRow({
           ariaLabel={`Agent for ${label}`}
         >
           <option value="">
-            {defaultCard ? `Use default · ${defaultCard.title}` : 'Use default'}
+            {defaultCard ? `Use default · ${defaultCard.title}` : "Use default"}
           </option>
           {cards.map((c) => (
             <option key={c.kind} value={c.kind} disabled={!c.connected}>
@@ -149,7 +179,7 @@ function RouteRow({
               category="thought_level"
               saved={effort}
               onChange={onSetEffort}
-              emptyLabel={`Use default · ${resolvedAgentDefaultEffort || 'agent effort'}`}
+              emptyLabel={`Use default · ${resolvedAgentDefaultEffort || "agent effort"}`}
               ariaLabel={`Effort for ${label}`}
             />
           </>
@@ -173,7 +203,10 @@ function RouteRow({
                   disabled={index === 0}
                   onClick={() => {
                     const next = [...activeLadder];
-                    [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
+                    [next[index - 1], next[index]] = [
+                      next[index]!,
+                      next[index - 1]!,
+                    ];
                     onSetLadder(next);
                   }}
                 >
@@ -185,7 +218,10 @@ function RouteRow({
                   disabled={index === activeLadder.length - 1}
                   onClick={() => {
                     const next = [...activeLadder];
-                    [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
+                    [next[index], next[index + 1]] = [
+                      next[index + 1]!,
+                      next[index]!,
+                    ];
                     onSetLadder(next);
                   }}
                 >
@@ -194,7 +230,9 @@ function RouteRow({
                 <button
                   type="button"
                   aria-label={`Remove ${card?.title ?? kind} from ${label} failover`}
-                  onClick={() => onSetLadder(activeLadder.filter((entry) => entry !== kind))}
+                  onClick={() =>
+                    onSetLadder(activeLadder.filter((entry) => entry !== kind))
+                  }
                 >
                   ×
                 </button>
@@ -210,9 +248,10 @@ function RouteRow({
           onChange={(event) => {
             const kind = event.target.value as AgentRunnerKind;
             if (!kind) return;
-            const title = cards.find((card) => card.kind === kind)?.title ?? kind;
+            const title =
+              cards.find((card) => card.kind === kind)?.title ?? kind;
             void openConfirm({
-              confirmLabel: 'Add fallback',
+              confirmLabel: "Add fallback",
               title: `Add ${title} to ${label} failover?`,
               message: `If earlier agents fail, Centraid may send the conversation handoff, attachments, and vault-derived context to ${title} without another prompt. A later manual switch remains separately confirm-gated.`,
             }).then((approved) => {
@@ -256,7 +295,7 @@ export default function SettingsProvidersScreen({
   setSubsystemRunnerLadder,
 }: SettingsProvidersBridgeProps): JSX.Element {
   const [status, setStatus] = useState<AgentsStatusDTO | null>(null);
-  const [defaultKind, setDefaultKind] = useState<AgentRunnerKind>('codex');
+  const [defaultKind, setDefaultKind] = useState<AgentRunnerKind>("codex");
   const [savedByKind, setSavedByKind] = useState<Record<string, string>>({});
   const [subsystemByKind, setSubsystemByKind] = useState<
     Record<string, Partial<Record<ModelSubsystem, string>>>
@@ -306,7 +345,10 @@ export default function SettingsProvidersScreen({
     };
   }, [loadStatus, apply, poll]);
 
-  const doRefresh = (fn: () => Promise<AgentsStatusDTO>, setBusy: (b: boolean) => void): void => {
+  const doRefresh = (
+    fn: () => Promise<AgentsStatusDTO>,
+    setBusy: (b: boolean) => void
+  ): void => {
     setBusy(true);
     deadlineRef.current = Date.now() + POLL_WINDOW_MS;
     void fn()
@@ -339,7 +381,7 @@ export default function SettingsProvidersScreen({
   const onSetSubsystemModel = (
     kind: AgentRunnerKind,
     subsystem: ModelSubsystem,
-    v: string,
+    v: string
   ): void => {
     setSubsystemByKind((m) => {
       const next = { ...m, [kind]: { ...m[kind] } };
@@ -358,7 +400,7 @@ export default function SettingsProvidersScreen({
       else delete next[subsystem];
       return next;
     });
-    void setSubsystemRunner(subsystem, v as AgentRunnerKind | '').then((ok) => {
+    void setSubsystemRunner(subsystem, v as AgentRunnerKind | "").then((ok) => {
       if (ok) return;
       setRunnerBySubsystem((current) => {
         const next = { ...current };
@@ -371,13 +413,17 @@ export default function SettingsProvidersScreen({
 
   const onSetSubsystemRunnerLadder = (
     subsystem: ModelSubsystem,
-    kinds: AgentRunnerKind[],
+    kinds: AgentRunnerKind[]
   ): void => {
     setRunnerLadders((current) => ({ ...current, [subsystem]: kinds }));
     setSubsystemRunnerLadder(subsystem, kinds);
   };
 
-  const onSetAgentConfig = (kind: AgentRunnerKind, category: string, value: string): void => {
+  const onSetAgentConfig = (
+    kind: AgentRunnerKind,
+    category: string,
+    value: string
+  ): void => {
     setDefaultConfigByKind((current) => {
       const next = { ...current, [kind]: { ...current[kind] } };
       if (value) next[kind]![category] = value;
@@ -391,7 +437,7 @@ export default function SettingsProvidersScreen({
     kind: AgentRunnerKind,
     subsystem: ModelSubsystem,
     category: string,
-    value: string,
+    value: string
   ): void => {
     setSubsystemConfigByKind((current) => {
       const next = {
@@ -413,17 +459,20 @@ export default function SettingsProvidersScreen({
     cards.find((c) => c.kind === kind);
   const defaultCard = cardFor(defaultKind);
   /** A lane's agent: its own override, else the default lane's. */
-  const resolvedKind = (s: ModelSubsystem): AgentRunnerKind => runnerBySubsystem[s] ?? defaultKind;
+  const resolvedKind = (s: ModelSubsystem): AgentRunnerKind =>
+    runnerBySubsystem[s] ?? defaultKind;
   const usedBy = (kind: AgentRunnerKind): string[] =>
-    SUBSYSTEM_ROWS.filter((r) => resolvedKind(r.key) === kind).map((r) => r.label);
+    SUBSYSTEM_ROWS.filter((r) => resolvedKind(r.key) === kind).map(
+      (r) => r.label
+    );
 
   return (
     <>
       <DrawerGroup label="Routing">
         <div className={controlsCss.note}>
-          Each surface picks its own agent and model. A lane left on “Use default” follows the
-          default lane below, so you can run the Builder on one agent and everything else on
-          another.
+          Each surface picks its own agent and model. A lane left on “Use
+          default” follows the default lane below, so you can run the Builder on
+          one agent and everything else on another.
         </div>
         {status === null ? (
           <div className={controlsCss.note}>Reading agent status…</div>
@@ -432,7 +481,7 @@ export default function SettingsProvidersScreen({
             <div
               className={styles.routeRow}
               data-default="true"
-              style={{ '--route-accent': defaultCard?.accent } as CSSProperties}
+              style={{ "--route-accent": defaultCard?.accent } as CSSProperties}
             >
               <div className={styles.routeMeta}>
                 <div className={styles.routeName}>
@@ -444,7 +493,11 @@ export default function SettingsProvidersScreen({
                 </span>
               </div>
               <div className={styles.routeControls}>
-                <Select value={defaultKind} onChange={onSetDefault} ariaLabel="Default agent">
+                <Select
+                  value={defaultKind}
+                  onChange={onSetDefault}
+                  ariaLabel="Default agent"
+                >
                   {cards.map((c) => (
                     <option key={c.kind} value={c.kind} disabled={!c.connected}>
                       {c.connected ? c.title : `${c.title} · unavailable`}
@@ -453,8 +506,8 @@ export default function SettingsProvidersScreen({
                 </Select>
                 <span className={styles.routeHint}>
                   {defaultCard
-                    ? `${modelLabel(defaultCard, savedByKind[defaultKind] ?? '')} — set per agent below`
-                    : '—'}
+                    ? `${modelLabel(defaultCard, savedByKind[defaultKind] ?? "")} — set per agent below`
+                    : "—"}
                 </span>
               </div>
             </div>
@@ -467,22 +520,27 @@ export default function SettingsProvidersScreen({
                   label={row.label}
                   hint={row.hint}
                   cards={cards}
-                  runner={runnerBySubsystem[row.key] ?? ''}
-                  model={subsystemByKind[kind]?.[row.key] ?? ''}
-                  effort={subsystemConfigByKind[kind]?.[row.key]?.thought_level ?? ''}
+                  runner={runnerBySubsystem[row.key] ?? ""}
+                  model={subsystemByKind[kind]?.[row.key] ?? ""}
+                  effort={
+                    subsystemConfigByKind[kind]?.[row.key]?.thought_level ?? ""
+                  }
                   resolvedCard={card}
-                  resolvedAgentDefault={savedByKind[kind] ?? ''}
+                  resolvedAgentDefault={savedByKind[kind] ?? ""}
                   resolvedAgentDefaultEffort={
                     defaultConfigByKind[kind]?.thought_level ??
-                    card?.configOptions?.find((option) => option.category === 'thought_level')
-                      ?.currentValue ??
-                    ''
+                    card?.configOptions?.find(
+                      (option) => option.category === "thought_level"
+                    )?.currentValue ??
+                    ""
                   }
                   defaultCard={defaultCard}
                   ladder={runnerLadders[row.key] ?? []}
                   onSetRunner={(v) => onSetSubsystemRunner(row.key, v)}
                   onSetModel={(v) => onSetSubsystemModel(kind, row.key, v)}
-                  onSetEffort={(v) => onSetSubsystemConfig(kind, row.key, 'thought_level', v)}
+                  onSetEffort={(v) =>
+                    onSetSubsystemConfig(kind, row.key, "thought_level", v)
+                  }
                   onSetLadder={(v) => onSetSubsystemRunnerLadder(row.key, v)}
                 />
               );
@@ -492,9 +550,10 @@ export default function SettingsProvidersScreen({
       </DrawerGroup>
       <DrawerGroup label="Agents">
         <div className={controlsCss.note}>
-          Detected on this gateway. Detection is CLI-only — the gateway ran `&lt;bin&gt; --version`;
-          Centraid doesn’t inspect how each agent authenticates. Each agent’s default model is what
-          its lanes fall back to.
+          Detected on this gateway. Detection is CLI-only — the gateway ran
+          `&lt;bin&gt; --version`; Centraid doesn’t inspect how each agent
+          authenticates. Each agent’s default model is what its lanes fall back
+          to.
         </div>
         <div className={styles.panel}>
           {status === null ? (
@@ -506,10 +565,12 @@ export default function SettingsProvidersScreen({
                 card={card}
                 usedBy={usedBy(card.kind)}
                 isDefault={card.kind === defaultKind}
-                saved={savedByKind[card.kind] ?? ''}
-                effort={defaultConfigByKind[card.kind]?.thought_level ?? ''}
+                saved={savedByKind[card.kind] ?? ""}
+                effort={defaultConfigByKind[card.kind]?.thought_level ?? ""}
                 onSetModel={(v) => onSetModel(card.kind, v)}
-                onSetEffort={(v) => onSetAgentConfig(card.kind, 'thought_level', v)}
+                onSetEffort={(v) =>
+                  onSetAgentConfig(card.kind, "thought_level", v)
+                }
               />
             ))
           )}
@@ -527,7 +588,11 @@ export default function SettingsProvidersScreen({
             variant="ghost"
             size="sm"
             icon="Copy"
-            label={diagnosticsCopied ? 'Diagnostics copied' : 'Copy capability diagnostics'}
+            label={
+              diagnosticsCopied
+                ? "Diagnostics copied"
+                : "Copy capability diagnostics"
+            }
             disabled={!status}
             onClick={() => {
               if (!status) return;
@@ -536,7 +601,10 @@ export default function SettingsProvidersScreen({
               // The label is an acknowledgement, not a state — without this the
               // button reads "Diagnostics copied" for the rest of the session.
               if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
-              copiedTimerRef.current = setTimeout(() => setDiagnosticsCopied(false), COPIED_ACK_MS);
+              copiedTimerRef.current = setTimeout(
+                () => setDiagnosticsCopied(false),
+                COPIED_ACK_MS
+              );
             }}
           />
         </div>

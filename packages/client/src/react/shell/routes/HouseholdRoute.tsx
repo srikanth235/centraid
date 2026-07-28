@@ -1,4 +1,5 @@
-import { type JSX, useEffect, useState } from 'react';
+import { type JSX, useEffect, useState } from "react";
+
 import {
   createGatewayDeviceTicket,
   getGatewayDeviceWorkStatus,
@@ -7,14 +8,17 @@ import {
   removeGatewayMember,
   revokeGatewayDevice,
   setGatewayDeviceCompute,
-} from '../../../gateway-client.js';
-import HouseholdScreen from '../../screens/HouseholdScreen.js';
-import { useShellActions } from '../actions.js';
-import { useMemberScopes } from '../useMemberScopes.js';
-import PageScroll from '../PageScroll.js';
-import SpaceModal, { DEFAULT_SPACE_ICON, randomSpaceColor } from './SpaceModal.js';
-import { createSpace } from './spaceModals.js';
-import { startVisibilityTicker } from './visibility-ticker.js';
+} from "../../../gateway-client.js";
+import HouseholdScreen from "../../screens/HouseholdScreen.js";
+import { useShellActions } from "../actions.js";
+import PageScroll from "../PageScroll.js";
+import { useMemberScopes } from "../useMemberScopes.js";
+import SpaceModal, {
+  DEFAULT_SPACE_ICON,
+  randomSpaceColor,
+} from "./SpaceModal.js";
+import { createSpace } from "./spaceModals.js";
+import { startVisibilityTicker } from "./visibility-ticker.js";
 
 // React-owned Household route (issue #599, Decision 14). The roster half is the
 // device/member surface that used to hang off the Gateway page; the spaces half
@@ -30,7 +34,7 @@ export default function HouseholdRoute(): JSX.Element {
   // operates on the gateway this client already addresses, which is the one
   // Household is describing, so there is no gateway to pick first any more.
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
-  const canCreateSpace = typeof window.CentraidApi.createVault === 'function';
+  const canCreateSpace = typeof window.CentraidApi.createVault === "function";
 
   // 1s ticker for the devices card's humanized ages, suspended while the tab is
   // hidden (issue #528 Phase D wakeup hygiene) — same discipline as Gateway.
@@ -51,7 +55,7 @@ export default function HouseholdRoute(): JSX.Element {
                 showToast(`Space created · ${data.name}`);
               } catch (err) {
                 showToast(
-                  `Couldn't create space: ${err instanceof Error ? err.message : String(err)}`,
+                  `Couldn't create space: ${err instanceof Error ? err.message : String(err)}`
                 );
               }
             })();
@@ -64,13 +68,15 @@ export default function HouseholdRoute(): JSX.Element {
         defaultScopeId={scopes.defaultScopeId}
         spacesLoading={scopes.loading}
         {...(canCreateSpace ? { onNewSpace: () => setNewSpaceOpen(true) } : {})}
-        onOpenStorage={() => navigate({ kind: 'storage' })}
-        onOpenSpaceSettings={() => navigate({ kind: 'settings', page: 'space' })}
+        onOpenStorage={() => navigate({ kind: "storage" })}
+        onOpenSpaceSettings={() =>
+          navigate({ kind: "settings", page: "space" })
+        }
         loadDevices={listGatewayDevices}
         onRevokeDevice={revokeGatewayDevice}
         onCurrentDeviceRevoked={() =>
-          import('../../../replica/shell-session.js').then((replica) =>
-            replica.purgeCurrentReplicaDevice(),
+          import("../../../replica/shell-session.js").then((replica) =>
+            replica.purgeCurrentReplicaDevice()
           )
         }
         loadMembers={listGatewayMembers}

@@ -9,17 +9,19 @@
 // an in-flight or pending save before it unmounts this component (closing
 // the overlay, switching notes) — the same registerFocus idiom
 // tasks/components/Capture.jsx uses, inverted for teardown instead of setup.
-import { useEffect, useRef, useState } from 'react';
-import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react';
-import { relTime, renderAttachments } from '../kit.ts';
-import { deriveTitle, parseBlocks, stripInline } from '../format.ts';
-import { I } from '../icons.ts';
-import { Icon } from './Shared.tsx';
-import type { Note, NotePatch, Notebook } from '../types.ts';
-import styles from './Editor.module.css';
-import shared from './shared.module.css';
+import { useEffect, useRef, useState } from "react";
+import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
 
-type SaveState = '' | 'saving' | 'saved' | 'pending' | 'error';
+import { deriveTitle, parseBlocks, stripInline } from "../format.ts";
+import { I } from "../icons.ts";
+import { relTime, renderAttachments } from "../kit.ts";
+import type { Note, NotePatch, Notebook } from "../types.ts";
+import { Icon } from "./Shared.tsx";
+
+import styles from "./Editor.module.css";
+import shared from "./shared.module.css";
+
+type SaveState = "" | "saving" | "saved" | "pending" | "error";
 
 function AttachStrip({
   note,
@@ -30,10 +32,13 @@ function AttachStrip({
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (ref.current) renderAttachments(ref.current, note.attachments ?? [], onRemove);
+    if (ref.current)
+      renderAttachments(ref.current, note.attachments ?? [], onRemove);
   }, [note.attachments, onRemove]);
   if (!note.attachments?.length) return null;
-  return <div className={`kit-attach-strip ${styles.editorAttach}`} ref={ref} />;
+  return (
+    <div className={`kit-attach-strip ${styles.editorAttach}`} ref={ref} />
+  );
 }
 
 function TagStrip({
@@ -45,13 +50,13 @@ function TagStrip({
   onAddTag: (noteId: string, label: string) => void;
   onRemoveTag: (tagId: string) => void;
 }) {
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useState("");
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const label = draft.trim();
     if (!label) return;
     onAddTag(note.note_id, label);
-    setDraft('');
+    setDraft("");
   };
   return (
     <div className={styles.tagStrip}>
@@ -88,7 +93,7 @@ function DeleteButton({ onDelete }: { onDelete: () => void }) {
     <button
       type="button"
       className="kit-icon-btn danger"
-      aria-label={armed ? 'Confirm delete note' : 'Delete note'}
+      aria-label={armed ? "Confirm delete note" : "Delete note"}
       onClick={() => {
         if (!armed) {
           setArmed(true);
@@ -98,7 +103,11 @@ function DeleteButton({ onDelete }: { onDelete: () => void }) {
         onDelete();
       }}
     >
-      {armed ? <span className={shared.armedLabel}>Sure?</span> : <Icon svg={I.trashLg} />}
+      {armed ? (
+        <span className={shared.armedLabel}>Sure?</span>
+      ) : (
+        <Icon svg={I.trashLg} />
+      )}
     </button>
   );
 }
@@ -122,15 +131,17 @@ function Blocks({
   const lineOffsets: number[] = [];
   {
     let acc = 0;
-    for (const line of body.split('\n')) {
+    for (const line of body.split("\n")) {
       lineOffsets.push(acc);
       acc += line.length + 1;
     }
   }
   // Caret offset for the END of a rendered line — what clicking that line has
   // always placed the caret at.
-  const caretAt = (idx: number) => (lineOffsets[idx] ?? 0) + (body.split('\n')[idx] ?? '').length;
-  const lineLabel = (text: string) => `Edit ${stripInline(text).trim() || 'this line'}`;
+  const caretAt = (idx: number) =>
+    (lineOffsets[idx] ?? 0) + (body.split("\n")[idx] ?? "").length;
+  const lineLabel = (text: string) =>
+    `Edit ${stripInline(text).trim() || "this line"}`;
 
   // This preview is a rendered projection of the body, not a textbox: the
   // container's fake `role="textbox"` is gone and every line is a real
@@ -153,7 +164,7 @@ function Blocks({
       />
       {blocks.length === 0 ? <p className={styles.mdGap} /> : null}
       {blocks.map((b) => {
-        if (b.kind === 'gap')
+        if (b.kind === "gap")
           return (
             <button
               key={b.line}
@@ -165,12 +176,16 @@ function Blocks({
               onClick={() => onEnter(caretAt(b.line))}
             />
           );
-        if (b.kind === 'h') {
-          const Tag = `h${b.level + 2}` as 'h3' | 'h4' | 'h5';
+        if (b.kind === "h") {
+          const Tag = `h${b.level + 2}` as "h3" | "h4" | "h5";
           // The heading element stays (its role is real); the click target is a
           // full-bleed button inside it.
           return (
-            <Tag key={b.line} className={MD_H_CLASS[b.level]} data-line={b.line}>
+            <Tag
+              key={b.line}
+              className={MD_H_CLASS[b.level]}
+              data-line={b.line}
+            >
               <button
                 type="button"
                 className={`kit-plain-btn ${styles.blockLine}`}
@@ -182,13 +197,17 @@ function Blocks({
             </Tag>
           );
         }
-        if (b.kind === 'check') {
+        if (b.kind === "check") {
           // A <button> can't contain the checkbox <button>, so the line keeps
           // its box and the edit target is a stretched overlay under it.
           return (
             <div
               key={b.line}
-              className={b.checked ? `${styles.checkLine} ${styles.done}` : styles.checkLine}
+              className={
+                b.checked
+                  ? `${styles.checkLine} ${styles.done}`
+                  : styles.checkLine
+              }
               data-line={b.line}
             >
               <button
@@ -201,7 +220,7 @@ function Blocks({
               <button
                 type="button"
                 className={styles.checkBox}
-                aria-label={b.checked ? 'Mark item not done' : 'Mark item done'}
+                aria-label={b.checked ? "Mark item not done" : "Mark item done"}
                 aria-pressed={b.checked}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -214,7 +233,7 @@ function Blocks({
             </div>
           );
         }
-        if (b.kind === 'li') {
+        if (b.kind === "li") {
           return (
             <button
               key={b.line}
@@ -268,22 +287,30 @@ export function Editor({
   pending: boolean;
   registerFlush: (fn: () => Promise<void>) => void;
   onClose: () => void;
-  onAutosave: (noteId: string, patch: NotePatch) => Promise<VaultOutcome | undefined>;
+  onAutosave: (
+    noteId: string,
+    patch: NotePatch
+  ) => Promise<VaultOutcome | undefined>;
   onTogglePin: (note: Note) => void;
   onMove: (noteId: string, notebookId: string | null) => void;
   onDelete: (note: Note) => void;
   onAttach: (noteId: string) => void;
-  onRemoveAttachment: (attachmentId: string) => Promise<VaultOutcome | undefined>;
+  onRemoveAttachment: (
+    attachmentId: string
+  ) => Promise<VaultOutcome | undefined>;
   onAddTag: (noteId: string, label: string) => void;
   onRemoveTag: (tagId: string) => void;
 }) {
-  const [title, setTitleState] = useState(note.title ?? '');
-  const [body, setBodyState] = useState(note.body ?? '');
+  const [title, setTitle] = useState(note.title ?? "");
+  const [body, setBody] = useState(note.body ?? "");
   const [bodyEditing, setBodyEditing] = useState(false);
-  const [saveState, setSaveState] = useState<SaveState>('');
+  const [saveState, setSaveState] = useState<SaveState>("");
   const titleRef = useRef(title);
   const bodyRef = useRef(body);
-  const lastSavedRef = useRef({ title: note.title ?? '', body: note.body ?? '' });
+  const lastSavedRef = useRef({
+    title: note.title ?? "",
+    body: note.body ?? "",
+  });
   const saveTimerRef = useRef(0);
   const savingRef = useRef<Promise<void> | null>(null);
   const caretRef = useRef<number | null>(null);
@@ -307,25 +334,26 @@ export function Editor({
       if (snapBody.trim() && snapBody !== prev.body) patch.body_text = snapBody;
       if (!patch.title && !patch.body_text) {
         lastSavedRef.current = { title: snapTitle, body: snapBody };
-        setSaveState('');
+        setSaveState("");
         return;
       }
-      setSaveState('saving');
+      setSaveState("saving");
       const outcome = await onAutosave(note.note_id, patch);
       lastSavedRef.current = { title: snapTitle, body: snapBody };
-      const stillDirty = titleRef.current !== snapTitle || bodyRef.current !== snapBody;
-      if (outcome?.status === 'executed') {
-        setSaveState(stillDirty ? 'saving' : 'saved');
+      const stillDirty =
+        titleRef.current !== snapTitle || bodyRef.current !== snapBody;
+      if (outcome?.status === "executed") {
+        setSaveState(stillDirty ? "saving" : "saved");
         // Re-armed inline instead of through scheduleSave(): referring forward
         // to it would reintroduce the hoisted-reference bail-out.
         if (stillDirty) {
           clearTimeout(saveTimerRef.current);
           saveTimerRef.current = window.setTimeout(performSave, 700);
         }
-      } else if (outcome?.status === 'parked') {
-        setSaveState('pending');
+      } else if (outcome?.status === "parked") {
+        setSaveState("pending");
       } else {
-        setSaveState('error');
+        setSaveState("error");
       }
     })();
     savingRef.current = p;
@@ -350,7 +378,7 @@ export function Editor({
     registerFlush?.(flush);
     return () => clearTimeout(saveTimerRef.current);
     // (#336) mount-once flush registration, deliberately []
-  }, []);
+  }, [flush, registerFlush]);
 
   useEffect(() => {
     if (bodyEditing && textareaRef.current) {
@@ -362,30 +390,30 @@ export function Editor({
     }
   }, [bodyEditing]);
 
-  const setTitle = (v: string): void => {
+  const updateTitle = (v: string): void => {
     titleRef.current = v;
-    setTitleState(v);
+    setTitle(v);
     scheduleSave();
   };
-  const setBody = (v: string): void => {
+  const updateBody = (v: string): void => {
     bodyRef.current = v;
-    setBodyState(v);
+    setBody(v);
     scheduleSave();
   };
   const saveBodyNow = (v: string): void => {
     bodyRef.current = v;
-    setBodyState(v);
+    setBody(v);
     clearTimeout(saveTimerRef.current);
     performSave();
   };
 
   const toggleCheck = (lineIndex: number): void => {
-    const lines = bodyRef.current.split('\n');
+    const lines = bodyRef.current.split("\n");
     if (lines[lineIndex] == null) return;
-    lines[lineIndex] = lines[lineIndex]!.replace(/\[( |x|X)\]/, (m) =>
-      /x/i.test(m) ? '[ ]' : '[x]',
+    lines[lineIndex] = lines[lineIndex]!.replace(/\[(?: |x|X)\]/u, (m) =>
+      /x/iu.test(m) ? "[ ]" : "[x]"
     );
-    saveBodyNow(lines.join('\n'));
+    saveBodyNow(lines.join("\n"));
   };
 
   const enterEdit = (pos: number | null): void => {
@@ -399,9 +427,9 @@ export function Editor({
   const insertChecklist = (): void => {
     if (!bodyEditing) {
       const cur = bodyRef.current;
-      const base = cur.length > 0 && !cur.endsWith('\n') ? `${cur}\n` : cur;
+      const base = cur.length > 0 && !cur.endsWith("\n") ? `${cur}\n` : cur;
       const next = `${base}- [ ] `;
-      setBody(next);
+      updateBody(next);
       enterEdit(next.length);
       return;
     }
@@ -409,12 +437,12 @@ export function Editor({
     if (!el) return;
     const value = el.value;
     const pos = el.selectionStart ?? value.length;
-    const lineStart = value.slice(0, pos).lastIndexOf('\n') + 1;
-    const nl = value.indexOf('\n', pos);
+    const lineStart = value.slice(0, pos).lastIndexOf("\n") + 1;
+    const nl = value.indexOf("\n", pos);
     const lineEnd = nl === -1 ? value.length : nl;
     let next: string;
     let caret: number;
-    if (value.slice(lineStart, lineEnd).trim() === '') {
+    if (value.slice(lineStart, lineEnd).trim() === "") {
       next = `${value.slice(0, lineStart)}- [ ] ${value.slice(lineStart)}`;
       caret = lineStart + 6;
     } else {
@@ -422,51 +450,54 @@ export function Editor({
       caret = lineEnd + 7;
     }
     caretRef.current = caret;
-    setBody(next);
+    updateBody(next);
     requestAnimationFrame(() => {
       textareaRef.current?.setSelectionRange(caret, caret);
     });
   };
 
   const handleBodyKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (e.key !== 'Enter' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+    if (e.key !== "Enter" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey)
+      return;
     const el = e.currentTarget;
     const pos = el.selectionStart;
     if (pos !== el.selectionEnd) return;
     const before = el.value.slice(0, pos);
-    const lineStart = before.lastIndexOf('\n') + 1;
-    const m = /^(\s*[-*] \[[ xX]\] )(.*)$/.exec(before.slice(lineStart));
+    const lineStart = before.lastIndexOf("\n") + 1;
+    const m = /^(?<marker>\s*[-*] \[[ xX]\] )(?<text>.*)$/u.exec(
+      before.slice(lineStart)
+    );
     if (!m) return;
     e.preventDefault();
-    if (m[2] === '') {
+    if (m.groups?.text === "") {
       const next = el.value.slice(0, lineStart) + el.value.slice(pos);
       caretRef.current = lineStart;
-      setBody(next);
+      updateBody(next);
       return;
     }
-    const insertion = `\n${m[1]!.replace(/\[[xX]\]/, '[ ]')}`;
+    const insertion = `\n${(m.groups?.marker ?? "").replace(/\[[xX]\]/u, "[ ]")}`;
     const next = el.value.slice(0, pos) + insertion + el.value.slice(pos);
     caretRef.current = pos + insertion.length;
-    setBody(next);
+    updateBody(next);
   };
 
-  const notebookId = note.notebook_ids?.[0] ?? '';
+  const notebookId = note.notebook_ids?.[0] ?? "";
   const notebookLabel = note.notebook_names?.[0];
   const activity: string[] = [];
   if (notebookLabel) activity.push(`Filed in “${notebookLabel}”`);
-  if (note.pinned === 1) activity.push('Pinned');
-  activity.push(`Edited ${relTime(note.updated_at ?? '')}`);
+  if (note.pinned === 1) activity.push("Pinned");
+  activity.push(`Edited ${relTime(note.updated_at ?? "")}`);
 
   const saveLabel =
-    saveState === 'saving'
-      ? 'Saving…'
-      : saveState === 'saved'
-        ? 'Saved · receipt'
-        : saveState === 'pending'
-          ? 'Pending approval'
-          : saveState === 'error'
-            ? 'Not saved'
-            : `Edited ${relTime(note.updated_at ?? '')}`;
+    saveState === "saving"
+      ? "Saving…"
+      : saveState === "saved"
+        ? "Saved · receipt"
+        : saveState === "pending"
+          ? "Pending approval"
+          : saveState === "error"
+            ? "Not saved"
+            : `Edited ${relTime(note.updated_at ?? "")}`;
 
   return (
     <div className={styles.editorBackdrop}>
@@ -474,10 +505,20 @@ export function Editor({
           panel (the panel is `position: relative`), so it has a keyboard
           equivalent — this replaces the old `e.target === e.currentTarget`
           guard on the backdrop div. */}
-      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <button
+        type="button"
+        className="kit-modal-scrim"
+        aria-label="Close"
+        onClick={onClose}
+      />
       <div className={pending ? `${styles.editor} kit-pending` : styles.editor}>
         <div className={styles.editorTop}>
-          <button type="button" className="kit-icon-btn" aria-label="Back" onClick={onClose}>
+          <button
+            type="button"
+            className="kit-icon-btn"
+            aria-label="Back"
+            onClick={onClose}
+          >
             <Icon svg={I.back} />
           </button>
           <span className={styles.saveLabel}>{saveLabel}</span>
@@ -499,7 +540,7 @@ export function Editor({
               <option value="">Unfiled</option>
               {notebooks.map((nb) => (
                 <option key={nb.notebook_id} value={nb.notebook_id}>
-                  {nb.name ?? 'Notebook'}
+                  {nb.name ?? "Notebook"}
                 </option>
               ))}
             </select>
@@ -513,8 +554,8 @@ export function Editor({
             </button>
             <button
               type="button"
-              className={note.pinned === 1 ? 'kit-icon-btn on' : 'kit-icon-btn'}
-              aria-label={note.pinned === 1 ? 'Unpin note' : 'Pin note'}
+              className={note.pinned === 1 ? "kit-icon-btn on" : "kit-icon-btn"}
+              aria-label={note.pinned === 1 ? "Unpin note" : "Pin note"}
               aria-pressed={note.pinned === 1}
               onClick={() => {
                 flush();
@@ -534,7 +575,7 @@ export function Editor({
             placeholder="Title"
             aria-label="Note title"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => updateTitle(e.target.value)}
           />
 
           {bodyEditing ? (
@@ -544,7 +585,7 @@ export function Editor({
               placeholder="Start writing. Markdown and - [ ] checklists work."
               aria-label="Note body"
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={(e) => updateBody(e.target.value)}
               onKeyDown={handleBodyKeyDown}
               onBlur={() => {
                 setTimeout(() => {
@@ -555,7 +596,11 @@ export function Editor({
               }}
             />
           ) : (
-            <Blocks body={body} onToggleCheck={toggleCheck} onEnter={enterEdit} />
+            <Blocks
+              body={body}
+              onToggleCheck={toggleCheck}
+              onEnter={enterEdit}
+            />
           )}
 
           <div className={shared.eyebrowLabel}>Tags</div>
@@ -574,7 +619,7 @@ export function Editor({
 
         <div className={styles.editorFoot}>
           <span className={styles.receiptChip}>receipt</span>
-          <span className={styles.activityLine}>{activity.join('  ·  ')}</span>
+          <span className={styles.activityLine}>{activity.join("  ·  ")}</span>
         </div>
       </div>
     </div>

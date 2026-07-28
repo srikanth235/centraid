@@ -1,12 +1,17 @@
-import { fileURLToPath } from 'node:url';
-import { defineProject, mergeConfig, type UserWorkspaceConfig } from 'vitest/config';
+import { fileURLToPath } from "node:url";
+
+import {
+  defineProject,
+  mergeConfig,
+  type UserWorkspaceConfig,
+} from "vitest/config";
 
 type ProjectConfig = UserWorkspaceConfig;
 
 // Resolved from this file rather than named as a bare specifier: consuming
 // projects run with their own cwd, and setupFiles paths are resolved against
 // the project root, not against test-kit.
-const JSDOM_SETUP = fileURLToPath(new URL('jsdom-setup.ts', import.meta.url));
+const JSDOM_SETUP = fileURLToPath(new URL("jsdom-setup.ts", import.meta.url));
 
 // #496 E5 — fail any test that runs zero assertions. Cheap partial defense
 // against assertion-gutting (matrix minimumTests counts `test(`/`it(` call
@@ -20,8 +25,8 @@ const requireAssertions = {
 
 const nodePreset = {
   test: {
-    environment: 'node',
-    pool: 'forks',
+    environment: "node",
+    pool: "forks",
     ...requireAssertions,
     // Node projects are the node:sqlite ones: they bootstrap real vault/daemon
     // layouts on disk, so their wall clock is fsync-bound, not CPU-bound.
@@ -72,19 +77,19 @@ const nodePreset = {
 // neither of those reaches the client environment's resolver — both were tried
 // and had no effect.
 const externalizeNodeSqlite = {
-  name: 'centraid:external-node-sqlite',
-  enforce: 'pre' as const,
+  name: "centraid:external-node-sqlite",
+  enforce: "pre" as const,
   resolveId(id: string) {
-    return id === 'node:sqlite' ? { id, external: true } : null;
+    return id === "node:sqlite" ? { id, external: true } : null;
   },
 };
 
 const jsdomPreset = {
-  esbuild: { jsx: 'automatic' as const },
+  esbuild: { jsx: "automatic" as const },
   plugins: [externalizeNodeSqlite],
   test: {
-    environment: 'jsdom',
-    css: { modules: { classNameStrategy: 'non-scoped' as const } },
+    environment: "jsdom",
+    css: { modules: { classNameStrategy: "non-scoped" as const } },
     ...requireAssertions,
     // Puts React into act mode for every jsdom project — see jsdom-setup.ts.
     setupFiles: [JSDOM_SETUP],
@@ -92,11 +97,15 @@ const jsdomPreset = {
 } satisfies ProjectConfig;
 
 /** Shared node:sqlite-safe Vitest project preset. */
-export function nodeProject(config: ProjectConfig): ReturnType<typeof defineProject> {
+export function nodeProject(
+  config: ProjectConfig
+): ReturnType<typeof defineProject> {
   return defineProject(mergeConfig(nodePreset, config));
 }
 
 /** Shared browser-logic preset: jsdom + automatic JSX + readable CSS modules. */
-export function jsdomProject(config: ProjectConfig): ReturnType<typeof defineProject> {
+export function jsdomProject(
+  config: ProjectConfig
+): ReturnType<typeof defineProject> {
   return defineProject(mergeConfig(jsdomPreset, config));
 }

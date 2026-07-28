@@ -1,4 +1,4 @@
-import type { BlobRange, BlobStat } from './store.js';
+import type { BlobRange, BlobStat } from "./store.js";
 
 export interface MultipartPart {
   partNumber: number;
@@ -24,43 +24,43 @@ export interface RemoteBlobTransfer {
    * object-creating call — when an eligible large original takes this path;
    * absent ⇒ the instance default.
    */
-  beginShaUpload?(sha256: string, storageClass?: string): Promise<string>;
-  uploadShaPart?(
+  beginShaUpload?: (sha256: string, storageClass?: string) => Promise<string>;
+  uploadShaPart?: (
     sha256: string,
     uploadId: string,
     partNumber: number,
-    bytes: Buffer,
-  ): Promise<string>;
-  completeShaUpload?(
+    bytes: Buffer
+  ) => Promise<string>;
+  completeShaUpload?: (
     sha256: string,
     uploadId: string,
-    parts: readonly MultipartPart[],
-  ): Promise<void>;
-  abortShaUpload?(sha256: string, uploadId: string): Promise<void>;
-  beginTemporaryUpload(tempId: string): Promise<string>;
-  uploadTemporaryPart(
+    parts: readonly MultipartPart[]
+  ) => Promise<void>;
+  abortShaUpload?: (sha256: string, uploadId: string) => Promise<void>;
+  beginTemporaryUpload: (tempId: string) => Promise<string>;
+  uploadTemporaryPart: (
     tempId: string,
     uploadId: string,
     partNumber: number,
-    bytes: Buffer,
-  ): Promise<string>;
-  completeTemporaryUpload(
+    bytes: Buffer
+  ) => Promise<string>;
+  completeTemporaryUpload: (
     tempId: string,
     uploadId: string,
-    parts: readonly MultipartPart[],
-  ): Promise<void>;
-  abortTemporaryUpload(tempId: string, uploadId: string): Promise<void>;
+    parts: readonly MultipartPart[]
+  ) => Promise<void>;
+  abortTemporaryUpload: (tempId: string, uploadId: string) => Promise<void>;
   /** Enumerate every in-progress upload under this vault's temp prefix. */
-  listTemporaryUploads?(): Promise<TemporaryMultipartUpload[]>;
-  putTemporary(tempId: string, bytes: Buffer): Promise<void>;
-  putTemporaryStream(
+  listTemporaryUploads?: () => Promise<TemporaryMultipartUpload[]>;
+  putTemporary: (tempId: string, bytes: Buffer) => Promise<void>;
+  putTemporaryStream: (
     tempId: string,
     source: NodeJS.ReadableStream,
-    approxSize: number,
-  ): Promise<void>;
-  statTemporary(tempId: string): Promise<BlobStat | null>;
+    approxSize: number
+  ) => Promise<void>;
+  statTemporary: (tempId: string) => Promise<BlobStat | null>;
   /** Bounded read used only to re-key a hash-unknown encrypted temp object. */
-  getTemporary?(tempId: string, range?: BlobRange): Promise<Buffer | null>;
+  getTemporary?: (tempId: string, range?: BlobRange) => Promise<Buffer | null>;
   /**
    * Promote a temp object to its final CAS key via CopyObject — the
    * object-creating call for the presigned direct-to-CAS door (#414 §11).
@@ -68,14 +68,21 @@ export interface RemoteBlobTransfer {
    * large original; the presigned temp PUT itself stays class-less (presign
    * signs only `host`). Absent ⇒ the instance default.
    */
-  copyTemporaryToSha(tempId: string, sha256: string, storageClass?: string): Promise<void>;
-  deleteTemporary(tempId: string): Promise<void>;
-  presignTemporaryPut(tempId: string, expiresSeconds?: number): Promise<URL>;
-  presignTemporaryPart(
+  copyTemporaryToSha: (
+    tempId: string,
+    sha256: string,
+    storageClass?: string
+  ) => Promise<void>;
+  deleteTemporary: (tempId: string) => Promise<void>;
+  presignTemporaryPut: (
+    tempId: string,
+    expiresSeconds?: number
+  ) => Promise<URL>;
+  presignTemporaryPart: (
     tempId: string,
     uploadId: string,
     partNumber: number,
-    expiresSeconds?: number,
-  ): Promise<URL>;
-  presignShaGet(sha256: string, expiresSeconds?: number): Promise<URL>;
+    expiresSeconds?: number
+  ) => Promise<URL>;
+  presignShaGet: (sha256: string, expiresSeconds?: number) => Promise<URL>;
 }

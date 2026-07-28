@@ -34,20 +34,25 @@
  * neither of which this reference implementation attempts.
  */
 
-import { randomUUID } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { FsObjectStore, type ObjectStore } from './object-store.js';
+import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import {
+  emptyRegistry,
+  type Registry,
+  type RegistryTarget,
+} from "./local-provider-registry.js";
+import { FsObjectStore, type ObjectStore } from "./object-store.js";
 import {
   inventoryFromFilesystem,
   paginateAuditEvents,
   validateProviderPolicy,
-} from './provider-observability.js';
+} from "./provider-observability.js";
 import {
   BackupProviderError,
   type AccountStatus,
   type BackupProvider,
-  type ProviderAuditEvent,
   type ProviderAuditPage,
   type ProviderAuditQuery,
   type ProviderCapabilities,
@@ -64,45 +69,30 @@ import {
   type TargetInfo,
   type Usage,
   type UsageByStore,
-} from './provider.js';
-
-interface RegistryTarget {
-  id: string;
-  name: string;
-  status: 'active' | 'deleted';
-  currentGeneration: number;
-  createdAt: string;
-  deletedAt: string | null;
-  purgedAt: string | null;
-}
-
-interface Registry {
-  targets: Record<string, RegistryTarget>;
-  snapshots: Record<string, SnapshotRow[]>;
-  idempotency: Record<string, Record<string, SnapshotRow>>;
-  nextSeq: Record<string, number>;
-  policies: Record<string, ProviderPolicy>;
-  events: Record<string, ProviderAuditEvent[]>;
-}
-
-function emptyRegistry(): Registry {
-  return { targets: {}, snapshots: {}, idempotency: {}, nextSeq: {}, policies: {}, events: {} };
-}
+} from "./provider.js";
 
 const SOFT_DELETE_WINDOW_DAYS = 14;
 const CAPABILITIES: ProviderCapabilities = {
-  protocol: ['centraid-storage-provider/1'],
-  dataPlane: 's3',
+  protocol: ["centraid-storage-provider/1"],
+  dataPlane: "s3",
   // Local disk has no separate wire-grant concept (openDataPlane IS the
   // grant), but it still supports every store class and can report cheap,
   // real usage — all are legitimately advertised offline.
-  capabilities: ['backup', 'cas', 'derived', 'usage', 'policy', 'inventory', 'audit'],
+  capabilities: [
+    "backup",
+    "cas",
+    "derived",
+    "usage",
+    "policy",
+    "inventory",
+    "audit",
+  ],
   maxCredentialTtlSeconds: 86400,
-  purgeAuthTier: 'api-key',
+  purgeAuthTier: "api-key",
   backup: {
     softDeleteWindowDays: SOFT_DELETE_WINDOW_DAYS,
-    retention: { kind: 'none' },
-    restoreCostClass: 'free-egress',
+    retention: { kind: "none" },
+    restoreCostClass: "free-egress",
     objectLock: false,
     conditionalWrites: true,
   },
@@ -114,7 +104,7 @@ const CAPABILITIES: ProviderCapabilities = {
 class ReadOnlyObjectStore implements ObjectStore {
   constructor(private readonly inner: ObjectStore) {}
   async put(): Promise<void> {
-    throw new Error('object store opened in read-only mode; put refused');
+    throw new Error("object store opened in read-only mode; put refused");
   }
   get(key: string): Promise<Uint8Array> {
     return this.inner.get(key);
@@ -129,7 +119,7 @@ class ReadOnlyObjectStore implements ObjectStore {
     return this.inner.list(prefix);
   }
   async delete(): Promise<void> {
-    throw new Error('object store opened in read-only mode; delete refused');
+    throw new Error("object store opened in read-only mode; delete refused");
   }
 }
 
@@ -147,8 +137,8 @@ export class LocalBackupProvider implements BackupProvider {
 
   constructor(options: LocalBackupProviderOptions) {
     this.rootDir = options.rootDir;
-    this.registryFile = path.join(this.rootDir, 'registry.json');
-    this.objectsRoot = path.join(this.rootDir, 'objects');
+    this.registryFile = path.join(this.rootDir, "registry.json");
+    this.objectsRoot = path.join(this.rootDir, "objects");
   }
 
   /**
@@ -159,7 +149,7 @@ export class LocalBackupProvider implements BackupProvider {
    */
   private async load(): Promise<Registry> {
     try {
-      const raw = await fs.readFile(this.registryFile, 'utf8');
+      const raw = await fs.readFile(this.registryFile, "utf8");
       const parsed = JSON.parse(raw) as Registry;
       return {
         targets: parsed.targets ?? {},
@@ -170,7 +160,7 @@ export class LocalBackupProvider implements BackupProvider {
         events: parsed.events ?? {},
       };
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
       return emptyRegistry();
     }
   }
@@ -183,15 +173,21 @@ export class LocalBackupProvider implements BackupProvider {
     this.writeChain = this.writeChain.then(async () => {
       await fs.mkdir(this.rootDir, { recursive: true });
       const tmp = `${this.registryFile}.${process.pid}.${Date.now()}.tmp`;
-      await fs.writeFile(tmp, `${JSON.stringify(registry, null, 2)}\n`, { mode: 0o600 });
+      await fs.writeFile(tmp, `${JSON.stringify(registry, null, 2)}\n`, {
+        mode: 0o600,
+      });
       await fs.rename(tmp, this.registryFile);
     });
     await this.writeChain;
   }
 
-  private requireTargetIn(registry: Registry, targetId: string): RegistryTarget {
+  private requireTargetIn(
+    registry: Registry,
+    targetId: string
+  ): RegistryTarget {
     const target = registry.targets[targetId];
-    if (!target) throw BackupProviderError.of('not_found', `unknown target "${targetId}"`);
+    if (!target)
+      throw BackupProviderError.of("not_found", `unknown target "${targetId}"`);
     return target;
   }
 
@@ -199,7 +195,7 @@ export class LocalBackupProvider implements BackupProvider {
     registry: Registry,
     targetId: string,
     kind: ProviderEventKind,
-    detail: Record<string, unknown>,
+    detail: Record<string, unknown>
   ): void {
     (registry.events[targetId] ??= []).push({
       at: Math.floor(Date.now() / 1000),
@@ -218,7 +214,7 @@ export class LocalBackupProvider implements BackupProvider {
     registry.targets[id] = {
       id,
       name: opts.label,
-      status: 'active',
+      status: "active",
       currentGeneration: 0,
       createdAt: new Date().toISOString(),
       deletedAt: null,
@@ -237,10 +233,13 @@ export class LocalBackupProvider implements BackupProvider {
     const registry = await this.load();
     const target = this.requireTargetIn(registry, targetId);
     if (target.purgedAt)
-      throw BackupProviderError.of('purge_pending', `target "${targetId}" was purged`);
-    target.status = 'deleted';
+      throw BackupProviderError.of(
+        "purge_pending",
+        `target "${targetId}" was purged`
+      );
+    target.status = "deleted";
     target.deletedAt = new Date().toISOString();
-    this.appendEvent(registry, targetId, 'soft-delete', { targetId });
+    this.appendEvent(registry, targetId, "soft-delete", { targetId });
     await this.persist(registry);
   }
 
@@ -249,12 +248,12 @@ export class LocalBackupProvider implements BackupProvider {
     const target = this.requireTargetIn(registry, targetId);
     if (target.purgedAt) {
       throw BackupProviderError.of(
-        'undelete_window_expired',
-        `target "${targetId}" was purged — undelete is gone forever`,
+        "undelete_window_expired",
+        `target "${targetId}" was purged — undelete is gone forever`
       );
     }
     if (!target.deletedAt) {
-      target.status = 'active';
+      target.status = "active";
       await this.persist(registry);
       return; // already active — undelete is a no-op
     }
@@ -262,13 +261,13 @@ export class LocalBackupProvider implements BackupProvider {
     const windowMs = SOFT_DELETE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
     if (Date.now() - deletedAt > windowMs) {
       throw BackupProviderError.of(
-        'undelete_window_expired',
-        `target "${targetId}" was deleted more than ${SOFT_DELETE_WINDOW_DAYS} days ago`,
+        "undelete_window_expired",
+        `target "${targetId}" was deleted more than ${SOFT_DELETE_WINDOW_DAYS} days ago`
       );
     }
-    target.status = 'active';
+    target.status = "active";
     target.deletedAt = null;
-    this.appendEvent(registry, targetId, 'undelete', { targetId });
+    this.appendEvent(registry, targetId, "undelete", { targetId });
     await this.persist(registry);
   }
 
@@ -277,13 +276,16 @@ export class LocalBackupProvider implements BackupProvider {
     // module header). A remote provider MUST reject this with 403.
     const registry = await this.load();
     const target = this.requireTargetIn(registry, targetId);
-    await fs.rm(path.join(this.objectsRoot, targetId), { recursive: true, force: true });
+    await fs.rm(path.join(this.objectsRoot, targetId), {
+      recursive: true,
+      force: true,
+    });
     registry.snapshots[targetId] = [];
     registry.idempotency[targetId] = {};
-    target.status = 'deleted';
-    target.deletedAt = target.deletedAt ?? new Date().toISOString();
+    target.status = "deleted";
+    target.deletedAt ??= new Date().toISOString();
     target.purgedAt = new Date().toISOString();
-    this.appendEvent(registry, targetId, 'purge', { targetId });
+    this.appendEvent(registry, targetId, "purge", { targetId });
     await this.persist(registry);
   }
 
@@ -297,35 +299,48 @@ export class LocalBackupProvider implements BackupProvider {
   async openDataPlane(
     targetId: string,
     store: StoreClass,
-    mode: 'read' | 'read-write',
+    mode: "read" | "read-write"
   ): Promise<ObjectStore> {
     const registry = await this.load();
     const target = this.requireTargetIn(registry, targetId);
     if (target.purgedAt)
-      throw BackupProviderError.of('purge_pending', `target "${targetId}" was purged`);
+      throw BackupProviderError.of(
+        "purge_pending",
+        `target "${targetId}" was purged`
+      );
     const root = this.storeRoot(targetId, store);
     await fs.mkdir(root, { recursive: true });
     const fsStore = new FsObjectStore(root);
-    return mode === 'read' ? new ReadOnlyObjectStore(fsStore) : fsStore;
+    return mode === "read" ? new ReadOnlyObjectStore(fsStore) : fsStore;
   }
 
-  async registerSnapshot(targetId: string, reg: SnapshotRegistration): Promise<SnapshotRow> {
+  async registerSnapshot(
+    targetId: string,
+    reg: SnapshotRegistration
+  ): Promise<SnapshotRow> {
     const registry = await this.load();
     const target = this.requireTargetIn(registry, targetId);
     if (target.purgedAt)
-      throw BackupProviderError.of('purge_pending', `target "${targetId}" was purged`);
+      throw BackupProviderError.of(
+        "purge_pending",
+        `target "${targetId}" was purged`
+      );
 
     // Idempotency replay BEFORE the fencing check (spec-mandated order).
     const existing = registry.idempotency[targetId]?.[reg.idempotencyKey];
     if (existing) return existing;
 
     if (reg.generation < target.currentGeneration) {
-      throw BackupProviderError.of('conflict_generation', `generation ${reg.generation} is stale`, {
-        currentGeneration: target.currentGeneration,
-      });
+      throw BackupProviderError.of(
+        "conflict_generation",
+        `generation ${reg.generation} is stale`,
+        {
+          currentGeneration: target.currentGeneration,
+        }
+      );
     }
 
-    const rows = registry.snapshots[targetId] ?? (registry.snapshots[targetId] = []);
+    const rows = (registry.snapshots[targetId] ??= []);
     const prevManifestHash = rows[0]?.manifestHash ?? null; // newest-first
     const seq = registry.nextSeq[targetId] ?? 1;
     registry.nextSeq[targetId] = seq + 1;
@@ -343,21 +358,25 @@ export class LocalBackupProvider implements BackupProvider {
       prunedAt: null,
     };
     rows.unshift(row); // newest-first
-    target.currentGeneration = Math.max(target.currentGeneration, reg.generation);
-    (registry.idempotency[targetId] ?? (registry.idempotency[targetId] = {}))[reg.idempotencyKey] =
-      row;
+    target.currentGeneration = Math.max(
+      target.currentGeneration,
+      reg.generation
+    );
+    (registry.idempotency[targetId] ??= {})[reg.idempotencyKey] = row;
     await this.persist(registry);
     return row;
   }
 
   async listSnapshots(
     targetId: string,
-    opts?: { includePruned?: boolean },
+    opts?: { includePruned?: boolean }
   ): Promise<SnapshotRow[]> {
     const registry = await this.load();
     this.requireTargetIn(registry, targetId);
     const rows = registry.snapshots[targetId] ?? [];
-    return opts?.includePruned ? [...rows] : rows.filter((r) => r.prunedAt === null);
+    return opts?.includePruned
+      ? [...rows]
+      : rows.filter((r) => r.prunedAt === null);
   }
 
   async getSnapshot(targetId: string, seq: number): Promise<SnapshotRow> {
@@ -366,8 +385,8 @@ export class LocalBackupProvider implements BackupProvider {
     const row = (registry.snapshots[targetId] ?? []).find((r) => r.seq === seq);
     if (!row)
       throw BackupProviderError.of(
-        'not_found',
-        `unknown snapshot seq ${seq} for target "${targetId}"`,
+        "not_found",
+        `unknown snapshot seq ${seq} for target "${targetId}"`
       );
     return row;
   }
@@ -388,10 +407,15 @@ export class LocalBackupProvider implements BackupProvider {
   /** Backup store's own usage figure (Layer 2, embedded in the target list) —
    *  scoped to the `backup` subtree only; `cas` usage is reported separately
    *  via `usageReport`. */
-  async usage(targetId: string): Promise<{ usage: Usage; accountStatus: AccountStatus }> {
+  async usage(
+    targetId: string
+  ): Promise<{ usage: Usage; accountStatus: AccountStatus }> {
     const registry = await this.load();
     this.requireTargetIn(registry, targetId);
-    const { bytesStored, objectCount } = await this.countStore(targetId, 'backup');
+    const { bytesStored, objectCount } = await this.countStore(
+      targetId,
+      "backup"
+    );
     return {
       usage: {
         storedBytes: bytesStored,
@@ -400,18 +424,18 @@ export class LocalBackupProvider implements BackupProvider {
         // quota, and the field is optional on the wire (a provider may not cap).
         meteredAt: Math.floor(Date.now() / 1000), // epoch seconds
       },
-      accountStatus: 'ok',
+      accountStatus: "ok",
     };
   }
 
   private async countStore(
     targetId: string,
-    store: StoreClass,
+    store: StoreClass
   ): Promise<{ bytesStored: number; objectCount: number }> {
     const fsStore = new FsObjectStore(this.storeRoot(targetId, store));
     let bytesStored = 0;
     let objectCount = 0;
-    for await (const obj of fsStore.list('')) {
+    for await (const obj of fsStore.list("")) {
       bytesStored += obj.size;
       objectCount++;
     }
@@ -426,26 +450,37 @@ export class LocalBackupProvider implements BackupProvider {
     const target = this.requireTargetIn(registry, targetId);
     const start = Math.floor(new Date(target.createdAt).getTime() / 1000);
     const end = Math.floor(Date.now() / 1000);
-    const out: UsageByStore = {};
-    for (const store of STORE_CLASSES) {
-      const { bytesStored, objectCount } = await this.countStore(targetId, store);
-      const report: StoreUsageReport = {
-        bytesStored,
-        objectCount,
-        quotaBytes: null,
-        period: { start, end },
-      };
-      out[store] = report;
-    }
+    const reports = await Promise.all(
+      STORE_CLASSES.map(async (store) => {
+        const { bytesStored, objectCount } = await this.countStore(
+          targetId,
+          store
+        );
+        const report: StoreUsageReport = {
+          bytesStored,
+          objectCount,
+          quotaBytes: null,
+          period: { start, end },
+        };
+        return [store, report] as const;
+      })
+    );
+    const out: UsageByStore = Object.fromEntries(reports);
     return out;
   }
 
-  async putPolicy(targetId: string, input: ProviderPolicyDeclaration): Promise<ProviderPolicy> {
+  async putPolicy(
+    targetId: string,
+    input: ProviderPolicyDeclaration
+  ): Promise<ProviderPolicy> {
     const registry = await this.load();
     this.requireTargetIn(registry, targetId);
-    const policy = { ...validateProviderPolicy(input), declaredAt: Math.floor(Date.now() / 1000) };
+    const policy = {
+      ...validateProviderPolicy(input),
+      declaredAt: Math.floor(Date.now() / 1000),
+    };
     registry.policies[targetId] = policy;
-    this.appendEvent(registry, targetId, 'policy-changed', { policy });
+    this.appendEvent(registry, targetId, "policy-changed", { policy });
     await this.persist(registry);
     return policy;
   }
@@ -454,34 +489,46 @@ export class LocalBackupProvider implements BackupProvider {
     const registry = await this.load();
     this.requireTargetIn(registry, targetId);
     const policy = registry.policies[targetId];
-    if (!policy) throw BackupProviderError.of('not_found', `no policy for target "${targetId}"`);
+    if (!policy)
+      throw BackupProviderError.of(
+        "not_found",
+        `no policy for target "${targetId}"`
+      );
     return policy;
   }
 
   async listInventory(
     targetId: string,
-    query: ProviderInventoryQuery,
+    query: ProviderInventoryQuery
   ): Promise<ProviderInventoryPage> {
     const registry = await this.load();
     const target = this.requireTargetIn(registry, targetId);
     return inventoryFromFilesystem(
       this.storeRoot(targetId, query.store),
-      target.status === 'active' ? 'live' : 'soft-deleted',
-      query,
+      target.status === "active" ? "live" : "soft-deleted",
+      query
     );
   }
 
-  async listEvents(targetId: string, query?: ProviderAuditQuery): Promise<ProviderAuditPage> {
+  async listEvents(
+    targetId: string,
+    query?: ProviderAuditQuery
+  ): Promise<ProviderAuditPage> {
     const registry = await this.load();
     this.requireTargetIn(registry, targetId);
     return paginateAuditEvents(registry.events[targetId] ?? [], query);
   }
 }
 
-async function persistObjectsDir(objectsRoot: string, targetId: string): Promise<void> {
+async function persistObjectsDir(
+  objectsRoot: string,
+  targetId: string
+): Promise<void> {
   await fs.mkdir(path.join(objectsRoot, targetId), { recursive: true });
 }
 
-export function openLocalBackupProvider(options: LocalBackupProviderOptions): LocalBackupProvider {
+export function openLocalBackupProvider(
+  options: LocalBackupProviderOptions
+): LocalBackupProvider {
   return new LocalBackupProvider(options);
 }

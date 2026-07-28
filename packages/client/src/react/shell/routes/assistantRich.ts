@@ -12,10 +12,12 @@ import {
   hydrateRefs as sharedHydrateRefs,
   wireCodeCopy as sharedWireCodeCopy,
   type AssistantRichClassOverrides,
-} from '@centraid/blueprints/kit/assistant-rich.js';
-import { resolveAssistantRefs } from '../../../gateway-client.js';
-import styles from './assistantRich.module.css';
-import asstPreCss from '../../styles/asstPre.module.css';
+} from "@centraid/blueprints/kit/assistant-rich.js";
+
+import { resolveAssistantRefs } from "../../../gateway-client.js";
+
+import asstPreCss from "../../styles/asstPre.module.css";
+import styles from "./assistantRich.module.css";
 
 // The shell's scoped/hashed class names, mapped onto the shared renderer's
 // slots. `asstPre` lives in a shared stylesheet reused by the tool timeline, so
@@ -58,7 +60,10 @@ export function richAnswerHtml(text: string): string {
 
 /** Resolve every ref chip under `host` to a live card title, batched. */
 export function hydrateRefs(host: HTMLElement): void {
-  sharedHydrateRefs(host, { resolveRefs: resolveAssistantRefs, refClass: styles.asstRef });
+  sharedHydrateRefs(host, {
+    resolveRefs: resolveAssistantRefs,
+    refClass: styles.asstRef,
+  });
 }
 
 /** Wire code-block "Copy" buttons under `host` to the clipboard (idempotent). */

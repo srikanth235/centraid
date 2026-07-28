@@ -10,10 +10,19 @@
  * CLI / local paths.
  */
 
-import { toBlueprintCss, type ColorKey, type IconName } from '@centraid/design-tokens';
-import { rewriteTitleInHtml, applyManifestName } from './app-rewrites.js';
-import { AUTOMATIONS_README, DEFAULT_APP_CSS, README_TEMPLATE } from './scaffold-defaults.js';
-import { AppScaffoldError } from './scaffold-types.js';
+import {
+  toBlueprintCss,
+  type ColorKey,
+  type IconName,
+} from "@centraid/design-tokens";
+
+import { rewriteTitleInHtml, applyManifestName } from "./app-rewrites.js";
+import {
+  AUTOMATIONS_README,
+  DEFAULT_APP_CSS,
+  README_TEMPLATE,
+} from "./scaffold-defaults.js";
+import { AppScaffoldError } from "./scaffold-types.js";
 
 /** A single file in a scaffold/clone file map. `path` is app-relative, posix. */
 export interface ScaffoldFile {
@@ -24,14 +33,14 @@ export interface ScaffoldFile {
 // A plain filesystem-safe slug. Automation apps are marked by the
 // manifest's `kind` field, not a dotted `auto.` id prefix (issue #98), so
 // no dot is allowed — a tree-traversing `..` is impossible by construction.
-const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
 /** Validate an app id against centraid's reserved-prefix and shape rules. */
 export function validateAppId(id: string): void {
-  if (id.startsWith('_') || !ID_RE.test(id)) {
+  if (id.startsWith("_") || !ID_RE.test(id)) {
     throw new AppScaffoldError(
-      'invalid_id',
-      `Invalid app id "${id}". Lowercase a-z / 0-9 / "-", 1-63 chars, no leading "_".`,
+      "invalid_id",
+      `Invalid app id "${id}". Lowercase a-z / 0-9 / "-", 1-63 chars, no leading "_".`
     );
   }
 }
@@ -56,32 +65,37 @@ export interface ScaffoldAppOpts {
  * (queries/actions) are not emitted — they appear once the agent writes
  * the first handler.
  */
-export function scaffoldAppFiles(id: string, opts: ScaffoldAppOpts = {}): ScaffoldFile[] {
+export function scaffoldAppFiles(
+  id: string,
+  opts: ScaffoldAppOpts = {}
+): ScaffoldFile[] {
   validateAppId(id);
   const name = opts.name ?? id;
   const appJson: Record<string, unknown> = {
     manifestVersion: 1,
     id,
     name,
-    version: opts.version ?? '0.1.0',
-    ...(opts.description?.trim() ? { description: opts.description.trim() } : {}),
+    version: opts.version ?? "0.1.0",
+    ...(opts.description?.trim()
+      ? { description: opts.description.trim() }
+      : {}),
     // Tile identity travels with the app (issue #263): the home shelves read
     // these off the listing instead of a per-device localStorage shim. The
     // defaults match the desktop's canonical draft look (Sparkle on violet).
-    iconKey: opts.iconKey ?? 'Sparkle',
-    colorKey: opts.colorKey ?? 'violet',
+    iconKey: opts.iconKey ?? "Sparkle",
+    colorKey: opts.colorKey ?? "violet",
     actions: [],
     queries: [],
     knobs: DEFAULT_APP_KNOBS,
   };
   return [
-    { path: 'package.json', content: appPackageJson(id) },
-    { path: 'app.json', content: JSON.stringify(appJson, null, 2) + '\n' },
-    { path: 'index.html', content: DEFAULT_INDEX_HTML(name) },
-    { path: 'app.css', content: `${toBlueprintCss()}\n\n${DEFAULT_APP_CSS}` },
-    { path: 'app.js', content: DEFAULT_APP_JS },
-    { path: 'automations/README.md', content: AUTOMATIONS_README },
-    { path: 'README.md', content: README_TEMPLATE(id) },
+    { path: "package.json", content: appPackageJson(id) },
+    { path: "app.json", content: JSON.stringify(appJson, null, 2) + "\n" },
+    { path: "index.html", content: DEFAULT_INDEX_HTML(name) },
+    { path: "app.css", content: `${toBlueprintCss()}\n\n${DEFAULT_APP_CSS}` },
+    { path: "app.js", content: DEFAULT_APP_JS },
+    { path: "automations/README.md", content: AUTOMATIONS_README },
+    { path: "README.md", content: README_TEMPLATE(id) },
   ];
 }
 
@@ -102,28 +116,34 @@ export function updateAppMetaFiles(
   current: ScaffoldFile[],
   id: string,
   patch: { name?: string; description?: string },
-  existingNames: ReadonlyArray<{ id: string; name?: string }> = [],
+  existingNames: ReadonlyArray<{ id: string; name?: string }> = []
 ): ScaffoldFile[] {
   validateAppId(id);
   const byPath = new Map(current.map((f) => [f.path, f.content]));
   const renameTo = patch.name === undefined ? undefined : patch.name.trim();
   if (patch.name !== undefined && !renameTo) {
-    throw new AppScaffoldError('invalid_id', 'App name cannot be empty.');
+    throw new AppScaffoldError("invalid_id", "App name cannot be empty.");
   }
   if (renameTo) {
     const taken = existingNames.some(
-      (a) => a.id !== id && (a.name ?? '').trim().toLowerCase() === renameTo.toLowerCase(),
+      (a) =>
+        a.id !== id &&
+        (a.name ?? "").trim().toLowerCase() === renameTo.toLowerCase()
     );
     if (taken)
-      throw new AppScaffoldError('already_exists', `An app named "${renameTo}" already exists.`);
+      throw new AppScaffoldError(
+        "already_exists",
+        `An app named "${renameTo}" already exists.`
+      );
   }
 
   let parsed: Record<string, unknown> = {};
-  const rawAppJson = byPath.get('app.json');
+  const rawAppJson = byPath.get("app.json");
   if (rawAppJson) {
     try {
       const decoded = JSON.parse(rawAppJson) as unknown;
-      if (decoded && typeof decoded === 'object') parsed = decoded as Record<string, unknown>;
+      if (decoded && typeof decoded === "object")
+        parsed = decoded as Record<string, unknown>;
     } catch {
       /* fall through: write a fresh app.json */
     }
@@ -136,21 +156,22 @@ export function updateAppMetaFiles(
   }
 
   const changed: ScaffoldFile[] = [
-    { path: 'app.json', content: JSON.stringify(parsed, null, 2) + '\n' },
+    { path: "app.json", content: JSON.stringify(parsed, null, 2) + "\n" },
   ];
   // Propagate the rename to subordinate files (browser-tab <title>,
   // Automations row title) so they don't drift from app.json#name. The
   // rename path leaves `generated.{by,at}` alone (clone-only).
   if (renameTo !== undefined) {
-    const html = byPath.get('index.html');
+    const html = byPath.get("index.html");
     if (html !== undefined) {
       const next = rewriteTitleInHtml(html, renameTo);
-      if (next !== html) changed.push({ path: 'index.html', content: next });
+      if (next !== html) changed.push({ path: "index.html", content: next });
     }
     for (const f of current) {
-      if (!/^automations\/[^/]+\/automation\.json$/.test(f.path)) continue;
+      if (!/^automations\/[^/]+\/automation\.json$/u.test(f.path)) continue;
       const next = applyManifestName(f.content, renameTo);
-      if (next !== null && next !== f.content) changed.push({ path: f.path, content: next });
+      if (next !== null && next !== f.content)
+        changed.push({ path: f.path, content: next });
     }
   }
   return changed;
@@ -162,14 +183,14 @@ export function appPackageJson(id: string): string {
     JSON.stringify(
       {
         name: `centraid-app-${id}`,
-        version: '0.1.0',
+        version: "0.1.0",
         private: true,
-        type: 'module',
-        devDependencies: { '@centraid/app-engine': '*' },
+        type: "module",
+        devDependencies: { "@centraid/app-engine": "*" },
       },
       null,
-      2,
-    ) + '\n'
+      2
+    ) + "\n"
   );
 }
 
@@ -268,48 +289,48 @@ void refresh();
 // popover: font, page width, corner radius, and accent colour.
 const DEFAULT_APP_KNOBS: ReadonlyArray<Record<string, unknown>> = [
   {
-    key: 'appFont',
-    label: 'Font',
-    type: 'segmented',
-    default: 'sans',
+    key: "appFont",
+    label: "Font",
+    type: "segmented",
+    default: "sans",
     options: [
-      { value: 'sans', label: 'Sans' },
-      { value: 'serif', label: 'Serif' },
-      { value: 'mono', label: 'Mono' },
+      { value: "sans", label: "Sans" },
+      { value: "serif", label: "Serif" },
+      { value: "mono", label: "Mono" },
     ],
   },
   {
-    key: 'appWidth',
-    label: 'Width',
-    type: 'segmented',
-    default: 'narrow',
+    key: "appWidth",
+    label: "Width",
+    type: "segmented",
+    default: "narrow",
     options: [
-      { value: 'narrow', label: 'Narrow' },
-      { value: 'wide', label: 'Wide' },
+      { value: "narrow", label: "Narrow" },
+      { value: "wide", label: "Wide" },
     ],
   },
   {
-    key: 'appRadius',
-    label: 'Corners',
-    type: 'segmented',
-    default: 'rounded',
+    key: "appRadius",
+    label: "Corners",
+    type: "segmented",
+    default: "rounded",
     options: [
-      { value: 'sharp', label: 'Sharp' },
-      { value: 'rounded', label: 'Rounded' },
-      { value: 'pill', label: 'Pill' },
+      { value: "sharp", label: "Sharp" },
+      { value: "rounded", label: "Rounded" },
+      { value: "pill", label: "Pill" },
     ],
   },
   {
-    key: 'appColor',
-    label: 'Color',
-    type: 'swatch',
-    default: '#4950F6',
+    key: "appColor",
+    label: "Color",
+    type: "swatch",
+    default: "#4950F6",
     options: [
-      { value: '#4950F6', label: 'Blue' },
-      { value: '#7C5BD9', label: 'Violet' },
-      { value: '#2EA098', label: 'Teal' },
-      { value: '#B47B3F', label: 'Ochre' },
-      { value: '#E55772', label: 'Rose' },
+      { value: "#4950F6", label: "Blue" },
+      { value: "#7C5BD9", label: "Violet" },
+      { value: "#2EA098", label: "Teal" },
+      { value: "#B47B3F", label: "Ochre" },
+      { value: "#E55772", label: "Rose" },
     ],
   },
 ];
@@ -322,9 +343,9 @@ const INLINE_SETTINGS_BRIDGE = `(function(){var h=document.documentElement;funct
 
 export function escapeHtml(s: string): string {
   return s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }

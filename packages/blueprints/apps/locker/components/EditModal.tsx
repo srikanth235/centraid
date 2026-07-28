@@ -7,12 +7,14 @@
 // callback that writes the generated value straight into this component's
 // own `fields` state, the same bridge app.js's `genTarget` gave the
 // module-level `state.edit.fields`.
-import { useState } from 'react';
-import { CAT_ORDER, TYPE_LABEL } from '../format.ts';
-import type { EditSeed, SavePayload } from '../types.ts';
-import { Icon } from './Shared.tsx';
-import styles from './EditModal.module.css';
-import shared from './shared.module.css';
+import { useState } from "react";
+
+import { CAT_ORDER, TYPE_LABEL } from "../format.ts";
+import type { EditSeed, SavePayload } from "../types.ts";
+import { Icon } from "./Shared.tsx";
+
+import styles from "./EditModal.module.css";
+import shared from "./shared.module.css";
 
 interface FieldDef {
   label: string;
@@ -26,37 +28,42 @@ interface FieldDef {
 // (otp_seed, card_number) — the map from prototype names happens here.
 function editFieldsFor(type: string): FieldDef[] {
   switch (type) {
-    case 'login':
+    case "login":
       return [
-        { label: 'Username', key: 'username', ph: 'you@email.com' },
-        { label: 'Password', key: 'password', mono: true, gen: true },
-        { label: 'Website', key: 'url', ph: 'https://' },
-        { label: 'One-time secret', key: 'otp_seed', mono: true, ph: 'base32 seed (optional)' },
+        { label: "Username", key: "username", ph: "you@email.com" },
+        { label: "Password", key: "password", mono: true, gen: true },
+        { label: "Website", key: "url", ph: "https://" },
+        {
+          label: "One-time secret",
+          key: "otp_seed",
+          mono: true,
+          ph: "base32 seed (optional)",
+        },
       ];
-    case 'card':
+    case "card":
       return [
-        { label: 'Card number', key: 'card_number', mono: true },
-        { label: 'Cardholder', key: 'cardholder' },
-        { label: 'Expiry', key: 'expiry', mono: true, ph: 'MM/YY' },
-        { label: 'CVV', key: 'cvv', mono: true },
-        { label: 'Brand', key: 'brand', ph: 'Visa' },
+        { label: "Card number", key: "card_number", mono: true },
+        { label: "Cardholder", key: "cardholder" },
+        { label: "Expiry", key: "expiry", mono: true, ph: "MM/YY" },
+        { label: "CVV", key: "cvv", mono: true },
+        { label: "Brand", key: "brand", ph: "Visa" },
       ];
-    case 'note':
-      return [{ label: 'Content', key: 'content' }];
-    case 'identity':
+    case "note":
+      return [{ label: "Content", key: "content" }];
+    case "identity":
       return [
-        { label: 'Full name', key: 'fullname' },
-        { label: 'Email', key: 'email' },
-        { label: 'Phone', key: 'phone', mono: true },
-        { label: 'Address', key: 'address' },
+        { label: "Full name", key: "fullname" },
+        { label: "Email", key: "email" },
+        { label: "Phone", key: "phone", mono: true },
+        { label: "Address", key: "address" },
       ];
-    case 'wifi':
+    case "wifi":
       return [
-        { label: 'Network', key: 'network' },
-        { label: 'Password', key: 'password', mono: true, gen: true },
+        { label: "Network", key: "network" },
+        { label: "Password", key: "password", mono: true, gen: true },
       ];
     default:
-      return [{ label: 'Password', key: 'password', mono: true, gen: true }];
+      return [{ label: "Password", key: "password", mono: true, gen: true }];
   }
 }
 
@@ -74,8 +81,8 @@ function EditFieldRow({
   const input = (
     <input
       className={f.mono ? `${styles.in} ${styles.mono}` : styles.in}
-      placeholder={f.ph || ''}
-      value={value || ''}
+      placeholder={f.ph || ""}
+      value={value || ""}
       onChange={(e) => onChange(f.key, e.target.value)}
     />
   );
@@ -116,13 +123,15 @@ export function EditModal({
   const [type, setType] = useState(edit.type);
   const [title, setTitle] = useState(edit.title);
   const [tags, setTags] = useState(edit.tags);
-  const [alias, setAlias] = useState(edit.alias || '');
+  const [alias, setAlias] = useState(edit.alias || "");
   const [urlMatchPolicy, setUrlMatchPolicy] = useState(edit.urlMatchPolicy);
   const [fields, setFields] = useState<Record<string, string>>(edit.fields);
 
   const fieldDefs = editFieldsFor(type);
-  const setField = (key: string, value: string) => setFields((f) => ({ ...f, [key]: value }));
-  const generate = (key: string) => onOpenGenerator((password) => setField(key, password));
+  const setField = (key: string, value: string) =>
+    setFields((f) => ({ ...f, [key]: value }));
+  const generate = (key: string) =>
+    onOpenGenerator((password) => setField(key, password));
 
   const save = () => {
     if (!title.trim()) return;
@@ -146,11 +155,16 @@ export function EditModal({
           the backdrop that only a mouse could reach. It replaces both the
           `e.target === e.currentTarget` guard and the card's stopPropagation —
           clicks inside the card never reach the scrim now (issue #573). */}
-      <button type="button" className="kit-modal-scrim" aria-label="Close" onClick={onClose} />
+      <button
+        type="button"
+        className="kit-modal-scrim"
+        aria-label="Close"
+        onClick={onClose}
+      />
       <div className="kit-modal">
-        <h2>{mode === 'edit' ? 'Edit item' : 'New item'}</h2>
+        <h2>{mode === "edit" ? "Edit item" : "New item"}</h2>
 
-        {mode === 'new' ? (
+        {mode === "new" ? (
           <div className={shared.fieldLg}>
             <div className={shared.flabel}>Type</div>
             <div className={styles.typerow}>
@@ -192,7 +206,7 @@ export function EditModal({
           />
         ))}
 
-        {type === 'login' ? (
+        {type === "login" ? (
           // The title/hint used to be wrapped in a <span> flex item; they are
           // direct children of the label now (the label is a two-column grid,
           // see EditModal.module.css) so the label's own text is its accessible
@@ -200,13 +214,17 @@ export function EditModal({
           <label className={styles.matchPolicy}>
             <input
               type="checkbox"
-              checked={urlMatchPolicy === 'exact-host'}
+              checked={urlMatchPolicy === "exact-host"}
               onChange={(event) =>
-                setUrlMatchPolicy(event.target.checked ? 'exact-host' : 'registrable-domain')
+                setUrlMatchPolicy(
+                  event.target.checked ? "exact-host" : "registrable-domain"
+                )
               }
             />
             <strong>Match only this exact host</strong>
-            <small>Otherwise Companion matches the site's registrable domain.</small>
+            <small>
+              Otherwise Companion matches the site's registrable domain.
+            </small>
           </label>
         ) : null}
 
@@ -237,7 +255,12 @@ export function EditModal({
           <button type="button" className="kit-btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="kit-btn primary" disabled={!title.trim()} onClick={save}>
+          <button
+            type="button"
+            className="kit-btn primary"
+            disabled={!title.trim()}
+            onClick={save}
+          >
             Save
           </button>
         </div>

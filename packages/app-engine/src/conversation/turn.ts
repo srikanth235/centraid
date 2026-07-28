@@ -11,8 +11,8 @@
  * implementation (`runTurn`) stays in agent-runtime.
  */
 
-import type { TurnStreamEvent } from './runner.js';
-import type { Dispatcher } from '../handlers/dispatcher.js';
+import type { Dispatcher } from "../handlers/dispatcher.js";
+import type { TurnStreamEvent } from "./runner.js";
 
 /**
  * Every runner kind the runtime knows how to drive — the single
@@ -29,30 +29,33 @@ import type { Dispatcher } from '../handlers/dispatcher.js';
  * a hardcoded per-kind literal anymore.
  */
 export const RUNNER_KINDS = [
-  'codex',
-  'claude-code',
-  'gemini',
-  'qwen',
-  'opencode',
-  'grok',
-  'kimi',
-  'copilot',
-  'cursor',
-  'kilo',
-  'cline',
-  'goose',
-  'auggie',
-  'vibe',
-  'droid',
-  'pi',
-  'acp',
+  "codex",
+  "claude-code",
+  "gemini",
+  "qwen",
+  "opencode",
+  "grok",
+  "kimi",
+  "copilot",
+  "cursor",
+  "kilo",
+  "cline",
+  "goose",
+  "auggie",
+  "vibe",
+  "droid",
+  "pi",
+  "acp",
 ] as const;
 
 export type RunnerKind = (typeof RUNNER_KINDS)[number];
 
 /** Validation guard for persisted/wire strings that claim to be a runner kind. */
 export function isRunnerKind(value: unknown): value is RunnerKind {
-  return typeof value === 'string' && (RUNNER_KINDS as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (RUNNER_KINDS as readonly string[]).includes(value)
+  );
 }
 
 /**
@@ -90,7 +93,9 @@ export interface VaultSqlToolResult {
  * runner in here; a refused/broken statement throws with the message the
  * model needs to self-correct.
  */
-export type VaultSqlRunner = (sql: string) => Promise<VaultSqlToolResult> | VaultSqlToolResult;
+export type VaultSqlRunner = (
+  sql: string
+) => Promise<VaultSqlToolResult> | VaultSqlToolResult;
 
 /**
  * The vault assistant's write tool (issue #286 phase 2): one typed vault
@@ -111,7 +116,9 @@ export type VaultInvokeRunner = (call: {
  * leaving custody. Text-first by design: binary variants stay on the
  * enricher plane.
  */
-export type VaultContentRunner = (call: { contentId: string }) => Promise<unknown> | unknown;
+export type VaultContentRunner = (call: {
+  contentId: string;
+}) => Promise<unknown> | unknown;
 
 /**
  * Per-turn binding that lets adapters register the vault-register tools
@@ -214,7 +221,7 @@ export interface TurnInput {
    * structural boundary used by automation conversations: the agent keeps
    * its pre-granted surface and every request to expand it is cancelled.
    */
-  permissionPolicy?: 'auto-allow' | 'deny';
+  permissionPolicy?: "auto-allow" | "deny";
   /** Resume id from a prior turn (codex thread id / claude session id). */
   prevSessionId?: string;
   /** Cumulative usage stored with `prevSessionId`; ignored for a fresh session. */
@@ -261,13 +268,13 @@ export interface TurnResult {
   /** Codex thread id (when `prefs.kind === 'codex'`) or Claude session id. */
   sessionId?: string;
   /** Echoes the runner kind that produced `sessionId`. */
-  adapterKind: RunnerPrefs['kind'];
+  adapterKind: RunnerPrefs["kind"];
   /** Cumulative usage to persist beside `sessionId` for the next delta. */
   usageSnapshot?: AdapterUsageSnapshot;
   /** True when this fresh session consumed the canonical ledger handoff. */
   hydrated?: boolean;
   /** Which bounded plan was actually consumed, for honest D4 accounting. */
-  hydrationKind?: 'handoff' | 'recovery';
+  hydrationKind?: "handoff" | "recovery";
 }
 
 /**
@@ -276,4 +283,7 @@ export interface TurnResult {
  * Kept structural (not `typeof runTurn`) so this layer never imports
  * the codex/claude backend.
  */
-export type RunTurnFn = (input: TurnInput, config: TurnConfig) => Promise<TurnResult>;
+export type RunTurnFn = (
+  input: TurnInput,
+  config: TurnConfig
+) => Promise<TurnResult>;

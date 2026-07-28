@@ -6,8 +6,8 @@
  * "am I local or remote".
  */
 
-import { createWriteStream, promises as fs } from 'node:fs';
-import path from 'node:path';
+import { createWriteStream, promises as fs } from "node:fs";
+import path from "node:path";
 
 export interface ObjectListEntry {
   key: string;
@@ -20,12 +20,15 @@ export interface ObjectListEntry {
 }
 
 export interface ObjectStore {
-  put(key: string, data: Uint8Array | AsyncIterable<Uint8Array>): Promise<void>;
-  get(key: string): Promise<Uint8Array>;
-  getStream(key: string): AsyncIterable<Uint8Array>;
-  head(key: string): Promise<{ size: number } | null>;
-  list(prefix: string): AsyncIterable<ObjectListEntry>;
-  delete(key: string): Promise<void>;
+  put: (
+    key: string,
+    data: Uint8Array | AsyncIterable<Uint8Array>
+  ) => Promise<void>;
+  get: (key: string) => Promise<Uint8Array>;
+  getStream: (key: string) => AsyncIterable<Uint8Array>;
+  head: (key: string) => Promise<{ size: number } | null>;
+  list: (prefix: string) => AsyncIterable<ObjectListEntry>;
+  delete: (key: string) => Promise<void>;
 }
 
 /**
@@ -34,14 +37,16 @@ export interface ObjectStore {
  * `manifests/123-abcd.json`) regardless of host OS.
  */
 export function assertSafeKey(key: string): void {
-  if (key.length === 0) throw new Error('object key must not be empty');
-  if (key.startsWith('/') || /^[A-Za-z]:[\\/]/.test(key)) {
+  if (key.length === 0) throw new Error("object key must not be empty");
+  if (key.startsWith("/") || /^[A-Za-z]:[\\/]/u.test(key)) {
     throw new Error(`object key must be relative: "${key}"`);
   }
-  const segments = key.split('/');
+  const segments = key.split("/");
   for (const seg of segments) {
-    if (seg === '..' || seg === '.') {
-      throw new Error(`object key must not contain "." or ".." segments: "${key}"`);
+    if (seg === ".." || seg === ".") {
+      throw new Error(
+        `object key must not contain "." or ".." segments: "${key}"`
+      );
     }
   }
 }
@@ -65,7 +70,10 @@ export class FsObjectStore implements ObjectStore {
     return full;
   }
 
-  async put(key: string, data: Uint8Array | AsyncIterable<Uint8Array>): Promise<void> {
+  async put(
+    key: string,
+    data: Uint8Array | AsyncIterable<Uint8Array>
+  ): Promise<void> {
     const dest = this.resolve(key);
     await fs.mkdir(path.dirname(dest), { recursive: true });
     const tmp = `${dest}.${process.pid}.${Date.now()}.tmp`;
@@ -75,17 +83,27 @@ export class FsObjectStore implements ObjectStore {
       } else {
         await new Promise<void>((resolve, reject) => {
           const ws = createWriteStream(tmp);
-          ws.on('error', reject);
-          ws.on('finish', resolve);
+          ws.on("error", reject);
+          ws.on("finish", resolve);
           (async () => {
-            try {
-              for await (const chunk of data) {
-                if (!ws.write(chunk)) {
-                  await new Promise<void>((resolve) => ws.once('drain', () => resolve()));
-                }
+            const iterator = data[Symbol.asyncIterator]();
+            const writeNext = async (): Promise<void> => {
+              const next = await iterator.next();
+              if (next.done) {
+                ws.end();
+                return;
               }
-              ws.end();
+              if (!ws.write(next.value)) {
+                await new Promise<void>((resolve) =>
+                  ws.once("drain", () => resolve())
+                );
+              }
+              return writeNext();
+            };
+            try {
+              await writeNext();
             } catch (err) {
+              await iterator.return?.();
               ws.destroy();
               reject(err instanceof Error ? err : new Error(String(err)));
             }
@@ -106,17 +124,19 @@ export class FsObjectStore implements ObjectStore {
 
   getStream(key: string): AsyncIterable<Uint8Array> {
     const full = this.resolve(key);
-    /** @yields Successive byte ranges of the file, in order. */
+    /** @yields {Uint8Array} Successive byte ranges of the file, in order. */
     async function* gen(): AsyncGenerator<Uint8Array> {
-      const handle = await fs.open(full, 'r');
+      const handle = await fs.open(full, "r");
       try {
         const bufSize = 64 * 1024;
         const buf = Buffer.alloc(bufSize);
-        for (;;) {
+        const readNext = async function* (): AsyncGenerator<Uint8Array> {
           const { bytesRead } = await handle.read(buf, 0, bufSize, null);
-          if (bytesRead === 0) break;
+          if (bytesRead === 0) return;
           yield new Uint8Array(buf.subarray(0, bytesRead));
-        }
+          yield* readNext();
+        };
+        yield* readNext();
       } finally {
         await handle.close();
       }
@@ -130,7 +150,7 @@ export class FsObjectStore implements ObjectStore {
       if (!st.isFile()) return null;
       return { size: st.size };
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
   }
@@ -142,28 +162,37 @@ export class FsObjectStore implements ObjectStore {
     // a literal path segment boundary (e.g. prefix "chunks/ab" over key
     // "chunks/abcd..."), so we walk the nearest existing ancestor directory
     // and filter by string prefix on the POSIX-joined relative key.
-    async function* walk(dir: string): AsyncGenerator<{ key: string; size: number }> {
-      let entries: import('node:fs').Dirent[];
+    async function* walk(
+      dir: string
+    ): AsyncGenerator<{ key: string; size: number }> {
+      let entries: import("node:fs").Dirent[];
       try {
         entries = await fs.readdir(dir, { withFileTypes: true });
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
         throw err;
       }
-      for (const entry of entries) {
+      const walkNextEntry = async function* (
+        index: number
+      ): AsyncGenerator<{ key: string; size: number }> {
+        const entry = entries[index];
+        if (!entry) return;
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           yield* walk(full);
         } else if (entry.isFile()) {
-          const rel = path.relative(root, full).split(path.sep).join('/');
+          const rel = path.relative(root, full).split(path.sep).join("/");
           if (rel.startsWith(prefix)) {
             const st = await fs.stat(full);
             yield { key: rel, size: st.size };
           }
         }
-      }
+        yield* walkNextEntry(index + 1);
+      };
+      yield* walkNextEntry(0);
     }
-    if (prefix.length > 0) assertSafeKey(prefix.endsWith('/') ? `${prefix}x` : prefix);
+    if (prefix.length > 0)
+      assertSafeKey(prefix.endsWith("/") ? `${prefix}x` : prefix);
     return walk(root);
   }
 
@@ -171,7 +200,7 @@ export class FsObjectStore implements ObjectStore {
     try {
       await fs.unlink(this.resolve(key));
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     }
   }
 }

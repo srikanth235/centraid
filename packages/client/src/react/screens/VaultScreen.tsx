@@ -1,25 +1,27 @@
-import { useCallback, useEffect, useState, type JSX } from 'react';
+import { useCallback, useEffect, useState, type JSX } from "react";
+
+import { relativeTime } from "../format.js";
 import type {
   VaultBridgeProps,
   VaultData,
   VaultGrantDTO,
   VaultParkedDTO,
   VaultScopeDTO,
-} from '../screen-contracts.js';
-import { relativeTime } from '../format.js';
-import { cx } from '../ui/cx.js';
-import vault from '../styles/vault.module.css';
-import au from '../styles/automation.module.css';
-import appSettingsCss from '../styles/appSettings.module.css';
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+
+import appSettingsCss from "../styles/appSettings.module.css";
+import au from "../styles/automation.module.css";
+import vault from "../styles/vault.module.css";
 
 const scopeLabel = (s: VaultScopeDTO): string => {
   const target = s.table ? `${s.schema}.${s.table}` : s.schema;
   const extent = [
-    s.rowFilter ? `${s.rowFilter.length} row rule` : '',
-    s.fieldMask ? `${s.fieldMask.length} fields` : '',
+    s.rowFilter ? `${s.rowFilter.length} row rule` : "",
+    s.fieldMask ? `${s.fieldMask.length} fields` : "",
   ]
     .filter(Boolean)
-    .join(' · ');
+    .join(" · ");
   return extent ? `${target} · ${extent}` : target;
 };
 
@@ -28,14 +30,22 @@ function Note({ children }: { children: React.ReactNode }): JSX.Element {
 }
 
 // WHAT the app asked for — why line + requested scopes as chips.
-function RequestSection({ block }: { block: VaultBridgeProps['block'] }): JSX.Element {
+function RequestSection({
+  block,
+}: {
+  block: VaultBridgeProps["block"];
+}): JSX.Element {
   return (
     <div className={appSettingsCss.appSettingsSection}>
       <div className={vault.label}>Requested access</div>
       {block.why ? <div className={vault.why}>{block.why}</div> : null}
       <div className={vault.scopes}>
         {block.scopes.map((scope) => (
-          <span key={scopeLabel(scope)} className={vault.scope} data-verbs={scope.verbs}>
+          <span
+            key={scopeLabel(scope)}
+            className={vault.scope}
+            data-verbs={scope.verbs}
+          >
             <span>{scopeLabel(scope)}</span>
             <span className={vault.scopeVerbs}>{scope.verbs}</span>
           </span>
@@ -76,7 +86,9 @@ function GrantSection({
       <div className={vault.label}>{`Access · ${vaultName}`}</div>
       {grants.length === 0 ? (
         <>
-          <Note>No access yet — the vault denies every call until you grant it.</Note>
+          <Note>
+            No access yet — the vault denies every call until you grant it.
+          </Note>
           <button
             type="button"
             className={vault.grantBtn}
@@ -93,10 +105,14 @@ function GrantSection({
         grants.map((grant) => (
           <div key={grant.grantId} className={vault.grantRow}>
             <div className={vault.grantText}>
-              <div className={vault.grantTitle}>{`Granted · ${grant.purpose ?? 'purpose'}`}</div>
+              <div
+                className={vault.grantTitle}
+              >{`Granted · ${grant.purpose ?? "purpose"}`}</div>
               <div className={vault.grantSub}>
-                {grant.scopes.map(scopeLabel).join(' · ') +
-                  (grant.expiresAt ? ` · expires ${grant.expiresAt.slice(0, 10)}` : '')}
+                {grant.scopes.map(scopeLabel).join(" · ") +
+                  (grant.expiresAt
+                    ? ` · expires ${grant.expiresAt.slice(0, 10)}`
+                    : "")}
               </div>
             </div>
             <button
@@ -132,9 +148,13 @@ function ParkedSection({
         <div key={entry.invocationId} className={vault.parkedCard}>
           <div className={vault.parkedHead}>
             <span className={vault.parkedCommand}>{entry.command}</span>
-            <span className={vault.parkedWhen}>{relativeTime(entry.parkedAt)}</span>
+            <span className={vault.parkedWhen}>
+              {relativeTime(entry.parkedAt)}
+            </span>
           </div>
-          <pre className={vault.parkedInput}>{JSON.stringify(entry.input, null, 2)}</pre>
+          <pre className={vault.parkedInput}>
+            {JSON.stringify(entry.input, null, 2)}
+          </pre>
           <div className={vault.parkedActions}>
             <button
               type="button"
@@ -170,7 +190,7 @@ function DemoSection({
   onLoad,
   onPurge,
 }: {
-  demo: NonNullable<VaultData['demo']>;
+  demo: NonNullable<VaultData["demo"]>;
   onLoad: () => void;
   onPurge: () => void;
 }): JSX.Element {
@@ -180,8 +200,8 @@ function DemoSection({
       <div className={vault.label}>Demo data</div>
       <Note>
         {demo.rows > 0
-          ? `${demo.rows} demo row${demo.rows === 1 ? '' : 's'} loaded — safe to reset any time; real data is never touched.`
-          : 'Load a sample scenario to try the app on realistic data. Demo rows are marked, never fire automations, and reset in one click.'}
+          ? `${demo.rows} demo row${demo.rows === 1 ? "" : "s"} loaded — safe to reset any time; real data is never touched.`
+          : "Load a sample scenario to try the app on realistic data. Demo rows are marked, never fire automations, and reset in one click."}
       </Note>
       <div className={vault.demoActions}>
         {demo.seedable ? (
@@ -216,10 +236,10 @@ function DemoSection({
 }
 
 type State =
-  | { phase: 'loading' }
-  | { phase: 'no-vault' }
-  | { phase: 'error' }
-  | { phase: 'ready'; data: VaultData };
+  | { phase: "loading" }
+  | { phase: "no-vault" }
+  | { phase: "error" }
+  | { phase: "ready"; data: VaultData };
 
 /**
  * Vault — the per-app owner consent pane, ported to React (issue #325,
@@ -230,22 +250,21 @@ type State =
  */
 export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
   const { block, loadData, showToast, onAccessChanged, onParkedCount } = props;
-  const [state, setState] = useState<State>({ phase: 'loading' });
+  const [state, setState] = useState<State>({ phase: "loading" });
 
   const reload = useCallback(
     (): Promise<void> =>
-      loadData().then(
-        (data) => {
+      loadData()
+        .then((data) => {
           if (!data) {
-            setState({ phase: 'no-vault' });
+            setState({ phase: "no-vault" });
             return;
           }
           onParkedCount?.(data.parked.length);
-          setState({ data, phase: 'ready' });
-        },
-        () => setState({ phase: 'error' }),
-      ),
-    [loadData, onParkedCount],
+          setState({ data, phase: "ready" });
+        })
+        .catch(() => setState({ phase: "error" })),
+    [loadData, onParkedCount]
   );
 
   useEffect(() => {
@@ -266,10 +285,10 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
           void reload();
         });
     },
-    [showToast, onAccessChanged, reload],
+    [showToast, onAccessChanged, reload]
   );
 
-  if (state.phase === 'loading') {
+  if (state.phase === "loading") {
     return (
       <>
         <RequestSection block={block} />
@@ -277,15 +296,18 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
       </>
     );
   }
-  if (state.phase === 'no-vault') {
+  if (state.phase === "no-vault") {
     return (
       <>
         <RequestSection block={block} />
-        <Note>No vault is mounted on this gateway, so this app has nothing to project.</Note>
+        <Note>
+          No vault is mounted on this gateway, so this app has nothing to
+          project.
+        </Note>
       </>
     );
   }
-  if (state.phase === 'error') {
+  if (state.phase === "error") {
     return <Note>Could not read the vault consent surface.</Note>;
   }
 
@@ -297,8 +319,10 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
       <GrantSection
         grants={data.grants}
         vaultName={data.vaultName}
-        onGrant={() => act(props.grant, 'Vault access granted', 'Grant failed')}
-        onRevoke={(id) => act(() => props.revoke(id), 'Vault access revoked', 'Revoke failed')}
+        onGrant={() => act(props.grant, "Vault access granted", "Grant failed")}
+        onRevoke={(id) =>
+          act(() => props.revoke(id), "Vault access revoked", "Revoke failed")
+        }
       />
       {data.parked.length > 0 ? (
         <ParkedSection
@@ -306,8 +330,8 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
           onConfirm={(id, approve) =>
             act(
               () => props.confirm(id, approve),
-              approve ? 'Approved' : 'Denied',
-              'Confirmation failed',
+              approve ? "Approved" : "Denied",
+              "Confirmation failed"
             )
           }
         />
@@ -315,8 +339,12 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
       {showDemo && data.demo ? (
         <DemoSection
           demo={data.demo}
-          onLoad={() => act(props.demoLoad, 'Demo data loaded', 'Load demo data failed')}
-          onPurge={() => act(props.demoPurge, 'Demo data reset', 'Reset demo data failed')}
+          onLoad={() =>
+            act(props.demoLoad, "Demo data loaded", "Load demo data failed")
+          }
+          onPurge={() =>
+            act(props.demoPurge, "Demo data reset", "Reset demo data failed")
+          }
         />
       ) : null}
     </>

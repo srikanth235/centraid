@@ -2,17 +2,23 @@
 // extracted so the screen stays under the repo's component-file cap and these
 // stay trivially unit-testable.
 
-import type { AuOverviewRowDTO, AuOverviewRunDTO } from '../screen-contracts.js';
+import type {
+  AuOverviewRowDTO,
+  AuOverviewRunDTO,
+} from "../screen-contracts.js";
 
 /** Attention / failed-last-run first, then alphabetical — so the list answers
  *  "what needs me?" before "what's everything named?" */
-export function sortOverviewRows(rows: readonly AuOverviewRowDTO[]): AuOverviewRowDTO[] {
+export function sortOverviewRows(
+  rows: readonly AuOverviewRowDTO[]
+): AuOverviewRowDTO[] {
   return [...rows].sort((a, b) => {
     const aAtt = a.attentionCount > 0 || a.lastRunOk === false ? 1 : 0;
     const bAtt = b.attentionCount > 0 || b.lastRunOk === false ? 1 : 0;
     if (aAtt !== bAtt) return bAtt - aAtt;
-    if (a.attentionCount !== b.attentionCount) return b.attentionCount - a.attentionCount;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    if (a.attentionCount !== b.attentionCount)
+      return b.attentionCount - a.attentionCount;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   });
 }
 
@@ -21,7 +27,7 @@ export function sortOverviewRows(rows: readonly AuOverviewRowDTO[]): AuOverviewR
  *  ("Cron" / "Webhook" / "Manual" / …), not the duration/token detail the
  *  fleet row's run history already carries. */
 export function runOrigin(metaLabel: string): string {
-  return metaLabel.split(' · ')[0] ?? metaLabel;
+  return metaLabel.split(" · ")[0] ?? metaLabel;
 }
 
 /** Small-caps mono date-separator label for the activity feed — "Today" /
@@ -32,9 +38,14 @@ export function dateGroupLabel(startedAt: number): string {
   const d = new Date(startedAt);
   const now = new Date();
   const ds = d.toDateString();
-  if (ds === now.toDateString()) return 'Today';
-  if (ds === new Date(now.getTime() - 86_400_000).toDateString()) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  if (ds === now.toDateString()) return "Today";
+  if (ds === new Date(now.getTime() - 86_400_000).toDateString())
+    return "Yesterday";
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
 }
 
 export interface RunGroup {

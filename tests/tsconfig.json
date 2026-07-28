@@ -7,5 +7,10 @@
     // the nightly perf/scale project is node-only but needs DOM IDB names for tsc.
     "lib": ["ES2023", "DOM"]
   },
-  "include": ["perf/**/*.ts", "scale/**/*.ts", "quality/**/*.ts", "helpers/**/*.ts"]
+  "include": [
+    "perf/**/*.ts",
+    "scale/**/*.ts",
+    "quality/**/*.ts",
+    "helpers/**/*.ts"
+  ]
 }

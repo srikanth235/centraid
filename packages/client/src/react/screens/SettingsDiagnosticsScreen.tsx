@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useState, type JSX } from 'react';
-import { Icon } from '../ui/index.js';
-import { relativeTime } from '../format.js';
-import { cx } from '../ui/cx.js';
-import styles from './SettingsDiagnosticsScreen.module.css';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
+import { useCallback, useEffect, useState, type JSX } from "react";
+
+import { relativeTime } from "../format.js";
+import { cx } from "../ui/cx.js";
+import { Icon } from "../ui/index.js";
 import type {
   BackgroundPauseDTO,
   PowerContextState,
   ResourceProfileDTO,
-} from './resource-summary.js';
+} from "./resource-summary.js";
+
+import controlsCss from "../styles/controls.module.css";
+import buttonCss from "../ui/Button.module.css";
+import styles from "./SettingsDiagnosticsScreen.module.css";
 
 // Gateway → Components: the owner surface over the gateway's
 // component-level health (`GET /centraid/_gateway/health`). Uptime says
@@ -20,7 +22,7 @@ import type {
 // the gateway I/O lives in `routes/settingsDiagnosticsData.ts`. Mounted from
 // the Gateway page's Components tab (GatewayScreen.tsx), not Settings.
 
-export type HealthStatus = 'ok' | 'degraded' | 'error';
+export type HealthStatus = "ok" | "degraded" | "error";
 
 export interface HealthComponentDTO {
   component: string;
@@ -35,7 +37,7 @@ export interface HealthComponentDTO {
 export interface HealthEventDTO {
   at: string;
   component: string;
-  level: 'warn' | 'error';
+  level: "warn" | "error";
   message: string;
 }
 
@@ -91,38 +93,38 @@ export interface SettingsDiagnosticsBridgeProps {
 }
 
 const STATUS_LABEL: Record<HealthStatus, string> = {
-  ok: 'All systems go',
-  degraded: 'Degraded',
-  error: 'Something is failing',
+  ok: "All systems go",
+  degraded: "Degraded",
+  error: "Something is failing",
 };
 
 const COMPONENT_LABEL: Record<string, string> = {
-  vaults: 'Vaults',
-  connections: 'Connections',
-  automations: 'Automation scheduler',
-  'automation-runs': 'Automation runs',
-  outbox: 'Outbox',
-  catalog: 'Model catalog',
-  tunnel: 'Phone tunnel',
-  'hardware-profile': 'Hardware profile',
-  'event-loop': 'Responsiveness',
-  'load-shed': 'Background load',
-  disk: 'Disk space',
-  'storage-latency': 'Storage latency',
+  vaults: "Vaults",
+  connections: "Connections",
+  automations: "Automation scheduler",
+  "automation-runs": "Automation runs",
+  outbox: "Outbox",
+  catalog: "Model catalog",
+  tunnel: "Phone tunnel",
+  "hardware-profile": "Hardware profile",
+  "event-loop": "Responsiveness",
+  "load-shed": "Background load",
+  disk: "Disk space",
+  "storage-latency": "Storage latency",
   // The health-component namespace is the GATEWAY's, not the shell's — this
   // stays `backups` even though the page that shows it is now called Storage.
-  backups: 'Backups',
-  'storage-limit': 'Disk budget',
-  enrichment: 'Media enrichment',
-  'blob-sweep': 'Blob sweep',
-  scheduler: 'Scheduler',
-  broker: 'Connections broker',
+  backups: "Backups",
+  "storage-limit": "Disk budget",
+  enrichment: "Media enrichment",
+  "blob-sweep": "Blob sweep",
+  scheduler: "Scheduler",
+  broker: "Connections broker",
 };
 
 export function componentLabel(component: string): string {
   return (
     COMPONENT_LABEL[component] ??
-    component.charAt(0).toUpperCase() + component.slice(1).replace(/-/g, ' ')
+    component.charAt(0).toUpperCase() + component.slice(1).replace(/-/gu, " ")
   );
 }
 
@@ -137,9 +139,9 @@ function formatUptime(ms: number): string {
 }
 
 function formatRss(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return '—';
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes < 1024) return `${Math.round(bytes)} B`;
-  const units = ['KB', 'MB', 'GB'] as const;
+  const units = ["KB", "MB", "GB"] as const;
   let value = bytes / 1024;
   let unit = 0;
   while (value >= 1024 && unit < units.length - 1) {
@@ -151,29 +153,33 @@ function formatRss(bytes: number): string {
 
 function resourceModeWord(mode: string | undefined): string {
   switch (mode) {
-    case 'auto':
-      return 'Auto';
-    case 'conserve':
-      return 'Conserve';
-    case 'balanced':
-      return 'Balanced';
-    case 'performance':
-      return 'Performance';
+    case "auto":
+      return "Auto";
+    case "conserve":
+      return "Conserve";
+    case "balanced":
+      return "Balanced";
+    case "performance":
+      return "Performance";
     default:
-      return mode ?? '—';
+      return mode ?? "—";
   }
 }
 
 function hardwareClassWord(cls: string | undefined): string {
-  if (cls === 'constrained') return 'Constrained';
-  if (cls === 'standard') return 'Standard';
-  return cls ?? '—';
+  if (cls === "constrained") return "Constrained";
+  if (cls === "standard") return "Standard";
+  return cls ?? "—";
 }
 
 function eventClock(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
 function ComponentRow({
@@ -187,8 +193,9 @@ function ComponentRow({
   // component shows its LAST ERROR (the actionable bit); a healthy one
   // shows its probe detail ("2 vaults mounted") or last-ok recency.
   const sub =
-    row.status === 'ok'
-      ? (row.detail ?? (row.lastOkAt ? `last ok ${relativeTime(row.lastOkAt)}` : undefined))
+    row.status === "ok"
+      ? (row.detail ??
+        (row.lastOkAt ? `last ok ${relativeTime(row.lastOkAt)}` : undefined))
       : (row.lastError ?? row.detail);
   return (
     <div className={styles.row} data-testid="diag-component">
@@ -203,10 +210,10 @@ function ComponentRow({
       </div>
       {row.errorCount > 0 ? (
         <span className={styles.errCount} title="Errors since gateway start">
-          {row.errorCount} err{row.errorCount === 1 ? '' : 's'}
+          {row.errorCount} err{row.errorCount === 1 ? "" : "s"}
         </span>
       ) : null}
-      {row.status !== 'ok' && onJumpToLogs ? (
+      {row.status !== "ok" && onJumpToLogs ? (
         <button
           type="button"
           className={styles.jumpToLogs}
@@ -216,7 +223,11 @@ function ComponentRow({
         </button>
       ) : null}
       <span className={styles.healthLabel} data-health={row.status}>
-        {row.status === 'ok' ? 'Healthy' : row.status === 'degraded' ? 'Degraded' : 'Failing'}
+        {row.status === "ok"
+          ? "Healthy"
+          : row.status === "degraded"
+            ? "Degraded"
+            : "Failing"}
       </span>
     </div>
   );
@@ -224,11 +235,13 @@ function ComponentRow({
 
 function MetricsPanel({ metrics }: { metrics: HealthMetricsDTO }): JSX.Element {
   const lag =
-    metrics.eventLoopLagP99Ms !== undefined
-      ? `p99 ${metrics.eventLoopLagP99Ms.toFixed(1)} ms`
-      : '—';
+    metrics.eventLoopLagP99Ms === undefined
+      ? "—"
+      : `p99 ${metrics.eventLoopLagP99Ms.toFixed(1)} ms`;
   const fsync =
-    metrics.storageFsyncMs !== undefined ? `${metrics.storageFsyncMs.toFixed(1)} ms` : '—';
+    metrics.storageFsyncMs === undefined
+      ? "—"
+      : `${metrics.storageFsyncMs.toFixed(1)} ms`;
   return (
     <div className={styles.metrics} data-testid="diag-metrics">
       <div className={styles.metric}>
@@ -245,8 +258,12 @@ function MetricsPanel({ metrics }: { metrics: HealthMetricsDTO }): JSX.Element {
       </div>
       <div className={styles.metric}>
         <div className={styles.metricLabel}>Resource mode</div>
-        <div className={styles.metricValue}>{resourceModeWord(metrics.resourceMode)}</div>
-        <div className={styles.metricSub}>{hardwareClassWord(metrics.hardwareProfileClass)}</div>
+        <div className={styles.metricValue}>
+          {resourceModeWord(metrics.resourceMode)}
+        </div>
+        <div className={styles.metricSub}>
+          {hardwareClassWord(metrics.hardwareProfileClass)}
+        </div>
       </div>
     </div>
   );
@@ -268,7 +285,9 @@ export default function SettingsDiagnosticsScreen({
         setHealth(snap);
         setError(null);
       })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) =>
+        setError(err instanceof Error ? err.message : String(err))
+      )
       .finally(() => setBusy(false));
   }, [loadHealth]);
 
@@ -281,7 +300,11 @@ export default function SettingsDiagnosticsScreen({
   useEffect(() => load(), [load]);
 
   if (error !== null) {
-    return <div className={styles.loadError}>Couldn’t reach the gateway: {error}</div>;
+    return (
+      <div className={styles.loadError}>
+        Couldn’t reach the gateway: {error}
+      </div>
+    );
   }
   if (!health) {
     return <div className={styles.loading}>Checking gateway health…</div>;
@@ -292,9 +315,11 @@ export default function SettingsDiagnosticsScreen({
       <div className={styles.overall} data-health={health.status}>
         <span className={styles.dot} data-health={health.status} />
         <div className={styles.overallMeta}>
-          <div className={styles.overallTitle}>{STATUS_LABEL[health.status]}</div>
+          <div className={styles.overallTitle}>
+            {STATUS_LABEL[health.status]}
+          </div>
           <div className={styles.overallSub}>
-            Gateway up {formatUptime(health.uptimeMs)} · since{' '}
+            Gateway up {formatUptime(health.uptimeMs)} · since{" "}
             {new Date(health.startedAt).toLocaleString()}
           </div>
         </div>
@@ -305,7 +330,7 @@ export default function SettingsDiagnosticsScreen({
           onClick={refresh}
         >
           <Icon name="Refresh" size={13} />
-          <span>{busy ? 'Checking…' : 'Refresh'}</span>
+          <span>{busy ? "Checking…" : "Refresh"}</span>
         </button>
       </div>
 
@@ -316,7 +341,11 @@ export default function SettingsDiagnosticsScreen({
           <div className={styles.empty}>No components have reported yet.</div>
         ) : (
           health.components.map((row) => (
-            <ComponentRow key={row.component} row={row} onJumpToLogs={onJumpToLogs} />
+            <ComponentRow
+              key={row.component}
+              row={row}
+              onJumpToLogs={onJumpToLogs}
+            />
           ))
         )}
       </div>
@@ -324,15 +353,23 @@ export default function SettingsDiagnosticsScreen({
       <div className={styles.eventsHead}>Recent warnings &amp; errors</div>
       <div className={styles.panel}>
         {health.recentEvents.length === 0 ? (
-          <div className={styles.empty}>Nothing logged since the gateway started.</div>
+          <div className={styles.empty}>
+            Nothing logged since the gateway started.
+          </div>
         ) : (
           health.recentEvents.map((ev, i) => (
-            <div className={styles.eventRow} key={`${ev.at}-${i}`} data-testid="diag-event">
+            <div
+              className={styles.eventRow}
+              key={`${ev.at}-${i}`}
+              data-testid="diag-event"
+            >
               <span className={styles.eventTime}>{eventClock(ev.at)}</span>
               <span className={styles.eventLevel} data-level={ev.level}>
                 {ev.level}
               </span>
-              <span className={styles.eventComponent}>{componentLabel(ev.component)}</span>
+              <span className={styles.eventComponent}>
+                {componentLabel(ev.component)}
+              </span>
               <span className={styles.eventMessage}>{ev.message}</span>
             </div>
           ))

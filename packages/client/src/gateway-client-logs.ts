@@ -6,9 +6,14 @@
  * `streamAutomationTurn`.
  */
 
-import { auth, authHeaders, doFetch, readJson } from './gateway-client-core.js';
+import {
+  consumeSseFrames,
+  frameData,
+} from "@centraid/blueprints/kit/turn-stream.js";
 
-export type GatewayLogLevelDTO = 'info' | 'warn' | 'error';
+import { auth, authHeaders, doFetch, readJson } from "./gateway-client-core.js";
+
+export type GatewayLogLevelDTO = "info" | "warn" | "error";
 
 /** One gateway log line, mirroring the gateway's `GatewayLogEntry`. */
 export interface GatewayLogEntryDTO {
@@ -27,14 +32,14 @@ export async function fetchGatewayLogs(input?: {
 }): Promise<{ entries: GatewayLogEntryDTO[] }> {
   const { baseUrl, token } = await auth();
   const params = new URLSearchParams();
-  if (input?.after !== undefined) params.set('after', String(input.after));
-  if (input?.limit !== undefined) params.set('limit', String(input.limit));
+  if (input?.after !== undefined) params.set("after", String(input.after));
+  if (input?.limit !== undefined) params.set("limit", String(input.limit));
   const qs = params.toString();
-  const res = await doFetch(baseUrl, `/centraid/_logs${qs ? `?${qs}` : ''}`, {
-    method: 'GET',
+  const res = await doFetch(baseUrl, `/centraid/_logs${qs ? `?${qs}` : ""}`, {
+    method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<{ entries: GatewayLogEntryDTO[] }>(res, 'fetch gateway logs');
+  return readJson<{ entries: GatewayLogEntryDTO[] }>(res, "fetch gateway logs");
 }
 
 /**
@@ -48,46 +53,40 @@ export async function fetchGatewayLogs(input?: {
 export async function streamGatewayLogs(
   onEntry: (entry: GatewayLogEntryDTO) => void,
   signal: AbortSignal,
-  after?: number,
+  after?: number
 ): Promise<void> {
   const { baseUrl, token } = await auth();
-  const qs = after !== undefined ? `?after=${encodeURIComponent(String(after))}` : '';
+  const qs =
+    after === undefined ? "" : `?after=${encodeURIComponent(String(after))}`;
   try {
     const res = await doFetch(baseUrl, `/centraid/_logs/events${qs}`, {
-      method: 'GET',
+      method: "GET",
       headers: authHeaders(token),
       signal,
     });
     if (!res.ok || !res.body) {
       throw new Error(`gateway log stream failed (HTTP ${res.status})`);
     }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let sep: number;
-      while ((sep = buf.indexOf('\n\n')) >= 0) {
-        const frame = buf.slice(0, sep);
-        buf = buf.slice(sep + 2);
-        const data = frame
-          .split('\n')
-          .filter((l) => l.startsWith('data:'))
-          .map((l) => l.slice('data:'.length).trimStart())
-          .join('\n');
-        if (!data) continue;
+    await consumeSseFrames(
+      res.body,
+      (frame) => {
+        const data = frameData(frame);
+        if (!data) return;
         try {
           const entry = JSON.parse(data) as GatewayLogEntryDTO;
-          if (entry && typeof entry.seq === 'number' && typeof entry.message === 'string') {
+          if (
+            entry &&
+            typeof entry.seq === "number" &&
+            typeof entry.message === "string"
+          ) {
             onEntry(entry);
           }
         } catch {
           /* skip a malformed frame rather than abort the stream */
         }
-      }
-    }
+      },
+      { signal }
+    );
   } catch (err) {
     // A caller-initiated abort is a normal teardown, not a failure.
     if (signal.aborted) return;

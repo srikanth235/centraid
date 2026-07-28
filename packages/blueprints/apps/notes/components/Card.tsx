@@ -1,14 +1,15 @@
+import { checkStats, notebookColorVar, previewText } from "../format.ts";
+import { I } from "../icons.ts";
 // One note card in the masonry/list wall. `.card` (was `.nt-card`) stays a
 // DIRECT child of the wall (CSS columns) — no wrapper div, matching
 // tasks/components/Row.jsx's note about display:contents not being an option
 // here either (CSS multi-col breaks on the child it sees, not a wrapper).
-import { relTime } from '../kit.ts';
-import { checkStats, notebookColorVar, previewText } from '../format.ts';
-import { I } from '../icons.ts';
-import { Highlighted, Icon } from './Shared.tsx';
-import type { Note } from '../types.ts';
-import styles from './Card.module.css';
-import shared from './shared.module.css';
+import { relTime } from "../kit.ts";
+import type { Note } from "../types.ts";
+import { Highlighted, Icon } from "./Shared.tsx";
+
+import styles from "./Card.module.css";
+import shared from "./shared.module.css";
 
 export function Card({
   note,
@@ -43,17 +44,19 @@ export function Card({
       <button
         type="button"
         className={`kit-stretch-btn ${styles.cardOpen}`}
-        aria-label={`Open ${note.title?.trim() || 'Untitled note'}`}
+        aria-label={`Open ${note.title?.trim() || "Untitled note"}`}
         onClick={() => onOpen(note.note_id)}
       />
       <div className={styles.cardHead}>
         <div className={styles.cardTitle}>
-          <Highlighted text={note.title ?? ''} term={search} />
+          <Highlighted text={note.title ?? ""} term={search} />
         </div>
         <button
           type="button"
-          className={pinned ? `${styles.pinBtn} ${styles.pinned}` : styles.pinBtn}
-          aria-label={pinned ? 'Unpin note' : 'Pin note'}
+          className={
+            pinned ? `${styles.pinBtn} ${styles.pinned}` : styles.pinBtn
+          }
+          aria-label={pinned ? "Unpin note" : "Pin note"}
           aria-pressed={pinned}
           onClick={(e) => {
             e.stopPropagation();
@@ -84,7 +87,10 @@ export function Card({
       {note.tags?.length ? (
         <div className={styles.cardTags}>
           {note.tags.map((t) => (
-            <span className={`${shared.tagChip} ${styles.tagChipStatic}`} key={t.tag_id}>
+            <span
+              className={`${shared.tagChip} ${styles.tagChipStatic}`}
+              key={t.tag_id}
+            >
               #{t.label}
             </span>
           ))}
@@ -93,11 +99,16 @@ export function Card({
       <div className={styles.cardMeta}>
         {notebookId ? (
           <span className={styles.cardNotebook}>
-            <span className={shared.nbDot} style={{ background: notebookColor ?? undefined }} />
-            {notebookName ?? 'Notebook'}
+            <span
+              className={shared.nbDot}
+              style={{ background: notebookColor ?? undefined }}
+            />
+            {notebookName ?? "Notebook"}
           </span>
         ) : null}
-        <span className={styles.cardWhen}>{relTime(note.updated_at ?? '')}</span>
+        <span className={styles.cardWhen}>
+          {relTime(note.updated_at ?? "")}
+        </span>
         {pending ? <span className="kit-pending-chip">pending</span> : null}
       </div>
     </article>

@@ -1,6 +1,14 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive builder-tab panel (code editor surface); splitting would fragment one visual unit
-import { type JSX, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { readAppFiles, writeAppFile } from '../../../../gateway-client.js';
+import {
+  type JSX,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+
+import { lineDiff } from "../../../../diff.js";
 import {
   type CodeLang,
   LANG_DISPLAY,
@@ -8,14 +16,15 @@ import {
   formatBytes,
   languageHint,
   tokenize,
-} from '../../../../format.js';
-import { lineDiff } from '../../../../diff.js';
-import { iconSvg } from '../../iconSvg.js';
-import { showToast } from '../../toast.js';
-import { cx } from '../../../ui/cx.js';
-import buttonCss from '../../../ui/Button.module.css';
-import atomsCss from '../../../styles/atoms.module.css';
-import styles from './BuilderCode.module.css';
+} from "../../../../format.js";
+import { readAppFiles, writeAppFile } from "../../../../gateway-client.js";
+import { cx } from "../../../ui/cx.js";
+import { iconSvg } from "../../iconSvg.js";
+import { showToast } from "../../toast.js";
+
+import atomsCss from "../../../styles/atoms.module.css";
+import buttonCss from "../../../ui/Button.module.css";
+import styles from "./BuilderCode.module.css";
 
 // File-tree glyphs copied verbatim from the vanilla builder (builder.ts
 // ~110-113). Small enough to inline; emitted as HTML strings for the
@@ -28,12 +37,23 @@ const FolderIcon = (size = 14): string =>
 // Module-scoped span classes for the syntax highlighter — keeps tokenize()'s
 // emitted HTML inside this module's scope instead of global `tok-*` names.
 const TOKEN_CLASSES: TokenClasses = {
-  attr: styles.tokAttr ?? '',
-  com: styles.tokCom ?? '',
-  key: styles.tokKey ?? '',
-  str: styles.tokStr ?? '',
-  tag: styles.tokTag ?? '',
+  attr: styles.tokAttr ?? "",
+  com: styles.tokCom ?? "",
+  key: styles.tokKey ?? "",
+  str: styles.tokStr ?? "",
+  tag: styles.tokTag ?? "",
 };
+
+async function savePathsInOrder(
+  paths: readonly string[],
+  saveFile: (path: string) => Promise<void>,
+  index = 0
+): Promise<void> {
+  const path = paths[index];
+  if (!path) return;
+  await saveFile(path);
+  return savePathsInOrder(paths, saveFile, index + 1);
+}
 
 export interface BuilderCodeProps {
   appId: string;
@@ -52,7 +72,7 @@ type AppFile = { path: string; content: string };
 type TreeNode = {
   name: string;
   path: string; // full path (matches files[].path for files)
-  kind: 'file' | 'folder';
+  kind: "file" | "folder";
   children: TreeNode[];
 };
 
@@ -61,16 +81,21 @@ type TreeNode = {
 function buildTree(files: AppFile[]): TreeNode[] {
   const root: TreeNode[] = [];
   for (const f of files) {
-    const parts = f.path.split('/');
+    const parts = f.path.split("/");
     let level = root;
-    let acc = '';
+    let acc = "";
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i]!;
       acc = acc ? `${acc}/${part}` : part;
       const isFile = i === parts.length - 1;
       let node = level.find((n) => n.name === part);
       if (!node) {
-        node = { name: part, path: acc, kind: isFile ? 'file' : 'folder', children: [] };
+        node = {
+          name: part,
+          path: acc,
+          kind: isFile ? "file" : "folder",
+          children: [],
+        };
         level.push(node);
       }
       level = node.children;
@@ -78,7 +103,7 @@ function buildTree(files: AppFile[]): TreeNode[] {
   }
   const sortLevel = (nodes: TreeNode[]): void => {
     nodes.sort((a, b) => {
-      if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
+      if (a.kind !== b.kind) return a.kind === "folder" ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
     for (const n of nodes) sortLevel(n.children);
@@ -90,11 +115,15 @@ function buildTree(files: AppFile[]): TreeNode[] {
 // Pure filter — returns a copy of the tree containing only nodes whose path
 // matches the (lowercased) query, plus their ancestors. Folders along the
 // way are collected into `expandOut` so matches stay visible.
-function filterTree(nodes: TreeNode[], q: string, expandOut: Set<string>): TreeNode[] {
+function filterTree(
+  nodes: TreeNode[],
+  q: string,
+  expandOut: Set<string>
+): TreeNode[] {
   if (!q) return nodes;
   const out: TreeNode[] = [];
   for (const n of nodes) {
-    if (n.kind === 'file') {
+    if (n.kind === "file") {
       if (n.path.toLowerCase().includes(q)) out.push(n);
     } else {
       const kids = filterTree(n.children, q, expandOut);
@@ -107,18 +136,30 @@ function filterTree(nodes: TreeNode[], q: string, expandOut: Set<string>): TreeN
   return out;
 }
 
-const basename = (p: string): string => (p.includes('/') ? p.slice(p.lastIndexOf('/') + 1) : p);
+const basename = (p: string): string =>
+  p.includes("/") ? p.slice(p.lastIndexOf("/") + 1) : p;
 
-const BACKEND_DIRS = new Set(['actions', 'queries', 'migrations', 'automations']);
+const BACKEND_DIRS = new Set([
+  "actions",
+  "queries",
+  "migrations",
+  "automations",
+]);
 
 /** Stable empty listing — `files` feeds effect dependency arrays, so the
  *  "no app / not fetched yet" case must not mint a new array each render. */
 const NO_FILES: AppFile[] = [];
 
-export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): JSX.Element {
+export default function BuilderCode({
+  appId,
+  reloadNonce,
+}: BuilderCodeProps): JSX.Element {
   // The settled read of the app's files. `appId === ''` ("no app yet") is a
   // render-time case, not something the fetch effect has to reset state for.
-  const [fetched, setFetched] = useState<{ files: AppFile[]; error: string | null } | null>(null);
+  const [fetched, setFetched] = useState<{
+    files: AppFile[];
+    error: string | null;
+  } | null>(null);
   const files = appId && fetched ? fetched.files : NO_FILES;
   const loaded = !appId || fetched !== null;
   const loadError = appId && fetched ? fetched.error : null;
@@ -126,9 +167,12 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   const [openTabs, setOpenTabs] = useState<string[]>([]);
   const [activePath, setActivePath] = useState<string | undefined>(undefined);
   const [diffMode, setDiffMode] = useState(false);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [caret, setCaret] = useState<{ line: number; col: number }>({ line: 1, col: 1 });
+  const [caret, setCaret] = useState<{ line: number; col: number }>({
+    line: 1,
+    col: 1,
+  });
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Refs mirror the latest state for use inside async/imperative callbacks
@@ -163,7 +207,11 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
       if (!f) return prev;
       return {
         ...prev,
-        [p]: { original: f.content, current: f.content, language: languageHint(p) },
+        [p]: {
+          original: f.content,
+          current: f.content,
+          language: languageHint(p),
+        },
       };
     });
     setOpenTabs((prev) => (prev.includes(p) ? prev : [...prev, p]));
@@ -197,15 +245,15 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
 
       let ap = activePathRef.current;
       if (!ap || !list.some((f) => f.path === ap)) {
-        ap = list.find((f) => f.path === 'index.html')?.path ?? list[0]!.path;
+        ap = list.find((f) => f.path === "index.html")?.path ?? list[0]!.path;
       }
       openFile(ap, list);
 
       // Folders containing the active file start expanded.
       setExpanded((prev) => {
         const nextSet = new Set(prev);
-        const parts = (ap ?? '').split('/');
-        let acc = '';
+        const parts = (ap ?? "").split("/");
+        let acc = "";
         for (let i = 0; i < parts.length - 1; i++) {
           acc = acc ? `${acc}/${parts[i]}` : parts[i]!;
           nextSet.add(acc);
@@ -213,7 +261,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
         return nextSet;
       });
     },
-    [openFile],
+    [openFile]
   );
 
   // Fetch the file list on mount, app switch, and each agent-write nonce bump.
@@ -228,7 +276,10 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
         reconcileToFiles(fs);
       } catch (err) {
         if (cancelled) return;
-        setFetched((prev) => ({ files: prev?.files ?? NO_FILES, error: String(err) }));
+        setFetched((prev) => ({
+          files: prev?.files ?? NO_FILES,
+          error: String(err),
+        }));
       }
     })();
     return () => {
@@ -240,8 +291,9 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   useEffect(() => {
     if (!menuOpen) return;
     const onDoc = (): void => setMenuOpen(false);
-    document.addEventListener('click', onDoc, { capture: true });
-    return () => document.removeEventListener('click', onDoc, { capture: true });
+    document.addEventListener("click", onDoc, { capture: true });
+    return () =>
+      document.removeEventListener("click", onDoc, { capture: true });
   }, [menuOpen]);
 
   // Restore the caret after a Tab-insert re-render.
@@ -275,18 +327,19 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
         });
         showToast(`Saved ${basename(p)}`);
       } catch (err) {
-        showToast(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+        showToast(
+          `Save failed: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     },
-    [appId],
+    [appId]
   );
 
   const saveAll = useCallback(async (): Promise<void> => {
-    for (const p of Object.entries(buffersRef.current)
+    const changedPaths = Object.entries(buffersRef.current)
       .filter(([, b]) => b.current !== b.original)
-      .map(([p]) => p)) {
-      await saveFile(p);
-    }
+      .map(([p]) => p);
+    await savePathsInOrder(changedPaths, saveFile);
   }, [saveFile]);
 
   const revertActive = (): void => {
@@ -318,8 +371,11 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
 
   const refreshCaret = (ta: HTMLTextAreaElement): void => {
     const upto = ta.value.slice(0, ta.selectionStart);
-    const nl = upto.lastIndexOf('\n');
-    setCaret({ line: upto.split('\n').length, col: ta.selectionStart - (nl + 1) + 1 });
+    const nl = upto.lastIndexOf("\n");
+    setCaret({
+      line: upto.split("\n").length,
+      col: ta.selectionStart - (nl + 1) + 1,
+    });
   };
 
   const onEditorChange = (e: React.ChangeEvent<HTMLTextAreaElement>): void => {
@@ -344,23 +400,25 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     }
   };
 
-  const onEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+  const onEditorKeyDown = (
+    e: React.KeyboardEvent<HTMLTextAreaElement>
+  ): void => {
     const p = activePathRef.current;
     if (!p) return;
-    if (e.key === 'Tab') {
+    if (e.key === "Tab") {
       e.preventDefault();
       const ta = e.currentTarget;
       const s = ta.selectionStart;
       const eEnd = ta.selectionEnd;
       const value = ta.value;
-      const next = value.slice(0, s) + '  ' + value.slice(eEnd);
+      const next = value.slice(0, s) + "  " + value.slice(eEnd);
       pendingCaret.current = s + 2;
       setBuffers((prev) => {
         const cur = prev[p];
         if (!cur) return prev;
         return { ...prev, [p]: { ...cur, current: next } };
       });
-    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
       e.preventDefault();
       void saveFile(p);
     }
@@ -371,18 +429,22 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   if (!appId) {
     workspaceBody = <div className={atomsCss.empty}>No app yet.</div>;
   } else if (loadError) {
-    workspaceBody = <div className={atomsCss.empty}>Could not read files: {loadError}</div>;
+    workspaceBody = (
+      <div className={atomsCss.empty}>Could not read files: {loadError}</div>
+    );
   } else if (loaded && files.length === 0) {
     workspaceBody = <div className={atomsCss.empty}>Empty app.</div>;
-  } else if (!activeBuf) {
-    workspaceBody = <div className={atomsCss.empty}>No file open.</div>;
-  } else {
+  } else if (activeBuf) {
     workspaceBody = renderWorkspace();
+  } else {
+    workspaceBody = <div className={atomsCss.empty}>No file open.</div>;
   }
 
   return (
     <div className={styles.pane}>
-      <div className={styles.tree}>{files.length > 0 ? renderTree() : null}</div>
+      <div className={styles.tree}>
+        {files.length > 0 ? renderTree() : null}
+      </div>
       <div className={styles.workspace}>{workspaceBody}</div>
     </div>
   );
@@ -393,18 +455,19 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     const expandOut = new Set<string>();
     const tree = buildTree(files);
     const visible = filterTree(tree, q, expandOut);
-    const isExpanded = (path: string): boolean => expanded.has(path) || expandOut.has(path);
+    const isExpanded = (path: string): boolean =>
+      expanded.has(path) || expandOut.has(path);
 
     const renderRow = (node: TreeNode, depth: number): JSX.Element => {
-      if (node.kind === 'folder') {
+      if (node.kind === "folder") {
         const isOpen = isExpanded(node.path);
         return (
           <button
             key={`f:${node.path}`}
             type="button"
-            className={cx(styles.treeRow, 'code-tree-folder')}
+            className={cx(styles.treeRow, "code-tree-folder")}
             data-depth={String(depth)}
-            style={{ '--depth': String(depth) } as React.CSSProperties}
+            style={{ "--depth": String(depth) } as React.CSSProperties}
             onClick={() =>
               setExpanded((prev) => {
                 const next = new Set(prev);
@@ -436,11 +499,11 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
         <button
           key={`p:${node.path}`}
           type="button"
-          className={cx(styles.treeRow, 'code-tree-file')}
+          className={cx(styles.treeRow, "code-tree-file")}
           data-active={String(activePath === node.path)}
           data-dirty={String(isDirty)}
           data-depth={String(depth)}
-          style={{ '--depth': String(depth) } as React.CSSProperties}
+          style={{ "--depth": String(depth) } as React.CSSProperties}
           onClick={() => {
             openFile(node.path, files);
             setDiffMode(false);
@@ -458,7 +521,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
       const out: JSX.Element[] = [];
       for (const n of nodes) {
         out.push(renderRow(n, depth));
-        if (n.kind === 'folder' && isExpanded(n.path)) {
+        if (n.kind === "folder" && isExpanded(n.path)) {
           out.push(...walk(n.children, depth + 1));
         }
       }
@@ -468,7 +531,9 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     // Split root-level entries into Frontend and Backend (reserved server-side
     // folders). Section headers appear only when both groups are populated and
     // no search is active.
-    const backend = visible.filter((n) => n.kind === 'folder' && BACKEND_DIRS.has(n.name));
+    const backend = visible.filter(
+      (n) => n.kind === "folder" && BACKEND_DIRS.has(n.name)
+    );
     const frontend = visible.filter((n) => !backend.includes(n));
     const showHeaders = !q && frontend.length > 0 && backend.length > 0;
 
@@ -484,7 +549,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
         <div className={styles.search}>
           <span
             className={styles.searchIcon}
-            dangerouslySetInnerHTML={{ __html: iconSvg('Search', 13) }}
+            dangerouslySetInnerHTML={{ __html: iconSvg("Search", 13) }}
           />
           <input
             className={styles.searchInput}
@@ -495,12 +560,18 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
           <span className={styles.searchKbd}>⌘P</span>
         </div>
         <div className={styles.treeList}>
-          {showHeaders ? groupHead('Frontend', frontend.length) : null}
+          {showHeaders ? groupHead("Frontend", frontend.length) : null}
           {walk(frontend, 0)}
-          {backend.length > 0 ? (showHeaders ? groupHead('Backend', backend.length) : null) : null}
+          {backend.length > 0
+            ? showHeaders
+              ? groupHead("Backend", backend.length)
+              : null
+            : null}
           {backend.length > 0 ? walk(backend, 0) : null}
           {visible.length === 0 ? (
-            <div className={cx(atomsCss.empty, styles.treeEmpty)}>No matches</div>
+            <div className={cx(atomsCss.empty, styles.treeEmpty)}>
+              No matches
+            </div>
           ) : null}
         </div>
       </>
@@ -552,9 +623,11 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
                 type="button"
                 aria-label={`Close ${basename(p)}`}
                 className={styles.tabClose}
-                title={dirty ? 'Unsaved changes' : 'Close'}
+                title={dirty ? "Unsaved changes" : "Close"}
                 onClick={() => closeTab(p)}
-                dangerouslySetInnerHTML={dirty ? undefined : { __html: iconSvg('X', 11, 2.5) }}
+                dangerouslySetInnerHTML={
+                  dirty ? undefined : { __html: iconSvg("X", 11, 2.5) }
+                }
               />
             </div>
           );
@@ -569,16 +642,21 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     if (!p || !buf) return <div className={styles.tabActions} />;
     const dirty = buf.current !== buf.original;
     const nDirty = dirtyPaths().length;
-    const isRemote = window.Centraid?.getRuntimeMode() === 'remote';
+    const isRemote = window.Centraid?.getRuntimeMode() === "remote";
 
     return (
       <div className={styles.tabActions}>
         <button
           type="button"
-          className={cx(buttonCss.btn, buttonCss.ghost, buttonCss.sm, styles.tabActionBtn)}
+          className={cx(
+            buttonCss.btn,
+            buttonCss.ghost,
+            buttonCss.sm,
+            styles.tabActionBtn
+          )}
           data-active={String(diffMode)}
           disabled={!dirty}
-          title={dirty ? 'Toggle diff against last save' : 'No changes to diff'}
+          title={dirty ? "Toggle diff against last save" : "No changes to diff"}
           onClick={() => setDiffMode((v) => !v)}
         >
           Diff
@@ -595,7 +673,12 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
           <button
             type="button"
             aria-label="More code actions"
-            className={cx(buttonCss.btn, buttonCss.ghost, buttonCss.sm, styles.overflowBtn)}
+            className={cx(
+              buttonCss.btn,
+              buttonCss.ghost,
+              buttonCss.sm,
+              styles.overflowBtn
+            )}
             onClick={(e) => {
               e.stopPropagation();
               setMenuOpen((v) => !v);
@@ -617,7 +700,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
                 void saveAll();
               }}
             >
-              {nDirty > 0 ? `Save all (${nDirty})` : 'Save all'}
+              {nDirty > 0 ? `Save all (${nDirty})` : "Save all"}
             </button>
             <button
               type="button"
@@ -630,7 +713,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
             >
               Revert this file
             </button>
-            {!isRemote ? (
+            {isRemote ? null : (
               <button
                 type="button"
                 className={styles.overflowItem}
@@ -641,7 +724,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
               >
                 Open app folder
               </button>
-            ) : null}
+            )}
           </div>
         </div>
       </div>
@@ -653,7 +736,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     const buf = activeBuf;
     if (!p || !buf) return <div className={atomsCss.empty}>No file open.</div>;
     const lang = buf.language;
-    const lineCount = buf.current.split('\n').length;
+    const lineCount = buf.current.split("\n").length;
     const lineNums: JSX.Element[] = [];
     for (let i = 1; i <= lineCount; i++) lineNums.push(<div key={i}>{i}</div>);
     return (
@@ -670,7 +753,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
               data-testid="code-edit-pre"
               ref={preRef}
               dangerouslySetInnerHTML={{
-                __html: tokenize(buf.current, lang, TOKEN_CLASSES) + '\n',
+                __html: tokenize(buf.current, lang, TOKEN_CLASSES) + "\n",
               }}
             />
           </div>
@@ -697,13 +780,17 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     return (
       <div className={styles.diff}>
         {rows.map((r, i) => {
-          const sign = r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' ';
+          const sign = r.type === "add" ? "+" : r.type === "del" ? "-" : " ";
           return (
             <div className={styles.diffRow} data-type={r.type} key={i}>
-              <span className={styles.diffNum}>{r.aNum ? String(r.aNum) : ''}</span>
-              <span className={styles.diffNum}>{r.bNum ? String(r.bNum) : ''}</span>
+              <span className={styles.diffNum}>
+                {r.aNum ? String(r.aNum) : ""}
+              </span>
+              <span className={styles.diffNum}>
+                {r.bNum ? String(r.bNum) : ""}
+              </span>
               <span className={styles.diffSign}>{sign}</span>
-              <span className={styles.diffText}>{r.text || ' '}</span>
+              <span className={styles.diffText}>{r.text || " "}</span>
             </div>
           );
         })}
@@ -715,28 +802,29 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     const p = activePath;
     const buf = activeBuf;
     if (!p || !buf) return null;
-    const lineCount = buf.current.split('\n').length;
+    const lineCount = buf.current.split("\n").length;
     const bytes = new TextEncoder().encode(buf.current).byteLength;
     const nDirty = dirtyPaths().length;
     const lang = languageHint(p);
     return (
       <>
         <span>
-          {lineCount} {lineCount === 1 ? 'line' : 'lines'} · {formatBytes(bytes)}
+          {lineCount} {lineCount === 1 ? "line" : "lines"} ·{" "}
+          {formatBytes(bytes)}
         </span>
         <span className={styles.statusSep}>·</span>
         <span className={styles.statusSave}>
           <span className={styles.statusDot} />
           {nDirty > 0
-            ? `autosaving · ${nDirty} unsaved file${nDirty === 1 ? '' : 's'}`
-            : 'all saved'}
+            ? `autosaving · ${nDirty} unsaved file${nDirty === 1 ? "" : "s"}`
+            : "all saved"}
         </span>
         <span className={styles.statusSpacer} />
         <span>
           line {caret.line} · col {caret.col}
         </span>
         <span className={styles.statusSep}>·</span>
-        <span>{LANG_DISPLAY[lang] ?? 'TXT'}</span>
+        <span>{LANG_DISPLAY[lang] ?? "TXT"}</span>
       </>
     );
   }

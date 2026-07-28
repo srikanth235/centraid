@@ -18,11 +18,11 @@
  * fires it later. A concurrent/restarted fire can never drop the delivery.
  */
 
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import { APP_AUTOMATIONS_SUBDIR, list, readAppAt, writeManifestAt } from './app.js';
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
+
 import {
   isPendingWebhookTrigger,
   MANIFEST_FILE,
@@ -31,10 +31,16 @@ import {
   webhookTriggerOf,
   type Trigger,
   type WebhookTrigger,
-} from '../manifest/manifest.js';
+} from "../manifest/manifest.js";
+import {
+  APP_AUTOMATIONS_SUBDIR,
+  list,
+  readAppAt,
+  writeManifestAt,
+} from "./app.js";
 
 /** URL prefix the gateway mounts the webhook route under. */
-export const WEBHOOK_ROUTE_PREFIX = '/_centraid-hook';
+export const WEBHOOK_ROUTE_PREFIX = "/_centraid-hook";
 
 /** Largest request body the webhook route accepts (64 KiB). */
 const MAX_BODY_BYTES = 64 * 1024;
@@ -45,29 +51,36 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 
 /** Generate a fresh webhook route slug (the path segment under the prefix). */
 export function generateWebhookId(): string {
-  return crypto.randomBytes(12).toString('hex');
+  return crypto.randomBytes(12).toString("hex");
 }
 
 /** Generate a fresh shared secret — shown to the user once, never stored raw. */
 export function generateWebhookSecret(): string {
-  return crypto.randomBytes(24).toString('hex');
+  return crypto.randomBytes(24).toString("hex");
 }
 
 /** SHA-256 hex of a secret — this is what the manifest persists. */
 export function hashWebhookSecret(secret: string): string {
-  return crypto.createHash('sha256').update(secret, 'utf8').digest('hex');
+  return crypto.createHash("sha256").update(secret, "utf8").digest("hex");
 }
 
 /** Timing-safe check of a presented secret against a stored hash. */
-export function verifyWebhookSecret(provided: string, expectedHash: string): boolean {
-  const a = Buffer.from(hashWebhookSecret(provided), 'hex');
-  const b = Buffer.from(expectedHash, 'hex');
+export function verifyWebhookSecret(
+  provided: string,
+  expectedHash: string
+): boolean {
+  const a = Buffer.from(hashWebhookSecret(provided), "hex");
+  const b = Buffer.from(expectedHash, "hex");
   if (a.length !== b.length || a.length === 0) return false;
   return crypto.timingSafeEqual(a, b);
 }
 
 function isEnoent(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'ENOENT';
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { code?: string }).code === "ENOENT"
+  );
 }
 
 /**
@@ -99,7 +112,7 @@ export interface ProvisionedWebhook {
  */
 export async function provisionPendingWebhookAt(
   dir: string,
-  ownerApp: string,
+  ownerApp: string
 ): Promise<ProvisionedWebhook | undefined> {
   const row = await readAppAt(dir, ownerApp);
   if (!row) return undefined;
@@ -108,12 +121,12 @@ export async function provisionPendingWebhookAt(
   const webhookId = generateWebhookId();
   const secret = generateWebhookSecret();
   const provisioned: WebhookTrigger = {
-    kind: 'webhook',
+    kind: "webhook",
     id: webhookId,
     secretHash: hashWebhookSecret(secret),
   };
   const triggers: Trigger[] = row.triggers.map((t) =>
-    isPendingWebhookTrigger(t) ? provisioned : t,
+    isPendingWebhookTrigger(t) ? provisioned : t
   );
   await writeManifestAt(dir, { ...row.manifest, triggers });
   return { dir, automationId: row.id, ownerApp, webhookId, secret };
@@ -124,9 +137,11 @@ export async function provisionPendingWebhookAt(
  * `<appDir>/automations/<id>/` (issue #98). A missing `automations/`
  * subdir contributes nothing. Each entry's `ownerApp` is the app id.
  */
-export async function provisionAppPendingWebhooks(appDir: string): Promise<ProvisionedWebhook[]> {
+export async function provisionAppPendingWebhooks(
+  appDir: string
+): Promise<ProvisionedWebhook[]> {
   const autoRoot = path.join(appDir, APP_AUTOMATIONS_SUBDIR);
-  let entries: import('node:fs').Dirent[];
+  let entries: import("node:fs").Dirent[];
   try {
     entries = await fs.readdir(autoRoot, { withFileTypes: true });
   } catch (err) {
@@ -134,14 +149,21 @@ export async function provisionAppPendingWebhooks(appDir: string): Promise<Provi
     throw err;
   }
   const appId = path.basename(appDir);
-  const out: ProvisionedWebhook[] = [];
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    if (e.name.startsWith('.') || e.name.startsWith('_')) continue;
-    const minted = await provisionPendingWebhookAt(path.join(autoRoot, e.name), appId);
-    if (minted) out.push(minted);
-  }
-  return out;
+  const minted = await Promise.all(
+    entries
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          !entry.name.startsWith(".") &&
+          !entry.name.startsWith("_")
+      )
+      .map((entry) =>
+        provisionPendingWebhookAt(path.join(autoRoot, entry.name), appId)
+      )
+  );
+  return minted.filter(
+    (webhook): webhook is ProvisionedWebhook => webhook !== undefined
+  );
 }
 
 /** A single draft file in a git-store file map (issue #141). */
@@ -164,7 +186,8 @@ export interface ProvisionedWebhookInFiles {
   readonly secret: string;
 }
 
-const AUTOMATION_MANIFEST_RE = /^automations\/([^/]+)\/automation\.json$/;
+const AUTOMATION_MANIFEST_RE =
+  /^automations\/(?<automationId>[^/]+)\/automation\.json$/u;
 
 /**
  * Filesystem-free variant of {@link provisionAppPendingWebhooks} for the
@@ -178,13 +201,14 @@ const AUTOMATION_MANIFEST_RE = /^automations\/([^/]+)\/automation\.json$/;
  */
 export function provisionPendingWebhooksInFiles(
   files: ReadonlyArray<WebhookFileMapEntry>,
-  ownerApp: string,
+  ownerApp: string
 ): { files: WebhookFileMapEntry[]; minted: ProvisionedWebhookInFiles[] } {
   const out: WebhookFileMapEntry[] = [];
   const minted: ProvisionedWebhookInFiles[] = [];
   for (const f of files) {
-    const m = AUTOMATION_MANIFEST_RE.exec(f.path);
-    if (!m) {
+    const automationId = AUTOMATION_MANIFEST_RE.exec(f.path)?.groups
+      ?.automationId;
+    if (!automationId) {
       out.push(f);
       continue;
     }
@@ -202,15 +226,18 @@ export function provisionPendingWebhooksInFiles(
     const webhookId = generateWebhookId();
     const secret = generateWebhookSecret();
     const provisioned: WebhookTrigger = {
-      kind: 'webhook',
+      kind: "webhook",
       id: webhookId,
       secretHash: hashWebhookSecret(secret),
     };
     const triggers: Trigger[] = manifest.triggers.map((t) =>
-      isPendingWebhookTrigger(t) ? provisioned : t,
+      isPendingWebhookTrigger(t) ? provisioned : t
     );
-    out.push({ path: f.path, content: JSON.stringify({ ...manifest, triggers }, null, 2) + '\n' });
-    minted.push({ path: f.path, automationId: m[1]!, ownerApp, webhookId, secret });
+    out.push({
+      path: f.path,
+      content: JSON.stringify({ ...manifest, triggers }, null, 2) + "\n",
+    });
+    minted.push({ path: f.path, automationId, ownerApp, webhookId, secret });
   }
   return { files: out, minted };
 }
@@ -246,7 +273,7 @@ export interface RotatedWebhookInFiles {
  */
 export function rotateWebhookInFiles(
   current: ReadonlyArray<WebhookFileMapEntry>,
-  automationId: string,
+  automationId: string
 ): { changed: WebhookFileMapEntry[]; rotated?: RotatedWebhookInFiles } {
   const target = `${APP_AUTOMATIONS_SUBDIR}/${automationId}/${MANIFEST_FILE}`;
   const file = current.find((f) => f.path === target);
@@ -263,14 +290,16 @@ export function rotateWebhookInFiles(
 
   const secret = generateWebhookSecret();
   const provisioned: WebhookTrigger = {
-    kind: 'webhook',
+    kind: "webhook",
     id: existing.id,
     secretHash: hashWebhookSecret(secret),
   };
-  const triggers: Trigger[] = manifest.triggers.map((t) => (t === existing ? provisioned : t));
+  const triggers: Trigger[] = manifest.triggers.map((t) =>
+    t === existing ? provisioned : t
+  );
   const changedFile: WebhookFileMapEntry = {
     path: target,
-    content: JSON.stringify({ ...manifest, triggers }, null, 2) + '\n',
+    content: JSON.stringify({ ...manifest, triggers }, null, 2) + "\n",
   };
   return {
     changed: [changedFile],
@@ -306,12 +335,12 @@ export interface WebhookRouteOptions {
 }
 
 function extractSecret(req: IncomingMessage): string | undefined {
-  const auth = req.headers['authorization'];
-  if (typeof auth === 'string' && /^Bearer\s+/i.test(auth)) {
-    return auth.replace(/^Bearer\s+/i, '').trim() || undefined;
+  const auth = req.headers["authorization"];
+  if (typeof auth === "string" && /^Bearer\s+/iu.test(auth)) {
+    return auth.replace(/^Bearer\s+/iu, "").trim() || undefined;
   }
-  const header = req.headers['x-openclaw-webhook-secret'];
-  if (typeof header === 'string' && header.trim()) return header.trim();
+  const header = req.headers["x-openclaw-webhook-secret"];
+  if (typeof header === "string" && header.trim()) return header.trim();
   return undefined;
 }
 
@@ -322,15 +351,16 @@ function extractSecret(req: IncomingMessage): string | undefined {
  * here would make two distinct deliveries collapse into one.
  */
 function deliveryId(req: IncomingMessage): string {
-  for (const name of ['x-centraid-delivery-id', 'x-github-delivery']) {
+  for (const name of ["x-centraid-delivery-id", "x-github-delivery"]) {
     const value = req.headers[name];
-    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 256);
+    if (typeof value === "string" && value.trim())
+      return value.trim().slice(0, 256);
   }
   return crypto.randomUUID();
 }
 
 async function readBodyCapped(
-  req: IncomingMessage,
+  req: IncomingMessage
 ): Promise<{ ok: true; body: unknown } | { ok: false }> {
   const chunks: Buffer[] = [];
   let total = 0;
@@ -340,7 +370,7 @@ async function readBodyCapped(
     if (total > MAX_BODY_BYTES) return { ok: false };
     chunks.push(buf);
   }
-  const text = Buffer.concat(chunks).toString('utf8');
+  const text = Buffer.concat(chunks).toString("utf8");
   if (!text) return { ok: true, body: undefined };
   try {
     return { ok: true, body: JSON.parse(text) as unknown };
@@ -354,8 +384,8 @@ async function readBodyCapped(
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body ?? null);
   res.writeHead(status, {
-    'content-type': 'application/json',
-    'content-length': Buffer.byteLength(text).toString(),
+    "content-type": "application/json",
+    "content-length": Buffer.byteLength(text).toString(),
   });
   res.end(text);
 }
@@ -381,48 +411,55 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
     return w.count > RATE_LIMIT_MAX;
   };
 
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
     if (!req.url || !req.url.startsWith(WEBHOOK_ROUTE_PREFIX)) return false;
-    const url = new URL(req.url, 'http://x');
+    const url = new URL(req.url, "http://x");
     const sub = url.pathname.slice(WEBHOOK_ROUTE_PREFIX.length);
-    const slug = sub.replace(/^\/+/, '').replace(/\/+$/, '');
+    const slug = sub.replace(/^\/+/u, "").replace(/\/+$/u, "");
 
-    if ((req.method ?? 'GET').toUpperCase() !== 'POST') {
-      sendJson(res, 405, { error: 'webhook triggers accept POST only' });
+    if ((req.method ?? "GET").toUpperCase() !== "POST") {
+      sendJson(res, 405, { error: "webhook triggers accept POST only" });
       return true;
     }
-    if (!slug || !/^[A-Za-z0-9_-]+$/.test(slug)) {
-      sendJson(res, 404, { error: 'unknown webhook' });
+    if (!slug || !/^[A-Za-z0-9_-]+$/u.test(slug)) {
+      sendJson(res, 404, { error: "unknown webhook" });
       return true;
     }
     if (overRateLimit(slug)) {
-      sendJson(res, 429, { error: 'rate limit exceeded' });
+      sendJson(res, 429, { error: "rate limit exceeded" });
       return true;
     }
     try {
       // Resolve the webhook id to its automation. Webhook slugs are
       // globally unique, so the first active-version match wins.
       const { rows } = await list(opts.appsDir);
-      const target = rows.find((r) => webhookTriggerOf(r.triggers)?.id === slug);
+      const target = rows.find(
+        (r) => webhookTriggerOf(r.triggers)?.id === slug
+      );
       if (!target) {
-        sendJson(res, 404, { error: 'unknown webhook' });
+        sendJson(res, 404, { error: "unknown webhook" });
         return true;
       }
       const trigger = webhookTriggerOf(target.triggers)!;
 
       const secret = extractSecret(req);
       if (!secret || !verifyWebhookSecret(secret, trigger.secretHash)) {
-        sendJson(res, 401, { error: 'invalid or missing webhook secret' });
+        sendJson(res, 401, { error: "invalid or missing webhook secret" });
         return true;
       }
       if (!target.enabled) {
-        sendJson(res, 200, { ok: false, skipped: 'automation disabled' });
+        sendJson(res, 200, { ok: false, skipped: "automation disabled" });
         return true;
       }
 
       const body = await readBodyCapped(req);
       if (!body.ok) {
-        sendJson(res, 413, { error: `request body exceeds ${MAX_BODY_BYTES} bytes` });
+        sendJson(res, 413, {
+          error: `request body exceeds ${MAX_BODY_BYTES} bytes`,
+        });
         return true;
       }
 
@@ -437,7 +474,9 @@ export function makeWebhookRouteHandler(opts: WebhookRouteOptions) {
       sendJson(res, result.accepted ? 202 : 500, { ...result, deliveryId: id });
       return true;
     } catch (err) {
-      sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      sendJson(res, 500, {
+        error: err instanceof Error ? err.message : String(err),
+      });
       return true;
     }
   };

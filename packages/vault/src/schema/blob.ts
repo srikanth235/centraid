@@ -30,8 +30,9 @@
 // per-document index budget (issue #367 §E3, `truncateForIndex`) applies
 // here too, same as every other body-shaped column.
 
-import type { DatabaseSync } from 'node:sqlite';
-import { truncateForIndex } from './fts.js';
+import type { DatabaseSync } from "node:sqlite";
+
+import { truncateForIndex } from "./fts.js";
 
 /** Body of a document's FTS row: extracted text, transcript, inline text. */
 const DOCUMENT_BODY = (ref: string) =>
@@ -53,7 +54,7 @@ const REFRESH_DOCUMENT_FTS = (contentIdRef: string) => `
   DELETE FROM fts_core_document
    WHERE rowid IN (SELECT rowid FROM core_document WHERE current_content_id = ${contentIdRef});
   INSERT INTO fts_core_document (rowid, document_id, title, body)
-  SELECT d.rowid, d."document_id", d."title", ${DOCUMENT_BODY('d')}
+  SELECT d.rowid, d."document_id", d."title", ${DOCUMENT_BODY("d")}
     FROM core_document d
    WHERE d.current_content_id = ${contentIdRef} AND d."deleted_at" IS NULL;`;
 
@@ -61,7 +62,7 @@ const REFRESH_CONTENT_ITEM_FTS = (contentIdRef: string) => `
   DELETE FROM fts_core_content_item
    WHERE rowid IN (SELECT rowid FROM core_content_item WHERE content_id = ${contentIdRef});
   INSERT INTO fts_core_content_item (rowid, content_id, title)
-  SELECT i.rowid, i.content_id, ${CONTENT_ITEM_SEARCH_TEXT('i')}
+  SELECT i.rowid, i.content_id, ${CONTENT_ITEM_SEARCH_TEXT("i")}
     FROM core_content_item i
    WHERE i.content_id = ${contentIdRef} AND i.deleted_at IS NULL;`;
 
@@ -199,13 +200,13 @@ DROP TRIGGER IF EXISTS fts_core_document_ai;
 DROP TRIGGER IF EXISTS fts_core_document_au;
 CREATE TRIGGER IF NOT EXISTS fts_core_document_ai AFTER INSERT ON core_document BEGIN
   INSERT INTO fts_core_document (rowid, document_id, title, body)
-  SELECT new.rowid, new."document_id", new."title", ${DOCUMENT_BODY('new')}
+  SELECT new.rowid, new."document_id", new."title", ${DOCUMENT_BODY("new")}
    WHERE new."deleted_at" IS NULL;
 END;
 CREATE TRIGGER IF NOT EXISTS fts_core_document_au AFTER UPDATE ON core_document BEGIN
   DELETE FROM fts_core_document WHERE rowid = old.rowid;
   INSERT INTO fts_core_document (rowid, document_id, title, body)
-  SELECT new.rowid, new."document_id", new."title", ${DOCUMENT_BODY('new')}
+  SELECT new.rowid, new."document_id", new."title", ${DOCUMENT_BODY("new")}
    WHERE new."deleted_at" IS NULL;
 END;
 
@@ -217,13 +218,13 @@ DROP TRIGGER IF EXISTS fts_core_content_item_ai;
 DROP TRIGGER IF EXISTS fts_core_content_item_au;
 CREATE TRIGGER IF NOT EXISTS fts_core_content_item_ai AFTER INSERT ON core_content_item BEGIN
   INSERT INTO fts_core_content_item (rowid, content_id, title)
-  SELECT new.rowid, new.content_id, ${CONTENT_ITEM_SEARCH_TEXT('new')}
+  SELECT new.rowid, new.content_id, ${CONTENT_ITEM_SEARCH_TEXT("new")}
    WHERE new.deleted_at IS NULL;
 END;
 CREATE TRIGGER IF NOT EXISTS fts_core_content_item_au AFTER UPDATE ON core_content_item BEGIN
   DELETE FROM fts_core_content_item WHERE rowid = old.rowid;
   INSERT INTO fts_core_content_item (rowid, content_id, title)
-  SELECT new.rowid, new.content_id, ${CONTENT_ITEM_SEARCH_TEXT('new')}
+  SELECT new.rowid, new.content_id, ${CONTENT_ITEM_SEARCH_TEXT("new")}
    WHERE new.deleted_at IS NULL;
 END;
 
@@ -232,28 +233,28 @@ END;
 -- pointed at the derivative's parent content item.
 CREATE TRIGGER IF NOT EXISTS trg_fts_document_derivative_ai AFTER INSERT ON core_content_derivative
 WHEN NEW.variant IN ('text','transcript')
-BEGIN${REFRESH_DOCUMENT_FTS('NEW.content_id')}
+BEGIN${REFRESH_DOCUMENT_FTS("NEW.content_id")}
 END;
 CREATE TRIGGER IF NOT EXISTS trg_fts_document_derivative_au AFTER UPDATE ON core_content_derivative
 WHEN NEW.variant IN ('text','transcript')
-BEGIN${REFRESH_DOCUMENT_FTS('NEW.content_id')}
+BEGIN${REFRESH_DOCUMENT_FTS("NEW.content_id")}
 END;
 CREATE TRIGGER IF NOT EXISTS trg_fts_document_derivative_ad AFTER DELETE ON core_content_derivative
 WHEN OLD.variant IN ('text','transcript')
-BEGIN${REFRESH_DOCUMENT_FTS('OLD.content_id')}
+BEGIN${REFRESH_DOCUMENT_FTS("OLD.content_id")}
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_fts_content_transcript_ai AFTER INSERT ON core_content_derivative
 WHEN NEW.variant = 'transcript'
-BEGIN${REFRESH_CONTENT_ITEM_FTS('NEW.content_id')}
+BEGIN${REFRESH_CONTENT_ITEM_FTS("NEW.content_id")}
 END;
 CREATE TRIGGER IF NOT EXISTS trg_fts_content_transcript_au AFTER UPDATE ON core_content_derivative
 WHEN NEW.variant = 'transcript'
-BEGIN${REFRESH_CONTENT_ITEM_FTS('NEW.content_id')}
+BEGIN${REFRESH_CONTENT_ITEM_FTS("NEW.content_id")}
 END;
 CREATE TRIGGER IF NOT EXISTS trg_fts_content_transcript_ad AFTER DELETE ON core_content_derivative
 WHEN OLD.variant = 'transcript'
-BEGIN${REFRESH_CONTENT_ITEM_FTS('OLD.content_id')}
+BEGIN${REFRESH_CONTENT_ITEM_FTS("OLD.content_id")}
 END;
 ${BLOB_CACHE_DDL}`;
 
@@ -266,10 +267,10 @@ ${BLOB_CACHE_DDL}`;
  * decode), so a `FTS_BODY_INDEX_BUDGET_CHARS` change reflows documents too.
  */
 export function rebuildDocumentFtsIndex(vault: DatabaseSync): void {
-  vault.exec('DELETE FROM fts_core_document;');
+  vault.exec("DELETE FROM fts_core_document;");
   vault.exec(`
     INSERT INTO fts_core_document (rowid, document_id, title, body)
-    SELECT d.rowid, d."document_id", d."title", ${DOCUMENT_BODY('d')}
+    SELECT d.rowid, d."document_id", d."title", ${DOCUMENT_BODY("d")}
       FROM core_document d
      WHERE d."deleted_at" IS NULL;
   `);

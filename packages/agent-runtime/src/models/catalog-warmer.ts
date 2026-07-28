@@ -24,13 +24,18 @@
  * renders.
  */
 
-import type { RunnerKind, RunnerModel, SurfaceStatus } from '@centraid/app-engine';
-import { writeCatalogEntry, hashModelIds } from './catalog.js';
+import type {
+  RunnerKind,
+  RunnerModel,
+  SurfaceStatus,
+} from "@centraid/app-engine";
 
-export type { SurfaceStatus } from '@centraid/app-engine';
+import { writeCatalogEntry, hashModelIds } from "./catalog.js";
+
+export type { SurfaceStatus } from "@centraid/app-engine";
 
 /** The host-capability surfaces the catalog tracks per runner. */
-export type CatalogSurface = 'models';
+export type CatalogSurface = "models";
 
 export interface CatalogWarmerOptions {
   catalogPath: string;
@@ -90,8 +95,11 @@ export class CatalogWarmer {
  * polls to pick up the fresh list. Blank-avoidance is the renderer's job: it
  * keeps showing the cached list while `loading` rather than clearing it.
  */
-export function deriveStatus(cachedLen: number, warming: boolean): SurfaceStatus {
-  if (warming) return 'loading';
-  if (cachedLen > 0) return 'ready';
-  return 'empty';
+export function deriveStatus(
+  cachedLen: number,
+  warming: boolean
+): SurfaceStatus {
+  if (warming) return "loading";
+  if (cachedLen > 0) return "ready";
+  return "empty";
 }

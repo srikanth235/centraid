@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
-import { cx } from '../ui/cx.js';
-import styles from './GatewayScreen.module.css';
-import buttonCss from '../ui/Button.module.css';
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+
+import { cx } from "../ui/cx.js";
 import {
   knobPending,
   knobRowsFromProfile,
@@ -11,7 +10,10 @@ import {
   type ResourceKnobPrefs,
   type ResourceProfileDTO,
   type TunableKnobKey,
-} from './resource-summary.js';
+} from "./resource-summary.js";
+
+import buttonCss from "../ui/Button.module.css";
+import styles from "./GatewayScreen.module.css";
 
 // L3 "Tune" rung of the Resource card (issue #528 Phase F): advanced knobs the
 // owner can override. Collapsed by default (an aria-expanded button + region,
@@ -24,14 +26,16 @@ export interface ResourceAdvancedKnobsProps {
   /** Must carry `sources` + `bounds`; the caller gates on that, we re-check. */
   profile: ResourceProfileDTO;
   loadKnobPrefs: () => Promise<ResourceKnobPrefs>;
-  saveKnobPrefs: (patch: Partial<Record<TunableKnobKey, number | null>>) => Promise<void>;
+  saveKnobPrefs: (
+    patch: Partial<Record<TunableKnobKey, number | null>>
+  ) => Promise<void>;
 }
 
 const EMPTY_DRAFTS: Record<TunableKnobKey, string> = {
-  workerMaxConcurrent: '',
-  workerMaxOldGenerationMb: '',
-  workerPoolSize: '',
-  replicationConcurrency: '',
+  workerMaxConcurrent: "",
+  workerMaxOldGenerationMb: "",
+  workerPoolSize: "",
+  replicationConcurrency: "",
 };
 
 export default function ResourceAdvancedKnobs({
@@ -42,7 +46,8 @@ export default function ResourceAdvancedKnobs({
   const rows = knobRowsFromProfile(profile);
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState<ResourceKnobPrefs | null>(null);
-  const [drafts, setDrafts] = useState<Record<TunableKnobKey, string>>(EMPTY_DRAFTS);
+  const [drafts, setDrafts] =
+    useState<Record<TunableKnobKey, string>>(EMPTY_DRAFTS);
   const [busyKey, setBusyKey] = useState<TunableKnobKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState(false);
@@ -55,10 +60,12 @@ export default function ResourceAdvancedKnobs({
         if (busyRef.current) return;
         setSaved(prefs);
         setDrafts({
-          workerMaxConcurrent: prefs.workerMaxConcurrent?.toString() ?? '',
-          workerMaxOldGenerationMb: prefs.workerMaxOldGenerationMb?.toString() ?? '',
-          workerPoolSize: prefs.workerPoolSize?.toString() ?? '',
-          replicationConcurrency: prefs.replicationConcurrency?.toString() ?? '',
+          workerMaxConcurrent: prefs.workerMaxConcurrent?.toString() ?? "",
+          workerMaxOldGenerationMb:
+            prefs.workerMaxOldGenerationMb?.toString() ?? "",
+          workerPoolSize: prefs.workerPoolSize?.toString() ?? "",
+          replicationConcurrency:
+            prefs.replicationConcurrency?.toString() ?? "",
         });
         setError(null);
       })
@@ -74,10 +81,11 @@ export default function ResourceAdvancedKnobs({
 
   if (!rows) return null;
 
-  const desiredOf = (key: TunableKnobKey): number | null => saved?.[key] ?? null;
+  const desiredOf = (key: TunableKnobKey): number | null =>
+    saved?.[key] ?? null;
   const effectiveOf = (facts: KnobRowFacts): number => {
     const draft = drafts[facts.key].trim();
-    if (draft !== '') {
+    if (draft !== "") {
       const parsed = validateKnobDraft(draft, facts.bounds);
       if (parsed.ok) return parsed.value;
     }
@@ -85,8 +93,8 @@ export default function ResourceAdvancedKnobs({
   };
 
   const byKey = new Map(rows.map((r) => [r.key, r]));
-  const concurrentRow = byKey.get('workerMaxConcurrent');
-  const memRow = byKey.get('workerMaxOldGenerationMb');
+  const concurrentRow = byKey.get("workerMaxConcurrent");
+  const memRow = byKey.get("workerMaxOldGenerationMb");
   const warnings =
     concurrentRow && memRow
       ? knobSoftWarnings({
@@ -106,7 +114,7 @@ export default function ResourceAdvancedKnobs({
     key: TunableKnobKey,
     patchValue: number | null,
     nextSavedValue: number | null,
-    nextDraft: string,
+    nextDraft: string
   ): Promise<void> => {
     busyRef.current = true;
     setBusyKey(key);
@@ -136,7 +144,7 @@ export default function ResourceAdvancedKnobs({
     void runWrite(facts.key, value, value, value.toString());
   };
   const handleClear = (facts: KnobRowFacts): void => {
-    void runWrite(facts.key, null, null, '');
+    void runWrite(facts.key, null, null, "");
   };
 
   return (
@@ -150,22 +158,26 @@ export default function ResourceAdvancedKnobs({
       >
         <span>Advanced</span>
         <span className={styles.resourceDetailsChevron} aria-hidden="true">
-          {open ? '▾' : '▸'}
+          {open ? "▾" : "▸"}
         </span>
       </button>
       {open ? (
-        <div className={styles.resourceAdvancedBody} data-testid="resource-advanced-body">
+        <div
+          className={styles.resourceAdvancedBody}
+          data-testid="resource-advanced-body"
+        >
           <p className={styles.resourceAdvancedLead}>
-            Linked to the sized budget by default. Override a knob to go Custom; changes apply on
-            the next gateway restart.
+            Linked to the sized budget by default. Override a knob to go Custom;
+            changes apply on the next gateway restart.
           </p>
           {rows.map((facts) => {
             const key = facts.key;
-            const locked = facts.source === 'env';
+            const locked = facts.source === "env";
             const desired = desiredOf(key);
             const draft = drafts[key];
             const trimmed = draft.trim();
-            const parsed = trimmed === '' ? null : validateKnobDraft(trimmed, facts.bounds);
+            const parsed =
+              trimmed === "" ? null : validateKnobDraft(trimmed, facts.bounds);
             const hardError = parsed && !parsed.ok ? parsed.error : null;
             const isCustom = !locked && desired !== null;
             const pending = knobPending(facts.running, desired, facts.source);
@@ -176,17 +188,26 @@ export default function ResourceAdvancedKnobs({
               parsed.ok &&
               parsed.value !== desired;
             const rowWarn =
-              key === 'workerMaxConcurrent'
+              key === "workerMaxConcurrent"
                 ? warnings.concurrencyOverCores
-                : key === 'workerMaxOldGenerationMb'
+                : key === "workerMaxOldGenerationMb"
                   ? warnings.memoryOverHalf
                   : false;
             return (
-              <div className={styles.resourceKnobRow} key={key} data-testid={`knob-${key}`}>
+              <div
+                className={styles.resourceKnobRow}
+                key={key}
+                data-testid={`knob-${key}`}
+              >
                 <div className={styles.resourceKnobHead}>
-                  <span className={styles.resourceKnobLabel}>{facts.label}</span>
+                  <span className={styles.resourceKnobLabel}>
+                    {facts.label}
+                  </span>
                   {locked ? (
-                    <span className={styles.resourceKnobLock} data-testid={`knob-${key}-lock`}>
+                    <span
+                      className={styles.resourceKnobLock}
+                      data-testid={`knob-${key}-lock`}
+                    >
                       <span aria-hidden="true">🔒</span> {facts.envVar}
                     </span>
                   ) : isCustom ? (
@@ -212,16 +233,26 @@ export default function ResourceAdvancedKnobs({
                     <>
                       <button
                         type="button"
-                        className={cx(buttonCss.btn, buttonCss.sm, buttonCss.soft)}
+                        className={cx(
+                          buttonCss.btn,
+                          buttonCss.sm,
+                          buttonCss.soft
+                        )}
                         disabled={!canSave}
-                        onClick={() => parsed?.ok && handleSave(facts, parsed.value)}
+                        onClick={() =>
+                          parsed?.ok && handleSave(facts, parsed.value)
+                        }
                       >
                         Save
                       </button>
                       {isCustom ? (
                         <button
                           type="button"
-                          className={cx(buttonCss.btn, buttonCss.sm, buttonCss.ghost)}
+                          className={cx(
+                            buttonCss.btn,
+                            buttonCss.sm,
+                            buttonCss.ghost
+                          )}
                           disabled={busyKey === key}
                           onClick={() => handleClear(facts)}
                         >
@@ -231,22 +262,31 @@ export default function ResourceAdvancedKnobs({
                     </>
                   )}
                 </div>
-                <div className={styles.resourceKnobMeta}>Running {facts.running}</div>
+                <div className={styles.resourceKnobMeta}>
+                  Running {facts.running}
+                </div>
                 {locked ? (
                   <div className={styles.resourceKnobHelp}>
-                    Set by the operator ({facts.envVar}) — remove the variable to tune here.
+                    Set by the operator ({facts.envVar}) — remove the variable
+                    to tune here.
                   </div>
                 ) : null}
                 {hardError ? (
-                  <div className={styles.resourceKnobError} data-testid={`knob-${key}-error`}>
+                  <div
+                    className={styles.resourceKnobError}
+                    data-testid={`knob-${key}-error`}
+                  >
                     {hardError}
                   </div>
                 ) : null}
                 {!hardError && rowWarn ? (
-                  <div className={styles.resourceKnobWarn} data-testid={`knob-${key}-warn`}>
-                    {key === 'workerMaxConcurrent'
+                  <div
+                    className={styles.resourceKnobWarn}
+                    data-testid={`knob-${key}-warn`}
+                  >
+                    {key === "workerMaxConcurrent"
                       ? `More workers than this host’s ${profile.host.cores} cores — may contend.`
-                      : 'Workers × memory would exceed half of host memory.'}
+                      : "Workers × memory would exceed half of host memory."}
                   </div>
                 ) : null}
                 {pending ? (
@@ -258,11 +298,16 @@ export default function ResourceAdvancedKnobs({
             );
           })}
           {savedNote ? (
-            <div className={styles.resourceNote} data-testid="resource-advanced-saved">
+            <div
+              className={styles.resourceNote}
+              data-testid="resource-advanced-saved"
+            >
               Saved. Applies on the next gateway restart.
             </div>
           ) : null}
-          {error ? <div className={styles.resourceError}>Couldn’t save: {error}</div> : null}
+          {error ? (
+            <div className={styles.resourceError}>Couldn’t save: {error}</div>
+          ) : null}
         </div>
       ) : null}
     </div>

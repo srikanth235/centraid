@@ -27,8 +27,8 @@
  * smaller number with no explanation.
  */
 
-import { promises as fs, statfsSync, type Dirent } from 'node:fs';
-import path from 'node:path';
+import { promises as fs, statfsSync, type Dirent } from "node:fs";
+import path from "node:path";
 
 /**
  * The vocabulary of local components. These are stable identifiers the UI
@@ -48,14 +48,14 @@ import path from 'node:path';
  *   templates    — `templatesCacheDir`: the pulled template cache.
  */
 export type LocalComponentId =
-  | 'ledger'
-  | 'vault-db'
-  | 'attachments'
-  | 'apps'
-  | 'code'
-  | 'logs'
-  | 'cache'
-  | 'templates';
+  | "ledger"
+  | "vault-db"
+  | "attachments"
+  | "apps"
+  | "code"
+  | "logs"
+  | "cache"
+  | "templates";
 
 export interface LocalComponentUsage {
   component: LocalComponentId;
@@ -113,13 +113,15 @@ export interface LocalUsageOptions {
   /** Clock override (tests). */
   now?: () => number;
   /** Injectable for tests — defaults to `fs.statfsSync`, `null` on any error. */
-  statfs?: (dir: string) => { bavail: number; bsize: number; blocks: number } | null;
+  statfs?: (
+    dir: string
+  ) => { bavail: number; bsize: number; blocks: number } | null;
 }
 
 /** One directory's recursive apparent size. Never throws: an unreadable
  *  subtree contributes what it could read and names itself in `unreadable`. */
 export async function walkDirBytes(
-  dir: string,
+  dir: string
 ): Promise<{ bytes: number; files: number; unreadable?: string }> {
   let bytes = 0;
   let files = 0;
@@ -127,60 +129,76 @@ export async function walkDirBytes(
   // Iterative: a deep `code/` worktree tree should not consume stack depth,
   // and this keeps one shared `unreadable` note rather than a per-level throw.
   const queue: string[] = [dir];
-  while (queue.length > 0) {
-    const current = queue.pop() as string;
+  async function walkNextDirectory(): Promise<void> {
+    const current = queue.pop();
+    if (!current) return;
+    const currentDir = current;
     let entries: Dirent[];
     try {
-      entries = await fs.readdir(current, { withFileTypes: true });
+      entries = await fs.readdir(currentDir, { withFileTypes: true });
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       // A component directory that was never created is 0 bytes, not an error.
-      if (code !== 'ENOENT') unreadable ??= `${current}: ${code ?? 'unreadable'}`;
-      continue;
+      if (code !== "ENOENT")
+        unreadable ??= `${currentDir}: ${code ?? "unreadable"}`;
+      return walkNextDirectory();
     }
-    for (const entry of entries) {
-      const full = path.join(current, entry.name);
+    async function inspectNextEntry(index: number): Promise<void> {
+      const entry = entries[index];
+      if (!entry) return;
+      const full = path.join(currentDir, entry.name);
       if (entry.isDirectory()) {
         queue.push(full);
-        continue;
+      } else if (entry.isFile()) {
+        // Symlinks are NOT followed — a link into the user's home would
+        // otherwise bill their whole disk to Centraid.
+        try {
+          const stat = await fs.stat(full);
+          bytes += stat.size;
+          files += 1;
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code !== "ENOENT")
+            unreadable ??= `${full}: ${code ?? "unreadable"}`;
+        }
       }
-      // Symlinks are NOT followed — a link into the user's home would
-      // otherwise bill their whole disk to Centraid.
-      if (!entry.isFile()) continue;
-      try {
-        const stat = await fs.stat(full);
-        bytes += stat.size;
-        files += 1;
-      } catch (err) {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code !== 'ENOENT') unreadable ??= `${full}: ${code ?? 'unreadable'}`;
-      }
+      return inspectNextEntry(index + 1);
     }
+    await inspectNextEntry(0);
+    return walkNextDirectory();
   }
+  await walkNextDirectory();
   return { bytes, files, ...(unreadable ? { unreadable } : {}) };
 }
 
 /** Sum of a fixed set of sibling files, missing ones counting zero. */
-async function fileBytes(dir: string, names: readonly string[]): Promise<number> {
-  let total = 0;
-  for (const name of names) {
-    try {
-      total += (await fs.stat(path.join(dir, name))).size;
-    } catch {
-      // A vault with no `-wal` sibling yet is not an error.
-    }
-  }
-  return total;
+async function fileBytes(
+  dir: string,
+  names: readonly string[]
+): Promise<number> {
+  const sizes = await Promise.all(
+    names.map((name) =>
+      fs
+        .stat(path.join(dir, name))
+        .then((stat) => stat.size)
+        .catch(() => 0)
+    )
+  );
+  return sizes.reduce((total, size) => total + size, 0);
 }
 
 /** `journal.db` and `vault.db` each carry a `-wal` and a `-shm` sibling; the
  *  `-shm` is a fixed-size shared-memory index, counted for honesty. */
-const LEDGER_FILES = ['journal.db', 'journal.db-wal', 'journal.db-shm'] as const;
-const VAULT_DB_FILES = ['vault.db', 'vault.db-wal', 'vault.db-shm'] as const;
+const LEDGER_FILES = [
+  "journal.db",
+  "journal.db-wal",
+  "journal.db-shm",
+] as const;
+const VAULT_DB_FILES = ["vault.db", "vault.db-wal", "vault.db-shm"] as const;
 
 async function dirComponent(
   component: LocalComponentId,
-  dir: string,
+  dir: string
 ): Promise<LocalComponentUsage> {
   const walked = await walkDirBytes(dir);
   return {
@@ -191,15 +209,26 @@ async function dirComponent(
   };
 }
 
-async function scanVault(entry: LocalUsageVaultEntry): Promise<LocalVaultUsage> {
+async function scanVault(
+  entry: LocalUsageVaultEntry
+): Promise<LocalVaultUsage> {
   const components: LocalComponentUsage[] = [
-    { component: 'ledger', bytes: await fileBytes(entry.dir, LEDGER_FILES), files: null },
-    { component: 'vault-db', bytes: await fileBytes(entry.dir, VAULT_DB_FILES), files: null },
-    await dirComponent('attachments', path.join(entry.dir, 'blobs')),
-    await dirComponent('apps', path.join(entry.dir, 'apps')),
-    await dirComponent('code', path.join(entry.dir, 'code')),
+    {
+      component: "ledger",
+      bytes: await fileBytes(entry.dir, LEDGER_FILES),
+      files: null,
+    },
+    {
+      component: "vault-db",
+      bytes: await fileBytes(entry.dir, VAULT_DB_FILES),
+      files: null,
+    },
+    await dirComponent("attachments", path.join(entry.dir, "blobs")),
+    await dirComponent("apps", path.join(entry.dir, "apps")),
+    await dirComponent("code", path.join(entry.dir, "code")),
   ];
-  if (entry.cacheDir) components.push(await dirComponent('cache', entry.cacheDir));
+  if (entry.cacheDir)
+    components.push(await dirComponent("cache", entry.cacheDir));
   return {
     vaultId: entry.vaultId,
     ...(entry.name ? { name: entry.name } : {}),
@@ -208,7 +237,9 @@ async function scanVault(entry: LocalUsageVaultEntry): Promise<LocalVaultUsage> 
   };
 }
 
-const defaultStatfs = (dir: string): { bavail: number; bsize: number; blocks: number } | null => {
+const defaultStatfs = (
+  dir: string
+): { bavail: number; bsize: number; blocks: number } | null => {
   try {
     return statfsSync(dir);
   } catch {
@@ -226,7 +257,7 @@ export class LocalUsageScanner {
   private readonly ttlMs: number;
   private readonly now: () => number;
   private readonly statfs: (
-    dir: string,
+    dir: string
   ) => { bavail: number; bsize: number; blocks: number } | null;
   private cached: LocalUsageReport | null = null;
   private refreshing: Promise<LocalUsageReport> | null = null;
@@ -291,18 +322,18 @@ export class LocalUsageScanner {
   }
 
   private async scan(): Promise<LocalUsageReport> {
-    const vaults: LocalVaultUsage[] = [];
-    for (const entry of this.options.vaults()) vaults.push(await scanVault(entry));
+    const vaults = await Promise.all(
+      this.options.vaults().map((entry) => scanVault(entry))
+    );
 
     const gatewayDirs = this.options.gatewayDirs();
-    const components: LocalComponentUsage[] = [];
-    for (const [component, dir] of Object.entries(gatewayDirs) as [
-      LocalComponentId,
-      string | undefined,
-    ][]) {
-      if (!dir) continue;
-      components.push(await dirComponent(component, dir));
-    }
+    const components = await Promise.all(
+      (
+        Object.entries(gatewayDirs) as [LocalComponentId, string | undefined][]
+      ).flatMap(([component, dir]) =>
+        dir ? [dirComponent(component, dir)] : []
+      )
+    );
 
     const stat = this.statfs(this.options.rootDir);
     const vaultBytes = vaults.reduce((sum, v) => sum + v.bytes, 0);
@@ -313,7 +344,10 @@ export class LocalUsageScanner {
       components,
       vaults,
       disk: stat
-        ? { freeBytes: stat.bavail * stat.bsize, totalBytes: stat.blocks * stat.bsize }
+        ? {
+            freeBytes: stat.bavail * stat.bsize,
+            totalBytes: stat.blocks * stat.bsize,
+          }
         : null,
     };
   }

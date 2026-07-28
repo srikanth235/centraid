@@ -7,7 +7,7 @@
  * shedding and a process-lifetime peak for benchmark/diagnostic evidence.
  */
 
-import { monitorEventLoopDelay } from 'node:perf_hooks';
+import { monitorEventLoopDelay } from "node:perf_hooks";
 
 const NS_PER_MS = 1_000_000;
 
@@ -23,10 +23,10 @@ export interface GatewayPerformanceSnapshot {
 interface EventLoopDelayHistogramLike {
   readonly count: number;
   readonly max: number;
-  enable(): boolean;
-  disable(): boolean;
-  reset(): void;
-  percentile(percentile: number): number;
+  enable: () => boolean;
+  disable: () => boolean;
+  reset: () => void;
+  percentile: (percentile: number) => number;
 }
 
 export interface GatewayPerformanceMonitorOptions {
@@ -65,10 +65,15 @@ export class GatewayPerformanceMonitor {
 
   constructor(options: GatewayPerformanceMonitorOptions = {}) {
     this.resolutionMs = options.resolutionMs ?? 20;
-    this.histogram = options.histogram ?? monitorEventLoopDelay({ resolution: this.resolutionMs });
+    this.histogram =
+      options.histogram ??
+      monitorEventLoopDelay({ resolution: this.resolutionMs });
     this.storageFsyncMs = options.storageFsyncMs;
     const firstWindowMs = options.sampleWindowMs ?? 1_000;
-    this.sampleIntervalMs = Math.max(1, options.sampleIntervalMs ?? firstWindowMs);
+    this.sampleIntervalMs = Math.max(
+      1,
+      options.sampleIntervalMs ?? firstWindowMs
+    );
     this.histogram.enable();
     if (firstWindowMs > 0) this.scheduleWindowEnd(firstWindowMs);
   }
@@ -84,7 +89,9 @@ export class GatewayPerformanceMonitor {
     return {
       ...signal,
       eventLoopLagPeakP99Ms: this.peakP99Ms,
-      ...(this.storageFsyncMs !== undefined ? { storageFsyncMs: this.storageFsyncMs } : {}),
+      ...(this.storageFsyncMs === undefined
+        ? {}
+        : { storageFsyncMs: this.storageFsyncMs }),
     };
   }
 

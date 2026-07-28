@@ -1,4 +1,4 @@
-import type { OnlineOnlyGuard } from './errors.js';
+import type { OnlineOnlyGuard } from "./errors.js";
 import type {
   ApplyChangesResult,
   OptimisticMutation,
@@ -14,7 +14,7 @@ import type {
   ReplicaShape,
   ReplicaSnapshot,
   ReplicaStatus,
-} from './types.js';
+} from "./types.js";
 
 /**
  * The async storage surface a {@link import('./coordinator.js').ReplicaCoordinator}
@@ -36,9 +36,9 @@ import type {
  *   them for the shell's MessagePort transport.
  */
 export interface ReplicaStore {
-  status(): Promise<ReplicaStatus>;
-  catalog(): Promise<ReplicaShape[]>;
-  bootstrap(snapshot: ReplicaSnapshot): Promise<ReplicaCursor>;
+  status: () => Promise<ReplicaStatus>;
+  catalog: () => Promise<ReplicaShape[]>;
+  bootstrap: (snapshot: ReplicaSnapshot) => Promise<ReplicaCursor>;
   /**
    * Page-wise bootstrap for windowed mode (a 50k+ asset library cannot land in
    * one envelope). `bootstrapBegin` clears the replica and installs the page-1
@@ -47,25 +47,25 @@ export interface ReplicaStore {
    * then `status().cursor` is null, so an interrupted bootstrap is indistinguishable
    * from none and restarts rather than presenting partial data as complete.
    */
-  bootstrapBegin(header: ReplicaBootstrapHeader): Promise<undefined>;
-  bootstrapPage(rows: ReplicaSnapshotRow[]): Promise<undefined>;
+  bootstrapBegin: (header: ReplicaBootstrapHeader) => Promise<undefined>;
+  bootstrapPage: (rows: ReplicaSnapshotRow[]) => Promise<undefined>;
   /** Commit at the PAGE-1 cursor; the caller must then replay changes from it. */
-  bootstrapCommit(cursor: ReplicaCursor): Promise<ReplicaCursor>;
-  applyChanges(batch: ReplicaChangeBatch): Promise<ApplyChangesResult>;
-  read(
+  bootstrapCommit: (cursor: ReplicaCursor) => Promise<ReplicaCursor>;
+  applyChanges: (batch: ReplicaChangeBatch) => Promise<ApplyChangesResult>;
+  read: (
     request: ReplicaReadRequest,
     mutations?: OptimisticMutation[],
-    guard?: OnlineOnlyGuard,
-  ): Promise<ReplicaReadResult>;
-  readWire(
+    guard?: OnlineOnlyGuard
+  ) => Promise<ReplicaReadResult>;
+  readWire: (
     request: ReplicaReadRequest,
-    mutations?: OptimisticMutation[],
-  ): Promise<ReplicaReadWireResult>;
-  searchWire(
+    mutations?: OptimisticMutation[]
+  ) => Promise<ReplicaReadWireResult>;
+  searchWire: (
     request: ReplicaSearchRequest,
-    mutations?: OptimisticMutation[],
-  ): Promise<ReplicaSearchWireResult>;
-  wipe(): Promise<undefined>;
-  close(): Promise<void>;
-  purge(): Promise<void>;
+    mutations?: OptimisticMutation[]
+  ) => Promise<ReplicaSearchWireResult>;
+  wipe: () => Promise<undefined>;
+  close: () => Promise<void>;
+  purge: () => Promise<void>;
 }

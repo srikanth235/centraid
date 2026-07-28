@@ -1,8 +1,10 @@
-import { useEffect, useRef, type JSX } from 'react';
-import type { CentraidChangelogRelease } from '../../centraid-api.js';
-import { changelogNotesToHtml } from '../shell/changelogMarkdown.js';
-import { useChangelog } from '../shell/useChangelog.js';
-import styles from './WhatsNewModal.module.css';
+import { useEffect, useRef, type JSX } from "react";
+
+import type { CentraidChangelogRelease } from "../../centraid-api.js";
+import { changelogNotesToHtml } from "../shell/changelogMarkdown.js";
+import { useChangelog } from "../shell/useChangelog.js";
+
+import styles from "./WhatsNewModal.module.css";
 
 const X_SVG = (
   <svg
@@ -22,15 +24,19 @@ const X_SVG = (
 
 /** `v0.2.0` and `0.2.0` should compare equal — strip a leading `v`. */
 function sameVersion(tag: string, current: string): boolean {
-  const norm = (s: string): string => s.replace(/^v/i, '').trim();
+  const norm = (s: string): string => s.replace(/^v/iu, "").trim();
   return norm(tag) === norm(current) && current.length > 0;
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return '';
+  if (!iso) return "";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 }
 
 function ReleaseSection({
@@ -50,8 +56,12 @@ function ReleaseSection({
           <h3 className={styles.title}>{release.title}</h3>
         </div>
         <div className={styles.tags}>
-          {isCurrent ? <span className={styles.installed}>Installed</span> : null}
-          {release.prerelease ? <span className={styles.pre}>Pre-release</span> : null}
+          {isCurrent ? (
+            <span className={styles.installed}>Installed</span>
+          ) : null}
+          {release.prerelease ? (
+            <span className={styles.pre}>Pre-release</span>
+          ) : null}
           <span className={styles.version}>{release.version}</span>
         </div>
       </header>
@@ -65,7 +75,12 @@ function ReleaseSection({
         <p className={styles.emptyNotes}>No notes for this release.</p>
       )}
       {release.url ? (
-        <a className={styles.ghLink} href={release.url} target="_blank" rel="noreferrer noopener">
+        <a
+          className={styles.ghLink}
+          href={release.url}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
           View on GitHub →
         </a>
       ) : null}
@@ -79,31 +94,40 @@ function ReleaseSection({
  * once after the running build's version changes. Esc / backdrop / the close
  * button dismiss it; the body scrolls when the history is long.
  */
-export default function WhatsNewModal({ onClose }: { onClose: () => void }): JSX.Element {
+export default function WhatsNewModal({
+  onClose,
+}: {
+  onClose: () => void;
+}): JSX.Element {
   const { state, reload } = useChangelog();
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         onClose();
       }
     };
-    document.addEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
     const t = setTimeout(() => closeRef.current?.focus(), 30);
     return () => {
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("keydown", onKey);
       clearTimeout(t);
     };
   }, [onClose]);
 
-  const current = state.status === 'ready' ? state.result.currentVersion : '';
+  const current = state.status === "ready" ? state.result.currentVersion : "";
 
   return (
     <>
       <div className={styles.backdrop} role="presentation" onClick={onClose} />
-      <dialog open className={styles.card} aria-modal="true" aria-label="What's new">
+      <dialog
+        open
+        className={styles.card}
+        aria-modal="true"
+        aria-label="What's new"
+      >
         <header className={styles.head}>
           <h2 className={styles.heading}>What&rsquo;s new</h2>
           <button
@@ -118,9 +142,9 @@ export default function WhatsNewModal({ onClose }: { onClose: () => void }): JSX
         </header>
 
         <div className={styles.body}>
-          {state.status === 'loading' ? (
+          {state.status === "loading" ? (
             <p className={styles.status}>Loading release notes…</p>
-          ) : state.status === 'error' ? (
+          ) : state.status === "error" ? (
             <div className={styles.status}>
               <p>Couldn&rsquo;t load the changelog.</p>
               <p className={styles.statusDetail}>{state.message}</p>

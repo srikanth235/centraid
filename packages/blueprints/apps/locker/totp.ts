@@ -4,15 +4,17 @@
 // base32 decode → HMAC-SHA1 over the big-endian 30s counter → dynamic
 // truncation → 6 digits. Cached per (seed, 30s-step) so the once-a-second
 // tick is cheap; the seed and code never get logged.
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
-export function base32Decode(input: string | null | undefined): Uint8Array<ArrayBuffer> | null {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  const clean = String(input || '')
+export function base32Decode(
+  input: string | null | undefined
+): Uint8Array<ArrayBuffer> | null {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const clean = String(input || "")
     .toUpperCase()
-    .replace(/=+$/, '')
-    .replace(/\s/g, '');
-  if (!clean || /[^A-Z2-7]/.test(clean)) return null;
+    .replace(/=+$/u, "")
+    .replace(/\s/gu, "");
+  if (!clean || /[^A-Z2-7]/u.test(clean)) return null;
   let bits = 0;
   let value = 0;
   const out: number[] = [];
@@ -29,7 +31,10 @@ export function base32Decode(input: string | null | undefined): Uint8Array<Array
   return out.length ? new Uint8Array(out) : null;
 }
 
-export async function computeTotp(seed: string, step: number): Promise<string | null> {
+export async function computeTotp(
+  seed: string,
+  step: number
+): Promise<string | null> {
   const key = base32Decode(seed);
   if (!key) return null;
   const counter = new ArrayBuffer(8);
@@ -39,21 +44,23 @@ export async function computeTotp(seed: string, step: number): Promise<string | 
   view.setUint32(4, step >>> 0);
   try {
     const cryptoKey = await crypto.subtle.importKey(
-      'raw',
+      "raw",
       key,
-      { name: 'HMAC', hash: 'SHA-1' },
+      { name: "HMAC", hash: "SHA-1" },
       false,
-      ['sign'],
+      ["sign"]
     );
-    const sig = new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, counter));
+    const sig = new Uint8Array(
+      await crypto.subtle.sign("HMAC", cryptoKey, counter)
+    );
     const offset = sig[sig.length - 1]! & 0x0f;
     const bin =
       ((sig[offset]! & 0x7f) << 24) |
       ((sig[offset + 1]! & 0xff) << 16) |
       ((sig[offset + 2]! & 0xff) << 8) |
       (sig[offset + 3]! & 0xff);
-    const code = String(bin % 1000000).padStart(6, '0');
-    return code.slice(0, 3) + ' ' + code.slice(3);
+    const code = String(bin % 1000000).padStart(6, "0");
+    return code.slice(0, 3) + " " + code.slice(3);
   } catch {
     return null;
   }
@@ -78,7 +85,10 @@ function cacheKey(seed: string, step: number): string {
  * once-a-second countdown never disturbs the sidebar/list/overlays the
  * owner might be mid-interaction with (typing in search, editing a modal).
  */
-export function useTotp(seed: string | null | undefined): { code: string | null; offset: number } {
+export function useTotp(seed: string | null | undefined): {
+  code: string | null;
+  offset: number;
+} {
   // The code is derived during render, never synced into state by an effect
   // (#573). `computed` carries the last value this hook resolved asynchronously,
   // so a fresh 30s step keeps showing the previous code until its replacement
@@ -105,7 +115,11 @@ export function useTotp(seed: string | null | undefined): { code: string | null;
   // A cached entry wins even when it is null (a failed compute is cached as
   // null, exactly as the old effect stored it); only a cache miss falls back to
   // the previous resolved code.
-  const code = key ? (OTP_CACHE.has(key) ? (OTP_CACHE.get(key) ?? null) : computed) : null;
+  const code = key
+    ? OTP_CACHE.has(key)
+      ? (OTP_CACHE.get(key) ?? null)
+      : computed
+    : null;
 
   useEffect(() => {
     if (!seed || !key || OTP_CACHE.has(key)) return undefined;
@@ -139,16 +153,18 @@ export interface Strength {
 // kit-meter + label. Mirrors the server's strengthScore so the meter agrees
 // with Watchtower's "weak".
 export function strength(pw: string | null | undefined): Strength {
-  if (!pw) return { ratio: 0, tone: '', label: '', color: 'var(--ink-3)' };
+  if (!pw) return { ratio: 0, tone: "", label: "", color: "var(--ink-3)" };
   let s = 0;
   if (pw.length >= 8) s++;
   if (pw.length >= 14) s++;
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
-  if (/[0-9]/.test(pw)) s++;
-  if (/[^A-Za-z0-9]/.test(pw)) s++;
-  const label = s <= 2 ? 'Weak' : s === 3 ? 'Fair' : s === 4 ? 'Good' : 'Strong';
-  const tone = s <= 2 ? 'danger' : s === 3 ? 'warn' : 'ok';
-  const color = s <= 2 ? 'var(--danger)' : s === 3 ? 'var(--warn)' : 'var(--ok)';
+  if (/[A-Z]/u.test(pw) && /[a-z]/u.test(pw)) s++;
+  if (/[0-9]/u.test(pw)) s++;
+  if (/[^A-Za-z0-9]/u.test(pw)) s++;
+  const label =
+    s <= 2 ? "Weak" : s === 3 ? "Fair" : s === 4 ? "Good" : "Strong";
+  const tone = s <= 2 ? "danger" : s === 3 ? "warn" : "ok";
+  const color =
+    s <= 2 ? "var(--danger)" : s === 3 ? "var(--warn)" : "var(--ok)";
   return { ratio: s / 5, tone, label, color };
 }
 
@@ -161,12 +177,12 @@ export function genPassword({
   num: boolean;
   sym: boolean;
 }): string {
-  let chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';
-  if (num) chars += '23456789';
-  if (sym) chars += '!@#$%^&*-_=+';
+  let chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz";
+  if (num) chars += "23456789";
+  if (sym) chars += "!@#$%^&*-_=+";
   const buf = new Uint32Array(len);
   crypto.getRandomValues(buf);
-  let out = '';
+  let out = "";
   for (let i = 0; i < len; i++) out += chars[buf[i]! % chars.length]!;
   return out;
 }

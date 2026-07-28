@@ -6,9 +6,14 @@ import {
   type ModelSubsystem,
   type RunnerKind,
   type RunnerPrefs,
-} from '@centraid/app-engine';
+} from "@centraid/app-engine";
 
-const RUNNER_SUBSYSTEMS: readonly ModelSubsystem[] = ['assistant', 'ask', 'builder', 'automations'];
+const RUNNER_SUBSYSTEMS: readonly ModelSubsystem[] = [
+  "assistant",
+  "ask",
+  "builder",
+  "automations",
+];
 
 /**
  * Resolve gateway launch prefs for one turn. `binPath`/`extraArgs` are one
@@ -18,24 +23,28 @@ const RUNNER_SUBSYSTEMS: readonly ModelSubsystem[] = ['assistant', 'ask', 'build
 export function resolveGatewayRunnerPrefs(
   allPrefs: Record<string, unknown>,
   subsystem?: ModelSubsystem,
-  requestedRunner?: RunnerKind,
+  requestedRunner?: RunnerKind
 ): RunnerPrefs {
   const kindRaw =
     requestedRunner ??
-    (subsystem ? resolveSubsystemRunner(allPrefs, subsystem) : allPrefs['agent.runner.kind']);
-  const kind: RunnerKind = isRunnerKind(kindRaw) ? kindRaw : 'codex';
-  const configuredKind: RunnerKind = isRunnerKind(allPrefs['agent.runner.kind'])
-    ? allPrefs['agent.runner.kind']
-    : 'codex';
+    (subsystem
+      ? resolveSubsystemRunner(allPrefs, subsystem)
+      : allPrefs["agent.runner.kind"]);
+  const kind: RunnerKind = isRunnerKind(kindRaw) ? kindRaw : "codex";
+  const configuredKind: RunnerKind = isRunnerKind(allPrefs["agent.runner.kind"])
+    ? allPrefs["agent.runner.kind"]
+    : "codex";
   const useConfiguredLaunch = kind === configuredKind;
   const binPath =
-    useConfiguredLaunch && typeof allPrefs['agent.runner.binPath'] === 'string'
-      ? allPrefs['agent.runner.binPath']
+    useConfiguredLaunch && typeof allPrefs["agent.runner.binPath"] === "string"
+      ? allPrefs["agent.runner.binPath"]
       : undefined;
-  const extraArgsRaw = allPrefs['agent.runner.extraArgs'];
+  const extraArgsRaw = allPrefs["agent.runner.extraArgs"];
   const extraArgs =
     useConfiguredLaunch && Array.isArray(extraArgsRaw)
-      ? extraArgsRaw.filter((value): value is string => typeof value === 'string')
+      ? extraArgsRaw.filter(
+          (value): value is string => typeof value === "string"
+        )
       : undefined;
   return {
     kind,
@@ -58,13 +67,14 @@ export function resolveGatewayRunnerPrefs(
  */
 export function resolveStrictGatewayRunnerPrefs(
   allPrefs: Record<string, unknown>,
-  subsystem?: ModelSubsystem,
+  subsystem?: ModelSubsystem
 ): RunnerPrefs | undefined {
   const kindRaw = subsystem
     ? resolveSubsystemRunner(allPrefs, subsystem)
-    : allPrefs['agent.runner.kind'];
+    : allPrefs["agent.runner.kind"];
   // Unset is legitimate — it means "the historical default agent".
-  if (kindRaw !== undefined && kindRaw !== null && !isRunnerKind(kindRaw)) return undefined;
+  if (kindRaw !== undefined && kindRaw !== null && !isRunnerKind(kindRaw))
+    return undefined;
   return resolveGatewayRunnerPrefs(allPrefs, subsystem);
 }
 
@@ -75,14 +85,16 @@ export function resolveStrictGatewayRunnerPrefs(
  */
 export function removedRunnerLadderMembers(
   before: Record<string, unknown>,
-  after: Record<string, unknown>,
+  after: Record<string, unknown>
 ): Array<{ subsystem: ModelSubsystem; kind: RunnerKind }> {
   const members = (
     snapshot: Record<string, unknown>,
-    subsystem: ModelSubsystem,
+    subsystem: ModelSubsystem
   ): Set<RunnerKind> => {
     const primary = resolveGatewayRunnerPrefs(snapshot, subsystem).kind;
-    return new Set(resolveSubsystemRunnerLadder(snapshot, subsystem, primary).slice(1));
+    return new Set(
+      resolveSubsystemRunnerLadder(snapshot, subsystem, primary).slice(1)
+    );
   };
   const removed: Array<{ subsystem: ModelSubsystem; kind: RunnerKind }> = [];
   for (const subsystem of RUNNER_SUBSYSTEMS) {

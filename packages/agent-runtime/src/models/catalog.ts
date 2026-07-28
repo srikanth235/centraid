@@ -16,10 +16,11 @@
  * never throw.
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { createHash } from 'node:crypto';
-import type { RunnerKind, RunnerModel } from '@centraid/app-engine';
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import type { RunnerKind, RunnerModel } from "@centraid/app-engine";
 
 const CATALOG_VERSION = 2 as const;
 
@@ -38,17 +39,22 @@ interface ModelCatalogFile {
 
 /** Stable hash of a model set, by id. */
 export function hashModelIds(models: readonly RunnerModel[]): string {
-  return createHash('sha256')
-    .update(models.map((m) => m.id).join('\n'))
-    .digest('hex')
+  return createHash("sha256")
+    .update(models.map((m) => m.id).join("\n"))
+    .digest("hex")
     .slice(0, 16);
 }
 
 /** Read + validate the catalog file. `undefined` on any failure. */
-export async function readCatalog(catalogPath: string): Promise<ModelCatalogFile | undefined> {
+export async function readCatalog(
+  catalogPath: string
+): Promise<ModelCatalogFile | undefined> {
   try {
-    const parsed = JSON.parse(await fs.readFile(catalogPath, 'utf8')) as ModelCatalogFile;
-    if (parsed && parsed.version === CATALOG_VERSION && parsed.runners) return parsed;
+    const parsed = JSON.parse(
+      await fs.readFile(catalogPath, "utf8")
+    ) as ModelCatalogFile;
+    if (parsed && parsed.version === CATALOG_VERSION && parsed.runners)
+      return parsed;
     return undefined;
   } catch {
     return undefined;
@@ -63,7 +69,7 @@ export async function readCatalog(catalogPath: string): Promise<ModelCatalogFile
 export async function writeCatalogEntry(
   catalogPath: string,
   kind: RunnerKind,
-  patch: Partial<CatalogEntry>,
+  patch: Partial<CatalogEntry>
 ): Promise<void> {
   try {
     const existing = (await readCatalog(catalogPath)) ?? {
@@ -73,7 +79,7 @@ export async function writeCatalogEntry(
     existing.version = CATALOG_VERSION;
     existing.runners[kind] = { ...existing.runners[kind], ...patch };
     await fs.mkdir(path.dirname(catalogPath), { recursive: true });
-    await fs.writeFile(catalogPath, JSON.stringify(existing, null, 2), 'utf8');
+    await fs.writeFile(catalogPath, JSON.stringify(existing, null, 2), "utf8");
   } catch {
     /* catalog is best-effort */
   }
@@ -87,7 +93,7 @@ export async function writeCatalogEntry(
  */
 export async function readRunnerModels(
   catalogPath: string,
-  kind: RunnerKind,
+  kind: RunnerKind
 ): Promise<RunnerModel[]> {
   return (await readCatalog(catalogPath))?.runners[kind]?.models ?? [];
 }

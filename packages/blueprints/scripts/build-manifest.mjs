@@ -10,29 +10,34 @@
  *
  * Run via `bun run build:manifest` (or as part of `bun run build`).
  */
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const PACKAGE_ROOT = path.resolve(here, '..');
-const SOURCE_INDEX = path.join(PACKAGE_ROOT, 'index.json');
-const OUTPUT = path.join(PACKAGE_ROOT, 'manifest.json');
+const here = import.meta.dirname;
+const PACKAGE_ROOT = path.resolve(here, "..");
+const SOURCE_INDEX = path.join(PACKAGE_ROOT, "index.json");
+const OUTPUT = path.join(PACKAGE_ROOT, "manifest.json");
 
 async function walk(dir, base = dir) {
-  const out = [];
-  for (const e of await fs.readdir(dir, { withFileTypes: true })) {
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) {
-      out.push(...(await walk(full, base)));
-    } else if (e.isFile()) {
-      out.push(path.relative(base, full).split(path.sep).join('/'));
-    }
-  }
-  return out.toSorted();
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  return (
+    await Promise.all(
+      entries.map(async (e) => {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          return walk(full, base);
+        }
+        return e.isFile()
+          ? [path.relative(base, full).split(path.sep).join("/")]
+          : [];
+      })
+    )
+  )
+    .flat()
+    .toSorted();
 }
 
-const raw = await fs.readFile(SOURCE_INDEX, 'utf8');
+const raw = await fs.readFile(SOURCE_INDEX, "utf8");
 const src = JSON.parse(raw);
 
 const enriched = {
@@ -40,40 +45,47 @@ const enriched = {
   templates: [],
 };
 
-for (const tmpl of src.templates) {
-  // Kind-segment directory: automation apps live under `automations/`, every
-  // other app under `apps/`. Derived from `kind` so the manifest, the disk
-  // resolver, and the remote fetcher all agree on the prefix.
-  const kindDir = tmpl.kind === 'automation' ? 'automations' : 'apps';
-  const dir = path.join(PACKAGE_ROOT, kindDir, tmpl.id);
-  let files = [];
-  try {
-    files = await walk(dir);
-  } catch {
-    console.warn(`[build-manifest] missing template dir for "${tmpl.id}", skipping`);
-    continue;
-  }
-  // Per-app knobs (font, width, radius…) are declared as `app.json#knobs`
-  // — folded in from the old `app-knobs.json` sidecar so there's a single
-  // app manifest. Embed the parsed list in the gallery manifest so the
-  // desktop doesn't need a second fetch — `resolveTemplates()` already
-  // reads manifest.json, so this rides along for free.
-  let appKnobs;
-  try {
-    const raw = await fs.readFile(path.join(dir, 'app.json'), 'utf8');
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed?.knobs)) appKnobs = parsed.knobs;
-  } catch {
-    /* template has no parseable app.json or no knobs — fine, the popover
+const templates = await Promise.all(
+  src.templates.map(async (tmpl) => {
+    // Kind-segment directory: automation apps live under `automations/`, every
+    // other app under `apps/`. Derived from `kind` so the manifest, the disk
+    // resolver, and the remote fetcher all agree on the prefix.
+    const kindDir = tmpl.kind === "automation" ? "automations" : "apps";
+    const dir = path.join(PACKAGE_ROOT, kindDir, tmpl.id);
+    let files = [];
+    try {
+      files = await walk(dir);
+    } catch {
+      console.warn(
+        `[build-manifest] missing template dir for "${tmpl.id}", skipping`
+      );
+      return undefined;
+    }
+    // Per-app knobs (font, width, radius…) are declared as `app.json#knobs`
+    // — folded in from the old `app-knobs.json` sidecar so there's a single
+    // app manifest. Embed the parsed list in the gallery manifest so the
+    // desktop doesn't need a second fetch — `resolveTemplates()` already
+    // reads manifest.json, so this rides along for free.
+    let appKnobs;
+    try {
+      const raw = await fs.readFile(path.join(dir, "app.json"), "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.knobs)) appKnobs = parsed.knobs;
+    } catch {
+      /* template has no parseable app.json or no knobs — fine, the popover
        just shows manage actions */
-  }
-  // `kind` is declared explicitly in index.json (`'automation'` for an
-  // automation app); a normal UI app omits it and defaults to `'app'`.
-  const kind = tmpl.kind ?? 'app';
-  enriched.templates.push(appKnobs ? { ...tmpl, kind, files, appKnobs } : { ...tmpl, kind, files });
-}
+    }
+    // `kind` is declared explicitly in index.json (`'automation'` for an
+    // automation app); a normal UI app omits it and defaults to `'app'`.
+    const kind = tmpl.kind ?? "app";
+    return appKnobs
+      ? { ...tmpl, kind, files, appKnobs }
+      : { ...tmpl, kind, files };
+  })
+);
+enriched.templates.push(...templates.filter(Boolean));
 
-await fs.writeFile(OUTPUT, JSON.stringify(enriched, null, 2) + '\n');
+await fs.writeFile(OUTPUT, JSON.stringify(enriched, null, 2) + "\n");
 process.stdout.write(
-  `[build-manifest] wrote ${enriched.templates.length} templates → ${path.relative(process.cwd(), OUTPUT)}\n`,
+  `[build-manifest] wrote ${enriched.templates.length} templates → ${path.relative(process.cwd(), OUTPUT)}\n`
 );

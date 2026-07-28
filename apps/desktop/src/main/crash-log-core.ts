@@ -5,10 +5,10 @@
  */
 
 export type CrashKind =
-  | 'uncaughtException'
-  | 'unhandledRejection'
-  | 'render-process-gone'
-  | 'child-process-gone';
+  | "uncaughtException"
+  | "unhandledRejection"
+  | "render-process-gone"
+  | "child-process-gone";
 
 export interface CrashRecord {
   /** ISO timestamp. */
@@ -22,11 +22,19 @@ export interface CrashRecord {
 export function toCrashRecord(
   kind: CrashKind,
   err: unknown,
-  now: () => Date = () => new Date(),
+  now: () => Date = () => new Date()
 ): CrashRecord {
   const message = err instanceof Error ? err.message : String(err);
-  const stack = err instanceof Error && typeof err.stack === 'string' ? err.stack : undefined;
-  return { at: now().toISOString(), kind, message, ...(stack ? { stack } : {}) };
+  const stack =
+    err instanceof Error && typeof err.stack === "string"
+      ? err.stack
+      : undefined;
+  return {
+    at: now().toISOString(),
+    kind,
+    message,
+    ...(stack ? { stack } : {}),
+  };
 }
 
 /** One newline-delimited JSON line — the crash log is NDJSON, cheap to `tail`/parse. */
@@ -35,6 +43,9 @@ export function formatCrashLine(record: CrashRecord): string {
 }
 
 /** True once the log has grown past the cap and should rotate before the next append. */
-export function shouldRotate(currentSizeBytes: number, maxBytes: number): boolean {
+export function shouldRotate(
+  currentSizeBytes: number,
+  maxBytes: number
+): boolean {
   return currentSizeBytes > maxBytes;
 }

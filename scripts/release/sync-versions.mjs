@@ -11,24 +11,31 @@
  * When --version is omitted, re-stamps natives/workspaces to match root.
  */
 
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { createRequire } from 'node:module';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, "../..");
 const require = createRequire(import.meta.url);
-const { nativeBuildNumber } = require(path.join(root, 'apps/mobile/src/version-core.cjs'));
+const { nativeBuildNumber } = require(
+  path.join(root, "apps/mobile/src/version-core.cjs")
+);
 
 /**
  * Patch Android build.gradle versionCode / versionName.
  */
 export function patchAndroidVersions(gradleText, semver, buildNumber) {
-  let next = gradleText.replace(/versionCode\s+\d+\b/, `versionCode ${buildNumber}`);
-  next = next.replace(/versionName\s+"[^"]+"/, `versionName "${semver}"`);
+  let next = gradleText.replace(
+    /versionCode\s+\d+\b/u,
+    `versionCode ${buildNumber}`
+  );
+  next = next.replace(/versionName\s+"[^"]+"/u, `versionName "${semver}"`);
   return {
-    ok: next.includes(`versionCode ${buildNumber}`) && next.includes(`versionName "${semver}"`),
-    detail: next === gradleText ? 'unchanged' : 'patched',
+    ok:
+      next.includes(`versionCode ${buildNumber}`) &&
+      next.includes(`versionName "${semver}"`),
+    detail: next === gradleText ? "unchanged" : "patched",
     text: next,
   };
 }
@@ -38,13 +45,16 @@ export function patchAndroidVersions(gradleText, semver, buildNumber) {
  */
 export function patchIosPbxproj(pbxText, semver, buildNumber) {
   let next = pbxText.replace(
-    /CURRENT_PROJECT_VERSION = \d+;/g,
-    `CURRENT_PROJECT_VERSION = ${buildNumber};`,
+    /CURRENT_PROJECT_VERSION = \d+;/gu,
+    `CURRENT_PROJECT_VERSION = ${buildNumber};`
   );
-  next = next.replace(/MARKETING_VERSION = [^;]+;/g, `MARKETING_VERSION = ${semver};`);
+  next = next.replace(
+    /MARKETING_VERSION = [^;]+;/gu,
+    `MARKETING_VERSION = ${semver};`
+  );
   return {
-    ok: /CURRENT_PROJECT_VERSION = \d+;/.test(next),
-    detail: next === pbxText ? 'unchanged' : 'patched',
+    ok: /CURRENT_PROJECT_VERSION = \d+;/u.test(next),
+    detail: next === pbxText ? "unchanged" : "patched",
     text: next,
   };
 }
@@ -54,41 +64,45 @@ export function patchIosPbxproj(pbxText, semver, buildNumber) {
  */
 export function patchInfoPlist(plistText, semver, buildNumber) {
   let next = plistText.replace(
-    /(<key>CFBundleVersion<\/key>\s*<string>)[^<]+(<\/string>)/,
-    `$1${buildNumber}$2`,
+    /(?<openTag><key>CFBundleVersion<\/key>\s*<string>)[^<]+(?<closeTag><\/string>)/u,
+    `$<openTag>${buildNumber}$<closeTag>`
   );
   next = next.replace(
-    /(<key>CFBundleShortVersionString<\/key>\s*<string>)[^<]+(<\/string>)/,
-    `$1${semver}$2`,
+    /(?<openTag><key>CFBundleShortVersionString<\/key>\s*<string>)[^<]+(?<closeTag><\/string>)/u,
+    `$<openTag>${semver}$<closeTag>`
   );
   return {
     ok:
       next.includes(`<string>${buildNumber}</string>`) &&
       next.includes(`<string>${semver}</string>`),
-    detail: next === plistText ? 'unchanged' : 'patched',
+    detail: next === plistText ? "unchanged" : "patched",
     text: next,
   };
 }
 
 function collectPackageJsons(rootDir) {
-  const out = [path.join(rootDir, 'package.json')];
-  for (const dir of ['packages', 'apps']) {
+  const out = [path.join(rootDir, "package.json")];
+  for (const dir of ["packages", "apps"]) {
     const base = path.join(rootDir, dir);
     if (!existsSync(base)) continue;
     for (const name of readdirSync(base)) {
-      const p = path.join(base, name, 'package.json');
+      const p = path.join(base, name, "package.json");
       if (existsSync(p)) out.push(p);
     }
   }
   return out;
 }
 
-export function runSyncVersions({ rootDir = root, version, dryRun = false } = {}) {
-  const rootPkgPath = path.join(rootDir, 'package.json');
-  const rootPkg = JSON.parse(readFileSync(rootPkgPath, 'utf8'));
+export function runSyncVersions({
+  rootDir = root,
+  version,
+  dryRun = false,
+} = {}) {
+  const rootPkgPath = path.join(rootDir, "package.json");
+  const rootPkg = JSON.parse(readFileSync(rootPkgPath, "utf8"));
   const prev = rootPkg.version;
   const ver = version || prev;
-  if (!/^\d+\.\d+\.\d+$/.test(ver)) {
+  if (!/^\d+\.\d+\.\d+$/u.test(ver)) {
     throw new Error(`unparseable version ${ver}`);
   }
   const build = nativeBuildNumber(ver);
@@ -101,40 +115,47 @@ export function runSyncVersions({ rootDir = root, version, dryRun = false } = {}
 
   const workspaces = [];
   for (const p of collectPackageJsons(rootDir)) {
-    const j = JSON.parse(readFileSync(p, 'utf8'));
+    const j = JSON.parse(readFileSync(p, "utf8"));
     if (j.version === prev || p === rootPkgPath) {
       j.version = ver;
-      write(p, JSON.stringify(j, null, 2) + '\n');
+      write(p, JSON.stringify(j, null, 2) + "\n");
       workspaces.push(path.relative(rootDir, p));
     }
   }
 
-  const gradlePath = path.join(rootDir, 'apps/mobile/android/app/build.gradle');
-  const pbxPath = path.join(rootDir, 'apps/mobile/ios/Centraid.xcodeproj/project.pbxproj');
-  const infoPath = path.join(rootDir, 'apps/mobile/ios/Centraid/Info.plist');
+  const gradlePath = path.join(rootDir, "apps/mobile/android/app/build.gradle");
+  const pbxPath = path.join(
+    rootDir,
+    "apps/mobile/ios/Centraid.xcodeproj/project.pbxproj"
+  );
+  const infoPath = path.join(rootDir, "apps/mobile/ios/Centraid/Info.plist");
   const shareInfoPath = path.join(
     rootDir,
-    'apps/mobile/ios/ShareExtension/ShareExtension-Info.plist',
+    "apps/mobile/ios/ShareExtension/ShareExtension-Info.plist"
   );
 
   const natives = {};
   if (existsSync(gradlePath)) {
-    const r = patchAndroidVersions(readFileSync(gradlePath, 'utf8'), ver, build);
+    const r = patchAndroidVersions(
+      readFileSync(gradlePath, "utf8"),
+      ver,
+      build
+    );
     write(gradlePath, r.text);
     natives.android = r.detail;
   }
   if (existsSync(pbxPath)) {
-    const r = patchIosPbxproj(readFileSync(pbxPath, 'utf8'), ver, build);
+    const r = patchIosPbxproj(readFileSync(pbxPath, "utf8"), ver, build);
     write(pbxPath, r.text);
     natives.iosPbx = r.detail;
   }
   if (existsSync(infoPath)) {
-    const r = patchInfoPlist(readFileSync(infoPath, 'utf8'), ver, build);
+    const r = patchInfoPlist(readFileSync(infoPath, "utf8"), ver, build);
     write(infoPath, r.text);
     natives.infoPlist = r.detail;
   }
   if (existsSync(shareInfoPath)) {
-    const r = patchInfoPlist(readFileSync(shareInfoPath, 'utf8'), ver, build);
+    const r = patchInfoPlist(readFileSync(shareInfoPath, "utf8"), ver, build);
     write(shareInfoPath, r.text);
     natives.shareInfoPlist = r.detail;
   }
@@ -157,8 +178,8 @@ if (isMain()) {
   let version = null;
   let dryRun = false;
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--version') version = args[++i];
-    else if (args[i] === '--dry-run') dryRun = true;
+    if (args[i] === "--version") version = args[++i];
+    else if (args[i] === "--dry-run") dryRun = true;
   }
   try {
     const report = runSyncVersions({ version: version || undefined, dryRun });

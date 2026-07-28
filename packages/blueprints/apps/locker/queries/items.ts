@@ -76,25 +76,25 @@ interface DecoratedItem {
   purge_at: string | null;
 }
 
-const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
-const LOCKER_TAGS_SCHEME_URI = 'https://centraid.dev/schemes/locker-tags';
-const ITEM_TYPE = 'locker.item';
+const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
+const LOCKER_TAGS_SCHEME_URI = "https://centraid.dev/schemes/locker-tags";
+const ITEM_TYPE = "locker.item";
 
 /** A safe, secret-free subtitle for a list row. */
 function subtitleOf(it: RawItem, watch: WatchEntry | undefined): string {
   switch (it.type) {
-    case 'login':
-      return it.username || '—';
-    case 'card':
-      return watch?.last4 ? `•••• ${watch.last4}` : 'Card';
-    case 'note':
-      return 'Secure note';
-    case 'identity':
-      return it.email || '—';
-    case 'wifi':
-      return it.network || '—';
+    case "login":
+      return it.username || "—";
+    case "card":
+      return watch?.last4 ? `•••• ${watch.last4}` : "Card";
+    case "note":
+      return "Secure note";
+    case "identity":
+      return it.email || "—";
+    case "wifi":
+      return it.network || "—";
     default:
-      return 'Password';
+      return "Password";
   }
 }
 
@@ -105,12 +105,16 @@ function subtitleOf(it: RawItem, watch: WatchEntry | undefined): string {
  */
 export async function readWatchtower(
   ctx: HandlerCtx,
-  purpose: string,
+  purpose: string
 ): Promise<Map<string, WatchEntry>> {
   const map = new Map<string, WatchEntry>();
   try {
-    const out = await ctx.vault.invoke({ command: 'locker.watchtower', input: {}, purpose });
-    if (out.status !== 'executed') return map;
+    const out = await ctx.vault.invoke({
+      command: "locker.watchtower",
+      input: {},
+      purpose,
+    });
+    if (out.status !== "executed") return map;
     const entries = (out.output?.items ?? []) as WatchEntry[];
     for (const entry of entries) map.set(entry.item_id, entry);
   } catch {
@@ -124,14 +128,14 @@ export function decorate(
   rows: RawItem[],
   tagsByItem: Map<string, string[]>,
   starredIds: Set<string>,
-  watchByItem?: Map<string, WatchEntry>,
+  watchByItem?: Map<string, WatchEntry>
 ): DecoratedItem[] {
   return rows.map((it) => {
     const watch = watchByItem?.get(it.item_id);
     const weak = !!watch?.weak;
     const reused = !!watch?.reused;
     const compromised = it.compromised === 1 || it.compromised === true;
-    const severity = compromised ? 'danger' : weak || reused ? 'warn' : '';
+    const severity = compromised ? "danger" : weak || reused ? "warn" : "";
     return {
       item_id: it.item_id,
       type: it.type,
@@ -155,10 +159,13 @@ export function decorate(
  * together and hand the result to both so a single items read doesn't hit each
  * table twice (issue #404).
  */
-export async function readConceptTables(ctx: HandlerCtx, purpose: string): Promise<ConceptTables> {
+export async function readConceptTables(
+  ctx: HandlerCtx,
+  purpose: string
+): Promise<ConceptTables> {
   const [concepts, schemes] = await Promise.all([
-    ctx.vault.read({ entity: 'core.concept', purpose }),
-    ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
+    ctx.vault.read({ entity: "core.concept", purpose }),
+    ctx.vault.read({ entity: "core.concept_scheme", purpose }),
   ]);
   return {
     concepts: (concepts.rows ?? []) as unknown as ConceptRow[],
@@ -176,16 +183,16 @@ export async function readTags(
   ctx: HandlerCtx,
   ids: string[],
   purpose: string,
-  tables?: ConceptTables,
+  tables?: ConceptTables
 ): Promise<Map<string, string[]>> {
   const map = new Map<string, string[]>();
   if (ids.length === 0) return map;
   const vocab = tables ?? (await readConceptTables(ctx, purpose));
   const tags = await ctx.vault.read({
-    entity: 'core.tag',
+    entity: "core.tag",
     where: [
-      { column: 'target_type', op: 'eq', value: ITEM_TYPE },
-      { column: 'target_id', op: 'in', value: ids },
+      { column: "target_type", op: "eq", value: ITEM_TYPE },
+      { column: "target_id", op: "in", value: ids },
     ],
     purpose,
   });
@@ -194,7 +201,7 @@ export async function readTags(
   const labelByConcept = new Map(
     vocab.concepts
       .filter((c) => c.scheme_id === tagScheme.scheme_id)
-      .map((c) => [c.concept_id, c.pref_label] as const),
+      .map((c) => [c.concept_id, c.pref_label] as const)
   );
   for (const t of (tags.rows ?? []) as unknown as TagRow[]) {
     const label = labelByConcept.get(t.concept_id);
@@ -215,37 +222,46 @@ export async function readStarred(
   ctx: HandlerCtx,
   ids: string[],
   purpose: string,
-  tables?: ConceptTables,
+  tables?: ConceptTables
 ): Promise<Set<string>> {
   const starred = new Set<string>();
   if (ids.length === 0) return starred;
   const vocab = tables ?? (await readConceptTables(ctx, purpose));
   const flagsScheme = vocab.schemes.find((s) => s.uri === FLAGS_SCHEME_URI);
   const starredConcept = flagsScheme
-    ? vocab.concepts.find((c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred')
+    ? vocab.concepts.find(
+        (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === "starred"
+      )
     : undefined;
   if (!starredConcept) return starred;
   const tags = await ctx.vault.read({
-    entity: 'core.tag',
+    entity: "core.tag",
     where: [
-      { column: 'concept_id', op: 'eq', value: starredConcept.concept_id },
-      { column: 'target_type', op: 'eq', value: ITEM_TYPE },
-      { column: 'target_id', op: 'in', value: ids },
+      { column: "concept_id", op: "eq", value: starredConcept.concept_id },
+      { column: "target_type", op: "eq", value: ITEM_TYPE },
+      { column: "target_id", op: "in", value: ids },
     ],
     purpose,
   });
-  for (const t of (tags.rows ?? []) as unknown as TagRow[]) starred.add(t.target_id);
+  for (const t of (tags.rows ?? []) as unknown as TagRow[])
+    starred.add(t.target_id);
   return starred;
 }
 
-export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: HandlerCtx }) => {
-  const purpose = 'dpv:ServiceProvision';
+export default async function itemsHandler({
+  input,
+  ctx,
+}: {
+  input?: Record<string, unknown>;
+  ctx: HandlerCtx;
+}) {
+  const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 300, 20), 2000);
   try {
     const res = await ctx.vault.read({
-      entity: 'locker.item',
-      where: [{ column: 'deleted_at', op: 'is-null' }],
-      orderBy: { column: 'updated_at', dir: 'desc' },
+      entity: "locker.item",
+      where: [{ column: "deleted_at", op: "is-null" }],
+      orderBy: { column: "updated_at", dir: "desc" },
       limit: window,
       purpose,
     });
@@ -262,7 +278,9 @@ export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: Ha
       readWatchtower(ctx, purpose),
     ]);
     const items = decorate(rows, tagsByItem, starredIds, watchByItem);
-    const affected = items.filter((it) => it.compromised || it.weak || it.reused);
+    const affected = items.filter(
+      (it) => it.compromised || it.weak || it.reused
+    );
     const watchtower = {
       compromised: items.filter((it) => it.compromised).length,
       weak: items.filter((it) => it.weak).length,
@@ -274,4 +292,4 @@ export default async ({ input, ctx }: { input?: Record<string, unknown>; ctx: Ha
     const e = err as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

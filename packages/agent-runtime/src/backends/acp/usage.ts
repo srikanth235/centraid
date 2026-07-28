@@ -15,8 +15,13 @@
  * ignore it.
  */
 
-import type { AdapterUsageSnapshot, RunnerKind, TurnStreamEvent } from '@centraid/app-engine';
-import { isObject } from './content.js';
+import type {
+  AdapterUsageSnapshot,
+  RunnerKind,
+  TurnStreamEvent,
+} from "@centraid/app-engine";
+
+import { isObject } from "./content.js";
 
 export interface TokenUsage {
   inputTokens?: number;
@@ -47,20 +52,30 @@ export function deltaCumulativeUsage(
   currentTokens: TokenUsage,
   currentCost: UsageCost | undefined,
   previous: AdapterUsageSnapshot | undefined,
-  context?: { used?: number; size?: number },
+  context?: { used?: number; size?: number }
 ): DeltaCumulativeUsage {
   const tokens: TokenUsage = {};
   const snapshot: AdapterUsageSnapshot = { ...previous };
-  const fields = ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens'] as const;
+  const fields = [
+    "inputTokens",
+    "outputTokens",
+    "cacheReadTokens",
+    "cacheWriteTokens",
+  ] as const;
   for (const field of fields) {
     const current = currentTokens[field];
-    if (current === undefined || !Number.isFinite(current) || current < 0) continue;
+    if (current === undefined || !Number.isFinite(current) || current < 0)
+      continue;
     const prior = previous?.[field];
     tokens[field] =
-      prior !== undefined && Number.isFinite(prior) && prior >= 0 && current >= prior
+      prior !== undefined &&
+      Number.isFinite(prior) &&
+      prior >= 0 &&
+      current >= prior
         ? current - prior
         : current;
-    (snapshot as Record<(typeof fields)[number], number | undefined>)[field] = current;
+    (snapshot as Record<(typeof fields)[number], number | undefined>)[field] =
+      current;
   }
 
   let cost: UsageCost | undefined;
@@ -101,15 +116,23 @@ export function readTokenUsage(source: Record<string, unknown>): TokenUsage {
   const num = (...keys: string[]): number | undefined => {
     for (const k of keys) {
       const v = src[k];
-      if (typeof v === 'number' && Number.isFinite(v)) return v;
+      if (typeof v === "number" && Number.isFinite(v)) return v;
     }
     return undefined;
   };
   const out: TokenUsage = {};
-  const input = num('inputTokens', 'input_tokens', 'promptTokens');
-  const output = num('outputTokens', 'output_tokens', 'completionTokens');
-  const cacheRead = num('cachedReadTokens', 'cacheReadTokens', 'cached_input_tokens');
-  const cacheWrite = num('cachedWriteTokens', 'cacheWriteTokens', 'cache_creation_input_tokens');
+  const input = num("inputTokens", "input_tokens", "promptTokens");
+  const output = num("outputTokens", "output_tokens", "completionTokens");
+  const cacheRead = num(
+    "cachedReadTokens",
+    "cacheReadTokens",
+    "cached_input_tokens"
+  );
+  const cacheWrite = num(
+    "cachedWriteTokens",
+    "cacheWriteTokens",
+    "cache_creation_input_tokens"
+  );
   if (input !== undefined) out.inputTokens = input;
   if (output !== undefined) out.outputTokens = output;
   if (cacheRead !== undefined) out.cacheReadTokens = cacheRead;
@@ -121,8 +144,8 @@ export function readTokenUsage(source: Record<string, unknown>): TokenUsage {
 export function readCost(raw: unknown): UsageCost | undefined {
   if (!isObject(raw)) return undefined;
   const { amount, currency } = raw;
-  if (typeof amount !== 'number' || !Number.isFinite(amount)) return undefined;
-  if (typeof currency !== 'string') return undefined;
+  if (typeof amount !== "number" || !Number.isFinite(amount)) return undefined;
+  if (typeof currency !== "string") return undefined;
   return { amount, currency };
 }
 
@@ -136,9 +159,10 @@ export function buildUsageEvent(
   model: string | undefined,
   effort: string | undefined,
   tokens: TokenUsage,
-  cost: UsageCost | undefined,
+  cost: UsageCost | undefined
 ): TurnStreamEvent | undefined {
-  const costUsd = cost && cost.currency.toUpperCase() === 'USD' ? cost.amount : undefined;
+  const costUsd =
+    cost && cost.currency.toUpperCase() === "USD" ? cost.amount : undefined;
   // Effort alone is not usage. Emitting for it books a zero-token, zero-cost
   // ledger row whose only content is a configuration label — noise the
   // repricing pipeline then has to carry forever. Effort rides ALONG with
@@ -147,11 +171,11 @@ export function buildUsageEvent(
     return undefined;
   }
   return {
-    type: 'usage',
+    type: "usage",
     provider: kind,
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
     ...tokens,
-    ...(costUsd !== undefined ? { costUsd } : {}),
+    ...(costUsd === undefined ? {} : { costUsd }),
   };
 }

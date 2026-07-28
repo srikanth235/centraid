@@ -7,25 +7,30 @@
  *   centraid-gateway key rotate  --data-dir <path> --vault <name-or-id>
  */
 
-import { existsSync, readdirSync } from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { existsSync, readdirSync } from "node:fs";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
 import {
   loadSealKey,
   resealVaultKey,
   openVaultDb,
   sealKeyFileFor,
   sealKeyFingerprint,
-} from '@centraid/vault';
-import { daemonLayoutFor } from './paths.js';
-import { daemonKeyStore } from './key-store.js';
+} from "@centraid/vault";
+
+import { daemonKeyStore } from "./key-store.js";
+import { daemonLayoutFor } from "./paths.js";
 
 interface KeyArgs {
   dataDir?: string;
   vault?: string;
 }
 
-function parseKeyArgs(args: string[], fail: (msg: string, code?: number) => never): KeyArgs {
+function parseKeyArgs(
+  args: string[],
+  fail: (msg: string, code?: number) => never
+): KeyArgs {
   const out: KeyArgs = {};
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
@@ -35,8 +40,8 @@ function parseKeyArgs(args: string[], fail: (msg: string, code?: number) => neve
       if (v === undefined) fail(`${flag} requires a value`, 2);
       return v;
     };
-    if (flag === '--data-dir') out.dataDir = take();
-    else if (flag === '--vault') out.vault = take();
+    if (flag === "--data-dir") out.dataDir = take();
+    else if (flag === "--vault") out.vault = take();
     else fail(`unknown flag "${flag}"`, 2);
   }
   return out;
@@ -51,14 +56,18 @@ interface VaultRow {
 
 /** Read identity + stamped fingerprint of one vault, without opening a plane. */
 function readVaultRow(dir: string): VaultRow | null {
-  const file = path.join(dir, 'vault.db');
+  const file = path.join(dir, "vault.db");
   if (!existsSync(file)) return null;
   try {
     const db = new DatabaseSync(file, { readOnly: true });
     try {
       const row = db
-        .prepare('SELECT vault_id, display_name, settings_json FROM core_vault LIMIT 1')
-        .get() as { vault_id: string; display_name: string; settings_json: string } | undefined;
+        .prepare(
+          "SELECT vault_id, display_name, settings_json FROM core_vault LIMIT 1"
+        )
+        .get() as
+        | { vault_id: string; display_name: string; settings_json: string }
+        | undefined;
       if (!row) return null;
       const settings = JSON.parse(row.settings_json) as {
         seal_key?: { fingerprint?: string };
@@ -81,7 +90,7 @@ function readVaultRow(dir: string): VaultRow | null {
 function resolveVaultDir(
   rootDir: string,
   nameOrId: string,
-  fail: (msg: string, code?: number) => never,
+  fail: (msg: string, code?: number) => never
 ): VaultRow {
   const rows: VaultRow[] = [];
   if (existsSync(rootDir)) {
@@ -91,23 +100,26 @@ function resolveVaultDir(
       if (row) rows.push(row);
     }
   }
-  const matches = rows.filter((r) => r.vaultId === nameOrId || r.displayName === nameOrId);
+  const matches = rows.filter(
+    (r) => r.vaultId === nameOrId || r.displayName === nameOrId
+  );
   if (matches.length === 0) fail(`no vault matches "${nameOrId}"`, 2);
-  if (matches.length > 1) fail(`"${nameOrId}" is ambiguous — use the vault id`, 2);
+  if (matches.length > 1)
+    fail(`"${nameOrId}" is ambiguous — use the vault id`, 2);
   return matches[0] as VaultRow;
 }
 
 export async function commandKey(
   args: string[],
-  fail: (msg: string, code?: number) => never,
+  fail: (msg: string, code?: number) => never
 ): Promise<void> {
   const [action, ...rest] = args;
-  if (!action || !['status', 'rotate'].includes(action)) {
-    fail('key subcommand must be one of: status, rotate', 2);
+  if (!action || !["status", "rotate"].includes(action)) {
+    fail("key subcommand must be one of: status, rotate", 2);
   }
   const parsed = parseKeyArgs(rest, fail);
-  if (!parsed.dataDir) fail('--data-dir is required', 2);
-  if (!parsed.vault) fail('--vault is required', 2);
+  if (!parsed.dataDir) fail("--data-dir is required", 2);
+  if (!parsed.vault) fail("--vault is required", 2);
   const layout = daemonLayoutFor(parsed.dataDir);
   const row = resolveVaultDir(layout.vaultDir, parsed.vault, fail);
   const keyFile = sealKeyFileFor(row.dir);
@@ -115,7 +127,7 @@ export async function commandKey(
   const key = loadSealKey(keyFile, keyStore);
 
   switch (action) {
-    case 'status': {
+    case "status": {
       process.stdout.write(
         `${JSON.stringify({
           vaultId: row.vaultId,
@@ -127,11 +139,11 @@ export async function commandKey(
           healthy:
             row.fingerprint === null ||
             (key !== null && sealKeyFingerprint(key) === row.fingerprint),
-        })}\n`,
+        })}\n`
       );
       return;
     }
-    case 'rotate': {
+    case "rotate": {
       // Full open (migrates + custody-checks) — rotation only makes sense
       // for a vault that opens with its current key.
       const db = openVaultDb({

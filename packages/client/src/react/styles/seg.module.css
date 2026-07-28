@@ -18,7 +18,7 @@
   text-transform: capitalize;
   min-width: 0;
 }
-.seg button[data-active='true'] {
+.seg button[data-active="true"] {
   background: var(--bg-elev);
   color: var(--ink);
   box-shadow: var(--shadow-sm);

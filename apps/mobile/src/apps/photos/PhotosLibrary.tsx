@@ -1,66 +1,74 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import { Feather } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import { Image } from "expo-image";
+import * as MediaLibrary from "expo-media-library";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
-import * as MediaLibrary from 'expo-media-library';
-import { Image } from 'expo-image';
-import { useFocusEffect } from '@react-navigation/native';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { family, useTheme } from '../../kit/theme';
-import { useReplica } from '../../kit/replica/ReplicaProvider';
-import { useReplicaQuery } from '../../kit/hooks/useReplicaQuery';
-import { sha256OfFile } from '../../lib/upload/enqueue';
-import { expoFileSource } from '../../lib/upload/expo-native';
-import { createNativeDigest } from '../../lib/upload/native-digest';
-import type { PhotosScreenProps } from '../../navigation';
-import { IN_CLOUD_MESSAGE, InCloudOriginalError, openDeviceOriginal } from './device-media';
-import { usePhotoTimeline } from './timeline-source';
-import { imageSource } from './media-source';
-import { revalidateBackedUp, selectFreeUpCandidates, type DeviceByteProbe } from './free-up-space';
-import { Store } from '../../storage';
+import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { useTheme } from "../../kit/theme";
+import { sha256OfFile } from "../../lib/upload/enqueue";
+import { expoFileSource } from "../../lib/upload/expo-native";
+import { createNativeDigest } from "../../lib/upload/native-digest";
+import type { PhotosScreenProps } from "../../navigation";
+import { Store } from "../../storage";
+import {
+  IN_CLOUD_MESSAGE,
+  InCloudOriginalError,
+  openDeviceOriginal,
+} from "./device-media";
+import {
+  revalidateBackedUp,
+  selectFreeUpCandidates,
+  type DeviceByteProbe,
+} from "./free-up-space";
+import { imageSource } from "./media-source";
+import { styles } from "./PhotosLibrary.styles";
+import { usePhotoTimeline } from "./timeline-source";
 
-const KEEP_ORIGINALS_KEY = 'photos.keepOriginalAlbums';
+const KEEP_ORIGINALS_KEY = "photos.keepOriginalAlbums";
 
 export default function PhotosLibrary({
   navigation,
-}: PhotosScreenProps<'PhotosLibrary'>): React.JSX.Element {
+}: PhotosScreenProps<"PhotosLibrary">): React.JSX.Element {
   const { colors } = useTheme();
   const { session } = useReplica();
   const { assets } = usePhotoTimeline();
   const collections = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.collection' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.collection" }), [])
   );
   const faces = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'media.face_region' }), []),
+    "photos",
+    useMemo(() => ({ entity: "media.face_region" }), [])
   );
   const places = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.place' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.place" }), [])
   );
   const policies = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'enrich.policy' }), []),
+    "photos",
+    useMemo(() => ({ entity: "enrich.policy" }), [])
   );
   const entries = useReplicaQuery(
-    'photos',
-    useMemo(() => ({ entity: 'core.collection_entry' }), []),
+    "photos",
+    useMemo(() => ({ entity: "core.collection_entry" }), [])
   );
   const [keptAlbums, setKeptAlbums] = useState<string[]>([]);
   const [pinsReady, setPinsReady] = useState(false);
   const [freeing, setFreeing] = useState(false);
   const [newAlbum, setNewAlbum] = useState(false);
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState("");
   useFocusEffect(
     useCallback(() => {
       let active = true;
@@ -74,7 +82,7 @@ export default function PhotosLibrary({
       return () => {
         active = false;
       };
-    }, []),
+    }, [])
   );
   // The keep-pin exclusion is only trustworthy once the collection_entry rows
   // have actually loaded — an empty set mid-load would wrongly treat pinned
@@ -85,21 +93,29 @@ export default function PhotosLibrary({
       new Set(
         entries.rows
           .filter((row) => keptAlbums.includes(String(row.collection_id)))
-          .map((row) => String(row.target_id)),
+          .map((row) => String(row.target_id))
       ),
-    [entries.rows, keptAlbums],
+    [entries.rows, keptAlbums]
   );
   const freeCandidates = useMemo(
     () => selectFreeUpCandidates(assets, protectedAssets),
-    [assets, protectedAssets],
+    [assets, protectedAssets]
   );
   const eligibleCount = useMemo(
-    () => freeCandidates.reduce((total, candidate) => total + candidate.localIds.length, 0),
-    [freeCandidates],
+    () =>
+      freeCandidates.reduce(
+        (total, candidate) => total + candidate.localIds.length,
+        0
+      ),
+    [freeCandidates]
   );
   const eligibleBytes = useMemo(
-    () => freeCandidates.reduce((total, candidate) => total + candidate.fileSize, 0),
-    [freeCandidates],
+    () =>
+      freeCandidates.reduce(
+        (total, candidate) => total + candidate.fileSize,
+        0
+      ),
+    [freeCandidates]
   );
   const duplicateCount = assets.filter((asset) => asset.duplicateHint).length;
   const albumRows = [...collections.rows]
@@ -108,31 +124,42 @@ export default function PhotosLibrary({
       const assetIds = new Set(
         entries.rows
           .filter((entry) => entry.collection_id === album.collection_id)
-          .map((entry) => String(entry.target_id)),
+          .map((entry) => String(entry.target_id))
       );
-      const albumAssets = assets.filter((asset) => asset.assetId && assetIds.has(asset.assetId));
+      const albumAssets = assets.filter(
+        (asset) => asset.assetId && assetIds.has(asset.assetId)
+      );
       const cover =
-        albumAssets.find((asset) => asset.contentId === album.cover_content_id) ?? albumAssets[0];
+        albumAssets.find(
+          (asset) => asset.contentId === album.cover_content_id
+        ) ?? albumAssets[0];
       return { album, cover, count: albumAssets.length };
     });
 
   const createAlbum = async (): Promise<void> => {
     if (!session || !title.trim()) return;
-    await session.write('photos', { action: 'create-album', input: { title: title.trim() } });
+    await session.write("photos", {
+      action: "create-album",
+      input: { title: title.trim() },
+    });
     setNewAlbum(false);
-    setTitle('');
+    setTitle("");
   };
   // Re-hash the CURRENT bytes of one device copy. A photo edited in place after
   // backup keeps its ph:// id but holds new bytes; this is what catches that.
   const probeDeviceBytes: DeviceByteProbe = async (localId) => {
     try {
       const original = await openDeviceOriginal(localId);
-      return await sha256OfFile(expoFileSource, original.uri, createNativeDigest);
+      return await sha256OfFile(
+        expoFileSource,
+        original.uri,
+        createNativeDigest
+      );
     } catch (reason) {
       if (!(reason instanceof InCloudOriginalError)) throw reason;
       // Reported as its own outcome below. Calling it "already gone" would be a
       // lie about a photo that is very much still there, just not here.
-      return 'in-cloud';
+      return "in-cloud";
     }
   };
   const confirmFreeSpace = async (): Promise<void> => {
@@ -142,58 +169,75 @@ export default function PhotosLibrary({
       const result = await revalidateBackedUp(freeCandidates, probeDeviceBytes);
       if (result.deletableLocalIds.length)
         await MediaLibrary.Asset.delete(
-          result.deletableLocalIds.map((localId) => new MediaLibrary.Asset(localId)),
+          result.deletableLocalIds.map(
+            (localId) => new MediaLibrary.Asset(localId)
+          )
         );
       const lines = [
         `${result.deletableLocalIds.length} originals removed (${(result.eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB).`,
       ];
       if (result.changedCount)
-        lines.push(`${result.changedCount} changed since backup — kept on device.`);
-      if (result.missingCount) lines.push(`${result.missingCount} already gone.`);
+        lines.push(
+          `${result.changedCount} changed since backup — kept on device.`
+        );
+      if (result.missingCount)
+        lines.push(`${result.missingCount} already gone.`);
       if (result.inCloudCount)
         lines.push(
-          `${result.inCloudCount} ${IN_CLOUD_MESSAGE} — their bytes could not be checked, so they were kept.`,
+          `${result.inCloudCount} ${IN_CLOUD_MESSAGE} — their bytes could not be checked, so they were kept.`
         );
       Alert.alert(
         result.changedCount || result.missingCount || result.inCloudCount
-          ? 'Freed with exclusions'
-          : 'Space freed',
-        lines.join('\n'),
+          ? "Freed with exclusions"
+          : "Space freed",
+        lines.join("\n")
       );
     } catch (error) {
-      Alert.alert('Free up space paused', error instanceof Error ? error.message : String(error));
+      Alert.alert(
+        "Free up space paused",
+        error instanceof Error ? error.message : String(error)
+      );
     } finally {
       setFreeing(false);
     }
   };
   const freeSpace = (): void => {
     if (!pinsHydrated) {
-      Alert.alert('Checking device pins', 'Try again after protected albums finish loading.');
+      Alert.alert(
+        "Checking device pins",
+        "Try again after protected albums finish loading."
+      );
       return;
     }
     if (!freeCandidates.length) {
-      Alert.alert('Nothing to free', 'No verified backups are eligible on this device right now.');
+      Alert.alert(
+        "Nothing to free",
+        "No verified backups are eligible on this device right now."
+      );
       return;
     }
     Alert.alert(
-      'Free up space',
+      "Free up space",
       `${eligibleCount} verified originals (${(eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB) are eligible. Bytes are re-hashed at delete time and anything changed since backup is kept. Albums pinned to this device are excluded. This is the only action here that touches device originals.`,
       [
-        { text: 'Cancel' },
+        { text: "Cancel" },
         {
-          text: 'Delete from device',
-          style: 'destructive',
+          text: "Delete from device",
+          style: "destructive",
           onPress: () => void confirmFreeSpace(),
         },
-      ],
+      ]
     );
   };
   const requestEnrichment = async (): Promise<void> => {
-    await session?.write('photos', { action: 'request-enrichment', input: {} });
+    await session?.write("photos", { action: "request-enrichment", input: {} });
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={["top"]}
+    >
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()}>
           <Feather name="chevron-left" size={26} color={colors.ink} />
@@ -204,8 +248,14 @@ export default function PhotosLibrary({
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.section, { color: colors.ink2 }]}>YOUR LIBRARY</Text>
-        <Pressable onPress={() => navigation.navigate('PhotoStateView', { mode: 'favorites' })}>
+        <Text style={[styles.section, { color: colors.ink2 }]}>
+          YOUR LIBRARY
+        </Text>
+        <Pressable
+          onPress={() =>
+            navigation.navigate("PhotoStateView", { mode: "favorites" })
+          }
+        >
           <Row
             icon="heart"
             title="Favorites"
@@ -213,7 +263,11 @@ export default function PhotosLibrary({
             colors={colors}
           />
         </Pressable>
-        <Pressable onPress={() => navigation.navigate('PhotoStateView', { mode: 'archive' })}>
+        <Pressable
+          onPress={() =>
+            navigation.navigate("PhotoStateView", { mode: "archive" })
+          }
+        >
           <Row
             icon="archive"
             title="Archive"
@@ -221,7 +275,11 @@ export default function PhotosLibrary({
             colors={colors}
           />
         </Pressable>
-        <Pressable onPress={() => navigation.navigate('PhotoStateView', { mode: 'trash' })}>
+        <Pressable
+          onPress={() =>
+            navigation.navigate("PhotoStateView", { mode: "trash" })
+          }
+        >
           <Row
             icon="trash-2"
             title="Trash"
@@ -229,7 +287,7 @@ export default function PhotosLibrary({
             colors={colors}
           />
         </Pressable>
-        <Pressable onPress={() => navigation.navigate('FaceReview')}>
+        <Pressable onPress={() => navigation.navigate("FaceReview")}>
           <Row
             icon="users"
             title="People"
@@ -237,7 +295,7 @@ export default function PhotosLibrary({
             colors={colors}
           />
         </Pressable>
-        <Pressable onPress={() => navigation.navigate('DuplicateReview')}>
+        <Pressable onPress={() => navigation.navigate("DuplicateReview")}>
           <Row
             icon="copy"
             title="Duplicates review"
@@ -245,7 +303,7 @@ export default function PhotosLibrary({
             colors={colors}
           />
         </Pressable>
-        <Pressable onPress={() => navigation.navigate('PlacesMap')}>
+        <Pressable onPress={() => navigation.navigate("PlacesMap")}>
           <Row
             icon="map-pin"
             title="Places"
@@ -260,7 +318,9 @@ export default function PhotosLibrary({
               <Pressable
                 key={album.__rowId}
                 onPress={() =>
-                  navigation.navigate('AlbumDetail', { albumId: String(album.collection_id) })
+                  navigation.navigate("AlbumDetail", {
+                    albumId: String(album.collection_id),
+                  })
                 }
                 style={styles.albumCard}
               >
@@ -271,12 +331,22 @@ export default function PhotosLibrary({
                     style={styles.albumCover}
                   />
                 ) : (
-                  <View style={[styles.albumCover, { backgroundColor: colors.bgSunken }]} />
+                  <View
+                    style={[
+                      styles.albumCover,
+                      { backgroundColor: colors.bgSunken },
+                    ]}
+                  />
                 )}
-                <Text numberOfLines={1} style={[styles.albumTitle, { color: colors.ink }]}>
-                  {String(album.name ?? 'Album')}
+                <Text
+                  numberOfLines={1}
+                  style={[styles.albumTitle, { color: colors.ink }]}
+                >
+                  {String(album.name ?? "Album")}
                 </Text>
-                <Text style={[styles.rowMeta, { color: colors.ink2 }]}>{count} items</Text>
+                <Text style={[styles.rowMeta, { color: colors.ink2 }]}>
+                  {count} items
+                </Text>
               </Pressable>
             ))}
           </View>
@@ -285,8 +355,10 @@ export default function PhotosLibrary({
             No albums yet. Tap + to create one.
           </Text>
         )}
-        <Text style={[styles.section, { color: colors.ink2 }]}>BACKUP & STORAGE</Text>
-        <Pressable onPress={() => navigation.navigate('BackupHealth')}>
+        <Text style={[styles.section, { color: colors.ink2 }]}>
+          BACKUP & STORAGE
+        </Text>
+        <Pressable onPress={() => navigation.navigate("BackupHealth")}>
           <Row
             icon="cloud"
             title="Backup health"
@@ -300,10 +372,10 @@ export default function PhotosLibrary({
             title="Free up space"
             meta={
               freeing
-                ? 'Re-hashing device originals…'
+                ? "Re-hashing device originals…"
                 : pinsHydrated
                   ? `${eligibleCount} verified originals · ${(eligibleBytes / 1024 / 1024 / 1024).toFixed(2)} GB`
-                  : 'Checking protected albums…'
+                  : "Checking protected albums…"
             }
             colors={colors}
           />
@@ -325,14 +397,19 @@ export default function PhotosLibrary({
       >
         <Pressable style={styles.backdrop} onPress={() => setNewAlbum(false)} />
         <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
-          <Text style={[styles.dialogTitle, { color: colors.ink }]}>New album</Text>
+          <Text style={[styles.dialogTitle, { color: colors.ink }]}>
+            New album
+          </Text>
           <TextInput
             autoFocus
             value={title}
             onChangeText={setTitle}
             placeholder="Album name"
             placeholderTextColor={colors.ink3}
-            style={[styles.albumInput, { borderColor: colors.lineStrong, color: colors.ink }]}
+            style={[
+              styles.albumInput,
+              { borderColor: colors.lineStrong, color: colors.ink },
+            ]}
           />
           <Pressable
             style={[styles.create, { backgroundColor: colors.accent }]}
@@ -352,10 +429,10 @@ function Row({
   meta,
   colors,
 }: {
-  icon: React.ComponentProps<typeof Feather>['name'];
+  icon: React.ComponentProps<typeof Feather>["name"];
   title: string;
   meta: string;
-  colors: ReturnType<typeof useTheme>['colors'];
+  colors: ReturnType<typeof useTheme>["colors"];
 }): React.JSX.Element {
   return (
     <View style={[styles.row, { borderBottomColor: colors.line }]}>
@@ -370,46 +447,3 @@ function Row({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  albumCard: { width: '48%' },
-  albumCover: { aspectRatio: 1.35, borderRadius: 10, width: '100%' },
-  albumGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 10 },
-  albumTitle: { fontFamily: family.sansMedium, fontSize: 13, marginTop: 7 },
-  albumInput: {
-    borderRadius: 10,
-    borderWidth: 1,
-    fontFamily: family.sansRegular,
-    fontSize: 15,
-    marginTop: 18,
-    padding: 12,
-  },
-  backdrop: { backgroundColor: 'rgba(0,0,0,.4)', flex: 1 },
-  content: { padding: 18, paddingBottom: 60 },
-  create: { alignItems: 'center', borderRadius: 10, marginTop: 12, padding: 12 },
-  createText: { color: '#fff', fontFamily: family.sansBold, fontSize: 14 },
-  dialog: { borderRadius: 16, left: 28, padding: 20, position: 'absolute', right: 28, top: '34%' },
-  dialogTitle: { fontFamily: family.displayBold, fontSize: 19 },
-  empty: { fontFamily: family.sansRegular, fontSize: 13, paddingVertical: 15 },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 50,
-    paddingHorizontal: 14,
-  },
-  icon: { alignItems: 'center', borderRadius: 10, height: 38, justifyContent: 'center', width: 38 },
-  row: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', minHeight: 64 },
-  rowCopy: { flex: 1, marginLeft: 12 },
-  rowMeta: { fontFamily: family.sansRegular, fontSize: 12, marginTop: 3 },
-  rowTitle: { fontFamily: family.sansMedium, fontSize: 14 },
-  safe: { flex: 1 },
-  section: {
-    fontFamily: family.monoBold,
-    fontSize: 10,
-    letterSpacing: 1,
-    marginBottom: 4,
-    marginTop: 24,
-  },
-  title: { fontFamily: family.displayBold, fontSize: 18 },
-});

@@ -33,16 +33,16 @@ export interface AppInfo {
    * UI-less automation app (Automations page), `'app'` / undefined a normal
    * UI app. Replaces the legacy `auto.` id-prefix convention.
    */
-  kind?: 'app' | 'automation';
+  kind?: "app" | "automation";
 }
 
 export type AppScaffoldErrorCode =
-  | 'no_app'
-  | 'not_found'
-  | 'conflict'
-  | 'invalid_id'
-  | 'invalid_manifest'
-  | 'already_exists';
+  | "no_app"
+  | "not_found"
+  | "conflict"
+  | "invalid_id"
+  | "invalid_manifest"
+  | "already_exists";
 
 /**
  * Error thrown by the app scaffolders / clone / lifecycle helpers. The gateway
@@ -51,9 +51,9 @@ export type AppScaffoldErrorCode =
 export class AppScaffoldError extends Error {
   constructor(
     public readonly code: AppScaffoldErrorCode,
-    message: string,
+    message: string
   ) {
     super(message);
-    this.name = 'AppScaffoldError';
+    this.name = "AppScaffoldError";
   }
 }

@@ -1,15 +1,17 @@
-import { useEffect, useRef, useState, type JSX } from 'react';
-import { cx } from '../ui/cx.js';
-import buttonCss from '../ui/Button.module.css';
-import a11y from '../styles/a11y.module.css';
-import styles from './ResourceDialogs.module.css';
+import { useEffect, useRef, useState, type JSX } from "react";
+
+import { cx } from "../ui/cx.js";
 import {
   PRESET_MODES,
   presetHint,
   resourceCompareRows,
   type PresetMode,
-} from './resource-presets.js';
-import type { ResourceMode } from './resource-summary.js';
+} from "./resource-presets.js";
+import type { ResourceMode } from "./resource-summary.js";
+
+import a11y from "../styles/a11y.module.css";
+import buttonCss from "../ui/Button.module.css";
+import styles from "./ResourceDialogs.module.css";
 
 // Compare dialog (issue #528 follow-up): every resource mode side by side so the
 // owner sees the consequence BEFORE committing — the gap the inline card left,
@@ -17,12 +19,12 @@ import type { ResourceMode } from './resource-summary.js';
 // static preset mirror (resource-presets.ts); selecting + Apply routes back
 // through the card's saveMode. Esc / backdrop / Cancel dismiss.
 
-const MODE_COLUMNS: readonly ResourceMode[] = ['auto', ...PRESET_MODES];
+const MODE_COLUMNS: readonly ResourceMode[] = ["auto", ...PRESET_MODES];
 const MODE_LABEL: Record<ResourceMode, string> = {
-  auto: 'Auto',
-  conserve: 'Conserve',
-  balanced: 'Balanced',
-  performance: 'Performance',
+  auto: "Auto",
+  conserve: "Conserve",
+  balanced: "Balanced",
+  performance: "Performance",
 };
 
 const X_ICON = (
@@ -59,21 +61,23 @@ export default function ResourceCompareDialog({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         onClose();
       }
     };
-    document.addEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
     const t = setTimeout(() => closeRef.current?.focus(), 30);
     return () => {
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("keydown", onKey);
       clearTimeout(t);
     };
   }, [onClose]);
 
-  const cellValue = (mode: ResourceMode, values: Record<PresetMode, string>): string =>
-    mode === 'auto' ? '—' : values[mode];
+  const cellValue = (
+    mode: ResourceMode,
+    values: Record<PresetMode, string>
+  ): string => (mode === "auto" ? "—" : values[mode]);
 
   return (
     <>
@@ -89,8 +93,8 @@ export default function ResourceCompareDialog({
           <div className={styles.headText}>
             <h3 className={styles.title}>Compare resource modes</h3>
             <p className={styles.sub}>
-              What each mode grants the gateway’s background work. Foreground chat and apps always
-              come first.
+              What each mode grants the gateway’s background work. Foreground
+              chat and apps always come first.
             </p>
           </div>
           <button
@@ -105,11 +109,20 @@ export default function ResourceCompareDialog({
         </div>
 
         <div className={styles.body}>
-          <div className={styles.cmp} role="radiogroup" aria-label="Resource mode">
+          <div
+            className={styles.cmp}
+            role="radiogroup"
+            aria-label="Resource mode"
+          >
             <div className={styles.cmpHeadCell} />
             {MODE_COLUMNS.map((mode) => (
               <div key={mode} className={styles.cmpHeadCell}>
-                <label className={cx(styles.cmpMode, sel === mode && styles.cmpModeActive)}>
+                <label
+                  className={cx(
+                    styles.cmpMode,
+                    sel === mode && styles.cmpModeActive
+                  )}
+                >
                   <input
                     type="radio"
                     className={a11y.srControl}
@@ -125,23 +138,27 @@ export default function ResourceCompareDialog({
             ))}
 
             {rows.map((row) => (
-              <div key={row.key} style={{ display: 'contents' }}>
+              <div key={row.key} style={{ display: "contents" }}>
                 <div className={styles.cmpRowLabel}>
                   {row.label}
-                  <span className={styles.cmpQ} title={row.hint} aria-label={row.hint}>
+                  <span
+                    className={styles.cmpQ}
+                    title={row.hint}
+                    aria-label={row.hint}
+                  >
                     ⓘ
                   </span>
                 </div>
                 {MODE_COLUMNS.map((mode) => {
                   const val = cellValue(mode, row.values);
-                  const hot = mode === sel && val !== '—';
+                  const hot = mode === sel && val !== "—";
                   return (
                     <div
                       key={mode}
                       className={cx(
                         styles.cmpCell,
                         hot && styles.cmpCellHot,
-                        mode === sel && styles.cmpColActive,
+                        mode === sel && styles.cmpColActive
                       )}
                     >
                       {val}
@@ -153,9 +170,10 @@ export default function ResourceCompareDialog({
           </div>
 
           <p className={styles.cmpNote}>
-            <b>Auto</b> measures this machine — cores, memory, storage speed, and CPU competition —
-            then applies <b>Conserve</b> on a constrained or shared host, or <b>Balanced</b> on a
-            dedicated one. It never chooses Performance for you.
+            <b>Auto</b> measures this machine — cores, memory, storage speed,
+            and CPU competition — then applies <b>Conserve</b> on a constrained
+            or shared host, or <b>Balanced</b> on a dedicated one. It never
+            chooses Performance for you.
           </p>
         </div>
 

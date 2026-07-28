@@ -16,9 +16,10 @@
  * turn, and the injected `runTurn` drives whichever is configured.
  */
 
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
-import { runTurn } from '@centraid/agent-runtime';
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { runTurn } from "@centraid/agent-runtime";
 import {
   makeConversationRunnerCore,
   type ConversationRunner,
@@ -33,8 +34,9 @@ import {
   type VaultInvokeRunner,
   type VaultContentRunner,
   type VaultSqlRunner,
-} from '@centraid/app-engine';
-import type { VaultRegistry } from '../serve/vault-registry.js';
+} from "@centraid/app-engine";
+
+import type { VaultRegistry } from "../serve/vault-registry.js";
 
 export interface AssistantConversationRunnerOptions {
   /** Per-turn runner prefs (kind + provider) — same loader app chat uses.
@@ -42,7 +44,7 @@ export interface AssistantConversationRunnerOptions {
    *  with THIS register's kind (assistant and ask are separate pins). */
   prefsLoader: (
     subsystem?: ModelSubsystem,
-    runnerKind?: RunnerKind,
+    runnerKind?: RunnerKind
   ) => Promise<RunnerPrefs | undefined>;
   /** Which subsystem's runner/model prefs these turns ride. The gateway
    *  builds this factory twice — `'assistant'` for the shell register and
@@ -62,17 +64,17 @@ export interface AssistantConversationRunnerOptions {
   runTurn?: RunTurnFn;
   runnerLadder?: (
     subsystem: ModelSubsystem | undefined,
-    primary: RunnerKind,
+    primary: RunnerKind
   ) => Promise<readonly RunnerKind[]> | readonly RunnerKind[];
   runnerHealth?: RunnerHealthController;
   runnerHealthContext?: (input: ConversationTurnInput, cwd: string) => string;
   providerEgressConsent?: ProviderEgressConsentController;
-  onFailover?: Parameters<typeof makeConversationRunnerCore>[0]['onFailover'];
+  onFailover?: Parameters<typeof makeConversationRunnerCore>[0]["onFailover"];
 }
 
 /** The active vault's scratch cwd for assistant turns. */
 export function assistantCwd(vaults: VaultRegistry): string {
-  return path.join(vaults.currentWorkspace().runnerSessionDir, 'assistant-cwd');
+  return path.join(vaults.currentWorkspace().runnerSessionDir, "assistant-cwd");
 }
 
 /**
@@ -98,12 +100,15 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
       vaults.current().invokeAsAssistant({
         command: call.command,
         input: call.input,
-        purpose: 'dpv:ServiceProvision',
+        purpose: "dpv:ServiceProvision",
       }),
     // Document-text reads (issue #299): "walk me through this contract"
     // resolves the text variant, receipted; the receipt id stays here.
     vaultContent: () => async (call) => {
-      const result = (await vaults.current().contentAsOwner(call)) as Record<string, unknown>;
+      const result = (await vaults.current().contentAsOwner(call)) as Record<
+        string,
+        unknown
+      >;
       const { receiptId: _receiptId, ...rest } = result;
       return rest;
     },
@@ -111,9 +116,11 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
 }
 
 export function makeAssistantConversationRunner(
-  opts: AssistantConversationRunnerOptions,
+  opts: AssistantConversationRunnerOptions
 ): ConversationRunner {
-  const { vaultSql, vaultInvoke, vaultContent } = makeVaultToolRunners(opts.vaults);
+  const { vaultSql, vaultInvoke, vaultContent } = makeVaultToolRunners(
+    opts.vaults
+  );
 
   return makeConversationRunnerCore({
     prefsLoader: opts.prefsLoader,
@@ -122,8 +129,12 @@ export function makeAssistantConversationRunner(
     runTurn: opts.runTurn ?? runTurn,
     ...(opts.runnerLadder ? { runnerLadder: opts.runnerLadder } : {}),
     ...(opts.runnerHealth ? { runnerHealth: opts.runnerHealth } : {}),
-    ...(opts.runnerHealthContext ? { runnerHealthContext: opts.runnerHealthContext } : {}),
-    ...(opts.providerEgressConsent ? { providerEgressConsent: opts.providerEgressConsent } : {}),
+    ...(opts.runnerHealthContext
+      ? { runnerHealthContext: opts.runnerHealthContext }
+      : {}),
+    ...(opts.providerEgressConsent
+      ? { providerEgressConsent: opts.providerEgressConsent }
+      : {}),
     ...(opts.onFailover ? { onFailover: opts.onFailover } : {}),
     vaultSql,
     vaultInvoke,

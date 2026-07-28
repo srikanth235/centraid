@@ -7,13 +7,14 @@
  * the safety-critical demotion of stale replica evidence via `unmark`.
  */
 
-import type { ProviderInventoryObject } from '@centraid/backup';
-import type { CollectedInventory } from './backup-provider-observability.js';
+import type { ProviderInventoryObject } from "@centraid/backup";
+
+import type { CollectedInventory } from "./backup-provider-observability.js";
 import type {
   InventoryAttestationDrift,
   StoreReconciliationState,
-} from './backup-reconciliation-state.js';
-import { driftSummary as drift } from './backup-reconciliation-state.js';
+} from "./backup-reconciliation-state.js";
+import { driftSummary as drift } from "./backup-reconciliation-state.js";
 
 function inventoryNumbers(objects: readonly ProviderInventoryObject[]): {
   objectCount: number;
@@ -29,17 +30,25 @@ function inventoryNumbers(objects: readonly ProviderInventoryObject[]): {
   let softDeletedBytes = 0;
   for (const object of objects) {
     bytes += object.sizeBytes;
-    if (object.state === 'soft-deleted') {
+    if (object.state === "soft-deleted") {
       softDeletedCount += 1;
       softDeletedBytes += object.sizeBytes;
       continue;
     }
     liveObjectCount += 1;
   }
-  return { objectCount, bytes, liveObjectCount, softDeletedCount, softDeletedBytes };
+  return {
+    objectCount,
+    bytes,
+    liveObjectCount,
+    softDeletedCount,
+    softDeletedBytes,
+  };
 }
 
-function attestationDrift(collection: CollectedInventory): InventoryAttestationDrift | undefined {
+function attestationDrift(
+  collection: CollectedInventory
+): InventoryAttestationDrift | undefined {
   if (!collection.crossCheck) return undefined;
   return {
     providerOnly: drift(collection.crossCheck.providerOnly),
@@ -51,7 +60,7 @@ function attestationDrift(collection: CollectedInventory): InventoryAttestationD
 export function baseStore(
   collection: CollectedInventory,
   missing: Iterable<string>,
-  orphans: Iterable<string>,
+  orphans: Iterable<string>
 ): StoreReconciliationState {
   return {
     configured: true,
@@ -60,13 +69,18 @@ export function baseStore(
     ...inventoryNumbers(collection.objects),
     missing: drift(missing),
     orphans: drift(orphans),
-    ...(attestationDrift(collection) ? { attestationDrift: attestationDrift(collection) } : {}),
-    ...(collection.attestationError ? { attestationError: collection.attestationError } : {}),
+    ...(attestationDrift(collection)
+      ? { attestationDrift: attestationDrift(collection) }
+      : {}),
+    ...(collection.attestationError
+      ? { attestationError: collection.attestationError }
+      : {}),
   };
 }
 
 function casSha(key: string): string | undefined {
-  return /(?:^|\/)blobs\/(?:sha256\/)?([0-9a-f]{64})$/.exec(key)?.[1];
+  return /(?:^|\/)blobs\/(?:sha256\/)?(?<sha>[0-9a-f]{64})$/u.exec(key)?.groups
+    ?.sha;
 }
 
 /**
@@ -87,25 +101,25 @@ export function reconcileCasInventory(opts: {
   const remote = new Set<string>();
   const unknownKeys: string[] = [];
   for (const object of opts.collection.objects) {
-    if (object.state !== 'live') continue;
+    if (object.state !== "live") continue;
     const sha = casSha(object.key);
     if (sha) remote.add(sha);
     else unknownKeys.push(object.key);
   }
   const missing = [...opts.indexed].filter(
-    (sha) => !remote.has(sha) && !opts.recentlyIndexed?.has(sha),
+    (sha) => !remote.has(sha) && !opts.recentlyIndexed?.has(sha)
   );
   for (const sha of missing) opts.unmark(sha);
   // A retained-snapshot root absent from the remote folds into `missing`
   // (→ 'error'/CRITICAL, per #414 D14); a pure root has no index row to demote.
   const snapshotMissing = [...(opts.snapshotReferenced ?? [])].filter(
-    (sha) => !remote.has(sha) && !opts.recentlyIndexed?.has(sha),
+    (sha) => !remote.has(sha) && !opts.recentlyIndexed?.has(sha)
   );
   const allMissing = [...new Set([...missing, ...snapshotMissing])];
   // Snapshot roots pin against the orphan diff only (the shared `live` that
   // feeds the derived diff is untouched).
   const orphans = [...remote].filter(
-    (sha) => !opts.live.has(sha) && !opts.snapshotReferenced?.has(sha),
+    (sha) => !opts.live.has(sha) && !opts.snapshotReferenced?.has(sha)
   );
   return baseStore(opts.collection, allMissing, [...orphans, ...unknownKeys]);
 }

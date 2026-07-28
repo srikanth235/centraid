@@ -48,8 +48,8 @@
  * nothing checkpoints bytes that aren't durably at or behind `offset`.
  */
 
-import { execFileSync } from 'node:child_process';
-import { createHash, randomBytes } from 'node:crypto';
+import { execFileSync } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
 import {
   closeSync,
   constants as fsConstants,
@@ -66,9 +66,10 @@ import {
   rmSync,
   statSync,
   writeSync,
-} from 'node:fs';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+} from "node:fs";
+import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
 import {
   newWalGeneration,
   parseWalCloserKey,
@@ -87,10 +88,11 @@ import {
   walPairMarkerKey,
   walSalts,
   walSegmentKey,
-} from '@centraid/backup';
-import type { VaultDb } from './db.js';
-import { sha256File } from './gateway/custody.js';
-import { writeReceipt } from './gateway/evidence.js';
+} from "@centraid/backup";
+
+import type { VaultDb } from "./db.js";
+import { sha256File } from "./gateway/custody.js";
+import { writeReceipt } from "./gateway/evidence.js";
 
 export interface WalShipperLogger {
   info?: (msg: string) => void;
@@ -171,12 +173,15 @@ interface DbStreamState {
   breakPending?: string;
 }
 
-type CaptureResult = { kind: 'ok' } | { kind: 'error' } | { kind: 'break'; reason: string };
+type CaptureResult =
+  | { kind: "ok" }
+  | { kind: "error" }
+  | { kind: "break"; reason: string };
 
 type SettleResult =
-  | { kind: 'ready'; dataVersion: number }
-  | { kind: 'retry' }
-  | { kind: 'break'; reason: string };
+  | { kind: "ready"; dataVersion: number }
+  | { kind: "retry" }
+  | { kind: "break"; reason: string };
 
 interface TruncateResult {
   raced: boolean;
@@ -236,11 +241,11 @@ interface ShipperState {
  *     of this set.
  */
 const FOREIGN_CHECKPOINT_REASONS: ReadonlySet<string> = new Set([
-  'main-db-file-changed-without-our-checkpoint',
-  'wal-file-vanished',
-  'wal-shrank-without-our-checkpoint',
-  'wal-salts-changed-without-our-checkpoint',
-  'wal-reset-during-capture',
+  "main-db-file-changed-without-our-checkpoint",
+  "wal-file-vanished",
+  "wal-shrank-without-our-checkpoint",
+  "wal-salts-changed-without-our-checkpoint",
+  "wal-reset-during-capture",
 ]);
 
 function isNonNegativeInteger(value: unknown): value is number {
@@ -248,84 +253,108 @@ function isNonNegativeInteger(value: unknown): value is number {
 }
 
 function isStreamState(value: unknown, db: WalDbName): value is DbStreamState {
-  if (typeof value !== 'object' || value === null) return false;
+  if (typeof value !== "object" || value === null) return false;
   const stream = value as Record<string, unknown>;
-  if (typeof stream['generation'] !== 'string' || !/^[0-9a-f]{32}$/.test(stream['generation'])) {
+  if (
+    typeof stream["generation"] !== "string" ||
+    !/^[0-9a-f]{32}$/u.test(stream["generation"])
+  ) {
     return false;
   }
-  const generation = stream['generation'];
-  if (stream['baseName'] !== `bases/${db}/${generation}.db`) return false;
+  const generation = stream["generation"];
+  if (stream["baseName"] !== `bases/${db}/${generation}.db`) return false;
   if (
-    stream['retiredBaseName'] !== undefined &&
-    (typeof stream['retiredBaseName'] !== 'string' ||
-      !new RegExp(`^bases/${db}/[0-9a-f]{32}\\.db$`).test(stream['retiredBaseName']))
+    stream["retiredBaseName"] !== undefined &&
+    (typeof stream["retiredBaseName"] !== "string" ||
+      !new RegExp(`^bases/${db}/[0-9a-f]{32}\\.db$`, "u").test(
+        stream["retiredBaseName"]
+      ))
   ) {
     return false;
   }
   if (
-    !isNonNegativeInteger(stream['group']) ||
-    !isNonNegativeInteger(stream['offset']) ||
-    !isNonNegativeInteger(stream['lastSize']) ||
-    !isNonNegativeInteger(stream['dbSize']) ||
-    !isNonNegativeInteger(stream['baseCreatedAtMs'])
+    !isNonNegativeInteger(stream["group"]) ||
+    !isNonNegativeInteger(stream["offset"]) ||
+    !isNonNegativeInteger(stream["lastSize"]) ||
+    !isNonNegativeInteger(stream["dbSize"]) ||
+    !isNonNegativeInteger(stream["baseCreatedAtMs"])
   ) {
     return false;
   }
   if (
-    (stream['salt1'] !== null && !isNonNegativeInteger(stream['salt1'])) ||
-    (stream['salt2'] !== null && !isNonNegativeInteger(stream['salt2'])) ||
-    (stream['pageSize'] !== null && !isNonNegativeInteger(stream['pageSize']))
+    (stream["salt1"] !== null && !isNonNegativeInteger(stream["salt1"])) ||
+    (stream["salt2"] !== null && !isNonNegativeInteger(stream["salt2"])) ||
+    (stream["pageSize"] !== null && !isNonNegativeInteger(stream["pageSize"]))
   ) {
     return false;
   }
-  if (typeof stream['dbMtimeMs'] !== 'number' || !Number.isFinite(stream['dbMtimeMs']))
+  if (
+    typeof stream["dbMtimeMs"] !== "number" ||
+    !Number.isFinite(stream["dbMtimeMs"])
+  )
     return false;
   if (
-    typeof stream['dbHeaderSha256'] !== 'string' ||
-    !/^[0-9a-f]{64}$/.test(stream['dbHeaderSha256'])
+    typeof stream["dbHeaderSha256"] !== "string" ||
+    !/^[0-9a-f]{64}$/u.test(stream["dbHeaderSha256"])
   ) {
     return false;
   }
-  if (typeof stream['baseSha256'] !== 'string' || !/^[0-9a-f]{64}$/.test(stream['baseSha256'])) {
+  if (
+    typeof stream["baseSha256"] !== "string" ||
+    !/^[0-9a-f]{64}$/u.test(stream["baseSha256"])
+  ) {
     return false;
   }
-  if (typeof stream['basePending'] !== 'boolean' || typeof stream['closedClean'] !== 'boolean') {
+  if (
+    typeof stream["basePending"] !== "boolean" ||
+    typeof stream["closedClean"] !== "boolean"
+  ) {
     return false;
   }
-  if (stream['discarded'] !== undefined && typeof stream['discarded'] !== 'boolean') return false;
-  if (stream['breakPending'] !== undefined && typeof stream['breakPending'] !== 'string')
+  if (
+    stream["discarded"] !== undefined &&
+    typeof stream["discarded"] !== "boolean"
+  )
+    return false;
+  if (
+    stream["breakPending"] !== undefined &&
+    typeof stream["breakPending"] !== "string"
+  )
     return false;
   return true;
 }
 
 function isShipperState(value: unknown): value is ShipperState {
-  if (typeof value !== 'object' || value === null) return false;
+  if (typeof value !== "object" || value === null) return false;
   const state = value as Record<string, unknown>;
-  if (state['version'] !== 1 || !isNonNegativeInteger(state['lastTickMs'])) return false;
-  if (typeof state['dbs'] !== 'object' || state['dbs'] === null) return false;
+  if (state["version"] !== 1 || !isNonNegativeInteger(state["lastTickMs"]))
+    return false;
+  if (typeof state["dbs"] !== "object" || state["dbs"] === null) return false;
   // Issue #411 action 1: optional fields — absent on pre-#411 state files
   // (default-on-load to 0/undefined), so tolerate absence but reject a
   // malformed shape.
   if (
-    state['foreignCheckpointCount'] !== undefined &&
-    !isNonNegativeInteger(state['foreignCheckpointCount'])
+    state["foreignCheckpointCount"] !== undefined &&
+    !isNonNegativeInteger(state["foreignCheckpointCount"])
   ) {
     return false;
   }
-  if (state['lastForeignCheckpoint'] !== undefined) {
-    const lfc = state['lastForeignCheckpoint'];
-    if (typeof lfc !== 'object' || lfc === null) return false;
+  if (state["lastForeignCheckpoint"] !== undefined) {
+    const lfc = state["lastForeignCheckpoint"];
+    if (typeof lfc !== "object" || lfc === null) return false;
     const rec = lfc as Record<string, unknown>;
     if (
-      !isNonNegativeInteger(rec['atMs']) ||
-      !WAL_DB_NAMES.includes(rec['db'] as WalDbName) ||
-      typeof rec['reason'] !== 'string'
+      !isNonNegativeInteger(rec["atMs"]) ||
+      !WAL_DB_NAMES.includes(rec["db"] as WalDbName) ||
+      typeof rec["reason"] !== "string"
     ) {
       return false;
     }
   }
-  const dbs = state['dbs'] as Record<string, unknown>;
-  return WAL_DB_NAMES.every((db) => dbs[db] === undefined || isStreamState(dbs[db], db));
+  const dbs = state["dbs"] as Record<string, unknown>;
+  return WAL_DB_NAMES.every(
+    (db) => dbs[db] === undefined || isStreamState(dbs[db], db)
+  );
 }
 
 export interface WalTickReport {
@@ -348,7 +377,7 @@ export interface UploadableWalFile {
   file: string;
   /** The object key it seals to. */
   key: string;
-  kind: 'segment' | 'closer' | 'marker';
+  kind: "segment" | "closer" | "marker";
   addr?: WalSegmentAddress;
   closer?: WalGroupCloser;
   marker?: WalPairMarker;
@@ -380,7 +409,10 @@ const MAX_CAPTURE_BYTES = 64 * 1024 * 1024;
  * checkpoint under.
  */
 const TRUNCATE_SETTLE_PASSES = 8;
-const noopLog: Required<WalShipperLogger> = { info: () => undefined, warn: () => undefined };
+const noopLog: Required<WalShipperLogger> = {
+  info: () => undefined,
+  warn: () => undefined,
+};
 /** Reflink support is a filesystem property; remember failed probes per device pair. */
 const reflinkCapability = new Map<string, boolean>();
 
@@ -412,10 +444,10 @@ function reflinkDeviceKey(src: string, dst: string): string {
  */
 export function cloneDbFile(src: string, dst: string): boolean {
   const capabilityKey = reflinkDeviceKey(src, dst);
-  if (process.platform === 'darwin') {
+  if (process.platform === "darwin") {
     if (reflinkCapability.get(capabilityKey) !== false) {
       try {
-        execFileSync('/bin/cp', ['-c', src, dst], { stdio: 'ignore' });
+        execFileSync("/bin/cp", ["-c", src, dst], { stdio: "ignore" });
         reflinkCapability.set(capabilityKey, true);
         return true;
       } catch {
@@ -424,7 +456,7 @@ export function cloneDbFile(src: string, dst: string): boolean {
       }
     }
   }
-  if (process.platform === 'linux') {
+  if (process.platform === "linux") {
     if (reflinkCapability.get(capabilityKey) !== false) {
       try {
         copyFileSync(src, dst, fsConstants.COPYFILE_FICLONE_FORCE);
@@ -442,7 +474,7 @@ export function cloneDbFile(src: string, dst: string): boolean {
 
 function fsyncDirBestEffort(dir: string): void {
   try {
-    const fd = openSync(dir, 'r');
+    const fd = openSync(dir, "r");
     try {
       fsyncSync(fd);
     } finally {
@@ -456,7 +488,7 @@ function fsyncDirBestEffort(dir: string): void {
 
 function writeFileDurable(file: string, data: Uint8Array): void {
   mkdirSync(path.dirname(file), { recursive: true });
-  const fd = openSync(file, 'w');
+  const fd = openSync(file, "w");
   try {
     let at = 0;
     while (at < data.length) at += writeSync(fd, data, at, data.length - at);
@@ -493,18 +525,20 @@ export class WalShipper {
   private warnedPlainClone = false;
 
   constructor(opts: WalShipperOptions) {
-    if (opts.db.dir === ':memory:') {
-      throw new Error('WalShipper needs a file-backed vault');
+    if (opts.db.dir === ":memory:") {
+      throw new Error("WalShipper needs a file-backed vault");
     }
     this.db = opts.db;
-    this.dir = opts.dir ?? path.join(opts.db.dir, 'wal-ship');
-    this.stateFile = path.join(this.dir, 'state.json');
+    this.dir = opts.dir ?? path.join(opts.db.dir, "wal-ship");
+    this.stateFile = path.join(this.dir, "state.json");
     const threshold = opts.walSizeThresholdBytes;
     this.threshold =
-      typeof threshold === 'function' ? threshold : () => threshold ?? DEFAULT_THRESHOLD;
+      typeof threshold === "function"
+        ? threshold
+        : () => threshold ?? DEFAULT_THRESHOLD;
     const baseIntervalMs = opts.baseIntervalMs;
     this.baseIntervalMs =
-      typeof baseIntervalMs === 'function'
+      typeof baseIntervalMs === "function"
         ? baseIntervalMs
         : () => baseIntervalMs ?? DEFAULT_BASE_INTERVAL_MS;
     this.localBudgetBytes = opts.localBudgetBytes ?? DEFAULT_LOCAL_BUDGET;
@@ -514,7 +548,9 @@ export class WalShipper {
     mkdirSync(this.dir, { recursive: true });
     this.state = this.loadState();
     this.startupHygiene();
-    this.localSegmentBytes = this.walkSegmentBytes(path.join(this.dir, 'segments'));
+    this.localSegmentBytes = this.walkSegmentBytes(
+      path.join(this.dir, "segments")
+    );
   }
 
   private walkSegmentBytes(dir: string): number {
@@ -522,7 +558,9 @@ export class WalShipper {
     let total = 0;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
-      total += entry.isDirectory() ? this.walkSegmentBytes(full) : statSync(full).size;
+      total += entry.isDirectory()
+        ? this.walkSegmentBytes(full)
+        : statSync(full).size;
     }
     return total;
   }
@@ -531,7 +569,7 @@ export class WalShipper {
 
   private loadState(): ShipperState {
     try {
-      const parsed: unknown = JSON.parse(readFileSync(this.stateFile, 'utf8'));
+      const parsed: unknown = JSON.parse(readFileSync(this.stateFile, "utf8"));
       if (isShipperState(parsed)) {
         this.stateRecovered = true;
         return parsed;
@@ -546,7 +584,10 @@ export class WalShipper {
   private persistState(): void {
     const tmp = `${this.stateFile}.tmp`;
     try {
-      writeFileDurable(tmp, new TextEncoder().encode(`${JSON.stringify(this.state, null, 2)}\n`));
+      writeFileDurable(
+        tmp,
+        new TextEncoder().encode(`${JSON.stringify(this.state, null, 2)}\n`)
+      );
       renameSync(tmp, this.stateFile);
     } catch (err) {
       // A partial tmp on a full disk must not linger (it would accumulate
@@ -572,9 +613,9 @@ export class WalShipper {
       // chained safely. Drop the whole unreferenced spool so the first-run
       // base starts clean instead of letting an unreachable backlog trigger a
       // generation roll on every budget check forever.
-      rmSync(path.join(this.dir, 'segments'), { recursive: true, force: true });
-      rmSync(path.join(this.dir, 'markers'), { recursive: true, force: true });
-      rmSync(path.join(this.dir, 'bases'), { recursive: true, force: true });
+      rmSync(path.join(this.dir, "segments"), { recursive: true, force: true });
+      rmSync(path.join(this.dir, "markers"), { recursive: true, force: true });
+      rmSync(path.join(this.dir, "bases"), { recursive: true, force: true });
       return;
     }
     for (const db of WAL_DB_NAMES) {
@@ -583,10 +624,17 @@ export class WalShipper {
       const groupDir = this.groupDir(db, stream.generation, stream.group);
       if (!existsSync(groupDir)) continue;
       for (const name of readdirSync(groupDir)) {
-        const addr = this.parseSegmentFileName(db, stream.generation, stream.group, name);
+        const addr = this.parseSegmentFileName(
+          db,
+          stream.generation,
+          stream.group,
+          name
+        );
         if (addr && addr.endOffset > stream.offset) {
           rmSync(path.join(groupDir, name), { force: true });
-          this.log.warn(`wal-ship: dropped unacknowledged segment ${db}/${name} (crash residue)`);
+          this.log.warn(
+            `wal-ship: dropped unacknowledged segment ${db}/${name} (crash residue)`
+          );
         }
       }
     }
@@ -602,11 +650,11 @@ export class WalShipper {
     db: WalDbName,
     generation: string,
     group: number,
-    name: string,
+    name: string
   ): WalSegmentAddress | null {
-    if (!name.endsWith('.seg')) return null;
+    if (!name.endsWith(".seg")) return null;
     return parseWalSegmentKey(
-      `wal/${db}/${generation}/${String(group).padStart(8, '0')}/${name.slice(0, -4)}`,
+      `wal/${db}/${generation}/${String(group).padStart(8, "0")}/${name.slice(0, -4)}`
     );
   }
 
@@ -621,22 +669,30 @@ export class WalShipper {
   }
 
   private dbHeaderSha256(db: WalDbName): string {
-    const fd = openSync(this.dbPath(db), 'r');
+    const fd = openSync(this.dbPath(db), "r");
     try {
       const header = Buffer.alloc(100);
       const bytes = readSync(fd, header, 0, header.length, 0);
-      return createHash('sha256').update(header.subarray(0, bytes)).digest('hex');
+      return createHash("sha256")
+        .update(header.subarray(0, bytes))
+        .digest("hex");
     } finally {
       closeSync(fd);
     }
   }
 
   private handle(db: WalDbName): DatabaseSync {
-    return db === 'vault' ? this.db.vault : this.db.journal;
+    return db === "vault" ? this.db.vault : this.db.journal;
   }
 
   private groupDir(db: WalDbName, generation: string, group: number): string {
-    return path.join(this.dir, 'segments', db, generation, String(group).padStart(8, '0'));
+    return path.join(
+      this.dir,
+      "segments",
+      db,
+      generation,
+      String(group).padStart(8, "0")
+    );
   }
 
   private basePath(baseName: string): string {
@@ -644,8 +700,15 @@ export class WalShipper {
   }
 
   /** `markers/{vaultGeneration}-{journalGeneration}/` — one dir per BASE PAIR. */
-  private markerDir(vaultGeneration: string, journalGeneration: string): string {
-    return path.join(this.dir, 'markers', `${vaultGeneration}-${journalGeneration}`);
+  private markerDir(
+    vaultGeneration: string,
+    journalGeneration: string
+  ): string {
+    return path.join(
+      this.dir,
+      "markers",
+      `${vaultGeneration}-${journalGeneration}`
+    );
   }
 
   // ------------------------------------------------------------------ ticking
@@ -689,7 +752,7 @@ export class WalShipper {
    * would fail.
    */
   tick(): WalTickReport {
-    if (this.closed) throw new Error('WalShipper is closed');
+    if (this.closed) throw new Error("WalShipper is closed");
     const report = this.newReport();
     const reasons = this.resolveBreakReasons();
 
@@ -698,15 +761,15 @@ export class WalShipper {
       const stream = this.state.dbs[db]!;
       try {
         const captured = this.capture(db, stream, report);
-        if (captured.kind === 'error') continue;
-        if (captured.kind === 'break') {
+        if (captured.kind === "error") continue;
+        if (captured.kind === "break") {
           reasons[db] = captured.reason;
           continue;
         }
         // Base cadence: a generation roll IS the base snapshot. A REQUEST, not
         // an inline break — the pair re-bases in one tick or not at all.
         if (report.tickMs - stream.baseCreatedAtMs >= this.baseIntervalMs()) {
-          reasons[db] = 'base-cadence';
+          reasons[db] = "base-cadence";
           continue;
         }
         // Group rollover: bound the WAL (and with it segment sizes + restart
@@ -716,8 +779,13 @@ export class WalShipper {
           this.rollover(db, stream, reasons, report);
         }
       } catch (err) {
-        report.errors.push({ db, message: err instanceof Error ? err.message : String(err) });
-        this.log.warn(`wal-ship: ${db} tick failed: ${report.errors.at(-1)!.message}`);
+        report.errors.push({
+          db,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        this.log.warn(
+          `wal-ship: ${db} tick failed: ${report.errors.at(-1)!.message}`
+        );
       }
     }
 
@@ -739,7 +807,7 @@ export class WalShipper {
     for (const db of WAL_CAPTURE_ORDER) {
       const stream = this.state.dbs[db];
       if (!stream) {
-        reasons[db] = 'first-run';
+        reasons[db] = "first-run";
         continue;
       }
       if (stream.breakPending !== undefined) {
@@ -774,26 +842,28 @@ export class WalShipper {
       dbStat.mtimeMs !== stream.dbMtimeMs ||
       this.dbHeaderSha256(db) !== stream.dbHeaderSha256
     ) {
-      return 'main-db-file-changed-without-our-checkpoint';
+      return "main-db-file-changed-without-our-checkpoint";
     }
     const walPath = this.walPath(db);
     if (!existsSync(walPath)) {
-      return stream.offset > 0 || stream.lastSize > 0 ? 'wal-file-vanished' : null;
+      return stream.offset > 0 || stream.lastSize > 0
+        ? "wal-file-vanished"
+        : null;
     }
     const size = statSync(walPath).size;
-    if (size < stream.lastSize) return 'wal-shrank-without-our-checkpoint';
+    if (size < stream.lastSize) return "wal-shrank-without-our-checkpoint";
     if (size >= WAL_HEADER_BYTES && stream.salt1 !== null) {
       const header = this.readWalRange(db, 0, WAL_HEADER_BYTES);
       const salts = walSalts(header);
       if (salts.salt1 !== stream.salt1 || salts.salt2 !== stream.salt2) {
-        return 'wal-salts-changed-without-our-checkpoint';
+        return "wal-salts-changed-without-our-checkpoint";
       }
     }
     return null;
   }
 
   private readWalRange(db: WalDbName, start: number, end: number): Uint8Array {
-    const fd = openSync(this.walPath(db), 'r');
+    const fd = openSync(this.walPath(db), "r");
     try {
       const buf = Buffer.alloc(end - start);
       let at = 0;
@@ -846,15 +916,15 @@ export class WalShipper {
       // `BEGIN` is DEFERRED — it takes no read mark until a read runs. The
       // SELECT is what materializes the snapshot and grabs the WAL read mark
       // that pins the file against a foreign checkpointer's reset/truncate.
-      conn.exec('BEGIN');
-      conn.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get();
+      conn.exec("BEGIN");
+      conn.prepare("SELECT 1 FROM sqlite_schema LIMIT 1").get();
       const held = conn;
       return {
         release: () => {
           // The snapshot ends when the connection closes regardless; ending the
           // transaction first is tidy and drops the read mark immediately.
           try {
-            held.exec('ROLLBACK');
+            held.exec("ROLLBACK");
           } catch {
             /* connection may already be gone — close still frees the mark */
           }
@@ -874,7 +944,7 @@ export class WalShipper {
       this.log.warn(
         `wal-ship: ${db} capture read-lock unavailable ` +
           `(${err instanceof Error ? err.message : String(err)}) — ` +
-          `relying on post-copy race detection`,
+          `relying on post-copy race detection`
       );
       return null;
     }
@@ -886,10 +956,14 @@ export class WalShipper {
    * (via the caller's persistState) — after `capture` returns, `offset`
    * only ever names durably-captured bytes.
    */
-  private capture(db: WalDbName, stream: DbStreamState, report: WalTickReport): CaptureResult {
+  private capture(
+    db: WalDbName,
+    stream: DbStreamState,
+    report: WalTickReport
+  ): CaptureResult {
     const walPath = this.walPath(db);
-    if (!existsSync(walPath)) return { kind: 'ok' };
-    const fd = openSync(walPath, 'r');
+    if (!existsSync(walPath)) return { kind: "ok" };
+    const fd = openSync(walPath, "r");
     let bytes: Buffer;
     let head: number;
     let headerStable = true;
@@ -900,9 +974,9 @@ export class WalShipper {
     try {
       head = fstatSync(fd).size;
       stream.lastSize = Math.max(stream.lastSize, head);
-      if (head < WAL_HEADER_BYTES) return { kind: 'ok' };
+      if (head < WAL_HEADER_BYTES) return { kind: "ok" };
       if (head > MAX_CAPTURE_BYTES) {
-        return { kind: 'break', reason: 'wal-exceeds-safe-capture-window' };
+        return { kind: "break", reason: "wal-exceeds-safe-capture-window" };
       }
       // Acquire the read mark now: after the size checks, before the FIRST read
       // of bytes. A reset in the sliver between the `head` stat and this pin is
@@ -914,41 +988,55 @@ export class WalShipper {
       let at = 0;
       while (at < head) {
         const n = readSync(fd, bytes, at, head - at, at);
-        if (n === 0) return { kind: 'break', reason: 'wal-reset-during-capture' };
+        if (n === 0)
+          return { kind: "break", reason: "wal-reset-during-capture" };
         at += n;
       }
       const after = fstatSync(fd).size;
-      if (after < head) return { kind: 'break', reason: 'wal-reset-during-capture' };
+      if (after < head)
+        return { kind: "break", reason: "wal-reset-during-capture" };
       const headerAfter = Buffer.alloc(WAL_HEADER_BYTES);
-      if (readSync(fd, headerAfter, 0, WAL_HEADER_BYTES, 0) !== WAL_HEADER_BYTES) {
-        return { kind: 'break', reason: 'wal-reset-during-capture' };
+      if (
+        readSync(fd, headerAfter, 0, WAL_HEADER_BYTES, 0) !== WAL_HEADER_BYTES
+      ) {
+        return { kind: "break", reason: "wal-reset-during-capture" };
       }
       headerStable = bytes.subarray(0, WAL_HEADER_BYTES).equals(headerAfter);
     } finally {
       closeSync(fd);
       readLock?.release();
     }
-    if (!headerStable) return { kind: 'break', reason: 'wal-reset-during-capture' };
+    if (!headerStable)
+      return { kind: "break", reason: "wal-reset-during-capture" };
 
     let scan;
     try {
       scan = scanWalPrefix(bytes);
     } catch {
-      return { kind: 'break', reason: 'wal-checksum-invalid-before-captured-offset' };
+      return {
+        kind: "break",
+        reason: "wal-checksum-invalid-before-captured-offset",
+      };
     }
     if (scan.validEndOffset < stream.offset) {
-      return { kind: 'break', reason: 'wal-checksum-invalid-before-captured-offset' };
+      return {
+        kind: "break",
+        reason: "wal-checksum-invalid-before-captured-offset",
+      };
     }
     const header = bytes.subarray(0, WAL_HEADER_BYTES);
     const salts = walSalts(header);
-    if (stream.salt1 !== null && (salts.salt1 !== stream.salt1 || salts.salt2 !== stream.salt2)) {
-      return { kind: 'break', reason: 'wal-reset-during-capture' };
+    if (
+      stream.salt1 !== null &&
+      (salts.salt1 !== stream.salt1 || salts.salt2 !== stream.salt2)
+    ) {
+      return { kind: "break", reason: "wal-reset-during-capture" };
     }
     stream.salt1 = salts.salt1;
     stream.salt2 = salts.salt2;
     stream.pageSize ??= scan.pageSize;
     const boundary = scan.lastCommitOffset;
-    if (boundary <= stream.offset) return { kind: 'ok' };
+    if (boundary <= stream.offset) return { kind: "ok" };
 
     const addr: WalSegmentAddress = {
       db,
@@ -964,7 +1052,7 @@ export class WalShipper {
     // never drift.
     const file = path.join(
       this.groupDir(db, stream.generation, stream.group),
-      `${path.posix.basename(walSegmentKey(addr))}.seg`,
+      `${path.posix.basename(walSegmentKey(addr))}.seg`
     );
     try {
       writeFileDurable(file, bytes.subarray(stream.offset, boundary));
@@ -976,12 +1064,12 @@ export class WalShipper {
         db,
         message: `segment write failed (${err instanceof Error ? err.message : String(err)}) — WAL retained`,
       });
-      return { kind: 'error' };
+      return { kind: "error" };
     }
     this.localSegmentBytes += boundary - stream.offset;
     stream.offset = boundary;
     report.shipped.push(walSegmentKey(addr));
-    return { kind: 'ok' };
+    return { kind: "ok" };
   }
 
   /**
@@ -1001,7 +1089,9 @@ export class WalShipper {
    *     ledger writers, the key-admin CLI).
    */
   private dataVersion(db: WalDbName): number {
-    const row = this.handle(db).prepare('PRAGMA data_version').get() as { data_version: number };
+    const row = this.handle(db).prepare("PRAGMA data_version").get() as {
+      data_version: number;
+    };
     return row.data_version;
   }
 
@@ -1032,26 +1122,34 @@ export class WalShipper {
    * legitimately outruns `offset` forever) — there is nothing left to ship and
    * the checkpoint cannot destroy committed bytes, so we stop and truncate.
    */
-  private settleWal(db: WalDbName, stream: DbStreamState, report: WalTickReport): SettleResult {
+  private settleWal(
+    db: WalDbName,
+    stream: DbStreamState,
+    report: WalTickReport
+  ): SettleResult {
     const walPath = this.walPath(db);
     for (let pass = 0; pass < TRUNCATE_SETTLE_PASSES; pass++) {
       const dvBefore = this.dataVersion(db); // BEFORE the stat — see above.
       const foreign = this.detectForeign(db, stream);
-      if (foreign) return { kind: 'break', reason: foreign };
+      if (foreign) return { kind: "break", reason: foreign };
       const size = existsSync(walPath) ? statSync(walPath).size : 0;
-      if (size <= stream.offset) return { kind: 'ready', dataVersion: dvBefore };
+      if (size <= stream.offset)
+        return { kind: "ready", dataVersion: dvBefore };
       const offsetBefore = stream.offset;
       const captured = this.capture(db, stream, report);
-      if (captured.kind === 'error') return { kind: 'retry' };
-      if (captured.kind === 'break') return captured;
-      if (stream.offset === offsetBefore) return { kind: 'ready', dataVersion: dvBefore };
+      if (captured.kind === "error") return { kind: "retry" };
+      if (captured.kind === "break") return captured;
+      if (stream.offset === offsetBefore)
+        return { kind: "ready", dataVersion: dvBefore };
     }
     // A writer is committing faster than we can capture. Leaving the WAL
     // untruncated is merely wasteful (it stays large and we retry next tick);
     // truncating without a settled stat would risk folding away committed bytes
     // we never shipped, which is the one thing that is never recoverable.
-    this.log.warn(`wal-ship: ${db} WAL will not settle for a checkpoint — retrying next tick`);
-    return { kind: 'retry' };
+    this.log.warn(
+      `wal-ship: ${db} WAL will not settle for a checkpoint — retrying next tick`
+    );
+    return { kind: "retry" };
   }
 
   /**
@@ -1086,16 +1184,22 @@ export class WalShipper {
       : undefined;
     handle.exec(`PRAGMA busy_timeout = ${CHECKPOINT_BUSY_MS}`);
     try {
-      const row = handle.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as { busy: number };
+      const row = handle.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as {
+        busy: number;
+      };
       if (row.busy !== 0) return null;
-      const size = existsSync(this.walPath(db)) ? statSync(this.walPath(db)).size : 0;
+      const size = existsSync(this.walPath(db))
+        ? statSync(this.walPath(db)).size
+        : 0;
       if (size !== 0) return null; // not fully truncated — treat as busy
       return {
         raced: this.dataVersion(db) !== dvBefore,
-        ...(preflightReason !== undefined ? { untrustedReason: preflightReason } : {}),
+        ...(preflightReason === undefined
+          ? {}
+          : { untrustedReason: preflightReason }),
       };
     } finally {
-      handle.exec('PRAGMA busy_timeout = 30000');
+      handle.exec("PRAGMA busy_timeout = 30000");
     }
   }
 
@@ -1118,20 +1222,20 @@ export class WalShipper {
     db: WalDbName,
     stream: DbStreamState,
     reasons: Partial<Record<WalDbName, string>>,
-    report: WalTickReport,
+    report: WalTickReport
   ): void {
     const captured = this.capture(db, stream, report);
-    if (captured.kind === 'error') return;
-    if (captured.kind === 'break') {
+    if (captured.kind === "error") return;
+    if (captured.kind === "break") {
       reasons[db] = captured.reason;
       return;
     }
     const settled = this.settleWal(db, stream, report);
-    if (settled.kind === 'break') {
+    if (settled.kind === "break") {
       reasons[db] = settled.reason;
       return;
     }
-    if (settled.kind === 'retry') {
+    if (settled.kind === "retry") {
       // Either the capture failed (the error is already on the report) or the
       // WAL would not settle. Both mean the same thing: do not checkpoint, and
       // do not consider this stream cleanly cut (`close()` reads `busy`).
@@ -1177,19 +1281,25 @@ export class WalShipper {
     result: TruncateResult,
     reasons: Partial<Record<WalDbName, string>>,
     report: WalTickReport,
-    opts: { trusted: boolean },
+    opts: { trusted: boolean }
   ): void {
     const raced = result.raced;
-    if (result.untrustedReason !== undefined) reasons[db] = result.untrustedReason;
+    if (result.untrustedReason !== undefined)
+      reasons[db] = result.untrustedReason;
     if (raced) {
       this.log.warn(
         `wal-ship: ${db} checkpoint raced a foreign writer (data_version moved across the ` +
           `TRUNCATE) — its committed frames may have been folded into the main database ` +
-          `unshipped; breaking generation`,
+          `unshipped; breaking generation`
       );
-      reasons[db] = 'checkpoint-raced-writer';
+      reasons[db] = "checkpoint-raced-writer";
     }
-    if (opts.trusted && !raced && result.untrustedReason === undefined && stream.offset > 0) {
+    if (
+      opts.trusted &&
+      !raced &&
+      result.untrustedReason === undefined &&
+      stream.offset > 0
+    ) {
       // Closer first, then advance: replay only ever crosses a group
       // boundary through this marker, so a group counter that advanced
       // without one would silently wall off everything after it. Filename
@@ -1203,9 +1313,9 @@ export class WalShipper {
       writeFileDurable(
         path.join(
           this.groupDir(db, stream.generation, stream.group),
-          `${path.posix.basename(closerKey)}.mrk`,
+          `${path.posix.basename(closerKey)}.mrk`
         ),
-        new Uint8Array(0),
+        new Uint8Array(0)
       );
       report.rolled.push({ db, group: stream.group, endOffset: stream.offset });
       stream.group += 1;
@@ -1265,11 +1375,12 @@ export class WalShipper {
    */
   private coordinatedBreak(
     reasons: Partial<Record<WalDbName, string>>,
-    report: WalTickReport,
+    report: WalTickReport
   ): void {
     if (WAL_CAPTURE_ORDER.every((db) => reasons[db] === undefined)) return;
     const trigger = WAL_CAPTURE_ORDER.find((db) => reasons[db] !== undefined)!;
-    for (const db of WAL_CAPTURE_ORDER) reasons[db] ??= `coordinated:${reasons[trigger]!}`;
+    for (const db of WAL_CAPTURE_ORDER)
+      reasons[db] ??= `coordinated:${reasons[trigger]!}`;
 
     const truncated: Partial<Record<WalDbName, TruncateResult>> = {};
     for (const db of WAL_CAPTURE_ORDER) {
@@ -1289,7 +1400,10 @@ export class WalShipper {
       }
       truncated[db] = result;
     }
-    const olds = { vault: this.state.dbs.vault, journal: this.state.dbs.journal };
+    const olds = {
+      vault: this.state.dbs.vault,
+      journal: this.state.dbs.journal,
+    };
     for (const db of WAL_CAPTURE_ORDER) this.mintBase(db, reasons[db]!, report);
     // Issue #411 action 1: tally the foreign checkpoints THIS break healed. One
     // increment per database that INDEPENDENTLY established a foreign reason —
@@ -1302,10 +1416,16 @@ export class WalShipper {
     for (const db of WAL_CAPTURE_ORDER) {
       const reason = reasons[db]!;
       if (!FOREIGN_CHECKPOINT_REASONS.has(reason)) continue;
-      this.state.foreignCheckpointCount = (this.state.foreignCheckpointCount ?? 0) + 1;
+      this.state.foreignCheckpointCount =
+        (this.state.foreignCheckpointCount ?? 0) + 1;
       this.state.lastForeignCheckpoint = { atMs: report.tickMs, db, reason };
     }
-    if (olds.vault && olds.journal && olds.vault.basePending && olds.journal.basePending) {
+    if (
+      olds.vault &&
+      olds.journal &&
+      olds.vault.basePending &&
+      olds.journal.basePending
+    ) {
       // The retired pair was never registered ⇒ never restorable ⇒ its pair
       // markers are dead weight, exactly like its segments.
       this.dropLocalMarkers(olds.vault.generation, olds.journal.generation);
@@ -1327,7 +1447,7 @@ export class WalShipper {
     busy: WalDbName,
     reasons: Partial<Record<WalDbName, string>>,
     truncated: Partial<Record<WalDbName, TruncateResult>>,
-    report: WalTickReport,
+    report: WalTickReport
   ): void {
     for (const db of WAL_CAPTURE_ORDER) {
       const result = truncated[db];
@@ -1336,7 +1456,9 @@ export class WalShipper {
       // A partial pair break can never authenticate a group end. Even when
       // this stream looked healthy before TRUNCATE, the sibling did not cut,
       // so a closer here would certify a one-sided instant.
-      this.finishTruncate(db, stream, result, reasons, report, { trusted: false });
+      this.finishTruncate(db, stream, result, reasons, report, {
+        trusted: false,
+      });
     }
     // AFTER finishTruncate — it may have upgraded a reason to
     // `checkpoint-raced-writer`, and that is the reason the retry must carry.
@@ -1346,7 +1468,7 @@ export class WalShipper {
     }
     this.log.warn(
       `wal-ship: coordinated generation break DEFERRED — ${busy}'s checkpoint is busy ` +
-        `(reason: ${reasons[busy]}); both streams are frozen until the retry lands`,
+        `(reason: ${reasons[busy]}); both streams are frozen until the retry lands`
     );
     this.persistState();
   }
@@ -1365,18 +1487,18 @@ export class WalShipper {
   private mintBase(db: WalDbName, reason: string, report: WalTickReport): void {
     const old = this.state.dbs[db];
     const generation = newWalGeneration(this.random);
-    const baseName = path.join('bases', db, `${generation}.db`);
+    const baseName = path.join("bases", db, `${generation}.db`);
     const baseAbs = this.basePath(baseName);
     mkdirSync(path.dirname(baseAbs), { recursive: true });
     const reflinked = cloneDbFile(this.dbPath(db), baseAbs);
     if (!reflinked && !this.warnedPlainClone) {
       this.warnedPlainClone = true;
       this.log.warn(
-        'wal-ship: filesystem has no reflink support; daily base snapshots require a full DB copy. ' +
-          'For Pi-class hosts prefer f2fs, btrfs, or a USB SSD and mount with noatime.',
+        "wal-ship: filesystem has no reflink support; daily base snapshots require a full DB copy. " +
+          "For Pi-class hosts prefer f2fs, btrfs, or a USB SSD and mount with noatime."
       );
     }
-    const fd = openSync(baseAbs, 'r');
+    const fd = openSync(baseAbs, "r");
     try {
       fsyncSync(fd);
     } finally {
@@ -1404,7 +1526,9 @@ export class WalShipper {
       closedClean: false,
     };
     report.breaks.push({ db, reason });
-    this.log.info(`wal-ship: ${db} generation break (${reason}) → ${generation}`);
+    this.log.info(
+      `wal-ship: ${db} generation break (${reason}) → ${generation}`
+    );
     if (old) {
       if (old.basePending) {
         // Never uploaded ⇒ the old generation was never restorable; its
@@ -1426,16 +1550,21 @@ export class WalShipper {
       writeReceipt(this.db.journal, {
         grantId: null,
         invocationId: null,
-        action: 'act consent.backup_wal_generation',
-        objectType: 'core.vault',
+        action: "act consent.backup_wal_generation",
+        objectType: "core.vault",
         objectId: null,
         purpose: null,
-        decision: 'allow',
-        detail: { db, reason, generation: stream.generation, baseSha256: stream.baseSha256 },
+        decision: "allow",
+        detail: {
+          db,
+          reason,
+          generation: stream.generation,
+          baseSha256: stream.baseSha256,
+        },
       });
     } catch (err) {
       this.log.warn(
-        `wal-ship: generation receipt failed (${err instanceof Error ? err.message : String(err)})`,
+        `wal-ship: generation receipt failed (${err instanceof Error ? err.message : String(err)})`
       );
     }
   }
@@ -1470,7 +1599,12 @@ export class WalShipper {
   private writePairMarker(report: WalTickReport): void {
     // A marker is a proof about BOTH cuts. Any per-db error, busy checkpoint,
     // or generation break means this tick did not establish such a proof.
-    if (report.errors.length > 0 || report.busy.length > 0 || report.breaks.length > 0) return;
+    if (
+      report.errors.length > 0 ||
+      report.busy.length > 0 ||
+      report.breaks.length > 0
+    )
+      return;
     if (report.shipped.length === 0 && report.rolled.length === 0) return;
     const vault = this.state.dbs.vault;
     const journal = this.state.dbs.journal;
@@ -1486,13 +1620,14 @@ export class WalShipper {
       vault: position(vault),
       journal: position(journal),
     };
-    const atFloor = (p: WalPairPosition): boolean => p.group === 0 && p.endOffset === 0;
+    const atFloor = (p: WalPairPosition): boolean =>
+      p.group === 0 && p.endOffset === 0;
     if (atFloor(marker.vault) && atFloor(marker.journal)) return;
     const key = walPairMarkerKey(marker);
     writeFileDurable(
       path.join(
         this.markerDir(marker.vaultGeneration, marker.journalGeneration),
-        `${path.posix.basename(key)}.tick`,
+        `${path.posix.basename(key)}.tick`
       ),
       new TextEncoder().encode(
         JSON.stringify({
@@ -1500,23 +1635,29 @@ export class WalShipper {
           tickMs: marker.tickMs,
           vault: marker.vault,
           journal: marker.journal,
-        }),
-      ),
+        })
+      )
     );
     report.markers.push(key);
   }
 
   /** Delete one generation's local segment tree, keeping the byte counter exact. */
   private dropLocalGeneration(db: WalDbName, generation: string): void {
-    const dir = path.join(this.dir, 'segments', db, generation);
+    const dir = path.join(this.dir, "segments", db, generation);
     this.localSegmentBytes -= this.walkSegmentBytes(dir);
     if (this.localSegmentBytes < 0) this.localSegmentBytes = 0;
     rmSync(dir, { recursive: true, force: true });
   }
 
   /** Delete one BASE PAIR's local markers (markers are pair-scoped, not per-db). */
-  private dropLocalMarkers(vaultGeneration: string, journalGeneration: string): void {
-    rmSync(this.markerDir(vaultGeneration, journalGeneration), { recursive: true, force: true });
+  private dropLocalMarkers(
+    vaultGeneration: string,
+    journalGeneration: string
+  ): void {
+    rmSync(this.markerDir(vaultGeneration, journalGeneration), {
+      recursive: true,
+      force: true,
+    });
   }
 
   /**
@@ -1538,7 +1679,7 @@ export class WalShipper {
     if (this.localSegmentBytes <= this.localBudgetBytes) return;
     this.log.warn(
       `wal-ship: local segments ${this.localSegmentBytes} bytes exceed budget ` +
-        `${this.localBudgetBytes} — rolling generations (PITR history traded for disk)`,
+        `${this.localBudgetBytes} — rolling generations (PITR history traded for disk)`
     );
     // WAL_CAPTURE_ORDER, not WAL_DB_NAMES (which is vault-first — the WRONG
     // order): the break this requests cuts the journal before the vault.
@@ -1548,7 +1689,7 @@ export class WalShipper {
       const stream = this.state.dbs[db];
       if (!stream) continue;
       olds[db] = stream.generation;
-      reasons[db] = 'local-budget';
+      reasons[db] = "local-budget";
     }
     this.coordinatedBreak(reasons, report);
     for (const db of WAL_CAPTURE_ORDER) {
@@ -1573,7 +1714,7 @@ export class WalShipper {
    * the same raced-writer verification as a rollover.
    */
   checkpointNow(): WalTickReport {
-    if (this.closed) throw new Error('WalShipper is closed');
+    if (this.closed) throw new Error("WalShipper is closed");
     const report = this.newReport();
     const reasons = this.resolveBreakReasons();
     for (const db of WAL_CAPTURE_ORDER) {
@@ -1599,16 +1740,19 @@ export class WalShipper {
   rollGeneration(
     db: WalDbName,
     reason: string,
-    opts: { captureFirst?: boolean } = {},
+    opts: { captureFirst?: boolean } = {}
   ): WalTickReport {
-    if (this.closed) throw new Error('WalShipper is closed');
+    if (this.closed) throw new Error("WalShipper is closed");
     const report = this.newReport();
     const reasons = this.resolveBreakReasons();
     // Whatever the detectors already condemned must not ship another byte,
     // whatever the caller wants.
-    const condemned = new Set(WAL_CAPTURE_ORDER.filter((d) => reasons[d] !== undefined));
+    const condemned = new Set(
+      WAL_CAPTURE_ORDER.filter((d) => reasons[d] !== undefined)
+    );
     reasons[db] ??= reason;
-    for (const other of WAL_CAPTURE_ORDER) reasons[other] ??= `coordinated:${reason}`;
+    for (const other of WAL_CAPTURE_ORDER)
+      reasons[other] ??= `coordinated:${reason}`;
     // Both streams ship their pending committed bytes under their OLD
     // generation first, so PITR history stays maximal across the roll.
     // `captureFirst: false` skips that for the NAMED database only: the
@@ -1628,7 +1772,7 @@ export class WalShipper {
       // generation whose very next event is its retirement.
       if (stream && stream.discarded !== true) {
         const captured = this.capture(target, stream, report);
-        if (captured.kind === 'break') reasons[target] = captured.reason;
+        if (captured.kind === "break") reasons[target] = captured.reason;
       }
     }
     this.coordinatedBreak(reasons, report);
@@ -1654,7 +1798,7 @@ export class WalShipper {
   close(): WalTickReport {
     for (const db of WAL_DB_NAMES) {
       try {
-        this.handle(db).exec('PRAGMA optimize');
+        this.handle(db).exec("PRAGMA optimize");
       } catch {
         // Best-effort maintenance, mirroring VaultDb.close().
       }
@@ -1674,7 +1818,7 @@ export class WalShipper {
   /** Every durable local file awaiting upload, oldest generation first. */
   listUploadable(): UploadableWalFile[] {
     const out: UploadableWalFile[] = [];
-    const segRoot = path.join(this.dir, 'segments');
+    const segRoot = path.join(this.dir, "segments");
     if (!existsSync(segRoot)) return out;
     // Shape-check every level: a stray plain file (Finder's .DS_Store, an
     // editor swap file) must be skipped, not readdirSync'd — one ENOTDIR
@@ -1687,11 +1831,11 @@ export class WalShipper {
     for (const db of WAL_DB_NAMES) {
       const dbRoot = path.join(segRoot, db);
       if (!existsSync(dbRoot)) continue;
-      for (const generation of dirsIn(dbRoot, /^[0-9a-f]{32}$/)) {
+      for (const generation of dirsIn(dbRoot, /^[0-9a-f]{32}$/u)) {
         const genRoot = path.join(dbRoot, generation);
-        for (const groupName of dirsIn(genRoot, /^\d{8}$/)) {
+        for (const groupName of dirsIn(genRoot, /^\d{8}$/u)) {
           const groupRoot = path.join(genRoot, groupName);
-          const group = Number.parseInt(groupName, 10);
+          const group = Math.trunc(Number(groupName));
           for (const name of readdirSync(groupRoot).sort()) {
             const full = path.join(groupRoot, name);
             const addr = this.parseSegmentFileName(db, generation, group, name);
@@ -1699,21 +1843,21 @@ export class WalShipper {
               out.push({
                 file: full,
                 key: walSegmentKey(addr),
-                kind: 'segment',
+                kind: "segment",
                 addr,
                 bytes: statSync(full).size,
               });
               continue;
             }
-            if (name.endsWith('.mrk')) {
+            if (name.endsWith(".mrk")) {
               const closer = parseWalCloserKey(
-                `wal/${db}/${generation}/${groupName}/${name.slice(0, -4)}`,
+                `wal/${db}/${generation}/${groupName}/${name.slice(0, -4)}`
               );
               if (closer) {
                 out.push({
                   file: full,
                   key: walGroupCloserKey(closer),
-                  kind: 'closer',
+                  kind: "closer",
                   closer,
                   bytes: 0,
                 });
@@ -1727,20 +1871,20 @@ export class WalShipper {
     // and closers it describes. Not a correctness requirement (an orphan marker
     // is merely unsatisfiable, which walks the restore back safely) but the
     // reverse order would cost a tick of RPO on every interrupted drain.
-    const markerRoot = path.join(this.dir, 'markers');
+    const markerRoot = path.join(this.dir, "markers");
     if (existsSync(markerRoot)) {
-      for (const pair of dirsIn(markerRoot, /^[0-9a-f]{32}-[0-9a-f]{32}$/)) {
+      for (const pair of dirsIn(markerRoot, /^[0-9a-f]{32}-[0-9a-f]{32}$/u)) {
         const pairDir = path.join(markerRoot, pair);
         const vaultGeneration = pair.slice(0, 32);
         const journalGeneration = pair.slice(33);
         for (const name of readdirSync(pairDir).sort()) {
-          if (!name.endsWith('.tick')) continue;
-          const tickMs = Number.parseInt(name.slice(0, -5), 10);
+          if (!name.endsWith(".tick")) continue;
+          const tickMs = Math.trunc(Number(name.slice(0, -5)));
           if (!Number.isInteger(tickMs)) continue;
           const full = path.join(pairDir, name);
           let payload: { vault?: WalPairPosition; journal?: WalPairPosition };
           try {
-            payload = JSON.parse(readFileSync(full, 'utf8')) as typeof payload;
+            payload = JSON.parse(readFileSync(full, "utf8")) as typeof payload;
           } catch {
             continue; // unreadable residue — never a reason to wedge the drain
           }
@@ -1752,7 +1896,13 @@ export class WalShipper {
             vault: payload.vault,
             journal: payload.journal,
           };
-          out.push({ file: full, key: walPairMarkerKey(marker), kind: 'marker', marker, bytes: 0 });
+          out.push({
+            file: full,
+            key: walPairMarkerKey(marker),
+            kind: "marker",
+            marker,
+            bytes: 0,
+          });
         }
       }
     }
@@ -1850,7 +2000,15 @@ export class WalShipper {
 
   status(): {
     dbs: Partial<
-      Record<WalDbName, { generation: string; group: number; offset: number; basePending: boolean }>
+      Record<
+        WalDbName,
+        {
+          generation: string;
+          group: number;
+          offset: number;
+          basePending: boolean;
+        }
+      >
     >;
     localBytes: number;
     /** Issue #411 action 1: foreign checkpoints detected+healed over this
@@ -1860,7 +2018,7 @@ export class WalShipper {
     lastForeignCheckpoint?: { atMs: number; db: WalDbName; reason: string };
   } {
     const localBytes = this.localSegmentBytes;
-    const dbs: ReturnType<WalShipper['status']>['dbs'] = {};
+    const dbs: ReturnType<WalShipper["status"]>["dbs"] = {};
     for (const db of WAL_DB_NAMES) {
       const s = this.state.dbs[db];
       if (s) {

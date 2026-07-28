@@ -9,8 +9,13 @@
 // at worst lose bytes (which the reconciliation sweep reports), never
 // corrupt identity.
 
-import { assertSha, type BlobRange, type BlobStat, type BlobStore } from './store.js';
-import { S3RequestPipeline } from './s3-pipeline.js';
+import { S3RequestPipeline } from "./s3-pipeline.js";
+import {
+  assertSha,
+  type BlobRange,
+  type BlobStat,
+  type BlobStore,
+} from "./store.js";
 
 export interface S3Credentials {
   accessKeyId: string;
@@ -78,11 +83,11 @@ async function streamToBuffer(source: NodeJS.ReadableStream): Promise<Buffer> {
  * Re-chunk a Readable into fixed-size Buffers, bounding resident memory to
  * roughly one part size regardless of the source's total length (issue #367
  * §C8: "never materializing the whole blob in memory").
- * @yields Fixed-size upload parts, with one final short part when needed.
+ * @yields {Buffer} Fixed-size upload parts, with one final short part when needed.
  */
 async function* chunkReadable(
   source: NodeJS.ReadableStream,
-  partSize: number,
+  partSize: number
 ): AsyncGenerator<Buffer> {
   let buffered: Buffer[] = [];
   let bufferedLen = 0;
@@ -105,7 +110,7 @@ async function* chunkReadable(
 }
 
 export class S3BlobStore implements BlobStore {
-  readonly kind = 's3';
+  readonly kind = "s3";
   private readonly pipeline: S3RequestPipeline;
 
   constructor(private readonly options: S3BlobStoreOptions) {
@@ -114,7 +119,9 @@ export class S3BlobStore implements BlobStore {
 
   private keyFor(sha: string): string {
     assertSha(sha);
-    const prefix = this.options.prefix ? this.options.prefix.replace(/\/+$/, '') + '/' : '';
+    const prefix = this.options.prefix
+      ? this.options.prefix.replace(/\/+$/u, "") + "/"
+      : "";
     return `${prefix}blobs/sha256/${sha}`;
   }
 
@@ -125,7 +132,11 @@ export class S3BlobStore implements BlobStore {
   private async request(
     method: string,
     key: string,
-    opts: { body?: Buffer; headers?: Record<string, string>; query?: Record<string, string> } = {},
+    opts: {
+      body?: Buffer;
+      headers?: Record<string, string>;
+      query?: Record<string, string>;
+    } = {}
   ): Promise<Response> {
     return this.pipeline.request(method, key, opts);
   }
@@ -169,7 +180,11 @@ export class S3BlobStore implements BlobStore {
   private async send(
     method: string,
     key: string,
-    opts: { body?: Buffer; headers?: Record<string, string>; query?: Record<string, string> } = {},
+    opts: {
+      body?: Buffer;
+      headers?: Record<string, string>;
+      query?: Record<string, string>;
+    } = {}
   ): Promise<Response> {
     return this.pipeline.send(method, key, opts);
   }
@@ -186,16 +201,17 @@ export class S3BlobStore implements BlobStore {
   async put(sha: string, bytes: Buffer, storageClass?: string): Promise<void> {
     await this.pipeline.pace(bytes.length);
     const cls = this.classOf(storageClass);
-    const res = await this.send('PUT', this.keyFor(sha), {
+    const res = await this.send("PUT", this.keyFor(sha), {
       body: bytes,
       headers: {
-        'content-type': 'application/octet-stream',
+        "content-type": "application/octet-stream",
         // Storage class rides the object-creating PUT; the signer folds it into
         // SignedHeaders like any other header.
-        ...(cls ? { 'x-amz-storage-class': cls } : {}),
+        ...(cls ? { "x-amz-storage-class": cls } : {}),
       },
     });
-    if (!res.ok) throw new Error(`s3 put ${sha}: ${res.status} ${await res.text()}`);
+    if (!res.ok)
+      throw new Error(`s3 put ${sha}: ${res.status} ${await res.text()}`);
   }
 
   /**
@@ -210,7 +226,7 @@ export class S3BlobStore implements BlobStore {
     sha: string,
     source: NodeJS.ReadableStream,
     approxSize: number,
-    storageClass?: string,
+    storageClass?: string
   ): Promise<void> {
     const key = this.keyFor(sha);
     if (approxSize <= MULTIPART_THRESHOLD_BYTES) {
@@ -220,7 +236,10 @@ export class S3BlobStore implements BlobStore {
     try {
       const parts: { partNumber: number; etag: string }[] = [];
       let partNumber = 1;
-      for await (const chunk of chunkReadable(source, MULTIPART_PART_SIZE_BYTES)) {
+      for await (const chunk of chunkReadable(
+        source,
+        MULTIPART_PART_SIZE_BYTES
+      )) {
         const etag = await this.uploadPart(key, uploadId, partNumber, chunk);
         parts.push({ partNumber, etag });
         partNumber += 1;
@@ -240,16 +259,22 @@ export class S3BlobStore implements BlobStore {
     }
   }
 
-  private async createMultipartUpload(key: string, storageClass?: string): Promise<string> {
+  private async createMultipartUpload(
+    key: string,
+    storageClass?: string
+  ): Promise<string> {
     const cls = this.classOf(storageClass);
-    return this.pipeline.beginMultipart(key, cls ? { 'x-amz-storage-class': cls } : undefined);
+    return this.pipeline.beginMultipart(
+      key,
+      cls ? { "x-amz-storage-class": cls } : undefined
+    );
   }
 
   private async uploadPart(
     key: string,
     uploadId: string,
     partNumber: number,
-    body: Buffer,
+    body: Buffer
   ): Promise<string> {
     return this.pipeline.uploadPart(key, uploadId, partNumber, body);
   }
@@ -257,19 +282,22 @@ export class S3BlobStore implements BlobStore {
   private async completeMultipartUpload(
     key: string,
     uploadId: string,
-    parts: readonly { partNumber: number; etag: string }[],
+    parts: readonly { partNumber: number; etag: string }[]
   ): Promise<void> {
     await this.pipeline.completeMultipart(key, uploadId, parts);
   }
 
-  private async abortMultipartUpload(key: string, uploadId: string): Promise<void> {
+  private async abortMultipartUpload(
+    key: string,
+    uploadId: string
+  ): Promise<void> {
     await this.pipeline.abortMultipart(key, uploadId);
   }
 
   async get(sha: string, range?: BlobRange): Promise<Buffer | null> {
     const headers: Record<string, string> = {};
-    if (range) headers.range = `bytes=${range.start}-${range.end ?? ''}`;
-    const res = await this.send('GET', this.keyFor(sha), { headers });
+    if (range) headers.range = `bytes=${range.start}-${range.end ?? ""}`;
+    const res = await this.send("GET", this.keyFor(sha), { headers });
     if (res.status === 404) return null;
     if (!res.ok && res.status !== 206) {
       throw new Error(`s3 get ${sha}: ${res.status} ${await res.text()}`);
@@ -282,7 +310,7 @@ export class S3BlobStore implements BlobStore {
   }
 
   async delete(sha: string): Promise<void> {
-    const res = await this.send('DELETE', this.keyFor(sha));
+    const res = await this.send("DELETE", this.keyFor(sha));
     // 404 is success for an idempotent delete.
     if (!res.ok && res.status !== 404) {
       throw new Error(`s3 delete ${sha}: ${res.status} ${await res.text()}`);
@@ -290,32 +318,40 @@ export class S3BlobStore implements BlobStore {
   }
 
   async list(): Promise<string[]> {
-    const prefix = this.keyFor('0'.repeat(64)).slice(0, -64); // ".../blobs/sha256/"
+    const prefix = this.keyFor("0".repeat(64)).slice(0, -64); // ".../blobs/sha256/"
     const shas: string[] = [];
-    let token: string | undefined;
-    do {
-      const query: Record<string, string> = { 'list-type': '2', prefix, 'max-keys': '1000' };
-      if (token) query['continuation-token'] = token;
-      const res = await this.send('GET', '', { query });
-      if (!res.ok) throw new Error(`s3 list: ${res.status} ${await res.text()}`);
+    const listPage = async (token?: string): Promise<void> => {
+      const query: Record<string, string> = {
+        "list-type": "2",
+        prefix,
+        "max-keys": "1000",
+      };
+      if (token) query["continuation-token"] = token;
+      const res = await this.send("GET", "", { query });
+      if (!res.ok)
+        throw new Error(`s3 list: ${res.status} ${await res.text()}`);
       const xml = await res.text();
-      for (const m of xml.matchAll(/<Key>([^<]+)<\/Key>/g)) {
-        const sha = (m[1] ?? '').slice(prefix.length);
-        if (/^[0-9a-f]{64}$/.test(sha)) shas.push(sha);
+      for (const m of xml.matchAll(/<Key>(?<key>[^<]+)<\/Key>/gu)) {
+        const sha = (m.groups?.key ?? "").slice(prefix.length);
+        if (/^[0-9a-f]{64}$/u.test(sha)) shas.push(sha);
       }
-      const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
-      token = truncated
-        ? /<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(xml)?.[1]
-        : undefined;
-    } while (token);
+      const truncated = /<IsTruncated>true<\/IsTruncated>/u.test(xml);
+      const tokenMatch =
+        /<NextContinuationToken>(?<token>[^<]+)<\/NextContinuationToken>/u.exec(
+          xml
+        );
+      const nextToken = truncated ? tokenMatch?.groups?.token : undefined;
+      if (nextToken) return listPage(nextToken);
+    };
+    await listPage();
     return shas.sort();
   }
 
   async stat(sha: string): Promise<BlobStat | null> {
-    const res = await this.send('HEAD', this.keyFor(sha));
+    const res = await this.send("HEAD", this.keyFor(sha));
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`s3 head ${sha}: ${res.status}`);
-    const len = res.headers.get('content-length');
+    const len = res.headers.get("content-length");
     return { size: len ? Number(len) : 0 };
   }
 }

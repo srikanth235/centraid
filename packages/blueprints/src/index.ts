@@ -36,16 +36,16 @@
  *   - fetchRemoteTemplates({ cacheDir, remoteUrl }): Promise<void>
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
 import type {
   ResolvedTemplate,
   TemplateKind,
   TemplateManifest,
   TemplateMeta,
   TemplateSource,
-} from './types.js';
+} from "./types.js";
 
 export type {
   AppKnob,
@@ -56,10 +56,10 @@ export type {
   TemplateManifest,
   TemplateMeta,
   TemplateSource,
-} from './types.js';
+} from "./types.js";
 
-const DIST_DIR = path.dirname(fileURLToPath(import.meta.url));
-const PACKAGE_ROOT = path.resolve(DIST_DIR, '..');
+const DIST_DIR = import.meta.dirname;
+const PACKAGE_ROOT = path.resolve(DIST_DIR, "..");
 
 /** Absolute path to the bundled templates directory (the package root). */
 export const appTemplatesDir: string = PACKAGE_ROOT;
@@ -70,10 +70,10 @@ export const appTemplatesDir: string = PACKAGE_ROOT;
  * serves them from here as a fallback for `/centraid/<id>/kit.{js,css}`.
  * Hosts pass this as the runtime's `sharedAssetsDir`.
  */
-export const KIT_DIR: string = path.join(PACKAGE_ROOT, 'kit');
+export const KIT_DIR: string = path.join(PACKAGE_ROOT, "kit");
 
 /** Manifest file name — same on bundle and cache. */
-const MANIFEST_FILE = 'manifest.json';
+const MANIFEST_FILE = "manifest.json";
 
 /**
  * The kind-segment directory a template's files live under, relative to the
@@ -86,7 +86,7 @@ const MANIFEST_FILE = 'manifest.json';
  * the wire.
  */
 export function templateKindDir(kind: TemplateKind | undefined): string {
-  return kind === 'automation' ? 'automations' : 'apps';
+  return kind === "automation" ? "automations" : "apps";
 }
 
 /**
@@ -108,7 +108,9 @@ export async function listTemplates(): Promise<TemplateMeta[]> {
  * builder is the compiler).
  */
 export async function listBundledAppTemplates(): Promise<TemplateMeta[]> {
-  return (await listTemplates()).filter((t) => (t.kind ?? 'app') !== 'automation');
+  return (await listTemplates()).filter(
+    (t) => (t.kind ?? "app") !== "automation"
+  );
 }
 
 /**
@@ -120,7 +122,7 @@ export async function listBundledAppTemplates(): Promise<TemplateMeta[]> {
  * compatibility.
  */
 export function bundledAppDir(id: string): string {
-  return templateSourceDir(id, { kind: 'app' });
+  return templateSourceDir(id, { kind: "app" });
 }
 
 /**
@@ -129,9 +131,11 @@ export function bundledAppDir(id: string): string {
  * resolution always degrades to the bundle.
  */
 export async function resolveTemplates(
-  opts: { cacheDir?: string } = {},
+  opts: { cacheDir?: string } = {}
 ): Promise<ResolvedTemplate[]> {
-  const bundle = await readManifest(appTemplatesDir).catch(() => emptyManifest());
+  const bundle = await readManifest(appTemplatesDir).catch(() =>
+    emptyManifest()
+  );
   const cache = opts.cacheDir
     ? await readManifest(opts.cacheDir).catch(() => emptyManifest())
     : emptyManifest();
@@ -143,15 +147,15 @@ export async function resolveTemplates(
   for (const b of bundle.templates) {
     const c = cacheById.get(b.id);
     if (c && compareSemver(c.version, b.version) > 0) {
-      out.push({ ...c, source: 'cache' });
+      out.push({ ...c, source: "cache" });
     } else {
-      out.push({ ...b, source: 'bundle' });
+      out.push({ ...b, source: "bundle" });
     }
     seen.add(b.id);
   }
   // Cache-only templates (added remotely, not yet bundled) also surface.
   for (const c of cache.templates) {
-    if (!seen.has(c.id)) out.push({ ...c, source: 'cache' });
+    if (!seen.has(c.id)) out.push({ ...c, source: "cache" });
   }
   return out;
 }
@@ -165,9 +169,10 @@ export async function resolveTemplates(
  */
 export function templateSourceDir(
   templateId: string,
-  opts: { kind?: TemplateKind; cacheDir?: string; source?: TemplateSource } = {},
+  opts: { kind?: TemplateKind; cacheDir?: string; source?: TemplateSource } = {}
 ): string {
-  const base = opts.source === 'cache' && opts.cacheDir ? opts.cacheDir : appTemplatesDir;
+  const base =
+    opts.source === "cache" && opts.cacheDir ? opts.cacheDir : appTemplatesDir;
   return path.join(base, templateKindDir(opts.kind), templateId);
 }
 
@@ -182,19 +187,21 @@ export function templateSourceDir(
  * on disk is a build/catalog error and surfaces as a read rejection.
  */
 export async function readTemplateFiles(
-  template: Pick<TemplateMeta, 'id' | 'files' | 'kind'> & { source?: TemplateSource },
-  opts: { cacheDir?: string } = {},
+  template: Pick<TemplateMeta, "id" | "files" | "kind"> & {
+    source?: TemplateSource;
+  },
+  opts: { cacheDir?: string } = {}
 ): Promise<{ path: string; content: string }[]> {
   const dir = templateSourceDir(template.id, {
-    ...(template.kind !== undefined ? { kind: template.kind } : {}),
-    ...(opts.cacheDir !== undefined ? { cacheDir: opts.cacheDir } : {}),
-    ...(template.source !== undefined ? { source: template.source } : {}),
+    ...(template.kind === undefined ? {} : { kind: template.kind }),
+    ...(opts.cacheDir === undefined ? {} : { cacheDir: opts.cacheDir }),
+    ...(template.source === undefined ? {} : { source: template.source }),
   });
   return Promise.all(
     template.files.map(async (rel) => ({
       path: rel,
-      content: await fs.readFile(path.join(dir, rel), 'utf8'),
-    })),
+      content: await fs.readFile(path.join(dir, rel), "utf8"),
+    }))
   );
 }
 
@@ -230,7 +237,9 @@ export async function fetchRemoteTemplates(opts: {
   }
   if (!remote || !Array.isArray(remote.templates)) return;
 
-  const bundle = await readManifest(appTemplatesDir).catch(() => emptyManifest());
+  const bundle = await readManifest(appTemplatesDir).catch(() =>
+    emptyManifest()
+  );
   const cached = await readManifest(cacheDir).catch(() => emptyManifest());
   const bundleById = new Map(bundle.templates.map((t) => [t.id, t]));
   const cachedById = new Map(cached.templates.map((t) => [t.id, t]));
@@ -239,12 +248,19 @@ export async function fetchRemoteTemplates(opts: {
   // we'd otherwise resolve to (max of bundle, cache).
   const nextCached: TemplateMeta[] = [...cached.templates];
   let updated = false;
+  const downloaded = await Promise.all(
+    remote.templates.map(async (rt) => {
+      const localBest = bestOf(bundleById.get(rt.id), cachedById.get(rt.id));
+      if (localBest && compareSemver(rt.version, localBest.version) <= 0)
+        return undefined;
+      return (await downloadTemplate(base, cacheDir, rt, doFetch))
+        ? rt
+        : undefined;
+    })
+  );
 
-  for (const rt of remote.templates) {
-    const localBest = bestOf(bundleById.get(rt.id), cachedById.get(rt.id));
-    if (localBest && compareSemver(rt.version, localBest.version) <= 0) continue;
-    const ok = await downloadTemplate(base, cacheDir, rt, doFetch);
-    if (!ok) continue;
+  for (const rt of downloaded) {
+    if (!rt) continue;
     const idx = nextCached.findIndex((t) => t.id === rt.id);
     if (idx >= 0) nextCached[idx] = rt;
     else nextCached.push(rt);
@@ -261,7 +277,7 @@ export async function fetchRemoteTemplates(opts: {
 // ---------------- internal helpers ----------------
 
 async function readManifest(dir: string): Promise<TemplateManifest> {
-  const raw = await fs.readFile(path.join(dir, MANIFEST_FILE), 'utf8');
+  const raw = await fs.readFile(path.join(dir, MANIFEST_FILE), "utf8");
   return JSON.parse(raw) as TemplateManifest;
 }
 
@@ -282,12 +298,12 @@ function bestOf(a?: TemplateMeta, b?: TemplateMeta): TemplateMeta | undefined {
  */
 function compareSemver(a: string, b: string): number {
   const pa = a
-    .split('-')[0]!
-    .split('.')
+    .split("-")[0]!
+    .split(".")
     .map((p) => Number(p) || 0);
   const pb = b
-    .split('-')[0]!
-    .split('.')
+    .split("-")[0]!
+    .split(".")
     .map((p) => Number(p) || 0);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const x = pa[i] ?? 0;
@@ -298,7 +314,7 @@ function compareSemver(a: string, b: string): number {
 }
 
 function stripTrailingSlash(s: string): string {
-  return s.endsWith('/') ? s.slice(0, -1) : s;
+  return s.endsWith("/") ? s.slice(0, -1) : s;
 }
 
 /**
@@ -313,37 +329,43 @@ async function downloadTemplate(
   base: string,
   cacheDir: string,
   tmpl: TemplateMeta,
-  doFetch: typeof fetch,
+  doFetch: typeof fetch
 ): Promise<boolean> {
   const kindDir = templateKindDir(tmpl.kind);
   const targetDir = path.join(cacheDir, kindDir, tmpl.id);
   await fs.mkdir(targetDir, { recursive: true });
-  for (const rel of tmpl.files) {
-    const url = `${base}/${kindDir}/${encodeURIComponent(tmpl.id)}/${rel
-      .split('/')
-      .map(encodeURIComponent)
-      .join('/')}`;
-    try {
-      const res = await doFetch(url);
-      if (!res.ok) return false;
-      const buf = Buffer.from(await res.arrayBuffer());
-      const dest = path.join(targetDir, rel);
-      await fs.mkdir(path.dirname(dest), { recursive: true });
-      const tmp = `${dest}.tmp`;
-      await fs.writeFile(tmp, buf);
-      await fs.rename(tmp, dest);
-    } catch {
-      return false;
-    }
-  }
-  return true;
+  const fileResults = await Promise.all(
+    tmpl.files.map(async (rel) => {
+      const url = `${base}/${kindDir}/${encodeURIComponent(tmpl.id)}/${rel
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/")}`;
+      try {
+        const res = await doFetch(url);
+        if (!res.ok) return false;
+        const buf = Buffer.from(await res.arrayBuffer());
+        const dest = path.join(targetDir, rel);
+        await fs.mkdir(path.dirname(dest), { recursive: true });
+        const tmp = `${dest}.tmp`;
+        await fs.writeFile(tmp, buf);
+        await fs.rename(tmp, dest);
+        return true;
+      } catch {
+        return false;
+      }
+    })
+  );
+  return fileResults.every(Boolean);
 }
 
-async function writeManifestAtomic(dir: string, manifest: TemplateManifest): Promise<void> {
+async function writeManifestAtomic(
+  dir: string,
+  manifest: TemplateManifest
+): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
   const dest = path.join(dir, MANIFEST_FILE);
   const tmp = `${dest}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(manifest, null, 2) + '\n');
+  await fs.writeFile(tmp, JSON.stringify(manifest, null, 2) + "\n");
   await fs.rename(tmp, dest);
 }
 
@@ -360,14 +382,14 @@ export {
   validateAppId,
   type ScaffoldFile,
   type ScaffoldAppOpts,
-} from './scaffold-files.js';
+} from "./scaffold-files.js";
 export {
   scaffoldApp,
   listAppsOnDisk,
   deleteApp,
   updateAppMeta,
   isDisplayNameTaken,
-} from './scaffold.js';
+} from "./scaffold.js";
 export {
   cloneTemplate,
   cloneTemplateFiles,
@@ -376,5 +398,9 @@ export {
   suggestCloneIdentityFrom,
   type CloneTemplateOptions,
   type CloneTemplateFilesOptions,
-} from './clone.js';
-export { AppScaffoldError, type AppScaffoldErrorCode, type AppInfo } from './scaffold-types.js';
+} from "./clone.js";
+export {
+  AppScaffoldError,
+  type AppScaffoldErrorCode,
+  type AppInfo,
+} from "./scaffold-types.js";

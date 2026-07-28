@@ -1,17 +1,19 @@
-import { type CSSProperties, type JSX, useState } from 'react';
-import type { IconName } from '@centraid/design-tokens';
-import { Icon } from '../ui/index.js';
-import { cx } from '../ui/cx.js';
-import controlsCss from '../styles/controls.module.css';
-import drawerGroupCss from '../styles/drawerGroup.module.css';
+import type { IconName } from "@centraid/design-tokens";
+import { type CSSProperties, type JSX, useState } from "react";
+
+import type { ActiveSpaceData } from "../shell/routes/settingsAccountData.js";
+import { PROFILE_COLORS, PROFILE_ICONS } from "../shell/routes/SpaceModal.js";
+import { cx } from "../ui/cx.js";
+import { Icon } from "../ui/index.js";
+
 // Reuses SpaceModal's field vocabulary (`.prof*`) directly — same precedent
 // GatewayModal.tsx / ConnectFlowModal.tsx / RenameGatewayModal.tsx set for
 // the shared dialog chrome, extended here to a plain (non-modal) form
 // section so name/icon/color/blurb edits look identical everywhere they
 // appear (issue #382).
-import spaceModalStyles from '../shell/routes/SpaceModal.module.css';
-import { PROFILE_COLORS, PROFILE_ICONS } from '../shell/routes/SpaceModal.js';
-import type { ActiveSpaceData } from '../shell/routes/settingsAccountData.js';
+import spaceModalStyles from "../shell/routes/SpaceModal.module.css";
+import controlsCss from "../styles/controls.module.css";
+import drawerGroupCss from "../styles/drawerGroup.module.css";
 
 export interface SettingsSpaceScreenProps {
   space: ActiveSpaceData;
@@ -37,11 +39,11 @@ function Avatar({
     <span
       style={
         {
-          alignItems: 'center',
+          alignItems: "center",
           borderRadius: 12,
-          color: 'white',
-          display: 'inline-flex',
-          justifyContent: 'center',
+          color: "white",
+          display: "inline-flex",
+          justifyContent: "center",
         } as CSSProperties
       }
     >
@@ -50,9 +52,9 @@ function Avatar({
           {
             background: color,
             borderRadius: 12,
-            display: 'grid',
+            display: "grid",
             height: size,
-            placeItems: 'center',
+            placeItems: "center",
             width: size,
           } as CSSProperties
         }
@@ -105,17 +107,17 @@ export default function SettingsSpaceScreen({
   const save = (): void => {
     if (!ready || saving) return;
     setSaving(true);
-    void Promise.resolve(onSave({ blurb: blurb.trim(), color, icon, name: name.trim() })).finally(
-      () => setSaving(false),
-    );
+    void Promise.resolve(
+      onSave({ blurb: blurb.trim(), color, icon, name: name.trim() })
+    ).finally(() => setSaving(false));
   };
 
   return (
     <div className={drawerGroupCss.group}>
       <div className={drawerGroupCss.groupBody}>
         <div className={controlsCss.note}>
-          This space is a vault — its own apps, chats, and data. Switch, add, or manage other spaces
-          from the switcher at the top of the sidebar (⌘⇧G).
+          This space is a vault — its own apps, chats, and data. Switch, add, or
+          manage other spaces from the switcher at the top of the sidebar (⌘⇧G).
         </div>
 
         <div className={spaceModalStyles.profModalPreview}>
@@ -123,9 +125,11 @@ export default function SettingsSpaceScreen({
             <Avatar icon={icon} color={color} size={46} />
           </span>
           <div className={spaceModalStyles.profModalPreviewText}>
-            <div className={spaceModalStyles.profModalPreviewName}>{name.trim() || 'Untitled'}</div>
+            <div className={spaceModalStyles.profModalPreviewName}>
+              {name.trim() || "Untitled"}
+            </div>
             <div className={spaceModalStyles.profModalPreviewSub}>
-              {blurb.trim() || 'How this space appears in the switcher.'}
+              {blurb.trim() || "How this space appears in the switcher."}
             </div>
           </div>
         </div>
@@ -150,7 +154,7 @@ export default function SettingsSpaceScreen({
                 className={spaceModalStyles.profIconBtn}
                 title={ic}
                 aria-label={ic}
-                data-selected={ic === icon ? 'true' : 'false'}
+                data-selected={ic === icon ? "true" : "false"}
                 onClick={() => setIcon(ic)}
               >
                 <Icon name={ic} size={16} />
@@ -169,7 +173,7 @@ export default function SettingsSpaceScreen({
                 className={spaceModalStyles.profColorBtn}
                 title={c}
                 aria-label={`Color ${c}`}
-                data-selected={c === color ? 'true' : 'false'}
+                data-selected={c === color ? "true" : "false"}
                 style={{ background: c }}
                 onClick={() => setColor(c)}
               />
@@ -179,7 +183,8 @@ export default function SettingsSpaceScreen({
 
         <label className={spaceModalStyles.profField}>
           <span className={spaceModalStyles.profFieldLabel}>
-            Description<span className={spaceModalStyles.profFieldOptional}>optional</span>
+            Description
+            <span className={spaceModalStyles.profFieldOptional}>optional</span>
           </span>
           <input
             className={spaceModalStyles.profFieldInput}
@@ -196,7 +201,7 @@ export default function SettingsSpaceScreen({
           disabled={!ready || !dirty || saving}
           onClick={save}
         >
-          {saving ? 'Saving…' : 'Save changes'}
+          {saving ? "Saving…" : "Save changes"}
         </button>
       </div>
 
@@ -205,7 +210,8 @@ export default function SettingsSpaceScreen({
           <div className={drawerGroupCss.groupLabel}>Danger zone</div>
           <div className={drawerGroupCss.groupBody}>
             <div className={controlsCss.note}>
-              Delete this space — its vault and everything in it are removed. This can't be undone.
+              Delete this space — its vault and everything in it are removed.
+              This can't be undone.
             </div>
             <button
               type="button"
@@ -219,7 +225,8 @@ export default function SettingsSpaceScreen({
         </div>
       ) : (
         <div className={controlsCss.note}>
-          This is the only space on this gateway, so it can't be deleted from here.
+          This is the only space on this gateway, so it can't be deleted from
+          here.
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from "vitest/config";
 
 /**
  * Standalone Stryker test root for vault custody.
@@ -8,10 +8,10 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
-    name: '@centraid/vault-mutation',
-    environment: 'node',
-    pool: 'forks',
-    include: ['src/blob/custody-proven.contract.test.ts'],
+    name: "@centraid/vault-mutation",
+    environment: "node",
+    pool: "forks",
+    include: ["src/blob/custody-proven.contract.test.ts"],
     testTimeout: 60_000,
     expect: { requireAssertions: true },
   },

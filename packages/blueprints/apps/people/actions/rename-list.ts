@@ -1,16 +1,19 @@
 /**
  * Rename a list. Runs through people.rename_list — consent-checked and receipted, risk low.
  */
-export default async ({ body, ctx }: HandlerArgs) => {
+export default async function renameList({ body, ctx }: HandlerArgs) {
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'people.rename_list',
+      command: "people.rename_list",
       input: (body ?? {}) as Record<string, unknown>,
-      purpose: 'dpv:ServiceProvision',
+      purpose: "dpv:ServiceProvision",
     });
     return { status: 200, body: outcome };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    return { status: 200, body: { status: 'denied', reason: e.message, code: e.code } };
+    return {
+      status: 200,
+      body: { status: "denied", reason: e.message, code: e.code },
+    };
   }
-};
+}

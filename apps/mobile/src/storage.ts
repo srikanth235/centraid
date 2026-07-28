@@ -2,9 +2,9 @@
 // Same `centraid.v1.` namespace so a future shared core can switch backends
 // without touching app code.
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const PREFIX = 'centraid.v1.';
+const PREFIX = "centraid.v1.";
 
 // In-memory cache so app code can stay synchronous on the render path.
 // Apps call `Store.hydrate(key, fallback)` once at mount, then use `get/set`.

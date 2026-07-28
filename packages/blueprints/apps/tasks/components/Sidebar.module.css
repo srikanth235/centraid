@@ -26,7 +26,7 @@
   background: var(--bg-sunken);
   color: var(--ink);
 }
-.navItem[aria-current='true'] {
+.navItem[aria-current="true"] {
   background: var(--accent-soft);
   color: var(--accent-deep-fg);
   font-weight: 600;

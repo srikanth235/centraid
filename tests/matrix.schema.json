@@ -1,7 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["version", "legend", "cellOwners", "dimensions", "surfaces", "flows"],
+  "required": [
+    "version",
+    "legend",
+    "cellOwners",
+    "dimensions",
+    "surfaces",
+    "flows"
+  ],
   "properties": {
     "version": { "type": "integer", "minimum": 1 },
     "legend": { "type": "object" },

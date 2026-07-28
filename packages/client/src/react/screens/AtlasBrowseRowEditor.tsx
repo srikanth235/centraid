@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type JSX } from "react";
+
 import {
   browseInsertRow,
   browseRefSearch,
@@ -6,16 +7,17 @@ import {
   type BrowseColumn,
   type BrowseColumnsResult,
   type BrowseRefHit,
-} from '../../gateway-client.js';
-import Icon from '../ui/Icon.js';
-import styles from './AtlasBrowseTab.module.css';
+} from "../../gateway-client.js";
+import Icon from "../ui/Icon.js";
 import {
   cellText,
   insertableColumns,
   isNumericColumn,
   pkColumns,
   type EditorState,
-} from './atlasBrowseData.js';
+} from "./atlasBrowseData.js";
+
+import styles from "./AtlasBrowseTab.module.css";
 
 // The row editor drawer (issue #441 B3), split out of AtlasBrowseTab. An insert
 // or edit form whose writes ride the gateway's journalled command path — never
@@ -40,20 +42,21 @@ export function RowEditor({
   onSaved: () => void;
   onDelete?: () => void;
 }): JSX.Element {
-  const isInsert = editor.mode === 'insert';
-  const original = editor.mode === 'edit' ? editor.row : null;
+  const isInsert = editor.mode === "insert";
+  const original = editor.mode === "edit" ? editor.row : null;
 
   const initial: Record<string, string> = {};
   for (const c of cols.columns) {
     if (c.sealed) continue;
-    if (isInsert) initial[c.name] = '';
-    else initial[c.name] = original ? cellText(original[c.name]) : '';
+    if (isInsert) initial[c.name] = "";
+    else initial[c.name] = original ? cellText(original[c.name]) : "";
   }
   const [draft, setDraft] = useState<Record<string, string>>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const setField = (name: string, v: string): void => setDraft((d) => ({ ...d, [name]: v }));
+  const setField = (name: string, v: string): void =>
+    setDraft((d) => ({ ...d, [name]: v }));
 
   const submit = (e: FormEvent): void => {
     e.preventDefault();
@@ -62,7 +65,7 @@ export function RowEditor({
     const machineryFlag = unlockMachinery ? { unlockMachinery: true } : {};
 
     const coerce = (c: BrowseColumn, raw: string): unknown => {
-      if (raw === '') return null;
+      if (raw === "") return null;
       if (isNumericColumn(c)) {
         const n = Number(raw);
         return Number.isNaN(n) ? raw : n;
@@ -73,27 +76,32 @@ export function RowEditor({
     const finish = (res: { ok: boolean; error?: string }): void => {
       setSaving(false);
       if (res.ok) onSaved();
-      else setError(res.error ?? 'The write was refused.');
+      else setError(res.error ?? "The write was refused.");
     };
 
     if (isInsert) {
       const values: Record<string, unknown> = {};
       for (const c of insertableColumns(cols.columns)) {
         if (c.sealed) continue;
-        const raw = draft[c.name] ?? '';
-        if (raw === '') continue; // let NOT NULL surface a clean server message
+        const raw = draft[c.name] ?? "";
+        if (raw === "") continue; // let NOT NULL surface a clean server message
         values[c.name] = coerce(c, raw);
       }
       void browseInsertRow({ table, values, ...machineryFlag }).then(finish);
-    } else if (editor.mode === 'edit') {
+    } else if (editor.mode === "edit") {
       const set: Record<string, unknown> = {};
       for (const c of cols.columns) {
         if (c.sealed || c.pk > 0) continue;
-        const raw = draft[c.name] ?? '';
-        const was = original ? cellText(original[c.name]) : '';
+        const raw = draft[c.name] ?? "";
+        const was = original ? cellText(original[c.name]) : "";
         if (raw !== was) set[c.name] = coerce(c, raw);
       }
-      void browseUpdateRow({ table, id: editor.id, set, ...machineryFlag }).then(finish);
+      void browseUpdateRow({
+        table,
+        id: editor.id,
+        set,
+        ...machineryFlag,
+      }).then(finish);
     }
   };
 
@@ -101,16 +109,20 @@ export function RowEditor({
 
   return (
     <div className={styles.drawerScrim}>
-      <div className={styles.drawerBackdrop} role="presentation" onClick={onClose} />
+      <div
+        className={styles.drawerBackdrop}
+        role="presentation"
+        onClick={onClose}
+      />
       <form
         className={styles.drawer}
         onSubmit={submit}
-        aria-label={isInsert ? 'Insert row' : 'Edit row'}
+        aria-label={isInsert ? "Insert row" : "Edit row"}
         data-testid="atlas-row-editor"
       >
         <header className={styles.drawerHead}>
           <h3 className={styles.drawerTitle}>
-            {isInsert ? 'Insert row' : 'Edit row'}
+            {isInsert ? "Insert row" : "Edit row"}
             <code className={styles.drawerTable}>{table}</code>
           </h3>
           <button
@@ -129,7 +141,7 @@ export function RowEditor({
               key={c.name}
               col={c}
               isInsert={isInsert}
-              value={draft[c.name] ?? ''}
+              value={draft[c.name] ?? ""}
               isPk={pks.some((p) => p.name === c.name)}
               onChange={(v) => setField(c.name, v)}
             />
@@ -166,7 +178,7 @@ export function RowEditor({
               disabled={saving}
               data-testid="atlas-row-submit"
             >
-              {saving ? 'Saving…' : isInsert ? 'Insert' : 'Save'}
+              {saving ? "Saving…" : isInsert ? "Insert" : "Save"}
             </button>
           </div>
         </footer>
@@ -224,7 +236,7 @@ function Field({
       ) : (
         <input
           className={styles.input}
-          type={isNumericColumn(col) ? 'number' : 'text'}
+          type={isNumericColumn(col) ? "number" : "text"}
           value={value}
           required={required}
           onChange={(e) => onChange(e.target.value)}
@@ -252,7 +264,7 @@ function FkField({
   onChange: (id: string) => void;
   colName: string;
 }): JSX.Element {
-  const [term, setTerm] = useState('');
+  const [term, setTerm] = useState("");
   const [hits, setHits] = useState<BrowseRefHit[]>([]);
   const [display, setDisplay] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -268,7 +280,7 @@ function FkField({
     setTerm(q);
     onChange(q); // manual-paste path: the raw text is the id until a hit is picked
     setOpen(true);
-    if (q.trim() === '') {
+    if (q.trim() === "") {
       setHits([]);
       return;
     }
@@ -301,7 +313,7 @@ function FkField({
       />
       {value ? (
         <span className={styles.fkChosen} data-testid="atlas-fk-value">
-          {display ? `${display} · ` : ''}
+          {display ? `${display} · ` : ""}
           {value}
         </span>
       ) : null}

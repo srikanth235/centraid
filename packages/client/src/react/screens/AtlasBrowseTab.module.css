@@ -396,7 +396,7 @@
   letter-spacing: 0.03em;
   cursor: pointer;
 }
-.unlockBtn[aria-checked='true'] {
+.unlockBtn[aria-checked="true"] {
   border-color: var(--danger);
   color: var(--danger);
 }

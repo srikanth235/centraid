@@ -51,7 +51,7 @@
 .deviceBtn:hover {
   color: var(--ink);
 }
-.deviceBtn[data-active='true'] {
+.deviceBtn[data-active="true"] {
   background: var(--bg-elev);
   color: var(--ink);
   box-shadow:
@@ -77,7 +77,7 @@
 .tab:hover {
   color: var(--ink);
 }
-.tab[data-active='true'] {
+.tab[data-active="true"] {
   background: var(--bg-elev);
   color: var(--ink);
   box-shadow: var(--shadow-sm);
@@ -124,8 +124,8 @@
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   color: var(--ink);
 }
-.toolbar:not([data-tab='preview']) .url,
-.toolbar:not([data-tab='preview']) .device {
+.toolbar:not([data-tab="preview"]) .url,
+.toolbar:not([data-tab="preview"]) .device {
   display: none;
 }
 .url {
@@ -147,14 +147,14 @@
   border-radius: 50%;
   background: var(--ink-3);
 }
-.urlDot[data-state='live'] {
+.urlDot[data-state="live"] {
   background: var(--ok, #3fb950);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok, #3fb950) 22%, transparent);
 }
-.urlDot[data-state='local'] {
+.urlDot[data-state="local"] {
   background: var(--accent);
 }
-.urlDot[data-state='building'] {
+.urlDot[data-state="building"] {
   background: var(--warn, #d29922);
   animation: rb-url-pulse 1.3s ease-in-out infinite;
 }
@@ -260,11 +260,11 @@
   flex-shrink: 0;
   animation: cd-pulse 1400ms ease-in-out infinite;
 }
-.tlStatus[data-state='idle-live'] {
+.tlStatus[data-state="idle-live"] {
   background: color-mix(in srgb, var(--success) 18%, transparent);
   color: var(--success);
 }
-.tlStatus[data-state='idle-live'] .tlStatusDot {
+.tlStatus[data-state="idle-live"] .tlStatusDot {
   animation: none;
 }
 .tlBuilderActions {
@@ -313,7 +313,7 @@
 .tabsPill button:hover {
   color: var(--ink);
 }
-.tabsPill button[data-active='true'] {
+.tabsPill button[data-active="true"] {
   background: var(--bg-elev);
   color: var(--ink);
   box-shadow:
@@ -343,10 +343,10 @@
 /* Chat-pane collapsed — driven by the chat-toggle in the chrome row. The
    chat-pane width animates to 0 and its border-right vanishes so the
    canvas reads as having the full floor. */
-.builder[data-chat='closed'] .builderBody {
+.builder[data-chat="closed"] .builderBody {
   grid-template-columns: 0 1fr;
 }
-.builder[data-chat='closed'] .builderBody .chatPane {
+.builder[data-chat="closed"] .builderBody .chatPane {
   border-right: 0;
 }
 .chatPane {
@@ -372,6 +372,7 @@
    right-pane toolbar above it. */
 .hasPhone .rightPaneContent {
   background:
-    radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 / 22px 22px,
+    radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 /
+      22px 22px,
     var(--device-wall);
 }

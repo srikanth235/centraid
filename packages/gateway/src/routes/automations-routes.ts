@@ -27,11 +27,12 @@
 // gateway's own runner config — the desktop's provider key is not used
 // for a remote fire.
 
-import crypto from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import crypto from "node:crypto";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import path from "node:path";
+
 import {
   AnalyticsStore,
   InsightsStore,
@@ -43,12 +44,18 @@ import {
   type Turn,
   type AutomationTurnStreamEvent,
   type TurnStreamEvent,
-} from '@centraid/app-engine';
-import * as automation from '@centraid/automation';
-import { journalConversationStore } from '../journal-stores.js';
-import type { WorktreeStore } from '../worktree-store/index.js';
-import { parseProviderConsent, readJson, sendError, sendJson } from './route-helpers.js';
-import { SseSubscriberCap } from './sse-cap.js';
+} from "@centraid/app-engine";
+import * as automation from "@centraid/automation";
+
+import { journalConversationStore } from "../journal-stores.js";
+import type { WorktreeStore } from "../worktree-store/index.js";
+import {
+  parseProviderConsent,
+  readJson,
+  sendError,
+  sendJson,
+} from "./route-helpers.js";
+import { SseSubscriberCap } from "./sse-cap.js";
 
 /**
  * The production subscriber cap for `/centraid/_automations/turn/events` —
@@ -85,7 +92,7 @@ export interface AutomationsRouteOptions {
    */
   subscribeTurnEvents?: (
     turnId: string,
-    listener: (ev: AutomationTurnStreamEvent, serialized: string) => void,
+    listener: (ev: AutomationTurnStreamEvent, serialized: string) => void
   ) => () => void;
   /**
    * Drive a real interactive automation turn. The route owns the standard
@@ -99,9 +106,9 @@ export interface AutomationsRouteOptions {
     abortSignal: AbortSignal;
     onEvent: (event: TurnStreamEvent) => void;
     providerConsent?:
-      | import('@centraid/app-engine').RunnerKind
-      | readonly import('@centraid/app-engine').RunnerKind[];
-    runnerKind?: import('@centraid/app-engine').RunnerKind;
+      | import("@centraid/app-engine").RunnerKind
+      | readonly import("@centraid/app-engine").RunnerKind[];
+    runnerKind?: import("@centraid/app-engine").RunnerKind;
     model?: string;
     thinking?: string;
     attachmentRefs?: TurnAttachmentRef[];
@@ -138,27 +145,31 @@ interface AutomationTurnJson extends Turn {
  */
 function replayItemEvents(item: Item): AutomationTurnStreamEvent[] {
   const start: AutomationTurnStreamEvent = {
-    type: 'item.start',
+    type: "item.start",
     itemId: item.itemId,
     ordinal: item.ordinal,
-    ...(item.callId !== undefined ? { callId: item.callId } : {}),
-    ...(item.batchId !== undefined ? { batchId: item.batchId } : {}),
+    ...(item.callId === undefined ? {} : { callId: item.callId }),
+    ...(item.batchId === undefined ? {} : { batchId: item.batchId }),
     kind: item.kind,
-    ...(item.name !== undefined ? { name: item.name } : {}),
-    ...(item.argsJson !== undefined ? { args: safeParseJson(item.argsJson) } : {}),
-    ...(item.rawJson !== undefined ? { rawJson: item.rawJson } : {}),
+    ...(item.name === undefined ? {} : { name: item.name }),
+    ...(item.argsJson === undefined
+      ? {}
+      : { args: safeParseJson(item.argsJson) }),
+    ...(item.rawJson === undefined ? {} : { rawJson: item.rawJson }),
   };
   if (item.endedAt === undefined) return [start];
   const end: AutomationTurnStreamEvent = {
-    type: 'item.end',
+    type: "item.end",
     itemId: item.itemId,
     ordinal: item.ordinal,
-    ...(item.callId !== undefined ? { callId: item.callId } : {}),
+    ...(item.callId === undefined ? {} : { callId: item.callId }),
     ok: item.ok,
-    ...(item.outputJson !== undefined ? { result: safeParseJson(item.outputJson) } : {}),
-    ...(item.error !== undefined ? { error: item.error } : {}),
+    ...(item.outputJson === undefined
+      ? {}
+      : { result: safeParseJson(item.outputJson) }),
+    ...(item.error === undefined ? {} : { error: item.error }),
     durationMs: item.durationMs ?? 0,
-    ...(item.rawJson !== undefined ? { rawJson: item.rawJson } : {}),
+    ...(item.rawJson === undefined ? {} : { rawJson: item.rawJson }),
   };
   return [start, end];
 }
@@ -168,11 +179,11 @@ function turnToAutomationTurn(
   turn: Turn,
   automationRef: string | undefined,
   conversationTitle: string | undefined,
-  adapterKind: string | undefined,
+  adapterKind: string | undefined
 ): AutomationTurnJson {
   return {
     ...turn,
-    ...(automationRef !== undefined ? { automationId: automationRef } : {}),
+    ...(automationRef === undefined ? {} : { automationId: automationRef }),
     ...(conversationTitle ? { automationName: conversationTitle } : {}),
     ...(adapterKind ? { adapterKind } : {}),
   };
@@ -184,16 +195,19 @@ function turnToAutomationTurn(
  * `true` when it owned the request.
  */
 export function makeAutomationsRouteHandler(
-  opts: AutomationsRouteOptions,
+  opts: AutomationsRouteOptions
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
-  const codeAppsDir = (): string => path.join(opts.store.getActiveMainLink(), 'apps');
+  const codeAppsDir = (): string =>
+    path.join(opts.store.getActiveMainLink(), "apps");
   const subscriberCap = opts.subscriberCap ?? defaultSubscriberCap;
 
   // Turn-ledger store — every automation turn's full ledger is the vault's
   // single `journal.db` (#280), so per-execution file resolution is gone. A
   // ledger file that doesn't exist yet just means no turn ever landed here.
   const turnsStore = journalConversationStore(opts.journalDbFile);
-  const turnsStoreForTurnId = (_turnId: string): ConversationStore | undefined => {
+  const turnsStoreForTurnId = (
+    _turnId: string
+  ): ConversationStore | undefined => {
     if (!existsSync(opts.journalDbFile)) return undefined;
     return turnsStore;
   };
@@ -201,15 +215,19 @@ export function makeAutomationsRouteHandler(
   // SSE: stream one run end-to-end (issue #158, ledger-tail hybrid). Subscribe
   // to the bus first (so events during replay aren't lost), replay the durable
   // ledger snapshot, then drain buffered + live events until `turn.end`.
-  const streamTurnEvents = (req: IncomingMessage, res: ServerResponse, turnId: string): boolean => {
+  const streamTurnEvents = (
+    req: IncomingMessage,
+    res: ServerResponse,
+    turnId: string
+  ): boolean => {
     const releaseSlot = subscriberCap.admit(res);
     if (!releaseSlot) return true; // 503 + Retry-After already written
 
     res.writeHead(200, {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
     });
     res.write(`: turn ${turnId}\n\n`);
     const heartbeat = setInterval(() => {
@@ -227,10 +245,13 @@ export function makeAutomationsRouteHandler(
       releaseSlot();
       if (!res.writableEnded) res.end();
     };
-    req.on('close', cleanup);
-    res.on('error', cleanup);
+    req.on("close", cleanup);
+    res.on("error", cleanup);
 
-    const write = (ev: AutomationTurnStreamEvent, serialized = JSON.stringify(ev)): void => {
+    const write = (
+      ev: AutomationTurnStreamEvent,
+      serialized = JSON.stringify(ev)
+    ): void => {
       if (res.writableEnded) return;
       res.write(`event: ${ev.type}\n`);
       res.write(`data: ${serialized}\n\n`);
@@ -245,7 +266,7 @@ export function makeAutomationsRouteHandler(
       while (queue.length > 0) {
         const [ev, serialized] = queue.shift()!;
         write(ev, serialized);
-        if (ev.type === 'turn.end') {
+        if (ev.type === "turn.end") {
           cleanup();
           return;
         }
@@ -259,20 +280,20 @@ export function makeAutomationsRouteHandler(
 
     const store = turnsStoreForTurnId(turnId);
     const turn = store?.getTurn(turnId);
-    write({ type: 'turn.start', turnId });
+    write({ type: "turn.start", turnId });
     const items = store ? store.listItems(turnId) : [];
     for (const item of items) {
-      if (item.kind === 'message_in') continue;
+      if (item.kind === "message_in") continue;
       for (const ev of replayItemEvents(item)) write(ev);
     }
 
     // Run already finished (background fire / late join) — emit terminal + close.
     if (turn && turn.endedAt !== undefined) {
       write({
-        type: 'turn.end',
+        type: "turn.end",
         turnId,
         ok: turn.ok,
-        ...(turn.error !== undefined ? { error: turn.error } : {}),
+        ...(turn.error === undefined ? {} : { error: turn.error }),
       });
       cleanup();
       return true;
@@ -290,33 +311,35 @@ export function makeAutomationsRouteHandler(
   };
 
   return async (req, res) => {
-    const url = new URL(req.url ?? '/', 'http://localhost');
+    const url = new URL(req.url ?? "/", "http://localhost");
     const { pathname } = url;
-    const isAutomations = pathname.startsWith('/centraid/_automations');
-    const isInsights = pathname === '/centraid/_insights/summary';
+    const isAutomations = pathname.startsWith("/centraid/_automations");
+    const isInsights = pathname === "/centraid/_insights/summary";
     if (!isAutomations && !isInsights) return false;
-    const method = (req.method ?? 'GET').toUpperCase();
+    const method = (req.method ?? "GET").toUpperCase();
 
     try {
-      if (isInsights && method === 'GET') {
-        const windowDays = Number(url.searchParams.get('windowDays'));
+      if (isInsights && method === "GET") {
+        const windowDays = Number(url.searchParams.get("windowDays"));
         return sendJson(
           res,
           200,
           opts.insights.summary(
-            Number.isFinite(windowDays) && windowDays > 0 ? { windowDays } : {},
-          ),
+            Number.isFinite(windowDays) && windowDays > 0 ? { windowDays } : {}
+          )
         );
       }
 
-      const sub = pathname.slice('/centraid/_automations'.length).replace(/^\/+/, '');
+      const sub = pathname
+        .slice("/centraid/_automations".length)
+        .replace(/^\/+/u, "");
 
-      if (sub === '' && method === 'GET') {
+      if (sub === "" && method === "GET") {
         return sendJson(res, 200, await automation.list(codeAppsDir()));
       }
 
-      if (sub === 'read' && method === 'GET') {
-        const ref = automation.parseRef(url.searchParams.get('ref') ?? '');
+      if (sub === "read" && method === "GET") {
+        const ref = automation.parseRef(url.searchParams.get("ref") ?? "");
         if (!ref) return sendJson(res, 200, { row: null });
         const row = await automation
           .readAppOwned(codeAppsDir(), ref.appId, ref.automationId)
@@ -328,13 +351,21 @@ export function makeAutomationsRouteHandler(
       // owns intent, but the deterministic plan the headless compiler writes
       // (`automation.json` + `handler.js`) is what actually runs. Surfacing it
       // read-only lets the owner see exactly what their prose became.
-      if (sub === 'source' && method === 'GET') {
-        const ref = automation.parseRef(url.searchParams.get('ref') ?? '');
+      if (sub === "source" && method === "GET") {
+        const ref = automation.parseRef(url.searchParams.get("ref") ?? "");
         if (!ref)
-          return sendJson(res, 400, { error: 'bad_request', message: 'source needs ?ref=' });
-        const dir = path.join(codeAppsDir(), ref.appId, 'automations', ref.automationId);
+          return sendJson(res, 400, {
+            error: "bad_request",
+            message: "source needs ?ref=",
+          });
+        const dir = path.join(
+          codeAppsDir(),
+          ref.appId,
+          "automations",
+          ref.automationId
+        );
         const read = (file: string): Promise<string | null> =>
-          readFile(path.join(dir, file), 'utf8').catch(() => null);
+          readFile(path.join(dir, file), "utf8").catch(() => null);
         const [manifest, handler] = await Promise.all([
           read(automation.MANIFEST_FILE),
           read(automation.HANDLER_FILE),
@@ -342,27 +373,32 @@ export function makeAutomationsRouteHandler(
         return sendJson(res, 200, { manifest, handler });
       }
 
-      if (sub === 'turn-now' && method === 'POST') {
-        const ref = url.searchParams.get('ref') ?? '';
+      if (sub === "turn-now" && method === "POST") {
+        const ref = url.searchParams.get("ref") ?? "";
         if (!automation.parseRef(ref)) {
-          return sendJson(res, 400, { error: 'bad_request', message: 'turn-now needs ?ref=' });
+          return sendJson(res, 400, {
+            error: "bad_request",
+            message: "turn-now needs ?ref=",
+          });
         }
         const turnId = `${ref}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
         opts.runAutomation({ automationRef: ref, turnId });
         return sendJson(res, 202, { turnId });
       }
 
-      if (sub === 'turns' && method === 'GET') {
-        const ref = url.searchParams.get('ref');
-        const limit = Number(url.searchParams.get('limit'));
-        const boundedLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 250) : 50;
-        if (!existsSync(opts.journalDbFile)) return sendJson(res, 200, { turns: [] });
+      if (sub === "turns" && method === "GET") {
+        const ref = url.searchParams.get("ref");
+        const limit = Number(url.searchParams.get("limit"));
+        const boundedLimit =
+          Number.isFinite(limit) && limit > 0 ? Math.min(limit, 250) : 50;
+        if (!existsSync(opts.journalDbFile))
+          return sendJson(res, 200, { turns: [] });
         const rows = ref
           ? turnsStore.listAutomationTurns(ref, { limit: boundedLimit })
           : (() => {
               const finished = opts.analytics
                 .listSummaries({ limit: boundedLimit })
-                .filter((summary) => summary.kind === 'automation')
+                .filter((summary) => summary.kind === "automation")
                 .map((summary) => turnsStore.getTurn(summary.runId))
                 .filter((turn): turn is Turn => turn !== undefined);
               const seen = new Set(finished.map((turn) => turn.turnId));
@@ -381,15 +417,15 @@ export function makeAutomationsRouteHandler(
             turn,
             conversation?.automationId,
             conversation?.title,
-            conversation?.adapterKind,
+            conversation?.adapterKind
           );
         });
         return sendJson(res, 200, { turns });
       }
 
-      if (sub === 'turn' && method === 'GET') {
-        const requestedTurnId = url.searchParams.get('turnId') ?? '';
-        const ref = url.searchParams.get('ref') ?? '';
+      if (sub === "turn" && method === "GET") {
+        const requestedTurnId = url.searchParams.get("turnId") ?? "";
+        const ref = url.searchParams.get("ref") ?? "";
         const store = turnsStoreForTurnId(requestedTurnId);
         const turn =
           store?.getTurn(requestedTurnId) ??
@@ -400,62 +436,73 @@ export function makeAutomationsRouteHandler(
           turn,
           conversation?.automationId,
           conversation?.title,
-          conversation?.adapterKind,
+          conversation?.adapterKind
         );
         return sendJson(res, 200, {
           turn: record,
-          ...(url.searchParams.get('expand') === 'items'
+          ...(url.searchParams.get("expand") === "items"
             ? { items: store.listItems(turn.turnId) }
             : {}),
         });
       }
 
-      if (sub === 'turn' && method === 'POST') {
-        const parsed = automation.parseRef(url.searchParams.get('ref') ?? '');
+      if (sub === "turn" && method === "POST") {
+        const parsed = automation.parseRef(url.searchParams.get("ref") ?? "");
         if (!parsed) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'turn needs ?ref=',
+            error: "bad_request",
+            message: "turn needs ?ref=",
           });
         }
         if (!opts.runInteractiveTurn) {
           return sendJson(res, 501, {
-            error: 'not_supported',
-            message: 'Interactive automation turns are not available on this gateway.',
+            error: "not_supported",
+            message:
+              "Interactive automation turns are not available on this gateway.",
           });
         }
-        const row = await automation.readAppOwned(codeAppsDir(), parsed.appId, parsed.automationId);
+        const row = await automation.readAppOwned(
+          codeAppsDir(),
+          parsed.appId,
+          parsed.automationId
+        );
         if (!row) {
           return sendJson(res, 404, {
-            error: 'not_found',
+            error: "not_found",
             message: `Automation "${parsed.appId}/${parsed.automationId}" was not found.`,
           });
         }
         const body = await readJson(req);
-        const message = typeof body.message === 'string' ? body.message.trim() : '';
+        const message =
+          typeof body.message === "string" ? body.message.trim() : "";
         if (!message) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'turn body needs a non-empty {message}',
+            error: "bad_request",
+            message: "turn body needs a non-empty {message}",
           });
         }
         const providerConsent = parseProviderConsent(body.providerConsent);
-        if (providerConsent === 'invalid') {
+        if (providerConsent === "invalid") {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'providerConsent must name registered runners.',
+            error: "bad_request",
+            message: "providerConsent must name registered runners.",
           });
         }
-        const runnerKind = isRunnerKind(body.runnerKind) ? body.runnerKind : undefined;
+        const runnerKind = isRunnerKind(body.runnerKind)
+          ? body.runnerKind
+          : undefined;
         if (body.runnerKind !== undefined && !runnerKind) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'runnerKind must name a registered runner.',
+            error: "bad_request",
+            message: "runnerKind must name a registered runner.",
           });
         }
-        const model = typeof body.model === 'string' && body.model ? body.model : undefined;
+        const model =
+          typeof body.model === "string" && body.model ? body.model : undefined;
         const thinking =
-          typeof body.thinking === 'string' && body.thinking ? body.thinking : undefined;
+          typeof body.thinking === "string" && body.thinking
+            ? body.thinking
+            : undefined;
         const attachmentRefs = parseTurnAttachmentRefs(body.attachments);
         // Same fd-exhaustion guard as `turn/events` (sse-cap.ts): every
         // accepted request holds an open response, a 30s heartbeat, and —
@@ -468,14 +515,14 @@ export function makeAutomationsRouteHandler(
         const turnId = `${row.ref}:interactive:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
         const abort = new AbortController();
         const onClose = (): void => abort.abort();
-        req.on('close', onClose);
-        req.on('error', onClose);
+        req.on("close", onClose);
+        req.on("error", onClose);
         res.writeHead(200, {
-          'Content-Type': 'text/event-stream; charset=utf-8',
-          'Cache-Control': 'no-cache, no-transform',
-          Connection: 'keep-alive',
-          'X-Accel-Buffering': 'no',
-          'X-Centraid-Turn-Id': turnId,
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+          "X-Centraid-Turn-Id": turnId,
         });
         res.write(`: automation ${row.ref} turn ${turnId}\n\n`);
         const heartbeat = setInterval(() => {
@@ -502,41 +549,41 @@ export function makeAutomationsRouteHandler(
           });
         } catch (error) {
           onEvent({
-            type: 'error',
+            type: "error",
             message: error instanceof Error ? error.message : String(error),
           });
         } finally {
           clearInterval(heartbeat);
-          req.off('close', onClose);
-          req.off('error', onClose);
+          req.off("close", onClose);
+          req.off("error", onClose);
           releaseSlot();
           if (!res.writableEnded) {
-            res.write('event: end\ndata: {}\n\n');
+            res.write("event: end\ndata: {}\n\n");
             res.end();
           }
         }
         return true;
       }
 
-      if (sub === 'turn/items' && method === 'GET') {
-        const turnId = url.searchParams.get('turnId') ?? '';
+      if (sub === "turn/items" && method === "GET") {
+        const turnId = url.searchParams.get("turnId") ?? "";
         const store = turnsStoreForTurnId(turnId);
         return sendJson(res, 200, { items: store?.listItems(turnId) ?? [] });
       }
 
-      if (sub === 'turn/events' && method === 'GET') {
-        const turnId = url.searchParams.get('turnId') ?? '';
+      if (sub === "turn/events" && method === "GET") {
+        const turnId = url.searchParams.get("turnId") ?? "";
         if (!turnId) {
           return sendJson(res, 400, {
-            error: 'bad_request',
-            message: 'turn/events needs ?turnId=',
+            error: "bad_request",
+            message: "turn/events needs ?turnId=",
           });
         }
         return streamTurnEvents(req, res, turnId);
       }
 
-      if (sub === 'turn/pin' && method === 'POST') {
-        const turnId = url.searchParams.get('turnId') ?? '';
+      if (sub === "turn/pin" && method === "POST") {
+        const turnId = url.searchParams.get("turnId") ?? "";
         const body = await readJson(req);
         const pinned = body.pinned === true;
         // turns.pinned is the source — the run_summary view reflects it.

@@ -19,36 +19,37 @@
  * `gateway-supervisor-core.ts` (H7) and is applied by `local-gateway.ts`.
  */
 
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { createRequire } from 'node:module';
-import crypto from 'node:crypto';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { endpointIdForSecret } from '@centraid/tunnel';
-import { landlordBearerForDataDir } from '@centraid/gateway';
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import crypto from "node:crypto";
+import { createRequire } from "node:module";
+import path from "node:path";
+
+import { landlordBearerForDataDir } from "@centraid/gateway";
+import { endpointIdForSecret } from "@centraid/tunnel";
+
 import {
   buildDetachedSpawnOptions,
   decideControl,
-  resolveListenPort,
-  type ControlDecision,
-} from './detached-gateway-core.js';
+  resolveListenPort as resolveConfiguredListenPort,
+} from "./detached-gateway-core.js";
+import type { ControlDecision } from "./detached-gateway-core.js";
+import { LOCAL_GATEWAY_ID } from "./gateway-paths.js";
 import {
   getOrCreateGatewayWrappingKey,
   readLocalLoopbackToken,
   storeLocalLoopbackToken,
-} from './gateway-secrets.js';
-import { LOCAL_GATEWAY_ID } from './gateway-paths.js';
-import { ensureIrohDeviceKey } from './iroh-dialer.js';
+} from "./gateway-secrets.js";
+import { ensureIrohDeviceKey } from "./iroh-dialer.js";
 
 const require = createRequire(import.meta.url);
 
-const DEFAULT_HOST = '127.0.0.1';
+const DEFAULT_HOST = "127.0.0.1";
 const READY_POLL_MS = 100;
 const READY_TIMEOUT_MS = 30_000;
 
 /** In-memory handle for a detached (or adopted foreign) gateway child. */
 export interface DetachedGatewayHandle {
-  mode: 'detached';
+  mode: "detached";
   url: string;
   token: string;
   pid: number;
@@ -62,12 +63,15 @@ export interface DetachedGatewayHandle {
    * App quit must NOT call this for detached handles — see
    * `shutdownAllLocalGatewaysExcept` in local-gateway.ts.
    */
-  close(): Promise<void>;
+  close: () => Promise<void>;
   /** Minimal health surface so callers that only registerProbe don't crash. */
   health: {
     registerProbe: (
       name: string,
-      probe: () => Promise<{ status: 'ok' | 'degraded' | 'error'; detail?: string }>,
+      probe: () => Promise<{
+        status: "ok" | "degraded" | "error";
+        detail?: string;
+      }>
     ) => void;
   };
   /**
@@ -95,15 +99,18 @@ export async function getOrCreateDesktopOwnerId(): Promise<string> {
  */
 export function resolveGatewayCliPath(): string {
   try {
-    const pkgJson = require.resolve('@centraid/gateway/package.json');
-    const candidate = path.join(path.dirname(pkgJson), 'dist', 'cli', 'cli.js');
+    const pkgJson = require.resolve("@centraid/gateway/package.json");
+    const candidate = path.join(path.dirname(pkgJson), "dist", "cli", "cli.js");
     return candidate;
   } catch {
     // fall through
   }
-  const here = path.dirname(fileURLToPath(import.meta.url));
+  const here = import.meta.dirname;
   // apps/desktop/dist/main → ../../../packages/gateway/dist/cli/cli.js
-  const monorepo = path.resolve(here, '../../../packages/gateway/dist/cli/cli.js');
+  const monorepo = path.resolve(
+    here,
+    "../../../packages/gateway/dist/cli/cli.js"
+  );
   return monorepo;
 }
 
@@ -120,15 +127,18 @@ function processExists(pid: number): boolean {
 export async function probeGatewayInfo(
   url: string,
   token?: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch
 ): Promise<boolean> {
   try {
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetchImpl(new URL('/centraid/_gateway/info', `${url}/`).toString(), {
-      headers,
-      signal: AbortSignal.timeout(2000),
-    });
+    const res = await fetchImpl(
+      new URL("/centraid/_gateway/info", `${url}/`).toString(),
+      {
+        headers,
+        signal: AbortSignal.timeout(2000),
+      }
+    );
     return res.ok;
   } catch {
     return false;
@@ -138,14 +148,17 @@ export async function probeGatewayInfo(
 async function probeGatewayAuthenticated(
   url: string,
   token: string | undefined,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch
 ): Promise<boolean> {
   if (!token) return false;
   try {
-    const res = await fetchImpl(new URL('/centraid/_gateway/health', `${url}/`).toString(), {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(2_000),
-    });
+    const res = await fetchImpl(
+      new URL("/centraid/_gateway/health", `${url}/`).toString(),
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(2_000),
+      }
+    );
     return res.ok;
   } catch {
     return false;
@@ -156,12 +169,13 @@ async function probeGatewayAuthenticated(
 async function firstWorkingToken(
   url: string,
   candidates: ReadonlyArray<string | undefined>,
+  index = 0
 ): Promise<string | undefined> {
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    if (await probeGatewayAuthenticated(url, candidate)) return candidate;
-  }
-  return undefined;
+  const candidate = candidates[index];
+  if (candidate === undefined) return undefined;
+  if (!candidate) return firstWorkingToken(url, candidates, index + 1);
+  if (await probeGatewayAuthenticated(url, candidate)) return candidate;
+  return firstWorkingToken(url, candidates, index + 1);
 }
 
 export interface EnsureDetachedOptions {
@@ -189,8 +203,8 @@ export interface EnsureDetachedOptions {
 
 function resolveNodeBin(): string {
   // Electron's execPath is the Electron binary, not node — prefer `node` on PATH.
-  if (typeof process.versions.electron === 'string') {
-    return 'node';
+  if (typeof process.versions.electron === "string") {
+    return "node";
   }
   return process.execPath;
 }
@@ -229,59 +243,74 @@ function signalGatewayGroup(pid: number, signal: NodeJS.Signals): void {
  * the still-dying pid and never respawns). This is exactly the restart-crash
  * footgun: the old stop was a fire-and-forget SIGTERM with no wait.
  */
-async function terminateDetachedGateway(pid: number, timeoutMs = STOP_TIMEOUT_MS): Promise<void> {
+async function terminateDetachedGateway(
+  pid: number,
+  timeoutMs = STOP_TIMEOUT_MS
+): Promise<void> {
   if (!Number.isInteger(pid) || pid <= 0) return;
   if (!processExists(pid)) return;
-  signalGatewayGroup(pid, 'SIGTERM');
+  signalGatewayGroup(pid, "SIGTERM");
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline && processExists(pid)) {
+  const waitForExit = async (): Promise<void> => {
+    if (Date.now() >= deadline || !processExists(pid)) return;
     await sleep(STOP_POLL_MS);
-  }
+    return waitForExit();
+  };
+  await waitForExit();
   if (processExists(pid)) {
-    signalGatewayGroup(pid, 'SIGKILL');
+    signalGatewayGroup(pid, "SIGKILL");
     const hardDeadline = Date.now() + 1_000;
-    while (Date.now() < hardDeadline && processExists(pid)) {
+    const waitForHardExit = async (): Promise<void> => {
+      if (Date.now() >= hardDeadline || !processExists(pid)) return;
       await sleep(STOP_POLL_MS);
-    }
+      return waitForHardExit();
+    };
+    await waitForHardExit();
   }
 }
 
-function makeVaults(url: string, token: string): DetachedGatewayHandle['vaults'] {
+function makeVaults(
+  url: string,
+  token: string
+): DetachedGatewayHandle["vaults"] {
   const request = async (
     pathname: string,
     body: Record<string, unknown>,
-    vaultId?: string,
+    vaultId?: string
   ): Promise<Record<string, unknown>> => {
     const response = await fetch(new URL(pathname, `${url}/`), {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...(vaultId ? { 'x-centraid-vault': vaultId } : {}),
+        "Content-Type": "application/json",
+        ...(vaultId ? { "x-centraid-vault": vaultId } : {}),
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(30_000),
     });
-    const result = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const result = (await response.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
     if (!response.ok) {
       throw new Error(
-        typeof result.message === 'string'
+        typeof result.message === "string"
           ? result.message
-          : `vault operation failed (HTTP ${response.status})`,
+          : `vault operation failed (HTTP ${response.status})`
       );
     }
     return result;
   };
   return {
     async create(name?: string): Promise<{ vaultId: string }> {
-      const result = await request('/centraid/_vault/vaults', { name });
-      if (typeof result.vaultId !== 'string') {
-        throw new Error('vault create returned no vaultId');
+      const result = await request("/centraid/_vault/vaults", { name });
+      if (typeof result.vaultId !== "string") {
+        throw new Error("vault create returned no vaultId");
       }
       return { vaultId: result.vaultId };
     },
     async delete(vaultId: string, name: string): Promise<void> {
-      await request('/centraid/_vault/vaults:erase', { name }, vaultId);
+      await request("/centraid/_vault/vaults:erase", { name }, vaultId);
     },
   };
 }
@@ -299,7 +328,7 @@ function makeHandle(input: {
 }): DetachedGatewayHandle {
   const { owned, pid } = input;
   return {
-    mode: 'detached',
+    mode: "detached",
     url: input.url,
     token: input.token,
     pid,
@@ -339,12 +368,18 @@ async function waitUntilReady(input: {
 }): Promise<{ url: string; token: string }> {
   const url = `http://${input.host}:${input.port}`;
   const deadline = Date.now() + input.timeoutMs;
-  while (Date.now() < deadline) {
+  const pollUntilReady = async (): Promise<{ url: string; token: string }> => {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `detached gateway at ${url} did not become ready within ${input.timeoutMs}ms`
+      );
+    }
     const ok = await probeGatewayAuthenticated(url, input.token);
     if (ok) return { url, token: input.token };
     await sleep(READY_POLL_MS);
-  }
-  throw new Error(`detached gateway at ${url} did not become ready within ${input.timeoutMs}ms`);
+    return pollUntilReady();
+  };
+  return pollUntilReady();
 }
 
 interface LockSnapshot {
@@ -357,28 +392,36 @@ function lockSnapshot(
   dataDir: string,
   cliPath: string,
   nodeBin: string,
-  wrappingKey?: Buffer,
+  wrappingKey?: Buffer
 ): LockSnapshot {
-  const result = spawnSync(nodeBin, [cliPath, 'lock-status', '--data-dir', dataDir, '--json'], {
-    encoding: 'utf8',
-    timeout: 5_000,
-    env: {
-      ...process.env,
-      ...(wrappingKey ? { CENTRAID_KEYSTORE_MASTER_KEY: wrappingKey.toString('base64') } : {}),
-    },
-  });
-  const line = (result.stdout || '').trim().split('\n').pop() ?? '';
+  const result = spawnSync(
+    nodeBin,
+    [cliPath, "lock-status", "--data-dir", dataDir, "--json"],
+    {
+      encoding: "utf8",
+      timeout: 5_000,
+      env: {
+        ...process.env,
+        ...(wrappingKey
+          ? { CENTRAID_KEYSTORE_MASTER_KEY: wrappingKey.toString("base64") }
+          : {}),
+      },
+    }
+  );
+  const line = (result.stdout || "").trim().split("\n").pop() ?? "";
   try {
     const parsed = JSON.parse(line) as Partial<LockSnapshot> & { ok?: boolean };
     if (
       parsed.ok === true &&
-      typeof parsed.held === 'boolean' &&
-      typeof parsed.answering === 'boolean'
+      typeof parsed.held === "boolean" &&
+      typeof parsed.answering === "boolean"
     ) {
       return {
         held: parsed.held,
         answering: parsed.answering,
-        ...(typeof parsed.holderPid === 'number' ? { holderPid: parsed.holderPid } : {}),
+        ...(typeof parsed.holderPid === "number"
+          ? { holderPid: parsed.holderPid }
+          : {}),
       };
     }
   } catch {
@@ -393,17 +436,18 @@ function lockSnapshot(
  * against a foreign stamp (H3).
  */
 export async function ensureDetachedGateway(
-  options: EnsureDetachedOptions,
+  options: EnsureDetachedOptions
 ): Promise<DetachedGatewayHandle> {
   const dataDir = options.dataDir;
   const host = options.host ?? DEFAULT_HOST;
-  const port = resolveListenPort(options.port);
+  const port = resolveConfiguredListenPort(options.port);
   const cliPath = options.cliPath ?? resolveGatewayCliPath();
   const nodeBin = options.nodeBin ?? resolveNodeBin();
   const readyTimeoutMs = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
   const candidateUrl = `http://${host}:${port}`;
   const gatewayWrappingKey =
-    options.gatewayWrappingKey ?? getOrCreateGatewayWrappingKey(LOCAL_GATEWAY_ID);
+    options.gatewayWrappingKey ??
+    getOrCreateGatewayWrappingKey(LOCAL_GATEWAY_ID);
   const existingToken = readLocalLoopbackToken(LOCAL_GATEWAY_ID);
   const lock = lockSnapshot(dataDir, cliPath, nodeBin, gatewayWrappingKey);
   // A gateway the user installed as an OS service was not spawned by this
@@ -424,21 +468,21 @@ export async function ensureDetachedGateway(
     publicProbeOk,
   });
 
-  if (decision === 'probe-failed-refuse') {
+  if (decision === "probe-failed-refuse") {
     throw new Error(
-      'gateway.db is locked but the daemon is not answering — refusing to start ' +
-        `a second writer${lock.holderPid ? ` (OS holder pid ${lock.holderPid})` : ''}`,
+      "gateway.db is locked but the daemon is not answering — refusing to start " +
+        `a second writer${lock.holderPid ? ` (OS holder pid ${lock.holderPid})` : ""}`
     );
   }
 
-  if (decision === 'foreign') {
+  if (decision === "foreign") {
     throw new Error(
-      'a live gateway holds this data directory, but this desktop has no matching ' +
-        'device credential; leave it running and pair this desktop over iroh',
+      "a live gateway holds this data directory, but this desktop has no matching " +
+        "device credential; leave it running and pair this desktop over iroh"
     );
   }
 
-  if (decision === 'own' && controlToken) {
+  if (decision === "own" && controlToken) {
     return makeHandle({
       url: candidateUrl,
       token: controlToken,
@@ -459,19 +503,19 @@ export async function ensureDetachedGateway(
   const spawnOpts = buildDetachedSpawnOptions();
   const args = [
     cliPath,
-    'serve',
-    '--data-dir',
+    "serve",
+    "--data-dir",
     dataDir,
-    '--port',
+    "--port",
     String(listenPort),
-    '--host',
+    "--host",
     listenHost,
   ];
 
   // Mint the per-launch loopback token and hand it to the daemon via
   // `CENTRAID_GATEWAY_TOKEN`. Persist it in device safeStorage—never the
   // gateway tree—so a desktop restart can re-adopt the child.
-  const loopbackToken = crypto.randomBytes(32).toString('hex');
+  const loopbackToken = crypto.randomBytes(32).toString("hex");
   storeLocalLoopbackToken(LOCAL_GATEWAY_ID, loopbackToken);
 
   let child: ChildProcess;
@@ -483,19 +527,19 @@ export async function ensureDetachedGateway(
         ...process.env,
         CENTRAID_GATEWAY_TOKEN: loopbackToken,
         CENTRAID_DESKTOP_ENDPOINT_ID: options.ownerId,
-        CENTRAID_KEYSTORE_MASTER_KEY: gatewayWrappingKey.toString('base64'),
+        CENTRAID_KEYSTORE_MASTER_KEY: gatewayWrappingKey.toString("base64"),
       },
     });
   } catch (err) {
     throw new Error(
       `failed to spawn detached gateway: ${err instanceof Error ? err.message : String(err)}`,
-      { cause: err },
+      { cause: err }
     );
   }
 
   const pid = child.pid;
   if (pid == null) {
-    throw new Error('failed to spawn detached gateway: no pid');
+    throw new Error("failed to spawn detached gateway: no pid");
   }
   if (spawnOpts.unref) {
     child.unref();
@@ -522,8 +566,10 @@ export async function ensureDetachedGateway(
 }
 
 /** Whether the desktop should prefer the in-process embed (tests/E2E). */
-export function preferEmbeddedGateway(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.CENTRAID_EMBEDDED_GATEWAY === '1';
+export function preferEmbeddedGateway(
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  return env.CENTRAID_EMBEDDED_GATEWAY === "1";
 }
 
 /**
@@ -532,47 +578,52 @@ export function preferEmbeddedGateway(env: NodeJS.ProcessEnv = process.env): boo
  * Opt-in only; never call from a silent path.
  */
 export async function installGatewayOsService(
-  dataDir: string,
+  dataDir: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const cliPath = resolveGatewayCliPath();
     const nodeBin = process.execPath;
-    const port = resolveListenPort();
+    const port = resolveConfiguredListenPort();
     const ownerId = await getOrCreateDesktopOwnerId();
     const gatewayWrappingKey = getOrCreateGatewayWrappingKey(LOCAL_GATEWAY_ID);
     const result = spawnSync(
       nodeBin,
       [
         cliPath,
-        'service',
-        'install',
-        '--data-dir',
+        "service",
+        "install",
+        "--data-dir",
         dataDir,
-        '--host',
+        "--host",
         DEFAULT_HOST,
-        '--port',
+        "--port",
         String(port),
       ],
       // `nodeBin` here is `process.execPath` = the Electron binary. Run it in
       // node mode so this one-shot install doesn't flash the full desktop app
       // (and so the child's own `process.execPath`-derived unit stays sane).
       {
-        encoding: 'utf8',
+        encoding: "utf8",
         timeout: 30_000,
         env: {
           ...process.env,
-          ELECTRON_RUN_AS_NODE: '1',
+          ELECTRON_RUN_AS_NODE: "1",
           CENTRAID_DESKTOP_ENDPOINT_ID: ownerId,
-          CENTRAID_KEYSTORE_MASTER_KEY: gatewayWrappingKey.toString('base64'),
+          CENTRAID_KEYSTORE_MASTER_KEY: gatewayWrappingKey.toString("base64"),
         },
-      },
+      }
     );
     if (result.status === 0) return { ok: true };
-    const err = (result.stderr || result.stdout || `exit ${result.status}`).trim();
-    return { ok: false, error: err || 'service install failed' };
+    const err = (
+      result.stderr ||
+      result.stdout ||
+      `exit ${result.status}`
+    ).trim();
+    return { ok: false, error: err || "service install failed" };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
-
-export { resolveListenPort };

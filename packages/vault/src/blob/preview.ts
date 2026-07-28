@@ -23,11 +23,12 @@
 // ingest/promote path (variant/variant_of), so dedup, custody and
 // replication all "just work" with no new plumbing.
 
-import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from '@centraid/blob-format';
-import type { VaultDb } from '../db.js';
-import { nowIso } from '../ids.js';
-import { stageBlobBytes } from './staging.js';
-import { shaOfBlobUri } from './store.js';
+import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from "@centraid/blob-format";
+
+import type { VaultDb } from "../db.js";
+import { nowIso } from "../ids.js";
+import { stageBlobBytes } from "./staging.js";
+import { shaOfBlobUri } from "./store.js";
 
 /** Tiny rung (issue #405 §2): the browse-grid thumbnail, ~256 px long edge. */
 export const TINY_EDGE = BLOB_TINY_EDGE;
@@ -49,9 +50,12 @@ export const INGRESS_PREVIEW_MAX_BYTES = 32 * 1024 * 1024;
  * variant vocabulary (schema/blob.ts already spells both), so the ladder
  * needs NO schema change — a rung is just a (variant, maxEdge) pair.
  */
-export const PREVIEW_LADDER: readonly { variant: 'thumb' | 'preview'; maxEdge: number }[] = [
-  { variant: 'thumb', maxEdge: TINY_EDGE },
-  { variant: 'preview', maxEdge: MEDIUM_EDGE },
+export const PREVIEW_LADDER: readonly {
+  variant: "thumb" | "preview";
+  maxEdge: number;
+}[] = [
+  { variant: "thumb", maxEdge: TINY_EDGE },
+  { variant: "preview", maxEdge: MEDIUM_EDGE },
 ];
 
 /** A downscaled raster the codec produced — bytes plus the resulting size. */
@@ -77,15 +81,21 @@ export interface PreviewOutput {
  * so a skipped item simply renders a placeholder.
  */
 export interface PreviewCodec {
-  downscale(
+  downscale: (
     source: Buffer,
     mediaType: string,
-    maxEdge: number,
-  ): PreviewOutput | null | Promise<PreviewOutput | null>;
+    maxEdge: number
+  ) => PreviewOutput | null | Promise<PreviewOutput | null>;
   /** 64-bit dHash, encoded as 16 lowercase hexadecimal characters. */
-  perceptualHash(source: Buffer, mediaType: string): string | null | Promise<string | null>;
+  perceptualHash: (
+    source: Buffer,
+    mediaType: string
+  ) => string | null | Promise<string | null>;
   /** ThumbHash bytes as unpadded standard base64, or null for an undecodable input. */
-  thumbhash(source: Buffer, mediaType: string): string | null | Promise<string | null>;
+  thumbhash: (
+    source: Buffer,
+    mediaType: string
+  ) => string | null | Promise<string | null>;
 }
 
 /** What one backstop pass touched — folded into the sweep receipt. */
@@ -104,6 +114,44 @@ export interface PreviewBackfillResult {
   missingBytes: number;
 }
 
+interface PreviewBackfillItem {
+  content_id: string;
+  media_type: string;
+}
+
+async function stageMissingPreviewRungs(
+  db: VaultDb,
+  codec: PreviewCodec,
+  item: PreviewBackfillItem,
+  bytes: Buffer,
+  parentSha: string,
+  missing: readonly (typeof PREVIEW_LADDER)[number][],
+  result: PreviewBackfillResult,
+  rungIndex = 0
+): Promise<boolean> {
+  const rung = missing[rungIndex];
+  if (!rung) return false;
+  const out = await codec.downscale(bytes, item.media_type, rung.maxEdge);
+  if (!out) return true;
+  stageBlobBytes(db, {
+    bytes: out.bytes,
+    mediaType: out.mediaType,
+    variant: rung.variant,
+    variantOf: parentSha,
+  });
+  result.generated += 1;
+  return stageMissingPreviewRungs(
+    db,
+    codec,
+    item,
+    bytes,
+    parentSha,
+    missing,
+    result,
+    rungIndex + 1
+  );
+}
+
 export interface IngressPreviewInput {
   sha256: string;
   bytes: Buffer;
@@ -115,19 +163,25 @@ export interface IngressPreviewInput {
 export async function contributeIngressPreviews(
   db: VaultDb,
   codec: PreviewCodec,
-  input: IngressPreviewInput,
+  input: IngressPreviewInput
 ): Promise<number> {
   if (
-    !input.mediaType.startsWith('image/') ||
+    !input.mediaType.startsWith("image/") ||
     input.bytes.length === 0 ||
     input.bytes.length > INGRESS_PREVIEW_MAX_BYTES
   ) {
     return 0;
   }
   let generated = 0;
-  for (const rung of PREVIEW_LADDER) {
-    const output = await codec.downscale(input.bytes, input.mediaType, rung.maxEdge);
-    if (!output) break;
+  async function stageNextRung(index: number): Promise<void> {
+    const rung = PREVIEW_LADDER[index];
+    if (!rung) return;
+    const output = await codec.downscale(
+      input.bytes,
+      input.mediaType,
+      rung.maxEdge
+    );
+    if (!output) return;
     stageBlobBytes(db, {
       bytes: output.bytes,
       mediaType: output.mediaType,
@@ -137,15 +191,19 @@ export async function contributeIngressPreviews(
       ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
     });
     generated += 1;
+    return stageNextRung(index + 1);
   }
-  if (!hasStagedOrClaimedVariant(db, input.sha256, 'phash')) {
+  // Preview rungs are a quality ladder: a codec declining one stops later,
+  // more expensive rungs from being attempted.
+  await stageNextRung(0);
+  if (!hasStagedOrClaimedVariant(db, input.sha256, "phash")) {
     try {
       const phash = await codec.perceptualHash(input.bytes, input.mediaType);
       if (phash) {
         stageBlobBytes(db, {
           bytes: Buffer.from(phash),
-          mediaType: 'text/x-perceptual-hash',
-          variant: 'phash',
+          mediaType: "text/x-perceptual-hash",
+          variant: "phash",
           variantOf: input.sha256,
           validateDerivative: true,
           ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
@@ -156,14 +214,14 @@ export async function contributeIngressPreviews(
       // A hash miss only removes a duplicate hint; binary previews still win.
     }
   }
-  if (!hasStagedOrClaimedVariant(db, input.sha256, 'thumbhash')) {
+  if (!hasStagedOrClaimedVariant(db, input.sha256, "thumbhash")) {
     try {
       const thumbhash = await codec.thumbhash(input.bytes, input.mediaType);
       if (thumbhash) {
         stageBlobBytes(db, {
           bytes: Buffer.from(thumbhash),
-          mediaType: 'application/x-thumbhash',
-          variant: 'thumbhash',
+          mediaType: "application/x-thumbhash",
+          variant: "thumbhash",
           variantOf: input.sha256,
           validateDerivative: true,
           ...(input.stagedBy ? { stagedBy: input.stagedBy } : {}),
@@ -200,7 +258,7 @@ function yieldTick(): Promise<void> {
 export async function backfillPreviews(
   db: VaultDb,
   codec: PreviewCodec,
-  options: { limit?: number; now?: string } = {},
+  options: { limit?: number; now?: string } = {}
 ): Promise<PreviewBackfillResult> {
   const limit = options.limit ?? PREVIEW_BACKFILL_BATCH;
   const result: PreviewBackfillResult = {
@@ -251,14 +309,20 @@ export async function backfillPreviews(
                               AND d.text_content IS NOT NULL)
           )
         ORDER BY i.created_at
-        LIMIT ?`,
+        LIMIT ?`
     )
-    .all(now, now, limit) as { content_id: string; content_uri: string; media_type: string }[];
+    .all(now, now, limit) as {
+    content_id: string;
+    content_uri: string;
+    media_type: string;
+  }[];
 
-  for (const item of items) {
+  async function processNextItem(index: number): Promise<void> {
+    const item = items[index];
+    if (!item) return;
     result.scanned += 1;
     const parentSha = shaOfBlobUri(item.content_uri);
-    if (!parentSha) continue;
+    if (!parentSha) return processNextItem(index + 1);
     try {
       // Which rungs this item still lacks — recomputed per item so a
       // client-supplied variant that landed since the outer query is honored
@@ -266,42 +330,39 @@ export async function backfillPreviews(
       const missing = PREVIEW_LADDER.filter(
         (rung) =>
           !hasVariant(db, item.content_id, rung.variant) &&
-          !hasLiveDeviceLease(db, item.content_id, rung.variant, now),
+          !hasLiveDeviceLease(db, item.content_id, rung.variant, now)
       );
-      const missingPhash = !hasVariant(db, item.content_id, 'phash');
-      const missingThumbhash = !hasVariant(db, item.content_id, 'thumbhash');
-      if (missing.length === 0 && !missingPhash && !missingThumbhash) continue;
+      const missingPhash = !hasVariant(db, item.content_id, "phash");
+      const missingThumbhash = !hasVariant(db, item.content_id, "thumbhash");
+      if (missing.length === 0 && !missingPhash && !missingThumbhash) {
+        return processNextItem(index + 1);
+      }
       // Local hit first; a remote-only original reads through custody.open at
       // backfill pace (the read-through re-caches it locally as a side effect).
-      const bytes = db.blobs.getSync(parentSha) ?? (await db.blobs.open(parentSha));
+      const bytes =
+        db.blobs.getSync(parentSha) ?? (await db.blobs.open(parentSha));
       if (!bytes) {
         result.missingBytes += 1;
-        continue;
+        return processNextItem(index + 1);
       }
-      let unsupported = false;
-      for (const rung of missing) {
-        const out = await codec.downscale(bytes, item.media_type, rung.maxEdge);
-        if (!out) {
-          // A codec that declines the tiny rung declines the medium too —
-          // it's the same decode. Skip the whole item, count it once.
-          unsupported = true;
-          break;
-        }
-        stageBlobBytes(db, {
-          bytes: out.bytes,
-          mediaType: out.mediaType,
-          variant: rung.variant,
-          variantOf: parentSha,
-        });
-        result.generated += 1;
-      }
+      // A codec that declines the tiny rung declines the medium too — it's the
+      // same decode. Skip the whole item, count it once.
+      let unsupported = await stageMissingPreviewRungs(
+        db,
+        codec,
+        item,
+        bytes,
+        parentSha,
+        missing,
+        result
+      );
       if (missingPhash) {
         const phash = await codec.perceptualHash(bytes, item.media_type);
-        if (phash && !hasVariant(db, item.content_id, 'phash')) {
+        if (phash && !hasVariant(db, item.content_id, "phash")) {
           stageBlobBytes(db, {
             bytes: Buffer.from(phash),
-            mediaType: 'text/x-perceptual-hash',
-            variant: 'phash',
+            mediaType: "text/x-perceptual-hash",
+            variant: "phash",
             variantOf: parentSha,
             validateDerivative: true,
           });
@@ -312,11 +373,11 @@ export async function backfillPreviews(
       }
       if (missingThumbhash && !unsupported) {
         const thumbhash = await codec.thumbhash(bytes, item.media_type);
-        if (thumbhash && !hasVariant(db, item.content_id, 'thumbhash')) {
+        if (thumbhash && !hasVariant(db, item.content_id, "thumbhash")) {
           stageBlobBytes(db, {
             bytes: Buffer.from(thumbhash),
-            mediaType: 'application/x-thumbhash',
-            variant: 'thumbhash',
+            mediaType: "application/x-thumbhash",
+            variant: "thumbhash",
             variantOf: parentSha,
             validateDerivative: true,
           });
@@ -332,7 +393,9 @@ export async function backfillPreviews(
       // sinks the batch or the custody sweep this pass rides along with.
     }
     await yieldTick();
+    return processNextItem(index + 1);
   }
+  await processNextItem(0);
   return result;
 }
 
@@ -340,7 +403,7 @@ export async function backfillPreviews(
 function hasVariant(
   db: VaultDb,
   contentId: string,
-  variant: 'thumb' | 'preview' | 'phash' | 'thumbhash',
+  variant: "thumb" | "preview" | "phash" | "thumbhash"
 ): boolean {
   const row = db.vault
     .prepare(
@@ -348,7 +411,7 @@ function hasVariant(
         WHERE content_id = ? AND variant = ?
           AND CASE WHEN variant IN ('phash','thumbhash') THEN text_content IS NOT NULL
                    ELSE sha256 IS NOT NULL END
-        LIMIT 1`,
+        LIMIT 1`
     )
     .get(contentId, variant);
   return row !== undefined;
@@ -358,17 +421,17 @@ function hasVariant(
 function hasStagedOrClaimedVariant(
   db: VaultDb,
   parentSha: string,
-  variant: 'phash' | 'thumbhash',
+  variant: "phash" | "thumbhash"
 ): boolean {
   const staged = db.vault
     .prepare(
       `SELECT 1 FROM blob_staging
-        WHERE variant_of = ? AND variant = ? AND inline_content IS NOT NULL LIMIT 1`,
+        WHERE variant_of = ? AND variant = ? AND inline_content IS NOT NULL LIMIT 1`
     )
     .get(parentSha, variant);
   if (staged) return true;
   const claimed = db.vault
-    .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?')
+    .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
     .get(parentSha) as { content_id: string } | undefined;
   return claimed ? hasVariant(db, claimed.content_id, variant) : false;
 }
@@ -376,8 +439,8 @@ function hasStagedOrClaimedVariant(
 function hasLiveDeviceLease(
   db: VaultDb,
   contentId: string,
-  variant: 'thumb' | 'preview',
-  now: string,
+  variant: "thumb" | "preview",
+  now: string
 ): boolean {
   return (
     db.vault
@@ -385,7 +448,7 @@ function hasLiveDeviceLease(
         `SELECT 1 FROM enrich_request
           WHERE target_type = 'core.content_item' AND target_id = ?
             AND contribution_variant = ? AND drained_at IS NULL
-            AND lease_expires_at > ? LIMIT 1`,
+            AND lease_expires_at > ? LIMIT 1`
       )
       .get(contentId, variant, now) !== undefined
   );

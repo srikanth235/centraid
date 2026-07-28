@@ -18,8 +18,8 @@
 //
 // The merge itself — ordering, cross-scope dedupe, the shared safe horizon —
 // lives in merge.ts and is deliberately not re-derived here.
-import { mergeScopePages, type MergeAsset, type MergeResult } from './merge.ts';
-import type { Album, Asset, LibraryData, Place } from './types.ts';
+import { mergeScopePages, type MergeAsset, type MergeResult } from "./merge.ts";
+import type { Album, Asset, LibraryData, Place } from "./types.ts";
 
 /** What one scope answered, or why it couldn't. Errors are data, never throws. */
 export type ScopeReadResult =
@@ -44,20 +44,20 @@ export interface ScopeLibrary {
 
 export interface LibraryStoreDeps {
   /** Fan the `library` query across the named scopes. Must never reject. */
-  readScopes(
+  readScopes: (
     scopeIds: readonly string[],
-    input: Record<string, unknown>,
-  ): Promise<ScopeReadResult[]>;
+    input: Record<string, unknown>
+  ) => Promise<ScopeReadResult[]>;
   /** The mounted scope ids, primary first — read live (audiences hydrate late). */
-  scopeIds(): string[];
+  scopeIds: () => string[];
   /** The member's own scope id: the dedupe winner and the default write target. */
-  ownScopeId(): string;
+  ownScopeId: () => string;
   /** The change-feed table gate — a burst touching none of these changes nothing. */
   readTables: ReadonlySet<string>;
   /** Defer `run` under `key`, collapsing repeats (a debounce in the app). */
-  schedule(key: string, run: () => void): void;
+  schedule: (key: string, run: () => void) => void;
   /** Fired after any applied read; the app re-renders from `merged()`. */
-  onData(): void;
+  onData: () => void;
   /** Live assets per page. */
   pageSize?: number;
 }
@@ -107,7 +107,10 @@ function appendPage(prev: ScopeLibrary, data: LibraryData): ScopeLibrary {
   const seen = new Set(prev.assets.map((asset) => asset.asset_id));
   return {
     ...next,
-    assets: [...prev.assets, ...next.assets.filter((asset) => !seen.has(asset.asset_id))],
+    assets: [
+      ...prev.assets,
+      ...next.assets.filter((asset) => !seen.has(asset.asset_id)),
+    ],
     albums: next.albums.length > 0 ? next.albums : prev.albums,
     places: next.places.length > 0 ? next.places : prev.places,
     trash: next.trash.length > 0 ? next.trash : prev.trash,
@@ -118,27 +121,27 @@ function appendPage(prev: ScopeLibrary, data: LibraryData): ScopeLibrary {
 
 export interface LibraryStore {
   /** Re-read every mounted scope from the newest end, at its current depth. */
-  refreshAll(): Promise<void>;
+  refreshAll: () => Promise<void>;
   /** Re-read exactly one scope. The change-feed path, and the only cheap one. */
-  refreshScope(scopeId: string): Promise<void>;
+  refreshScope: (scopeId: string) => Promise<void>;
   /** Page the horizon scopes deeper, each from its own cursor, and append. */
-  showMore(): Promise<void>;
+  showMore: () => Promise<void>;
   /** Route one change-feed burst to the smallest refetch that answers it. */
-  handleChange(detail: LibraryChangeDetail | undefined): void;
+  handleChange: (detail: LibraryChangeDetail | undefined) => void;
   /** The merged timeline across scopes (memoized until the next read lands). */
-  merged(): MergeResult;
+  merged: () => MergeResult;
   /** One scope's accumulated library, empty when it has never answered. */
-  scope(scopeId: string): ScopeLibrary;
+  scope: (scopeId: string) => ScopeLibrary;
   /** The member's own scope's library — albums, places and trash come from here. */
-  own(): ScopeLibrary;
+  own: () => ScopeLibrary;
   /**
    * Apply a page a LIVE read pushed (single-scope hosts, where the replica can
    * hand the app a fresh projection without a round trip). Treated as the
    * newest answer for that scope, so an older in-flight read cannot clobber it.
    */
-  applyScopeData(scopeId: string, data: LibraryData): void;
+  applyScopeData: (scopeId: string, data: LibraryData) => void;
   /** Fence every in-flight read; nothing applies after this. */
-  dispose(): void;
+  dispose: () => void;
 }
 
 export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
@@ -157,7 +160,8 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
   };
   const current = (scopeId: string): number => generation.get(scopeId) ?? 0;
 
-  const scopeOf = (scopeId: string): ScopeLibrary => byScope.get(scopeId) ?? emptyLibrary();
+  const scopeOf = (scopeId: string): ScopeLibrary =>
+    byScope.get(scopeId) ?? emptyLibrary();
 
   /** How deep this scope currently is, rounded up to whole pages. */
   const depthOf = (scopeId: string): number => {
@@ -171,24 +175,29 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
   };
 
   /** Fold one scope's answer in. A failed read leaves the last good page alone. */
-  const apply = (result: ScopeReadResult, mode: 'replace' | 'append'): void => {
+  const apply = (result: ScopeReadResult, mode: "replace" | "append"): void => {
     if (result.ok) {
       const prev = byScope.get(result.scope);
       byScope.set(
         result.scope,
-        mode === 'append' && prev ? appendPage(prev, result.data) : libraryFrom(result.data),
+        mode === "append" && prev
+          ? appendPage(prev, result.data)
+          : libraryFrom(result.data)
       );
       return;
     }
     // Keep whatever this scope last showed and record why it is stale — a
     // failing audience must not blank the timeline the other scopes still fill.
-    byScope.set(result.scope, { ...scopeOf(result.scope), error: result.error.message });
+    byScope.set(result.scope, {
+      ...scopeOf(result.scope),
+      error: result.error.message,
+    });
   };
 
   async function readInto(
     scopeIds: readonly string[],
     input: Record<string, unknown>,
-    mode: 'replace' | 'append',
+    mode: "replace" | "append"
   ): Promise<void> {
     if (disposed || scopeIds.length === 0) return;
     const marks = new Map(scopeIds.map((id) => [id, bump(id)]));
@@ -228,13 +237,16 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
     const scopeIds = deps.scopeIds();
     // One round trip, so one limit: the deepest scope's, which keeps a scope
     // that has already paged deep from snapping back to page 1 on a refresh.
-    const limit = scopeIds.reduce((deep, id) => Math.max(deep, depthOf(id)), pageSize);
-    await readInto(scopeIds, { limit }, 'replace');
+    const limit = scopeIds.reduce(
+      (deep, id) => Math.max(deep, depthOf(id)),
+      pageSize
+    );
+    await readInto(scopeIds, { limit }, "replace");
   }
 
   async function refreshScope(scopeId: string): Promise<void> {
     if (!deps.scopeIds().includes(scopeId)) return;
-    await readInto([scopeId], { limit: depthOf(scopeId) }, 'replace');
+    await readInto([scopeId], { limit: depthOf(scopeId) }, "replace");
   }
 
   async function showMore(): Promise<void> {
@@ -252,9 +264,9 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
           // Without a cursor the query returns the same newest page again;
           // replacing (not appending) keeps that from being a no-op that also
           // strands the accumulated depth.
-          before ? 'append' : 'replace',
+          before ? "append" : "replace"
         );
-      }),
+      })
     );
   }
 
@@ -263,8 +275,8 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
     const scope = detail?.scope;
     // A scope that just hydrated has no page at all: fetch exactly it, and
     // never mistake the arrival for a data burst that the table gate can drop.
-    if (detail?.source === 'scope-added') {
-      const scopeId = scope ?? '';
+    if (detail?.source === "scope-added") {
+      const scopeId = scope ?? "";
       deps.schedule(`scope:${scopeId}`, () => void refreshScope(scopeId));
       return;
     }
@@ -273,11 +285,11 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
     if (Array.isArray(tables) && tables.length > 0) {
       if (!tables.some((table) => deps.readTables.has(table))) return;
     }
-    if (typeof scope === 'string' && deps.scopeIds().includes(scope)) {
+    if (typeof scope === "string" && deps.scopeIds().includes(scope)) {
       deps.schedule(`scope:${scope}`, () => void refreshScope(scope));
       return;
     }
-    deps.schedule('all', () => void refreshAll());
+    deps.schedule("all", () => void refreshAll());
   }
 
   return {

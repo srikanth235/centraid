@@ -1,3 +1,4 @@
+import { checkStats, deriveTitle, previewText } from "./format.ts";
 // governance: allow-repo-hygiene file-size-limit cohesive non-visual notes logic module; vault IO, notebook navigation/CRUD, and note commands share the vault predicate translation and parked-write tracking
 // Non-visual business logic: vault IO (write/act), notebook navigation,
 // notebook CRUD with the vault's predicates translated to sentences, the
@@ -7,15 +8,22 @@
 // the same factory shape tasks/logic.js uses. The pure derivations
 // (`sidebarCounts`/`buildWall`) need no closure and are exported standalone
 // so components can call them too.
-import { debounce, outcomeMessage, toast } from './kit.ts';
-import { checkStats, deriveTitle, previewText } from './format.ts';
-import type { AppData, AppState, LogicDeps, Nav, Note, NotePatch, SidebarCounts } from './types.ts';
+import { debounce, outcomeMessage, toast } from "./kit.ts";
+import type {
+  AppData,
+  AppState,
+  LogicDeps,
+  Nav,
+  Note,
+  NotePatch,
+  SidebarCounts,
+} from "./types.ts";
 
 type Friendly = Record<string, string>;
 
 export function createLogic({ state, data, render, refresh }: LogicDeps) {
   function notice(text: string) {
-    const el = document.getElementById('noticeBanner');
+    const el = document.querySelector<HTMLElement>("#noticeBanner");
     if (!el) return;
     el.textContent = text;
     el.hidden = !text;
@@ -26,33 +34,36 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // treatment, not the banner — a designed calm state, not an error);
   // failed/denied surface the plain-language reason, translating a known
   // predicate through `friendly` when the caller supplies one.
-  function narrate(outcome: VaultOutcome | undefined, friendly?: Friendly): boolean {
-    if (outcome?.status === 'executed') {
-      notice('');
+  function narrate(
+    outcome: VaultOutcome | undefined,
+    friendly?: Friendly
+  ): boolean {
+    if (outcome?.status === "executed") {
+      notice("");
       return true;
     }
-    if (outcome?.status === 'parked') {
-      notice('');
+    if (outcome?.status === "parked") {
+      notice("");
       return false;
     }
-    if (outcome?.status === 'failed' && friendly) {
-      const predicate = String(outcome.predicate ?? outcome.reason ?? '');
+    if (outcome?.status === "failed" && friendly) {
+      const predicate = String(outcome.predicate ?? outcome.reason ?? "");
       const known = Object.keys(friendly).find((k) => predicate.includes(k));
       if (known) {
         notice(friendly[known]!);
         return false;
       }
     }
-    notice(outcomeMessage(outcome) ?? '');
+    notice(outcomeMessage(outcome) ?? "");
     return false;
   }
 
   function markPending(
     action: string,
     input: Record<string, unknown>,
-    outcome: VaultOutcome | undefined,
+    outcome: VaultOutcome | undefined
   ) {
-    if (action === 'create-note') {
+    if (action === "create-note") {
       state.pendingCreates.push({
         key:
           outcome?.invocationId ??
@@ -63,10 +74,16 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       return;
     }
     const noteId = input.note_id ?? input.subject_id;
-    if (noteId && ['edit-note', 'move-note', 'delete-note', 'attach'].includes(action)) {
+    if (
+      noteId &&
+      ["edit-note", "move-note", "delete-note", "attach"].includes(action)
+    ) {
       state.pendingNoteIds.add(String(noteId));
     }
-    if (input.notebook_id && (action === 'rename-notebook' || action === 'delete-notebook')) {
+    if (
+      input.notebook_id &&
+      (action === "rename-notebook" || action === "delete-notebook")
+    ) {
       state.pendingNotebookIds.add(String(input.notebook_id));
     }
   }
@@ -84,7 +101,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   async function write(
     action: string,
     input: Record<string, unknown>,
-    { friendly }: { friendly?: Friendly } = {},
+    { friendly }: { friendly?: Friendly } = {}
   ): Promise<VaultOutcome | undefined> {
     let outcome: VaultOutcome | undefined;
     try {
@@ -95,11 +112,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       return undefined;
     }
     const executed = narrate(outcome, friendly);
-    if (outcome?.status === 'parked') {
+    if (outcome?.status === "parked") {
       markPending(action, input, outcome);
-      toast('Sent to the owner for confirmation.');
+      toast("Sent to the owner for confirmation.");
     }
-    if (executed || outcome?.status === 'denied') await refresh();
+    if (executed || outcome?.status === "denied") await refresh();
     else render();
     return outcome;
   }
@@ -108,7 +125,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // wireAttachInput) can narrate and refresh on their own.
   async function act(
     action: string,
-    input: Record<string, unknown>,
+    input: Record<string, unknown>
   ): Promise<VaultOutcome | undefined> {
     try {
       return await window.centraid.write({ action, input });
@@ -128,12 +145,12 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // "refetch everything" step is skipped.
   async function editNoteAutosave(
     noteId: string,
-    patch: NotePatch,
+    patch: NotePatch
   ): Promise<VaultOutcome | undefined> {
     let outcome: VaultOutcome | undefined;
     try {
       outcome = await window.centraid.write({
-        action: 'edit-note',
+        action: "edit-note",
         input: { note_id: noteId, ...patch },
       });
     } catch (err) {
@@ -141,8 +158,8 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       notice(String(e?.message ?? err));
       return undefined;
     }
-    if (outcome?.status === 'executed') {
-      notice('');
+    if (outcome?.status === "executed") {
+      notice("");
       const note = findNote(noteId);
       if (note) {
         if (patch.title != null) note.title = patch.title;
@@ -155,11 +172,11 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         }
         note.updated_at = new Date().toISOString();
       }
-    } else if (outcome?.status === 'parked') {
-      notice('');
+    } else if (outcome?.status === "parked") {
+      notice("");
       state.pendingNoteIds.add(noteId);
     } else {
-      notice(outcomeMessage(outcome) ?? '');
+      notice(outcomeMessage(outcome) ?? "");
     }
     render();
     return outcome;
@@ -170,7 +187,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }
 
   function notebookName(notebookId: string): string {
-    return (data.notebooks ?? []).find((nb) => nb.notebook_id === notebookId)?.name ?? '';
+    return (
+      (data.notebooks ?? []).find((nb) => nb.notebook_id === notebookId)
+        ?.name ?? ""
+    );
   }
 
   // ---------- Navigation ----------
@@ -180,10 +200,10 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     state.editingNotebookId = null;
     state.creatingNotebook = false;
     if (state.search) {
-      state.search = '';
+      state.search = "";
       state.searchResults = null;
     }
-    document.getElementById('shell')?.classList.remove('side-open');
+    document.querySelector("#shell")?.classList.remove("side-open");
     render();
   }
 
@@ -197,17 +217,20 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     state.editorId = noteId;
     render();
     const note = findNote(noteId);
-    if (!note || typeof note.body === 'string') return;
+    if (!note || typeof note.body === "string") return;
     let res: { body?: unknown; vaultDenied?: unknown } | undefined;
     try {
-      res = await window.centraid.read({ query: 'note', input: { note_id: noteId } });
+      res = await window.centraid.read({
+        query: "note",
+        input: { note_id: noteId },
+      });
     } catch {
       return;
     }
     if (state.editorId !== noteId) return; // closed/switched while loading
     const fresh = findNote(noteId);
     if (fresh && res && !res.vaultDenied) {
-      fresh.body = typeof res.body === 'string' ? res.body : '';
+      fresh.body = typeof res.body === "string" ? res.body : "";
       render();
     }
   }
@@ -225,54 +248,60 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     title: string;
     body: string;
   }): Promise<boolean> {
-    const t = String(title ?? '').trim();
-    const b = String(body ?? '').trim();
+    const t = String(title ?? "").trim();
+    const b = String(body ?? "").trim();
     if (!t && !b) {
-      notice('Write something first — a title or a first line is enough.');
+      notice("Write something first — a title or a first line is enough.");
       return false;
     }
-    const finalTitle = t || b.split('\n')[0]!.slice(0, 80);
+    const finalTitle = t || b.split("\n")[0]!.slice(0, 80);
     const input: Record<string, unknown> = {
       title: finalTitle,
       body_text: b || t,
-      format: 'markdown',
+      format: "markdown",
     };
-    if (state.nav.kind === 'notebook') input.notebook_id = state.nav.notebookId;
-    const outcome = await write('create-note', input);
-    if (outcome?.status === 'executed') {
+    if (state.nav.kind === "notebook") input.notebook_id = state.nav.notebookId;
+    const outcome = await write("create-note", input);
+    if (outcome?.status === "executed") {
       const newId = outcome.output?.note_id;
-      toast('Note created · receipt', {
-        undoLabel: newId ? 'Undo' : undefined,
-        onUndo: newId ? () => void write('delete-note', { note_id: newId }) : undefined,
+      toast("Note created · receipt", {
+        undoLabel: newId ? "Undo" : undefined,
+        onUndo: newId
+          ? () => void write("delete-note", { note_id: newId })
+          : undefined,
       });
     }
-    return outcome?.status === 'executed' || outcome?.status === 'parked';
+    return outcome?.status === "executed" || outcome?.status === "parked";
   }
 
   // ---------- Note actions ----------
 
   async function togglePin(note: Note): Promise<VaultOutcome | undefined> {
     const nextPinned = note.pinned === 1 ? 0 : 1;
-    const outcome = await write('edit-note', { note_id: note.note_id, pinned: nextPinned });
-    if (outcome?.status === 'executed')
-      toast(nextPinned ? 'Pinned · receipt' : 'Unpinned · receipt');
+    const outcome = await write("edit-note", {
+      note_id: note.note_id,
+      pinned: nextPinned,
+    });
+    if (outcome?.status === "executed")
+      toast(nextPinned ? "Pinned · receipt" : "Unpinned · receipt");
     return outcome;
   }
 
   async function moveNote(
     noteId: string,
-    notebookId: string | null,
+    notebookId: string | null
   ): Promise<VaultOutcome | undefined> {
     const input: Record<string, unknown> = { note_id: noteId };
     if (notebookId) input.notebook_id = notebookId;
-    const outcome = await write('move-note', input);
-    if (outcome?.status === 'executed') toast(notebookId ? 'Moved · receipt' : 'Unfiled · receipt');
+    const outcome = await write("move-note", input);
+    if (outcome?.status === "executed")
+      toast(notebookId ? "Moved · receipt" : "Unfiled · receipt");
     return outcome;
   }
 
   async function deleteNote(note: Note): Promise<VaultOutcome | undefined> {
-    const outcome = await write('delete-note', { note_id: note.note_id });
-    if (outcome?.status === 'executed') {
+    const outcome = await write("delete-note", { note_id: note.note_id });
+    if (outcome?.status === "executed") {
       // No restore/undelete command exists in the manifest — delete-note is
       // the only lifecycle step there is. Offering a client-side "Undo" here
       // would fake a vault state that was never asserted, so — unlike
@@ -280,7 +309,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       // cancelTask comment for the analogous case: schedule.task has no
       // delete either, only the closest honest substitute).
       if (state.editorId === note.note_id) state.editorId = null;
-      toast(`Deleted “${String(note.title ?? '').slice(0, 40)}”`);
+      toast(`Deleted “${String(note.title ?? "").slice(0, 40)}”`);
     }
     return outcome;
   }
@@ -289,14 +318,14 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // The vault's predicates, translated. Rename refuses a name already used
   // by another of the owner's notebooks; delete refuses while children exist.
   const RENAME_NOTEBOOK_FRIENDLY: Friendly = {
-    name_unused_by_owner: 'You already have a notebook with that name.',
+    name_unused_by_owner: "You already have a notebook with that name.",
   };
   const CREATE_NOTEBOOK_FRIENDLY: Friendly = {
-    name_unused: 'You already have a notebook with that name.',
+    name_unused: "You already have a notebook with that name.",
   };
   const DELETE_NOTEBOOK_FRIENDLY: Friendly = {
     notebook_has_no_children:
-      'This notebook still has notebooks inside it — delete or move those first.',
+      "This notebook still has notebooks inside it — delete or move those first.",
   };
 
   // Each of these three mutates state AFTER `write()` has already resolved
@@ -305,18 +334,23 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   // render() to actually reach the screen; without it the nav switch /
   // form-close / editing-clear silently sits in `state` until some later,
   // unrelated render happens to flush it.
-  async function createNotebook(name: string): Promise<VaultOutcome | undefined> {
-    const n = String(name ?? '').trim();
+  async function createNotebook(
+    name: string
+  ): Promise<VaultOutcome | undefined> {
+    const n = String(name ?? "").trim();
     if (!n) return undefined;
     const outcome = await write(
-      'create-notebook',
+      "create-notebook",
       { name: n },
-      { friendly: CREATE_NOTEBOOK_FRIENDLY },
+      { friendly: CREATE_NOTEBOOK_FRIENDLY }
     );
-    if (outcome?.status === 'executed') {
-      state.nav = { kind: 'notebook', notebookId: String(outcome.output?.notebook_id ?? '') };
+    if (outcome?.status === "executed") {
+      state.nav = {
+        kind: "notebook",
+        notebookId: String(outcome.output?.notebook_id ?? ""),
+      };
       state.creatingNotebook = false;
-      toast('Notebook created · receipt');
+      toast("Notebook created · receipt");
       render();
     }
     return outcome;
@@ -324,34 +358,41 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 
   async function renameNotebook(
     notebookId: string,
-    name: string,
+    name: string
   ): Promise<VaultOutcome | undefined> {
     const outcome = await write(
-      'rename-notebook',
+      "rename-notebook",
       { notebook_id: notebookId, name },
-      { friendly: RENAME_NOTEBOOK_FRIENDLY },
+      { friendly: RENAME_NOTEBOOK_FRIENDLY }
     );
-    if (outcome?.status === 'executed') {
+    if (outcome?.status === "executed") {
       state.editingNotebookId = null;
-      toast('Notebook renamed · receipt');
+      toast("Notebook renamed · receipt");
       render();
     }
     return outcome;
   }
 
-  async function deleteNotebook(notebookId: string): Promise<VaultOutcome | undefined> {
+  async function deleteNotebook(
+    notebookId: string
+  ): Promise<VaultOutcome | undefined> {
     const outcome = await write(
-      'delete-notebook',
+      "delete-notebook",
       { notebook_id: notebookId },
-      { friendly: DELETE_NOTEBOOK_FRIENDLY },
+      { friendly: DELETE_NOTEBOOK_FRIENDLY }
     );
-    if (outcome?.status === 'executed') {
+    if (outcome?.status === "executed") {
       const unfiled = Number(outcome.output?.notes_unfiled ?? 0);
-      if (state.nav.kind === 'notebook' && state.nav.notebookId === notebookId) {
-        state.nav = { kind: 'all' };
+      if (
+        state.nav.kind === "notebook" &&
+        state.nav.notebookId === notebookId
+      ) {
+        state.nav = { kind: "all" };
         render();
       }
-      toast(`Notebook deleted — ${unfiled} ${unfiled === 1 ? 'note' : 'notes'} unfiled`);
+      toast(
+        `Notebook deleted — ${unfiled} ${unfiled === 1 ? "note" : "notes"} unfiled`
+      );
     }
     return outcome;
   }
@@ -364,27 +405,32 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   };
   const getAttachTarget = () => attachTarget;
 
-  async function removeAttachment(attachmentId: string): Promise<VaultOutcome | undefined> {
-    const outcome = await act('detach', { attachment_id: attachmentId });
-    if (narrate(outcome) || outcome?.status === 'denied') await refresh();
+  async function removeAttachment(
+    attachmentId: string
+  ): Promise<VaultOutcome | undefined> {
+    const outcome = await act("detach", { attachment_id: attachmentId });
+    if (narrate(outcome) || outcome?.status === "denied") await refresh();
     else render();
     return outcome;
   }
 
   // ---------- Tags ----------
 
-  async function addTag(noteId: string, label: string): Promise<VaultOutcome | undefined> {
-    const l = String(label ?? '').trim();
+  async function addTag(
+    noteId: string,
+    label: string
+  ): Promise<VaultOutcome | undefined> {
+    const l = String(label ?? "").trim();
     if (!l) return undefined;
-    const outcome = await act('add-tag', { note_id: noteId, label: l });
-    if (narrate(outcome) || outcome?.status === 'denied') await refresh();
+    const outcome = await act("add-tag", { note_id: noteId, label: l });
+    if (narrate(outcome) || outcome?.status === "denied") await refresh();
     else render();
     return outcome;
   }
 
   async function removeTag(tagId: string): Promise<VaultOutcome | undefined> {
-    const outcome = await act('remove-tag', { tag_id: tagId });
-    if (narrate(outcome) || outcome?.status === 'denied') await refresh();
+    const outcome = await act("remove-tag", { tag_id: tagId });
+    if (narrate(outcome) || outcome?.status === "denied") await refresh();
     else render();
     return outcome;
   }
@@ -396,7 +442,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     state.search = raw;
     if (!raw.trim()) {
       state.searchResults = null;
-      notice('');
+      notice("");
       render();
       return;
     }
@@ -404,19 +450,20 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     let rows: Note[] = [];
     // A denied/broken search must not look like "no matches" — the same
     // honesty app.tsx's refresh() already gives the library read.
-    let deniedMessage = '';
+    let deniedMessage = "";
     try {
       const res = await window.centraid.read<{
         notes?: Note[];
         vaultDenied?: { message?: string };
-      }>({ query: 'search', input: { term: raw } });
+      }>({ query: "search", input: { term: raw } });
       if (res?.vaultDenied) {
-        deniedMessage = res.vaultDenied.message || 'The vault denied this search.';
+        deniedMessage =
+          res.vaultDenied.message || "The vault denied this search.";
       } else {
         rows = res?.notes ?? [];
       }
     } catch {
-      deniedMessage = 'Couldn’t reach the vault — retrying when you come back.';
+      deniedMessage = "Couldn’t reach the vault — retrying when you come back.";
     }
     if (seq !== searchSeq) return;
     state.searchResults = rows;
@@ -426,7 +473,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 
   function clearSearch() {
     searchSeq += 1;
-    state.search = '';
+    state.search = "";
     state.searchResults = null;
     render();
   }
@@ -485,14 +532,18 @@ export function sidebarCounts(data: AppData): SidebarCounts {
  * while a term is active (the library copy is only the browse view), else
  * the library window — either narrowed to the active notebook/pinned scope. */
 export function scopedRows(data: AppData, state: AppState): Note[] {
-  let rows = state.search.trim() ? (state.searchResults ?? []) : (data.notes ?? []);
-  if (state.nav.kind === 'pinned') rows = rows.filter((n) => n.pinned === 1);
-  else if (state.nav.kind === 'notebook') {
+  let rows = state.search.trim()
+    ? (state.searchResults ?? [])
+    : (data.notes ?? []);
+  if (state.nav.kind === "pinned") rows = rows.filter((n) => n.pinned === 1);
+  else if (state.nav.kind === "notebook") {
     const notebookId = state.nav.notebookId;
     rows = rows.filter((n) => (n.notebook_ids ?? []).includes(notebookId));
-  } else if (state.nav.kind === 'tag') {
+  } else if (state.nav.kind === "tag") {
     const conceptId = state.nav.conceptId;
-    rows = rows.filter((n) => (n.tags ?? []).some((t) => t.concept_id === conceptId));
+    rows = rows.filter((n) =>
+      (n.tags ?? []).some((t) => t.concept_id === conceptId)
+    );
   }
   return rows;
 }
@@ -511,7 +562,8 @@ export function notebookNoteCounts(data: AppData): Map<string, number> {
 export function tagNoteCounts(data: AppData): Map<string, number> {
   const map = new Map<string, number>();
   for (const n of data.notes ?? []) {
-    for (const t of n.tags ?? []) map.set(t.concept_id, (map.get(t.concept_id) ?? 0) + 1);
+    for (const t of n.tags ?? [])
+      map.set(t.concept_id, (map.get(t.concept_id) ?? 0) + 1);
   }
   return map;
 }
@@ -520,22 +572,32 @@ export function buildWall(data: AppData, state: AppState) {
   const rows = scopedRows(data, state);
   const searching = Boolean(state.search.trim());
   const showPinnedGroup =
-    state.nav.kind !== 'pinned' && !searching && rows.some((n) => n.pinned === 1);
+    state.nav.kind !== "pinned" &&
+    !searching &&
+    rows.some((n) => n.pinned === 1);
   const pinned = showPinnedGroup ? rows.filter((n) => n.pinned === 1) : [];
   const others = showPinnedGroup ? rows.filter((n) => n.pinned !== 1) : rows;
 
-  let emptyTitle = 'No notes yet';
-  let emptySub = 'Take a note above — it lands as a typed vault command.';
+  let emptyTitle = "No notes yet";
+  let emptySub = "Take a note above — it lands as a typed vault command.";
   if (searching) {
-    emptyTitle = 'No matches';
+    emptyTitle = "No matches";
     emptySub = `No notes match “${state.search.trim()}”. Search covers titles and contents.`;
-  } else if (state.nav.kind === 'pinned') {
-    emptyTitle = 'Nothing pinned yet';
-    emptySub = 'Pin a note from its card or the editor to keep it up top.';
-  } else if (state.nav.kind === 'notebook') {
-    emptyTitle = 'This notebook is empty';
-    emptySub = 'Take a note above — it lands filed straight into this notebook.';
+  } else if (state.nav.kind === "pinned") {
+    emptyTitle = "Nothing pinned yet";
+    emptySub = "Pin a note from its card or the editor to keep it up top.";
+  } else if (state.nav.kind === "notebook") {
+    emptyTitle = "This notebook is empty";
+    emptySub =
+      "Take a note above — it lands filed straight into this notebook.";
   }
 
-  return { pinned, others, showPinnedGroup, isEmpty: rows.length === 0, emptyTitle, emptySub };
+  return {
+    pinned,
+    others,
+    showPinnedGroup,
+    isEmpty: rows.length === 0,
+    emptyTitle,
+    emptySub,
+  };
 }

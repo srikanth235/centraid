@@ -4,12 +4,20 @@
 // backend.test.ts (core turn), backend.attachments.test.ts,
 // backend.model-usage.test.ts, and backend.vault-tools.test.ts.
 
-import { tempDir } from '@centraid/test-kit/temp-dir';
-import { fileURLToPath } from 'node:url';
-import type { AdapterUsageSnapshot, ToolContext, TurnStreamEvent } from '@centraid/app-engine';
-import { runAcpTurn, type AcpTurnConfig } from './backend.js';
+import { fileURLToPath } from "node:url";
 
-export const FAKE_AGENT = fileURLToPath(new URL('fake-acp-agent.mjs', import.meta.url));
+import type {
+  AdapterUsageSnapshot,
+  ToolContext,
+  TurnStreamEvent,
+} from "@centraid/app-engine";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+
+import { runAcpTurn, type AcpTurnConfig } from "./backend.js";
+
+export const FAKE_AGENT = fileURLToPath(
+  new URL("fake-acp-agent.mjs", import.meta.url)
+);
 
 export interface RunOptions {
   extraArgs: string[];
@@ -18,7 +26,11 @@ export interface RunOptions {
   hydrationContext?: string;
   hydrationAttachments?: { path: string; mime: string; filename?: string }[];
   recoveryHydrationContext?: string;
-  recoveryHydrationAttachments?: { path: string; mime: string; filename?: string }[];
+  recoveryHydrationAttachments?: {
+    path: string;
+    mime: string;
+    filename?: string;
+  }[];
   forceHydration?: boolean;
   model?: string;
   attachments?: { path: string; mime: string; filename?: string }[];
@@ -26,21 +38,25 @@ export interface RunOptions {
   toolContext?: ToolContext;
   label?: string;
   installHint?: string;
-  permissionPolicy?: 'auto-allow' | 'deny';
-  config?: Pick<AcpTurnConfig, 'stageTimeoutMs' | 'promptIdleTimeoutMs'>;
+  permissionPolicy?: "auto-allow" | "deny";
+  config?: Pick<AcpTurnConfig, "stageTimeoutMs" | "promptIdleTimeoutMs">;
   /** Called with each event as it arrives — return true to abort the turn. */
   abortOn?: (event: TurnStreamEvent) => boolean;
 }
 
 export async function runFake(opts: RunOptions): Promise<{
   events: TurnStreamEvent[];
-  result: { sessionId?: string; usageSnapshot?: AdapterUsageSnapshot; hydrated?: boolean };
+  result: {
+    sessionId?: string;
+    usageSnapshot?: AdapterUsageSnapshot;
+    hydrated?: boolean;
+  };
 }> {
-  const cwd = await tempDir('acp-backend-');
+  const cwd = await tempDir("acp-backend-");
   const events: TurnStreamEvent[] = [];
   const controller = new AbortController();
   const config: AcpTurnConfig = {
-    kind: 'acp',
+    kind: "acp",
     acpArgs: [],
     binPath: FAKE_AGENT,
     extraArgs: opts.extraArgs,
@@ -52,12 +68,18 @@ export async function runFake(opts: RunOptions): Promise<{
   const result = await runAcpTurn(
     {
       cwd,
-      message: 'hello agent',
-      extraSystemPrompt: 'SYSTEM_CONTEXT',
+      message: "hello agent",
+      extraSystemPrompt: "SYSTEM_CONTEXT",
       ...(opts.prevSessionId ? { prevSessionId: opts.prevSessionId } : {}),
-      ...(opts.prevUsageSnapshot ? { prevUsageSnapshot: opts.prevUsageSnapshot } : {}),
-      ...(opts.hydrationContext ? { hydrationContext: opts.hydrationContext } : {}),
-      ...(opts.hydrationAttachments ? { hydrationAttachments: opts.hydrationAttachments } : {}),
+      ...(opts.prevUsageSnapshot
+        ? { prevUsageSnapshot: opts.prevUsageSnapshot }
+        : {}),
+      ...(opts.hydrationContext
+        ? { hydrationContext: opts.hydrationContext }
+        : {}),
+      ...(opts.hydrationAttachments
+        ? { hydrationAttachments: opts.hydrationAttachments }
+        : {}),
       ...(opts.recoveryHydrationContext
         ? { recoveryHydrationContext: opts.recoveryHydrationContext }
         : {}),
@@ -68,14 +90,16 @@ export async function runFake(opts: RunOptions): Promise<{
       ...(opts.model ? { model: opts.model } : {}),
       ...(opts.attachments ? { attachments: opts.attachments } : {}),
       ...(opts.toolContext ? { toolContext: opts.toolContext } : {}),
-      ...(opts.permissionPolicy ? { permissionPolicy: opts.permissionPolicy } : {}),
+      ...(opts.permissionPolicy
+        ? { permissionPolicy: opts.permissionPolicy }
+        : {}),
       abortSignal: controller.signal,
       onEvent: (e) => {
         events.push(e);
         if (opts.abortOn?.(e)) controller.abort();
       },
     },
-    config,
+    config
   );
   return { events, result };
 }
@@ -86,13 +110,13 @@ export async function runFake(opts: RunOptions): Promise<{
  * never touches.
  */
 export function vaultToolContext(
-  over: Partial<ToolContext> = {},
+  over: Partial<ToolContext> = {}
 ): ToolContext & { calls: Array<{ sql: unknown }> } {
   const calls: Array<{ sql: unknown }> = [];
   return {
-    appId: 'test-app',
-    turnId: 'turn-1',
-    dispatcher: null as unknown as ToolContext['dispatcher'],
+    appId: "test-app",
+    turnId: "turn-1",
+    dispatcher: null as unknown as ToolContext["dispatcher"],
     vaultSql: (sql: string) => {
       calls.push({ sql });
       return Promise.resolve({ rows: [{ one: 1 }] });
@@ -102,23 +126,29 @@ export function vaultToolContext(
   } as ToolContext & { calls: Array<{ sql: unknown }> };
 }
 
-export const types = (events: TurnStreamEvent[]): string[] => events.map((e) => e.type);
+export const types = (events: TurnStreamEvent[]): string[] =>
+  events.map((e) => e.type);
 
 export const deltas = (events: TurnStreamEvent[]): string =>
   events
     .filter(
-      (e): e is Extract<TurnStreamEvent, { type: 'assistant.delta' }> =>
-        e.type === 'assistant.delta',
+      (e): e is Extract<TurnStreamEvent, { type: "assistant.delta" }> =>
+        e.type === "assistant.delta"
     )
     .map((e) => e.delta)
-    .join('');
+    .join("");
 
 export const notices = (events: TurnStreamEvent[]): string[] =>
   events
-    .filter((e): e is Extract<TurnStreamEvent, { type: 'notice' }> => e.type === 'notice')
-    .map((e) => e.code ?? '');
+    .filter(
+      (e): e is Extract<TurnStreamEvent, { type: "notice" }> =>
+        e.type === "notice"
+    )
+    .map((e) => e.code ?? "");
 
 export const usageOf = (
-  events: TurnStreamEvent[],
-): Extract<TurnStreamEvent, { type: 'usage' }> | undefined =>
-  events.find((e): e is Extract<TurnStreamEvent, { type: 'usage' }> => e.type === 'usage');
+  events: TurnStreamEvent[]
+): Extract<TurnStreamEvent, { type: "usage" }> | undefined =>
+  events.find(
+    (e): e is Extract<TurnStreamEvent, { type: "usage" }> => e.type === "usage"
+  );

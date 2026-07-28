@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReplicaRow, ReplicaReadWireResult } from '@centraid/client/replica/native';
+import type {
+  ReplicaRow,
+  ReplicaReadWireResult,
+} from "@centraid/client/replica/native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useReplica } from '../replica/ReplicaProvider';
-import type { NativeReadRequest } from '../../lib/replica/native-session';
+import type { NativeReadRequest } from "../../lib/replica/native-session";
+import { useReplica } from "../replica/ReplicaProvider";
 
 export interface ReplicaQueryState {
   rows: Array<ReplicaRow & { __rowId: string }>;
   loading: boolean;
   error?: string;
-  refresh(): Promise<void>;
+  refresh: () => Promise<void>;
 }
 
 /**
@@ -17,12 +20,18 @@ export interface ReplicaQueryState {
  * memoized in the hook) is unit-testable without a renderer.
  */
 export function mapReplicaRows(
-  result: ReplicaReadWireResult | undefined,
+  result: ReplicaReadWireResult | undefined
 ): Array<ReplicaRow & { __rowId: string }> {
-  return (result?.rows ?? []).map((row) => ({ ...row.values, __rowId: row.rowId }));
+  return (result?.rows ?? []).map((row) => ({
+    ...row.values,
+    __rowId: row.rowId,
+  }));
 }
 
-export function useReplicaQuery(appId: string, request: NativeReadRequest): ReplicaQueryState {
+export function useReplicaQuery(
+  appId: string,
+  request: NativeReadRequest
+): ReplicaQueryState {
   const { session } = useReplica();
   const [result, setResult] = useState<ReplicaReadWireResult>();
   const [loading, setLoading] = useState(true);
@@ -43,7 +52,8 @@ export function useReplicaQuery(appId: string, request: NativeReadRequest): Repl
     // presence below, so there is no state to settle here either.
     if (!session) return;
     const ticket = (sequence.current += 1);
-    const current = (): boolean => mounted.current && ticket === sequence.current;
+    const current = (): boolean =>
+      mounted.current && ticket === sequence.current;
     try {
       const next = await session.read(appId, request);
       if (!current()) return;

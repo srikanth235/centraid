@@ -10,13 +10,15 @@
  * 200k-token tiering, no batch/geo modifiers in v1.
  */
 
-import type { ModelPrice, TokenUsage } from '../model-pricing.js';
-import type { PricingEntry } from './types.js';
+import type { ModelPrice, TokenUsage } from "../model-pricing.js";
+import type { PricingEntry } from "./types.js";
 
 /** Per-token USD cache-write rate: 5m if present, else the 1h rate, else 0. */
 function cacheWriteRate(entry: PricingEntry): number {
   return (
-    entry.cache_creation_input_token_cost ?? entry.cache_creation_input_token_cost_above_1hr ?? 0
+    entry.cache_creation_input_token_cost ??
+    entry.cache_creation_input_token_cost_above_1hr ??
+    0
   );
 }
 

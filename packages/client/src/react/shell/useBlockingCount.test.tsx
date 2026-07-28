@@ -1,72 +1,127 @@
-import { act, useEffect } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const getBlocking = vi.fn();
-vi.mock('../../gateway-client.js', () => ({ getBlocking: () => getBlocking() }));
+import type {
+  BlockingSummary,
+  OutboxItem,
+  OutboxNeedsAuth,
+} from "../../gateway-client-outbox.js";
+import type { VaultParkedEntry } from "../../gateway-client-vault.js";
 
-let useBlockingCount: typeof import('./useBlockingCount.js').useBlockingCount;
+const getBlocking =
+  vi.fn<typeof import("../../gateway-client.js").getBlocking>();
+vi.mock(import("../../gateway-client.js"), () => ({
+  getBlocking: () => getBlocking(),
+}));
+
+let useBlockingCount: typeof import("./useBlockingCount.js").useBlockingCount;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
-beforeEach(async () => {
-  getBlocking.mockReset();
-  ({ useBlockingCount } = await import('./useBlockingCount.js'));
-});
+const outboxItem: OutboxItem = {
+  itemId: "outbox-1",
+  actorId: "app-1",
+  connection: { kind: "service", label: "Service" },
+  actor: null,
+  actorKind: "app",
+  verb: "write",
+  target: "item",
+  artifact: {},
+  status: "pending",
+  grantId: null,
+  stagedAt: "2026-01-01T00:00:00.000Z",
+  decidedAt: null,
+  drainedAt: null,
+  result: null,
+  note: null,
+  canEdit: false,
+};
+const needsAuthItem: OutboxNeedsAuth = {
+  connectionId: "connection-1",
+  kind: "service",
+  label: "Service",
+  note: null,
+};
+const parkedItem: VaultParkedEntry = {
+  invocationId: "invocation-1",
+  command: "write",
+  parkedAt: "2026-01-01T00:00:00.000Z",
+  callerKind: "app",
+  callerId: "app-1",
+  caller: null,
+  input: {},
+};
 
-afterEach(() => {
-  act(() => root?.unmount());
-  host?.remove();
-  root = null;
-  host = null;
-});
-
-let count = 0;
-function Harness(): null {
-  const value = useBlockingCount();
-  // Published from a commit-time effect, not the render body — assigning to an
-  // outer binding during render is a side effect (`act()` flushes this before
-  // the assertions run, so every test still reads the latest value).
-  useEffect(() => {
-    count = value;
-  });
-  return null;
+function blockingSummary({
+  outbox = 0,
+  needsAuth = 0,
+  parked = 0,
+}: Partial<
+  Record<"outbox" | "needsAuth" | "parked", number>
+> = {}): BlockingSummary {
+  return {
+    outbox: Array.from({ length: outbox }, () => outboxItem),
+    needsAuth: Array.from({ length: needsAuth }, () => needsAuthItem),
+    parked: Array.from({ length: parked }, () => parkedItem),
+    scopeRequests: [],
+  };
 }
-async function mount(): Promise<void> {
-  host = document.createElement('div');
-  document.body.append(host);
-  root = createRoot(host);
-  await act(async () => {
-    root!.render(<Harness />);
-  });
-}
 
-describe('useBlockingCount', () => {
-  it('sums all four blocking groups', async () => {
-    getBlocking.mockResolvedValue({
-      outbox: [{}, {}],
-      needsAuth: [{}],
-      parked: [{}, {}, {}],
-      scopeRequests: [],
-    });
-    await mount();
-    expect(count).toBe(6);
+describe("useBlockingCount", () => {
+  beforeEach(async () => {
+    getBlocking.mockReset();
+    ({ useBlockingCount } = await import("./useBlockingCount.js"));
   });
 
-  it('stays at the last known count when the gateway is unreachable', async () => {
-    getBlocking.mockRejectedValue(new Error('offline'));
-    await mount();
-    expect(count).toBe(0);
+  afterEach(() => {
+    act(() => root?.unmount());
+    host?.remove();
+    root = null;
+    host = null;
   });
 
-  it('refreshes on window focus', async () => {
-    getBlocking.mockResolvedValue({ outbox: [], needsAuth: [], parked: [], scopeRequests: [] });
-    await mount();
-    expect(count).toBe(0);
-    getBlocking.mockResolvedValue({ outbox: [{}], needsAuth: [], parked: [], scopeRequests: [] });
+  function Harness() {
+    return <output data-testid="blocking-count">{useBlockingCount()}</output>;
+  }
+  function count(): number {
+    return Number(
+      host?.querySelector("[data-testid=blocking-count]")?.textContent
+    );
+  }
+  async function mount(): Promise<void> {
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
     await act(async () => {
-      window.dispatchEvent(new Event('focus'));
+      root!.render(<Harness />);
     });
-    expect(count).toBe(1);
+  }
+
+  describe("useBlockingCount", () => {
+    it("sums all four blocking groups", async () => {
+      getBlocking.mockResolvedValue(
+        blockingSummary({ outbox: 2, needsAuth: 1, parked: 3 })
+      );
+      await mount();
+      expect(count()).toBe(6);
+    });
+
+    it("stays at the last known count when the gateway is unreachable", async () => {
+      getBlocking.mockRejectedValue(new Error("offline"));
+      await mount();
+      expect(count()).toBe(0);
+    });
+
+    it("refreshes on window focus", async () => {
+      getBlocking.mockResolvedValue(blockingSummary());
+      await mount();
+      expect(count()).toBe(0);
+      getBlocking.mockResolvedValue(blockingSummary({ outbox: 1 }));
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      expect(count()).toBe(1);
+    });
   });
 });

@@ -1,8 +1,10 @@
-import { type JSX, useEffect, useRef, useState } from 'react';
-import { iconSvg } from '../iconSvg.js';
-import spaceModalStyles from './SpaceModal.module.css';
-import controlsCss from '../../styles/controls.module.css';
-import { cx } from '../../ui/cx.js';
+import { type JSX, useEffect, useRef, useState } from "react";
+
+import { cx } from "../../ui/cx.js";
+import { iconSvg } from "../iconSvg.js";
+
+import controlsCss from "../../styles/controls.module.css";
+import spaceModalStyles from "./SpaceModal.module.css";
 
 export interface RenameGatewayModalProps {
   initialLabel: string;
@@ -27,15 +29,15 @@ export default function RenameGatewayModal({
       ref.current?.select();
     });
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
+      if (e.key === "Escape") {
         e.preventDefault();
         onCancel();
       }
     };
-    document.addEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
     return () => {
       cancelAnimationFrame(id);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("keydown", onKey);
     };
   }, [onCancel]);
 
@@ -58,7 +60,7 @@ export default function RenameGatewayModal({
         <div className={spaceModalStyles.profModalHead}>
           <span
             className={spaceModalStyles.profModalHeadIcon}
-            dangerouslySetInnerHTML={{ __html: iconSvg('Pencil', 14) }}
+            dangerouslySetInnerHTML={{ __html: iconSvg("Pencil", 14) }}
           />
           <h2 className={spaceModalStyles.profModalTitle}>Rename gateway</h2>
           <button
@@ -67,7 +69,7 @@ export default function RenameGatewayModal({
             title="Close"
             aria-label="Close"
             onClick={onCancel}
-            dangerouslySetInnerHTML={{ __html: iconSvg('X', 14) }}
+            dangerouslySetInnerHTML={{ __html: iconSvg("X", 14) }}
           />
         </div>
         <div className={spaceModalStyles.profModalBody}>
@@ -80,7 +82,7 @@ export default function RenameGatewayModal({
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === "Enter") {
                   e.preventDefault();
                   submit();
                 }
@@ -97,7 +99,7 @@ export default function RenameGatewayModal({
             type="button"
             className={spaceModalStyles.profModalSave}
             disabled={!ready}
-            data-enabled={ready ? 'true' : 'false'}
+            data-enabled={ready ? "true" : "false"}
             onClick={submit}
           >
             Save

@@ -7,10 +7,11 @@
  * against `LocalBackupProvider` or `RemoteBackupProvider`.
  */
 
-import { createHash } from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { frameChunkPayloadAsync, unframeChunkPayload } from './compress.js';
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { frameChunkPayloadAsync, unframeChunkPayload } from "./compress.js";
 import {
   activeMasterKey,
   chunkId as computeChunkId,
@@ -21,8 +22,8 @@ import {
   encryptWithNonce,
   type Keyring,
   masterKeyForEpoch,
-} from './crypto.js';
-import type { EngineLogger } from './engine-log.js';
+} from "./crypto.js";
+import type { EngineLogger } from "./engine-log.js";
 import {
   assertManifestMatchesRegistry,
   canonicalJson,
@@ -34,10 +35,15 @@ import {
   sealManifest,
   SNAPSHOT_FORMAT_V2,
   validateSnapshotBasePair,
-} from './manifest.js';
-import { partStream } from './parts.js';
-import type { BackupProvider, SnapshotRow } from './provider.js';
-import type { ObjectStore } from './object-store.js';
+} from "./manifest.js";
+import type { ObjectStore } from "./object-store.js";
+import {
+  applyAvailableInOrder,
+  applyInOrder,
+  mapWithConcurrency,
+} from "./ordered-work.js";
+import { partStream } from "./parts.js";
+import type { BackupProvider, SnapshotRow } from "./provider.js";
 import {
   openWalCloser,
   openWalPairMarker,
@@ -57,8 +63,8 @@ import {
   walPairMarkerPrefix,
   walSegmentKey,
   walSegmentPrefix,
-} from './wal-format.js';
-import { replayWalSegments, type WalReplayOutcome } from './wal-restore.js';
+} from "./wal-format.js";
+import { replayWalSegments, type WalReplayOutcome } from "./wal-restore.js";
 
 export interface SourceEntry {
   /** Path recorded in the manifest — relative, forward-slash, no traversal. */
@@ -76,9 +82,12 @@ export interface SourceEntry {
   walTipTickMs?: number;
 }
 
-export type { EngineLogger } from './engine-log.js';
+export type { EngineLogger } from "./engine-log.js";
 
-const noopLog: Required<EngineLogger> = { info: () => undefined, warn: () => undefined };
+const noopLog: Required<EngineLogger> = {
+  info: () => undefined,
+  warn: () => undefined,
+};
 
 // ---------------------------------------------------------------------------
 // Bounded concurrency helper — chunk uploads run up to 4 in flight while
@@ -106,7 +115,7 @@ class Semaphore {
   private release(): void {
     this.available++;
     const next = this.waiters.shift();
-    if (next) next();
+    if (next) return next();
   }
 }
 
@@ -139,33 +148,53 @@ async function loadPreviousManifest(
   provider: BackupProvider,
   targetId: string,
   keyring: Keyring,
-  vaultId: string,
+  vaultId: string
 ): Promise<PreviousManifestInfo | null> {
   const rows = await provider.listSnapshots(targetId);
   const newest = rows[0];
   if (!newest) return null;
-  const store = await provider.openDataPlane(targetId, 'backup', 'read');
+  const store = await provider.openDataPlane(targetId, "backup", "read");
   const { opened } = await openSnapshotRow(newest, store, keyring, vaultId);
-  const entriesByPath = new Map(opened.entries.map((e) => [e.path, e] as const));
-  const chunkSizes = new Map(opened.public.chunkIndex.map((c) => [c.id, c.size] as const));
-  return { row: newest, keyEpoch: opened.public.keyEpoch, entriesByPath, chunkSizes };
+  const entriesByPath = new Map(
+    opened.entries.map((e) => [e.path, e] as const)
+  );
+  const chunkSizes = new Map(
+    opened.public.chunkIndex.map((c) => [c.id, c.size] as const)
+  );
+  return {
+    row: newest,
+    keyEpoch: opened.public.keyEpoch,
+    entriesByPath,
+    chunkSizes,
+  };
 }
 
-async function statEntry(absolutePath: string): Promise<{ size: number; mtimeMs: number }> {
+async function statEntry(
+  absolutePath: string
+): Promise<{ size: number; mtimeMs: number }> {
   const st = await fs.stat(absolutePath);
   return { size: st.size, mtimeMs: st.mtimeMs };
 }
 
-async function* readFileStream(absolutePath: string): AsyncGenerator<Uint8Array> {
-  const handle = await fs.open(absolutePath, 'r');
+async function* readNextFileChunk(
+  handle: Awaited<ReturnType<typeof fs.open>>,
+  buffer: Buffer,
+  bufferSize: number
+): AsyncGenerator<Uint8Array> {
+  const { bytesRead } = await handle.read(buffer, 0, bufferSize, null);
+  if (bytesRead === 0) return;
+  yield new Uint8Array(buffer.subarray(0, bytesRead));
+  yield* readNextFileChunk(handle, buffer, bufferSize);
+}
+
+async function* readFileStream(
+  absolutePath: string
+): AsyncGenerator<Uint8Array> {
+  const handle = await fs.open(absolutePath, "r");
   try {
     const bufSize = 256 * 1024;
     const buf = Buffer.alloc(bufSize);
-    for (;;) {
-      const { bytesRead } = await handle.read(buf, 0, bufSize, null);
-      if (bytesRead === 0) break;
-      yield new Uint8Array(buf.subarray(0, bytesRead));
-    }
+    yield* readNextFileChunk(handle, buf, bufSize);
   } finally {
     await handle.close();
   }
@@ -178,7 +207,9 @@ async function* readFileStream(absolutePath: string): AsyncGenerator<Uint8Array>
  * nothing" (spec decision, kept explicit rather than registering a
  * byte-identical manifest under a fresh key every tick).
  */
-export async function createSnapshot(opts: CreateSnapshotOptions): Promise<SnapshotRow | null> {
+export async function createSnapshot(
+  opts: CreateSnapshotOptions
+): Promise<SnapshotRow | null> {
   const log = { ...noopLog, ...opts.log };
   const { epoch: keyEpoch, key: master } = activeMasterKey(opts.keyring);
   const dataKey = deriveDataKey(master, opts.vaultId);
@@ -188,16 +219,21 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
     opts.provider,
     opts.targetId,
     opts.keyring,
-    opts.vaultId,
+    opts.vaultId
   );
-  const sameEpochPrevious = previous && previous.keyEpoch === keyEpoch ? previous : null;
+  const sameEpochPrevious =
+    previous && previous.keyEpoch === keyEpoch ? previous : null;
   if (previous && !sameEpochPrevious) {
     log.info(
-      `createSnapshot: previous manifest is epoch ${previous.keyEpoch}, active is ${keyEpoch} — full re-upload`,
+      `createSnapshot: previous manifest is epoch ${previous.keyEpoch}, active is ${keyEpoch} — full re-upload`
     );
   }
 
-  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read-write');
+  const store = await opts.provider.openDataPlane(
+    opts.targetId,
+    "backup",
+    "read-write"
+  );
   const uploadSem = new Semaphore(4);
   const knownChunkIds = new Set<string>(sameEpochPrevious?.chunkSizes.keys());
   const newChunkIndex = new Map<string, number>(); // id -> size, this snapshot's full set
@@ -205,7 +241,7 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
   let totalBytes = 0;
   let everyEntryReused = true;
 
-  for (const entry of opts.entries) {
+  await applyInOrder(opts.entries, async (entry) => {
     if (!isSafeEntryPath(entry.path)) {
       throw new Error(`createSnapshot: unsafe entry path "${entry.path}"`);
     }
@@ -227,8 +263,14 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
     // destroyed restore point that every surface reports as healthy.
     // When the caller vouches for the content — the WAL shipper always hashes
     // its base clones — that hash IS the identity test, so require it.
-    const contentUnchanged = entry.sha256 === undefined || prior?.sha256 === entry.sha256;
-    if (prior && contentUnchanged && prior.size === stat.size && prior.mtimeMs === stat.mtimeMs) {
+    const contentUnchanged =
+      entry.sha256 === undefined || prior?.sha256 === entry.sha256;
+    if (
+      prior &&
+      contentUnchanged &&
+      prior.size === stat.size &&
+      prior.mtimeMs === stat.mtimeMs
+    ) {
       // Fast path: reuse recorded chunk refs without reading the file. The
       // WAL db-entry fields come from the CURRENT source (not `prior`): the
       // file's bytes are the ones `prior` chunked (checked above), and its
@@ -244,44 +286,59 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
         size: stat.size,
         mtimeMs: stat.mtimeMs,
         chunks: prior.chunks,
-        ...(entry.sha256 !== undefined ? { sha256: entry.sha256 } : {}),
-        ...(entry.walGeneration !== undefined ? { walGeneration: entry.walGeneration } : {}),
-        ...(entry.baseTickMs !== undefined ? { baseTickMs: entry.baseTickMs } : {}),
-        ...(entry.walTipTickMs !== undefined ? { walTipTickMs: entry.walTipTickMs } : {}),
+        ...(entry.sha256 === undefined ? {} : { sha256: entry.sha256 }),
+        ...(entry.walGeneration === undefined
+          ? {}
+          : { walGeneration: entry.walGeneration }),
+        ...(entry.baseTickMs === undefined
+          ? {}
+          : { baseTickMs: entry.baseTickMs }),
+        ...(entry.walTipTickMs === undefined
+          ? {}
+          : { walTipTickMs: entry.walTipTickMs }),
       });
-      continue;
+      return;
     }
 
     everyEntryReused = false;
     const chunkIds: string[] = [];
     const uploads: Promise<void>[] = [];
-    for await (const plain of partStream(readFileStream(entry.absolutePath))) {
-      const id = computeChunkId(dedupKey, plain);
-      chunkIds.push(id);
-      newChunkIndex.set(id, plain.length);
-      if (knownChunkIds.has(id)) continue; // already known to exist (previous manifest or this run)
-      knownChunkIds.add(id);
-      const release = await uploadSem.acquire();
-      const objectKey = `chunks/${id}`;
-      // Deterministic nonce from the chunk's own keyed content hash (G7):
-      // same plaintext ⇒ same id ⇒ byte-identical object (retries and dedup
-      // races converge); different plaintext ⇒ different id ⇒ fresh nonce —
-      // the (key, nonce) pair can never repeat with different content. Both id
-      // and nonce derive from the RAW plaintext, so entropy-gated compression
-      // (below) is invisible to identity: it changes only the sealed byte
-      // count, never where the object lands (#405 §1).
-      const nonce = deriveNonce(dataKey, `centraid-backup:chunk-nonce:${id}`);
-      // /2 (#405 §1): compress-then-seal. The sealed plaintext is the framed
-      // payload `[algo-id][possibly-compressed body]`, not the raw part —
-      // keep-if-smaller, so incompressible parts cost at most one extra byte.
-      const encrypted = encryptWithNonce(dataKey, nonce, await frameChunkPayloadAsync(plain));
-      uploads.push(
-        store
-          .head(objectKey)
-          .then((head) => (head ? undefined : store.put(objectKey, encrypted)))
-          .finally(release),
-      );
-    }
+    await applyAvailableInOrder(
+      partStream(readFileStream(entry.absolutePath)),
+      async (plain) => {
+        const id = computeChunkId(dedupKey, plain);
+        chunkIds.push(id);
+        newChunkIndex.set(id, plain.length);
+        if (knownChunkIds.has(id)) return; // already known to exist (previous manifest or this run)
+        knownChunkIds.add(id);
+        const release = await uploadSem.acquire();
+        const objectKey = `chunks/${id}`;
+        // Deterministic nonce from the chunk's own keyed content hash (G7):
+        // same plaintext ⇒ same id ⇒ byte-identical object (retries and dedup
+        // races converge); different plaintext ⇒ different id ⇒ fresh nonce —
+        // the (key, nonce) pair can never repeat with different content. Both id
+        // and nonce derive from the RAW plaintext, so entropy-gated compression
+        // (below) is invisible to identity: it changes only the sealed byte
+        // count, never where the object lands (#405 §1).
+        const nonce = deriveNonce(dataKey, `centraid-backup:chunk-nonce:${id}`);
+        // /2 (#405 §1): compress-then-seal. The sealed plaintext is the framed
+        // payload `[algo-id][possibly-compressed body]`, not the raw part —
+        // keep-if-smaller, so incompressible parts cost at most one extra byte.
+        const encrypted = encryptWithNonce(
+          dataKey,
+          nonce,
+          await frameChunkPayloadAsync(plain)
+        );
+        uploads.push(
+          store
+            .head(objectKey)
+            .then((head) =>
+              head ? undefined : store.put(objectKey, encrypted)
+            )
+            .finally(release)
+        );
+      }
+    );
     await Promise.all(uploads);
     sealedEntries.push({
       path: entry.path,
@@ -289,12 +346,18 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
       size: stat.size,
       mtimeMs: stat.mtimeMs,
       chunks: chunkIds,
-      ...(entry.sha256 !== undefined ? { sha256: entry.sha256 } : {}),
-      ...(entry.walGeneration !== undefined ? { walGeneration: entry.walGeneration } : {}),
-      ...(entry.baseTickMs !== undefined ? { baseTickMs: entry.baseTickMs } : {}),
-      ...(entry.walTipTickMs !== undefined ? { walTipTickMs: entry.walTipTickMs } : {}),
+      ...(entry.sha256 === undefined ? {} : { sha256: entry.sha256 }),
+      ...(entry.walGeneration === undefined
+        ? {}
+        : { walGeneration: entry.walGeneration }),
+      ...(entry.baseTickMs === undefined
+        ? {}
+        : { baseTickMs: entry.baseTickMs }),
+      ...(entry.walTipTickMs === undefined
+        ? {}
+        : { walTipTickMs: entry.walTipTickMs }),
     });
-  }
+  });
 
   const previousChunkIdSet = sameEpochPrevious
     ? new Set(sameEpochPrevious.chunkSizes.keys())
@@ -319,15 +382,22 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
     sealedEntries.length === sameEpochPrevious.entriesByPath.size &&
     sealedEntries.every((entry) => {
       const prior = sameEpochPrevious.entriesByPath.get(entry.path);
-      return prior !== undefined && canonicalJson(prior) === canonicalJson(entry);
+      return (
+        prior !== undefined && canonicalJson(prior) === canonicalJson(entry)
+      );
     });
 
   if (!opts.forceRegistration && chunkIndexIdentical && entriesIdentical) {
-    log.info('createSnapshot: no change since previous snapshot — skipping registration');
+    log.info(
+      "createSnapshot: no change since previous snapshot — skipping registration"
+    );
     return null;
   }
 
-  const chunkIndex = [...newChunkIndex.entries()].map(([id, size]) => ({ id, size }));
+  const chunkIndex = [...newChunkIndex.entries()].map(([id, size]) => ({
+    id,
+    size,
+  }));
   validateSnapshotBasePair(sealedEntries);
   const { bytes, manifestHash } = sealManifest({
     keyring: opts.keyring,
@@ -367,7 +437,7 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
     appMeta: opts.appMeta,
   });
   log.info(
-    `createSnapshot: registered seq ${row.seq} (${chunkIndex.length} chunks, ${totalBytes} bytes)`,
+    `createSnapshot: registered seq ${row.seq} (${chunkIndex.length} chunks, ${totalBytes} bytes)`
   );
   return row;
 }
@@ -411,7 +481,10 @@ export interface RestoreSnapshotOptions {
    * for `kind: 'blob'`, never for `db`/`git-bundle`/`seal-key` entries (those
    * are load-bearing for the restore itself and are always materialized).
    */
-  skipBlob?: (blob: { path: string; sha: string }) => boolean | Promise<boolean>;
+  skipBlob?: (blob: {
+    path: string;
+    sha: string;
+  }) => boolean | Promise<boolean>;
   log?: EngineLogger;
 }
 
@@ -431,8 +504,8 @@ export interface RestoreResult {
 
 /** `x.y` (or bare `x`) numeric version compare: -1/0/1. Non-numeric parts compare as 0. */
 function compareVersion(a: string, b: string): number {
-  const pa = a.split('.').map((p) => Number.parseInt(p, 10) || 0);
-  const pb = b.split('.').map((p) => Number.parseInt(p, 10) || 0);
+  const pa = a.split(".").map((p) => Math.trunc(Number(p)) || 0);
+  const pb = b.split(".").map((p) => Math.trunc(Number(p)) || 0);
   const len = Math.max(pa.length, pb.length);
   for (let i = 0; i < len; i++) {
     const x = pa[i] ?? 0;
@@ -442,8 +515,8 @@ function compareVersion(a: string, b: string): number {
   return 0;
 }
 
-const MIN_SUPPORTED_VAULT_USER_VERSION = '1';
-const MIN_SUPPORTED_ONTOLOGY_VERSION = '1.0';
+const MIN_SUPPORTED_VAULT_USER_VERSION = "1";
+const MIN_SUPPORTED_ONTOLOGY_VERSION = "1.0";
 
 /**
  * Registry-row-level compatibility gate (issue #439 R1): does a snapshot's
@@ -457,31 +530,33 @@ const MIN_SUPPORTED_ONTOLOGY_VERSION = '1.0';
  */
 export function assertCompatibleAppMeta(
   appMeta: Record<string, string>,
-  current: RestoreCurrentVersions,
+  current: RestoreCurrentVersions
 ): void {
-  const vaultUserVersion = appMeta['vaultUserVersion'];
-  const ontologyVersion = appMeta['ontologyVersion'];
+  const vaultUserVersion = appMeta["vaultUserVersion"];
+  const ontologyVersion = appMeta["ontologyVersion"];
   if (vaultUserVersion !== undefined) {
     if (compareVersion(vaultUserVersion, current.vaultUserVersion) > 0) {
       throw new Error(
-        `restoreSnapshot: snapshot vaultUserVersion ${vaultUserVersion} is newer than running ${current.vaultUserVersion} — update the gateway first (no migrations, v0 stance)`,
+        `restoreSnapshot: snapshot vaultUserVersion ${vaultUserVersion} is newer than running ${current.vaultUserVersion} — update the gateway first (no migrations, v0 stance)`
       );
     }
-    if (compareVersion(vaultUserVersion, MIN_SUPPORTED_VAULT_USER_VERSION) < 0) {
+    if (
+      compareVersion(vaultUserVersion, MIN_SUPPORTED_VAULT_USER_VERSION) < 0
+    ) {
       throw new Error(
-        `restoreSnapshot: snapshot vaultUserVersion ${vaultUserVersion} is older than the reader guarantee`,
+        `restoreSnapshot: snapshot vaultUserVersion ${vaultUserVersion} is older than the reader guarantee`
       );
     }
   }
   if (ontologyVersion !== undefined) {
     if (compareVersion(ontologyVersion, current.ontologyVersion) > 0) {
       throw new Error(
-        `restoreSnapshot: snapshot ontologyVersion ${ontologyVersion} is newer than running ${current.ontologyVersion} — update the gateway first`,
+        `restoreSnapshot: snapshot ontologyVersion ${ontologyVersion} is newer than running ${current.ontologyVersion} — update the gateway first`
       );
     }
     if (compareVersion(ontologyVersion, MIN_SUPPORTED_ONTOLOGY_VERSION) < 0) {
       throw new Error(
-        `restoreSnapshot: snapshot ontologyVersion ${ontologyVersion} is older than the reader guarantee`,
+        `restoreSnapshot: snapshot ontologyVersion ${ontologyVersion} is older than the reader guarantee`
       );
     }
   }
@@ -498,10 +573,12 @@ async function openSnapshotRow(
   store: ObjectStore,
   keyring: Keyring,
   vaultId: string,
-  current?: RestoreCurrentVersions,
+  current?: RestoreCurrentVersions
 ): Promise<OpenedSnapshot> {
   if (!READABLE_SNAPSHOT_FORMATS.includes(row.format)) {
-    throw new Error(`restoreSnapshot: unknown format "${row.format}" — update the gateway first`);
+    throw new Error(
+      `restoreSnapshot: unknown format "${row.format}" — update the gateway first`
+    );
   }
   // Registry metadata is only an early refusal gate: it can prevent a futile
   // download, never authorize a restore. The authenticated envelope is checked
@@ -511,7 +588,7 @@ async function openSnapshotRow(
   const opened = openManifest(bytes, keyring, vaultId, row.manifestHash);
   if (!READABLE_SNAPSHOT_FORMATS.includes(opened.public.format)) {
     throw new Error(
-      `restoreSnapshot: unknown authenticated format "${opened.public.format}" — update the gateway first`,
+      `restoreSnapshot: unknown authenticated format "${opened.public.format}" — update the gateway first`
     );
   }
   if (current) assertCompatibleAppMeta(opened.public.appMeta, current);
@@ -520,40 +597,70 @@ async function openSnapshotRow(
   return { row, opened, baseTimeMs };
 }
 
-export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<RestoreResult> {
+export async function restoreSnapshot(
+  opts: RestoreSnapshotOptions
+): Promise<RestoreResult> {
   const log = { ...noopLog, ...opts.log };
-  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
+  const store = await opts.provider.openDataPlane(
+    opts.targetId,
+    "backup",
+    "read"
+  );
   let selected: OpenedSnapshot | undefined;
   if (opts.seq !== undefined) {
     const row = await opts.provider.getSnapshot(opts.targetId, opts.seq);
-    if (row) selected = await openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current);
-    if (selected && opts.pointInTimeMs !== undefined && selected.baseTimeMs > opts.pointInTimeMs) {
+    if (row)
+      selected = await openSnapshotRow(
+        row,
+        store,
+        opts.keyring,
+        opts.vaultId,
+        opts.current
+      );
+    if (
+      selected &&
+      opts.pointInTimeMs !== undefined &&
+      selected.baseTimeMs > opts.pointInTimeMs
+    ) {
       throw new Error(
         `restoreSnapshot: snapshot seq ${opts.seq} has a base at ` +
           `${new Date(selected.baseTimeMs).toISOString()}, which is NEWER than the requested ` +
           `point in time ${new Date(opts.pointInTimeMs).toISOString()} — its base already ` +
-          'contains later writes and cannot be rewound; drop --seq to pick the newest snapshot ' +
-          'at or before that instant',
+          "contains later writes and cannot be rewound; drop --seq to pick the newest snapshot " +
+          "at or before that instant"
       );
     }
-  } else if (opts.pointInTimeMs !== undefined) {
+  } else if (opts.pointInTimeMs === undefined) {
+    const row = (await opts.provider.listSnapshots(opts.targetId))[0];
+    if (row)
+      selected = await openSnapshotRow(
+        row,
+        store,
+        opts.keyring,
+        opts.vaultId,
+        opts.current
+      );
+  } else {
     const rows = await opts.provider.listSnapshots(opts.targetId);
-    const candidates: OpenedSnapshot[] = [];
-    for (const row of rows) {
-      const candidate = await openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current);
-      if (candidate.baseTimeMs <= opts.pointInTimeMs) candidates.push(candidate);
+    const pointInTimeMs = opts.pointInTimeMs;
+    if (pointInTimeMs === undefined) {
+      throw new Error(
+        "restoreSnapshot: point-in-time selection requires a point in time"
+      );
     }
+    const candidates = (
+      await mapWithConcurrency(rows, 4, (row) =>
+        openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current)
+      )
+    ).filter((candidate) => candidate.baseTimeMs <= pointInTimeMs);
     selected = candidates.sort((a, b) => b.baseTimeMs - a.baseTimeMs)[0];
     if (!selected) {
       throw new Error(
-        `restoreSnapshot: no snapshot exists at or before ${new Date(opts.pointInTimeMs).toISOString()}`,
+        `restoreSnapshot: no snapshot exists at or before ${new Date(opts.pointInTimeMs).toISOString()}`
       );
     }
-  } else {
-    const row = (await opts.provider.listSnapshots(opts.targetId))[0];
-    if (row) selected = await openSnapshotRow(row, store, opts.keyring, opts.vaultId, opts.current);
   }
-  if (!selected) throw new Error('restoreSnapshot: no snapshot available');
+  if (!selected) throw new Error("restoreSnapshot: no snapshot available");
   const { row, opened } = selected;
 
   // 3. Fresh directory only — never over a live vault.
@@ -561,7 +668,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
   try {
     destEntries = await fs.readdir(opts.destDir);
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
       await fs.mkdir(opts.destDir, { recursive: true });
       destEntries = [];
     } else {
@@ -570,7 +677,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
   }
   if (destEntries.length > 0) {
     throw new Error(
-      `restoreSnapshot: destDir "${opts.destDir}" is not empty — refusing to restore over it`,
+      `restoreSnapshot: destDir "${opts.destDir}" is not empty — refusing to restore over it`
     );
   }
 
@@ -579,7 +686,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
   const dedupKey = deriveDedupKey(master, opts.vaultId);
 
   const skippedBlobs: string[] = [];
-  for (const entry of opened.entries) {
+  await applyInOrder(opened.entries, async (entry) => {
     // 2 (continued). Reject path traversal entries — openManifest already
     // validated this, but re-check defensively at the point we touch disk.
     if (!isSafeEntryPath(entry.path)) {
@@ -589,22 +696,22 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
     // CAS already holds is left remote-only — never downloaded, never written.
     // The custody read-through serves it on demand later. Only `blob` entries
     // are ever eligible; the sha is the file name of the content-addressed path.
-    if (opts.skipBlob && entry.kind === 'blob') {
-      const sha = entry.path.split('/').pop() ?? '';
+    if (opts.skipBlob && entry.kind === "blob") {
+      const sha = entry.path.split("/").pop() ?? "";
       if (await opts.skipBlob({ path: entry.path, sha })) {
         skippedBlobs.push(sha);
-        continue;
+        return;
       }
     }
-    const dest = path.join(opts.destDir, ...entry.path.split('/'));
+    const dest = path.join(opts.destDir, ...entry.path.split("/"));
     await fs.mkdir(path.dirname(dest), { recursive: true });
     // Stream parts straight to disk (bases can be GBs — never buffer whole
     // files), hashing as we go so db entries verify against their
     // capture-time sha256 before any WAL replay mutates the file.
-    const hash = createHash('sha256');
-    const handle = await fs.open(dest, 'w');
+    const hash = createHash("sha256");
+    const handle = await fs.open(dest, "w");
     try {
-      for (const id of entry.chunks) {
+      await applyInOrder(entry.chunks, async (id) => {
         const ciphertext = await store.get(`chunks/${id}`);
         // Unseal, then unframe: the sealed plaintext is `[algo-id][body]`
         // (/2, #405 §1); the raw part is what the keyed id is recomputed over,
@@ -613,26 +720,30 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
         const recomputed = computeChunkId(dedupKey, plain);
         if (recomputed !== id) {
           throw new Error(
-            `restoreSnapshot: chunk integrity mismatch for "${entry.path}" (chunk ${id})`,
+            `restoreSnapshot: chunk integrity mismatch for "${entry.path}" (chunk ${id})`
           );
         }
-        const buf = Buffer.from(plain.buffer, plain.byteOffset, plain.byteLength);
+        const buf = Buffer.from(
+          plain.buffer,
+          plain.byteOffset,
+          plain.byteLength
+        );
         hash.update(buf);
         await handle.write(buf);
-      }
+      });
       await handle.sync();
     } finally {
       await handle.close();
     }
     if (entry.sha256 !== undefined) {
-      const actual = hash.digest('hex');
+      const actual = hash.digest("hex");
       if (actual !== entry.sha256) {
         throw new Error(
-          `restoreSnapshot: "${entry.path}" hash mismatch (expected ${entry.sha256}, got ${actual})`,
+          `restoreSnapshot: "${entry.path}" hash mismatch (expected ${entry.sha256}, got ${actual})`
         );
       }
     }
-  }
+  });
 
   // Replay shipped WAL segments on top of the restored base files —
   // SQLite itself performs and validates the replay (wal-restore.ts).
@@ -647,8 +758,12 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
       journal: pair.journal.walGeneration!,
     },
     baseTickMsByDb: { vault: pair.baseTickMs, journal: pair.baseTickMs },
-    ...(pair.walTipTickMs !== undefined ? { walTipTickMs: pair.walTipTickMs } : {}),
-    ...(opts.pointInTimeMs !== undefined ? { pointInTimeMs: opts.pointInTimeMs } : {}),
+    ...(pair.walTipTickMs === undefined
+      ? {}
+      : { walTipTickMs: pair.walTipTickMs }),
+    ...(opts.pointInTimeMs === undefined
+      ? {}
+      : { pointInTimeMs: opts.pointInTimeMs }),
     log,
   });
 
@@ -656,11 +771,11 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
   const marker = {
     restoredAt: new Date().toISOString(),
     sourceSeq: row.seq,
-    quarantine: ['outbox', 'automations', 'connections'],
+    quarantine: ["outbox", "automations", "connections"],
   };
   await fs.writeFile(
-    path.join(opts.destDir, 'RESTORE_QUARANTINE.json'),
-    `${JSON.stringify(marker, null, 2)}\n`,
+    path.join(opts.destDir, "RESTORE_QUARANTINE.json"),
+    `${JSON.stringify(marker, null, 2)}\n`
   );
 
   return {
@@ -696,14 +811,20 @@ export interface VerifySnapshotResult {
   walSampled: number;
 }
 
-export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<VerifySnapshotResult> {
+export async function verifySnapshot(
+  opts: VerifySnapshotOptions
+): Promise<VerifySnapshotResult> {
   const row =
-    opts.seq !== undefined
-      ? await opts.provider.getSnapshot(opts.targetId, opts.seq)
-      : (await opts.provider.listSnapshots(opts.targetId))[0];
-  if (!row) throw new Error('verifySnapshot: no snapshot available');
+    opts.seq === undefined
+      ? (await opts.provider.listSnapshots(opts.targetId))[0]
+      : await opts.provider.getSnapshot(opts.targetId, opts.seq);
+  if (!row) throw new Error("verifySnapshot: no snapshot available");
 
-  const store = await opts.provider.openDataPlane(opts.targetId, 'backup', 'read');
+  const store = await opts.provider.openDataPlane(
+    opts.targetId,
+    "backup",
+    "read"
+  );
   const missing: string[] = [];
   const corrupt: string[] = [];
   let checkedObjects = 0;
@@ -712,13 +833,25 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
   checkedObjects++;
   if (!manifestHead) {
     missing.push(row.manifestKey);
-    return { checkedObjects, missing, corrupt, sampled: 0, walSegments: 0, walSampled: 0 };
+    return {
+      checkedObjects,
+      missing,
+      corrupt,
+      sampled: 0,
+      walSegments: 0,
+      walSampled: 0,
+    };
   }
   const manifestBytes = await store.get(row.manifestKey);
-  const opened = openManifest(manifestBytes, opts.keyring, opts.vaultId, row.manifestHash);
+  const opened = openManifest(
+    manifestBytes,
+    opts.keyring,
+    opts.vaultId,
+    row.manifestHash
+  );
   if (!READABLE_SNAPSHOT_FORMATS.includes(opened.public.format)) {
     throw new Error(
-      `verifySnapshot: unknown authenticated format "${opened.public.format}" — update the gateway first`,
+      `verifySnapshot: unknown authenticated format "${opened.public.format}" — update the gateway first`
     );
   }
   assertManifestMatchesRegistry(opened.public, opened.entries, row);
@@ -727,27 +860,44 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
   const dataKey = deriveDataKey(master, opts.vaultId);
   const dedupKey = deriveDedupKey(master, opts.vaultId);
 
-  for (const chunk of opened.public.chunkIndex) {
-    checkedObjects++;
-    const head = await store.head(`chunks/${chunk.id}`);
-    if (!head) missing.push(chunk.id);
-  }
+  const chunkHeads = await mapWithConcurrency(
+    opened.public.chunkIndex,
+    4,
+    async (chunk) => ({
+      id: chunk.id,
+      present: (await store.head(`chunks/${chunk.id}`)) !== null,
+    })
+  );
+  checkedObjects += chunkHeads.length;
+  missing.push(
+    ...chunkHeads.filter(({ present }) => !present).map(({ id }) => id)
+  );
 
-  const sampleCount = Math.min(opts.sampleCount ?? 8, opened.public.chunkIndex.length);
-  const sample = sampleWithoutReplacement(opened.public.chunkIndex, sampleCount);
-  for (const chunk of sample) {
+  const sampleCount = Math.min(
+    opts.sampleCount ?? 8,
+    opened.public.chunkIndex.length
+  );
+  const sample = sampleWithoutReplacement(
+    opened.public.chunkIndex,
+    sampleCount
+  );
+  const corruptSamples = await mapWithConcurrency(sample, 4, async (chunk) => {
     try {
       const ciphertext = await store.get(`chunks/${chunk.id}`);
       // Unseal → unframe → recompute the keyed id over the raw plaintext
       // (/2, #405 §1): a sample that decompresses and re-addresses proves the
       // object is both readable and the content it claims to be.
       const plain = unframeChunkPayload(decrypt(dataKey, ciphertext));
-      const recomputed = computeChunkId(dedupKey, plain);
-      if (recomputed !== chunk.id) corrupt.push(chunk.id);
+      return computeChunkId(dedupKey, plain) === chunk.id
+        ? undefined
+        : chunk.id;
     } catch {
-      corrupt.push(chunk.id);
+      return chunk.id;
     }
-  }
+  });
+  corrupt.push(
+    ...corruptSamples.filter((id): id is string => id !== undefined)
+  );
 
   // The snapshot's WAL streams. Existence is NOT just "the LIST
   // returned keys" — a lost mid-stream segment or closer silently truncates
@@ -768,61 +918,97 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
     const generationByDb: Partial<Record<WalDbName, string>> = {};
     const listingByDb: Partial<Record<WalDbName, WalStreamListing>> = {};
     const walTipTickMs = basePair.walTipTickMs ?? -1;
-    for (const db of WAL_DB_NAMES) {
-      const entry = opened.entries.find((e) => e.kind === 'db' && e.path === WAL_DB_FILES[db]);
-      if (entry?.walGeneration === undefined) continue;
+    await applyInOrder(WAL_DB_NAMES, async (db) => {
+      const entry = opened.entries.find(
+        (e) => e.kind === "db" && e.path === WAL_DB_FILES[db]
+      );
+      if (entry?.walGeneration === undefined) return;
       const generation = entry.walGeneration;
       generationByDb[db] = generation;
       const segments: WalSegmentAddress[] = [];
       const closers: WalGroupCloser[] = [];
-      for await (const obj of store.list(walSegmentPrefix(db, generation))) {
-        const addr = parseWalSegmentKey(obj.key);
-        if (addr) {
-          segments.push(addr);
-          continue;
+      await applyAvailableInOrder(
+        store.list(walSegmentPrefix(db, generation)),
+        async (obj) => {
+          const addr = parseWalSegmentKey(obj.key);
+          if (addr) {
+            segments.push(addr);
+            return;
+          }
+          const closer = parseWalCloserKey(obj.key);
+          if (!closer) return;
+          try {
+            openWalCloser(
+              dataKey,
+              opts.vaultId,
+              closer,
+              await store.get(obj.key)
+            );
+            closers.push(closer);
+          } catch {
+            corrupt.push(obj.key);
+          }
         }
-        const closer = parseWalCloserKey(obj.key);
-        if (!closer) continue;
-        try {
-          openWalCloser(dataKey, opts.vaultId, closer, await store.get(obj.key));
-          closers.push(closer);
-        } catch {
-          corrupt.push(obj.key);
-        }
-      }
+      );
       listingByDb[db] = { segments, closers };
       walSegments += segments.length;
       const plan = planWalReplay({ segments, closers }, { db, generation });
       if (plan.truncatedByHole) {
         missing.push(
           `wal/${db}/${generation}: stream hole — replay reaches tick ${plan.lastTickMs} ` +
-            `but ${segments.length - plan.segments.length} listed segment(s) lie beyond it`,
+            `but ${segments.length - plan.segments.length} listed segment(s) lie beyond it`
         );
       }
-      for (const addr of sampleWithoutReplacement(segments, Math.min(4, segments.length))) {
-        walSampled++;
-        const key = walSegmentKey(addr);
-        try {
-          openWalSegment(dataKey, opts.vaultId, addr, await store.get(key));
-        } catch {
-          corrupt.push(key);
+      const sampleAddresses = sampleWithoutReplacement(
+        segments,
+        Math.min(4, segments.length)
+      );
+      walSampled += sampleAddresses.length;
+      const corruptAddresses = await mapWithConcurrency(
+        sampleAddresses,
+        4,
+        async (addr) => {
+          const key = walSegmentKey(addr);
+          try {
+            openWalSegment(dataKey, opts.vaultId, addr, await store.get(key));
+            return undefined;
+          } catch {
+            return key;
+          }
         }
-      }
-    }
+      );
+      corrupt.push(
+        ...corruptAddresses.filter((key): key is string => key !== undefined)
+      );
+    });
 
     const { vault: gv, journal: gj } = generationByDb;
     if (gv !== undefined && gj !== undefined) {
       const markers: WalPairMarker[] = [];
-      for await (const obj of store.list(walPairMarkerPrefix(gv, gj))) {
-        const addr = parseWalPairMarkerKey(obj.key);
-        if (!addr) continue;
-        try {
-          markers.push(openWalPairMarker(dataKey, opts.vaultId, addr, await store.get(obj.key)));
-        } catch {
-          corrupt.push(obj.key);
+      await applyAvailableInOrder(
+        store.list(walPairMarkerPrefix(gv, gj)),
+        async (obj) => {
+          const addr = parseWalPairMarkerKey(obj.key);
+          if (!addr) return;
+          try {
+            markers.push(
+              openWalPairMarker(
+                dataKey,
+                opts.vaultId,
+                addr,
+                await store.get(obj.key)
+              )
+            );
+          } catch {
+            corrupt.push(obj.key);
+          }
         }
-      }
-      const coordinated = planCoordinatedReplay({ listingByDb, generationByDb, markers });
+      );
+      const coordinated = planCoordinatedReplay({
+        listingByDb,
+        generationByDb,
+        markers,
+      });
       if (
         coordinated.newestMarkerTickMs >= 0 &&
         coordinated.coordinatedCutMs < coordinated.newestMarkerTickMs
@@ -830,7 +1016,7 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
         missing.push(
           `wal/tick/${gv}-${gj}: the newest coordinated point the producer shipped ` +
             `(tick ${coordinated.newestMarkerTickMs}) cannot be reassembled — the pair can only ` +
-            `be restored at tick ${coordinated.coordinatedCutMs}; segments are missing`,
+            `be restored at tick ${coordinated.coordinatedCutMs}; segments are missing`
         );
       }
       // …and the markers THEMSELVES can be deleted, which the check above
@@ -845,13 +1031,20 @@ export async function verifySnapshot(opts: VerifySnapshotOptions): Promise<Verif
           `wal/tick/${gv}-${gj}: pair marker(s) this snapshot registered are GONE — the producer ` +
             `confirmed the pair reached tick ${walTipTickMs}, but the store can only be replayed ` +
             `to tick ${coordinated.coordinatedCutMs}. A restore would silently return an earlier ` +
-            'state.',
+            "state."
         );
       }
     }
   }
 
-  return { checkedObjects, missing, corrupt, sampled: sample.length, walSegments, walSampled };
+  return {
+    checkedObjects,
+    missing,
+    corrupt,
+    sampled: sample.length,
+    walSegments,
+    walSampled,
+  };
 }
 
 function sampleWithoutReplacement<T>(items: readonly T[], count: number): T[] {

@@ -1,4 +1,5 @@
-import { expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
+
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
   GATEWAY_PROTOCOL_VERSION,
@@ -8,190 +9,197 @@ import {
   buildGatewayInfoPayload,
   protocolsCompatible,
   ROUTES,
-} from './index.ts';
+} from "./index.ts";
 
-test('version constants: product string + protocol ints', () => {
-  expect(GATEWAY_VERSION).toBe('0.1.0');
-  expect(GATEWAY_PROTOCOL_VERSION).toBe(2);
-  expect(GATEWAY_MIN_PROTOCOL_VERSION).toBe(2);
-  expect(GATEWAY_SCHEMA_EPOCH).toBe(2);
-  expect(GATEWAY_SCHEMA_EPOCH).toBe(GATEWAY_PROTOCOL_VERSION);
-});
-
-test('protocolsCompatible enforces mutual support window', () => {
-  expect(
-    protocolsCompatible({
-      localProtocol: 2,
-      localMin: 2,
-      peerProtocol: 2,
-      peerMin: 2,
-    }),
-  ).toBe(true);
-  // peer too old for local min
-  expect(
-    protocolsCompatible({
-      localProtocol: 3,
-      localMin: 3,
-      peerProtocol: 2,
-      peerMin: 2,
-    }),
-  ).toBe(false);
-  // local too old for peer min
-  expect(
-    protocolsCompatible({
-      localProtocol: 2,
-      localMin: 2,
-      peerProtocol: 3,
-      peerMin: 3,
-    }),
-  ).toBe(false);
-  // peer newer but still supports our protocol
-  expect(
-    protocolsCompatible({
-      localProtocol: 2,
-      localMin: 2,
-      peerProtocol: 5,
-      peerMin: 2,
-    }),
-  ).toBe(true);
-});
-
-test('judgeGatewayInfo: product version skew is allowed when protocol matches', () => {
-  const ok = judgeGatewayInfo({
-    version: '9.9.9',
-    protocolVersion: GATEWAY_PROTOCOL_VERSION,
-    minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
-  });
-  expect(ok.ok).toBe(true);
-  if (!ok.ok) return;
-  expect(ok.info.version).toBe('9.9.9');
-  expect(ok.info.protocolVersion).toBe(GATEWAY_PROTOCOL_VERSION);
-  expect(ok.info.capabilities?.webSessions).toBe(true);
-});
-
-test('judgeGatewayInfo: schemaEpoch fallback when protocolVersion omitted', () => {
-  const ok = judgeGatewayInfo({
-    version: '0.0.1',
-    schemaEpoch: GATEWAY_PROTOCOL_VERSION,
-  });
-  expect(ok.ok).toBe(true);
-});
-
-test('judgeGatewayInfo: protocol mismatch refused (not product)', () => {
-  const bad = judgeGatewayInfo({
-    version: GATEWAY_VERSION,
-    protocolVersion: 99,
-    minSupportedProtocol: 99,
-  });
-  expect(bad).toMatchObject({ ok: false, reason: 'protocol_mismatch' });
-  expect(judgeGatewayInfo(null)).toMatchObject({ ok: false, reason: 'malformed' });
-});
-
-test('buildGatewayInfoPayload ships product + protocol fields', () => {
-  const payload = buildGatewayInfoPayload({
-    instanceId: 'i1',
-    startedAt: 1,
-    uptimeMs: 2,
-    authenticated: true,
-  });
-  expect(payload.version).toBe(GATEWAY_VERSION);
-  expect(payload.protocolVersion).toBe(GATEWAY_PROTOCOL_VERSION);
-  expect(payload.minSupportedProtocol).toBe(GATEWAY_MIN_PROTOCOL_VERSION);
-  expect(payload.schemaEpoch).toBe(GATEWAY_SCHEMA_EPOCH);
-  expect(payload.capabilities?.devicePairing).toBe(true);
-  expect(ROUTES.gatewayInfo).toBe('/centraid/_gateway/info');
-});
-
-test('the authenticated flag survives the judge, and is absent when not reported', () => {
-  const anonymous = buildGatewayInfoPayload({
-    instanceId: 'i1',
-    startedAt: 1,
-    uptimeMs: 2,
-    authenticated: false,
-  });
-  expect(anonymous.authenticated).toBe(false);
-  expect(judgeGatewayInfo(anonymous)).toMatchObject({
-    ok: true,
-    info: { authenticated: false },
-  });
-  const authed = judgeGatewayInfo({
-    version: GATEWAY_VERSION,
-    protocolVersion: GATEWAY_PROTOCOL_VERSION,
-    minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
-    authenticated: true,
-  });
-  expect(authed).toMatchObject({ ok: true, info: { authenticated: true } });
-  const silent = judgeGatewayInfo({
-    version: GATEWAY_VERSION,
-    protocolVersion: GATEWAY_PROTOCOL_VERSION,
-    minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
-  });
-  expect(silent.ok && 'authenticated' in silent.info).toBe(false);
-});
-
-test('gateway endpoint identity and dial hints are preserved only when strings', () => {
-  const payload = buildGatewayInfoPayload({
-    instanceId: 'i1',
-    startedAt: 1,
-    uptimeMs: 2,
-    authenticated: true,
-    endpointId: 'endpoint-1',
-    endpointTicket: 'ticket-1',
-  });
-  expect(payload.endpointId).toBe('endpoint-1');
-  expect(payload.endpointTicket).toBe('ticket-1');
-  expect(judgeGatewayInfo(payload)).toMatchObject({
-    ok: true,
-    info: {
-      endpointId: 'endpoint-1',
-      endpointTicket: 'ticket-1',
-    },
+describe("handshake scenarios", () => {
+  test("version constants: product string + protocol ints", () => {
+    expect(GATEWAY_VERSION).toBe("0.1.0");
+    expect(GATEWAY_PROTOCOL_VERSION).toBe(2);
+    expect(GATEWAY_MIN_PROTOCOL_VERSION).toBe(2);
+    expect(GATEWAY_SCHEMA_EPOCH).toBe(2);
+    expect(GATEWAY_SCHEMA_EPOCH).toBe(GATEWAY_PROTOCOL_VERSION);
   });
 
-  const invalid = judgeGatewayInfo({
-    version: GATEWAY_VERSION,
-    protocolVersion: GATEWAY_PROTOCOL_VERSION,
-    minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
-    endpointId: 42,
-    endpointTicket: null,
+  test("protocolsCompatible enforces mutual support window", () => {
+    expect(
+      protocolsCompatible({
+        localProtocol: 2,
+        localMin: 2,
+        peerProtocol: 2,
+        peerMin: 2,
+      })
+    ).toBe(true);
+    // peer too old for local min
+    expect(
+      protocolsCompatible({
+        localProtocol: 3,
+        localMin: 3,
+        peerProtocol: 2,
+        peerMin: 2,
+      })
+    ).toBe(false);
+    // local too old for peer min
+    expect(
+      protocolsCompatible({
+        localProtocol: 2,
+        localMin: 2,
+        peerProtocol: 3,
+        peerMin: 3,
+      })
+    ).toBe(false);
+    // peer newer but still supports our protocol
+    expect(
+      protocolsCompatible({
+        localProtocol: 2,
+        localMin: 2,
+        peerProtocol: 5,
+        peerMin: 2,
+      })
+    ).toBe(true);
   });
-  expect(invalid.ok).toBe(true);
-  if (!invalid.ok) return;
-  expect(invalid.info).not.toHaveProperty('endpointId');
-  expect(invalid.info).not.toHaveProperty('endpointTicket');
-});
 
-test('malformed handshake details distinguish shape, version, and protocol failures', () => {
-  expect(judgeGatewayInfo('not-an-object')).toEqual({
-    ok: false,
-    reason: 'malformed',
-    detail: 'gateway info was not an object',
+  test("judgeGatewayInfo: product version skew is allowed when protocol matches", () => {
+    const ok = judgeGatewayInfo({
+      version: "9.9.9",
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+    });
+    expect(ok.ok).toBe(true);
+    if (!ok.ok) return;
+    expect(ok.info.version).toBe("9.9.9");
+    expect(ok.info.protocolVersion).toBe(GATEWAY_PROTOCOL_VERSION);
+    expect(ok.info.capabilities?.webSessions).toBe(true);
   });
-  expect(judgeGatewayInfo({ protocolVersion: GATEWAY_PROTOCOL_VERSION })).toEqual({
-    ok: false,
-    reason: 'malformed',
-    detail: 'gateway info missing version string',
+
+  test("judgeGatewayInfo: schemaEpoch fallback when protocolVersion omitted", () => {
+    const ok = judgeGatewayInfo({
+      version: "0.0.1",
+      schemaEpoch: GATEWAY_PROTOCOL_VERSION,
+    });
+    expect(ok.ok).toBe(true);
   });
-  expect(
-    judgeGatewayInfo({
+
+  test("judgeGatewayInfo: protocol mismatch refused (not product)", () => {
+    const bad = judgeGatewayInfo({
       version: GATEWAY_VERSION,
-      protocolVersion: 'not-a-number',
-      schemaEpoch: 'also-not-a-number',
-    }),
-  ).toEqual({
-    ok: false,
-    reason: 'malformed',
-    detail: 'gateway info missing protocolVersion (or schemaEpoch fallback)',
+      protocolVersion: 99,
+      minSupportedProtocol: 99,
+    });
+    expect(bad).toMatchObject({ ok: false, reason: "protocol_mismatch" });
+    expect(judgeGatewayInfo(null)).toMatchObject({
+      ok: false,
+      reason: "malformed",
+    });
   });
-});
 
-test('an invalid minimum protocol falls back to the peer protocol', () => {
-  const result = judgeGatewayInfo({
-    version: GATEWAY_VERSION,
-    protocolVersion: GATEWAY_PROTOCOL_VERSION,
-    minSupportedProtocol: 2.5,
+  test("buildGatewayInfoPayload ships product + protocol fields", () => {
+    const payload = buildGatewayInfoPayload({
+      instanceId: "i1",
+      startedAt: 1,
+      uptimeMs: 2,
+      authenticated: true,
+    });
+    expect(payload.version).toBe(GATEWAY_VERSION);
+    expect(payload.protocolVersion).toBe(GATEWAY_PROTOCOL_VERSION);
+    expect(payload.minSupportedProtocol).toBe(GATEWAY_MIN_PROTOCOL_VERSION);
+    expect(payload.schemaEpoch).toBe(GATEWAY_SCHEMA_EPOCH);
+    expect(payload.capabilities?.devicePairing).toBe(true);
+    expect(ROUTES.gatewayInfo).toBe("/centraid/_gateway/info");
   });
-  expect(result.ok).toBe(true);
-  if (!result.ok) return;
-  expect(result.info.minSupportedProtocol).toBe(GATEWAY_PROTOCOL_VERSION);
+
+  test("the authenticated flag survives the judge, and is absent when not reported", () => {
+    const anonymous = buildGatewayInfoPayload({
+      instanceId: "i1",
+      startedAt: 1,
+      uptimeMs: 2,
+      authenticated: false,
+    });
+    expect(anonymous.authenticated).toBe(false);
+    expect(judgeGatewayInfo(anonymous)).toMatchObject({
+      ok: true,
+      info: { authenticated: false },
+    });
+    const authed = judgeGatewayInfo({
+      version: GATEWAY_VERSION,
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+      authenticated: true,
+    });
+    expect(authed).toMatchObject({ ok: true, info: { authenticated: true } });
+    const silent = judgeGatewayInfo({
+      version: GATEWAY_VERSION,
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+    });
+    expect(silent.ok && "authenticated" in silent.info).toBe(false);
+  });
+
+  test("gateway endpoint identity and dial hints are preserved only when strings", () => {
+    const payload = buildGatewayInfoPayload({
+      instanceId: "i1",
+      startedAt: 1,
+      uptimeMs: 2,
+      authenticated: true,
+      endpointId: "endpoint-1",
+      endpointTicket: "ticket-1",
+    });
+    expect(payload.endpointId).toBe("endpoint-1");
+    expect(payload.endpointTicket).toBe("ticket-1");
+    expect(judgeGatewayInfo(payload)).toMatchObject({
+      ok: true,
+      info: {
+        endpointId: "endpoint-1",
+        endpointTicket: "ticket-1",
+      },
+    });
+
+    const invalid = judgeGatewayInfo({
+      version: GATEWAY_VERSION,
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+      endpointId: 42,
+      endpointTicket: null,
+    });
+    expect(invalid.ok).toBe(true);
+    if (!invalid.ok) return;
+    expect(invalid.info).not.toHaveProperty("endpointId");
+    expect(invalid.info).not.toHaveProperty("endpointTicket");
+  });
+
+  test("malformed handshake details distinguish shape, version, and protocol failures", () => {
+    expect(judgeGatewayInfo("not-an-object")).toStrictEqual({
+      ok: false,
+      reason: "malformed",
+      detail: "gateway info was not an object",
+    });
+    expect(
+      judgeGatewayInfo({ protocolVersion: GATEWAY_PROTOCOL_VERSION })
+    ).toStrictEqual({
+      ok: false,
+      reason: "malformed",
+      detail: "gateway info missing version string",
+    });
+    expect(
+      judgeGatewayInfo({
+        version: GATEWAY_VERSION,
+        protocolVersion: "not-a-number",
+        schemaEpoch: "also-not-a-number",
+      })
+    ).toStrictEqual({
+      ok: false,
+      reason: "malformed",
+      detail: "gateway info missing protocolVersion (or schemaEpoch fallback)",
+    });
+  });
+
+  test("an invalid minimum protocol falls back to the peer protocol", () => {
+    const result = judgeGatewayInfo({
+      version: GATEWAY_VERSION,
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      minSupportedProtocol: 2.5,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.info.minSupportedProtocol).toBe(GATEWAY_PROTOCOL_VERSION);
+  });
 });

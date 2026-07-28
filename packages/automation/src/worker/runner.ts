@@ -1,30 +1,8 @@
-/**
- * Worker entry that executes an *automation* handler.
- *
- * Issue #91: an automation is a standalone app, so the handler arg
- * is `{ automation, log, ctx }` — there is no app `db`. `ctx` exposes
- * `agent` / `fetch` / `state` / `runs` / `vault`. The runner forwards each
- * call back to the parent via message-passing and awaits the matching reply.
- *
- * Two rails, one honest cost story:
- *   - `ctx.agent` is the ONLY billed path — a bounded model turn against the
- *     user's real provider, driven through the runner registry (ACP).
- *   - everything else (`ctx.vault`, `ctx.fetch`, `ctx.state`, `ctx.runs`) is
- *     deterministic, in-process work the parent services directly against
- *     SQLite / the vault bridge. A fire whose handler never calls `ctx.agent`
- *     starts zero child processes and zero HTTP servers.
- *
- * There is no runtime retry: a failed `ctx.*` call rejects the handler's
- * Promise, and the handler (plain JS) owns retry / backoff / error
- * classification via `try/catch`. Each call is an ordering barrier — it
- * flushes to the parent and awaits its reply before the next line runs.
- *
- * Trust model: same as `runner.ts`. App code is trusted; the worker is
- * for crash + timeout isolation, not security sandboxing.
- */
+/** Automation worker: isolates crashes/timeouts, not trusted app code. `ctx.agent`
+ * is the only billed rail; every `ctx.*` call is an ordered parent RPC barrier. */
 
-import { parentPort, workerData } from 'node:worker_threads';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL } from "node:url";
+import { parentPort, workerData } from "node:worker_threads";
 
 interface WorkerRequest {
   handlerFile: string;
@@ -35,28 +13,24 @@ interface WorkerRequest {
   input?: unknown;
 }
 
+type ParentReply = {
+  id: number;
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+};
 type ParentMessage =
-  | { type: 'agent-reply'; id: number; ok: boolean; result?: unknown; error?: string }
-  | { type: 'state-reply'; id: number; ok: boolean; result?: unknown; error?: string }
-  | { type: 'runs-reply'; id: number; ok: boolean; result?: unknown; error?: string }
-  | { type: 'fetch-reply'; id: number; ok: boolean; result?: unknown; error?: string }
-  | {
-      type: 'vault-reply';
-      id: number;
-      ok: boolean;
-      result?: unknown;
-      error?: string;
-      code?: string;
-    }
-  | {
-      type: 'connector-open-reply';
-      id: number;
-      ok: boolean;
-      result?: unknown;
-      error?: string;
-    }
-  | { type: 'abort'; reason?: string }
-  | { type: 'run'; request: WorkerRequest };
+  | ({
+      type:
+        | "agent-reply"
+        | "state-reply"
+        | "runs-reply"
+        | "fetch-reply"
+        | "connector-open-reply";
+    } & ParentReply)
+  | ({ type: "vault-reply"; code?: string } & ParentReply)
+  | { type: "abort"; reason?: string }
+  | { type: "run"; request: WorkerRequest };
 
 /**
  * A `ctx.fetch` request (issue #293 decision 8, connector-only). Any string
@@ -73,42 +47,53 @@ export interface FetchSpec {
 
 type WorkerMessage =
   | {
-      type: 'agent';
+      type: "agent";
       id: number;
       prompt: string;
       json?: unknown;
       content?: { contentId: string; variant: string; maxBytes?: number }[];
     }
-  | { type: 'state'; id: number; method: 'get' | 'set' | 'delete'; key: string; value?: unknown }
   | {
-      type: 'runs';
+      type: "state";
       id: number;
-      method: 'last' | 'list';
-      filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number };
+      method: "get" | "set" | "delete";
+      key: string;
+      value?: unknown;
     }
   | {
-      type: 'vault';
+      type: "runs";
+      id: number;
+      method: "last" | "list";
+      filter: {
+        automationId?: string;
+        status?: "ok" | "error";
+        since?: number;
+        limit?: number;
+      };
+    }
+  | {
+      type: "vault";
       id: number;
       op:
-        | 'read'
-        | 'search'
-        | 'invoke'
-        | 'query'
-        | 'describe'
-        | 'parked'
-        | 'changes'
-        | 'resolve'
-        | 'reveal'
-        | 'content';
+        | "read"
+        | "search"
+        | "invoke"
+        | "query"
+        | "describe"
+        | "parked"
+        | "changes"
+        | "resolve"
+        | "reveal"
+        | "content";
       payload: Record<string, unknown>;
     }
-  | { type: 'fetch'; id: number; spec: FetchSpec }
-  | { type: 'connector-open'; id: number; principal: string }
-  | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
-  | { type: 'result'; ok: boolean; value?: unknown; error?: string };
+  | { type: "fetch"; id: number; spec: FetchSpec }
+  | { type: "connector-open"; id: number; principal: string }
+  | { type: "log"; level: "info" | "warn" | "error"; msg: string }
+  | { type: "result"; ok: boolean; value?: unknown; error?: string };
 
 if (!parentPort) {
-  throw new Error('centraid automation worker must be run as a worker_thread');
+  throw new Error("centraid automation worker must be run as a worker_thread");
 }
 const port = parentPort;
 const boot = workerData as { pooled?: boolean } & Partial<WorkerRequest>;
@@ -123,10 +108,12 @@ const pendingCalls = new Map<
 >();
 
 /** Omit that distributes over a union instead of collapsing it to common keys. */
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, K>
+  : never;
 type RpcRequest = DistributiveOmit<
-  Exclude<WorkerMessage, { type: 'log' } | { type: 'result' }>,
-  'id'
+  Exclude<WorkerMessage, { type: "log" } | { type: "result" }>,
+  "id"
 >;
 
 /** Post one request message and await its `*-reply`. Each ctx.* call is an
@@ -147,18 +134,18 @@ function rejectAllPending(reason: string): void {
   pendingCalls.clear();
 }
 
-port.on('message', (msg: ParentMessage) => {
-  if (msg.type === 'run') {
+port.on("message", (msg: ParentMessage) => {
+  if (msg.type === "run") {
     execute(msg.request);
     return;
   }
   if (
-    msg.type === 'agent-reply' ||
-    msg.type === 'state-reply' ||
-    msg.type === 'runs-reply' ||
-    msg.type === 'fetch-reply' ||
-    msg.type === 'vault-reply' ||
-    msg.type === 'connector-open-reply'
+    msg.type === "agent-reply" ||
+    msg.type === "state-reply" ||
+    msg.type === "runs-reply" ||
+    msg.type === "fetch-reply" ||
+    msg.type === "vault-reply" ||
+    msg.type === "connector-open-reply"
   ) {
     const p = pendingCalls.get(msg.id);
     if (!p) return;
@@ -166,55 +153,71 @@ port.on('message', (msg: ParentMessage) => {
     if (msg.ok) p.resolve(msg.result);
     else {
       const err = new Error(
-        msg.error ?? `${msg.type.replace('-reply', '')} call failed`,
+        msg.error ?? `${msg.type.replace("-reply", "")} call failed`
       ) as Error & {
         code?: string;
       };
-      if ('code' in msg && msg.code) err.code = msg.code;
+      if ("code" in msg && msg.code) err.code = msg.code;
       p.reject(err);
     }
     return;
   }
-  if (msg.type === 'abort') {
-    abortController.abort(msg.reason ?? 'aborted');
-    rejectAllPending(msg.reason ?? 'aborted');
+  if (msg.type === "abort") {
+    abortController.abort(msg.reason ?? "aborted");
+    rejectAllPending(msg.reason ?? "aborted");
   }
 });
 
 const log = {
   info: (msg: string) =>
-    port.postMessage({ type: 'log', level: 'info', msg } satisfies WorkerMessage),
+    port.postMessage({
+      type: "log",
+      level: "info",
+      msg,
+    } satisfies WorkerMessage),
   warn: (msg: string) =>
-    port.postMessage({ type: 'log', level: 'warn', msg } satisfies WorkerMessage),
+    port.postMessage({
+      type: "log",
+      level: "warn",
+      msg,
+    } satisfies WorkerMessage),
   error: (msg: string) =>
-    port.postMessage({ type: 'log', level: 'error', msg } satisfies WorkerMessage),
+    port.postMessage({
+      type: "log",
+      level: "error",
+      msg,
+    } satisfies WorkerMessage),
 };
 
 const state = {
   get<T = unknown>(key: string): Promise<T | undefined> {
-    return rpcCall({ type: 'state', method: 'get', key }) as Promise<T | undefined>;
+    return rpcCall({ type: "state", method: "get", key }) as Promise<
+      T | undefined
+    >;
   },
   async set(key: string, value: unknown): Promise<void> {
-    await rpcCall({ type: 'state', method: 'set', key, value });
+    await rpcCall({ type: "state", method: "set", key, value });
   },
   async delete(key: string): Promise<void> {
-    await rpcCall({ type: 'state', method: 'delete', key });
+    await rpcCall({ type: "state", method: "delete", key });
   },
 };
 
 const runs = {
-  last(filter: { automationId?: string; status?: 'ok' | 'error' } = {}): Promise<unknown> {
-    return rpcCall({ type: 'runs', method: 'last', filter });
+  last(
+    filter: { automationId?: string; status?: "ok" | "error" } = {}
+  ): Promise<unknown> {
+    return rpcCall({ type: "runs", method: "last", filter });
   },
   list(
     filter: {
       automationId?: string;
-      status?: 'ok' | 'error';
+      status?: "ok" | "error";
       since?: number;
       limit?: number;
-    } = {},
+    } = {}
   ): Promise<unknown> {
-    return rpcCall({ type: 'runs', method: 'list', filter });
+    return rpcCall({ type: "runs", method: "list", filter });
   },
 };
 
@@ -226,51 +229,51 @@ const runs = {
 // (the consented journal feed data triggers ride).
 function vaultCall(
   op:
-    | 'read'
-    | 'search'
-    | 'invoke'
-    | 'query'
-    | 'describe'
-    | 'parked'
-    | 'changes'
-    | 'resolve'
-    | 'reveal'
-    | 'content',
-  payload: Record<string, unknown>,
+    | "read"
+    | "search"
+    | "invoke"
+    | "query"
+    | "describe"
+    | "parked"
+    | "changes"
+    | "resolve"
+    | "reveal"
+    | "content",
+  payload: Record<string, unknown>
 ): Promise<unknown> {
-  return rpcCall({ type: 'vault', op, payload });
+  return rpcCall({ type: "vault", op, payload });
 }
 
 const vault = {
   read(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('read', request);
+    return vaultCall("read", request);
   },
   /** FTS5 search over a text-indexed entity — match vault-side, never grep a full read. */
   search(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('search', request);
+    return vaultCall("search", request);
   },
   invoke(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('invoke', request);
+    return vaultCall("invoke", request);
   },
   query(view: string, purpose: string): Promise<unknown> {
-    return vaultCall('query', { view, purpose });
+    return vaultCall("query", { view, purpose });
   },
   describe(): Promise<unknown> {
-    return vaultCall('describe', {});
+    return vaultCall("describe", {});
   },
   parked(): Promise<unknown> {
-    return vaultCall('parked', {});
+    return vaultCall("parked", {});
   },
   changes(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('changes', request);
+    return vaultCall("changes", request);
   },
   /** Reference cards for cross-domain (type, id) refs (issue #272). */
   resolve(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('resolve', request);
+    return vaultCall("resolve", request);
   },
   /** Plaintext of one entity's sealed columns — `reveal` verb, receipted per item (issue #293). */
   reveal(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('reveal', request);
+    return vaultCall("reveal", request);
   },
   /**
    * One content item's derivative, size-bounded (issue #299): `variant` is
@@ -278,7 +281,7 @@ const vault = {
    * receipted read on the host side.
    */
   content(request: Record<string, unknown>): Promise<unknown> {
-    return vaultCall('content', request);
+    return vaultCall("content", request);
   },
 };
 
@@ -291,10 +294,12 @@ const ctx = {
    * substitutes and performs the request; the secret never enters this
    * worker. Non-connector runs are refused host-side.
    */
-  fetch(
-    spec: FetchSpec,
-  ): Promise<{ status: number; headers: Record<string, string>; text: string }> {
-    return rpcCall({ type: 'fetch', spec }) as Promise<{
+  fetch(spec: FetchSpec): Promise<{
+    status: number;
+    headers: Record<string, string>;
+    text: string;
+  }> {
+    return rpcCall({ type: "fetch", spec }) as Promise<{
       status: number;
       headers: Record<string, string>;
       text: string;
@@ -313,10 +318,10 @@ const ctx = {
     content?: { contentId: string; variant: string; maxBytes?: number }[];
   }): Promise<unknown> {
     return rpcCall({
-      type: 'agent',
+      type: "agent",
       prompt: args.prompt,
-      ...(args.json !== undefined ? { json: args.json } : {}),
-      ...(args.content !== undefined ? { content: args.content } : {}),
+      ...(args.json === undefined ? {} : { json: args.json }),
+      ...(args.content === undefined ? {} : { content: args.content }),
     });
   },
   state,
@@ -340,13 +345,13 @@ interface PullContext {
 }
 
 interface PullSpec {
-  protocol: 'centraid.pull/v1';
-  principal(args: { ctx: PullContext; log: typeof log }): Promise<string>;
-  pull(args: {
+  protocol: "centraid.pull/v1";
+  principal: (args: { ctx: PullContext; log: typeof log }) => Promise<string>;
+  pull: (args: {
     ctx: PullContext;
     log: typeof log;
     cursor: ReturnType<typeof cursorManager>;
-  }): Promise<{ rows: PullRow[]; summary?: string }>;
+  }) => Promise<{ rows: PullRow[]; summary?: string }>;
 }
 
 function cursorManager(initial: Record<string, unknown>) {
@@ -355,7 +360,7 @@ function cursorManager(initial: Record<string, unknown>) {
     highWater(key: string) {
       const initialValue = initial[key];
       let value =
-        typeof initialValue === 'string' || typeof initialValue === 'number'
+        typeof initialValue === "string" || typeof initialValue === "number"
           ? initialValue
           : undefined;
       return {
@@ -403,16 +408,19 @@ async function executePullSpec(spec: PullSpec): Promise<unknown> {
     fetch: ctx.fetch,
   };
   const principal = await spec.principal({ ctx: pullCtx, log });
-  if (typeof principal !== 'string' || principal.trim().length === 0) {
-    throw new Error('pull connector principal probe returned no identity');
+  if (typeof principal !== "string" || principal.trim().length === 0) {
+    throw new Error("pull connector principal probe returned no identity");
   }
-  const openedRaw = await rpcCall({ type: 'connector-open', principal: principal.trim() });
+  const openedRaw = await rpcCall({
+    type: "connector-open",
+    principal: principal.trim(),
+  });
   const opened =
-    openedRaw && typeof openedRaw === 'object' && 'output' in openedRaw
+    openedRaw && typeof openedRaw === "object" && "output" in openedRaw
       ? (openedRaw as { output: Record<string, unknown> }).output
       : (openedRaw as Record<string, unknown>);
-  if (!opened || typeof opened !== 'object') {
-    throw new Error('pull connector run scope returned no result');
+  if (!opened || typeof opened !== "object") {
+    throw new Error("pull connector run scope returned no result");
   }
   if (opened.refused) {
     return {
@@ -420,7 +428,9 @@ async function executePullSpec(spec: PullSpec): Promise<unknown> {
       output: { skipped: true },
     };
   }
-  const cursor = cursorManager((opened.cursors as Record<string, unknown>) ?? {});
+  const cursor = cursorManager(
+    (opened.cursors as Record<string, unknown>) ?? {}
+  );
   const result = await spec.pull({ ctx: pullCtx, log, cursor });
   return {
     __centraidPull: {
@@ -441,25 +451,29 @@ function execute(request: WorkerRequest): void {
         default?: ((args: unknown) => Promise<unknown>) | PullSpec;
       };
       if (
-        typeof mod.default !== 'function' &&
+        typeof mod.default !== "function" &&
         !(
           mod.default &&
-          mod.default.protocol === 'centraid.pull/v1' &&
-          typeof mod.default.principal === 'function' &&
-          typeof mod.default.pull === 'function'
+          mod.default.protocol === "centraid.pull/v1" &&
+          typeof mod.default.principal === "function" &&
+          typeof mod.default.pull === "function"
         )
       ) {
         throw new Error(`${req.handlerFile} has no default export`);
       }
       const fullArgs = { ...(req.args as object), log, ctx };
       const value =
-        typeof mod.default === 'function'
+        typeof mod.default === "function"
           ? await mod.default(fullArgs)
           : await executePullSpec(mod.default);
-      port.postMessage({ type: 'result', ok: true, value } satisfies WorkerMessage);
+      port.postMessage({
+        type: "result",
+        ok: true,
+        value,
+      } satisfies WorkerMessage);
     } catch (err) {
       port.postMessage({
-        type: 'result',
+        type: "result",
         ok: false,
         error: err instanceof Error ? (err.stack ?? err.message) : String(err),
       } satisfies WorkerMessage);
@@ -469,5 +483,5 @@ function execute(request: WorkerRequest): void {
   })();
 }
 
-if (boot.pooled) port.postMessage({ type: 'ready' });
+if (boot.pooled) port.postMessage({ type: "ready" });
 else execute(boot as WorkerRequest);

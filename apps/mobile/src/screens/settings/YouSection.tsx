@@ -4,9 +4,10 @@
 // vault identity (that is Settings → Space). Edits persist as you type / tap and
 // the avatar previews the colour + initials live.
 
-import React, { useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
-import { radii, spacing, t, useTheme, type ThemeColors } from '../../kit/theme';
+import React, { useMemo, useState } from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
+
+import { radii, spacing, t, useTheme, type ThemeColors } from "../../kit/theme";
 import {
   PROFILE_COLORS,
   getProfileColor,
@@ -14,9 +15,9 @@ import {
   initialsOf,
   setProfileColor,
   setProfileName,
-} from '../../lib/profile';
-import ColorSwatchRow from './ColorSwatchRow';
-import SettingsSection from './SettingsSection';
+} from "../../lib/profile";
+import ColorSwatchRow from "./ColorSwatchRow";
+import SettingsSection from "./SettingsSection";
 
 export default function YouSection(): React.JSX.Element {
   const { colors } = useTheme();
@@ -51,7 +52,11 @@ export default function YouSection(): React.JSX.Element {
         </View>
 
         <Text style={styles.fieldLabel}>Colour</Text>
-        <ColorSwatchRow value={color} options={PROFILE_COLORS} onChange={onColor} />
+        <ColorSwatchRow
+          value={color}
+          options={PROFILE_COLORS}
+          onChange={onColor}
+        />
       </View>
     </SettingsSection>
   );
@@ -62,13 +67,13 @@ const AVATAR = 44;
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     avatar: {
-      alignItems: 'center',
+      alignItems: "center",
       borderRadius: AVATAR / 2,
       height: AVATAR,
-      justifyContent: 'center',
+      justifyContent: "center",
       width: AVATAR,
     },
-    avatarInitial: { color: '#fff', ...t('bodyStrong') },
+    avatarInitial: { color: "#fff", ...t("bodyStrong") },
     card: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
@@ -77,10 +82,15 @@ const makeStyles = (colors: ThemeColors) =>
       gap: spacing[3],
       padding: spacing[4],
     },
-    fieldLabel: { ...t('small'), color: colors.ink2, fontWeight: '500', marginTop: spacing[1] },
-    identity: { alignItems: 'center', flexDirection: 'row', gap: spacing[3] },
+    fieldLabel: {
+      ...t("small"),
+      color: colors.ink2,
+      fontWeight: "500",
+      marginTop: spacing[1],
+    },
+    identity: { alignItems: "center", flexDirection: "row", gap: spacing[3] },
     input: {
-      ...t('body'),
+      ...t("body"),
       backgroundColor: colors.bg,
       borderColor: colors.line,
       borderRadius: radii.md,

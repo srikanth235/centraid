@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 
-import { createRequire } from 'node:module';
+import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const iroh = require('@number0/iroh/index.js');
+const iroh = require("@number0/iroh/index.js");
 
 function attempt(label, bytes) {
   try {
     const secret = iroh.SecretKey.fromBytes(bytes);
-    return { label, accepted: true, returnedByteShape: secret.toBytes().constructor.name };
+    return {
+      label,
+      accepted: true,
+      returnedByteShape: secret.toBytes().constructor.name,
+    };
   } catch (error) {
     return {
       label,
@@ -20,22 +24,23 @@ function attempt(label, bytes) {
 
 const seed = Array.from({ length: 32 }, () => 1);
 const results = [
-  attempt('Array<number>', seed),
-  attempt('Uint8Array', Uint8Array.from(seed)),
-  attempt('Buffer', Buffer.from(seed)),
+  attempt("Array<number>", seed),
+  attempt("Uint8Array", Uint8Array.from(seed)),
+  attempt("Buffer", Buffer.from(seed)),
 ];
 
 process.stdout.write(
   `${JSON.stringify(
     {
-      schema: 'centraid-iroh-typed-array-probe/1',
-      package: '@number0/iroh@1.0.0',
-      api: 'SecretKey.fromBytes / SecretKey.toBytes',
+      schema: "centraid-iroh-typed-array-probe/1",
+      package: "@number0/iroh@1.0.0",
+      api: "SecretKey.fromBytes / SecretKey.toBytes",
       results,
     },
     null,
-    2,
-  )}\n`,
+    2
+  )}\n`
 );
 
-if (!results[0]?.accepted || results[1]?.accepted || results[2]?.accepted) process.exitCode = 1;
+if (!results[0]?.accepted || results[1]?.accepted || results[2]?.accepted)
+  process.exitCode = 1;

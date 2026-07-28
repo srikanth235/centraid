@@ -45,11 +45,11 @@ const WEEKDAY_SHORT: Record<string, number> = {
 
 /** True when `name` is a non-empty IANA zone known to this runtime's `Intl`. */
 export function isValidIanaTimeZone(name: string): boolean {
-  if (typeof name !== 'string') return false;
+  if (typeof name !== "string") return false;
   const trimmed = name.trim();
   if (!trimmed) return false;
   try {
-    new Intl.DateTimeFormat('en-US', { timeZone: trimmed }).format();
+    new Intl.DateTimeFormat("en-US", { timeZone: trimmed }).format();
     return true;
   } catch {
     return false;
@@ -62,10 +62,10 @@ export function isValidIanaTimeZone(name: string): boolean {
  */
 export function resolveCronTimezone(
   triggerTz?: string | null,
-  gatewayDefaultTz?: string | null,
+  gatewayDefaultTz?: string | null
 ): string | undefined {
   for (const candidate of [triggerTz, gatewayDefaultTz]) {
-    if (typeof candidate !== 'string') continue;
+    if (typeof candidate !== "string") continue;
     const trimmed = candidate.trim();
     if (!trimmed) continue;
     if (isValidIanaTimeZone(trimmed)) return trimmed;
@@ -93,27 +93,27 @@ function wallClockFields(date: Date, timeZone?: string): WallClock {
       weekday: date.getDay(),
     };
   }
-  const parts = new Intl.DateTimeFormat('en-US', {
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
-    weekday: 'short',
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    hourCycle: 'h23',
+    weekday: "short",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h23",
   }).formatToParts(date);
   const pick = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((p) => p.type === type)?.value ?? '';
-  let hour = Number(pick('hour'));
+    parts.find((p) => p.type === type)?.value ?? "";
+  let hour = Number(pick("hour"));
   if (hour === 24) hour = 0;
   return {
-    year: Number(pick('year')),
-    month: Number(pick('month')),
-    day: Number(pick('day')),
+    year: Number(pick("year")),
+    month: Number(pick("month")),
+    day: Number(pick("day")),
     hour,
-    minute: Number(pick('minute')),
-    weekday: WEEKDAY_SHORT[pick('weekday')] ?? 0,
+    minute: Number(pick("minute")),
+    weekday: WEEKDAY_SHORT[pick("weekday")] ?? 0,
   };
 }
 
@@ -123,27 +123,27 @@ export function cronFieldMatch(
   value: number,
   min: number,
   max: number,
-  names: Record<string, number>,
+  names: Record<string, number>
 ): boolean {
-  for (let part of field.split(',')) {
+  for (let part of field.split(",")) {
     part = part.trim();
     let step = 1;
-    const slash = part.indexOf('/');
+    const slash = part.indexOf("/");
     if (slash >= 0) {
-      step = parseInt(part.slice(slash + 1), 10) || 1;
+      step = Math.trunc(Number(part.slice(slash + 1))) || 1;
       part = part.slice(0, slash);
     }
     let lo = min;
     let hi = max;
-    if (part !== '*' && part !== '?' && part !== '') {
+    if (part !== "*" && part !== "?" && part !== "") {
       const resolve = (t: string): number => {
         const named = names[t.trim().toUpperCase()];
-        return named !== undefined ? named : parseInt(t, 10);
+        return named === undefined ? Math.trunc(Number(t)) : named;
       };
-      if (part.includes('-')) {
-        const [a, b] = part.split('-');
-        lo = resolve(a ?? '');
-        hi = resolve(b ?? '');
+      if (part.includes("-")) {
+        const [a, b] = part.split("-");
+        lo = resolve(a ?? "");
+        hi = resolve(b ?? "");
       } else {
         lo = resolve(part);
         hi = lo;
@@ -162,16 +162,23 @@ function fieldsMatch(
   domF: string,
   monF: string,
   dowF: string,
-  wall: WallClock,
+  wall: WallClock
 ): boolean {
-  const domStar = domF === '*' || domF === '?';
-  const dowStar = dowF === '*' || dowF === '?';
+  const domStar = domF === "*" || domF === "?";
+  const dowStar = dowF === "*" || dowF === "?";
   const domOk = cronFieldMatch(domF, wall.day, 1, 31, {});
   const dow = wall.weekday;
   const dowOk =
     cronFieldMatch(dowF, dow, 0, 7, CRON_DOW) ||
     cronFieldMatch(dowF, dow === 0 ? 7 : dow, 0, 7, CRON_DOW);
-  const dayOk = domStar && dowStar ? true : domStar ? dowOk : dowStar ? domOk : domOk || dowOk;
+  const dayOk =
+    domStar && dowStar
+      ? true
+      : domStar
+        ? dowOk
+        : dowStar
+          ? domOk
+          : domOk || dowOk;
   return (
     dayOk &&
     cronFieldMatch(minF, wall.minute, 0, 59, {}) &&
@@ -192,11 +199,17 @@ export function cronNextRuns(
   expr: string,
   count: number,
   from: Date = new Date(),
-  timeZone?: string,
+  timeZone?: string
 ): Date[] {
-  const f = expr.trim().split(/\s+/);
+  const f = expr.trim().split(/\s+/u);
   if (f.length !== 5) return [];
-  const [minF, hourF, domF, monF, dowF] = f as [string, string, string, string, string];
+  const [minF, hourF, domF, monF, dowF] = f as [
+    string,
+    string,
+    string,
+    string,
+    string,
+  ];
   const out: Date[] = [];
   const cap = 366 * 24 * 60; // step at most one year of minutes
 
@@ -204,7 +217,9 @@ export function cronNextRuns(
     let ms = Math.floor(from.getTime() / 60_000) * 60_000 + 60_000;
     for (let i = 0; i < cap && out.length < count; i++) {
       const d = new Date(ms);
-      if (fieldsMatch(minF, hourF, domF, monF, dowF, wallClockFields(d, timeZone))) {
+      if (
+        fieldsMatch(minF, hourF, domF, monF, dowF, wallClockFields(d, timeZone))
+      ) {
         out.push(d);
       }
       ms += 60_000;
@@ -217,7 +232,7 @@ export function cronNextRuns(
     from.getMonth(),
     from.getDate(),
     from.getHours(),
-    from.getMinutes() + 1,
+    from.getMinutes() + 1
   );
   for (let i = 0; i < cap && out.length < count; i++) {
     if (
@@ -247,36 +262,36 @@ export function cronNextRuns(
  * gloss when provided so the preview does not look local when it is not.
  */
 export function describeCron(expr: string, timeZone?: string): string {
-  const t = expr.trim().replace(/\s+/g, ' ');
-  const zoneSuffix = timeZone ? ` (${shortTimeZoneName(timeZone)})` : '';
+  const t = expr.trim().replace(/\s+/gu, " ");
+  const zoneSuffix = timeZone ? ` (${shortTimeZoneName(timeZone)})` : "";
   const known: Record<string, string> = {
-    '0 9 * * *': `Every day at 09:00${zoneSuffix}`,
-    '0 0 * * *': `Every day at midnight${zoneSuffix}`,
-    '0 * * * *': 'Every hour, on the hour',
-    '*/30 * * * *': 'Every 30 minutes',
-    '*/15 * * * *': 'Every 15 minutes',
-    '*/5 * * * *': 'Every 5 minutes',
-    '0 9 * * 1-5': `Weekdays at 09:00${zoneSuffix}`,
-    '0 9 * * MON-FRI': `Weekdays at 09:00${zoneSuffix}`,
-    '0 9 * * 1': `Every Monday at 09:00${zoneSuffix}`,
+    "0 9 * * *": `Every day at 09:00${zoneSuffix}`,
+    "0 0 * * *": `Every day at midnight${zoneSuffix}`,
+    "0 * * * *": "Every hour, on the hour",
+    "*/30 * * * *": "Every 30 minutes",
+    "*/15 * * * *": "Every 15 minutes",
+    "*/5 * * * *": "Every 5 minutes",
+    "0 9 * * 1-5": `Weekdays at 09:00${zoneSuffix}`,
+    "0 9 * * MON-FRI": `Weekdays at 09:00${zoneSuffix}`,
+    "0 9 * * 1": `Every Monday at 09:00${zoneSuffix}`,
   };
   if (known[t]) return known[t];
-  const f = t.split(' ');
-  const pad2 = (n: string): string => n.padStart(2, '0');
+  const f = t.split(" ");
+  const pad2 = (n: string): string => n.padStart(2, "0");
   if (f.length === 5) {
     if (
-      /^\d+$/.test(f[0]!) &&
-      /^\d+$/.test(f[1]!) &&
-      f[2] === '*' &&
-      f[3] === '*' &&
-      f[4] === '*'
+      /^\d+$/u.test(f[0]!) &&
+      /^\d+$/u.test(f[1]!) &&
+      f[2] === "*" &&
+      f[3] === "*" &&
+      f[4] === "*"
     ) {
       return `Every day at ${pad2(f[1]!)}:${pad2(f[0]!)}${zoneSuffix}`;
     }
-    if (f[0]!.startsWith('*/') && f.slice(1).every((x) => x === '*')) {
+    if (f[0]!.startsWith("*/") && f.slice(1).every((x) => x === "*")) {
       return `Every ${f[0]!.slice(2)} minutes`;
     }
-    if (/^\d+$/.test(f[0]!) && f.slice(1).every((x) => x === '*')) {
+    if (/^\d+$/u.test(f[0]!) && f.slice(1).every((x) => x === "*")) {
       return `Every hour at :${pad2(f[0]!)}`;
     }
   }
@@ -284,20 +299,23 @@ export function describeCron(expr: string, timeZone?: string): string {
 }
 
 /** Short zone label (`IST`, `EDT`, `America/New_York` fallback). */
-export function shortTimeZoneName(timeZone: string, at: Date = new Date()): string {
+export function shortTimeZoneName(
+  timeZone: string,
+  at: Date = new Date()
+): string {
   try {
     const parts = new Intl.DateTimeFormat(undefined, {
       timeZone,
-      timeZoneName: 'short',
+      timeZoneName: "short",
     }).formatToParts(at);
-    const name = parts.find((p) => p.type === 'timeZoneName')?.value;
+    const name = parts.find((p) => p.type === "timeZoneName")?.value;
     if (name && name !== timeZone) return name;
   } catch {
     // fall through
   }
   // Prefer the city tail of an IANA name over the full path.
-  const slash = timeZone.lastIndexOf('/');
-  return slash >= 0 ? timeZone.slice(slash + 1).replace(/_/g, ' ') : timeZone;
+  const slash = timeZone.lastIndexOf("/");
+  return slash >= 0 ? timeZone.slice(slash + 1).replace(/_/gu, " ") : timeZone;
 }
 
 /**
@@ -311,14 +329,14 @@ export function cronRunLabel(
     timeZone?: string;
     viewerTimeZone?: string;
     now?: Date;
-  },
+  }
 ): string {
   const scheduleTz = opts?.timeZone;
   const viewerTz = opts?.viewerTimeZone;
   const now = opts?.now ?? new Date();
   const formatOpts: Intl.DateTimeFormatOptions = {
-    hour: 'numeric',
-    minute: '2-digit',
+    hour: "numeric",
+    minute: "2-digit",
     ...(scheduleTz ? { timeZone: scheduleTz } : {}),
   };
   const time = d.toLocaleTimeString(undefined, formatOpts);
@@ -331,20 +349,22 @@ export function cronRunLabel(
     // Approximate day identity in zone via UTC components of a synthetic date.
     return Date.UTC(w.year, w.month - 1, w.day);
   };
-  const dayDiff = Math.round((dayStart(d, scheduleTz) - dayStart(now, scheduleTz)) / 86_400_000);
+  const dayDiff = Math.round(
+    (dayStart(d, scheduleTz) - dayStart(now, scheduleTz)) / 86_400_000
+  );
   const day =
     dayDiff === 0
-      ? 'Today'
+      ? "Today"
       : dayDiff === 1
-        ? 'Tomorrow'
+        ? "Tomorrow"
         : dayDiff > 1 && dayDiff < 7
           ? d.toLocaleDateString(undefined, {
-              weekday: 'short',
+              weekday: "short",
               ...(scheduleTz ? { timeZone: scheduleTz } : {}),
             })
           : d.toLocaleDateString(undefined, {
-              month: 'short',
-              day: 'numeric',
+              month: "short",
+              day: "numeric",
               ...(scheduleTz ? { timeZone: scheduleTz } : {}),
             });
 

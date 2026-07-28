@@ -10,7 +10,7 @@
  * access state.
  */
 
-const YOU_COLOR = '#0FA678';
+const YOU_COLOR = "#0FA678";
 
 /** A resolved person (owner or friend) the ledgers decorate rows with. */
 export interface ServerPerson {
@@ -80,34 +80,37 @@ export interface TallyData {
 // FRIEND_COLORS; inlined here to keep this server query free of the client
 // kit imports format.ts pulls in.)
 const FRIEND_COLORS = [
-  '#7C5BD9',
-  '#4E68DD',
-  '#E0567A',
-  '#E8923C',
-  '#2EA098',
-  '#3AA6B9',
-  '#57A55A',
-  '#D9536F',
+  "#7C5BD9",
+  "#4E68DD",
+  "#E0567A",
+  "#E8923C",
+  "#2EA098",
+  "#3AA6B9",
+  "#57A55A",
+  "#D9536F",
 ];
 function friendColor(partyId: string): string {
-  const id = String(partyId || '');
+  const id = String(partyId || "");
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return FRIEND_COLORS[h % FRIEND_COLORS.length]!;
 }
 
 function initials(name: string | undefined): string {
-  if (!name) return '?';
+  if (!name) return "?";
   return name
-    .split(/\s+/)
+    .split(/\s+/u)
     .slice(0, 2)
     .map((w) => w[0])
-    .join('')
+    .join("")
     .toUpperCase();
 }
 
 /** Pull every ground fact Tally needs and shape it for the compute helpers. */
-export async function loadTally(ctx: HandlerCtx, purpose: string): Promise<TallyData> {
+export async function loadTally(
+  ctx: HandlerCtx,
+  purpose: string
+): Promise<TallyData> {
   // A group decorates a social.circle (issue #310 S4): the circle carries
   // the name and the membership, tally.group the icon + colour.
   const [
@@ -121,32 +124,32 @@ export async function loadTally(ctx: HandlerCtx, purpose: string): Promise<Tally
     settlesRes,
     obligationsRes,
   ] = await Promise.all([
-    ctx.vault.read({ entity: 'core.vault', purpose }),
-    ctx.vault.read({ entity: 'tally.friend', purpose }),
-    ctx.vault.read({ entity: 'tally.group', purpose }),
-    ctx.vault.read({ entity: 'social.circle', purpose }),
-    ctx.vault.read({ entity: 'social.circle_member', purpose }),
+    ctx.vault.read({ entity: "core.vault", purpose }),
+    ctx.vault.read({ entity: "tally.friend", purpose }),
+    ctx.vault.read({ entity: "tally.group", purpose }),
+    ctx.vault.read({ entity: "social.circle", purpose }),
+    ctx.vault.read({ entity: "social.circle_member", purpose }),
     ctx.vault.read({
-      entity: 'tally.expense',
+      entity: "tally.expense",
       // Trashed expenses (issue #441 A4) drop out of every balance and ledger —
       // their splits are read below but never consumed once the expense is gone.
-      where: [{ column: 'deleted_at', op: 'is-null' }],
-      orderBy: { column: 'spent_on', dir: 'desc' },
+      where: [{ column: "deleted_at", op: "is-null" }],
+      orderBy: { column: "spent_on", dir: "desc" },
       limit: 2000,
       purpose,
     }),
-    ctx.vault.read({ entity: 'tally.expense_split', limit: 8000, purpose }),
+    ctx.vault.read({ entity: "tally.expense_split", limit: 8000, purpose }),
     ctx.vault.read({
-      entity: 'tally.settlement',
-      where: [{ column: 'deleted_at', op: 'is-null' }],
+      entity: "tally.settlement",
+      where: [{ column: "deleted_at", op: "is-null" }],
       limit: 2000,
       purpose,
     }),
     ctx.vault.read({
-      entity: 'tally.obligation',
+      entity: "tally.obligation",
       where: [
-        { column: 'settled_at', op: 'is-null' },
-        { column: 'deleted_at', op: 'is-null' },
+        { column: "settled_at", op: "is-null" },
+        { column: "deleted_at", op: "is-null" },
       ],
       limit: 2000,
       purpose,
@@ -155,16 +158,18 @@ export async function loadTally(ctx: HandlerCtx, purpose: string): Promise<Tally
 
   const vaultRow = (vaultRes.rows ?? [])[0] ?? {};
   const me = (vaultRow.owner_party_id as string | undefined) ?? null;
-  const currency = (vaultRow.base_currency as string | undefined) ?? 'USD';
+  const currency = (vaultRow.base_currency as string | undefined) ?? "USD";
 
   const friends = (friendsRes.rows ?? []) as unknown as FriendRow[];
   const friendPartyIds = friends.map((f) => f.party_id);
-  const partyIds = [...new Set([me, ...friendPartyIds].filter(Boolean))] as string[];
+  const partyIds = [
+    ...new Set([me, ...friendPartyIds].filter(Boolean)),
+  ] as string[];
   const partiesRes =
     partyIds.length > 0
       ? await ctx.vault.read({
-          entity: 'core.party',
-          where: [{ column: 'party_id', op: 'in', value: partyIds }],
+          entity: "core.party",
+          where: [{ column: "party_id", op: "in", value: partyIds }],
           purpose,
         })
       : { rows: [] as Record<string, unknown>[] };
@@ -173,17 +178,25 @@ export async function loadTally(ctx: HandlerCtx, purpose: string): Promise<Tally
     display_name?: string;
   }>;
   const nameById = new Map(partyRows.map((p) => [p.party_id, p.display_name]));
-  const colorByParty = new Map(friends.map((f) => [f.party_id, friendColor(f.party_id)]));
+  const colorByParty = new Map(
+    friends.map((f) => [f.party_id, friendColor(f.party_id)])
+  );
 
   const people = new Map<string, ServerPerson>();
   if (me)
-    people.set(me, { party_id: me, name: 'You', color: YOU_COLOR, initials: 'You', is_me: true });
+    people.set(me, {
+      party_id: me,
+      name: "You",
+      color: YOU_COLOR,
+      initials: "You",
+      is_me: true,
+    });
   for (const f of friends) {
-    const name = nameById.get(f.party_id) || 'Friend';
+    const name = nameById.get(f.party_id) || "Friend";
     people.set(f.party_id, {
       party_id: f.party_id,
       name,
-      color: colorByParty.get(f.party_id) || '#5C677D',
+      color: colorByParty.get(f.party_id) || "#5C677D",
       initials: initials(name),
       is_me: false,
     });
@@ -194,9 +207,11 @@ export async function loadTally(ctx: HandlerCtx, purpose: string): Promise<Tally
     name: string;
   }>;
   const circleName = new Map(circleRows.map((c) => [c.circle_id, c.name]));
-  const groups: DecoratedGroup[] = ((groupsRes.rows ?? []) as unknown as GroupRow[]).map((g) => ({
+  const groups: DecoratedGroup[] = (
+    (groupsRes.rows ?? []) as unknown as GroupRow[]
+  ).map((g) => ({
     ...g,
-    name: circleName.get(g.circle_id) ?? 'Group',
+    name: circleName.get(g.circle_id) ?? "Group",
   }));
 
   const membersByCircle = new Map<string, string[]>();
@@ -208,7 +223,8 @@ export async function loadTally(ctx: HandlerCtx, purpose: string): Promise<Tally
     membersByCircle.get(m.circle_id)!.push(m.party_id);
   }
   const membersByGroup = new Map<string, string[]>();
-  for (const g of groups) membersByGroup.set(g.group_id, membersByCircle.get(g.circle_id) ?? []);
+  for (const g of groups)
+    membersByGroup.set(g.group_id, membersByCircle.get(g.circle_id) ?? []);
 
   const splitsByExpense = new Map<string, Record<string, number>>();
   for (const s of (splitsRes.rows ?? []) as unknown as Array<{
@@ -216,15 +232,16 @@ export async function loadTally(ctx: HandlerCtx, purpose: string): Promise<Tally
     party_id: string;
     share_minor: number;
   }>) {
-    if (!splitsByExpense.has(s.expense_id)) splitsByExpense.set(s.expense_id, {});
+    if (!splitsByExpense.has(s.expense_id))
+      splitsByExpense.set(s.expense_id, {});
     splitsByExpense.get(s.expense_id)![s.party_id] = s.share_minor;
   }
-  const expenses: ExpenseFact[] = ((expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]).map(
-    (e) => ({
-      ...e,
-      splits: splitsByExpense.get(e.expense_id) ?? {},
-    }),
-  );
+  const expenses: ExpenseFact[] = (
+    (expensesRes.rows ?? []) as unknown as ExpenseRowRaw[]
+  ).map((e) => ({
+    ...e,
+    splits: splitsByExpense.get(e.expense_id) ?? {},
+  }));
 
   return {
     me,
@@ -243,9 +260,9 @@ export function personOf(data: TallyData, pid: string): ServerPerson {
   return (
     data.people.get(pid) || {
       party_id: pid,
-      name: 'Someone',
-      color: '#5C677D',
-      initials: '?',
+      name: "Someone",
+      color: "#5C677D",
+      initials: "?",
       is_me: false,
     }
   );
@@ -261,7 +278,8 @@ export function pairwise(data: TallyData): Map<string, number> {
     for (const [pid, share] of Object.entries(e.splits)) {
       if (pid === payer) continue;
       if (payer === me && pid !== me) b.set(pid, (b.get(pid) || 0) + share);
-      else if (pid === me && payer !== me) b.set(payer, (b.get(payer) || 0) - share);
+      else if (pid === me && payer !== me)
+        b.set(payer, (b.get(payer) || 0) - share);
     }
   }
   for (const s of data.settlements) {
@@ -272,9 +290,15 @@ export function pairwise(data: TallyData): Map<string, number> {
   }
   for (const obligation of data.obligations) {
     if (obligation.from_party === me && obligation.to_party !== me) {
-      b.set(obligation.to_party, (b.get(obligation.to_party) || 0) - obligation.amount_minor);
+      b.set(
+        obligation.to_party,
+        (b.get(obligation.to_party) || 0) - obligation.amount_minor
+      );
     } else if (obligation.to_party === me && obligation.from_party !== me) {
-      b.set(obligation.from_party, (b.get(obligation.from_party) || 0) + obligation.amount_minor);
+      b.set(
+        obligation.from_party,
+        (b.get(obligation.from_party) || 0) + obligation.amount_minor
+      );
     }
   }
   return b;
@@ -287,7 +311,8 @@ export function groupNet(data: TallyData, gid: string): Map<string, number> {
   for (const e of data.expenses) {
     if (e.group_id !== gid) continue;
     net.set(e.paid_by, (net.get(e.paid_by) || 0) + e.amount_minor);
-    for (const [pid, share] of Object.entries(e.splits)) net.set(pid, (net.get(pid) || 0) - share);
+    for (const [pid, share] of Object.entries(e.splits))
+      net.set(pid, (net.get(pid) || 0) - share);
   }
   for (const s of data.settlements) {
     if (s.group_id !== gid) continue;
@@ -300,19 +325,19 @@ export function groupNet(data: TallyData, gid: string): Map<string, number> {
 /** A ledger row: the expense decorated with the owner's lent/borrowed stance. */
 export function ledgerRow(data: TallyData, e: ExpenseFact) {
   const me = data.me;
-  const myShare = me != null ? e.splits[me] : undefined;
+  const myShare = me == null ? undefined : e.splits[me];
   const yourShare = myShare ?? 0;
   const involved = myShare != null;
-  let your_role: 'lent' | 'borrowed' | 'none';
+  let your_role: "lent" | "borrowed" | "none";
   let your_amount_minor: number;
   if (e.paid_by === me) {
-    your_role = 'lent';
+    your_role = "lent";
     your_amount_minor = e.amount_minor - yourShare;
   } else if (involved) {
-    your_role = 'borrowed';
+    your_role = "borrowed";
     your_amount_minor = yourShare;
   } else {
-    your_role = 'none';
+    your_role = "none";
     your_amount_minor = e.amount_minor;
   }
   return {
@@ -339,14 +364,14 @@ export function ledgerRow(data: TallyData, e: ExpenseFact) {
   };
 }
 
-export default async ({ ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
+export default async function dashboardHandler({ ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
   try {
     const data = await loadTally(ctx, purpose);
     const trashRes = await ctx.vault.read({
-      entity: 'tally.expense',
-      where: [{ column: 'deleted_at', op: 'not-null' }],
-      orderBy: { column: 'deleted_at', dir: 'desc' },
+      entity: "tally.expense",
+      where: [{ column: "deleted_at", op: "not-null" }],
+      orderBy: { column: "deleted_at", dir: "desc" },
       limit: 100,
       purpose,
     });
@@ -378,12 +403,14 @@ export default async ({ ctx }: HandlerArgs) => {
         owner_net_minor: net.get(data.me as string) || 0,
       };
     });
-    const groupName = new Map(data.groups.map((group) => [group.group_id, group.name]));
+    const groupName = new Map(
+      data.groups.map((group) => [group.group_id, group.name])
+    );
     const trash = (trashRes.rows ?? []).map((row) => ({
       expense_id: String(row.expense_id),
-      description: String(row.description ?? 'Expense'),
+      description: String(row.description ?? "Expense"),
       amount_minor: Number(row.amount_minor ?? 0),
-      group_name: groupName.get(String(row.group_id)) ?? 'Group',
+      group_name: groupName.get(String(row.group_id)) ?? "Group",
       deleted_at: String(row.deleted_at),
       purge_at: row.purge_at == null ? null : String(row.purge_at),
     }));
@@ -400,7 +427,7 @@ export default async ({ ctx }: HandlerArgs) => {
     const e = err as { code?: string; message?: string };
     return {
       me: null,
-      currency: 'USD',
+      currency: "USD",
       friends: [],
       groups: [],
       trash: [],
@@ -409,4 +436,4 @@ export default async ({ ctx }: HandlerArgs) => {
       vaultDenied: { code: e.code, message: e.message },
     };
   }
-};
+}

@@ -1,7 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit (#406) one protocol route keeps bootstrap, pull/SSE, lazy-row, checkpoint, and intent admission semantics together
 /* Replica HTTP protocol: authenticated bootstrap, pull/stream, lazy row and intent lanes. */
-import crypto from 'node:crypto';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import crypto from "node:crypto";
+import type { IncomingMessage, ServerResponse } from "node:http";
+
 import {
   currentReplicaLogState,
   InvalidReplicaCursorError,
@@ -15,25 +16,28 @@ import {
   type ReplicaRow,
   type ReplicaSnapshotResult,
   type ReplicaSnapshotReader,
-} from '@centraid/vault';
-import type { RouteHandler } from '../serve/build-gateway.js';
-import type { EnrollmentStore } from '../serve/enrollment-store.js';
-import { vaultContext } from '../serve/vault-context.js';
-import type { VaultRegistry } from '../serve/vault-registry.js';
-import { readJson, sendJson } from './route-helpers.js';
+} from "@centraid/vault";
+
+import type { RouteHandler } from "../serve/build-gateway.js";
+import type { EnrollmentStore } from "../serve/enrollment-store.js";
+import { vaultContext } from "../serve/vault-context.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
 import {
   expectedReplicaShapeIds,
   resolveReplicaAccess,
   type ReplicaRequestAccess,
-} from './replica-access.js';
-import { handleReplicaIntent, type ReplicaIntentDispatcher } from './replica-intent-route.js';
+} from "./replica-access.js";
+import {
+  handleReplicaIntent,
+  type ReplicaIntentDispatcher,
+} from "./replica-intent-route.js";
 import {
   projectReplicaPage,
   replicaOutcomeWire,
   replicaShapeIds,
   sameReplicaShapeIds,
   type ReplicaProjectedPage,
-} from './replica-projection.js';
+} from "./replica-projection.js";
 import {
   buildReplicaShapes,
   replicaRowColumns,
@@ -45,14 +49,15 @@ import {
   shapeReplicaRow,
   type ReplicaEntityShape,
   type ReplicaServerShape,
-} from './replica-shape.js';
+} from "./replica-shape.js";
+import { readJson, sendJson } from "./route-helpers.js";
 
-const BOOTSTRAP_PATH = '/centraid/_vault/replica/bootstrap';
-const CHANGES_PATH = '/centraid/_vault/changes';
-const ROW_PATH = '/centraid/_vault/replica/row';
-const CHECKPOINT_PATH = '/centraid/_vault/replica/checkpoint';
-const OUTCOMES_PATH = '/centraid/_vault/replica/outcomes';
-export const REPLICA_INTENTS_PATH = '/centraid/_vault/replica/intents';
+const BOOTSTRAP_PATH = "/centraid/_vault/replica/bootstrap";
+const CHANGES_PATH = "/centraid/_vault/changes";
+const ROW_PATH = "/centraid/_vault/replica/row";
+const CHECKPOINT_PATH = "/centraid/_vault/replica/checkpoint";
+const OUTCOMES_PATH = "/centraid/_vault/replica/outcomes";
+export const REPLICA_INTENTS_PATH = "/centraid/_vault/replica/intents";
 const OUTCOME_RECONCILE_LIMIT = 500;
 const DEFAULT_MAX_BOOTSTRAP_ROWS = 100_000;
 const DEFAULT_MAX_SYNTHETIC_LOOKUP_ROWS = 25_000;
@@ -63,9 +68,9 @@ const MAX_BOOTSTRAP_WINDOW = 20_000;
 const BOOTSTRAP_READ_PAGE = 10_000;
 
 class ReplicaWorkLimitError extends Error {
-  constructor(readonly kind: 'bootstrap' | 'synthetic-row') {
+  constructor(readonly kind: "bootstrap" | "synthetic-row") {
     super(`replica ${kind} work limit exceeded`);
-    this.name = 'ReplicaWorkLimitError';
+    this.name = "ReplicaWorkLimitError";
   }
 }
 
@@ -121,42 +126,46 @@ interface BootstrapWindowToken {
 }
 
 function shapeSignature(shapeIds: string[]): string {
-  return crypto.createHash('sha256').update(JSON.stringify(shapeIds)).digest('hex').slice(0, 32);
+  return crypto
+    .createHash("sha256")
+    .update(JSON.stringify(shapeIds))
+    .digest("hex")
+    .slice(0, 32);
 }
 
 function encodeBootstrapToken(token: BootstrapWindowToken): string {
-  return Buffer.from(JSON.stringify(token)).toString('base64url');
+  return Buffer.from(JSON.stringify(token)).toString("base64url");
 }
 
 function isSafeIndex(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function decodeBootstrapToken(raw: string): BootstrapWindowToken {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+    parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
   } catch {
-    throw new Error('replica bootstrap token is not valid base64url JSON');
+    throw new Error("replica bootstrap token is not valid base64url JSON");
   }
   const t = parsed as Record<string, unknown>;
   const first = t.first as Record<string, unknown> | undefined;
   if (
     !t ||
-    typeof t !== 'object' ||
+    typeof t !== "object" ||
     t.v !== 1 ||
-    typeof t.epoch !== 'string' ||
+    typeof t.epoch !== "string" ||
     !Number.isSafeInteger(t.schemaEpoch) ||
     !first ||
-    typeof first !== 'object' ||
-    typeof first.epoch !== 'string' ||
+    typeof first !== "object" ||
+    typeof first.epoch !== "string" ||
     !Number.isSafeInteger(first.seq) ||
-    typeof t.shapeSig !== 'string' ||
+    typeof t.shapeSig !== "string" ||
     !isSafeIndex(t.shapeIdx) ||
     !isSafeIndex(t.entityIdx) ||
-    !(t.after === null || typeof t.after === 'string')
+    !(t.after === null || typeof t.after === "string")
   ) {
-    throw new Error('replica bootstrap token structure is invalid');
+    throw new Error("replica bootstrap token structure is invalid");
   }
   return {
     v: 1,
@@ -171,11 +180,12 @@ function decodeBootstrapToken(raw: string): BootstrapWindowToken {
 }
 
 /** `?window` bound (1..20000); default when omitted on a continuation. */
-function parseBootstrapWindow(url: URL): number | 'invalid' {
-  const raw = url.searchParams.get('window');
+function parseBootstrapWindow(url: URL): number | "invalid" {
+  const raw = url.searchParams.get("window");
   if (raw === null) return DEFAULT_BOOTSTRAP_WINDOW;
   const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_BOOTSTRAP_WINDOW) return 'invalid';
+  if (!Number.isSafeInteger(value) || value < 1 || value > MAX_BOOTSTRAP_WINDOW)
+    return "invalid";
   return value;
 }
 
@@ -197,8 +207,12 @@ function collectBootstrapWindow(
   shapes: ReplicaServerShape[],
   nowMs: number,
   start: BootstrapPosition,
-  windowLimit: number,
-): { rows: BootstrapWireRow[]; position: BootstrapPosition; complete: boolean } {
+  windowLimit: number
+): {
+  rows: BootstrapWireRow[];
+  position: BootstrapPosition;
+  complete: boolean;
+} {
   const rows: BootstrapWireRow[] = [];
   let { shapeIdx, entityIdx, after } = start;
   while (shapeIdx < shapes.length) {
@@ -227,7 +241,11 @@ function collectBootstrapWindow(
     }
     if (rows.length >= windowLimit) break;
   }
-  return { rows, position: { shapeIdx, entityIdx, after }, complete: shapeIdx >= shapes.length };
+  return {
+    rows,
+    position: { shapeIdx, entityIdx, after },
+    complete: shapeIdx >= shapes.length,
+  };
 }
 
 export interface ReplicaRouteOptions {
@@ -240,9 +258,12 @@ export interface ReplicaRouteOptions {
   maxSyntheticLookupRows?: number;
 }
 
-function rebootstrapBody(reason: string, state: ReplicaLogState): Record<string, unknown> {
+function rebootstrapBody(
+  reason: string,
+  state: ReplicaLogState
+): Record<string, unknown> {
   return {
-    error: 'replica_rebootstrap_required',
+    error: "replica_rebootstrap_required",
     reason,
     state: {
       epoch: state.epoch,
@@ -255,26 +276,28 @@ function rebootstrapBody(reason: string, state: ReplicaLogState): Record<string,
 }
 
 function methodAllowed(res: ServerResponse, allowed: string): true {
-  res.setHeader('Allow', allowed);
-  return sendJson(res, 405, { error: 'method_not_allowed' });
+  res.setHeader("Allow", allowed);
+  return sendJson(res, 405, { error: "method_not_allowed" });
 }
 
 function parseLimit(url: URL): number | undefined {
-  const raw = url.searchParams.get('limit');
+  const raw = url.searchParams.get("limit");
   if (raw === null) return undefined;
   const value = Number(raw);
-  return Number.isSafeInteger(value) && value >= 1 && value <= 10_000 ? value : NaN;
+  return Number.isSafeInteger(value) && value >= 1 && value <= 10_000
+    ? value
+    : NaN;
 }
 
 function isSse(req: IncomingMessage, url: URL): boolean {
   return (
-    url.searchParams.get('stream') === '1' ||
-    String(req.headers.accept ?? '').includes('text/event-stream')
+    url.searchParams.get("stream") === "1" ||
+    String(req.headers.accept ?? "").includes("text/event-stream")
   );
 }
 
 function isNdjson(req: IncomingMessage): boolean {
-  return String(req.headers.accept ?? '').includes('application/x-ndjson');
+  return String(req.headers.accept ?? "").includes("application/x-ndjson");
 }
 
 function writeSse(res: ServerResponse, event: string, data: unknown): void {
@@ -287,8 +310,8 @@ function sameCursor(left: ReplicaCursor, right: ReplicaCursor): boolean {
 
 function requestedColumns(url: URL): string[] {
   return [
-    ...url.searchParams.getAll('column'),
-    ...(url.searchParams.get('columns') ?? '').split(','),
+    ...url.searchParams.getAll("column"),
+    ...(url.searchParams.get("columns") ?? "").split(","),
   ]
     .map((value) => value.trim())
     .filter(Boolean);
@@ -299,12 +322,14 @@ function quoteIdentifier(value: string): string {
 }
 
 function rawKeyValues(
-  db: import('node:sqlite').DatabaseSync,
+  db: import("node:sqlite").DatabaseSync,
   schema: ReplicaEntityShape,
-  rowId: string,
+  rowId: string
 ): unknown[] {
   const pk = (
-    db.prepare(`PRAGMA table_info(${JSON.stringify(schema.physical)})`).all() as {
+    db
+      .prepare(`PRAGMA table_info(${JSON.stringify(schema.physical)})`)
+      .all() as {
       name: string;
       pk: number;
     }[]
@@ -315,17 +340,19 @@ function rawKeyValues(
   if (pk.length === 1) return [rowId];
   const parsed = JSON.parse(rowId) as unknown;
   if (!Array.isArray(parsed) || parsed.length !== pk.length)
-    throw new Error('invalid replica row id');
+    throw new Error("invalid replica row id");
   return parsed;
 }
 
 function rawValues(
-  db: import('node:sqlite').DatabaseSync,
+  db: import("node:sqlite").DatabaseSync,
   schema: ReplicaEntityShape,
   rowId: string,
-  columns: string[],
+  columns: string[]
 ): Record<string, unknown> | undefined {
-  const info = db.prepare(`PRAGMA table_info(${JSON.stringify(schema.physical)})`).all() as {
+  const info = db
+    .prepare(`PRAGMA table_info(${JSON.stringify(schema.physical)})`)
+    .all() as {
     name: string;
     pk: number;
   }[];
@@ -333,22 +360,39 @@ function rawValues(
     .filter((column) => column.pk > 0)
     .sort((a, b) => a.pk - b.pk)
     .map((column) => column.name);
-  const real = columns.filter((column) => column !== REPLICA_SYNTHETIC_PRIMARY_KEY);
-  const selected = real.length > 0 ? real.map(quoteIdentifier).join(', ') : '1 AS __present';
-  const where = pk.map((column) => `${quoteIdentifier(column)} = ?`).join(' AND ');
+  const real = columns.filter(
+    (column) => column !== REPLICA_SYNTHETIC_PRIMARY_KEY
+  );
+  const selected =
+    real.length > 0 ? real.map(quoteIdentifier).join(", ") : "1 AS __present";
+  const where = pk
+    .map((column) => `${quoteIdentifier(column)} = ?`)
+    .join(" AND ");
   const row = db
-    .prepare(`SELECT ${selected} FROM ${quoteIdentifier(schema.physical)} WHERE ${where}`)
+    .prepare(
+      `SELECT ${selected} FROM ${quoteIdentifier(schema.physical)} WHERE ${where}`
+    )
     .get(
-      ...(rawKeyValues(db, schema, rowId) as (string | number | bigint | Uint8Array | null)[]),
+      ...(rawKeyValues(db, schema, rowId) as (
+        | string
+        | number
+        | bigint
+        | Uint8Array
+        | null
+      )[])
     ) as Record<string, unknown> | undefined;
   if (!row) return undefined;
   const values: Record<string, unknown> = {};
   for (const column of columns) {
-    const value = column === REPLICA_SYNTHETIC_PRIMARY_KEY ? rowId : row[column];
+    const value =
+      column === REPLICA_SYNTHETIC_PRIMARY_KEY ? rowId : row[column];
     values[column] =
       value instanceof Uint8Array
-        ? { base64: Buffer.from(value).toString('base64'), byteSize: value.byteLength }
-        : typeof value === 'bigint'
+        ? {
+            base64: Buffer.from(value).toString("base64"),
+            byteSize: value.byteLength,
+          }
+        : typeof value === "bigint"
           ? value.toString()
           : value;
   }
@@ -361,10 +405,12 @@ function rowForWireId(
   schema: ReplicaEntityShape,
   entity: string,
   wireRowId: string,
-  maxRows: number,
+  maxRows: number
 ): ReplicaRow | undefined {
   if (schema.primaryKey !== REPLICA_SYNTHETIC_PRIMARY_KEY) {
-    return reader.readRow(entity, wireRowId, { maxValueBytes: REPLICA_MAX_VALUE_BYTES });
+    return reader.readRow(entity, wireRowId, {
+      maxValueBytes: REPLICA_MAX_VALUE_BYTES,
+    });
   }
   let after: string | undefined;
   let scanned = 0;
@@ -374,11 +420,13 @@ function rowForWireId(
       limit: Math.min(10_000, Math.max(1, maxRows - scanned)),
       maxValueBytes: REPLICA_MAX_VALUE_BYTES,
     });
-    const found = page.rows.find((row) => replicaWireRowId(shape, entity, row.rowId) === wireRowId);
+    const found = page.rows.find(
+      (row) => replicaWireRowId(shape, entity, row.rowId) === wireRowId
+    );
     if (found) return found;
     scanned += page.rows.length;
     if (page.nextAfter && scanned >= maxRows) {
-      throw new ReplicaWorkLimitError('synthetic-row');
+      throw new ReplicaWorkLimitError("synthetic-row");
     }
     after = page.nextAfter;
   } while (after);
@@ -390,7 +438,7 @@ function accessFor(
   res: ServerResponse,
   url: URL,
   vaultId: string,
-  enrollments?: EnrollmentStore,
+  enrollments?: EnrollmentStore
 ): ReplicaRequestAccess | undefined {
   const resolution = resolveReplicaAccess(req, url, vaultId, enrollments);
   if (!resolution.ok) {
@@ -403,20 +451,20 @@ function accessFor(
 function sendProjected(
   res: ServerResponse,
   req: IncomingMessage,
-  page: ReplicaProjectedPage,
+  page: ReplicaProjectedPage
 ): true {
   if (isNdjson(req)) {
     res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
     res.write(
-      `${JSON.stringify({ type: 'meta', ...page.batch, changes: undefined, outcomes: undefined })}\n`,
+      `${JSON.stringify({ type: "meta", ...page.batch, changes: undefined, outcomes: undefined })}\n`
     );
     for (const change of page.batch.changes)
-      res.write(`${JSON.stringify({ type: 'change', change })}\n`);
+      res.write(`${JSON.stringify({ type: "change", change })}\n`);
     for (const outcome of page.batch.outcomes ?? [])
-      res.write(`${JSON.stringify({ type: 'outcome', outcome })}\n`);
+      res.write(`${JSON.stringify({ type: "outcome", outcome })}\n`);
     res.end(
-      `${JSON.stringify({ type: 'cursor', cursor: page.batch.to, hasMore: page.batch.hasMore ?? false })}\n`,
+      `${JSON.stringify({ type: "cursor", cursor: page.batch.to, hasMore: page.batch.hasMore ?? false })}\n`
     );
     return true;
   }
@@ -424,9 +472,11 @@ function sendProjected(
 }
 
 function parseSince(url: URL): ReplicaCursor {
-  const since = url.searchParams.get('since');
-  if (since === null) throw new InvalidReplicaCursorError('replica since cursor is required');
-  if (since === '0:0') throw new InvalidReplicaCursorError('replica bootstrap sentinel');
+  const since = url.searchParams.get("since");
+  if (since === null)
+    throw new InvalidReplicaCursorError("replica since cursor is required");
+  if (since === "0:0")
+    throw new InvalidReplicaCursorError("replica bootstrap sentinel");
   return parseReplicaCursor(since);
 }
 
@@ -438,13 +488,18 @@ function parseOutcomeReconciliation(body: Record<string, unknown>): {
     !Array.isArray(body.intentIds) ||
     body.intentIds.length > OUTCOME_RECONCILE_LIMIT ||
     body.intentIds.some(
-      (intentId) => typeof intentId !== 'string' || intentId.length < 1 || intentId.length > 512,
+      (intentId) =>
+        typeof intentId !== "string" ||
+        intentId.length < 1 ||
+        intentId.length > 512
     ) ||
     body.through === null ||
-    typeof body.through !== 'object' ||
+    typeof body.through !== "object" ||
     Array.isArray(body.through)
   ) {
-    throw new Error(`intentIds must contain at most ${OUTCOME_RECONCILE_LIMIT} valid ids`);
+    throw new Error(
+      `intentIds must contain at most ${OUTCOME_RECONCILE_LIMIT} valid ids`
+    );
   }
   return {
     intentIds: [...new Set(body.intentIds as string[])],
@@ -452,8 +507,12 @@ function parseOutcomeReconciliation(body: Record<string, unknown>): {
   };
 }
 
-function sendSseRebootstrap(res: ServerResponse, reason: string, state: ReplicaLogState): void {
-  writeSse(res, 'rebootstrap', rebootstrapBody(reason, state));
+function sendSseRebootstrap(
+  res: ServerResponse,
+  reason: string,
+  state: ReplicaLogState
+): void {
+  writeSse(res, "rebootstrap", rebootstrapBody(reason, state));
   res.end();
 }
 
@@ -461,29 +520,29 @@ async function streamChanges(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  db: import('node:sqlite').DatabaseSync,
+  db: import("node:sqlite").DatabaseSync,
   vaultId: string,
   options: ReplicaRouteOptions,
-  limit: number,
+  limit: number
 ): Promise<true> {
-  const rawSince = url.searchParams.get('since');
+  const rawSince = url.searchParams.get("since");
   res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders?.();
-  if (rawSince === '0:0') {
-    sendSseRebootstrap(res, 'initial', currentReplicaLogState(db));
+  if (rawSince === "0:0") {
+    sendSseRebootstrap(res, "initial", currentReplicaLogState(db));
     return true;
   }
   let cursor: ReplicaCursor;
   try {
     cursor = parseSince(url);
   } catch (error) {
-    writeSse(res, 'rebootstrap', {
-      error: 'replica_rebootstrap_required',
-      reason: error instanceof Error ? error.message : 'invalid-cursor',
+    writeSse(res, "rebootstrap", {
+      error: "replica_rebootstrap_required",
+      reason: error instanceof Error ? error.message : "invalid-cursor",
     });
     res.end();
     return true;
@@ -497,49 +556,61 @@ async function streamChanges(
     closed = true;
     wake?.();
   };
-  req.on('close', close);
-  res.on('close', close);
+  req.on("close", close);
+  res.on("close", close);
   const unsubscribe = subscribeReplicaCommits(db, () => {
     signalPending = true;
     wake?.();
   });
   let heartbeatAt = Date.now();
-  while (!closed) {
+  const streamNext = async (): Promise<void> => {
+    if (closed) return;
     const access = resolveReplicaAccess(req, url, vaultId, options.enrollments);
     if (!access.ok) {
-      sendSseRebootstrap(res, 'device-access-changed', currentReplicaLogState(db));
-      break;
+      sendSseRebootstrap(
+        res,
+        "device-access-changed",
+        currentReplicaLogState(db)
+      );
+      return;
     }
     try {
       const page = projectReplicaPage(db, access.access, cursor, limit);
-      if (page.rebootstrapReason || (baseline && !sameReplicaShapeIds(page.shapes, baseline))) {
+      if (
+        page.rebootstrapReason ||
+        (baseline && !sameReplicaShapeIds(page.shapes, baseline))
+      ) {
         sendSseRebootstrap(
           res,
-          page.rebootstrapReason ?? 'shape-changed',
-          currentReplicaLogState(db),
+          page.rebootstrapReason ?? "shape-changed",
+          currentReplicaLogState(db)
         );
-        break;
+        return;
       }
       baseline ??= replicaShapeIds(page.shapes);
       if (page.doorbell.length > 0) {
-        writeSse(res, 'change', { changes: page.doorbell, cursor: page.batch.to });
+        writeSse(res, "change", {
+          changes: page.doorbell,
+          cursor: page.batch.to,
+        });
       }
-      if (!sameCursor(cursor, page.batch.to)) writeSse(res, 'cursor', page.batch.to);
+      if (!sameCursor(cursor, page.batch.to))
+        writeSse(res, "cursor", page.batch.to);
       cursor = page.batch.to;
-      if (page.batch.hasMore) continue;
+      if (page.batch.hasMore) return streamNext();
     } catch (error) {
       if (error instanceof ReplicaRebootstrapRequiredError) {
         sendSseRebootstrap(res, error.reason, error.state);
-        break;
+        return;
       }
-      writeSse(res, 'retry', {
-        error: 'replica_stream_retry',
+      writeSse(res, "retry", {
+        error: "replica_stream_retry",
         message: error instanceof Error ? error.message : String(error),
       });
     }
     const heartbeatMs = options.heartbeatMs ?? 15_000;
     if (Date.now() - heartbeatAt >= heartbeatMs) {
-      res.write(': heartbeat\n\n');
+      res.write(": heartbeat\n\n");
       heartbeatAt = Date.now();
     }
     await new Promise<void>((resolve) => {
@@ -559,7 +630,7 @@ async function streamChanges(
           wake = undefined;
           settle();
         },
-        Math.max(1, heartbeatMs - (Date.now() - heartbeatAt)),
+        Math.max(1, heartbeatMs - (Date.now() - heartbeatAt))
       );
       timer.unref?.();
       wake = () => {
@@ -569,10 +640,12 @@ async function streamChanges(
         settle();
       };
     });
-  }
+    return streamNext();
+  };
+  await streamNext();
   unsubscribe();
-  req.off('close', close);
-  res.off('close', close);
+  req.off("close", close);
+  res.off("close", close);
   if (!closed && !res.writableEnded) res.end();
   return true;
 }
@@ -592,80 +665,109 @@ type WindowedBootstrapResult =
 function handleWindowedBootstrap(
   res: ServerResponse,
   url: URL,
-  db: import('node:sqlite').DatabaseSync,
+  db: import("node:sqlite").DatabaseSync,
   vaultId: string,
-  access: ReplicaRequestAccess,
+  access: ReplicaRequestAccess
 ): true {
   const windowLimit = parseBootstrapWindow(url);
-  if (windowLimit === 'invalid') return sendJson(res, 400, { error: 'invalid_replica_window' });
-  const rawToken = url.searchParams.get('after');
+  if (windowLimit === "invalid")
+    return sendJson(res, 400, { error: "invalid_replica_window" });
+  const rawToken = url.searchParams.get("after");
   let token: BootstrapWindowToken | null = null;
   if (rawToken !== null) {
     try {
       token = decodeBootstrapToken(rawToken);
     } catch {
-      return sendJson(res, 400, { error: 'invalid_replica_bootstrap_token' });
+      return sendJson(res, 400, { error: "invalid_replica_bootstrap_token" });
     }
   }
 
-  const snapshot = withReplicaSnapshot(db, (reader): WindowedBootstrapResult => {
-    const state = reader.state;
-    const nowMs = Date.now();
-    const shapes = buildReplicaShapes(db, access, new Date(nowMs).toISOString());
-    const shapeIds = replicaShapeIds(shapes);
-    const shapeSig = shapeSignature(shapeIds);
-    let start: BootstrapPosition = { shapeIdx: 0, entityIdx: 0, after: null };
-    if (token) {
-      if (token.epoch !== state.epoch || token.schemaEpoch !== state.schemaEpoch) {
-        return { rebootstrap: 'epoch-changed' };
+  const snapshot = withReplicaSnapshot(
+    db,
+    (reader): WindowedBootstrapResult => {
+      const state = reader.state;
+      const nowMs = Date.now();
+      const shapes = buildReplicaShapes(
+        db,
+        access,
+        new Date(nowMs).toISOString()
+      );
+      const shapeIds = replicaShapeIds(shapes);
+      const shapeSig = shapeSignature(shapeIds);
+      let start: BootstrapPosition = { shapeIdx: 0, entityIdx: 0, after: null };
+      if (token) {
+        if (
+          token.epoch !== state.epoch ||
+          token.schemaEpoch !== state.schemaEpoch
+        ) {
+          return { rebootstrap: "epoch-changed" };
+        }
+        // The delta the client will replay after completion must still be in the
+        // log; a floor past our pinned page-1 cursor means it was GC'd.
+        if (token.first.seq < state.floor.seq)
+          return { rebootstrap: "snapshot-retention" };
+        if (token.shapeSig !== shapeSig)
+          return { rebootstrap: "shape-changed" };
+        if (token.shapeIdx > shapes.length) return { badToken: true };
+        start = {
+          shapeIdx: token.shapeIdx,
+          entityIdx: token.entityIdx,
+          after: token.after,
+        };
       }
-      // The delta the client will replay after completion must still be in the
-      // log; a floor past our pinned page-1 cursor means it was GC'd.
-      if (token.first.seq < state.floor.seq) return { rebootstrap: 'snapshot-retention' };
-      if (token.shapeSig !== shapeSig) return { rebootstrap: 'shape-changed' };
-      if (token.shapeIdx > shapes.length) return { badToken: true };
-      start = { shapeIdx: token.shapeIdx, entityIdx: token.entityIdx, after: token.after };
+      let collected: ReturnType<typeof collectBootstrapWindow>;
+      try {
+        collected = collectBootstrapWindow(
+          reader,
+          shapes,
+          nowMs,
+          start,
+          windowLimit
+        );
+      } catch {
+        return { badToken: true }; // a malformed `after` row id the reader rejected
+      }
+      const first = token
+        ? token.first
+        : { epoch: state.epoch, seq: state.watermark.seq };
+      const next = collected.complete
+        ? undefined
+        : encodeBootstrapToken({
+            v: 1,
+            epoch: state.epoch,
+            schemaEpoch: state.schemaEpoch,
+            first,
+            shapeSig,
+            shapeIdx: collected.position.shapeIdx,
+            entityIdx: collected.position.entityIdx,
+            after: collected.position.after,
+          });
+      return {
+        shapes,
+        shapeIds,
+        rows: collected.rows,
+        complete: collected.complete,
+        ...(next ? { next } : {}),
+      };
     }
-    let collected: ReturnType<typeof collectBootstrapWindow>;
-    try {
-      collected = collectBootstrapWindow(reader, shapes, nowMs, start, windowLimit);
-    } catch {
-      return { badToken: true }; // a malformed `after` row id the reader rejected
-    }
-    const first = token ? token.first : { epoch: state.epoch, seq: state.watermark.seq };
-    const next = collected.complete
-      ? undefined
-      : encodeBootstrapToken({
-          v: 1,
-          epoch: state.epoch,
-          schemaEpoch: state.schemaEpoch,
-          first,
-          shapeSig,
-          shapeIdx: collected.position.shapeIdx,
-          entityIdx: collected.position.entityIdx,
-          after: collected.position.after,
-        });
-    return {
-      shapes,
-      shapeIds,
-      rows: collected.rows,
-      complete: collected.complete,
-      ...(next ? { next } : {}),
-    };
-  });
+  );
 
   const value = snapshot.value;
-  if ('rebootstrap' in value) {
-    return sendJson(res, 409, rebootstrapBody(value.rebootstrap, snapshot.state));
+  if ("rebootstrap" in value) {
+    return sendJson(
+      res,
+      409,
+      rebootstrapBody(value.rebootstrap, snapshot.state)
+    );
   }
-  if ('badToken' in value) {
-    return sendJson(res, 400, { error: 'invalid_replica_bootstrap_token' });
+  if ("badToken" in value) {
+    return sendJson(res, 400, { error: "invalid_replica_bootstrap_token" });
   }
   // A trusted-app session that resolves to no shapes is a 403, same as the
   // single-shot path — but only on the first page (a continuation already
   // proved the shapes existed and would 409 on any shape change).
   if (!token && access.appId && value.shapes.length === 0) {
-    return sendJson(res, 403, { error: 'replica_shape_empty' });
+    return sendJson(res, 403, { error: "replica_shape_empty" });
   }
   const base = {
     protocolVersion: REPLICA_PROTOCOL_VERSION,
@@ -688,10 +790,10 @@ function handleWindowedBootstrap(
 
 export function makeReplicaRouteHandler(
   vaults: VaultRegistry,
-  options: ReplicaRouteOptions,
+  options: ReplicaRouteOptions
 ): RouteHandler {
   return async (req, res): Promise<boolean> => {
-    const url = new URL(req.url ?? '/', 'http://gateway.local');
+    const url = new URL(req.url ?? "/", "http://gateway.local");
     if (
       ![
         BOOTSTRAP_PATH,
@@ -707,48 +809,58 @@ export function makeReplicaRouteHandler(
     const vaultId = vaultContext()?.vaultId ?? plane.boot.vaultId;
     const access = accessFor(req, res, url, vaultId, options.enrollments);
     if (!access) return true;
-    const method = (req.method ?? 'GET').toUpperCase();
+    const method = (req.method ?? "GET").toUpperCase();
 
     if (url.pathname === OUTCOMES_PATH) {
-      if (method !== 'POST') return methodAllowed(res, 'POST');
+      if (method !== "POST") return methodAllowed(res, "POST");
       let requested: ReturnType<typeof parseOutcomeReconciliation>;
       try {
         requested = parseOutcomeReconciliation(await readJson(req));
       } catch (error) {
         return sendJson(res, 400, {
-          error: 'invalid_replica_outcome_reconciliation',
+          error: "invalid_replica_outcome_reconciliation",
           message: error instanceof Error ? error.message : String(error),
         });
       }
       const snapshot = withReplicaSnapshot(plane.db.vault, (reader) => {
         if (requested.through.epoch !== reader.state.epoch) {
-          return { reason: 'epoch-mismatch' as const, outcomes: [] };
+          return { reason: "epoch-mismatch" as const, outcomes: [] };
         }
         if (
           requested.through.seq < reader.state.floor.seq ||
           requested.through.seq > reader.state.watermark.seq
         ) {
-          return { reason: 'cursor-gap' as const, outcomes: [] };
+          return { reason: "cursor-gap" as const, outcomes: [] };
         }
         const outcomes = requested.intentIds.flatMap((intentId) => {
           const latest = plane.db.vault
             .prepare(
               `SELECT MAX(seq) AS seq FROM replica_change
-                WHERE epoch = ? AND entity = 'replica.intent' AND row_id = ?`,
+                WHERE epoch = ? AND entity = 'replica.intent' AND row_id = ?`
             )
             .get(reader.state.epoch, intentId) as { seq: number | null };
           // A transition newer than the bootstrap watermark remains visible
           // through incremental pull and must not clear its overlay early.
-          if (latest.seq !== null && latest.seq > requested.through.seq) return [];
-          const outcome = readReplicaIntentOutcome(plane.db.vault, intentId, access.deviceId);
-          if (!outcome || (access.appId && outcome.appId !== access.appId)) return [];
+          if (latest.seq !== null && latest.seq > requested.through.seq)
+            return [];
+          const outcome = readReplicaIntentOutcome(
+            plane.db.vault,
+            intentId,
+            access.deviceId
+          );
+          if (!outcome || (access.appId && outcome.appId !== access.appId))
+            return [];
           const wire = replicaOutcomeWire(outcome);
           return wire ? [wire] : [];
         });
         return { outcomes };
       });
-      if ('reason' in snapshot.value && snapshot.value.reason) {
-        return sendJson(res, 409, rebootstrapBody(snapshot.value.reason, snapshot.state));
+      if ("reason" in snapshot.value && snapshot.value.reason) {
+        return sendJson(
+          res,
+          409,
+          rebootstrapBody(snapshot.value.reason, snapshot.state)
+        );
       }
       return sendJson(res, 200, {
         protocolVersion: REPLICA_PROTOCOL_VERSION,
@@ -757,17 +869,27 @@ export function makeReplicaRouteHandler(
     }
 
     if (url.pathname === BOOTSTRAP_PATH) {
-      if (method !== 'GET') return methodAllowed(res, 'GET');
+      if (method !== "GET") return methodAllowed(res, "GET");
       // Windowed mode (issue #419): additive, and only when the client opts in
       // via `?window`/`?after`. The single-shot path below is untouched.
-      if (url.searchParams.has('window') || url.searchParams.has('after')) {
-        return handleWindowedBootstrap(res, url, plane.db.vault, vaultId, access);
+      if (url.searchParams.has("window") || url.searchParams.has("after")) {
+        return handleWindowedBootstrap(
+          res,
+          url,
+          plane.db.vault,
+          vaultId,
+          access
+        );
       }
       let snapshot: ReplicaSnapshotResult<BootstrapValue>;
       try {
         snapshot = withReplicaSnapshot(plane.db.vault, (reader) => {
           const nowMs = Date.now();
-          const shapes = buildReplicaShapes(plane.db.vault, access, new Date(nowMs).toISOString());
+          const shapes = buildReplicaShapes(
+            plane.db.vault,
+            access,
+            new Date(nowMs).toISOString()
+          );
           const cache = new Map<string, ReplicaRow[]>();
           const rowsFor = (entity: string): ReplicaRow[] => {
             const found = cache.get(entity);
@@ -781,8 +903,11 @@ export function makeReplicaRouteHandler(
                 maxValueBytes: REPLICA_MAX_VALUE_BYTES,
               });
               rows.push(...page.rows);
-              if (rows.length > (options.maxBootstrapRows ?? DEFAULT_MAX_BOOTSTRAP_ROWS)) {
-                throw new ReplicaWorkLimitError('bootstrap');
+              if (
+                rows.length >
+                (options.maxBootstrapRows ?? DEFAULT_MAX_BOOTSTRAP_ROWS)
+              ) {
+                throw new ReplicaWorkLimitError("bootstrap");
               }
               after = page.nextAfter;
             } while (after);
@@ -792,21 +917,29 @@ export function makeReplicaRouteHandler(
           const rows = shapes.flatMap((shape) =>
             shape.entities.flatMap((entity) =>
               rowsFor(entity.entity).flatMap((row) => {
-                const shaped = shapeReplicaRow(shape, entity.entity, row, nowMs);
+                const shaped = shapeReplicaRow(
+                  shape,
+                  entity.entity,
+                  row,
+                  nowMs
+                );
                 return shaped ? [shaped] : [];
-              }),
-            ),
+              })
+            )
           );
           return { shapes, rows };
         });
       } catch (error) {
-        if (error instanceof ReplicaWorkLimitError && error.kind === 'bootstrap') {
-          return sendJson(res, 413, { error: 'replica_bootstrap_too_large' });
+        if (
+          error instanceof ReplicaWorkLimitError &&
+          error.kind === "bootstrap"
+        ) {
+          return sendJson(res, 413, { error: "replica_bootstrap_too_large" });
         }
         throw error;
       }
       if (access.appId && snapshot.value.shapes.length === 0)
-        return sendJson(res, 403, { error: 'replica_shape_empty' });
+        return sendJson(res, 403, { error: "replica_shape_empty" });
       return sendJson(res, 200, {
         protocolVersion: REPLICA_PROTOCOL_VERSION,
         vaultId,
@@ -821,55 +954,79 @@ export function makeReplicaRouteHandler(
     }
 
     if (url.pathname === CHANGES_PATH) {
-      if (method !== 'GET') return methodAllowed(res, 'GET');
+      if (method !== "GET") return methodAllowed(res, "GET");
       const limit = parseLimit(url);
-      if (Number.isNaN(limit)) return sendJson(res, 400, { error: 'invalid_replica_limit' });
+      if (Number.isNaN(limit))
+        return sendJson(res, 400, { error: "invalid_replica_limit" });
       if (isSse(req, url))
-        return streamChanges(req, res, url, plane.db.vault, vaultId, options, limit ?? 1_000);
-      if (url.searchParams.get('since') === '0:0')
+        return streamChanges(
+          req,
+          res,
+          url,
+          plane.db.vault,
+          vaultId,
+          options,
+          limit ?? 1_000
+        );
+      if (url.searchParams.get("since") === "0:0")
         return sendJson(
           res,
           409,
-          rebootstrapBody('initial', currentReplicaLogState(plane.db.vault)),
+          rebootstrapBody("initial", currentReplicaLogState(plane.db.vault))
         );
       try {
-        const page = projectReplicaPage(plane.db.vault, access, parseSince(url), limit ?? 1_000);
+        const page = projectReplicaPage(
+          plane.db.vault,
+          access,
+          parseSince(url),
+          limit ?? 1_000
+        );
         const expected = expectedReplicaShapeIds(url);
-        if (page.rebootstrapReason || (expected && !sameReplicaShapeIds(page.shapes, expected))) {
+        if (
+          page.rebootstrapReason ||
+          (expected && !sameReplicaShapeIds(page.shapes, expected))
+        ) {
           return sendJson(
             res,
             409,
             rebootstrapBody(
-              page.rebootstrapReason ?? 'shape-changed',
-              currentReplicaLogState(plane.db.vault),
-            ),
+              page.rebootstrapReason ?? "shape-changed",
+              currentReplicaLogState(plane.db.vault)
+            )
           );
         }
         return sendProjected(res, req, page);
       } catch (error) {
         if (error instanceof ReplicaRebootstrapRequiredError)
           return sendJson(res, 409, rebootstrapBody(error.reason, error.state));
-        if (error instanceof InvalidReplicaCursorError || error instanceof RangeError)
-          return sendJson(res, 400, { error: 'invalid_replica_cursor', message: error.message });
+        if (
+          error instanceof InvalidReplicaCursorError ||
+          error instanceof RangeError
+        )
+          return sendJson(res, 400, {
+            error: "invalid_replica_cursor",
+            message: error.message,
+          });
         throw error;
       }
     }
 
     if (url.pathname === ROW_PATH) {
-      if (method !== 'GET') return methodAllowed(res, 'GET');
-      const shapeId = url.searchParams.get('shapeId') ?? '';
-      const entity = url.searchParams.get('entity') ?? '';
-      const rowId = url.searchParams.get('rowId') ?? url.searchParams.get('row_id') ?? '';
+      if (method !== "GET") return methodAllowed(res, "GET");
+      const shapeId = url.searchParams.get("shapeId") ?? "";
+      const entity = url.searchParams.get("entity") ?? "";
+      const rowId =
+        url.searchParams.get("rowId") ?? url.searchParams.get("row_id") ?? "";
       const columns = requestedColumns(url);
       if (!shapeId || !entity || !rowId)
-        return sendJson(res, 400, { error: 'invalid_replica_row_request' });
+        return sendJson(res, 400, { error: "invalid_replica_row_request" });
       try {
         const result = withReplicaSnapshot(plane.db.vault, (reader) => {
           const nowMs = Date.now();
           const shape = buildReplicaShapes(
             plane.db.vault,
             access,
-            new Date(nowMs).toISOString(),
+            new Date(nowMs).toISOString()
           ).find((candidate) => candidate.shapeId === shapeId);
           const schema = shape?.entityMap.get(entity);
           const row =
@@ -880,18 +1037,22 @@ export function makeReplicaRouteHandler(
                   schema,
                   entity,
                   rowId,
-                  options.maxSyntheticLookupRows ?? DEFAULT_MAX_SYNTHETIC_LOOKUP_ROWS,
+                  options.maxSyntheticLookupRows ??
+                    DEFAULT_MAX_SYNTHETIC_LOOKUP_ROWS
                 )
               : undefined;
           if (!shape || !schema || !row) return undefined;
           const allowed = replicaRowColumns(shape, entity, row, nowMs);
           if (!allowed) return undefined;
-          if (columns.length === 0) return shapeReplicaRow(shape, entity, row, nowMs);
-          if (columns.some((column) => !allowed.has(column))) throw new Error('field_not_in_shape');
+          if (columns.length === 0)
+            return shapeReplicaRow(shape, entity, row, nowMs);
+          if (columns.some((column) => !allowed.has(column)))
+            throw new Error("field_not_in_shape");
           const values = rawValues(plane.db.vault, schema, row.rowId, columns);
           return values ? { shapeId, entity, rowId, values } : undefined;
         });
-        if (!result.value) return sendJson(res, 404, { error: 'replica_row_not_found' });
+        if (!result.value)
+          return sendJson(res, 404, { error: "replica_row_not_found" });
         return sendJson(res, 200, {
           protocolVersion: REPLICA_PROTOCOL_VERSION,
           schemaEpoch: String(result.state.schemaEpoch),
@@ -899,27 +1060,30 @@ export function makeReplicaRouteHandler(
           row: result.value,
         });
       } catch (error) {
-        if (error instanceof ReplicaWorkLimitError && error.kind === 'synthetic-row') {
-          return sendJson(res, 413, { error: 'replica_row_lookup_too_large' });
+        if (
+          error instanceof ReplicaWorkLimitError &&
+          error.kind === "synthetic-row"
+        ) {
+          return sendJson(res, 413, { error: "replica_row_lookup_too_large" });
         }
-        if (error instanceof Error && error.message === 'field_not_in_shape')
-          return sendJson(res, 403, { error: 'replica_field_not_in_shape' });
-        return sendJson(res, 400, { error: 'invalid_replica_row_request' });
+        if (error instanceof Error && error.message === "field_not_in_shape")
+          return sendJson(res, 403, { error: "replica_field_not_in_shape" });
+        return sendJson(res, 400, { error: "invalid_replica_row_request" });
       }
     }
 
     if (url.pathname === CHECKPOINT_PATH) {
-      if (method !== 'POST') return methodAllowed(res, 'POST');
+      if (method !== "POST") return methodAllowed(res, "POST");
       let body: Record<string, unknown>;
       try {
         body = await readJson(req);
       } catch {
-        return sendJson(res, 400, { error: 'malformed_request' });
+        return sendJson(res, 400, { error: "malformed_request" });
       }
       const rawCursor = body.cursor;
       const rawSchema = body.schemaEpoch;
-      if (!rawCursor || typeof rawCursor !== 'object')
-        return sendJson(res, 400, { error: 'invalid_replica_checkpoint' });
+      if (!rawCursor || typeof rawCursor !== "object")
+        return sendJson(res, 400, { error: "invalid_replica_checkpoint" });
       try {
         const cursor = parseReplicaCursor(rawCursor as ReplicaCursor);
         const schemaEpoch = Number(rawSchema);
@@ -931,16 +1095,25 @@ export function makeReplicaRouteHandler(
           cursor.seq < state.floor.seq ||
           cursor.seq > state.watermark.seq
         ) {
-          return sendJson(res, 409, rebootstrapBody('checkpoint-incompatible', state));
+          return sendJson(
+            res,
+            409,
+            rebootstrapBody("checkpoint-incompatible", state)
+          );
         }
         if (!access.deviceKey || !options.enrollments)
           return sendJson(res, 200, { ok: true, persisted: false, cursor });
         // The server offering a snapshot is not an acknowledgement: only the
         // client POST after its SQLite commit initializes/replaces an epoch.
         // Within one epoch, acknowledgements remain strictly monotonic.
-        const previous = options.enrollments.get(access.deviceKey, vaultId)?.checkpoint;
+        const previous = options.enrollments.get(
+          access.deviceKey,
+          vaultId
+        )?.checkpoint;
         const checkpoint =
-          !previous || previous.epoch !== cursor.epoch || previous.schemaEpoch !== schemaEpoch
+          !previous ||
+          previous.epoch !== cursor.epoch ||
+          previous.schemaEpoch !== schemaEpoch
             ? options.enrollments.resetCheckpoint(access.deviceKey, vaultId, {
                 ...cursor,
                 schemaEpoch,
@@ -952,13 +1125,17 @@ export function makeReplicaRouteHandler(
         return sendJson(res, 200, { ok: true, persisted: true, checkpoint });
       } catch (error) {
         return sendJson(res, 409, {
-          error: 'replica_checkpoint_conflict',
+          error: "replica_checkpoint_conflict",
           message: error instanceof Error ? error.message : String(error),
         });
       }
     }
 
-    if (method !== 'POST') return methodAllowed(res, 'POST');
-    return handleReplicaIntent(req, res, { plane, access, dispatch: options.dispatchIntent });
+    if (method !== "POST") return methodAllowed(res, "POST");
+    return handleReplicaIntent(req, res, {
+      plane,
+      access,
+      dispatch: options.dispatchIntent,
+    });
   };
 }

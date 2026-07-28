@@ -5,9 +5,12 @@
 // `:memory:` cannot express) and it opens an existing path rather than always
 // creating a fresh database. Never imported by app code, so Metro never
 // bundles it.
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from "node:sqlite";
 
-import type { ReplicaBindValue, ReplicaSqliteDriver } from '@centraid/client/replica/native';
+import type {
+  ReplicaBindValue,
+  ReplicaSqliteDriver,
+} from "@centraid/client/replica/native";
 
 export class NodeSqliteFileDriver implements ReplicaSqliteDriver {
   private readonly db: DatabaseSync;
@@ -20,7 +23,10 @@ export class NodeSqliteFileDriver implements ReplicaSqliteDriver {
     this.db.prepare(sql).run(...bind);
   }
 
-  all<T extends object>(sql: string, bind: readonly ReplicaBindValue[] = []): T[] {
+  all<T extends object>(
+    sql: string,
+    bind: readonly ReplicaBindValue[] = []
+  ): T[] {
     return this.db.prepare(sql).all(...bind) as T[];
   }
 

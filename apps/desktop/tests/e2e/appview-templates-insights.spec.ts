@@ -1,6 +1,8 @@
-import { test, expect } from '@playwright/test';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+import { test, expect } from "@playwright/test";
+
 import {
   appEntry,
   closeApp,
@@ -15,7 +17,7 @@ import {
   waitForHome,
   type MockGateway,
   type TestEnv,
-} from './fixtures';
+} from "./fixtures";
 
 /** §7 App view + in-app chat, §10 Templates / Discover, §11 Insights. */
 
@@ -34,30 +36,30 @@ test.afterEach(async () => {
 });
 
 async function openApp(
-  page: import('@playwright/test').Page,
+  page: import("@playwright/test").Page,
   id: string,
-  name: string,
+  name: string
 ): Promise<void> {
   await waitForHome(page);
   await markUserApp(page, { id, name });
   await page.reload();
   await waitForHome(page);
   await openTile(page, id);
-  await page.getByTestId('inline-app-view').waitFor({ state: 'visible' });
+  await page.getByTestId("inline-app-view").waitFor({ state: "visible" });
 }
 
 // ─────────────────────────── §7 app view + chat ───────────────────────────
 
-test('7.1 — opening a system app renders inline; back returns home', async () => {
-  gateway.state.apps = [appEntry({ id: 'notes', name: 'Notes' })];
+test("7.1 — opening a system app renders inline; back returns home", async () => {
+  gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
   const { app, page } = await launchApp(env);
   try {
-    await openApp(page, 'notes', 'Notes');
-    await expect(page.getByTestId('inline-app-view')).toBeVisible();
-    await expect(page.locator('iframe[data-centraid-app]')).toHaveCount(0);
-    await page.keyboard.press('Meta+[');
+    await openApp(page, "notes", "Notes");
+    await expect(page.getByTestId("inline-app-view")).toBeVisible();
+    await expect(page.locator("iframe[data-centraid-app]")).toHaveCount(0);
+    await page.keyboard.press("Meta+[");
     await waitForHome(page);
-    await expect(page.getByTestId('apps-grid')).toBeVisible();
+    await expect(page.getByTestId("apps-grid")).toBeVisible();
   } finally {
     await closeApp(app);
   }
@@ -88,77 +90,93 @@ test('7.1 — opening a system app renders inline; back returns home', async () 
 // message → vault side effect → transcript). These Playwright skips stay until
 // the mock serves blueprint kits; they must not be un-skipped against dead UI.
 
-test.skip('7.2 — the chat FAB opens the copilot panel', async () => {
-  gateway.state.apps = [appEntry({ id: 'notes', name: 'Notes' })];
+test.skip("7.2 — the chat FAB opens the copilot panel", async () => {
+  gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
   const { app, page } = await launchApp(env);
   try {
-    await openApp(page, 'notes', 'Notes');
-    await page.locator('.app-chat-fab').click();
-    await expect(page.locator('.app-chat-panel.open')).toBeVisible();
+    await openApp(page, "notes", "Notes");
+    await page.locator(".app-chat-fab").click();
+    await expect(page.locator(".app-chat-panel.open")).toBeVisible();
   } finally {
     await closeApp(app);
   }
 });
 
-test.skip('7.3 — a chat turn streams an assistant reply and a SQL tool result', async () => {
-  gateway.state.apps = [appEntry({ id: 'notes', name: 'Notes' })];
+test.skip("7.3 — a chat turn streams an assistant reply and a SQL tool result", async () => {
+  gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
   gateway.state.turnFrames = [
-    { data: { type: 'assistant.start' }, delayMs: 20 },
-    { data: { type: 'assistant.delta', delta: 'Let me check your notes.' }, delayMs: 20 },
+    { data: { type: "assistant.start" }, delayMs: 20 },
+    {
+      data: { type: "assistant.delta", delta: "Let me check your notes." },
+      delayMs: 20,
+    },
     {
       data: {
-        type: 'tool.start',
-        toolCallId: 't1',
-        toolName: 'vault_sql',
-        sql: 'SELECT count(*) FROM notes_note',
+        type: "tool.start",
+        toolCallId: "t1",
+        toolName: "vault_sql",
+        sql: "SELECT count(*) FROM notes_note",
       },
       delayMs: 20,
     },
     {
       data: {
-        type: 'tool.result',
-        toolCallId: 't1',
-        toolName: 'vault_sql',
+        type: "tool.result",
+        toolCallId: "t1",
+        toolName: "vault_sql",
         ok: true,
         result: { rows: [[3]] },
       },
       delayMs: 20,
     },
-    { data: { type: 'assistant.delta', delta: ' You have 3 notes.' }, delayMs: 20 },
-    { data: { type: 'final', text: 'You have 3 notes.' }, delayMs: 20 },
+    {
+      data: { type: "assistant.delta", delta: " You have 3 notes." },
+      delayMs: 20,
+    },
+    { data: { type: "final", text: "You have 3 notes." }, delayMs: 20 },
   ];
   const { app, page } = await launchApp(env);
   try {
-    await openApp(page, 'notes', 'Notes');
-    await page.locator('.app-chat-fab').click();
-    await expect(page.locator('.app-chat-panel.open')).toBeVisible();
+    await openApp(page, "notes", "Notes");
+    await page.locator(".app-chat-fab").click();
+    await expect(page.locator(".app-chat-panel.open")).toBeVisible();
 
-    await page.locator('.app-chat-textarea').fill('How many notes do I have?');
-    await page.locator('.app-chat-textarea').press('Enter');
+    await page.locator(".app-chat-textarea").fill("How many notes do I have?");
+    await page.locator(".app-chat-textarea").press("Enter");
 
-    await expect(page.locator('.msg-user-bubble')).toContainText('How many notes');
-    await expect(page.locator('.msg-ai-text', { hasText: '3 notes' })).toBeVisible({
+    await expect(page.locator(".msg-user-bubble")).toContainText(
+      "How many notes"
+    );
+    await expect(
+      page.locator(".msg-ai-text", { hasText: "3 notes" })
+    ).toBeVisible({
       timeout: 10_000,
     });
     // The streamed tool call rendered a tool group in the transcript.
     await expect(
-      page.locator('.app-chat-scroll .tool-group, .app-chat-scroll [class*="tool"]').first(),
+      page
+        .locator(
+          '.app-chat-scroll .tool-group, .app-chat-scroll [class*="tool"]'
+        )
+        .first()
     ).toBeVisible({ timeout: 10_000 });
     expect(
-      gateway.calls.some((c) => c.method === 'POST' && /\/centraid\/.*\/_turn$/.test(c.pathname)),
+      gateway.calls.some(
+        (c) => c.method === "POST" && /\/centraid\/.*\/_turn$/u.test(c.pathname)
+      )
     ).toBe(true);
   } finally {
     await closeApp(app);
   }
 });
 
-test.skip('7.4 — the copilot past-chats history lists prior sessions and filters by search', async () => {
-  gateway.state.apps = [appEntry({ id: 'notes', name: 'Notes' })];
+test.skip("7.4 — the copilot past-chats history lists prior sessions and filters by search", async () => {
+  gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
   gateway.state.conversations = [
     {
-      id: 'c1',
-      originAppId: 'notes',
-      title: 'Grocery list',
+      id: "c1",
+      originAppId: "notes",
+      title: "Grocery list",
       adapterKind: null,
       adapterSessionId: null,
       turnCount: 2,
@@ -167,9 +185,9 @@ test.skip('7.4 — the copilot past-chats history lists prior sessions and filte
       messageCount: 4,
     },
     {
-      id: 'c2',
-      originAppId: 'notes',
-      title: 'Trip planning',
+      id: "c2",
+      originAppId: "notes",
+      title: "Trip planning",
       adapterKind: null,
       adapterSessionId: null,
       turnCount: 1,
@@ -180,33 +198,40 @@ test.skip('7.4 — the copilot past-chats history lists prior sessions and filte
   ];
   const { app, page } = await launchApp(env);
   try {
-    await openApp(page, 'notes', 'Notes');
-    await page.locator('.app-chat-fab').click();
-    await expect(page.locator('.app-chat-panel.open')).toBeVisible();
+    await openApp(page, "notes", "Notes");
+    await page.locator(".app-chat-fab").click();
+    await expect(page.locator(".app-chat-panel.open")).toBeVisible();
 
     // Open the ⋯ overflow and pick "Chat history".
     await page
-      .locator('.app-chat-overflow-wrap .app-chat-icon-btn[aria-label="More actions"]')
+      .locator(
+        '.app-chat-overflow-wrap .app-chat-icon-btn[aria-label="More actions"]'
+      )
       .click();
-    await page.locator('.app-chat-overflow-item', { hasText: 'Chat history' }).click();
+    await page
+      .locator(".app-chat-overflow-item", { hasText: "Chat history" })
+      .click();
 
     // Both sessions render in the history list.
-    await expect(page.locator('.app-chat-history-row')).toHaveCount(2, { timeout: 10_000 });
+    await expect(page.locator(".app-chat-history-row")).toHaveCount(2, {
+      timeout: 10_000,
+    });
     await expect(
-      page.locator('.app-chat-history-title', { hasText: 'Grocery list' }),
+      page.locator(".app-chat-history-title", { hasText: "Grocery list" })
     ).toBeVisible();
     expect(
       gateway.calls.some(
         (c) =>
-          c.method === 'GET' && c.pathname.endsWith('/_centraid-conversations/apps/notes/sessions'),
-      ),
+          c.method === "GET" &&
+          c.pathname.endsWith("/_centraid-conversations/apps/notes/sessions")
+      )
     ).toBe(true);
 
     // Searching narrows to one.
-    await page.locator('.app-chat-history-search').fill('trip');
-    await expect(page.locator('.app-chat-history-row')).toHaveCount(1);
+    await page.locator(".app-chat-history-search").fill("trip");
+    await expect(page.locator(".app-chat-history-row")).toHaveCount(1);
     await expect(
-      page.locator('.app-chat-history-title', { hasText: 'Trip planning' }),
+      page.locator(".app-chat-history-title", { hasText: "Trip planning" })
     ).toBeVisible();
   } finally {
     await closeApp(app);
@@ -215,75 +240,81 @@ test.skip('7.4 — the copilot past-chats history lists prior sessions and filte
 
 // ─────────────────────────── §10 Discover / templates ───────────────────────────
 
-test('10.1 — Discover renders template cards', async () => {
+test("10.1 — Discover renders template cards", async () => {
   gateway.state.templates = [
     {
-      id: 'habit',
-      name: 'Habit Tracker',
-      desc: 'Track habits',
-      colorKey: 'violet',
-      iconKey: 'Todo',
-      version: '1',
+      id: "habit",
+      name: "Habit Tracker",
+      desc: "Track habits",
+      colorKey: "violet",
+      iconKey: "Todo",
+      version: "1",
     },
     {
-      id: 'journal',
-      name: 'Journal',
-      desc: 'Daily journal',
-      colorKey: 'teal',
-      iconKey: 'Todo',
-      version: '1',
+      id: "journal",
+      name: "Journal",
+      desc: "Daily journal",
+      colorKey: "teal",
+      iconKey: "Todo",
+      version: "1",
     },
   ];
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await gotoNav(page, 'Discover');
-    await expect(page.getByRole('button', { name: /Habit Tracker/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Journal/ })).toBeVisible();
+    await gotoNav(page, "Discover");
+    await expect(
+      page.getByRole("button", { name: /Habit Tracker/u })
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /Journal/u })).toBeVisible();
   } finally {
     await closeApp(app);
   }
 });
 
-test('10.2 — an automation template clone survives a fresh gateway instance and Electron process', async () => {
+test("10.2 — an automation template clone survives a fresh gateway instance and Electron process", async () => {
   gateway.state.templates = [
     {
-      id: 'digest',
-      name: 'Daily Digest',
-      desc: 'Summarize the day',
-      colorKey: 'violet',
-      iconKey: 'Todo',
-      version: '1',
-      kind: 'automation',
-      triggerKind: 'cron',
-      triggerLabel: 'Every day',
+      id: "digest",
+      name: "Daily Digest",
+      desc: "Summarize the day",
+      colorKey: "violet",
+      iconKey: "Todo",
+      version: "1",
+      kind: "automation",
+      triggerKind: "cron",
+      triggerLabel: "Every day",
     },
   ];
   gateway.state.cloneResult = {
     app: {
-      id: 'digest-clone',
-      name: 'Daily Digest',
-      description: 'Summarize the day',
-      kind: 'automation',
+      id: "digest-clone",
+      name: "Daily Digest",
+      description: "Summarize the day",
+      kind: "automation",
       hasIndex: true,
     },
     template: gateway.state.templates[0],
     webhooks: [],
   };
-  let launched: Awaited<ReturnType<typeof launchApp>> | undefined = await launchApp(env);
+  let launched: Awaited<ReturnType<typeof launchApp>> | undefined =
+    await launchApp(env);
   try {
     await waitForHome(launched.page);
-    await gotoNav(launched.page, 'Discover');
-    await launched.page.getByRole('button', { name: /Daily Digest/ }).click();
+    await gotoNav(launched.page, "Discover");
+    await launched.page.getByRole("button", { name: /Daily Digest/u }).click();
     await launched.page
-      .getByRole('dialog', { name: 'Daily Digest template' })
-      .getByRole('button', { name: /Use template/ })
+      .getByRole("dialog", { name: "Daily Digest template" })
+      .getByRole("button", { name: /Use template/u })
       .click();
     await expect
       .poll(
         () =>
-          gateway.calls.some((c) => c.method === 'POST' && c.pathname === '/centraid/_apps/_clone'),
-        { timeout: 10_000 },
+          gateway.calls.some(
+            (c) =>
+              c.method === "POST" && c.pathname === "/centraid/_apps/_clone"
+          ),
+        { timeout: 10_000 }
       )
       .toBe(true);
     await expect.poll(() => gateway.state.automations).toHaveLength(1);
@@ -293,15 +324,20 @@ test('10.2 — an automation template clone survives a fresh gateway instance an
     // flows owned: "template tile disappeared after clone — expected templates
     // to remain available until publish"). Adopt navigates to the new thread,
     // so return to Discover and assert the Daily Digest card is still listed.
-    await gotoNav(launched.page, 'Discover');
-    await expect(launched.page.getByRole('button', { name: /Daily Digest/ })).toBeVisible();
+    await gotoNav(launched.page, "Discover");
+    await expect(
+      launched.page.getByRole("button", { name: /Daily Digest/u })
+    ).toBeVisible();
 
-    const manifestPath = path.join(env.appsDir, 'digest-clone', 'app.json');
-    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as {
+    const manifestPath = path.join(env.appsDir, "digest-clone", "app.json");
+    const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as {
       id: string;
       name: string;
     };
-    expect(manifest).toMatchObject({ id: 'digest-clone', name: 'Daily Digest' });
+    expect(manifest).toMatchObject({
+      id: "digest-clone",
+      name: "Daily Digest",
+    });
 
     await closeApp(launched.app);
     launched = undefined;
@@ -311,47 +347,71 @@ test('10.2 — an automation template clone survives a fresh gateway instance an
 
     launched = await launchApp(env);
     await waitForHome(launched.page);
-    await gotoNav(launched.page, 'Automations');
-    await expect(launched.page.getByRole('button', { name: /Daily Digest/ })).toBeVisible();
+    await gotoNav(launched.page, "Automations");
+    await expect(
+      launched.page.getByRole("button", { name: /Daily Digest/u })
+    ).toBeVisible();
     await expect(fs.access(manifestPath)).resolves.toBeUndefined();
   } finally {
     if (launched) await closeApp(launched.app);
   }
 });
 
-test('10.3 — independent builder drafts coexist on disk and survive a full Electron restart', async () => {
-  const prompts = ['Track hydration', 'Plan daily todos', 'Keep a private journal'];
+test("10.3 — independent builder drafts coexist on disk and survive a full Electron restart", async () => {
+  const prompts = [
+    "Track hydration",
+    "Plan daily todos",
+    "Keep a private journal",
+  ];
   let launched = await launchApp(env);
   try {
-    for (const [index, prompt] of prompts.entries()) {
+    // Each draft must survive a complete app restart before the next one is
+    // created, so the state transition is intentionally serial.
+    const createNextDraft = async (index: number): Promise<void> => {
+      const prompt = prompts[index];
+      if (prompt === undefined) return;
       await waitForHome(launched.page);
-      const composer = launched.page.getByPlaceholder(/Describe an app you want/i);
+      const composer = launched.page.getByPlaceholder(
+        /Describe an app you want/iu
+      );
       await composer.fill(prompt);
-      await composer.press('Control+Enter');
-      await expect.poll(() => gateway.state.apps.length, { timeout: 10_000 }).toBe(index + 1);
+      await composer.press("Control+Enter");
+      await expect
+        .poll(() => gateway.state.apps.length, { timeout: 10_000 })
+        .toBe(index + 1);
       await closeApp(launched.app);
       launched = await launchApp(env);
-    }
+      return createNextDraft(index + 1);
+    };
+    await createNextDraft(0);
     await waitForHome(launched.page);
     const draftIds = gateway.state.apps.map((entry) => entry.id).sort();
     const appDirectories = (await fs.readdir(env.appsDir)).sort();
     expect(appDirectories).toEqual(draftIds);
-    for (const id of draftIds) {
-      const manifest = JSON.parse(
-        await fs.readFile(path.join(env.appsDir, id, 'app.json'), 'utf8'),
-      ) as { id: string; name: string };
-      expect(manifest.id).toBe(id);
-      expect(manifest.name.length).toBeGreaterThan(0);
-    }
+    await Promise.all(
+      draftIds.map(async (id) => {
+        const manifest = JSON.parse(
+          await fs.readFile(path.join(env.appsDir, id, "app.json"), "utf8")
+        ) as { id: string; name: string };
+        expect(manifest.id).toBe(id);
+        expect(manifest.name.length).toBeGreaterThan(0);
+      })
+    );
     await closeApp(launched.app);
 
     const restarted = await launchApp(env);
     try {
       await waitForHome(restarted.page);
-      for (const id of draftIds) {
-        await expect(restarted.page.locator(`[data-app-id="${id}"]`)).toBeVisible();
-        await expect(fs.access(path.join(env.appsDir, id, 'app.json'))).resolves.toBeUndefined();
-      }
+      await Promise.all(
+        draftIds.map(async (id) => {
+          await expect(
+            restarted.page.locator(`[data-app-id="${id}"]`)
+          ).toBeVisible();
+          await expect(
+            fs.access(path.join(env.appsDir, id, "app.json"))
+          ).resolves.toBeUndefined();
+        })
+      );
     } finally {
       await closeApp(restarted.app);
     }
@@ -360,13 +420,13 @@ test('10.3 — independent builder drafts coexist on disk and survive a full Ele
   }
 });
 
-test('10.4 — empty Discover renders without cards', async () => {
+test("10.4 — empty Discover renders without cards", async () => {
   gateway.state.templates = [];
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await gotoNav(page, 'Discover');
-    await expect(page.getByText('Nothing to install yet.')).toBeVisible();
+    await gotoNav(page, "Discover");
+    await expect(page.getByText("Nothing to install yet.")).toBeVisible();
   } finally {
     await closeApp(app);
   }
@@ -374,7 +434,7 @@ test('10.4 — empty Discover renders without cards', async () => {
 
 // ─────────────────────────── §11 Insights ───────────────────────────
 
-test('11.1 — Insights renders the spend hero', async () => {
+test("11.1 — Insights renders the spend hero", async () => {
   gateway.state.insights = {
     windowDays: 30,
     generatedAt: Date.now(),
@@ -393,30 +453,32 @@ test('11.1 — Insights renders the spend hero', async () => {
       failedCostUsd: 0,
     },
     daily: [
-      { date: '2024-05-01', tokens: 5000, costUsd: 0.5, runs: 2 },
-      { date: '2024-05-02', tokens: 7345, costUsd: 0.73, runs: 5 },
+      { date: "2024-05-01", tokens: 5000, costUsd: 0.5, runs: 2 },
+      { date: "2024-05-02", tokens: 7345, costUsd: 0.73, runs: 5 },
     ],
     bySource: [
       {
-        key: 'app/digest',
-        label: 'Digest',
-        kind: 'automation',
+        key: "app/digest",
+        label: "Digest",
+        kind: "automation",
         runs: 3,
         tokens: 8000,
         costUsd: 0.8,
       },
     ],
-    byRunner: [{ provider: 'claude-code', runs: 7, tokens: 12345, costUsd: 1.23 }],
-    byModel: [{ model: 'tier-deep', runs: 7, tokens: 12345, costUsd: 1.23 }],
-    byEffort: [{ effort: 'high', runs: 7, tokens: 12345, costUsd: 1.23 }],
+    byRunner: [
+      { provider: "claude-code", runs: 7, tokens: 12345, costUsd: 1.23 },
+    ],
+    byModel: [{ model: "tier-deep", runs: 7, tokens: 12345, costUsd: 1.23 }],
+    byEffort: [{ effort: "high", runs: 7, tokens: 12345, costUsd: 1.23 }],
     recent: [],
   };
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await gotoNav(page, 'Insights');
-    await expect(page.getByTestId('insights-hero')).toBeVisible();
-    await expect(page.getByTestId('insights-hero')).toContainText('$1.23');
+    await gotoNav(page, "Insights");
+    await expect(page.getByTestId("insights-hero")).toBeVisible();
+    await expect(page.getByTestId("insights-hero")).toContainText("$1.23");
   } finally {
     await closeApp(app);
   }

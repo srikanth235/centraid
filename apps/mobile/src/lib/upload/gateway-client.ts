@@ -13,8 +13,12 @@ export interface MultipartPartReceipt {
 }
 
 export type DirectUploadPlan =
-  | { kind: 'single'; url: string }
-  | { kind: 'multipart'; uploadId: string; parts: { partNumber: number; url: string }[] };
+  | { kind: "single"; url: string }
+  | {
+      kind: "multipart";
+      uploadId: string;
+      parts: { partNumber: number; url: string }[];
+    };
 
 export interface DirectBeginInput {
   sha256: string;
@@ -50,23 +54,35 @@ export interface SettlementReceipt extends Record<string, unknown> {
 }
 
 export interface DirectTransferClient {
-  begin(input: DirectBeginInput): Promise<DirectBeginResult>;
-  recordPart(sessionId: string, partNumber: number, etag: string): Promise<void>;
-  complete(sessionId: string, parts: readonly MultipartPartReceipt[]): Promise<SettlementReceipt>;
+  begin: (input: DirectBeginInput) => Promise<DirectBeginResult>;
+  recordPart: (
+    sessionId: string,
+    partNumber: number,
+    etag: string
+  ) => Promise<void>;
+  complete: (
+    sessionId: string,
+    parts: readonly MultipartPartReceipt[]
+  ) => Promise<SettlementReceipt>;
 }
 
 export class DirectTransferError extends Error {
   constructor(
     message: string,
-    readonly status: number,
+    readonly status: number
   ) {
     super(message);
-    this.name = 'DirectTransferError';
+    this.name = "DirectTransferError";
   }
 
   /** 4xx other than 408/429 will not fix itself by retrying the same bytes. */
   get terminal(): boolean {
-    return this.status >= 400 && this.status < 500 && this.status !== 408 && this.status !== 429;
+    return (
+      this.status >= 400 &&
+      this.status < 500 &&
+      this.status !== 408 &&
+      this.status !== 429
+    );
   }
 }
 
@@ -78,17 +94,21 @@ export interface DirectTransferClientOptions {
 }
 
 export function httpDirectTransferClient(
-  options: DirectTransferClientOptions,
+  options: DirectTransferClientOptions
 ): DirectTransferClient {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const base = options.gatewayBaseUrl.replace(/\/+$/, '');
+  const base = options.gatewayBaseUrl.replace(/\/+$/u, "");
   const headers = (): Record<string, string> => ({
-    'content-type': 'application/json',
-    accept: 'application/json',
+    "content-type": "application/json",
+    accept: "application/json",
     ...options.headers?.(),
   });
 
-  async function send<T>(path: string, method: string, body: unknown): Promise<T> {
+  async function send<T>(
+    path: string,
+    method: string,
+    body: unknown
+  ): Promise<T> {
     const response = await fetchImpl(`${base}${path}`, {
       method,
       headers: headers(),
@@ -97,7 +117,7 @@ export function httpDirectTransferClient(
     if (!response.ok) {
       throw new DirectTransferError(
         `${method} ${path} refused (${response.status})`,
-        response.status,
+        response.status
       );
     }
     return (await response.json()) as T;
@@ -106,19 +126,20 @@ export function httpDirectTransferClient(
   return {
     // 200 when alreadyPresent, 201 otherwise; both are `ok`, and the body's
     // own `alreadyPresent` is the signal we act on.
-    begin: (input) => send<DirectBeginResult>('/centraid/_vault/blobs/direct', 'POST', input),
+    begin: (input) =>
+      send<DirectBeginResult>("/centraid/_vault/blobs/direct", "POST", input),
     recordPart: async (sessionId, partNumber, etag) => {
       await send<{ completedParts: MultipartPartReceipt[] }>(
         `/centraid/_vault/blobs/direct/${encodeURIComponent(sessionId)}/parts/${partNumber}`,
-        'PUT',
-        { etag },
+        "PUT",
+        { etag }
       );
     },
     complete: (sessionId, parts) =>
       send<SettlementReceipt>(
         `/centraid/_vault/blobs/direct/${encodeURIComponent(sessionId)}/complete`,
-        'POST',
-        { parts },
+        "POST",
+        { parts }
       ),
   };
 }

@@ -21,7 +21,7 @@
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
-import { srcOf } from './_shared.ts';
+import { srcOf } from "./_shared.ts";
 
 interface RawPhash {
   cluster_id: string;
@@ -47,12 +47,12 @@ interface RawContent {
   deleted_at?: string | null;
 }
 
-export default async ({ ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
+export default async function duplicatesHandler({ ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
   try {
     const phashRows = await ctx.vault.read({
-      entity: 'media.asset_phash',
-      where: [{ column: 'cluster_id', op: 'not-null' }],
+      entity: "media.asset_phash",
+      where: [{ column: "cluster_id", op: "not-null" }],
       limit: 4000,
       purpose,
     });
@@ -61,7 +61,8 @@ export default async ({ ctx }: HandlerArgs) => {
 
     const assetIdsByCluster = new Map<string, string[]>();
     for (const r of rows) {
-      if (!assetIdsByCluster.has(r.cluster_id)) assetIdsByCluster.set(r.cluster_id, []);
+      if (!assetIdsByCluster.has(r.cluster_id))
+        assetIdsByCluster.set(r.cluster_id, []);
       assetIdsByCluster.get(r.cluster_id)!.push(r.asset_id);
     }
     const allAssetIds = [...new Set(rows.map((r) => r.asset_id))];
@@ -70,31 +71,37 @@ export default async ({ ctx }: HandlerArgs) => {
     // old cluster is not something to offer trashing again. Clusters left
     // with fewer than 2 live members are dropped entirely below.
     const assetsResult = await ctx.vault.read({
-      entity: 'media.media_asset',
+      entity: "media.media_asset",
       where: [
-        { column: 'asset_id', op: 'in', value: allAssetIds },
-        { column: 'deleted_at', op: 'is-null' },
+        { column: "asset_id", op: "in", value: allAssetIds },
+        { column: "deleted_at", op: "is-null" },
       ],
       limit: 4000,
       purpose,
     });
     const assetById = new Map(
-      ((assetsResult.rows ?? []) as unknown as RawAsset[]).map((a) => [a.asset_id, a] as const),
+      ((assetsResult.rows ?? []) as unknown as RawAsset[]).map(
+        (a) => [a.asset_id, a] as const
+      )
     );
 
     const contentIds = [
-      ...new Set([...assetById.values()].map((a) => a.content_id).filter(Boolean)),
+      ...new Set(
+        [...assetById.values()].map((a) => a.content_id).filter(Boolean)
+      ),
     ];
     const contents =
       contentIds.length > 0
         ? await ctx.vault.read({
-            entity: 'core.content_item',
-            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            entity: "core.content_item",
+            where: [{ column: "content_id", op: "in", value: contentIds }],
             purpose,
           })
         : { rows: [] };
     const contentById = new Map(
-      ((contents.rows ?? []) as unknown as RawContent[]).map((c) => [c.content_id, c] as const),
+      ((contents.rows ?? []) as unknown as RawContent[]).map(
+        (c) => [c.content_id, c] as const
+      )
     );
 
     const rowFor = (assetId: string) => {
@@ -123,15 +130,18 @@ export default async ({ ctx }: HandlerArgs) => {
     for (const [clusterId, assetIds] of assetIdsByCluster) {
       const assets = assetIds.map(rowFor).filter((a) => a != null);
       if (assets.length < 2) continue;
-      clusters.push({ key: clusterId, tier: 'phash', assets });
+      clusters.push({ key: clusterId, tier: "phash", assets });
     }
     clusters.sort((a, b) => b.assets.length - a.assets.length);
     return { clusters };
   } catch (err) {
     const e = err as { code?: string; message?: string };
-    if (e.code === 'VAULT_CONSENT') {
-      return { clusters: [], vaultDenied: { code: e.code, message: e.message } };
+    if (e.code === "VAULT_CONSENT") {
+      return {
+        clusters: [],
+        vaultDenied: { code: e.code, message: e.message },
+      };
     }
     return { clusters: [], error: String(e.message ?? err) };
   }
-};
+}

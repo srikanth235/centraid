@@ -1,4 +1,4 @@
-import { Store } from '../store.js';
+import { Store } from "../store.js";
 
 // Which space each conversation belongs to (issue #599, Decision 14).
 //
@@ -16,7 +16,7 @@ import { Store } from '../store.js';
 // and falls back to the internal default scope, which is exactly how every
 // conversation created before this issue behaves.
 
-const KEY = 'assistant.conversationScopes.v1';
+const KEY = "assistant.conversationScopes.v1";
 
 type ScopeMap = Record<string, string>;
 
@@ -26,13 +26,18 @@ function read(): ScopeMap {
 
 /** The space a conversation was created in, or `undefined` if this device
  *  never recorded one (an older thread, or one started elsewhere). */
-export function conversationScope(conversationId: string | undefined): string | undefined {
+export function conversationScope(
+  conversationId: string | undefined
+): string | undefined {
   if (!conversationId) return undefined;
   return read()[conversationId];
 }
 
 /** Record a fresh conversation's space. Called once, at creation. */
-export function rememberConversationScope(conversationId: string, scopeId: string): void {
+export function rememberConversationScope(
+  conversationId: string,
+  scopeId: string
+): void {
   Store.set<ScopeMap>(KEY, { ...read(), [conversationId]: scopeId });
 }
 

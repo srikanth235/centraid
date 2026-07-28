@@ -1,7 +1,8 @@
-import { type JSX, useMemo } from 'react';
-import SettingsConnectionsScreen from '../../screens/SettingsConnectionsScreen.js';
-import { useShellActions } from '../actions.js';
-import PageScroll from '../PageScroll.js';
+import { type JSX, useMemo } from "react";
+
+import SettingsConnectionsScreen from "../../screens/SettingsConnectionsScreen.js";
+import { useShellActions } from "../actions.js";
+import PageScroll from "../PageScroll.js";
 import {
   beginConnectionAuthorize,
   completeAssistReturnLink,
@@ -13,7 +14,7 @@ import {
   makeDetachConnection,
   submitConnectionForm,
   updateConnectionStatus,
-} from './settingsConnectionsData.js';
+} from "./settingsConnectionsData.js";
 
 // First-class Connectors surface — vault data-source OAuth / API connections
 // (Gmail, Calendar, GitHub, …). Promoted from Settings → Account → Connections
@@ -22,7 +23,10 @@ import {
 
 export default function ConnectorsRoute(): JSX.Element {
   const { showToast, confirm } = useShellActions();
-  const detachConnection = useMemo(() => makeDetachConnection(confirm), [confirm]);
+  const detachConnection = useMemo(
+    () => makeDetachConnection(confirm),
+    [confirm]
+  );
 
   // Title / New Connector / search live on the screen (gallery chrome).
   return (

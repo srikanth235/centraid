@@ -1,16 +1,22 @@
+import crypto from "node:crypto";
+import { promises as fs } from "node:fs";
+import http from "node:http";
+import os from "node:os";
+import path from "node:path";
+
+import { forEachSequentially } from "@centraid/test-kit/sequential";
 // governance: allow-repo-hygiene file-size-limit — one cohesive e2e harness (mock
 // gateway + record builders + DOM helpers) shared by every spec; splitting it would
 // scatter the single source of fixture truth. See receipts/issue-225-desktop-e2e-suite.md.
-import { _electron, test, type ElectronApplication, type Page } from '@playwright/test';
-import { promises as fs } from 'node:fs';
-import http from 'node:http';
-import path from 'node:path';
-import os from 'node:os';
-import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import {
+  _electron,
+  test,
+  type ElectronApplication,
+  type Page,
+} from "@playwright/test";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = import.meta.filename;
+const __dirname = import.meta.dirname;
 
 /*
  * E2E harness for the desktop app, rebuilt for the post-#109/#137/#141
@@ -36,7 +42,7 @@ export interface AppMetaEntry {
   id: string;
   name?: string;
   description?: string;
-  kind?: 'app' | 'automation';
+  kind?: "app" | "automation";
   hasIndex: boolean;
 }
 
@@ -119,10 +125,16 @@ export interface MockGateway {
   token: string;
   state: MockState;
   /** Calls observed, in arrival order (excludes OPTIONS preflight). */
-  calls: Array<{ method: string; pathname: string; search: string; auth?: string; body?: string }>;
+  calls: Array<{
+    method: string;
+    pathname: string;
+    search: string;
+    auth?: string;
+    body?: string;
+  }>;
   /** Convenience: number of calls matching a method + path predicate. */
-  countCalls(method: string, pathTest: (p: string) => boolean): number;
-  close(): Promise<void>;
+  countCalls: (method: string, pathTest: (p: string) => boolean) => number;
+  close: () => Promise<void>;
 }
 
 interface MockGatewayOptions {
@@ -143,7 +155,12 @@ function defaultState(): MockState {
     filesById: {},
     prefs: {},
     insights: {},
-    runnerStatus: { ok: true, kind: 'local', version: 'test', models: ['tier-fast', 'tier-deep'] },
+    runnerStatus: {
+      ok: true,
+      kind: "local",
+      version: "test",
+      models: ["tier-fast", "tier-deep"],
+    },
     agentsStatus: { agents: [], models: [] },
     conversations: [],
     conversationMessages: [],
@@ -153,85 +170,94 @@ function defaultState(): MockState {
     publishStatus: 200,
     runNowStatus: 200,
     setEnabledStatus: 200,
-    nextAutomationTurnId: 'turn-1',
+    nextAutomationTurnId: "turn-1",
     turnFrames: [],
     automationTurnFrames: [],
   };
 }
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization,content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+  "Access-Control-Allow-Headers": "authorization,content-type",
 };
 
 function json(res: http.ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json', ...CORS });
+  res.writeHead(status, { "content-type": "application/json", ...CORS });
   res.end(JSON.stringify(body));
 }
 
-async function writeSse(res: http.ServerResponse, frames: SseFrame[]): Promise<void> {
+async function writeSse(
+  res: http.ServerResponse,
+  frames: SseFrame[]
+): Promise<void> {
   res.writeHead(200, {
-    'content-type': 'text/event-stream',
-    'cache-control': 'no-cache',
-    connection: 'keep-alive',
+    "content-type": "text/event-stream",
+    "cache-control": "no-cache",
+    connection: "keep-alive",
     ...CORS,
   });
-  for (const f of frames) {
-    if (f.delayMs) await new Promise((resolve) => setTimeout(resolve, f.delayMs));
+  await forEachSequentially(frames, async (f) => {
+    if (f.delayMs)
+      await new Promise((resolve) => setTimeout(resolve, f.delayMs));
     res.write(`data: ${JSON.stringify(f.data)}\n\n`);
-  }
-  res.write('event: end\ndata: {}\n\n');
+  });
+  res.write("event: end\ndata: {}\n\n");
   res.end();
 }
 
-export async function startMockGateway(options: MockGatewayOptions = {}): Promise<MockGateway> {
+export async function startMockGateway(
+  options: MockGatewayOptions = {}
+): Promise<MockGateway> {
   const state = defaultState();
   if (options.appsDir) {
     const persisted = await readMockApps(options.appsDir);
     state.apps = persisted.apps;
     state.automations = persisted.automations;
   }
-  const calls: MockGateway['calls'] = [];
-  const token = crypto.randomBytes(16).toString('hex');
+  const calls: MockGateway["calls"] = [];
+  const token = crypto.randomBytes(16).toString("hex");
 
   const server = http.createServer((req, res) => {
-    const method = req.method ?? 'GET';
-    const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+    const method = req.method ?? "GET";
+    const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const p = url.pathname;
 
-    if (method === 'OPTIONS') {
+    if (method === "OPTIONS") {
       res.writeHead(204, CORS);
       res.end();
       return;
     }
 
     const chunks: Buffer[] = [];
-    req.on('data', (c) => chunks.push(c as Buffer));
-    req.on('end', () => {
-      const body = Buffer.concat(chunks).toString('utf8');
+    req.on("data", (c) => chunks.push(c as Buffer));
+    req.on("end", () => {
+      const body = Buffer.concat(chunks).toString("utf8");
       calls.push({
         method,
         pathname: p,
         search: url.search,
-        auth: req.headers['authorization'] as string | undefined,
+        auth: req.headers["authorization"] as string | undefined,
         body: body || undefined,
       });
 
       if (state.forceStatus && state.forceStatus !== 200) {
-        json(res, state.forceStatus, { error: 'forced' });
+        json(res, state.forceStatus, { error: "forced" });
         return;
       }
 
-      void route(method, p, url, body, res, state, options).catch((err: unknown) => {
-        json(res, 500, { error: String(err) });
-      });
+      void route(method, p, url, body, res, state, options).catch(
+        (err: unknown) => {
+          json(res, 500, { error: String(err) });
+        }
+      );
     });
   });
 
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const addr = server.address();
-  if (!addr || typeof addr === 'string') throw new Error('mock gateway: no address');
+  if (!addr || typeof addr === "string")
+    throw new Error("mock gateway: no address");
 
   return {
     url: `http://127.0.0.1:${addr.port}`,
@@ -259,12 +285,12 @@ async function route(
   body: string,
   res: http.ServerResponse,
   s: MockState,
-  options: MockGatewayOptions,
+  options: MockGatewayOptions
 ): Promise<void> {
-  const seg = p.split('/').filter(Boolean); // e.g. ['centraid','_apps','todo-abc']
+  const seg = p.split("/").filter(Boolean); // e.g. ['centraid','_apps','todo-abc']
 
   // ---- editing/session lifecycle (match specific before /:id) ----
-  if (p === '/centraid/_apps/_sessions' && method === 'POST') {
+  if (p === "/centraid/_apps/_sessions" && method === "POST") {
     const sid = (() => {
       try {
         return (JSON.parse(body) as { sessionId?: string }).sessionId;
@@ -272,16 +298,16 @@ async function route(
         return undefined;
       }
     })();
-    return json(res, 200, { sessionId: sid ?? 'desktop-x' });
+    return json(res, 200, { sessionId: sid ?? "desktop-x" });
   }
-  if (p.startsWith('/centraid/_apps/_sessions/') && method === 'DELETE') {
+  if (p.startsWith("/centraid/_apps/_sessions/") && method === "DELETE") {
     return json(res, 200, { ok: true });
   }
-  if (p === '/centraid/_apps/_clone' && method === 'POST') {
+  if (p === "/centraid/_apps/_clone" && method === "POST") {
     const result = s.cloneResult ?? defaultCloneResult(body);
     const app = result.app as Partial<AppMetaEntry> | undefined;
     if (app?.id) {
-      if (app.kind === 'automation') {
+      if (app.kind === "automation") {
         s.automations = [
           ...s.automations.filter((entry) => entry.id !== app.id),
           automationRow({ id: app.id, name: app.name }),
@@ -298,25 +324,25 @@ async function route(
   }
 
   // ---- draft preview probe ----
-  if (p.startsWith('/centraid/_draft/')) {
+  if (p.startsWith("/centraid/_draft/")) {
     if (s.draftAvailable) {
-      res.writeHead(200, { 'content-type': 'text/html', ...CORS });
-      res.end('<!doctype html><title>draft</title><body>draft preview</body>');
+      res.writeHead(200, { "content-type": "text/html", ...CORS });
+      res.end("<!doctype html><title>draft</title><body>draft preview</body>");
     } else {
       res.writeHead(404, CORS);
-      res.end('not found');
+      res.end("not found");
     }
     return;
   }
 
   // ---- apps collection ----
-  if (p === '/centraid/_apps') {
-    if (method === 'GET') return json(res, 200, s.apps);
-    if (method === 'POST') {
+  if (p === "/centraid/_apps") {
+    if (method === "GET") return json(res, 200, s.apps);
+    if (method === "POST") {
       const parsed = safeJson(body);
-      const id = (parsed.id as string) ?? 'new-app';
+      const id = (parsed.id as string) ?? "new-app";
       const result = s.createAppResult ?? {
-        app: { id, name: parsed.name, kind: 'app', hasIndex: true },
+        app: { id, name: parsed.name, kind: "app", hasIndex: true },
       };
       const app = result.app as Partial<AppMetaEntry> | undefined;
       if (app?.id) {
@@ -331,11 +357,11 @@ async function route(
   }
 
   // ---- single app: /centraid/_apps/:id[/...] ----
-  if (seg[0] === 'centraid' && seg[1] === '_apps' && seg[2]) {
+  if (seg[0] === "centraid" && seg[1] === "_apps" && seg[2]) {
     const id = decodeURIComponent(seg[2]);
     const sub = seg[3];
     if (!sub) {
-      if (method === 'DELETE') {
+      if (method === "DELETE") {
         // Mirror the gateway: a 200 or 404 (already-gone) drops the app from
         // the registry, so a subsequent listApps() won't resurrect the tile.
         // A 5xx leaves it registered. (Offline is modelled by closing the
@@ -343,43 +369,57 @@ async function route(
         if (s.deleteStatus === 200 || s.deleteStatus === 404) {
           s.apps = s.apps.filter((a) => a.id !== id);
           if (options.appsDir) {
-            await fs.rm(path.join(options.appsDir, id), { recursive: true, force: true });
+            await fs.rm(path.join(options.appsDir, id), {
+              recursive: true,
+              force: true,
+            });
           }
         }
         if (s.deleteStatus === 200) return json(res, 200, { id });
-        return json(res, s.deleteStatus, { error: s.deleteStatus === 404 ? 'not_found' : 'error' });
+        return json(res, s.deleteStatus, {
+          error: s.deleteStatus === 404 ? "not_found" : "error",
+        });
       }
     }
-    if (sub === 'logs' && method === 'GET')
+    if (sub === "logs" && method === "GET")
       return json(res, 200, { entries: s.logsById[id] ?? [] });
-    if (sub === 'files') {
-      if (method === 'GET') return json(res, 200, { files: s.filesById[id] ?? [] });
-      if (method === 'PUT')
-        return json(res, 200, { path: decodeURIComponent(seg[4] ?? ''), size: body.length });
+    if (sub === "files") {
+      if (method === "GET")
+        return json(res, 200, { files: s.filesById[id] ?? [] });
+      if (method === "PUT")
+        return json(res, 200, {
+          path: decodeURIComponent(seg[4] ?? ""),
+          size: body.length,
+        });
     }
-    if (sub === 'meta' && method === 'POST') return json(res, 200, { ok: true });
-    if (sub === 'publish' && method === 'POST') {
-      if (s.publishStatus !== 200) return json(res, s.publishStatus, { error: 'publish_failed' });
-      return json(res, 200, { id, versionTag: 'v1', sha: 'abc123' });
+    if (sub === "meta" && method === "POST")
+      return json(res, 200, { ok: true });
+    if (sub === "publish" && method === "POST") {
+      if (s.publishStatus !== 200)
+        return json(res, s.publishStatus, { error: "publish_failed" });
+      return json(res, 200, { id, versionTag: "v1", sha: "abc123" });
     }
-    if (sub === 'reset-data' && method === 'POST')
+    if (sub === "reset-data" && method === "POST")
       return json(res, 200, { id, seeded: true, migrationsApplied: [] });
-    if (sub === 'git-versions' && method === 'GET') {
+    if (sub === "git-versions" && method === "GET") {
       const v = s.versions[id];
-      if (!v) return json(res, 404, { error: 'no_tags' });
+      if (!v) return json(res, 404, { error: "no_tags" });
       return json(res, 200, { versions: v });
     }
-    if (sub === 'rollback' && method === 'POST') return json(res, 200, { id, sha: 'rollback-sha' });
+    if (sub === "rollback" && method === "POST")
+      return json(res, 200, { id, sha: "rollback-sha" });
   }
 
   // ---- templates ----
-  if (p === '/centraid/_templates' && method === 'GET') return json(res, 200, s.templates);
+  if (p === "/centraid/_templates" && method === "GET")
+    return json(res, 200, s.templates);
 
   // ---- user identity + prefs ----
-  if (p === '/_centraid-user/id' && method === 'GET') return json(res, 200, { id: 'user-test' });
-  if (p === '/_centraid-user/prefs') {
-    if (method === 'GET') return json(res, 200, { prefs: s.prefs });
-    if (method === 'PUT') {
+  if (p === "/_centraid-user/id" && method === "GET")
+    return json(res, 200, { id: "user-test" });
+  if (p === "/_centraid-user/prefs") {
+    if (method === "GET") return json(res, 200, { prefs: s.prefs });
+    if (method === "PUT") {
       const patch = (safeJson(body).patch as Record<string, unknown>) ?? {};
       s.prefs = { ...s.prefs, ...patch };
       return json(res, 200, { prefs: s.prefs });
@@ -387,121 +427,159 @@ async function route(
   }
 
   // ---- automations ----
-  if (p === '/centraid/_automations') {
-    if (method === 'GET') {
+  if (p === "/centraid/_automations") {
+    if (method === "GET") {
       if (s.automationsStatus !== 200)
-        return json(res, s.automationsStatus, { error: 'list_failed' });
+        return json(res, s.automationsStatus, { error: "list_failed" });
       return json(res, 200, { rows: s.automations });
     }
-    if (method === 'POST')
-      return json(res, 200, s.createAutomationResult ?? { row: defaultAutomationRow(body) });
-    if (method === 'DELETE') return json(res, 200, { deletedApp: true });
+    if (method === "POST")
+      return json(
+        res,
+        200,
+        s.createAutomationResult ?? { row: defaultAutomationRow(body) }
+      );
+    if (method === "DELETE") return json(res, 200, { deletedApp: true });
   }
-  if (p === '/centraid/_automations/read' && method === 'GET') {
-    const ref = url.searchParams.get('ref') ?? '';
+  if (p === "/centraid/_automations/read" && method === "GET") {
+    const ref = url.searchParams.get("ref") ?? "";
     const row = s.automations.find((a) => a.ref === ref) ?? null;
     return json(res, 200, { row });
   }
-  if (p === '/centraid/_automations/turn-now' && method === 'POST') {
-    if (s.runNowStatus !== 200) return json(res, s.runNowStatus, { error: 'run_failed' });
+  if (p === "/centraid/_automations/turn-now" && method === "POST") {
+    if (s.runNowStatus !== 200)
+      return json(res, s.runNowStatus, { error: "run_failed" });
     // Mirror the gateway: firing a turn materialises its ledger row, so the
     // automation thread feed shows it on the authoritative reload. The
     // thread is the only route to the forensic viewer now (Run now no longer
     // navigates there itself), so without this the feed stays empty.
     const fired = s.automationTurnsById[s.nextAutomationTurnId];
-    if (fired && !s.automationTurns.some((turn) => turn['turnId'] === s.nextAutomationTurnId)) {
+    if (
+      fired &&
+      !s.automationTurns.some(
+        (turn) => turn["turnId"] === s.nextAutomationTurnId
+      )
+    ) {
       s.automationTurns = [fired, ...s.automationTurns];
     }
     return json(res, 202, { turnId: s.nextAutomationTurnId });
   }
-  if (p === '/centraid/_automations/turns' && method === 'GET') {
-    const ref = url.searchParams.get('ref');
+  if (p === "/centraid/_automations/turns" && method === "GET") {
+    const ref = url.searchParams.get("ref");
     const turns = ref
       ? s.automationTurns.filter((turn) => turn.automationId === ref)
       : s.automationTurns;
     return json(res, 200, { turns });
   }
-  if (p === '/centraid/_automations/turn' && method === 'GET') {
-    const turnId = url.searchParams.get('turnId') ?? '';
-    const ref = url.searchParams.get('ref');
+  if (p === "/centraid/_automations/turn" && method === "GET") {
+    const turnId = url.searchParams.get("turnId") ?? "";
+    const ref = url.searchParams.get("ref");
     const turn =
       s.automationTurnsById[turnId] ??
-      (ref ? s.automationTurns.find((candidate) => candidate.automationId === ref) : undefined) ??
+      (ref
+        ? s.automationTurns.find((candidate) => candidate.automationId === ref)
+        : undefined) ??
       null;
     return json(res, 200, {
       turn,
-      ...(url.searchParams.get('expand') === 'items' && turn
+      ...(url.searchParams.get("expand") === "items" && turn
         ? {
             items:
-              s.automationItemsByTurn[typeof turn.turnId === 'string' ? turn.turnId : turnId] ?? [],
+              s.automationItemsByTurn[
+                typeof turn.turnId === "string" ? turn.turnId : turnId
+              ] ?? [],
           }
         : {}),
     });
   }
-  if (p === '/centraid/_automations/turn/items' && method === 'GET') {
-    const turnId = url.searchParams.get('turnId') ?? '';
+  if (p === "/centraid/_automations/turn/items" && method === "GET") {
+    const turnId = url.searchParams.get("turnId") ?? "";
     return json(res, 200, { items: s.automationItemsByTurn[turnId] ?? [] });
   }
-  if (p === '/centraid/_automations/turn/events' && method === 'GET') {
+  if (p === "/centraid/_automations/turn/events" && method === "GET") {
     void writeSse(res, s.automationTurnFrames);
     return;
   }
-  if (p === '/centraid/_automations/turn/pin' && method === 'POST')
+  if (p === "/centraid/_automations/turn/pin" && method === "POST")
     return json(res, 200, { ok: true });
-  if (p === '/centraid/_automations/set-enabled' && method === 'POST') {
-    if (s.setEnabledStatus !== 200) return json(res, s.setEnabledStatus, { error: 'failed' });
+  if (p === "/centraid/_automations/set-enabled" && method === "POST") {
+    if (s.setEnabledStatus !== 200)
+      return json(res, s.setEnabledStatus, { error: "failed" });
     // Mirror the gateway: the toggle persists, so the thread's reload-after-
     // toggle renders the new state instead of snapping back to the seeded one.
     // `ref` travels in the query string; `enabled` in the body.
-    const ref = url.searchParams.get('ref');
-    const next = safeJson(body)['enabled'];
+    const ref = url.searchParams.get("ref");
+    const next = safeJson(body)["enabled"];
     s.automations = s.automations.map((a) =>
-      a['ref'] === ref
+      a["ref"] === ref
         ? {
             ...a,
             enabled: next,
-            ...(a['manifest'] && typeof a['manifest'] === 'object'
+            ...(a["manifest"] && typeof a["manifest"] === "object"
               ? {
                   manifest: {
-                    ...(a['manifest'] as Record<string, unknown>),
+                    ...(a["manifest"] as Record<string, unknown>),
                     enabled: next,
                   },
                 }
               : {}),
           }
-        : a,
+        : a
     );
     return json(res, 200, { ok: true });
   }
 
   // ---- insights ----
-  if (p === '/centraid/_insights/summary' && method === 'GET') return json(res, 200, s.insights);
+  if (p === "/centraid/_insights/summary" && method === "GET")
+    return json(res, 200, s.insights);
 
   // ---- runner / agents ----
-  if (p === '/centraid/_turn/runner-status' && method === 'GET')
+  if (p === "/centraid/_turn/runner-status" && method === "GET")
     return json(res, 200, s.runnerStatus);
-  if (p === '/centraid/_agents/status' && method === 'GET') return json(res, 200, s.agentsStatus);
+  if (p === "/centraid/_agents/status" && method === "GET")
+    return json(res, 200, s.agentsStatus);
 
   // ---- vault consent context used by the current automation fleet/thread ----
-  if (p === '/centraid/_vault/agents' && method === 'GET') return json(res, 200, { agents: [] });
-  if (p === '/centraid/_vault/blocking' && method === 'GET')
-    return json(res, 200, { outbox: [], needsAuth: [], parked: [], scopeRequests: [] });
-  if (p === '/centraid/_vault/outbox-grants' && method === 'GET')
+  if (p === "/centraid/_vault/agents" && method === "GET")
+    return json(res, 200, { agents: [] });
+  if (p === "/centraid/_vault/blocking" && method === "GET")
+    return json(res, 200, {
+      outbox: [],
+      needsAuth: [],
+      parked: [],
+      scopeRequests: [],
+    });
+  if (p === "/centraid/_vault/outbox-grants" && method === "GET")
     return json(res, 200, { grants: [] });
 
   // ---- unified chat turn (SSE) ----
-  if (seg[0] === 'centraid' && seg[2] === '_turn' && method === 'POST') {
+  if (seg[0] === "centraid" && seg[2] === "_turn" && method === "POST") {
     void writeSse(res, s.turnFrames);
     return;
   }
 
   // ---- conversations ----
-  if (seg[0] === '_centraid-conversations' && seg[1] === 'apps' && seg[3] === 'sessions') {
+  if (
+    seg[0] === "_centraid-conversations" &&
+    seg[1] === "apps" &&
+    seg[3] === "sessions"
+  ) {
     const sid = seg[4];
-    if (!sid) {
-      if (method === 'GET') return json(res, 200, { sessions: s.conversations });
-      if (method === 'POST') {
-        const title = (safeJson(body).title as string) ?? '';
+    if (sid) {
+      if (method === "GET")
+        return json(res, 200, {
+          id: sid,
+          title: "",
+          createdAt: 0,
+          messages: s.conversationMessages,
+        });
+      if (method === "PATCH" || method === "DELETE")
+        return json(res, 200, { ok: true });
+    } else {
+      if (method === "GET")
+        return json(res, 200, { sessions: s.conversations });
+      if (method === "POST") {
+        const title = (safeJson(body).title as string) ?? "";
         const now = Date.now();
         const conv = {
           id: `conv-${s.conversations.length + 1}`,
@@ -514,19 +592,14 @@ async function route(
         s.conversations.unshift(conv);
         return json(res, 200, conv);
       }
-    } else {
-      if (method === 'GET')
-        return json(res, 200, {
-          id: sid,
-          title: '',
-          createdAt: 0,
-          messages: s.conversationMessages,
-        });
-      if (method === 'PATCH' || method === 'DELETE') return json(res, 200, { ok: true });
     }
   }
-  if (seg[0] === '_centraid-conversations' && seg[3] === 'blobs' && method === 'POST') {
-    return json(res, 200, { hash: 'blob-hash', sizeBytes: body.length });
+  if (
+    seg[0] === "_centraid-conversations" &&
+    seg[3] === "blobs" &&
+    method === "POST"
+  ) {
+    return json(res, 200, { hash: "blob-hash", sizeBytes: body.length });
   }
 
   // Absorb ambient/unknown calls so the renderer never blows up.
@@ -536,39 +609,44 @@ async function route(
 async function writeMockApp(
   appsDir: string,
   id: string,
-  app: Partial<AppMetaEntry>,
+  app: Partial<AppMetaEntry>
 ): Promise<void> {
   const directory = path.join(appsDir, id);
   await fs.mkdir(directory, { recursive: true });
   await fs.writeFile(
-    path.join(directory, 'app.json'),
-    `${JSON.stringify({ id, name: app.name ?? id, kind: app.kind ?? 'app' }, null, 2)}\n`,
+    path.join(directory, "app.json"),
+    `${JSON.stringify({ id, name: app.name ?? id, kind: app.kind ?? "app" }, null, 2)}\n`
   );
 }
 
-async function readMockApps(
-  appsDir: string,
-): Promise<{ apps: AppMetaEntry[]; automations: Array<Record<string, unknown>> }> {
-  const entries = await fs.readdir(appsDir, { withFileTypes: true }).catch(() => []);
+async function readMockApps(appsDir: string): Promise<{
+  apps: AppMetaEntry[];
+  automations: Array<Record<string, unknown>>;
+}> {
+  const entries = await fs
+    .readdir(appsDir, { withFileTypes: true })
+    .catch(() => []);
   const apps: AppMetaEntry[] = [];
   const automations: Array<Record<string, unknown>> = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+  await forEachSequentially(entries, async (entry) => {
+    if (!entry.isDirectory()) return;
     try {
       const manifest = JSON.parse(
-        await fs.readFile(path.join(appsDir, entry.name, 'app.json'), 'utf8'),
+        await fs.readFile(path.join(appsDir, entry.name, "app.json"), "utf8")
       ) as Partial<AppMetaEntry>;
       const id = manifest.id ?? entry.name;
-      if (manifest.kind === 'automation') {
+      if (manifest.kind === "automation") {
         automations.push(automationRow({ id, name: manifest.name }));
       } else {
-        apps.push(appEntry({ ...manifest, id, hasIndex: manifest.hasIndex ?? true }));
+        apps.push(
+          appEntry({ ...manifest, id, hasIndex: manifest.hasIndex ?? true })
+        );
       }
     } catch {
       // A half-written directory is intentionally absent from the mock's
       // restart inventory, matching the gateway's manifest boundary.
     }
-  }
+  });
   return { apps, automations };
 }
 
@@ -581,18 +659,18 @@ function safeJson(body: string): Record<string, unknown> {
 }
 
 function defaultCloneResult(body: string): Record<string, unknown> {
-  const templateId = (safeJson(body).templateId as string) ?? 'template';
+  const templateId = (safeJson(body).templateId as string) ?? "template";
   const id = `${templateId}-clone`;
   return {
-    app: { id, name: 'Cloned app', description: '', kind: 'app' },
+    app: { id, name: "Cloned app", description: "", kind: "app" },
     template: {
       id: templateId,
-      name: 'Template',
-      desc: '',
-      colorKey: 'violet',
-      iconKey: 'Todo',
-      version: '1',
-      kind: 'app',
+      name: "Template",
+      desc: "",
+      colorKey: "violet",
+      iconKey: "Todo",
+      version: "1",
+      kind: "app",
     },
     webhooks: [],
   };
@@ -600,24 +678,24 @@ function defaultCloneResult(body: string): Record<string, unknown> {
 
 function defaultAutomationRow(body: string): Record<string, unknown> {
   const parsed = safeJson(body);
-  const id = (parsed.id as string) ?? 'auto-1';
+  const id = (parsed.id as string) ?? "auto-1";
   return {
     id,
     dir: `/${id}`,
-    name: (parsed.name as string) ?? 'New automation',
+    name: (parsed.name as string) ?? "New automation",
     ref: `${id}/${id}`,
     enabled: false,
     triggers: [],
     ownerApp: id,
     manifest: {
-      name: (parsed.name as string) ?? 'New automation',
-      version: '1',
+      name: (parsed.name as string) ?? "New automation",
+      version: "1",
       enabled: false,
-      prompt: '',
+      prompt: "",
       triggers: [],
       requires: {},
-      history: { keep: 'all' },
-      generated: { by: 'test', at: '2024-01-01T00:00:00Z' },
+      history: { keep: "all" },
+      generated: { by: "test", at: "2024-01-01T00:00:00Z" },
     },
   };
 }
@@ -633,12 +711,12 @@ export interface TestEnv {
 }
 
 export async function makeEnv(): Promise<TestEnv> {
-  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-e2e-'));
-  const userData = path.join(workspace, 'userData');
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "centraid-e2e-"));
+  const userData = path.join(workspace, "userData");
   await fs.mkdir(userData, { recursive: true });
-  const gatewayId = crypto.randomBytes(32).toString('hex');
+  const gatewayId = crypto.randomBytes(32).toString("hex");
   // Mock-owned app files are fixture data, not desktop connection state.
-  const appsDir = path.join(workspace, 'mock-apps');
+  const appsDir = path.join(workspace, "mock-apps");
   await fs.mkdir(appsDir, { recursive: true });
   return { workspace, userData, gatewayId, appsDir, gatewayProxies: {} };
 }
@@ -655,26 +733,28 @@ export async function cleanupEnv(env: TestEnv): Promise<void> {
 export async function seedRemoteGateway(
   env: TestEnv,
   gateway: { url: string },
-  opts: { onboarding?: boolean } = {},
+  opts: { onboarding?: boolean } = {}
 ): Promise<void> {
   await seedRemoteGatewayProfile(env, gateway, {
     id: env.gatewayId,
-    label: 'E2E Gateway',
+    label: "E2E Gateway",
   });
   await fs.writeFile(
-    path.join(env.userData, 'centraid-settings.json'),
+    path.join(env.userData, "centraid-settings.json"),
     JSON.stringify(
       {
         activeGatewayId: env.gatewayId,
         builderEnabled: true,
-        changelogSeenVersion: '0.1.0',
-        remoteTemplatesUrl: '',
-        ...(opts.onboarding ? {} : { onboardingCompletedAt: '2024-01-01T00:00:00.000Z' }),
+        changelogSeenVersion: "0.1.0",
+        remoteTemplatesUrl: "",
+        ...(opts.onboarding
+          ? {}
+          : { onboardingCompletedAt: "2024-01-01T00:00:00.000Z" }),
       },
       null,
-      2,
+      2
     ),
-    { mode: 0o600 },
+    { mode: 0o600 }
   );
 }
 
@@ -682,34 +762,38 @@ export async function seedRemoteGateway(
 export async function seedRemoteGatewayProfile(
   env: TestEnv,
   gateway: { url: string },
-  opts: { id?: string; label?: string } = {},
+  opts: { id?: string; label?: string } = {}
 ): Promise<string> {
-  const id = opts.id ?? crypto.randomBytes(32).toString('hex');
-  const label = opts.label ?? 'E2E Gateway';
-  const file = path.join(env.userData, 'connections.json');
-  const profiles = JSON.parse(await fs.readFile(file, 'utf8').catch(() => '[]')) as Array<
-    Record<string, unknown>
-  >;
+  const id = opts.id ?? crypto.randomBytes(32).toString("hex");
+  const label = opts.label ?? "E2E Gateway";
+  const file = path.join(env.userData, "connections.json");
+  const profiles = JSON.parse(
+    await fs.readFile(file, "utf8").catch(() => "[]")
+  ) as Array<Record<string, unknown>>;
   profiles.push({
     id,
-    kind: 'remote',
+    kind: "remote",
     label,
     displayName: label,
     endpointId: id,
     rememberDevice: false,
-    createdAt: '2024-01-01T00:00:00.000Z',
+    createdAt: "2024-01-01T00:00:00.000Z",
   });
-  await fs.writeFile(file, `${JSON.stringify(profiles, null, 2)}\n`, { mode: 0o600 });
+  await fs.writeFile(file, `${JSON.stringify(profiles, null, 2)}\n`, {
+    mode: 0o600,
+  });
   env.gatewayProxies[id] = gateway.url;
   return id;
 }
 
-export async function launchApp(env: TestEnv): Promise<{ app: ElectronApplication; page: Page }> {
-  const desktopRoot = path.resolve(__dirname, '..', '..');
-  const main = path.join(desktopRoot, 'dist', 'main.js');
+export async function launchApp(
+  env: TestEnv
+): Promise<{ app: ElectronApplication; page: Page }> {
+  const desktopRoot = path.resolve(__dirname, "..", "..");
+  const main = path.join(desktopRoot, "dist", "main.js");
   await fs.access(main).catch(() => {
     throw new Error(
-      `dist/main.js not found at ${main}. Run \`npm run build\` in apps/desktop first.`,
+      `dist/main.js not found at ${main}. Run \`npm run build\` in apps/desktop first.`
     );
   });
   // Launch through a test-only entry that applies e2e-specific main-process
@@ -717,41 +801,45 @@ export async function launchApp(env: TestEnv): Promise<{ app: ElectronApplicatio
   // production main.ts stays free of any test/CI/platform branches. Electron
   // resolves the app root by walking up to apps/desktop/package.json, so the
   // app behaves identically to launching `desktopRoot` directly.
-  const entry = path.join(__dirname, 'electron-entry.mjs');
+  const entry = path.join(__dirname, "electron-entry.mjs");
   const app = await _electron.launch({
     args: [entry, `--user-data-dir=${env.userData}`],
     env: {
       ...process.env,
-      NODE_ENV: 'test',
+      NODE_ENV: "test",
       // The local gateway moved out of Electron userData in #555. Keep every
       // E2E worker's real gateway state inside its disposable workspace so it
       // cannot contend with the developer's/service's canonical gateway.db.
-      CENTRAID_DATA_DIR: path.join(env.workspace, 'gateway-data'),
-      CENTRAID_EMBEDDED_GATEWAY: '1',
+      CENTRAID_DATA_DIR: path.join(env.workspace, "gateway-data"),
+      CENTRAID_EMBEDDED_GATEWAY: "1",
       CENTRAID_E2E_IROH_PROXY_MAP: JSON.stringify(env.gatewayProxies),
     },
   });
   const page = await app.firstWindow();
-  page.on('pageerror', (error) => {
-    process.stderr.write(`[desktop-e2e pageerror] ${error.stack ?? error.message}\n`);
+  page.on("pageerror", (error) => {
+    process.stderr.write(
+      `[desktop-e2e pageerror] ${error.stack ?? error.message}\n`
+    );
   });
-  page.on('console', (message) => {
-    if (message.type() === 'error') {
+  page.on("console", (message) => {
+    if (message.type() === "error") {
       process.stderr.write(`[desktop-e2e console] ${message.text()}\n`);
     }
   });
-  await page.waitForLoadState('domcontentloaded');
+  await page.waitForLoadState("domcontentloaded");
   return { app, page };
 }
 
 // ─────────────────────────── DOM helpers ───────────────────────────
 
 /** A published-app metadata row for the gateway's listApps response. */
-export function appEntry(over: Partial<AppMetaEntry> & { id: string }): AppMetaEntry {
+export function appEntry(
+  over: Partial<AppMetaEntry> & { id: string }
+): AppMetaEntry {
   return {
     ...over,
     name: over.name ?? over.id,
-    kind: over.kind ?? 'app',
+    kind: over.kind ?? "app",
     hasIndex: over.hasIndex ?? true,
   };
 }
@@ -766,7 +854,7 @@ export function automationRow(over: {
 }): Record<string, unknown> {
   const id = over.id;
   const ref = `${id}/${id}`;
-  const triggers = over.triggers ?? [{ kind: 'cron', expr: '0 9 * * *' }];
+  const triggers = over.triggers ?? [{ kind: "cron", expr: "0 9 * * *" }];
   return {
     id,
     dir: `/${id}`,
@@ -777,14 +865,14 @@ export function automationRow(over: {
     ownerApp: id,
     manifest: {
       name: over.name ?? id,
-      version: '1',
-      description: over.description ?? '',
+      version: "1",
+      description: over.description ?? "",
       enabled: over.enabled ?? true,
-      prompt: 'Do the thing.',
+      prompt: "Do the thing.",
       triggers,
-      requires: { model: 'tier-deep' },
-      history: { keep: 'all' },
-      generated: { by: 'test', at: '2024-01-01T00:00:00Z' },
+      requires: { model: "tier-deep" },
+      history: { keep: "all" },
+      generated: { by: "test", at: "2024-01-01T00:00:00Z" },
     },
   };
 }
@@ -804,8 +892,8 @@ export function automationTurnRecord(over: {
     conversationId: over.automationId,
     seq: 0,
     automationId: over.automationId,
-    triggerKind: over.triggerKind ?? 'manual',
-    triggerOrigin: over.triggerOrigin ?? 'manual',
+    triggerKind: over.triggerKind ?? "manual",
+    triggerOrigin: over.triggerOrigin ?? "manual",
     startedAt: 1_700_000_000_000,
     endedAt: 1_700_000_002_500,
     ok: over.ok ?? true,
@@ -835,8 +923,8 @@ export function automationTurnItem(over: {
     itemId: `${over.turnId}-i${over.ordinal}`,
     turnId: over.turnId,
     ordinal: over.ordinal,
-    kind: over.kind ?? 'tool',
-    name: over.name ?? 'do_thing',
+    kind: over.kind ?? "tool",
+    name: over.name ?? "do_thing",
     argsJson: over.argsJson ?? '{"x":1}',
     outputJson: over.outputJson ?? '{"ok":true}',
     ok: over.ok ?? true,
@@ -846,28 +934,28 @@ export function automationTurnItem(over: {
     durationMs: 1000,
     inputTokens: 100,
     outputTokens: 50,
-    model: 'tier-deep',
-    provider: 'test',
+    model: "tier-deep",
+    provider: "test",
   };
 }
 
 /** Mark an app "known/published" in localStorage so it isn't classed a draft. */
 export async function markUserApp(
   page: Page,
-  app: { id: string; name: string; desc?: string },
+  app: { id: string; name: string; desc?: string }
 ): Promise<void> {
   await page.evaluate((a) => {
-    const KEY = 'centraid.v1.home.userApps';
-    const existing = JSON.parse(localStorage.getItem(KEY) ?? '[]') as Array<
+    const KEY = "centraid.v1.home.userApps";
+    const existing = JSON.parse(localStorage.getItem(KEY) ?? "[]") as Array<
       Record<string, unknown>
     >;
     existing.push({
       id: a.id,
       name: a.name,
-      desc: a.desc ?? 'Built with Centraid.',
-      iconKey: 'Todo',
-      color: '#5847e0',
-      colorKey: 'violet',
+      desc: a.desc ?? "Built with Centraid.",
+      iconKey: "Todo",
+      color: "#5847e0",
+      colorKey: "violet",
       centraidAppId: a.id,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -878,15 +966,22 @@ export async function markUserApp(
 
 /** Wait for the home shell to be present. */
 export async function waitForHome(page: Page): Promise<void> {
-  await page.locator('[data-sidebar]').waitFor({ state: 'visible' });
-  const library = page.locator('[role="tablist"][aria-label="Filter your library by kind"]');
+  await page.locator("[data-sidebar]").waitFor({ state: "visible" });
+  const library = page.locator(
+    '[role="tablist"][aria-label="Filter your library by kind"]'
+  );
   try {
-    await library.waitFor({ state: 'visible', timeout: 10_000 });
+    await library.waitFor({ state: "visible", timeout: 10_000 });
   } catch (error) {
-    const body = (await page.locator('body').textContent())?.replaceAll(/\s+/g, ' ').slice(0, 500);
-    throw new Error(`home library did not render at ${page.url()}; shell text: ${body ?? ''}`, {
-      cause: error,
-    });
+    const body = (await page.locator("body").textContent())
+      ?.replaceAll(/\s+/gu, " ")
+      .slice(0, 500);
+    throw new Error(
+      `home library did not render at ${page.url()}; shell text: ${body ?? ""}`,
+      {
+        cause: error,
+      }
+    );
   }
 }
 
@@ -912,7 +1007,7 @@ export async function closeApp(app: ElectronApplication): Promise<void> {
   // outer `finally` as a backstop. Playwright throws from `process()` once the
   // application is gone, which for a teardown helper just means "already
   // closed" — nothing left to do.
-  let child: ReturnType<ElectronApplication['process']>;
+  let child: ReturnType<ElectronApplication["process"]>;
   try {
     child = app.process();
   } catch {
@@ -920,12 +1015,12 @@ export async function closeApp(app: ElectronApplication): Promise<void> {
   }
   const exited =
     child.exitCode === null
-      ? new Promise<void>((resolve) => child.once('exit', () => resolve()))
+      ? new Promise<void>((resolve) => child.once("exit", () => resolve()))
       : Promise.resolve();
 
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<'timeout'>((resolve) => {
-    timer = setTimeout(() => resolve('timeout'), CLOSE_TIMEOUT_MS);
+  const deadline = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), CLOSE_TIMEOUT_MS);
   });
 
   // Swallowed here, not at the race: if we end up force-killing, the pending
@@ -935,18 +1030,18 @@ export async function closeApp(app: ElectronApplication): Promise<void> {
 
   try {
     const outcome = await Promise.race([
-      Promise.all([closed, exited]).then(() => 'closed' as const),
+      Promise.all([closed, exited]).then(() => "closed" as const),
       deadline,
     ]);
-    if (outcome === 'timeout') {
+    if (outcome === "timeout") {
       const where = testTitle();
       process.stderr.write(
         `\n[desktop-e2e] !! FORCE-KILL: electronApplication.close() did not return within ` +
           `${CLOSE_TIMEOUT_MS}ms during "${where}". The test body is NOT at fault — this is a ` +
-          `main-process teardown hang. SIGKILLing pid ${child.pid ?? '?'} so the worker is not ` +
-          `wedged.\n\n`,
+          `main-process teardown hang. SIGKILLing pid ${child.pid ?? "?"} so the worker is not ` +
+          `wedged.\n\n`
       );
-      child.kill('SIGKILL');
+      child.kill("SIGKILL");
       await exited;
     }
   } finally {
@@ -957,15 +1052,15 @@ export async function closeApp(app: ElectronApplication): Promise<void> {
 /** Best-effort name of the running test, for the force-kill warning. */
 function testTitle(): string {
   try {
-    return test.info().titlePath.slice(1).join(' › ') || 'unknown test';
+    return test.info().titlePath.slice(1).join(" › ") || "unknown test";
   } catch {
-    return 'unknown test (outside a test)';
+    return "unknown test (outside a test)";
   }
 }
 
 /** Click a sidebar nav item by its visible label. */
 export async function gotoNav(page: Page, label: string): Promise<void> {
-  await page.getByRole('button', { name: label, exact: true }).click();
+  await page.getByRole("button", { name: label, exact: true }).click();
 }
 
 /** The grid item for an app, keyed by its stable data-app-id anchor. */
@@ -975,28 +1070,33 @@ export function tile(page: Page, appId: string) {
 
 /** Open an app tile (the clickable card surface). */
 export async function openTile(page: Page, appId: string): Promise<void> {
-  await tile(page, appId).getByTestId('app-tile').click();
+  await tile(page, appId).getByTestId("app-tile").click();
 }
 
 /** Open a tile's overflow (⋯) action menu. Located by accessible role/name so
  * it survives card restyles — the class churn in #230 is exactly what broke
  * the old `.cd-card-more` selector. */
 export async function openTileMenu(page: Page, appId: string): Promise<void> {
-  await tile(page, appId).getByRole('button', { name: 'More actions' }).click();
-  await page.getByRole('menu').waitFor({ state: 'visible' });
+  await tile(page, appId).getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menu").waitFor({ state: "visible" });
 }
 
 /** Click a context-menu item by text. */
 export async function clickMenuItem(page: Page, text: string): Promise<void> {
-  await page.getByRole('menuitem', { name: text, exact: true }).click();
+  await page.getByRole("menuitem", { name: text, exact: true }).click();
 }
 
 /** Wait for the confirm modal with the given title. */
 export async function expectConfirm(page: Page, title: string): Promise<void> {
-  await page.getByRole('dialog', { name: title, exact: true }).waitFor({ state: 'visible' });
+  await page
+    .getByRole("dialog", { name: title, exact: true })
+    .waitFor({ state: "visible" });
 }
 
 /** Click the danger "Delete" button in the open confirm modal. */
 export async function confirmDelete(page: Page): Promise<void> {
-  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
 }

@@ -24,17 +24,16 @@
  *
  * Pure comparison is exported for unit tests.
  */
-import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { execFileSync } from "node:child_process";
+import { readFileSync, existsSync } from "node:fs";
+import path from "node:path";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const root = path.resolve(import.meta.dirname, "../..");
 
 /** Perf budget source files ratcheted under #532 (path → kind). */
 export const PERF_BUDGET_SOURCES = [
-  { path: 'apps/web/tests/e2e/perf-budgets.ts', exportName: 'perfBudgets' },
-  { path: 'packages/gateway/benchmarks/low-end-budgets.json' },
+  { path: "apps/web/tests/e2e/perf-budgets.ts", exportName: "perfBudgets" },
+  { path: "packages/gateway/benchmarks/low-end-budgets.json" },
 ];
 
 /**
@@ -45,37 +44,41 @@ export const PERF_BUDGET_SOURCES = [
  */
 export function diffCoverageFloors(base, head) {
   const errors = [];
-  if (!base || typeof base !== 'object' || !head || typeof head !== 'object') {
+  if (!base || typeof base !== "object" || !head || typeof head !== "object") {
     return errors;
   }
   const baseObj = /** @type {Record<string, unknown>} */ (base);
   const headObj = /** @type {Record<string, unknown>} */ (head);
   const keys = new Set([...Object.keys(baseObj), ...Object.keys(headObj)]);
   for (const key of keys) {
-    if (key === 'approvedDeviation' || key.startsWith('_')) continue;
+    if (key === "approvedDeviation" || key.startsWith("_")) continue;
     const b = baseObj[key];
     const h = headObj[key];
-    if (typeof b === 'number') {
-      if (typeof h !== 'number') {
+    if (typeof b === "number") {
+      if (typeof h !== "number") {
         errors.push(`coverage floor "${key}" removed (was ${b})`);
       } else if (h < b) {
         errors.push(`coverage floor "${key}" decreased ${b} → ${h}`);
       }
       continue;
     }
-    if (b && typeof b === 'object') {
-      if (!h || typeof h !== 'object') {
+    if (b && typeof b === "object") {
+      if (!h || typeof h !== "object") {
         errors.push(`coverage floor scope "${key}" removed`);
         continue;
       }
       const bb = /** @type {Record<string, number>} */ (b);
       const hh = /** @type {Record<string, number>} */ (h);
       for (const metric of new Set([...Object.keys(bb), ...Object.keys(hh)])) {
-        if (typeof bb[metric] !== 'number') continue;
-        if (typeof hh[metric] !== 'number') {
-          errors.push(`coverage floor "${key}.${metric}" removed (was ${bb[metric]})`);
+        if (typeof bb[metric] !== "number") continue;
+        if (typeof hh[metric] !== "number") {
+          errors.push(
+            `coverage floor "${key}.${metric}" removed (was ${bb[metric]})`
+          );
         } else if (hh[metric] < bb[metric]) {
-          errors.push(`coverage floor "${key}.${metric}" decreased ${bb[metric]} → ${hh[metric]}`);
+          errors.push(
+            `coverage floor "${key}.${metric}" decreased ${bb[metric]} → ${hh[metric]}`
+          );
         }
       }
     }
@@ -91,7 +94,9 @@ export function diffCoverageFloors(base, head) {
  * @returns {string[]} Human-readable decrease errors.
  */
 export function diffMutationFloors(base, head) {
-  return diffCoverageFloors(base, head).map((e) => e.replace(/^coverage floor/, 'mutation floor'));
+  return diffCoverageFloors(base, head).map((e) =>
+    e.replace(/^coverage floor/u, "mutation floor")
+  );
 }
 
 /**
@@ -102,38 +107,40 @@ export function diffMutationFloors(base, head) {
  */
 export function diffMinimumTests(base, head) {
   const errors = [];
-  const headMap = new Map((head?.flows ?? []).filter((f) => f?.id).map((f) => [f.id, f]));
+  const headMap = new Map(
+    (head?.flows ?? []).filter((f) => f?.id).map((f) => [f.id, f])
+  );
   for (const prev of base?.flows ?? []) {
     if (!prev?.id || prev.minimumTests === undefined) continue;
     const flow = headMap.get(prev.id);
     if (!flow || flow.minimumTests === undefined) {
       if (
         flow &&
-        typeof flow.approvedMinimumTestsDeviation === 'string' &&
+        typeof flow.approvedMinimumTestsDeviation === "string" &&
         flow.approvedMinimumTestsDeviation.trim()
       ) {
         continue;
       }
-      if (!flow) {
+      if (flow) {
         errors.push(
-          `flow "${prev.id}" removed (had minimumTests ${prev.minimumTests}); add approvedMinimumTestsDeviation on a residual entry or restore the flow`,
+          `flow "${prev.id}" minimumTests removed (was ${prev.minimumTests}; add approvedMinimumTestsDeviation to allow)`
         );
       } else {
         errors.push(
-          `flow "${prev.id}" minimumTests removed (was ${prev.minimumTests}; add approvedMinimumTestsDeviation to allow)`,
+          `flow "${prev.id}" removed (had minimumTests ${prev.minimumTests}); add approvedMinimumTestsDeviation on a residual entry or restore the flow`
         );
       }
       continue;
     }
     if (flow.minimumTests < prev.minimumTests) {
       if (
-        typeof flow.approvedMinimumTestsDeviation === 'string' &&
+        typeof flow.approvedMinimumTestsDeviation === "string" &&
         flow.approvedMinimumTestsDeviation.trim()
       ) {
         continue;
       }
       errors.push(
-        `flow "${flow.id}" minimumTests decreased ${prev.minimumTests} → ${flow.minimumTests} (add approvedMinimumTestsDeviation to allow)`,
+        `flow "${flow.id}" minimumTests decreased ${prev.minimumTests} → ${flow.minimumTests} (add approvedMinimumTestsDeviation to allow)`
       );
     }
   }
@@ -148,7 +155,7 @@ export function diffMinimumTests(base, head) {
  * @returns {boolean} Return value.
  */
 export function isBudgetFloorKey(key) {
-  return /^min[A-Z_]|^minimum/i.test(key);
+  return /^min[A-Z_]|^minimum/iu.test(key);
 }
 
 /**
@@ -157,16 +164,18 @@ export function isBudgetFloorKey(key) {
  * @param {string} [prefix] Path prefix.
  * @returns {Record<string, number>} Return value.
  */
-export function flattenBudgetNumbers(value, prefix = '') {
+export function flattenBudgetNumbers(value, prefix = "") {
   /** @type {Record<string, number>} */
   const out = {};
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return out;
-  for (const [key, child] of Object.entries(/** @type {Record<string, unknown>} */ (value))) {
-    if (key.startsWith('_') || key === 'approvedDeviation') continue;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return out;
+  for (const [key, child] of Object.entries(
+    /** @type {Record<string, unknown>} */ (value)
+  )) {
+    if (key.startsWith("_") || key === "approvedDeviation") continue;
     const pathKey = prefix ? `${prefix}.${key}` : key;
-    if (typeof child === 'number' && Number.isFinite(child)) {
+    if (typeof child === "number" && Number.isFinite(child)) {
       out[pathKey] = child;
-    } else if (child && typeof child === 'object' && !Array.isArray(child)) {
+    } else if (child && typeof child === "object" && !Array.isArray(child)) {
       Object.assign(out, flattenBudgetNumbers(child, pathKey));
     }
   }
@@ -181,7 +190,10 @@ export function flattenBudgetNumbers(value, prefix = '') {
  * @returns {Record<string, number>} Flattened path → number.
  */
 export function extractBudgetNumbersFromSource(source, exportName) {
-  const marker = new RegExp(`export\\s+const\\s+${exportName}\\s*(?::\\s*[^=]+)?=\\s*\\{`);
+  const marker = new RegExp(
+    `export\\s+const\\s+${exportName}\\s*(?::\\s*[^=]+)?=\\s*\\{`,
+    "u"
+  );
   const match = marker.exec(source);
   if (!match || match.index === undefined) return {};
   const start = match.index + match[0].length - 1;
@@ -189,8 +201,8 @@ export function extractBudgetNumbersFromSource(source, exportName) {
   let end = -1;
   for (let i = start; i < source.length; i++) {
     const ch = source[i];
-    if (ch === '{') depth += 1;
-    else if (ch === '}') {
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
       depth -= 1;
       if (depth === 0) {
         end = i;
@@ -216,39 +228,39 @@ function parseBudgetObjectLiteral(text) {
   const s = text;
 
   function skipWs() {
-    while (i < s.length && /\s|,/.test(s[i])) i += 1;
+    while (i < s.length && /\s|,/u.test(s[i])) i += 1;
   }
 
   function readIdent() {
-    const m = /^[A-Za-z_][A-Za-z0-9_]*/.exec(s.slice(i));
+    const m = /^[A-Za-z_][A-Za-z0-9_]*/u.exec(s.slice(i));
     if (!m) return null;
     i += m[0].length;
     return m[0];
   }
 
   function readNumber() {
-    const m = /^-?\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?/.exec(s.slice(i));
+    const m = /^-?\d[\d_]*(?:\.\d[\d_]*)?(?:[eE][+-]?\d+)?/u.exec(s.slice(i));
     if (!m) return null;
     i += m[0].length;
-    return Number(m[0].replace(/_/g, ''));
+    return Number(m[0].replace(/_/gu, ""));
   }
 
   function parseObject() {
-    if (s[i] !== '{') return;
+    if (s[i] !== "{") return;
     i += 1;
     while (i < s.length) {
       skipWs();
-      if (s[i] === '}') {
+      if (s[i] === "}") {
         i += 1;
         return;
       }
-      if (s[i] === '/' && s[i + 1] === '/') {
-        while (i < s.length && s[i] !== '\n') i += 1;
+      if (s[i] === "/" && s[i + 1] === "/") {
+        while (i < s.length && s[i] !== "\n") i += 1;
         continue;
       }
-      if (s[i] === '/' && s[i + 1] === '*') {
+      if (s[i] === "/" && s[i + 1] === "*") {
         i += 2;
-        while (i < s.length && !(s[i] === '*' && s[i + 1] === '/')) i += 1;
+        while (i < s.length && !(s[i] === "*" && s[i + 1] === "/")) i += 1;
         i += 2;
         continue;
       }
@@ -258,18 +270,18 @@ function parseBudgetObjectLiteral(text) {
         continue;
       }
       skipWs();
-      if (s[i] === ':') i += 1;
+      if (s[i] === ":") i += 1;
       skipWs();
-      if (s[i] === '{') {
+      if (s[i] === "{") {
         stack.push(key);
         parseObject();
         stack.pop();
       } else {
         const num = readNumber();
         if (num !== null && Number.isFinite(num)) {
-          out[[...stack, key].join('.')] = num;
+          out[[...stack, key].join(".")] = num;
         } else {
-          while (i < s.length && s[i] !== ',' && s[i] !== '}') i += 1;
+          while (i < s.length && s[i] !== "," && s[i] !== "}") i += 1;
         }
       }
       skipWs();
@@ -289,23 +301,27 @@ function parseBudgetObjectLiteral(text) {
  * @param {string} [label] Source label for error messages.
  * @returns {string[]} Return value.
  */
-export function diffPerfBudgetNumbers(base, head, label = 'perf budget') {
+export function diffPerfBudgetNumbers(base, head, label = "perf budget") {
   const errors = [];
   for (const key of Object.keys(base)) {
-    const leaf = key.includes('.') ? key.slice(key.lastIndexOf('.') + 1) : key;
+    const leaf = key.includes(".") ? key.slice(key.lastIndexOf(".") + 1) : key;
     const floor = isBudgetFloorKey(leaf);
     const b = base[key];
     const h = head[key];
-    if (typeof h !== 'number') {
+    if (typeof h !== "number") {
       errors.push(`${label} "${key}" removed (was ${b})`);
       continue;
     }
     if (floor) {
       if (h < b) {
-        errors.push(`${label} "${key}" loosened ${b} → ${h} (min floors may only rise)`);
+        errors.push(
+          `${label} "${key}" loosened ${b} → ${h} (min floors may only rise)`
+        );
       }
     } else if (h > b) {
-      errors.push(`${label} "${key}" widened ${b} → ${h} (ceilings may only tighten)`);
+      errors.push(
+        `${label} "${key}" widened ${b} → ${h} (ceilings may only tighten)`
+      );
     }
   }
   return errors;
@@ -319,9 +335,12 @@ export function diffPerfBudgetNumbers(base, head, label = 'perf budget') {
 export function hasApprovedDeviation(head) {
   return (
     !!head &&
-    typeof head === 'object' &&
-    typeof (/** @type {{ approvedDeviation?: string }} */ (head).approvedDeviation) === 'string' &&
-    /** @type {{ approvedDeviation: string }} */ (head).approvedDeviation.trim().length > 0
+    typeof head === "object" &&
+    typeof (
+      /** @type {{ approvedDeviation?: string }} */ (head).approvedDeviation
+    ) === "string" &&
+    /** @type {{ approvedDeviation: string }} */ (head).approvedDeviation.trim()
+      .length > 0
   );
 }
 
@@ -349,12 +368,18 @@ export function ratchetFloors({
   const floors = diffCoverageFloors(baseFloors, headFloors);
   const mins = diffMinimumTests(baseMatrix, headMatrix);
   const mutation =
-    baseMutation && headMutation ? diffMutationFloors(baseMutation, headMutation) : [];
+    baseMutation && headMutation
+      ? diffMutationFloors(baseMutation, headMutation)
+      : [];
   /** @type {string[]} */
   const perf = [];
   for (const entry of perfBudgets) {
     const errs = diffPerfBudgetNumbers(entry.base, entry.head, entry.label);
-    if (errs.length && entry.approvedDeviation && entry.approvedDeviation.trim()) {
+    if (
+      errs.length &&
+      entry.approvedDeviation &&
+      entry.approvedDeviation.trim()
+    ) {
       continue;
     }
     perf.push(...errs);
@@ -362,10 +387,17 @@ export function ratchetFloors({
 
   let remainingFloors = floors;
   let remainingMutation = mutation;
-  if (floors.length > 0 && hasApprovedDeviation(headFloors)) remainingFloors = [];
-  if (mutation.length > 0 && hasApprovedDeviation(headMutation)) remainingMutation = [];
+  if (floors.length > 0 && hasApprovedDeviation(headFloors))
+    remainingFloors = [];
+  if (mutation.length > 0 && hasApprovedDeviation(headMutation))
+    remainingMutation = [];
 
-  const remaining = [...remainingFloors, ...remainingMutation, ...mins, ...perf];
+  const remaining = [
+    ...remainingFloors,
+    ...remainingMutation,
+    ...mins,
+    ...perf,
+  ];
   const anyWaived =
     (floors.length > 0 && remainingFloors.length === 0) ||
     (mutation.length > 0 && remainingMutation.length === 0);
@@ -374,9 +406,9 @@ export function ratchetFloors({
 
 function readJsonAt(ref, relPath) {
   try {
-    const raw = execFileSync('git', ['show', `${ref}:${relPath}`], {
+    const raw = execFileSync("git", ["show", `${ref}:${relPath}`], {
       cwd: root,
-      encoding: 'utf8',
+      encoding: "utf8",
       maxBuffer: 8 * 1024 * 1024,
     });
     return JSON.parse(raw);
@@ -387,9 +419,9 @@ function readJsonAt(ref, relPath) {
 
 function readTextAt(ref, relPath) {
   try {
-    return execFileSync('git', ['show', `${ref}:${relPath}`], {
+    return execFileSync("git", ["show", `${ref}:${relPath}`], {
       cwd: root,
-      encoding: 'utf8',
+      encoding: "utf8",
       maxBuffer: 8 * 1024 * 1024,
     });
   } catch {
@@ -399,11 +431,11 @@ function readTextAt(ref, relPath) {
 
 function resolveBase(explicit) {
   if (explicit) return explicit;
-  for (const candidate of ['origin/main', 'main', 'origin/master', 'master']) {
+  for (const candidate of ["origin/main", "main", "origin/master", "master"]) {
     try {
-      execFileSync('git', ['rev-parse', '--verify', candidate], {
+      execFileSync("git", ["rev-parse", "--verify", candidate], {
         cwd: root,
-        stdio: ['ignore', 'pipe', 'ignore'],
+        stdio: ["ignore", "pipe", "ignore"],
       });
       return candidate;
     } catch {
@@ -416,9 +448,9 @@ function resolveBase(explicit) {
 function parseArgs(argv) {
   const out = { base: null, help: false };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--base' && argv[i + 1]) {
+    if (argv[i] === "--base" && argv[i + 1]) {
       out.base = argv[++i];
-    } else if (argv[i] === '--help' || argv[i] === '-h') {
+    } else if (argv[i] === "--help" || argv[i] === "-h") {
       out.help = true;
     }
   }
@@ -437,18 +469,19 @@ function loadBudgetSource(absPath, source, ref) {
   if (ref) {
     text = readTextAt(ref, source.path);
   } else if (existsSync(absPath)) {
-    text = readFileSync(absPath, 'utf8');
+    text = readFileSync(absPath, "utf8");
   }
-  if (!text) return { numbers: {}, approvedDeviation: '' };
+  if (!text) return { numbers: {}, approvedDeviation: "" };
 
-  let approvedDeviation = '';
-  const waiver = /approvedDeviation\s*[:=]\s*['"`]([^'"`]+)['"`]/.exec(text);
-  if (waiver) approvedDeviation = waiver[1];
+  let approvedDeviation = "";
+  const waiver =
+    /approvedDeviation\s*[:=]\s*['"`](?<deviation>[^'"`]+)['"`]/u.exec(text);
+  if (waiver?.groups?.deviation) approvedDeviation = waiver.groups.deviation;
 
-  if (source.path.endsWith('.json')) {
+  if (source.path.endsWith(".json")) {
     try {
       const parsed = JSON.parse(text);
-      if (typeof parsed.approvedDeviation === 'string') {
+      if (typeof parsed.approvedDeviation === "string") {
         approvedDeviation = parsed.approvedDeviation;
       }
       return { numbers: flattenBudgetNumbers(parsed), approvedDeviation };
@@ -468,45 +501,56 @@ function loadBudgetSource(absPath, source, ref) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
-    console.log('Usage: node scripts/test-report/ratchet-floors.mjs [--base <ref>]');
+    console.log(
+      "Usage: node scripts/test-report/ratchet-floors.mjs [--base <ref>]"
+    );
     process.exit(0);
   }
   const baseRef = resolveBase(args.base);
   if (!baseRef) {
     console.error(
-      'ratchet-floors: no merge base found (tried origin/main, main, origin/master, master). Fetch the default branch or pass --base <ref>.',
+      "ratchet-floors: no merge base found (tried origin/main, main, origin/master, master). Fetch the default branch or pass --base <ref>."
     );
     process.exitCode = 1;
     return;
   }
 
-  const floorsPath = 'tests/coverage-floors.json';
-  const matrixPath = 'tests/matrix.json';
-  const mutationPath = 'tests/mutation-floors.json';
-  if (!existsSync(path.join(root, floorsPath)) || !existsSync(path.join(root, matrixPath))) {
-    console.error(`ratchet-floors: missing ${floorsPath} or ${matrixPath} in working tree`);
+  const floorsPath = "tests/coverage-floors.json";
+  const matrixPath = "tests/matrix.json";
+  const mutationPath = "tests/mutation-floors.json";
+  if (
+    !existsSync(path.join(root, floorsPath)) ||
+    !existsSync(path.join(root, matrixPath))
+  ) {
+    console.error(
+      `ratchet-floors: missing ${floorsPath} or ${matrixPath} in working tree`
+    );
     process.exitCode = 1;
     return;
   }
-  const headFloors = JSON.parse(readFileSync(path.join(root, floorsPath), 'utf8'));
-  const headMatrix = JSON.parse(readFileSync(path.join(root, matrixPath), 'utf8'));
+  const headFloors = JSON.parse(
+    readFileSync(path.join(root, floorsPath), "utf8")
+  );
+  const headMatrix = JSON.parse(
+    readFileSync(path.join(root, matrixPath), "utf8")
+  );
   const baseFloors = readJsonAt(baseRef, floorsPath);
   const baseMatrix = readJsonAt(baseRef, matrixPath);
 
   const headMutation = existsSync(path.join(root, mutationPath))
-    ? JSON.parse(readFileSync(path.join(root, mutationPath), 'utf8'))
+    ? JSON.parse(readFileSync(path.join(root, mutationPath), "utf8"))
     : null;
   const baseMutation = readJsonAt(baseRef, mutationPath);
 
   if (!baseFloors || !baseMatrix) {
     if (!baseFloors && !baseMatrix) {
       console.log(
-        `ratchet-floors: ${floorsPath} and ${matrixPath} absent on ${baseRef}; nothing to ratchet (first land)`,
+        `ratchet-floors: ${floorsPath} and ${matrixPath} absent on ${baseRef}; nothing to ratchet (first land)`
       );
       return;
     }
     console.error(
-      `ratchet-floors: ${!baseFloors ? floorsPath : matrixPath} missing on ${baseRef} while present on head — refusing silent skip`,
+      `ratchet-floors: ${baseFloors ? matrixPath : floorsPath} missing on ${baseRef} while present on head — refusing silent skip`
     );
     process.exitCode = 1;
     return;
@@ -516,7 +560,7 @@ function main() {
   // the file, decreases require approvedDeviation.
   if (headMutation && !baseMutation) {
     console.log(
-      `ratchet-floors: ${mutationPath} absent on ${baseRef}; mutation floors first land (ok)`,
+      `ratchet-floors: ${mutationPath} absent on ${baseRef}; mutation floors first land (ok)`
     );
   }
 
@@ -548,10 +592,12 @@ function main() {
     perfBudgets,
   });
   if (errors.length) {
-    console.error(`ratchet-floors: floors/budgets may only tighten (base ${baseRef})`);
+    console.error(
+      `ratchet-floors: floors/budgets may only tighten (base ${baseRef})`
+    );
     for (const e of errors) console.error(`  - ${e}`);
     console.error(
-      'To lower a floor or widen a budget deliberately, set approvedDeviation (coverage/mutation floors, budget source) or approvedMinimumTestsDeviation on the flow.',
+      "To lower a floor or widen a budget deliberately, set approvedDeviation (coverage/mutation floors, budget source) or approvedMinimumTestsDeviation on the flow."
     );
     process.exitCode = 1;
     return;
@@ -559,7 +605,8 @@ function main() {
   console.log(`ratchet-floors: ok (no decreases vs ${baseRef})`);
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain =
+  process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
 if (isMain) {
   main();
 }

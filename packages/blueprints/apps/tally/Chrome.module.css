@@ -43,7 +43,7 @@
    Emitted for both the explicit [data-theme='dark'] and the standalone
    prefers-color-scheme fallback, the same two-selector shape the token layer
    uses. */
-:global(:root[data-theme='dark']) .shell {
+:global(:root[data-theme="dark"]) .shell {
   --accd: color-mix(in oklab, var(--_accent) 78%, hsl(185 40% 8%));
   --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
   --neg: #f0805a;
@@ -60,7 +60,7 @@
    data-app-font on the inline scope wrapper (pushKnobToInlineRoot); app.css's
    :root[data-app-font] rule isn't loaded inline, so re-express it here keyed on
    that wrapper. */
-:global(.centraid-inline-scope[data-app-font='mono']) {
+:global(.centraid-inline-scope[data-app-font="mono"]) {
   --font-sans: var(--mono);
 }
 
@@ -280,7 +280,7 @@
   box-shadow: var(--shadow-sm);
 }
 .banner::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 14px;
   top: 15px;

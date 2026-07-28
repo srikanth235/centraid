@@ -1,8 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit clone orchestration + identity/visual rewrites share one copy-then-rewrite pipeline — splitting would fracture the per-clone invariants
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import type { AppInfo } from './scaffold-types.js';
-import { AppScaffoldError } from './scaffold-types.js';
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
 import {
   applyAppVisualIdentity,
   applyManifestName,
@@ -10,9 +9,11 @@ import {
   rewriteIndexHtmlTitle,
   rewriteTitleInHtml,
   stampAppVisualIdentity,
-} from './app-rewrites.js';
-import type { ScaffoldFile } from './scaffold-files.js';
-import { isDisplayNameTaken, validateAppId } from './scaffold.js';
+} from "./app-rewrites.js";
+import type { ScaffoldFile } from "./scaffold-files.js";
+import type { AppInfo } from "./scaffold-types.js";
+import { AppScaffoldError } from "./scaffold-types.js";
+import { isDisplayNameTaken, validateAppId } from "./scaffold.js";
 
 /**
  * Options for {@link cloneTemplate}.
@@ -56,19 +57,24 @@ export interface CloneTemplateOptions {
  *   - `already_exists` — destination dir already exists
  *   - `no_app`     — `templateDir` is missing or not a directory
  */
-export async function cloneTemplate(opts: CloneTemplateOptions): Promise<AppInfo> {
+export async function cloneTemplate(
+  opts: CloneTemplateOptions
+): Promise<AppInfo> {
   validateAppId(opts.newAppId);
 
   const destDir = path.join(opts.appsDir, opts.newAppId);
   if (await pathExists(destDir)) {
     throw new AppScaffoldError(
-      'already_exists',
-      `App "${opts.newAppId}" already exists at ${destDir}.`,
+      "already_exists",
+      `App "${opts.newAppId}" already exists at ${destDir}.`
     );
   }
 
   if (!(await dirExists(opts.templateDir))) {
-    throw new AppScaffoldError('no_app', `Template source not found: ${opts.templateDir}`);
+    throw new AppScaffoldError(
+      "no_app",
+      `Template source not found: ${opts.templateDir}`
+    );
   }
 
   await fs.mkdir(opts.appsDir, { recursive: true });
@@ -88,7 +94,10 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<AppInfo
   // older cached template (app.json without iconKey/colorKey) still lands
   // with the template's canonical look (issue #263).
   if (opts.iconKey || opts.colorKey) {
-    await stampAppVisualIdentity(destDir, { iconKey: opts.iconKey, colorKey: opts.colorKey });
+    await stampAppVisualIdentity(destDir, {
+      iconKey: opts.iconKey,
+      colorKey: opts.colorKey,
+    });
   }
   await rewritePackageJson(destDir, opts.newAppId);
   // Keep the browser-tab title aligned with the new display name. The
@@ -104,11 +113,13 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<AppInfo
   // rather than the original template's authoring time. No-op for app
   // templates with no automations/<id>/ subdirs.
   if (opts.newName) {
-    await rewriteAutomationManifestNames(destDir, opts.newName, { stampGenerated: true });
+    await rewriteAutomationManifestNames(destDir, opts.newName, {
+      stampGenerated: true,
+    });
   }
 
   const stat = await fs.stat(destDir);
-  const hasIndex = await fileExists(path.join(destDir, 'index.html'));
+  const hasIndex = await fileExists(path.join(destDir, "index.html"));
   const built = await hasAnyBuiltJs(destDir);
   const meta = await readAppMeta(destDir);
 
@@ -137,21 +148,24 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<AppInfo
 export async function suggestAppId(
   appsDir: string,
   preferred: string,
-  opts: { alwaysSuffix?: boolean } = {},
+  opts: { alwaysSuffix?: boolean } = {}
 ): Promise<string> {
   validateAppId(preferred);
   const start = opts.alwaysSuffix ? 2 : 1;
-  for (let i = start; i <= 1000; i++) {
+  const findAvailableId = async (i: number): Promise<string> => {
+    if (i > 1000) {
+      throw new AppScaffoldError(
+        "already_exists",
+        `Could not find a free id starting from "${preferred}".`
+      );
+    }
     const candidate = i === 1 ? preferred : `${preferred}-${i}`;
     if (!(await pathExists(path.join(appsDir, candidate)))) {
       return candidate;
     }
-  }
-  // Astronomically unlikely; surface as a clear error rather than loop forever.
-  throw new AppScaffoldError(
-    'already_exists',
-    `Could not find a free id starting from "${preferred}".`,
-  );
+    return findAvailableId(i + 1);
+  };
+  return findAvailableId(start);
 }
 
 /**
@@ -176,20 +190,27 @@ export async function suggestAppId(
 export async function suggestCloneIdentity(
   appsDir: string,
   preferredId: string,
-  preferredName: string,
+  preferredName: string
 ): Promise<{ id: string; name: string }> {
   validateAppId(preferredId);
-  for (let n = 1; n <= 1000; n++) {
+  const findAvailableIdentity = async (
+    n: number
+  ): Promise<{ id: string; name: string }> => {
+    if (n > 1000) {
+      throw new AppScaffoldError(
+        "already_exists",
+        `Could not find a free id+name starting from "${preferredId}" / "${preferredName}".`
+      );
+    }
     const id = n === 1 ? preferredId : `${preferredId}-${n}`;
-    if (await pathExists(path.join(appsDir, id))) continue;
+    if (await pathExists(path.join(appsDir, id)))
+      return findAvailableIdentity(n + 1);
     const name = n === 1 ? preferredName : `${preferredName} ${n}`;
-    if (await isDisplayNameTaken(appsDir, name)) continue;
+    if (await isDisplayNameTaken(appsDir, name))
+      return findAvailableIdentity(n + 1);
     return { id, name };
-  }
-  throw new AppScaffoldError(
-    'already_exists',
-    `Could not find a free id+name starting from "${preferredId}" / "${preferredName}".`,
-  );
+  };
+  return findAvailableIdentity(1);
 }
 
 /**
@@ -205,12 +226,14 @@ export async function suggestCloneIdentity(
 export function suggestCloneIdentityFrom(
   existing: ReadonlyArray<{ id: string; name?: string }>,
   preferredId: string,
-  preferredName: string,
+  preferredName: string
 ): { id: string; name: string } {
   validateAppId(preferredId);
   const takenIds = new Set(existing.map((a) => a.id));
   const takenNames = new Set(
-    existing.map((a) => (a.name ?? a.id).trim().toLowerCase()).filter((n) => n.length > 0),
+    existing
+      .map((a) => (a.name ?? a.id).trim().toLowerCase())
+      .filter((n) => n.length > 0)
   );
   for (let n = 1; n <= 1000; n++) {
     const id = n === 1 ? preferredId : `${preferredId}-${n}`;
@@ -220,8 +243,8 @@ export function suggestCloneIdentityFrom(
     return { id, name };
   }
   throw new AppScaffoldError(
-    'already_exists',
-    `Could not find a free id+name starting from "${preferredId}" / "${preferredName}".`,
+    "already_exists",
+    `Could not find a free id+name starting from "${preferredId}" / "${preferredName}".`
   );
 }
 
@@ -253,7 +276,9 @@ export interface CloneTemplateFilesOptions {
  *   - `automations/<id>/automation.json#name` + re-stamped `generated`
  * Seeds `automations/README.md` when the template ships no automations.
  */
-export function cloneTemplateFiles(opts: CloneTemplateFilesOptions): ScaffoldFile[] {
+export function cloneTemplateFiles(
+  opts: CloneTemplateFilesOptions
+): ScaffoldFile[] {
   validateAppId(opts.newAppId);
   const out = opts.templateFiles.map((f) => ({ ...f }));
   const byPath = new Map(out.map((f, i) => [f.path, i] as const));
@@ -269,46 +294,57 @@ export function cloneTemplateFiles(opts: CloneTemplateFilesOptions): ScaffoldFil
   };
 
   // app.json — fresh id/version, name + description applied.
-  const appJsonIdx = byPath.get('app.json');
+  const appJsonIdx = byPath.get("app.json");
   let parsedAppJson: Record<string, unknown> = {};
   if (appJsonIdx !== undefined) {
     try {
-      parsedAppJson = JSON.parse(out[appJsonIdx]!.content) as Record<string, unknown>;
+      parsedAppJson = JSON.parse(out[appJsonIdx]!.content) as Record<
+        string,
+        unknown
+      >;
     } catch {
       parsedAppJson = {};
     }
   }
   const nextName =
-    opts.newName ?? (typeof parsedAppJson.name === 'string' ? parsedAppJson.name : 'Untitled');
+    opts.newName ??
+    (typeof parsedAppJson.name === "string" ? parsedAppJson.name : "Untitled");
   const nextAppJson: Record<string, unknown> = {
     ...parsedAppJson,
     id: opts.newAppId,
     name: nextName,
-    version: '0.1.0',
+    version: "0.1.0",
   };
   const descSource =
     opts.newDesc ??
-    (typeof parsedAppJson.description === 'string' ? parsedAppJson.description : '');
+    (typeof parsedAppJson.description === "string"
+      ? parsedAppJson.description
+      : "");
   const descTrimmed = descSource.trim();
   if (descTrimmed) nextAppJson.description = descTrimmed;
   else delete nextAppJson.description;
   // Backfill the tile identity from the catalog entry (issue #263) —
   // no-op when the template's app.json already declares the keys.
   const withVisual =
-    applyAppVisualIdentity(JSON.stringify(nextAppJson, null, 2) + '\n', {
+    applyAppVisualIdentity(JSON.stringify(nextAppJson, null, 2) + "\n", {
       iconKey: opts.iconKey,
       colorKey: opts.colorKey,
-    }) ?? JSON.stringify(nextAppJson, null, 2) + '\n';
-  set('app.json', withVisual);
+    }) ?? JSON.stringify(nextAppJson, null, 2) + "\n";
+  set("app.json", withVisual);
 
   // package.json — only rewrite the convention-following name.
-  const pkgIdx = byPath.get('package.json');
+  const pkgIdx = byPath.get("package.json");
   if (pkgIdx !== undefined) {
     try {
-      const pkg = JSON.parse(out[pkgIdx]!.content) as { name?: unknown } & Record<string, unknown>;
-      if (typeof pkg.name === 'string' && pkg.name.startsWith('centraid-app-')) {
+      const pkg = JSON.parse(out[pkgIdx]!.content) as {
+        name?: unknown;
+      } & Record<string, unknown>;
+      if (
+        typeof pkg.name === "string" &&
+        pkg.name.startsWith("centraid-app-")
+      ) {
         pkg.name = `centraid-app-${opts.newAppId}`;
-        set('package.json', JSON.stringify(pkg, null, 2) + '\n');
+        set("package.json", JSON.stringify(pkg, null, 2) + "\n");
       }
     } catch {
       /* unparseable — leave alone */
@@ -316,21 +352,28 @@ export function cloneTemplateFiles(opts: CloneTemplateFilesOptions): ScaffoldFil
   }
 
   if (opts.newName) {
-    const htmlIdx = byPath.get('index.html');
+    const htmlIdx = byPath.get("index.html");
     if (htmlIdx !== undefined) {
-      set('index.html', rewriteTitleInHtml(out[htmlIdx]!.content, opts.newName));
+      set(
+        "index.html",
+        rewriteTitleInHtml(out[htmlIdx]!.content, opts.newName)
+      );
     }
     for (const f of out) {
-      if (!/^automations\/[^/]+\/automation\.json$/.test(f.path)) continue;
-      const next = applyManifestName(f.content, opts.newName, { stampGenerated: true });
+      if (!/^automations\/[^/]+\/automation\.json$/u.test(f.path)) continue;
+      const next = applyManifestName(f.content, opts.newName, {
+        stampGenerated: true,
+      });
       if (next !== null) set(f.path, next);
     }
   }
 
   // Seed an automations brief when the template ships none.
-  const hasAutomation = out.some((f) => /^automations\/[^/]+\/automation\.json$/.test(f.path));
-  if (!hasAutomation && !byPath.has('automations/README.md')) {
-    set('automations/README.md', AUTOMATIONS_README);
+  const hasAutomation = out.some((f) =>
+    /^automations\/[^/]+\/automation\.json$/u.test(f.path)
+  );
+  if (!hasAutomation && !byPath.has("automations/README.md")) {
+    set("automations/README.md", AUTOMATIONS_README);
   }
   return out;
 }
@@ -338,7 +381,9 @@ export function cloneTemplateFiles(opts: CloneTemplateFilesOptions): ScaffoldFil
 async function copyDir(src: string, dest: string): Promise<void> {
   await fs.mkdir(dest, { recursive: true });
   const entries = await fs.readdir(src, { withFileTypes: true });
-  for (const entry of entries) {
+  const copyNextEntry = async (index: number): Promise<void> => {
+    const entry = entries[index];
+    if (!entry) return;
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {
@@ -347,30 +392,34 @@ async function copyDir(src: string, dest: string): Promise<void> {
       await fs.copyFile(srcPath, destPath);
     }
     // Symlinks/other types: skip. Templates only ship plain files.
-  }
+    return copyNextEntry(index + 1);
+  };
+  return copyNextEntry(0);
 }
 
 async function rewriteAppJson(
   destDir: string,
   newName?: string,
   newDesc?: string,
-  newAppId?: string,
+  newAppId?: string
 ): Promise<void> {
-  const appJsonPath = path.join(destDir, 'app.json');
-  let parsed: { name?: unknown; description?: unknown; version?: unknown } & Record<
-    string,
-    unknown
-  > = {};
+  const appJsonPath = path.join(destDir, "app.json");
+  let parsed: {
+    name?: unknown;
+    description?: unknown;
+    version?: unknown;
+  } & Record<string, unknown> = {};
   try {
-    const raw = await fs.readFile(appJsonPath, 'utf8');
+    const raw = await fs.readFile(appJsonPath, "utf8");
     parsed = JSON.parse(raw);
   } catch {
     // No app.json in the template (or unparseable). Write a fresh one.
   }
   const next: Record<string, unknown> = {
     ...parsed,
-    name: newName ?? (typeof parsed.name === 'string' ? parsed.name : 'Untitled'),
-    version: '0.1.0',
+    name:
+      newName ?? (typeof parsed.name === "string" ? parsed.name : "Untitled"),
+    version: "0.1.0",
   };
   // The cloned app gets a fresh id — the manifest's `id` field must
   // track the new folder name, not the template's original id. Without
@@ -379,18 +428,23 @@ async function rewriteAppJson(
   if (newAppId) next.id = newAppId;
   // Caller-provided `newDesc` wins; otherwise preserve whatever the template
   // had. Empty strings clear the field.
-  const descSource = newDesc ?? (typeof parsed.description === 'string' ? parsed.description : '');
+  const descSource =
+    newDesc ??
+    (typeof parsed.description === "string" ? parsed.description : "");
   const descTrimmed = descSource.trim();
   if (descTrimmed) next.description = descTrimmed;
   else delete next.description;
-  await fs.writeFile(appJsonPath, JSON.stringify(next, null, 2) + '\n');
+  await fs.writeFile(appJsonPath, JSON.stringify(next, null, 2) + "\n");
 }
 
-async function rewritePackageJson(destDir: string, newAppId: string): Promise<void> {
-  const pkgPath = path.join(destDir, 'package.json');
+async function rewritePackageJson(
+  destDir: string,
+  newAppId: string
+): Promise<void> {
+  const pkgPath = path.join(destDir, "package.json");
   let raw: string;
   try {
-    raw = await fs.readFile(pkgPath, 'utf8');
+    raw = await fs.readFile(pkgPath, "utf8");
   } catch {
     return; // template doesn't ship a package.json; nothing to rewrite.
   }
@@ -400,27 +454,38 @@ async function rewritePackageJson(destDir: string, newAppId: string): Promise<vo
   } catch {
     return; // unparseable; leave alone.
   }
-  const currentName = typeof parsed.name === 'string' ? parsed.name : '';
+  const currentName = typeof parsed.name === "string" ? parsed.name : "";
   // Only rewrite names that follow the `centraid-app-*` convention; leave
   // unrelated names alone so we don't clobber author intent.
-  if (!currentName.startsWith('centraid-app-')) return;
+  if (!currentName.startsWith("centraid-app-")) return;
   parsed.name = `centraid-app-${newAppId}`;
-  await fs.writeFile(pkgPath, JSON.stringify(parsed, null, 2) + '\n');
+  await fs.writeFile(pkgPath, JSON.stringify(parsed, null, 2) + "\n");
 }
 
-async function readAppMeta(
-  appDir: string,
-): Promise<{ name?: string; description?: string; kind?: 'app' | 'automation' }> {
+async function readAppMeta(appDir: string): Promise<{
+  name?: string;
+  description?: string;
+  kind?: "app" | "automation";
+}> {
   try {
-    const raw = await fs.readFile(path.join(appDir, 'app.json'), 'utf8');
-    const parsed = JSON.parse(raw) as { name?: unknown; description?: unknown; kind?: unknown };
+    const raw = await fs.readFile(path.join(appDir, "app.json"), "utf8");
+    const parsed = JSON.parse(raw) as {
+      name?: unknown;
+      description?: unknown;
+      kind?: unknown;
+    };
     const name =
-      typeof parsed.name === 'string' && parsed.name.length > 0 ? parsed.name : undefined;
+      typeof parsed.name === "string" && parsed.name.length > 0
+        ? parsed.name
+        : undefined;
     const description =
-      typeof parsed.description === 'string' && parsed.description.length > 0
+      typeof parsed.description === "string" && parsed.description.length > 0
         ? parsed.description
         : undefined;
-    const kind = parsed.kind === 'automation' || parsed.kind === 'app' ? parsed.kind : undefined;
+    const kind =
+      parsed.kind === "automation" || parsed.kind === "app"
+        ? parsed.kind
+        : undefined;
     return { name, description, kind };
   } catch {
     return {};
@@ -433,11 +498,13 @@ async function readAppMeta(
  * Idempotent — `mkdir { recursive: true }` is a no-op on existing dirs,
  * so re-cloning or cloning an already-canonical template is fine.
  */
-const CANONICAL_SUBDIRS = ['queries', 'actions', 'automations'] as const;
+const CANONICAL_SUBDIRS = ["queries", "actions", "automations"] as const;
 
 async function ensureCanonicalSubdirs(appDir: string): Promise<void> {
   await Promise.all(
-    CANONICAL_SUBDIRS.map((sub) => fs.mkdir(path.join(appDir, sub), { recursive: true })),
+    CANONICAL_SUBDIRS.map((sub) =>
+      fs.mkdir(path.join(appDir, sub), { recursive: true })
+    )
   );
   // Seed a brief only when the template didn't ship one of its own.
   // The brief is a placeholder for an empty `automations/` folder —
@@ -445,7 +512,7 @@ async function ensureCanonicalSubdirs(appDir: string): Promise<void> {
   // template provides." Templates that bundle real manifests usually
   // ship their own README alongside them; either way, we never
   // clobber existing content.
-  const readmePath = path.join(appDir, 'automations', 'README.md');
+  const readmePath = path.join(appDir, "automations", "README.md");
   try {
     await fs.access(readmePath);
   } catch {
@@ -469,12 +536,14 @@ desktop picks them up on the next sync. See the app root
 `;
 
 async function hasAnyBuiltJs(appDir: string): Promise<boolean> {
-  for (const sub of ['queries', 'actions']) {
-    const dir = path.join(appDir, sub);
-    const entries = await fs.readdir(dir).catch(() => []);
-    if (entries.some((n) => n.endsWith('.js') || n.endsWith('.mjs'))) return true;
-  }
-  return false;
+  const entriesByDirectory = await Promise.all(
+    ["queries", "actions"].map(async (sub) =>
+      fs.readdir(path.join(appDir, sub)).catch(() => [])
+    )
+  );
+  return entriesByDirectory.some((entries) =>
+    entries.some((n) => n.endsWith(".js") || n.endsWith(".mjs"))
+  );
 }
 
 async function pathExists(p: string): Promise<boolean> {

@@ -1,19 +1,21 @@
+import type { CSSProperties } from "react";
+
 // The month canvas: a 6×7 Monday-first CSS grid (one flat grid — the 7
 // weekday-header spans plus 42 day cells are all direct children, so no
 // per-week wrapper row is needed). Up to 3 event pills per day (all-day /
 // multi-day render as solid bars), a "+N more" past that, and clicking empty
 // day space starts a proposal prefilled there.
-import { bucketByDay, fmtRange, fmtTime, startOfWeek } from '../format.ts';
-import { localDayKey } from '../kit.ts';
-import { CalDot } from './Shared.tsx';
-import type { CSSProperties } from 'react';
-import type { AgEvent, DaySegment } from '../types.ts';
-import styles from './MonthView.module.css';
+import { bucketByDay, fmtRange, fmtTime, startOfWeek } from "../format.ts";
+import { localDayKey } from "../kit.ts";
+import type { AgEvent, DaySegment } from "../types.ts";
+import { CalDot } from "./Shared.tsx";
+
+import styles from "./MonthView.module.css";
 
 type ColorFor = (calendarId: string | null | undefined) => string | null;
 
 const MAX_PILLS = 3;
-const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function Pill({
   seg,
@@ -32,16 +34,18 @@ function Pill({
       className={styles.pill}
       data-status={ev.status}
       data-spans={String(seg.spansAll)}
-      style={{ '--ev-color': color ?? undefined } as CSSProperties}
+      style={{ "--ev-color": color ?? undefined } as CSSProperties}
       title={`${fmtRange(ev)} — ${ev.summary}`}
       onClick={(e) => {
         e.stopPropagation();
         onEventOpen(ev);
       }}
     >
-      {!seg.spansAll ? <CalDot color={color} /> : null}
+      {seg.spansAll ? null : <CalDot color={color} />}
       <span className={styles.pillText}>
-        {seg.startsHere && !seg.spansAll ? `${fmtTime(ev.dtstart)} ${ev.summary}` : ev.summary}
+        {seg.startsHere && !seg.spansAll
+          ? `${fmtTime(ev.dtstart)} ${ev.summary}`
+          : ev.summary}
       </span>
     </button>
   );
@@ -67,11 +71,17 @@ function DayCell({
   onMoreOpen: (dayKey: string, anchorEl: HTMLElement) => void;
 }) {
   const overflow = segs.length > MAX_PILLS;
-  const label = `${date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}, ${
-    segs.length === 0 ? 'no events' : `${segs.length} event${segs.length === 1 ? '' : 's'}`
+  const label = `${date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}, ${
+    segs.length === 0
+      ? "no events"
+      : `${segs.length} event${segs.length === 1 ? "" : "s"}`
   }. Press Enter to propose an event.`;
   return (
-    <div className={styles.dayCell} data-outside={String(outside)} data-today={String(isToday)}>
+    <div
+      className={styles.dayCell}
+      data-outside={String(outside)}
+      data-today={String(isToday)}
+    >
       {/* Empty day space proposes an event. That is a real button laid over the
           cell (issue #573) rather than a click+keydown pair on the cell div:
           the pills and the "+N more" button sit above it, so the old
@@ -130,7 +140,12 @@ export function MonthView({
   const todayKey = localDayKey(new Date());
   const days = Array.from(
     { length: 42 },
-    (_, i) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i),
+    (_, i) =>
+      new Date(
+        gridStart.getFullYear(),
+        gridStart.getMonth(),
+        gridStart.getDate() + i
+      )
   );
 
   // No `role="grid"`: this flat CSS grid has no `role="row"` rows, so the grid

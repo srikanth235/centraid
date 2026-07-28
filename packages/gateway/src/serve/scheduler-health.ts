@@ -19,8 +19,9 @@
  * information, not "the gateway is down" (that's `_gateway/info`'s job).
  */
 
-import type { SchedulerLedgerSnapshot } from '@centraid/automation';
-import type { HealthProbe } from './health-registry.js';
+import type { SchedulerLedgerSnapshot } from "@centraid/automation";
+
+import type { HealthProbe } from "./health-registry.js";
 
 export interface SchedulerHealthVaultEntry {
   readonly vaultId: string;
@@ -39,7 +40,9 @@ export interface SchedulerHealthOptions {
 }
 
 /** Builds the `scheduler` component's `HealthProbe` (registered in `build-gateway.ts`). */
-export function createSchedulerHealthProbe(options: SchedulerHealthOptions): HealthProbe {
+export function createSchedulerHealthProbe(
+  options: SchedulerHealthOptions
+): HealthProbe {
   const now = options.now ?? Date.now;
   const periodMs = options.periodMs ?? 60_000;
   const staleMs = periodMs * (options.staleAfterPeriods ?? 3);
@@ -75,19 +78,19 @@ export function createSchedulerHealthProbe(options: SchedulerHealthOptions): Hea
     }
 
     const notes: string[] = [];
-    if (stale.length > 0) notes.push(`tick stale: ${stale.join(', ')}`);
+    if (stale.length > 0) notes.push(`tick stale: ${stale.join(", ")}`);
     if (missedTotal > 0) {
       notes.push(
-        `${missedTotal} missed automation window${missedTotal === 1 ? '' : 's'} recorded` +
-          (latest ? ` — latest ${latest.label}` : ''),
+        `${missedTotal} missed automation window${missedTotal === 1 ? "" : "s"} recorded` +
+          (latest ? ` — latest ${latest.label}` : "")
       );
     }
     if (notes.length === 0) {
       return {
-        status: 'ok',
-        detail: `${vaults.length} vault scheduler${vaults.length === 1 ? '' : 's'} healthy`,
+        status: "ok",
+        detail: `${vaults.length} vault scheduler${vaults.length === 1 ? "" : "s"} healthy`,
       };
     }
-    return { status: 'degraded', detail: notes.join('; ') };
+    return { status: "degraded", detail: notes.join("; ") };
   };
 }

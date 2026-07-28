@@ -8,13 +8,27 @@
 // Pressable, and the content layer is `box-none`, so a tap on empty space falls
 // through to close while taps on the input / a tile / Cancel are handled.
 
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Icon from '../../kit/components/Icon';
-import LauncherGrid from './LauncherGrid';
-import { filterLauncherItems, type LauncherItem } from './catalog';
-import { family, t, useTheme, type ThemeColors, type Scheme } from '../../kit/theme';
+import React, { useMemo, useState } from "react";
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import Icon from "../../kit/components/Icon";
+import {
+  family,
+  t,
+  useTheme,
+  type ThemeColors,
+  type Scheme,
+} from "../../kit/theme";
+import { filterLauncherItems, type LauncherItem } from "./catalog";
+import LauncherGrid from "./LauncherGrid";
 
 const H_PADDING = 20;
 
@@ -22,14 +36,14 @@ const H_PADDING = 20;
 // film; that native module isn't wired into this build yet (deferred polish),
 // so the scrim runs near-opaque to stay legible over any content beneath it.
 const TINT: Record<Scheme, string> = {
-  light: 'rgba(241, 236, 225, 0.97)',
-  dark: 'rgba(16, 19, 24, 0.97)',
+  light: "rgba(241, 236, 225, 0.97)",
+  dark: "rgba(16, 19, 24, 0.97)",
 };
 
 export interface SearchOverlayProps {
   items: readonly LauncherItem[];
-  onOpen(item: LauncherItem): void;
-  onClose(): void;
+  onOpen: (item: LauncherItem) => void;
+  onClose: () => void;
 }
 
 export default function SearchOverlay({
@@ -40,9 +54,12 @@ export default function SearchOverlay({
   const { colors, scheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
 
-  const matches = useMemo(() => filterLauncherItems(items, query), [items, query]);
+  const matches = useMemo(
+    () => filterLauncherItems(items, query),
+    [items, query]
+  );
   const trimmed = query.trim();
 
   return (
@@ -57,10 +74,18 @@ export default function SearchOverlay({
         accessibilityLabel="Close search"
       />
 
-      <View style={[styles.content, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+      <View
+        style={[styles.content, { paddingTop: insets.top + 8 }]}
+        pointerEvents="box-none"
+      >
         <View style={styles.searchRow}>
           <View style={styles.field}>
-            <Icon name="Search" size={17} color={colors.ink3} strokeWidth={1.8} />
+            <Icon
+              name="Search"
+              size={17}
+              color={colors.ink3}
+              strokeWidth={1.8}
+            />
             <TextInput
               autoFocus
               value={query}
@@ -73,7 +98,11 @@ export default function SearchOverlay({
               autoCapitalize="none"
             />
           </View>
-          <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Cancel search">
+          <Pressable
+            onPress={onClose}
+            hitSlop={8}
+            accessibilityLabel="Cancel search"
+          >
             <Text style={styles.cancel}>Cancel</Text>
           </Pressable>
         </View>
@@ -87,13 +116,21 @@ export default function SearchOverlay({
           {matches.length ? (
             <LauncherGrid items={matches} onOpen={onOpen} />
           ) : (
-            <Text style={styles.empty}>No apps match &ldquo;{trimmed}&rdquo;.</Text>
+            <Text style={styles.empty}>
+              No apps match &ldquo;{trimmed}&rdquo;.
+            </Text>
           )}
 
           <View style={styles.hint}>
-            <Icon name="Sparkle" size={15} color={colors.ink3} strokeWidth={1.7} />
+            <Icon
+              name="Sparkle"
+              size={15}
+              color={colors.ink3}
+              strokeWidth={1.7}
+            />
             <Text style={styles.hintText}>
-              Deeper search — photos, docs and people — arrives once your desktop is paired.
+              Deeper search — photos, docs and people — arrives once your
+              desktop is paired.
             </Text>
           </View>
         </ScrollView>
@@ -104,30 +141,34 @@ export default function SearchOverlay({
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    cancel: { ...t('body'), color: colors.accent, fontFamily: family.sansMedium },
+    cancel: {
+      ...t("body"),
+      color: colors.accent,
+      fontFamily: family.sansMedium,
+    },
     content: { flex: 1, paddingHorizontal: H_PADDING },
-    empty: { ...t('small'), color: colors.ink2, paddingVertical: 8 },
+    empty: { ...t("small"), color: colors.ink2, paddingVertical: 8 },
     field: {
-      alignItems: 'center',
+      alignItems: "center",
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
       borderRadius: 12,
       borderWidth: StyleSheet.hairlineWidth,
       flex: 1,
-      flexDirection: 'row',
+      flexDirection: "row",
       gap: 8,
       height: 46,
       paddingHorizontal: 12,
     },
     hint: {
-      alignItems: 'center',
-      flexDirection: 'row',
+      alignItems: "center",
+      flexDirection: "row",
       gap: 8,
       marginTop: 28,
       paddingRight: 12,
     },
-    hintText: { ...t('small'), color: colors.ink3, flex: 1, lineHeight: 18 },
-    input: { ...t('body'), color: colors.ink, flex: 1, padding: 0 },
+    hintText: { ...t("small"), color: colors.ink3, flex: 1, lineHeight: 18 },
+    input: { ...t("body"), color: colors.ink, flex: 1, padding: 0 },
     results: { paddingTop: 22 },
-    searchRow: { alignItems: 'center', flexDirection: 'row', gap: 12 },
+    searchRow: { alignItems: "center", flexDirection: "row", gap: 12 },
   });

@@ -13,7 +13,7 @@
  */
 export function authDeadError(message: string): Error {
   const err = new Error(message);
-  err.name = 'AuthDeadError';
+  err.name = "AuthDeadError";
   return err;
 }
 
@@ -34,7 +34,7 @@ export class ConnectionLimiter {
   private readonly queue: Array<() => void> = [];
   constructor(
     private readonly maxConcurrent = 2,
-    private readonly minIntervalMs = 250,
+    private readonly minIntervalMs = 250
   ) {}
 
   async run<T>(fn: () => Promise<T>): Promise<T> {

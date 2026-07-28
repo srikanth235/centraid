@@ -1,13 +1,15 @@
 // governance: allow-repo-hygiene file-size-limit single cohesive screen (connect form + recovery-kit gate + per-vault hosted/local toggle) — one storage-connection flow, same call SettingsConnectionsScreen.tsx makes
-import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
-import { Button, IconButton } from '../ui/index.js';
-import { cx } from '../ui/cx.js';
-import styles from './SettingsStorageScreen.module.css';
-import a11y from '../styles/a11y.module.css';
-import drawerGroupCss from '../styles/drawerGroup.module.css';
-import controlsCss from '../styles/controls.module.css';
-import inlineEmptyCss from '../styles/inlineEmpty.module.css';
-import modalCss from '../styles/modal.module.css';
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+
+import { cx } from "../ui/cx.js";
+import { Button, IconButton } from "../ui/index.js";
+
+import a11y from "../styles/a11y.module.css";
+import controlsCss from "../styles/controls.module.css";
+import drawerGroupCss from "../styles/drawerGroup.module.css";
+import inlineEmptyCss from "../styles/inlineEmpty.module.css";
+import modalCss from "../styles/modal.module.css";
+import styles from "./SettingsStorageScreen.module.css";
 
 // Settings → Storage (issue #436 §7): the owner surface collapsed to ONE
 // choice per vault — "On this device" or "Hosted". There is a single
@@ -36,26 +38,28 @@ export interface StorageConnectionFormInput {
 
 export type StorageMutationResult<T> =
   | { ok: true; value: T }
-  | { ok: false; code: 'recovery_kit_not_confirmed'; message: string }
-  | { ok: false; code: 'error'; message: string };
+  | { ok: false; code: "recovery_kit_not_confirmed"; message: string }
+  | { ok: false; code: "error"; message: string };
 
-export type StorageTestResult = { ok: true; detail: string } | { ok: false; error: string };
+export type StorageTestResult =
+  | { ok: true; detail: string }
+  | { ok: false; error: string };
 
 export interface VaultBlobStoreDTO {
-  kind: 'fs' | 's3';
+  kind: "fs" | "s3";
   connectionId?: string;
 }
 
 export interface SettingsStorageBridgeProps {
   loadConnections: () => Promise<StorageConnectionRowDTO[]>;
   createConnection: (
-    input: StorageConnectionFormInput,
+    input: StorageConnectionFormInput
   ) => Promise<StorageMutationResult<StorageConnectionRowDTO>>;
   deleteConnection: (id: string, name: string) => Promise<void>;
   testConnection: (id: string) => Promise<StorageTestResult>;
   loadVaultBlobStore: () => Promise<VaultBlobStoreDTO>;
   attachVaultConnection: (
-    connectionId: string,
+    connectionId: string
   ) => Promise<StorageMutationResult<VaultBlobStoreDTO>>;
   detachVaultConnection: () => Promise<VaultBlobStoreDTO>;
   showToast: (message: string) => void;
@@ -80,18 +84,28 @@ function RecoveryKitGateDialog({
         if (event.target === event.currentTarget) onClose();
       }}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') onClose();
+        if (event.key === "Escape") onClose();
       }}
     >
-      <dialog open className={modalCss.card} aria-label="Confirm your recovery kit">
-        <IconButton icon="X" ariaLabel="Close" className={modalCss.close} onClick={onClose} />
+      <dialog
+        open
+        className={modalCss.card}
+        aria-label="Confirm your recovery kit"
+      >
+        <IconButton
+          icon="X"
+          ariaLabel="Close"
+          className={modalCss.close}
+          onClick={onClose}
+        />
         <h3>Before this ships bytes off this machine</h3>
         <p className={styles.gateReason}>{gate.message}</p>
         <p>
-          Hosted storage is ciphertext without the seal key that made it — if it's ever lost, the
-          backed-up vaults stored offsite become unrecoverable. Local-only vaults are not included.
-          Open the Storage page, export a password-wrapped recovery kit, re-select that exact file,
-          and complete the loss-consent check before continuing.
+          Hosted storage is ciphertext without the seal key that made it — if
+          it's ever lost, the backed-up vaults stored offsite become
+          unrecoverable. Local-only vaults are not included. Open the Storage
+          page, export a password-wrapped recovery kit, re-select that exact
+          file, and complete the loss-consent check before continuing.
         </p>
         <div className={modalCss.actions}>
           <Button variant="primary" label="Close" onClick={onClose} />
@@ -110,7 +124,7 @@ function ConnectionRow({
 }: {
   row: StorageConnectionRowDTO;
   busy: boolean;
-  testResult: 'testing' | StorageTestResult | undefined;
+  testResult: "testing" | StorageTestResult | undefined;
   onTest: () => void;
   onDelete: () => void;
 }): JSX.Element {
@@ -123,8 +137,10 @@ function ConnectionRow({
             Hosted
           </span>
         </div>
-        {row.baseUrl ? <span className={styles.rowSub}>{row.baseUrl}</span> : null}
-        {testResult && testResult !== 'testing' ? (
+        {row.baseUrl ? (
+          <span className={styles.rowSub}>{row.baseUrl}</span>
+        ) : null}
+        {testResult && testResult !== "testing" ? (
           <span
             className={styles.testResult}
             data-ok={testResult.ok}
@@ -138,8 +154,8 @@ function ConnectionRow({
         <Button
           variant="soft"
           size="sm"
-          label={testResult === 'testing' ? 'Testing…' : 'Test connection'}
-          disabled={busy || testResult === 'testing'}
+          label={testResult === "testing" ? "Testing…" : "Test connection"}
+          disabled={busy || testResult === "testing"}
           onClick={onTest}
         />
         <button
@@ -166,16 +182,16 @@ function ConnectProviderForm({
   onCancel: () => void;
   onSubmit: (input: StorageConnectionFormInput) => void;
 }): JSX.Element {
-  const [name, setName] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
-  const [apiKey, setApiKey] = useState('');
+  const [name, setName] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
 
   const ready = baseUrl.trim().length > 0 && apiKey.trim().length > 0;
 
   const submit = (): void => {
     if (!ready) return;
     onSubmit({
-      name: name.trim() || 'Hosted storage',
+      name: name.trim() || "Hosted storage",
       baseUrl: baseUrl.trim(),
       apiKey: apiKey.trim(),
     });
@@ -223,7 +239,7 @@ function ConnectProviderForm({
         <Button
           variant="primary"
           size="sm"
-          label={busy ? 'Connecting…' : 'Connect'}
+          label={busy ? "Connecting…" : "Connect"}
           disabled={!ready || busy}
           onClick={submit}
         />
@@ -248,9 +264,13 @@ function VaultStorageChoice({
   onDetach: () => void;
 }): JSX.Element {
   if (blobStore === null) {
-    return <div className={controlsCss.note}>Reading this vault's storage settings…</div>;
+    return (
+      <div className={controlsCss.note}>
+        Reading this vault's storage settings…
+      </div>
+    );
   }
-  const hosted = blobStore.kind === 's3';
+  const hosted = blobStore.kind === "s3";
   const hostedDisabled = !homeConnectionId || busy;
 
   const chooseDevice = (): void => {
@@ -292,10 +312,10 @@ function VaultStorageChoice({
       </div>
       <p className={styles.attachStatus}>
         {hosted
-          ? 'Snapshots, attachments, and previews are kept as one sealed bundle with your provider.'
+          ? "Snapshots, attachments, and previews are kept as one sealed bundle with your provider."
           : homeConnectionId
-            ? 'Everything stays on this machine. Switch to Hosted to keep an encrypted offsite copy.'
-            : 'Everything stays on this machine. Connect a storage provider above to turn on hosted storage.'}
+            ? "Everything stays on this machine. Switch to Hosted to keep an encrypted offsite copy."
+            : "Everything stays on this machine. Connect a storage provider above to turn on hosted storage."}
       </p>
     </div>
   );
@@ -318,19 +338,23 @@ export default function SettingsStorageScreen({
   const [formError, setFormError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [attachBusy, setAttachBusy] = useState(false);
-  const [testResults, setTestResults] = useState<Map<string, 'testing' | StorageTestResult>>(
-    new Map(),
-  );
+  const [testResults, setTestResults] = useState<
+    Map<string, "testing" | StorageTestResult>
+  >(new Map());
   const [gate, setGate] = useState<PendingGate | null>(null);
   const mountedRef = useRef(true);
 
   const refresh = useCallback((): void => {
     void loadConnections()
       .then(setRows)
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
+      .catch((err: unknown) =>
+        showToast(err instanceof Error ? err.message : String(err))
+      );
     void loadVaultBlobStore()
       .then(setBlobStore)
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
+      .catch((err: unknown) =>
+        showToast(err instanceof Error ? err.message : String(err))
+      );
   }, [loadConnections, loadVaultBlobStore, showToast]);
 
   useEffect(() => {
@@ -339,12 +363,14 @@ export default function SettingsStorageScreen({
     return () => {
       mountedRef.current = false;
     };
-  }, [loadConnections, loadVaultBlobStore]);
+  }, [loadConnections, loadVaultBlobStore, refresh]);
 
   const withBusy = (id: string, fn: () => Promise<void>): void => {
     setBusyIds((s) => new Set(s).add(id));
     void fn()
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) =>
+        showToast(err instanceof Error ? err.message : String(err))
+      )
       .finally(() => {
         setBusyIds((s) => {
           const next = new Set(s);
@@ -355,7 +381,9 @@ export default function SettingsStorageScreen({
       });
   };
 
-  const runCreate = async (input: StorageConnectionFormInput): Promise<void> => {
+  const runCreate = async (
+    input: StorageConnectionFormInput
+  ): Promise<void> => {
     const result = await createConnection(input);
     if (result.ok) {
       setWizardOpen(false);
@@ -363,7 +391,7 @@ export default function SettingsStorageScreen({
       refresh();
       return;
     }
-    if (result.code === 'recovery_kit_not_confirmed') {
+    if (result.code === "recovery_kit_not_confirmed") {
       setGate({ message: result.message });
       return;
     }
@@ -374,12 +402,14 @@ export default function SettingsStorageScreen({
     setSaving(true);
     setFormError(null);
     runCreate(input)
-      .catch((err: unknown) => setFormError(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) =>
+        setFormError(err instanceof Error ? err.message : String(err))
+      )
       .finally(() => setSaving(false));
   };
 
   const onTest = (id: string): void => {
-    setTestResults((m) => new Map(m).set(id, 'testing'));
+    setTestResults((m) => new Map(m).set(id, "testing"));
     void testConnection(id)
       .then((result) => setTestResults((m) => new Map(m).set(id, result)))
       .catch((err: unknown) =>
@@ -387,8 +417,8 @@ export default function SettingsStorageScreen({
           new Map(m).set(id, {
             ok: false,
             error: err instanceof Error ? err.message : String(err),
-          }),
-        ),
+          })
+        )
       );
   };
 
@@ -402,7 +432,7 @@ export default function SettingsStorageScreen({
       if (mountedRef.current) setBlobStore(result.value);
       return;
     }
-    if (result.code === 'recovery_kit_not_confirmed') {
+    if (result.code === "recovery_kit_not_confirmed") {
       setGate({ message: result.message });
       return;
     }
@@ -412,7 +442,9 @@ export default function SettingsStorageScreen({
   const onAttach = (connectionId: string): void => {
     setAttachBusy(true);
     runAttach(connectionId)
-      .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) =>
+        showToast(err instanceof Error ? err.message : String(err))
+      )
       .finally(() => setAttachBusy(false));
   };
 
@@ -437,9 +469,9 @@ export default function SettingsStorageScreen({
       <div className={drawerGroupCss.groupLabel}>Hosted storage</div>
       <div className={drawerGroupCss.groupBody}>
         <div className={controlsCss.note}>
-          Keep an encrypted copy of this profile with a storage provider — snapshots, attachments,
-          and previews, all sealed on your device before they leave it. The provider only ever sees
-          ciphertext.
+          Keep an encrypted copy of this profile with a storage provider —
+          snapshots, attachments, and previews, all sealed on your device before
+          they leave it. The provider only ever sees ciphertext.
         </div>
 
         {rows === null ? (
@@ -457,7 +489,9 @@ export default function SettingsStorageScreen({
             />
           ) : (
             <>
-              <div className={inlineEmptyCss.inlineEmpty}>No storage provider connected yet.</div>
+              <div className={inlineEmptyCss.inlineEmpty}>
+                No storage provider connected yet.
+              </div>
               <Button
                 variant="soft"
                 size="sm"
@@ -494,7 +528,9 @@ export default function SettingsStorageScreen({
         />
       </div>
 
-      {gate ? <RecoveryKitGateDialog gate={gate} onClose={() => setGate(null)} /> : null}
+      {gate ? (
+        <RecoveryKitGateDialog gate={gate} onClose={() => setGate(null)} />
+      ) : null}
     </div>
   );
 }

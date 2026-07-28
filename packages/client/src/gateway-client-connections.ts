@@ -27,6 +27,12 @@
  */
 
 import {
+  ROUTES,
+  vaultConnectionAuthorizePath,
+  vaultConnectionPath,
+} from "@centraid/protocol";
+
+import {
   GatewayClientError,
   auth,
   authHeaders,
@@ -34,8 +40,7 @@ import {
   enc,
   readJson,
   withClientSession,
-} from './gateway-client-core.js';
-import { ROUTES, vaultConnectionAuthorizePath, vaultConnectionPath } from '@centraid/protocol';
+} from "./gateway-client-core.js";
 
 // ---- Connection health list (GET /_vault/connections) ----
 
@@ -45,12 +50,12 @@ interface ConnectionWireRow {
   kind: string;
   label: string;
   principal: string | null;
-  status: 'active' | 'needs-auth' | 'failing' | 'paused';
-  trust: 'staged' | 'auto-publish';
+  status: "active" | "needs-auth" | "failing" | "paused";
+  trust: "staged" | "auto-publish";
   created_at: string;
   last_run_at: string | null;
-  cred_kind: 'oauth2' | 'api_key' | null;
-  oauth_mode?: 'byo' | 'assist' | null;
+  cred_kind: "oauth2" | "api_key" | null;
+  oauth_mode?: "byo" | "assist" | null;
   provider: string | null;
   scopes: string | null;
   allowed_hosts: string[] | null;
@@ -65,14 +70,14 @@ export interface ConnectionEntry {
   kind: string;
   label: string;
   principal: string | null;
-  status: 'active' | 'needs-auth' | 'failing' | 'paused';
-  trust: 'staged' | 'auto-publish';
+  status: "active" | "needs-auth" | "failing" | "paused";
+  trust: "staged" | "auto-publish";
   createdAt: string;
   lastRunAt: string | null;
   /** `null` = no credential attached yet — the connection rides the
    *  harness-ambient lane instead of a BYO credential. */
-  credKind: 'oauth2' | 'api_key' | null;
-  oauthMode: 'byo' | 'assist' | null;
+  credKind: "oauth2" | "api_key" | null;
+  oauthMode: "byo" | "assist" | null;
   provider: string | null;
   scopes: string | null;
   allowedHosts: string[] | null;
@@ -88,7 +93,7 @@ function fromWireRow(r: ConnectionWireRow): ConnectionEntry {
     connectionId: r.connection_id,
     createdAt: r.created_at,
     credKind: r.cred_kind,
-    oauthMode: r.oauth_mode ?? (r.cred_kind === 'oauth2' ? 'byo' : null),
+    oauthMode: r.oauth_mode ?? (r.cred_kind === "oauth2" ? "byo" : null),
     hasRefreshToken: r.has_refresh_token,
     kind: r.kind,
     label: r.label,
@@ -106,10 +111,13 @@ function fromWireRow(r: ConnectionWireRow): ConnectionEntry {
 export async function listConnections(): Promise<ConnectionEntry[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, ROUTES.vaultConnections, {
-    method: 'GET',
+    method: "GET",
     headers: authHeaders(token),
   });
-  const out = await readJson<{ connections: ConnectionWireRow[] }>(res, 'list connections');
+  const out = await readJson<{ connections: ConnectionWireRow[] }>(
+    res,
+    "list connections"
+  );
   return (out.connections ?? []).map(fromWireRow);
 }
 
@@ -119,7 +127,7 @@ export async function listConnections(): Promise<ConnectionEntry[]> {
  */
 export async function oauthCallbackUri(): Promise<string> {
   const { baseUrl } = await auth();
-  return `${baseUrl.replace(/\/$/, '')}${ROUTES.vaultOAuthCallback}`;
+  return `${baseUrl.replace(/\/$/u, "")}${ROUTES.vaultOAuthCallback}`;
 }
 
 // ---- BYO-client wizard presets (GET /_vault/connections/providers) ----
@@ -146,7 +154,7 @@ export interface ConnectionProviderActionCapability {
   toolName: string;
   kind: string;
   templateId?: string;
-  approval?: 'outbox';
+  approval?: "outbox";
   scope?: string;
 }
 
@@ -161,7 +169,7 @@ export interface ConnectionProviderCapabilities {
 export interface ConnectionProviderPreset {
   id: string;
   name: string;
-  credKind: 'oauth2' | 'api_key';
+  credKind: "oauth2" | "api_key";
   authUrl?: string;
   tokenUrl?: string;
   scopes?: string;
@@ -176,7 +184,7 @@ export type AssistOAuthAvailability =
   | { enabled: false }
   | {
       enabled: true;
-      provider: 'google';
+      provider: "google";
       callbackUrl: string;
       restrictedScopesEnabled: boolean;
       scopeTiers: {
@@ -193,13 +201,13 @@ export interface ConnectionProviderCatalog {
 export async function loadConnectionProviderCatalog(): Promise<ConnectionProviderCatalog> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, ROUTES.vaultConnectionProviders, {
-    method: 'GET',
+    method: "GET",
     headers: authHeaders(token),
   });
   const out = await readJson<{
     providers: ConnectionProviderPreset[];
     assist?: AssistOAuthAvailability;
-  }>(res, 'list providers');
+  }>(res, "list providers");
   return {
     providers: out.providers ?? [],
     assist: out.assist ?? { enabled: false },
@@ -207,7 +215,9 @@ export async function loadConnectionProviderCatalog(): Promise<ConnectionProvide
 }
 
 /** The BYO-client wizard's provider catalog (Google, GitHub, …). */
-export async function listConnectionProviders(): Promise<ConnectionProviderPreset[]> {
+export async function listConnectionProviders(): Promise<
+  ConnectionProviderPreset[]
+> {
   return (await loadConnectionProviderCatalog()).providers;
 }
 
@@ -220,7 +230,7 @@ export async function listConnectionProviders(): Promise<ConnectionProviderPrese
 export interface ConfigureConnectionInput {
   kind: string;
   label: string;
-  credKind: 'oauth2' | 'api_key' | 'none';
+  credKind: "oauth2" | "api_key" | "none";
   provider?: string;
   authUrl?: string;
   tokenUrl?: string;
@@ -240,25 +250,29 @@ export interface ConfigureAssistConnectionInput {
 }
 
 export async function configureAssistConnection(
-  input: ConfigureAssistConnectionInput,
+  input: ConfigureAssistConnectionInput
 ): Promise<{ connectionId: string; credKind: string; status: string }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, ROUTES.vaultConnectionsAssist, {
     body: JSON.stringify(input),
-    headers: authHeaders(token, 'application/json'),
-    method: 'POST',
+    headers: authHeaders(token, "application/json"),
+    method: "POST",
   });
   const out = await readJson<{
     ok: true;
     connection_id: string;
     cred_kind: string;
     status: string;
-  }>(res, 'configure Centraid Assist connection');
-  return { connectionId: out.connection_id, credKind: out.cred_kind, status: out.status };
+  }>(res, "configure Centraid Assist connection");
+  return {
+    connectionId: out.connection_id,
+    credKind: out.cred_kind,
+    status: out.status,
+  };
 }
 
 export async function configureConnection(
-  input: ConfigureConnectionInput,
+  input: ConfigureConnectionInput
 ): Promise<{ connectionId: string; credKind: string; status: string }> {
   const { baseUrl, token } = await auth();
   const body: Record<string, unknown> = {
@@ -276,35 +290,47 @@ export async function configureConnection(
   if (input.allowedHosts) body.allowed_hosts = input.allowedHosts;
   const res = await doFetch(baseUrl, ROUTES.vaultConnections, {
     body: JSON.stringify(body),
-    headers: authHeaders(token, 'application/json'),
-    method: 'POST',
+    headers: authHeaders(token, "application/json"),
+    method: "POST",
   });
   const out = await readJson<{
     ok: true;
     connection_id: string;
     cred_kind: string;
     status: string;
-  }>(res, 'configure connection');
-  return { connectionId: out.connection_id, credKind: out.cred_kind, status: out.status };
+  }>(res, "configure connection");
+  return {
+    connectionId: out.connection_id,
+    credKind: out.cred_kind,
+    status: out.status,
+  };
 }
 
 // ---- Pause / resume (PATCH /_vault/connections/<id>) ----
 
 export async function setConnectionStatus(input: {
   connectionId: string;
-  status: 'active' | 'paused' | 'needs-auth';
+  status: "active" | "paused" | "needs-auth";
   note?: string;
 }): Promise<{ connectionId: string; status: string }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, vaultConnectionPath(enc(input.connectionId)), {
-    body: JSON.stringify({ status: input.status, ...(input.note ? { note: input.note } : {}) }),
-    headers: authHeaders(token, 'application/json'),
-    method: 'PATCH',
-  });
-  const out = await readJson<{ ok: true; connection_id: string; status: string }>(
-    res,
-    'set connection status',
+  const res = await doFetch(
+    baseUrl,
+    vaultConnectionPath(enc(input.connectionId)),
+    {
+      body: JSON.stringify({
+        status: input.status,
+        ...(input.note ? { note: input.note } : {}),
+      }),
+      headers: authHeaders(token, "application/json"),
+      method: "PATCH",
+    }
   );
+  const out = await readJson<{
+    ok: true;
+    connection_id: string;
+    status: string;
+  }>(res, "set connection status");
   return { connectionId: out.connection_id, status: out.status };
 }
 
@@ -318,35 +344,38 @@ export async function setConnectionStatus(input: {
  * outbox decide/revoke routes, so the caller gets the server's own reason
  * instead of a generic "HTTP 409" message.
  */
-async function readRemoveOutcome(res: Response, op: string): Promise<{ connection_id: string }> {
+async function readRemoveOutcome(
+  res: Response,
+  op: string
+): Promise<{ connection_id: string }> {
   const text = await res.text();
   if (res.ok) {
     try {
       return JSON.parse(text) as { connection_id: string };
     } catch {
       throw new GatewayClientError(
-        'gateway_error',
-        `${op} returned non-JSON: ${text.slice(0, 200)}`,
+        "gateway_error",
+        `${op} returned non-JSON: ${text.slice(0, 200)}`
       );
     }
   }
   if (res.status === 401 || res.status === 403) {
     throw new GatewayClientError(
-      'auth_required',
-      `${op}: gateway rejected request (HTTP ${res.status}). Check your gateway token in Settings.`,
+      "auth_required",
+      `${op}: gateway rejected request (HTTP ${res.status}). Check your gateway token in Settings.`
     );
   }
   if (res.status === 404) {
-    throw new GatewayClientError('not_found', `${op}: no such connection`);
+    throw new GatewayClientError("not_found", `${op}: no such connection`);
   }
   let reason = text || res.statusText;
   try {
     const body = JSON.parse(text) as { error?: string };
-    if (typeof body.error === 'string') reason = body.error;
+    if (typeof body.error === "string") reason = body.error;
   } catch {
     // Non-JSON body — fall back to the raw text above.
   }
-  throw new GatewayClientError('conflict', reason);
+  throw new GatewayClientError("conflict", reason);
 }
 
 /**
@@ -356,13 +385,15 @@ async function readRemoveOutcome(res: Response, op: string): Promise<{ connectio
  * sync history — `reason` is the server's own explanation, meant for a
  * toast, not a generic HTTP-status message.
  */
-export async function removeConnection(connectionId: string): Promise<{ connectionId: string }> {
+export async function removeConnection(
+  connectionId: string
+): Promise<{ connectionId: string }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, vaultConnectionPath(enc(connectionId)), {
     headers: authHeaders(token),
-    method: 'DELETE',
+    method: "DELETE",
   });
-  const out = await readRemoveOutcome(res, 'remove connection');
+  const out = await readRemoveOutcome(res, "remove connection");
   return { connectionId: out.connection_id };
 }
 
@@ -385,22 +416,31 @@ export interface BeginConnectionAuthorization {
 export async function beginConnectionAuthorization(input: {
   connectionId: string;
   redirectUri?: string;
-  surface?: 'desktop' | 'web';
+  surface?: "desktop" | "web";
 }): Promise<BeginConnectionAuthorization> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, vaultConnectionAuthorizePath(enc(input.connectionId)), {
-    body: JSON.stringify({
-      ...(input.redirectUri ? { redirect_uri: input.redirectUri } : {}),
-      ...(input.surface ? { surface: input.surface } : {}),
-    }),
-    headers: withClientSession(authHeaders(token, 'application/json')),
-    method: 'POST',
-  });
-  const out = await readJson<{ auth_url: string; state: string; redirect_uri: string }>(
-    res,
-    'begin authorization',
+  const res = await doFetch(
+    baseUrl,
+    vaultConnectionAuthorizePath(enc(input.connectionId)),
+    {
+      body: JSON.stringify({
+        ...(input.redirectUri ? { redirect_uri: input.redirectUri } : {}),
+        ...(input.surface ? { surface: input.surface } : {}),
+      }),
+      headers: withClientSession(authHeaders(token, "application/json")),
+      method: "POST",
+    }
   );
-  return { authUrl: out.auth_url, redirectUri: out.redirect_uri, state: out.state };
+  const out = await readJson<{
+    auth_url: string;
+    state: string;
+    redirect_uri: string;
+  }>(res, "begin authorization");
+  return {
+    authUrl: out.auth_url,
+    redirectUri: out.redirect_uri,
+    state: out.state,
+  };
 }
 
 export interface AssistOAuthHandoff {
@@ -412,17 +452,17 @@ export interface AssistOAuthHandoff {
 
 /** Deliver fragment material to its originating gateway ceremony. */
 export async function completeAssistAuthorization(
-  handoff: AssistOAuthHandoff,
+  handoff: AssistOAuthHandoff
 ): Promise<{ connectionId: string }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, ROUTES.vaultConnectionsAssistComplete, {
     body: JSON.stringify(handoff),
-    headers: withClientSession(authHeaders(token, 'application/json')),
-    method: 'POST',
+    headers: withClientSession(authHeaders(token, "application/json")),
+    method: "POST",
   });
   const out = await readJson<{ ok: true; connection_id: string }>(
     res,
-    'complete Centraid Assist authorization',
+    "complete Centraid Assist authorization"
   );
   return { connectionId: out.connection_id };
 }

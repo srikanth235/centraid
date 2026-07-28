@@ -21,25 +21,25 @@
  * loudly. Cheap insurance.
  */
 
+import type { ValidateFunction } from "ajv";
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- Ajv2020 is both value (constructor) and type (instance). (#247)
-import { Ajv2020 } from 'ajv/dist/2020.js';
-import type { ValidateFunction } from 'ajv';
+import { Ajv2020 } from "ajv/dist/2020.js";
 
 /** Current manifest schema version. Bump on any incompatible field change. */
 export const MANIFEST_VERSION = 1;
 
 /** Filename inside an app's code dir. */
-export const APP_MANIFEST_FILE = 'app.json';
+export const APP_MANIFEST_FILE = "app.json";
 
 export type ManifestValidationCode =
-  | 'invalid_json'
-  | 'invalid_manifest'
-  | 'unsupported_manifest_version'
-  | 'missing_field'
-  | 'invalid_field'
-  | 'invalid_handler_entry'
-  | 'duplicate_handler'
-  | 'reserved_handler_name';
+  | "invalid_json"
+  | "invalid_manifest"
+  | "unsupported_manifest_version"
+  | "missing_field"
+  | "invalid_field"
+  | "invalid_handler_entry"
+  | "duplicate_handler"
+  | "reserved_handler_name";
 
 /**
  * Names starting with `_` are reserved (they once addressed built-ins
@@ -47,7 +47,7 @@ export type ManifestValidationCode =
  * App authors cannot declare an action or query with such a name —
  * `validateManifest` refuses it explicitly at load time.
  */
-export const RESERVED_HANDLER_PREFIX = '_';
+export const RESERVED_HANDLER_PREFIX = "_";
 
 export function isReservedHandlerName(name: string): boolean {
   return name.startsWith(RESERVED_HANDLER_PREFIX);
@@ -58,7 +58,7 @@ export class ManifestError extends Error {
   readonly path?: string;
   constructor(code: ManifestValidationCode, message: string, path?: string) {
     super(message);
-    this.name = 'ManifestError';
+    this.name = "ManifestError";
     this.code = code;
     if (path !== undefined) this.path = path;
   }
@@ -67,7 +67,7 @@ export class ManifestError extends Error {
 /** A JSON Schema fragment — kept as an opaque record. Validated by Ajv at use. */
 export type JsonSchema = Record<string, unknown>;
 
-export type HandlerConfirmation = 'none' | 'required';
+export type HandlerConfirmation = "none" | "required";
 
 export interface ManifestActionEntry {
   readonly name: string;
@@ -109,7 +109,7 @@ export interface ManifestKnob {
   /** Display label shown in the popover row. */
   readonly label: string;
   /** Control type. `segmented` for discrete values, `swatch` for colour. */
-  readonly type: 'segmented' | 'swatch';
+  readonly type: "segmented" | "swatch";
   /** Value to assume when the per-app table has no row for this knob. */
   readonly default: string;
   /** Choices the user picks from. */
@@ -120,7 +120,7 @@ export interface ManifestKnob {
 export interface ManifestVaultScope {
   readonly schema: string;
   readonly table?: string;
-  readonly verbs: 'read' | 'read+act' | 'act' | 'reveal';
+  readonly verbs: "read" | "read+act" | "act" | "reveal";
 }
 
 /**
@@ -146,7 +146,7 @@ export interface ManifestVaultBlock {
  */
 export interface ManifestExtColumn {
   readonly name: string;
-  readonly type: 'text' | 'integer' | 'real' | 'blob';
+  readonly type: "text" | "integer" | "real" | "blob";
   readonly primaryKey?: boolean;
   readonly notNull?: boolean;
   readonly default?: string | number;
@@ -184,7 +184,7 @@ export interface Manifest {
    * manifest, not the folder id, is the source of truth for "is this an
    * automation app".
    */
-  readonly kind?: 'app' | 'automation';
+  readonly kind?: "app" | "automation";
   readonly description?: string;
   readonly actions: readonly ManifestActionEntry[];
   readonly queries: readonly ManifestQueryEntry[];
@@ -202,130 +202,140 @@ export interface Manifest {
 // it without depending on our runtime module.
 // ----------------------------------------------------------------------------
 export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
-  $schema: 'https://json-schema.org/draft/2020-12/schema',
-  $id: 'https://centraid.dev/schemas/app-manifest/v1.json',
-  type: 'object',
-  required: ['manifestVersion', 'id', 'name', 'version'],
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://centraid.dev/schemas/app-manifest/v1.json",
+  type: "object",
+  required: ["manifestVersion", "id", "name", "version"],
   additionalProperties: true,
   properties: {
-    manifestVersion: { type: 'integer', const: MANIFEST_VERSION },
-    id: { type: 'string', minLength: 1 },
-    name: { type: 'string', minLength: 1 },
-    version: { type: 'string', minLength: 1 },
-    kind: { type: 'string', enum: ['app', 'automation'] },
-    description: { type: 'string' },
+    manifestVersion: { type: "integer", const: MANIFEST_VERSION },
+    id: { type: "string", minLength: 1 },
+    name: { type: "string", minLength: 1 },
+    version: { type: "string", minLength: 1 },
+    kind: { type: "string", enum: ["app", "automation"] },
+    description: { type: "string" },
     actions: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
-        required: ['name', 'confirmation', 'input'],
+        type: "object",
+        required: ["name", "confirmation", "input"],
         properties: {
-          name: { type: 'string', minLength: 1 },
-          description: { type: 'string' },
-          confirmation: { type: 'string', enum: ['none', 'required'] },
-          input: { type: 'object' },
-          output: { type: 'object' },
-          writes: { type: 'array', items: { type: 'string' } },
+          name: { type: "string", minLength: 1 },
+          description: { type: "string" },
+          confirmation: { type: "string", enum: ["none", "required"] },
+          input: { type: "object" },
+          output: { type: "object" },
+          writes: { type: "array", items: { type: "string" } },
         },
       },
     },
     queries: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
-        required: ['name', 'input'],
+        type: "object",
+        required: ["name", "input"],
         properties: {
-          name: { type: 'string', minLength: 1 },
-          description: { type: 'string' },
-          input: { type: 'object' },
-          output: { type: 'object' },
-          reads: { type: 'array', items: { type: 'string' } },
+          name: { type: "string", minLength: 1 },
+          description: { type: "string" },
+          input: { type: "object" },
+          output: { type: "object" },
+          reads: { type: "array", items: { type: "string" } },
         },
       },
     },
     ext: {
-      type: 'object',
-      required: ['tables'],
+      type: "object",
+      required: ["tables"],
       properties: {
         tables: {
-          type: 'array',
+          type: "array",
           items: {
-            type: 'object',
-            required: ['name', 'columns'],
+            type: "object",
+            required: ["name", "columns"],
             properties: {
-              name: { type: 'string', minLength: 1 },
+              name: { type: "string", minLength: 1 },
               columns: {
-                type: 'array',
+                type: "array",
                 minItems: 1,
                 items: {
-                  type: 'object',
-                  required: ['name', 'type'],
+                  type: "object",
+                  required: ["name", "type"],
                   properties: {
-                    name: { type: 'string', minLength: 1 },
-                    type: { type: 'string', enum: ['text', 'integer', 'real', 'blob'] },
-                    primaryKey: { type: 'boolean' },
-                    notNull: { type: 'boolean' },
-                    default: { type: ['string', 'number'] },
-                    references: { type: 'string', minLength: 1 },
+                    name: { type: "string", minLength: 1 },
+                    type: {
+                      type: "string",
+                      enum: ["text", "integer", "real", "blob"],
+                    },
+                    primaryKey: { type: "boolean" },
+                    notNull: { type: "boolean" },
+                    default: { type: ["string", "number"] },
+                    references: { type: "string", minLength: 1 },
                   },
                 },
               },
               indexes: {
-                type: 'array',
+                type: "array",
                 items: {
-                  type: 'object',
-                  required: ['columns'],
+                  type: "object",
+                  required: ["columns"],
                   properties: {
-                    columns: { type: 'array', minItems: 1, items: { type: 'string' } },
-                    unique: { type: 'boolean' },
+                    columns: {
+                      type: "array",
+                      minItems: 1,
+                      items: { type: "string" },
+                    },
+                    unique: { type: "boolean" },
                   },
                 },
               },
-              searchable: { type: 'array', items: { type: 'string' } },
+              searchable: { type: "array", items: { type: "string" } },
             },
           },
         },
       },
     },
     vault: {
-      type: 'object',
-      required: ['purpose', 'scopes'],
+      type: "object",
+      required: ["purpose", "scopes"],
       properties: {
-        purpose: { type: 'string', minLength: 1 },
-        why: { type: 'string' },
+        purpose: { type: "string", minLength: 1 },
+        why: { type: "string" },
         scopes: {
-          type: 'array',
+          type: "array",
           minItems: 1,
           items: {
-            type: 'object',
-            required: ['schema', 'verbs'],
+            type: "object",
+            required: ["schema", "verbs"],
             properties: {
-              schema: { type: 'string', minLength: 1 },
-              table: { type: 'string', minLength: 1 },
-              verbs: { type: 'string', enum: ['read', 'read+act', 'act', 'reveal'] },
+              schema: { type: "string", minLength: 1 },
+              table: { type: "string", minLength: 1 },
+              verbs: {
+                type: "string",
+                enum: ["read", "read+act", "act", "reveal"],
+              },
             },
           },
         },
       },
     },
     knobs: {
-      type: 'array',
+      type: "array",
       items: {
-        type: 'object',
-        required: ['key', 'label', 'type', 'default', 'options'],
+        type: "object",
+        required: ["key", "label", "type", "default", "options"],
         properties: {
-          key: { type: 'string', minLength: 1 },
-          label: { type: 'string', minLength: 1 },
-          type: { type: 'string', enum: ['segmented', 'swatch'] },
-          default: { type: 'string' },
+          key: { type: "string", minLength: 1 },
+          label: { type: "string", minLength: 1 },
+          type: { type: "string", enum: ["segmented", "swatch"] },
+          default: { type: "string" },
           options: {
-            type: 'array',
+            type: "array",
             items: {
-              type: 'object',
-              required: ['value', 'label'],
+              type: "object",
+              required: ["value", "label"],
               properties: {
-                value: { type: 'string' },
-                label: { type: 'string' },
+                value: { type: "string" },
+                label: { type: "string" },
               },
             },
           },
@@ -364,7 +374,8 @@ function getAjv(): Ajv2020 {
 
 let manifestValidator: ValidateFunction | undefined;
 function getManifestValidator(): ValidateFunction {
-  if (!manifestValidator) manifestValidator = getAjv().compile(MANIFEST_JSON_SCHEMA);
+  if (!manifestValidator)
+    manifestValidator = getAjv().compile(MANIFEST_JSON_SCHEMA);
   return manifestValidator;
 }
 
@@ -387,8 +398,8 @@ export function parseManifest(json: string): Manifest {
     raw = JSON.parse(json);
   } catch (err) {
     throw new ManifestError(
-      'invalid_json',
-      `app.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      "invalid_json",
+      `app.json is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
     );
   }
   return validateManifest(raw);
@@ -405,8 +416,11 @@ export function parseManifest(json: string): Manifest {
  *      handler names within an app.
  */
 export function validateManifest(raw: unknown): Manifest {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new ManifestError('invalid_manifest', 'manifest must be a JSON object');
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ManifestError(
+      "invalid_manifest",
+      "manifest must be a JSON object"
+    );
   }
   const r = raw as Record<string, unknown>;
 
@@ -414,16 +428,16 @@ export function validateManifest(raw: unknown): Manifest {
   // "required" error is less actionable for the most common drift case.
   if (r.manifestVersion === undefined) {
     throw new ManifestError(
-      'unsupported_manifest_version',
+      "unsupported_manifest_version",
       `app.json is missing "manifestVersion"; expected ${MANIFEST_VERSION}`,
-      'manifestVersion',
+      "manifestVersion"
     );
   }
   if (r.manifestVersion !== MANIFEST_VERSION) {
     throw new ManifestError(
-      'unsupported_manifest_version',
+      "unsupported_manifest_version",
       `app.json declares manifestVersion ${String(r.manifestVersion)}, but this runtime understands ${MANIFEST_VERSION}`,
-      'manifestVersion',
+      "manifestVersion"
     );
   }
 
@@ -431,9 +445,13 @@ export function validateManifest(raw: unknown): Manifest {
   if (!validate(raw)) {
     const errs = validate.errors ?? [];
     const first = errs[0];
-    const path = first?.instancePath || '';
-    const msg = first?.message ?? 'manifest failed schema validation';
-    throw new ManifestError('invalid_manifest', `manifest invalid: ${msg}`, path);
+    const path = first?.instancePath || "";
+    const msg = first?.message ?? "manifest failed schema validation";
+    throw new ManifestError(
+      "invalid_manifest",
+      `manifest invalid: ${msg}`,
+      path
+    );
   }
 
   // Cross-cut: detect duplicate handler names. The same name appearing
@@ -447,16 +465,16 @@ export function validateManifest(raw: unknown): Manifest {
   for (const a of actions) {
     if (isReservedHandlerName(a.name)) {
       throw new ManifestError(
-        'reserved_handler_name',
+        "reserved_handler_name",
         `action name "${a.name}" is reserved; names starting with "${RESERVED_HANDLER_PREFIX}" are dispatched to built-in handlers`,
-        `actions[name=${a.name}]`,
+        `actions[name=${a.name}]`
       );
     }
     if (seenActions.has(a.name)) {
       throw new ManifestError(
-        'duplicate_handler',
+        "duplicate_handler",
         `manifest declares the action "${a.name}" twice`,
-        `actions[name=${a.name}]`,
+        `actions[name=${a.name}]`
       );
     }
     seenActions.add(a.name);
@@ -465,16 +483,16 @@ export function validateManifest(raw: unknown): Manifest {
   for (const q of queries) {
     if (isReservedHandlerName(q.name)) {
       throw new ManifestError(
-        'reserved_handler_name',
+        "reserved_handler_name",
         `query name "${q.name}" is reserved; names starting with "${RESERVED_HANDLER_PREFIX}" are dispatched to built-in handlers`,
-        `queries[name=${q.name}]`,
+        `queries[name=${q.name}]`
       );
     }
     if (seenQueries.has(q.name)) {
       throw new ManifestError(
-        'duplicate_handler',
+        "duplicate_handler",
         `manifest declares the query "${q.name}" twice`,
-        `queries[name=${q.name}]`,
+        `queries[name=${q.name}]`
       );
     }
     seenQueries.add(q.name);
@@ -485,22 +503,34 @@ export function validateManifest(raw: unknown): Manifest {
     id: r.id as string,
     name: r.name as string,
     version: r.version as string,
-    ...(r.kind === 'automation' || r.kind === 'app' ? { kind: r.kind } : {}),
-    ...(typeof r.description === 'string' ? { description: r.description } : {}),
+    ...(r.kind === "automation" || r.kind === "app" ? { kind: r.kind } : {}),
+    ...(typeof r.description === "string"
+      ? { description: r.description }
+      : {}),
     actions,
     queries,
     ...(Array.isArray(r.knobs) ? { knobs: r.knobs as ManifestKnob[] } : {}),
-    ...(r.vault && typeof r.vault === 'object' ? { vault: r.vault as ManifestVaultBlock } : {}),
-    ...(r.ext && typeof r.ext === 'object' ? { ext: r.ext as ManifestExtBlock } : {}),
+    ...(r.vault && typeof r.vault === "object"
+      ? { vault: r.vault as ManifestVaultBlock }
+      : {}),
+    ...(r.ext && typeof r.ext === "object"
+      ? { ext: r.ext as ManifestExtBlock }
+      : {}),
   };
 }
 
 /** Look up an action entry by name. */
-export function findAction(manifest: Manifest, name: string): ManifestActionEntry | undefined {
+export function findAction(
+  manifest: Manifest,
+  name: string
+): ManifestActionEntry | undefined {
   return manifest.actions.find((a) => a.name === name);
 }
 
 /** Look up a query entry by name. */
-export function findQuery(manifest: Manifest, name: string): ManifestQueryEntry | undefined {
+export function findQuery(
+  manifest: Manifest,
+  name: string
+): ManifestQueryEntry | undefined {
   return manifest.queries.find((q) => q.name === name);
 }

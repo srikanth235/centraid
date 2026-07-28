@@ -2,22 +2,53 @@
 // battery/network modules and the durable rule store are injected via mocks so
 // the pure decision logic runs under node.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { nativeUploadPolicy } from './native-policy';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const network = { getNetworkStateAsync: vi.fn() };
-const battery = { getBatteryStateAsync: vi.fn() };
-const store = { hydrate: vi.fn() };
+import { nativeUploadPolicy } from "./native-policy";
 
-vi.mock('expo-network', () => ({
-  getNetworkStateAsync: (...args: unknown[]) => network.getNetworkStateAsync(...args),
-  NetworkStateType: { WIFI: 'WIFI', CELLULAR: 'CELLULAR', OTHER: 'OTHER' },
+type NetworkStateTestSeam = () => Promise<{
+  isConnected: boolean;
+  type: "WIFI" | "CELLULAR" | "OTHER";
+}>;
+type BatteryStateTestSeam = () => Promise<number>;
+type HydrateRulesTestSeam = (key: string, fallback: Rules) => Promise<Rules>;
+
+const network = { getNetworkStateAsync: vi.fn<NetworkStateTestSeam>() };
+const battery = { getBatteryStateAsync: vi.fn<BatteryStateTestSeam>() };
+const store = { hydrate: vi.fn<HydrateRulesTestSeam>() };
+
+vi.mock(import("expo-network") as Promise<unknown>, () => ({
+  getNetworkStateAsync: () => network.getNetworkStateAsync(),
+  // Real string-enum members (`NetworkStateType.WIFI`, …) are a distinct
+  // literal type per member — a plain string like `'WIFI'` is never
+  // assignable to an enum-typed property without going through the actual
+  // enum, so this partial stand-in (only the members native-policy.ts
+  // reads) is asserted to the real type rather than reconstructed.
+  NetworkStateType: {
+    WIFI: "WIFI",
+    CELLULAR: "CELLULAR",
+    OTHER: "OTHER",
+  } as unknown as typeof import("expo-network").NetworkStateType,
 }));
-vi.mock('expo-battery', () => ({
-  getBatteryStateAsync: (...args: unknown[]) => battery.getBatteryStateAsync(...args),
-  BatteryState: { UNKNOWN: 0, UNPLUGGED: 1, CHARGING: 2, FULL: 3 },
+vi.mock(import("expo-battery"), () => ({
+  getBatteryStateAsync: () => battery.getBatteryStateAsync(),
+  BatteryState: {
+    UNKNOWN: 0,
+    UNPLUGGED: 1,
+    CHARGING: 2,
+    FULL: 3,
+  } as unknown as typeof import("expo-battery").BatteryState,
 }));
-vi.mock('../../storage', () => ({ Store: { hydrate: (...a: unknown[]) => store.hydrate(...a) } }));
+vi.mock(import("../../storage") as Promise<unknown>, () => ({
+  Store: {
+    // Only `hydrate` is exercised here; `get`/`set` are implemented with the
+    // real generic signatures (not asserted) since they're trivial to
+    // satisfy honestly.
+    get: <T>(_key: string, fallback: T): T => fallback,
+    hydrate: (key: string, fallback: Rules) => store.hydrate(key, fallback),
+    set: <T>(_key: string, _value: T): void => undefined,
+  },
+}));
 
 interface Rules {
   wifiOnly: boolean;
@@ -28,7 +59,7 @@ interface Rules {
 function scenario(opts: {
   rules: Partial<Rules>;
   connected?: boolean;
-  type?: 'WIFI' | 'CELLULAR' | 'OTHER';
+  type?: "WIFI" | "CELLULAR" | "OTHER";
   batteryState?: number;
 }): Promise<boolean> {
   store.hydrate.mockResolvedValue({
@@ -39,58 +70,72 @@ function scenario(opts: {
   });
   network.getNetworkStateAsync.mockResolvedValue({
     isConnected: opts.connected ?? true,
-    type: opts.type ?? 'WIFI',
+    type: opts.type ?? "WIFI",
   });
   battery.getBatteryStateAsync.mockResolvedValue(opts.batteryState ?? 1);
   return Promise.resolve(nativeUploadPolicy().canTransfer());
 }
 
-beforeEach(() => {
-  store.hydrate.mockReset();
-  network.getNetworkStateAsync.mockReset();
-  battery.getBatteryStateAsync.mockReset();
-});
-
-describe('nativeUploadPolicy', () => {
-  it('never transfers while offline, whatever the rules', async () => {
-    expect(await scenario({ rules: { wifiOnly: false }, connected: false })).toBe(false);
+describe("native-policy", () => {
+  beforeEach(() => {
+    store.hydrate.mockReset();
+    network.getNetworkStateAsync.mockReset();
+    battery.getBatteryStateAsync.mockReset();
   });
 
-  it('wifiOnly permits Wi-Fi and blocks cellular', async () => {
-    expect(await scenario({ rules: { wifiOnly: true }, type: 'WIFI' })).toBe(true);
-    expect(await scenario({ rules: { wifiOnly: true }, type: 'CELLULAR' })).toBe(false);
-  });
+  describe(nativeUploadPolicy, () => {
+    it("never transfers while offline, whatever the rules", async () => {
+      await expect(
+        scenario({ rules: { wifiOnly: false }, connected: false })
+      ).resolves.toBe(false);
+    });
 
-  it('with wifiOnly off, metered cellular needs allowMetered', async () => {
-    expect(
-      await scenario({ rules: { wifiOnly: false, allowMetered: false }, type: 'CELLULAR' }),
-    ).toBe(false);
-    expect(
-      await scenario({ rules: { wifiOnly: false, allowMetered: true }, type: 'CELLULAR' }),
-    ).toBe(true);
-  });
+    it("wifiOnly permits Wi-Fi and blocks cellular", async () => {
+      await expect(
+        scenario({ rules: { wifiOnly: true }, type: "WIFI" })
+      ).resolves.toBe(true);
+      await expect(
+        scenario({ rules: { wifiOnly: true }, type: "CELLULAR" })
+      ).resolves.toBe(false);
+    });
 
-  it('chargerOnly gates on the battery state even on Wi-Fi', async () => {
-    expect(
-      await scenario({
-        rules: { wifiOnly: true, chargerOnly: true },
-        type: 'WIFI',
-        batteryState: 1,
-      }),
-    ).toBe(false);
-    expect(
-      await scenario({
-        rules: { wifiOnly: true, chargerOnly: true },
-        type: 'WIFI',
-        batteryState: 2,
-      }),
-    ).toBe(true);
-    expect(
-      await scenario({
-        rules: { wifiOnly: true, chargerOnly: true },
-        type: 'WIFI',
-        batteryState: 3,
-      }),
-    ).toBe(true);
+    it("with wifiOnly off, metered cellular needs allowMetered", async () => {
+      await expect(
+        scenario({
+          rules: { wifiOnly: false, allowMetered: false },
+          type: "CELLULAR",
+        })
+      ).resolves.toBe(false);
+      await expect(
+        scenario({
+          rules: { wifiOnly: false, allowMetered: true },
+          type: "CELLULAR",
+        })
+      ).resolves.toBe(true);
+    });
+
+    it("chargerOnly gates on the battery state even on Wi-Fi", async () => {
+      await expect(
+        scenario({
+          rules: { wifiOnly: true, chargerOnly: true },
+          type: "WIFI",
+          batteryState: 1,
+        })
+      ).resolves.toBe(false);
+      await expect(
+        scenario({
+          rules: { wifiOnly: true, chargerOnly: true },
+          type: "WIFI",
+          batteryState: 2,
+        })
+      ).resolves.toBe(true);
+      await expect(
+        scenario({
+          rules: { wifiOnly: true, chargerOnly: true },
+          type: "WIFI",
+          batteryState: 3,
+        })
+      ).resolves.toBe(true);
+    });
   });
 });

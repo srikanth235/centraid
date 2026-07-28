@@ -20,11 +20,13 @@
  * failure never widens access and never advances past undelivered rows.
  */
 
-import { createHash } from 'node:crypto';
-import type { VaultBridge } from '@centraid/app-engine';
-import type { ConditionTrigger, DataTrigger } from '../manifest/manifest.js';
-import { parseRef } from '../manifest/ref.js';
-import type { CursorReadResult } from './cursor-engine.js';
+import { createHash } from "node:crypto";
+
+import type { VaultBridge } from "@centraid/app-engine";
+
+import type { ConditionTrigger, DataTrigger } from "../manifest/manifest.js";
+import { parseRef } from "../manifest/ref.js";
+import type { CursorReadResult } from "./cursor-engine.js";
 
 /*
  * `__trigger:` stays a reserved `automation_state` key prefix: handlers share
@@ -40,7 +42,7 @@ const MAX_SEEN_HASHES = 2000;
 function rowHash(row: Record<string, unknown>): string {
   const keys = Object.keys(row).sort();
   const canonical = JSON.stringify(keys.map((k) => [k, row[k]]));
-  return createHash('sha256').update(canonical).digest('hex').slice(0, 32);
+  return createHash("sha256").update(canonical).digest("hex").slice(0, 32);
 }
 
 export interface ReadConditionCursorOptions {
@@ -58,7 +60,7 @@ function stringArrayPosition(positionJson: string | undefined): string[] {
   try {
     const parsed = JSON.parse(positionJson) as unknown;
     return Array.isArray(parsed)
-      ? parsed.filter((entry): entry is string => typeof entry === 'string')
+      ? parsed.filter((entry): entry is string => typeof entry === "string")
       : [];
   } catch {
     return [];
@@ -67,13 +69,13 @@ function stringArrayPosition(positionJson: string | undefined): string[] {
 
 /** Derived-query cursor source: content hashes are its ordered position set. */
 export async function readConditionCursor(
-  options: ReadConditionCursorOptions,
+  options: ReadConditionCursorOptions
 ): Promise<CursorReadResult> {
   if (!parseRef(options.automationRef)) {
     throw new Error(`invalid ref ${options.automationRef}`);
   }
   const result = await options.vault({
-    op: 'read',
+    op: "read",
     payload: {
       entity: options.trigger.entity,
       ...(options.trigger.where ? { where: options.trigger.where } : {}),
@@ -82,9 +84,13 @@ export async function readConditionCursor(
     },
   });
   if (!result.ok) {
-    throw new Error(`${result.code ?? 'VAULT_ERROR'}: ${result.error ?? 'vault read failed'}`);
+    throw new Error(
+      `${result.code ?? "VAULT_ERROR"}: ${result.error ?? "vault read failed"}`
+    );
   }
-  const rows = ((result.result as { rows?: Record<string, unknown>[] })?.rows ?? []).slice();
+  const rows = (
+    (result.result as { rows?: Record<string, unknown>[] })?.rows ?? []
+  ).slice();
   const seen = new Set(stringArrayPosition(options.positionJson));
   const current = rows.map(rowHash);
   const fresh = rows
@@ -95,7 +101,9 @@ export async function readConditionCursor(
   // The committed position advances over DELIVERED rows only: a match beyond
   // the cap stays unseen and arrives on the next gate tick. Rows that left the
   // window are dropped from the set, which is what makes a re-entry fire again.
-  const position = current.filter((hash) => seen.has(hash) || deliveredHashes.has(hash));
+  const position = current.filter(
+    (hash) => seen.has(hash) || deliveredHashes.has(hash)
+  );
   const occurredAt = options.now.getTime();
   return {
     elements: delivered.map(({ row, hash }) => ({
@@ -127,7 +135,7 @@ function scalarPosition(positionJson: string | undefined): string | null {
   if (!positionJson) return null;
   try {
     const parsed = JSON.parse(positionJson) as unknown;
-    return typeof parsed === 'string' ? parsed : null;
+    return typeof parsed === "string" ? parsed : null;
   } catch {
     return null;
   }
@@ -135,19 +143,24 @@ function scalarPosition(positionJson: string | undefined): string | null {
 
 /** The feed-native watermark of one change entry, when it carries one. */
 function changeId(change: Record<string, unknown>): string | undefined {
-  for (const key of ['id', 'provId', 'provenanceId', 'cursor']) {
+  for (const key of ["id", "provId", "provenanceId", "cursor"]) {
     const value = change[key];
-    if (typeof value === 'string' && value) return value;
+    if (typeof value === "string" && value) return value;
   }
   return undefined;
 }
 
-function changePosition(change: Record<string, unknown>, index: number): string {
+function changePosition(
+  change: Record<string, unknown>,
+  index: number
+): string {
   return changeId(change) ?? `${rowHash(change)}:${index}`;
 }
 
 /** Vault provenance cursor source. Missing position bootstraps from now. */
-export async function readDataCursor(options: ReadDataCursorOptions): Promise<CursorReadResult> {
+export async function readDataCursor(
+  options: ReadDataCursorOptions
+): Promise<CursorReadResult> {
   if (!parseRef(options.automationRef)) {
     throw new Error(`invalid ref ${options.automationRef}`);
   }
@@ -158,7 +171,7 @@ export async function readDataCursor(options: ReadDataCursorOptions): Promise<Cu
   // would advance past entries no fire ever saw. A backlog beyond the cap is
   // still durably in the journal — the next gate tick reads it.
   const result = await options.vault({
-    op: 'changes',
+    op: "changes",
     payload: {
       entities: [...options.trigger.entities],
       purpose: options.purpose,
@@ -167,7 +180,9 @@ export async function readDataCursor(options: ReadDataCursorOptions): Promise<Cu
     },
   });
   if (!result.ok) {
-    throw new Error(`${result.code ?? 'VAULT_ERROR'}: ${result.error ?? 'vault changes failed'}`);
+    throw new Error(
+      `${result.code ?? "VAULT_ERROR"}: ${result.error ?? "vault changes failed"}`
+    );
   }
   const feed = result.result as {
     changes?: Record<string, unknown>[];
@@ -186,10 +201,14 @@ export async function readDataCursor(options: ReadDataCursorOptions): Promise<Cu
         position: changePosition(change, index),
         occurredAt: options.now.getTime(),
         payload: change,
-        ...(watermark !== undefined ? { positionJson: JSON.stringify(watermark) } : {}),
+        ...(watermark === undefined
+          ? {}
+          : { positionJson: JSON.stringify(watermark) }),
       };
     }),
-    ...(typeof feed.cursor === 'string' ? { positionJson: JSON.stringify(feed.cursor) } : {}),
+    ...(typeof feed.cursor === "string"
+      ? { positionJson: JSON.stringify(feed.cursor) }
+      : {}),
     skipped: 0,
   };
 }

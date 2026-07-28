@@ -8,12 +8,13 @@
  * custom properties exist, under which selectors, with which names), not the
  * literal bytes, so a new token or a re-ordered block does not fail the suite.
  */
-import { expect, test } from 'vitest';
-import { toCss } from './css.js';
-import { densities } from './density.js';
-import { palette } from './palette.js';
-import { radii } from './radii.js';
-import { BRAND, themes } from './themes/index.js';
+import { describe, expect, test } from "vitest";
+
+import { toCss } from "./css.js";
+import { densities } from "./density.js";
+import { palette } from "./palette.js";
+import { radii } from "./radii.js";
+import { BRAND, themes } from "./themes/index.js";
 
 const css = toCss();
 
@@ -21,61 +22,65 @@ function blockFor(selector: string): string {
   // Blocks are `selector {\n  --k: v;\n}`; grab one without assuming order.
   const start = css.indexOf(`${selector} {`);
   expect(start, `no block for ${selector}`).toBeGreaterThanOrEqual(0);
-  return css.slice(start, css.indexOf('\n}', start));
+  return css.slice(start, css.indexOf("\n}", start));
 }
 
-test('every palette hue is emitted under both its legacy and redesign name', () => {
-  const root = blockFor(':root');
-  for (const [key, value] of Object.entries(palette)) {
-    // `--icon-*` is a portability alias for `--c-*`; they must not drift.
-    expect(root).toContain(`--c-${key}: ${value};`);
-    expect(root).toContain(`--icon-${key}: ${value};`);
-  }
-});
+describe("css", () => {
+  test("every palette hue is emitted under both its legacy and redesign name", () => {
+    const root = blockFor(":root");
+    for (const [key, value] of Object.entries(palette)) {
+      // `--icon-*` is a portability alias for `--c-*`; they must not drift.
+      expect(root).toContain(`--c-${key}: ${value};`);
+      expect(root).toContain(`--icon-${key}: ${value};`);
+    }
+  });
 
-test('radii are emitted in px and the brand teal is theme-independent', () => {
-  const root = blockFor(':root');
-  for (const [key, value] of Object.entries(radii)) {
-    expect(root).toContain(`--r-${key}: ${value}px;`);
-  }
-  expect(root).toContain(`--brand: ${BRAND};`);
-});
+  test("radii are emitted in px and the brand teal is theme-independent", () => {
+    const root = blockFor(":root");
+    for (const [key, value] of Object.entries(radii)) {
+      expect(root).toContain(`--r-${key}: ${value}px;`);
+    }
+    expect(root).toContain(`--brand: ${BRAND};`);
+  });
 
-test('camelCase type keys emit kebab-case custom properties', () => {
-  const root = blockFor(':root');
-  // The regex in toCss() splits on lower->upper boundaries; `display1` keeps
-  // its digit attached, `bodyStrong` gains a hyphen. Both spellings are load
-  // bearing for `font: var(--t-...)` call sites.
-  expect(root).toContain('--t-body-strong:');
-  expect(root).toMatch(/--t-display-?1:/);
-  expect(root).not.toMatch(/--t-[a-z-]*[A-Z]/);
-});
+  test("camelCase type keys emit kebab-case custom properties", () => {
+    const root = blockFor(":root");
+    // The regex in toCss() splits on lower->upper boundaries; `display1` keeps
+    // its digit attached, `bodyStrong` gains a hyphen. Both spellings are load
+    // bearing for `font: var(--t-...)` call sites.
+    expect(root).toContain("--t-body-strong:");
+    expect(root).toMatch(/--t-display-?1:/u);
+    expect(root).not.toMatch(/--t-[a-z-]*[A-Z]/u);
+  });
 
-test('each registered theme and density gets its own override block', () => {
-  for (const name of Object.keys(themes)) {
-    expect(css).toContain(`[data-theme='${name}'] {`);
-  }
-  for (const name of Object.keys(densities)) {
-    expect(css).toContain(`[data-density='${name}'] {`);
-  }
-});
+  test("each registered theme and density gets its own override block", () => {
+    for (const name of Object.keys(themes)) {
+      expect(css).toContain(`[data-theme='${name}'] {`);
+    }
+    for (const name of Object.keys(densities)) {
+      expect(css).toContain(`[data-density='${name}'] {`);
+    }
+  });
 
-test('cool-cast off neutralises the dark ramp hue while keeping the --bg-l anchor', () => {
-  const off = blockFor("[data-theme='dark'][data-cool-cast='off']");
-  // Hue and saturation go to zero; every surface must still be derived from
-  // --bg-l so the lightness slider keeps driving all four.
-  for (const prop of ['--bg', '--bg-app', '--bg-elev', '--bg-sunken']) {
-    expect(off).toMatch(new RegExp(`${prop}: hsl\\(0 0%`));
-  }
-  expect(off).toContain('var(--bg-l)');
-  // The device-wall composite references --bg-wall, so redefining it here is
-  // what neutralises both the panes and the wall in one place.
-  expect(off).toContain('--bg-wall:');
-});
+  test("cool-cast off neutralises the dark ramp hue while keeping the --bg-l anchor", () => {
+    const off = blockFor("[data-theme='dark'][data-cool-cast='off']");
+    // Hue and saturation go to zero; every surface must still be derived from
+    // --bg-l so the lightness slider keeps driving all four.
+    for (const prop of ["--bg", "--bg-app", "--bg-elev", "--bg-sunken"]) {
+      expect(off).toMatch(new RegExp(`${prop}: hsl\\(0 0%`, "u"));
+    }
+    expect(off).toContain("var(--bg-l)");
+    // The device-wall composite references --bg-wall, so redefining it here is
+    // what neutralises both the panes and the wall in one place.
+    expect(off).toContain("--bg-wall:");
+  });
 
-test('output is a single generated stylesheet with a do-not-edit banner', () => {
-  expect(css.startsWith('/* Generated by @centraid/design-tokens')).toBe(true);
-  expect(css.endsWith('\n')).toBe(true);
-  // Balanced blocks — a malformed emit would desync these.
-  expect(css.split('{').length).toBe(css.split('}').length);
+  test("output is a single generated stylesheet with a do-not-edit banner", () => {
+    expect(css.startsWith("/* Generated by @centraid/design-tokens")).toBe(
+      true
+    );
+    expect(css.endsWith("\n")).toBe(true);
+    // Balanced blocks — a malformed emit would desync these.
+    expect(css.split("{")).toHaveLength(css.split("}").length);
+  });
 });

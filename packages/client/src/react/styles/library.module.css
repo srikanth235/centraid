@@ -31,7 +31,7 @@
 .libLayoutBtn:hover {
   color: var(--ink-2);
 }
-.libLayoutBtn[aria-pressed='true'] {
+.libLayoutBtn[aria-pressed="true"] {
   background: var(--bg-elev);
   box-shadow: 0 0 0 0.5px var(--line);
   color: var(--ink);
@@ -68,7 +68,7 @@
 .discSegB:hover {
   color: var(--ink-2);
 }
-.discSegB[data-active='true'] {
+.discSegB[data-active="true"] {
   background: var(--bg-elev);
   box-shadow: 0 0 0 0.5px var(--line);
   color: var(--ink);
@@ -83,6 +83,6 @@
   letter-spacing: 0;
   color: var(--ink-4);
 }
-.discSegB[data-active='true'] .discSegN {
+.discSegB[data-active="true"] .discSegN {
   color: var(--ink-3);
 }

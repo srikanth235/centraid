@@ -1,18 +1,26 @@
-import { useEffect, useId, useRef, useState, type JSX } from 'react';
-import type { AuEditorCatalogConnectorDTO, AuEditorConnectFormInput } from '../screen-contracts.js';
-import { Button, Icon } from '../ui/index.js';
-import { cx } from '../ui/cx.js';
-import { ConnectorBrandGlyph, type ConnectorTone } from './connectorBrandMarks.js';
-import styles from './AutomationEditorScreen.module.css';
+import { useEffect, useId, useRef, useState, type JSX } from "react";
+
+import type {
+  AuEditorCatalogConnectorDTO,
+  AuEditorConnectFormInput,
+} from "../screen-contracts.js";
+import { cx } from "../ui/cx.js";
+import { Button, Icon } from "../ui/index.js";
+import {
+  ConnectorBrandGlyph,
+  type ConnectorTone,
+} from "./connectorBrandMarks.js";
+
+import styles from "./AutomationEditorScreen.module.css";
 
 const HEALTH_LABEL: Record<
-  NonNullable<AuEditorCatalogConnectorDTO['connection']>['health'],
+  NonNullable<AuEditorCatalogConnectorDTO["connection"]>["health"],
   string
 > = {
-  failing: 'Failing',
-  'needs-auth': 'Needs auth',
-  ok: 'Connected',
-  paused: 'Paused',
+  failing: "Failing",
+  "needs-auth": "Needs auth",
+  ok: "Connected",
+  paused: "Paused",
 };
 
 function ConnectInlineForm({
@@ -27,25 +35,26 @@ function ConnectInlineForm({
   onSubmit: (input: AuEditorConnectFormInput) => void;
 }): JSX.Element {
   const [label, setLabel] = useState(
-    () => `${item.providerName.split(' (')[0] ?? item.providerName} · ${item.name}`,
+    () =>
+      `${item.providerName.split(" (")[0] ?? item.providerName} · ${item.name}`
   );
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
-  const [apiKey, setApiKey] = useState('');
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [guideOpen, setGuideOpen] = useState(false);
 
   const ready =
     label.trim().length > 0 &&
-    (item.credKind === 'oauth2'
+    (item.credKind === "oauth2"
       ? clientId.trim().length > 0 && clientSecret.trim().length > 0
       : apiKey.trim().length > 0);
 
   return (
     <div className={styles.connForm}>
       <p className={styles.connFormLead}>
-        {item.credKind === 'oauth2'
-          ? 'OAuth — register your own client (BYO), then authorize in the browser.'
-          : 'API key / personal token for this service.'}
+        {item.credKind === "oauth2"
+          ? "OAuth — register your own client (BYO), then authorize in the browser."
+          : "API key / personal token for this service."}
       </p>
       <label className={styles.connField}>
         <span className={styles.microLabel}>Label</span>
@@ -57,11 +66,11 @@ function ConnectInlineForm({
           data-testid="connector-label-input"
         />
         <span className={styles.connFieldHint}>
-          Names this connection. Use a distinct label per account (e.g. “{item.name} · work”) to
-          connect more than one.
+          Names this connection. Use a distinct label per account (e.g. “
+          {item.name} · work”) to connect more than one.
         </span>
       </label>
-      {item.credKind === 'oauth2' ? (
+      {item.credKind === "oauth2" ? (
         <>
           <label className={styles.connField}>
             <span className={styles.microLabel}>Client ID</span>
@@ -102,7 +111,7 @@ function ConnectInlineForm({
             className={styles.connGuideToggle}
             onClick={() => setGuideOpen((o) => !o)}
           >
-            {guideOpen ? 'Hide setup guide' : 'Show setup guide'}
+            {guideOpen ? "Hide setup guide" : "Show setup guide"}
           </button>
           {guideOpen ? (
             <ol className={styles.connGuideList}>
@@ -119,16 +128,24 @@ function ConnectInlineForm({
         <Button
           variant="primary"
           size="sm"
-          label={busy ? 'Saving…' : item.credKind === 'oauth2' ? 'Save & authorize' : 'Save'}
+          label={
+            busy
+              ? "Saving…"
+              : item.credKind === "oauth2"
+                ? "Save & authorize"
+                : "Save"
+          }
           disabled={!ready || busy}
           onClick={() => {
             if (!ready) return;
             onSubmit({
               allowedHosts: item.allowedHosts,
-              apiKey: item.credKind === 'api_key' ? apiKey.trim() : undefined,
+              apiKey: item.credKind === "api_key" ? apiKey.trim() : undefined,
               authUrl: item.authUrl,
-              clientId: item.credKind === 'oauth2' ? clientId.trim() : undefined,
-              clientSecret: item.credKind === 'oauth2' ? clientSecret.trim() : undefined,
+              clientId:
+                item.credKind === "oauth2" ? clientId.trim() : undefined,
+              clientSecret:
+                item.credKind === "oauth2" ? clientSecret.trim() : undefined,
               connectorKind: item.kind,
               credKind: item.credKind,
               label: label.trim(),
@@ -161,16 +178,23 @@ export function AutomationEditorConnectorsPicker({
   catalog: AuEditorCatalogConnectorDTO[];
   loading: boolean;
   selected: ReadonlySet<string>;
-  bindings: ReadonlyMap<string, { connectionId: string; kind: string; label: string }>;
+  bindings: ReadonlyMap<
+    string,
+    { connectionId: string; kind: string; label: string }
+  >;
   onToggleSelect: (kind: string, connectionId?: string) => void;
   /**
    * After a successful configure/authorize — persists durable vault
    * connection id on the editor form so save includes the binding.
    */
-  onBoundConnection: (binding: { connectionId: string; kind: string; label: string }) => void;
+  onBoundConnection: (binding: {
+    connectionId: string;
+    kind: string;
+    label: string;
+  }) => void;
   onClose: () => void;
   configureConnection?: (
-    input: AuEditorConnectFormInput,
+    input: AuEditorConnectFormInput
   ) => Promise<{ connectionId: string } | void>;
   beginAuthorize?: (connectionId: string) => Promise<string>;
   onConnected: () => void;
@@ -180,7 +204,7 @@ export function AutomationEditorConnectorsPicker({
   const searchRef = useRef<HTMLInputElement | null>(null);
   const [connectingKind, setConnectingKind] = useState<string | null>(null);
   const [busyKind, setBusyKind] = useState<string | null>(null);
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState("");
 
   // Closing discards the sheet's transient state. Done during render (the React
   // "adjust state when a prop changes" pattern) so a reopen never flashes the
@@ -190,7 +214,7 @@ export function AutomationEditorConnectorsPicker({
     setSeenOpen(open);
     if (!open) {
       setConnectingKind(null);
-      setFilter('');
+      setFilter("");
     }
   }
 
@@ -208,26 +232,29 @@ export function AutomationEditorConnectorsPicker({
         (c) =>
           c.name.toLowerCase().includes(q) ||
           c.kind.toLowerCase().includes(q) ||
-          c.providerName.toLowerCase().includes(q),
+          c.providerName.toLowerCase().includes(q)
       )
     : catalog;
 
   const runConfigure = async (
     item: AuEditorCatalogConnectorDTO,
-    input: AuEditorConnectFormInput,
+    input: AuEditorConnectFormInput
   ) => {
     if (!configureConnection) {
-      showToast?.('Connecting is not available in this host.');
+      showToast?.("Connecting is not available in this host.");
       return;
     }
     setBusyKind(item.kind);
     try {
       const result = await configureConnection(input);
-      const connectionId = result && 'connectionId' in result ? result.connectionId : undefined;
-      if (item.credKind === 'oauth2' && beginAuthorize && connectionId) {
+      const connectionId =
+        result && "connectionId" in result ? result.connectionId : undefined;
+      if (item.credKind === "oauth2" && beginAuthorize && connectionId) {
         const url = await beginAuthorize(connectionId);
-        window.open(url, '_blank', 'noopener,noreferrer');
-        showToast?.(`${item.name} saved — finish authorization in the browser.`);
+        window.open(url, "_blank", "noopener,noreferrer");
+        showToast?.(
+          `${item.name} saved — finish authorization in the browser.`
+        );
       } else {
         showToast?.(`${item.name} connected`);
       }
@@ -244,7 +271,9 @@ export function AutomationEditorConnectorsPicker({
       }
       onConnected();
     } catch (err) {
-      showToast?.(`Could not connect: ${err instanceof Error ? err.message : String(err)}`);
+      showToast?.(
+        `Could not connect: ${err instanceof Error ? err.message : String(err)}`
+      );
     } finally {
       setBusyKind(null);
     }
@@ -256,8 +285,8 @@ export function AutomationEditorConnectorsPicker({
     setBusyKind(item.kind);
     try {
       const url = await beginAuthorize(id);
-      window.open(url, '_blank', 'noopener,noreferrer');
-      showToast?.('Complete authorization in the browser window.');
+      window.open(url, "_blank", "noopener,noreferrer");
+      showToast?.("Complete authorization in the browser window.");
       onBoundConnection({
         connectionId: id,
         kind: item.kind,
@@ -265,7 +294,9 @@ export function AutomationEditorConnectorsPicker({
       });
       onConnected();
     } catch (err) {
-      showToast?.(`Authorize failed: ${err instanceof Error ? err.message : String(err)}`);
+      showToast?.(
+        `Authorize failed: ${err instanceof Error ? err.message : String(err)}`
+      );
     } finally {
       setBusyKind(null);
     }
@@ -285,8 +316,8 @@ export function AutomationEditorConnectorsPicker({
             Connectors
           </div>
           <p className={styles.connPickerHint}>
-            Pick services this automation may use. OAuth and API-key connectors use the same
-            credential flow as Settings → Connectors.
+            Pick services this automation may use. OAuth and API-key connectors
+            use the same credential flow as Settings → Connectors.
           </p>
         </div>
         <button
@@ -313,8 +344,8 @@ export function AutomationEditorConnectorsPicker({
         ) : rows.length === 0 ? (
           <p className={styles.connPickerEmpty}>
             {catalog.length === 0
-              ? 'No connector catalog available. Open Connectors in the sidebar to add providers.'
-              : 'No matches.'}
+              ? "No connector catalog available. Open Connectors in the sidebar to add providers."
+              : "No matches."}
           </p>
         ) : (
           rows.map((item) => {
@@ -328,7 +359,9 @@ export function AutomationEditorConnectorsPicker({
             // deliberate choice (#541).
             const bindingDangling =
               boundConnectionId !== undefined &&
-              !item.connections.some((c) => c.connectionId === boundConnectionId);
+              !item.connections.some(
+                (c) => c.connectionId === boundConnectionId
+              );
             const multipleAccounts = item.connections.length > 1;
             const hasAccountChoice = multipleAccounts || bindingDangling;
             const connecting = connectingKind === item.kind;
@@ -352,21 +385,21 @@ export function AutomationEditorConnectorsPicker({
                 >
                   <span className={styles.connPickerMark} aria-hidden="true">
                     <ConnectorBrandGlyph
-                      tone={(item.tone as ConnectorTone) || 'default'}
+                      tone={(item.tone as ConnectorTone) || "default"}
                       size={22}
                     />
                   </span>
                   <span className={styles.connPickerMeta}>
                     <span className={styles.connPickerName}>{item.name}</span>
                     <span className={styles.connPickerSub}>
-                      {item.credKind === 'oauth2' ? 'OAuth' : 'API key'}
+                      {item.credKind === "oauth2" ? "OAuth" : "API key"}
                       {multipleAccounts
                         ? ` · ${item.connections.length} configured accounts`
                         : bindingDangling
-                          ? ' · Bound account unavailable'
+                          ? " · Bound account unavailable"
                           : health
                             ? ` · ${HEALTH_LABEL[health]} · ${item.connection?.label}`
-                            : ' · Not connected'}
+                            : " · Not connected"}
                     </span>
                   </span>
                   <span
@@ -388,12 +421,14 @@ export function AutomationEditorConnectorsPicker({
                         data-testid="connector-account-dangling"
                         data-kind={item.kind}
                       >
-                        This automation is still bound to an account that is no longer configured.
-                        Nothing was changed for you — pick a replacement.
+                        This automation is still bound to an account that is no
+                        longer configured. Nothing was changed for you — pick a
+                        replacement.
                       </p>
                     ) : null}
                     {item.connections.map((connection) => {
-                      const chosen = boundConnectionId === connection.connectionId;
+                      const chosen =
+                        boundConnectionId === connection.connectionId;
                       return (
                         <button
                           key={connection.connectionId}
@@ -410,9 +445,11 @@ export function AutomationEditorConnectorsPicker({
                           }
                         >
                           <span className={styles.connAccountCopy}>
-                            <span className={styles.connAccountLabel}>{connection.label}</span>
+                            <span className={styles.connAccountLabel}>
+                              {connection.label}
+                            </span>
                             <span className={styles.connAccountPrincipal}>
-                              {connection.principal ?? 'Principal unavailable'}
+                              {connection.principal ?? "Principal unavailable"}
                             </span>
                           </span>
                           <span
@@ -421,7 +458,10 @@ export function AutomationEditorConnectorsPicker({
                           >
                             {HEALTH_LABEL[connection.health]}
                           </span>
-                          <span className={styles.connAccountCheck} aria-hidden="true">
+                          <span
+                            className={styles.connAccountCheck}
+                            aria-hidden="true"
+                          >
                             {chosen ? <Icon name="Check" size={13} /> : null}
                           </span>
                         </button>
@@ -430,12 +470,12 @@ export function AutomationEditorConnectorsPicker({
                   </fieldset>
                 ) : null}
                 <div className={styles.connPickerActions}>
-                  {hasAccountChoice ? null : health === 'ok' ? null : health === 'needs-auth' &&
-                    item.connection ? (
+                  {hasAccountChoice ? null : health === "ok" ? null : health ===
+                      "needs-auth" && item.connection ? (
                     <Button
                       variant="soft"
                       size="sm"
-                      label={busy ? 'Waiting…' : 'Authorize'}
+                      label={busy ? "Waiting…" : "Authorize"}
                       disabled={busy || !beginAuthorize}
                       onClick={() => void runAuthorize(item)}
                     />
@@ -443,9 +483,13 @@ export function AutomationEditorConnectorsPicker({
                     <Button
                       variant="soft"
                       size="sm"
-                      label={connecting ? 'Cancel' : 'Connect'}
+                      label={connecting ? "Cancel" : "Connect"}
                       disabled={busy || !configureConnection}
-                      onClick={() => setConnectingKind((k) => (k === item.kind ? null : item.kind))}
+                      onClick={() =>
+                        setConnectingKind((k) =>
+                          k === item.kind ? null : item.kind
+                        )
+                      }
                     />
                   )}
                 </div>

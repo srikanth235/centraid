@@ -6,8 +6,9 @@
 // scroll host — but expressed as a React tree so app-inline.tsx renders one tree
 // instead of five imperative roots. Classes come from Chrome.module.css (scoped
 // chrome) + the global kit-* vocabulary (kit.css, loaded once by the route host).
-import type { KeyboardEvent, ReactNode } from 'react';
-import styles from './Chrome.module.css';
+import type { KeyboardEvent, ReactNode } from "react";
+
+import styles from "./Chrome.module.css";
 
 export interface ChromeAvatar {
   bg: string;
@@ -90,16 +91,16 @@ export function Chrome(props: ChromeProps): ReactNode {
 
   const shellClass = [
     styles.shell,
-    props.narrow ? styles.isNarrow : '',
-    props.sideOpen ? styles.sideOpen : '',
+    props.narrow ? styles.isNarrow : "",
+    props.sideOpen ? styles.sideOpen : "",
     // Global classes the reused Dashboard.module.css `:global(.tally.is-narrow)`
     // rules key on — the module-scoped .isNarrow above can't be seen from
     // another module, so mirror the served app's static #root classes here.
-    'tally',
-    props.narrow ? 'is-narrow' : '',
+    "tally",
+    props.narrow ? "is-narrow" : "",
   ]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
 
   return (
     <div className={shellClass}>
@@ -132,7 +133,11 @@ export function Chrome(props: ChromeProps): ReactNode {
           </button>
         </div>
 
-        <button type="button" className={styles.add} onClick={props.onAddExpense}>
+        <button
+          type="button"
+          className={styles.add}
+          onClick={props.onAddExpense}
+        >
           {plusGlyph}
           Add an expense
         </button>
@@ -143,7 +148,11 @@ export function Chrome(props: ChromeProps): ReactNode {
 
         <div className={styles.seclabel}>
           <span>Groups</span>
-          <button type="button" aria-label="New group" onClick={props.onNewGroup}>
+          <button
+            type="button"
+            aria-label="New group"
+            onClick={props.onNewGroup}
+          >
             {smallPlusGlyph}
           </button>
         </div>
@@ -151,7 +160,11 @@ export function Chrome(props: ChromeProps): ReactNode {
 
         <div className={styles.seclabel}>
           <span>Friends</span>
-          <button type="button" aria-label="Add friend" onClick={props.onAddFriend}>
+          <button
+            type="button"
+            aria-label="Add friend"
+            onClick={props.onAddFriend}
+          >
             {smallPlusGlyph}
           </button>
         </div>
@@ -210,7 +223,10 @@ export function Chrome(props: ChromeProps): ReactNode {
           </button>
           <div className={styles.head}>
             {props.avatar ? (
-              <span className={styles.headAv} style={{ background: props.avatar.bg }}>
+              <span
+                className={styles.headAv}
+                style={{ background: props.avatar.bg }}
+              >
                 {props.avatar.text}
               </span>
             ) : null}
@@ -248,7 +264,11 @@ export function Chrome(props: ChromeProps): ReactNode {
               />
             </div>
             {props.showSettle ? (
-              <button type="button" className="kit-btn" onClick={props.onSettle}>
+              <button
+                type="button"
+                className="kit-btn"
+                onClick={props.onSettle}
+              >
                 Settle up
               </button>
             ) : null}
@@ -268,7 +288,8 @@ export function Chrome(props: ChromeProps): ReactNode {
           // served islands exposed the same id). Without it, a refocus after a
           // revoke would be throttled and never retry the read (#505).
           <div id="consentBanner" className={styles.banner}>
-            <strong>No vault access yet.</strong> <span>{props.consent.message}</span>
+            <strong>No vault access yet.</strong>{" "}
+            <span>{props.consent.message}</span>
           </div>
         ) : null}
         {/* Driven imperatively by logic.ts (notice / readFailed) — rendered once,

@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test } from "vitest";
+
 import {
   ASSIST_DEVELOPMENT_WORKER_ORIGIN,
   ASSIST_PRODUCTION_CALLBACK_URL,
@@ -7,19 +8,21 @@ import {
   assistOAuthFromEnvironment,
   assistScopes,
   validateAssistOAuthConfig,
-} from './assist-oauth.js';
+} from "./assist-oauth.js";
 
-const CLIENT_ID = 'centraid-shared-client.apps.googleusercontent.com';
+const CLIENT_ID = "centraid-shared-client.apps.googleusercontent.com";
 
-describe('Assist host configuration', () => {
-  test('is absent unless both public coordinates are configured', () => {
+describe("Assist host configuration", () => {
+  test("is absent unless both public coordinates are configured", () => {
     expect(assistOAuthFromEnvironment({})).toBeUndefined();
     expect(() =>
-      assistOAuthFromEnvironment({ CENTRAID_ASSIST_GOOGLE_CLIENT_ID: CLIENT_ID }),
-    ).toThrow(/requires both/);
+      assistOAuthFromEnvironment({
+        CENTRAID_ASSIST_GOOGLE_CLIENT_ID: CLIENT_ID,
+      })
+    ).toThrow(/requires both/u);
   });
 
-  test('accepts the production origin and exact loopback development origins only', () => {
+  test("accepts the production origin and exact loopback development origins only", () => {
     const production = assistOAuthFromEnvironment({
       CENTRAID_ASSIST_GOOGLE_CLIENT_ID: CLIENT_ID,
       CENTRAID_ASSIST_OAUTH_WORKER_URL: ASSIST_PRODUCTION_WORKER_ORIGIN,
@@ -34,27 +37,27 @@ describe('Assist host configuration', () => {
         workerBaseUrl: ASSIST_DEVELOPMENT_WORKER_ORIGIN,
         googleClientId: CLIENT_ID,
         restrictedScopesEnabled: false,
-      }).workerBaseUrl,
+      }).workerBaseUrl
     ).toBe(ASSIST_DEVELOPMENT_WORKER_ORIGIN);
     for (const workerBaseUrl of [
-      'https://oauth.example',
-      'https://oauth.centraid.dev.evil.example',
-      'http://localhost:8787',
-      'http://127.0.0.1:8788',
+      "https://oauth.example",
+      "https://oauth.centraid.dev.evil.example",
+      "http://localhost:8787",
+      "http://127.0.0.1:8788",
     ]) {
       expect(() =>
         validateAssistOAuthConfig({
           workerBaseUrl,
           googleClientId: CLIENT_ID,
           restrictedScopesEnabled: false,
-        }),
-      ).toThrow(/must be https:\/\/oauth\.centraid\.dev/);
+        })
+      ).toThrow(/must be https:\/\/oauth\.centraid\.dev/u);
     }
   });
 });
 
-describe('Assist scope tiers', () => {
-  test('requests only selected standard scopes and rejects identity/restricted scopes by default', () => {
+describe("Assist scope tiers", () => {
+  test("requests only selected standard scopes and rejects identity/restricted scopes by default", () => {
     const config = {
       workerBaseUrl: ASSIST_PRODUCTION_WORKER_ORIGIN,
       googleClientId: CLIENT_ID,
@@ -63,29 +66,31 @@ describe('Assist scope tiers', () => {
     expect(
       assistScopes(
         [
-          'https://www.googleapis.com/auth/calendar.readonly',
-          'https://www.googleapis.com/auth/calendar.readonly',
-          'https://www.googleapis.com/auth/contacts.readonly',
+          "https://www.googleapis.com/auth/calendar.readonly",
+          "https://www.googleapis.com/auth/calendar.readonly",
+          "https://www.googleapis.com/auth/contacts.readonly",
         ],
-        config,
-      ),
-    ).toEqual([
-      'https://www.googleapis.com/auth/calendar.readonly',
-      'https://www.googleapis.com/auth/contacts.readonly',
+        config
+      )
+    ).toStrictEqual([
+      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/contacts.readonly",
     ]);
-    expect(() => assistScopes(['openid'], config)).toThrow(/not part of a Centraid Assist tier/);
-    expect(() => assistScopes(['https://www.googleapis.com/auth/gmail.readonly'], config)).toThrow(
-      /verification/,
+    expect(() => assistScopes(["openid"], config)).toThrow(
+      /not part of a Centraid Assist tier/u
     );
+    expect(() =>
+      assistScopes(["https://www.googleapis.com/auth/gmail.readonly"], config)
+    ).toThrow(/verification/u);
   });
 
-  test('restricted scopes remain behind the explicit verified-release assertion', () => {
+  test("restricted scopes remain behind the explicit verified-release assertion", () => {
     expect(
-      assistScopes(['https://www.googleapis.com/auth/gmail.readonly'], {
+      assistScopes(["https://www.googleapis.com/auth/gmail.readonly"], {
         workerBaseUrl: ASSIST_PRODUCTION_WORKER_ORIGIN,
         googleClientId: CLIENT_ID,
         restrictedScopesEnabled: true,
-      }),
-    ).toEqual(['https://www.googleapis.com/auth/gmail.readonly']);
+      })
+    ).toStrictEqual(["https://www.googleapis.com/auth/gmail.readonly"]);
   });
 });

@@ -103,7 +103,7 @@
 .segB:hover {
   color: var(--ink);
 }
-.segB[data-active='true'] {
+.segB[data-active="true"] {
   background: var(--accent);
   color: #fff;
 }
@@ -134,7 +134,7 @@
 .fltrChip:hover {
   border-color: var(--line-strong);
 }
-.fltrChip[data-active='true'] {
+.fltrChip[data-active="true"] {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev));
   color: var(--ink);
@@ -192,7 +192,7 @@
   margin-bottom: 14px;
 }
 .catLabel::after {
-  content: '';
+  content: "";
   flex: 1;
   height: 1px;
   background: var(--line);
@@ -226,7 +226,7 @@
    instances (see that module's header comment). Quiet by default, reads
    a touch stronger on hover — no lift, no shadow. */
 .card::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
@@ -238,7 +238,11 @@
 }
 .card:hover {
   border-color: var(--line-strong);
-  background: color-mix(in srgb, var(--tk-hue, var(--accent)) 4%, var(--bg-elev));
+  background: color-mix(
+    in srgb,
+    var(--tk-hue, var(--accent)) 4%,
+    var(--bg-elev)
+  );
 }
 .card:hover::before {
   opacity: 0.9;

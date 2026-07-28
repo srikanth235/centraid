@@ -25,13 +25,13 @@
  *   node scripts/test-report/diff-coverage-run.mjs --dependents
  *   node scripts/test-report/diff-coverage-run.mjs --base origin/main
  */
-import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { isInstrumentableSource } from './diff-coverage.mjs';
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+import { isInstrumentableSource } from "./diff-coverage.mjs";
+
+const root = path.resolve(import.meta.dirname, "../..");
 
 /**
  * @param {string[]} argv Raw argv slice.
@@ -40,8 +40,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 export function parseArgs(argv) {
   const out = { base: /** @type {string | null} */ (null), dependents: false };
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--base' && argv[i + 1]) out.base = argv[++i];
-    else if (argv[i] === '--dependents') out.dependents = true;
+    if (argv[i] === "--base" && argv[i + 1]) out.base = argv[++i];
+    else if (argv[i] === "--dependents") out.dependents = true;
   }
   return out;
 }
@@ -52,14 +52,14 @@ export function parseArgs(argv) {
  */
 function git(args) {
   try {
-    return execFileSync('git', args, {
+    return execFileSync("git", args, {
       cwd: root,
-      encoding: 'utf8',
+      encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
-      stdio: ['ignore', 'pipe', 'ignore'],
+      stdio: ["ignore", "pipe", "ignore"],
     });
   } catch {
-    return '';
+    return "";
   }
 }
 
@@ -71,8 +71,8 @@ function git(args) {
  */
 export function resolveBase(explicit) {
   if (explicit) return explicit;
-  for (const candidate of ['origin/main', 'main', 'origin/master', 'master']) {
-    if (git(['rev-parse', '--verify', candidate]).trim()) return candidate;
+  for (const candidate of ["origin/main", "main", "origin/master", "master"]) {
+    if (git(["rev-parse", "--verify", candidate]).trim()) return candidate;
   }
   return null;
 }
@@ -85,9 +85,9 @@ export function resolveBase(explicit) {
  */
 export function changedFiles(baseRef) {
   const names = [
-    ...git(['diff', '--name-only', `${baseRef}...HEAD`]).split('\n'),
-    ...git(['diff', '--name-only']).split('\n'),
-    ...git(['diff', '--cached', '--name-only']).split('\n'),
+    ...git(["diff", "--name-only", `${baseRef}...HEAD`]).split("\n"),
+    ...git(["diff", "--name-only"]).split("\n"),
+    ...git(["diff", "--cached", "--name-only"]).split("\n"),
   ];
   return [...new Set(names.map((n) => n.trim()).filter(Boolean))];
 }
@@ -98,8 +98,8 @@ export function changedFiles(baseRef) {
  * @returns {string | null} e.g. "packages/gateway", or null.
  */
 export function workspaceDirOf(filePath) {
-  const m = /^((?:packages|apps)\/[^/]+)\//.exec(filePath);
-  return m ? m[1] : null;
+  const m = /^(?<workspaceDir>(?:packages|apps)\/[^/]+)\//u.exec(filePath);
+  return m?.groups?.workspaceDir ?? null;
 }
 
 /**
@@ -107,17 +107,19 @@ export function workspaceDirOf(filePath) {
  * @returns {string | null} The package name vitest uses as its project name.
  */
 export function projectNameOf(dir) {
-  const manifest = path.join(root, dir, 'package.json');
+  const manifest = path.join(root, dir, "package.json");
   if (!existsSync(manifest)) return null;
   // A workspace with no vitest config contributes no project to the root run,
   // so naming it in --project would make vitest fail on an unknown project.
-  const hasVitest = ['vitest.config.ts', 'vitest.config.mts', 'vitest.config.js'].some((f) =>
-    existsSync(path.join(root, dir, f)),
-  );
+  const hasVitest = [
+    "vitest.config.ts",
+    "vitest.config.mts",
+    "vitest.config.js",
+  ].some((f) => existsSync(path.join(root, dir, f)));
   if (!hasVitest) return null;
   try {
-    const name = JSON.parse(readFileSync(manifest, 'utf8')).name;
-    return typeof name === 'string' && name ? name : null;
+    const name = JSON.parse(readFileSync(manifest, "utf8")).name;
+    return typeof name === "string" && name ? name : null;
   } catch {
     return null;
   }
@@ -131,15 +133,17 @@ export function projectNameOf(dir) {
  */
 function dependentsOf(baseRef) {
   const res = spawnSync(
-    'bunx',
-    ['turbo', 'run', 'test', `--filter=...[${baseRef}]`, '--dry=json'],
-    { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+    "bunx",
+    ["turbo", "run", "test", `--filter=...[${baseRef}]`, "--dry=json"],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
   );
   if (res.status !== 0 || !res.stdout) return null;
   try {
     const parsed = JSON.parse(res.stdout);
     const packages = parsed?.packages;
-    return Array.isArray(packages) ? packages.filter((p) => typeof p === 'string') : null;
+    return Array.isArray(packages)
+      ? packages.filter((p) => typeof p === "string")
+      : null;
   } catch {
     return null;
   }
@@ -151,7 +155,7 @@ function dependentsOf(baseRef) {
  * @returns {number} Exit status.
  */
 export function run(command, args) {
-  const res = spawnSync(command, args, { cwd: root, stdio: 'inherit' });
+  const res = spawnSync(command, args, { cwd: root, stdio: "inherit" });
   return res.status ?? 1;
 }
 
@@ -161,11 +165,11 @@ function main() {
   // Best-effort: a stale origin/main only makes the diff larger, never wrong.
   // NOT --depth=1 — against a full local clone that truncates origin/main into
   // a shallow ref and destroys the merge base (#568 learned this the hard way).
-  git(['fetch', '--no-tags', 'origin', 'main']);
+  git(["fetch", "--no-tags", "origin", "main"]);
 
   const baseRef = resolveBase(args.base);
   if (!baseRef) {
-    console.error('diff-coverage-run: no base ref found; pass --base <ref>');
+    console.error("diff-coverage-run: no base ref found; pass --base <ref>");
     return 1;
   }
 
@@ -173,7 +177,7 @@ function main() {
   const instrumentable = changed.filter(isInstrumentableSource);
   if (instrumentable.length === 0) {
     console.log(
-      `diff-coverage-run: no instrumentable source changed vs ${baseRef} (${changed.length} file(s) in the diff) — nothing to score`,
+      `diff-coverage-run: no instrumentable source changed vs ${baseRef} (${changed.length} file(s) in the diff) — nothing to score`
     );
     return 0;
   }
@@ -193,42 +197,54 @@ function main() {
       for (const name of expanded) projects.add(name);
     } else {
       console.warn(
-        'diff-coverage-run: turbo could not resolve dependents — scoring changed packages only',
+        "diff-coverage-run: turbo could not resolve dependents — scoring changed packages only"
       );
     }
   }
 
   if (projects.size === 0) {
     console.error(
-      `diff-coverage-run: ${instrumentable.length} instrumentable file(s) changed but no vitest project owns them:\n  ${instrumentable.join('\n  ')}`,
+      `diff-coverage-run: ${instrumentable.length} instrumentable file(s) changed but no vitest project owns them:\n  ${instrumentable.join("\n  ")}`
     );
     return 1;
   }
 
   const names = [...projects].sort();
-  console.log(`diff-coverage-run: ${names.length} project(s) — ${names.join(', ')}`);
+  console.log(
+    `diff-coverage-run: ${names.length} project(s) — ${names.join(", ")}`
+  );
 
   // Handler tests load built workers from dist, so dist must match src. turbo
   // caches this, so it is ~free on a repeat run.
-  const buildStatus = run('bunx', ['turbo', 'run', 'build', ...names.map((n) => `--filter=${n}`)]);
+  const buildStatus = run("bunx", [
+    "turbo",
+    "run",
+    "build",
+    ...names.map((n) => `--filter=${n}`),
+  ]);
   if (buildStatus !== 0) return buildStatus;
 
-  const testStatus = run('node', [
-    'node_modules/vitest/vitest.mjs',
-    'run',
-    '--config',
-    'vitest.diff-coverage.config.ts',
-    '--coverage',
+  const testStatus = run("node", [
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "--config",
+    "vitest.diff-coverage.config.ts",
+    "--coverage",
     ...names.map((n) => `--project=${n}`),
   ]);
   if (testStatus !== 0) return testStatus;
 
-  return run('node', ['scripts/test-report/diff-coverage.mjs', '--base', baseRef]);
+  return run("node", [
+    "scripts/test-report/diff-coverage.mjs",
+    "--base",
+    baseRef,
+  ]);
 }
 
 // Same invoke-guard as diff-coverage.mjs / ratchet-floors.mjs so the helpers
 // above are importable under vitest without triggering the full run.
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const isMain =
+  process.argv[1] && path.resolve(process.argv[1]) === import.meta.filename;
 if (isMain) {
   process.exitCode = main();
 }

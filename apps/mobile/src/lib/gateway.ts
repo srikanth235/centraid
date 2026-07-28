@@ -6,15 +6,20 @@
 //       token here is only used for RN-side API fetches (listing apps,
 //       approvals); WebView loads against an authed gateway need the tunnel.
 
-import { apps as BUILTIN_APPS, icons, palette } from '@centraid/design-tokens';
-import type { AppMetaResolved, ColorKey, IconName } from '@centraid/design-tokens';
-import { ensureTunnelStarted } from './phone-link';
-import { getSecure, hydrateSecure, setSecure } from './secure-storage';
-import { getActiveVaultId } from './spaces';
-import { Store } from '../storage';
+import { apps as BUILTIN_APPS, icons, palette } from "@centraid/design-tokens";
+import type {
+  AppMetaResolved,
+  ColorKey,
+  IconName,
+} from "@centraid/design-tokens";
 
-export const SETTINGS_KEY = 'settings.gatewayUrl';
-export const SETTINGS_TOKEN_KEY = 'settings.gatewayToken';
+import { Store } from "../storage";
+import { ensureTunnelStarted } from "./phone-link";
+import { getSecure, hydrateSecure, setSecure } from "./secure-storage";
+import { getActiveVaultId } from "./spaces";
+
+export const SETTINGS_KEY = "settings.gatewayUrl";
+export const SETTINGS_TOKEN_KEY = "settings.gatewayToken";
 
 /**
  * One row of `GET /centraid/_apps` — the worktree-store listing
@@ -26,7 +31,7 @@ export interface AppRegistryRow {
   id: string;
   name?: string;
   description?: string;
-  kind?: 'app' | 'automation';
+  kind?: "app" | "automation";
   hasIndex: boolean;
   iconKey?: string;
   colorKey?: string;
@@ -46,21 +51,21 @@ export interface ParkedInvocation {
 
 export class GatewayError extends Error {
   constructor(
-    public readonly kind: 'no_gateway' | 'unreachable' | 'bad_response',
-    message: string,
+    public readonly kind: "no_gateway" | "unreachable" | "bad_response",
+    message: string
   ) {
     super(message);
-    this.name = 'GatewayError';
+    this.name = "GatewayError";
   }
 }
 
 /** Strip a trailing `/` so we can confidently concatenate paths. */
 function normalizeBase(raw: string): string {
-  return raw.replace(/\/+$/, '');
+  return raw.replace(/\/+$/u, "");
 }
 
 export async function hydrateGatewayUrl(): Promise<string> {
-  return Store.hydrate<string>(SETTINGS_KEY, '');
+  return Store.hydrate<string>(SETTINGS_KEY, "");
 }
 
 export function setGatewayUrl(value: string): void {
@@ -68,11 +73,11 @@ export function setGatewayUrl(value: string): void {
 }
 
 export function getGatewayToken(): string {
-  return getSecure(SETTINGS_TOKEN_KEY, '');
+  return getSecure(SETTINGS_TOKEN_KEY, "");
 }
 
 export async function hydrateGatewayToken(): Promise<string> {
-  return hydrateSecure(SETTINGS_TOKEN_KEY, '');
+  return hydrateSecure(SETTINGS_TOKEN_KEY, "");
 }
 
 export function setGatewayToken(value: string): void {
@@ -100,11 +105,13 @@ export function authHeader(): Record<string, string> {
  */
 export function vaultHeader(): Record<string, string> {
   const vaultId = getActiveVaultId();
-  return vaultId ? { 'x-centraid-vault': vaultId } : {};
+  return vaultId ? { "x-centraid-vault": vaultId } : {};
 }
 
 /** The RN-fetch header set every authed gateway call needs: auth + active vault. */
-export function apiHeaders(extra?: Record<string, string>): Record<string, string> {
+export function apiHeaders(
+  extra?: Record<string, string>
+): Record<string, string> {
   return { ...authHeader(), ...vaultHeader(), ...extra };
 }
 
@@ -131,8 +138,8 @@ export async function requireGatewayBase(): Promise<string> {
   const base = await resolveGatewayBase();
   if (!base) {
     throw new GatewayError(
-      'no_gateway',
-      'Not connected to a desktop. Pair with your desktop in Settings.',
+      "no_gateway",
+      "Not connected to a desktop. Pair with your desktop in Settings."
     );
   }
   return base;
@@ -142,27 +149,39 @@ export function appLiveUrl(base: string, appId: string): string {
   return `${base}/centraid/${encodeURIComponent(appId)}/`;
 }
 
-async function fetchOrThrow(href: string, init?: RequestInit): Promise<Response> {
+async function fetchOrThrow(
+  href: string,
+  init?: RequestInit
+): Promise<Response> {
   try {
     return await fetch(href, init);
   } catch (err) {
     throw new GatewayError(
-      'unreachable',
-      `Could not reach the gateway: ${err instanceof Error ? err.message : String(err)}`,
+      "unreachable",
+      `Could not reach the gateway: ${err instanceof Error ? err.message : String(err)}`
     );
   }
 }
 
-export async function fetchJson<T>(href: string, init?: RequestInit): Promise<T> {
+export async function fetchJson<T>(
+  href: string,
+  init?: RequestInit
+): Promise<T> {
   const res = await fetchOrThrow(href, init);
   if (!res.ok) {
-    throw new GatewayError('bad_response', `Gateway returned HTTP ${res.status}`);
+    throw new GatewayError(
+      "bad_response",
+      `Gateway returned HTTP ${res.status}`
+    );
   }
   const text = await res.text();
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new GatewayError('bad_response', `Gateway returned non-JSON: ${text.slice(0, 120)}`);
+    throw new GatewayError(
+      "bad_response",
+      `Gateway returned non-JSON: ${text.slice(0, 120)}`
+    );
   }
 }
 
@@ -177,7 +196,7 @@ export async function listAppRegistry(): Promise<AppRegistryRow[]> {
   const base = await requireGatewayBase();
   return fetchJson<AppRegistryRow[]>(`${base}/centraid/_apps`, {
     headers: apiHeaders(),
-    method: 'GET',
+    method: "GET",
   });
 }
 
@@ -187,27 +206,36 @@ export async function listAppRegistry(): Promise<AppRegistryRow[]> {
  * become launcher tiles. Exported so the split rule lives in exactly one place.
  */
 export function isOpenableApp(row: AppRegistryRow): boolean {
-  return row.hasIndex !== false && row.kind !== 'automation';
+  return row.hasIndex !== false && row.kind !== "automation";
 }
 
 /** Parked vault invocations awaiting the owner's confirmation. */
 export async function listParked(): Promise<ParkedInvocation[]> {
   const base = await requireGatewayBase();
-  const body = await fetchJson<{ parked: ParkedInvocation[] }>(`${base}/centraid/_vault/parked`, {
-    headers: apiHeaders(),
-    method: 'GET',
-  });
+  const body = await fetchJson<{ parked: ParkedInvocation[] }>(
+    `${base}/centraid/_vault/parked`,
+    {
+      headers: apiHeaders(),
+      method: "GET",
+    }
+  );
   return body.parked;
 }
 
 /** Approve or deny one parked invocation. */
-export async function confirmParked(invocationId: string, approve: boolean): Promise<void> {
+export async function confirmParked(
+  invocationId: string,
+  approve: boolean
+): Promise<void> {
   const base = await requireGatewayBase();
-  await fetchJson<unknown>(`${base}/centraid/_vault/parked/${encodeURIComponent(invocationId)}`, {
-    body: JSON.stringify({ approve }),
-    headers: apiHeaders({ 'content-type': 'application/json' }),
-    method: 'POST',
-  });
+  await fetchJson<unknown>(
+    `${base}/centraid/_vault/parked/${encodeURIComponent(invocationId)}`,
+    {
+      body: JSON.stringify({ approve }),
+      headers: apiHeaders({ "content-type": "application/json" }),
+      method: "POST",
+    }
+  );
 }
 
 /**
@@ -239,10 +267,14 @@ export async function listVaults(): Promise<VaultRow[] | undefined> {
   const base = await requireGatewayBase();
   const res = await fetchOrThrow(`${base}/centraid/_vault/vaults`, {
     headers: authHeader(),
-    method: 'GET',
+    method: "GET",
   });
   if (res.status === 404) return undefined;
-  if (!res.ok) throw new GatewayError('bad_response', `Gateway returned HTTP ${res.status}`);
+  if (!res.ok)
+    throw new GatewayError(
+      "bad_response",
+      `Gateway returned HTTP ${res.status}`
+    );
   const body = (await res.json()) as { vaults: VaultRow[] };
   return body.vaults;
 }
@@ -259,14 +291,17 @@ export async function listVaults(): Promise<VaultRow[] | undefined> {
  */
 export async function updateVault(
   vaultId: string,
-  patch: { name?: string; color?: string; icon?: string; blurb?: string },
+  patch: { name?: string; color?: string; icon?: string; blurb?: string }
 ): Promise<VaultRow> {
   const base = await requireGatewayBase();
-  return fetchJson<VaultRow>(`${base}/centraid/_vault/vaults/${encodeURIComponent(vaultId)}`, {
-    body: JSON.stringify(patch),
-    headers: { 'content-type': 'application/json', ...authHeader() },
-    method: 'PATCH',
-  });
+  return fetchJson<VaultRow>(
+    `${base}/centraid/_vault/vaults/${encodeURIComponent(vaultId)}`,
+    {
+      body: JSON.stringify(patch),
+      headers: { "content-type": "application/json", ...authHeader() },
+      method: "PATCH",
+    }
+  );
 }
 
 // --- Display metadata ---
@@ -275,55 +310,65 @@ export async function updateVault(
 // listing. Fall back per-field: built-in template metadata for known ids,
 // then title-cased id + palette hash + generic icon.
 
-const BUILTIN_BY_ID = new Map<string, AppMetaResolved>(BUILTIN_APPS.map((a) => [a.id, a]));
+const BUILTIN_BY_ID = new Map<string, AppMetaResolved>(
+  BUILTIN_APPS.map((a) => [a.id, a])
+);
 
 const COLOR_KEYS: readonly ColorKey[] = [
-  'violet',
-  'rose',
-  'amber',
-  'teal',
-  'forest',
-  'indigo',
-  'ochre',
-  'slate',
+  "violet",
+  "rose",
+  "amber",
+  "teal",
+  "forest",
+  "indigo",
+  "ochre",
+  "slate",
 ];
 
 function hashIdToColor(id: string): ColorKey {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
   const idx = Math.abs(h) % COLOR_KEYS.length;
-  const key = COLOR_KEYS[idx] ?? 'violet';
+  const key = COLOR_KEYS[idx] ?? "violet";
   return key;
 }
 
 function titleCaseFromId(id: string): string {
   return id
-    .replace(/[-_]+/g, ' ')
-    .split(' ')
+    .replace(/[-_]+/gu, " ")
+    .split(" ")
     .filter(Boolean)
     .map((w) => w[0]?.toUpperCase() + w.slice(1))
-    .join(' ');
+    .join(" ");
 }
 
 function asIconName(value: string | undefined): IconName | undefined {
-  return value !== undefined && value in icons ? (value as IconName) : undefined;
+  return value !== undefined && value in icons
+    ? (value as IconName)
+    : undefined;
 }
 
 function asColorKey(value: string | undefined): ColorKey | undefined {
-  return value !== undefined && value in palette ? (value as ColorKey) : undefined;
+  return value !== undefined && value in palette
+    ? (value as ColorKey)
+    : undefined;
 }
 
 /** Map a registry row into a tile-renderable AppMetaResolved. */
 export function resolveAppMeta(
-  row: Pick<AppRegistryRow, 'id' | 'name' | 'description' | 'iconKey' | 'colorKey'>,
+  row: Pick<
+    AppRegistryRow,
+    "id" | "name" | "description" | "iconKey" | "colorKey"
+  >
 ): AppMetaResolved {
   const builtin = BUILTIN_BY_ID.get(row.id);
-  const iconKey = asIconName(row.iconKey) ?? builtin?.iconKey ?? 'Sparkle';
-  const colorKey = asColorKey(row.colorKey) ?? builtin?.colorKey ?? hashIdToColor(row.id);
+  const iconKey = asIconName(row.iconKey) ?? builtin?.iconKey ?? "Sparkle";
+  const colorKey =
+    asColorKey(row.colorKey) ?? builtin?.colorKey ?? hashIdToColor(row.id);
   return {
     color: palette[colorKey],
     colorKey,
-    desc: row.description ?? builtin?.desc ?? '',
+    desc: row.description ?? builtin?.desc ?? "",
     iconKey,
     id: row.id,
     name: row.name ?? builtin?.name ?? titleCaseFromId(row.id),

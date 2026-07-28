@@ -22,8 +22,9 @@
  * warmer (boot + Refresh), never on a normal runner-status read.
  */
 
-import type { RunnerKind, RunnerModel } from '@centraid/app-engine';
-import { RUNNER_BACKENDS } from '../registry.js';
+import type { RunnerKind, RunnerModel } from "@centraid/app-engine";
+
+import { RUNNER_BACKENDS } from "../registry.js";
 
 /**
  * Enumerate the models the active runner can serve, via the runner-backend

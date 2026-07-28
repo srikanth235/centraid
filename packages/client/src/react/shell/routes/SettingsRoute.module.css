@@ -66,7 +66,7 @@
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: var(--ink);
 }
-.settingsNavItem[data-active='true'] {
+.settingsNavItem[data-active="true"] {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
 }

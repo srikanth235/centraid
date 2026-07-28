@@ -9,11 +9,11 @@
 
 /** The gateway's native chat-stream event. */
 export type TurnStreamEvent =
-  | { type: 'assistant.start' }
-  | { type: 'assistant.delta'; delta: string }
-  | { type: 'reasoning.delta'; delta: string }
+  | { type: "assistant.start" }
+  | { type: "assistant.delta"; delta: string }
+  | { type: "reasoning.delta"; delta: string }
   | {
-      type: 'tool.start';
+      type: "tool.start";
       toolCallId: string;
       toolName: string;
       args?: unknown;
@@ -22,7 +22,7 @@ export type TurnStreamEvent =
       rawJson?: string;
     }
   | {
-      type: 'tool.result';
+      type: "tool.result";
       toolCallId: string;
       toolName: string;
       ok: boolean;
@@ -32,37 +32,50 @@ export type TurnStreamEvent =
       locations?: Array<{ path: string; line?: number }>;
       /** `hash` is the CAS sha256 when the runner reported one — the chip shows
        *  it, matching the reloaded transcript's artifact chips (#567). */
-      artifacts?: Array<{ dataBase64: string; mime: string; filename?: string; hash?: string }>;
+      artifacts?: Array<{
+        dataBase64: string;
+        mime: string;
+        filename?: string;
+        hash?: string;
+      }>;
       rawJson?: string;
     }
   | {
-      type: 'phase';
+      type: "phase";
       phase: string;
       detail?: unknown;
       plan?: Array<{ content: string; status?: string; priority?: string }>;
     }
-  | { type: 'final'; text: string; stopReason?: string; rawJson?: string }
+  | { type: "final"; text: string; stopReason?: string; rawJson?: string }
   | {
-      type: 'error';
+      type: "error";
       message: string;
-      failureClass?: 'spawn' | 'auth' | 'init' | 'timeout' | 'quota' | 'wedge' | 'exit' | 'unknown';
+      failureClass?:
+        | "spawn"
+        | "auth"
+        | "init"
+        | "timeout"
+        | "quota"
+        | "wedge"
+        | "exit"
+        | "unknown";
       stopReason?: string;
       rawJson?: string;
     }
-  | { type: 'aborted' }
+  | { type: "aborted" }
   | {
-      type: 'consent.required';
-      consentKind: 'provider-egress';
+      type: "consent.required";
+      consentKind: "provider-egress";
       provider: string;
-      reason: 'direct' | 'ladder';
+      reason: "direct" | "ladder";
       message: string;
     }
   /** Non-fatal, human-readable notice (issue #420) — e.g. a runner that can't
    *  read PDF attachments. Rendered in the transcript live AND persisted with
    *  the turn, so a reload replays it (#567). */
-  | { type: 'notice'; level: 'warn' | 'info'; code?: string; message: string }
+  | { type: "notice"; level: "warn" | "info"; code?: string; message: string }
   | {
-      type: 'usage';
+      type: "usage";
       model?: string;
       provider?: string;
       /** ACP-confirmed semantic thought_level; absent when unsupported/unconfirmed. */
@@ -73,12 +86,12 @@ export type TurnStreamEvent =
       cacheWriteTokens?: number;
       /** Agent-reported or catalog-estimated USD (see costSource). */
       costUsd?: number;
-      costSource?: 'agent' | 'estimated';
+      costSource?: "agent" | "estimated";
     }
   /** COMPAT additive (#567): live context-window usage may move non-monotonically. */
-  | { type: 'context'; used?: number; size?: number }
+  | { type: "context"; used?: number; size?: number }
   | {
-      type: 'webhooks';
+      type: "webhooks";
       minted: Array<{
         automationId: string;
         ownerApp: string;
@@ -101,6 +114,16 @@ export function isEndFrame(rawFrame: string): boolean;
 export function parseSseText(text: string): TurnStreamEvent[];
 
 /**
+ * Read an SSE body in transport order and dispatch each complete raw frame.
+ * Frame callbacks are synchronous; use this as the single fetch-SSE boundary.
+ */
+export function consumeSseFrames(
+  body: ReadableStream<Uint8Array>,
+  onFrame: (rawFrame: string) => void,
+  opts?: { signal?: AbortSignal }
+): Promise<void>;
+
+/**
  * Read a `_turn` SSE body to completion, dispatching each parsed event.
  * Resolves `{ ended: true }` when the terminal `event: end` frame was seen,
  * `{ ended: false }` when the body closed mid-turn (the catch-up signal).
@@ -108,5 +131,5 @@ export function parseSseText(text: string): TurnStreamEvent[];
 export function consumeSse(
   body: ReadableStream<Uint8Array>,
   onEvent: (event: TurnStreamEvent) => void,
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal }
 ): Promise<{ ended: boolean }>;

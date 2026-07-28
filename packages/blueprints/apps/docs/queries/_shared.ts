@@ -24,8 +24,8 @@
  * pre-conversion JS.
  */
 
-const TAGS_SCHEME_URI = 'centraid:tags:v1';
-const DOCUMENT_TARGET_TYPE = 'core.document';
+const TAGS_SCHEME_URI = "centraid:tags:v1";
+const DOCUMENT_TARGET_TYPE = "core.document";
 
 /** A folders/flags/tags-scheme concept row (the SKOS vocabulary). */
 export interface ConceptRow {
@@ -87,13 +87,13 @@ export async function readLabelsByDocument({
   const labelConceptById = new Map<string, string | undefined>(
     (concepts ?? [])
       .filter((c) => c.scheme_id === tagsScheme.scheme_id)
-      .map((c) => [c.concept_id, c.pref_label ?? c.notation] as const),
+      .map((c) => [c.concept_id, c.pref_label ?? c.notation] as const)
   );
   const labelTags = await ctx.vault.read({
-    entity: 'core.tag',
+    entity: "core.tag",
     where: [
-      { column: 'target_type', op: 'eq', value: DOCUMENT_TARGET_TYPE },
-      { column: 'target_id', op: 'in', value: documentIds },
+      { column: "target_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
+      { column: "target_id", op: "in", value: documentIds },
     ],
     purpose,
   });
@@ -129,11 +129,14 @@ export async function readCustodyByContent({
 }): Promise<Map<string, string>> {
   if (contentIds.length === 0) return new Map();
   const custody = await ctx.vault.read({
-    entity: 'blob.custody_state',
-    where: [{ column: 'content_id', op: 'in', value: contentIds }],
+    entity: "blob.custody_state",
+    where: [{ column: "content_id", op: "in", value: contentIds }],
     purpose,
   });
   return new Map(
-    ((custody.rows ?? []) as unknown as CustodyRow[]).map((c) => [c.content_id, c.custody_state]),
+    ((custody.rows ?? []) as unknown as CustodyRow[]).map((c) => [
+      c.content_id,
+      c.custody_state,
+    ])
   );
 }

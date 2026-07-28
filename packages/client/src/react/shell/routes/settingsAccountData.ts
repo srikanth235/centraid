@@ -1,4 +1,5 @@
-import type { IconName } from '@centraid/design-tokens';
+import type { IconName } from "@centraid/design-tokens";
+
 import {
   listVaults,
   vaultConnections,
@@ -9,8 +10,11 @@ import {
   vaultImportsList,
   vaultImportStage,
   vaultStatus,
-} from '../../../gateway-client.js';
-import type { ImportBridgeProps, PhoneBridgeProps } from '../../screen-contracts.js';
+} from "../../../gateway-client.js";
+import type {
+  ImportBridgeProps,
+  PhoneBridgeProps,
+} from "../../screen-contracts.js";
 
 /** Settings → Space page data (issue #382) — scoped to the ACTIVE vault
  *  only; the cross-vault list + gateway "Connections" group both moved to
@@ -32,15 +36,15 @@ export async function loadActiveSpaceData(): Promise<ActiveSpaceData | null> {
     .then((v) => v ?? [])
     .catch(() => []);
   const activeVaultId = await window.CentraidApi.getGatewayAuth()
-    .then((a) => a.vaultId ?? vaultList[0]?.vaultId ?? '')
-    .catch(() => vaultList[0]?.vaultId ?? '');
+    .then((a) => a.vaultId ?? vaultList[0]?.vaultId ?? "")
+    .catch(() => vaultList[0]?.vaultId ?? "");
   const active = vaultList.find((v) => v.vaultId === activeVaultId);
   if (!active) return null;
   return {
-    blurb: active.blurb ?? '',
-    color: active.color ?? '#4E68DD',
+    blurb: active.blurb ?? "",
+    color: active.color ?? "#4E68DD",
     deletable: vaultList.length > 1,
-    icon: (active.icon as IconName) ?? 'Folder',
+    icon: (active.icon as IconName) ?? "Folder",
     name: active.name,
     vaultId: active.vaultId,
   };
@@ -52,11 +56,15 @@ export async function loadActiveSpaceData(): Promise<ActiveSpaceData | null> {
 // through the vault plane. Returned prop objects drop straight into the
 // existing PhoneScreen / ImportScreen.
 
-export function phoneCallbacks(showToast: (m: string) => void): PhoneBridgeProps {
+export function phoneCallbacks(
+  showToast: (m: string) => void
+): PhoneBridgeProps {
   return {
     showToast,
     beginPairing: async (onPaired) => {
-      const pairing = await window.CentraidApi.beginPhonePairing().catch(() => undefined);
+      const pairing = await window.CentraidApi.beginPhonePairing().catch(
+        () => undefined
+      );
       if (!pairing) return null;
       const stop = window.CentraidApi.onPhonePaired(({ device }) => {
         stop();
@@ -71,7 +79,9 @@ export function phoneCallbacks(showToast: (m: string) => void): PhoneBridgeProps
       };
     },
     loadStatus: async () => {
-      const s = await window.CentraidApi.getPhoneLinkStatus().catch(() => undefined);
+      const s = await window.CentraidApi.getPhoneLinkStatus().catch(
+        () => undefined
+      );
       if (!s) return null;
       return {
         devices: s.devices.map((d) => ({
@@ -86,15 +96,17 @@ export function phoneCallbacks(showToast: (m: string) => void): PhoneBridgeProps
       };
     },
     revoke: async (deviceId) => {
-      const result = await window.CentraidApi.revokePhoneDevice({ deviceId }).catch(
-        () => undefined,
-      );
+      const result = await window.CentraidApi.revokePhoneDevice({
+        deviceId,
+      }).catch(() => undefined);
       return !!result?.removed;
     },
   };
 }
 
-export function importCallbacks(showToast: (m: string) => void): ImportBridgeProps {
+export function importCallbacks(
+  showToast: (m: string) => void
+): ImportBridgeProps {
   return {
     showToast,
     discard: (batchId) => vaultImportDiscard(batchId).then(() => undefined),

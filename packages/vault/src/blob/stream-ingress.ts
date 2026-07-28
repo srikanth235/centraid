@@ -7,21 +7,31 @@ import {
   rmSync,
   truncateSync,
   writeSync,
-} from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
-import type { BackupPolicy } from '../backup-policy.js';
-import { VaultBlobHashMismatchError, VaultBlobSessionError } from '../errors.js';
-import { uuidv7 } from '../ids.js';
-import type { BlobCache } from './cache.js';
-import type { BlobContentKeyRegistry } from './content-keys.js';
-import { remoteEncryptionKey, type RemoteTier } from './custody-types.js';
-import { IncrementalSha256, type SerializableSha256State } from './incremental-sha256.js';
-import { extractBlobMetaFromProbes, sniffMediaType } from './pipeline.js';
-import { INGRESS_PREVIEW_MAX_BYTES, type IngressPreviewInput } from './preview.js';
-import type { MultipartPart } from './remote-transfer.js';
-import { verifyRemoteSealedObject } from './remote-verify.js';
+} from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
+
+import type { BackupPolicy } from "../backup-policy.js";
+import {
+  VaultBlobHashMismatchError,
+  VaultBlobSessionError,
+} from "../errors.js";
+import { uuidv7 } from "../ids.js";
+import type { BlobCache } from "./cache.js";
+import type { BlobContentKeyRegistry } from "./content-keys.js";
+import { remoteEncryptionKey, type RemoteTier } from "./custody-types.js";
+import {
+  IncrementalSha256,
+  type SerializableSha256State,
+} from "./incremental-sha256.js";
+import { extractBlobMetaFromProbes, sniffMediaType } from "./pipeline.js";
+import {
+  INGRESS_PREVIEW_MAX_BYTES,
+  type IngressPreviewInput,
+} from "./preview.js";
+import type { MultipartPart } from "./remote-transfer.js";
+import { verifyRemoteSealedObject } from "./remote-verify.js";
 import {
   DEFAULT_FRAME_SIZE,
   encodeHeader,
@@ -29,11 +39,11 @@ import {
   frameCountFor,
   sealDirectory,
   sealStoredFrame,
-} from './seal-frames.js';
-import { recordKnownStagedBlob } from './staging-record.js';
-import { mediaLocationPolicyForVault } from './staging.js';
-import type { CommittedBlob } from './transfers.js';
-import type { BlobTransferState, IngressSessionRow } from './transfer-state.js';
+} from "./seal-frames.js";
+import { recordKnownStagedBlob } from "./staging-record.js";
+import { mediaLocationPolicyForVault } from "./staging.js";
+import type { BlobTransferState, IngressSessionRow } from "./transfer-state.js";
+import type { CommittedBlob } from "./transfers.js";
 
 export const STREAM_INGRESS_CHUNK_BYTES = 16 * 1024 * 1024;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -47,7 +57,7 @@ interface StreamMeta {
 }
 
 export interface StreamIngressStart {
-  mode: 'stream-through';
+  mode: "stream-through";
   sessionId: string;
   offset: number;
   expiresAt: string;
@@ -64,7 +74,7 @@ interface StreamIngressDeps {
   dir: string;
   chunkBytes?: number;
   contributePreview?: (input: IngressPreviewInput) => void;
-  emit(): void;
+  emit: () => void;
 }
 
 function parseParts(json: string): MultipartPart[] {
@@ -74,9 +84,9 @@ function parseParts(json: string): MultipartPart[] {
     return value.filter(
       (part): part is MultipartPart =>
         part !== null &&
-        typeof part === 'object' &&
+        typeof part === "object" &&
         Number.isInteger((part as MultipartPart).partNumber) &&
-        typeof (part as MultipartPart).etag === 'string',
+        typeof (part as MultipartPart).etag === "string"
     );
   } catch {
     return [];
@@ -89,12 +99,14 @@ function parseMeta(row: IngressSessionRow): StreamMeta {
     !Number.isSafeInteger(value.frameSize) ||
     value.frameSize! <= 0 ||
     !Array.isArray(value.sealedLens) ||
-    !value.sealedLens.every((length) => Number.isSafeInteger(length) && length > 0) ||
+    !value.sealedLens.every(
+      (length) => Number.isSafeInteger(length) && length > 0
+    ) ||
     !Number.isSafeInteger(value.sealedBytes) ||
     value.sealedBytes! < 0
   ) {
     throw new VaultBlobSessionError(
-      `stream-through session ${row.session_id} has invalid metadata`,
+      `stream-through session ${row.session_id} has invalid metadata`
     );
   }
   return value as StreamMeta;
@@ -106,7 +118,9 @@ export class RemoteStreamIngress {
   constructor(private readonly deps: StreamIngressDeps) {
     this.chunkBytes = deps.chunkBytes ?? STREAM_INGRESS_CHUNK_BYTES;
     if (!Number.isSafeInteger(this.chunkBytes) || this.chunkBytes <= 0) {
-      throw new Error('stream ingress chunk size must be a positive safe integer');
+      throw new Error(
+        "stream ingress chunk size must be a positive safe integer"
+      );
     }
   }
 
@@ -123,13 +137,15 @@ export class RemoteStreamIngress {
     const remote = this.requireRemote(input.sha256);
     const frameSize = remote.frameSize ?? DEFAULT_FRAME_SIZE;
     if (this.chunkBytes % frameSize !== 0) {
-      throw new Error('stream ingress chunk size must align to the CBSF frame size');
+      throw new Error(
+        "stream ingress chunk size must align to the CBSF frame size"
+      );
     }
     const initialHash = await IncrementalSha256.create();
     const hashState = initialHash.exportState();
     const row = this.deps.state.createSession({
       sessionId,
-      kind: 'stream-through',
+      kind: "stream-through",
       expectedSha256: input.sha256,
       expectedSize: input.expectedSize,
       remoteTempId: tempId,
@@ -148,13 +164,19 @@ export class RemoteStreamIngress {
       meta: { frameSize, sealedLens: [], sealedBytes: 0 },
     });
     await this.ensureUpload(row);
-    return { mode: 'stream-through', sessionId, offset: 0, expiresAt, chunkSize: this.chunkBytes };
+    return {
+      mode: "stream-through",
+      sessionId,
+      offset: 0,
+      expiresAt,
+      chunkSize: this.chunkBytes,
+    };
   }
 
   async resume(row: IngressSessionRow): Promise<StreamIngressStart> {
     await this.ensureUpload(row);
     return {
-      mode: 'stream-through',
+      mode: "stream-through",
       sessionId: row.session_id,
       offset: row.received_bytes,
       expiresAt: row.expires_at,
@@ -162,12 +184,16 @@ export class RemoteStreamIngress {
     };
   }
 
-  async append(sessionId: string, offset: number, bytes: Buffer): Promise<{ offset: number }> {
-    const row = this.requireSession(sessionId, 'open');
+  async append(
+    sessionId: string,
+    offset: number,
+    bytes: Buffer
+  ): Promise<{ offset: number }> {
+    const row = this.requireSession(sessionId, "open");
     if (offset !== row.received_bytes) {
       throw new VaultBlobSessionError(
         `upload offset ${offset} does not match durable offset ${row.received_bytes}`,
-        row.received_bytes,
+        row.received_bytes
       );
     }
     const expectedSize = row.expected_size!;
@@ -175,7 +201,7 @@ export class RemoteStreamIngress {
     if (bytes.length !== chunkLength) {
       throw new VaultBlobSessionError(
         `stream-through chunks are fixed at ${this.chunkBytes} bytes except the final chunk; expected ${chunkLength}`,
-        row.received_bytes,
+        row.received_bytes
       );
     }
     const sha = row.expected_sha256!;
@@ -185,10 +211,12 @@ export class RemoteStreamIngress {
     const frameCount = frameCountFor(expectedSize, meta.frameSize);
     const startFrame = Math.floor(offset / meta.frameSize);
     if (startFrame !== meta.sealedLens.length) {
-      throw new VaultBlobSessionError('stream-through frame ledger does not match its byte offset');
+      throw new VaultBlobSessionError(
+        "stream-through frame ledger does not match its byte offset"
+      );
     }
     const state = await IncrementalSha256.create(
-      JSON.parse(row.hash_state_json ?? '{}') as SerializableSha256State,
+      JSON.parse(row.hash_state_json ?? "{}") as SerializableSha256State
     );
     state.update(bytes);
     const nextOffset = offset + bytes.length;
@@ -200,14 +228,18 @@ export class RemoteStreamIngress {
     const sealedFrames: Buffer[] = [];
     const newLens: number[] = [];
     for (let at = 0, index = startFrame; at < bytes.length; index += 1) {
-      const frame = bytes.subarray(at, Math.min(at + meta.frameSize, bytes.length));
+      const frame = bytes.subarray(
+        at,
+        Math.min(at + meta.frameSize, bytes.length)
+      );
       const sealed = sealStoredFrame(key, sha, index, frameCount, frame);
       sealedFrames.push(sealed);
       newLens.push(sealed.length);
       at += frame.length;
     }
     const sealedLens = [...meta.sealedLens, ...newLens];
-    const body: Buffer[] = offset === 0 ? [encodeHeader(sha), ...sealedFrames] : sealedFrames;
+    const body: Buffer[] =
+      offset === 0 ? [encodeHeader(sha), ...sealedFrames] : sealedFrames;
     if (nextOffset === expectedSize) {
       const directory = sealDirectory(
         key,
@@ -215,7 +247,7 @@ export class RemoteStreamIngress {
         frameCount,
         meta.frameSize,
         expectedSize,
-        sealedLens,
+        sealedLens
       );
       body.push(directory, encodeTrailer(directory.length, frameCount));
     }
@@ -226,20 +258,24 @@ export class RemoteStreamIngress {
       row.remote_temp_id!,
       uploadId,
       partNumber,
-      partBytes,
+      partBytes
     );
     if (offset === 0) {
-      this.deps.state.recordProbe(sessionId, 'head', bytes.subarray(0, PROBE_HEAD_BYTES));
+      this.deps.state.recordProbe(
+        sessionId,
+        "head",
+        bytes.subarray(0, PROBE_HEAD_BYTES)
+      );
     }
     if (nextOffset === expectedSize) {
       this.deps.state.recordProbe(
         sessionId,
-        'tail',
-        bytes.subarray(Math.max(0, bytes.length - PROBE_TAIL_BYTES)),
+        "tail",
+        bytes.subarray(Math.max(0, bytes.length - PROBE_TAIL_BYTES))
       );
     }
     const byNumber = new Map(
-      parseParts(row.remote_parts_json).map((part) => [part.partNumber, part]),
+      parseParts(row.remote_parts_json).map((part) => [part.partNumber, part])
     );
     byNumber.set(partNumber, { partNumber, etag });
     this.deps.state.recordRemoteAppend({
@@ -257,7 +293,7 @@ export class RemoteStreamIngress {
   }
 
   async commit(sessionId: string): Promise<CommittedBlob> {
-    let row = this.requireSession(sessionId, 'open', 'committing');
+    let row = this.requireSession(sessionId, "open", "committing");
     const sha = row.expected_sha256!;
     const expectedSize = row.expected_size!;
     if (
@@ -266,60 +302,66 @@ export class RemoteStreamIngress {
       parseParts(row.remote_parts_json).length === 0
     ) {
       await this.appendEmpty(row);
-      row = this.requireSession(sessionId, 'open');
+      row = this.requireSession(sessionId, "open");
     }
     if (row.received_bytes !== expectedSize) {
       throw new VaultBlobSessionError(
         `upload is incomplete: have ${row.received_bytes}, expected ${expectedSize}`,
-        row.received_bytes,
+        row.received_bytes
       );
     }
     const state = await IncrementalSha256.create(
-      JSON.parse(row.hash_state_json ?? '{}') as SerializableSha256State,
+      JSON.parse(row.hash_state_json ?? "{}") as SerializableSha256State
     );
     const actual = await state.digestHex();
     if (actual !== sha) throw new VaultBlobHashMismatchError(sha, actual);
     const remote = this.requireRemote(sha);
     const meta = parseMeta(row);
-    const parts = parseParts(row.remote_parts_json).sort((a, b) => a.partNumber - b.partNumber);
+    const parts = parseParts(row.remote_parts_json).sort(
+      (a, b) => a.partNumber - b.partNumber
+    );
     if (parts.length !== row.part_count) {
       throw new VaultBlobSessionError(
-        `multipart completion has ${parts.length}/${row.part_count} parts`,
+        `multipart completion has ${parts.length}/${row.part_count} parts`
       );
     }
-    this.deps.state.setSessionState(sessionId, 'committing');
+    this.deps.state.setSessionState(sessionId, "committing");
     let temp = await remote.transfer!.statTemporary(row.remote_temp_id!);
     if (!temp) {
       await remote.transfer!.completeTemporaryUpload(
         row.remote_temp_id!,
         row.remote_upload_id!,
-        parts,
+        parts
       );
       temp = await remote.transfer!.statTemporary(row.remote_temp_id!);
     }
     if (!temp || temp.size !== meta.sealedBytes) {
       throw new Error(
-        `stream-through provider size mismatch: expected ${meta.sealedBytes}, got ${temp?.size ?? 'missing'}`,
+        `stream-through provider size mismatch: expected ${meta.sealedBytes}, got ${temp?.size ?? "missing"}`
       );
     }
     const probes = this.deps.state.probes(sessionId);
     const mediaType = sniffMediaType(
       probes.head,
       row.media_type ?? undefined,
-      row.original_name ?? undefined,
+      row.original_name ?? undefined
     );
     // Direct-to-cold heuristic (issue #425 Wave 3): the CopyObject that mints
     // the final CAS object carries STANDARD_IA for an eligible large original.
     // The original's staging row is only written below, after custody, so the
     // media type + size are handed in directly for the resolver.
-    const storageClass = remote.storageClassFor?.(sha, 'cas', {
+    const storageClass = remote.storageClassFor?.(sha, "cas", {
       mediaType,
       byteSize: expectedSize,
     });
-    await remote.transfer!.copyTemporaryToSha(row.remote_temp_id!, sha, storageClass);
+    await remote.transfer!.copyTemporaryToSha(
+      row.remote_temp_id!,
+      sha,
+      storageClass
+    );
     const final = await remote.store.stat(sha);
     if (!final || final.size !== temp.size)
-      throw new Error('provider HEAD did not confirm final object');
+      throw new Error("provider HEAD did not confirm final object");
     await verifyRemoteSealedObject({
       store: remote.store,
       sha256: sha,
@@ -329,20 +371,26 @@ export class RemoteStreamIngress {
     });
     this.deps.cache.replica.mark(sha, expectedSize);
     this.deps.state.completeSession(sessionId, sha);
-    await remote.transfer!.deleteTemporary(row.remote_temp_id!).catch(() => undefined);
+    await remote
+      .transfer!.deleteTemporary(row.remote_temp_id!)
+      .catch(() => undefined);
     const staged = recordKnownStagedBlob(this.deps.vault, {
       sha256: sha,
       byteSize: expectedSize,
       mediaType,
       meta: extractBlobMetaFromProbes(probes.head, probes.tail, mediaType, {
-        keepLocation: mediaLocationPolicyForVault(this.deps.vault) !== 'strip',
+        keepLocation: mediaLocationPolicyForVault(this.deps.vault) !== "strip",
       }),
       ...(row.original_name ? { filename: row.original_name } : {}),
       ...(row.staged_by ? { stagedBy: row.staged_by } : {}),
     });
     this.contributePreview(row, sha, mediaType);
     this.deps.emit();
-    return { ...staged, casAck: this.deps.policy().casAck, custody: 'remote-only' };
+    return {
+      ...staged,
+      casAck: this.deps.policy().casAck,
+      custody: "remote-only",
+    };
   }
 
   private async appendEmpty(row: IngressSessionRow): Promise<void> {
@@ -352,12 +400,16 @@ export class RemoteStreamIngress {
     const uploadId = await this.ensureUpload(row);
     const meta = parseMeta(this.deps.state.session(row.session_id)!);
     const directory = sealDirectory(key, sha, 0, meta.frameSize, 0, []);
-    const bytes = Buffer.concat([encodeHeader(sha), directory, encodeTrailer(directory.length, 0)]);
+    const bytes = Buffer.concat([
+      encodeHeader(sha),
+      directory,
+      encodeTrailer(directory.length, 0),
+    ]);
     const etag = await remote.transfer!.uploadTemporaryPart(
       row.remote_temp_id!,
       uploadId,
       1,
-      bytes,
+      bytes
     );
     this.deps.state.recordRemoteAppend({
       sessionId: row.session_id,
@@ -371,7 +423,9 @@ export class RemoteStreamIngress {
   private requireRemote(sha256: string): RemoteTier {
     const remote = this.deps.remote();
     if (!remote?.transfer || !remoteEncryptionKey(remote, sha256)) {
-      throw new Error('resumable stream-through requires an encrypted multipart remote tier');
+      throw new Error(
+        "resumable stream-through requires an encrypted multipart remote tier"
+      );
     }
     return remote;
   }
@@ -379,34 +433,44 @@ export class RemoteStreamIngress {
   private async ensureUpload(row: IngressSessionRow): Promise<string> {
     if (row.remote_upload_id) return row.remote_upload_id;
     const remote = this.requireRemote(row.expected_sha256!);
-    const uploadId = await remote.transfer!.beginTemporaryUpload(row.remote_temp_id!);
+    const uploadId = await remote.transfer!.beginTemporaryUpload(
+      row.remote_temp_id!
+    );
     this.deps.state.setSessionUpload(row.session_id, uploadId);
     return uploadId;
   }
 
-  private spoolPreview(row: IngressSessionRow, offset: number, bytes: Buffer): void {
-    if (!this.deps.contributePreview || row.expected_size! > INGRESS_PREVIEW_MAX_BYTES) return;
+  private spoolPreview(
+    row: IngressSessionRow,
+    offset: number,
+    bytes: Buffer
+  ): void {
+    if (
+      !this.deps.contributePreview ||
+      row.expected_size! > INGRESS_PREVIEW_MAX_BYTES
+    )
+      return;
     let previewPath = row.temp_path;
     if (offset === 0) {
       const type = sniffMediaType(
         bytes.subarray(0, PROBE_HEAD_BYTES),
         row.media_type ?? undefined,
-        row.original_name ?? undefined,
+        row.original_name ?? undefined
       );
-      if (!type.startsWith('image/')) return;
+      if (!type.startsWith("image/")) return;
       const root =
-        this.deps.dir === ':memory:'
-          ? path.join(os.tmpdir(), 'centraid-ingress-previews')
-          : path.join(this.deps.dir, 'blob-ingress-previews');
+        this.deps.dir === ":memory:"
+          ? path.join(os.tmpdir(), "centraid-ingress-previews")
+          : path.join(this.deps.dir, "blob-ingress-previews");
       mkdirSync(root, { recursive: true });
       previewPath = path.join(root, `${row.session_id}.part`);
-      closeSync(openSync(previewPath, 'a', 0o600));
+      closeSync(openSync(previewPath, "a", 0o600));
       this.deps.state.setSessionTempPath(row.session_id, previewPath);
     }
     if (!previewPath) return;
     try {
       truncateSync(previewPath, offset);
-      const fd = openSync(previewPath, 'r+');
+      const fd = openSync(previewPath, "r+");
       try {
         writeSync(fd, bytes, 0, bytes.length, offset);
         fsyncSync(fd);
@@ -419,7 +483,11 @@ export class RemoteStreamIngress {
     }
   }
 
-  private contributePreview(row: IngressSessionRow, sha256: string, mediaType: string): void {
+  private contributePreview(
+    row: IngressSessionRow,
+    sha256: string,
+    mediaType: string
+  ): void {
     if (!this.deps.contributePreview || !row.temp_path) return;
     try {
       const bytes = readFileSync(row.temp_path);
@@ -439,18 +507,20 @@ export class RemoteStreamIngress {
 
   private requireSession(
     sessionId: string,
-    ...states: IngressSessionRow['state'][]
+    ...states: IngressSessionRow["state"][]
   ): IngressSessionRow {
     const row = this.deps.state.session(sessionId);
     if (
       !row ||
-      row.kind !== 'stream-through' ||
+      row.kind !== "stream-through" ||
       !states.includes(row.state) ||
       !row.expected_sha256 ||
       row.expected_size === null ||
       !row.remote_temp_id
     ) {
-      throw new VaultBlobSessionError(`unknown or closed stream-through session ${sessionId}`);
+      throw new VaultBlobSessionError(
+        `unknown or closed stream-through session ${sessionId}`
+      );
     }
     return row;
   }

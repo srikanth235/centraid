@@ -101,10 +101,10 @@
   background: color-mix(in srgb, var(--ink) 18%, transparent);
   transition: background 0.2s ease;
 }
-.abProgressDots i[data-on='true'] {
+.abProgressDots i[data-on="true"] {
   background: var(--accent);
 }
-.abProgressDots i[data-on='true']:last-of-type {
+.abProgressDots i[data-on="true"]:last-of-type {
   animation: cd-pulse 1.2s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -255,7 +255,7 @@
   background: var(--ink-3);
   opacity: 0.55;
 }
-.chatThinking[data-streaming='true'] .thinkingDot {
+.chatThinking[data-streaming="true"] .thinkingDot {
   background: var(--accent);
   animation: pulse-fade 1s infinite;
 }
@@ -348,7 +348,7 @@
   color: var(--ink-2);
   max-width: 220px;
 }
-.attachChip[data-state='error'] {
+.attachChip[data-state="error"] {
   border-color: var(--danger);
   color: var(--danger);
 }

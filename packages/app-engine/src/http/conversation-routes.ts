@@ -11,10 +11,14 @@
  * are easier to audit at a glance) is the more important constraint.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ConversationHistoryStore, ConversationSummary } from '../conversation/history.js';
+import type { IncomingMessage, ServerResponse } from "node:http";
 
-const ROUTE_PREFIX = '/_centraid-conversations';
+import type {
+  ConversationHistoryStore,
+  ConversationSummary,
+} from "../conversation/history.js";
+
+const ROUTE_PREFIX = "/_centraid-conversations";
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB per attachment.
 
@@ -24,7 +28,8 @@ async function readRawBody(req: IncomingMessage): Promise<Buffer> {
   for await (const chunk of req) {
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     total += buf.byteLength;
-    if (total > MAX_UPLOAD_BYTES) throw new Error(`upload exceeds ${MAX_UPLOAD_BYTES} bytes`);
+    if (total > MAX_UPLOAD_BYTES)
+      throw new Error(`upload exceeds ${MAX_UPLOAD_BYTES} bytes`);
     chunks.push(buf);
   }
   return Buffer.concat(chunks);
@@ -33,7 +38,7 @@ async function readRawBody(req: IncomingMessage): Promise<Buffer> {
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const raw = await readRawBody(req);
   if (raw.length === 0) return undefined;
-  const text = raw.toString('utf8');
+  const text = raw.toString("utf8");
   if (!text) return undefined;
   return JSON.parse(text) as unknown;
 }
@@ -41,8 +46,8 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body ?? null);
   res.writeHead(status, {
-    'content-type': 'application/json',
-    'content-length': Buffer.byteLength(text).toString(),
+    "content-type": "application/json",
+    "content-length": Buffer.byteLength(text).toString(),
   });
   res.end(text);
 }
@@ -74,31 +79,40 @@ function sendError(res: ServerResponse, status: number, message: string): void {
  * The transcript is not appended over HTTP — a chat turn is recorded as a
  * `runs` row by the `/centraid/<id>/_turn` route's runner (issue #90 fold).
  */
-export function makeConversationRouteHandler(getStore: () => ConversationHistoryStore) {
-  return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
+export function makeConversationRouteHandler(
+  getStore: () => ConversationHistoryStore
+) {
+  return async (
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<boolean> => {
     if (!req.url || !req.url.startsWith(ROUTE_PREFIX)) return false;
     // Use a dummy host because IncomingMessage.url is path-only.
-    const url = new URL(req.url, 'http://x');
+    const url = new URL(req.url, "http://x");
     const sub = url.pathname.slice(ROUTE_PREFIX.length); // e.g. "/apps/foo/sessions/abc"
-    const method = (req.method ?? 'GET').toUpperCase();
+    const method = (req.method ?? "GET").toUpperCase();
     const store = getStore();
 
     try {
       // Attachment blob CAS (issue #190):
       //   POST /apps/<appId>/blobs            upload bytes → { hash, sizeBytes, url }
       //   GET  /apps/<appId>/blobs/<hash>     download bytes
-      const blobMatch = sub.match(/^\/apps\/([^/]+)\/blobs(?:\/([a-f0-9]{64}))?\/?$/);
-      if (blobMatch && blobMatch[1]) {
-        const appId = decodeURIComponent(blobMatch[1]);
-        const hash = blobMatch[2];
-        if (!hash && method === 'POST') {
+      const blobMatch = sub.match(
+        /^\/apps\/(?<appId>[^/]+)\/blobs(?:\/(?<hash>[a-f0-9]{64}))?\/?$/u
+      );
+      const blobAppId = blobMatch?.groups?.appId;
+      if (blobAppId) {
+        const appId = decodeURIComponent(blobAppId);
+        const hash = blobMatch?.groups?.hash;
+        if (!hash && method === "POST") {
           const bytes = await readRawBody(req);
           if (bytes.length === 0) {
-            sendError(res, 400, 'empty upload');
+            sendError(res, 400, "empty upload");
             return true;
           }
           const put = await store.uploadBlob(appId, bytes);
-          const mime = req.headers['content-type'] ?? 'application/octet-stream';
+          const mime =
+            req.headers["content-type"] ?? "application/octet-stream";
           sendJson(res, 200, {
             hash: put.hash,
             sizeBytes: put.sizeBytes,
@@ -107,42 +121,53 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
           });
           return true;
         }
-        if (hash && method === 'GET') {
+        if (hash && method === "GET") {
           const bytes = await store.readBlob(appId, hash);
           if (!bytes) {
-            sendError(res, 404, 'blob not found');
+            sendError(res, 404, "blob not found");
             return true;
           }
-          const mime = url.searchParams.get('mime') ?? 'application/octet-stream';
+          const mime =
+            url.searchParams.get("mime") ?? "application/octet-stream";
           res.writeHead(200, {
-            'content-type': mime,
-            'content-length': bytes.byteLength.toString(),
-            'cache-control': 'private, max-age=31536000, immutable',
+            "content-type": mime,
+            "content-length": bytes.byteLength.toString(),
+            "cache-control": "private, max-age=31536000, immutable",
           });
           res.end(bytes);
           return true;
         }
-        sendError(res, 405, 'method not allowed');
+        sendError(res, 405, "method not allowed");
         return true;
       }
 
       // Per-turn message feedback (issue #420):
       //   PATCH /apps/<appId>/sessions/<id>/turns/<turnId>/feedback  body {feedback}
-      const fb = sub.match(/^\/apps\/([^/]+)\/sessions\/([^/]+)\/turns\/([^/]+)\/feedback\/?$/);
-      if (fb && fb[1] && fb[2] && fb[3]) {
-        if (method !== 'PATCH') {
-          sendError(res, 405, 'method not allowed');
+      const fb = sub.match(
+        /^\/apps\/(?<appId>[^/]+)\/sessions\/(?<sessionId>[^/]+)\/turns\/(?<turnId>[^/]+)\/feedback\/?$/u
+      );
+      const fbGroups = fb?.groups;
+      if (fbGroups?.appId && fbGroups.sessionId && fbGroups.turnId) {
+        if (method !== "PATCH") {
+          sendError(res, 405, "method not allowed");
           return true;
         }
-        const fbAppId = decodeURIComponent(fb[1]);
-        const fbSessionId = decodeURIComponent(fb[2]);
-        const fbTurnId = decodeURIComponent(fb[3]);
-        const body = (await readJsonBody(req)) as { feedback?: unknown } | undefined;
+        const fbAppId = decodeURIComponent(fbGroups.appId);
+        const fbSessionId = decodeURIComponent(fbGroups.sessionId);
+        const fbTurnId = decodeURIComponent(fbGroups.turnId);
+        const body = (await readJsonBody(req)) as
+          | { feedback?: unknown }
+          | undefined;
         const raw = body?.feedback;
-        const feedback = raw === 'up' || raw === 'down' ? raw : null;
-        const ok = store.setTurnFeedback(fbAppId, fbSessionId, fbTurnId, feedback);
+        const feedback = raw === "up" || raw === "down" ? raw : null;
+        const ok = store.setTurnFeedback(
+          fbAppId,
+          fbSessionId,
+          fbTurnId,
+          feedback
+        );
         if (!ok) {
-          sendError(res, 404, 'turn not found');
+          sendError(res, 404, "turn not found");
           return true;
         }
         sendJson(res, 200, { ok: true, feedback });
@@ -154,75 +179,93 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
       // whether the turn finished server-side (its `turnCount` climbed) before
       // reloading the full transcript. Cheap — one conversations-row read, no
       // item reconstruction. Matched BEFORE the generic sessions/<id> route.
-      const statusMatch = sub.match(/^\/apps\/([^/]+)\/sessions\/([^/]+)\/status\/?$/);
-      if (statusMatch && statusMatch[1] && statusMatch[2]) {
-        if (method !== 'GET') {
-          sendError(res, 405, 'method not allowed');
+      const statusMatch = sub.match(
+        /^\/apps\/(?<appId>[^/]+)\/sessions\/(?<sessionId>[^/]+)\/status\/?$/u
+      );
+      const statusGroups = statusMatch?.groups;
+      if (statusGroups?.appId && statusGroups.sessionId) {
+        if (method !== "GET") {
+          sendError(res, 405, "method not allowed");
           return true;
         }
-        const stAppId = decodeURIComponent(statusMatch[1]);
-        const stId = decodeURIComponent(statusMatch[2]);
+        const stAppId = decodeURIComponent(statusGroups.appId);
+        const stId = decodeURIComponent(statusGroups.sessionId);
         const meta = store.getSessionMeta(stAppId, stId);
         if (!meta) {
-          sendError(res, 404, 'session not found');
+          sendError(res, 404, "session not found");
           return true;
         }
-        sendJson(res, 200, { turnCount: meta.turnCount, updatedAt: meta.updatedAt });
+        sendJson(res, 200, {
+          turnCount: meta.turnCount,
+          updatedAt: meta.updatedAt,
+        });
         return true;
       }
 
       // Conversation FTS search (issue #420) — matched BEFORE the generic
       // sessions/<id> route so "search" isn't read as a session id:
       //   GET /apps/<appId>/sessions/search?q=<query>&limit=<n>  → { results }
-      const searchMatch = sub.match(/^\/apps\/([^/]+)\/sessions\/search\/?$/);
-      if (searchMatch && searchMatch[1]) {
-        if (method !== 'GET') {
-          sendError(res, 405, 'method not allowed');
+      const searchMatch = sub.match(
+        /^\/apps\/(?<appId>[^/]+)\/sessions\/search\/?$/u
+      );
+      const searchAppIdRaw = searchMatch?.groups?.appId;
+      if (searchAppIdRaw) {
+        if (method !== "GET") {
+          sendError(res, 405, "method not allowed");
           return true;
         }
-        const searchAppId = decodeURIComponent(searchMatch[1]);
-        const q = url.searchParams.get('q') ?? '';
-        const limitParam = Number(url.searchParams.get('limit'));
-        const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 20;
-        sendJson(res, 200, { results: store.searchSessions(searchAppId, q, limit) });
+        const searchAppId = decodeURIComponent(searchAppIdRaw);
+        const q = url.searchParams.get("q") ?? "";
+        const limitParam = Number(url.searchParams.get("limit"));
+        const limit =
+          Number.isFinite(limitParam) && limitParam > 0 ? limitParam : 20;
+        sendJson(res, 200, {
+          results: store.searchSessions(searchAppId, q, limit),
+        });
         return true;
       }
 
       // /apps/<appId>/sessions  and  /apps/<appId>/sessions/<id>
-      const m = sub.match(/^\/apps\/([^/]+)\/sessions(?:\/([^/]+))?\/?$/);
-      if (!m || !m[1]) {
-        sendError(res, 404, 'unknown conversation route');
+      const m = sub.match(
+        /^\/apps\/(?<appId>[^/]+)\/sessions(?:\/(?<sessionId>[^/]+))?\/?$/u
+      );
+      const rawAppId = m?.groups?.appId;
+      if (!rawAppId) {
+        sendError(res, 404, "unknown conversation route");
         return true;
       }
-      const appId = decodeURIComponent(m[1]);
-      const id = m[2] ? decodeURIComponent(m[2]) : undefined;
+      const appId = decodeURIComponent(rawAppId);
+      const rawSessionId = m?.groups?.sessionId;
+      const id = rawSessionId ? decodeURIComponent(rawSessionId) : undefined;
 
       if (!id) {
-        if (method === 'GET') {
+        if (method === "GET") {
           sendJson(res, 200, { sessions: store.listSessions(appId) });
           return true;
         }
-        if (method === 'POST') {
-          const body = (await readJsonBody(req)) as { title?: string } | undefined;
-          sendJson(res, 200, store.createSession(appId, body?.title ?? ''));
+        if (method === "POST") {
+          const body = (await readJsonBody(req)) as
+            | { title?: string }
+            | undefined;
+          sendJson(res, 200, store.createSession(appId, body?.title ?? ""));
           return true;
         }
-        sendError(res, 405, 'method not allowed');
+        sendError(res, 405, "method not allowed");
         return true;
       }
 
-      if (method === 'GET') {
+      if (method === "GET") {
         // Archive-aware read (issue #438 wave 3): serves live rows and merges
         // any custody-gated-pruned history back from the CAS, read-only.
         const full = await store.getSessionRehydrated(appId, id);
         if (!full) {
-          sendError(res, 404, 'session not found');
+          sendError(res, 404, "session not found");
           return true;
         }
         sendJson(res, 200, full);
         return true;
       }
-      if (method === 'PATCH') {
+      if (method === "PATCH") {
         const body = (await readJsonBody(req)) as
           | { title?: unknown; pinned?: unknown; archived?: unknown }
           | undefined;
@@ -231,47 +274,47 @@ export function makeConversationRouteHandler(getStore: () => ConversationHistory
         // the last successful update's fresh summary is returned.
         let updated: ConversationSummary | undefined;
         let touched = false;
-        if (typeof body?.title === 'string') {
+        if (typeof body?.title === "string") {
           touched = true;
           updated = store.renameSession(appId, id, body.title);
           if (!updated) {
-            sendError(res, 404, 'session not found');
+            sendError(res, 404, "session not found");
             return true;
           }
         }
-        if (typeof body?.pinned === 'boolean') {
+        if (typeof body?.pinned === "boolean") {
           touched = true;
           updated = store.setSessionPinned(appId, id, body.pinned);
           if (!updated) {
-            sendError(res, 404, 'session not found');
+            sendError(res, 404, "session not found");
             return true;
           }
         }
-        if (typeof body?.archived === 'boolean') {
+        if (typeof body?.archived === "boolean") {
           touched = true;
           updated = store.setSessionArchived(appId, id, body.archived);
           if (!updated) {
-            sendError(res, 404, 'session not found');
+            sendError(res, 404, "session not found");
             return true;
           }
         }
         if (!touched) {
           // Back-compat: a bare PATCH with no recognized field is a rename to ''.
-          updated = store.renameSession(appId, id, '');
+          updated = store.renameSession(appId, id, "");
         }
         if (!updated) {
-          sendError(res, 404, 'session not found');
+          sendError(res, 404, "session not found");
           return true;
         }
         sendJson(res, 200, updated);
         return true;
       }
-      if (method === 'DELETE') {
+      if (method === "DELETE") {
         const ok = store.deleteSession(appId, id);
         sendJson(res, ok ? 200 : 404, { ok });
         return true;
       }
-      sendError(res, 405, 'method not allowed');
+      sendError(res, 405, "method not allowed");
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

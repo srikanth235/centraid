@@ -24,7 +24,7 @@
 .row:hover {
   background: var(--bg-sunken);
 }
-.row[data-selected='true'] {
+.row[data-selected="true"] {
   background: var(--sel);
 }
 .check {
@@ -42,7 +42,7 @@
   background: transparent;
   padding: 0;
 }
-.check[aria-pressed='true'] {
+.check[aria-pressed="true"] {
   border-color: var(--accd);
   background: var(--accd);
 }

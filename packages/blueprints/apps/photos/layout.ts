@@ -6,7 +6,7 @@
 // `{ asset, width, height }` tiles that fill the container width edge to
 // edge (except a shorter, natural-height last row) — the same algorithm,
 // unchanged, just renamed fields.
-import type { Asset } from './types.ts';
+import type { Asset } from "./types.ts";
 
 const GAP = 4;
 
@@ -56,7 +56,7 @@ export interface JustifiedTile {
 export function justify(
   list: Asset[],
   containerWidth: number,
-  targetHeight: number,
+  targetHeight: number
 ): JustifiedTile[][] {
   const rows: JustifiedTile[][] = [];
   let row: { asset: Asset; ar: number }[] = [];
@@ -67,15 +67,26 @@ export function justify(
     sum += ar;
     if (sum * targetHeight + (row.length - 1) * GAP >= containerWidth) {
       const h = (containerWidth - (row.length - 1) * GAP) / sum;
-      rows.push(row.map((r) => ({ asset: r.asset, width: r.ar * h, height: h })));
+      rows.push(
+        row.map((r) => ({ asset: r.asset, width: r.ar * h, height: h }))
+      );
       row = [];
       sum = 0;
     }
   }
   if (row.length) {
-    const h = Math.min(targetHeight, (containerWidth - (row.length - 1) * GAP) / sum);
+    const h = Math.min(
+      targetHeight,
+      (containerWidth - (row.length - 1) * GAP) / sum
+    );
     const clamped = Math.max(h, targetHeight * 0.72);
-    rows.push(row.map((r) => ({ asset: r.asset, width: r.ar * clamped, height: clamped })));
+    rows.push(
+      row.map((r) => ({
+        asset: r.asset,
+        width: r.ar * clamped,
+        height: clamped,
+      }))
+    );
   }
   return rows;
 }

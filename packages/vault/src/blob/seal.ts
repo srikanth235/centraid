@@ -11,7 +11,8 @@
 // v0 (centraid-v0-status): the pre-#405 whole-blob envelope is NOT readable
 // here — no dual-format reader; stale remotes re-seal on the next sweep.
 
-import { Transform } from 'node:stream';
+import { Transform } from "node:stream";
+
 import {
   decodeHeader,
   decodeTrailer,
@@ -25,19 +26,21 @@ import {
   sealFrame,
   TRAILER_BYTES,
   unsealFrame,
-} from './seal-frames.js';
+} from "./seal-frames.js";
 
-/**
- * Buffered framed seal: cut the plaintext into `frameSize` frames, seal each,
- * then append the sealed directory and the fixed trailer. Used by the
- * replication path for blobs small enough to hold whole (issue #405 §1); the
- * streaming twin below handles the large ones.
- */
+export {
+  decodeHeader,
+  decodeTrailer,
+  HEADER_BYTES,
+  openDirectory,
+  TRAILER_BYTES,
+  unsealFrame,
+} from "./seal-frames.js";
 export function sealBlob(
   key: Buffer,
   sha: string,
   plaintext: Buffer,
-  frameSize: number = DEFAULT_FRAME_SIZE,
+  frameSize: number = DEFAULT_FRAME_SIZE
 ): Buffer {
   const frameCount = frameCountFor(plaintext.length, frameSize);
   const parts: Buffer[] = [encodeHeader(sha)];
@@ -45,13 +48,20 @@ export function sealBlob(
   for (let i = 0; i < frameCount; i++) {
     const frame = plaintext.subarray(
       i * frameSize,
-      Math.min((i + 1) * frameSize, plaintext.length),
+      Math.min((i + 1) * frameSize, plaintext.length)
     );
     const sealed = sealFrame(key, sha, i, frameCount, frame);
     parts.push(sealed);
     sealedLens.push(sealed.length);
   }
-  const dir = sealDirectory(key, sha, frameCount, frameSize, plaintext.length, sealedLens);
+  const dir = sealDirectory(
+    key,
+    sha,
+    frameCount,
+    frameSize,
+    plaintext.length,
+    sealedLens
+  );
   parts.push(dir, encodeTrailer(dir.length, frameCount));
   return Buffer.concat(parts);
 }
@@ -70,7 +80,7 @@ export function sealBlobStream(
   key: Buffer,
   sha: string,
   totalSize: number,
-  frameSize: number = DEFAULT_FRAME_SIZE,
+  frameSize: number = DEFAULT_FRAME_SIZE
 ): Transform {
   const frameCount = frameCountFor(totalSize, frameSize);
   const sealedLens: number[] = [];
@@ -115,7 +125,14 @@ export function sealBlobStream(
         pendingLen = 0;
       }
       out.push(...header()); // zero-frame (empty blob) still needs its header
-      const dir = sealDirectory(key, sha, frameCount, frameSize, totalSize, sealedLens);
+      const dir = sealDirectory(
+        key,
+        sha,
+        frameCount,
+        frameSize,
+        totalSize,
+        sealedLens
+      );
       out.push(dir, encodeTrailer(dir.length, frameCount));
       callback(null, Buffer.concat(out));
     },
@@ -129,13 +146,20 @@ export function sealBlobStream(
  * a RANGED read never comes through here — it fetches only covering frames.
  */
 export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
-  if (sealed.length < HEADER_BYTES + TRAILER_BYTES) throw new Error('sealed blob truncated');
+  if (sealed.length < HEADER_BYTES + TRAILER_BYTES)
+    throw new Error("sealed blob truncated");
   decodeHeader(sealed.subarray(0, HEADER_BYTES), sha);
   const trailer = decodeTrailer(sealed.subarray(sealed.length - TRAILER_BYTES));
   const dirEnd = sealed.length - TRAILER_BYTES;
   const dirStart = dirEnd - trailer.directoryLength;
-  if (dirStart < HEADER_BYTES) throw new Error('sealed blob: directory overruns frames');
-  const dir = openDirectory(key, sha, trailer.frameCount, sealed.subarray(dirStart, dirEnd));
+  if (dirStart < HEADER_BYTES)
+    throw new Error("sealed blob: directory overruns frames");
+  const dir = openDirectory(
+    key,
+    sha,
+    trailer.frameCount,
+    sealed.subarray(dirStart, dirEnd)
+  );
   const frames: Buffer[] = [];
   for (let i = 0; i < dir.frameCount; i++) {
     const start = dir.offsets[i]!;
@@ -146,13 +170,3 @@ export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
 }
 
 // Re-exported for the ranged read-through (custody-read.ts) and tests.
-export {
-  decodeHeader,
-  decodeTrailer,
-  frameCountFor,
-  openDirectory,
-  DEFAULT_FRAME_SIZE,
-  HEADER_BYTES,
-  TRAILER_BYTES,
-  unsealFrame,
-};

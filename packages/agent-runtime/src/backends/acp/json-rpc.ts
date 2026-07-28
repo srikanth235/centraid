@@ -11,9 +11,10 @@
  * has to survive the trip from the wire to the error handler.
  */
 
-import type { ChildProcessByStdio } from 'node:child_process';
-import type { Readable, Writable } from 'node:stream';
-import { safeStdinWrite } from './safe-stdin-write.js';
+import type { ChildProcessByStdio } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
+
+import { safeStdinWrite } from "./safe-stdin-write.js";
 
 /** Protocol major version we speak (single integer per the spec). */
 export const ACP_PROTOCOL_VERSION = 1;
@@ -40,7 +41,7 @@ interface PendingResponse {
 }
 
 interface RpcMessage {
-  jsonrpc: '2.0';
+  jsonrpc: "2.0";
   id?: number | string;
   method?: string;
   params?: unknown;
@@ -57,14 +58,18 @@ export class AcpRpcError extends Error {
   readonly code: number;
   constructor(code: number, message: string) {
     super(message);
-    this.name = 'AcpRpcError';
+    this.name = "AcpRpcError";
     this.code = code;
   }
 }
 
 export interface AcpConnectionHandlers {
   /** A request the agent sent us (has both `id` and `method`). */
-  onServerRequest: (id: number | string, method: string, params: unknown) => void;
+  onServerRequest: (
+    id: number | string,
+    method: string,
+    params: unknown
+  ) => void;
   /** A notification the agent sent us (`method`, no `id`). */
   onNotification: (method: string, params: unknown) => void;
 }
@@ -100,46 +105,53 @@ export interface AcpConnection {
  */
 export function createAcpConnection(
   child: ChildProcessByStdio<Writable, Readable, Readable>,
-  handlers: AcpConnectionHandlers,
+  handlers: AcpConnectionHandlers
 ): AcpConnection {
   let nextId = 0;
   const pending = new Map<number, PendingResponse>();
-  let buffer = '';
-  let stderrBuf = '';
+  let buffer = "";
+  let stderrBuf = "";
   let processExited = false;
   let exitError: Error | undefined;
   let activeHandlers = handlers;
 
   const send = (msg: object): void => {
-    safeStdinWrite(child.stdin, JSON.stringify(msg) + '\n');
+    safeStdinWrite(child.stdin, JSON.stringify(msg) + "\n");
   };
 
-  const request = <T = unknown>(method: string, params: unknown): Promise<T> => {
+  const request = <T = unknown>(
+    method: string,
+    params: unknown
+  ): Promise<T> => {
     const id = nextId++;
     return new Promise<T>((resolve, reject) => {
       pending.set(id, { resolve: (v) => resolve(v as T), reject });
-      send({ jsonrpc: '2.0', id, method, params });
+      send({ jsonrpc: "2.0", id, method, params });
     });
   };
 
   const respond = (id: number | string, result: unknown): void => {
-    send({ jsonrpc: '2.0', id, result });
+    send({ jsonrpc: "2.0", id, result });
   };
 
   const respondMethodNotFound = (id: number | string, method: string): void => {
     send({
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       id,
       error: { code: METHOD_NOT_FOUND, message: `method not found: ${method}` },
     });
   };
 
   const handleMessage = (msg: RpcMessage): void => {
-    if (typeof msg.id === 'number' && (msg.result !== undefined || msg.error !== undefined)) {
+    if (
+      typeof msg.id === "number" &&
+      (msg.result !== undefined || msg.error !== undefined)
+    ) {
       const p = pending.get(msg.id);
       if (!p) return;
       pending.delete(msg.id);
-      if (msg.error) p.reject(new AcpRpcError(msg.error.code, msg.error.message));
+      if (msg.error)
+        p.reject(new AcpRpcError(msg.error.code, msg.error.message));
       else p.resolve(msg.result);
       return;
     }
@@ -150,40 +162,40 @@ export function createAcpConnection(
     if (msg.method) activeHandlers.onNotification(msg.method, msg.params);
   };
 
-  child.stdout.setEncoding('utf8');
-  child.stdout.on('data', (chunk: string) => {
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => {
     buffer += chunk;
-    let nl = buffer.indexOf('\n');
+    let nl = buffer.indexOf("\n");
     while (nl >= 0) {
       const line = buffer.slice(0, nl).trim();
       buffer = buffer.slice(nl + 1);
-      if (line && line.startsWith('{')) {
+      if (line && line.startsWith("{")) {
         try {
           handleMessage(JSON.parse(line) as RpcMessage);
         } catch {
           // unparseable line — skip
         }
       }
-      nl = buffer.indexOf('\n');
+      nl = buffer.indexOf("\n");
     }
   });
 
-  child.stderr.setEncoding('utf8');
-  child.stderr.on('data', (chunk: string) => {
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string) => {
     stderrBuf = (stderrBuf + chunk).slice(-STDERR_TAIL_BYTES);
   });
 
   const exited = new Promise<void>((resolve) => {
-    child.on('error', (err) => {
+    child.on("error", (err) => {
       exitError = err;
       processExited = true;
       for (const p of pending.values()) p.reject(err);
       pending.clear();
       resolve();
     });
-    child.on('exit', () => {
+    child.on("exit", () => {
       processExited = true;
-      const err = new Error('acp agent exited');
+      const err = new Error("acp agent exited");
       for (const p of pending.values()) p.reject(err);
       pending.clear();
       resolve();

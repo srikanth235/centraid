@@ -8,8 +8,13 @@
 // each reaching into design-tokens differently. This is the kind of thing
 // ui-core exists to hold: shared view logic, no rendering.
 
-import { tileFinish } from '@centraid/design-tokens';
-import type { AppMetaResolved, IconName, TileFinish, TileVariant } from '@centraid/design-tokens';
+import { tileFinish } from "@centraid/design-tokens";
+import type {
+  AppMetaResolved,
+  IconName,
+  TileFinish,
+  TileVariant,
+} from "@centraid/design-tokens";
 
 export interface TileVisual {
   /** Display label. */
@@ -20,7 +25,10 @@ export interface TileVisual {
   finish: TileFinish;
 }
 
-export function tileVisual(app: AppMetaResolved, variant: TileVariant = 'solid'): TileVisual {
+export function tileVisual(
+  app: AppMetaResolved,
+  variant: TileVariant = "solid"
+): TileVisual {
   return {
     finish: tileFinish(app.color, variant),
     iconKey: app.iconKey,

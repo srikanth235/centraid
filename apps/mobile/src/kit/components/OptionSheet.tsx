@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from "react";
 import {
   ActionSheetIOS,
   Modal,
@@ -8,9 +8,9 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
+} from "react-native";
 
-import { radii, spacing, t, useTheme, type ThemeColors } from '../theme';
+import { radii, spacing, t, useTheme, type ThemeColors } from "../theme";
 
 export interface SheetOption {
   id: string;
@@ -48,7 +48,7 @@ export default function OptionSheet({
 }: OptionSheetProps): React.JSX.Element | null {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const ios = Platform.OS === 'ios';
+  const ios = Platform.OS === "ios";
   // The iOS sheet is imperative and fire-once: read the current props through a
   // ref so a re-render mid-sheet cannot stack a second one.
   const latest = useRef({ title, options, onSelect, onClose });
@@ -62,29 +62,33 @@ export default function OptionSheet({
     if (!visible || !ios) return;
     const current = latest.current;
     const labels = current.options.map((option) =>
-      option.detail ? `${option.label} — ${option.detail}` : option.label,
+      option.detail ? `${option.label} — ${option.detail}` : option.label
     );
     ActionSheetIOS.showActionSheetWithOptions(
       {
         title: current.title,
-        options: [...labels, 'Cancel'],
+        options: [...labels, "Cancel"],
         cancelButtonIndex: labels.length,
         disabledButtonIndices: current.options.flatMap((option, index) =>
-          option.disabled ? [index] : [],
+          option.disabled ? [index] : []
         ),
       },
       (index) => {
         current.onClose();
         const chosen = current.options[index];
         if (chosen && !chosen.disabled) current.onSelect(chosen.id);
-      },
+      }
     );
   }, [visible, ios]);
 
   if (ios || !visible) return null;
   return (
     <Modal transparent visible animationType="slide" onRequestClose={onClose}>
-      <Pressable accessibilityLabel="Dismiss" style={styles.scrim} onPress={onClose} />
+      <Pressable
+        accessibilityLabel="Dismiss"
+        style={styles.scrim}
+        onPress={onClose}
+      />
       <View style={styles.sheet}>
         <Text style={styles.title}>{title}</Text>
         <ScrollView style={styles.list}>
@@ -103,11 +107,18 @@ export default function OptionSheet({
               }}
               style={styles.row}
             >
-              <Text style={[styles.rowLabel, option.disabled === true && styles.rowDisabled]}>
+              <Text
+                style={[
+                  styles.rowLabel,
+                  option.disabled === true && styles.rowDisabled,
+                ]}
+              >
                 {option.label}
-                {option.id === selectedId ? ' ✓' : ''}
+                {option.id === selectedId ? " ✓" : ""}
               </Text>
-              {option.detail ? <Text style={styles.rowDetail}>{option.detail}</Text> : null}
+              {option.detail ? (
+                <Text style={styles.rowDetail}>{option.detail}</Text>
+              ) : null}
             </Pressable>
           ))}
         </ScrollView>
@@ -125,11 +136,11 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
       paddingVertical: spacing[3],
     },
-    rowDetail: { ...t('tiny'), color: colors.ink3 },
+    rowDetail: { ...t("tiny"), color: colors.ink3 },
     rowDisabled: { color: colors.ink3 },
-    rowLabel: { ...t('body'), color: colors.ink },
+    rowLabel: { ...t("body"), color: colors.ink },
     // Scrims are shadow, not surface — the same literal the space drawer uses.
-    scrim: { backgroundColor: 'rgba(0,0,0,.4)', flex: 1 },
+    scrim: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
     sheet: {
       backgroundColor: colors.bgElev,
       borderTopLeftRadius: radii.lg,
@@ -138,7 +149,7 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: spacing[4],
     },
     title: {
-      ...t('small'),
+      ...t("small"),
       color: colors.ink2,
       paddingBottom: spacing[2],
       paddingHorizontal: spacing[4],

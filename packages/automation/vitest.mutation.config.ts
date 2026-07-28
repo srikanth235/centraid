@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from "vitest/config";
 
 /**
  * Standalone Stryker test root (defineConfig, not defineProject).
@@ -6,10 +6,10 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
-    name: '@centraid/automation-mutation',
-    environment: 'node',
-    pool: 'forks',
-    include: ['src/fire/scheduler-ledger.contract.test.ts'],
+    name: "@centraid/automation-mutation",
+    environment: "node",
+    pool: "forks",
+    include: ["src/fire/scheduler-ledger.contract.test.ts"],
     testTimeout: 60_000,
     expect: { requireAssertions: true },
   },

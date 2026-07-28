@@ -1,14 +1,15 @@
-import { describe, expect, test } from 'vitest';
-import { isIgnorableStdinError, safeStdinWrite } from './safe-stdin-write.js';
+import { describe, expect, test } from "vitest";
+
+import { isIgnorableStdinError, safeStdinWrite } from "./safe-stdin-write.js";
 
 type ErrorListener = (err: Error) => void;
 
 interface FakeStdin {
   writable: boolean;
   writes: string[];
-  write(chunk: string, cb?: (err?: Error | null) => void): boolean;
-  on(event: string, listener: ErrorListener): FakeStdin;
-  emit(event: string, err: Error): void;
+  write: (chunk: string, cb?: (err?: Error | null) => void) => boolean;
+  on: (event: string, listener: ErrorListener) => FakeStdin;
+  emit: (event: string, err: Error) => void;
 }
 
 /** Minimal Writable stand-in with on/emit (no EventEmitter). */
@@ -28,11 +29,11 @@ function makeFakeStdin(opts?: {
       return true;
     },
     on(event: string, listener: ErrorListener): FakeStdin {
-      if (event === 'error') listeners.add(listener);
+      if (event === "error") listeners.add(listener);
       return stdin;
     },
     emit(event: string, err: Error): void {
-      if (event !== 'error') return;
+      if (event !== "error") return;
       for (const listener of listeners) listener(err);
     },
   };
@@ -45,57 +46,60 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-describe('safeStdinWrite', () => {
-  test('writes the line when stdin is writable', () => {
+describe(safeStdinWrite, () => {
+  test("writes the line when stdin is writable", () => {
     const stdin = makeFakeStdin();
     safeStdinWrite(stdin as never, '{"jsonrpc":"2.0"}\n');
-    expect(stdin.writes).toEqual(['{"jsonrpc":"2.0"}\n']);
+    expect(stdin.writes).toStrictEqual(['{"jsonrpc":"2.0"}\n']);
   });
 
-  test('no-ops when stdin is missing or not writable', () => {
-    expect(() => safeStdinWrite(undefined, 'x\n')).not.toThrow();
+  test("no-ops when stdin is missing or not writable", () => {
+    expect(() => safeStdinWrite(undefined, "x\n")).not.toThrow();
     const closed = makeFakeStdin({ writable: false });
-    safeStdinWrite(closed as never, 'x\n');
-    expect(closed.writes).toEqual([]);
+    safeStdinWrite(closed as never, "x\n");
+    expect(closed.writes).toStrictEqual([]);
   });
 
-  test('swallows EPIPE delivered via the write callback without throwing', async () => {
+  test("swallows EPIPE delivered via the write callback without throwing", async () => {
     const writes: string[] = [];
     const stdin = makeFakeStdin({
       writeImpl: (chunk, cb) => {
         writes.push(chunk);
-        const err = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' });
+        const err = Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
         if (cb) queueMicrotask(() => cb(err));
         return true;
       },
     });
-    expect(() => safeStdinWrite(stdin as never, 'msg\n')).not.toThrow();
+    expect(() => safeStdinWrite(stdin as never, "msg\n")).not.toThrow();
     await delay(10);
-    expect(writes).toEqual(['msg\n']);
+    expect(writes).toStrictEqual(["msg\n"]);
   });
 
-  test('swallows EPIPE emitted on the stream error event (the Vitest failure mode)', async () => {
+  test("swallows EPIPE emitted on the stream error event (the Vitest failure mode)", async () => {
     const stdin = makeFakeStdin();
     const uncaught: Error[] = [];
     const onUncaught = (err: Error) => {
       uncaught.push(err);
     };
-    process.on('uncaughtException', onUncaught);
+    process.on("uncaughtException", onUncaught);
     try {
-      safeStdinWrite(stdin as never, 'msg\n');
+      safeStdinWrite(stdin as never, "msg\n");
       // Simulate Node's async EPIPE after the child dies mid-write.
-      stdin.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }));
+      stdin.emit(
+        "error",
+        Object.assign(new Error("write EPIPE"), { code: "EPIPE" })
+      );
       await delay(10);
-      expect(uncaught).toEqual([]);
+      expect(uncaught).toStrictEqual([]);
     } finally {
-      process.off('uncaughtException', onUncaught);
+      process.off("uncaughtException", onUncaught);
     }
   });
 
-  test('isIgnorableStdinError recognizes closed-pipe codes', () => {
-    expect(isIgnorableStdinError({ code: 'EPIPE' })).toBe(true);
-    expect(isIgnorableStdinError({ code: 'ERR_STREAM_DESTROYED' })).toBe(true);
-    expect(isIgnorableStdinError({ code: 'EACCES' })).toBe(false);
+  test("isIgnorableStdinError recognizes closed-pipe codes", () => {
+    expect(isIgnorableStdinError({ code: "EPIPE" })).toBe(true);
+    expect(isIgnorableStdinError({ code: "ERR_STREAM_DESTROYED" })).toBe(true);
+    expect(isIgnorableStdinError({ code: "EACCES" })).toBe(false);
     expect(isIgnorableStdinError(null)).toBe(false);
   });
 });

@@ -22,7 +22,7 @@
  * an error — the caller renders that as an empty state, never a failure.
  */
 
-const DOCUMENT_TARGET_TYPE = 'core.document';
+const DOCUMENT_TARGET_TYPE = "core.document";
 
 interface ProvenanceRow {
   prov_activity: string;
@@ -30,16 +30,16 @@ interface ProvenanceRow {
   occurred_at: string;
 }
 
-export default async ({ input, ctx }: HandlerArgs) => {
-  const purpose = 'dpv:ServiceProvision';
-  const documentId = String(input?.document_id ?? '');
+export default async function activityHandler({ input, ctx }: HandlerArgs) {
+  const purpose = "dpv:ServiceProvision";
+  const documentId = String(input?.document_id ?? "");
   if (!documentId) return { events: [] };
   try {
     const result = await ctx.vault.read({
-      entity: 'consent.provenance',
+      entity: "consent.provenance",
       where: [
-        { column: 'entity_type', op: 'eq', value: DOCUMENT_TARGET_TYPE },
-        { column: 'entity_id', op: 'eq', value: documentId },
+        { column: "entity_type", op: "eq", value: DOCUMENT_TARGET_TYPE },
+        { column: "entity_id", op: "eq", value: documentId },
       ],
       purpose,
     });
@@ -52,10 +52,12 @@ export default async ({ input, ctx }: HandlerArgs) => {
         agent_kind: r.agent_kind,
         occurred_at: r.occurred_at,
       }))
-      .toSorted((a, b) => String(b.occurred_at ?? '').localeCompare(String(a.occurred_at ?? '')));
+      .toSorted((a, b) =>
+        String(b.occurred_at ?? "").localeCompare(String(a.occurred_at ?? ""))
+      );
     return { events };
   } catch (err) {
     const e = err as { code?: string; message?: string };
     return { events: [], vaultDenied: { code: e.code, message: e.message } };
   }
-};
+}

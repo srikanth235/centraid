@@ -14,7 +14,7 @@
 .item:hover {
   background: var(--bg-elev);
 }
-.item[data-active='true'] {
+.item[data-active="true"] {
   background: var(--bg-elev);
   border-color: var(--line);
 }

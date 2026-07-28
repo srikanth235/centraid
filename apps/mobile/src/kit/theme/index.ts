@@ -12,39 +12,52 @@
 // legacy `colors` export stays light-only for callers that read it at module
 // scope; anything that needs to follow the OS theme should call `useTheme()`.
 
-import { spacing, radii, type as typeTokens } from '@centraid/design-tokens';
-import type { TypeKey } from '@centraid/design-tokens';
-import type { TextStyle } from 'react-native';
+import { type as typeTokens } from "@centraid/design-tokens";
+import type { TypeKey } from "@centraid/design-tokens";
+import type { TextStyle } from "react-native";
+
+export { spacing, radii } from "@centraid/design-tokens";
 
 // One family name per (family, weight) pair. Keep in sync with the
 // imports in App.tsx — anything referenced here must be loaded there.
 export const family = {
-  displayBold: 'SpaceGrotesk_600SemiBold',
-  displayMedium: 'SpaceGrotesk_500Medium',
-  monoBold: 'JetBrainsMono_600SemiBold',
-  monoMedium: 'JetBrainsMono_500Medium',
-  monoRegular: 'JetBrainsMono_400Regular',
-  sansBold: 'Geist_600SemiBold',
-  sansMedium: 'Geist_500Medium',
-  sansRegular: 'Geist_400Regular',
+  displayBold: "SpaceGrotesk_600SemiBold",
+  displayMedium: "SpaceGrotesk_500Medium",
+  monoBold: "JetBrainsMono_600SemiBold",
+  monoMedium: "JetBrainsMono_500Medium",
+  monoRegular: "JetBrainsMono_400Regular",
+  sansBold: "Geist_600SemiBold",
+  sansMedium: "Geist_500Medium",
+  sansRegular: "Geist_400Regular",
   // Playfair Display — the editorial serif used for the home greeting
   // (upright for the salutation, italic for the name). Loaded in App.tsx.
-  serif: 'PlayfairDisplay_600SemiBold',
-  serifItalic: 'PlayfairDisplay_600SemiBold_Italic',
+  serif: "PlayfairDisplay_600SemiBold",
+  serifItalic: "PlayfairDisplay_600SemiBold_Italic",
 } as const;
 
-type FamilyKey = 'sans' | 'display' | 'mono';
+type FamilyKey = "sans" | "display" | "mono";
 
 const FAMILY_BY_WEIGHT: Record<FamilyKey, Record<string, string>> = {
-  display: { '500': family.displayMedium, '600': family.displayBold },
-  mono: { '400': family.monoRegular, '500': family.monoMedium, '600': family.monoBold },
-  sans: { '400': family.sansRegular, '500': family.sansMedium, '600': family.sansBold },
+  display: { "500": family.displayMedium, "600": family.displayBold },
+  mono: {
+    "400": family.monoRegular,
+    "500": family.monoMedium,
+    "600": family.monoBold,
+  },
+  sans: {
+    "400": family.sansRegular,
+    "500": family.sansMedium,
+    "600": family.sansBold,
+  },
 };
 
-export const t = (key: TypeKey): Pick<TextStyle, 'fontSize' | 'lineHeight' | 'fontFamily'> => {
+export const t = (
+  key: TypeKey
+): Pick<TextStyle, "fontSize" | "lineHeight" | "fontFamily"> => {
   const def = typeTokens[key];
   const map = FAMILY_BY_WEIGHT[def.family as FamilyKey];
-  const fontFamily = map[def.weight] ?? map['400'] ?? map['500'] ?? family.sansRegular;
+  const fontFamily =
+    map[def.weight] ?? map["400"] ?? map["500"] ?? family.sansRegular;
   return {
     fontFamily,
     fontSize: def.size,
@@ -52,13 +65,16 @@ export const t = (key: TypeKey): Pick<TextStyle, 'fontSize' | 'lineHeight' | 'fo
   };
 };
 
-export { spacing, radii };
-
 // Dark-mode-aware theme API, lowered from the canonical blueprint token source.
-export { useTheme } from './useTheme';
-export { resolveTheme, navThemeFor } from './resolve';
-export type { ThemeColors, Scheme } from './resolve';
+export { useTheme } from "./useTheme";
+export { resolveTheme, navThemeFor } from "./resolve";
+export type { ThemeColors, Scheme } from "./resolve";
 
 // Device-local Appearance override (System / Light / Dark) folded over the OS.
-export { useAppearance, setAppearance, hydrateAppearance, resolveScheme } from './appearance';
-export type { Appearance } from './appearance';
+export {
+  useAppearance,
+  setAppearance,
+  hydrateAppearance,
+  resolveScheme,
+} from "./appearance";
+export type { Appearance } from "./appearance";

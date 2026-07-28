@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 /**
  * Resolve the immutable report slot for an Actions run (#557).
  *
@@ -18,17 +19,19 @@
  * Usage:  node scripts/ci/run-slug.mjs --repo owner/name --run-id 123
  * Writes `date=` and `slug=` to $GITHUB_OUTPUT, and prints them to stdout.
  */
-import { appendFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { appendFileSync } from "node:fs";
 
 /** GitHub returns an ISO-8601 timestamp; we key the slot on the UTC date. */
 export function toRunDate(createdAt, fallbackNow) {
-  const candidate = String(createdAt ?? '').slice(0, 10);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(candidate)) {
+  const candidate = String(createdAt ?? "").slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/u.test(candidate)) {
     // Reject a well-shaped but impossible date (e.g. 2026-13-45) — silently
     // publishing to a nonsense slot is worse than falling back.
     const parsed = new Date(`${candidate}T00:00:00Z`);
-    if (!Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === candidate) {
+    if (
+      !Number.isNaN(parsed.getTime()) &&
+      parsed.toISOString().slice(0, 10) === candidate
+    ) {
       return candidate;
     }
   }
@@ -45,19 +48,19 @@ function main() {
     const index = argv.indexOf(`--${name}`);
     return index === -1 ? undefined : argv[index + 1];
   };
-  const repo = flag('repo');
-  const runId = flag('run-id');
-  if (!repo || !runId) throw new Error('--repo and --run-id are required');
+  const repo = flag("repo");
+  const runId = flag("run-id");
+  if (!repo || !runId) throw new Error("--repo and --run-id are required");
 
   // Best-effort: a rate-limited or offline `gh` must not fail the alert path.
   const probe = spawnSync(
-    'gh',
-    ['api', `repos/${repo}/actions/runs/${runId}`, '--jq', '.created_at'],
+    "gh",
+    ["api", `repos/${repo}/actions/runs/${runId}`, "--jq", ".created_at"],
     {
-      encoding: 'utf8',
-    },
+      encoding: "utf8",
+    }
   );
-  const createdAt = probe.status === 0 ? probe.stdout.trim() : '';
+  const createdAt = probe.status === 0 ? probe.stdout.trim() : "";
 
   const date = toRunDate(createdAt, new Date());
   const slug = toSlug(date, runId);
@@ -69,7 +72,7 @@ function main() {
   }
 }
 
-if (process.argv[1] && process.argv[1].endsWith('run-slug.mjs')) {
+if (process.argv[1] && process.argv[1].endsWith("run-slug.mjs")) {
   try {
     main();
   } catch (error) {

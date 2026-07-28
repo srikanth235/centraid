@@ -1,9 +1,9 @@
-import { useState, type JSX, type ReactNode } from 'react';
-import type { IconName } from '@centraid/design-tokens';
-import Icon from '../ui/Icon.js';
-import Logo from '../ui/Logo.js';
-import StatusPill from '../ui/StatusPill.js';
-import chrome from './chrome.module.css';
+import type { IconName } from "@centraid/design-tokens";
+import { useState, type JSX, type ReactNode } from "react";
+
+import Icon from "../ui/Icon.js";
+import Logo from "../ui/Logo.js";
+import StatusPill from "../ui/StatusPill.js";
 import {
   ArrowRightGlyph,
   HomeGlyph,
@@ -11,34 +11,36 @@ import {
   SearchGlyph,
   SettingsGlyph,
   SparkleGlyph,
-} from './glyphs.js';
+} from "./glyphs.js";
+
+import chrome from "./chrome.module.css";
 
 // The shell's own anchor type — mirrors the ambient `MenuAnchor` in the
 // renderer's types.d.ts, redeclared here because the React tsconfig doesn't
 // pull in that ambient file. Owned by the shell so the migration doesn't
 // depend on the soon-to-be-deleted bridge.ts contract.
 export type ShellMenuAnchor =
-  | { kind: 'point'; x: number; y: number }
-  | { kind: 'rect'; rect: DOMRect };
+  | { kind: "point"; x: number; y: number }
+  | { kind: "rect"; rect: DOMRect };
 
 // The shell sidebar — Search + New Chat, Automations/Connectors, Pages,
 // Operations, History (recent vault-assistant threads + See all), and
 // Settings. Styled by chrome.module.css (shared with ShellFrame).
 
 export type SidebarPage =
-  | 'home'
-  | 'assistant'
-  | 'insights'
-  | 'discover'
-  | 'starred'
-  | 'automations'
-  | 'connectors'
-  | 'approvals'
-  | 'gateway'
-  | 'household'
-  | 'storage'
-  | 'atlas'
-  | 'settings';
+  | "home"
+  | "assistant"
+  | "insights"
+  | "discover"
+  | "starred"
+  | "automations"
+  | "connectors"
+  | "approvals"
+  | "gateway"
+  | "household"
+  | "storage"
+  | "atlas"
+  | "settings";
 
 /** @deprecated Sidebar no longer lists apps; kept for callers that still type app rows. */
 export interface SidebarApp {
@@ -46,7 +48,7 @@ export interface SidebarApp {
   name: string;
   iconKey: IconName;
   color: string;
-  status?: 'new' | 'draft' | 'live' | null;
+  status?: "new" | "draft" | "live" | null;
 }
 
 /** One row in the sidebar's "Chats" list — a persisted vault-assistant
@@ -109,7 +111,7 @@ export interface SidebarProps {
   approvalsCount?: number;
   onGateway?: () => void;
   /** Live heartbeat status pill next to "Gateway" — omitted shows no pill. */
-  gatewayStatus?: 'up' | 'down' | 'unknown';
+  gatewayStatus?: "up" | "down" | "unknown";
   /** People, devices and spaces (issue #599). */
   onHousehold?: () => void;
   onStorage?: () => void;
@@ -148,11 +150,11 @@ function SbItem(props: {
     <button
       className={chrome.sbItem}
       type="button"
-      data-active={props.active ? 'true' : undefined}
-      data-disabled={props.disabled ? 'true' : undefined}
-      data-accent={props.accent ? 'true' : undefined}
+      data-active={props.active ? "true" : undefined}
+      data-disabled={props.disabled ? "true" : undefined}
+      data-accent={props.accent ? "true" : undefined}
       disabled={props.disabled}
-      onClick={props.onClick}
+      onClick={() => props.onClick?.()}
     >
       {props.icon}
       <span className={chrome.sbLabel}>{props.label}</span>
@@ -162,13 +164,24 @@ function SbItem(props: {
   );
 }
 
-function SbSection({ label, onAction }: { label: string; onAction?: () => void }): JSX.Element {
+function SbSection({
+  label,
+  onAction,
+}: {
+  label: string;
+  onAction?: () => void;
+}): JSX.Element {
   return (
     <div className={chrome.sbSection}>
       <span>{label}</span>
       {onAction ? (
         <span className={chrome.sbSectionActions}>
-          <button className={chrome.sbSectionBtn} type="button" aria-label="Add" onClick={onAction}>
+          <button
+            className={chrome.sbSectionBtn}
+            type="button"
+            aria-label="Add"
+            onClick={onAction}
+          >
             <PlusGlyph />
           </button>
         </span>
@@ -211,7 +224,7 @@ function ConversationRow({
         className={chrome.sbAppRow}
         onContextMenu={(e) => {
           e.preventDefault();
-          onMenu({ kind: 'point', x: e.clientX, y: e.clientY });
+          onMenu({ kind: "point", x: e.clientX, y: e.clientY });
         }}
       >
         {item}
@@ -223,7 +236,10 @@ function ConversationRow({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            onMenu({ kind: 'rect', rect: e.currentTarget.getBoundingClientRect() });
+            onMenu({
+              kind: "rect",
+              rect: e.currentTarget.getBoundingClientRect(),
+            });
           }}
         >
           <Icon name="MoreVert" size={14} />
@@ -266,7 +282,9 @@ function HistorySection(props: SidebarProps): JSX.Element {
   const normal = all.filter((c) => !c.pinned && !c.archived);
   const archived = all.filter((c) => c.archived);
   const activeCount = pinned.length + normal.length;
-  const effectiveCap = expanded ? Number.POSITIVE_INFINITY : HISTORY_SIDEBAR_CAP;
+  const effectiveCap = expanded
+    ? Number.POSITIVE_INFINITY
+    : HISTORY_SIDEBAR_CAP;
   const pinnedShow = pinned.slice(0, effectiveCap);
   const remaining = Math.max(0, effectiveCap - pinnedShow.length);
   const normalShow = normal.slice(0, remaining);
@@ -278,9 +296,16 @@ function HistorySection(props: SidebarProps): JSX.Element {
       active={c.id === props.activeConversationId}
       onClick={() => props.onSelectConversation?.(c.id)}
       {...(props.onConversationMenu
-        ? { onMenu: (anchor: ShellMenuAnchor) => props.onConversationMenu?.(c.id, anchor) }
+        ? {
+            onMenu: (anchor: ShellMenuAnchor) =>
+              props.onConversationMenu?.(c.id, anchor),
+          }
         : {})}
-      onDelete={props.onDeleteConversation ? () => props.onDeleteConversation?.(c.id) : undefined}
+      onDelete={
+        props.onDeleteConversation
+          ? () => props.onDeleteConversation?.(c.id)
+          : undefined
+      }
     />
   );
 
@@ -292,7 +317,7 @@ function HistorySection(props: SidebarProps): JSX.Element {
           icon={<SparkleGlyph />}
           label="No chats yet"
           disabled={!props.onNewChat}
-          onClick={props.onNewChat}
+          onClick={() => props.onNewChat?.()}
         />
       ) : (
         <>
@@ -300,7 +325,9 @@ function HistorySection(props: SidebarProps): JSX.Element {
             <>
               <div className={chrome.sbSubLabel}>Pinned</div>
               {pinnedShow.map(row)}
-              {normalShow.length > 0 ? <div className={chrome.sbSubLabel}>Recent</div> : null}
+              {normalShow.length > 0 ? (
+                <div className={chrome.sbSubLabel}>Recent</div>
+              ) : null}
             </>
           ) : null}
           {normalShow.map(row)}
@@ -319,7 +346,11 @@ function HistorySection(props: SidebarProps): JSX.Element {
         </button>
       ) : null}
       {expanded && activeCount > HISTORY_SIDEBAR_CAP ? (
-        <button className={chrome.sbSeeAll} type="button" onClick={() => setExpanded(false)}>
+        <button
+          className={chrome.sbSeeAll}
+          type="button"
+          onClick={() => setExpanded(false)}
+        >
           Show less
         </button>
       ) : null}
@@ -331,7 +362,10 @@ function HistorySection(props: SidebarProps): JSX.Element {
             aria-expanded={archivedOpen}
             onClick={() => setArchivedOpen((o) => !o)}
           >
-            <Icon name={archivedOpen ? 'ChevronDown' : 'ChevronRight'} size={13} />
+            <Icon
+              name={archivedOpen ? "ChevronDown" : "ChevronRight"}
+              size={13}
+            />
             <span>Archived · {archived.length}</span>
           </button>
           {archivedOpen ? archived.map(row) : null}
@@ -343,7 +377,7 @@ function HistorySection(props: SidebarProps): JSX.Element {
 
 export default function Sidebar(props: SidebarProps): JSX.Element {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {props.headSlot}
 
       {/* Primary actions — Grok-style: Search + New Chat first. */}
@@ -351,76 +385,81 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         icon={<SearchGlyph />}
         label="Search"
         meta="⌘K"
-        onClick={props.onSearch}
+        onClick={() => props.onSearch?.()}
         disabled={!props.onSearch}
       />
       <SbItem
         icon={<Icon name="Plus" size={15} />}
         label="New Chat"
-        active={props.activePage === 'assistant' && !props.activeConversationId}
+        active={props.activePage === "assistant" && !props.activeConversationId}
         disabled={!props.onNewChat && !props.onAssistant}
-        onClick={props.onNewChat ?? props.onAssistant}
+        onClick={() => (props.onNewChat ?? props.onAssistant)?.()}
         accent
       />
       {props.onNewApp ? (
-        <SbItem icon={<PlusGlyph />} label="Build new" meta="⌘N" onClick={props.onNewApp} />
+        <SbItem
+          icon={<PlusGlyph />}
+          label="Build new"
+          meta="⌘N"
+          onClick={() => props.onNewApp?.()}
+        />
       ) : null}
 
       {/* Automations + Connectors sit above Pages for quick access. */}
       <SbItem
         icon={<Icon name="Bolt" size={15} />}
         label="Automations"
-        active={props.activePage === 'automations'}
+        active={props.activePage === "automations"}
         disabled={!props.onAutomations}
-        onClick={props.onAutomations}
+        onClick={() => props.onAutomations?.()}
       />
       <SbItem
         icon={<Icon name="Plug" size={15} />}
         label="Connectors"
-        active={props.activePage === 'connectors'}
+        active={props.activePage === "connectors"}
         disabled={!props.onConnectors}
-        onClick={props.onConnectors}
+        onClick={() => props.onConnectors?.()}
       />
 
       <SbSection label="Pages" />
       <SbItem
         icon={<HomeGlyph />}
         label="Home"
-        active={props.activePage === 'home'}
-        onClick={props.onHome}
+        active={props.activePage === "home"}
+        onClick={() => props.onHome()}
       />
       <SbItem
         icon={<Icon name="Activity" size={15} />}
         label="Insights"
-        active={props.activePage === 'insights'}
+        active={props.activePage === "insights"}
         disabled={!props.onInsights}
-        onClick={props.onInsights}
+        onClick={() => props.onInsights?.()}
       />
       <SbItem
         icon={<Icon name="Compass" size={15} />}
         label="Discover"
-        active={props.activePage === 'discover'}
+        active={props.activePage === "discover"}
         disabled={!props.onDiscover}
-        onClick={props.onDiscover}
+        onClick={() => props.onDiscover?.()}
       />
       <SbItem
         icon={<Icon name="CheckCircle" size={15} />}
         label="Approvals"
         meta={props.approvalsCount ? String(props.approvalsCount) : undefined}
-        active={props.activePage === 'approvals'}
+        active={props.activePage === "approvals"}
         disabled={!props.onApprovals}
-        onClick={props.onApprovals}
+        onClick={() => props.onApprovals?.()}
       />
       <SbSection label="Operations" />
       <SbItem
         icon={<Icon name="Cellular" size={15} />}
         label="Gateway"
-        active={props.activePage === 'gateway'}
+        active={props.activePage === "gateway"}
         disabled={!props.onGateway}
-        onClick={props.onGateway}
+        onClick={() => props.onGateway?.()}
         trailing={
-          props.gatewayStatus && props.gatewayStatus !== 'unknown' ? (
-            <StatusPill tone={props.gatewayStatus === 'up' ? 'live' : 'down'}>
+          props.gatewayStatus && props.gatewayStatus !== "unknown" ? (
+            <StatusPill tone={props.gatewayStatus === "up" ? "live" : "down"}>
               {props.gatewayStatus}
             </StatusPill>
           ) : undefined
@@ -429,48 +468,50 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       <SbItem
         icon={<Icon name="Users" size={15} />}
         label="Household"
-        active={props.activePage === 'household'}
+        active={props.activePage === "household"}
         disabled={!props.onHousehold}
-        onClick={props.onHousehold}
+        onClick={() => props.onHousehold?.()}
       />
       <SbItem
         icon={<Icon name="Save" size={15} />}
         label="Storage"
-        active={props.activePage === 'storage'}
+        active={props.activePage === "storage"}
         disabled={!props.onStorage}
-        onClick={props.onStorage}
+        onClick={() => props.onStorage?.()}
       />
       <SbItem
         icon={<Icon name="Globe" size={15} />}
         label="Vault Atlas"
-        active={props.activePage === 'atlas'}
+        active={props.activePage === "atlas"}
         disabled={!props.onAtlas}
-        onClick={props.onAtlas}
+        onClick={() => props.onAtlas?.()}
       />
 
       <HistorySection {...props} />
 
-      <span style={{ flex: '1', minHeight: '12px' }} />
+      <span style={{ flex: "1", minHeight: "12px" }} />
       {props.onWhatsNew ? (
         <SbItem
           icon={<Icon name="Gift" size={15} />}
           label="What's new"
-          onClick={props.onWhatsNew}
+          onClick={() => props.onWhatsNew?.()}
         />
       ) : null}
       {props.updateVersion !== undefined && props.onRelaunchToUpdate ? (
         <button
           className={chrome.sbUpdate}
           type="button"
-          onClick={props.onRelaunchToUpdate}
+          onClick={() => props.onRelaunchToUpdate?.()}
           disabled={props.updateReadyToInstall === false}
         >
           <Logo size={26} />
           <span className={chrome.sbUpdateBody}>
             <span className={chrome.sbUpdateTitle}>
-              {props.updatePillTitle ?? 'Relaunch to update'}
+              {props.updatePillTitle ?? "Relaunch to update"}
             </span>
-            <span className={chrome.sbUpdateVersion}>v{props.updateVersion}</span>
+            <span className={chrome.sbUpdateVersion}>
+              v{props.updateVersion}
+            </span>
           </span>
           <ArrowRightGlyph />
         </button>
@@ -478,8 +519,8 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       <SbItem
         icon={<SettingsGlyph />}
         label="Settings"
-        active={props.activePage === 'settings'}
-        onClick={props.onSettings}
+        active={props.activePage === "settings"}
+        onClick={() => props.onSettings()}
         trailing={<StatusPill tone="live">live</StatusPill>}
       />
     </div>

@@ -2,10 +2,10 @@
 // Secrets (link ticket/secret, gateway token, device keys) live in
 // expo-secure-store. Non-secret prefs stay on AsyncStorage via Store.
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 
-const PREFIX = 'centraid.v1.';
+const PREFIX = "centraid.v1.";
 
 // Sync cache so call sites that already use Store.get can stay synchronous
 // after hydrateSecure().
@@ -15,11 +15,14 @@ function storageKey(key: string): string {
   return PREFIX + key;
 }
 
-export function getSecure(key: string, fallback = ''): string {
+export function getSecure(key: string, fallback = ""): string {
   return cache.has(key) ? (cache.get(key) as string) : fallback;
 }
 
-export async function hydrateSecure(key: string, fallback = ''): Promise<string> {
+export async function hydrateSecure(
+  key: string,
+  fallback = ""
+): Promise<string> {
   try {
     const raw = await SecureStore.getItemAsync(storageKey(key));
     if (raw != null) {
@@ -32,7 +35,7 @@ export async function hydrateSecure(key: string, fallback = ''): Promise<string>
       let value = legacy;
       try {
         value = JSON.parse(legacy) as string;
-        if (typeof value !== 'string') value = legacy;
+        if (typeof value !== "string") value = legacy;
       } catch {
         value = legacy;
       }
@@ -52,7 +55,7 @@ export async function hydrateSecure(key: string, fallback = ''): Promise<string>
 export async function setSecure(key: string, value: string): Promise<void> {
   cache.set(key, value);
   try {
-    if (value === '') {
+    if (value === "") {
       await SecureStore.deleteItemAsync(storageKey(key));
     } else {
       await SecureStore.setItemAsync(storageKey(key), value);

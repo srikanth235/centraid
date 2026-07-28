@@ -1,6 +1,6 @@
+import type { S3BlobStoreOptions } from "./s3.js";
 /* eslint-disable max-classes-per-file -- token bucket is an implementation detail of the shared S3 pipeline (#418) */
-import { signS3Request } from './sigv4.js';
-import type { S3BlobStoreOptions } from './s3.js';
+import { signS3Request } from "./sigv4.js";
 
 export interface S3RequestInput {
   body?: Buffer;
@@ -19,11 +19,11 @@ function delay(ms: number): Promise<void> {
 
 function xmlEscape(value: string): string {
   return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+    .replace(/&/gu, "&amp;")
+    .replace(/</gu, "&lt;")
+    .replace(/>/gu, "&gt;")
+    .replace(/"/gu, "&quot;")
+    .replace(/'/gu, "&apos;");
 }
 
 class TokenBucket {
@@ -36,17 +36,27 @@ class TokenBucket {
 
   async consume(bytes: number): Promise<void> {
     if (this.ratePerSec <= 0 || bytes <= 0) return;
-    for (;;) {
+    const waitForTokens = async (): Promise<void> => {
       const now = Date.now();
       const elapsedSec = (now - this.lastRefillMs) / 1000;
       this.lastRefillMs = now;
-      this.tokens = Math.min(this.ratePerSec, this.tokens + elapsedSec * this.ratePerSec);
+      this.tokens = Math.min(
+        this.ratePerSec,
+        this.tokens + elapsedSec * this.ratePerSec
+      );
       if (this.tokens >= bytes || bytes >= this.ratePerSec) {
         this.tokens = Math.max(0, this.tokens - bytes);
         return;
       }
-      await delay(Math.min(Math.max(((bytes - this.tokens) / this.ratePerSec) * 1000, 10), 1000));
-    }
+      await delay(
+        Math.min(
+          Math.max(((bytes - this.tokens) / this.ratePerSec) * 1000, 10),
+          1000
+        )
+      );
+      return waitForTokens();
+    };
+    return waitForTokens();
   }
 }
 
@@ -70,13 +80,17 @@ export class S3RequestPipeline {
     return this.throttle?.consume(bytes) ?? Promise.resolve();
   }
 
-  async request(method: string, key: string, input: S3RequestInput = {}): Promise<Response> {
+  async request(
+    method: string,
+    key: string,
+    input: S3RequestInput = {}
+  ): Promise<Response> {
     const credentials = await this.options.credentials();
     const signed = signS3Request({
       method,
       base: this.base,
-      path: key === '' ? this.options.bucket : `${this.options.bucket}/${key}`,
-      region: this.options.region ?? 'us-east-1',
+      path: key === "" ? this.options.bucket : `${this.options.bucket}/${key}`,
+      region: this.options.region ?? "us-east-1",
       credentials,
       ...(input.body ? { body: input.body } : {}),
       ...(input.query ? { query: input.query } : {}),
@@ -89,33 +103,47 @@ export class S3RequestPipeline {
     });
   }
 
-  async send(method: string, key: string, input: S3RequestInput = {}): Promise<Response> {
-    let failure: unknown;
-    for (let attempt = 1; attempt <= this.tries; attempt += 1) {
+  async send(
+    method: string,
+    key: string,
+    input: S3RequestInput = {}
+  ): Promise<Response> {
+    const sendAttempt = async (attempt: number): Promise<Response> => {
       try {
         const response = await this.request(method, key, input);
-        if (attempt === this.tries || (response.status !== 429 && response.status < 500)) {
+        if (
+          attempt === this.tries ||
+          (response.status !== 429 && response.status < 500)
+        ) {
           return response;
         }
         await response.text().catch(() => undefined);
       } catch (error) {
-        failure = error;
         if (attempt === this.tries) throw error;
       }
       const ceiling = Math.min(2_000, 200 * 2 ** (attempt - 1));
       await this.sleep(Math.random() * ceiling);
-    }
-    throw failure ?? new Error(`S3 ${method} retries exhausted`);
+      return sendAttempt(attempt + 1);
+    };
+    return sendAttempt(1);
   }
 
-  async beginMultipart(key: string, headers?: Record<string, string>): Promise<string> {
-    const response = await this.send('POST', key, {
-      query: { uploads: '' },
+  async beginMultipart(
+    key: string,
+    headers?: Record<string, string>
+  ): Promise<string> {
+    const response = await this.send("POST", key, {
+      query: { uploads: "" },
       ...(headers ? { headers } : {}),
     });
-    if (!response.ok) throw new Error(`s3 create multipart upload: ${response.status}`);
-    const uploadId = /<UploadId>([^<]+)<\/UploadId>/.exec(await response.text())?.[1];
-    if (!uploadId) throw new Error('s3 create multipart upload: missing UploadId');
+    if (!response.ok)
+      throw new Error(`s3 create multipart upload: ${response.status}`);
+    const match = /<UploadId>(?<uploadId>[^<]+)<\/UploadId>/u.exec(
+      await response.text()
+    );
+    const uploadId = match?.groups?.uploadId;
+    if (!uploadId)
+      throw new Error("s3 create multipart upload: missing UploadId");
     return uploadId;
   }
 
@@ -123,36 +151,41 @@ export class S3RequestPipeline {
     key: string,
     uploadId: string,
     partNumber: number,
-    body: Buffer,
+    body: Buffer
   ): Promise<string> {
     await this.pace(body.length);
-    const response = await this.send('PUT', key, {
+    const response = await this.send("PUT", key, {
       body,
       query: { partNumber: String(partNumber), uploadId },
     });
-    if (!response.ok) throw new Error(`s3 upload part ${partNumber}: ${response.status}`);
-    return response.headers.get('etag') ?? `"part-${partNumber}"`;
+    if (!response.ok)
+      throw new Error(`s3 upload part ${partNumber}: ${response.status}`);
+    return response.headers.get("etag") ?? `"part-${partNumber}"`;
   }
 
   async completeMultipart(
     key: string,
     uploadId: string,
-    parts: readonly S3MultipartPart[],
+    parts: readonly S3MultipartPart[]
   ): Promise<void> {
     const body = Buffer.from(
       `<CompleteMultipartUpload>${parts
         .map(
           (part) =>
-            `<Part><PartNumber>${part.partNumber}</PartNumber><ETag>${xmlEscape(part.etag)}</ETag></Part>`,
+            `<Part><PartNumber>${part.partNumber}</PartNumber><ETag>${xmlEscape(part.etag)}</ETag></Part>`
         )
-        .join('')}</CompleteMultipartUpload>`,
+        .join("")}</CompleteMultipartUpload>`
     );
-    const response = await this.send('POST', key, { body, query: { uploadId } });
-    if (!response.ok) throw new Error(`s3 complete multipart upload: ${response.status}`);
+    const response = await this.send("POST", key, {
+      body,
+      query: { uploadId },
+    });
+    if (!response.ok)
+      throw new Error(`s3 complete multipart upload: ${response.status}`);
   }
 
   async abortMultipart(key: string, uploadId: string): Promise<void> {
-    const response = await this.request('DELETE', key, { query: { uploadId } });
+    const response = await this.request("DELETE", key, { query: { uploadId } });
     if (!response.ok && response.status !== 404) {
       throw new Error(`s3 abort multipart upload: ${response.status}`);
     }

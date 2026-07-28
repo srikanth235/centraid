@@ -1,23 +1,36 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { Image } from 'expo-image';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
-import { Feather } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { Feather } from "@expo/vector-icons";
+import { FlashList, type FlashListRef } from "@shopify/flash-list";
+import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { runOnJS } from "react-native-reanimated";
 
-import Icon from '../../kit/components/Icon';
-import { family, useTheme } from '../../kit/theme';
-import type { PhotoAsset, PhotoSection } from './timeline-source';
-import { addDragSelection } from './timeline-model';
-import { imageSource } from './media-source';
+import Icon from "../../kit/components/Icon";
+import { family, useTheme } from "../../kit/theme";
+import { imageSource } from "./media-source";
+import { addDragSelection } from "./timeline-model";
+import type { PhotoAsset, PhotoSection } from "./timeline-source";
 
 type TimelineRow =
-  | { type: 'month'; key: string; title: string; assets: PhotoAsset[] }
-  | { type: 'header'; key: string; title: string; assets: PhotoAsset[] }
+  | { type: "month"; key: string; title: string; assets: PhotoAsset[] }
+  | { type: "header"; key: string; title: string; assets: PhotoAsset[] }
   | {
-      type: 'assets';
+      type: "assets";
       key: string;
       assets: PhotoAsset[];
       height: number;
@@ -25,19 +38,25 @@ type TimelineRow =
     };
 
 // Hoisted so the scrubber doesn't build a fresh Intl formatter on every move.
-const MONTH_YEAR_FORMAT = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' });
+const MONTH_YEAR_FORMAT = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  year: "numeric",
+});
 
 const ratioFor = (asset: PhotoAsset): number =>
-  Math.max(0.65, Math.min(1.9, asset.width && asset.height ? asset.width / asset.height : 1));
+  Math.max(
+    0.65,
+    Math.min(1.9, asset.width && asset.height ? asset.width / asset.height : 1)
+  );
 
 const rowHeightOf = (row: TimelineRow): number =>
-  row.type === 'month' ? 52 : row.type === 'header' ? 42 : row.height;
+  row.type === "month" ? 52 : row.type === "header" ? 42 : row.height;
 
 function assetRows(
   assets: PhotoAsset[],
   columns: number,
   width: number,
-  key: string,
+  key: string
 ): TimelineRow[] {
   const chunks: PhotoAsset[][] = [];
   let chunk: PhotoAsset[] = [];
@@ -59,7 +78,7 @@ function assetRows(
     const gapWidth = Math.max(0, rowAssets.length - 1) * 2;
     const height = isLooseFinalRow ? width / columns : (width - gapWidth) / sum;
     return {
-      type: 'assets' as const,
+      type: "assets" as const,
       key: `r:${key}:${index}:${columns}`,
       assets: rowAssets,
       height,
@@ -68,14 +87,19 @@ function assetRows(
   });
 }
 
-function rowsFor(sections: PhotoSection[], columns: number, width: number): TimelineRow[] {
+function rowsFor(
+  sections: PhotoSection[],
+  columns: number,
+  width: number
+): TimelineRow[] {
   return sections.flatMap((section, sectionIndex) => {
-    const monthChanged = sectionIndex === 0 || sections[sectionIndex - 1]?.month !== section.month;
+    const monthChanged =
+      sectionIndex === 0 || sections[sectionIndex - 1]?.month !== section.month;
     return [
       ...(monthChanged
         ? [
             {
-              type: 'month' as const,
+              type: "month" as const,
               key: `m:${section.month}`,
               title: section.monthTitle,
               assets: section.assets,
@@ -83,7 +107,7 @@ function rowsFor(sections: PhotoSection[], columns: number, width: number): Time
           ]
         : []),
       {
-        type: 'header' as const,
+        type: "header" as const,
         key: `h:${section.day}`,
         title: section.title,
         assets: section.assets,
@@ -100,7 +124,7 @@ function assetAt(
   rowTops: number[],
   scrollY: number,
   x: number,
-  y: number,
+  y: number
 ): PhotoAsset | undefined {
   const cursor = scrollY + y;
   // Binary search for the row whose band contains the cursor.
@@ -119,7 +143,7 @@ function assetAt(
     }
   }
   const row = rowIndex >= 0 ? rows[rowIndex] : undefined;
-  if (!row || row.type !== 'assets') return undefined;
+  if (!row || row.type !== "assets") return undefined;
   let position = Math.max(0, x);
   let assetIndex = 0;
   for (let index = 0; index < row.widths.length; index += 1) {
@@ -155,11 +179,15 @@ function buildTimelineGestures(
   columns: number,
   onColumns: (next: number) => void,
   onTap: (x: number, y: number) => void,
-  onDrag: (x: number, y: number) => void,
+  onDrag: (x: number, y: number) => void
 ): ReturnType<typeof Gesture.Simultaneous> {
   const pinch = Gesture.Pinch().onEnd(({ scale }) => {
     const next =
-      scale > 1.15 ? Math.max(2, columns - 1) : scale < 0.86 ? Math.min(7, columns + 1) : columns;
+      scale > 1.15
+        ? Math.max(2, columns - 1)
+        : scale < 0.86
+          ? Math.min(7, columns + 1)
+          : columns;
     if (next !== columns) runOnJS(onColumns)(next);
   });
   const tap = Gesture.Tap().onEnd((event, success) => {
@@ -189,72 +217,83 @@ function TimelineGestureLayer({
   children,
 }: {
   columns: number;
-  onColumns(next: number): void;
-  onTap(x: number, y: number): void;
-  onDrag(x: number, y: number): void;
+  onColumns: (next: number) => void;
+  onTap: (x: number, y: number) => void;
+  onDrag: (x: number, y: number) => void;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <GestureDetector gesture={buildTimelineGestures(columns, onColumns, onTap, onDrag)}>
+    <GestureDetector
+      gesture={buildTimelineGestures(columns, onColumns, onTap, onDrag)}
+    >
       {children}
     </GestureDetector>
   );
 }
 
-const AssetCell = memo(function AssetCell({
-  asset,
-  height,
-  width,
-  selected,
-  selecting,
-  onOpen,
-  onSelect,
-}: {
-  asset: PhotoAsset;
-  height: number;
-  width: number;
-  selected: boolean;
-  selecting: boolean;
-  onOpen(asset: PhotoAsset): void;
-  onSelect(asset: PhotoAsset): void;
-}) {
-  const { colors } = useTheme();
-  return (
-    <Pressable
-      accessibilityLabel={asset.filename ?? `Photo from ${asset.capturedAt}`}
-      accessibilityRole="imagebutton"
-      onPress={() => (selecting ? onSelect(asset) : onOpen(asset))}
-      style={{ height, width }}
-    >
-      <Image
-        source={imageSource(asset.uri)}
-        placeholder={asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined}
-        contentFit="cover"
-        transition={120}
-        recyclingKey={asset.id}
-        style={[styles.image, { backgroundColor: colors.bgSunken }]}
-      />
-      <View style={styles.badges}>
-        {asset.kind === 'video' ? <Icon name="Play" size={14} color="#fff" /> : null}
-        {asset.backupState !== 'backed-up' && asset.backupState !== 'remote-only' ? (
-          <Feather name="cloud" size={14} color="#fff" />
-        ) : null}
-      </View>
-      {asset.duplicateHint ? (
-        <View style={styles.duplicate}>
-          <Icon name="Copy" size={12} color="#fff" />
+const AssetCell = memo(
+  ({
+    asset,
+    height,
+    width,
+    selected,
+    selecting,
+    onOpen,
+    onSelect,
+  }: {
+    asset: PhotoAsset;
+    height: number;
+    width: number;
+    selected: boolean;
+    selecting: boolean;
+    onOpen: (asset: PhotoAsset) => void;
+    onSelect: (asset: PhotoAsset) => void;
+  }) => {
+    const { colors } = useTheme();
+    return (
+      <Pressable
+        accessibilityLabel={asset.filename ?? `Photo from ${asset.capturedAt}`}
+        accessibilityRole="imagebutton"
+        onPress={() => (selecting ? onSelect(asset) : onOpen(asset))}
+        style={{ height, width }}
+      >
+        <Image
+          source={imageSource(asset.uri)}
+          placeholder={
+            asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined
+          }
+          contentFit="cover"
+          transition={120}
+          recyclingKey={asset.id}
+          style={[styles.image, { backgroundColor: colors.bgSunken }]}
+        />
+        <View style={styles.badges}>
+          {asset.kind === "video" ? (
+            <Icon name="Play" size={14} color="#fff" />
+          ) : null}
+          {asset.backupState !== "backed-up" &&
+          asset.backupState !== "remote-only" ? (
+            <Feather name="cloud" size={14} color="#fff" />
+          ) : null}
         </View>
-      ) : null}
-      {selected ? (
-        <View style={[styles.selection, { borderColor: colors.accent }]}>
-          <View style={[styles.check, { backgroundColor: colors.accent }]}>
-            <Icon name="Check" size={13} color="#fff" strokeWidth={2.5} />
+        {asset.duplicateHint ? (
+          <View style={styles.duplicate}>
+            <Icon name="Copy" size={12} color="#fff" />
           </View>
-        </View>
-      ) : null}
-    </Pressable>
-  );
-});
+        ) : null}
+        {selected ? (
+          <View style={[styles.selection, { borderColor: colors.accent }]}>
+            <View style={[styles.check, { backgroundColor: colors.accent }]}>
+              <Icon name="Check" size={13} color="#fff" strokeWidth={2.5} />
+            </View>
+          </View>
+        ) : null}
+      </Pressable>
+    );
+  }
+);
+
+AssetCell.displayName = "AssetCell";
 
 export default function PhotoTimeline({
   sections,
@@ -263,14 +302,14 @@ export default function PhotoTimeline({
   onSelectionChange,
 }: {
   sections: PhotoSection[];
-  onOpen(asset: PhotoAsset): void;
+  onOpen: (asset: PhotoAsset) => void;
   selection: Set<string>;
-  onSelectionChange(next: Set<string>): void;
+  onSelectionChange: (next: Set<string>) => void;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
   const [columns, setColumns] = useState(4);
-  const [scrubLabel, setScrubLabel] = useState('');
+  const [scrubLabel, setScrubLabel] = useState("");
   const list = useRef<FlashListRef<TimelineRow>>(null);
   const scrollOffset = useRef(0);
   // Latest-value mirrors, written from an effect rather than during render:
@@ -281,10 +320,13 @@ export default function PhotoTimeline({
   useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
-  const rows = useMemo(() => rowsFor(sections, columns, width), [columns, sections, width]);
+  const rows = useMemo(
+    () => rowsFor(sections, columns, width),
+    [columns, sections, width]
+  );
   const monthHeaderIndices = useMemo(
-    () => rows.flatMap((row, index) => (row.type === 'month' ? [index] : [])),
-    [rows],
+    () => rows.flatMap((row, index) => (row.type === "month" ? [index] : [])),
+    [rows]
   );
   // Prefix-summed row tops, so a drag maps a y-offset to its row by binary
   // search instead of re-walking every row's height on each pan event.
@@ -306,13 +348,16 @@ export default function PhotoTimeline({
   useEffect(() => {
     onOpenRef.current = onOpen;
   }, [onOpen]);
-  const handleOpen = useCallback((asset: PhotoAsset): void => onOpenRef.current(asset), []);
+  const handleOpen = useCallback(
+    (asset: PhotoAsset): void => onOpenRef.current(asset),
+    []
+  );
   const toggle = useCallback(
     (asset: PhotoAsset): void => {
       void Haptics.selectionAsync();
       onSelectionChange(toggleSelection(selectionRef.current, asset.id));
     },
-    [onSelectionChange],
+    [onSelectionChange]
   );
 
   const dragSelect = (x: number, y: number): void => {
@@ -334,9 +379,16 @@ export default function PhotoTimeline({
   };
 
   const scrub = (pageY: number): void => {
-    const ratio = Math.max(0, Math.min(1, (pageY - 100) / Math.max(1, height - 180)));
+    const ratio = Math.max(
+      0,
+      Math.min(1, (pageY - 100) / Math.max(1, height - 180))
+    );
     const index = Math.min(rows.length - 1, Math.floor(ratio * rows.length));
-    void list.current?.scrollToIndex({ index, animated: false, viewPosition: 0 });
+    void list.current?.scrollToIndex({
+      index,
+      animated: false,
+      viewPosition: 0,
+    });
     const row = rows[index];
     const asset = row?.assets[0];
     if (asset) {
@@ -359,22 +411,33 @@ export default function PhotoTimeline({
           getItemType={(item) => item.type}
           stickyHeaderIndices={monthHeaderIndices}
           renderItem={({ item }) =>
-            item.type === 'month' ? (
-              <View style={[styles.monthHeader, { backgroundColor: colors.bg }]}>
-                <Text style={[styles.monthText, { color: colors.ink }]}>{item.title}</Text>
+            item.type === "month" ? (
+              <View
+                style={[styles.monthHeader, { backgroundColor: colors.bg }]}
+              >
+                <Text style={[styles.monthText, { color: colors.ink }]}>
+                  {item.title}
+                </Text>
               </View>
-            ) : item.type === 'header' ? (
+            ) : item.type === "header" ? (
               <View style={[styles.header, { backgroundColor: colors.bg }]}>
-                <Text style={[styles.headerText, { color: colors.ink }]}>{item.title}</Text>
+                <Text style={[styles.headerText, { color: colors.ink }]}>
+                  {item.title}
+                </Text>
                 {selecting ? (
                   <Pressable
                     onPress={() =>
                       onSelectionChange(
-                        new Set([...selection, ...item.assets.map((asset) => asset.id)]),
+                        new Set([
+                          ...selection,
+                          ...item.assets.map((asset) => asset.id),
+                        ])
                       )
                     }
                   >
-                    <Text style={[styles.selectDay, { color: colors.accent }]}>Select day</Text>
+                    <Text style={[styles.selectDay, { color: colors.accent }]}>
+                      Select day
+                    </Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -395,7 +458,7 @@ export default function PhotoTimeline({
               </View>
             )
           }
-          onScrollBeginDrag={() => setScrubLabel('')}
+          onScrollBeginDrag={() => setScrubLabel("")}
           onScroll={(event) => {
             scrollOffset.current = event.nativeEvent.contentOffset.y;
           }}
@@ -408,14 +471,16 @@ export default function PhotoTimeline({
           onMoveShouldSetResponder={() => true}
           onResponderGrant={(event) => scrub(event.nativeEvent.pageY)}
           onResponderMove={(event) => scrub(event.nativeEvent.pageY)}
-          onResponderRelease={() => setTimeout(() => setScrubLabel(''), 450)}
+          onResponderRelease={() => setTimeout(() => setScrubLabel(""), 450)}
           style={styles.scrubber}
         >
           <View style={[styles.rail, { backgroundColor: colors.line }]} />
         </View>
         {scrubLabel ? (
           <View style={[styles.scrubBubble, { backgroundColor: colors.ink }]}>
-            <Text style={[styles.scrubText, { color: colors.bg }]}>{scrubLabel}</Text>
+            <Text style={[styles.scrubText, { color: colors.bg }]}>
+              {scrubLabel}
+            </Text>
           </View>
         ) : null}
       </View>
@@ -424,34 +489,45 @@ export default function PhotoTimeline({
 }
 
 const styles = StyleSheet.create({
-  badges: { position: 'absolute', bottom: 7, right: 7, flexDirection: 'row', gap: 5 },
+  badges: {
+    position: "absolute",
+    bottom: 7,
+    right: 7,
+    flexDirection: "row",
+    gap: 5,
+  },
   check: {
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 14,
     height: 24,
-    justifyContent: 'center',
+    justifyContent: "center",
     width: 24,
   },
-  duplicate: { position: 'absolute', left: 7, bottom: 7 },
+  duplicate: { position: "absolute", left: 7, bottom: 7 },
   fill: { flex: 1 },
   header: {
-    alignItems: 'center',
-    flexDirection: 'row',
+    alignItems: "center",
+    flexDirection: "row",
     height: 42,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
     paddingHorizontal: 18,
   },
   headerText: { fontFamily: family.sansBold, fontSize: 13 },
-  image: { borderRadius: 3, height: '100%', width: '100%' },
-  monthHeader: { height: 52, justifyContent: 'flex-end', paddingHorizontal: 18, paddingBottom: 8 },
+  image: { borderRadius: 3, height: "100%", width: "100%" },
+  monthHeader: {
+    height: 52,
+    justifyContent: "flex-end",
+    paddingHorizontal: 18,
+    paddingBottom: 8,
+  },
   monthText: { fontFamily: family.displayBold, fontSize: 20 },
-  rail: { borderRadius: 2, height: '100%', width: 3 },
-  row: { flexDirection: 'row', gap: 2, marginBottom: 2 },
+  rail: { borderRadius: 2, height: "100%", width: 3 },
+  row: { flexDirection: "row", gap: 2, marginBottom: 2 },
   scrubber: {
-    alignItems: 'center',
+    alignItems: "center",
     bottom: 100,
     paddingHorizontal: 8,
-    position: 'absolute',
+    position: "absolute",
     right: 0,
     top: 50,
     width: 24,
@@ -460,9 +536,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    position: 'absolute',
+    position: "absolute",
     right: 30,
-    top: '46%',
+    top: "46%",
   },
   scrubText: { fontFamily: family.sansBold, fontSize: 12 },
   selectDay: { fontFamily: family.sansMedium, fontSize: 12 },
@@ -471,7 +547,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     bottom: 1,
     left: 1,
-    position: 'absolute',
+    position: "absolute",
     right: 1,
     top: 1,
   },

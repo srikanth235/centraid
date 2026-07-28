@@ -3,12 +3,13 @@
 // asked" chip on parked-cancel events. Search results (the vault FTS hits,
 // snippet included) route here — same shape as the loaded window, so one
 // component renders either source.
-import { bucketByDay, segTimeText } from '../format.ts';
-import { localDayKey } from '../kit.ts';
-import { I } from '../icons.ts';
-import { Icon, Snippet } from './Shared.tsx';
-import type { AgEvent, DaySegment } from '../types.ts';
-import styles from './ScheduleView.module.css';
+import { bucketByDay, segTimeText } from "../format.ts";
+import { I } from "../icons.ts";
+import { localDayKey } from "../kit.ts";
+import type { AgEvent, DaySegment } from "../types.ts";
+import { Icon, Snippet } from "./Shared.tsx";
+
+import styles from "./ScheduleView.module.css";
 
 type ColorFor = (calendarId: string | null | undefined) => string | null;
 
@@ -42,10 +43,18 @@ function EventCard({
             app-boot harness queries `.ag-sched-title` on rendered content, so
             it must not be module-hashed. `tentative` is the shared global
             state modifier. */}
-        <span className={ev.status === 'tentative' ? 'ag-sched-title tentative' : 'ag-sched-title'}>
+        <span
+          className={
+            ev.status === "tentative"
+              ? "ag-sched-title tentative"
+              : "ag-sched-title"
+          }
+        >
           {ev.summary}
         </span>
-        {ev.snippet ? <Snippet snippet={ev.snippet} className={styles.schedSnippet} /> : null}
+        {ev.snippet ? (
+          <Snippet snippet={ev.snippet} className={styles.schedSnippet} />
+        ) : null}
       </span>
       {pending ? <span className="kit-pending-chip">cancel asked</span> : null}
     </button>
@@ -74,9 +83,11 @@ function DayGroup({
           {d.getDate()}
         </div>
         <div className={styles.schedDow}>
-          {d.toLocaleDateString(undefined, { weekday: 'short' })}
+          {d.toLocaleDateString(undefined, { weekday: "short" })}
         </div>
-        <div className={styles.schedMy}>{d.toLocaleDateString(undefined, { month: 'short' })}</div>
+        <div className={styles.schedMy}>
+          {d.toLocaleDateString(undefined, { month: "short" })}
+        </div>
       </div>
       <div className={styles.schedItems}>
         {segs.map((seg) => (
@@ -129,12 +140,12 @@ export function ScheduleView({
             <Icon svg={I.empty} />
           </div>
           <div className="kit-empty-title">
-            {searching ? 'No matching events' : 'Nothing coming up'}
+            {searching ? "No matching events" : "Nothing coming up"}
           </div>
           <div className="kit-empty-sub">
             {searching
-              ? 'Try another title, or clear the search.'
-              : 'Propose an event above, or jump ahead to a busier month.'}
+              ? "Try another title, or clear the search."
+              : "Propose an event above, or jump ahead to a busier month."}
           </div>
         </div>
       ) : null}

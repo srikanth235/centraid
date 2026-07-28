@@ -1,4 +1,4 @@
-import type { DatabaseProvider } from '../stores/gateway-db.js';
+import type { DatabaseProvider } from "../stores/gateway-db.js";
 
 export interface AutomationTriggerCursor {
   automationId: string;
@@ -29,7 +29,7 @@ export interface PutAutomationTriggerCursor {
 
 export interface TriggerIngressRecord {
   id: number;
-  source: 'webhook' | 'poll';
+  source: "webhook" | "poll";
   sourceKey: string;
   deliveryId: string;
   receivedAt: number;
@@ -39,7 +39,7 @@ export interface TriggerIngressRecord {
 }
 
 export interface AppendTriggerIngress {
-  source: 'webhook' | 'poll';
+  source: "webhook" | "poll";
   sourceKey: string;
   deliveryId: string;
   receivedAt: number;
@@ -87,7 +87,7 @@ interface CursorRow {
 
 interface IngressRow {
   id: number;
-  source: 'webhook' | 'poll';
+  source: "webhook" | "poll";
   source_key: string;
   delivery_id: string;
   received_at: number;
@@ -101,12 +101,12 @@ function mapCursor(row: CursorRow): AutomationTriggerCursor {
     automationId: row.automation_id,
     triggerIndex: row.trigger_index,
     sourceKind: row.source_kind,
-    ...(row.position_json !== null ? { positionJson: row.position_json } : {}),
-    ...(row.pending_json !== null ? { pendingJson: row.pending_json } : {}),
-    ...(row.window_from !== null ? { windowFrom: row.window_from } : {}),
-    ...(row.window_to !== null ? { windowTo: row.window_to } : {}),
+    ...(row.position_json === null ? {} : { positionJson: row.position_json }),
+    ...(row.pending_json === null ? {} : { pendingJson: row.pending_json }),
+    ...(row.window_from === null ? {} : { windowFrom: row.window_from }),
+    ...(row.window_to === null ? {} : { windowTo: row.window_to }),
     skipped: row.skipped,
-    ...(row.gap_reason !== null ? { gapReason: row.gap_reason } : {}),
+    ...(row.gap_reason === null ? {} : { gapReason: row.gap_reason }),
     updatedAt: row.updated_at,
   };
 }
@@ -118,8 +118,8 @@ function mapIngress(row: IngressRow): TriggerIngressRecord {
     sourceKey: row.source_key,
     deliveryId: row.delivery_id,
     receivedAt: row.received_at,
-    ...(row.payload_json !== null ? { payloadJson: row.payload_json } : {}),
-    ...(row.payload_ref !== null ? { payloadRef: row.payload_ref } : {}),
+    ...(row.payload_json === null ? {} : { payloadJson: row.payload_json }),
+    ...(row.payload_ref === null ? {} : { payloadRef: row.payload_ref }),
     expiresAt: row.expires_at,
   };
 }
@@ -128,13 +128,16 @@ function mapIngress(row: IngressRow): TriggerIngressRecord {
 export class AutomationTriggerStore {
   constructor(private readonly dbProvider: DatabaseProvider) {}
 
-  getCursor(automationId: string, triggerIndex: number): AutomationTriggerCursor | undefined {
+  getCursor(
+    automationId: string,
+    triggerIndex: number
+  ): AutomationTriggerCursor | undefined {
     const row = this.dbProvider()
       .prepare(
         `SELECT automation_id, trigger_index, source_kind, position_json, pending_json,
                 window_from, window_to, skipped, gap_reason, updated_at
            FROM automation_trigger_cursor
-          WHERE automation_id = ? AND trigger_index = ?`,
+          WHERE automation_id = ? AND trigger_index = ?`
       )
       .get(automationId, triggerIndex) as unknown as CursorRow | undefined;
     return row ? mapCursor(row) : undefined;
@@ -155,7 +158,7 @@ export class AutomationTriggerStore {
            window_to = excluded.window_to,
            skipped = excluded.skipped,
            gap_reason = excluded.gap_reason,
-           updated_at = excluded.updated_at`,
+           updated_at = excluded.updated_at`
       )
       .run(
         input.automationId,
@@ -167,7 +170,7 @@ export class AutomationTriggerStore {
         input.windowTo ?? null,
         input.skipped ?? 0,
         input.gapReason ?? null,
-        input.updatedAt,
+        input.updatedAt
       );
   }
 
@@ -183,14 +186,19 @@ export class AutomationTriggerStore {
    */
   deleteCursorsNotIn(retained: readonly CursorRetentionKey[]): number {
     if (retained.length === 0) return 0;
-    const placeholders = retained.map(() => '(?, ?)').join(',');
+    const placeholders = retained.map(() => "(?, ?)").join(",");
     return Number(
       this.dbProvider()
         .prepare(
           `DELETE FROM automation_trigger_cursor
-            WHERE (automation_id, trigger_index) NOT IN (VALUES ${placeholders})`,
+            WHERE (automation_id, trigger_index) NOT IN (VALUES ${placeholders})`
         )
-        .run(...retained.flatMap((entry) => [entry.automationId, entry.triggerIndex])).changes,
+        .run(
+          ...retained.flatMap((entry) => [
+            entry.automationId,
+            entry.triggerIndex,
+          ])
+        ).changes
     );
   }
 
@@ -201,17 +209,20 @@ export class AutomationTriggerStore {
    * able to delete the row between them and make a stored delivery look
    * rejected.
    */
-  appendIngress(input: AppendTriggerIngress): { inserted: boolean; id: number } {
+  appendIngress(input: AppendTriggerIngress): {
+    inserted: boolean;
+    id: number;
+  } {
     const db = this.dbProvider();
     // SAVEPOINT (not BEGIN) so this nests safely inside a caller's transaction
     // — journal.db is one connection shared with the conversation store.
-    db.prepare('SAVEPOINT append_ingress').run();
+    db.prepare("SAVEPOINT append_ingress").run();
     try {
       const result = db
         .prepare(
           `INSERT OR IGNORE INTO trigger_ingress
              (source, source_key, delivery_id, received_at, payload_json, payload_ref, expires_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           input.source,
@@ -220,31 +231,38 @@ export class AutomationTriggerStore {
           input.receivedAt,
           input.payloadJson ?? null,
           input.payloadRef ?? null,
-          input.expiresAt,
+          input.expiresAt
         );
       const row = db
         .prepare(
           `SELECT id FROM trigger_ingress
-            WHERE source = ? AND source_key = ? AND delivery_id = ?`,
+            WHERE source = ? AND source_key = ? AND delivery_id = ?`
         )
         .get(input.source, input.sourceKey, input.deliveryId) as unknown as
         | { id: number }
         | undefined;
       if (!row) {
         throw new Error(
-          `trigger ingress ${input.source}/${input.sourceKey}/${input.deliveryId} vanished inside its own transaction`,
+          `trigger ingress ${input.source}/${input.sourceKey}/${input.deliveryId} vanished inside its own transaction`
         );
       }
-      const appended = { inserted: Number(result.changes) > 0, id: Number(row.id) };
-      db.prepare('RELEASE append_ingress').run();
+      const appended = {
+        inserted: Number(result.changes) > 0,
+        id: Number(row.id),
+      };
+      db.prepare("RELEASE append_ingress").run();
       return appended;
     } catch (error) {
-      db.prepare('ROLLBACK TO append_ingress').run();
+      db.prepare("ROLLBACK TO append_ingress").run();
       throw error;
     }
   }
 
-  listIngressAfter(sourceKey: string, afterId: number, limit: number): TriggerIngressRecord[] {
+  listIngressAfter(
+    sourceKey: string,
+    afterId: number,
+    limit: number
+  ): TriggerIngressRecord[] {
     return (
       this.dbProvider()
         .prepare(
@@ -253,7 +271,7 @@ export class AutomationTriggerStore {
              FROM trigger_ingress
             WHERE source_key = ? AND id > ?
             ORDER BY id ASC
-            LIMIT ?`,
+            LIMIT ?`
         )
         .all(sourceKey, afterId, limit) as unknown as IngressRow[]
     ).map(mapIngress);
@@ -264,12 +282,15 @@ export class AutomationTriggerStore {
       .prepare(
         `SELECT COUNT(*) AS count, MAX(id) AS latest_id
            FROM trigger_ingress
-          WHERE source_key = ? AND id > ?`,
+          WHERE source_key = ? AND id > ?`
       )
-      .get(sourceKey, afterId) as unknown as { count: number; latest_id: number | null };
+      .get(sourceKey, afterId) as unknown as {
+      count: number;
+      latest_id: number | null;
+    };
     return {
       count: Number(row.count),
-      ...(row.latest_id !== null ? { latestId: Number(row.latest_id) } : {}),
+      ...(row.latest_id === null ? {} : { latestId: Number(row.latest_id) }),
     };
   }
 
@@ -285,7 +306,7 @@ export class AutomationTriggerStore {
   pruneIngress(now: number): PruneIngressResult {
     const db = this.dbProvider();
     // One savepoint: the reported gap must describe exactly the rows deleted.
-    db.prepare('SAVEPOINT prune_ingress').run();
+    db.prepare("SAVEPOINT prune_ingress").run();
     try {
       const gaps = (
         db
@@ -293,7 +314,7 @@ export class AutomationTriggerStore {
             `SELECT source_key, COUNT(*) AS pruned, MAX(id) AS through_id
                FROM trigger_ingress
               WHERE expires_at <= ?
-              GROUP BY source_key`,
+              GROUP BY source_key`
           )
           .all(now) as unknown as {
           source_key: string;
@@ -306,12 +327,13 @@ export class AutomationTriggerStore {
         throughId: Number(row.through_id),
       }));
       const deleted = Number(
-        db.prepare('DELETE FROM trigger_ingress WHERE expires_at <= ?').run(now).changes,
+        db.prepare("DELETE FROM trigger_ingress WHERE expires_at <= ?").run(now)
+          .changes
       );
-      db.prepare('RELEASE prune_ingress').run();
+      db.prepare("RELEASE prune_ingress").run();
       return { deleted, gaps };
     } catch (error) {
-      db.prepare('ROLLBACK TO prune_ingress').run();
+      db.prepare("ROLLBACK TO prune_ingress").run();
       throw error;
     }
   }

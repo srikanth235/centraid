@@ -1,22 +1,22 @@
 // Shared types for the gateway pipeline (§10): identity → consent → contract
 // → execution → evidence.
 
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from "node:sqlite";
 
 /** A host-owned, execution-local attenuation of a durable consent scope. */
 export interface ExecutionScopeSpec {
   schema: string;
   table?: string;
-  verbs: 'read' | 'read+act' | 'act' | 'reveal';
+  verbs: "read" | "read+act" | "act" | "reveal";
   rowFilter?: FilterClause[];
   fieldMask?: string[];
 }
 
 /** How a caller proves who it is (S1). Every caller authenticates as a row. */
 export type Credential =
-  | { kind: 'app'; appId: string; signingKey: string }
+  | { kind: "app"; appId: string; signingKey: string }
   | {
-      kind: 'agent';
+      kind: "agent";
       agentId: string;
       deviceId: string;
       deviceKey: string;
@@ -36,9 +36,9 @@ export type Credential =
        */
       onBehalfOfMember?: { memberId: string; mayAct: boolean };
     }
-  | { kind: 'device'; deviceId: string; deviceKey: string };
+  | { kind: "device"; deviceId: string; deviceKey: string };
 
-export type Risk = 'low' | 'medium' | 'high';
+export type Risk = "low" | "medium" | "high";
 
 /**
  * The auto-defaulted DPV purpose (issue #306 decision 4): purposes are off
@@ -46,15 +46,15 @@ export type Risk = 'low' | 'medium' | 'high';
  * vocabulary and `consent.policy` purpose rules stay for the day sharing
  * reintroduces a genuine second party.
  */
-export const DEFAULT_PURPOSE = 'dpv:ServiceProvision';
+export const DEFAULT_PURPOSE = "dpv:ServiceProvision";
 
 /** Resolved caller identity after S1. */
 export interface Identity {
-  kind: 'app' | 'agent' | 'owner-device';
+  kind: "app" | "agent" | "owner-device";
   /** Row id of the authenticated caller (app_id / agent_id / device_id). */
   callerId: string;
   /** prov:Agent class stamped on provenance rows. */
-  provAgentKind: 'app' | 'ai_agent' | 'owner';
+  provAgentKind: "app" | "ai_agent" | "owner";
   /** Party the caller acts as, when it has one (agents, owner devices). */
   partyId: string | null;
   /** readonly devices may read but never act. */
@@ -78,17 +78,17 @@ export interface FilterClause {
    * the horizon window condition triggers ride).
    */
   op:
-    | 'eq'
-    | 'ne'
-    | 'lt'
-    | 'lte'
-    | 'gt'
-    | 'gte'
-    | 'in'
-    | 'is-null'
-    | 'not-null'
-    | 'within-days'
-    | 'within-next-days';
+    | "eq"
+    | "ne"
+    | "lt"
+    | "lte"
+    | "gt"
+    | "gte"
+    | "in"
+    | "is-null"
+    | "not-null"
+    | "within-days"
+    | "within-next-days";
   value?: unknown;
 }
 
@@ -101,7 +101,7 @@ export interface FilterClause {
 export interface OrderBy {
   column: string;
   /** Default `asc`. Ties use an exposed scalar primary key in ascending BINARY order. */
-  dir?: 'asc' | 'desc';
+  dir?: "asc" | "desc";
 }
 
 export interface ReadRequest {
@@ -207,7 +207,7 @@ export interface ChangeEntry {
   entity: string;
   entityId: string;
   activity: string;
-  agentKind: 'owner' | 'app' | 'ai_agent' | 'import';
+  agentKind: "owner" | "app" | "ai_agent" | "import";
   occurredAt: string;
 }
 
@@ -219,17 +219,27 @@ export interface ChangesResult {
 }
 
 export type InvokeOutcome =
-  | { status: 'executed'; invocationId: string; receiptId: string; output: unknown }
-  | { status: 'parked'; invocationId: string; reason: string }
-  | { status: 'denied'; invocationId?: string; receiptId: string; reason: string }
   | {
-      status: 'failed';
+      status: "executed";
+      invocationId: string;
+      receiptId: string;
+      output: unknown;
+    }
+  | { status: "parked"; invocationId: string; reason: string }
+  | {
+      status: "denied";
+      invocationId?: string;
+      receiptId: string;
+      reason: string;
+    }
+  | {
+      status: "failed";
       invocationId: string;
       receiptId: string;
       reason: string;
       predicate?: string;
     }
-  | { status: 'replayed'; invocationId: string; output: unknown };
+  | { status: "replayed"; invocationId: string; output: unknown };
 
 /**
  * The requester kind an approval surface renders as a trust-legibility
@@ -239,7 +249,7 @@ export type InvokeOutcome =
  * credential shape but mean very different things to the owner deciding
  * whether to approve a parked act.
  */
-export type ParkedCallerKind = 'app' | 'agent' | 'assistant' | 'owner-device';
+export type ParkedCallerKind = "app" | "agent" | "assistant" | "owner-device";
 
 /**
  * One invocation awaiting owner confirmation, as the consent surface lists
@@ -273,7 +283,7 @@ export interface ConditionSpec {
   sql: string;
   /** Column of that row to compare. */
   column: string;
-  op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
+  op: "eq" | "ne" | "lt" | "lte" | "gt" | "gte";
   value: number | string;
   /**
    * Owner-facing sentence shown in place of the raw `name: column op value`
@@ -300,7 +310,7 @@ export interface Citation {
  */
 export interface HandlerBlobs {
   /** Staged, unclaimed info for a sha (null = nothing staged). */
-  staged(sha256: string): {
+  staged: (sha256: string) => {
     mediaType: string;
     byteSize: number;
     originalName: string | null;
@@ -311,10 +321,10 @@ export interface HandlerBlobs {
    * "bytes waiting" to "model" (issue #296 §3). Idempotent over dedup:
    * a live content item already owning the sha restores + returns.
    */
-  claimStaged(
+  claimStaged: (
     sha256: string,
-    options?: { title?: string },
-  ): {
+    options?: { title?: string }
+  ) => {
     contentId: string;
     mediaType: string;
     byteSize: number;
@@ -326,9 +336,9 @@ export interface HandlerBlobs {
    * data_uri compatibility path (§3): the command already holds the bytes,
    * custody moves them out of the row.
    */
-  spill(bytes: Buffer): string;
+  spill: (bytes: Buffer) => string;
   /** Local CAS presence — precondition-grade, no bytes returned. */
-  has(sha256: string): boolean;
+  has: (sha256: string) => boolean;
 }
 
 /** Transaction-scoped surface handed to command handlers. */
@@ -342,11 +352,11 @@ export interface HandlerCtx {
    * endpoints under the same purpose the act rode in on). */
   purpose: string;
   now: string;
-  newId(): string;
+  newId: () => string;
   /** Record a write so the gateway stamps consent.provenance for it. */
-  wrote(entityType: string, entityId: string): void;
+  wrote: (entityType: string, entityId: string) => void;
   /** Cite a row the command read to justify its action. */
-  cite(citation: Citation): void;
+  cite: (citation: Citation) => void;
   /**
    * Decrypt one sealed cell INSIDE the command (issue #293 decision 5):
    * derivatives without revelation — `locker.totp_code` unseals the seed,
@@ -355,7 +365,11 @@ export interface HandlerCtx {
    * noted on the command's receipt (column names, never values). Plaintext
    * legacy values return as-is; a missing row/column returns null.
    */
-  unseal(entityType: string, entityId: string, column: string): string | null;
+  unseal: (
+    entityType: string,
+    entityId: string,
+    column: string
+  ) => string | null;
   /** Blob custody surface (issue #296) — staged claims and data_uri spills. */
   blobs: HandlerBlobs;
 }
@@ -363,7 +377,7 @@ export interface HandlerCtx {
 /** Domain-owned command implementation, hosted and checked by the gateway. */
 export interface CommandHandler {
   name: string;
-  execute(ctx: HandlerCtx): Record<string, unknown>;
+  execute: (ctx: HandlerCtx) => Record<string, unknown>;
 }
 
 /** Registration payload: the agent.command row + its handler. */
@@ -374,7 +388,7 @@ export interface CommandDefinition {
   outputSchema: Record<string, unknown>;
   preconditions: ConditionSpec[];
   postconditions: ConditionSpec[];
-  idempotency: 'idempotent' | 'once' | 'retry-safe';
+  idempotency: "idempotent" | "once" | "retry-safe";
   /**
    * Salience marker (issue #306 decision 2): journaled on every invocation
    * receipt and used to rank the owner's review feed — NOT an approval
@@ -390,7 +404,7 @@ export interface CommandDefinition {
    * after the fact.
    */
   confirm?: boolean;
-  handler: CommandHandler['execute'];
+  handler: CommandHandler["execute"];
   /**
    * Input keys carrying secret material (issue #293 decision 4). The journal
    * is append-only — these keys are replaced with a keyed hash token before
@@ -430,7 +444,7 @@ export interface RevealRequest {
   /** Sealed columns to reveal. Default: all of the entity's sealed columns. */
   columns?: string[];
   /** Optional, non-secret reason attached to the evidence receipt. */
-  context?: { kind: 'fill'; origin: string };
+  context?: { kind: "fill"; origin: string };
   purpose?: string;
 }
 
@@ -442,10 +456,10 @@ export interface RevealResult {
 
 export class GatewayError extends Error {
   constructor(
-    readonly stage: 'identity' | 'consent' | 'contract' | 'execution',
-    message: string,
+    readonly stage: "identity" | "consent" | "contract" | "execution",
+    message: string
   ) {
     super(message);
-    this.name = 'GatewayError';
+    this.name = "GatewayError";
   }
 }

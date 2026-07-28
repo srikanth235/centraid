@@ -1,6 +1,10 @@
-import { openRemoteBackupProvider, type BackupProvider } from '@centraid/backup';
-import type { BackupConfig, BackupProviderConfig } from './backup-config.js';
-import type { StorageConnectionStore } from './storage-connections.js';
+import {
+  openRemoteBackupProvider,
+  type BackupProvider,
+} from "@centraid/backup";
+
+import type { BackupConfig, BackupProviderConfig } from "./backup-config.js";
+import type { StorageConnectionStore } from "./storage-connections.js";
 
 export interface ResolvedBackupBackend {
   provider: BackupProvider;
@@ -10,7 +14,7 @@ export interface ResolvedBackupBackend {
 }
 
 export function backupProviderLabel(config: BackupProviderConfig): string {
-  return config.kind === 'remote' ? config.endpoint : `local:${config.dir}`;
+  return config.kind === "remote" ? config.endpoint : `local:${config.dir}`;
 }
 
 export async function resolveBackupBackend(opts: {
@@ -20,7 +24,12 @@ export async function resolveBackupBackend(opts: {
 }): Promise<ResolvedBackupBackend | undefined> {
   if (opts.config && opts.provider) {
     const label = backupProviderLabel(opts.config.provider);
-    return { provider: opts.provider, providerRef: `static:${label}`, label, dynamic: false };
+    return {
+      provider: opts.provider,
+      providerRef: `static:${label}`,
+      label,
+      dynamic: false,
+    };
   }
   if (!opts.storageConnections) return undefined;
   // One home connection (#436 §7): a provider connection is the full home
@@ -28,11 +37,17 @@ export async function resolveBackupBackend(opts: {
   // attach both key off the same single connection — no `uses` filter.
   const matches = await opts.storageConnections.list();
   if (matches.length === 0) return undefined;
-  if (matches.length > 1) throw new Error('backup: multiple active home connections found');
+  if (matches.length > 1)
+    throw new Error("backup: multiple active home connections found");
   const connection = matches[0]!;
-  const apiKey = await opts.storageConnections.resolveProviderApiKey(connection.id);
+  const apiKey = await opts.storageConnections.resolveProviderApiKey(
+    connection.id
+  );
   return {
-    provider: openRemoteBackupProvider({ baseUrl: connection.baseUrl!, apiKey }),
+    provider: openRemoteBackupProvider({
+      baseUrl: connection.baseUrl!,
+      apiKey,
+    }),
     providerRef: `connection:${connection.id}:${connection.baseUrl!}`,
     label: connection.baseUrl!,
     dynamic: true,

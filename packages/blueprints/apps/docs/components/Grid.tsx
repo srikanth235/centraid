@@ -1,10 +1,19 @@
 // Grid view row (#grid root's mapped children).
-import type { MouseEvent } from 'react';
-import { fmtBytes, fmtDate, isImage, isVideo, tintBg, typeMeta } from '../format.ts';
-import type { DriveDoc } from '../types.ts';
-import { Checkbox, CustodyDot } from './Shared.tsx';
-import styles from './Grid.module.css';
-import shared from './shared.module.css';
+import type { MouseEvent } from "react";
+
+import {
+  fmtBytes,
+  fmtDate,
+  isImage,
+  isVideo,
+  tintBg,
+  typeMeta,
+} from "../format.ts";
+import type { DriveDoc } from "../types.ts";
+import { Checkbox, CustodyDot } from "./Shared.tsx";
+
+import styles from "./Grid.module.css";
+import shared from "./shared.module.css";
 
 export function GridCard({
   doc,
@@ -32,14 +41,14 @@ export function GridCard({
       <button
         type="button"
         className={`kit-stretch-btn ${styles.cardOpen}`}
-        aria-label={`Open ${doc.title ?? 'Untitled'} details`}
+        aria-label={`Open ${doc.title ?? "Untitled"} details`}
         onClick={() => onOpenDetails(doc.document_id)}
       />
       <button
         type="button"
         className={`kit-plain-btn ${styles.thumb}`}
         style={{ background: tintBg(m.cv, 15) }}
-        aria-label={`Preview ${doc.title ?? 'Untitled'}`}
+        aria-label={`Preview ${doc.title ?? "Untitled"}`}
         onClick={() => onOpenQuick(doc.document_id)}
       >
         {isImage(doc) ? (
@@ -58,16 +67,37 @@ export function GridCard({
           </>
         ) : (
           <>
-            <span className={styles.thumbLabel} style={{ color: `var(${m.cv})` }}>
+            <span
+              className={styles.thumbLabel}
+              style={{ color: `var(${m.cv})` }}
+            >
               {m.label}
             </span>
             {/* <span>, not <div>: this subtree is inside a <button> now, whose
                 content model is phrasing content. `.thumbLines` already sets
                 `display: flex`, so the box is unchanged. */}
             <span className={styles.thumbLines}>
-              <i style={{ width: '70%', background: `var(${m.cv})`, opacity: 0.18 }}></i>
-              <i style={{ width: '90%', background: `var(${m.cv})`, opacity: 0.14 }}></i>
-              <i style={{ width: '55%', background: `var(${m.cv})`, opacity: 0.14 }}></i>
+              <i
+                style={{
+                  width: "70%",
+                  background: `var(${m.cv})`,
+                  opacity: 0.18,
+                }}
+              />
+              <i
+                style={{
+                  width: "90%",
+                  background: `var(${m.cv})`,
+                  opacity: 0.14,
+                }}
+              />
+              <i
+                style={{
+                  width: "55%",
+                  background: `var(${m.cv})`,
+                  opacity: 0.14,
+                }}
+              />
             </span>
           </>
         )}
@@ -79,11 +109,11 @@ export function GridCard({
           e.stopPropagation();
           onToggleSelect(doc.document_id, index, e.shiftKey);
         }}
-        label={`Select ${doc.title ?? 'document'}`}
+        label={`Select ${doc.title ?? "document"}`}
       />
       <div className={styles.cardBody}>
         <div className={styles.cardTitle}>
-          {doc.title ?? 'Untitled'}
+          {doc.title ?? "Untitled"}
           {doc.starred ? (
             <span className={shared.starInd} aria-label="Starred">
               ★
