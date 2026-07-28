@@ -32,7 +32,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "0.62.0",
+    "@agentclientprotocol/claude-agent-acp": "0.63.0",
     "@agentclientprotocol/codex-acp": "1.1.7",
     "@centraid/app-engine": "workspace:*",
     "@centraid/automation": "workspace:*"
