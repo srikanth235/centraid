@@ -65,15 +65,136 @@ export function summarizeCellStates(cells) {
     cellsMissing: 0,
     cellsSkipped: 0,
     cellsStale: 0,
+    cellsFlaky: 0,
+    cellsOwnerSilent: 0,
+    cellsLaneDidNotRun: 0,
+    cellsInfraMismatch: 0,
+    cellsEvidenceUnmatched: 0,
   };
   for (const cell of cells ?? []) {
     if (cell.state === "passed") counts.cellsPassed += 1;
     else if (cell.state === "failed") counts.cellsFailed += 1;
-    else if (cell.state === "missing") counts.cellsMissing += 1;
+    else if (
+      [
+        "missing",
+        "evidence-unmatched",
+        "owner-silent",
+        "lane-did-not-run",
+      ].includes(cell.state)
+    )
+      counts.cellsMissing += 1;
     else if (cell.state === "skipped") counts.cellsSkipped += 1;
     else if (cell.state === "stale") counts.cellsStale += 1;
+    if (cell.state === "flaky") counts.cellsFlaky += 1;
+    if (cell.state === "owner-silent") counts.cellsOwnerSilent += 1;
+    if (cell.state === "lane-did-not-run") counts.cellsLaneDidNotRun += 1;
+    if (cell.state === "infra-mismatch") counts.cellsInfraMismatch += 1;
+    if (cell.state === "evidence-unmatched") counts.cellsEvidenceUnmatched += 1;
   }
   return counts;
+}
+
+/**
+ * Resolve a Playwright JSON reporter `suite.file` to the repository-relative
+ * owner key used by the matrix. Playwright emits paths relative to
+ * `config.rootDir` (normally the project's testDir), including bare basenames.
+ */
+export function resolvePlaywrightOwner(
+  value,
+  { repoRoot = "", configRoot = "", registeredOwners = [] } = {}
+) {
+  const slash = (input) => String(input ?? "").replaceAll("\\", "/");
+  const file = slash(value);
+  const repository = slash(repoRoot).replace(/\/$/u, "");
+  const root = slash(configRoot).replace(/\/$/u, "");
+  if (!file) return "";
+
+  const stripRepository = (candidate) =>
+    repository && candidate.startsWith(`${repository}/`)
+      ? candidate.slice(repository.length + 1)
+      : candidate;
+  if (file.startsWith("/") || /^[A-Za-z]:\//u.test(file)) {
+    return stripRepository(file);
+  }
+  if (root) {
+    const rooted = stripRepository(`${root}/${file}`.replace(/\/+/gu, "/"));
+    if (!rooted.startsWith("../")) return rooted;
+  }
+
+  const owners = [...registeredOwners].map(slash);
+  const suffixMatches = owners.filter(
+    (owner) => owner === file || owner.endsWith(`/${file}`)
+  );
+  if (suffixMatches.length === 1) return suffixMatches[0];
+  return stripRepository(file);
+}
+
+/** Flatten Playwright JSON while preserving the reporter's retry classification. */
+export function collectPlaywrightEvidence(
+  report,
+  { lane = "playwright", resolveOwner = (value) => value } = {}
+) {
+  const evidence = [];
+  const visit = (suites) => {
+    for (const suite of suites ?? []) {
+      if (suite.file) {
+        const tests = (suite.specs ?? []).flatMap((spec) => spec.tests ?? []);
+        const attempts = tests.flatMap((test) => test.results ?? []);
+        const classifications = tests.map((test) =>
+          String(test.status ?? "").toLowerCase()
+        );
+        let status = "missing";
+        if (
+          classifications.includes("unexpected") ||
+          attempts.at(-1)?.status === "failed"
+        ) {
+          status = "failed";
+        } else if (classifications.includes("flaky")) {
+          status = "flaky";
+        } else if (
+          classifications.includes("skipped") ||
+          (attempts.length &&
+            attempts.every((attempt) => attempt.status === "skipped"))
+        ) {
+          status = "skipped";
+        } else if (
+          classifications.includes("expected") ||
+          attempts.some((attempt) => attempt.status === "passed")
+        ) {
+          status = "passed";
+        }
+        const failedAttempt = attempts.find(
+          (attempt) => attempt.status === "failed"
+        );
+        const error =
+          failedAttempt?.error?.message ??
+          failedAttempt?.errors?.[0]?.message ??
+          tests
+            .flatMap((test) => test.results ?? [])
+            .flatMap((attempt) => attempt.errors ?? [])
+            .find((entry) => entry?.message)?.message ??
+          null;
+        evidence.push({
+          owner: resolveOwner(suite.file),
+          status,
+          lane,
+          duration: attempts.reduce(
+            (sum, attempt) => sum + Number(attempt.duration ?? 0),
+            0
+          ),
+          error: error ? String(error) : null,
+          retries: Math.max(
+            0,
+            ...attempts.map((attempt) => attempt.retry ?? 0)
+          ),
+          attachments: attempts.flatMap((attempt) => attempt.attachments ?? []),
+        });
+      }
+      visit(suite.suites);
+    }
+  };
+  visit(report?.suites);
+  return evidence;
 }
 
 /**
@@ -120,6 +241,29 @@ export function detectDefaultCiEnvGate(source) {
       /if\s*\(\s*process\.env\.(?<env>[A-Z0-9_]+)\s*!==\s*['"]1['"]\s*\)\s*\{[\s\S]{0,200}?\breturn\b/u
     );
   if (early) return { env: early.groups?.env, kind: "early-env-return" };
+  // A skip/run conditional that mentions an environment variable but does not
+  // match a supported whole-owner shape must be loud. Returning an explicit
+  // unknown kind lets validation fail closed instead of preserving a false
+  // solid cell.
+  const inlineUnknown = source.match(
+    /\.(?:skipIf|runIf)\(\s*[\s\S]{0,120}?process\.env\.(?<env>[A-Z0-9_]+)/u
+  );
+  const envAssignment = source.match(
+    /(?:const|let)\s+(?<variable>\w+)\s*=\s*[\s\S]{0,80}?process\.env\.(?<env>[A-Z0-9_]+)/u
+  );
+  const assignedGate =
+    envAssignment &&
+    new RegExp(
+      String.raw`\.(?:skipIf|runIf)\(\s*(?:Boolean\(\s*)?!?${envAssignment.groups?.variable}\s*\)?\s*\)`,
+      "u"
+    ).test(source);
+  if (inlineUnknown || assignedGate) {
+    return {
+      env:
+        inlineUnknown?.groups?.env ?? envAssignment?.groups?.env ?? "unknown",
+      kind: "unparseable-env-gate",
+    };
+  }
   return null;
 }
 
@@ -205,6 +349,25 @@ export function findUnmappedEvidence(
   };
 }
 
+/** Declared owners for which a full run produced no evidence key at all. */
+export function findUnmatchedOwners(
+  results,
+  manifest,
+  { normalizeOwner } = {}
+) {
+  const norm =
+    typeof normalizeOwner === "function"
+      ? normalizeOwner
+      : (value) => String(value ?? "").replaceAll("\\", "/");
+  const observed = new Set(
+    (results ?? []).map((result) => norm(result?.owner)).filter(Boolean)
+  );
+  return [...collectRegisteredOwners(manifest)]
+    .map(norm)
+    .filter((owner) => owner && !observed.has(owner))
+    .sort();
+}
+
 /**
  * Reconcile evidence-producing needs.* job conclusions against report summary.
  * When any needed job failed but summary.failed is 0, the report must not
@@ -252,29 +415,24 @@ export function cellsMissingRatchet(currentMissing, historyPoints) {
 }
 
 /**
- * Drop `_`-prefixed / non-scope meta keys from a floors-style config
- * (e.g. coverage-floors `_comment`) so they never render as coverage rows.
+ * Identity-aware cell regression detection. Counts can stay flat while one
+ * repaired cell is replaced by a newly-grey or newly-red cell.
  */
-export function filterFloorConfigEntries(floorConfig) {
-  return Object.entries(floorConfig ?? {}).filter(
-    ([key, value]) =>
-      !key.startsWith("_") &&
-      key !== "approvedDeviation" &&
-      (typeof value === "number" || (value && typeof value === "object"))
-  );
+export function cellIdentityRegressions(
+  { missingCellIds = [], failedCellIds = [] },
+  historyPoints
+) {
+  const prior = (historyPoints ?? []).at(-1) ?? {};
+  const priorMissing = new Set(prior.missingCellIds);
+  const priorFailed = new Set(prior.failedCellIds);
+  return {
+    newMissing: [...new Set(missingCellIds)]
+      .filter((id) => !priorMissing.has(id))
+      .sort(),
+    newFailed: [...new Set(failedCellIds)]
+      .filter((id) => !priorFailed.has(id))
+      .sort(),
+  };
 }
 
-/**
- * Merge per-lane marker maps written as `lane-starts-<lane>.json` (and the
- * legacy single `lane-starts.json`) so merge-multiple never last-write-wins.
- */
-export function mergeLaneMarkers(markerMaps) {
-  const merged = {};
-  for (const map of markerMaps ?? []) {
-    if (!map || typeof map !== "object") continue;
-    for (const [lane, at] of Object.entries(map)) {
-      if (typeof at === "string" && at) merged[lane] = at;
-    }
-  }
-  return merged;
-}
+export * from "./report-depth-signals.mjs";

@@ -32,10 +32,13 @@ try {
   await writeFile(
     path.join(playwright, "desktop-playwright.json"),
     JSON.stringify({
+      config: {
+        rootDir: path.join(rootForFixture(), "apps/desktop/tests/e2e"),
+      },
       stats: { startTime: "2000-01-01T00:00:00.000Z" },
       suites: [
         {
-          file: "apps/desktop/tests/e2e/appview-templates-insights.spec.ts",
+          file: "appview-templates-insights.spec.ts",
           specs: [
             { tests: [{ results: [{ status: "passed", duration: 4_242 }] }] },
           ],
@@ -89,10 +92,13 @@ try {
   for (const required of [
     "Surface × quality dimension",
     "Coverage vs ratchet floor",
-    "environment-gated",
-    "cells not run",
+    "Environment-gated",
+    "unproven cells",
     "unhandled errors",
-    "failed (ran)",
+    "product failed",
+    "partial passed",
+    "evidence unmatched",
+    "owner silent",
     "owner.latest.status",
     "duration(owner.latest.duration)",
     "report-data",
@@ -247,4 +253,8 @@ try {
   console.log("test report smoke: ok");
 } finally {
   await rm(temp, { recursive: true, force: true });
+}
+
+function rootForFixture() {
+  return path.resolve(import.meta.dirname, "../..");
 }

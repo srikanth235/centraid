@@ -1,5 +1,10 @@
 {
-  "_comment": "Coverage floors (#532). Up-only under test:ratchet. Seeded ~1pt under measured bun run coverage (coverage-summary.json). Re-seeded 2026-07-27 for @vitest/coverage-v8 4 (#565) — see approvedDeviation. packages/client/src/react/** kept deliberately low (45/35) until a full measured baseline is available (#545 D5).",
+  "_comment": "Coverage floors (#532/#587). Up-only under test:ratchet. Floors move to two points below a level sustained for three runs; absolute floor-lag remains visible in the report.",
+  "_ratchetPolicy": {
+    "sustainedRuns": 3,
+    "marginPoints": 2,
+    "floorLagWarningPoints": 15
+  },
   "approvedDeviation": "@vitest/coverage-v8 4 (#565) made AST-aware remapping the only mode, redefining what counts as a branch (optional chaining, nullish coalescing, default params, nested arrows). This is a MEASUREMENT change, not lost coverage — proven by packages/tunnel, packages/backup, packages/agent-runtime and packages/cli, which have ZERO source or test changes vs origin/main yet all moved (tunnel branches 80 -> 52.67). Local and CI agree within 0.06pt, so it is deterministic, not runner variance. Branch floors re-seed ~1pt under the newly measured values; the vault/tunnel/cli LINE floors move 1-3pt for the same reason. NOT re-seeded downward: packages/design-tokens lines TIGHTENS 90 -> 98, because #565 added packages/design-tokens/src/css.test.ts covering toCss(), which had 0/32 lines and no test anywhere in the repo — that gap, not the remap, was the entire design-tokens lines miss (66.01 -> 99.03). Re-tightening the branch floors needs real tests and is tracked separately.",
   "lines": 71,
   "packages/app-engine/src/**": { "lines": 84, "branches": 73 },
@@ -14,6 +19,6 @@
   "packages/tunnel/src/**": { "lines": 70, "branches": 51 },
   "packages/protocol/src/**": { "lines": 98, "branches": 96 },
   "packages/cli/src/**": { "lines": 83, "branches": 81 },
-  "apps/oauth-worker/src/**": { "lines": 70, "branches": 55 },
-  "packages/client/src/react/**": { "lines": 45, "branches": 35 }
+  "apps/oauth-worker/src/**": { "lines": 92, "branches": 55 },
+  "packages/client/src/react/**": { "lines": 74, "branches": 35 }
 }

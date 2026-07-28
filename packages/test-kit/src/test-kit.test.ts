@@ -6,13 +6,18 @@ import { describe, expect, test } from "vitest";
 
 import { useFakeClock } from "./fake-clock.js";
 import { fc } from "./fast-check.js";
-import { recordQualityResult } from "./quality-result.js";
+import { recordQualityResult, regressionBudget } from "./quality-result.js";
 import { forEachSequentially } from "./sequential.js";
 import { tempDir, tempDirSync } from "./temp-dir.js";
 import { jsdomProject, nodeProject } from "./vitest.js";
 import { generateVolumeFixture } from "./volume-fixture.js";
 
 describe("test-kit", () => {
+  test("enables regression budgets only after ten durable samples", () => {
+    expect(regressionBudget([1, 2, 3])).toBeNull();
+    expect(regressionBudget([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])).toBe(16.5);
+  });
+
   test("tempDir creates an accessible tracked directory", async () => {
     const dir = await tempDir("centraid-kit-");
     await expect(access(dir)).resolves.toBeUndefined();

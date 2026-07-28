@@ -7,6 +7,79 @@
     "gap": "No adequate owning proof yet",
     "skip": "Deliberately low-value for the current v0 product posture"
   },
+  "trackingIssues": {
+    "587": {
+      "url": "https://github.com/srikanth235/centraid/issues/587",
+      "state": "open"
+    }
+  },
+  "gaps": {
+    "extension.offline": {
+      "trackingIssue": 587
+    },
+    "extension.journey": {
+      "trackingIssue": 587
+    }
+  },
+  "revisitTriggers": {
+    "vault-core.compat": {
+      "glob": "packages/vault/**/migrations/**/*",
+      "trackingIssue": 587
+    },
+    "blob-custody.compat": {
+      "glob": "packages/blob-format/**/migrations/**/*",
+      "trackingIssue": 587
+    },
+    "gateway.compat": {
+      "glob": "packages/gateway/**/migrations/**/*",
+      "trackingIssue": 587
+    },
+    "app-engine.compat": {
+      "glob": "packages/app-engine/**/migrations/**/*",
+      "trackingIssue": 587
+    },
+    "automations.compat": {
+      "glob": "packages/automation/**/migrations/**/*",
+      "trackingIssue": 587
+    },
+    "blueprints.compat": {
+      "glob": "packages/blueprints/**/migrations/**/*",
+      "trackingIssue": 587
+    },
+    "desktop.compat": {
+      "glob": "apps/desktop/**/migrations/**/*",
+      "trackingIssue": 587
+    },
+    "web.compat": {
+      "glob": "apps/web/**/migrations/**/*",
+      "trackingIssue": 587
+    },
+    "mobile.compat": {
+      "glob": "apps/mobile/**/migrations/**/*",
+      "trackingIssue": 587
+    }
+  },
+  "workspaceSurfaces": {
+    "packages/agent-runtime": "agent-runtime",
+    "packages/app-engine": "app-engine",
+    "packages/automation": "automations",
+    "packages/backup": "backup-restore",
+    "packages/blob-format": "blob-custody",
+    "packages/blueprints": "blueprints",
+    "packages/cli": "gateway",
+    "packages/client": "replica-sync",
+    "packages/design-tokens": "web",
+    "packages/gateway": "gateway",
+    "packages/protocol": "gateway",
+    "packages/test-kit": "gateway",
+    "packages/tunnel": "tunnel-pairing",
+    "packages/vault": "vault-core",
+    "apps/desktop": "desktop",
+    "apps/extension": "extension",
+    "apps/mobile": "mobile",
+    "apps/oauth-worker": "oauth-worker",
+    "apps/web": "web"
+  },
   "notes": {
     "web.concurrency": "Partial→stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic.",
     "mobile.performance": "Honest skip for on-device budget until a Maestro metric owner lands; #404 PWA waterfall owns web.performance. Android home-loads runs nightly (PC1).",
@@ -16,7 +89,7 @@
     "agent-runtime.journey": "Owned by packages/agent-runtime/src/backends/acp/journey.integration.test.ts (fake-acp message→vault side-effect→transcript). Desktop copilot Playwright specs stay skipped until mock serves blueprint kits (#470).",
     "builder.publish": "Punted (#496): builder is not in v0. builder.spec.ts \"Publish posts to the gateway\" stays skipped with this product reason — declared gap, not fake solid.",
     "desktop.copilot-e2e": "Unconditional Playwright skips in appview-templates-insights (7.2–7.4) target removed FAB UI; journey owned at agent-runtime.journey until #470 mock blueprint serving.",
-    "mobile.scalability": "Honest skip: no volume proof on-device yet; mobile-real-journey + crash durability cover the correctness path.",
+    "mobile.scalability": "Owned by tests/agent-e2e-mobile/flows/volume-proof.mjs; records a nightly scalability budget and durable numeric measurements.",
     "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom).",
     "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire).",
     "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy — not full Electron launch).",
@@ -45,94 +118,94 @@
     "blob-custody.offline": "Skip: blob store has no offline user journey; durability is ENOSPC custody + disk-full e2e; offline is a consuming-surface concern.",
     "blob-custody.compat": "Skip: no blob format migration path in v0; CBSF mutation + format floors cover format stability instead.",
     "blob-custody.journey": "Skip: custody is a primitive; journeys live on mobile upload durability and desktop/gateway blob consumers.",
-    "backup-restore.performance": "Skip: no dedicated backup throughput budget yet; correctness+journey (recover) own the product path.",
+    "backup-restore.performance": "Owned by tests/perf/backup-throughput.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
     "backup-restore.offline": "Skip: restore is an online blank-machine operation; offline continuity is owned by vault WAL + mobile offline, not backup kit.",
     "gateway.offline": "Skip: gateway is always the online host; offline UX lives on mobile/web clients. No meaningful gateway-offline matrix cell.",
     "gateway.compat": "Skip: no gateway wire migration suite in v0; protocol judge + tunnel wire contracts own compatibility pressure.",
-    "app-engine.performance": "Skip: no isolated app-engine perf harness yet; cost formula mutation + desktop cold path cover adjacent budgets.",
+    "app-engine.performance": "Owned by tests/perf/app-engine-handler.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
     "app-engine.offline": "Skip: app-engine runs server-side with the gateway; offline is a client-surface dimension.",
     "app-engine.compat": "Skip: no app-engine API migration surface in v0; runner registry contracts own kind-compat pressure.",
     "app-engine.journey": "Skip: user journeys are desktop/web/mobile copilot paths; engine is exercised via agent-runtime.journey (fake-acp).",
-    "automations.performance": "Skip: no dedicated automation fire latency budget; scale lane owns volume via automations-fire.scale.",
+    "automations.performance": "Owned by tests/perf/automation-fire.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
     "automations.offline": "Skip: automations schedule on the gateway host; offline client behavior is mobile/web. No offline scheduler product path.",
     "automations.compat": "Skip: no automations schema migration in v0; scheduler mutation floors cover pure compute stability.",
-    "agent-runtime.performance": "Skip: no runner turn-latency budget harness yet; journey.integration covers correctness.",
-    "agent-runtime.scalability": "Skip: no multi-session runner load rig; gateway-sessions.scale covers session headroom at the host.",
+    "agent-runtime.performance": "Owned by tests/perf/agent-turn.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
+    "agent-runtime.scalability": "Owned by tests/scale/agent-sessions.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "agent-runtime.offline": "Skip: runners require a live CLI/ACP process; offline is not a runtime dimension (client offline owns UX).",
     "blueprints.performance": "Skip: scaffold/clone is filesystem-bound and not product-critical for a budget; kit-smoke + handler CRUD own correctness.",
-    "blueprints.scalability": "Skip: no multi-app clone volume rig; not product-critical for v0.",
+    "blueprints.scalability": "Owned by tests/scale/blueprint-clones.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "blueprints.offline": "Skip: blueprints are authoring-time; offline runtime is mobile/web. No offline blueprint surface.",
     "blueprints.compat": "Skip: no blueprint manifest migration suite in v0; app.json shape is covered by scaffold contracts + clone rewrites.",
-    "desktop.scalability": "Skip: no multi-window Electron load rig; journey e2e + supervisor unit cover functional paths.",
+    "desktop.scalability": "Owned by tests/scale/desktop-windows.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "desktop.offline": "Skip: desktop hosts the gateway; offline UX is mobile/web. Detached-gateway outage logging covers host-side continuity.",
     "desktop.compat": "Skip: no desktop settings/schema migration suite in v0; settings-merge contracts cover preserve-or-set durability of prefs.",
-    "web.scalability": "Skip: no multi-tab volume rig beyond cache concurrency e2e; PWA waterfall owns perf.",
+    "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "web.compat": "Skip: no web storage migration suite in v0; sw-version + webGatewayId contracts cover identity/version stability.",
     "mobile.contracts": "Skip: mobile has no separate public protocol surface beyond gateway bridge; security transfer-policy + replica unit cover contracts-adjacent rules.",
     "mobile.compat": "Skip: no mobile storage migration suite in v0; crash durability + replica unit cover state continuity instead.",
     "tunnel-pairing.durability": "Skip: pairing tickets are intentionally ephemeral; hygiene journey burns wrong-secret/expiry. Durable custody is vault/blob, not tickets.",
-    "tunnel-pairing.scalability": "Skip: no multi-pair fan-out rig; cross-network relay + throughput perf own the product path.",
-    "extension.correctness": "Partial: extension unit owners exist; deepen coverage under #545 C/D.",
-    "extension.contracts": "Partial: extension unit owners exist; deepen coverage under #545 C/D.",
-    "extension.durability": "Skip: extension v0 surface — no durability harness planned; unit owners cover security-critical paths (#545).",
-    "extension.concurrency": "Skip: extension v0 surface — no concurrency harness planned; unit owners cover security-critical paths (#545).",
-    "extension.performance": "Skip: extension v0 surface — no performance harness planned; unit owners cover security-critical paths (#545).",
-    "extension.scalability": "Skip: extension v0 surface — no scalability harness planned; unit owners cover security-critical paths (#545).",
-    "extension.security": "Partial: extension unit owners exist; deepen coverage under #545 C/D.",
-    "extension.offline": "Skip: extension v0 surface — no offline harness planned; unit owners cover security-critical paths (#545).",
-    "extension.compat": "Skip: extension v0 surface — no compat harness planned; unit owners cover security-critical paths (#545).",
-    "extension.journey": "Skip: extension v0 surface — no journey harness planned; unit owners cover security-critical paths (#545).",
-    "oauth-worker.correctness": "Partial: oauth-worker unit owners exist; deepen coverage under #545 C/D.",
-    "oauth-worker.contracts": "Partial: oauth-worker unit owners exist; deepen coverage under #545 C/D.",
-    "oauth-worker.durability": "Skip: oauth-worker v0 surface — no durability harness planned; unit owners cover security-critical paths (#545).",
-    "oauth-worker.concurrency": "Skip: oauth-worker v0 surface — no concurrency harness planned; unit owners cover security-critical paths (#545).",
-    "oauth-worker.performance": "Skip: oauth-worker v0 surface — no performance harness planned; unit owners cover security-critical paths (#545).",
-    "oauth-worker.scalability": "Skip: oauth-worker v0 surface — no scalability harness planned; unit owners cover security-critical paths (#545).",
-    "oauth-worker.offline": "Skip: oauth-worker v0 surface — no offline harness planned; unit owners cover security-critical paths (#545).",
-    "oauth-worker.compat": "Skip: oauth-worker v0 surface — no compat harness planned; unit owners cover security-critical paths (#545).",
-    "oauth-worker.journey": "Skip: oauth-worker v0 surface — no journey harness planned; unit owners cover security-critical paths (#545).",
-    "vault-core.durability": "Partial: vault-core.durability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "vault-core.concurrency": "Partial: vault-core.concurrency has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "vault-core.performance": "Partial: vault-core.performance has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "vault-core.scalability": "Partial: vault-core.scalability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "blob-custody.concurrency": "Partial: blob-custody.concurrency has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "blob-custody.performance": "Partial: blob-custody.performance has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "blob-custody.scalability": "Partial: blob-custody.scalability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "blob-custody.security": "Partial: blob-custody.security has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
+    "tunnel-pairing.scalability": "Owned by tests/scale/tunnel-pairs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
+    "extension.correctness": "Extension parser and popup unit owners cover valid messages; malformed cross-context payload cases remain under #587.",
+    "extension.contracts": "Extension transport unit owners cover the current gateway envelope; browser-version and protocol-skew fixtures remain under #587.",
+    "extension.durability": "Structural N/A: the extension owns no durable state; paired credentials are browser storage and gateway-owned.",
+    "extension.concurrency": "Structural N/A for v0: one active popup/worker transaction is admitted per browser profile.",
+    "extension.performance": "Structural N/A for v0: the companion performs no user-visible compute or transfer hot path.",
+    "extension.scalability": "Structural N/A for v0: one companion serves one browser profile; fleet scale belongs to the gateway.",
+    "extension.security": "Sender validation and credential handling have unit proof; hostile-page and revoked-pairing browser journeys remain under #587.",
+    "extension.offline": "Tracked gap (#587): the MV3 companion has no network-loss and reconnect journey.",
+    "extension.compat": "Structural N/A until a versioned extension storage format exists; gateway protocol contracts own wire compatibility.",
+    "extension.journey": "Tracked gap (#587): install-to-paired extension journey evidence is not implemented.",
+    "oauth-worker.correctness": "Courier route tests cover valid exchanges; provider-specific negative responses remain under #587.",
+    "oauth-worker.contracts": "Request/response contract tests cover the courier envelope; version-skew fixtures remain under #587.",
+    "oauth-worker.durability": "Structural N/A: the OAuth courier intentionally holds no durable application state.",
+    "oauth-worker.concurrency": "Structural N/A: stateless Cloudflare Worker isolates provide request concurrency; no shared mutable state exists.",
+    "oauth-worker.performance": "Structural N/A: provider and edge latency dominate the stateless one-shot code courier.",
+    "oauth-worker.scalability": "Structural N/A: Cloudflare owns isolate scaling and the courier holds no application queue or pool.",
+    "oauth-worker.offline": "Structural N/A: an edge OAuth callback service has no offline product mode.",
+    "oauth-worker.compat": "Structural N/A: the courier exposes one versionless, short-lived exchange contract owned by contract tests.",
+    "oauth-worker.journey": "Structural N/A: end-user OAuth journeys are owned by the consuming desktop/web surfaces; the worker is a stateless courier.",
+    "vault-core.durability": "packages/vault/src/wal-shipper.test.ts proves the current happy path; missing crash/restart recovery evidence.",
+    "vault-core.concurrency": "packages/vault/src/enrich/leases.test.ts proves the current happy path; missing multi-actor interleaving evidence.",
+    "vault-core.performance": "tests/perf/vault-write.perf.test.ts proves the current happy path; missing longitudinal regression evidence.",
+    "vault-core.scalability": "tests/scale/ontology.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal.",
+    "blob-custody.concurrency": "packages/vault/src/blob/outbox-drain.test.ts proves the current happy path; missing multi-actor interleaving evidence.",
+    "blob-custody.performance": "tests/perf/blob-egress.perf.test.ts proves the current happy path; missing longitudinal regression evidence.",
+    "blob-custody.scalability": "tests/scale/blob-gc.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal.",
+    "blob-custody.security": "packages/vault/src/blob/seal.test.ts proves the current happy path; missing adversarial input and authorization cases.",
     "backup-restore.concurrency": "Skip: restore into a LIVE gateway was deleted with the founding plane (#603) — restore is the offline `recover` verb, so concurrent restore has no surface.",
-    "backup-restore.scalability": "Partial: backup-restore.scalability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "backup-restore.journey": "Partial: backup-restore.journey has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "replica-sync.durability": "Partial: replica-sync.durability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "replica-sync.scalability": "Partial: replica-sync.scalability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "replica-sync.security": "Partial: replica-sync.security has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "replica-sync.offline": "Partial: replica-sync.offline has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "replica-sync.compat": "Partial: replica-sync.compat has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "replica-sync.journey": "Partial: replica-sync.journey has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "gateway.durability": "Partial: gateway.durability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "gateway.concurrency": "Partial: gateway.concurrency has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "gateway.performance": "Partial: gateway.performance has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "gateway.journey": "Partial: gateway.journey has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "app-engine.durability": "Partial: app-engine.durability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "app-engine.concurrency": "Partial: app-engine.concurrency has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "app-engine.scalability": "Partial: app-engine.scalability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "automations.durability": "Partial: automations.durability has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "automations.concurrency": "Partial: automations.concurrency has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "automations.security": "Partial: automations.security has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "agent-runtime.correctness": "Partial: agent-runtime.correctness has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "agent-runtime.security": "Partial: agent-runtime.security has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "agent-runtime.compat": "Partial: agent-runtime.compat has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "blueprints.security": "Partial: blueprints.security has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "blueprints.journey": "Partial: blueprints.journey has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "desktop.correctness": "Partial: desktop.correctness has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "desktop.security": "Partial: desktop.security has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "web.correctness": "Partial: web.correctness has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "mobile.concurrency": "Partial: mobile.concurrency has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "mobile.security": "Partial: mobile.security has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "mobile.offline": "Partial: mobile.offline has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "tunnel-pairing.correctness": "Partial: tunnel-pairing.correctness has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "tunnel-pairing.concurrency": "Partial: tunnel-pairing.concurrency has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "tunnel-pairing.security": "Partial: tunnel-pairing.security has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map.",
-    "tunnel-pairing.compat": "Partial: tunnel-pairing.compat has some owning proof but is incomplete or not continuously exercised — see cellOwners and #545 D2 closure map."
+    "backup-restore.scalability": "tests/scale/backup-restore.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal.",
+    "backup-restore.journey": "packages/gateway/src/backup/backup.integration.test.ts proves the current happy path; missing a cross-surface end-to-end assertion.",
+    "replica-sync.durability": "packages/client/src/replica/sqlite-store.test.ts proves the current happy path; missing crash/restart recovery evidence.",
+    "replica-sync.scalability": "tests/scale/replica-bootstrap.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal.",
+    "replica-sync.security": "packages/client/src/replica/shell-session-admission.contract.test.ts proves the current happy path; missing adversarial input and authorization cases.",
+    "replica-sync.offline": "packages/client/src/replica/shell-session.test.ts proves the current happy path; missing disconnect/reconnect recovery evidence.",
+    "replica-sync.compat": "packages/vault/src/replica/change-log.test.ts proves the current happy path; missing migration and version-skew fixtures.",
+    "replica-sync.journey": "apps/web/tests/e2e/web-pwa.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion.",
+    "gateway.durability": "packages/gateway/src/serve/disk-health.test.ts proves the current happy path; missing crash/restart recovery evidence.",
+    "gateway.concurrency": "packages/gateway/src/serve/serve-multiclient.test.ts proves the current happy path; missing multi-actor interleaving evidence.",
+    "gateway.performance": "tests/perf/gateway-request.perf.test.ts proves the current happy path; missing longitudinal regression evidence.",
+    "gateway.journey": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs proves the current happy path; missing a cross-surface end-to-end assertion.",
+    "app-engine.durability": "packages/app-engine/src/conversation/archive/archive.contract.test.ts proves the current happy path; missing crash/restart recovery evidence.",
+    "app-engine.concurrency": "packages/app-engine/src/handlers/handler-pool.test.ts proves the current happy path; missing multi-actor interleaving evidence.",
+    "app-engine.scalability": "tests/scale/conversation-ledger.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal.",
+    "automations.durability": "packages/automation/src/fire/scheduler-ledger.contract.test.ts proves the current happy path; missing crash/restart recovery evidence.",
+    "automations.concurrency": "packages/automation/src/fire/in-process-scheduler.test.ts proves the current happy path; missing multi-actor interleaving evidence.",
+    "automations.security": "packages/automation/src/handler/lint.test.ts proves the current happy path; missing adversarial input and authorization cases.",
+    "agent-runtime.correctness": "packages/agent-runtime/src/backends/acp/backend.test.ts proves the current happy path; missing negative and boundary cases.",
+    "agent-runtime.security": "packages/agent-runtime/src/preflight.test.ts proves the current happy path; missing adversarial input and authorization cases.",
+    "agent-runtime.compat": "packages/agent-runtime/src/backends/acp/enumerate-models.test.ts proves the current happy path; missing migration and version-skew fixtures.",
+    "blueprints.security": "packages/blueprints/src/consent-cards.test.ts proves the current happy path; missing adversarial input and authorization cases.",
+    "blueprints.journey": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion.",
+    "desktop.correctness": "apps/desktop/src/main/gateway-supervisor-core.test.ts proves the current happy path; missing negative and boundary cases.",
+    "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts proves the current happy path; missing adversarial input and authorization cases.",
+    "web.correctness": "apps/web/src/web-host.test.ts proves the current happy path; missing negative and boundary cases.",
+    "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves the current happy path; missing multi-actor interleaving evidence.",
+    "mobile.security": "apps/mobile/src/lib/bridge/transfer-policy.test.ts proves the current happy path; missing adversarial input and authorization cases.",
+    "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs proves the current happy path; missing disconnect/reconnect recovery evidence.",
+    "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases.",
+    "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence.",
+    "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; missing adversarial input and authorization cases.",
+    "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts proves the current happy path; missing migration and version-skew fixtures."
   },
   "cellOwners": {
     "vault-core.correctness": {
@@ -210,7 +283,10 @@
       "tier": "integration"
     },
     "backup-restore.concurrency": null,
-    "backup-restore.performance": null,
+    "backup-restore.performance": {
+      "owner": "tests/perf/backup-throughput.perf.test.ts",
+      "tier": "perf"
+    },
     "backup-restore.scalability": {
       "owner": "tests/scale/backup-restore.scale.test.ts",
       "tier": "scale"
@@ -318,7 +394,10 @@
       "owner": "packages/app-engine/src/handlers/handler-pool.test.ts",
       "tier": "integration"
     },
-    "app-engine.performance": null,
+    "app-engine.performance": {
+      "owner": "tests/perf/app-engine-handler.perf.test.ts",
+      "tier": "perf"
+    },
     "app-engine.scalability": {
       "owner": "tests/scale/conversation-ledger.scale.test.ts",
       "tier": "scale"
@@ -346,7 +425,10 @@
       "owner": "packages/automation/src/fire/in-process-scheduler.test.ts",
       "tier": "integration"
     },
-    "automations.performance": null,
+    "automations.performance": {
+      "owner": "tests/perf/automation-fire.perf.test.ts",
+      "tier": "perf"
+    },
     "automations.scalability": {
       "owner": "tests/scale/automations-fire.scale.test.ts",
       "tier": "scale"
@@ -377,8 +459,14 @@
       "owner": "packages/agent-runtime/src/matrix-concurrency.test.ts",
       "tier": "unit"
     },
-    "agent-runtime.performance": null,
-    "agent-runtime.scalability": null,
+    "agent-runtime.performance": {
+      "owner": "tests/perf/agent-turn.perf.test.ts",
+      "tier": "perf"
+    },
+    "agent-runtime.scalability": {
+      "owner": "tests/scale/agent-sessions.scale.test.ts",
+      "tier": "scale"
+    },
     "agent-runtime.security": {
       "owner": "packages/agent-runtime/src/preflight.test.ts",
       "tier": "unit"
@@ -409,7 +497,10 @@
       "tier": "unit"
     },
     "blueprints.performance": null,
-    "blueprints.scalability": null,
+    "blueprints.scalability": {
+      "owner": "tests/scale/blueprint-clones.scale.test.ts",
+      "tier": "scale"
+    },
     "blueprints.security": {
       "owner": "packages/blueprints/src/consent-cards.test.ts",
       "tier": "unit"
@@ -440,7 +531,10 @@
       "owner": "tests/perf/desktop-cold.perf.test.ts",
       "tier": "perf"
     },
-    "desktop.scalability": null,
+    "desktop.scalability": {
+      "owner": "tests/scale/desktop-windows.scale.test.ts",
+      "tier": "scale"
+    },
     "desktop.security": {
       "owner": "apps/desktop/src/main/gateway-pairing-core.test.ts",
       "tier": "unit"
@@ -471,7 +565,10 @@
       "owner": "tests/perf/pwa-waterfall.perf.test.ts",
       "tier": "perf"
     },
-    "web.scalability": null,
+    "web.scalability": {
+      "owner": "tests/scale/web-tabs.scale.test.ts",
+      "tier": "scale"
+    },
     "web.security": {
       "owner": "apps/web/tests/e2e/web-pwa.spec.ts",
       "tier": "e2e"
@@ -499,7 +596,10 @@
       "tier": "integration"
     },
     "mobile.performance": null,
-    "mobile.scalability": null,
+    "mobile.scalability": {
+      "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
+      "tier": "scale"
+    },
     "mobile.security": {
       "owner": "apps/mobile/src/lib/bridge/transfer-policy.test.ts",
       "tier": "unit"
@@ -530,7 +630,10 @@
       "owner": "tests/perf/tunnel-throughput.perf.test.ts",
       "tier": "perf"
     },
-    "tunnel-pairing.scalability": null,
+    "tunnel-pairing.scalability": {
+      "owner": "tests/scale/tunnel-pairs.scale.test.ts",
+      "tier": "scale"
+    },
     "tunnel-pairing.security": {
       "owner": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs",
       "tier": "e2e"
@@ -679,7 +782,7 @@
         "contracts": "solid",
         "durability": "solid",
         "concurrency": "skip",
-        "performance": "skip",
+        "performance": "solid",
         "scalability": "partial",
         "security": "solid",
         "offline": "skip",
@@ -727,7 +830,7 @@
         "contracts": "solid",
         "durability": "partial",
         "concurrency": "partial",
-        "performance": "skip",
+        "performance": "solid",
         "scalability": "partial",
         "security": "solid",
         "offline": "skip",
@@ -743,7 +846,7 @@
         "contracts": "solid",
         "durability": "partial",
         "concurrency": "partial",
-        "performance": "skip",
+        "performance": "solid",
         "scalability": "partial",
         "security": "partial",
         "offline": "skip",
@@ -759,8 +862,8 @@
         "contracts": "partial",
         "durability": "partial",
         "concurrency": "partial",
-        "performance": "skip",
-        "scalability": "skip",
+        "performance": "solid",
+        "scalability": "solid",
         "security": "partial",
         "offline": "skip",
         "compat": "partial",
@@ -776,7 +879,7 @@
         "durability": "partial",
         "concurrency": "partial",
         "performance": "skip",
-        "scalability": "skip",
+        "scalability": "solid",
         "security": "partial",
         "offline": "skip",
         "compat": "skip",
@@ -792,7 +895,7 @@
         "durability": "partial",
         "concurrency": "partial",
         "performance": "partial",
-        "scalability": "skip",
+        "scalability": "solid",
         "security": "partial",
         "offline": "skip",
         "compat": "skip",
@@ -808,7 +911,7 @@
         "durability": "partial",
         "concurrency": "partial",
         "performance": "solid",
-        "scalability": "skip",
+        "scalability": "solid",
         "security": "solid",
         "offline": "solid",
         "compat": "skip",
@@ -824,7 +927,7 @@
         "durability": "solid",
         "concurrency": "partial",
         "performance": "skip",
-        "scalability": "skip",
+        "scalability": "solid",
         "security": "partial",
         "offline": "partial",
         "compat": "skip",
@@ -840,7 +943,7 @@
         "durability": "skip",
         "concurrency": "partial",
         "performance": "solid",
-        "scalability": "skip",
+        "scalability": "solid",
         "security": "partial",
         "offline": "solid",
         "compat": "partial",
@@ -858,9 +961,9 @@
         "performance": "skip",
         "scalability": "skip",
         "security": "partial",
-        "offline": "skip",
+        "offline": "gap",
         "compat": "skip",
-        "journey": "skip"
+        "journey": "gap"
       }
     },
     {

@@ -57,6 +57,12 @@ updates:
       production:
         dependency-type: production
         patterns: ["*"]
+        # #587 E25 — Dependabot still proposes every major production update,
+        # but each major gets an attributable PR and the full test suite gets
+        # to accept or reject it. The grouped #565 bump hid several independent
+        # mobile breakages in one lockfile diff; patch/minor updates retain the
+        # low-noise batch.
+        update-types: ["minor", "patch"]
 
   # ----------------------------------------------------------------- cargo --
   # Three independent crates; Cargo.lock lives next to each manifest.

@@ -3,6 +3,6 @@ import { nodeProject } from "@centraid/test-kit/vitest";
 export default nodeProject({
   test: {
     name: "@centraid/mobile",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "scripts/**/*.test.mjs"],
   },
 });

@@ -1,10 +1,14 @@
-import { access, readFile } from "node:fs/promises";
+import { access, glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { detectDefaultCiEnvGate } from "./report-signals.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const allowedStatuses = new Set(["solid", "partial", "gap", "skip"]);
+const boilerplatePartial =
+  /has some owning proof but is incomplete or not continuously exercised/iu;
+const nonStructuralSkip =
+  /\b(?:no (?:dedicated )?(?:harness|rig|budget)|not (?:yet|currently)|\byet\b|planned)\b/iu;
 
 export async function validateMatrix(matrix, options = {}) {
   const errors = [];
@@ -99,6 +103,65 @@ export async function validateMatrix(matrix, options = {}) {
               `${cellId} is skip but has no matrix.notes rationale (add a one-line note or real owned coverage)`
             );
           }
+          if (typeof note === "string" && nonStructuralSkip.test(note)) {
+            cellErrors.push(
+              `${cellId} is skip but its rationale describes missing work; use gap with a live tracking issue`
+            );
+          }
+        }
+        if (status === "gap") {
+          const gap = matrix.gaps?.[cellId];
+          const issue = gap?.trackingIssue;
+          const issueRecord = matrix.trackingIssues?.[String(issue)];
+          if (!Number.isInteger(issue) || issue < 1) {
+            cellErrors.push(
+              `${cellId} is gap but has no structured gaps.${cellId}.trackingIssue`
+            );
+          } else if (!issueRecord) {
+            cellErrors.push(
+              `${cellId} gap references unregistered tracking issue #${issue}`
+            );
+          } else if (issueRecord.state !== "open") {
+            cellErrors.push(
+              `${cellId} gap references closed tracking issue #${issue}`
+            );
+          }
+        } else if (matrix.gaps?.[cellId]) {
+          cellErrors.push(`${cellId} is not gap but has a gaps entry`);
+        }
+        if (status === "partial") {
+          const note = notes[cellId];
+          if (typeof note !== "string" || !note.trim()) {
+            cellErrors.push(`${cellId} is partial but has no specific note`);
+          } else if (boilerplatePartial.test(note)) {
+            cellErrors.push(
+              `${cellId} uses the rejected boilerplate partial note; name the missing proof`
+            );
+          }
+        }
+        if (
+          status === "skip" &&
+          /\bno .*migration/iu.test(notes[cellId] ?? "")
+        ) {
+          const trigger = matrix.revisitTriggers?.[cellId];
+          if (!trigger?.glob || !Number.isInteger(trigger.trackingIssue)) {
+            cellErrors.push(
+              `${cellId} is a time-bound compat skip but has no checkable revisit trigger`
+            );
+          } else if (options.checkFiles !== false) {
+            const matches = [];
+            for await (const match of glob(trigger.glob, {
+              cwd: options.root ?? root,
+            })) {
+              matches.push(match);
+              if (matches.length > 1) break;
+            }
+            if (matches.length) {
+              cellErrors.push(
+                `${cellId} revisit trigger matched ${matches[0]}; convert the skip to a tracked gap`
+              );
+            }
+          }
         }
         return cellErrors;
       })
@@ -190,6 +253,43 @@ export async function validateMatrix(matrix, options = {}) {
   );
   errors.push(...flowValidation.flatMap((result) => result.errors));
   warnings.push(...flowValidation.flatMap((result) => result.warnings));
+
+  if (
+    options.checkWorkspaceCompleteness !== false &&
+    options.checkFiles !== false
+  ) {
+    const packageJson = JSON.parse(
+      await readFile(path.join(options.root ?? root, "package.json"), "utf8")
+    );
+    const patterns = packageJson.workspaces?.packages ?? [];
+    const workspacePaths = (
+      await Promise.all(
+        patterns.map((pattern) =>
+          Array.fromAsync(
+            glob(`${pattern}/package.json`, {
+              cwd: options.root ?? root,
+            })
+          )
+        )
+      )
+    )
+      .flat()
+      .map((manifestPath) =>
+        path.posix.dirname(manifestPath.replaceAll("\\", "/"))
+      );
+    for (const workspacePath of workspacePaths.sort()) {
+      const mappedSurface = matrix.workspaceSurfaces?.[workspacePath];
+      if (!mappedSurface) {
+        errors.push(
+          `workspace ${workspacePath} has no matrix surface mapping in workspaceSurfaces`
+        );
+      } else if (!surfaces.has(mappedSurface)) {
+        errors.push(
+          `workspace ${workspacePath} maps to unknown matrix surface ${mappedSurface}`
+        );
+      }
+    }
+  }
 
   return { errors, warnings, dimensions, surfaces, flowIds };
 }

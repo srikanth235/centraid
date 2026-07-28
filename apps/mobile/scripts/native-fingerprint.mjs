@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 /**
  * Print the {@link https://docs.expo.dev/versions/latest/sdk/fingerprint/ @expo/fingerprint}
@@ -26,25 +27,43 @@ import path from "node:path";
  */
 import { createFingerprintAsync } from "@expo/fingerprint";
 
-const platform = process.argv[2];
-if (platform !== "ios" && platform !== "android") {
-  process.stderr.write("usage: native-fingerprint.mjs <ios|android>\n");
-  process.exit(2);
-}
-
 // scripts/ → apps/mobile. Resolve relative to this file, not cwd: gradle and
 // the monorepo root both invoke Expo tooling from different cwds (see the same
 // note in app.config.ts).
 const projectRoot = path.resolve(import.meta.dirname, "..");
 
-const fingerprint = await createFingerprintAsync(projectRoot, {
-  platforms: [platform],
-});
-// Guard against a silent empty digest becoming a constant (always-hit) key.
-if (!fingerprint.hash || fingerprint.sources.length === 0) {
-  process.stderr.write(
-    `::error::empty ${platform} fingerprint — refusing to emit a constant key\n`
-  );
-  process.exit(1);
+export async function fingerprintForPlatform(platform) {
+  if (platform !== "ios" && platform !== "android") {
+    throw new Error(`unsupported native fingerprint platform: ${platform}`);
+  }
+  const fingerprint = await createFingerprintAsync(projectRoot, {
+    platforms: [platform],
+    // The committed expectation is the ratchet output, not an input. Including
+    // it would make every refresh self-referential and impossible to settle.
+    ignorePaths: ["native-fingerprints.json"],
+  });
+  // Guard against a silent empty digest becoming a constant (always-hit) key.
+  if (!fingerprint.hash || fingerprint.sources.length === 0) {
+    throw new Error(
+      `empty ${platform} fingerprint — refusing to emit a constant key`
+    );
+  }
+  return fingerprint.hash;
 }
-process.stdout.write(fingerprint.hash);
+
+if (
+  process.argv[1] &&
+  pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url
+) {
+  const platform = process.argv[2];
+  if (platform !== "ios" && platform !== "android") {
+    process.stderr.write("usage: native-fingerprint.mjs <ios|android>\n");
+    process.exit(2);
+  }
+  try {
+    process.stdout.write(await fingerprintForPlatform(platform));
+  } catch (error) {
+    process.stderr.write(`::error::${error.message}\n`);
+    process.exit(1);
+  }
+}

@@ -1,0 +1,46 @@
+import { cloneTemplateFiles, scaffoldAppFiles } from "@centraid/blueprints";
+import {
+  qualityRegressionBudget,
+  recordQualityResult,
+} from "@centraid/test-kit/quality-result";
+import { describe, expect, test } from "vitest";
+
+const OWNER = "tests/scale/blueprint-clones.scale.test.ts";
+const APPS = 1_000;
+
+describe("blueprint-clones.scale", () => {
+  test("clones a template at multi-app catalog volume", async () => {
+    const templateFiles = scaffoldAppFiles("template", { name: "Template" });
+    const started = performance.now();
+    const clones = Array.from({ length: APPS }, (_, index) =>
+      cloneTemplateFiles({
+        newAppId: `clone-${index}`,
+        newName: `Clone ${index}`,
+        templateFiles,
+      })
+    );
+    const durationMs = performance.now() - started;
+    const budget = await qualityRegressionBudget("scale", OWNER);
+    const passed = budget == null || durationMs < budget;
+    expect(clones).toHaveLength(APPS);
+    expect(
+      clones.every((files) => files.some((file) => file.path === "app.json"))
+    ).toBe(true);
+    await recordQualityResult({
+      lane: "scale",
+      owner: OWNER,
+      name: `${APPS} in-memory blueprint clones`,
+      status: passed ? "passed" : "failed",
+      measurements: [
+        {
+          name: "wall clock",
+          value: durationMs,
+          unit: "ms",
+          ...(budget == null ? {} : { budget }),
+        },
+        { name: "apps", value: APPS, unit: "count" },
+      ],
+    });
+    expect(passed).toBe(true);
+  });
+});

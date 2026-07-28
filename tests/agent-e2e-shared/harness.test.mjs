@@ -4,7 +4,12 @@ import path from "node:path";
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { defaultRunId, writeFlowVerdict } from "./harness.mjs";
+import {
+  defaultRunId,
+  qualityRegressionBudget,
+  recordQualityResult,
+  writeFlowVerdict,
+} from "./harness.mjs";
 
 const scratchDirs = [];
 
@@ -37,6 +42,31 @@ describe("defaultRunId", () => {
     const a = defaultRunId();
     const b = defaultRunId();
     expect(a).not.toBe(b);
+  });
+});
+
+describe("qualityRegressionBudget", () => {
+  test("waits for ten durable observations before enabling the budget", async () => {
+    const repoRoot = await makeRunDir();
+    expect(
+      await qualityRegressionBudget(repoRoot, "scale", "mobile-volume")
+    ).toBeNull();
+    await Array.from({ length: 10 }, (_, index) => index + 1).reduce(
+      async (previous, value) => {
+        await previous;
+        await recordQualityResult(repoRoot, {
+          lane: "scale",
+          owner: "mobile-volume",
+          name: "volume",
+          status: "passed",
+          measurements: [{ name: "wall clock", value, unit: "ms" }],
+        });
+      },
+      Promise.resolve()
+    );
+    expect(
+      await qualityRegressionBudget(repoRoot, "scale", "mobile-volume")
+    ).toBe(16.5);
   });
 });
 
