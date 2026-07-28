@@ -17,7 +17,9 @@ import {
   type TurnStreamEvent,
 } from '../../../gateway-client.js';
 import { openPrompt } from '../prompt.js';
+import { providerConsentWire, withProviderConsent } from '../../providerConsent.js';
 import { catchUpAfterDrop } from './assistantCatchUp.js';
+import { rejectScopedDirectory } from './scopedDirectory.js';
 import { downloadConversation } from './conversationExport.js';
 import { DEFAULT_STARTERS, resolveStarters } from './assistantStarters.js';
 import mainScrollCss from '../../styles/mainScroll.module.css';
@@ -48,6 +50,9 @@ import {
 
 type ReadyAttachment = PendingAttachment & { ref: ConversationAttachmentRef };
 
+/** Wall clock for live transcript rows, at module scope (render-purity rule). */
+const nowMs = (): number => Date.now();
+
 interface AssistantRouteProps {
   /** The open conversation's id, from the shell route (`{kind:'assistant',
    *  conversationId}`) — `undefined` is a fresh, not-yet-created
@@ -60,7 +65,7 @@ interface AssistantRouteProps {
 // mutable model lives in a ref (the snapshot, not React state, is the source of
 // truth for the screen). The conversation LIST lives in the shell sidebar.
 export default function AssistantRoute({ conversationId }: AssistantRouteProps): JSX.Element {
-  const { showToast, replace, navigate, refreshAssistantThreads } = useShellActions();
+  const { showToast, replace, navigate, confirm, refreshAssistantThreads } = useShellActions();
   const m = useRef({
     currentId: null as string | null,
     msgs: [] as AsstMsg[],
@@ -252,7 +257,13 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
         title: runner.title,
         connected: runner.connected,
         sessionReady: runner.sessionReady,
-        hint: runner.subtitle,
+        // Breaker health belongs in the hint on every picker — a tripped
+        // breaker is exactly what explains a runner that looks connected but
+        // won't take the turn (matches builder + automations).
+        hint: [
+          runner.subtitle,
+          ...(runner.breakerStates ?? []).map((state) => `${state.failureClass} ${state.state}`),
+        ].join(' · '),
       })),
       selectedRunnerKind: runnerKind,
       workspaceKinds: ['vault-data'],
@@ -330,7 +341,8 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     idempotencyKey: string;
     appendUser: boolean;
     removeFromIndex?: number;
-    providerConsent?: string;
+    /** Every provider approved so far during THIS send attempt (#567). */
+    providerConsent?: string[];
   }): Promise<void> => {
     const conversationId = m.current.currentId;
     if (!conversationId) return;
@@ -341,6 +353,9 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
       m.current.msgs.push({
         kind: 'user',
         text: opts.text,
+        // Live sends carry a timestamp too, so the hover clock works before the
+        // transcript reload replaces the row with the ledger copy.
+        createdAt: nowMs(),
         ...(opts.attachments.length
           ? {
               attachments: opts.attachments.map((a) => ({
@@ -466,8 +481,11 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
               label: location.path.split(/[\\/]/).at(-1) ?? location.path,
               workspacePath: location.path,
             })),
+            // Keep the live chip identical to the reload path: when the runner
+            // reports a content hash, the chip shows `sha256 …` (#567).
             ...(event.artifacts ?? []).map((artifact) => ({
               label: artifact.filename ?? 'Agent artifact',
+              ...(artifact.hash ? { hash: artifact.hash } : {}),
             })),
           ];
           if (artifacts.length) call.artifacts = artifacts;
@@ -503,6 +521,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
 
     let streamEnded = false;
     let threw: unknown = null;
+    const consentWire = providerConsentWire(opts.providerConsent);
     try {
       const res = await streamAssistantTurn(
         {
@@ -511,7 +530,7 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
           idempotencyKey: opts.idempotencyKey,
           ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
           ...(opts.attachments.length ? { attachments: opts.attachments.map((a) => a.ref) } : {}),
-          ...(opts.providerConsent ? { providerConsent: opts.providerConsent } : {}),
+          ...(consentWire !== undefined ? { providerConsent: consentWire } : {}),
           ...(m.current.runnerKind ? { runnerKind: m.current.runnerKind } : {}),
           ...(m.current.selectedModel ? { model: m.current.selectedModel } : {}),
           ...(m.current.selectedEffort ? { thinking: m.current.selectedEffort } : {}),
@@ -529,14 +548,19 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     if (m.current.disposed || m.current.currentId !== conversationId) return;
     if (requiredProvider) {
       setBusy(false);
-      const approved = window.confirm(
-        `Allow this conversation to be sent to ${requiredProvider}? This can include your message, attachments, conversation handoff, and vault tool results.`,
-      );
+      const approved = await confirm({
+        confirmLabel: 'Allow provider',
+        title: `Send to ${requiredProvider}?`,
+        message: `Allow this conversation to be sent to ${requiredProvider}? This can include your message, attachments, conversation handoff, and vault tool results.`,
+      });
+      if (m.current.disposed || m.current.currentId !== conversationId) return;
       if (approved) {
+        // Carry EVERY provider approved this attempt — a consent-gated failover
+        // asks twice, and dropping the first approval loops forever (#567).
         await runTurn({
           ...opts,
           appendUser: false,
-          providerConsent: requiredProvider,
+          providerConsent: withProviderConsent(opts.providerConsent ?? [], requiredProvider),
         });
       } else {
         m.current.msgs.push({
@@ -600,9 +624,16 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
     if (live) live.streaming = false;
     // A request that never started (threw before any activity) → resend bubble.
     if (threw !== null && !errored && !aborted) {
+      const message = threw instanceof Error ? threw.message : String(threw);
+      // A rejected shared folder is a rejection of the SELECTION, not a
+      // transient turn failure: say so out of band, because the resend button
+      // on the error bubble will keep failing until the chip is removed (#567).
+      if (/additional director/i.test(message)) {
+        showToast(`The gateway rejected a shared folder — remove it and try again. ${message}`);
+      }
       m.current.msgs.push({
         kind: 'ai',
-        text: threw instanceof Error ? threw.message : String(threw),
+        text: message,
         error: true,
         failedText: opts.text,
         idempotencyKey: opts.idempotencyKey,
@@ -860,8 +891,15 @@ export default function AssistantRoute({ conversationId }: AssistantRouteProps):
             placeholder: '/absolute/path/to/folder',
             confirmLabel: 'Share folder',
           }).then((directory) => {
-            const trimmed = directory?.trim();
-            if (!trimmed || m.current.additionalDirectories.includes(trimmed)) return;
+            const trimmed = directory?.trim() ?? '';
+            if (!trimmed) return;
+            // The gateway rejects a bad root with a 400 on the NEXT turn, which
+            // reads as a failed answer. Catch what we can name here (#567).
+            const rejection = rejectScopedDirectory(trimmed, m.current.additionalDirectories);
+            if (rejection) {
+              showToast(rejection);
+              return;
+            }
             m.current.additionalDirectories.push(trimmed);
             push();
           });

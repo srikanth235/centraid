@@ -24,6 +24,8 @@ import type {
   BuilderChatSnapshot,
 } from '../../../screen-contracts.js';
 import { loadProviders, resolveReportedRunnerKind } from '../settingsProvidersData.js';
+import { openConfirm } from '../../confirm.js';
+import { providerConsentWire, withProviderConsent } from '../../../providerConsent.js';
 import {
   BUILDER_SUGGESTIONS,
   type ChatView,
@@ -128,9 +130,12 @@ async function streamBuilderWithConsent(input: {
   model?: string;
   thinking?: string;
 }): Promise<void> {
-  let providerConsent: string | undefined;
+  // Every provider approved during THIS send — a consent-gated failover asks
+  // twice, and resending only the newest approval loops forever (#567).
+  let approvedProviders: string[] = [];
   for (;;) {
     let requiredProvider: string | undefined;
+    const providerConsent = providerConsentWire(approvedProviders);
     await streamTurn(
       input.appId,
       {
@@ -141,7 +146,7 @@ async function streamBuilderWithConsent(input: {
         ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
         ...(input.model ? { model: input.model } : {}),
         ...(input.thinking ? { thinking: input.thinking } : {}),
-        ...(providerConsent ? { providerConsent } : {}),
+        ...(providerConsent !== undefined ? { providerConsent } : {}),
         ...(input.attachments?.length ? { attachments: input.attachments } : {}),
       },
       (event) => {
@@ -151,14 +156,16 @@ async function streamBuilderWithConsent(input: {
       input.signal,
     );
     if (!requiredProvider) return;
-    const approved = window.confirm(
-      `Allow this builder conversation to be sent to ${requiredProvider}? This can include the prompt, attachments, handoff context, and vault tool results.`,
-    );
+    const approved = await openConfirm({
+      confirmLabel: 'Allow provider',
+      title: `Send to ${requiredProvider}?`,
+      message: `Allow this builder conversation to be sent to ${requiredProvider}? This can include the prompt, attachments, handoff context, and vault tool results.`,
+    });
     if (!approved) {
       input.onDeclined(requiredProvider);
       return;
     }
-    providerConsent = requiredProvider;
+    approvedProviders = withProviderConsent(approvedProviders, requiredProvider);
   }
 }
 

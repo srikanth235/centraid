@@ -1,4 +1,5 @@
-// governance: allow-repo-hygiene file-size-limit (#567) one component-level suite shares the Assistant bridge fixture across runner, capability, consent, attachment, stop, and transcript behavior
+// governance: allow-repo-hygiene file-size-limit (#567) one component-level suite shares the Assistant bridge fixture across runner, capability, workspace, attachment, stop, and transcript behavior
+// (Provider-egress consent lives on the ROUTE, not this screen — see AssistantRoute.test.tsx.)
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -492,6 +493,65 @@ describe('AssistantScreen', () => {
       effort.dispatchEvent(new Event('change', { bubbles: true }));
     });
     expect(props.onSetEffort).toHaveBeenCalledWith('high');
+  });
+
+  it('re-enables the pickers when a runner switch rejects', async () => {
+    const props = makeProps({
+      loadModelPicker: vi.fn().mockResolvedValue(
+        modelPickerDTO({
+          runners: [
+            { kind: 'codex', title: 'Codex', connected: true, sessionReady: true, hint: 'ready' },
+            {
+              kind: 'copilot',
+              title: 'Copilot',
+              connected: true,
+              sessionReady: true,
+              hint: 'ready',
+            },
+          ],
+        }),
+      ),
+      onSetRunner: vi.fn().mockRejectedValue(new Error('preflight failed')),
+    });
+    const el = await mount(props);
+    push(emptySnap());
+    await flush();
+    const runner = el.querySelector('select[aria-label="Assistant runner"]') as HTMLSelectElement;
+    expect(runner.disabled).toBe(false);
+    await act(async () => {
+      runner.value = 'copilot';
+      runner.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await flush();
+    // A rejected switch used to leave every picker disabled for good.
+    expect(props.onSetRunner).toHaveBeenCalledWith('copilot');
+    expect(
+      el.querySelector<HTMLSelectElement>('select[aria-label="Assistant runner"]')?.disabled,
+    ).toBe(false);
+  });
+
+  it('hides the workspace select while there is only one workspace', async () => {
+    const el = await mount(makeProps());
+    push(emptySnap());
+    await flush();
+    expect(el.querySelector('select[aria-label="Assistant workspace"]')).toBeNull();
+  });
+
+  it('labels workspaces in words once there is a choice', async () => {
+    const props = makeProps({
+      loadModelPicker: vi
+        .fn()
+        .mockResolvedValue(modelPickerDTO({ workspaceKinds: ['vault-data', 'app'] })),
+    });
+    const el = await mount(props);
+    push(emptySnap());
+    await flush();
+    const select = el.querySelector('select[aria-label="Assistant workspace"]');
+    expect([...(select?.querySelectorAll('option') ?? [])].map((o) => o.textContent)).toEqual([
+      'Vault data',
+      'Live app',
+    ]);
   });
 
   it('renders the latest context snapshot and permits the gauge to decrease', async () => {

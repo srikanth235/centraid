@@ -13,6 +13,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
+import OptionSheet, { type SheetOption } from '../../kit/components/OptionSheet';
 import { useTheme } from '../../kit/theme';
 import type { AssistantScreenProps } from '../../navigation';
 import { makeStyles } from './Assistant.styles';
@@ -63,10 +64,17 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
 
   useEffect(() => {
     if (!pendingConsent) return;
-    Alert.alert('Share with another provider?', pendingConsent.message, [
-      { text: 'Cancel', style: 'cancel', onPress: declineConsent },
-      { text: `Allow ${pendingConsent.provider}`, onPress: approveConsent },
-    ]);
+    Alert.alert(
+      'Share with another provider?',
+      pendingConsent.message,
+      [
+        { text: 'Cancel', style: 'cancel', onPress: declineConsent },
+        { text: `Allow ${pendingConsent.provider}`, onPress: approveConsent },
+      ],
+      // Android's back gesture dismisses without pressing a button. Silence is
+      // not consent — and without this the turn stays wedged on pendingConsent.
+      { cancelable: true, onDismiss: declineConsent },
+    );
   }, [approveConsent, declineConsent, pendingConsent]);
 
   const submit = (): void => {
@@ -81,22 +89,44 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
   // the keyboard is up it rides just above it, otherwise it only clears the
   // home-indicator safe area.
   const composerPad = keyboardUp ? 8 : insets.bottom + 8;
-  const cycleModel = (): void => {
-    if (!config || config.models.length === 0) return;
-    const index = config.models.findIndex((model) => model.id === config.selectedModel);
-    selectModel(config.models[(index + 1) % config.models.length]!.id);
-  };
-  const cycleRunner = (): void => {
-    if (!config) return;
-    if (config.runners.length === 0) return;
-    const index = config.runners.findIndex((runner) => runner.kind === config.runnerKind);
-    selectRunner(config.runners[(index + 1) % config.runners.length]!.kind);
-  };
-  const cycleEffort = (): void => {
-    if (!config || config.efforts.length === 0) return;
-    const index = config.efforts.findIndex((effort) => effort.id === config.selectedEffort);
-    selectEffort(config.efforts[(index + 1) % config.efforts.length]!.id);
-  };
+  // Which picker is open, if any. Selection presents the platform's own
+  // single-choice list (#567 D12) — the user picks the agent they want instead
+  // of cycling through the dead ones. `selectRunner` still preflights and
+  // reverts, so a chosen-but-unready runner surfaces as a selection error.
+  const [picker, setPicker] = useState<'runner' | 'model' | 'effort' | null>(null);
+  const pickerSpec: {
+    title: string;
+    options: SheetOption[];
+    selectedId?: string;
+    onSelect: (id: string) => void;
+  } | null =
+    !config || picker === null
+      ? null
+      : picker === 'runner'
+        ? {
+            title: 'Agent',
+            options: config.runners.map((runner) => ({
+              id: runner.kind,
+              label: runner.label,
+              ...(runner.hint ? { detail: runner.hint } : {}),
+              ...(runner.sessionReady ? {} : { disabled: true }),
+            })),
+            ...(config.runnerKind ? { selectedId: config.runnerKind } : {}),
+            onSelect: selectRunner,
+          }
+        : picker === 'model'
+          ? {
+              title: 'Model',
+              options: config.models.map((model) => ({ id: model.id, label: model.name })),
+              ...(config.selectedModel ? { selectedId: config.selectedModel } : {}),
+              onSelect: selectModel,
+            }
+          : {
+              title: 'Effort',
+              options: config.efforts.map((effort) => ({ id: effort.id, label: effort.name })),
+              ...(config.selectedEffort ? { selectedId: config.selectedEffort } : {}),
+              onSelect: selectEffort,
+            };
   const contextRatio =
     context.used !== undefined && context.size
       ? Math.max(0, Math.min(1, context.used / context.size))
@@ -165,7 +195,7 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Change assistant runner"
-                onPress={cycleRunner}
+                onPress={() => setPicker('runner')}
                 disabled={!config?.runners.length || sending}
                 style={styles.statusChip}
               >
@@ -179,7 +209,7 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Change assistant model"
-                  onPress={cycleModel}
+                  onPress={() => setPicker('model')}
                   disabled={sending}
                   style={styles.statusChip}
                 >
@@ -194,7 +224,7 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Change assistant effort"
-                  onPress={cycleEffort}
+                  onPress={() => setPicker('effort')}
                   disabled={sending}
                   style={styles.statusChip}
                 >
@@ -276,6 +306,16 @@ export default function AssistantScreen({ navigation }: AssistantScreenProps): R
           </View>
         </KeyboardAvoidingView>
       )}
+      {pickerSpec ? (
+        <OptionSheet
+          visible
+          title={pickerSpec.title}
+          options={pickerSpec.options}
+          {...(pickerSpec.selectedId ? { selectedId: pickerSpec.selectedId } : {})}
+          onSelect={pickerSpec.onSelect}
+          onClose={() => setPicker(null)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

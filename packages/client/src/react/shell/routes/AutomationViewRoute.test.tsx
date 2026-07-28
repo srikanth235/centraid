@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit (#567) one Automation Q&A route suite shares the mocked bridge and persistence fixture across runner, model, effort, attachment, consent, and reload cases
+// governance: allow-repo-hygiene file-size-limit (#567) one Automation Q&A route suite shares the mocked bridge and persistence fixture across runner, model, effort, provider-consent, and reload cases
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -81,7 +81,11 @@ vi.mock('./settingsProvidersData.js', async (importOriginal) => ({
   loadProviders: helpers.loadProviders,
 }));
 
-const { automationPicker, default: AutomationViewRoute } = await import('./AutomationViewRoute.js');
+const {
+  automationPicker,
+  latestAdapterKind,
+  default: AutomationViewRoute,
+} = await import('./AutomationViewRoute.js');
 
 function automationRow(): CentraidAutomationRow {
   const triggers: CentraidAutomationManifest['triggers'] = [{ kind: 'cron', expr: '0 9 * * *' }];
@@ -487,6 +491,63 @@ describe('AutomationViewRoute', () => {
     await expect(bridge.loadData()).resolves.toMatchObject({
       runnerConfig: { selectedRunnerKind: 'copilot' },
     });
+  });
+
+  it('binds the runner to the latest run that recorded an adapter, not list order', () => {
+    const runs = [
+      { ...turn, turnId: 'newest', seq: 3, startedAt: 300, adapterKind: 'copilot' },
+      { ...turn, turnId: 'older', seq: 2, startedAt: 200, adapterKind: 'codex' },
+      { ...turn, turnId: 'no-adapter', seq: 4, startedAt: 400 },
+    ];
+    expect(latestAdapterKind(runs)).toBe('copilot');
+    // Same answer whichever order the feed arrives in.
+    expect(latestAdapterKind(runs.toReversed())).toBe('copilot');
+    expect(latestAdapterKind([{ ...turn }])).toBeUndefined();
+  });
+
+  it('resends an ask with every provider approved so far, and stops on a decline', async () => {
+    const consentPerAttempt = ['claude-code', 'copilot', null];
+    let attempt = 0;
+    api.streamAutomationConversationTurn.mockImplementation(
+      async (
+        _automationId: string,
+        _text: string,
+        onEvent: (event: Record<string, unknown>) => void,
+      ) => {
+        const provider = consentPerAttempt[attempt++] ?? null;
+        if (provider) {
+          onEvent({
+            type: 'consent.required',
+            consentKind: 'provider-egress',
+            provider,
+            reason: 'ladder',
+            message: `${provider} needs approval.`,
+          });
+          return { ended: true };
+        }
+        onEvent({ type: 'assistant.delta', delta: 'Done' });
+        return { turnId: 'turn-3', ended: true };
+      },
+    );
+    const bridge = await mount();
+    await bridge.loadData();
+
+    await expect(
+      bridge.onAskAboutRuns('What happened?', {}, vi.fn(), new AbortController().signal),
+    ).resolves.toBe('turn-3');
+    expect(actions.confirm).toHaveBeenCalledTimes(2);
+    expect(
+      api.streamAutomationConversationTurn.mock.calls.map((call: unknown[]) => call[4]),
+    ).toEqual([undefined, 'claude-code', ['claude-code', 'copilot']]);
+
+    // A decline sends nothing further and yields no turn.
+    api.streamAutomationConversationTurn.mockClear();
+    attempt = 0;
+    actions.confirm.mockResolvedValue(false);
+    await expect(
+      bridge.onAskAboutRuns('And then?', {}, vi.fn(), new AbortController().signal),
+    ).resolves.toBeNull();
+    expect(api.streamAutomationConversationTurn).toHaveBeenCalledTimes(1);
   });
 
   it('returns null when the automation disappears and guards actions before load', async () => {

@@ -9,7 +9,8 @@ vi.mock('../../lib/assistant', () => ({
   saveAssistantSelection: assistant.saveAssistantSelection,
 }));
 
-const { persistAssistantSelection, preflightedRunnerSelection } = await import('./useAssistant');
+const { nextProviderConsent, persistAssistantSelection, preflightedRunnerSelection } =
+  await import('./useAssistant');
 
 function config(over: Partial<AssistantConfig> = {}): AssistantConfig {
   return {
@@ -37,6 +38,18 @@ function config(over: Partial<AssistantConfig> = {}): AssistantConfig {
     ...over,
   };
 }
+
+describe('nextProviderConsent', () => {
+  it('keeps earlier approvals when a consent-gated failover asks for another provider', () => {
+    const first = nextProviderConsent(undefined, 'claude-code');
+    expect(first).toEqual(['claude-code']);
+    expect(nextProviderConsent(first, 'copilot')).toEqual(['claude-code', 'copilot']);
+  });
+
+  it('does not repeat a provider the owner already approved', () => {
+    expect(nextProviderConsent(['codex'], 'codex')).toEqual(['codex']);
+  });
+});
 
 describe('preflightedRunnerSelection', () => {
   it('retains the prior runner when refreshed session setup or sign-in is incomplete', () => {

@@ -13,9 +13,12 @@ import AgentEntry from './SettingsProvidersAgents.js';
 import { ConfigSelect, ModelSelect, Select, modelLabel } from './SettingsProvidersSelects.js';
 import styles from './SettingsProvidersScreen.module.css';
 import controlsCss from '../styles/controls.module.css';
+import { openConfirm } from '../shell/confirm.js';
 
 const POLL_MS = 800;
 const POLL_WINDOW_MS = 30_000;
+/** How long the "Diagnostics copied" acknowledgement stays on the button. */
+const COPIED_ACK_MS = 2000;
 
 /**
  * The status poll's self-rescheduling timer. It lives at module scope, taking
@@ -93,12 +96,16 @@ function RouteRow({
   onSetEffort: (v: string) => void;
   onSetLadder: (v: AgentRunnerKind[]) => void;
 }): JSX.Element {
-  const activeLadder = ladder.filter(
-    (kind, index) => kind !== resolvedCard?.kind && ladder.indexOf(kind) === index,
-  );
+  // D13: ladder membership IS the consent record, so the row shows exactly what
+  // is stored — including a member that currently resolves as this lane's
+  // primary. Hiding it made the UI disagree with the consent the gateway holds.
+  const activeLadder = ladder.filter((kind, index) => ladder.indexOf(kind) === index);
+  // Unattended failover runs with no one watching, so a fallback must be past
+  // its session preflight — `connected` alone admits an agent that will stop
+  // and ask for auth mid-run.
   const availableFallbacks = cards.filter(
     (card) =>
-      card.connected && card.kind !== resolvedCard?.kind && !activeLadder.includes(card.kind),
+      card.sessionReady && card.kind !== resolvedCard?.kind && !activeLadder.includes(card.kind),
   );
   return (
     <div
@@ -204,13 +211,13 @@ function RouteRow({
             const kind = event.target.value as AgentRunnerKind;
             if (!kind) return;
             const title = cards.find((card) => card.kind === kind)?.title ?? kind;
-            if (
-              window.confirm(
-                `Add ${title} as an unattended ${label} fallback? If earlier agents fail, Centraid may send the conversation handoff, attachments, and vault-derived context to ${title} without another prompt. A later manual switch remains separately confirm-gated.`,
-              )
-            ) {
-              onSetLadder([...activeLadder, kind]);
-            }
+            void openConfirm({
+              confirmLabel: 'Add fallback',
+              title: `Add ${title} to ${label} failover?`,
+              message: `If earlier agents fail, Centraid may send the conversation handoff, attachments, and vault-derived context to ${title} without another prompt. A later manual switch remains separately confirm-gated.`,
+            }).then((approved) => {
+              if (approved) onSetLadder([...activeLadder, kind]);
+            });
           }}
         >
           <option value="">Add fallback…</option>
@@ -270,6 +277,7 @@ export default function SettingsProvidersScreen({
   const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   const deadlineRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const apply = useCallback((s: AgentsStatusDTO) => {
     setStatus(s);
@@ -294,6 +302,7 @@ export default function SettingsProvidersScreen({
     });
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
     };
   }, [loadStatus, apply, poll]);
 
@@ -524,6 +533,10 @@ export default function SettingsProvidersScreen({
               if (!status) return;
               void navigator.clipboard?.writeText(status.diagnosticsJson);
               setDiagnosticsCopied(true);
+              // The label is an acknowledgement, not a state — without this the
+              // button reads "Diagnostics copied" for the rest of the session.
+              if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
+              copiedTimerRef.current = setTimeout(() => setDiagnosticsCopied(false), COPIED_ACK_MS);
             }}
           />
         </div>

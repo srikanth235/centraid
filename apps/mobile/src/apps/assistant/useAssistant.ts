@@ -51,8 +51,19 @@ interface PendingTurn {
   text: string;
   assistantKey: string;
   idempotencyKey: string;
-  providerConsent?: string;
+  /** Every provider approved so far for THIS turn (#567). */
+  providerConsent?: string[];
   attachments: AssistantAttachment[];
+}
+
+/**
+ * Approvals accumulate. A turn can need consent for provider A, fail over to B,
+ * and need consent for B too — resending only B drops A's approval and the
+ * gateway asks for A again, forever.
+ */
+export function nextProviderConsent(current: string[] | undefined, provider: string): string[] {
+  const approved = current ?? [];
+  return approved.includes(provider) ? approved : [...approved, provider];
 }
 
 let counter = 0;
@@ -121,6 +132,8 @@ export function useAssistant(): AssistantController {
   const conversationId = useRef<string | undefined>(undefined);
   const abort = useRef<AbortController | undefined>(undefined);
   const pendingTurn = useRef<PendingTurn | undefined>(undefined);
+  /** Synchronous twin of `sending` — closes the double-tap window state leaves open. */
+  const inFlight = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -157,6 +170,9 @@ export function useAssistant(): AssistantController {
       const controller = new AbortController();
       abort.current = controller;
       let finalText = '';
+      // The turn is not over when it parks on consent — the send guard has to
+      // stay closed until the owner answers the prompt.
+      let awaitingConsent = false;
       try {
         const outcome = await streamAssistantTurn(
           {
@@ -167,7 +183,14 @@ export function useAssistant(): AssistantController {
             ...(config?.selectedEffort ? { effort: config.selectedEffort } : {}),
             ...(config?.runnerKind ? { runnerKind: config.runnerKind } : {}),
             ...(turn.attachments.length ? { attachments: turn.attachments } : {}),
-            ...(turn.providerConsent ? { providerConsent: turn.providerConsent } : {}),
+            ...(turn.providerConsent?.length
+              ? {
+                  providerConsent:
+                    turn.providerConsent.length === 1
+                      ? turn.providerConsent[0]!
+                      : turn.providerConsent,
+                }
+              : {}),
           },
           (event) => {
             if (event.type === 'assistant.delta') {
@@ -199,6 +222,7 @@ export function useAssistant(): AssistantController {
         );
         if (outcome.error) throw new Error(outcome.error);
         if (outcome.consent) {
+          awaitingConsent = true;
           setPendingConsent(outcome.consent);
           return;
         }
@@ -230,6 +254,7 @@ export function useAssistant(): AssistantController {
         );
         pendingTurn.current = undefined;
       } finally {
+        if (!awaitingConsent) inFlight.current = false;
         if (mounted.current) setSending(false);
         if (abort.current === controller) abort.current = undefined;
       }
@@ -240,7 +265,10 @@ export function useAssistant(): AssistantController {
   const send = useCallback(
     (text: string): void => {
       const trimmed = text.trim();
-      if (!trimmed || sending || !conversationId.current) return;
+      // `sending` is React state — it only flips a render later, so two taps in
+      // the same frame both got past it. The ref closes synchronously.
+      if (!trimmed || sending || inFlight.current || !conversationId.current) return;
+      inFlight.current = true;
       const assistantKey = nextKey();
       const turn: PendingTurn = {
         text: trimmed,
@@ -261,6 +289,7 @@ export function useAssistant(): AssistantController {
 
   const stop = useCallback((): void => {
     abort.current?.abort();
+    inFlight.current = false;
     setSending(false);
     setBubbles((current) =>
       current.map((bubble) =>
@@ -276,11 +305,15 @@ export function useAssistant(): AssistantController {
     const turn = pendingTurn.current;
     const requested = pendingConsent;
     if (!turn || !requested) return;
-    void run({ ...turn, providerConsent: requested.provider });
+    void run({
+      ...turn,
+      providerConsent: nextProviderConsent(turn.providerConsent, requested.provider),
+    });
   }, [pendingConsent, run]);
 
   const declineConsent = useCallback((): void => {
     const key = pendingTurn.current?.assistantKey;
+    inFlight.current = false;
     setPendingConsent(undefined);
     setBubbles((current) =>
       current.map((bubble) =>

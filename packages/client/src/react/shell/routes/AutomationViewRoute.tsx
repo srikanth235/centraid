@@ -33,6 +33,7 @@ import {
   reduceAutomationTurnEvent,
 } from './automationLiveMessages.js';
 import { loadProviders, resolveReportedRunnerKind } from './settingsProvidersData.js';
+import { providerConsentWire, withProviderConsent } from '../../providerConsent.js';
 
 export function automationPicker(
   status: AgentsStatusDTO,
@@ -90,6 +91,28 @@ export function automationPicker(
   };
 }
 
+/**
+ * The adapter the automation's MOST RECENT run actually used. `listAutomationTurns`
+ * documents newest-first, but "first entry that happens to carry an adapterKind"
+ * silently inherits that ordering — so pick the latest run explicitly (#567).
+ */
+export function latestAdapterKind(
+  runs: readonly CentraidAutomationTurnRecord[],
+): string | undefined {
+  let latest: CentraidAutomationTurnRecord | undefined;
+  for (const run of runs) {
+    if (!run.adapterKind) continue;
+    if (
+      !latest ||
+      run.startedAt > latest.startedAt ||
+      (run.startedAt === latest.startedAt && run.seq > latest.seq)
+    ) {
+      latest = run;
+    }
+  }
+  return latest?.adapterKind;
+}
+
 async function askAutomationWithConsent(input: {
   automationRef: string;
   text: string;
@@ -106,7 +129,9 @@ async function askAutomationWithConsent(input: {
 }): Promise<string | null> {
   let live = createAutomationLiveTrace(input.text);
   input.onMessages(automationLiveMessages(live));
-  let providerConsent: string | undefined;
+  // Approvals accumulate across this ask: consent for provider A then a
+  // failover to B must resend BOTH, or the server re-asks for A forever (#567).
+  let approvedProviders: string[] = [];
   for (;;) {
     let requiredProvider: string | undefined;
     const result = await streamAutomationConversationTurn(
@@ -123,7 +148,7 @@ async function askAutomationWithConsent(input: {
         }
       },
       input.signal,
-      providerConsent,
+      providerConsentWire(approvedProviders),
       {
         ...(input.turn.attachments?.length ? { attachments: input.turn.attachments } : {}),
         ...(input.turn.runnerKind ? { runnerKind: input.turn.runnerKind } : {}),
@@ -145,7 +170,7 @@ async function askAutomationWithConsent(input: {
       title: `Send to ${requiredProvider}?`,
     });
     if (!approved) return null;
-    providerConsent = requiredProvider;
+    approvedProviders = withProviderConsent(approvedProviders, requiredProvider);
   }
 }
 
@@ -182,7 +207,7 @@ export default function AutomationViewRoute({
             return null;
           }
           rowRef.current = result.row;
-          runnerRef.current ??= runs.find((run) => run.adapterKind)?.adapterKind;
+          runnerRef.current ??= latestAdapterKind(runs);
           const hero = deriveAutomationHero(result.row, baseUrl);
           const runTokens: Record<string, number> = {};
           for (const r of runs) {

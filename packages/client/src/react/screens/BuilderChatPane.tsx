@@ -13,6 +13,7 @@ import tgCss from '../styles/toolGroup.module.css';
 import chatCss from '../styles/chatMessage.module.css';
 import ChatComposer from './ChatComposer.js';
 import { EffortPicker, ModelPicker, RunnerPicker } from './AssistantScreen.js';
+import { workspaceKindLabel } from './workspaceKindLabel.js';
 
 // Builder-specific status glyphs not yet in the shared icon set.
 function BoltGlyph(): JSX.Element {
@@ -434,7 +435,7 @@ export default function BuilderChatPane({
               >
                 {snap.workspaceKinds.map((kind) => (
                   <option key={kind} value={kind}>
-                    {kind === 'vault-data' ? 'Vault data' : kind === 'app' ? 'Live app' : 'Draft'}
+                    {workspaceKindLabel(kind)}
                   </option>
                 ))}
               </select>
@@ -452,6 +453,10 @@ export default function BuilderChatPane({
                     void onSetRunner(runnerKind)
                       .then((next) => {
                         if (!next.supportsAttachments) setPending([]);
+                      })
+                      .catch(() => {
+                        // Same as the assistant composer: the route reports the
+                        // failure, the pane only has to re-enable its controls.
                       })
                       .finally(() => setPickerLoaded(true));
                   }}
@@ -475,7 +480,13 @@ export default function BuilderChatPane({
               />
             ) : undefined
           }
-          hint="Switching agents creates a bounded context handoff and may require provider consent."
+          // The hint explains the runner picker, so it only makes sense once
+          // that picker exists (the runner config arrives with the snapshot).
+          {...(snap.runnerConfig
+            ? {
+                hint: 'Switching agents creates a bounded context handoff and may require provider consent.',
+              }
+            : {})}
         />
       </div>
     </div>

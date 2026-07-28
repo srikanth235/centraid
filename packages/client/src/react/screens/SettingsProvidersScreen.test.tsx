@@ -4,6 +4,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentsStatusDTO, SettingsProvidersBridgeProps } from '../screen-contracts.js';
 import SettingsProvidersScreen from './SettingsProvidersScreen.js';
 
+// Ladder membership is a consent decision, so it goes through the shell's own
+// confirm dialog (not `window.confirm`) — mocked here to drive the answer.
+const dialog = vi.hoisted(() => ({ openConfirm: vi.fn() }));
+vi.mock('../shell/confirm.js', () => dialog);
+
+/** `makeStatusBothConnected`, but Claude Code is also past its session preflight. */
+function withSessionReady(status: AgentsStatusDTO): AgentsStatusDTO {
+  return {
+    ...status,
+    cards: status.cards.map((card) =>
+      card.kind === 'claude-code' ? { ...card, sessionReady: true } : card,
+    ),
+  };
+}
+
 function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {
   return {
     selectedKind: 'codex',
@@ -176,14 +191,54 @@ describe('SettingsProvidersScreen', () => {
   });
 
   it('requires explicit confirmation before adding ordered failover membership', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    dialog.openConfirm.mockReset().mockResolvedValue(true);
+    const props = makeProps({
+      loadStatus: vi.fn().mockResolvedValue(withSessionReady(makeStatusBothConnected())),
+    });
+    const el = await mount(props);
+    await act(async () => {
+      await pick(sel(el, 'Add fallback agent for Assistant'), 'claude-code');
+    });
+    expect(dialog.openConfirm).toHaveBeenCalledOnce();
+    expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith('assistant', ['claude-code']);
+  });
+
+  it('will not offer an agent that has not passed its session preflight as a fallback', async () => {
+    // Unattended failover has nobody to answer an auth prompt, so `connected`
+    // alone is not enough to join the ladder.
     const props = makeProps({
       loadStatus: vi.fn().mockResolvedValue(makeStatusBothConnected()),
     });
     const el = await mount(props);
-    await pick(sel(el, 'Add fallback agent for Assistant'), 'claude-code');
-    expect(confirm).toHaveBeenCalledOnce();
-    expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith('assistant', ['claude-code']);
+    const add = sel(el, 'Add fallback agent for Assistant');
+    expect([...add.querySelectorAll('option')].map((option) => option.value)).toEqual(['']);
+    expect(add.disabled).toBe(true);
+  });
+
+  it('shows the stored ladder in full, including a member that is now the lane primary', async () => {
+    // D13: membership IS the consent record — filtering the resolved primary
+    // out of the display made the UI disagree with what the gateway holds.
+    const props = makeProps({
+      loadStatus: vi.fn().mockResolvedValue(
+        withSessionReady(
+          makeStatusBothConnected({
+            subsystemRunnerLadders: { assistant: ['codex', 'claude-code'] },
+          }),
+        ),
+      ),
+    });
+    const el = await mount(props);
+    expect(el.querySelector('[aria-label="Remove Codex from Assistant failover"]')).toBeTruthy();
+    // …and an edit re-saves the same membership rather than silently pruning it.
+    await act(async () => {
+      el.querySelector<HTMLButtonElement>(
+        '[aria-label="Move Claude Code earlier for Assistant"]',
+      )?.click();
+    });
+    expect(props.setSubsystemRunnerLadder).toHaveBeenCalledWith('assistant', [
+      'claude-code',
+      'codex',
+    ]);
   });
 
   it('names what an inheriting lane resolves to rather than saying "use default"', async () => {

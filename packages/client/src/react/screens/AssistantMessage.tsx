@@ -10,8 +10,7 @@ import Icon from '../ui/Icon.js';
 import asstPreCss from '../styles/asstPre.module.css';
 import { formatUsageLabel, formatUsageTitle } from './assistantUsage.js';
 
-// Thumbs glyphs — not in the design-tokens icon set, so small local SVGs
-// (mirrors AssistantScreen's PaperclipGlyph pattern).
+// Thumbs glyphs — not in the design-tokens icon set, so small local SVGs.
 function ThumbUpGlyph(): JSX.Element {
   return (
     <svg

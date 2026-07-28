@@ -116,8 +116,13 @@ export interface StreamTurnInput {
    * replays the already-recorded turn instead of double-running it.
    */
   idempotencyKey?: string;
-  /** Explicit owner approval for this conversation × provider egress boundary. */
-  providerConsent?: string;
+  /**
+   * Explicit owner approval for this conversation × provider egress boundary.
+   * A list when one attempt needed consent for more than one provider (a
+   * consent-gated failover): every provider approved so far must ride each
+   * resend, or the server re-asks for the earlier ones (#567).
+   */
+  providerConsent?: string | string[];
   /** Explicit owner-selected extra workspace roots for this conversation turn. */
   additionalDirectories?: string[];
   /** Centraid-owned primary workspace selector (the host resolves the path). */
@@ -243,7 +248,7 @@ export async function streamTurn(
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-      ...(input.providerConsent ? { providerConsent: input.providerConsent } : {}),
+      ...(input.providerConsent?.length ? { providerConsent: input.providerConsent } : {}),
       ...(input.additionalDirectories !== undefined
         ? { additionalDirectories: input.additionalDirectories }
         : {}),
@@ -294,7 +299,7 @@ export async function streamAssistantTurn(
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-      ...(input.providerConsent ? { providerConsent: input.providerConsent } : {}),
+      ...(input.providerConsent?.length ? { providerConsent: input.providerConsent } : {}),
       ...(input.additionalDirectories !== undefined
         ? { additionalDirectories: input.additionalDirectories }
         : {}),

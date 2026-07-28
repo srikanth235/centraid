@@ -20,6 +20,8 @@ import {
   vaultParked,
   type TurnStreamEvent,
 } from '../../gateway-client.js';
+import { openConfirm } from '../shell/confirm.js';
+import { providerConsentWire, withProviderConsent } from '../providerConsent.js';
 import type { InlineKitAsk } from '@centraid/blueprints/apps/inline-types';
 
 export interface InstallInlineAskOptions {
@@ -128,16 +130,19 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
     controller = new AbortController();
     const assistantEl = { el: null as HTMLElement | null };
     try {
-      let providerConsent: string | undefined;
+      // Accumulated across this send: a consent-gated failover asks for a
+      // second provider, and resending without the first loops forever (#567).
+      let approvedProviders: string[] = [];
       for (;;) {
         let requiredProvider: string | undefined;
+        const providerConsent = providerConsentWire(approvedProviders);
         await streamTurn(
           appId,
           {
             conversationId,
             message,
             register: 'ask',
-            ...(providerConsent ? { providerConsent } : {}),
+            ...(providerConsent !== undefined ? { providerConsent } : {}),
           },
           (event) => {
             if (event.type === 'consent.required') requiredProvider = event.provider;
@@ -146,15 +151,18 @@ export function installInlineAsk(options: InstallInlineAskOptions): () => void {
           controller.signal,
         );
         if (!requiredProvider) break;
-        if (
-          !window.confirm(
-            `Allow this conversation to be sent to ${requiredProvider}? This can include vault tool results.`,
-          )
-        ) {
+        // Inline apps mount into the SHELL document (the iframe is builder-only,
+        // issue #505), so the shell's own confirm dialog is reachable here.
+        const approved = await openConfirm({
+          confirmLabel: 'Allow provider',
+          title: `Send to ${requiredProvider}?`,
+          message: `Allow this conversation to be sent to ${requiredProvider}? This can include vault tool results.`,
+        });
+        if (!approved) {
           line('kit-ask-note', `Nothing was sent to ${requiredProvider}.`);
           break;
         }
-        providerConsent = requiredProvider;
+        approvedProviders = withProviderConsent(approvedProviders, requiredProvider);
       }
     } catch (error) {
       line('kit-ask-err', error instanceof Error ? error.message : String(error));

@@ -554,7 +554,8 @@ export async function streamAutomationConversationTurn(
   message: string,
   onEvent: (event: TurnStreamEvent) => void,
   signal: AbortSignal,
-  providerConsent?: string,
+  /** One approved provider, or every provider approved so far this attempt (#567). */
+  providerConsent?: string | string[],
   turn?: {
     attachments?: Array<{ hash: string; mime: string; sizeBytes: number; filename?: string }>;
     runnerKind?: string;
@@ -568,7 +569,7 @@ export async function streamAutomationConversationTurn(
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({
       message,
-      ...(providerConsent ? { providerConsent } : {}),
+      ...(providerConsent?.length ? { providerConsent } : {}),
       ...(turn?.attachments?.length ? { attachments: turn.attachments } : {}),
       ...(turn?.runnerKind ? { runnerKind: turn.runnerKind } : {}),
       ...(turn?.model ? { model: turn.model } : {}),

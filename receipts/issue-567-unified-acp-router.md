@@ -91,6 +91,19 @@ branch in one follow-up round:
   real content; dead resume handles are marked stale after a failed recovery;
   workspace artifacts stat-then-read under the shared 25 MiB cap and surface
   drops as durable notices.
+- **Client/mobile.** Provider consent accumulates across prompts
+  (`providerConsent: string | string[]` end to end); a rejected runner switch
+  re-enables the pickers; consent flows use the shell confirm dialog and are
+  covered by real tests on two surfaces (approve resends with the same
+  idempotency key and `appendUser:false`; decline sends nothing); mobile
+  selection is a native option sheet (ActionSheetIOS / RN Modal) instead of
+  tap-to-cycle chips, with dismiss-as-decline consent and a synchronous send
+  guard; ladder adds require `sessionReady` and the row shows the full stored
+  ladder; assistant hints include breaker health; workspace selects hide when
+  single-option and share humanized labels; scoped-folder input validates
+  absolute paths; live artifact chips carry the content hash; stale comments
+  fixed.
+
 ### Package-level changes
 
 - ACP runtime: bounded lifecycle/watchdog behavior, classified failures, safe

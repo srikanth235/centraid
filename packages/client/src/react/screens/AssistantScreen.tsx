@@ -13,6 +13,7 @@ import { useAssistantScroll } from './useAssistantScroll.js';
 import { clearDraft, loadDraft, saveDraft } from './assistantDrafts.js';
 import { useComposerAutocomplete } from './ComposerAutocomplete.js';
 import ChatComposer from './ChatComposer.js';
+import { workspaceKindLabel } from './workspaceKindLabel.js';
 
 const NO_ENTITIES = async (): Promise<never[]> => [];
 
@@ -308,10 +309,15 @@ export default function AssistantScreen({
   };
   const selectRunner = (runnerKind: string): void => {
     setModelPickerLoaded(false);
-    void onSetRunner(runnerKind).then((picker) => {
-      setModelPicker(picker);
-      setModelPickerLoaded(true);
-    });
+    // `finally` is load-bearing: a rejected switch used to leave every picker
+    // disabled forever (plus an unhandled rejection). Mirrors BuilderChatPane.
+    void onSetRunner(runnerKind)
+      .then((picker) => setModelPicker(picker))
+      .catch(() => {
+        // The route owns the user-facing failure (it toasts the preflight
+        // reason); the screen's only job here is not to strand its controls.
+      })
+      .finally(() => setModelPickerLoaded(true));
   };
 
   const messageCallbacks: MessageCallbacks = {
@@ -512,7 +518,9 @@ export default function AssistantScreen({
                     busy={snap.busy}
                     onSelect={selectModel}
                   />
-                  {modelPicker.workspaceKinds.length ? (
+                  {/* One workspace is not a choice — a permanently single-option
+                      select just showed the raw 'vault-data' token. */}
+                  {modelPicker.workspaceKinds.length > 1 ? (
                     <label className={styles.effortPicker}>
                       <span className={styles.srOnly}>Assistant workspace</span>
                       <select
@@ -525,7 +533,7 @@ export default function AssistantScreen({
                       >
                         {modelPicker.workspaceKinds.map((kind) => (
                           <option key={kind} value={kind}>
-                            {kind}
+                            {workspaceKindLabel(kind)}
                           </option>
                         ))}
                       </select>

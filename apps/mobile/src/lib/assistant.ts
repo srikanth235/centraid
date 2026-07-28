@@ -276,7 +276,8 @@ export async function streamAssistantTurn(
     effort?: string;
     runnerKind?: string;
     attachments?: AssistantAttachment[];
-    providerConsent?: string;
+    /** One approved provider, or every provider approved so far this turn (#567). */
+    providerConsent?: string | string[];
     idempotencyKey: string;
   },
   onEvent: (event: AssistantTurnEvent) => void,
@@ -300,7 +301,7 @@ export async function streamAssistantTurn(
       ...(input.effort ? { thinking: input.effort } : {}),
       ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
-      ...(input.providerConsent ? { providerConsent: input.providerConsent } : {}),
+      ...(input.providerConsent?.length ? { providerConsent: input.providerConsent } : {}),
     }),
     signal,
   });
