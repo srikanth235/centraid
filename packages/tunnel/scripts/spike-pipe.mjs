@@ -116,7 +116,7 @@ async function local() {
   const desktop = await serve();
   const pairing = desktop.activePairing();
   await dial(pairing.qrPayload);
-  const response = await fetch('http://127.0.0.1:8787/');
+  const response = await fetch('http://127.0.0.1:8787/'); // lgtm[js/insecure-download]
   log('[local] GET / →', response.status, (await response.text()).slice(0, 60));
   const moduleResponse = await fetch('http://127.0.0.1:8787/app.js');
   log('[local] GET /app.js →', moduleResponse.status, await moduleResponse.text());

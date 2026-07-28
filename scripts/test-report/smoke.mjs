@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -75,7 +75,6 @@ try {
     ],
     { stdio: 'inherit' },
   );
-  await access(output);
   const html = await readFile(output, 'utf8');
   for (const required of [
     'Surface × quality dimension',
@@ -94,8 +93,6 @@ try {
   }
   const summaryJson = path.join(path.dirname(output), 'summary.json');
   const summaryMd = path.join(path.dirname(output), 'summary.md');
-  await access(summaryJson);
-  await access(summaryMd);
   const summary = JSON.parse(await readFile(summaryJson, 'utf8'));
   if (typeof summary.cellsFailed !== 'number' || typeof summary.cellsMissing !== 'number') {
     throw new Error('summary.json missing cell honesty fields');

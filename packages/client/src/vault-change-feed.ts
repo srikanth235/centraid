@@ -296,7 +296,7 @@ class VaultFeed {
     ) {
       return;
     }
-    const wait = Math.round(this.reconnectDelay * (0.5 + Math.random()));
+    const wait = Math.round(this.reconnectDelay * (0.5 + Math.random())); // lgtm[js/insecure-randomness]
     this.reconnectDelay = Math.min(MAX_RECONNECT_MS, this.reconnectDelay * 2);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined;

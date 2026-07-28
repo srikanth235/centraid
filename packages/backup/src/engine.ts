@@ -602,7 +602,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
     // files), hashing as we go so db entries verify against their
     // capture-time sha256 before any WAL replay mutates the file.
     const hash = createHash('sha256');
-    const handle = await fs.open(dest, 'w');
+    const handle = await fs.open(dest, 'w', 0o600);
     try {
       for (const id of entry.chunks) {
         const ciphertext = await store.get(`chunks/${id}`);
@@ -661,6 +661,7 @@ export async function restoreSnapshot(opts: RestoreSnapshotOptions): Promise<Res
   await fs.writeFile(
     path.join(opts.destDir, 'RESTORE_QUARANTINE.json'),
     `${JSON.stringify(marker, null, 2)}\n`,
+    { mode: 0o600 },
   );
 
   return {

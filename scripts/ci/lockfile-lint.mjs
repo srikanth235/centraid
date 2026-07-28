@@ -14,7 +14,12 @@ let failed = 0;
 // HTTP (non-TLS) package URLs
 const httpUrls = lock.match(/http:\/\/[^\s"']+/g) ?? [];
 for (const u of httpUrls) {
-  if (u.includes('localhost') || u.includes('127.0.0.1')) continue;
+  try {
+    const parsed = new URL(u);
+    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') continue;
+  } catch {
+    // not a valid URL — skip
+  }
   console.error(`FAIL http (non-TLS) URL in lockfile: ${u}`);
   failed++;
 }
@@ -26,9 +31,14 @@ if (!/integrity|sha512-|sha256-/.test(lock)) {
 }
 
 // Suspicious hosts outside allowlist (best-effort on https:// URLs)
-const httpsUrls = lock.match(/https:\/\/([^/\s"']+)/g) ?? [];
+const httpsUrls = lock.match(/https:\/\/[^\s"']+/g) ?? [];
 for (const full of httpsUrls) {
-  const host = full.replace('https://', '');
+  let host;
+  try {
+    host = new URL(full).hostname;
+  } catch {
+    continue;
+  }
   if (
     !allowedHost.test(host) &&
     !host.includes('github.com') &&

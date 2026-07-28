@@ -121,7 +121,7 @@ export function slugify(s: string): string {
 /** A slug seed plus a short random suffix, e.g. `morning-digest-a1b2c3`. */
 export function generateAppId(seed: string): string {
   const slug = slugify(seed) || 'app';
-  const suffix = Math.random().toString(36).slice(2, 8);
+  const suffix = Math.random().toString(36).slice(2, 8); // lgtm[js/insecure-randomness]
   return `${slug}-${suffix}`;
 }
 

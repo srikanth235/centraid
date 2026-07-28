@@ -118,7 +118,8 @@ export function makeConnectionsRouteHandler(
 
     // The bearer-free ceremony end — authenticated by its single-use state.
     if (url.pathname === OAUTH_CALLBACK_PATH && method === 'GET') {
-      const state = url.searchParams.get('state') ?? '';
+      const rawState = url.searchParams.get('state') ?? '';
+      const state = rawState.length <= 512 ? rawState : '';
       const code = url.searchParams.get('code');
       const providerError = url.searchParams.get('error');
       if (providerError || !code) {

@@ -38,8 +38,26 @@ export interface VaultSqlRows {
 
 export type VaultSqlResult = VaultSqlRows & { receiptId: string };
 
-const COMMENT_RE = /\/\*[\s\S]*?\*\//g;
-const LINE_COMMENT_RE = /--[^\n]*/g;
+function stripSqlComments(sql: string): string {
+  let result = '';
+  let i = 0;
+  while (i < sql.length) {
+    if (sql[i] === '/' && sql[i + 1] === '*') {
+      // Block comment — skip until */
+      i += 2;
+      while (i < sql.length - 1 && !(sql[i] === '*' && sql[i + 1] === '/')) i++;
+      i += 2; // skip */
+      result += ' ';
+    } else if (sql[i] === '-' && sql[i + 1] === '-') {
+      // Line comment — skip until newline
+      while (i < sql.length && sql[i] !== '\n') i++;
+    } else {
+      result += sql[i];
+      i++;
+    }
+  }
+  return result;
+}
 
 /**
  * Lexical gate: one statement, read-shaped. Execution enforcement is
@@ -49,9 +67,7 @@ const LINE_COMMENT_RE = /--[^\n]*/g;
  * where query_only cannot be toggled) still refuses writes outright.
  */
 export function readOnlySqlRefusal(sql: string): string | undefined {
-  const stripped = sql
-    .replace(COMMENT_RE, ' ')
-    .replace(LINE_COMMENT_RE, ' ')
+  const stripped = stripSqlComments(sql)
     .trim()
     .replace(/;+\s*$/, '');
   if (!stripped) return 'empty statement';

@@ -8,6 +8,10 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { serveStatic } from './static-server.js';
 import { resolveStaticPath } from './security.js';
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 interface MockRes {
   statusCode: number;
   headers: Record<string, string>;
@@ -77,9 +81,7 @@ describe('serveStatic — CSP + nonce', () => {
     expect(csp).toBeTruthy();
     expect(csp).toContain("media-src 'self' data: blob:");
     expect(csp).toContain("worker-src 'self' blob:");
-    expect(csp).toMatch(
-      new RegExp(`script-src 'self' 'nonce-${inlineMatch![1]!.replace(/[/+=]/g, '\\$&')}'`),
-    );
+    expect(csp).toMatch(new RegExp(`script-src 'self' 'nonce-${escapeRegExp(inlineMatch![1]!)}'`));
   });
 
   it('does not double-stamp when the inline script already has a nonce', async () => {

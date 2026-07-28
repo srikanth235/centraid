@@ -17,7 +17,13 @@ const TEMP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 /** Canonical path-style namespace advertised to trusted native carriers. */
 export function s3TemporaryUploadPrefix(input: { bucket: string; prefix?: string }): string {
-  const prefix = input.prefix ? `${input.prefix.replace(/^\/+|\/+$/g, '')}/` : '';
+  const raw = input.prefix ?? '';
+  let start = 0;
+  while (start < raw.length && raw[start] === '/') start++;
+  let end = raw.length;
+  while (end > start && raw[end - 1] === '/') end--;
+  const trimmed = raw.slice(start, end);
+  const prefix = trimmed ? `${trimmed}/` : '';
   return `/${encodeKeyPath(input.bucket)}/${encodeKeyPath(`${prefix}tmp/blobs/`)}`;
 }
 

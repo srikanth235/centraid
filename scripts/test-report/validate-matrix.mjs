@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detectDefaultCiEnvGate } from './report-signals.mjs';
@@ -38,22 +38,17 @@ export async function validateMatrix(matrix, options = {}) {
         } else if (path.isAbsolute(cellOwner.owner) || cellOwner.owner.includes('..')) {
           errors.push(`${cellId} owner must be a repository-relative path`);
         } else if (options.checkFiles !== false) {
+          const ownerPath = path.join(options.root ?? root, cellOwner.owner);
           try {
-            const ownerPath = path.join(options.root ?? root, cellOwner.owner);
-            await access(ownerPath);
             // Solid/partial cells whose only owner is whole-file env-gated off
             // default CI claim coverage they never get on PR/nightly defaults.
             if (options.checkEnvGates !== false && !cellOwner.owner.endsWith('.mjs')) {
-              try {
-                const source = await readFile(ownerPath, 'utf8');
-                const gate = detectDefaultCiEnvGate(source);
-                if (gate) {
-                  errors.push(
-                    `${cellId} is ${status} but owner ${cellOwner.owner} is always env-gated off default CI (${gate.env} / ${gate.kind}); demote assessment or ungated the suite`,
-                  );
-                }
-              } catch {
-                // access already succeeded
+              const source = await readFile(ownerPath, 'utf8');
+              const gate = detectDefaultCiEnvGate(source);
+              if (gate) {
+                errors.push(
+                  `${cellId} is ${status} but owner ${cellOwner.owner} is always env-gated off default CI (${gate.env} / ${gate.kind}); demote assessment or ungated the suite`,
+                );
               }
             }
           } catch {
@@ -113,9 +108,8 @@ export async function validateMatrix(matrix, options = {}) {
       );
     }
     if (options.checkFiles !== false) {
+      const ownerPath = path.join(options.root ?? root, flow.owner);
       try {
-        const ownerPath = path.join(options.root ?? root, flow.owner);
-        await access(ownerPath);
         const source = await readFile(ownerPath, 'utf8');
         if (flow.minimumTests !== undefined && flow.minimumTests !== null) {
           const testCount = source.match(/\b(?:test|it)\s*\(/g)?.length ?? 0;

@@ -17,9 +17,10 @@
  */
 
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { escapeRegExp } from './escape-regexp.mjs';
 import { runSyncVersions } from './sync-versions.mjs';
 import { buildSurfaceMatrix, defaultShipSurfaceIds, resolveShipSurfaces } from './surfaces.mjs';
 
@@ -95,8 +96,13 @@ const shipManifest = {
 
 function foldChangelog() {
   const clPath = path.join(root, 'CHANGELOG.md');
-  if (!existsSync(clPath)) return;
-  let text = readFileSync(clPath, 'utf8');
+  let text;
+  try {
+    text = readFileSync(clPath, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') return;
+    throw err;
+  }
   const date = new Date().toISOString().slice(0, 10);
   if (!text.includes('## [Unreleased]')) return;
   text = text.replace('## [Unreleased]', `## [Unreleased]\n\n## [${version}] - ${date}`);
@@ -105,10 +111,15 @@ function foldChangelog() {
 
 function extractReleaseBody() {
   const clPath = path.join(root, 'CHANGELOG.md');
-  if (!existsSync(clPath)) return `Centraid ${version}`;
-  const text = readFileSync(clPath, 'utf8');
+  let text;
+  try {
+    text = readFileSync(clPath, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') return `Centraid ${version}`;
+    throw err;
+  }
   const re = new RegExp(
-    `^##\\s+\\[${version.replace(/\./g, '\\.')}\\][^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`,
+    `^##\\s+\\[${escapeRegExp(version)}\\][^\\n]*\\n([\\s\\S]*?)(?=^##\\s+|$)`,
     'm',
   );
   const m = text.match(re);

@@ -11,6 +11,7 @@ import {
   closeSync,
   createReadStream,
   existsSync,
+  fstatSync,
   fsyncSync,
   linkSync,
   mkdirSync,
@@ -120,17 +121,17 @@ export class FsBlobStore implements LocalBlobStore {
     const file = this.fileFor(sha);
     if (range) {
       try {
-        const size = statSync(file).size;
-        const resolved = resolveRange(size, range);
-        if (!resolved) return null;
-        const bytes = Buffer.alloc(resolved.end - resolved.start + 1);
         const fd = openSync(file, 'r');
         try {
+          const size = fstatSync(fd).size;
+          const resolved = resolveRange(size, range);
+          if (!resolved) return null;
+          const bytes = Buffer.alloc(resolved.end - resolved.start + 1);
           readSync(fd, bytes, 0, bytes.length, resolved.start);
+          return bytes;
         } finally {
           closeSync(fd);
         }
-        return bytes;
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
         throw err;

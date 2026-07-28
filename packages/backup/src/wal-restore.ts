@@ -313,7 +313,7 @@ async function replayDb(
   for (const group of orderedGroups) {
     await fs.rm(walPath, { force: true });
     await fs.rm(shmPath, { force: true });
-    const handle = await fs.open(walPath, 'w');
+    const handle = await fs.open(walPath, 'w', 0o600);
     try {
       for (const seg of groups.get(group)!) {
         const spoolPath = path.join(spoolDir, walSegmentKey(seg).replaceAll('/', '_'));
