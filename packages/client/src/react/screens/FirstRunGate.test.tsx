@@ -3,6 +3,7 @@ import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import FirstRunGate, { type FirstRunGateProps } from './FirstRunGate.js';
+import type { OnboardingCompleteInput } from './OnboardingScreen.js';
 
 // FirstRunGate pulls in OnboardingScreen (→ ConnectFlow → gateway-client),
 // which reaches gateway-client-core's module-load window.CentraidApi listeners.
@@ -17,7 +18,7 @@ vi.hoisted(() => {
 
 function makeProps(over: Partial<FirstRunGateProps> = {}): FirstRunGateProps {
   return {
-    onOnboardingComplete: vi.fn<(...args: unknown[]) => unknown>(),
+    onOnboardingComplete: vi.fn<(input: OnboardingCompleteInput) => void>(),
     host: 'desktop',
     ...over,
   };

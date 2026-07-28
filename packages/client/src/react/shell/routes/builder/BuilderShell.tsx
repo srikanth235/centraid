@@ -370,7 +370,15 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
               onSetModel={(model) => vm.setChatModel(model)}
               onSetEffort={(effort) => vm.setChatEffort(effort)}
               onMountHistory={(host) => {
-                mountBuilderHistory(host, historyRoots.current, vm.appId, vm.onRestored, showToast);
+                if (vm.appId) {
+                  mountBuilderHistory(
+                    host,
+                    historyRoots.current,
+                    vm.appId,
+                    vm.onRestored,
+                    showToast,
+                  );
+                }
               }}
             />
           </div>

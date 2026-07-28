@@ -90,7 +90,7 @@ vi.mock(import('react-native'), async () => {
         type: !multiline && secureTextEntry ? 'password' : undefined,
       }),
     View: ({ children }: { children?: React.ReactNode }) => element('div', { children }),
-  };
+  } as unknown as Partial<typeof import('react-native')>;
 });
 
 vi.mock(import('react-native-safe-area-context'), async () => {
@@ -98,7 +98,7 @@ vi.mock(import('react-native-safe-area-context'), async () => {
   return {
     SafeAreaView: ({ children }: { children?: React.ReactNode }) =>
       ReactModule.createElement('section', null, children),
-  };
+  } as unknown as Partial<typeof import('react-native-safe-area-context')>;
 });
 
 vi.mock(import('react-native-svg'), async () => {
@@ -119,7 +119,7 @@ vi.mock(import('react-native-svg'), async () => {
     RadialGradient: component('radialGradient'),
     Rect: component('rect'),
     Stop: component('stop'),
-  };
+  } as unknown as Partial<typeof import('react-native-svg')>;
 });
 
 vi.mock(import('expo-camera'), async () => {
@@ -137,38 +137,54 @@ vi.mock(import('expo-camera'), async () => {
       ),
     useCameraPermissions: () =>
       [{ canAskAgain: true, granted: true }, mocks.requestPermission] as const,
-  };
+  } as unknown as Partial<typeof import('expo-camera')>;
 });
 
-vi.mock(import('expo-haptics'), () => ({
-  NotificationFeedbackType: { Success: 'success' },
-  notificationAsync: mocks.notificationAsync,
-}));
+vi.mock(
+  import('expo-haptics'),
+  () =>
+    ({
+      NotificationFeedbackType: { Success: 'success' },
+      notificationAsync: mocks.notificationAsync,
+    }) as unknown as Partial<typeof import('expo-haptics')>,
+);
 
-vi.mock(import('../kit/theme'), () => ({
-  family: {
-    displayBold: 'display',
-    monoMedium: 'mono-medium',
-    monoRegular: 'mono',
-    sansBold: 'sans-bold',
-    sansMedium: 'sans-medium',
-    sansRegular: 'sans',
-  },
-}));
+vi.mock(
+  import('../kit/theme'),
+  () =>
+    ({
+      family: {
+        displayBold: 'display',
+        monoMedium: 'mono-medium',
+        monoRegular: 'mono',
+        sansBold: 'sans-bold',
+        sansMedium: 'sans-medium',
+        sansRegular: 'sans',
+      },
+    }) as unknown as Partial<typeof import('../kit/theme')>,
+);
 
-vi.mock(import('../lib/profile'), () => ({
-  BRAND_TEAL: '#22a78f',
-  PROFILE_COLORS: ['#22a78f', '#4e68dd', '#e55772'],
-  initialsOf: (name: string) => (name.trim() ? name.trim().slice(0, 1).toUpperCase() : '·'),
-  setOnboarded: mocks.setOnboarded,
-  setProfileColor: mocks.setProfileColor,
-  setProfileName: mocks.setProfileName,
-}));
+vi.mock(
+  import('../lib/profile'),
+  () =>
+    ({
+      BRAND_TEAL: '#22a78f',
+      PROFILE_COLORS: ['#22a78f', '#4e68dd', '#e55772'],
+      initialsOf: (name: string) => (name.trim() ? name.trim().slice(0, 1).toUpperCase() : '·'),
+      setOnboarded: mocks.setOnboarded,
+      setProfileColor: mocks.setProfileColor,
+      setProfileName: mocks.setProfileName,
+    }) as unknown as Partial<typeof import('../lib/profile')>,
+);
 
-vi.mock(import('../lib/phone-link'), () => ({
-  isTunnelAvailable: () => true,
-  pair: mocks.pair,
-}));
+vi.mock(
+  import('../lib/phone-link'),
+  () =>
+    ({
+      isTunnelAvailable: () => true,
+      pair: mocks.pair,
+    }) as unknown as Partial<typeof import('../lib/phone-link')>,
+);
 
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;

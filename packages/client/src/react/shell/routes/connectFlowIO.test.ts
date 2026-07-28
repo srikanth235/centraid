@@ -5,10 +5,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const listVaults = vi.fn<(...args: unknown[]) => unknown>();
-const connectGateway = vi.fn<(...args: unknown[]) => unknown>();
-const friendlyGatewayError = vi.fn<(...args: unknown[]) => unknown>((e: unknown) =>
-  e instanceof Error ? e.message : String(e),
+const listVaults = vi.fn<typeof import('../../../gateway-client.js').listVaults>();
+const connectGateway = vi.fn<typeof import('./gatewayModals.js').connectGateway>();
+const friendlyGatewayError = vi.fn<typeof import('./gatewayModals.js').friendlyGatewayError>(
+  (error, message) => message || error,
 );
 
 vi.mock(import('../../../gateway-client.js'), () => ({
@@ -16,8 +16,8 @@ vi.mock(import('../../../gateway-client.js'), () => ({
 }));
 
 vi.mock(import('./gatewayModals.js'), () => ({
-  connectGateway: (...a: unknown[]) => connectGateway(...a),
-  friendlyGatewayError: (e: unknown) => friendlyGatewayError(e),
+  connectGateway: (input) => connectGateway(input),
+  friendlyGatewayError: (error, message) => friendlyGatewayError(error, message),
 }));
 
 import {
@@ -81,7 +81,7 @@ describe('connectFlowIO scenarios', () => {
   describe('loadLocalVaults / commitConnectFlow', () => {
     it('maps listVaults rows on a successful read', async () => {
       listVaults.mockResolvedValue([
-        { vaultId: 'v1', name: 'Home', color: '#fff', icon: 'Folder' },
+        { color: '#fff', icon: 'Folder', name: 'Home', ownerPartyId: 'party-1', vaultId: 'v1' },
       ]);
       await expect(loadLocalVaults()).resolves.toStrictEqual({
         ok: true,
@@ -111,8 +111,8 @@ describe('connectFlowIO scenarios', () => {
 
     it('connectFreshLocalGateway addresses the auto-founded Personal vault', async () => {
       listVaults.mockResolvedValue([
-        { vaultId: 'shared', name: 'Shared' },
-        { vaultId: 'personal', name: 'Personal' },
+        { ownerPartyId: 'party-1', vaultId: 'shared', name: 'Shared' },
+        { ownerPartyId: 'party-1', vaultId: 'personal', name: 'Personal' },
       ]);
       await expect(connectFreshLocalGateway()).resolves.toStrictEqual({
         displayLabel: 'This Mac',

@@ -1,4 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit the kit is the single canonical bundle every app loads verbatim (UX primitives + charts + the folded Ask-your-vault controller); it is served as one file, so splitting it would fracture that one-request contract without reducing surface
+/* oxlint-disable typescript-eslint/ban-ts-comment -- this source-consolidation
+   makes the implementation the public type source; the legacy Ask controller
+   still needs a follow-up strictness pass after it is split from the DOM primitives. */
+// @ts-nocheck
 import { richAnswerHtml, hydrateRefs, wireCodeCopy } from './assistant-rich.js';
 import {
   outcomeOf,
@@ -17,10 +21,6 @@ import {
   modelLabel,
 } from './conversation-client.js';
 import { sha256FileStream, stageDirectFile, stageFallbackFile } from './edge-upload.js';
-/* oxlint-disable typescript-eslint/ban-ts-comment -- this source-consolidation
-   makes the implementation the public type source; the legacy Ask controller
-   still needs a follow-up strictness pass after it is split from the DOM primitives. */
-// @ts-nocheck
 // Centraid blueprint kit — the shared UX substrate for template apps.
 //
 // Canonical (and ONLY) copy: packages/blueprints/kit/kit.ts. Apps don't

@@ -48,7 +48,7 @@ const svgPlus12 = iconSvg('Plus', 12);
 type ConfigSectionKey = 'what' | 'when' | 'activity' | 'behavior' | 'vault' | 'apps';
 
 function renderConfigSection(
-  flashSections: ReadonlySet<ConfigSectionKey>,
+  flashSections: ReadonlySet<string>,
   key: ConfigSectionKey,
   label: string,
   body: JSX.Element,

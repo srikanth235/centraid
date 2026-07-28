@@ -3,12 +3,13 @@ import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConnectFlow, { type ConnectFlowProps } from './ConnectFlow.js';
+import type { ConnectFlowResult } from './connectFlow-core.js';
 
 vi.mock(import('../../../gateway-client.js'), () => ({
   listVaults: () => listVaultsMock(),
 }));
 
-const listVaultsMock = vi.fn<(...args: unknown[]) => unknown>();
+const listVaultsMock = vi.fn<typeof import('../../../gateway-client.js').listVaults>();
 const getSettings = vi.fn<(...args: unknown[]) => unknown>();
 const setActiveGateway = vi.fn<(...args: unknown[]) => unknown>();
 const setActiveVault = vi.fn<(...args: unknown[]) => unknown>();
@@ -16,11 +17,14 @@ const createVault = vi.fn<(...args: unknown[]) => unknown>();
 const redeemGatewayPairing = vi.fn<(...args: unknown[]) => unknown>();
 const addGateway = vi.fn<(...args: unknown[]) => unknown>();
 const testGatewayConnection = vi.fn<(...args: unknown[]) => unknown>();
+const onDoneMock = () => vi.fn<(result: ConnectFlowResult) => void>();
 
 describe('ConnectFlow scenarios', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listVaultsMock.mockResolvedValue([{ vaultId: 'a', name: 'Personal', color: '#4E68DD' }]);
+    listVaultsMock.mockResolvedValue([
+      { color: '#4E68DD', ownerPartyId: 'party-1', vaultId: 'a', name: 'Personal' },
+    ]);
     getSettings.mockResolvedValue({ activeGatewayId: 'local' });
     setActiveGateway.mockResolvedValue({});
     setActiveVault.mockResolvedValue({});
@@ -92,7 +96,7 @@ describe('ConnectFlow scenarios', () => {
 
   describe(ConnectFlow, () => {
     it('renders both surviving method cards by default — SSH is gone (#603)', () => {
-      const el = mount({ context: 'onboarding', onDone: vi.fn<(...args: unknown[]) => unknown>() });
+      const el = mount({ context: 'onboarding', onDone: onDoneMock() });
       expect(el.querySelectorAll('input[type="radio"]')).toHaveLength(2);
       expect(el.textContent).toContain('This Mac');
       expect(el.textContent).toContain('Existing gateway');
@@ -103,7 +107,7 @@ describe('ConnectFlow scenarios', () => {
       const el = mount({
         context: 'switcher',
         methods: ['gateway'],
-        onDone: vi.fn<(...args: unknown[]) => unknown>(),
+        onDone: onDoneMock(),
       });
       expect(el.querySelectorAll('input[type="radio"]')).toHaveLength(1);
       expect(el.textContent).not.toContain('This Mac');
@@ -114,7 +118,7 @@ describe('ConnectFlow scenarios', () => {
         context: 'onboarding',
         initialMethod: 'gateway',
         methods: ['gateway'],
-        onDone: vi.fn<(...args: unknown[]) => unknown>(),
+        onDone: onDoneMock(),
       });
       expect(el.querySelector('textarea')).toBeTruthy();
       expect(el.textContent).not.toContain('Existing gateway');
@@ -123,7 +127,7 @@ describe('ConnectFlow scenarios', () => {
     // #603: a fresh gateway auto-founds TWO vaults, so onboarding no longer
     // auto-commits a local connect — the pick is always an explicit act.
     it('onboarding + "This Mac" shows the picker rather than auto-committing', async () => {
-      const el = mount({ context: 'onboarding', onDone: vi.fn<(...args: unknown[]) => unknown>() });
+      const el = mount({ context: 'onboarding', onDone: onDoneMock() });
       click(radios(el, 'This Mac')[0]);
       await flush(4);
       expect(el.querySelector('[role="radiogroup"][aria-label="Space"]')).toBeTruthy();
@@ -132,7 +136,7 @@ describe('ConnectFlow scenarios', () => {
 
     it('a failed local vault read shows the honest error instead of offering a create', async () => {
       listVaultsMock.mockRejectedValue(new Error('gateway is down'));
-      const el = mount({ context: 'onboarding', onDone: vi.fn<(...args: unknown[]) => unknown>() });
+      const el = mount({ context: 'onboarding', onDone: onDoneMock() });
       click(radios(el, 'This Mac')[0]);
       await flush(4);
       expect(el.querySelector('[role="alert"]')?.textContent).toContain('gateway is down');
@@ -144,7 +148,7 @@ describe('ConnectFlow scenarios', () => {
     });
 
     it('switcher + "This Mac" with one vault still shows the picker (no auto-commit)', async () => {
-      const el = mount({ context: 'switcher', onDone: vi.fn<(...args: unknown[]) => unknown>() });
+      const el = mount({ context: 'switcher', onDone: onDoneMock() });
       click(radios(el, 'This Mac')[0]);
       await flush(3);
       expect(el.querySelector('[role="radiogroup"][aria-label="Space"]')).toBeTruthy();
@@ -153,10 +157,10 @@ describe('ConnectFlow scenarios', () => {
 
     it('local: picking a different existing vault and committing calls setActiveVault + onDone', async () => {
       listVaultsMock.mockResolvedValue([
-        { vaultId: 'a', name: 'Personal' },
-        { vaultId: 'b', name: 'Work' },
+        { ownerPartyId: 'party-1', vaultId: 'a', name: 'Personal' },
+        { ownerPartyId: 'party-1', vaultId: 'b', name: 'Work' },
       ]);
-      const onDone = vi.fn<(...args: unknown[]) => unknown>();
+      const onDone = onDoneMock();
       const el = mount({ context: 'switcher', onDone });
       click(radios(el, 'This Mac')[0]);
       await flush(3);
@@ -177,10 +181,10 @@ describe('ConnectFlow scenarios', () => {
 
     it('local: creating a new vault calls createVault + setActiveVault', async () => {
       listVaultsMock.mockResolvedValue([
-        { vaultId: 'a', name: 'Personal' },
-        { vaultId: 'b', name: 'Work' },
+        { ownerPartyId: 'party-1', vaultId: 'a', name: 'Personal' },
+        { ownerPartyId: 'party-1', vaultId: 'b', name: 'Work' },
       ]);
-      const el = mount({ context: 'switcher', onDone: vi.fn<(...args: unknown[]) => unknown>() });
+      const el = mount({ context: 'switcher', onDone: onDoneMock() });
       click(radios(el, 'This Mac')[0]);
       await flush(3);
       const createRow = radios(el, 'Create new space')[0];
@@ -211,7 +215,7 @@ describe('ConnectFlow scenarios', () => {
         vaultId: 'v1',
         vaultName: 'Office',
       });
-      const onDone = vi.fn<(...args: unknown[]) => unknown>();
+      const onDone = onDoneMock();
       const el = mount({ context: 'onboarding', onDone });
       click(radios(el, 'Existing gateway')[0]);
       await flush();
@@ -254,7 +258,7 @@ describe('ConnectFlow scenarios', () => {
         ok: false,
         stages: [{ id: 'decode', label: 'Decode ticket', status: 'fail' }],
       });
-      const el = mount({ context: 'onboarding', onDone: vi.fn<(...args: unknown[]) => unknown>() });
+      const el = mount({ context: 'onboarding', onDone: onDoneMock() });
       click(radios(el, 'Existing gateway')[0]);
       await flush();
       typeInto(el.querySelector('textarea') as HTMLTextAreaElement, 'bad-ticket');
@@ -286,7 +290,7 @@ describe('ConnectFlow scenarios', () => {
         stages: [],
         ticket: { expiresAt: '', gatewayEndpointId: '', vaultName: 'A' },
       });
-      const onDone = vi.fn<(...args: unknown[]) => unknown>();
+      const onDone = onDoneMock();
       const el = mount({ context: 'switcher', methods: ['gateway'], onDone });
       click(radios(el, 'Existing gateway')[0]);
       await flush();
@@ -305,11 +309,11 @@ describe('ConnectFlow scenarios', () => {
     });
 
     it('"Start over" fires onCancel when supplied', () => {
-      const onCancel = vi.fn<(...args: unknown[]) => unknown>();
+      const onCancel = vi.fn<() => void>();
       const el = mount({
         context: 'onboarding',
         onCancel,
-        onDone: vi.fn<(...args: unknown[]) => unknown>(),
+        onDone: onDoneMock(),
       });
       click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Start over'));
       expect(onCancel).toHaveBeenCalledOnce();

@@ -23,14 +23,15 @@ vi.mock(import('../../../gateway-client.js'), () => ({
     updateVault(input),
 }));
 
-const createVault = vi.fn<typeof window.CentraidApi.createVault>(() =>
+const createVault = vi.fn<NonNullable<typeof window.CentraidApi.createVault>>(() =>
   Promise.resolve({ vaultId: 'new1' }),
 );
-const deleteVault = vi.fn<typeof window.CentraidApi.deleteVault>(() =>
+const deleteVault = vi.fn<NonNullable<typeof window.CentraidApi.deleteVault>>(() =>
   Promise.resolve({ deleted: true }),
 );
-const setActiveVault = vi.fn<typeof window.CentraidApi.setActiveVault>();
-const notifyVaultMetadataChanged = vi.fn<typeof window.CentraidApi.notifyVaultMetadataChanged>();
+const setActiveVault = vi.fn<NonNullable<typeof window.CentraidApi.setActiveVault>>();
+const notifyVaultMetadataChanged =
+  vi.fn<NonNullable<typeof window.CentraidApi.notifyVaultMetadataChanged>>();
 
 describe('spaceModals', () => {
   beforeEach(() => {

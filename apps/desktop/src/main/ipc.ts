@@ -52,8 +52,6 @@ import {
   vaultChangedPayload,
 } from './ipc-core.js';
 
-export { Channel } from './ipc-core.js';
-
 /**
  * Status read for the auto-publish queue (issue #137: there is no
  * queue anymore — every publish is synchronous via PUBLISH IPC). Kept

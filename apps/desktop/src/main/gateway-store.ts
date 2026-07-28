@@ -24,8 +24,6 @@ import {
 } from './gateway-store-core.js';
 import { ensureIrohProxy } from './iroh-dialer.js';
 
-export { defaultAvatarColor } from './gateway-store-core.js';
-
 export type GatewayProfile = GatewayProfileShape;
 
 export interface ResolvedGateway {

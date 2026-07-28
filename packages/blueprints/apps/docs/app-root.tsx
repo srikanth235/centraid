@@ -240,7 +240,6 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
   const { nav } = core;
   const {
     addTag: handleAddTag,
-    applySearch: handleSearchInput,
     cancelCreateFolder: handleCancelCreateFolder,
     cancelRenameFolder: handleCancelRenameFolder,
     clearSelected: handleClearSelected,
@@ -263,6 +262,7 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     trashDoc: handleTrashDoc,
     trashSelected: handleTrashSelected,
   } = logic;
+  const handleSearchInput = core.applySearch;
   const {
     closeDetails: handleCloseDetails,
     closeQuick: handleCloseQuick,

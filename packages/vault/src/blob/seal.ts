@@ -31,8 +31,6 @@ import {
 export {
   decodeHeader,
   decodeTrailer,
-  DEFAULT_FRAME_SIZE,
-  frameCountFor,
   HEADER_BYTES,
   openDirectory,
   TRAILER_BYTES,

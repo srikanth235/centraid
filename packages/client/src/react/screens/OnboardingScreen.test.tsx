@@ -2,23 +2,27 @@ import { act } from 'react';
 import { forEachSequentially } from '@centraid/test-kit/sequential';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import OnboardingScreen, { type OnboardingScreenProps } from './OnboardingScreen.js';
+import OnboardingScreen, {
+  type OnboardingCompleteInput,
+  type OnboardingScreenProps,
+} from './OnboardingScreen.js';
 
 vi.mock(import('../../gateway-client.js'), () => ({
   listVaults: () => listVaultsMock(),
 }));
 
-const listVaultsMock = vi.fn<(...args: unknown[]) => unknown>();
+const listVaultsMock = vi.fn<typeof import('../../gateway-client.js').listVaults>();
 const getSettings = vi.fn<(...args: unknown[]) => unknown>();
 const setActiveGateway = vi.fn<(...args: unknown[]) => unknown>();
 const setActiveVault = vi.fn<(...args: unknown[]) => unknown>();
 const createVault = vi.fn<(...args: unknown[]) => unknown>();
 const redeemGatewayPairing = vi.fn<(...args: unknown[]) => unknown>();
+const onCompleteMock = () => vi.fn<(input: OnboardingCompleteInput) => Promise<void>>();
 
 describe('OnboardingScreen scenarios', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listVaultsMock.mockResolvedValue([{ vaultId: 'a', name: 'Personal' }]);
+    listVaultsMock.mockResolvedValue([{ ownerPartyId: 'party-1', vaultId: 'a', name: 'Personal' }]);
     getSettings.mockResolvedValue({ activeGatewayId: 'local' });
     setActiveGateway.mockResolvedValue({});
     setActiveVault.mockResolvedValue({});
@@ -87,7 +91,7 @@ describe('OnboardingScreen scenarios', () => {
 
   describe(OnboardingScreen, () => {
     it('renders the identity step with 8 swatches and a disabled CTA until a name is entered', () => {
-      const el = mount({ onComplete: vi.fn<(...args: unknown[]) => unknown>() });
+      const el = mount({ onComplete: onCompleteMock() });
       expect(el.textContent).toContain('Make yourself');
       expect(el.querySelectorAll('.swatch')).toHaveLength(8);
       const cta = el.querySelector('.cta') as HTMLButtonElement;
@@ -98,7 +102,7 @@ describe('OnboardingScreen scenarios', () => {
     });
 
     it('selects a swatch on click', () => {
-      const el = mount({ onComplete: vi.fn<(...args: unknown[]) => unknown>() });
+      const el = mount({ onComplete: onCompleteMock() });
       const swatch = el.querySelectorAll('.swatch')[3] as HTMLLabelElement;
       click(radioIn(swatch));
       expect(swatch.dataset.selected).toBe('true');
@@ -106,7 +110,7 @@ describe('OnboardingScreen scenarios', () => {
     });
 
     it('the ticket path goes from identity straight into the ticket paste', () => {
-      const el = mount({ onComplete: vi.fn<(...args: unknown[]) => unknown>() });
+      const el = mount({ onComplete: onCompleteMock() });
       typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
       click(el.querySelector('.cta'));
       expect(el.textContent).toContain('Connect your');
@@ -118,10 +122,10 @@ describe('OnboardingScreen scenarios', () => {
 
     it('the fresh path skips connect entirely and completes on the local Personal vault', async () => {
       listVaultsMock.mockResolvedValue([
-        { vaultId: 'shared', name: 'Shared' },
-        { vaultId: 'personal', name: 'Personal' },
+        { ownerPartyId: 'party-1', vaultId: 'shared', name: 'Shared' },
+        { ownerPartyId: 'party-1', vaultId: 'personal', name: 'Personal' },
       ]);
-      const onComplete = vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue(undefined);
+      const onComplete = onCompleteMock().mockResolvedValue(undefined);
       const el = mount({ path: 'fresh', onComplete });
       typeName(el.querySelector('.input') as HTMLInputElement, 'Grace');
       click(el.querySelector('.cta'));
@@ -138,7 +142,7 @@ describe('OnboardingScreen scenarios', () => {
 
     it('the fresh path surfaces an unreachable local gateway inline', async () => {
       listVaultsMock.mockRejectedValue(new Error('ECONNREFUSED'));
-      const el = mount({ path: 'fresh', onComplete: vi.fn<(...args: unknown[]) => unknown>() });
+      const el = mount({ path: 'fresh', onComplete: onCompleteMock() });
       typeName(el.querySelector('.input') as HTMLInputElement, 'Grace');
       click(el.querySelector('.cta'));
       await flush(4);
@@ -148,7 +152,7 @@ describe('OnboardingScreen scenarios', () => {
     it('renders a Back affordance only when the host supplies one', () => {
       const withBack = mount({
         onBack: vi.fn<(...args: unknown[]) => unknown>(),
-        onComplete: vi.fn<(...args: unknown[]) => unknown>(),
+        onComplete: onCompleteMock(),
       });
       expect([...withBack.querySelectorAll('button')].some((b) => b.textContent === 'Back')).toBe(
         true,
@@ -156,7 +160,7 @@ describe('OnboardingScreen scenarios', () => {
     });
 
     it('"Start over" from the connect step returns to the identity step', () => {
-      const el = mount({ onComplete: vi.fn<(...args: unknown[]) => unknown>() });
+      const el = mount({ onComplete: onCompleteMock() });
       typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
       click(el.querySelector('.cta'));
       click([...el.querySelectorAll('button')].find((b) => b.textContent === 'Start over'));
@@ -165,8 +169,10 @@ describe('OnboardingScreen scenarios', () => {
     });
 
     it('trims the name and carries the chosen swatch through', async () => {
-      listVaultsMock.mockResolvedValue([{ vaultId: 'personal', name: 'Personal' }]);
-      const onComplete = vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue(undefined);
+      listVaultsMock.mockResolvedValue([
+        { ownerPartyId: 'party-1', vaultId: 'personal', name: 'Personal' },
+      ]);
+      const onComplete = onCompleteMock().mockResolvedValue(undefined);
       const el = mount({ path: 'fresh', onComplete });
       typeName(el.querySelector('.input') as HTMLInputElement, '  Grace  ');
       click(radioIn(el.querySelectorAll('.swatch')[2] as HTMLLabelElement));
@@ -198,7 +204,7 @@ describe('OnboardingScreen scenarios', () => {
         vaultId: 'v1',
         vaultName: 'Office',
       });
-      const onComplete = vi.fn<(...args: unknown[]) => unknown>().mockResolvedValue(undefined);
+      const onComplete = onCompleteMock().mockResolvedValue(undefined);
       const el = mount({ onComplete });
       typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
       click(el.querySelector('.cta'));
@@ -234,10 +240,10 @@ describe('OnboardingScreen scenarios', () => {
     });
 
     it('surfaces an error inline when onComplete rejects', async () => {
-      listVaultsMock.mockResolvedValue([{ vaultId: 'personal', name: 'Personal' }]);
-      const onComplete = vi
-        .fn<(...args: unknown[]) => unknown>()
-        .mockRejectedValue(new Error('nope'));
+      listVaultsMock.mockResolvedValue([
+        { ownerPartyId: 'party-1', vaultId: 'personal', name: 'Personal' },
+      ]);
+      const onComplete = onCompleteMock().mockRejectedValue(new Error('nope'));
       const el = mount({ path: 'fresh', onComplete });
       typeName(el.querySelector('.input') as HTMLInputElement, 'X');
       click(el.querySelector('.cta'));

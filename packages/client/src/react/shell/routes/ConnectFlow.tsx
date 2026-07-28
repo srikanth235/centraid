@@ -72,7 +72,7 @@ const METHOD_CARDS: ReadonlyArray<{
   },
 ];
 
-const DEFAULT_METHODS: ConnectFlowProps['methods'] = ['local', 'gateway'];
+const DEFAULT_METHODS: readonly ConnectMethod[] = ['local', 'gateway'];
 
 export default function ConnectFlow({
   context,

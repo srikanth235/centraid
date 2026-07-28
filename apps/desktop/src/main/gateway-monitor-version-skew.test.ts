@@ -10,8 +10,10 @@ import {
 } from './gateway-monitor-core.js';
 import { EXPECTED_GATEWAY_VERSION, EXPECTED_SCHEMA_EPOCH } from './version-handshake.js';
 
-const LOCAL_GW = { id: 'local', label: 'Local', kind: 'local' as const };
-const REMOTE_GW = { id: 'remote-1', label: 'VPS', kind: 'remote' as const };
+type GatewayIdentity = Parameters<typeof initialRuntimeState>[0];
+
+const LOCAL_GW: GatewayIdentity = { id: 'local', label: 'Local', kind: 'local' };
+const REMOTE_GW: GatewayIdentity = { id: 'remote-1', label: 'VPS', kind: 'remote' };
 const T0 = 1_000_000;
 
 const ok = (at: number, extra: Partial<GatewayProbe> = {}): GatewayProbe => ({

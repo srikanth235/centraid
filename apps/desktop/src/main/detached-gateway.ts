@@ -594,5 +594,3 @@ export async function installGatewayOsService(
     };
   }
 }
-
-export { resolveListenPort } from './detached-gateway-core.js';
