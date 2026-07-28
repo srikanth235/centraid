@@ -39,6 +39,7 @@ Pod::Spec.new do |s|
   # machines after a bump.
   iroh_tag = 'v1.1.0'
   iroh_sha = 'ad46dadf09f9224157512992923562931ed60f252414230d50893a4d515c5776'
+  iroh_swift_sha = '681abdbd903ad86848571dbfbbf5540733da541584edae6592e0cabef3c3b856'
   iroh_base = "https://github.com/n0-computer/iroh-ffi"
   s.prepare_command = <<-CMD
     set -euo pipefail
@@ -55,6 +56,8 @@ Pod::Spec.new do |s|
     if [ ! -f IrohLib.swift ]; then
       curl -sSL -o IrohLib.swift "https://raw.githubusercontent.com/n0-computer/iroh-ffi/#{iroh_tag}/IrohLib/Sources/IrohLib/IrohLib.swift"
     fi
+    got="$(shasum -a 256 IrohLib.swift | awk '{print $1}')"
+    [ "$got" = "#{iroh_swift_sha}" ] || { echo "iroh Swift binding checksum mismatch: $got" >&2; exit 1; }
     echo "#{iroh_tag}" > .iroh-version
   CMD
 

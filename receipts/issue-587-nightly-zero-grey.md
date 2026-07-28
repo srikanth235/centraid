@@ -198,6 +198,22 @@ lock now resolves the prebuilt pod at 0.86.2; the strengthened
 `apps/mobile/scripts/verify-native-state.test.mjs` coverage prevent either
 prebuilt dependency from silently diverging again.
 
+The following required PR gate exposed a separate fingerprint invariant:
+CocoaPods reconstructs the git-ignored Iroh framework, Swift binding, and
+version marker from the tag/checksum recipe in
+`apps/mobile/modules/centraid-tunnel/ios/CentraidTunnel.podspec`. Hashing both
+that durable recipe and its downloaded products made
+`apps/mobile/scripts/native-fingerprint.mjs` disagree between a clean CI
+checkout and a locally built tree. Those reconstructed paths are now excluded;
+the podspec pins and verifies separate SHA-256 values for both
+`IrohLib.xcframework.zip` and `IrohLib.swift`, and that download recipe remains
+hashed, so running `pod install` no longer changes native input identity. The
+binding procedure and checksum contract are recorded in
+`apps/mobile/modules/centraid-tunnel/README.md`. CocoaPods similarly rewrites
+`node_modules/react-native-maps/ios/AirMaps/RNMapsDefines.h` from the durable
+maps configuration. The marker is now excluded for both platform fingerprints
+while the app configuration and installed package remain hashed.
+
 `.github/dependabot.yml` continues to propose all major upgrades, but leaves
 each production major in its own attributable PR while grouping patch/minor
 updates. The suite—not a version-ban policy—decides which major works.
@@ -422,6 +438,7 @@ as independent, attributable PRs.
 | codex-019fa9f8-a97-1785275651-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 3983 | 0 | 637952 | 319 | 4302 | 0.1742 | 1708251 | 0 | 105807104 | 174595 | fix(mobile): compile Expo application shell (#587) -m governance: allow-toolchai |
 | codex-019fa9f8-a97-1785277234-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 158547 | 0 | 18686720 | 16161 | 174708 | 5.3105 | 1866798 | 0 | 124493824 | 190756 | fix(mobile): align iOS prebuilt React lock (#587) |
 | codex-019fa9f8-a97-1785277279-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 5554 | 0 | 251392 | 487 | 6041 | 0.0840 | 1872352 | 0 | 124745216 | 191243 | fix(mobile): align iOS prebuilt React lock (#587) |
+| codex-019fa9f8-a97-1785280747-1 | codex | 019fa9f8-a974-7022-83ce-110628053d14 | #587 | gpt-5.6-sol | 389894 | 0 | 26411776 | 32143 | 422037 | 8.0598 | 2262246 | 0 | 151156992 | 223386 | fix(mobile): stabilize native fingerprint inputs (#587) |
 
 ### Steering
 

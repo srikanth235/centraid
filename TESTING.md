@@ -363,6 +363,12 @@ paths; and compares both platforms with
 `apps/mobile/native-fingerprints.json`. A native dependency, SDK,
 config-plugin, or generated-project change therefore requires an explicit
 fingerprint rebaseline after reviewing the native diff.
+The fingerprint hashes the Iroh tag and separate framework/Swift checksums in
+`CentraidTunnel.podspec`, not its git-ignored reconstructed framework and
+Swift binding; running CocoaPods must not change the same checkout's native
+input identity. It likewise hashes the app's maps configuration and the
+`react-native-maps` package, but not the package's `RNMapsDefines.h` marker
+that CocoaPods rewrites from those inputs.
 
 Android decisions mirror iOS where the artifact exists: Android uses the same
 fingerprint ratchet and path-safe `require.resolve` project configuration.
