@@ -432,13 +432,32 @@ async function asVaultCallResultAsync(fn: () => Promise<unknown>): Promise<Vault
 const JOURNAL_ARCHIVAL_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Strip any caller-supplied `actingMemberId` from an invoke payload (issue
- * #599 decision 8). Attribution is HOST-resolved from the device binding; an
- * app or agent naming its own member would forge the journal, so the field is
- * dropped here and re-set from the request scope by the caller.
+ * Strip the two caller-supplied identity fields from an invoke payload (issue
+ * #599 decision 8). Both are HOST-resolved from the authenticated request —
+ * `actingMemberId` from the device's member binding, `intentDeviceId` from the
+ * request's device key — and both are dropped here and re-set by the caller.
+ *
+ * `intentDeviceId` matters as much as the member: it is the ONLY thing the
+ * vault checks when an app claims a replica intent (`gateway.ts` — "is not
+ * owned by this device and app"). If the app could supply it, it could name
+ * another device's queued offline write and settle it as its own. Stripping
+ * makes the check compare host truth against stored truth; with no device on
+ * the request the field stays absent and the claim fails closed.
  */
-function withoutActingMember(payload: InvokeRequest): InvokeRequest {
-  const { actingMemberId: _forged, ...rest } = payload;
+function withoutForgedIdentity(payload: InvokeRequest): InvokeRequest {
+  const { actingMemberId: _member, intentDeviceId: _device, ...rest } = payload;
+  return rest;
+}
+
+/**
+ * An agent never runs under a replica intent — the app-engine wrapper that
+ * injects `intentId` (`dispatcher.ts`) exists only on the app bridge, and the
+ * vault's ownership check is app-only. Any `intentId` reaching this bridge is
+ * therefore caller-invented, so it is dropped rather than left to settle some
+ * device's queued write.
+ */
+function withoutAgentIntent(payload: InvokeRequest): InvokeRequest {
+  const { intentId: _claimed, ...rest } = payload;
   return rest;
 }
 
@@ -1849,7 +1868,7 @@ export class VaultPlane {
       }
       if (call.op === 'invoke') {
         return this.invokeQueued(cred, {
-          ...withoutActingMember(call.payload as unknown as InvokeRequest),
+          ...withoutForgedIdentity(call.payload as unknown as InvokeRequest),
           ...(replicaIntent?.appId === appId
             ? { intentId: replicaIntent.intentId, intentDeviceId: replicaIntent.deviceId }
             : requestDeviceId
@@ -1962,7 +1981,7 @@ export class VaultPlane {
       }
       if (call.op === 'invoke') {
         return this.invokeQueued(cred, {
-          ...withoutActingMember(call.payload as unknown as InvokeRequest),
+          ...withoutAgentIntent(withoutForgedIdentity(call.payload as unknown as InvokeRequest)),
           ...(onBehalfOfMember ? { actingMemberId: onBehalfOfMember.memberId } : {}),
         });
       }

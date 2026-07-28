@@ -67,7 +67,7 @@ function receiptDetail(vault: VaultPlane): Record<string, unknown> {
 async function replayOfflineWrite(
   vault: VaultPlane,
   access: { deviceId: string; memberId?: string },
-): Promise<void> {
+): Promise<string> {
   vault.approveGrant('planner', {
     purpose: 'dpv:ServiceProvision',
     scopes: [{ schema: 'schedule', verbs: 'read+act' }],
@@ -102,6 +102,7 @@ async function replayOfflineWrite(
       return { status: 'executed' };
     },
   });
+  return body.intentId;
 }
 
 test('a replayed offline write journals the acting member id', async () => {
@@ -137,6 +138,32 @@ test('the attribution is the id, so a rename leaves it exactly as written', asyn
   expect(receiptDetail(vault)).toEqual(before);
   expect(before).toMatchObject({ actingMember: sid.memberId });
   expect(enrollments.members.get(sid.memberId)?.label).toBe('Siddharth');
+});
+
+test('an app cannot name another device to claim that device intent', async () => {
+  const vault = await plane();
+  // Sid's phone queued a write offline; the gateway replayed it and the
+  // intent's outcome row now names `sid-phone`.
+  const intentId = await replayOfflineWrite(vault, { deviceId: 'sid-phone' });
+
+  // A later call arrives with NO host device context (no replica-intent scope,
+  // no request device key) and supplies the pair itself. `intentDeviceId` is
+  // the vault's only ownership evidence — if the payload could set it, the
+  // check would compare the forgery against itself and pass.
+  const forged = await vault.bridgeFor('planner')({
+    op: 'invoke',
+    payload: {
+      command: 'schedule.add_task',
+      input: { title: 'not mine to settle' },
+      intentId,
+      intentDeviceId: 'sid-phone',
+    },
+  });
+
+  expect(forged.ok).toBe(false);
+  expect(String((forged as { error?: string }).error)).toContain('is not owned by this device');
+  // And nothing was written under the hijacked intent.
+  expect(vault.db.vault.prepare('SELECT count(*) AS n FROM schedule_task').get()).toEqual({ n: 1 });
 });
 
 test('a write with no resolvable member journals none rather than guessing', async () => {
