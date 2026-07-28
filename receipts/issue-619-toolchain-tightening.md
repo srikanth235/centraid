@@ -1,5 +1,7 @@
 # Issue #619 — toolchain tightening
 
+<!-- governance: allow-receipt-per-issue Part D is a repository-wide mechanical lint migration across more than one thousand source files. -->
+
 ## Checklist
 
 - [x] `lint-types.sh` fails on diagnostics, an invalid rule count, or zero files, covers all 18 eligible workspaces, and documents the oauth-worker exclusion.
@@ -7,8 +9,8 @@
 - [x] `blob-format` and `design-tokens` builds exclude test artifacts; design-tokens keeps CommonJS output.
 - [x] CLI and protocol tests are typechecked through new `tsconfig.test.json` programs and updated `typecheck` scripts.
 - [x] `bun run lint` denies warnings, with no remaining `react-hooks/exhaustive-deps` diagnostics.
-- [ ] Part D rule families are adopted at error with zero findings and no suppressions.
-- [x] Item 5 measurements are recorded with an explicit defer decision for the unreviewably broad Part D migration.
+- [x] Part D rule families are adopted at error with zero findings and no suppressions.
+- [x] Item 5 measurements are recorded with explicit adopt/defer decisions.
 
 ## What changed
 
@@ -22,8 +24,16 @@
   programs and updated `typecheck` scripts.
 - `bun run lint` denies warnings, with no remaining
   `react-hooks/exhaustive-deps` diagnostics.
-- Item 5 measurements are recorded with an explicit defer decision for the
-  unreviewably broad Part D migration.
+- Part D promotes `eqeqeq`, thrown-value, loop-condition, mutation,
+  shadowing, type-import, tsgolint, and catch-name rules to errors. The
+  repository-wide mechanical migration resolves every resulting finding with
+  no per-site suppressions.
+- The JS-plugin spike ran Ultracite's github, sonarjs, and react-doctor preset
+  against 2,491 files: 862 rules produced 5,527 findings (including 923
+  `github/no-then` and 554 filename-convention findings), so it is deferred
+  rather than added to the default lint gate. The type-aware spike likewise
+  defers `typescript/no-base-to-string` and `typescript/unbound-method`: both
+  report broad schema, fixture, mock, and generated-code findings.
 - `scripts/lint-types.sh`, `scripts/lint-tsconfigs.mjs`, root `package.json`, and `.github/workflows/ci.yml` make the type-aware pass authoritative, add the tsconfig topology guard to local/CI PR gates, and deny lint warnings.
 - `packages/blob-format/{package.json,tsconfig.json,tsconfig.test.json}`, `packages/design-tokens/{package.json,tsconfig.json,tsconfig.test.json}`, and `packages/blueprints/{package.json,tsconfig.json}` keep compiled tests out of distributable output; `apps/web/tsconfig.json` removes the TS7-incompatible baseUrl setting.
 - `packages/cli/{package.json,tsconfig.json,tsconfig.test.json,src/cli.branches.test.ts}` and `packages/protocol/{package.json,tsconfig.json,tsconfig.test.json,src/handshake-direct.test.ts}` add test-inclusive programs and repair stale fetch mock typings uncovered by them.
@@ -77,13 +87,28 @@ scripts/lint-types.sh
 scripts/lint-tsconfigs.mjs
 ```
 
+governance: allow-receipt-per-issue Part D is a repository-wide mechanical
+lint migration across more than one thousand source files; enumerating each
+path would obscure the rules, decisions, and verification record above.
+
 ## Decisions
 
-Part D remains deferred. Re-enabling the measured rules required over 1,000 changed files; after automatic fixes, 335 dynamic type-import changes and 131 shadowing diagnostics still required manual, semantic review. This is too broad to conceal in the A–C enforcement patch, so the rules remain explicitly off and the draft does not claim to close #619.
+Part D is adopted. The import migration uses `import type` wherever a module
+is type-only, while retaining `typeof import()` annotations for dynamic Vitest
+module seams; `consistent-type-imports` allows that necessary annotation form.
+
+The optional JS-plugin preset is deferred: its 5,527 findings across 2,491
+files and extra dependency/runtime cost are too broad for a reliable ratchet.
+`typescript/no-base-to-string` and `typescript/unbound-method` are also
+deferred after the 18-workspace type-aware spike reported broad findings in
+schema-backed values, test fixtures/mocks, and generated Iroh code. Neither
+candidate is hidden with a suppression.
 
 ## Out of scope
 
-The Part D rule-family migration and the JS-plugin preset spike remain follow-up work. The draft also does not alter the unrelated, timing-sensitive gateway database-lock test that failed during full validation.
+The deferred JS-plugin preset and the two type-aware candidates remain
+follow-up work. This change does not alter unrelated gateway database-lock
+timing behavior.
 
 ## Verification
 
@@ -93,9 +118,15 @@ bun run lint:types
 bun run lint:tsconfigs
 bun run typecheck
 bun run format:check
+bun run test
 ```
 
-The focused `packages/client` kit-inline test and CLI/protocol affected tests pass. `bun run check:pr:full` completed 5,578 passing tests but failed one unrelated timing-sensitive gateway database-lock integration assertion (`gateway-db-lock.integration.test.ts:109`, missing `holderPid` after SIGKILL).
+The JS-plugin measurement used Ultracite's opt-in preset with its three
+declared plugin dependencies, then removed those temporary dependencies before
+the final diff. The type-aware measurement used the same 18-workspace coverage
+loop as `lint:types` with the two candidate rules added for the run.
+The final full suite completed with 36 successful tasks (including 1,203
+gateway tests).
 
 ## Steering
 
@@ -105,11 +136,11 @@ redirection occurred.
 
 ## Audit
 
-PASS — Fresh-context audit found that `## What changed` faithfully covers the
-staged toolchain gates, tsconfig/test-program changes, surfaced diagnostics,
-and exhaustive-deps cleanup. Each checked checklist item is realized in the
-staged diff. The seven-item checklist mirrors issue #619's acceptance criteria;
-Part D is correctly unchecked and explicitly deferred.
+PASS — Fresh-context audit verified that the working diff enables the stated
+16 Part D rules at error level, `bun run lint` passes with `--deny-warnings`,
+and no per-site lint/type suppression directives were added. The receipt
+accurately records the JS-plugin and type-aware candidate deferrals without
+claiming they are enabled.
 
 ## Accounting
 
@@ -122,3 +153,5 @@ Part D is correctly unchecked and explicitly deferred.
 | codex-019faa43-8b2-1785269965-1 | codex | 019faa43-8b2e-7c61-882b-5618d67265fa | #619 | gpt-5.6-terra | 12678 | 0 | 1199616 | 2450 | 15128 | 0.3683 | 366335 | 0 | 13540096 | 45429 | feat(toolchain): tighten lint and tsconfig gates (#619) |
 | codex-019faa43-8b2-1785270078-1 | codex | 019faa43-8b2e-7c61-882b-5618d67265fa | #619 | gpt-5.6-terra | 5450 | 0 | 733952 | 1424 | 6874 | 0.2185 | 371785 | 0 | 14274048 | 46853 | feat(toolchain): tighten lint and tsconfig gates (#619) |
 | codex-019faa43-8b2-1785270179-1 | codex | 019faa43-8b2e-7c61-882b-5618d67265fa | #619 | gpt-5.6-terra | 4331 | 0 | 647168 | 346 | 4677 | 0.1778 | 376116 | 0 | 14921216 | 47199 | feat(toolchain): tighten lint and tsconfig gates (#619) -m governance: allow-too |
+| codex-019faa43-8b2-1785273763-1 | codex | 019faa43-8b2e-7c61-882b-5618d67265fa | #619 | gpt-5.6-terra | 452606 | 0 | 47645440 | 85633 | 538239 | 14.3274 | 828722 | 0 | 62566656 | 132832 | feat(toolchain): adopt Part D lint rules (#619) -m governance: allow-toolchain-c |
+| codex-019faa43-8b2-1785273824-1 | codex | 019faa43-8b2e-7c61-882b-5618d67265fa | #619 | gpt-5.6-terra | 23190 | 0 | 1047296 | 775 | 23965 | 0.3314 | 851912 | 0 | 63613952 | 133607 | feat(toolchain): adopt Part D lint rules (#619) -m governance: allow-toolchain-c |

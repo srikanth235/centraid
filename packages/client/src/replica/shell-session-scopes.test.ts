@@ -18,10 +18,11 @@ import {
 } from "vitest";
 
 import type { ShellReplicaCoordinator } from "./shell-session.js";
+import type * as TypeImport_1vwuba6 from "./shell-session.js";
 import type { ReplicaShape, ReplicaStatus } from "./types.js";
 
-let ReplicaShellSession: typeof import("./shell-session.js").ReplicaShellSession;
-let fetchReplicaForScope: typeof import("./shell-session.js").fetchReplicaForScope;
+let ReplicaShellSession: typeof TypeImport_1vwuba6.ReplicaShellSession;
+let fetchReplicaForScope: typeof TypeImport_1vwuba6.fetchReplicaForScope;
 
 const FOCUSED_VAULT = "vault-focused";
 const BASE_URL = "https://gateway.example";

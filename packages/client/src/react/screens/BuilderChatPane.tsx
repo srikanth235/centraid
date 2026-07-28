@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type JSX } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import type {
   BuilderAttachmentRef,
@@ -93,7 +94,7 @@ export default function BuilderChatPane({
               a.localId === localId ? { ...a, state: "ready", ref } : a
             )
           ),
-        (err: unknown) =>
+        (error: unknown) =>
           setPending((p) =>
             p.map((a) =>
               a.localId === localId
@@ -101,7 +102,7 @@ export default function BuilderChatPane({
                     ...a,
                     state: "error",
                     errorText:
-                      err instanceof Error ? err.message : "Upload failed",
+                      error instanceof Error ? error.message : "Upload failed",
                   }
                 : a
             )

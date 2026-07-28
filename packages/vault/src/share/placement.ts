@@ -34,12 +34,10 @@ import type { DatabaseSync } from "node:sqlite";
 import type { LocalBlobStore } from "../blob/local.js";
 import { liveBlobShas } from "../blob/read.js";
 import { VaultShareError } from "../errors.js";
-import { placeBlob, type BlobPlacement } from "./blobs.js";
-import {
-  projectShareClosure,
-  readShareClosure,
-  type ShareableItemType,
-} from "./closure.js";
+import { placeBlob } from "./blobs.js";
+import type { BlobPlacement } from "./blobs.js";
+import { projectShareClosure, readShareClosure } from "./closure.js";
+import type { ShareableItemType } from "./closure.js";
 import { deleteProjectedClosure } from "./removal.js";
 
 /**
@@ -196,11 +194,11 @@ export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
       deduped: projection.deduped,
       blobs,
     };
-  } catch (err) {
+  } catch (error) {
     // Roll the audience back to exactly where it was — the origin was never
     // written, so the whole share is undone bar the orphaned link above.
     audience.exec("ROLLBACK");
-    throw err;
+    throw error;
   }
 }
 
@@ -234,9 +232,9 @@ export function unshareFromVault(
       .run(input.itemType, input.itemId);
     shas = removal.shas;
     audience.exec("COMMIT");
-  } catch (err) {
+  } catch (error) {
     audience.exec("ROLLBACK");
-    throw err;
+    throw error;
   }
   // Which of those addresses the vault no longer claims — read from the live
   // model AFTER the commit, so a sha some other row still holds is honestly

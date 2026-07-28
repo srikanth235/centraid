@@ -4,6 +4,7 @@
 // or replay-unsafe app is rejected at publish time rather than at run/fire time.
 
 import { promises as fs } from "node:fs";
+import type * as TypeImport_g9tn66 from "node:fs";
 import path from "node:path";
 
 import { ManifestError, parseAppManifest } from "@centraid/app-engine";
@@ -43,11 +44,11 @@ export async function validateManifestAt(
   let manifest;
   try {
     manifest = parseAppManifest(raw);
-  } catch (err) {
-    if (err instanceof ManifestError) {
-      return `app.json invalid (${err.code})${err.path ? ` at ${err.path}` : ""}: ${err.message}`;
+  } catch (error) {
+    if (error instanceof ManifestError) {
+      return `app.json invalid (${error.code})${error.path ? ` at ${error.path}` : ""}: ${error.message}`;
     }
-    return err instanceof Error ? err.message : String(err);
+    return error instanceof Error ? error.message : String(error);
   }
   const actionError = await findFirstInOrder(
     manifest.actions,
@@ -97,7 +98,7 @@ async function validateAutomationManifestsAt(
   appDir: string
 ): Promise<string | undefined> {
   const automationsDir = path.join(appDir, "automations");
-  let ids: import("node:fs").Dirent[];
+  let ids: TypeImport_g9tn66.Dirent[];
   try {
     ids = await fs.readdir(automationsDir, { withFileTypes: true });
   } catch {
@@ -115,11 +116,11 @@ async function validateAutomationManifestsAt(
       }
       try {
         automation.parseManifest(raw);
-      } catch (err) {
-        if (err instanceof automation.ManifestError) {
-          return `${rel} invalid (${err.code})${err.field ? ` at ${err.field}` : ""}: ${err.message}`;
+      } catch (error) {
+        if (error instanceof automation.ManifestError) {
+          return `${rel} invalid (${error.code})${error.field ? ` at ${error.field}` : ""}: ${error.message}`;
         }
-        return err instanceof Error ? err.message : String(err);
+        return error instanceof Error ? error.message : String(error);
       }
       return undefined;
     }
@@ -135,7 +136,7 @@ async function lintAutomationHandlersAt(
   appDir: string
 ): Promise<string | undefined> {
   const automationsDir = path.join(appDir, "automations");
-  let ids: import("node:fs").Dirent[];
+  let ids: TypeImport_g9tn66.Dirent[];
   try {
     ids = await fs.readdir(automationsDir, { withFileTypes: true });
   } catch {

@@ -26,9 +26,8 @@ import { nowIso } from "../ids.js";
 import {
   DEFAULT_REPLICATION_CONCURRENCY,
   EMPTY_BLOB_METRICS,
-  type BlobCache,
-  type BlobMetrics,
 } from "./cache.js";
+import type { BlobCache, BlobMetrics } from "./cache.js";
 import { exportLocalTier } from "./custody-export.js";
 import {
   localBlobPath,
@@ -43,14 +42,13 @@ import {
 import { reconcileCustody } from "./custody-reconcile.js";
 import { createRemoteBlobStream } from "./custody-remote-stream.js";
 // Re-export the split custody types so existing facade importers stay untouched.
-import {
-  remoteEncryptionKey,
-  storeForClass,
-  type CustodyState,
-  type RemoteTier,
-  type ReconcileResult,
-  type ReconcileOptions,
-  type BlobSweepStatus,
+import { remoteEncryptionKey, storeForClass } from "./custody-types.js";
+import type {
+  CustodyState,
+  RemoteTier,
+  ReconcileResult,
+  ReconcileOptions,
+  BlobSweepStatus,
 } from "./custody-types.js";
 import type { LocalBlobStore } from "./local.js";
 import type { ReplicaStore } from "./replica-index.js";
@@ -58,12 +56,8 @@ import { driveReplication } from "./replicate-driver.js";
 import type { FrameDirectory } from "./seal-frames.js";
 import { sealBlob, sealBlobStream, unsealBlob } from "./seal.js";
 import { resolveWriteStore } from "./store-routing.js";
-import {
-  resolveRange,
-  sha256OfBytes,
-  type BlobRange,
-  type BlobStore,
-} from "./store.js";
+import { resolveRange, sha256OfBytes } from "./store.js";
+import type { BlobRange, BlobStore } from "./store.js";
 
 export { sealBlob, sealBlobStream, unsealBlob } from "./seal.js";
 export type {
@@ -471,10 +465,11 @@ export class BlobCustody {
       this.lastSweepError = null;
       this.sweepConsecutiveFailures = 0;
       return result;
-    } catch (err) {
-      this.lastSweepError = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      this.lastSweepError =
+        error instanceof Error ? error.message : String(error);
       this.sweepConsecutiveFailures += 1;
-      throw err;
+      throw error;
     }
   }
 

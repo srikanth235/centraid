@@ -20,16 +20,15 @@
 import type { InlineScope } from "@centraid/blueprints/apps/inline-types";
 
 import { auth } from "../../../gateway-client-core.js";
-import {
-  listAppScopes,
-  type AppScopeEntry,
-} from "../../../gateway-client-vault.js";
+import { listAppScopes } from "../../../gateway-client-vault.js";
+import type { AppScopeEntry } from "../../../gateway-client-vault.js";
 import {
   addressedGatewayAuth,
   replicaIdentityForGatewayAuth,
 } from "../../../replica/shell-session.js";
 import type { ReplicaIdentity } from "../../../replica/types.js";
-import { useAsyncData, type AsyncState } from "../useAsyncData.js";
+import { useAsyncData } from "../useAsyncData.js";
+import type { AsyncState } from "../useAsyncData.js";
 
 /**
  * The ceiling on concurrently hydrated scopes. Four is the measured comfort

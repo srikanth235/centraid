@@ -26,14 +26,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
-import {
-  BlobCustody,
-  FsBlobStore,
-  ReplicaIndex,
-  type BlobRange,
-  type BlobStat,
-  type BlobStore,
-  type RemoteTier,
+import { BlobCustody, FsBlobStore, ReplicaIndex } from "@centraid/vault";
+import type {
+  BlobRange,
+  BlobStat,
+  BlobStore,
+  RemoteTier,
 } from "@centraid/vault";
 import { describe, expect, test, vi } from "vitest";
 

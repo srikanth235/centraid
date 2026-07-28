@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handleCompanionRequest } from "./companion-api.js";
+import type * as TypeImport_1016tag from "./storage.js";
+import type * as TypeImport_zxw3p4 from "./transport.js";
 
 type JsonTestSeam = (path: string, init?: RequestInit) => Promise<unknown>;
 type AppReadTestSeam = (
@@ -16,14 +18,13 @@ type AppWriteTestSeam = (
 
 const state = vi.hoisted(() => ({ paired: true }));
 const transport = vi.hoisted(() => ({
-  closeTransport: vi.fn<typeof import("./transport.js").closeTransport>(),
+  closeTransport: vi.fn<typeof TypeImport_zxw3p4.closeTransport>(),
   companionJson: vi.fn<JsonTestSeam>(),
   appRead: vi.fn<AppReadTestSeam>(),
   appWrite: vi.fn<AppWriteTestSeam>(),
 }));
 const storage = vi.hoisted(() => ({
-  purgeCompanionState:
-    vi.fn<typeof import("./storage.js").purgeCompanionState>(),
+  purgeCompanionState: vi.fn<typeof TypeImport_1016tag.purgeCompanionState>(),
 }));
 
 vi.mock(import("./transport.js"), () => ({
@@ -34,12 +35,12 @@ vi.mock(import("./transport.js"), () => ({
     transport.appRead(...args) as Promise<T>,
   appWrite: <T>(...args: Parameters<typeof transport.appWrite>) =>
     transport.appWrite(...args) as Promise<T>,
-  pairOverIroh: vi.fn<typeof import("./transport.js").pairOverIroh>(),
+  pairOverIroh: vi.fn<typeof TypeImport_zxw3p4.pairOverIroh>(),
 }));
 vi.mock(import("./storage.js"), () => ({
   ...storage,
-  isLocked: vi.fn<typeof import("./storage.js").isLocked>(async () => false),
-  loadPairing: vi.fn<typeof import("./storage.js").loadPairing>(async () =>
+  isLocked: vi.fn<typeof TypeImport_1016tag.isLocked>(async () => false),
+  loadPairing: vi.fn<typeof TypeImport_1016tag.loadPairing>(async () =>
     state.paired
       ? {
           endpointTicket: "ticket",
@@ -51,8 +52,8 @@ vi.mock(import("./storage.js"), () => ({
         }
       : undefined
   ),
-  savePairing: vi.fn<typeof import("./storage.js").savePairing>(),
-  setLocked: vi.fn<typeof import("./storage.js").setLocked>(),
+  savePairing: vi.fn<typeof TypeImport_1016tag.savePairing>(),
+  setLocked: vi.fn<typeof TypeImport_1016tag.setLocked>(),
 }));
 
 describe("Companion unpair", () => {

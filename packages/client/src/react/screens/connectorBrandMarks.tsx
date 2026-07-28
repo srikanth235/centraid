@@ -20,7 +20,8 @@
  *   default: local:default
  */
 
-import { useId, type JSX } from "react";
+import { useId } from "react";
+import type { JSX } from "react";
 
 export type ConnectorTone =
   | "gmail"

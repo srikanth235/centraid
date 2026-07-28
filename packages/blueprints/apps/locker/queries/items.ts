@@ -288,8 +288,8 @@ export default async function itemsHandler({
       items: affected,
     };
     return { items, watchtower, truncated: rows.length >= window, window };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }
 }

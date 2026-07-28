@@ -1,7 +1,5 @@
-import {
-  openRemoteBackupProvider,
-  type BackupProvider,
-} from "@centraid/backup";
+import { openRemoteBackupProvider } from "@centraid/backup";
+import type { BackupProvider } from "@centraid/backup";
 
 import type { BackupConfig, BackupProviderConfig } from "./backup-config.js";
 import type { StorageConnectionStore } from "./storage-connections.js";

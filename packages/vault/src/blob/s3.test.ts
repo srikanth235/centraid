@@ -146,7 +146,7 @@ function startFakeS3(): Promise<FakeS3> {
           state.failStatus = s;
         },
         close: () =>
-          new Promise<void>((resolve) => server.close(() => resolve())),
+          new Promise<void>((_resolve) => server.close(() => _resolve())),
       };
       resolve(fake);
     });

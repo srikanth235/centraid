@@ -312,8 +312,8 @@ function main() {
   let coverageMap;
   try {
     coverageMap = JSON.parse(readFileSync(coveragePath, "utf8"));
-  } catch (err) {
-    console.error(`diff-coverage: failed to parse coverage map: ${err}`);
+  } catch (error) {
+    console.error(`diff-coverage: failed to parse coverage map: ${error}`);
     process.exitCode = 1;
     return;
   }
@@ -329,7 +329,7 @@ function main() {
         maxBuffer: 32 * 1024 * 1024,
       }
     );
-  } catch (err) {
+  } catch (error) {
     // Include unstaged too for local pre-push? Prefer merge-base range; on clean
     // PR branch HEAD has all commits. Also include working tree for local checks.
     try {
@@ -358,7 +358,7 @@ function main() {
       );
       diffText = committed + unstaged + staged;
     } catch {
-      console.error(`diff-coverage: git diff failed: ${err}`);
+      console.error(`diff-coverage: git diff failed: ${error}`);
       process.exitCode = 1;
       return;
     }

@@ -28,15 +28,15 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { run, runRaw, revParse } from "./git.js";
-import {
-  WorktreeStoreError,
-  type WorktreeStoreOptions,
-  type PublishInput,
-  type PublishResult,
-  type RollbackInput,
-  type RollbackResult,
-  type SessionHandle,
-  type VersionEntry,
+import { WorktreeStoreError } from "./types.js";
+import type {
+  WorktreeStoreOptions,
+  PublishInput,
+  PublishResult,
+  RollbackInput,
+  RollbackResult,
+  SessionHandle,
+  VersionEntry,
 } from "./types.js";
 
 /** Git's canonical empty tree sha. Used to plant the initial main commit. */

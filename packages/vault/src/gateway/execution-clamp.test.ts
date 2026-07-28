@@ -5,19 +5,13 @@
 
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollAgent,
-  type BootstrapResult,
-} from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { bootstrapVault, createGrant, enrollAgent } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { evaluateConsent } from "./consent.js";
-import {
-  GatewayError,
-  type ExecutionScopeSpec,
-  type Identity,
-} from "./types.js";
+import { GatewayError } from "./types.js";
+import type { ExecutionScopeSpec, Identity } from "./types.js";
 
 const PURPOSE = "dpv:ServiceProvision";
 

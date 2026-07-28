@@ -64,14 +64,14 @@ export default async function faces({ input, ctx }: HandlerArgs) {
         })),
       },
     };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     if (e.code === "VAULT_CONSENT") {
       return { status: 200, body: { denied: true, reason: e.message } };
     }
     return {
       status: 200,
-      body: { regions: [], people: [], error: String(e.message ?? err) },
+      body: { regions: [], people: [], error: String(e.message ?? error) },
     };
   }
 }

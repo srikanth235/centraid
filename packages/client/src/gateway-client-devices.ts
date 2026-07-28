@@ -13,10 +13,8 @@
  * routes 404, which `listGatewayDevices` reports as an empty roster.
  */
 
-import {
-  readDirectBlob,
-  type DirectBlobDownloadPlan,
-} from "./device-blob-source.js";
+import { readDirectBlob } from "./device-blob-source.js";
+import type { DirectBlobDownloadPlan } from "./device-blob-source.js";
 import {
   auth,
   authHeaders,
@@ -141,11 +139,11 @@ export async function listGatewayDevices(): Promise<CentraidGatewayDevice[]> {
       "list devices"
     );
     return out.devices ?? [];
-  } catch (err) {
+  } catch (error) {
     // A gateway without a device plane (desktop embed) simply has none.
-    if (err instanceof GatewayClientError && err.code === "not_found")
+    if (error instanceof GatewayClientError && error.code === "not_found")
       return [];
-    throw err;
+    throw error;
   }
 }
 

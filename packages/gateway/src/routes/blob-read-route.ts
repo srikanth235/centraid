@@ -7,8 +7,8 @@ import {
   createBlobHandoffUrl,
   DATA_PLANE_RELAY_HEADER,
   isDataPlaneRelayRequest,
-  type DataPlaneHttpOptions,
 } from "../serve/data-plane-handoff.js";
+import type { DataPlaneHttpOptions } from "../serve/data-plane-handoff.js";
 import { parseRange, pipeBlobResponse } from "./blob-response.js";
 import { sendJson } from "./route-helpers.js";
 

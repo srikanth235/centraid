@@ -1,8 +1,5 @@
-import {
-  handshakeGateway,
-  ROUTES,
-  type HandshakeResult,
-} from "@centraid/protocol";
+import { handshakeGateway, ROUTES } from "@centraid/protocol";
+import type { HandshakeResult } from "@centraid/protocol";
 
 export interface GatewayClientOptions {
   baseUrl: string;

@@ -99,10 +99,10 @@ export async function runVaultContentTool(
       ok: true,
       result: await ctx.vaultContent({ contentId: a.content_id }),
     };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      errorText: err instanceof Error ? err.message : String(err),
+      errorText: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -130,10 +130,10 @@ export async function runVaultInvokeTool(
       ok: true,
       result: await ctx.vaultInvoke({ command: a.command, input }),
     };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      errorText: err instanceof Error ? err.message : String(err),
+      errorText: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -153,10 +153,10 @@ export async function runVaultSqlTool(
   }
   try {
     return { ok: true, result: await ctx.vaultSql(sql) };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      errorText: err instanceof Error ? err.message : String(err),
+      errorText: error instanceof Error ? error.message : String(error),
     };
   }
 }

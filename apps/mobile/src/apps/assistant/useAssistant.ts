@@ -6,9 +6,8 @@ import {
   pickAndUploadAssistantAttachment,
   saveAssistantSelection,
   streamAssistantTurn,
-  type AssistantAttachment,
-  type AssistantConfig,
 } from "../../lib/assistant";
+import type { AssistantAttachment, AssistantConfig } from "../../lib/assistant";
 
 export interface Bubble {
   key: string;

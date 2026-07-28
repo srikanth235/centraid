@@ -27,11 +27,8 @@ import {
   InCloudOriginalError,
   openDeviceOriginal,
 } from "./device-media";
-import {
-  revalidateBackedUp,
-  selectFreeUpCandidates,
-  type DeviceByteProbe,
-} from "./free-up-space";
+import { revalidateBackedUp, selectFreeUpCandidates } from "./free-up-space";
+import type { DeviceByteProbe } from "./free-up-space";
 import { imageSource } from "./media-source";
 import { styles } from "./PhotosLibrary.styles";
 import { usePhotoTimeline } from "./timeline-source";
@@ -155,8 +152,8 @@ export default function PhotosLibrary({
         original.uri,
         createNativeDigest
       );
-    } catch (reason) {
-      if (!(reason instanceof InCloudOriginalError)) throw reason;
+    } catch (error) {
+      if (!(error instanceof InCloudOriginalError)) throw error;
       // Reported as its own outcome below. Calling it "already gone" would be a
       // lie about a photo that is very much still there, just not here.
       return "in-cloud";

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "vitest";
 
 import { DEFAULT_BACKUP_POLICY } from "../backup-policy.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { BlobCache } from "./cache.js";
 import { BlobCustody } from "./custody.js";

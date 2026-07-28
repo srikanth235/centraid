@@ -22,13 +22,12 @@
 
 import { randomUUID } from "node:crypto";
 
-import {
-  ConversationStore,
-  makeJournalDbProvider,
-  type AutomationTriggerKind,
-  type AutomationTriggerOrigin,
-  type AutomationTurnStreamEvent,
-  type VaultBridge,
+import { ConversationStore, makeJournalDbProvider } from "@centraid/app-engine";
+import type {
+  AutomationTriggerKind,
+  AutomationTriggerOrigin,
+  AutomationTurnStreamEvent,
+  VaultBridge,
 } from "@centraid/app-engine";
 
 import { runHandler } from "../handler/runner.js";
@@ -354,10 +353,10 @@ export async function runFire(
       const ref = secretRefs[index];
       if (ref === undefined) return;
       const value = await revealSecret(vaultBridge, ref).catch(
-        (err: unknown) => {
+        (error: unknown) => {
           onLog(
             "warn",
-            `connector ${opts.automationRef}: secret "${ref}" did not resolve — ${err instanceof Error ? err.message : String(err)}`
+            `connector ${opts.automationRef}: secret "${ref}" did not resolve — ${error instanceof Error ? error.message : String(error)}`
           );
           return undefined;
         }
@@ -395,10 +394,10 @@ export async function runFire(
           ? { connectionId: row.manifest.connector.connectionId }
           : {}),
       });
-    } catch (err) {
+    } catch (error) {
       await dispatch.close().catch(() => undefined);
       return skipRun(
-        `connection credential did not resolve: ${err instanceof Error ? err.message : String(err)}`
+        `connection credential did not resolve: ${error instanceof Error ? error.message : String(error)}`
       );
     }
     if (resolved && "refused" in resolved) {
@@ -532,10 +531,10 @@ export async function runFire(
             },
             deps
           );
-        } catch (err) {
+        } catch (error) {
           onLog(
             "error",
-            `onFailure dispatch ${row.manifest.onFailure} threw: ${err instanceof Error ? err.message : String(err)}`
+            `onFailure dispatch ${row.manifest.onFailure} threw: ${error instanceof Error ? error.message : String(error)}`
           );
         }
       } else {

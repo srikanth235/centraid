@@ -21,10 +21,12 @@ import {
 
 import HomeKey from "../../kit/components/HomeKey";
 import { spacing, useTheme } from "../../kit/theme";
-import { runAutomation, type AutomationRow } from "../../lib/automations";
+import { runAutomation } from "../../lib/automations";
+import type { AutomationRow } from "../../lib/automations";
 import type { AutomationsScreenProps } from "../../navigation";
 import { makeStyles } from "./Automations.styles";
-import { useAutomations, type AutomationsState } from "./useAutomations";
+import { useAutomations } from "./useAutomations";
+import type { AutomationsState } from "./useAutomations";
 
 export default function AutomationsScreen({
   navigation,
@@ -169,11 +171,11 @@ function AutomationCard({
           if (mounted.current) setRun("idle");
         }, 2200);
       })
-      .catch((err: unknown) => {
+      .catch((error: unknown) => {
         if (mounted.current) setRun("idle");
         Alert.alert(
           "Could not run",
-          err instanceof Error ? err.message : "Please try again."
+          error instanceof Error ? error.message : "Please try again."
         );
       });
   }, [run, row.ref]);
@@ -182,10 +184,10 @@ function AutomationCard({
     if (busyToggle) return;
     setBusyToggle(true);
     void toggle(row.ref, !row.enabled)
-      .catch((err: unknown) => {
+      .catch((error: unknown) => {
         Alert.alert(
           "Could not update",
-          err instanceof Error ? err.message : "The change was not saved."
+          error instanceof Error ? error.message : "The change was not saved."
         );
       })
       .finally(() => {

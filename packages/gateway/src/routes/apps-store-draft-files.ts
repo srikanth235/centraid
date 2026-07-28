@@ -5,9 +5,11 @@
 // extensions) lives here with the reads/writes it guards.
 
 import { promises as fs } from "node:fs";
+import type * as TypeImport_g9tn66 from "node:fs";
 import path from "node:path";
 
-import { WorktreeStore, WorktreeStoreError } from "../worktree-store/index.js";
+import type { WorktreeStore } from "../worktree-store/index.js";
+import { WorktreeStoreError } from "../worktree-store/index.js";
 
 /** Text extensions a draft file write accepts — mirrors agent-harness. */
 export const EDITABLE_EXT = new Set([
@@ -44,7 +46,7 @@ async function walk(
   out: DraftFile[]
 ): Promise<void> {
   const here = rel ? path.join(root, rel) : root;
-  let entries: import("node:fs").Dirent[];
+  let entries: TypeImport_g9tn66.Dirent[];
   try {
     entries = await fs.readdir(here, { withFileTypes: true });
   } catch {

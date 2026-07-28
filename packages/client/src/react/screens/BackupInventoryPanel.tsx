@@ -1,4 +1,5 @@
-import { useState, type JSX } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import { formatBytes } from "../../format.js";
 import { formatDuration } from "../shell/routes/gatewayData.js";
@@ -187,8 +188,10 @@ export default function BackupInventoryPanel({
     setError(null);
     try {
       setCurrent((await onVerifyBucket(vaultId)).reconciliation);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : String(caughtError)
+      );
     } finally {
       setVerifying(false);
     }

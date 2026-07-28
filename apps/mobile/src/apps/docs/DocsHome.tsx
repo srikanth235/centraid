@@ -23,7 +23,8 @@ import { backupDocument } from "../../lib/upload/media-producer";
 import type { DocsScreenProps } from "../../navigation";
 import type { NativeDocument, NativeFolder } from "./docs-model";
 import { styles } from "./DocsHome.styles";
-import { GridItem, ListItem, type DriveItem } from "./DocsLibraryItems";
+import { GridItem, ListItem } from "./DocsLibraryItems";
+import type { DriveItem } from "./DocsLibraryItems";
 import { useDocsLibrary } from "./useDocsLibrary";
 
 type LibraryFilter = "all" | "recent" | "starred" | "trash";

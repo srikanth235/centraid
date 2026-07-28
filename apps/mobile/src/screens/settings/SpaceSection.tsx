@@ -5,14 +5,15 @@ import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import Button from "../../kit/components/Button";
 import Icon from "../../kit/components/Icon";
-import { radii, t, useTheme, type ThemeColors } from "../../kit/theme";
+import { radii, t, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 import {
   GatewayError,
   listVaults,
   resolveGatewayBase,
   updateVault,
-  type VaultRow,
 } from "../../lib/gateway";
+import type { VaultRow } from "../../lib/gateway";
 import { getActiveVaultId, subscribeSpaces } from "../../lib/spaces";
 import ColorSwatchRow from "./ColorSwatchRow";
 import SettingsSection from "./SettingsSection";
@@ -103,10 +104,10 @@ async function loadSpace(setters: SpaceFormSetters): Promise<void> {
     }
     seedForm(setters, active);
     setters.setState({ kind: "ready", vault: active });
-  } catch (err) {
+  } catch (error) {
     const message =
-      err instanceof GatewayError || err instanceof Error
-        ? err.message
+      error instanceof GatewayError || error instanceof Error
+        ? error.message
         : "Could not load your space.";
     setters.setState({ kind: "error", message });
   }
@@ -175,9 +176,9 @@ export default function SpaceSection(): React.JSX.Element {
         seedForm(setters, updated);
         setState({ kind: "ready", vault: updated });
       })
-      .catch((err: unknown) => {
+      .catch((error: unknown) => {
         setSaveError(
-          err instanceof Error ? err.message : "Could not save your space."
+          error instanceof Error ? error.message : "Could not save your space."
         );
       })
       .finally(() => setSaving(false));

@@ -161,11 +161,11 @@ if (gotSingleInstanceLock) {
       // a settings.json hand-edit) reconciles instead of drifting silently.
       applyLaunchAtLogin(settings.launchAtLogin);
       setTrayGatewayRunning(settings.gatewayUrl.length > 0);
-    } catch (err) {
+    } catch (error) {
       setTrayGatewayRunning(false);
       dialog.showErrorBox(
         "Centraid gateway failed to start",
-        `The embedded gateway could not start:\n\n${err instanceof Error ? err.message : String(err)}\n\n` +
+        `The embedded gateway could not start:\n\n${error instanceof Error ? error.message : String(error)}\n\n` +
           "Centraid will keep retrying automatically in the background."
       );
     }
@@ -188,8 +188,8 @@ if (gotSingleInstanceLock) {
     // Phone link (issue #263): bring the iroh endpoint up front so paired
     // phones reconnect without any UI open. Failures surface in the
     // Settings → Phone panel via PHONE_STATUS; they must not block launch.
-    ensurePhoneLink().catch((err) => {
-      process.stdout.write(`[phone-link] failed to start: ${String(err)}\n`);
+    ensurePhoneLink().catch((error) => {
+      process.stdout.write(`[phone-link] failed to start: ${String(error)}\n`);
     });
     // Remote template refresh now runs inside the embedded gateway (issue
     // #141, Phase 5): `local-gateway` passes the configured remote manifest

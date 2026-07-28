@@ -12,10 +12,8 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import {
-  openStorageConnectionStore,
-  type StorageConnectionStore,
-} from "./storage-connections.js";
+import { openStorageConnectionStore } from "./storage-connections.js";
+import type { StorageConnectionStore } from "./storage-connections.js";
 import { StorageUsagePoller } from "./storage-usage.js";
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -77,13 +75,13 @@ describe("storage-usage", () => {
       server.listen(0, "127.0.0.1", () => {
         const { port } = server.address() as AddressInfo;
         cleanups.push(
-          () => new Promise<void>((resolve) => server.close(() => resolve()))
+          () => new Promise<void>((_resolve) => server.close(() => _resolve()))
         );
         resolve({
           url: `http://127.0.0.1:${port}`,
           requestCount: () => requests,
           close: () =>
-            new Promise<void>((resolve) => server.close(() => resolve())),
+            new Promise<void>((_resolve) => server.close(() => _resolve())),
         });
       });
     });

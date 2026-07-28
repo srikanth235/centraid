@@ -18,8 +18,8 @@ import {
   masterKeyForEpoch,
   rotateKeyring,
   saveKeyring,
-  type Keyring,
 } from "./crypto.js";
+import type { Keyring } from "./crypto.js";
 
 describe("encrypt/decrypt", () => {
   test("roundtrips", () => {

@@ -110,8 +110,8 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         input,
         ...(optimistic === undefined ? {} : { optimistic }),
       });
-    } catch (err) {
-      notice(String((err as { message?: string })?.message ?? err));
+    } catch (error) {
+      notice(String((error as { message?: string })?.message ?? error));
       return undefined;
     }
   }

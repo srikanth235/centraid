@@ -1,8 +1,5 @@
-import {
-  OnlineOnlyError,
-  OnlineOnlyGuard,
-  ReplicaProtocolError,
-} from "./errors.js";
+import type { OnlineOnlyGuard } from "./errors.js";
+import { OnlineOnlyError, ReplicaProtocolError } from "./errors.js";
 import type {
   OptimisticMutation,
   ReplicaEntitySchema,

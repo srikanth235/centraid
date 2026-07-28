@@ -68,10 +68,10 @@ import {
 } from "@centraid/vault";
 
 import type { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
-import {
-  StorageConnectionError,
-  type CreateStorageConnectionInput,
-  type StorageConnectionStore,
+import { StorageConnectionError } from "../backup/storage-connections.js";
+import type {
+  CreateStorageConnectionInput,
+  StorageConnectionStore,
 } from "../backup/storage-connections.js";
 import {
   assertProviderHomeProfile,
@@ -82,10 +82,8 @@ import type { StorageUsagePoller } from "../backup/storage-usage.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
 import { readJson, sendError, sendJson } from "./route-helpers.js";
-import {
-  tryStorageLocalRoutes,
-  type StorageLocalRouteDeps,
-} from "./storage-local-routes.js";
+import { tryStorageLocalRoutes } from "./storage-local-routes.js";
+import type { StorageLocalRouteDeps } from "./storage-local-routes.js";
 
 const CONNECTIONS_PATH = "/centraid/_gateway/storage/connections";
 const STATUS_PATH = "/centraid/_gateway/storage/status";
@@ -199,10 +197,10 @@ async function probeConnection(
       detail:
         "signed request reached the bucket and was accepted; provider advertises the home profile",
     };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }
@@ -325,8 +323,8 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           return streamStorageStatus(req, res, planes);
         const vaults = planes.map(storageStatus);
         return sendJson(res, 200, { vaults });
-      } catch (err) {
-        return sendError(res, err);
+      } catch (error) {
+        return sendError(res, error);
       }
     }
 
@@ -359,8 +357,8 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           })
         );
         return sendJson(res, 200, { connections: results });
-      } catch (err) {
-        return sendError(res, err);
+      } catch (error) {
+        return sendError(res, error);
       }
     }
 
@@ -375,8 +373,8 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           return sendJson(res, 200, {
             connections: await deps.storageConnections.list(),
           });
-        } catch (err) {
-          return sendError(res, err);
+        } catch (error) {
+          return sendError(res, error);
         }
       }
       if ((req.method ?? "GET") === "POST") {
@@ -409,8 +407,8 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
           const connection = await deps.storageConnections.create(body);
           await deps.onConnectionsChanged?.();
           return sendJson(res, 201, { connection, recoveryKitConfirmed });
-        } catch (err) {
-          return sendConnectionError(res, err);
+        } catch (error) {
+          return sendConnectionError(res, error);
         }
       }
       return sendJson(res, 405, {
@@ -443,8 +441,8 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
             const connection = await deps.storageConnections.update(id, body);
             await deps.onConnectionsChanged?.();
             return sendJson(res, 200, { connection });
-          } catch (err) {
-            return sendConnectionError(res, err);
+          } catch (error) {
+            return sendConnectionError(res, error);
           }
         }
         if (method === "DELETE") {
@@ -452,8 +450,8 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
             await deps.storageConnections.delete(id);
             await deps.onConnectionsChanged?.();
             return sendJson(res, 200, { ok: true });
-          } catch (err) {
-            return sendConnectionError(res, err);
+          } catch (error) {
+            return sendConnectionError(res, error);
           }
         }
         return sendJson(res, 405, {
@@ -472,8 +470,8 @@ export function makeStorageRouteHandler(deps: StorageRouteDeps): RouteHandler {
         try {
           const result = await probeConnection(deps.storageConnections, id);
           return sendJson(res, 200, result);
-        } catch (err) {
-          return sendError(res, err);
+        } catch (error) {
+          return sendError(res, error);
         }
       }
     }

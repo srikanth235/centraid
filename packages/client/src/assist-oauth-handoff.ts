@@ -6,14 +6,10 @@
  * authenticated gateway. It is never written to local/session storage.
  */
 
-import {
-  ASSIST_HANDOFF_EVENT,
-  type AssistHandoffResult,
-} from "./assist-oauth-events.js";
-import {
-  completeAssistAuthorization,
-  type AssistOAuthHandoff,
-} from "./gateway-client-connections.js";
+import { ASSIST_HANDOFF_EVENT } from "./assist-oauth-events.js";
+import type { AssistHandoffResult } from "./assist-oauth-events.js";
+import { completeAssistAuthorization } from "./gateway-client-connections.js";
+import type { AssistOAuthHandoff } from "./gateway-client-connections.js";
 
 export function parseAssistHandoffUrl(
   rawUrl: string
@@ -104,12 +100,12 @@ async function completeHandoff(
   try {
     const completed = await completeAssistAuthorization(handoff);
     return { status: "complete", connectionId: completed.connectionId };
-  } catch (err) {
+  } catch (error) {
     return {
       status: "error",
       message:
-        err instanceof Error
-          ? err.message
+        error instanceof Error
+          ? error.message
           : "Centraid Assist could not complete authorization. Start Connect again.",
     };
   }

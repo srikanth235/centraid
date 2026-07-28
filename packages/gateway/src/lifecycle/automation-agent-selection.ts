@@ -2,8 +2,8 @@ import {
   isRunnerKind,
   resolveSubsystemConfigPins,
   resolveSubsystemModel,
-  type RunnerKind,
 } from "@centraid/app-engine";
+import type { RunnerKind } from "@centraid/app-engine";
 import type { ManifestRequires } from "@centraid/automation";
 
 /**

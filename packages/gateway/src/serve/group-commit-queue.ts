@@ -55,15 +55,15 @@ export class GroupCommitQueue {
           if (result.ok) batch[index]!.resolve(result.value);
           else batch[index]!.reject(result.error);
         }
-      } catch (err) {
-        for (const task of batch) task.reject(err);
+      } catch (error) {
+        for (const task of batch) task.reject(error);
       }
     } else {
       for (const task of batch) {
         try {
           task.resolve(task.run());
-        } catch (err) {
-          task.reject(err);
+        } catch (error) {
+          task.reject(error);
         }
       }
     }

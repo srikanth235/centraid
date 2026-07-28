@@ -62,10 +62,10 @@ export function applyRestoreQuarantine(
   let marker: QuarantineMarker = {};
   try {
     marker = JSON.parse(readFileSync(markerFile, "utf8")) as QuarantineMarker;
-  } catch (err) {
+  } catch (error) {
     logger.warn(
       `vault plane: ${markerFile} exists but is unreadable: ` +
-        (err instanceof Error ? err.message : String(err))
+        (error instanceof Error ? error.message : String(error))
     );
   }
   const restoredAt =

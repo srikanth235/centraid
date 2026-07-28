@@ -4,8 +4,8 @@ import {
   doFetch,
   GatewayClientError,
   VAULT_HEADER,
-  type GatewayAuth,
 } from "../gateway-client-core.js";
+import type { GatewayAuth } from "../gateway-client-core.js";
 import { vaultStatus } from "../gateway-client-vault.js";
 import {
   resumeVaultChanges,
@@ -13,10 +13,8 @@ import {
   subscribeVaultChanges,
   clearVaultChangeCursor,
 } from "../vault-change-feed.js";
-import {
-  createReplicaCoordinator,
-  type ReplicaWebCoordinatorOptions,
-} from "./coordinator-web.js";
+import { createReplicaCoordinator } from "./coordinator-web.js";
+import type { ReplicaWebCoordinatorOptions } from "./coordinator-web.js";
 import { ReplicaProtocolError } from "./errors.js";
 import { validateOptimisticMutation } from "./query.js";
 import {
@@ -25,9 +23,9 @@ import {
   fetchReplicaIntentOutcomes,
   postReplicaCheckpoint,
   postReplicaIntent,
-  type ReplicaFetcher,
   ReplicaTransportError,
 } from "./shell-transport.js";
+import type { ReplicaFetcher } from "./shell-transport.js";
 import {
   deferTerminalReplicaPurge,
   markReplicaIdentityTerminal,
@@ -35,26 +33,26 @@ import {
   purgeReplicaIdentityStorage,
   purgeRememberedReplicaIdentities,
   unregisterRememberedReplicaIdentity,
-  type ReplicaIdentityInventory,
 } from "./storage-manifest.js";
+import type { ReplicaIdentityInventory } from "./storage-manifest.js";
 import { TerminalReplicaPurgeRetryLoop } from "./terminal-purge-retry.js";
-import {
-  DEFAULT_REPLICA_PURPOSE,
-  type EnqueueIntentInput,
-  type IntentOutcome,
-  type OptimisticMutation,
-  type ReplicaCursor,
-  type ReplicaDependency,
-  type ReplicaIdentity,
-  type ReplicaIntent,
-  type ReplicaInvalidation,
-  type ReplicaReadRequest,
-  type ReplicaReadWireResult,
-  type ReplicaSearchRequest,
-  type ReplicaSearchWireResult,
-  type ReplicaShape,
-  type ReplicaStatus,
-  type ReplicaValue,
+import { DEFAULT_REPLICA_PURPOSE } from "./types.js";
+import type {
+  EnqueueIntentInput,
+  IntentOutcome,
+  OptimisticMutation,
+  ReplicaCursor,
+  ReplicaDependency,
+  ReplicaIdentity,
+  ReplicaIntent,
+  ReplicaInvalidation,
+  ReplicaReadRequest,
+  ReplicaReadWireResult,
+  ReplicaSearchRequest,
+  ReplicaSearchWireResult,
+  ReplicaShape,
+  ReplicaStatus,
+  ReplicaValue,
 } from "./types.js";
 
 /**
@@ -216,13 +214,13 @@ export class ReplicaShellSession {
     request: ShellReplicaReadRequest
   ): Promise<ReplicaReadWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(
+    const shapeIdLocal = this.resolveShapeId(
       appId,
       request.entity,
       request.shapeId,
       request.purpose
     );
-    return this.coordinator.readWire({ ...request, shapeId });
+    return this.coordinator.readWire({ ...request, shapeId: shapeIdLocal });
   }
 
   async search(
@@ -230,13 +228,13 @@ export class ReplicaShellSession {
     request: ShellReplicaSearchRequest
   ): Promise<ReplicaSearchWireResult> {
     this.assertOpen();
-    const shapeId = this.resolveShapeId(
+    const shapeIdLocal = this.resolveShapeId(
       appId,
       request.entity,
       request.shapeId,
       request.purpose
     );
-    return this.coordinator.searchWire({ ...request, shapeId });
+    return this.coordinator.searchWire({ ...request, shapeId: shapeIdLocal });
   }
 
   async write(
@@ -247,10 +245,15 @@ export class ReplicaShellSession {
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
     const optimistic = (input.optimistic ?? []).map((mutation) => {
-      const { purpose, shapeId, ...core } = mutation;
+      const { purpose, shapeId: shapeIdLocal, ...core } = mutation;
       return {
         ...core,
-        shapeId: this.resolveShapeId(appId, mutation.entity, shapeId, purpose),
+        shapeId: this.resolveShapeId(
+          appId,
+          mutation.entity,
+          shapeIdLocal,
+          purpose
+        ),
       };
     }) as OptimisticMutation[];
     for (const mutation of optimistic) {
@@ -705,7 +708,7 @@ export async function openReplicaShellSession(
       }
     );
   }
-  let session: ReplicaShellSession | undefined;
+  let session: ReplicaShellSession | undefined = undefined;
   let pendingBootstrap = false;
   let persistedShapeIds: readonly string[] = [];
   const fetcher = options.fetcher ?? fetchReplicaForScope(gatewayAuth);

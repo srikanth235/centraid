@@ -17,10 +17,10 @@ import {
   decrypt,
   deriveNonce,
   encryptWithNonce,
-  type Keyring,
   masterKeyForEpoch,
   deriveDataKey,
 } from "./crypto.js";
+import type { Keyring } from "./crypto.js";
 
 export type ManifestEntryKind = "db" | "blob" | "git-bundle" | "seal-key";
 
@@ -293,8 +293,10 @@ function validateStoredManifest(value: unknown): StoredManifest {
       throw new Error("manifest: duplicate chunk id");
     chunkIds.add(c["id"] as string);
   }
-  for (const value of Object.values(v["appMeta"] as Record<string, unknown>)) {
-    if (typeof value !== "string")
+  for (const valueLocal of Object.values(
+    v["appMeta"] as Record<string, unknown>
+  )) {
+    if (typeof valueLocal !== "string")
       throw new Error("manifest: appMeta values must be strings");
   }
   return value as StoredManifest;

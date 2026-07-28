@@ -1,17 +1,15 @@
-import {
-  auth,
-  authHeaders,
-  doFetch,
-  type GatewayAuth,
-} from "./gateway-client-core.js";
+import { auth, authHeaders, doFetch } from "./gateway-client-core.js";
+import type { GatewayAuth } from "./gateway-client-core.js";
 import {
   consumeVaultChangeSse,
   INITIAL_VAULT_CURSOR,
   parseChange,
   parseCursor,
-  type SseFrame,
-  type VaultChangeCursor,
-  type VaultChangeMessage,
+} from "./vault-change-sse.js";
+import type {
+  SseFrame,
+  VaultChangeCursor,
+  VaultChangeMessage,
 } from "./vault-change-sse.js";
 
 export {

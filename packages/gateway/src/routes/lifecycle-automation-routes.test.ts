@@ -15,7 +15,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import type { GatewayPaths } from "../paths.ts";
-import { serve, type GatewayServeHandle } from "../serve/serve.ts";
+import { serve } from "../serve/serve.ts";
+import type { GatewayServeHandle } from "../serve/serve.ts";
 // lifecycle-automation-routes is exercised through serve() HTTP paths below (#545 B3).
 
 let dataDir: string;

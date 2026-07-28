@@ -83,10 +83,10 @@ export async function ensureAppSession(appId: string): Promise<string> {
     }
   }
   const wanted = sessionIdFor(appId);
-  const p = openAppSession(wanted).catch((err: unknown) => {
-    if (err instanceof GatewayClientError && err.code === "conflict")
+  const p = openAppSession(wanted).catch((error: unknown) => {
+    if (error instanceof GatewayClientError && error.code === "conflict")
       return wanted;
-    throw err;
+    throw error;
   });
   appSessions.set(appId, p);
   return p;

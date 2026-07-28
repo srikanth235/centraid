@@ -300,8 +300,8 @@ const server = http.createServer(async (req, res) => {
 
     if (rel === "/" || rel === "") rel = "/index.html";
     await serveAppAsset(req, res, appId, rel);
-  } catch (err) {
-    console.error("[visual-harness] request failed:", err);
+  } catch (error) {
+    console.error("[visual-harness] request failed:", error);
     if (!res.headersSent) sendPlain(res, 500, "internal error");
   }
 });

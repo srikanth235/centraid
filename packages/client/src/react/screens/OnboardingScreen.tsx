@@ -1,10 +1,5 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type JSX,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import type { CSSProperties, JSX } from "react";
 
 import type { ConnectFlowResult } from "../shell/routes/connectFlow-core.js";
 import ConnectFlow from "../shell/routes/ConnectFlow.js";
@@ -106,10 +101,10 @@ export default function OnboardingScreen({
       .then((expected) => {
         if (!cancelled) setKeychainNote(expected);
       })
-      .catch((err: unknown) => {
+      .catch((caughtError: unknown) => {
         // A broken probe must not block onboarding, but losing the note means
         // the OS dialog arrives unannounced — leave a trace for debugging.
-        console.error("keychainPromptExpected probe failed", err);
+        console.error("keychainPromptExpected probe failed", caughtError);
       });
     return () => {
       cancelled = true;
@@ -142,9 +137,13 @@ export default function OnboardingScreen({
         const result = await connectFreshLocalGateway();
         setSubmitting(false);
         afterConnect(result);
-      } catch (err) {
+      } catch (caughtError) {
         setSubmitting(false);
-        setError(err instanceof Error ? err.message : String(err));
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError)
+        );
       }
     })();
   };
@@ -161,10 +160,10 @@ export default function OnboardingScreen({
           vaultId: result.vaultId,
           path,
         });
-      } catch (err) {
+      } catch (caughtError) {
         setSubmitting(false);
         setError(
-          `Couldn't save your profile: ${err instanceof Error ? err.message : String(err)}`
+          `Couldn't save your profile: ${caughtError instanceof Error ? caughtError.message : String(caughtError)}`
         );
       }
     })();
@@ -211,9 +210,13 @@ export default function OnboardingScreen({
         }
         await window.CentraidApi.saveSettings?.({ offerGatewayService: true });
         finish(pendingResult);
-      } catch (err) {
+      } catch (caughtError) {
         setSubmitting(false);
-        setError(err instanceof Error ? err.message : String(err));
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError)
+        );
       }
     })();
   };

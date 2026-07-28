@@ -11,7 +11,8 @@ import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import type { GatewayPaths } from "../paths.js";
 import type { WorktreeStore } from "../worktree-store/index.js";
-import { serve, type GatewayServeHandle } from "./serve.js";
+import { serve } from "./serve.js";
+import type { GatewayServeHandle } from "./serve.js";
 import { runWithVaultContext } from "./vault-context.js";
 import { WebAppSessions } from "./web-app-sessions.js";
 import {

@@ -1,10 +1,5 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type JSX,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import type { CSSProperties, JSX } from "react";
 
 import type {
   AppKnobDTO,

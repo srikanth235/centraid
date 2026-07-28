@@ -4,7 +4,8 @@
 // state of its own. Identity is v0 key-equality, so the host (which owns the
 // database files) recovers credentials by reading the enrolled rows back.
 
-import { enrollAgent, enrollApp, type BootstrapResult } from "./bootstrap.js";
+import { enrollAgent, enrollApp } from "./bootstrap.js";
+import type { BootstrapResult } from "./bootstrap.js";
 import type { VaultDb } from "./db.js";
 import type { FilterClause, Risk } from "./gateway/types.js";
 import { nowIso } from "./ids.js";

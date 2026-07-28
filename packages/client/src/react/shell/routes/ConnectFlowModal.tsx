@@ -1,8 +1,10 @@
-import { type JSX, useEffect } from "react";
+import { useEffect } from "react";
+import type { JSX } from "react";
 
 import { cx } from "../../ui/cx.js";
 import { iconSvg } from "../iconSvg.js";
-import ConnectFlow, { type ConnectFlowProps } from "./ConnectFlow.js";
+import ConnectFlow from "./ConnectFlow.js";
+import type { ConnectFlowProps } from "./ConnectFlow.js";
 
 import controlsCss from "../../styles/controls.module.css";
 // Reuses SpaceModal's overlay/scrim/head/foot chrome verbatim, same

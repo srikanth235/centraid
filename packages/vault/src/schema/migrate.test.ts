@@ -279,8 +279,8 @@ describe("schema/migrate", () => {
     let caught: unknown;
     try {
       migrate(db, JOURNAL_MIGRATIONS);
-    } catch (err) {
-      caught = err;
+    } catch (error) {
+      caught = error;
     }
     expect(caught).toBeInstanceOf(VaultSchemaAheadError);
     const err = caught as VaultSchemaAheadError;

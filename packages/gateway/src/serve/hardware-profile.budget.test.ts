@@ -1,9 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import {
-  resolveGatewayHardwareProfile,
-  type ResourceMode,
-} from "./hardware-profile.js";
+import { resolveGatewayHardwareProfile } from "./hardware-profile.js";
+import type { ResourceMode } from "./hardware-profile.js";
 
 /*
  * #528 Phase E ground-truth guard. This table was captured from the resolver

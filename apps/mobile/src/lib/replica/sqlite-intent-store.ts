@@ -1,10 +1,10 @@
-import {
-  ReplicaProtocolError,
-  type IntentRecordStore,
-  type IntentState,
-  type NewStoredIntent,
-  type ReplicaIntent,
-  type ReplicaSqliteDriver,
+import { ReplicaProtocolError } from "@centraid/client/replica/native";
+import type {
+  IntentRecordStore,
+  IntentState,
+  NewStoredIntent,
+  ReplicaIntent,
+  ReplicaSqliteDriver,
 } from "@centraid/client/replica/native";
 
 const DDL = `

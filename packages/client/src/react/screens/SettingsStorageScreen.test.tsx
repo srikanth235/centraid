@@ -1,10 +1,12 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import SettingsStorageScreen, {
-  type SettingsStorageBridgeProps,
-  type StorageConnectionRowDTO,
+import SettingsStorageScreen from "./SettingsStorageScreen.js";
+import type {
+  SettingsStorageBridgeProps,
+  StorageConnectionRowDTO,
 } from "./SettingsStorageScreen.js";
 
 function makeRow(

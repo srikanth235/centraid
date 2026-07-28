@@ -170,18 +170,18 @@ export function rewriteRuntimeSymlinks(out, root) {
     }
     try {
       symlinkSync(rel, full);
-    } catch (err) {
+    } catch (error) {
       // Another walk step may race; replace aggressively.
       if (
-        err &&
-        typeof err === "object" &&
-        "code" in err &&
-        err.code === "EEXIST"
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "EEXIST"
       ) {
         rmSync(full, { recursive: true, force: true });
         symlinkSync(rel, full);
       } else {
-        throw err;
+        throw error;
       }
     }
   };
@@ -415,8 +415,8 @@ if (isMain) {
     process.stdout.write(
       `gateway runtime assembled → ${out} (${report.packages.length} packages${packagesOnly ? ", packages-only" : ""})\n`
     );
-  } catch (err) {
-    process.stderr.write(`${err instanceof Error ? err.stack : err}\n`);
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.stack : error}\n`);
     process.exit(1);
   }
 }

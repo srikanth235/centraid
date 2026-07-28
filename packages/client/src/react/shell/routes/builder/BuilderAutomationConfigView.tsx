@@ -1,4 +1,5 @@
-import { type JSX, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { cronNextRuns, describeCron } from "../../../../cron.js";
 import {
@@ -20,8 +21,8 @@ import {
 } from "./BuilderAutomationPaneShared.js";
 import TriggerEditor, {
   formatWhereClauses,
-  type EditableTrigger,
 } from "./BuilderAutomationTriggers.js";
+import type { EditableTrigger } from "./BuilderAutomationTriggers.js";
 
 import styles from "./BuilderAutomationPane.module.css";
 
@@ -252,8 +253,8 @@ export default function ConfigView({
         manifest: fresh?.manifest ?? nextManifest,
       });
       setEditing(null);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : String(err));
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }

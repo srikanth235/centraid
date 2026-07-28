@@ -8,10 +8,8 @@ import path from "node:path";
 import { hostCredentialKey, keychainAccountFor } from "./key-store.js";
 import { daemonLayoutFor } from "./paths.js";
 import { resolveDaemonConfig } from "./resolve-config.js";
-import {
-  adoptKeyStoreCredential,
-  type ServiceKeyCredential,
-} from "./service-credential.js";
+import { adoptKeyStoreCredential } from "./service-credential.js";
+import type { ServiceKeyCredential } from "./service-credential.js";
 import {
   DEFAULT_LAUNCHD_LABEL,
   DEFAULT_SYSTEMD_UNIT_NAME,
@@ -20,8 +18,8 @@ import {
   launchAgentPlistPath,
   systemdUnitPath,
   systemdCredentialPath,
-  type ServiceUnitSpec,
 } from "./service-unit.js";
+import type { ServiceUnitSpec } from "./service-unit.js";
 
 type Fail = (message: string, code?: number) => never;
 

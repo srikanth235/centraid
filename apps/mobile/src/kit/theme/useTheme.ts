@@ -1,7 +1,8 @@
 import { useColorScheme } from "react-native";
 
 import { resolveScheme, useAppearance } from "./appearance";
-import { resolveTheme, type ThemeValue } from "./resolve";
+import { resolveTheme } from "./resolve";
+import type { ThemeValue } from "./resolve";
 
 // Dark-mode-aware theme hook. Folds the device-local Appearance preference over
 // the OS color scheme (see appearance.ts), so pinning Light/Dark in Settings

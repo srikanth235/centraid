@@ -4,11 +4,11 @@ import { describe, expect, test, vi } from "vitest";
 
 import type { VaultChangeMessage } from "../vault-change-feed.js";
 import { createReplicaCoordinator } from "./coordinator-web.js";
-import {
-  ReplicaCoordinator,
-  type ReplicaChangeFeedAdapter,
-  type ReplicaChangePuller,
-  type ReplicaCoordinatorOptions,
+import { ReplicaCoordinator } from "./coordinator.js";
+import type {
+  ReplicaChangeFeedAdapter,
+  ReplicaChangePuller,
+  ReplicaCoordinatorOptions,
 } from "./coordinator.js";
 import { ReplicaRebootstrapRequiredError } from "./errors.js";
 import { MemoryIntentStore } from "./intent-store.js";
@@ -18,10 +18,8 @@ import type {
   ReplicaCursor,
   ReplicaSnapshot,
 } from "./types.js";
-import {
-  ReplicaWorkerClient,
-  type ReplicaWorkerLike,
-} from "./worker-client.js";
+import { ReplicaWorkerClient } from "./worker-client.js";
+import type { ReplicaWorkerLike } from "./worker-client.js";
 import type {
   ReplicaWorkerRequest,
   ReplicaWorkerResponse,

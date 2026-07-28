@@ -7,9 +7,8 @@ import {
   MIN_COMPRESS_BYTES,
   negotiateEncoding,
   staticQualityForHost,
-  type CompressQuality,
-  type Encoding,
 } from "./compression.js";
+import type { CompressQuality, Encoding } from "./compression.js";
 import { staticSecurityHeaders } from "./security.js";
 
 export function computeEtag(buf: Buffer): string {

@@ -1,4 +1,5 @@
-import { type JSX, useState } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import type { MemberScope } from "../memberScope.js";
 import ScopePicker from "./ScopePicker.js";

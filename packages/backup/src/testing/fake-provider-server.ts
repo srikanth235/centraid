@@ -6,17 +6,17 @@ import {
   paginateInventory,
   validateProviderPolicy,
 } from "../provider-observability.js";
-import {
-  BackupProviderError,
-  type ProviderAuditEvent,
-  type ProviderAuditQuery,
-  type ProviderInventoryObject,
-  type ProviderInventoryQuery,
-  type ProviderPolicy,
-  type SnapshotRow,
-  STORE_CLASSES,
-  type StoreClass,
+import { BackupProviderError, STORE_CLASSES } from "../provider.js";
+import type {
+  ProviderAuditEvent,
+  ProviderAuditQuery,
+  ProviderInventoryObject,
+  ProviderInventoryQuery,
+  ProviderPolicy,
+  SnapshotRow,
+  StoreClass,
 } from "../provider.js";
+import type * as TypeImport_f6ycyk from "../provider.js";
 import { S3TestServer } from "./s3-test-server.js";
 
 const API_KEY = "test-bearer-token";
@@ -152,16 +152,16 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
   }
 
   const server = http.createServer((req, res) => {
-    void handle(req, res).catch((err: unknown) => {
-      if (err instanceof BackupProviderError) {
-        errorBody(res, err.status, err.code, err.message, err.details);
+    void handle(req, res).catch((error: unknown) => {
+      if (error instanceof BackupProviderError) {
+        errorBody(res, error.status, error.code, error.message, error.details);
         return;
       }
       errorBody(
         res,
         502,
         "provider_error",
-        err instanceof Error ? err.message : String(err)
+        error instanceof Error ? error.message : String(error)
       );
     });
   });
@@ -333,7 +333,7 @@ export async function startFakeProviderServer(): Promise<FakeProviderServer> {
     }
     if (req.method === "POST" && rest === "/snapshots") {
       const reg = (await readJsonBody(req)) as Parameters<
-        import("../provider.js").BackupProvider["registerSnapshot"]
+        TypeImport_f6ycyk.BackupProvider["registerSnapshot"]
       >[1];
       const cached = idempotency.get(targetId)!.get(reg.idempotencyKey);
       if (cached) return jsonBody(res, 200, cached);

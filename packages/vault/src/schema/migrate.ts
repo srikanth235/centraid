@@ -208,9 +208,9 @@ export function migrate(db: DatabaseSync, migrations: readonly string[]): void {
       db.exec(ddl);
       db.exec(`PRAGMA user_version = ${version + 1}`);
       db.exec("COMMIT");
-    } catch (err) {
+    } catch (error) {
       db.exec("ROLLBACK");
-      throw err;
+      throw error;
     }
     version += 1;
   }

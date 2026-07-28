@@ -1,16 +1,18 @@
 // governance: allow-repo-hygiene file-size-limit (#552) one suite per screen — decision/risk/actor/grant/collapse/filter/expand cases all exercise the single ApprovalsScreen activity contract and share its mount fixtures
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import ApprovalsScreen, {
-  type ApprovalsActivityRowDTO,
-  type ApprovalsGrantRowDTO,
-  type ApprovalsNeedsAuthRowDTO,
-  type ApprovalsOutboxRowDTO,
-  type ApprovalsParkedRowDTO,
-  type ApprovalsScopeRequestRowDTO,
-  type ApprovalsScreenProps,
+import ApprovalsScreen from "./ApprovalsScreen.js";
+import type {
+  ApprovalsActivityRowDTO,
+  ApprovalsGrantRowDTO,
+  ApprovalsNeedsAuthRowDTO,
+  ApprovalsOutboxRowDTO,
+  ApprovalsParkedRowDTO,
+  ApprovalsScopeRequestRowDTO,
+  ApprovalsScreenProps,
 } from "./ApprovalsScreen.js";
 
 const outboxRow: ApprovalsOutboxRowDTO = {

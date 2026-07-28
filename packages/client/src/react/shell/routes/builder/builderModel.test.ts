@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  type ConversationMsg,
   parseVersionTime,
   relTime,
   summarizeGroup,
@@ -10,6 +9,7 @@ import {
   toolVerb,
   turnProgress,
 } from "./builderModel.js";
+import type { ConversationMsg } from "./builderModel.js";
 
 describe(toolVerb, () => {
   it("maps known tools and title-cases the rest", () => {

@@ -93,11 +93,11 @@ export async function act(
       input,
       ...(scope ? { scope } : {}),
     });
-  } catch (err) {
+  } catch (error) {
     // A read-only audience is refused by the shell with a human message; that
     // is narration, not a crash, and it reads like any other refusal.
-    const e = err as { message?: string };
-    notice(String(e?.message ?? err));
+    const e = error as { message?: string };
+    notice(String(e?.message ?? error));
     return undefined;
   }
 }

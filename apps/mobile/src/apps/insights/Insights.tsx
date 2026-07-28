@@ -24,7 +24,8 @@ import Svg, {
 } from "react-native-svg";
 
 import HomeKey from "../../kit/components/HomeKey";
-import { useTheme, type ThemeColors } from "../../kit/theme";
+import { useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 import {
   formatBytes,
   formatCount,
@@ -32,14 +33,17 @@ import {
   formatUptime,
   formatUsd,
   relativeTime,
-  type ComponentHealth,
-  type ComponentStatus,
-  type GatewayHealth,
-  type InsightsSummary,
+} from "../../lib/insights";
+import type {
+  ComponentHealth,
+  ComponentStatus,
+  GatewayHealth,
+  InsightsSummary,
 } from "../../lib/insights";
 import type { InsightsScreenProps } from "../../navigation";
 import { makeStyles } from "./Insights.styles";
-import { useInsights, type InsightsState } from "./useInsights";
+import { useInsights } from "./useInsights";
+import type { InsightsState } from "./useInsights";
 
 type Styles = ReturnType<typeof makeStyles>;
 type Colors = ThemeColors;

@@ -17,9 +17,8 @@ import {
   isBinaryDerivative,
   isDerivativeVariant,
   validateDerivativeContribution,
-  type DerivativeVariant,
-  type ValidatedDerivative,
 } from "./derivatives.js";
+import type { DerivativeVariant, ValidatedDerivative } from "./derivatives.js";
 import { extractBlobMeta, sniffMediaType } from "./pipeline.js";
 import { upsertContentEmbedding } from "./semantic-contributions.js";
 import { sha256OfBytes } from "./store.js";

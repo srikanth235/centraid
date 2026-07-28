@@ -4,17 +4,15 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   readReplicaIntentOutcome,
   recordReplicaIntentOutcome,
-  type ReplicaIntentOutcome,
 } from "@centraid/vault";
+import type { ReplicaIntentOutcome } from "@centraid/vault";
 
 import { canWrite } from "../serve/enrollment-store.js";
 import { runWithReplicaIntent } from "../serve/replica-intent-context.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import { replicaOutcomeWire } from "./replica-projection.js";
-import {
-  REPLICA_PROTOCOL_VERSION,
-  type ReplicaShapeAccess,
-} from "./replica-shape.js";
+import { REPLICA_PROTOCOL_VERSION } from "./replica-shape.js";
+import type { ReplicaShapeAccess } from "./replica-shape.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 export interface ReplicaIntentDispatchInput {

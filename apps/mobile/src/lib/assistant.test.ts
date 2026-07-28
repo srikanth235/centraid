@@ -1,3 +1,5 @@
+import type * as TypeImport_17jh4pq from "expo-document-picker";
+import type * as TypeImport_16tq702 from "expo/fetch";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const gateway = vi.hoisted(() => ({
@@ -10,11 +12,10 @@ vi.mock(import("./gateway") as Promise<unknown>, () => ({
   requireGatewayBase: () => Promise.resolve("https://gateway.test"),
 }));
 vi.mock(import("expo/fetch"), () => ({
-  fetch: vi.fn<typeof import("expo/fetch").fetch>(),
+  fetch: vi.fn<typeof TypeImport_16tq702.fetch>(),
 }));
 vi.mock(import("expo-document-picker"), () => ({
-  getDocumentAsync:
-    vi.fn<typeof import("expo-document-picker").getDocumentAsync>(),
+  getDocumentAsync: vi.fn<typeof TypeImport_17jh4pq.getDocumentAsync>(),
 }));
 
 const { loadAssistantConfig } = await import("./assistant");

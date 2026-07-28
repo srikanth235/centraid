@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import { createSpace, deleteSpace, saveSpace } from "./spaceModals.js";
 
-const updateVault = vi.fn<
-  typeof import("../../../gateway-client.js").updateVault
->((_input) =>
+const updateVault = vi.fn<typeof TypeImport_1gl5zx7.updateVault>((_input) =>
   Promise.resolve({ vaultId: "v1", name: "Work", ownerPartyId: "party-1" })
 );
 // `vi.mock` is hoisted above the imports by vitest, so the gateway stub lands
@@ -21,11 +20,8 @@ vi.mock(import("../../../gateway-client.js"), () => ({
         blurb: "real",
       },
     ]),
-  updateVault: (
-    input: Parameters<
-      typeof import("../../../gateway-client.js").updateVault
-    >[0]
-  ) => updateVault(input),
+  updateVault: (input: Parameters<typeof TypeImport_1gl5zx7.updateVault>[0]) =>
+    updateVault(input),
 }));
 
 const createVault = vi.fn<NonNullable<typeof window.CentraidApi.createVault>>(

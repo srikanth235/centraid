@@ -16,12 +16,11 @@ import {
   readReplicaRows,
   replicaUnavailableColumnsOf,
   resolveEntity,
-  type FilterClause,
-  type ConsentAllow,
-  type ReplicaRow,
 } from "@centraid/vault";
+import type { FilterClause, ConsentAllow, ReplicaRow } from "@centraid/vault";
 
-import { canWrite, type GrantableRole } from "../serve/enrollment-store.js";
+import { canWrite } from "../serve/enrollment-store.js";
+import type { GrantableRole } from "../serve/enrollment-store.js";
 
 export const REPLICA_PROTOCOL_VERSION = 1 as const;
 export const REPLICA_MAX_VALUE_BYTES = 64 * 1024;

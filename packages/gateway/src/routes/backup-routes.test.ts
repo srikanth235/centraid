@@ -6,8 +6,8 @@ import {
   parseRecoveryKit,
   recoveryKitFingerprint,
   wrapRecoveryKit,
-  type RecoveryKitDocument,
 } from "@centraid/backup";
+import type { RecoveryKitDocument } from "@centraid/backup";
 import { bootstrapVault, openVaultDb } from "@centraid/vault";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -17,10 +17,8 @@ import type { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
-import {
-  makeBackupRouteHandler,
-  type BackupStatusBody,
-} from "./backup-routes.js";
+import { makeBackupRouteHandler } from "./backup-routes.js";
+import type { BackupStatusBody } from "./backup-routes.js";
 
 /** Loosened GET-body shape for tests that only assert a slice of it. */
 type BackupStatusBodyForTest = Pick<BackupStatusBody, "recoveryKit">;

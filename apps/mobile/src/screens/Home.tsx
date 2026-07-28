@@ -17,14 +17,12 @@ import { useFocusEffect } from "@react-navigation/native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import {
-  runOnJS,
-  useSharedValue,
-  type SharedValue,
-} from "react-native-reanimated";
+import { runOnJS, useSharedValue } from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { family, useTheme, type ThemeColors } from "../kit/theme";
+import { family, useTheme } from "../kit/theme";
+import type { ThemeColors } from "../kit/theme";
 import {
   GatewayError,
   isOpenableApp,
@@ -36,12 +34,10 @@ import {
 import { getProfileColor, getProfileName } from "../lib/profile";
 import { subscribeSpaces } from "../lib/spaces";
 import type { HomeScreenProps } from "../navigation";
-import AttentionLine, { type ConnectionState } from "./home/AttentionLine";
-import {
-  NATIVE_APP_IDS,
-  buildLauncherItems,
-  type LauncherItem,
-} from "./home/catalog";
+import AttentionLine from "./home/AttentionLine";
+import type { ConnectionState } from "./home/AttentionLine";
+import { NATIVE_APP_IDS, buildLauncherItems } from "./home/catalog";
+import type { LauncherItem } from "./home/catalog";
 import GlassDock from "./home/GlassDock";
 import GreetingHeader from "./home/GreetingHeader";
 import LauncherGrid from "./home/LauncherGrid";

@@ -1,6 +1,7 @@
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -8,7 +9,8 @@ import type {
   AtlasGraphPayload,
   AtlasPulsePayload,
 } from "../../gateway-client.js";
-import AtlasScreen, { type AtlasScreenProps } from "./AtlasScreen.js";
+import AtlasScreen from "./AtlasScreen.js";
+import type { AtlasScreenProps } from "./AtlasScreen.js";
 
 // The Browse tab (mounted when a Kinds card is clicked) self-fetches through the
 // vault client. Stub those helpers so the openBrowse seam can be exercised here

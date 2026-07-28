@@ -5,12 +5,8 @@
  * so this is split out of `cli.ts` rather than duplicated.
  */
 
-import {
-  loadConfigFile,
-  validateConfig,
-  DaemonConfigError,
-  type DaemonConfig,
-} from "./config.js";
+import { loadConfigFile, validateConfig, DaemonConfigError } from "./config.js";
+import type { DaemonConfig } from "./config.js";
 import { DEFAULT_GATEWAY_PORT, platformDefaultDataDir } from "./data-dir.js";
 
 export interface ConfigSource {
@@ -28,9 +24,9 @@ export async function resolveDaemonConfig(
   if (source.configPath) {
     try {
       cfg = await loadConfigFile(source.configPath);
-    } catch (err) {
-      if (err instanceof DaemonConfigError) fail(err.message, 2);
-      throw err;
+    } catch (error) {
+      if (error instanceof DaemonConfigError) fail(error.message, 2);
+      throw error;
     }
   } else {
     cfg = validateConfig({

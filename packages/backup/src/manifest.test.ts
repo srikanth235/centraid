@@ -11,8 +11,8 @@ import {
   sealManifest,
   sha256Hex,
   verifyManifest,
-  type ManifestEntry,
 } from "./manifest.js";
+import type { ManifestEntry } from "./manifest.js";
 
 describe(canonicalJson, () => {
   test("sorts object keys recursively", () => {

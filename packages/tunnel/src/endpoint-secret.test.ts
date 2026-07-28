@@ -1,10 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
-import {
-  EndpointSecretError,
-  loadEndpointSecret,
-  type EndpointSecretPersistence,
-} from "./endpoint-secret.js";
+import { EndpointSecretError, loadEndpointSecret } from "./endpoint-secret.js";
+import type { EndpointSecretPersistence } from "./endpoint-secret.js";
 
 function memory(initial: Uint8Array | null): EndpointSecretPersistence & {
   current: Uint8Array | null;

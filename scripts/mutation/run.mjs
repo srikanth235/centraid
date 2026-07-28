@@ -332,14 +332,14 @@ function runSeeds(seeds) {
         const report = JSON.parse(readFileSync(reportAbs, "utf8"));
         score = mutationScoreFromReport(report);
         if (score !== null) status = "ok";
-      } catch (err) {
+      } catch (error) {
         rows.push({
           id: seed.id,
           label: seed.label,
           score: null,
           status: "failed",
           reportPath: seed.report,
-          error: String(err),
+          error: String(error),
         });
         continue;
       }

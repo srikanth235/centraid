@@ -51,8 +51,8 @@ export default async function activityHandler({ ctx }: HandlerArgs) {
     }
     rows.sort((a, b) => String(b.date).localeCompare(String(a.date)));
     return { me, currency: data.currency, activity: rows };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       me: null,
       currency: "USD",

@@ -1,5 +1,6 @@
 import type { IconName } from "@centraid/design-tokens";
-import { useMemo, useState, type CSSProperties, type JSX } from "react";
+import { useMemo, useState } from "react";
+import type { CSSProperties, JSX } from "react";
 
 import { INTEGRATION_HUES } from "../format.js";
 import type {

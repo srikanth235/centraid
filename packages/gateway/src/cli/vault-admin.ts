@@ -23,9 +23,10 @@ import { GatewayDatabase, GatewayLockError } from "../serve/gateway-db.js";
 import {
   openVaultRegistry,
   VaultRegistryError,
-  type VaultInfo,
 } from "../serve/vault-registry.js";
-import { jsonFail, runJson, type Fail } from "./json-cli.js";
+import type { VaultInfo } from "../serve/vault-registry.js";
+import { jsonFail, runJson } from "./json-cli.js";
+import type { Fail } from "./json-cli.js";
 import { daemonKeyStore } from "./key-store.js";
 import { daemonLayoutFor } from "./paths.js";
 
@@ -172,9 +173,9 @@ export async function commandVault(
         default:
           localFail(`unknown vault subcommand "${action}"`, 2);
       }
-    } catch (err) {
-      if (err instanceof VaultRegistryError) localFail(err.message, 1);
-      throw err;
+    } catch (error) {
+      if (error instanceof VaultRegistryError) localFail(error.message, 1);
+      throw error;
     } finally {
       registry.stop();
       mutationLock?.close();

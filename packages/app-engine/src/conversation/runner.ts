@@ -22,6 +22,7 @@ import type {
   RunnerKind,
   TurnAttachment,
 } from "./turn.js";
+import type * as TypeImport_bjbigq from "./turn.js";
 
 export type AgentFailureClass =
   | "spawn"
@@ -283,7 +284,7 @@ export interface ConversationTurnInput {
     estimatedTokens: number;
   };
   /** Historical files re-attached only if the target advertises their block type. */
-  hydrationAttachments?: import("./turn.js").TurnAttachment[];
+  hydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
   /** Full-ledger recovery plan used only if this runner's own resume handle expired. */
   recoveryHydrationContext?: {
     prompt: string;
@@ -293,7 +294,7 @@ export interface ConversationTurnInput {
     estimatedTokens: number;
   };
   /** Full-ledger counterpart to `hydrationAttachments`. */
-  recoveryHydrationAttachments?: import("./turn.js").TurnAttachment[];
+  recoveryHydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
   /**
    * Per-rung resume + hydration planner, injected by the turn driver (which
    * owns the conversation store). The failover ladder can land on a provider
@@ -321,10 +322,10 @@ export interface TurnResumePlan {
   usageSnapshot?: AdapterUsageSnapshot;
   /** Ledger delta past THIS binding's watermark (the full ledger when cold). */
   hydrationContext?: ConversationTurnInput["hydrationContext"];
-  hydrationAttachments?: import("./turn.js").TurnAttachment[];
+  hydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
   /** Full-ledger plan used only if `sessionId` turns out to be expired. */
   recoveryHydrationContext?: ConversationTurnInput["recoveryHydrationContext"];
-  recoveryHydrationAttachments?: import("./turn.js").TurnAttachment[];
+  recoveryHydrationAttachments?: TypeImport_bjbigq.TurnAttachment[];
 }
 
 export interface ConversationTurnResult {

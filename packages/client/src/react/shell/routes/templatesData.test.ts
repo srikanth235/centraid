@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TemplateMetaEntry } from "../../../gateway-client.js";
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import {
   installAppTemplate,
   loadAppTemplates,
@@ -14,12 +15,9 @@ import {
 // close over them without a TDZ error, keeping the real imports first.
 const { listTemplates, gwCloneTemplate, gwInstallTemplate } = vi.hoisted(
   () => ({
-    listTemplates:
-      vi.fn<typeof import("../../../gateway-client.js").listTemplates>(),
-    gwCloneTemplate:
-      vi.fn<typeof import("../../../gateway-client.js").cloneTemplate>(),
-    gwInstallTemplate:
-      vi.fn<typeof import("../../../gateway-client.js").installTemplate>(),
+    listTemplates: vi.fn<typeof TypeImport_1gl5zx7.listTemplates>(),
+    gwCloneTemplate: vi.fn<typeof TypeImport_1gl5zx7.cloneTemplate>(),
+    gwInstallTemplate: vi.fn<typeof TypeImport_1gl5zx7.installTemplate>(),
   })
 );
 vi.mock(import("../../../gateway-client.js"), () => ({

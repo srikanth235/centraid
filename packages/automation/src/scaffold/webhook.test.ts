@@ -15,9 +15,8 @@ import {
   rotateWebhookInFiles,
   verifyWebhookSecret,
   WEBHOOK_ROUTE_PREFIX,
-  type WebhookFileMapEntry,
-  type WebhookIngressFn,
 } from "./webhook.js";
+import type { WebhookFileMapEntry, WebhookIngressFn } from "./webhook.js";
 
 function manifest(triggers: unknown[]): string {
   return (

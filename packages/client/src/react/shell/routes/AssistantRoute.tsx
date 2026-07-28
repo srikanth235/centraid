@@ -430,8 +430,8 @@ export default function AssistantRoute({
     /** Every provider approved so far during THIS send attempt (#567). */
     providerConsent?: string[];
   }): Promise<void> => {
-    const conversationId = m.current.currentId;
-    if (!conversationId) return;
+    const conversationIdLocal = m.current.currentId;
+    if (!conversationIdLocal) return;
     const baselineTurnCount = m.current.turnCount;
     if (opts.removeFromIndex !== undefined)
       m.current.msgs = m.current.msgs.slice(0, opts.removeFromIndex);
@@ -490,7 +490,8 @@ export default function AssistantRoute({
     let sawActivity = false;
 
     const onEvent = (event: TurnStreamEvent): void => {
-      if (m.current.disposed || m.current.currentId !== conversationId) return;
+      if (m.current.disposed || m.current.currentId !== conversationIdLocal)
+        return;
       if (event.type !== "error" && event.type !== "aborted")
         sawActivity = true;
       switch (event.type) {
@@ -630,7 +631,7 @@ export default function AssistantRoute({
     try {
       const res = await streamAssistantTurn(
         {
-          conversationId,
+          conversationId: conversationIdLocal,
           message: opts.text,
           idempotencyKey: opts.idempotencyKey,
           ...(opts.retryOf ? { retryOf: opts.retryOf } : {}),
@@ -651,8 +652,8 @@ export default function AssistantRoute({
           additionalDirectories: m.current.additionalDirectories,
           // Explicit, never ambient: the turn must land in the space the
           // conversation was created in (issue #599).
-          ...(conversationScope(conversationId)
-            ? { scopeId: conversationScope(conversationId) }
+          ...(conversationScope(conversationIdLocal)
+            ? { scopeId: conversationScope(conversationIdLocal) }
             : {}),
         },
         onEvent,
@@ -664,7 +665,8 @@ export default function AssistantRoute({
         threw = error;
     }
 
-    if (m.current.disposed || m.current.currentId !== conversationId) return;
+    if (m.current.disposed || m.current.currentId !== conversationIdLocal)
+      return;
     if (requiredProvider) {
       setBusy(false);
       const approved = await confirm({
@@ -672,7 +674,8 @@ export default function AssistantRoute({
         title: `Send to ${requiredProvider}?`,
         message: `Allow this conversation to be sent to ${requiredProvider}? This can include your message, attachments, conversation handoff, and vault tool results.`,
       });
-      if (m.current.disposed || m.current.currentId !== conversationId) return;
+      if (m.current.disposed || m.current.currentId !== conversationIdLocal)
+        return;
       if (approved) {
         // Carry EVERY provider approved this attempt — a consent-gated failover
         // asks twice, and dropping the first approval loops forever (#567).
@@ -725,16 +728,17 @@ export default function AssistantRoute({
         getStatus: () =>
           conversationStatus(
             ASSISTANT_APP_ID,
-            conversationId,
-            conversationScope(conversationId)
+            conversationIdLocal,
+            conversationScope(conversationIdLocal)
           ),
         isCancelled: () =>
-          m.current.disposed || m.current.currentId !== conversationId,
+          m.current.disposed || m.current.currentId !== conversationIdLocal,
       });
-      if (m.current.disposed || m.current.currentId !== conversationId) return;
+      if (m.current.disposed || m.current.currentId !== conversationIdLocal)
+        return;
       m.current.busy = false;
       if (settled) {
-        await reloadTranscript(conversationId);
+        await reloadTranscript(conversationIdLocal);
       } else {
         // Give up: drop the catch-up row and offer a one-tap resend (same key).
         m.current.msgs = m.current.msgs.filter(
@@ -787,7 +791,7 @@ export default function AssistantRoute({
     push();
     refreshAssistantThreads?.();
     // On a clean turn, re-fetch so answers gain turn ids + retry pagers.
-    if (!errored && !aborted) void reloadTranscript(conversationId);
+    if (!errored && !aborted) void reloadTranscript(conversationIdLocal);
   };
 
   const submit = async (textArg?: string): Promise<void> => {
@@ -897,8 +901,8 @@ export default function AssistantRoute({
   };
 
   const setFeedback = (turnId: string, value: "up" | "down"): void => {
-    const conversationId = m.current.currentId;
-    if (!conversationId) return;
+    const conversationIdLocal = m.current.currentId;
+    if (!conversationIdLocal) return;
     let applied: "up" | "down" | null = null;
     for (const msg of m.current.msgs) {
       if (msg.kind !== "ai") continue;
@@ -917,7 +921,7 @@ export default function AssistantRoute({
     push();
     void setConversationFeedback(
       ASSISTANT_APP_ID,
-      conversationId,
+      conversationIdLocal,
       turnId,
       applied
     ).catch(() => undefined);

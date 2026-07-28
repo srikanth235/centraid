@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import {
   activeAttemptOf,
   hydrateMessages,
   msgToDTO,
-  type AsstMsg,
 } from "./assistantTranscript.js";
+import type { AsstMsg } from "./assistantTranscript.js";
 
 // The renderer pulls in the auth-aware resolver; stub it as assistantRich's own
 // test does (the codec under test never calls it).
 vi.mock(import("../../../gateway-client.js"), () => ({
-  resolveAssistantRefs:
-    vi.fn<typeof import("../../../gateway-client.js").resolveAssistantRefs>(),
+  resolveAssistantRefs: vi.fn<typeof TypeImport_1gl5zx7.resolveAssistantRefs>(),
 }));
 
 describe(hydrateMessages, () => {

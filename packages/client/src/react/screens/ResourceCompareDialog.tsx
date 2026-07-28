@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState, type JSX } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import { cx } from "../ui/cx.js";
 import {
   PRESET_MODES,
   presetHint,
   resourceCompareRows,
-  type PresetMode,
 } from "./resource-presets.js";
+import type { PresetMode } from "./resource-presets.js";
 import type { ResourceMode } from "./resource-summary.js";
 
 import a11y from "../styles/a11y.module.css";

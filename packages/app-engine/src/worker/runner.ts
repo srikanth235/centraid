@@ -245,11 +245,14 @@ function execute(req: WorkerRequest): void {
         ok: true,
         value,
       } satisfies ResultMessage);
-    } catch (err) {
+    } catch (error) {
       port.postMessage({
         type: "result",
         ok: false,
-        error: err instanceof Error ? (err.stack ?? err.message) : String(err),
+        error:
+          error instanceof Error
+            ? (error.stack ?? error.message)
+            : String(error),
       } satisfies ResultMessage);
     } finally {
       abortController.abort();

@@ -1,9 +1,11 @@
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import FirstRunGate, { type FirstRunGateProps } from "./FirstRunGate.js";
+import FirstRunGate from "./FirstRunGate.js";
+import type { FirstRunGateProps } from "./FirstRunGate.js";
 import type { OnboardingCompleteInput } from "./OnboardingScreen.js";
 
 // FirstRunGate pulls in OnboardingScreen (→ ConnectFlow → gateway-client),

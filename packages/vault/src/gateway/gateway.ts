@@ -9,26 +9,23 @@
 
 import type { DatabaseSync } from "node:sqlite";
 
-import { refreshCustodyState, type ReconcileResult } from "../blob/custody.js";
+import { refreshCustodyState } from "../blob/custody.js";
+import type { ReconcileResult } from "../blob/custody.js";
 import { backfillPreviews } from "../blob/preview.js";
-import {
-  resolveServableBlob,
-  liveBlobShas,
-  type BlobResolveOutcome,
-} from "../blob/read.js";
-import {
-  stageBlobBytes,
-  type StageBlobOptions,
-  type StagedBlob,
-} from "../blob/staging.js";
+import { resolveServableBlob, liveBlobShas } from "../blob/read.js";
+import type { BlobResolveOutcome } from "../blob/read.js";
+import { stageBlobBytes } from "../blob/staging.js";
+import type { StageBlobOptions, StagedBlob } from "../blob/staging.js";
 import { conversationArchiveShas } from "../conversation-archive-roots.js";
 import type { VaultDb } from "../db.js";
 import { recomputeDuplicateClusters } from "../enrich/clusters.js";
 import {
   AGENT_CONTENT_VARIANTS,
   resolveAgentContent,
-  type AgentContentOutcome,
-  type AgentContentVariant,
+} from "../enrich/content.js";
+import type {
+  AgentContentOutcome,
+  AgentContentVariant,
 } from "../enrich/content.js";
 import {
   drainSatisfiedEnrichmentRequests,
@@ -36,22 +33,16 @@ import {
   releaseExpiredEnrichmentLeases,
 } from "../enrich/leases.js";
 import { nowIso, uuidv7 } from "../ids.js";
-import {
-  importIcsEvents,
-  importVcardParties,
-  type ImportResult,
-} from "../ingest/import.js";
+import { importIcsEvents, importVcardParties } from "../ingest/import.js";
+import type { ImportResult } from "../ingest/import.js";
 import { PUBLISHERS } from "../ingest/publishers.js";
-import {
-  stageFile,
-  type StageFileOptions,
-  type StageFileResult,
+import { stageFile } from "../ingest/stage-file.js";
+import type {
+  StageFileOptions,
+  StageFileResult,
 } from "../ingest/stage-file.js";
-import {
-  discardBatch,
-  publishBatch,
-  type PublishResult,
-} from "../ingest/staging.js";
+import { discardBatch, publishBatch } from "../ingest/staging.js";
+import type { PublishResult } from "../ingest/staging.js";
 import { archivedSegmentShas } from "../journal-archive.js";
 import { notifyReplicaCommit } from "../replica/doorbell.js";
 import { transitionReplicaIntentOutcomeInTransaction } from "../replica/intents.js";
@@ -81,21 +72,17 @@ import {
 } from "../schema/sealed.js";
 import { SEED_DEMO_ACTIVITY } from "../schema/seed.js";
 import { resolveEntity } from "../schema/tables.js";
-import {
-  resolveRefCards,
-  type RefRequest,
-  type ResolveResult,
-} from "./cards.js";
-import { evaluateConsent, type ConsentAllow } from "./consent.js";
+import { resolveRefCards } from "./cards.js";
+import type { RefRequest, ResolveResult } from "./cards.js";
+import { evaluateConsent } from "./consent.js";
+import type { ConsentAllow } from "./consent.js";
 import { lookupCommand } from "./contract.js";
-import { backupVault, checkpointVault, type BackupResult } from "./custody.js";
-import { demoStatus, purgeDemoRows, type DemoPurgeResult } from "./demo.js";
-import {
-  revokeGrantCascade,
-  sweepLifecycle,
-  type RevocationResult,
-  type SweepResult,
-} from "./duties.js";
+import { backupVault, checkpointVault } from "./custody.js";
+import type { BackupResult } from "./custody.js";
+import { demoStatus, purgeDemoRows } from "./demo.js";
+import type { DemoPurgeResult } from "./demo.js";
+import { revokeGrantCascade, sweepLifecycle } from "./duties.js";
+import type { RevocationResult, SweepResult } from "./duties.js";
 import { actingMemberDetail, writeReceipt } from "./evidence.js";
 import {
   assertInvocationIdentity,
@@ -104,8 +91,8 @@ import {
   pkColumn,
   runContractAndExecute,
   setInvocationStatus,
-  type RegisteredCommand,
 } from "./execution.js";
+import type { RegisteredCommand } from "./execution.js";
 import {
   applyExtBand,
   dropExtBand,
@@ -115,8 +102,8 @@ import {
   purgeExtBand,
   retainExtBand,
   seedExtDraft,
-  type ExtApplyOutcome,
 } from "./ext.js";
+import type { ExtApplyOutcome } from "./ext.js";
 import {
   applyFieldMask,
   compileFilters,
@@ -124,14 +111,11 @@ import {
   scalarPrimaryKeyColumn,
 } from "./filters.js";
 import { authenticate } from "./identity.js";
-import { exportVault, type VaultExport } from "./portability.js";
+import { exportVault } from "./portability.js";
+import type { VaultExport } from "./portability.js";
 import { searchEntity } from "./search.js";
-import {
-  runReadOnlySql,
-  VAULT_SQL_DEFAULT_ROWS,
-  type VaultSqlRequest,
-  type VaultSqlResult,
-} from "./sql.js";
+import { runReadOnlySql, VAULT_SQL_DEFAULT_ROWS } from "./sql.js";
+import type { VaultSqlRequest, VaultSqlResult } from "./sql.js";
 import type {
   ChangeEntry,
   ChangesRequest,
@@ -152,12 +136,8 @@ import type {
   SearchResult,
 } from "./types.js";
 import { DEFAULT_PURPOSE, GatewayError } from "./types.js";
-import {
-  queryAppView,
-  registerAppView,
-  type ViewDefinition,
-  type ViewResult,
-} from "./views.js";
+import { queryAppView, registerAppView } from "./views.js";
+import type { ViewDefinition, ViewResult } from "./views.js";
 
 /**
  * Structural guard for reading `consent.provenance` (issue #352 phase 3/4 —

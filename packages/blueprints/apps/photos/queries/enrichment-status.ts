@@ -25,11 +25,11 @@ export default async function enrichmentStatus({ ctx }: HandlerArgs) {
     });
     const row = ((result.rows ?? []) as unknown as RawPolicy[])[0];
     return { tier: row?.tier ?? "off" };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     if (e.code === "VAULT_CONSENT") {
       return { tier: null, vaultDenied: { code: e.code, message: e.message } };
     }
-    return { tier: null, error: String(e.message ?? err) };
+    return { tier: null, error: String(e.message ?? error) };
   }
 }

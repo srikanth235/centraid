@@ -23,9 +23,8 @@ import {
   WAL_DB_NAMES,
   walDbPrefix,
   walPairMarkerRootPrefix,
-  type BackupProvider,
-  type Keyring,
 } from "@centraid/backup";
+import type { BackupProvider, Keyring } from "@centraid/backup";
 
 import type { VaultPlane } from "../serve/vault-plane.js";
 
@@ -285,13 +284,13 @@ export async function pruneWalGenerations(opts: {
         }
       }
       cache?.set(row.manifestHash, generations);
-    } catch (err) {
+    } catch (error) {
       // An unreadable manifest must FAIL the prune, not shrink the keep
       // set — deleting segments because we couldn't read who references
       // them is exactly backwards.
       throw new Error(
-        `wal prune: cannot read manifest seq ${row.seq}: ${err instanceof Error ? err.message : String(err)}`,
-        { cause: err }
+        `wal prune: cannot read manifest seq ${row.seq}: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
       );
     }
   });

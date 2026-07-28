@@ -8,8 +8,8 @@ import {
   ensureDetachedGateway,
   getOrCreateDesktopOwnerId,
   preferEmbeddedGateway,
-  type DetachedGatewayHandle,
 } from "./detached-gateway.js";
+import type { DetachedGatewayHandle } from "./detached-gateway.js";
 import { startDesktopEmbeddedGateway } from "./embedded-gateway.js";
 import {
   gatewayModelCatalogFile,
@@ -23,8 +23,8 @@ import {
   backoffForAttempt,
   initialSupervisorState,
   recordFailure,
-  type SupervisorState,
 } from "./gateway-supervisor-core.js";
+import type { SupervisorState } from "./gateway-supervisor-core.js";
 import { phoneLinkStatus } from "./phone-link.js";
 import { loadPersistedSettings, templatesCacheDir } from "./settings.js";
 
@@ -278,8 +278,8 @@ export async function ensureLocalGateway(
       handles.set(gatewayId, handle);
       return handle;
     })
-    .catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
       const prev = supervisor.get(gatewayId) ?? initialSupervisorState();
       const next = recordFailure(prev, Date.now(), message);
       supervisor.set(gatewayId, next);
@@ -296,7 +296,7 @@ export async function ensureLocalGateway(
         }, delay);
         timer.unref?.();
       }
-      throw err;
+      throw error;
     })
     .finally(() => {
       starting.delete(gatewayId);

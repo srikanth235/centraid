@@ -1,4 +1,4 @@
-import { type JSX } from "react";
+import type { JSX } from "react";
 
 import type { TemplateEntry } from "../../../app-shell-context.js";
 import type { DiscoverTemplate } from "../../screen-contracts.js";
@@ -42,9 +42,9 @@ export default function TemplatesRoute(): JSX.Element {
         if (ref) navigate({ kind: "automation-view", automationId: ref });
         else navigate({ kind: "automations" });
       })
-      .catch((err: unknown) =>
+      .catch((error: unknown) =>
         showToast(
-          `Could not adopt template: ${err instanceof Error ? err.message : String(err)}`
+          `Could not adopt template: ${error instanceof Error ? error.message : String(error)}`
         )
       );
   };

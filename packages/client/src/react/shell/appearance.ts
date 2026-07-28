@@ -4,11 +4,11 @@
 // gateway round-trip lives in useAppearance.ts.
 import { themes } from "@centraid/design-tokens";
 
-import {
-  ACCENT_PALETTE,
-  type AccentKey,
-  type AppearancePrefs,
-  type ThemeName,
+import { ACCENT_PALETTE } from "../../app-shell-context.js";
+import type {
+  AccentKey,
+  AppearancePrefs,
+  ThemeName,
 } from "../../app-shell-context.js";
 
 export const DEFAULT_PREFS: AppearancePrefs = {

@@ -39,18 +39,18 @@ import {
   evaluateAlert,
   formatDurationMs,
   initialRuntimeState,
-  type GatewayAlertAction,
-  type GatewayAlertConfig,
-  type GatewayComponentAlertAction,
-  type GatewayProbe,
-  type GatewayRuntimeState,
-  type GatewayVersionSkewAction,
+} from "./gateway-monitor-core.js";
+import type {
+  GatewayAlertAction,
+  GatewayAlertConfig,
+  GatewayComponentAlertAction,
+  GatewayProbe,
+  GatewayRuntimeState,
+  GatewayVersionSkewAction,
 } from "./gateway-monitor-core.js";
 import { probeGateway } from "./gateway-monitor-probe.js";
-import {
-  deriveOutageEvents,
-  type OutageLogEvent,
-} from "./gateway-outage-log-core.js";
+import { deriveOutageEvents } from "./gateway-outage-log-core.js";
+import type { OutageLogEvent } from "./gateway-outage-log-core.js";
 import { loadOutageLog, persistOutageEvents } from "./gateway-outage-log.js";
 import {
   CRASH_LOOP_THRESHOLD,
@@ -210,8 +210,8 @@ async function tick(): Promise<void> {
   let settingsError: string | undefined;
   try {
     settings = await loadSettings();
-  } catch (err) {
-    settingsError = err instanceof Error ? err.message : String(err);
+  } catch (error) {
+    settingsError = error instanceof Error ? error.message : String(error);
     if (!state) {
       process.stdout.write(
         `[gateway-monitor] settings unavailable, no prior state to track: ${settingsError}\n`
@@ -392,8 +392,10 @@ async function tick(): Promise<void> {
 function runTick(): Promise<void> {
   if (!inFlight) {
     inFlight = tick()
-      .catch((err) => {
-        process.stdout.write(`[gateway-monitor] tick failed: ${String(err)}\n`);
+      .catch((error) => {
+        process.stdout.write(
+          `[gateway-monitor] tick failed: ${String(error)}\n`
+        );
       })
       .finally(() => {
         inFlight = undefined;

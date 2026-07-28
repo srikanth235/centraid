@@ -11,11 +11,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import nodePath from "node:path";
 
 import * as automation from "@centraid/automation";
-import {
-  AppScaffoldError,
-  listTemplates,
-  type ScaffoldFile,
-} from "@centraid/blueprints";
+import { AppScaffoldError, listTemplates } from "@centraid/blueprints";
+import type { ScaffoldFile } from "@centraid/blueprints";
 
 import {
   defaultSessionId,
@@ -25,8 +22,8 @@ import {
   publishAndReconcile,
   stageAndMaybePublish,
   webhookUrl,
-  type LifecycleRouteOptions,
 } from "../lifecycle/lifecycle-shared.js";
+import type { LifecycleRouteOptions } from "../lifecycle/lifecycle-shared.js";
 import { readFileMap, readJson, sendJson } from "./route-helpers.js";
 
 // ---- POST /centraid/_automations/compile?ref= (hidden builder compile) ----

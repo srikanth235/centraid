@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, test } from "vitest";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollApp,
-  type BootstrapResult,
-} from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import { createGateway, Gateway } from "../gateway/gateway.js";
+import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import type { Gateway } from "../gateway/gateway.js";
+import { createGateway } from "../gateway/gateway.js";
 import type { Credential, InvokeOutcome } from "../gateway/types.js";
 import { isSealedValue, sealAad, unsealValue } from "../schema/sealed.js";
 import { LOCKER_ITEM_TYPE, registerLockerCommands } from "./locker.js";
@@ -241,10 +239,10 @@ describe("locker", () => {
         connection_id: "conn-gh",
       })
     ).item_id;
-    const row = db.vault
+    const rowLocal = db.vault
       .prepare("SELECT connection_id FROM locker_item WHERE item_id = ?")
       .get(id) as { connection_id: string | null };
-    expect(row.connection_id).toBe("conn-gh");
+    expect(rowLocal.connection_id).toBe("conn-gh");
 
     // '' clears; a ghost connection refuses.
     out(invoke("locker.edit_item", { item_id: id, connection_id: "" }));

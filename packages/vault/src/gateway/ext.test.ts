@@ -6,25 +6,21 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollApp,
-  type BootstrapResult,
-} from "../bootstrap.js";
+import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
 import { registerLinkCommands } from "../commands/links.js";
 import { registerPartyCommands } from "../commands/parties.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import {
-  canonicalSpecJson,
-  validateExtSpecs,
-  type ExtTableSpec,
-} from "../schema/ext.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import { canonicalSpecJson, validateExtSpecs } from "../schema/ext.js";
+import type { ExtTableSpec } from "../schema/ext.js";
 import { listVaultEntities, resolveEntity } from "../schema/tables.js";
 import { buildAssistantContext } from "./assistant-context.js";
-import { createGateway, Gateway } from "./gateway.js";
+import type { Gateway } from "./gateway.js";
+import { createGateway } from "./gateway.js";
 import { exportVault, importVaultExport } from "./portability.js";
-import { GatewayError, type Credential } from "./types.js";
+import { GatewayError } from "./types.js";
+import type { Credential } from "./types.js";
 
 const PURPOSE = "dpv:ServiceProvision";
 const APP = "gym-log";

@@ -75,11 +75,11 @@ async function main() {
     console.log(`[smoke] wrote ${shot}`);
 
     console.log(`[smoke] PASS in ${Date.now() - t0}ms total`);
-  } catch (err) {
+  } catch (error) {
     const failShot = path.join(OUT_DIR, "smoke-FAILURE.png");
     await page.screenshot({ path: failShot }).catch(() => undefined);
     console.error(`[smoke] FAIL — screenshot at ${failShot}`);
-    throw err;
+    throw error;
   } finally {
     await close();
     await fs
@@ -88,7 +88,7 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((error) => {
+  console.error(error);
   process.exitCode = 1;
 });

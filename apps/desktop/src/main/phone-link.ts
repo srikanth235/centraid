@@ -18,9 +18,8 @@ import {
   DeviceStore,
   loadEndpointSecret,
   startPreferredDesktopTunnel,
-  type DesktopTunnelHandle,
-  type PairedDevice,
 } from "@centraid/tunnel";
+import type { DesktopTunnelHandle, PairedDevice } from "@centraid/tunnel";
 import { app, BrowserWindow } from "electron";
 import QRCode from "qrcode";
 
@@ -99,9 +98,9 @@ export async function ensurePhoneLink(): Promise<DesktopTunnelHandle> {
   })();
   try {
     return await starting;
-  } catch (err) {
-    startError = err instanceof Error ? err.message : String(err);
-    throw err;
+  } catch (error) {
+    startError = error instanceof Error ? error.message : String(error);
+    throw error;
   } finally {
     starting = undefined;
   }

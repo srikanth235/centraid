@@ -9,7 +9,8 @@ import type {
 import { S3RequestPipeline } from "./s3-pipeline.js";
 import type { S3BlobStoreOptions } from "./s3.js";
 import { encodeKeyPath, presignS3Request } from "./sigv4.js";
-import { assertSha, type BlobRange, type BlobStat } from "./store.js";
+import { assertSha } from "./store.js";
+import type { BlobRange, BlobStat } from "./store.js";
 
 const PART_BYTES = 16 * 1024 * 1024;
 const MULTIPART_AT = 32 * 1024 * 1024;

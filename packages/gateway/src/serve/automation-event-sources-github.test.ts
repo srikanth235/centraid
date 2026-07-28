@@ -9,10 +9,8 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  pollProviderEventSource,
-  type PollJson,
-} from "./automation-event-sources.js";
+import { pollProviderEventSource } from "./automation-event-sources.js";
+import type { PollJson } from "./automation-event-sources.js";
 import { github, replies } from "./automation-event-sources.test-fixtures.js";
 
 describe("pollProviderEventSource — GitHub", () => {

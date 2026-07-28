@@ -6,11 +6,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { Runtime } from "../runtime.ts";
-import {
-  startRuntimeHttpServer,
-  AUTHED_DEVICE_HEADER,
-  type RuntimeHttpServerHandle,
-} from "./http-server.ts";
+import { startRuntimeHttpServer, AUTHED_DEVICE_HEADER } from "./http-server.ts";
+import type { RuntimeHttpServerHandle } from "./http-server.ts";
 
 /** Raw HTTP so tests can set a custom Host header (undici forbids it). */
 function rawRequest(

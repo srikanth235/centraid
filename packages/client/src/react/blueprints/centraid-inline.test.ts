@@ -1,21 +1,20 @@
 import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
-import {
-  installInlineCentraid,
-  type InstallInlineCentraidOptions,
-} from "./centraid-inline.js";
+import { installInlineCentraid } from "./centraid-inline.js";
+import type { InstallInlineCentraidOptions } from "./centraid-inline.js";
 
 const { doFetch, readJson } = vi.hoisted(() => ({
-  doFetch: vi.fn<typeof import("../../gateway-client-core.js").doFetch>(),
+  doFetch: vi.fn<typeof TypeImport_oycips.doFetch>(),
   readJson:
     vi.fn<(response: Response, operation: string) => Promise<unknown>>(),
 }));
 // vitest hoists vi.mock above imports at run time, so declaration order here is
 // only for the linter's import-first rule.
 vi.mock(import("../../gateway-client-core.js") as Promise<unknown>, () => ({
-  auth: vi.fn<typeof import("../../gateway-client-core.js").auth>(async () => ({
+  auth: vi.fn<typeof TypeImport_oycips.auth>(async () => ({
     baseUrl: "https://gw.test",
     token: "tok",
   })),

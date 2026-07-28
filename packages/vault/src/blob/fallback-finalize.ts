@@ -4,12 +4,11 @@ import type { DatabaseSync } from "node:sqlite";
 import type { BlobCache } from "./cache.js";
 import type { LocalBlobStore } from "./local.js";
 import { extractBlobMetaFromProbes, sniffMediaType } from "./pipeline.js";
-import {
-  INGRESS_PREVIEW_MAX_BYTES,
-  type IngressPreviewInput,
-} from "./preview.js";
+import { INGRESS_PREVIEW_MAX_BYTES } from "./preview.js";
+import type { IngressPreviewInput } from "./preview.js";
 import { recordKnownStagedBlob } from "./staging-record.js";
-import { mediaLocationPolicyForVault, type StagedBlob } from "./staging.js";
+import { mediaLocationPolicyForVault } from "./staging.js";
+import type { StagedBlob } from "./staging.js";
 import type { IngressSessionRow } from "./transfer-state.js";
 
 const HEAD_BYTES = 1024 * 1024;

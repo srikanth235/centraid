@@ -15,11 +15,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { AUTHED_PLANE_HEADER } from "@centraid/app-engine";
-import {
-  ROUTES,
-  buildGatewayInfoPayload,
-  type GatewayCapabilities,
-} from "@centraid/protocol";
+import { ROUTES, buildGatewayInfoPayload } from "@centraid/protocol";
+import type { GatewayCapabilities } from "@centraid/protocol";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
 import { sendJson } from "./route-helpers.js";

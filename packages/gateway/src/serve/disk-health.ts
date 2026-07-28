@@ -28,7 +28,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { sharedDiskFullTracker, type DiskFullTracker } from "@centraid/vault";
+import { sharedDiskFullTracker } from "@centraid/vault";
+import type { DiskFullTracker } from "@centraid/vault";
 
 import type { ComponentStatus, HealthProbe } from "./health-registry.js";
 

@@ -19,8 +19,8 @@ import {
   KeyStore,
   KeyStoreError,
   aesGcmKeyProtector,
-  type KeyProtector,
 } from "./key-store.js";
+import type { KeyProtector } from "./key-store.js";
 
 const roots: string[] = [];
 

@@ -6,13 +6,8 @@
  * stored breach flag. Only non-trashed items are reviewed.
  */
 
-import {
-  decorate,
-  readTags,
-  readStarred,
-  readWatchtower,
-  type RawItem,
-} from "./items.ts";
+import { decorate, readTags, readStarred, readWatchtower } from "./items.ts";
+import type { RawItem } from "./items.ts";
 
 export default async function watchtowerHandler({ ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
@@ -41,8 +36,8 @@ export default async function watchtowerHandler({ ctx }: HandlerArgs) {
       reused: decorated.filter((it) => it.reused).length,
       items: affected,
     };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       compromised: 0,
       weak: 0,

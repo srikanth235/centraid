@@ -3,10 +3,8 @@
 // charging/network state, computes one bounded job, contributes derivatives,
 // then completes (or releases) the token-bound lease.
 
-import {
-  computeDeviceWorkContributions,
-  type DeviceWorkContribution,
-} from "./device-enrichment-compute.js";
+import { computeDeviceWorkContributions } from "./device-enrichment-compute.js";
+import type { DeviceWorkContribution } from "./device-enrichment-compute.js";
 import {
   finishGatewayDeviceWork,
   leaseGatewayDeviceWork,
@@ -15,8 +13,10 @@ import {
   releaseGatewayDeviceWork,
   setGatewayDeviceCompute,
   stageGatewayDeviceWorkDerivative,
-  type CentraidGatewayDevice,
-  type DeviceEnrichmentLease,
+} from "./gateway-client-devices.js";
+import type {
+  CentraidGatewayDevice,
+  DeviceEnrichmentLease,
 } from "./gateway-client-devices.js";
 
 const POLL_INTERVAL_MS = 5 * 60 * 1_000;

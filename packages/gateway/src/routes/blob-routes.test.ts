@@ -12,7 +12,8 @@ import jpegJs from "jpeg-js";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { createImagePreviewCodec } from "../preview/codec.js";
-import { openVaultPlane, type VaultPlane } from "../serve/vault-plane.js";
+import { openVaultPlane } from "../serve/vault-plane.js";
+import type { VaultPlane } from "../serve/vault-plane.js";
 import {
   MAX_OPEN_RANGE_BYTES,
   makeBlobRouteHandler,

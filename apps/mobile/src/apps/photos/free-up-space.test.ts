@@ -1,11 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import {
-  revalidateBackedUp,
-  selectFreeUpCandidates,
-  type DeviceByteProbe,
-  type FreeUpCandidate,
-} from "./free-up-space";
+import { revalidateBackedUp, selectFreeUpCandidates } from "./free-up-space";
+import type { DeviceByteProbe, FreeUpCandidate } from "./free-up-space";
 import type { PhotoAsset } from "./timeline-model";
 
 const backedUp = (

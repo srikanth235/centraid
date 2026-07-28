@@ -26,8 +26,8 @@ export default async function search({ input, ctx }: HandlerArgs) {
         group_name: groupName.get(e.group_id) || "",
       }));
     return { me: data.me, currency: data.currency, results };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       me: null,
       currency: "USD",

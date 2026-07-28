@@ -80,10 +80,10 @@ export function exportVault(
       tables[logical] = db.vault
         .prepare(`SELECT * FROM "${ref.physical}" ORDER BY "${pk}"`)
         .all() as Record<string, unknown>[];
-    } catch (err) {
+    } catch (error) {
       skippedTables.push({
         entity: logical,
-        error: err instanceof Error ? err.message : String(err),
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -189,9 +189,9 @@ export function importVaultExport(
       );
     }
     db.vault.exec("COMMIT");
-  } catch (err) {
+  } catch (error) {
     db.vault.exec("ROLLBACK");
-    throw err;
+    throw error;
   } finally {
     db.vault.exec("PRAGMA foreign_keys = ON");
   }

@@ -264,20 +264,22 @@ export function startAutomationLiveItem(
   }
 ): AutomationLiveTraceState {
   if (state.items.has(input.itemId)) return state;
-  const items = new Map(state.items);
-  items.set(
-    input.itemId,
-    createLiveItem(
+  const items = new Map([
+    ...state.items,
+    [
       input.itemId,
-      input.ordinal,
-      input.kind,
-      input.kind === "tool"
-        ? activeAgentItemId(state, input.ordinal)
-        : undefined,
-      input.name,
-      input.callId
-    )
-  );
+      createLiveItem(
+        input.itemId,
+        input.ordinal,
+        input.kind,
+        input.kind === "tool"
+          ? activeAgentItemId(state, input.ordinal)
+          : undefined,
+        input.name,
+        input.callId
+      ),
+    ],
+  ]);
   return { ...state, items };
 }
 

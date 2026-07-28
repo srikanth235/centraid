@@ -5,14 +5,14 @@
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { bootstrapVault, enrollApp } from "./bootstrap.js";
-import { openVaultDb, type VaultDb } from "./db.js";
+import { openVaultDb } from "./db.js";
+import type { VaultDb } from "./db.js";
 import {
   clearScopeTombstones,
   listScopeTombstones,
   writeScopeTombstones,
-  type GranteeKey,
-  type ScopeTriple,
 } from "./install-memory.js";
+import type { GranteeKey, ScopeTriple } from "./install-memory.js";
 
 let db: VaultDb;
 let grantee: GranteeKey;

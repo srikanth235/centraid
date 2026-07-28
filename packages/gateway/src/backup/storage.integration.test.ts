@@ -28,8 +28,8 @@ import {
   sealBlob,
   sealBlobStream,
   unsealBlob,
-  type RemoteTier,
 } from "@centraid/vault";
+import type { RemoteTier } from "@centraid/vault";
 import { afterAll, describe, expect, test, vi } from "vitest";
 
 vi.setConfig({ testTimeout: 30_000 });

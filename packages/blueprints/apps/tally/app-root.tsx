@@ -4,18 +4,12 @@
 // descriptor imports `Root` and `CHANGE_TABLES` from here and adds the query
 // wiring; there is deliberately no parallel served-system-app entry.
 
-import {
-  useCallback,
-  useEffect,
-  useReducer,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 
 import type { InlineAppProps } from "../inline-types.ts";
-import { Chrome, type ChromeAvatar } from "./Chrome.tsx";
+import { Chrome } from "./Chrome.tsx";
+import type { ChromeAvatar } from "./Chrome.tsx";
 import { ActivityFeed } from "./components/Activity.tsx";
 import { Dashboard } from "./components/Dashboard.tsx";
 import { DetailModal } from "./components/DetailModal.tsx";
@@ -131,8 +125,8 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       } else if (state.search.trim()) {
         next = await logic.read("search", { term: state.search.trim() });
       }
-    } catch (err) {
-      logic.notice(String((err as { message?: string })?.message ?? err));
+    } catch (error) {
+      logic.notice(String((error as { message?: string })?.message ?? error));
     }
     if (seq !== viewSeqRef.current) return;
     state.viewData = next;

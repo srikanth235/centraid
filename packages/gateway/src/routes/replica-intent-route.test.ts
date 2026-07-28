@@ -5,7 +5,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { Readable } from "node:stream";
 
-import { Dispatcher, Registry, type ToolResult } from "@centraid/app-engine";
+import { Dispatcher, Registry } from "@centraid/app-engine";
+import type { ToolResult } from "@centraid/app-engine";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { plainSqliteRow, plainSqliteRows } from "@centraid/test-kit/sqlite";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -16,11 +17,10 @@ import {
 import { describe, afterEach, expect, test, vi } from "vitest";
 
 import { replicaDispatchOutcome } from "../serve/build-gateway.js";
-import { openVaultPlane, type VaultPlane } from "../serve/vault-plane.js";
-import {
-  handleReplicaIntent,
-  type ReplicaIntentDispatcher,
-} from "./replica-intent-route.js";
+import { openVaultPlane } from "../serve/vault-plane.js";
+import type { VaultPlane } from "../serve/vault-plane.js";
+import { handleReplicaIntent } from "./replica-intent-route.js";
+import type { ReplicaIntentDispatcher } from "./replica-intent-route.js";
 
 const logger = {
   info: () => undefined,

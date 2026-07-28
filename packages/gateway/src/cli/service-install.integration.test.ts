@@ -19,11 +19,8 @@ import path from "node:path";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test, vi } from "vitest";
 
-import {
-  buildLaunchdPlist,
-  launchAgentPlistPath,
-  type ServiceUnitSpec,
-} from "./service-unit.ts";
+import { buildLaunchdPlist, launchAgentPlistPath } from "./service-unit.ts";
+import type { ServiceUnitSpec } from "./service-unit.ts";
 
 vi.setConfig({ testTimeout: 30_000 });
 

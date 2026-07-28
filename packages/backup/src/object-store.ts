@@ -7,6 +7,7 @@
  */
 
 import { createWriteStream, promises as fs } from "node:fs";
+import type * as TypeImport_g9tn66 from "node:fs";
 import path from "node:path";
 
 export interface ObjectListEntry {
@@ -94,8 +95,8 @@ export class FsObjectStore implements ObjectStore {
                 return;
               }
               if (!ws.write(next.value)) {
-                await new Promise<void>((resolve) =>
-                  ws.once("drain", () => resolve())
+                await new Promise<void>((_resolve) =>
+                  ws.once("drain", () => _resolve())
                 );
               }
               return writeNext();
@@ -165,7 +166,7 @@ export class FsObjectStore implements ObjectStore {
     async function* walk(
       dir: string
     ): AsyncGenerator<{ key: string; size: number }> {
-      let entries: import("node:fs").Dirent[];
+      let entries: TypeImport_g9tn66.Dirent[];
       try {
         entries = await fs.readdir(dir, { withFileTypes: true });
       } catch (error) {

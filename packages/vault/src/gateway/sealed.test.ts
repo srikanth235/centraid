@@ -5,13 +5,16 @@ import {
   createGrant,
   enrollApp,
   enrollDevice,
-  type BootstrapResult,
 } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
 import { registerLockerCommands } from "../commands/locker.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import { createGateway, Gateway } from "../gateway/gateway.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import type { Gateway } from "../gateway/gateway.js";
+import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
-import { assertNoSealedFtsColumns, type FtsEntitySpec } from "../schema/fts.js";
+import { assertNoSealedFtsColumns } from "../schema/fts.js";
+import type { FtsEntitySpec } from "../schema/fts.js";
 import {
   SEALED_PLACEHOLDER,
   SEALED_PREFIX,

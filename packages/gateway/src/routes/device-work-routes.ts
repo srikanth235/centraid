@@ -7,8 +7,8 @@ import {
   enrichmentQueueDepth,
   leaseNextEnrichmentRequest,
   releaseEnrichmentLease,
-  type EnrichmentCapability,
 } from "@centraid/vault";
+import type { EnrichmentCapability } from "@centraid/vault";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";

@@ -15,9 +15,11 @@ import {
   OUTAGE_CAP,
   SAMPLE_CAP,
   SUSTAINED_LATENCY_SAMPLE_COUNT,
-  type GatewayComponentIssue,
-  type GatewayProbe,
-  type GatewayRuntimeState,
+} from "./gateway-monitor-core.js";
+import type {
+  GatewayComponentIssue,
+  GatewayProbe,
+  GatewayRuntimeState,
 } from "./gateway-monitor-core.js";
 import { EXPECTED_SCHEMA_EPOCH } from "./version-handshake.js";
 

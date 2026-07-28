@@ -28,7 +28,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAnimatedValue } from "../../kit/hooks/useAnimatedValue";
-import { family, useTheme, type ThemeColors } from "../../kit/theme";
+import { family, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 import { initialsOf } from "../../lib/profile";
 import type { ConnectionState } from "./AttentionLine";
 

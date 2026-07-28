@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { assertSha, type BlobTransferCoordinator } from "@centraid/vault";
+import { assertSha } from "@centraid/vault";
+import type { BlobTransferCoordinator } from "@centraid/vault";
 
 /** Blob-scoped custody stream: no all-vault backlog/status disclosure. */
 export async function openBlobCustodyEvents(input: {
@@ -28,7 +29,7 @@ export async function openBlobCustodyEvents(input: {
   let again = false;
   let last = "";
   let unsubscribe = (): void => undefined;
-  let heartbeat: NodeJS.Timeout | undefined;
+  let heartbeat: NodeJS.Timeout | undefined = undefined;
   const close = (): void => {
     if (closed) return;
     closed = true;

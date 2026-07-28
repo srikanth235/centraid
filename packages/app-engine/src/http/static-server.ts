@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit cohesive per-file static asset server; the .ts/.tsx transform, .module.css compile branch, and range/etag plumbing are one request path and share the cache/mtime helpers
 import { promises as fs } from "node:fs";
+import type * as TypeImport_g9tn66 from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
@@ -189,8 +190,8 @@ async function transformJsx(
     const etag = computeEtag(Buffer.from(code, "utf8"));
     jsxCache.set(cacheKey, { mtimeMs: stat.mtimeMs, ok: true, code, etag });
     return { code, etag };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     const shim = errorShim(message);
     const etag = computeEtag(Buffer.from(shim, "utf8"));
     jsxCache.set(cacheKey, {
@@ -381,12 +382,12 @@ export async function serveStatic(
   // {@link cssModuleVariantCache}. `appDir` is the compilation root so hashed
   // class names stay deterministic and path-prefix-free.
   if (isCssModuleFile(file)) {
-    const stat = await fs.stat(file);
+    const statLocal = await fs.stat(file);
     let cachedCss = cssModuleCache.get(file);
-    if (!cachedCss || cachedCss.mtimeMs !== stat.mtimeMs) {
+    if (!cachedCss || cachedCss.mtimeMs !== statLocal.mtimeMs) {
       const compiled = await compileCssModule(file, appDir);
       cachedCss = {
-        mtimeMs: stat.mtimeMs,
+        mtimeMs: statLocal.mtimeMs,
         code: compiled.js,
         etag: compiled.etag,
       };
@@ -449,7 +450,7 @@ export async function serveStatic(
 /** `fs.stat` or `null` when the path doesn't exist / isn't reachable. */
 async function statOrNull(
   file: string
-): Promise<import("node:fs").Stats | null> {
+): Promise<TypeImport_g9tn66.Stats | null> {
   try {
     return await fs.stat(file);
   } catch {

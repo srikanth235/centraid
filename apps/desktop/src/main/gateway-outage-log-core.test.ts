@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  initialRuntimeState,
-  type GatewayRuntimeState,
-} from "./gateway-monitor-core.js";
+import { initialRuntimeState } from "./gateway-monitor-core.js";
+import type { GatewayRuntimeState } from "./gateway-monitor-core.js";
 import {
   capOutageLog,
   deriveOutageEvents,
   formatOutageLogLine,
   OUTAGE_LOG_CAP,
   parseOutageLogLines,
-  type OutageLogEvent,
 } from "./gateway-outage-log-core.js";
+import type { OutageLogEvent } from "./gateway-outage-log-core.js";
 
 const T0 = Date.UTC(2026, 6, 11, 12, 0, 0);
 

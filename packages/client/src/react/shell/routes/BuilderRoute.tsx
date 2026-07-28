@@ -1,4 +1,5 @@
-import { type JSX, type ReactNode, useState } from "react";
+import { useState } from "react";
+import type { JSX, ReactNode } from "react";
 
 import type {
   AppearancePrefs,

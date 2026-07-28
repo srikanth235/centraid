@@ -56,8 +56,8 @@ function testMessageChannel(): { parent: TestPort; child: TestPort } {
     Array<(event: { data: unknown }) => void>
   >();
   const closed = new WeakSet<TestPort>();
-  let parent: TestPort;
-  let child: TestPort;
+  let parent = undefined as unknown as TestPort;
+  let child = undefined as unknown as TestPort;
   const make = (peer: () => TestPort): TestPort => {
     const port: TestPort = {
       postMessage(data) {
@@ -547,7 +547,8 @@ describe("bridge-script", () => {
           url,
           body: JSON.parse(init.body) as Record<string, unknown>,
         });
-        if (fetchError) throw fetchError;
+        if (fetchError)
+          throw new Error(fetchError.message, { cause: fetchError });
         return {
           ok: true,
           status: 200,

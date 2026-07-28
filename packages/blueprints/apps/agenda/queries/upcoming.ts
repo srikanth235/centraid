@@ -573,8 +573,8 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
       events: rows,
       calendars: calendars.rows ?? [],
     };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       events: [],
       calendars: [],

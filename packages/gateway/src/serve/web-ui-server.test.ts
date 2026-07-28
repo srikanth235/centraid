@@ -1,13 +1,14 @@
 import { promises as fs } from "node:fs";
 import http from "node:http";
-import { AddressInfo } from "node:net";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { brotliCompressSync } from "node:zlib";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { startWebUiServer, type WebUiServerHandle } from "./web-ui-server.js";
+import { startWebUiServer } from "./web-ui-server.js";
+import type { WebUiServerHandle } from "./web-ui-server.js";
 
 let root: string;
 let server: WebUiServerHandle;

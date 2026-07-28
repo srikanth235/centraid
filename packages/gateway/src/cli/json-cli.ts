@@ -55,9 +55,9 @@ export async function runJson(
   }
   try {
     await body();
-  } catch (err) {
-    const code = err instanceof CliJsonError ? err.code : 1;
-    const message = err instanceof Error ? err.message : String(err);
+  } catch (error) {
+    const code = error instanceof CliJsonError ? error.code : 1;
+    const message = error instanceof Error ? error.message : String(error);
     process.stdout.write(
       `${JSON.stringify({ ok: false, error: code === 2 ? "usage" : "error", message })}\n`
     );

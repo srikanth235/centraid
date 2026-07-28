@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 
-import { roleBadge, type MemberScope } from "../memberScope.js";
+import { roleBadge } from "../memberScope.js";
+import type { MemberScope } from "../memberScope.js";
 
 import styles from "./ScopePicker.module.css";
 

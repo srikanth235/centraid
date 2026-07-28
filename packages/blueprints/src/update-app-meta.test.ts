@@ -34,8 +34,8 @@ describe(updateAppMeta, () => {
     let err: unknown;
     try {
       await updateAppMeta(dir, "hydrate-2", { name: "Hydrate" });
-    } catch (e) {
-      err = e;
+    } catch (error) {
+      err = error;
     }
     expect(err instanceof AppScaffoldError).toBeTruthy();
     expect((err as AppScaffoldError).code).toBe("already_exists");
@@ -47,8 +47,8 @@ describe(updateAppMeta, () => {
     let err: unknown;
     try {
       await updateAppMeta(dir, "hydrate-2", { name: "  HYDRATE  " });
-    } catch (e) {
-      err = e;
+    } catch (error) {
+      err = error;
     }
     expect(err instanceof AppScaffoldError).toBeTruthy();
     expect((err as AppScaffoldError).code).toBe("already_exists");
@@ -68,8 +68,8 @@ describe(updateAppMeta, () => {
     let err: unknown;
     try {
       await updateAppMeta(dir, "todos", { name: "   " });
-    } catch (e) {
-      err = e;
+    } catch (error) {
+      err = error;
     }
     expect(err instanceof AppScaffoldError).toBeTruthy();
     expect((err as AppScaffoldError).code).toBe("invalid_id");

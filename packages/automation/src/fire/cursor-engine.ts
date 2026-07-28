@@ -22,13 +22,15 @@ import {
   registrationsFor,
   retentionKeysFor,
   scheduleExpr,
-  type CursorReadResult,
-  type CursorRegistration,
-  type CursorStore,
-  type LocalCursorScheduler,
-  type PendingFireBatch,
-  type TriggerCursorFireInput,
-  type VaultCursorEngineOptions,
+} from "./cursor-engine-support.js";
+import type {
+  CursorReadResult,
+  CursorRegistration,
+  CursorStore,
+  LocalCursorScheduler,
+  PendingFireBatch,
+  TriggerCursorFireInput,
+  VaultCursorEngineOptions,
 } from "./cursor-engine-support.js";
 import type { ReconcileResult } from "./host.js";
 import { MemoryCursorStore } from "./memory-cursor-store.js";
@@ -282,8 +284,13 @@ export class VaultCursorEngine implements LocalCursorScheduler {
       active.dirty = true;
       return active.promise;
     }
-    const state = { promise: Promise.resolve(), dirty: false };
-    state.promise = (async () => {
+    const state: { readonly promise: Promise<void>; dirty: boolean } = {
+      get promise(): Promise<void> {
+        return promise;
+      },
+      dirty: false,
+    };
+    const promise = (async () => {
       let failure: { error: unknown } | undefined;
       const drainDirtyWork = async (): Promise<void> => {
         state.dirty = false;

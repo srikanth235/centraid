@@ -10,8 +10,8 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type RefObject,
 } from "react";
+import type { RefObject } from "react";
 
 // Survives route remounts (navigating away and back) — in-memory is enough.
 const scrollPositions = new Map<string, number>();

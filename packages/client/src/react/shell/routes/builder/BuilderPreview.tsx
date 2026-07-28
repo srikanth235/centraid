@@ -1,4 +1,5 @@
-import { type CSSProperties, type JSX, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import type { CSSProperties, JSX } from "react";
 
 import { draftPreviewUrl } from "../../../../gateway-client.js";
 import { cx } from "../../../ui/cx.js";

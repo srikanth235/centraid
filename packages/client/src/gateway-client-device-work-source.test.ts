@@ -1,7 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
+import type * as TypeImport_6pj8pj from "./gateway-client-devices.js";
+
 type Bytes = Uint8Array<ArrayBuffer>;
-let readSource: typeof import("./gateway-client-devices.js").readGatewayDeviceWorkSource;
+let readSource: typeof TypeImport_6pj8pj.readGatewayDeviceWorkSource;
 
 describe("gateway-client-device-work-source", () => {
   beforeAll(async () => {

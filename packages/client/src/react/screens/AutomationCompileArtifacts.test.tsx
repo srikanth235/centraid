@@ -1,10 +1,10 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import AutomationCompileArtifacts, {
-  type AutomationCompileArtifactsProps,
-} from "./AutomationCompileArtifacts.js";
+import AutomationCompileArtifacts from "./AutomationCompileArtifacts.js";
+import type { AutomationCompileArtifactsProps } from "./AutomationCompileArtifacts.js";
 
 // The compiled-plan viewer — band 3 of the compiler rail. It is a pure
 // read surface: two tabs, a gutter-numbered listing, and a copy button. Like

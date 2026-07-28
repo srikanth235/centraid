@@ -30,13 +30,11 @@ import type { ConversationHistoryStore } from "../conversation/history.js";
 import type { ConversationRunner } from "../conversation/runner.js";
 import type { ConversationWorkspaceKind } from "../conversation/schema.js";
 import { isRunnerKind } from "../conversation/turn.js";
+import type * as TypeImport_nu6ai6 from "../conversation/turn.js";
 import { buildExtraPrompt } from "../handlers/build-extra-prompt.js";
 import { appDataDir } from "../registry/app-paths.js";
-import {
-  APP_MANIFEST_FILE,
-  parseManifest,
-  type Manifest,
-} from "../registry/manifest.js";
+import { APP_MANIFEST_FILE, parseManifest } from "../registry/manifest.js";
+import type { Manifest } from "../registry/manifest.js";
 import type { Registry } from "../registry/registry.js";
 import type { RegistryEntry } from "../types.js";
 import { sendError, sendJson, readBody, MAX_BODY_BYTES } from "./http-utils.js";
@@ -48,8 +46,8 @@ import {
   parseTurnAttachmentRefs,
   resolveTurnAttachments,
   validateTurnAttachmentRefs,
-  type TurnAttachmentRef,
 } from "./turn-sse.js";
+import type { TurnAttachmentRef } from "./turn-sse.js";
 
 /**
  * Validate a chat-session id. Reject anything that could escape a
@@ -328,9 +326,9 @@ async function handlePostTurn(
     const raw = await readBody(req);
     body =
       raw.length === 0 ? {} : (JSON.parse(raw.toString("utf8")) as PostBody);
-  } catch (err) {
+  } catch (error) {
     const message =
-      err instanceof Error && err.message.includes("1 MiB")
+      error instanceof Error && error.message.includes("1 MiB")
         ? `Request body exceeds ${MAX_BODY_BYTES} bytes.`
         : "Invalid JSON body.";
     sendError(res, 400, "bad_request", message);
@@ -395,7 +393,7 @@ async function handlePostTurn(
   let prevAdapterSessionId: string | undefined;
   let prevAdapterKind: string | undefined;
   let prevAdapterUsageSnapshot:
-    | import("../conversation/turn.js").AdapterUsageSnapshot
+    | TypeImport_nu6ai6.AdapterUsageSnapshot
     | undefined;
   if (ctx.conversationStore) {
     const session = ctx.conversationStore.getSessionMeta(
@@ -462,12 +460,12 @@ async function handlePostTurn(
         body.additionalDirectories
       );
     }
-  } catch (err) {
+  } catch (error) {
     sendError(
       res,
       400,
       "bad_request",
-      err instanceof Error ? err.message : "Invalid workspace selection."
+      error instanceof Error ? error.message : "Invalid workspace selection."
     );
     return;
   }

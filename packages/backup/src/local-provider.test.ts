@@ -4,10 +4,8 @@ import path from "node:path";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";
 
-import {
-  providerConformanceCases,
-  type ConformanceHarness,
-} from "./conformance.js";
+import { providerConformanceCases } from "./conformance.js";
+import type { ConformanceHarness } from "./conformance.js";
 import { LocalBackupProvider } from "./local-provider.js";
 import { BackupProviderError } from "./provider.js";
 
@@ -113,7 +111,7 @@ describe("LocalBackupProvider lifecycle edge cases", () => {
     expect(rows).toStrictEqual([]);
     const roAfterPurge = await provider
       .openDataPlane(targetId, "backup", "read")
-      .catch((e: unknown) => e);
+      .catch((error: unknown) => error);
     expect(roAfterPurge).toBeInstanceOf(BackupProviderError);
   });
 
@@ -143,7 +141,7 @@ describe("LocalBackupProvider lifecycle edge cases", () => {
         format: "centraid-snapshot/2",
         appMeta: {},
       })
-      .catch((e: unknown) => e);
+      .catch((error: unknown) => error);
     expect(err).toBeInstanceOf(BackupProviderError);
     expect((err as BackupProviderError).code).toBe("conflict_generation");
     expect((err as BackupProviderError).details?.currentGeneration).toBe(4);

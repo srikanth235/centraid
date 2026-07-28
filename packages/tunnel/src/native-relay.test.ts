@@ -6,18 +6,15 @@ import path from "node:path";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
-import {
-  createTunnelClient,
-  tunnelRequest,
-  type TunnelClient,
-} from "./client.js";
+import { createTunnelClient, tunnelRequest } from "./client.js";
+import type { TunnelClient } from "./client.js";
 import type { DesktopTunnelOptions } from "./desktop-tunnel.js";
 import { DeviceStore } from "./device-store.js";
-import {
-  startGatewayEndpoint,
-  type GatewayEndpointHandle,
-  type GatewayEndpointOptions,
-  type GatewayPairResponse,
+import { startGatewayEndpoint } from "./gateway-endpoint.js";
+import type {
+  GatewayEndpointHandle,
+  GatewayEndpointOptions,
+  GatewayPairResponse,
 } from "./gateway-endpoint.js";
 import { startNativeDesktopTunnel } from "./native-relay.js";
 
@@ -128,7 +125,7 @@ describe.skipIf(process.env.CENTRAID_RUN_NATIVE_TUNNEL !== "1")(
       expect(response.status).toBe(200);
       expect(response.headers["x-seen-device"]).toBe(client.endpointId);
       expect(response.body).toStrictEqual(body);
-      expect(controlCalls.map(({ path }) => path)).toContain(
+      expect(controlCalls.map(({ path: pathLocal }) => pathLocal)).toContain(
         "/centraid/_gateway/tunnel/pair"
       );
       expect(boxedAuthorize).not.toHaveBeenCalled();

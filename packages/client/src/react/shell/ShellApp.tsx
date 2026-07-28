@@ -1,12 +1,5 @@
-import {
-  type JSX,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import type { JSX, ReactNode } from "react";
 
 import type { ShellRoute } from "../../app-shell-context.js";
 import {

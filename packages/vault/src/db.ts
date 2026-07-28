@@ -8,23 +8,15 @@ import { DatabaseSync } from "node:sqlite";
 import { readBackupPolicy } from "./backup-policy.js";
 import { BlobCache, readBlobCacheSettings } from "./blob/cache.js";
 import { BlobContentKeyRegistry } from "./blob/content-keys.js";
-import { BlobCustody, type RemoteTier } from "./blob/custody.js";
-import {
-  FsBlobStore,
-  MemoryBlobStore,
-  type LocalBlobStore,
-} from "./blob/local.js";
-import {
-  contributeIngressPreviews,
-  type IngressPreviewInput,
-  type PreviewCodec,
-} from "./blob/preview.js";
+import { BlobCustody } from "./blob/custody.js";
+import type { RemoteTier } from "./blob/custody.js";
+import { FsBlobStore, MemoryBlobStore } from "./blob/local.js";
+import type { LocalBlobStore } from "./blob/local.js";
+import { contributeIngressPreviews } from "./blob/preview.js";
+import type { IngressPreviewInput, PreviewCodec } from "./blob/preview.js";
 import { S3TransferStore } from "./blob/s3-transfer.js";
-import {
-  S3BlobStore,
-  type S3BlobStoreOptions,
-  type S3Credentials,
-} from "./blob/s3.js";
+import { S3BlobStore } from "./blob/s3.js";
+import type { S3BlobStoreOptions, S3Credentials } from "./blob/s3.js";
 import {
   desiredStoreForSha,
   storageClassForShaWrite,
@@ -258,11 +250,11 @@ function openFile(
       if (autoVacuum === 0 && pageCount > 0) db.exec("VACUUM");
     }
     return db;
-  } catch (err) {
+  } catch (error) {
     // WAL mode creates a `-wal`/`-shm` sibling on first write — on a
     // completely full volume even THAT can ENOSPC during open, before any
     // vault command ever runs. Surface it the same as every other write path.
-    throw asVaultDiskFullError(`opening ${location}`, err);
+    throw asVaultDiskFullError(`opening ${location}`, error);
   }
 }
 

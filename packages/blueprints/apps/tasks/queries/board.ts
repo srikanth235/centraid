@@ -398,8 +398,8 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       truncated,
       window,
     };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       open: [],
       logbook: [],

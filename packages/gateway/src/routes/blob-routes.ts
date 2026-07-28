@@ -22,9 +22,8 @@ import {
   DERIVATIVE_VARIANTS,
   isDerivativeVariant,
   readBackupPolicy,
-  type CommittedBlob,
-  type StagedBlob,
 } from "@centraid/vault";
+import type { CommittedBlob, StagedBlob } from "@centraid/vault";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { DataPlaneHttpOptions } from "../serve/data-plane-handoff.js";

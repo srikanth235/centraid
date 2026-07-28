@@ -11,7 +11,8 @@
 // isTunnelAvailable() returns false and the async functions reject with a
 // clear error instead of crashing at import time.
 
-import { NativeModule, requireOptionalNativeModule } from "expo-modules-core";
+import type { NativeModule } from "expo-modules-core";
+import { requireOptionalNativeModule } from "expo-modules-core";
 
 export type TunnelState = "stopped" | "starting" | "running" | "error";
 

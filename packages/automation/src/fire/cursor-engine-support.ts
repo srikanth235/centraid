@@ -9,8 +9,8 @@ import {
   DATA_DEFAULT_EVERY,
   EVENT_DEFAULT_EVERY,
   isDeniedTriggerCursorEntity,
-  type Trigger,
 } from "../manifest/manifest.js";
+import type { Trigger } from "../manifest/manifest.js";
 import type { Row } from "../scaffold/app.js";
 import type { Host } from "./host.js";
 

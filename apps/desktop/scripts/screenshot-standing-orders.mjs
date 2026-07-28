@@ -245,7 +245,7 @@ async function seedAppDir(appsDir, id) {
   );
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((error) => {
+  console.error(error);
   process.exit(1);
 });

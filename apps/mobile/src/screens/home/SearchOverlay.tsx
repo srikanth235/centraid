@@ -20,14 +20,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
-import {
-  family,
-  t,
-  useTheme,
-  type ThemeColors,
-  type Scheme,
-} from "../../kit/theme";
-import { filterLauncherItems, type LauncherItem } from "./catalog";
+import { family, t, useTheme } from "../../kit/theme";
+import type { ThemeColors, Scheme } from "../../kit/theme";
+import { filterLauncherItems } from "./catalog";
+import type { LauncherItem } from "./catalog";
 import LauncherGrid from "./LauncherGrid";
 
 const H_PADDING = 20;

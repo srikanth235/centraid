@@ -6,7 +6,8 @@
 // CJS preload). Renderer typings live in `renderer/centraid-api.d.ts`.
 
 import * as tokens from "@centraid/design-tokens";
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
+import type { IpcRendererEvent } from "electron";
 
 import { Channel, hostCapabilities } from "./main/ipc-core.js";
 import { createDeepLinkBuffer } from "./main/oauth-deep-link.js";

@@ -1,8 +1,10 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
 import { once } from "node:events";
 import { promises as fs } from "node:fs";
-import http, { type Server } from "node:http";
+import http from "node:http";
+import type { Server } from "node:http";
 import net from "node:net";
 import path from "node:path";
 
@@ -10,10 +12,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { createBlobHandoffUrl } from "../serve/data-plane-handoff.js";
-import {
-  startTypeScriptBytePlane,
-  type TypeScriptBytePlaneHandle,
-} from "./byte-plane-reference.js";
+import { startTypeScriptBytePlane } from "./byte-plane-reference.js";
+import type { TypeScriptBytePlaneHandle } from "./byte-plane-reference.js";
 
 const externalBaseUrl = process.env.CENTRAID_BYTE_PLANE_BASE_URL;
 const implementation = externalBaseUrl

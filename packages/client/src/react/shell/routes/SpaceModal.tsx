@@ -1,11 +1,6 @@
 import type { IconName } from "@centraid/design-tokens";
-import {
-  type CSSProperties,
-  type JSX,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import type { CSSProperties, JSX } from "react";
 
 import { cx } from "../../ui/cx.js";
 import { iconSvg } from "../iconSvg.js";

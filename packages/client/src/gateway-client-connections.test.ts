@@ -1,7 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 
-let completeAssistAuthorization: typeof import("./gateway-client-connections.js").completeAssistAuthorization;
-let resetGatewayAuthCache: typeof import("./gateway-client-core.js").resetGatewayAuthCache;
+import type * as TypeImport_1jh8y15 from "./gateway-client-connections.js";
+import type * as TypeImport_dar201 from "./gateway-client-core.js";
+
+let completeAssistAuthorization: typeof TypeImport_1jh8y15.completeAssistAuthorization;
+let resetGatewayAuthCache: typeof TypeImport_dar201.resetGatewayAuthCache;
 
 const getGatewayAuth = vi.fn<typeof window.CentraidApi.getGatewayAuth>();
 const irohFetch = vi.fn<NonNullable<typeof window.CentraidIroh>["fetch"]>();

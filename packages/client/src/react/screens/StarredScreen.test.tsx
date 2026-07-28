@@ -1,9 +1,11 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HomeAppItemDTO, HomeAutoItemDTO } from "../screen-contracts.js";
-import StarredScreen, { type StarredScreenProps } from "./StarredScreen.js";
+import StarredScreen from "./StarredScreen.js";
+import type { StarredScreenProps } from "./StarredScreen.js";
 
 const appItems: HomeAppItemDTO[] = [
   {

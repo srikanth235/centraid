@@ -32,8 +32,8 @@ import {
   durationSeconds,
   liveVideoUri,
   openDeviceOriginal,
-  type DeviceOriginal,
 } from "./device-media";
+import type { DeviceOriginal } from "./device-media";
 
 interface Rules {
   wifiOnly: boolean;
@@ -108,8 +108,8 @@ export default function BackupHealth({
         )
       )
       .then(setAlbums)
-      .catch((reason: unknown) =>
-        setAlbumError(reason instanceof Error ? reason.message : String(reason))
+      .catch((error: unknown) =>
+        setAlbumError(error instanceof Error ? error.message : String(error))
       );
   }, []);
   useEffect(() => {
@@ -162,8 +162,8 @@ export default function BackupHealth({
         let original: DeviceOriginal;
         try {
           original = await openDeviceOriginal(metadata.id);
-        } catch (reason) {
-          if (!(reason instanceof InCloudOriginalError)) throw reason;
+        } catch (error) {
+          if (!(error instanceof InCloudOriginalError)) throw error;
           // Counted and shown on the screen, never passed over in silence.
           skipped += 1;
           setInCloudSkipped(skipped);

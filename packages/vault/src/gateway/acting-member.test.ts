@@ -14,12 +14,14 @@ import {
   createGrant,
   enrollAgent,
   enrollDevice,
-  type BootstrapResult,
 } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
 import { registerScheduleCommands } from "../commands/schedule.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import { uuidv7 } from "../ids.js";
-import { createGateway, Gateway } from "./gateway.js";
+import type { Gateway } from "./gateway.js";
+import { createGateway } from "./gateway.js";
 import type { Credential } from "./types.js";
 
 const PURPOSE = "dpv:ServiceProvision";

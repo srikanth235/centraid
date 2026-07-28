@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import http from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { AddressInfo } from "node:net";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { Readable } from "node:stream";
 

@@ -9,13 +9,12 @@
  * which is exactly what the gateway exists to prevent.
  */
 
-import {
-  CARD_PK,
-  SEARCHABLE,
-  type Credential,
-  type FilterClause,
-  type Gateway as VaultGateway,
-  type ScopeSpec,
+import { CARD_PK, SEARCHABLE } from "@centraid/vault";
+import type {
+  Credential,
+  FilterClause,
+  Gateway as VaultGateway,
+  ScopeSpec,
 } from "@centraid/vault";
 
 export const AUTOMATION_ANCHOR_ENTITY = "core.link_anchor";

@@ -23,9 +23,8 @@ import {
   listOutboxGrants,
   readAutomation,
   revokeOutboxGrant,
-  type BlockingSummary,
-  type OutboxGrant,
 } from "../../../gateway-client.js";
+import type { BlockingSummary, OutboxGrant } from "../../../gateway-client.js";
 import type {
   AuConsentDTO,
   AuPlanStatusDTO,

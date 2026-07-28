@@ -4,7 +4,8 @@ import path from "node:path";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { appendLogs, readLogs, type LogEntry } from "./log-store.ts";
+import { appendLogs, readLogs } from "./log-store.ts";
+import type { LogEntry } from "./log-store.ts";
 
 let workspace: string;
 

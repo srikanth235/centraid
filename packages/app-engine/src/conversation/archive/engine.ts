@@ -17,11 +17,13 @@ import {
   DEFAULT_MAX_CONVERSATIONS_PER_RUN,
   DEFAULT_MAX_PRUNE_SEGMENTS_PER_RUN,
   windowCutoffMs,
-  type ArchivedRange,
-  type ConversationArchivalDeps,
-  type ConversationArchivalOptions,
-  type ConversationArchivalResult,
-  type Row,
+} from "./types.js";
+import type {
+  ArchivedRange,
+  ConversationArchivalDeps,
+  ConversationArchivalOptions,
+  ConversationArchivalResult,
+  Row,
 } from "./types.js";
 
 export function runConversationArchival(
@@ -72,9 +74,9 @@ export function runConversationArchival(
         itemCount: out.itemCount,
       });
       turnsArchived += out.turnCount;
-    } catch (err) {
+    } catch (error) {
       journal.exec("ROLLBACK");
-      throw err;
+      throw error;
     }
   }
 

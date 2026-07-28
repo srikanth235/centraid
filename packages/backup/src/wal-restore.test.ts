@@ -24,7 +24,8 @@ import { DatabaseSync } from "node:sqlite";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";
 
-import { FsObjectStore, type ObjectStore } from "./object-store.js";
+import { FsObjectStore } from "./object-store.js";
+import type { ObjectStore } from "./object-store.js";
 import {
   lastCommitBoundary,
   openWalSegment,
@@ -32,14 +33,16 @@ import {
   sealWalCloser,
   sealWalPairMarker,
   sealWalSegment,
-  type WalDbName,
-  type WalGroupCloser,
-  type WalPairMarker,
-  type WalSegmentAddress,
   WAL_DB_FILES,
   walGroupCloserKey,
   walPairMarkerKey,
   walSegmentKey,
+} from "./wal-format.js";
+import type {
+  WalDbName,
+  WalGroupCloser,
+  WalPairMarker,
+  WalSegmentAddress,
 } from "./wal-format.js";
 import { replayWalSegments } from "./wal-restore.js";
 

@@ -9,16 +9,20 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
+import { bootstrapVault } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
 import { registerMediaCommands } from "../commands/media.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import {
   leaseNextEnrichmentRequest,
   queueDeviceEnrichmentRequest,
 } from "../enrich/leases.js";
-import { createGateway, Gateway } from "../gateway/gateway.js";
+import type { Gateway } from "../gateway/gateway.js";
+import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
-import { backfillPreviews, type PreviewCodec } from "./preview.js";
+import { backfillPreviews } from "./preview.js";
+import type { PreviewCodec } from "./preview.js";
 import { shaOfBlobUri } from "./store.js";
 
 // A 1×1 PNG — appending zero bytes keeps the PNG signature (so it still sniffs

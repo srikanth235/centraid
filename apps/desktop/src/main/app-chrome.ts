@@ -5,15 +5,8 @@
 
 import path from "node:path";
 
-import {
-  app,
-  BrowserWindow,
-  Menu,
-  Tray,
-  nativeImage,
-  type MenuItemConstructorOptions,
-  type NativeImage,
-} from "electron";
+import { app, BrowserWindow, Menu, Tray, nativeImage } from "electron";
+import type { MenuItemConstructorOptions, NativeImage } from "electron";
 
 import { isOAuthFinishDeepLink } from "./oauth-deep-link.js";
 

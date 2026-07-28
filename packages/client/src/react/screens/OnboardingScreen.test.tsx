@@ -1,19 +1,21 @@
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import OnboardingScreen, {
-  type OnboardingCompleteInput,
-  type OnboardingScreenProps,
+import type * as TypeImport_bmsl46 from "../../gateway-client.js";
+import OnboardingScreen from "./OnboardingScreen.js";
+import type {
+  OnboardingCompleteInput,
+  OnboardingScreenProps,
 } from "./OnboardingScreen.js";
 
 vi.mock(import("../../gateway-client.js"), () => ({
   listVaults: () => listVaultsMock(),
 }));
 
-const listVaultsMock =
-  vi.fn<typeof import("../../gateway-client.js").listVaults>();
+const listVaultsMock = vi.fn<typeof TypeImport_bmsl46.listVaults>();
 const getSettings = vi.fn<(...args: unknown[]) => unknown>();
 const setActiveGateway = vi.fn<(...args: unknown[]) => unknown>();
 const setActiveVault = vi.fn<(...args: unknown[]) => unknown>();

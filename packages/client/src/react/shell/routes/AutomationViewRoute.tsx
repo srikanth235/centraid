@@ -1,4 +1,5 @@
-import { type JSX, useRef } from "react";
+import { useRef } from "react";
+import type { JSX } from "react";
 
 import {
   auth,
@@ -23,9 +24,8 @@ import type {
   AsstMsgDTO,
   BuilderAttachmentRef,
 } from "../../screen-contracts.js";
-import AutomationThreadScreen, {
-  type AutomationThreadDataEx,
-} from "../../screens/AutomationThreadScreen.js";
+import AutomationThreadScreen from "../../screens/AutomationThreadScreen.js";
+import type { AutomationThreadDataEx } from "../../screens/AutomationThreadScreen.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
 import { openWebhookReveal } from "../webhookReveal.js";
@@ -317,9 +317,9 @@ export default function AutomationViewRoute({
             showToast(`Deleted "${row.name}"`);
             navigate({ kind: "automations" });
             return true;
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Could not delete ${row.name}: ${err instanceof Error ? err.message : String(err)}`
+              `Could not delete ${row.name}: ${error instanceof Error ? error.message : String(error)}`
             );
             return false;
           }
@@ -333,9 +333,9 @@ export default function AutomationViewRoute({
             });
             showToast("Run started");
             return turnId;
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Run failed: ${err instanceof Error ? err.message : String(err)}`
+              `Run failed: ${error instanceof Error ? error.message : String(error)}`
             );
             return null;
           }
@@ -349,9 +349,9 @@ export default function AutomationViewRoute({
               enabled: next,
             });
             return true;
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Could not ${next ? "enable" : "disable"} ${row.name}: ${err instanceof Error ? err.message : String(err)}`
+              `Could not ${next ? "enable" : "disable"} ${row.name}: ${error instanceof Error ? error.message : String(error)}`
             );
             return false;
           }
@@ -364,9 +364,9 @@ export default function AutomationViewRoute({
               kind,
               ...(alwaysAllow === undefined ? {} : { alwaysAllow }),
             });
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Could not update: ${err instanceof Error ? err.message : String(err)}`
+              `Could not update: ${error instanceof Error ? error.message : String(error)}`
             );
             return false;
           }
@@ -437,9 +437,10 @@ export default function AutomationViewRoute({
               signal,
               confirm,
             });
-          } catch (err) {
+          } catch (error) {
             if (!signal.aborted) {
-              const message = err instanceof Error ? err.message : String(err);
+              const message =
+                error instanceof Error ? error.message : String(error);
               onMessages([
                 { kind: "user", text },
                 {
@@ -477,9 +478,9 @@ export default function AutomationViewRoute({
             });
             showToast("Webhook secret regenerated");
             return true;
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Could not regenerate secret: ${err instanceof Error ? err.message : String(err)}`
+              `Could not regenerate secret: ${error instanceof Error ? error.message : String(error)}`
             );
             return false;
           }

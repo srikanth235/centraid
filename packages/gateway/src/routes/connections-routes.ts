@@ -29,8 +29,8 @@ import {
   GOOGLE_ASSIST_SCOPE_TIERS,
   assistCallbackUrl,
   assistScopes,
-  type AssistOAuthConfig,
 } from "../serve/assist-oauth.js";
+import type { AssistOAuthConfig } from "../serve/assist-oauth.js";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { ConnectionBroker } from "../serve/connection-broker.js";
 import { vaultContext } from "../serve/vault-context.js";
@@ -159,11 +159,11 @@ export function makeConnectionsRouteHandler(
       try {
         await broker.completeAuthorization(state, code);
         sendCeremonyHtml(res, true, "The connection is authorized and live.");
-      } catch (err) {
+      } catch (error) {
         sendCeremonyHtml(
           res,
           false,
-          err instanceof Error ? err.message : String(err)
+          error instanceof Error ? error.message : String(error)
         );
       }
       return true;
@@ -177,9 +177,9 @@ export function makeConnectionsRouteHandler(
     let plane: VaultPlane;
     try {
       plane = vaults.current();
-    } catch (err) {
+    } catch (error) {
       sendJson(res, 500, {
-        error: err instanceof Error ? err.message : String(err),
+        error: error instanceof Error ? error.message : String(error),
       });
       return true;
     }
@@ -251,10 +251,10 @@ export function makeConnectionsRouteHandler(
             "requested Google scope does not belong to this connector"
           );
         }
-      } catch (err) {
+      } catch (error) {
         sendJson(res, 400, {
           error: "invalid_assist_scopes",
-          message: err instanceof Error ? err.message : String(err),
+          message: error instanceof Error ? error.message : String(error),
         });
         return true;
       }
@@ -322,10 +322,10 @@ export function makeConnectionsRouteHandler(
           deviceKey,
         });
         sendJson(res, 200, { ok: true, connection_id: completed.connectionId });
-      } catch (err) {
+      } catch (error) {
         sendJson(res, 400, {
           error: "assist_authorization_failed",
-          message: err instanceof Error ? err.message : String(err),
+          message: error instanceof Error ? error.message : String(error),
         });
       }
       return true;
@@ -438,9 +438,9 @@ export function makeConnectionsRouteHandler(
           redirect_uri:
             "redirectUri" in ceremony ? ceremony.redirectUri : redirectUri,
         });
-      } catch (err) {
+      } catch (error) {
         sendJson(res, 400, {
-          error: err instanceof Error ? err.message : String(err),
+          error: error instanceof Error ? error.message : String(error),
         });
       }
       return true;

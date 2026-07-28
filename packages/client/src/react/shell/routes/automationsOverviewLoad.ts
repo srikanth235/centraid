@@ -71,9 +71,9 @@ export async function adoptOverviewSuggestion(
     await revealWebhooksInOrder(webhooks);
     if (ref) navigate({ kind: "automation-view", automationId: ref });
     else navigate({ kind: "automations" });
-  } catch (err: unknown) {
+  } catch (error: unknown) {
     showToast(
-      `Could not adopt template: ${err instanceof Error ? err.message : String(err)}`
+      `Could not adopt template: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }

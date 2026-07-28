@@ -1,4 +1,5 @@
-import { type JSX, useMemo } from "react";
+import { useMemo } from "react";
+import type { JSX } from "react";
 
 import SettingsConnectionsScreen from "../../screens/SettingsConnectionsScreen.js";
 import { useShellActions } from "../actions.js";

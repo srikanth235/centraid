@@ -1,7 +1,5 @@
-import {
-  OnlineOnlyError,
-  type ReplicaSnapshot,
-} from "@centraid/client/replica/native";
+import { OnlineOnlyError } from "@centraid/client/replica/native";
+import type { ReplicaSnapshot } from "@centraid/client/replica/native";
 import { describe, expect, test } from "vitest";
 
 import { NativeReplicaStore } from "./native-replica-store";

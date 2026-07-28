@@ -40,8 +40,8 @@ export async function cleanupDeregisteredApp(
   try {
     await fs.rm(entry.path, { recursive: true, force: true });
     return { kind: "removed" };
-  } catch (err) {
-    const e = err instanceof Error ? err : new Error(String(err));
+  } catch (error) {
+    const e = error instanceof Error ? error : new Error(String(error));
     logger.warn(
       `[centraid] deregister: failed to remove "${entry.path}": ${e.message}`
     );

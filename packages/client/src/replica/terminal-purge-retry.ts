@@ -1,7 +1,5 @@
-import {
-  retryTerminalReplicaPurges,
-  type ReplicaStoragePurgeOptions,
-} from "./storage-manifest.js";
+import { retryTerminalReplicaPurges } from "./storage-manifest.js";
+import type { ReplicaStoragePurgeOptions } from "./storage-manifest.js";
 
 const DEFAULT_RETRY_DELAY_MS = 5_000;
 

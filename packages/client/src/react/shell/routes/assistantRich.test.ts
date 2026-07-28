@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import { richAnswerHtml } from "./assistantRich.js";
 
 // `vi.mock` is hoisted above the import by vitest, so the stub lands first.
 vi.mock(import("../../../gateway-client.js"), () => ({
-  resolveAssistantRefs:
-    vi.fn<typeof import("../../../gateway-client.js").resolveAssistantRefs>(),
+  resolveAssistantRefs: vi.fn<typeof TypeImport_1gl5zx7.resolveAssistantRefs>(),
 }));
 
 describe(richAnswerHtml, () => {

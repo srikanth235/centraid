@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PaletteConversationSearch } from "./paletteConversationSearch.js";
-import { buildPaletteGroups, type PaletteDeps } from "./paletteData.js";
+import { buildPaletteGroups } from "./paletteData.js";
+import type { PaletteDeps } from "./paletteData.js";
 
 // `vi.mock` is hoisted above the import by vitest, so iconSvg's design-tokens
 // dependency resolves before paletteData.js loads.

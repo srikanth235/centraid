@@ -1,4 +1,5 @@
-import { useRef, useState, type JSX } from "react";
+import { useRef, useState } from "react";
+import type { JSX } from "react";
 
 import {
   availabilityPct,
@@ -8,24 +9,31 @@ import {
   formatDuration,
   formatUptime,
   reconcileStatus,
-  type GatewayRuntimeSnapshot,
-  type ReconciledStatus,
+} from "../shell/routes/gatewayData.js";
+import type {
+  GatewayRuntimeSnapshot,
+  ReconciledStatus,
 } from "../shell/routes/gatewayData.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
-import BackupCard, { type BackupCardProps } from "./BackupCard.js";
+import BackupCard from "./BackupCard.js";
+import type { BackupCardProps } from "./BackupCard.js";
 import GatewayAlertsTab from "./GatewayAlertsTab.js";
-import LogsScreen, { type LogsBridgeProps } from "./LogsScreen.js";
-import ResourceModeCard, {
-  type ResourceMode,
-  type ResourceModeCardProps,
+import LogsScreen from "./LogsScreen.js";
+import type { LogsBridgeProps } from "./LogsScreen.js";
+import ResourceModeCard from "./ResourceModeCard.js";
+import type {
+  ResourceMode,
+  ResourceModeCardProps,
 } from "./ResourceModeCard.js";
 import RestartGatewayButton from "./RestartGatewayButton.js";
-import SettingsDiagnosticsScreen, {
-  type GatewayHealthDTO,
-  type SettingsDiagnosticsBridgeProps,
+import SettingsDiagnosticsScreen from "./SettingsDiagnosticsScreen.js";
+import type {
+  GatewayHealthDTO,
+  SettingsDiagnosticsBridgeProps,
 } from "./SettingsDiagnosticsScreen.js";
-import StorageScreen, { type StorageScreenProps } from "./StorageScreen.js";
+import StorageScreen from "./StorageScreen.js";
+import type { StorageScreenProps } from "./StorageScreen.js";
 
 import a11y from "../styles/a11y.module.css";
 import styles from "./GatewayScreen.module.css";

@@ -3,9 +3,11 @@ import {
   resolveSubsystemConfigPins,
   resolveSubsystemRunner,
   resolveSubsystemRunnerLadder,
-  type ModelSubsystem,
-  type RunnerKind,
-  type RunnerPrefs,
+} from "@centraid/app-engine";
+import type {
+  ModelSubsystem,
+  RunnerKind,
+  RunnerPrefs,
 } from "@centraid/app-engine";
 
 const RUNNER_SUBSYSTEMS: readonly ModelSubsystem[] = [

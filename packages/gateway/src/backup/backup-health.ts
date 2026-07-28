@@ -1,4 +1,5 @@
-import { DEFAULT_BACKUP_POLICY, type BackupPolicy } from "@centraid/vault";
+import { DEFAULT_BACKUP_POLICY } from "@centraid/vault";
+import type { BackupPolicy } from "@centraid/vault";
 
 import type { BackupState } from "./backup-state.js";
 

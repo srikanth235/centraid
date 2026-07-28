@@ -5,13 +5,11 @@ import {
   listReplicaPurgeSelectors,
   rememberReplicaPurgeSelector,
   replicaPurgeSelectorMatches,
-  type ReplicaPurgeSelector,
 } from "./purge-selector.js";
+import type { ReplicaPurgeSelector } from "./purge-selector.js";
 import type { ReplicaIdentity } from "./types.js";
-import {
-  ReplicaWorkerClient,
-  type ReplicaWorkerFactory,
-} from "./worker-client.js";
+import { ReplicaWorkerClient } from "./worker-client.js";
+import type { ReplicaWorkerFactory } from "./worker-client.js";
 
 const MANIFEST_KEY = "centraid.replica.remembered.v1";
 const TERMINAL_MANIFEST_KEY = "centraid.replica.terminal-pending.v1";

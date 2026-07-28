@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_1n561g5 from "../gateway-client-core.js";
 import { ReplicaRebootstrapRequiredError } from "./errors.js";
 import {
   fetchReplicaChanges,
   fetchReplicaIntentOutcomes,
-  type ReplicaFetcher,
 } from "./shell-transport.js";
+import type { ReplicaFetcher } from "./shell-transport.js";
 
 vi.mock(import("../gateway-client-core.js"), () => ({
   // Explicit `Record<string, string>` return type (matching the real
@@ -13,7 +14,7 @@ vi.mock(import("../gateway-client-core.js"), () => ({
   // `{ Authorization?: undefined }`, which isn't assignable to it.
   authHeaders: (token?: string): Record<string, string> =>
     token ? { Authorization: `Bearer ${token}` } : {},
-  doFetch: vi.fn<typeof import("../gateway-client-core.js").doFetch>(),
+  doFetch: vi.fn<typeof TypeImport_1n561g5.doFetch>(),
   GatewayClientError: class GatewayClientError extends Error {
     constructor(
       readonly code: string,

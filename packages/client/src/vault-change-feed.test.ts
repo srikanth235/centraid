@@ -9,9 +9,12 @@ import {
   vi,
 } from "vitest";
 
+import type * as TypeImport_dar201 from "./gateway-client-core.js";
+import type * as TypeImport_lkae3t from "./vault-change-feed.js";
+
 const core = vi.hoisted(() => ({
-  auth: vi.fn<typeof import("./gateway-client-core.js").auth>(),
-  doFetch: vi.fn<typeof import("./gateway-client-core.js").doFetch>(),
+  auth: vi.fn<typeof TypeImport_dar201.auth>(),
+  doFetch: vi.fn<typeof TypeImport_dar201.doFetch>(),
 }));
 
 vi.mock(import("./gateway-client-core.js"), () => ({
@@ -24,7 +27,9 @@ vi.mock(import("./gateway-client-core.js"), () => ({
     token ? { Authorization: `Bearer ${token}` } : {},
 }));
 
-let feedModule: typeof import("./vault-change-feed.js");
+type VaultChangeFeedModule = typeof import("./vault-change-feed.js");
+
+let feedModule: VaultChangeFeedModule;
 
 describe("vault-change-feed", () => {
   beforeAll(async () => {
@@ -78,7 +83,7 @@ describe("vault-change-feed", () => {
   describe("consumeVaultChangeSse", () => {
     it("parses split CRLF frames, comments, ids, and multi-line data", async () => {
       const stream = controlledBody();
-      const frames: import("./vault-change-feed.js").SseFrame[] = [];
+      const frames: TypeImport_lkae3t.SseFrame[] = [];
       const done = feedModule.consumeVaultChangeSse(stream.body, (frame) =>
         frames.push(frame)
       );
@@ -169,8 +174,7 @@ describe("vault-change-feed", () => {
         status: 200,
         body: current.body,
       } as unknown as Response);
-      const messages: import("./vault-change-feed.js").VaultChangeMessage[] =
-        [];
+      const messages: TypeImport_lkae3t.VaultChangeMessage[] = [];
       const off = feedModule.subscribeVaultChanges((message) =>
         messages.push(message)
       );
@@ -198,8 +202,8 @@ describe("vault-change-feed", () => {
         status: 200,
         body: stream.body,
       } as unknown as Response);
-      const first: import("./vault-change-feed.js").VaultChangeMessage[] = [];
-      const second: import("./vault-change-feed.js").VaultChangeMessage[] = [];
+      const first: TypeImport_lkae3t.VaultChangeMessage[] = [];
+      const second: TypeImport_lkae3t.VaultChangeMessage[] = [];
       const offFirst = feedModule.subscribeVaultChanges((message) =>
         first.push(message)
       );
@@ -288,8 +292,7 @@ describe("vault-change-feed", () => {
           status: 200,
           body: resumed.body,
         } as unknown as Response);
-      const messages: import("./vault-change-feed.js").VaultChangeMessage[] =
-        [];
+      const messages: TypeImport_lkae3t.VaultChangeMessage[] = [];
       const off = feedModule.subscribeVaultChanges((message) =>
         messages.push(message)
       );
@@ -324,8 +327,7 @@ describe("vault-change-feed", () => {
         body: null,
         json: async () => ({ error: "replica_device_not_enrolled" }),
       } as unknown as Response);
-      const messages: import("./vault-change-feed.js").VaultChangeMessage[] =
-        [];
+      const messages: TypeImport_lkae3t.VaultChangeMessage[] = [];
       const off = feedModule.subscribeVaultChanges((message) =>
         messages.push(message)
       );

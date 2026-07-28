@@ -106,9 +106,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     let outcome: VaultOutcome | undefined;
     try {
       outcome = await window.centraid.write({ action, input });
-    } catch (err) {
-      const e = err as { message?: string };
-      notice(String(e?.message ?? err));
+    } catch (error) {
+      const e = error as { message?: string };
+      notice(String(e?.message ?? error));
       return undefined;
     }
     const executed = narrate(outcome, friendly);
@@ -129,9 +129,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   ): Promise<VaultOutcome | undefined> {
     try {
       return await window.centraid.write({ action, input });
-    } catch (err) {
-      const e = err as { message?: string };
-      notice(String(e?.message ?? err));
+    } catch (error) {
+      const e = error as { message?: string };
+      notice(String(e?.message ?? error));
       return undefined;
     }
   }
@@ -153,9 +153,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
         action: "edit-note",
         input: { note_id: noteId, ...patch },
       });
-    } catch (err) {
-      const e = err as { message?: string };
-      notice(String(e?.message ?? err));
+    } catch (error) {
+      const e = error as { message?: string };
+      notice(String(e?.message ?? error));
       return undefined;
     }
     if (outcome?.status === "executed") {

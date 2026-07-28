@@ -134,14 +134,14 @@ export default async function duplicatesHandler({ ctx }: HandlerArgs) {
     }
     clusters.sort((a, b) => b.assets.length - a.assets.length);
     return { clusters };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     if (e.code === "VAULT_CONSENT") {
       return {
         clusters: [],
         vaultDenied: { code: e.code, message: e.message },
       };
     }
-    return { clusters: [], error: String(e.message ?? err) };
+    return { clusters: [], error: String(e.message ?? error) };
   }
 }

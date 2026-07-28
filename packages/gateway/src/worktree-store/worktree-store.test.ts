@@ -27,8 +27,8 @@ async function expectRejectsWithCode(
   let err: unknown;
   try {
     await op();
-  } catch (e) {
-    err = e;
+  } catch (error) {
+    err = error;
   }
   expect(err).toBeInstanceOf(WorktreeStoreError);
   expect((err as WorktreeStoreError).code).toBe(code);

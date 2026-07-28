@@ -16,7 +16,8 @@ import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import Icon from "../../kit/components/Icon";
-import { family, t, useTheme, type ThemeColors } from "../../kit/theme";
+import { family, t, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 
 // Mirrors Home's load state, minus the resolved app payload — this component
 // only needs to know whether the desktop is reachable, not what it returned.

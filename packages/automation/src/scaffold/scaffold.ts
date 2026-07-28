@@ -20,22 +20,21 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 
 import { isValidAppId } from "@centraid/app-engine";
-import {
-  AppScaffoldError,
-  type ScaffoldFile,
-  type AppInfo,
-} from "@centraid/blueprints";
+import { AppScaffoldError } from "@centraid/blueprints";
+import type { ScaffoldFile, AppInfo } from "@centraid/blueprints";
 
 import {
   HANDLER_FILE,
   MANIFEST_FILE,
   validateManifest,
-  type Manifest,
-  type Trigger,
-  type HistoryKeep,
-  type ConnectionBinding,
-  type ConnectorSpec,
-  type ManifestVault,
+} from "../manifest/manifest.js";
+import type {
+  Manifest,
+  Trigger,
+  HistoryKeep,
+  ConnectionBinding,
+  ConnectorSpec,
+  ManifestVault,
 } from "../manifest/manifest.js";
 import { isValidId } from "../manifest/ref.js";
 import { APP_AUTOMATIONS_SUBDIR } from "./app.js";
@@ -323,8 +322,8 @@ export async function scaffoldApp(
       "already_exists",
       `Automation app "${appId}" already exists at ${appDir}.`
     );
-  } catch (err) {
-    if (err instanceof AppScaffoldError) throw err;
+  } catch (error) {
+    if (error instanceof AppScaffoldError) throw error;
     // ENOENT — the directory is free, proceed.
   }
 

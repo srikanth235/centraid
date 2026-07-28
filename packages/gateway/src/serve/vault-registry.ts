@@ -33,21 +33,17 @@ import type {
   VaultBridge,
   VaultWorkspace,
 } from "@centraid/app-engine";
-import {
-  uuidv7,
-  VaultSchemaAheadError,
-  type BlobStoreSettings,
-  type S3Credentials,
-  type PreviewCodec,
-  type KeyStore,
+import { uuidv7, VaultSchemaAheadError } from "@centraid/vault";
+import type {
+  BlobStoreSettings,
+  S3Credentials,
+  PreviewCodec,
+  KeyStore,
 } from "@centraid/vault";
 
 import { vaultContext } from "./vault-context.js";
-import {
-  openVaultPlane,
-  VaultPlane,
-  type InstallScopeBlock,
-} from "./vault-plane.js";
+import type { InstallScopeBlock, VaultPlane } from "./vault-plane.js";
+import { openVaultPlane } from "./vault-plane.js";
 
 /**
  * Minimum time between retry attempts for a directory whose mount failed
@@ -281,11 +277,11 @@ export class VaultRegistry {
         this.failedMountsByDir.delete(dir);
         if (this.started) plane.start();
         this.notifyMounted(plane);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         const schemaAhead =
-          err instanceof VaultSchemaAheadError ||
-          (err instanceof Error && err.name === "VaultSchemaAheadError");
+          error instanceof VaultSchemaAheadError ||
+          (error instanceof Error && error.name === "VaultSchemaAheadError");
         this.failedMountsByDir.set(dir, { message, atMs: nowMs, schemaAhead });
         this.logger.warn(
           `vault registry: could not mount vault at ${dir}: ${message}`
@@ -574,9 +570,9 @@ export class VaultRegistry {
           );
         }
       })
-      .catch((err: unknown) => {
+      .catch((error: unknown) => {
         this.logger.warn(
-          `vault registry: remote blob purge for deleted vault ${vaultId} failed: ${err instanceof Error ? err.message : String(err)}`
+          `vault registry: remote blob purge for deleted vault ${vaultId} failed: ${error instanceof Error ? error.message : String(error)}`
         );
       });
     this.logger.info(

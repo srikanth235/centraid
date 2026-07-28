@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 
-import { openVaultDb, type VaultDb } from "../db.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import {
   readReplicaIntentOutcome,
   recordReplicaIntentOutcome,

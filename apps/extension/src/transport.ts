@@ -4,8 +4,8 @@ import initWasm, {
   BrowserEndpoint,
   connect_failure_marker,
   device_revoked_marker,
-  type BrowserResponse,
 } from "../../web/src/generated/centraid_web_iroh.js";
+import type { BrowserResponse } from "../../web/src/generated/centraid_web_iroh.js";
 import {
   loadDeviceKey,
   loadPairing,

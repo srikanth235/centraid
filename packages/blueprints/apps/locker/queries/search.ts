@@ -7,13 +7,8 @@
  * a first-class outcome the UI renders as the access state.
  */
 
-import {
-  decorate,
-  readTags,
-  readStarred,
-  readWatchtower,
-  type RawItem,
-} from "./items.ts";
+import { decorate, readTags, readStarred, readWatchtower } from "./items.ts";
+import type { RawItem } from "./items.ts";
 
 export default async function searchHandler({
   input,
@@ -55,8 +50,8 @@ export default async function searchHandler({
       readWatchtower(ctx, purpose),
     ]);
     return { items: decorate(matched, tagsByItem, starredIds, watchByItem) };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return { items: [], vaultDenied: { code: e.code, message: e.message } };
   }
 }

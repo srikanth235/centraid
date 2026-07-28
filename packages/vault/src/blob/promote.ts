@@ -10,8 +10,8 @@ import { queueMissingDeviceEnrichmentRequests } from "../enrich/leases.js";
 import {
   isBinaryDerivative,
   validateDerivativeContribution,
-  type DerivativeVariant,
 } from "./derivatives.js";
+import type { DerivativeVariant } from "./derivatives.js";
 import type { BlobMeta } from "./pipeline.js";
 import { upsertContentEmbedding } from "./semantic-contributions.js";
 import { blobUriFor } from "./store.js";

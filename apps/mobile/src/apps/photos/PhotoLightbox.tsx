@@ -253,12 +253,12 @@ export default function PhotoLightbox({
 
   /** Export never fails quietly: an iCloud-only original says exactly that. */
   const runExport = (save: boolean): void => {
-    void exportAsset(save).catch((reason: unknown) => {
+    void exportAsset(save).catch((error: unknown) => {
       Alert.alert(
-        reason instanceof InCloudOriginalError
+        error instanceof InCloudOriginalError
           ? "Original is in iCloud"
           : "Export failed",
-        reason instanceof Error ? reason.message : String(reason)
+        error instanceof Error ? error.message : String(error)
       );
     });
   };

@@ -1183,14 +1183,19 @@ export default function SettingsConnectionsScreen({
       return;
     }
     // api_key: re-open credential form without delete/recreate.
-    const featured = featuredForRow(row);
-    if (!featured) {
+    const featuredLocal = featuredForRow(row);
+    if (!featuredLocal) {
       showToast(
         "No provider preset for this connection — reconfigure from Featured."
       );
       return;
     }
-    setSheet({ kind: "connection", row, featured, reconnecting: true });
+    setSheet({
+      kind: "connection",
+      row,
+      featured: featuredLocal,
+      reconnecting: true,
+    });
   };
 
   const onManualAssistHandoff = (rawUrl: string): void => {

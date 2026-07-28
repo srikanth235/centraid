@@ -12,10 +12,8 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { makeConversationRouteHandler } from "../http/conversation-routes.js";
-import {
-  makeJournalDbProvider,
-  type DatabaseProvider,
-} from "../stores/gateway-db.js";
+import { makeJournalDbProvider } from "../stores/gateway-db.js";
+import type { DatabaseProvider } from "../stores/gateway-db.js";
 import type { WorkspaceProvider } from "../stores/vault-workspace.js";
 import { runConversationArchival } from "./archive/index.js";
 import type { BlobSink } from "./archive/types.js";

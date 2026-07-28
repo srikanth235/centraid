@@ -285,9 +285,9 @@ export function stageCandidates(
       db.sealKey
     );
     db.vault.exec("COMMIT");
-  } catch (err) {
+  } catch (error) {
     db.vault.exec("ROLLBACK");
-    throw err;
+    throw error;
   }
   const { batchId, counts } = staged;
   const receiptId = writeReceipt(db.journal, {
@@ -557,14 +557,14 @@ export function applyBatchTx(
           );
         }
       }
-    } catch (err) {
+    } catch (error) {
       failed.push({
         externalId: row.external_id,
-        error: err instanceof Error ? err.message : String(err),
+        error: error instanceof Error ? error.message : String(error),
       });
       markRow.run(
         null,
-        `failed: ${err instanceof Error ? err.message : String(err)}`,
+        `failed: ${error instanceof Error ? error.message : String(error)}`,
         row.row_id
       );
     }
@@ -630,9 +630,9 @@ export function publishBatch(
       db.sealKey
     );
     db.vault.exec("COMMIT");
-  } catch (err) {
+  } catch (error) {
     db.vault.exec("ROLLBACK");
-    throw err;
+    throw error;
   }
   const { created, updated, skipped, failed } = applied;
   // `file.ics` → `import.ics`: the provenance activity names the SOURCE
@@ -695,9 +695,9 @@ export function discardBatch(
     // the staged bytes, so the TTL sweep reclaims them.
     releaseBatchHold(db.vault, batchId);
     db.vault.exec("COMMIT");
-  } catch (err) {
+  } catch (error) {
     db.vault.exec("ROLLBACK");
-    throw err;
+    throw error;
   }
   const receiptId = writeReceipt(db.journal, {
     grantId: null,

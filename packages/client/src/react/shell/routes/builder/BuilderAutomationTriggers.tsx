@@ -1,4 +1,5 @@
-import { type JSX, useState } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import { describeCron } from "../../../../cron.js";
 import { cx } from "../../../ui/cx.js";
@@ -104,10 +105,10 @@ function parseWhereInput(
   let parsed: unknown;
   try {
     parsed = JSON.parse(trimmed);
-  } catch (err) {
+  } catch (error) {
     return {
       field: "where",
-      message: `must be valid JSON (${err instanceof Error ? err.message : String(err)})`,
+      message: `must be valid JSON (${error instanceof Error ? error.message : String(error)})`,
     };
   }
   if (!Array.isArray(parsed)) {

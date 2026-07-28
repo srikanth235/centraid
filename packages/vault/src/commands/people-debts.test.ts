@@ -1,13 +1,11 @@
 import { assert, beforeEach, describe, expect, test } from "vitest";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollApp,
-  type BootstrapResult,
-} from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import { createGateway, Gateway } from "../gateway/gateway.js";
+import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import type { Gateway } from "../gateway/gateway.js";
+import { createGateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import { registerPartyCommands } from "./parties.js";
 import { registerPeopleCommands } from "./people.js";

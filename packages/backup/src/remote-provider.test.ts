@@ -1,17 +1,13 @@
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { afterEach, describe, expect, test } from "vitest";
 
-import {
-  providerConformanceCases,
-  type ConformanceHarness,
-} from "./conformance.js";
+import { providerConformanceCases } from "./conformance.js";
+import type { ConformanceHarness } from "./conformance.js";
 import { BackupProviderError } from "./provider.js";
 import { RemoteBackupProvider } from "./remote-provider.js";
 import { S3ObjectStore } from "./s3-store.js";
-import {
-  startFakeProviderServer,
-  type FakeProviderServer,
-} from "./testing/fake-provider-server.js";
+import { startFakeProviderServer } from "./testing/fake-provider-server.js";
+import type { FakeProviderServer } from "./testing/fake-provider-server.js";
 
 const BUCKET = "test-bucket";
 const cleanups: Array<() => Promise<void>> = [];
@@ -82,7 +78,7 @@ describe("remote-provider", () => {
       });
       const err = await provider
         .getSnapshot("unknown-target", 1)
-        .catch((e: unknown) => e);
+        .catch((error: unknown) => error);
       expect(err).toBeInstanceOf(BackupProviderError);
     });
 

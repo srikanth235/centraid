@@ -9,16 +9,14 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
-import { bootstrapVault, type BootstrapResult } from "../bootstrap.js";
-import { openVaultDb, type VaultDb } from "../db.js";
+import { bootstrapVault } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
 import type { Identity } from "../gateway/types.js";
 import { PUBLISHERS } from "./publishers.js";
-import {
-  applyBatchTx,
-  ensureConnectionTx,
-  stageBatchTx,
-  type StageCandidate,
-} from "./staging.js";
+import { applyBatchTx, ensureConnectionTx, stageBatchTx } from "./staging.js";
+import type { StageCandidate } from "./staging.js";
 
 let db: VaultDb;
 let owner: Identity;

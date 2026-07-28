@@ -4,9 +4,11 @@ import { Readable } from "node:stream";
 
 import type { BlobCache } from "./cache.js";
 import { fetchFrameDirectory, fetchRemoteRange } from "./custody-read.js";
-import { remoteEncryptionKey, type RemoteTier } from "./custody-types.js";
+import { remoteEncryptionKey } from "./custody-types.js";
+import type { RemoteTier } from "./custody-types.js";
 import type { LocalBlobStore } from "./local.js";
-import { resolveRange, type BlobRange, type BlobStore } from "./store.js";
+import { resolveRange } from "./store.js";
+import type { BlobRange, BlobStore } from "./store.js";
 
 const REMOTE_STREAM_CHUNK_BYTES = 4 * 1024 * 1024;
 

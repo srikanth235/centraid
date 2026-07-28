@@ -156,8 +156,8 @@ export default async function historyHandler({ input, ctx }: HandlerArgs) {
     });
 
     return { versions };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return { versions: [], vaultDenied: { code: e.code, message: e.message } };
   }
 }

@@ -18,7 +18,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import GlassBar from "../../kit/components/GlassBar";
 import Icon from "../../kit/components/Icon";
-import { family, useTheme, type ThemeColors } from "../../kit/theme";
+import { family, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 
 export interface GlassDockProps {
   onSearch: () => void;

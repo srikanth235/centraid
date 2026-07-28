@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import { cx } from "../ui/cx.js";
 import {
@@ -6,10 +7,12 @@ import {
   knobRowsFromProfile,
   knobSoftWarnings,
   validateKnobDraft,
-  type KnobRowFacts,
-  type ResourceKnobPrefs,
-  type ResourceProfileDTO,
-  type TunableKnobKey,
+} from "./resource-summary.js";
+import type {
+  KnobRowFacts,
+  ResourceKnobPrefs,
+  ResourceProfileDTO,
+  TunableKnobKey,
 } from "./resource-summary.js";
 
 import buttonCss from "../ui/Button.module.css";
@@ -69,9 +72,13 @@ export default function ResourceAdvancedKnobs({
         });
         setError(null);
       })
-      .catch((err: unknown) => {
+      .catch((caughtError: unknown) => {
         if (busyRef.current) return;
-        setError(err instanceof Error ? err.message : String(err));
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError)
+        );
       });
   }, [loadKnobPrefs]);
 
@@ -132,8 +139,10 @@ export default function ResourceAdvancedKnobs({
       }));
       setDrafts((d) => ({ ...d, [key]: nextDraft }));
       setSavedNote(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error ? caughtError.message : String(caughtError)
+      );
     } finally {
       busyRef.current = false;
       setBusyKey(null);

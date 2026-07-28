@@ -269,8 +269,8 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         starred,
       },
     };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       reconnect: [],
       upcoming: [],

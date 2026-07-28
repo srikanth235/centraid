@@ -63,9 +63,8 @@ import {
   scaffoldAppFiles,
   suggestCloneIdentityFrom,
   updateAppMetaFiles,
-  type ScaffoldAppOpts,
-  type ScaffoldFile,
 } from "@centraid/blueprints";
+import type { ScaffoldAppOpts, ScaffoldFile } from "@centraid/blueprints";
 
 import {
   defaultSessionId,
@@ -73,8 +72,8 @@ import {
   sendLifecycleError,
   stageAndMaybePublish,
   webhookUrl,
-  type LifecycleRouteOptions,
 } from "../lifecycle/lifecycle-shared.js";
+import type { LifecycleRouteOptions } from "../lifecycle/lifecycle-shared.js";
 import {
   handleAutomationCreate,
   handleAutomationCompile,
@@ -162,8 +161,8 @@ export function makeLifecycleRouteHandler(
         return await handleAutomationDelete(opts, req, res, url);
       }
       return false;
-    } catch (err) {
-      return sendLifecycleError(res, err);
+    } catch (error) {
+      return sendLifecycleError(res, error);
     }
   };
 }

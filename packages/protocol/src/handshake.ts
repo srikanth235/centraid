@@ -9,8 +9,8 @@
 import {
   DEFAULT_GATEWAY_CAPABILITIES,
   isGatewayCapabilities,
-  type GatewayCapabilities,
 } from "./capabilities.js";
+import type { GatewayCapabilities } from "./capabilities.js";
 import { ROUTES } from "./routes.js";
 import {
   GATEWAY_MIN_PROTOCOL_VERSION,
@@ -213,11 +213,11 @@ export async function handshakeGateway(
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       }
     );
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
       reason: "unreachable",
-      detail: err instanceof Error ? err.message : String(err),
+      detail: error instanceof Error ? error.message : String(error),
     };
   }
   if (!res.ok) {

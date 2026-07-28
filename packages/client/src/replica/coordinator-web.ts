@@ -1,17 +1,15 @@
-import {
-  ReplicaCoordinator,
-  type ReplicaCoordinatorCreated,
-  type ReplicaCoordinatorOptions,
+import { ReplicaCoordinator } from "./coordinator.js";
+import type {
+  ReplicaCoordinatorCreated,
+  ReplicaCoordinatorOptions,
 } from "./coordinator.js";
 import type { IntentRecordStore } from "./intent-record-store.js";
 import { IndexedDbIntentStore, MemoryIntentStore } from "./intent-store.js";
 import { IntentQueue } from "./intents.js";
 import { replicaIntentDatabaseName } from "./key.js";
 import type { ReplicaIdentity } from "./types.js";
-import {
-  ReplicaWorkerClient,
-  type ReplicaWorkerFactory,
-} from "./worker-client.js";
+import { ReplicaWorkerClient } from "./worker-client.js";
+import type { ReplicaWorkerFactory } from "./worker-client.js";
 
 export interface ReplicaWebCoordinatorOptions extends ReplicaCoordinatorOptions {
   workerFactory?: ReplicaWorkerFactory;

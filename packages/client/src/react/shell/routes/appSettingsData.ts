@@ -12,9 +12,8 @@ import {
   vaultDemoStatus,
   vaultParked,
   vaultStatus,
-  type VaultDemoApp,
-  type VaultScope,
 } from "../../../gateway-client.js";
+import type { VaultDemoApp, VaultScope } from "../../../gateway-client.js";
 import type {
   VaultBlockDTO,
   VaultBridgeProps,

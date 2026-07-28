@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
 
-import {
-  RUNNER_KINDS,
-  type RunnerKind,
-  type TurnConfig,
-  type TurnInput,
-  type TurnStreamEvent,
+import { RUNNER_KINDS } from "@centraid/app-engine";
+import type {
+  RunnerKind,
+  TurnConfig,
+  TurnInput,
+  TurnStreamEvent,
 } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, expect, test } from "vitest";

@@ -11,9 +11,11 @@ import {
   removeConnection as gwRemoveConnection,
   setConnectionStatus as gwSetConnectionStatus,
   updateAutomation,
-  type ConnectionEntry,
-  type ConnectionProviderPreset,
-  type AssistOAuthAvailability,
+} from "../../../gateway-client.js";
+import type {
+  ConnectionEntry,
+  ConnectionProviderPreset,
+  AssistOAuthAvailability,
 } from "../../../gateway-client.js";
 import type {
   ConnectionFormInput,
@@ -25,8 +27,8 @@ import type {
 import {
   sortConnectionsByAttention,
   toolDescriptorsFromHealthyConnections,
-  type ProviderCapabilitiesDTO,
 } from "./connectorPlatform.js";
+import type { ProviderCapabilitiesDTO } from "./connectorPlatform.js";
 
 // Connectors data layer (issue #304 renderer half; screen now lives on the
 // primary Connectors sidebar route): maps the gateway's broker-owned OAuth /

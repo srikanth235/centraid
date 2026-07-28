@@ -13,9 +13,8 @@ import {
   seedRemoteGateway,
   startMockGateway,
   waitForHome,
-  type MockGateway,
-  type TestEnv,
 } from "./fixtures";
+import type { MockGateway, TestEnv } from "./fixtures";
 
 /** §1 Onboarding & first run, §2 Home / app tiles. */
 

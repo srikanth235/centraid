@@ -16,6 +16,7 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import type * as TypeImport_rdfcd1 from "node:http";
 
 import type { DeviceRole } from "./enrollment-store.js";
 
@@ -60,9 +61,7 @@ export interface DeviceAccess {
    * transport — the composed handler (`build-gateway.ts`) then refuses the
    * request unless its host supplied another proved enrollment identity.
    */
-  deviceKeyFor: (
-    req: import("node:http").IncomingMessage
-  ) => string | undefined;
+  deviceKeyFor: (req: TypeImport_rdfcd1.IncomingMessage) => string | undefined;
   /** The vault ids this device key is enrolled in, oldest enrollment first. */
   vaultsFor: (deviceKey: string) => string[];
 }

@@ -1,5 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#567) the Assistant screen is one stateful composition over the shared composer/status primitives; splitting its bridge state would duplicate fallible control coordination
-import { useEffect, useRef, useState, type JSX } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import type {
   AsstModelPickerDTO,
@@ -9,7 +10,8 @@ import type {
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import { clearDraft, loadDraft, saveDraft } from "./assistantDrafts.js";
-import Message, { type MessageCallbacks } from "./AssistantMessage.js";
+import Message from "./AssistantMessage.js";
+import type { MessageCallbacks } from "./AssistantMessage.js";
 import ChatComposer from "./ChatComposer.js";
 import { useComposerAutocomplete } from "./ComposerAutocomplete.js";
 import { useAssistantScroll } from "./useAssistantScroll.js";

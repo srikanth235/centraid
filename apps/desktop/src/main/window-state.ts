@@ -8,7 +8,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { app, screen, type BrowserWindow, type Rectangle } from "electron";
+import { app, screen } from "electron";
+import type { BrowserWindow, Rectangle } from "electron";
 
 const FILE = "window-state.json";
 const DEBOUNCE_MS = 400;
@@ -33,7 +34,7 @@ function clampToDisplay(state: WindowState): WindowState {
   const width = Math.max(400, state.width);
   const height = Math.max(300, state.height);
   // Prefer the display that contains the saved origin; fall back to primary.
-  let display =
+  const display =
     displays.find((d) => {
       const b = d.workArea;
       return (
@@ -84,8 +85,8 @@ export function saveWindowStateSync(state: WindowState): void {
     const dir = path.dirname(statePath());
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(statePath(), JSON.stringify(state), { mode: 0o600 });
-  } catch (err) {
-    process.stdout.write(`[window-state] save failed: ${String(err)}\n`);
+  } catch (error) {
+    process.stdout.write(`[window-state] save failed: ${String(error)}\n`);
   }
 }
 

@@ -4,16 +4,14 @@
 // here rather than reaching across packages.
 
 import { promises as fs } from "node:fs";
+import type * as TypeImport_g9tn66 from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { createBrotliCompress, createGzip, constants } from "node:zlib";
 
-import {
-  isRunnerKind,
-  negotiateEncoding,
-  type RunnerKind,
-} from "@centraid/app-engine";
+import { isRunnerKind, negotiateEncoding } from "@centraid/app-engine";
+import type { RunnerKind } from "@centraid/app-engine";
 import {
   DEVICE_IDENTITY_HEADER,
   DEVICE_PROOF_HEADER,
@@ -119,7 +117,7 @@ async function walkFileMap(
   out: FileMapEntry[]
 ): Promise<void> {
   const here = rel ? path.join(root, rel) : root;
-  let entries: import("node:fs").Dirent[];
+  let entries: TypeImport_g9tn66.Dirent[];
   try {
     entries = await fs.readdir(here, { withFileTypes: true });
   } catch {

@@ -10,8 +10,8 @@ import {
   formatDuration,
   formatUptime,
   thresholdLabel,
-  type GatewayRuntimeSnapshot,
 } from "./gatewayData.js";
+import type { GatewayRuntimeSnapshot } from "./gatewayData.js";
 
 const T0 = Date.UTC(2026, 6, 11, 12, 0, 0); // Jul 11 2026, 12:00:00 UTC
 

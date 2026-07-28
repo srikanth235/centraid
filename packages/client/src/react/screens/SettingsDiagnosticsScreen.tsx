@@ -288,8 +288,12 @@ export default function SettingsDiagnosticsScreen({
         setHealth(snap);
         setError(null);
       })
-      .catch((error: unknown) =>
-        setError(error instanceof Error ? error.message : String(error))
+      .catch((caughtError: unknown) =>
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : String(caughtError)
+        )
       )
       .finally(() => setBusy(false));
   }, [loadHealth]);

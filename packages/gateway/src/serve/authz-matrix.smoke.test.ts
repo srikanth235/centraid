@@ -11,7 +11,8 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 import type { GatewayPaths } from "../paths.js";
-import { serve, type GatewayServeHandle } from "./serve.js";
+import { serve } from "./serve.js";
+import type { GatewayServeHandle } from "./serve.js";
 
 const ADMIN = "authz-smoke-admin-token";
 

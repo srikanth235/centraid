@@ -1,8 +1,12 @@
 import { act, useEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const listApps = vi.fn<typeof import("../../gateway-client.js").listApps>();
+import type * as TypeImport_bmsl46 from "../../gateway-client.js";
+import type * as TypeImport_1fc2oj6 from "./useShellApps.js";
+
+const listApps = vi.fn<typeof TypeImport_bmsl46.listApps>();
 vi.mock(import("../../gateway-client.js"), () => ({
   listApps: () => listApps(),
   listVaults: () => Promise.resolve([]),
@@ -17,7 +21,7 @@ vi.mock(import("./store.js"), () => ({
   },
 }));
 
-let useShellApps: typeof import("./useShellApps.js").useShellApps;
+let useShellApps: typeof TypeImport_1fc2oj6.useShellApps;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 

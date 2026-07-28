@@ -8,8 +8,10 @@ import {
   sortConnectionsByAttention,
   toolDescriptorHasNoSecrets,
   toolDescriptorsFromHealthyConnections,
-  type ConnectionHealthRow,
-  type ProviderCapabilitiesDTO,
+} from "./connectorPlatform.js";
+import type {
+  ConnectionHealthRow,
+  ProviderCapabilitiesDTO,
 } from "./connectorPlatform.js";
 
 const capsGmail: ProviderCapabilitiesDTO = {

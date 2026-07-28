@@ -8,21 +8,21 @@ import { getChangelog } from "./changelog.js";
 import {
   deviceTranscriptionAvailable,
   transcribeDeviceMedia,
-  type DeviceTranscriptionInput,
 } from "./device-transcription.js";
-import {
-  testGatewayConnection,
-  type ConnectivityReport,
-  type TestConnectionInput,
+import type { DeviceTranscriptionInput } from "./device-transcription.js";
+import { testGatewayConnection } from "./gateway-connectivity.js";
+import type {
+  ConnectivityReport,
+  TestConnectionInput,
 } from "./gateway-connectivity.js";
 import {
   getGatewayRuntimeSnapshot,
   nudgeGatewayMonitor,
 } from "./gateway-monitor.js";
-import {
-  redeemGatewayPairing,
-  type RedeemGatewayPairingInput,
-  type RedeemGatewayPairingResult,
+import { redeemGatewayPairing } from "./gateway-pairing.js";
+import type {
+  RedeemGatewayPairingInput,
+  RedeemGatewayPairingResult,
 } from "./gateway-pairing.js";
 import {
   GatewayError,
@@ -30,12 +30,10 @@ import {
   removeGateway,
   renameGateway,
   updateProfileMetadata,
-  type GatewayProfile,
 } from "./gateway-store.js";
-import {
-  listGatewayVaults,
-  type ListGatewayVaultsResult,
-} from "./gateway-vaults.js";
+import type { GatewayProfile } from "./gateway-store.js";
+import { listGatewayVaults } from "./gateway-vaults.js";
+import type { ListGatewayVaultsResult } from "./gateway-vaults.js";
 import {
   Channel,
   gatewayChangedPayload,
@@ -55,8 +53,8 @@ import {
   saveSettings,
   setActiveGatewayId,
   setActiveVaultId,
-  type DesktopSettings,
 } from "./settings.js";
+import type { DesktopSettings } from "./settings.js";
 import {
   checkForUpdatesManual,
   getUpdateStatus,
@@ -205,11 +203,14 @@ export function registerIpcHandlers(): void {
     async (_e, input: { id: string }): Promise<{ activeGatewayId: string }> => {
       try {
         await removeGateway(input.id);
-      } catch (err) {
-        if (err instanceof GatewayError && err.code === "local_not_removable") {
-          throw new Error(err.message, { cause: err });
+      } catch (error) {
+        if (
+          error instanceof GatewayError &&
+          error.code === "local_not_removable"
+        ) {
+          throw new Error(error.message, { cause: error });
         }
-        throw err;
+        throw error;
       }
       // If the active gateway was removed, fall back to local. Either
       // way the caches need to drop so the renderer's HTTP clients
@@ -503,10 +504,10 @@ export function registerIpcHandlers(): void {
         requestLocalGatewayStart();
         const { restartLocalGateway } = await import("./local-gateway.js");
         await restartLocalGateway(settings.activeGatewayId);
-      } catch (err) {
+      } catch (error) {
         return {
           ok: false,
-          error: err instanceof Error ? err.message : String(err),
+          error: error instanceof Error ? error.message : String(error),
         };
       }
       await invalidateGatewayCaches();

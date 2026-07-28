@@ -3,7 +3,8 @@ import React, { useMemo } from "react";
 import { Pressable, View, Text, StyleSheet } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 
-import { radii, spacing, t, useTheme, type ThemeColors } from "../theme";
+import { radii, spacing, t, useTheme } from "../theme";
+import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
 
 export type ButtonVariant = "primary" | "soft" | "ghost";

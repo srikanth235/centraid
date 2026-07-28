@@ -9,12 +9,8 @@ import type { DatabaseSync } from "node:sqlite";
 import { gunzipSync, gzipSync } from "node:zlib";
 
 import type { EligibleRange } from "./selector.js";
-import {
-  CONVERSATION_SEGMENT_VERSION,
-  type ArchivedConversationSegment,
-  type BlobSink,
-  type Row,
-} from "./types.js";
+import { CONVERSATION_SEGMENT_VERSION } from "./types.js";
+import type { ArchivedConversationSegment, BlobSink, Row } from "./types.js";
 
 /** Per-model rollup entry stored in `conversation_digest.models_json`. */
 interface ModelRollup {

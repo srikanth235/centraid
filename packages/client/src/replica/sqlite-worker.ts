@@ -1,7 +1,5 @@
-import sqlite3InitModule, {
-  type Database,
-  type SAHPoolUtil,
-} from "@sqlite.org/sqlite-wasm";
+import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
+import type { Database, SAHPoolUtil } from "@sqlite.org/sqlite-wasm";
 
 import { ReplicaProtocolError } from "./errors.js";
 import { SqliteReplicaStore } from "./sqlite-store.js";

@@ -60,17 +60,15 @@
  */
 
 import { promises as fs } from "node:fs";
+import type * as TypeImport_g9tn66 from "node:fs";
 import path from "node:path";
 
 import * as esbuild from "esbuild";
 
 import { prepareBundledIndex as prepareBundledIndexWith } from "./app-bundled-index.js";
 import { computeEtag } from "./asset-variants.js";
-import {
-  compress,
-  staticQualityForHost,
-  type Encoding,
-} from "./compression.js";
+import { compress, staticQualityForHost } from "./compression.js";
+import type { Encoding } from "./compression.js";
 import { compileCssModule } from "./css-module.js";
 import { resolveStaticPath, SHARED_ASSET_FILES } from "./security.js";
 
@@ -127,7 +125,7 @@ export function clearBundleCaches(): void {
 
 async function statOrNull(
   file: string
-): Promise<import("node:fs").Stats | null> {
+): Promise<TypeImport_g9tn66.Stats | null> {
   try {
     return await fs.stat(file);
   } catch {
@@ -347,10 +345,10 @@ async function buildBundle(
     const etag = computeEtag(code);
     const hash = etag.slice(1, 17); // first 16 hex of the sha256, sans quote
     return { ok: true, hash, etag, code, variants: new Map() };
-  } catch (err) {
+  } catch (error) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }

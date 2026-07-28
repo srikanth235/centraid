@@ -99,9 +99,9 @@ export async function prewarmMetroBundle(platform, appId) {
         `  prewarm : bundle ready in ${Date.now() - t0}ms (${bytes} bytes)`
       );
       return true;
-    } catch (err) {
+    } catch (error) {
       console.log(
-        `  prewarm : ${url.split("?")[0]} failed (${err.message ?? err})`
+        `  prewarm : ${url.split("?")[0]} failed (${error.message ?? error})`
       );
       return prewarmNext(index + 1);
     }

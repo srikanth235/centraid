@@ -5,8 +5,8 @@ import {
   exportGatewayDiagnostics,
   exportGatewayRecoveryKit,
   fetchDiagnosticsText,
-  type ExportDiagnosticsDeps,
 } from "./gateway-ops-core.js";
+import type { ExportDiagnosticsDeps } from "./gateway-ops-core.js";
 
 describe(diagnosticsFileName, () => {
   it("formats the local calendar date, zero-padded", () => {

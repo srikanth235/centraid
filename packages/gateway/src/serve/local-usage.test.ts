@@ -4,11 +4,8 @@ import path from "node:path";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  LocalUsageScanner,
-  walkDirBytes,
-  type LocalUsageOptions,
-} from "./local-usage.js";
+import { LocalUsageScanner, walkDirBytes } from "./local-usage.js";
+import type { LocalUsageOptions } from "./local-usage.js";
 
 // The component walker (issue #544). What matters here is that the figures
 // are attributable — a byte lands under exactly one component — and that the

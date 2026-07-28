@@ -1,23 +1,24 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { row as automationRow } from "../../../gateway-client-contract-fixtures.js";
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import type { ShellActions } from "../actions.js";
+import type * as TypeImport_f807xh from "./InsightsRoute.js";
 
 type InsightsSummary = Awaited<
-  ReturnType<typeof import("../../../gateway-client.js").getInsightsSummary>
+  ReturnType<typeof TypeImport_1gl5zx7.getInsightsSummary>
 >;
 type GatewayHealth = Awaited<
-  ReturnType<typeof import("../../../gateway-client.js").getGatewayHealth>
+  ReturnType<typeof TypeImport_1gl5zx7.getGatewayHealth>
 >;
 
 const getInsightsSummary =
-  vi.fn<typeof import("../../../gateway-client.js").getInsightsSummary>();
-const listAutomations =
-  vi.fn<typeof import("../../../gateway-client.js").listAutomations>();
-const getGatewayHealth =
-  vi.fn<typeof import("../../../gateway-client.js").getGatewayHealth>();
+  vi.fn<typeof TypeImport_1gl5zx7.getInsightsSummary>();
+const listAutomations = vi.fn<typeof TypeImport_1gl5zx7.listAutomations>();
+const getGatewayHealth = vi.fn<typeof TypeImport_1gl5zx7.getGatewayHealth>();
 const navigate = vi.fn<ShellActions["navigate"]>();
 vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
   getInsightsSummary: (input?: { windowDays?: number }) =>
@@ -29,7 +30,7 @@ vi.mock(import("../actions.js") as Promise<unknown>, () => ({
   useShellActions: () => ({ navigate }),
 }));
 
-let InsightsRoute: typeof import("./InsightsRoute.js").default;
+let InsightsRoute: typeof TypeImport_f807xh.default;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 describe("InsightsRoute suite", () => {

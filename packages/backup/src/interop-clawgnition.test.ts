@@ -1,4 +1,5 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#363) single cross-repo interop suite against a real Clawgnition gateway (wrangler dev); the scenario is one coherent conformance run, not independently splittable cases
 /*
@@ -46,17 +47,12 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
-import {
-  providerConformanceCases,
-  type ConformanceHarness,
-} from "./conformance.js";
-import { createKeyring, type Keyring } from "./crypto.js";
-import {
-  createSnapshot,
-  restoreSnapshot,
-  verifySnapshot,
-  type SourceEntry,
-} from "./engine.js";
+import { providerConformanceCases } from "./conformance.js";
+import type { ConformanceHarness } from "./conformance.js";
+import { createKeyring } from "./crypto.js";
+import type { Keyring } from "./crypto.js";
+import { createSnapshot, restoreSnapshot, verifySnapshot } from "./engine.js";
+import type { SourceEntry } from "./engine.js";
 import { BackupProviderError } from "./provider.js";
 import { RemoteBackupProvider } from "./remote-provider.js";
 import { S3TestServer } from "./testing/s3-test-server.js";
@@ -296,8 +292,8 @@ async function waitForGatewayUp(
       const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
       if (res.status === 401 || res.status === 200) return;
       lastErr = `unexpected status ${res.status}`;
-    } catch (err) {
-      lastErr = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      lastErr = error instanceof Error ? error.message : String(error);
     }
     await sleep(1000);
     return poll();
@@ -393,14 +389,14 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
           90_000,
           spawned.recentLog
         );
-      } catch (err) {
+      } catch (error) {
         if (gatewayProc) {
           await killProcessTree(gatewayProc);
           gatewayProc = undefined;
         }
-        if (attempt >= 2) throw err;
+        if (attempt >= 2) throw error;
         console.warn(
-          `[interop] gateway boot attempt ${attempt} failed (${err instanceof Error ? err.message : String(err)}); ` +
+          `[interop] gateway boot attempt ${attempt} failed (${error instanceof Error ? error.message : String(error)}); ` +
             `wiping .wrangler/state (known migration-0012 trap) and retrying once`
         );
         await fs.rm(path.join(GATEWAY_DIR, ".wrangler", "state"), {
@@ -423,9 +419,9 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // (`rm -rf apps/gateway/.wrangler/state`), so this is just hygiene, not
     // a correctness requirement for the next run.
     await forEachSequentially(createdTargetIds, async (id) => {
-      await provider.deleteTarget(id).catch((err: unknown) => {
+      await provider.deleteTarget(id).catch((error: unknown) => {
         console.warn(
-          `[interop] cleanup: deleteTarget(${id}) failed: ${String(err)}`
+          `[interop] cleanup: deleteTarget(${id}) failed: ${String(error)}`
         );
       });
     });
@@ -685,7 +681,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
         manifestKey: manifestKeyFor("gen1.json"),
         generation: 1,
       })
-      .catch((e: unknown) => e);
+      .catch((error: unknown) => error);
     expect(err).toBeInstanceOf(BackupProviderError);
     expect((err as BackupProviderError).code).toBe("conflict_generation");
     expect((err as BackupProviderError).details?.currentGeneration).toBe(2);

@@ -32,9 +32,8 @@ import {
   readBackupPolicy,
   readBlobStoreSettings,
   updateBackupPolicy,
-  type BackupPolicy,
-  type BackupPolicyPatch,
 } from "@centraid/vault";
+import type { BackupPolicy, BackupPolicyPatch } from "@centraid/vault";
 
 import type { ProviderPolicySyncState } from "../backup/backup-provider-observability.js";
 import type { BackupReconciliationState } from "../backup/backup-reconciliation.js";
@@ -268,8 +267,8 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
       }
       try {
         return sendJson(res, 200, await buildStatus(deps));
-      } catch (err) {
-        return sendError(res, err);
+      } catch (error) {
+        return sendError(res, error);
       }
     }
 
@@ -331,14 +330,14 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
           });
         }
         return sendJson(res, 200, response);
-      } catch (err) {
-        if (err instanceof BackupPolicyError) {
+      } catch (error) {
+        if (error instanceof BackupPolicyError) {
           return sendJson(res, 400, {
             error: "invalid_policy",
-            message: err.message,
+            message: error.message,
           });
         }
-        return sendError(res, err);
+        return sendError(res, error);
       }
     }
 
@@ -375,8 +374,8 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
           });
         }
         return sendJson(res, 200, { vaultId, reconciliation });
-      } catch (err) {
-        return sendError(res, err);
+      } catch (error) {
+        return sendError(res, error);
       }
     }
 
@@ -469,8 +468,8 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
             body.password
           )
         );
-      } catch (err) {
-        return sendError(res, err);
+      } catch (error) {
+        return sendError(res, error);
       }
     }
 
@@ -513,8 +512,8 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
           message:
             'backup is not configured — add a "backup" block to the gateway config',
         });
-      } catch (err) {
-        return sendError(res, err);
+      } catch (error) {
+        return sendError(res, error);
       }
     }
 

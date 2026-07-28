@@ -2,7 +2,8 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { sealedColumnsOf } from "../schema/sealed.js";
 import { resolveEntity } from "../schema/tables.js";
-import { currentReplicaLogState, type ReplicaLogState } from "./change-log.js";
+import { currentReplicaLogState } from "./change-log.js";
+import type { ReplicaLogState } from "./change-log.js";
 import { replicaUnavailableColumnsOf } from "./unavailable-columns.js";
 
 export const DEFAULT_REPLICA_MAX_VALUE_BYTES = 64 * 1_024;

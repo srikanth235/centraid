@@ -644,9 +644,9 @@ export function runJournalArchival(
       );
     }
     journal.exec("COMMIT");
-  } catch (err) {
+  } catch (error) {
     journal.exec("ROLLBACK");
-    throw err;
+    throw error;
   }
 
   const reclaim = reclaimSpace(journal);

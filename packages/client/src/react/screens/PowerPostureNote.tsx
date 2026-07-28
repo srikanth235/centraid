@@ -1,9 +1,7 @@
-import { type JSX } from "react";
+import type { JSX } from "react";
 
-import {
-  powerPostureLine,
-  type PowerContextState,
-} from "./resource-summary.js";
+import { powerPostureLine } from "./resource-summary.js";
+import type { PowerContextState } from "./resource-summary.js";
 
 import styles from "./GatewayScreen.module.css";
 

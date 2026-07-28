@@ -524,7 +524,7 @@ async function main() {
     .catch(() => undefined);
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((error) => {
+  console.error(error);
   process.exit(1);
 });

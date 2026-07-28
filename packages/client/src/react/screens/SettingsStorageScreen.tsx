@@ -1,5 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit single cohesive screen (connect form + recovery-kit gate + per-vault hosted/local toggle) — one storage-connection flow, same call SettingsConnectionsScreen.tsx makes
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import { cx } from "../ui/cx.js";
 import { Button, IconButton } from "../ui/index.js";
@@ -347,13 +348,13 @@ export default function SettingsStorageScreen({
   const refresh = useCallback((): void => {
     void loadConnections()
       .then(setRows)
-      .catch((err: unknown) =>
-        showToast(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        showToast(error instanceof Error ? error.message : String(error))
       );
     void loadVaultBlobStore()
       .then(setBlobStore)
-      .catch((err: unknown) =>
-        showToast(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        showToast(error instanceof Error ? error.message : String(error))
       );
   }, [loadConnections, loadVaultBlobStore, showToast]);
 
@@ -368,8 +369,8 @@ export default function SettingsStorageScreen({
   const withBusy = (id: string, fn: () => Promise<void>): void => {
     setBusyIds((s) => new Set(s).add(id));
     void fn()
-      .catch((err: unknown) =>
-        showToast(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        showToast(error instanceof Error ? error.message : String(error))
       )
       .finally(() => {
         setBusyIds((s) => {
@@ -402,8 +403,8 @@ export default function SettingsStorageScreen({
     setSaving(true);
     setFormError(null);
     runCreate(input)
-      .catch((err: unknown) =>
-        setFormError(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        setFormError(error instanceof Error ? error.message : String(error))
       )
       .finally(() => setSaving(false));
   };
@@ -412,11 +413,11 @@ export default function SettingsStorageScreen({
     setTestResults((m) => new Map(m).set(id, "testing"));
     void testConnection(id)
       .then((result) => setTestResults((m) => new Map(m).set(id, result)))
-      .catch((err: unknown) =>
+      .catch((error: unknown) =>
         setTestResults((m) =>
           new Map(m).set(id, {
             ok: false,
-            error: err instanceof Error ? err.message : String(err),
+            error: error instanceof Error ? error.message : String(error),
           })
         )
       );
@@ -442,8 +443,8 @@ export default function SettingsStorageScreen({
   const onAttach = (connectionId: string): void => {
     setAttachBusy(true);
     runAttach(connectionId)
-      .catch((err: unknown) =>
-        showToast(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        showToast(error instanceof Error ? error.message : String(error))
       )
       .finally(() => setAttachBusy(false));
   };
@@ -454,8 +455,8 @@ export default function SettingsStorageScreen({
       try {
         const next = await detachVaultConnection();
         if (mountedRef.current) setBlobStore(next);
-      } catch (err) {
-        showToast(err instanceof Error ? err.message : String(err));
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : String(error));
       } finally {
         setAttachBusy(false);
       }

@@ -6,10 +6,8 @@ import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { hostCredentialKey } from "./key-store.js";
-import {
-  adoptKeyStoreCredential,
-  type ServiceKeyCredential,
-} from "./service-credential.js";
+import { adoptKeyStoreCredential } from "./service-credential.js";
+import type { ServiceKeyCredential } from "./service-credential.js";
 
 const roots: string[] = [];
 

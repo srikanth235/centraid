@@ -1,4 +1,5 @@
-import { useMemo, useState, type JSX } from "react";
+import { useMemo, useState } from "react";
+import type { JSX } from "react";
 
 import type { LocalUsageReportDTO } from "../../gateway-client-local-storage.js";
 import { cx } from "../ui/cx.js";

@@ -23,8 +23,8 @@ import {
   fingerprintOf,
   UpdatePoller,
   WATCHED_DIST_FILES,
-  type WatchedStat,
 } from "./update-check.js";
+import type { WatchedStat } from "./update-check.js";
 import { admitUpdate } from "./update-rollout.js";
 
 const POLL_MS = 10_000;

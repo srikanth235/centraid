@@ -1,10 +1,19 @@
 // governance: allow-repo-hygiene file-size-limit (#567) one Automation Q&A route suite shares the mocked bridge and persistence fixture across runner, model, effort, provider-consent, and reload cases
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
+import type * as TypeImport_1kred2y from "../../screen-contracts.js";
 import type { AutomationThreadScreenProps } from "../../screens/AutomationThreadScreen.js";
 import type { ShellActions } from "../actions.js";
+import type * as TypeImport_1f3slmz from "../webhookReveal.js";
+import type * as TypeImport_1ek7brk from "./automationLiveMessages.js";
+import type * as TypeImport_17pturf from "./automationsData.js";
+import type * as TypeImport_14phijm from "./automationThreadData.js";
+import type * as TypeImport_18nw00v from "./automationTurnMessages.js";
+import type * as TypeImport_ym9bw8 from "./settingsProvidersData.js";
 
 const captured = vi.hoisted(() => ({
   props: null as AutomationThreadScreenProps | null,
@@ -15,85 +24,40 @@ const actions = vi.hoisted(() => ({
   showToast: vi.fn<ShellActions["showToast"]>(),
 }));
 const api = vi.hoisted(() => ({
-  auth: vi.fn<typeof import("../../../gateway-client.js").auth>(),
-  compileAutomation:
-    vi.fn<typeof import("../../../gateway-client.js").compileAutomation>(),
-  deleteAutomation:
-    vi.fn<typeof import("../../../gateway-client.js").deleteAutomation>(),
-  listAutomationTurns:
-    vi.fn<typeof import("../../../gateway-client.js").listAutomationTurns>(),
+  auth: vi.fn<typeof TypeImport_1gl5zx7.auth>(),
+  compileAutomation: vi.fn<typeof TypeImport_1gl5zx7.compileAutomation>(),
+  deleteAutomation: vi.fn<typeof TypeImport_1gl5zx7.deleteAutomation>(),
+  listAutomationTurns: vi.fn<typeof TypeImport_1gl5zx7.listAutomationTurns>(),
   readAutomationTurnExpanded:
-    vi.fn<
-      typeof import("../../../gateway-client.js").readAutomationTurnExpanded
-    >(),
+    vi.fn<typeof TypeImport_1gl5zx7.readAutomationTurnExpanded>(),
   readGatewayCapabilities:
-    vi.fn<
-      typeof import("../../../gateway-client.js").readGatewayCapabilities
-    >(),
+    vi.fn<typeof TypeImport_1gl5zx7.readGatewayCapabilities>(),
   rotateAutomationWebhookSecret:
-    vi.fn<
-      typeof import("../../../gateway-client.js").rotateAutomationWebhookSecret
-    >(),
-  runAutomationNow:
-    vi.fn<typeof import("../../../gateway-client.js").runAutomationNow>(),
-  setAutomationEnabled:
-    vi.fn<typeof import("../../../gateway-client.js").setAutomationEnabled>(),
+    vi.fn<typeof TypeImport_1gl5zx7.rotateAutomationWebhookSecret>(),
+  runAutomationNow: vi.fn<typeof TypeImport_1gl5zx7.runAutomationNow>(),
+  setAutomationEnabled: vi.fn<typeof TypeImport_1gl5zx7.setAutomationEnabled>(),
   streamAutomationConversationTurn:
-    vi.fn<
-      typeof import("../../../gateway-client.js").streamAutomationConversationTurn
-    >(),
-  streamAutomationTurn:
-    vi.fn<typeof import("../../../gateway-client.js").streamAutomationTurn>(),
+    vi.fn<typeof TypeImport_1gl5zx7.streamAutomationConversationTurn>(),
+  streamAutomationTurn: vi.fn<typeof TypeImport_1gl5zx7.streamAutomationTurn>(),
 }));
 const helpers = vi.hoisted(() => ({
   automationLiveMessages:
-    vi.fn<
-      typeof import("./automationLiveMessages.js").automationLiveMessages
-    >(),
+    vi.fn<typeof TypeImport_1ek7brk.automationLiveMessages>(),
   automationTurnMessages:
-    vi.fn<
-      typeof import("./automationTurnMessages.js").automationTurnMessages
-    >(),
-  createLiveTrace:
-    vi.fn<
-      typeof import("./automationLiveMessages.js").createAutomationLiveTrace
-    >(),
+    vi.fn<typeof TypeImport_18nw00v.automationTurnMessages>(),
+  createLiveTrace: vi.fn<typeof TypeImport_1ek7brk.createAutomationLiveTrace>(),
   createLiveTraceFromItems:
-    vi.fn<
-      typeof import("./automationLiveMessages.js").createAutomationLiveTraceFromItems
-    >(),
-  decideConsent:
-    vi.fn<typeof import("./automationThreadData.js").decideConsentItem>(),
-  deriveHero:
-    vi.fn<typeof import("./automationsData.js").deriveAutomationHero>(),
-  finishLiveItem:
-    vi.fn<
-      typeof import("./automationLiveMessages.js").finishAutomationLiveItem
-    >(),
-  finishLiveTrace:
-    vi.fn<
-      typeof import("./automationLiveMessages.js").finishAutomationLiveTrace
-    >(),
-  loadThread:
-    vi.fn<
-      typeof import("./automationThreadData.js").loadAutomationThreadData
-    >(),
-  loadProviders:
-    vi.fn<typeof import("./settingsProvidersData.js").loadProviders>(),
-  openWebhookReveal:
-    vi.fn<typeof import("../webhookReveal.js").openWebhookReveal>(),
-  reduceItem:
-    vi.fn<
-      typeof import("./automationLiveMessages.js").reduceAutomationItemEvent
-    >(),
-  reduceTurn:
-    vi.fn<
-      typeof import("./automationLiveMessages.js").reduceAutomationTurnEvent
-    >(),
-  startLiveItem:
-    vi.fn<
-      typeof import("./automationLiveMessages.js").startAutomationLiveItem
-    >(),
+    vi.fn<typeof TypeImport_1ek7brk.createAutomationLiveTraceFromItems>(),
+  decideConsent: vi.fn<typeof TypeImport_14phijm.decideConsentItem>(),
+  deriveHero: vi.fn<typeof TypeImport_17pturf.deriveAutomationHero>(),
+  finishLiveItem: vi.fn<typeof TypeImport_1ek7brk.finishAutomationLiveItem>(),
+  finishLiveTrace: vi.fn<typeof TypeImport_1ek7brk.finishAutomationLiveTrace>(),
+  loadThread: vi.fn<typeof TypeImport_14phijm.loadAutomationThreadData>(),
+  loadProviders: vi.fn<typeof TypeImport_ym9bw8.loadProviders>(),
+  openWebhookReveal: vi.fn<typeof TypeImport_1f3slmz.openWebhookReveal>(),
+  reduceItem: vi.fn<typeof TypeImport_1ek7brk.reduceAutomationItemEvent>(),
+  reduceTurn: vi.fn<typeof TypeImport_1ek7brk.reduceAutomationTurnEvent>(),
+  startLiveItem: vi.fn<typeof TypeImport_1ek7brk.startAutomationLiveItem>(),
 }));
 
 vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => api);
@@ -125,7 +89,7 @@ vi.mock(import("./automationsData.js") as Promise<unknown>, () => ({
 vi.mock(
   import("./automationTurnMessages.js") as Promise<unknown>,
   async (importOriginal) => ({
-    ...(await importOriginal<typeof import("./automationTurnMessages.js")>()),
+    ...(await importOriginal<typeof TypeImport_18nw00v>()),
     automationTurnMessages: helpers.automationTurnMessages,
   })
 );
@@ -145,7 +109,7 @@ vi.mock(import("../webhookReveal.js") as Promise<unknown>, () => ({
 vi.mock(
   import("./settingsProvidersData.js") as Promise<unknown>,
   async (importOriginal) => ({
-    ...(await importOriginal<typeof import("./settingsProvidersData.js")>()),
+    ...(await importOriginal<typeof TypeImport_ym9bw8>()),
     loadProviders: helpers.loadProviders,
   })
 );
@@ -460,7 +424,7 @@ describe("AutomationViewRoute suite", () => {
             ],
           },
         ],
-      } satisfies import("../../screen-contracts.js").AgentsStatusDTO;
+      } satisfies TypeImport_1kred2y.AgentsStatusDTO;
       expect(
         automationPicker(status, "codex", {
           runner: "codex",
@@ -525,7 +489,7 @@ describe("AutomationViewRoute suite", () => {
             ],
           },
         ],
-      } satisfies import("../../screen-contracts.js").AgentsStatusDTO;
+      } satisfies TypeImport_1kred2y.AgentsStatusDTO;
       expect(
         automationPicker(status, "future-runner", {
           runner: "future-runner",

@@ -1,17 +1,19 @@
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import type { ConnectFlowResult } from "./connectFlow-core.js";
-import ConnectFlow, { type ConnectFlowProps } from "./ConnectFlow.js";
+import ConnectFlow from "./ConnectFlow.js";
+import type { ConnectFlowProps } from "./ConnectFlow.js";
 
 vi.mock(import("../../../gateway-client.js"), () => ({
   listVaults: () => listVaultsMock(),
 }));
 
-const listVaultsMock =
-  vi.fn<typeof import("../../../gateway-client.js").listVaults>();
+const listVaultsMock = vi.fn<typeof TypeImport_1gl5zx7.listVaults>();
 const getSettings = vi.fn<(...args: unknown[]) => unknown>();
 const setActiveGateway = vi.fn<(...args: unknown[]) => unknown>();
 const setActiveVault = vi.fn<(...args: unknown[]) => unknown>();

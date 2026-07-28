@@ -7,10 +7,8 @@
  *    published prompt ahead of the compiled handler with nothing to reconcile.
  */
 
-import {
-  validateManifest,
-  type Row as AutomationRow,
-} from "@centraid/automation";
+import { validateManifest } from "@centraid/automation";
+import type { Row as AutomationRow } from "@centraid/automation";
 import { describe, expect, test } from "vitest";
 
 import { reviseAutomationInstructions } from "./automation-revision.js";

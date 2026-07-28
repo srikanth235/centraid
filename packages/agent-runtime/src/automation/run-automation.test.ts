@@ -12,12 +12,10 @@ import type {
 } from "./run-automation-live-dispatch.js";
 
 const { runFire } = vi.hoisted(() => ({
-  runFire: vi.fn<typeof import("@centraid/automation").runFire>(),
+  runFire: vi.fn<typeof TypeImport_2es3ft.runFire>(),
 }));
 type AutomationFailover = NonNullable<
-  Parameters<
-    typeof import("./run-automation.ts").runAutomation
-  >[0]["onFailover"]
+  Parameters<typeof TypeImport_1plgb7w.runAutomation>[0]["onFailover"]
 >;
 type FireResult = Awaited<ReturnType<typeof runFire>>;
 
@@ -78,7 +76,10 @@ vi.mock(
   })
 );
 
+import type * as TypeImport_2es3ft from "@centraid/automation";
+
 import { runAutomation } from "./run-automation.ts";
+import type * as TypeImport_1plgb7w from "./run-automation.ts";
 
 describe("run-automation suite", () => {
   beforeEach(() => {

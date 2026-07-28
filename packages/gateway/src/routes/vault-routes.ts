@@ -70,9 +70,8 @@ import {
   updateBlobStoreSettings,
   updateBackupPolicy,
   updateEnrichSettings,
-  type KeyStore,
-  type EnrichTier,
 } from "@centraid/vault";
+import type { KeyStore, EnrichTier } from "@centraid/vault";
 
 import type { RecoveryKitStateStore } from "../backup/recovery-kit-state.js";
 import type { StorageConnectionStore } from "../backup/storage-connections.js";
@@ -84,20 +83,18 @@ import {
   assertArtifactShapeUnchanged,
   outboxVerbIsEditable,
   rebuilderForVerb,
-  type OutboxWireRequest,
 } from "../serve/outbox-edit.js";
-import { vaultContext, type DeviceAccess } from "../serve/vault-context.js";
+import type { OutboxWireRequest } from "../serve/outbox-edit.js";
+import { vaultContext } from "../serve/vault-context.js";
+import type { DeviceAccess } from "../serve/vault-context.js";
 import type { AnchorSelector } from "../serve/vault-picker.js";
 import type {
   GrantRequest,
   OutboxItemSummary,
   VaultPlane,
 } from "../serve/vault-plane.js";
-import {
-  VaultRegistryError,
-  type VaultInfo,
-  type VaultRegistry,
-} from "../serve/vault-registry.js";
+import { VaultRegistryError } from "../serve/vault-registry.js";
+import type { VaultInfo, VaultRegistry } from "../serve/vault-registry.js";
 import { COMPANION_MODULES, companionModuleState } from "./companion-grants.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
@@ -202,8 +199,8 @@ export function makeVaultRouteHandler(
     let plane: VaultPlane;
     try {
       plane = vaults.current();
-    } catch (err) {
-      return sendRegistryError(res, err);
+    } catch (error) {
+      return sendRegistryError(res, error);
     }
 
     try {
@@ -649,10 +646,10 @@ export function makeVaultRouteHandler(
         try {
           const grantId = plane.approveGrant(appId, request);
           return sendJson(res, 200, { grantId });
-        } catch (err) {
+        } catch (error) {
           return sendJson(res, 400, {
             error: "grant_refused",
-            message: err instanceof Error ? err.message : String(err),
+            message: error instanceof Error ? error.message : String(error),
           });
         }
       }
@@ -669,10 +666,10 @@ export function makeVaultRouteHandler(
         const appId = segments[1] ?? "";
         try {
           return sendJson(res, 200, plane.purgeAppExt(appId));
-        } catch (err) {
+        } catch (error) {
           return sendJson(res, 400, {
             error: "purge_failed",
-            message: err instanceof Error ? err.message : String(err),
+            message: error instanceof Error ? error.message : String(error),
           });
         }
       }
@@ -704,10 +701,10 @@ export function makeVaultRouteHandler(
           const displayName = await options.resolveAutomationName?.(appId);
           const grantId = plane.approveAgentGrant(appId, request, displayName);
           return sendJson(res, 200, { grantId });
-        } catch (err) {
+        } catch (error) {
           return sendJson(res, 400, {
             error: "grant_refused",
-            message: err instanceof Error ? err.message : String(err),
+            message: error instanceof Error ? error.message : String(error),
           });
         }
       }
@@ -732,10 +729,10 @@ export function makeVaultRouteHandler(
         try {
           const result = plane.revokeGrant(segments[1] ?? "");
           return sendJson(res, 200, result);
-        } catch (err) {
+        } catch (error) {
           return sendJson(res, 404, {
             error: "revoke_failed",
-            message: err instanceof Error ? err.message : String(err),
+            message: error instanceof Error ? error.message : String(error),
           });
         }
       }
@@ -829,10 +826,10 @@ export function makeVaultRouteHandler(
               original.request as unknown as OutboxWireRequest,
               body.artifact
             ) as unknown as Record<string, unknown>;
-          } catch (err) {
+          } catch (error) {
             return sendJson(res, 400, {
               error: "bad_request",
-              message: err instanceof Error ? err.message : String(err),
+              message: error instanceof Error ? error.message : String(error),
             });
           }
         }
@@ -930,10 +927,10 @@ export function makeVaultRouteHandler(
             body.approve
           );
           return sendJson(res, 200, { request, approved: body.approve });
-        } catch (err) {
+        } catch (error) {
           return sendJson(res, 404, {
             error: "decide_failed",
-            message: err instanceof Error ? err.message : String(err),
+            message: error instanceof Error ? error.message : String(error),
           });
         }
       }
@@ -1063,15 +1060,15 @@ export function makeVaultRouteHandler(
               )
             );
           }
-        } catch (err) {
-          if (err instanceof BrowseError) {
-            const status = err.code === "bad_request" ? 400 : 404;
+        } catch (error) {
+          if (error instanceof BrowseError) {
+            const status = error.code === "bad_request" ? 400 : 404;
             return sendJson(res, status, {
-              error: err.code,
-              message: err.message,
+              error: error.code,
+              message: error.message,
             });
           }
-          throw err;
+          throw error;
         }
 
         if (method === "POST" && sub === "insert") {
@@ -1113,15 +1110,15 @@ export function makeVaultRouteHandler(
                 totalRows: deps.totalRows,
               });
             }
-          } catch (err) {
-            if (err instanceof BrowseError) {
-              const status = err.code === "bad_request" ? 400 : 404;
+          } catch (error) {
+            if (error instanceof BrowseError) {
+              const status = error.code === "bad_request" ? 400 : 404;
               return sendJson(res, status, {
-                error: err.code,
-                message: err.message,
+                error: error.code,
+                message: error.message,
               });
             }
-            throw err;
+            throw error;
           }
           return runBrowseWrite(res, plane, "atlas.delete_row", {
             table: body["table"],
@@ -1271,10 +1268,10 @@ export function makeVaultRouteHandler(
         try {
           const outcome = plane.confirmParked(segments[1] ?? "", body.approve);
           return sendJson(res, 200, outcome);
-        } catch (err) {
+        } catch (error) {
           return sendJson(res, 404, {
             error: "confirm_failed",
-            message: err instanceof Error ? err.message : String(err),
+            message: error instanceof Error ? error.message : String(error),
           });
         }
       }
@@ -1283,10 +1280,10 @@ export function makeVaultRouteHandler(
         error: "not_found",
         message: "unknown _vault route",
       });
-    } catch (err) {
+    } catch (error) {
       return sendJson(res, 500, {
         error: "internal_error",
-        message: err instanceof Error ? err.message : String(err),
+        message: error instanceof Error ? error.message : String(error),
       });
     }
   };
@@ -1430,8 +1427,8 @@ async function handleVaultsRoute(
       error: "not_found",
       message: "unknown _vault/vaults route",
     });
-  } catch (err) {
-    return sendRegistryError(res, err);
+  } catch (error) {
+    return sendRegistryError(res, error);
   }
 }
 

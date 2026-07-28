@@ -4,8 +4,8 @@ import {
   ReplicaClosedError,
   ReplicaProtocolError,
   ReplicaRebootstrapRequiredError,
-  type RebootstrapReason,
 } from "./errors.js";
+import type { RebootstrapReason } from "./errors.js";
 import { replicaDatabaseName } from "./key.js";
 import { guardReplicaRow } from "./query.js";
 import type { ReplicaStore } from "./store.js";

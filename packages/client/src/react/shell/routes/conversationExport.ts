@@ -57,13 +57,12 @@ function fence(lang: string, body: string): string {
 
 /** Human-readable Markdown: role headings, timestamps, code fences for tools. */
 export function conversationToMarkdown(conv: ExportableConversation): string {
-  const lines: string[] = [];
-  lines.push(
+  const lines: string[] = [
     `# ${conv.title || "Untitled conversation"}`,
     "",
     `_Exported ${isoDate(Date.now())} · started ${isoDate(conv.createdAt)}_`,
-    ""
-  );
+    "",
+  ];
   for (const m of conv.messages) {
     const when = isoDate(m.createdAt);
     const p = m.payload;

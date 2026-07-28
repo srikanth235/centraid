@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, it } from "vitest";
 
-let resolveSettingsPage: typeof import("./SettingsRoute.js").resolveSettingsPage;
+import type * as TypeImport_11x360t from "./SettingsRoute.js";
+
+let resolveSettingsPage: typeof TypeImport_11x360t.resolveSettingsPage;
 
 describe("resolveSettingsPage", () => {
   beforeAll(async () => {

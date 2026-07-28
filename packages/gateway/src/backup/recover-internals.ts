@@ -13,12 +13,14 @@ import { DatabaseSync } from "node:sqlite";
 import {
   openLocalBackupProvider,
   openRemoteBackupProvider,
-  type BackupProvider,
-  type EngineLogger,
-  type RecoveryKitTarget,
-  type RestoreCurrentVersions,
-  type SnapshotRow,
-  type WalReplayOutcome,
+} from "@centraid/backup";
+import type {
+  BackupProvider,
+  EngineLogger,
+  RecoveryKitTarget,
+  RestoreCurrentVersions,
+  SnapshotRow,
+  WalReplayOutcome,
 } from "@centraid/backup";
 import {
   bumpReplicaEpoch,

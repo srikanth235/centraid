@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  deriveStorageMetrics,
-  type FreshnessClocks,
-  type StorageMetricsInput,
+import { deriveStorageMetrics } from "./storage-metrics.js";
+import type {
+  FreshnessClocks,
+  StorageMetricsInput,
 } from "./storage-metrics.js";
 
 const HOUR = 60 * 60 * 1000;

@@ -12,9 +12,8 @@ import {
   t,
   useAppearance,
   useTheme,
-  type Appearance,
-  type ThemeColors,
 } from "../../kit/theme";
+import type { Appearance, ThemeColors } from "../../kit/theme";
 import SettingsSection from "./SettingsSection";
 
 const OPTIONS: ReadonlyArray<{ value: Appearance; label: string }> = [

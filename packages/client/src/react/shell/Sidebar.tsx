@@ -1,5 +1,6 @@
 import type { IconName } from "@centraid/design-tokens";
-import { useState, type JSX, type ReactNode } from "react";
+import { useState } from "react";
+import type { JSX, ReactNode } from "react";
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive navigation component owns desktop, mobile, and compact variants over one item model
 
 import Icon from "../ui/Icon.js";

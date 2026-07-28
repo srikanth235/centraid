@@ -8,9 +8,11 @@ import {
   purgeRememberedReplicaIdentities,
   rememberReplicaIdentity,
   retryTerminalReplicaPurges,
-  type ReplicaIdentityInventory,
-  type ReplicaIdentityInventoryEntry,
-  type ReplicaStoragePurgeOptions,
+} from "./storage-manifest.js";
+import type {
+  ReplicaIdentityInventory,
+  ReplicaIdentityInventoryEntry,
+  ReplicaStoragePurgeOptions,
 } from "./storage-manifest.js";
 import { TerminalReplicaPurgeRetryLoop } from "./terminal-purge-retry.js";
 import type { ReplicaIdentity } from "./types.js";

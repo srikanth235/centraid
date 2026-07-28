@@ -46,8 +46,8 @@ import {
   hydrateSpaces,
   removeSpace,
   setActiveSpace,
-  type Space,
 } from "./spaces";
+import type { Space } from "./spaces";
 
 // The active-slot keys now live in their new owner, lib/spaces (the Spaces
 // registry projects the active (gateway, vault) tuple into them); imported above
@@ -286,10 +286,10 @@ export async function ensureTunnelStarted(): Promise<
         ticket: getSecure(LINK_ENDPOINT_HINT_KEY, ""),
       });
       return { baseUrl: `http://127.0.0.1:${port}` };
-    } catch (err) {
+    } catch (error) {
       throw new PhoneLinkError(
         "tunnel_failed",
-        `Could not reach your gateway: ${err instanceof Error ? err.message : String(err)}`
+        `Could not reach your gateway: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   })();

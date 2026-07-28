@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 import http from "node:http";
-import { AddressInfo } from "node:net";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
 
 import {
@@ -234,7 +234,7 @@ export async function startWebUiServer(
         // awaits this during teardown, so that wedges a gateway switch or
         // quit. Stop accepting, hurry the idle sockets along, then destroy
         // whatever is left after the grace window.
-        let force: ReturnType<typeof setTimeout> | undefined;
+        let force: ReturnType<typeof setTimeout> | undefined = undefined;
         server.close((error) => {
           if (force) clearTimeout(force);
           if (error) {

@@ -5,12 +5,11 @@ import { deflateRawSync, zstdCompressSync } from "node:zlib";
 
 import { cbsfFrameAad } from "@centraid/blob-format";
 
-import { deriveDataKey, type Keyring } from "../../backup/src/crypto.ts";
+import { deriveDataKey } from "../../backup/src/crypto.ts";
+import type { Keyring } from "../../backup/src/crypto.ts";
 import { sealManifest } from "../../backup/src/manifest.ts";
-import {
-  sealWalSegment,
-  type WalSegmentAddress,
-} from "../../backup/src/wal-format.ts";
+import { sealWalSegment } from "../../backup/src/wal-format.ts";
+import type { WalSegmentAddress } from "../../backup/src/wal-format.ts";
 import {
   encodeHeader,
   encodeTrailer,

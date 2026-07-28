@@ -1,22 +1,21 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive builder-tab panel (code editor surface); splitting would fragment one visual unit
 import {
-  type JSX,
   useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
+import type { JSX } from "react";
 
 import { lineDiff } from "../../../../diff.js";
 import {
-  type CodeLang,
   LANG_DISPLAY,
-  type TokenClasses,
   formatBytes,
   languageHint,
   tokenize,
 } from "../../../../format.js";
+import type { CodeLang, TokenClasses } from "../../../../format.js";
 import { readAppFiles, writeAppFile } from "../../../../gateway-client.js";
 import { cx } from "../../../ui/cx.js";
 import { iconSvg } from "../../iconSvg.js";
@@ -274,11 +273,11 @@ export default function BuilderCode({
         if (cancelled) return;
         setFetched({ files: fs, error: null });
         reconcileToFiles(fs);
-      } catch (err) {
+      } catch (error) {
         if (cancelled) return;
         setFetched((prev) => ({
           files: prev?.files ?? NO_FILES,
-          error: String(err),
+          error: String(error),
         }));
       }
     })();
@@ -326,9 +325,9 @@ export default function BuilderCode({
           return { ...prev, [p]: { ...cur, original: cur.current } };
         });
         showToast(`Saved ${basename(p)}`);
-      } catch (err) {
+      } catch (error) {
         showToast(
-          `Save failed: ${err instanceof Error ? err.message : String(err)}`
+          `Save failed: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     },

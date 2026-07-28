@@ -6,7 +6,8 @@
 // — imported by gateway-client-automations.contract.test.ts /
 // gateway-client-vault.contract.test.ts, never shipped.
 
-import { beforeEach, type Mock, vi } from "vitest";
+import { beforeEach, vi } from "vitest";
+import type { Mock } from "vitest";
 
 // Annotated rather than inferred. Under vitest 4 the inferred `vi.fn()` type
 // names `@vitest/spy` through its install path, which declaration emit rejects

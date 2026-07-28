@@ -104,9 +104,9 @@ describe("cli", () => {
     }) as never);
     try {
       await main(argv);
-    } catch (err) {
-      if (!(err instanceof Error) || !err.message.startsWith("__exit_"))
-        throw err;
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.startsWith("__exit_"))
+        throw error;
     } finally {
       write.mockRestore();
       errWrite.mockRestore();

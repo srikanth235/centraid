@@ -65,13 +65,16 @@ export const DEFAULT_REPLICATION_CONCURRENCY = 3;
 
 export function replicationConcurrencyFromEnv(
   env: NodeJS.ProcessEnv = process.env,
-  host: { cores: number; totalMemoryBytes: number } = {
+  host?: { cores: number; totalMemoryBytes: number }
+): number {
+  const resolvedHost = host ?? {
     cores: availableParallelism(),
     totalMemoryBytes: totalmem(),
-  }
-): number {
+  };
   const fallback =
-    host.cores <= 4 || host.totalMemoryBytes <= 4 * 1024 ** 3 ? 1 : 3;
+    resolvedHost.cores <= 4 || resolvedHost.totalMemoryBytes <= 4 * 1024 ** 3
+      ? 1
+      : 3;
   const raw = env.CENTRAID_REPLICATION_CONCURRENCY;
   if (raw === undefined || raw === "") return fallback;
   const parsed = Math.trunc(Number(raw));

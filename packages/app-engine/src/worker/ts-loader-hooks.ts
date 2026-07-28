@@ -88,12 +88,12 @@ export async function resolve(
 ): Promise<ResolveResult> {
   try {
     return await nextResolve(specifier, context);
-  } catch (err) {
+  } catch (error) {
     if (context.parentURL) {
       const [first] = tsCandidates(specifier, context.parentURL);
       if (first) return { url: first, format: "module", shortCircuit: true };
     }
-    throw err;
+    throw error;
   }
 }
 

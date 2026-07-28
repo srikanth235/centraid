@@ -1,10 +1,8 @@
 import { describe, expect, test } from "vitest";
 
 import { OnlineOnlyError, OnlineOnlyGuard } from "./errors.js";
-import {
-  ReplicaWorkerClient,
-  type ReplicaWorkerLike,
-} from "./worker-client.js";
+import { ReplicaWorkerClient } from "./worker-client.js";
+import type { ReplicaWorkerLike } from "./worker-client.js";
 import type {
   ReplicaWorkerRequest,
   ReplicaWorkerResponse,

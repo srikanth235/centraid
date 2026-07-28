@@ -1,13 +1,24 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import type {
   AutomationEditorBridgeProps,
   AutomationEditorData,
 } from "../../screen-contracts.js";
+import type * as TypeImport_ffl4ji from "../../screens/SettingsConnectionsScreen.js";
 import type { ShellActions } from "../actions.js";
+import type * as TypeImport_1f3slmz from "../webhookReveal.js";
+import type * as TypeImport_fuav22 from "./automationEditorAgentData.js";
+import type * as TypeImport_1omb499 from "./automationEditorCreateData.js";
+import type * as TypeImport_vtz3vd from "./automationEditorData.js";
 import { automationRow } from "./automationEditorRoute.fixture.js";
+import type * as TypeImport_17pturf from "./automationsData.js";
+import type * as TypeImport_14phijm from "./automationThreadData.js";
+import type * as TypeImport_buhgwd from "./settingsConnectionsData.js";
+import type * as TypeImport_ym9bw8 from "./settingsProvidersData.js";
 
 const captured = vi.hoisted(() => ({
   props: null as AutomationEditorBridgeProps | null,
@@ -25,81 +36,42 @@ const actions = vi.hoisted(() => ({
   openContextMenu: vi.fn<ShellActions["openContextMenu"]>(),
 }));
 const api = vi.hoisted(() => ({
-  auth: vi.fn<typeof import("../../../gateway-client.js").auth>(),
-  compileAutomation:
-    vi.fn<typeof import("../../../gateway-client.js").compileAutomation>(),
-  configureConnection:
-    vi.fn<typeof import("../../../gateway-client.js").configureConnection>(),
-  createAutomation:
-    vi.fn<typeof import("../../../gateway-client.js").createAutomation>(),
-  deleteAutomation:
-    vi.fn<typeof import("../../../gateway-client.js").deleteAutomation>(),
-  getBlocking: vi.fn<typeof import("../../../gateway-client.js").getBlocking>(),
-  getUserPrefs:
-    vi.fn<typeof import("../../../gateway-client.js").getUserPrefs>(),
-  listAgents: vi.fn<typeof import("../../../gateway-client.js").listAgents>(),
-  listOutboxGrants:
-    vi.fn<typeof import("../../../gateway-client.js").listOutboxGrants>(),
-  listTemplates:
-    vi.fn<typeof import("../../../gateway-client.js").listTemplates>(),
-  listVaultEntityTypes:
-    vi.fn<typeof import("../../../gateway-client.js").listVaultEntityTypes>(),
-  readAutomationSource:
-    vi.fn<typeof import("../../../gateway-client.js").readAutomationSource>(),
+  auth: vi.fn<typeof TypeImport_1gl5zx7.auth>(),
+  compileAutomation: vi.fn<typeof TypeImport_1gl5zx7.compileAutomation>(),
+  configureConnection: vi.fn<typeof TypeImport_1gl5zx7.configureConnection>(),
+  createAutomation: vi.fn<typeof TypeImport_1gl5zx7.createAutomation>(),
+  deleteAutomation: vi.fn<typeof TypeImport_1gl5zx7.deleteAutomation>(),
+  getBlocking: vi.fn<typeof TypeImport_1gl5zx7.getBlocking>(),
+  getUserPrefs: vi.fn<typeof TypeImport_1gl5zx7.getUserPrefs>(),
+  listAgents: vi.fn<typeof TypeImport_1gl5zx7.listAgents>(),
+  listOutboxGrants: vi.fn<typeof TypeImport_1gl5zx7.listOutboxGrants>(),
+  listTemplates: vi.fn<typeof TypeImport_1gl5zx7.listTemplates>(),
+  listVaultEntityTypes: vi.fn<typeof TypeImport_1gl5zx7.listVaultEntityTypes>(),
+  readAutomationSource: vi.fn<typeof TypeImport_1gl5zx7.readAutomationSource>(),
   rotateAutomationWebhookSecret:
-    vi.fn<
-      typeof import("../../../gateway-client.js").rotateAutomationWebhookSecret
-    >(),
-  runAutomationNow:
-    vi.fn<typeof import("../../../gateway-client.js").runAutomationNow>(),
-  searchVaultAnchors:
-    vi.fn<typeof import("../../../gateway-client.js").searchVaultAnchors>(),
-  searchVaultEntities:
-    vi.fn<typeof import("../../../gateway-client.js").searchVaultEntities>(),
-  setAutomationEnabled:
-    vi.fn<typeof import("../../../gateway-client.js").setAutomationEnabled>(),
-  updateAutomation:
-    vi.fn<typeof import("../../../gateway-client.js").updateAutomation>(),
+    vi.fn<typeof TypeImport_1gl5zx7.rotateAutomationWebhookSecret>(),
+  runAutomationNow: vi.fn<typeof TypeImport_1gl5zx7.runAutomationNow>(),
+  searchVaultAnchors: vi.fn<typeof TypeImport_1gl5zx7.searchVaultAnchors>(),
+  searchVaultEntities: vi.fn<typeof TypeImport_1gl5zx7.searchVaultEntities>(),
+  setAutomationEnabled: vi.fn<typeof TypeImport_1gl5zx7.setAutomationEnabled>(),
+  updateAutomation: vi.fn<typeof TypeImport_1gl5zx7.updateAutomation>(),
 }));
 const helpers = vi.hoisted(() => ({
-  beginAuthorize:
-    vi.fn<
-      typeof import("./settingsConnectionsData.js").beginConnectionAuthorize
-    >(),
+  beginAuthorize: vi.fn<typeof TypeImport_buhgwd.beginConnectionAuthorize>(),
   buildAgentData:
-    vi.fn<
-      typeof import("./automationEditorAgentData.js").buildAutomationAgentEditorData
-    >(),
+    vi.fn<typeof TypeImport_fuav22.buildAutomationAgentEditorData>(),
   buildCreateData:
-    vi.fn<
-      typeof import("./automationEditorCreateData.js").buildCreateAutomationEditorData
-    >(),
-  buildFeatured:
-    vi.fn<
-      typeof import("../../screens/SettingsConnectionsScreen.js").buildFeatured
-    >(),
-  decideConsent:
-    vi.fn<typeof import("./automationThreadData.js").decideConsentItem>(),
-  deriveHero:
-    vi.fn<typeof import("./automationsData.js").deriveAutomationHero>(),
-  filterConsent:
-    vi.fn<
-      typeof import("./automationThreadData.js").filterConsentForAutomation
-    >(),
+    vi.fn<typeof TypeImport_1omb499.buildCreateAutomationEditorData>(),
+  buildFeatured: vi.fn<typeof TypeImport_ffl4ji.buildFeatured>(),
+  decideConsent: vi.fn<typeof TypeImport_14phijm.decideConsentItem>(),
+  deriveHero: vi.fn<typeof TypeImport_17pturf.deriveAutomationHero>(),
+  filterConsent: vi.fn<typeof TypeImport_14phijm.filterConsentForAutomation>(),
   loadConnectionProviders:
-    vi.fn<
-      typeof import("./settingsConnectionsData.js").loadConnectionProvidersData
-    >(),
-  loadConnections:
-    vi.fn<typeof import("./settingsConnectionsData.js").loadConnectionsData>(),
-  loadEditor:
-    vi.fn<
-      typeof import("./automationEditorData.js").loadAutomationEditorData
-    >(),
-  loadProviders:
-    vi.fn<typeof import("./settingsProvidersData.js").loadProviders>(),
-  openWebhookReveal:
-    vi.fn<typeof import("../webhookReveal.js").openWebhookReveal>(),
+    vi.fn<typeof TypeImport_buhgwd.loadConnectionProvidersData>(),
+  loadConnections: vi.fn<typeof TypeImport_buhgwd.loadConnectionsData>(),
+  loadEditor: vi.fn<typeof TypeImport_vtz3vd.loadAutomationEditorData>(),
+  loadProviders: vi.fn<typeof TypeImport_ym9bw8.loadProviders>(),
+  openWebhookReveal: vi.fn<typeof TypeImport_1f3slmz.openWebhookReveal>(),
 }));
 
 vi.mock(import("../../../gateway-client.js"), () => api);

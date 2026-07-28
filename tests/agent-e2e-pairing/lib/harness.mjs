@@ -448,8 +448,8 @@ export async function runFlow(slug, fn, { fresh: _fresh = false } = {}) {
     };
 
     result = await fn(ctx);
-  } catch (e) {
-    error = e;
+  } catch (caughtError) {
+    error = caughtError;
   } finally {
     await Promise.all(
       devices.map(async (device) => device.close().catch(() => {}))

@@ -1,4 +1,5 @@
-import { type JSX, useRef } from "react";
+import { useRef } from "react";
+import type { JSX } from "react";
 
 import {
   auth,
@@ -25,10 +26,8 @@ import type {
   AutomationEditorData,
 } from "../../screen-contracts.js";
 import AutomationEditorScreen from "../../screens/AutomationEditorScreen.js";
-import {
-  buildFeatured,
-  type ConnectionRowDTO,
-} from "../../screens/SettingsConnectionsScreen.js";
+import { buildFeatured } from "../../screens/SettingsConnectionsScreen.js";
+import type { ConnectionRowDTO } from "../../screens/SettingsConnectionsScreen.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
 import { openWebhookReveal } from "../webhookReveal.js";
@@ -284,9 +283,9 @@ export default function AutomationEditorRoute({
             }
             showToast(`Created · ${fields.name}`);
             return true;
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Could not save: ${err instanceof Error ? err.message : String(err)}`
+              `Could not save: ${error instanceof Error ? error.message : String(error)}`
             );
             return false;
           }
@@ -303,9 +302,9 @@ export default function AutomationEditorRoute({
               enableOnSuccess,
             });
             return compileTurnId;
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Could not compile: ${err instanceof Error ? err.message : String(err)}`
+              `Could not compile: ${error instanceof Error ? error.message : String(error)}`
             );
             return null;
           }
@@ -382,9 +381,9 @@ export default function AutomationEditorRoute({
             // effect of pressing Test.
             const { turnId } = await runAutomationNow({ automationId: ref });
             return turnId;
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Run failed: ${err instanceof Error ? err.message : String(err)}`
+              `Run failed: ${error instanceof Error ? error.message : String(error)}`
             );
             return null;
           }
@@ -395,9 +394,9 @@ export default function AutomationEditorRoute({
           try {
             await setAutomationEnabled({ automationId: ref, enabled: next });
             return true;
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Could not ${next ? "enable" : "disable"}: ${err instanceof Error ? err.message : String(err)}`
+              `Could not ${next ? "enable" : "disable"}: ${error instanceof Error ? error.message : String(error)}`
             );
             return false;
           }
@@ -410,9 +409,9 @@ export default function AutomationEditorRoute({
               kind,
               ...(alwaysAllow === undefined ? {} : { alwaysAllow }),
             });
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Could not update: ${err instanceof Error ? err.message : String(err)}`
+              `Could not update: ${error instanceof Error ? error.message : String(error)}`
             );
             return false;
           }
@@ -452,9 +451,9 @@ export default function AutomationEditorRoute({
             });
             showToast("Webhook secret regenerated");
             return true;
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Could not regenerate secret: ${err instanceof Error ? err.message : String(err)}`
+              `Could not regenerate secret: ${error instanceof Error ? error.message : String(error)}`
             );
             return false;
           }
@@ -475,9 +474,9 @@ export default function AutomationEditorRoute({
             showToast(`Deleted "${row.name}"`);
             navigate({ kind: "automations" });
             return true;
-          } catch (err) {
+          } catch (error) {
             showToast(
-              `Could not delete: ${err instanceof Error ? err.message : String(err)}`
+              `Could not delete: ${error instanceof Error ? error.message : String(error)}`
             );
             return false;
           }

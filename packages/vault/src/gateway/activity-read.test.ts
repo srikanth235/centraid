@@ -7,15 +7,13 @@
 
 import { beforeEach, describe, expect, test } from "vitest";
 
-import {
-  bootstrapVault,
-  createGrant,
-  enrollApp,
-  type BootstrapResult,
-} from "../bootstrap.js";
+import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
 import { registerDocumentCommands } from "../commands/documents.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import { createGateway, Gateway } from "./gateway.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import type { Gateway } from "./gateway.js";
+import { createGateway } from "./gateway.js";
 import type { Credential } from "./types.js";
 
 let db: VaultDb;

@@ -7,18 +7,18 @@ import { rmSync } from "node:fs";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import {
-  bootstrapVault,
-  enrollApp,
-  type BootstrapResult,
-} from "../bootstrap.js";
+import { bootstrapVault, enrollApp } from "../bootstrap.js";
+import type { BootstrapResult } from "../bootstrap.js";
 import { registerKnowledgeCommands } from "../commands/knowledge.js";
 import { registerLinkCommands } from "../commands/links.js";
 import { registerPartyCommands } from "../commands/parties.js";
-import { openVaultDb, type VaultDb } from "../db.js";
-import { createGateway, Gateway } from "./gateway.js";
+import { openVaultDb } from "../db.js";
+import type { VaultDb } from "../db.js";
+import type { Gateway } from "./gateway.js";
+import { createGateway } from "./gateway.js";
 import { readOnlySqlRefusal } from "./sql.js";
-import { GatewayError, type Credential } from "./types.js";
+import { GatewayError } from "./types.js";
+import type { Credential } from "./types.js";
 
 let db: VaultDb;
 let gw: Gateway;

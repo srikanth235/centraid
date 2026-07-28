@@ -1,14 +1,7 @@
 import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#539) single cohesive screen component (header/consent-strip/chat-turn spine/steering composer of one thread surface); splitting would fragment one visual unit
-import {
-  type Dispatch,
-  type JSX,
-  type SetStateAction,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Dispatch, JSX, SetStateAction } from "react";
 
 import type {
   AsstModelPickerDTO,
@@ -27,7 +20,8 @@ import type {
 } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
 import { Icon } from "../ui/index.js";
-import Message, { type MessageCallbacks } from "./AssistantMessage.js";
+import Message from "./AssistantMessage.js";
+import type { MessageCallbacks } from "./AssistantMessage.js";
 import { EffortPicker, ModelPicker, RunnerPicker } from "./AssistantScreen.js";
 import ChatComposer from "./ChatComposer.js";
 

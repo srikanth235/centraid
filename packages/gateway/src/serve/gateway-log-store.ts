@@ -45,11 +45,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import type { RuntimeLogger } from "@centraid/app-engine";
-import {
-  isDiskFullError,
-  sharedDiskFullTracker,
-  type DiskFullTracker,
-} from "@centraid/vault";
+import { isDiskFullError, sharedDiskFullTracker } from "@centraid/vault";
+import type { DiskFullTracker } from "@centraid/vault";
 
 export type GatewayLogLevel = "info" | "warn" | "error";
 
@@ -229,11 +226,11 @@ export class GatewayLogStore {
       fs.appendFileSync(this.currentFile, `${serialized}\n`);
       this.diskFullUntil = null;
       this.rotateIfNeeded();
-    } catch (err) {
+    } catch (error) {
       this.droppedWrites += 1;
-      if (isDiskFullError(err)) {
+      if (isDiskFullError(error)) {
         this.diskFullUntil = Date.now() + DISK_FULL_RETRY_MS;
-        this.diskFullTracker.report(err, "gateway log persistence");
+        this.diskFullTracker.report(error, "gateway log persistence");
       }
     }
   }

@@ -12,7 +12,8 @@ import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { openVaultPlane, type VaultPlane } from "./vault-plane.js";
+import { openVaultPlane } from "./vault-plane.js";
+import type { VaultPlane } from "./vault-plane.js";
 
 const silentLogger = {
   info: () => undefined,

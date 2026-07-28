@@ -42,12 +42,15 @@ import {
   parseRecoveryKit,
   restoreSnapshot,
   validateKeyring,
-  type BackupProvider,
-  type Keyring,
-  type RecoveryKitTarget,
-  type SnapshotRow,
 } from "@centraid/backup";
-import { KeyStore, type RemoteTier } from "@centraid/vault";
+import type {
+  BackupProvider,
+  Keyring,
+  RecoveryKitTarget,
+  SnapshotRow,
+} from "@centraid/backup";
+import { KeyStore } from "@centraid/vault";
+import type { RemoteTier } from "@centraid/vault";
 
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { deriveBackupSourceInstanceId } from "./backup-state.js";
@@ -64,11 +67,8 @@ import {
   walReplayTruncated,
   warmOrSkip,
 } from "./recover-internals.js";
-import {
-  reconcileAdoptedInventory,
-  type ReconcileLogger,
-  type ReconcileReport,
-} from "./recover-reconcile.js";
+import { reconcileAdoptedInventory } from "./recover-reconcile.js";
+import type { ReconcileLogger, ReconcileReport } from "./recover-reconcile.js";
 
 /** The user-facing phases wave 4's SSE narrates. Machine vocabulary (seq, WAL,
  *  lazy) stays out of it — these map to "fetching your vault → replaying recent
@@ -250,9 +250,10 @@ export async function discoverRecovery(opts: {
   if (row) {
     try {
       assertCompatibleAppMeta(row.appMeta, currentVersions());
-    } catch (err) {
+    } catch (error) {
       compatible = false;
-      incompatibleReason = err instanceof Error ? err.message : String(err);
+      incompatibleReason =
+        error instanceof Error ? error.message : String(error);
     }
   }
   return {
@@ -476,12 +477,12 @@ export async function recover(input: RecoverInput): Promise<RecoverReport> {
       reconcile,
       quarantine: ["outbox", "automations", "connections"],
     };
-  } catch (err) {
+  } catch (error) {
     // Never leave restore scratch behind (the final dir, if the rename
     // already ran, is a real vault and is left in place).
     await fs
       .rm(restoreWorkDir, { recursive: true, force: true })
       .catch(() => undefined);
-    throw err;
+    throw error;
   }
 }

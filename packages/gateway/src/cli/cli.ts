@@ -42,18 +42,18 @@ import { promises as fs, realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { GatewayEndpointHandle } from "@centraid/tunnel";
-
 import { assistOAuthFromEnvironment } from "../serve/assist-oauth.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { kitlessHostIdentity } from "../serve/host-identity.js";
 import { findSequentially } from "../serve/sequential.js";
 import { serve } from "../serve/serve.js";
+import type * as TypeImport_lkogjn from "../serve/vault-registry.js";
 import { WebControlSessionStore } from "../serve/web-session-store.js";
 import { mergeAllowedHosts } from "./allowed-hosts.js";
 import { commandBackup } from "./backup-admin.js";
-import { parseServeArgsPure, type ParsedServe } from "./cli-serve-args.js";
-import { type DaemonConfig } from "./config.js";
+import { parseServeArgsPure } from "./cli-serve-args.js";
+import type { ParsedServe } from "./cli-serve-args.js";
+import type { DaemonConfig } from "./config.js";
 import { commandDevices, commandPair } from "./device-admin.js";
 import { makeDaemonDevicePlane } from "./endpoint-host.js";
 import { commandKey } from "./key-admin.js";
@@ -240,7 +240,7 @@ async function commandServe(args: string[]): Promise<void> {
   const hostEndpointId =
     desktopEndpointId ??
     kitlessHostIdentity(keyStore.loadOrCreate("endpoint-key.bin"));
-  let vaultsRef: import("../serve/vault-registry.js").VaultRegistry | undefined;
+  let vaultsRef: TypeImport_lkogjn.VaultRegistry | undefined = undefined;
   const devicePlane = makeDaemonDevicePlane({
     layout,
     gatewayDatabase,
@@ -255,7 +255,6 @@ async function commandServe(args: string[]): Promise<void> {
   // authorization still resolves through a real EndpointId enrollment: iroh
   // proof normally, or the spawning desktop's OS-custodied identity.
   const webRoot = await bundledWebRoot();
-  let endpoint: GatewayEndpointHandle | undefined;
   const allowedHosts = mergeAllowedHosts(parsed.allowedHosts);
   const handle = await serve({
     assistOAuth: assistOAuthFromEnvironment(process.env),
@@ -319,7 +318,7 @@ async function commandServe(args: string[]): Promise<void> {
   // The iroh endpoint (issue #289 phase 3): the gateway's permanent
   // identity + the only remote transport. Best-effort so the loopback
   // maintenance surface can still start when iroh is temporarily unavailable.
-  endpoint =
+  const endpoint =
     config.endpoint === false
       ? undefined
       : await devicePlane.startEndpoint({
@@ -336,9 +335,9 @@ async function commandServe(args: string[]): Promise<void> {
   // replace, so re-seed on every boot is safe.
   try {
     seedRunnerPrefs(handle.prefs, config);
-  } catch (err) {
+  } catch (error) {
     process.stderr.write(
-      `[centraid-gateway] warning: failed to seed runner prefs: ${err instanceof Error ? err.message : String(err)}\n`
+      `[centraid-gateway] warning: failed to seed runner prefs: ${error instanceof Error ? error.message : String(error)}\n`
     );
   }
 
@@ -353,9 +352,9 @@ async function commandServe(args: string[]): Promise<void> {
       `[centraid-gateway] ${signal} received — shutting down\n`
     );
     await endpoint?.close().catch(() => undefined);
-    await handle.close().catch((err) => {
+    await handle.close().catch((error) => {
       process.stderr.write(
-        `[centraid-gateway] close error: ${err instanceof Error ? err.message : String(err)}\n`
+        `[centraid-gateway] close error: ${error instanceof Error ? error.message : String(error)}\n`
       );
     });
     process.exit(0);
@@ -417,9 +416,9 @@ async function main(): Promise<void> {
 // install symlink (node_modules/.bin/centraid-gateway); Bun realpaths both.
 // Compare realpaths so the documented Node bin is not a silent no-op (#545).
 if (isProcessMainModule(process.argv[1], import.meta.url)) {
-  main().catch((err) => {
+  main().catch((error) => {
     process.stderr.write(
-      `centraid-gateway: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`
+      `centraid-gateway: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`
     );
     process.exit(1);
   });

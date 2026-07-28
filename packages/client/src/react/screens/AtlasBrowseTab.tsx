@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import {
   browseColumns,
@@ -6,16 +7,14 @@ import {
   browseDependents,
   browseRows,
   browseTables,
-  type BrowseColumnsResult,
-  type BrowseTableEntry,
+} from "../../gateway-client.js";
+import type {
+  BrowseColumnsResult,
+  BrowseTableEntry,
 } from "../../gateway-client.js";
 import Icon from "../ui/Icon.js";
-import {
-  groupBrowseTables,
-  rowIdOf,
-  type DeleteState,
-  type EditorState,
-} from "./atlasBrowseData.js";
+import { groupBrowseTables, rowIdOf } from "./atlasBrowseData.js";
+import type { DeleteState, EditorState } from "./atlasBrowseData.js";
 import { DeleteDialog } from "./AtlasBrowseDeleteDialog.js";
 import { Grid, MachineryBar } from "./AtlasBrowseGrid.js";
 import { RowEditor } from "./AtlasBrowseRowEditor.js";
@@ -80,8 +79,8 @@ export default function AtlasBrowseTab({
       .then((t) => {
         if (mountedRef.current) setTables(t);
       })
-      .catch((e) => {
-        if (mountedRef.current) setTablesError(errText(e));
+      .catch((error) => {
+        if (mountedRef.current) setTablesError(errText(error));
       });
   }, []);
 
@@ -125,8 +124,8 @@ export default function AtlasBrowseTab({
         setOrderBy(page.orderBy);
         setDir(page.dir);
         setCursor(page.nextCursor);
-      } catch (e) {
-        if (mountedRef.current) setGridError(errText(e));
+      } catch (error) {
+        if (mountedRef.current) setGridError(errText(error));
       } finally {
         if (mountedRef.current) {
           setGridLoading(false);
@@ -168,9 +167,9 @@ export default function AtlasBrowseTab({
         const meta = await browseColumns(selected);
         if (cancelled || !mountedRef.current) return;
         setCols(meta);
-      } catch (e) {
+      } catch (error) {
         if (!cancelled && mountedRef.current) {
-          setGridError(errText(e));
+          setGridError(errText(error));
           setGridLoading(false);
         }
         return;
@@ -253,10 +252,10 @@ export default function AtlasBrowseTab({
             error: null,
           });
         })
-        .catch((e) => {
+        .catch((error) => {
           if (mountedRef.current) {
             setDel((d) =>
-              d ? { ...d, loading: false, error: errText(e) } : d
+              d ? { ...d, loading: false, error: errText(error) } : d
             );
           }
         });

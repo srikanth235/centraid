@@ -5,8 +5,8 @@ import {
   createStorageQuotaHealthProbe,
   QUOTA_DEGRADED_AT,
   QUOTA_ERROR_AT,
-  type StorageQuotaConnectionEntry,
 } from "./storage-quota-health.js";
+import type { StorageQuotaConnectionEntry } from "./storage-quota-health.js";
 
 function report(
   bytesStored: number,

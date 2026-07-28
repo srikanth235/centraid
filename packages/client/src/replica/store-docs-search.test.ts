@@ -1,6 +1,7 @@
 // The core.document local-search spec (offline Docs search) — split from
 // store-core.test.ts to keep that conformance suite under the repo file cap.
-import sqlite3InitModule, { type Sqlite3Static } from "@sqlite.org/sqlite-wasm";
+import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
+import type { Sqlite3Static } from "@sqlite.org/sqlite-wasm";
 import { beforeAll, describe, expect, test } from "vitest";
 
 import { NodeSqliteDriver } from "./node-sqlite-test-driver.js";

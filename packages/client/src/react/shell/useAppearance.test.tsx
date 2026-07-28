@@ -1,18 +1,21 @@
 import { act, useEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_bmsl46 from "../../gateway-client.js";
+import type * as TypeImport_t83a9s from "./useAppearance.js";
+
 const { getUserPrefs, saveUserPrefs } = vi.hoisted(() => ({
-  getUserPrefs: vi.fn<typeof import("../../gateway-client.js").getUserPrefs>(),
-  saveUserPrefs:
-    vi.fn<typeof import("../../gateway-client.js").saveUserPrefs>(),
+  getUserPrefs: vi.fn<typeof TypeImport_bmsl46.getUserPrefs>(),
+  saveUserPrefs: vi.fn<typeof TypeImport_bmsl46.saveUserPrefs>(),
 }));
 vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   getUserPrefs,
   saveUserPrefs,
 }));
 
-let useAppearance: typeof import("./useAppearance.js").useAppearance;
+let useAppearance: typeof TypeImport_t83a9s.useAppearance;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 // The client-local store is a plain module now; back it with an in-memory Map.

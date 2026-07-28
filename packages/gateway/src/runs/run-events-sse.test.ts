@@ -14,8 +14,8 @@ import {
   AnalyticsStore,
   InsightsStore,
   makeJournalDbProvider,
-  type AutomationTurnStreamEvent,
 } from "@centraid/app-engine";
+import type { AutomationTurnStreamEvent } from "@centraid/app-engine";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 

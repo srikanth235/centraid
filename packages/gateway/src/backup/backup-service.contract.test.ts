@@ -5,8 +5,8 @@ import {
   openLocalBackupProvider,
   wrapRecoveryKit,
   WAL_DB_FILES,
-  type BackupProvider,
 } from "@centraid/backup";
+import type { BackupProvider } from "@centraid/backup";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
@@ -15,15 +15,13 @@ import {
   KeyStore,
   ReplicaIndex,
   sealKeyFileFor,
-  type BackupPolicyPatch,
 } from "@centraid/vault";
+import type { BackupPolicyPatch } from "@centraid/vault";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { HealthRegistry } from "../serve/health-registry.js";
-import {
-  openVaultRegistry,
-  type VaultRegistry,
-} from "../serve/vault-registry.js";
+import { openVaultRegistry } from "../serve/vault-registry.js";
+import type { VaultRegistry } from "../serve/vault-registry.js";
 import { runCasOnlyReconciliation } from "./backup-cas-reconciliation.js";
 import type { BackupConfig } from "./backup-config.js";
 import { conflictAfterFirstCall } from "./backup-conflict-provider.js";

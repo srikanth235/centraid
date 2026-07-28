@@ -7,8 +7,8 @@ import {
   BlobCustody,
   custodyStateCounts,
   refreshCustodyState,
-  type CustodyState,
 } from "../../packages/vault/src/blob/custody.js";
+import type { CustodyState } from "../../packages/vault/src/blob/custody.js";
 import {
   FsBlobStore,
   MemoryBlobStore,

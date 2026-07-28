@@ -10,12 +10,13 @@ vi.mock(import("./gateway") as Promise<unknown>, () => ({
   authHeader: () => ({}),
   // `fetchJson` is generic (`<T>(href, init?) => Promise<T>`); a typed mock erases
   // the type parameter, so `Mock<...>` stops being assignable to the export.
-  fetchJson: vi.fn<typeof import("./gateway").fetchJson>(),
-  requireGatewayBase: vi.fn<typeof import("./gateway").requireGatewayBase>(
+  fetchJson: vi.fn<typeof TypeImport_3w09v8.fetchJson>(),
+  requireGatewayBase: vi.fn<typeof TypeImport_3w09v8.requireGatewayBase>(
     async () => "http://127.0.0.1:9"
   ),
 }));
 
+import type * as TypeImport_3w09v8 from "./gateway";
 import {
   formatBytes,
   formatCount,

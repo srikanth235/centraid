@@ -18,7 +18,7 @@ if (!m) {
 }
 const version = m.groups.version;
 const swPath = path.join(root, "public/sw.js");
-let sw = readFileSync(swPath, "utf8");
+const sw = readFileSync(swPath, "utf8");
 // Single-quoted assignment so oxfmt --check stays clean after stamp (CI static).
 const assignment = `const VERSION = '${version.replace(/'/gu, "\\'")}'`;
 const next = sw.replace(/const VERSION = ['"][^'"]*['"]/u, assignment);

@@ -3,16 +3,20 @@
 // contract: same idempotency key, no second user bubble, and EVERY provider
 // approved so far — a consent-gated failover asks twice.
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CentraidConversationSummary } from "../../../centraid-api.js";
 import type { TurnStreamEvent } from "../../../gateway-client.js";
+import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import type {
   AssistantBridgeProps,
   AssistantSnapshot,
 } from "../../screen-contracts.js";
 import type { ShellActions } from "../actions.js";
+import type * as TypeImport_g611bp from "../prompt.js";
+import type * as TypeImport_ym9bw8 from "./settingsProvidersData.js";
 
 const captured = vi.hoisted(() => ({
   props: null as AssistantBridgeProps | null,
@@ -30,40 +34,25 @@ const actions = vi.hoisted(() => ({
 const api = vi.hoisted(() => ({
   ASSISTANT_APP_ID: "_assistant",
   MAX_ATTACHMENT_BYTES: 25 * 1024 * 1024,
-  conversationStatus:
-    vi.fn<typeof import("../../../gateway-client.js").conversationStatus>(),
-  createConversation:
-    vi.fn<typeof import("../../../gateway-client.js").createConversation>(),
+  conversationStatus: vi.fn<typeof TypeImport_1gl5zx7.conversationStatus>(),
+  createConversation: vi.fn<typeof TypeImport_1gl5zx7.createConversation>(),
   fetchAssistantAttachmentUrl:
-    vi.fn<
-      typeof import("../../../gateway-client.js").fetchAssistantAttachmentUrl
-    >(),
-  getUserPrefs:
-    vi.fn<typeof import("../../../gateway-client.js").getUserPrefs>(),
-  loadConversation:
-    vi.fn<typeof import("../../../gateway-client.js").loadConversation>(),
-  renameConversation:
-    vi.fn<typeof import("../../../gateway-client.js").renameConversation>(),
-  searchVaultEntities:
-    vi.fn<typeof import("../../../gateway-client.js").searchVaultEntities>(),
+    vi.fn<typeof TypeImport_1gl5zx7.fetchAssistantAttachmentUrl>(),
+  getUserPrefs: vi.fn<typeof TypeImport_1gl5zx7.getUserPrefs>(),
+  loadConversation: vi.fn<typeof TypeImport_1gl5zx7.loadConversation>(),
+  renameConversation: vi.fn<typeof TypeImport_1gl5zx7.renameConversation>(),
+  searchVaultEntities: vi.fn<typeof TypeImport_1gl5zx7.searchVaultEntities>(),
   setConversationFeedback:
-    vi.fn<
-      typeof import("../../../gateway-client.js").setConversationFeedback
-    >(),
-  streamAssistantTurn:
-    vi.fn<typeof import("../../../gateway-client.js").streamAssistantTurn>(),
+    vi.fn<typeof TypeImport_1gl5zx7.setConversationFeedback>(),
+  streamAssistantTurn: vi.fn<typeof TypeImport_1gl5zx7.streamAssistantTurn>(),
   uploadConversationAttachment:
-    vi.fn<
-      typeof import("../../../gateway-client.js").uploadConversationAttachment
-    >(),
+    vi.fn<typeof TypeImport_1gl5zx7.uploadConversationAttachment>(),
 }));
 const providers = vi.hoisted(() => ({
-  loadProviders:
-    vi.fn<typeof import("./settingsProvidersData.js").loadProviders>(),
+  loadProviders: vi.fn<typeof TypeImport_ym9bw8.loadProviders>(),
   setSubsystemConfigPin:
-    vi.fn<typeof import("./settingsProvidersData.js").setSubsystemConfigPin>(),
-  setSubsystemModel:
-    vi.fn<typeof import("./settingsProvidersData.js").setSubsystemModel>(),
+    vi.fn<typeof TypeImport_ym9bw8.setSubsystemConfigPin>(),
+  setSubsystemModel: vi.fn<typeof TypeImport_ym9bw8.setSubsystemModel>(),
 }));
 
 vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => api);
@@ -71,12 +60,12 @@ vi.mock(import("../actions.js") as Promise<unknown>, () => ({
   useShellActions: () => actions,
 }));
 vi.mock(import("../prompt.js") as Promise<unknown>, () => ({
-  openPrompt: vi.fn<typeof import("../prompt.js").openPrompt>(),
+  openPrompt: vi.fn<typeof TypeImport_g611bp.openPrompt>(),
 }));
 vi.mock(
   import("./settingsProvidersData.js") as Promise<unknown>,
   async (importOriginal) => ({
-    ...(await importOriginal<typeof import("./settingsProvidersData.js")>()),
+    ...(await importOriginal<typeof TypeImport_ym9bw8>()),
     loadProviders: providers.loadProviders,
     setSubsystemConfigPin: providers.setSubsystemConfigPin,
     setSubsystemModel: providers.setSubsystemModel,

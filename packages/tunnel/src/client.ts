@@ -11,10 +11,10 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 
-import {
-  GW_PAIR_ALPN,
-  type GatewayPairRequest,
-  type GatewayPairResponse,
+import { GW_PAIR_ALPN } from "./gateway-endpoint.js";
+import type {
+  GatewayPairRequest,
+  GatewayPairResponse,
 } from "./gateway-endpoint.js";
 import type { Connection, Endpoint } from "./iroh.js";
 import { iroh } from "./iroh.js";
@@ -216,11 +216,11 @@ export async function startLocalProxy(
         response.write(c);
       });
       response.end();
-    })().catch((err: unknown) => {
+    })().catch((error: unknown) => {
       if (!response.headersSent)
         response.writeHead(502, { "content-type": "application/json" });
       response.end(
-        JSON.stringify({ error: "tunnel_error", message: String(err) })
+        JSON.stringify({ error: "tunnel_error", message: String(error) })
       );
     });
   });

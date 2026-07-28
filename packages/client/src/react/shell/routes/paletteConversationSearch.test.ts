@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  createPaletteConversationSearch,
-  type PaletteConversationSearchOptions,
-} from "./paletteConversationSearch.js";
+import { createPaletteConversationSearch } from "./paletteConversationSearch.js";
+import type { PaletteConversationSearchOptions } from "./paletteConversationSearch.js";
 
 describe("paletteConversationSearch", () => {
   beforeEach(() => vi.useFakeTimers());

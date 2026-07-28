@@ -1,9 +1,5 @@
-import {
-  webCryptoDigest,
-  webCryptoIdFactory,
-  type ReplicaDigest,
-  type ReplicaIdFactory,
-} from "./digest.js";
+import { webCryptoDigest, webCryptoIdFactory } from "./digest.js";
+import type { ReplicaDigest, ReplicaIdFactory } from "./digest.js";
 import type { IntentRecordStore } from "./intent-record-store.js";
 import { intentPayloadHash } from "./payload-hash.js";
 import type {

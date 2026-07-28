@@ -196,9 +196,9 @@ await runFlow("template-gate", async (ctx) => {
           c.templateId
         );
         ctx.note(`${c.templateId}: rendered (marker "${marker ?? c.appName}")`);
-      } catch (err) {
-        failures.push(`${c.templateId}: ${err.message.split("\n")[0]}`);
-        ctx.note(`${c.templateId}: FAILED — ${err.message.split("\n")[0]}`);
+      } catch (error) {
+        failures.push(`${c.templateId}: ${error.message.split("\n")[0]}`);
+        ctx.note(`${c.templateId}: FAILED — ${error.message.split("\n")[0]}`);
       }
       return exerciseNext(index + 1);
     };
@@ -214,9 +214,9 @@ await runFlow("template-gate", async (ctx) => {
             await gw(`/centraid/_apps/${encodeURIComponent(c.appId)}`, {
               method: "DELETE",
             });
-          } catch (err) {
+          } catch (error) {
             ctx.note(
-              `cleanup: could not delete ${c.appId} — ${err.message.split("\n")[0]}`
+              `cleanup: could not delete ${c.appId} — ${error.message.split("\n")[0]}`
             );
           }
         })

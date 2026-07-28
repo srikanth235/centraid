@@ -12,7 +12,8 @@
 import "../theme-vars.js";
 import "../icons.js";
 import type { ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 
 import {
   consumeInitialAssistHandoff,
@@ -155,10 +156,10 @@ void (async (): Promise<void> => {
               vaultId,
               name: displayName,
               color: avatarColor,
-            }).catch((err: unknown) => {
+            }).catch((error: unknown) => {
               console.error(
                 "[first-run] renaming the Personal vault failed",
-                err
+                error
               );
             });
           }

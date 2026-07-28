@@ -87,8 +87,8 @@ describe("disk-full", () => {
         const bytes = Buffer.alloc(1024 * 1024, i);
         try {
           store.putSync(sha, bytes);
-        } catch (err) {
-          failure = err;
+        } catch (error) {
+          failure = error;
         }
       }
 

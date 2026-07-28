@@ -36,9 +36,11 @@ import {
   DEFAULT_STORAGE_LIMITS,
   StorageLimitsError,
   evaluateStorageLimit,
-  type StorageLimits,
-  type StorageLimitsPatch,
-  type StorageLimitsStore,
+} from "../serve/storage-limits.js";
+import type {
+  StorageLimits,
+  StorageLimitsPatch,
+  StorageLimitsStore,
 } from "../serve/storage-limits.js";
 import { readJson, sendError, sendJson } from "./route-helpers.js";
 
@@ -90,8 +92,8 @@ async function handleLocal(
       limits,
       limit: evaluateStorageLimit(report.totalBytes, limits),
     });
-  } catch (err) {
-    return sendError(res, err);
+  } catch (error) {
+    return sendError(res, error);
   }
 }
 
@@ -104,8 +106,8 @@ async function handleLimits(
   if (method === "GET") {
     try {
       return sendJson(res, 200, { limits: await currentLimits(deps) });
-    } catch (err) {
-      return sendError(res, err);
+    } catch (error) {
+      return sendError(res, error);
     }
   }
   if (method !== "PUT" && method !== "PATCH") {
@@ -126,11 +128,11 @@ async function handleLimits(
     return sendJson(res, 200, {
       limits: await deps.storageLimits.update(body),
     });
-  } catch (err) {
-    if (err instanceof StorageLimitsError) {
-      return sendJson(res, 400, { error: err.code, message: err.message });
+  } catch (error) {
+    if (error instanceof StorageLimitsError) {
+      return sendJson(res, 400, { error: error.code, message: error.message });
     }
-    return sendError(res, err);
+    return sendError(res, error);
   }
 }
 

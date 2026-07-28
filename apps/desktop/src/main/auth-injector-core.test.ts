@@ -7,8 +7,8 @@ import {
   relaxFrameAncestors,
   stripFrameAncestors,
   VAULT_HEADER,
-  type AuthInjectorSnapshot,
 } from "./auth-injector-core.js";
+import type { AuthInjectorSnapshot } from "./auth-injector-core.js";
 
 const snap = (
   patch: Partial<AuthInjectorSnapshot> = {}

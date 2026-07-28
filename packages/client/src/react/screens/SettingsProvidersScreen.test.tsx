@@ -1,5 +1,6 @@
 import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive provider-routing screen suite shares one bridge and DOM harness
 
@@ -7,12 +8,13 @@ import type {
   AgentsStatusDTO,
   SettingsProvidersBridgeProps,
 } from "../screen-contracts.js";
+import type * as TypeImport_in5dl4 from "../shell/confirm.js";
 import SettingsProvidersScreen from "./SettingsProvidersScreen.js";
 
 // Ladder membership is a consent decision, so it goes through the shell's own
 // confirm dialog (not `window.confirm`) — mocked here to drive the answer.
 const dialog = vi.hoisted(() => ({
-  openConfirm: vi.fn<typeof import("../shell/confirm.js").openConfirm>(),
+  openConfirm: vi.fn<typeof TypeImport_in5dl4.openConfirm>(),
 }));
 vi.mock(import("../shell/confirm.js"), () => dialog);
 

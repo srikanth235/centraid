@@ -19,11 +19,12 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  type SharedValue,
 } from "react-native-reanimated";
+import type { SharedValue } from "react-native-reanimated";
 
 import AppIcon from "../../kit/components/AppIcon";
-import { family, useTheme, type ThemeColors } from "../../kit/theme";
+import { family, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
 import type { LauncherItem } from "./catalog";
 
 // Quick, lightly-damped spring — a firm press-in, an unfussy release.

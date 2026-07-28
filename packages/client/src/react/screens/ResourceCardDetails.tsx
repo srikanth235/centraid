@@ -1,10 +1,8 @@
-import { useState, type JSX } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
-import {
-  hostFactRows,
-  resolvedKnobRows,
-  type ResourceProfileDTO,
-} from "./resource-summary.js";
+import { hostFactRows, resolvedKnobRows } from "./resource-summary.js";
+import type { ResourceProfileDTO } from "./resource-summary.js";
 
 import styles from "./GatewayScreen.module.css";
 

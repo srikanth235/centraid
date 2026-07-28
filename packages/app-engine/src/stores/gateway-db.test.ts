@@ -12,8 +12,8 @@ function freshDbPath(): string {
   return path.join(dir, "db.sqlite");
 }
 
-function userVersion(path: string): number {
-  const db = new DatabaseSync(path);
+function userVersion(pathLocal: string): number {
+  const db = new DatabaseSync(pathLocal);
   try {
     const row = db.prepare("PRAGMA user_version").get() as {
       user_version: number;
@@ -24,8 +24,8 @@ function userVersion(path: string): number {
   }
 }
 
-function tableNames(path: string): string[] {
-  const db = new DatabaseSync(path);
+function tableNames(pathLocal: string): string[] {
+  const db = new DatabaseSync(pathLocal);
   try {
     return (
       db
@@ -64,29 +64,29 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
 
   it("NEVER touches PRAGMA user_version — that belongs to the vault audit ladder", () => {
     // Fresh file: the ensure creates the ledger band and leaves the version 0.
-    const path = freshDbPath();
-    openJournalDb(path).close();
-    expect(userVersion(path)).toBe(0);
+    const pathLocal = freshDbPath();
+    openJournalDb(pathLocal).close();
+    expect(userVersion(pathLocal)).toBe(0);
   });
 
   it("is safe on a file the vault package already migrated (audit band intact)", () => {
     // Preserve a foreign table and nonzero user_version from the vault ladder.
-    const path = freshDbPath();
-    const seed = new DatabaseSync(path);
+    const pathLocal = freshDbPath();
+    const seed = new DatabaseSync(pathLocal);
     seed.exec(`CREATE TABLE consent_receipt (receipt_id TEXT PRIMARY KEY);`);
     seed.exec("PRAGMA user_version = 1");
     seed.close();
-    openJournalDb(path).close();
-    expect(userVersion(path)).toBe(1);
-    expect(tableNames(path)).toContain("consent_receipt");
-    expect(tableNames(path)).toContain("conversations");
+    openJournalDb(pathLocal).close();
+    expect(userVersion(pathLocal)).toBe(1);
+    expect(tableNames(pathLocal)).toContain("consent_receipt");
+    expect(tableNames(pathLocal)).toContain("conversations");
   });
 
   it("creates the ledger tables + the run_summary VIEW in ONE file (no legacy tables)", () => {
-    const path = freshDbPath();
-    openJournalDb(path).close();
+    const pathLocal = freshDbPath();
+    openJournalDb(pathLocal).close();
     // Exclude FTS5's `fts_conversation` virtual table and shadow tables (#420).
-    const ledgerTables = tableNames(path).filter(
+    const ledgerTables = tableNames(pathLocal).filter(
       (n) => !n.startsWith("fts_conversation")
     );
     expect(ledgerTables).toStrictEqual([
@@ -106,8 +106,8 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
       "turns",
     ]);
     // The search virtual table + its sync triggers exist.
-    expect(tableNames(path)).toContain("fts_conversation");
-    const db = new DatabaseSync(path);
+    expect(tableNames(pathLocal)).toContain("fts_conversation");
+    const db = new DatabaseSync(pathLocal);
     try {
       const views = db
         .prepare(
@@ -136,9 +136,9 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
   it("conversations has NO foreign key (user_id carries the vault owner party id)", () => {
     // The owner's party row lives in the vault's separate vault.db file;
     // SQLite has no cross-file FKs, so the scoping is application-enforced.
-    const path = freshDbPath();
-    openJournalDb(path).close();
-    const db = new DatabaseSync(path);
+    const pathLocal = freshDbPath();
+    openJournalDb(pathLocal).close();
+    const db = new DatabaseSync(pathLocal);
     try {
       expect(
         db.prepare(`PRAGMA foreign_key_list('conversations')`).all()
@@ -149,9 +149,9 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
   });
 
   it("turns→conversations and items→turns and attachments→items are CASCADE FKs", () => {
-    const path = freshDbPath();
-    openJournalDb(path).close();
-    const db = new DatabaseSync(path);
+    const pathLocal = freshDbPath();
+    openJournalDb(pathLocal).close();
+    const db = new DatabaseSync(pathLocal);
     try {
       const fk = (table: string, parent: string) =>
         (
@@ -176,8 +176,8 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
   });
 
   it("deleting a conversation cascades to its turns, items, and attachments", () => {
-    const path = freshDbPath();
-    const db = openJournalDb(path);
+    const pathLocal = freshDbPath();
+    const db = openJournalDb(pathLocal);
     try {
       const now = Date.now();
       db.prepare(
@@ -210,8 +210,8 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
   });
 
   it("CHECK constraints reject unknown conversation kind / turn trigger / item kind", () => {
-    const path = freshDbPath();
-    const db = openJournalDb(path);
+    const pathLocal = freshDbPath();
+    const db = openJournalDb(pathLocal);
     try {
       const now = Date.now();
       expect(() =>
@@ -247,8 +247,8 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
   });
 
   it("re-opening an already-ensured DB is a no-op (rows survive)", () => {
-    const path = freshDbPath();
-    const first = openJournalDb(path);
+    const pathLocal = freshDbPath();
+    const first = openJournalDb(pathLocal);
     const now = Date.now();
     first
       .prepare(
@@ -257,7 +257,7 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
       )
       .run(now, now);
     first.close();
-    const again = openJournalDb(path);
+    const again = openJournalDb(pathLocal);
     try {
       const n = again
         .prepare("SELECT COUNT(*) AS n FROM conversations")
@@ -269,14 +269,14 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
   });
 
   it("upgrades effort columns before recreating the run_summary view", () => {
-    const path = freshDbPath();
-    const legacy = openJournalDb(path);
+    const pathLocal = freshDbPath();
+    const legacy = openJournalDb(pathLocal);
     legacy.exec("DROP VIEW run_summary");
     legacy.exec("ALTER TABLE items DROP COLUMN effort");
     legacy.exec("ALTER TABLE conversation_digest DROP COLUMN efforts_json");
     legacy.close();
 
-    const upgraded = openJournalDb(path);
+    const upgraded = openJournalDb(pathLocal);
     try {
       const itemColumns = (
         upgraded.prepare("PRAGMA table_info(items)").all() as Array<{
@@ -303,8 +303,8 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
   });
 
   it("opens auto_vacuum=INCREMENTAL and incremental_vacuum reclaims freed pages (issue #438)", () => {
-    const path = freshDbPath();
-    const db = openJournalDb(path);
+    const pathLocal = freshDbPath();
+    const db = openJournalDb(pathLocal);
     try {
       // Fresh file: the pragma applied at first-table-create (the ledger DDL).
       expect(
@@ -356,9 +356,9 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
   });
 
   it("converts a pre-#438 journal.db (auto_vacuum=0) to INCREMENTAL on open (issue #438)", () => {
-    const path = freshDbPath();
+    const pathLocal = freshDbPath();
     // A file written before the pragma existed: WAL, freelist mode, non-empty.
-    const seed = new DatabaseSync(path);
+    const seed = new DatabaseSync(pathLocal);
     seed.exec("PRAGMA journal_mode=WAL");
     seed.exec("CREATE TABLE legacy(a TEXT)");
     const ins = seed.prepare("INSERT INTO legacy VALUES (?)");
@@ -370,7 +370,7 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
     ).toBe(0);
     seed.close();
 
-    const db = openJournalDb(path);
+    const db = openJournalDb(pathLocal);
     try {
       expect(
         (db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number })
@@ -382,8 +382,8 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
   });
 
   it("conversation_archive and conversation_digest CASCADE-delete with their conversation (issue #438)", () => {
-    const path = freshDbPath();
-    const db = openJournalDb(path);
+    const pathLocal = freshDbPath();
+    const db = openJournalDb(pathLocal);
     try {
       const now = Date.now();
       db.prepare(
@@ -414,8 +414,8 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
   });
 
   it("conversation_archive rejects a non-64-char segment_sha256 (issue #438)", () => {
-    const path = freshDbPath();
-    const db = openJournalDb(path);
+    const pathLocal = freshDbPath();
+    const db = openJournalDb(pathLocal);
     try {
       const now = Date.now();
       db.prepare(
@@ -440,9 +440,9 @@ describe("openJournalDb (the conversation-ledger band of the vault journal)", ()
 
 describe("STRICT tables (issue #374 SQLite hardening)", () => {
   it("every ledger table is created STRICT", () => {
-    const path = freshDbPath();
-    openJournalDb(path).close();
-    const db = new DatabaseSync(path);
+    const pathLocal = freshDbPath();
+    openJournalDb(pathLocal).close();
+    const db = new DatabaseSync(pathLocal);
     try {
       const rows = db
         .prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'table'`)
@@ -463,8 +463,8 @@ describe("STRICT tables (issue #374 SQLite hardening)", () => {
   });
 
   it("rejects a type-violating insert (STRICT enforcement)", () => {
-    const path = freshDbPath();
-    const db = openJournalDb(path);
+    const pathLocal = freshDbPath();
+    const db = openJournalDb(pathLocal);
     try {
       const now = Date.now();
       // turn_count is INTEGER; a non-numeric TEXT value violates STRICT.
@@ -492,8 +492,8 @@ describe("lazy provider", () => {
   });
 
   it("does not touch the filesystem until the first call", () => {
-    const path = freshDbPath();
-    makeJournalDbProvider(path);
-    expect(existsSync(path)).toBe(false);
+    const pathLocal = freshDbPath();
+    makeJournalDbProvider(pathLocal);
+    expect(existsSync(pathLocal)).toBe(false);
   });
 });

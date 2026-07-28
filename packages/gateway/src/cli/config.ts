@@ -28,16 +28,11 @@
 
 import { promises as fs } from "node:fs";
 
-import {
-  RUNNER_KINDS,
-  isRunnerKind,
-  type RunnerKind,
-} from "@centraid/app-engine";
+import { RUNNER_KINDS, isRunnerKind } from "@centraid/app-engine";
+import type { RunnerKind } from "@centraid/app-engine";
 
-import {
-  validateBackupConfig,
-  type BackupConfig,
-} from "../backup/backup-config.js";
+import { validateBackupConfig } from "../backup/backup-config.js";
+import type { BackupConfig } from "../backup/backup-config.js";
 
 export interface DaemonRunnerConfig {
   /** Any kind the runtime registers — validated against `RUNNER_KINDS`. */
@@ -88,17 +83,17 @@ export async function loadConfigFile(path: string): Promise<DaemonConfig> {
   let raw: string;
   try {
     raw = await fs.readFile(path, "utf8");
-  } catch (err) {
+  } catch (error) {
     throw new DaemonConfigError(
-      `could not read ${path}: ${err instanceof Error ? err.message : String(err)}`
+      `could not read ${path}: ${error instanceof Error ? error.message : String(error)}`
     );
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch (err) {
+  } catch (error) {
     throw new DaemonConfigError(
-      `${path} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`
+      `${path} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`
     );
   }
   return validateConfig(parsed);
@@ -144,9 +139,9 @@ export function validateConfig(value: unknown): DaemonConfig {
   if (value.backup !== undefined) {
     try {
       out.backup = validateBackupConfig(value.backup);
-    } catch (err) {
+    } catch (error) {
       throw new DaemonConfigError(
-        err instanceof Error ? err.message : String(err)
+        error instanceof Error ? error.message : String(error)
       );
     }
   }

@@ -1,9 +1,11 @@
-import { useState, type JSX } from "react";
+import { useState } from "react";
+import type { JSX } from "react";
 
 import { isWebHost } from "../host-platform.js";
-import OnboardingScreen, {
-  type OnboardingCompleteInput,
-  type OnboardingPath,
+import OnboardingScreen from "./OnboardingScreen.js";
+import type {
+  OnboardingCompleteInput,
+  OnboardingPath,
 } from "./OnboardingScreen.js";
 
 import styles from "./RecoverScreen.module.css";

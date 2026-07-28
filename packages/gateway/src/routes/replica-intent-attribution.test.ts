@@ -20,7 +20,8 @@ import { describe, afterEach, expect, test } from "vitest";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
-import { openVaultPlane, type VaultPlane } from "../serve/vault-plane.js";
+import { openVaultPlane } from "../serve/vault-plane.js";
+import type { VaultPlane } from "../serve/vault-plane.js";
 import { handleReplicaIntent } from "./replica-intent-route.js";
 
 const logger = {

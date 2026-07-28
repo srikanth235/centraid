@@ -6,7 +6,8 @@ import { Card } from "./Card.tsx";
 // the pinned/others card groups (CSS-columns masonry, or a single narrow
 // column in list view), the empty state and the bounded-window "Show more"
 // footer. Mirrors tasks/components/Board.jsx's shape.
-import { QuickAdd, type QuickAddProps } from "./QuickAdd.tsx";
+import { QuickAdd } from "./QuickAdd.tsx";
+import type { QuickAddProps } from "./QuickAdd.tsx";
 import { Icon } from "./Shared.tsx";
 
 import cardStyles from "./Card.module.css";

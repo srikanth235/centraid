@@ -8,10 +8,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { ChangeBus } from "../changes/change-bus.ts";
 import { Runtime } from "../runtime.ts";
 import { ChangesSubscriberCap, handleAppChanges } from "./changes-sse.ts";
-import {
-  startRuntimeHttpServer,
-  type RuntimeHttpServerHandle,
-} from "./http-server.ts";
+import { startRuntimeHttpServer } from "./http-server.ts";
+import type { RuntimeHttpServerHandle } from "./http-server.ts";
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;

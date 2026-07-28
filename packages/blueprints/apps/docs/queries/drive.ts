@@ -29,13 +29,8 @@
  * byte-for-byte the pre-conversion JS.
  */
 
-import {
-  readCustodyByContent,
-  readLabelsByDocument,
-  type ConceptRow,
-  type SchemeRow,
-  type TagRow,
-} from "./_shared.ts";
+import { readCustodyByContent, readLabelsByDocument } from "./_shared.ts";
+import type { ConceptRow, SchemeRow, TagRow } from "./_shared.ts";
 
 const FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
 const FLAGS_SCHEME_URI = "https://centraid.dev/schemes/flags";
@@ -252,8 +247,8 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
       truncated,
       window,
     };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       folders: [],
       documents: [],

@@ -168,8 +168,8 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
       reminders: remindersByParty.get(pr.party_id) ?? [],
     }));
     return { people, lists, truncated: profileRows.length >= window, window };
-  } catch (err) {
-    const e = err as { code?: string; message?: string };
+  } catch (error) {
+    const e = error as { code?: string; message?: string };
     return {
       people: [],
       lists: [],

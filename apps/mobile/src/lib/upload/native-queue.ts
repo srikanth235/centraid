@@ -5,23 +5,22 @@
 // can exercise them (the M0.2 lesson).
 
 import { OpSqliteDriver } from "../replica/op-sqlite-driver";
-import { webCryptoUploadCrypto, type UploadCrypto } from "./crypto";
-import { enqueueLocalFile, type EnqueueInput } from "./enqueue";
+import { webCryptoUploadCrypto } from "./crypto";
+import type { UploadCrypto } from "./crypto";
+import { enqueueLocalFile } from "./enqueue";
+import type { EnqueueInput } from "./enqueue";
 import { expoFileSource, expoPartPutter } from "./expo-native";
 import { httpDirectTransferClient } from "./gateway-client";
 import { createNativeDigest } from "./native-digest";
-import {
-  UploadQueueStore,
-  type NewUploadFollowup,
-  type UploadFollowupFactory,
-  type UploadFollowup,
-  type UploadItem,
+import { UploadQueueStore } from "./store";
+import type {
+  NewUploadFollowup,
+  UploadFollowupFactory,
+  UploadFollowup,
+  UploadItem,
 } from "./store";
-import {
-  UploadDrainer,
-  type DrainSummary,
-  type UploadPolicy,
-} from "./uploader";
+import { UploadDrainer } from "./uploader";
+import type { DrainSummary, UploadPolicy } from "./uploader";
 
 /**
  * The queue's own database, deliberately NOT the replica's — see the header of
