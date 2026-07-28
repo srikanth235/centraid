@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { JSX } from "react";
 
 import { relativeTime } from "../format.js";
 import { cx } from "../ui/cx.js";
@@ -161,8 +162,10 @@ function resourceModeWord(mode: string | undefined): string {
       return "Balanced";
     case "performance":
       return "Performance";
+    case undefined:
+      return "—";
     default:
-      return mode ?? "—";
+      return mode;
   }
 }
 
@@ -285,8 +288,8 @@ export default function SettingsDiagnosticsScreen({
         setHealth(snap);
         setError(null);
       })
-      .catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        setError(error instanceof Error ? error.message : String(error))
       )
       .finally(() => setBusy(false));
   }, [loadHealth]);

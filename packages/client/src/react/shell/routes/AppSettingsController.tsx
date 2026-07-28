@@ -1,5 +1,7 @@
-import { type JSX, useEffect, useRef } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { useEffect, useRef } from "react";
+import type { JSX } from "react";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 
 import { formatDuration, triggersSummary } from "../../../app-format.js";
 import {
@@ -12,7 +14,6 @@ import AppSettingsPanel from "../../screens/AppSettingsPanel.js";
 import VaultScreen from "../../screens/VaultScreen.js";
 import { iconSvg } from "../iconSvg.js";
 import {
-  type AppKnob,
   buildVaultProps,
   fetchAppKnobValues,
   fetchAppManifestRaw,
@@ -24,6 +25,7 @@ import {
   waitForAutomationRun,
   writeAppKnobValue,
 } from "./appSettingsData.js";
+import type { AppKnob } from "./appSettingsData.js";
 import RunsPane from "./RunsPane.js";
 
 type RunState =
@@ -148,6 +150,10 @@ export default function AppSettingsController({
   const push = (): void => {
     if (alive.current) updater.current?.(buildSnapshot());
   };
+  const pushRef = useRef(push);
+  useEffect(() => {
+    pushRef.current = push;
+  });
 
   // Resolve knobs, vault visibility, and linked automations once on open.
   useEffect(() => {
@@ -163,14 +169,14 @@ export default function AppSettingsController({
           knobs.current = manifest.knobs;
           Object.assign(knobValues.current, stored);
         }
-        push();
+        pushRef.current();
       }
     );
     void manifestRaw.then((raw) => {
       if (!alive.current) return;
       if (manifestVaultBlock(raw)) {
         vaultVisible.current = true;
-        push();
+        pushRef.current();
       }
     });
     void listAutomations().then((all) => {
@@ -178,7 +184,7 @@ export default function AppSettingsController({
       orders.current = all.filter((r) => r.manifest.apps?.includes(appId));
       automationsBadge.current =
         orders.current.length === 0 ? null : orders.current.length;
-      push();
+      pushRef.current();
     });
 
     return () => {
@@ -186,7 +192,7 @@ export default function AppSettingsController({
       roots.forEach((r) => r.unmount());
       roots.clear();
     };
-  }, [appId, push]);
+  }, [appId]);
 
   const pushKnob = (key: string, value: string): void => {
     if (inlineRoot) pushKnobToInlineRoot(inlineRoot, key, value);
@@ -198,8 +204,8 @@ export default function AppSettingsController({
     const def = knobs.current?.find((k) => k.key === key)?.default ?? "";
     const prior = knobValues.current[key] ?? def;
     knobValues.current[key] = value;
-    void writeAppKnobValue(appId, key, value).catch((err: unknown) => {
-      showToast(`Saving ${key} failed: ${String(err)}`);
+    void writeAppKnobValue(appId, key, value).catch((error: unknown) => {
+      showToast(`Saving ${key} failed: ${String(error)}`);
       if (alive.current) {
         knobValues.current[key] = prior;
         pushKnob(key, prior);
@@ -220,12 +226,12 @@ export default function AppSettingsController({
         durationMs: (rec.endedAt ?? Date.now()) - rec.startedAt,
         ...(rec.error ? { error: rec.error } : {}),
       });
-    } catch (err) {
+    } catch (error) {
       runState.current.set(ref, {
         kind: "done",
         ok: false,
         durationMs: 0,
-        error: err instanceof Error ? err.message : String(err),
+        error: error instanceof Error ? error.message : String(error),
       });
     }
     push();
@@ -239,12 +245,12 @@ export default function AppSettingsController({
     push();
     try {
       await setAutomationEnabled({ automationId: ref, enabled });
-    } catch (err) {
+    } catch (error) {
       row.enabled = prior;
       if (alive.current) {
         push();
         showToast(
-          `Could not ${enabled ? "enable" : "disable"} ${row.name}: ${err instanceof Error ? err.message : String(err)}`
+          `Could not ${enabled ? "enable" : "disable"} ${row.name}: ${error instanceof Error ? error.message : String(error)}`
         );
       }
     }

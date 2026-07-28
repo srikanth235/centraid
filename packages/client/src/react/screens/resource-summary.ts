@@ -268,6 +268,8 @@ export function powerPostureLine(power: PowerContextState): string | null {
         return "Battery low — background work paused until charging";
       case "thermal":
         return "Thermal pressure — backing off";
+      case null:
+        return null;
       default:
         return null;
     }

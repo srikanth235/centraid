@@ -1,18 +1,10 @@
 import type { IconName } from "@centraid/design-tokens";
 // governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Connectors gallery surface; splitting would fragment one visual unit
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type JSX,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { JSX } from "react";
 
-import {
-  ASSIST_HANDOFF_EVENT,
-  type AssistHandoffResult,
-} from "../../assist-oauth-events.js";
+import { ASSIST_HANDOFF_EVENT } from "../../assist-oauth-events.js";
+import type { AssistHandoffResult } from "../../assist-oauth-events.js";
 import { relativeTime } from "../format.js";
 import { cx } from "../ui/cx.js";
 import { Button, Icon } from "../ui/index.js";
@@ -216,6 +208,12 @@ function pollUntilAuthorized(
       });
   };
   pollTimer.current = setTimeout(tick, POLL_MS);
+}
+
+function clearPollTimer(timer: {
+  current: ReturnType<typeof setTimeout> | null;
+}): void {
+  if (timer.current) clearTimeout(timer.current);
 }
 
 function assertAssistWebOrigin(): void {
@@ -1013,8 +1011,8 @@ export default function SettingsConnectionsScreen({
   const refresh = useCallback((): void => {
     void loadConnections()
       .then(setRows)
-      .catch((err: unknown) =>
-        showToast(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        showToast(error instanceof Error ? error.message : String(error))
       );
   }, [loadConnections, showToast]);
 
@@ -1022,17 +1020,15 @@ export default function SettingsConnectionsScreen({
     refresh();
     void loadProviders()
       .then(setProviders)
-      .catch((err: unknown) =>
-        showToast(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        showToast(error instanceof Error ? error.message : String(error))
       );
     if (loadOAuthCallbackUri) {
       void loadOAuthCallbackUri()
         .then(setOauthCallbackUri)
         .catch(() => setOauthCallbackUri(null));
     }
-    return () => {
-      if (pollTimer.current) clearTimeout(pollTimer.current);
-    };
+    return () => clearPollTimer(pollTimer);
   }, [
     loadConnections,
     loadProviders,
@@ -1098,8 +1094,8 @@ export default function SettingsConnectionsScreen({
   const withBusy = (id: string, fn: () => Promise<void>): void => {
     setBusyIds((s) => new Set(s).add(id));
     void fn()
-      .catch((err: unknown) =>
-        showToast(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        showToast(error instanceof Error ? error.message : String(error))
       )
       .finally(() => {
         setBusyIds((s) => {
@@ -1141,8 +1137,8 @@ export default function SettingsConnectionsScreen({
         window.open(authUrl, "_blank", "noopener");
         pollAfterAuthorize(row.connectionId);
       })
-      .catch((err: unknown) => {
-        showToast(err instanceof Error ? err.message : String(err));
+      .catch((error: unknown) => {
+        showToast(error instanceof Error ? error.message : String(error));
         setAuthorizingIds((s) => {
           const n = new Set(s);
           n.delete(row.connectionId);
@@ -1211,8 +1207,8 @@ export default function SettingsConnectionsScreen({
         showToast("Connected with Centraid Assist.");
         refresh();
       })
-      .catch((err: unknown) =>
-        showToast(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        showToast(error instanceof Error ? error.message : String(error))
       )
       .finally(() => setFinishingManualHandoff(false));
   };
@@ -1248,8 +1244,8 @@ export default function SettingsConnectionsScreen({
                 ? `Finish connecting ${input.label} in your browser…`
                 : `Authorize ${input.label} in the browser window…`
             );
-          } catch (err: unknown) {
-            showToast(err instanceof Error ? err.message : String(err));
+          } catch (error: unknown) {
+            showToast(error instanceof Error ? error.message : String(error));
             setAuthorizingIds((s) => {
               const n = new Set(s);
               n.delete(connectionId);
@@ -1261,8 +1257,8 @@ export default function SettingsConnectionsScreen({
         setSheet({ kind: "closed" });
         showToast(`Connected · ${input.label}`);
       })
-      .catch((err: unknown) =>
-        showToast(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        showToast(error instanceof Error ? error.message : String(error))
       )
       .finally(() => setSaving(false));
   };
@@ -1282,8 +1278,8 @@ export default function SettingsConnectionsScreen({
         showToast(`Enabled · ${sync.title}`);
         return loadLinkedSyncs?.(connection).then(setLinkedSyncs);
       })
-      .catch((err: unknown) =>
-        showToast(err instanceof Error ? err.message : String(err))
+      .catch((error: unknown) =>
+        showToast(error instanceof Error ? error.message : String(error))
       )
       .finally(() => setInstallingSync(null));
   };

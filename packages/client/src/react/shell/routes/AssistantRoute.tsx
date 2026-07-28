@@ -1,5 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit shared shell relocation keeps this cohesive route intact; split later under #392
-import { type JSX, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 
 import {
   ASSISTANT_APP_ID,
@@ -14,8 +15,10 @@ import {
   streamAssistantTurn,
   uploadConversationAttachment,
   MAX_ATTACHMENT_BYTES,
-  type ConversationAttachmentRef,
-  type TurnStreamEvent,
+} from "../../../gateway-client.js";
+import type {
+  ConversationAttachmentRef,
+  TurnStreamEvent,
 } from "../../../gateway-client.js";
 import {
   providerConsentWire,
@@ -39,9 +42,11 @@ import {
   hydrateMessages,
   msgToDTO,
   toolOutputText,
-  type AsstMsg,
-  type AsstToolCall,
-  type PendingAttachment,
+} from "./assistantTranscript.js";
+import type {
+  AsstMsg,
+  AsstToolCall,
+  PendingAttachment,
 } from "./assistantTranscript.js";
 import { downloadConversation } from "./conversationExport.js";
 import {
@@ -214,10 +219,10 @@ export default function AssistantRoute({
           ...loaded.workspace.additionalDirectories,
         ];
       }
-    } catch (err) {
+    } catch (error) {
       if (m.current.disposed) return;
       m.current.msgs = [
-        { kind: "ai", text: `Failed to load: ${String(err)}`, error: true },
+        { kind: "ai", text: `Failed to load: ${String(error)}`, error: true },
       ];
     }
     push();
@@ -269,7 +274,7 @@ export default function AssistantRoute({
             };
           }
           push();
-        } catch (err) {
+        } catch (error) {
           if (m.current.disposed) return;
           const entry = m.current.pendingAttachments.find(
             (a) => a.localId === localId
@@ -277,7 +282,7 @@ export default function AssistantRoute({
           if (entry) {
             entry.state = "error";
             entry.errorText =
-              err instanceof Error ? err.message : "Upload failed";
+              error instanceof Error ? error.message : "Upload failed";
           }
           push();
         }
@@ -501,7 +506,7 @@ export default function AssistantRoute({
             text: event.message,
           });
           push();
-          return;
+          break;
         }
         case "reasoning.delta":
           if (thinking) {
@@ -610,8 +615,11 @@ export default function AssistantRoute({
           push();
           break;
         }
-        default:
-          // start/phase/aborted/webhooks — no UI surface yet.
+        // These event types deliberately have no transcript surface yet.
+        case "assistant.start":
+        case "phase":
+        case "aborted":
+        case "webhooks":
           break;
       }
     };
@@ -651,9 +659,9 @@ export default function AssistantRoute({
         m.current.abort.signal
       );
       streamEnded = res.ended;
-    } catch (err) {
-      if (!(err instanceof DOMException && err.name === "AbortError"))
-        threw = err;
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError"))
+        threw = error;
     }
 
     if (m.current.disposed || m.current.currentId !== conversationId) return;
@@ -806,9 +814,11 @@ export default function AssistantRoute({
         suppressSelectRef.current = created.id;
         replace?.({ kind: "assistant", conversationId: created.id });
         refreshAssistantThreads?.();
-      } catch (err) {
+      } catch (error) {
         showToast(
-          err instanceof Error ? err.message : "Could not start a conversation"
+          error instanceof Error
+            ? error.message
+            : "Could not start a conversation"
         );
         return;
       }
@@ -1008,9 +1018,9 @@ export default function AssistantRoute({
     if (id === "export") {
       void loadConversation(ASSISTANT_APP_ID, cid, conversationScope(cid))
         .then((conv) => downloadConversation(conv, "markdown"))
-        .catch((err: unknown) =>
+        .catch((error: unknown) =>
           showToast(
-            `Couldn't export: ${err instanceof Error ? err.message : String(err)}`
+            `Couldn't export: ${error instanceof Error ? error.message : String(error)}`
           )
         );
     } else if (id === "rename") {
@@ -1026,9 +1036,9 @@ export default function AssistantRoute({
           cid,
           next,
           conversationScope(cid)
-        ).catch((err: unknown) =>
+        ).catch((error: unknown) =>
           showToast(
-            `Couldn't rename: ${err instanceof Error ? err.message : String(err)}`
+            `Couldn't rename: ${error instanceof Error ? error.message : String(error)}`
           )
         );
         refreshAssistantThreads?.();
