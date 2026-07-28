@@ -54,7 +54,7 @@ export function tileFinish(color: string, variant: TileVariant): TileFinish {
         boxShadow: `inset 0 0 0 0.5px ${withAlpha(color, 0.28)}`,
         glyphColor: color,
       };
-    default:
+    case "solid":
       return {
         background: color,
         backgroundColor: color,

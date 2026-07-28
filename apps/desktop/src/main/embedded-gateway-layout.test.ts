@@ -11,6 +11,17 @@ import { describe, afterEach, expect, test } from "vitest";
 
 import { startDesktopEmbeddedGateway } from "./embedded-gateway.js";
 
+/**
+ * Reproduces the default `Array#sort` ordering (UTF-16 code units) explicitly,
+ * which is what these assertions depend on. Not `localeCompare` — that orders
+ * case and punctuation differently and would change what is being asserted.
+ */
+const byCodeUnit = (x: unknown, y: unknown): number => {
+  const a = String(x);
+  const b = String(y);
+  return a < b ? -1 : a > b ? 1 : 0;
+};
+
 const roots: string[] = [];
 
 describe("embedded-gateway-layout scenarios", () => {
@@ -154,7 +165,7 @@ describe("embedded-gateway-layout scenarios", () => {
         vaults?: Array<{ name?: string }>;
       };
       expect(
-        (body.vaults ?? []).map((vault) => vault.name).sort()
+        (body.vaults ?? []).map((vault) => vault.name).sort(byCodeUnit)
       ).toStrictEqual(["Personal", "Shared"]);
     } finally {
       await gateway.close();

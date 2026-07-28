@@ -8,6 +8,17 @@ import {
   renderTokensModule,
 } from "./generate";
 
+/**
+ * Reproduces the default `Array#sort` ordering (UTF-16 code units) explicitly,
+ * which is what these assertions depend on. Not `localeCompare` — that orders
+ * case and punctuation differently and would change what is being asserted.
+ */
+const byCodeUnit = (x: unknown, y: unknown): number => {
+  const a = String(x);
+  const b = String(y);
+  return a < b ? -1 : a > b ? 1 : 0;
+};
+
 // A trimmed stand-in for toBlueprintCss() that exercises
 // every translation path: hsl+var, alpha, calc, var-with-fallback, aliases,
 // color-mix (skip), swatch (skip), internal var (skip), radii, and a dark
@@ -153,7 +164,7 @@ describe(renderTokensModule, () => {
     const keys = [...block.matchAll(/^\s*(?<key>[A-Za-z0-9_$]+):/gmu)].map(
       (m) => m[1]
     );
-    expect(keys).toStrictEqual([...keys].sort());
+    expect(keys).toStrictEqual([...keys].sort(byCodeUnit));
     expect(keys.length).toBeGreaterThan(0);
   });
 

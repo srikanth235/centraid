@@ -17,6 +17,17 @@ import { createGateway, Gateway } from "./gateway.js";
 import { ftsMatchExpression } from "./search.js";
 import type { Credential } from "./types.js";
 
+/**
+ * Reproduces the default `Array#sort` ordering (UTF-16 code units) explicitly,
+ * which is what these assertions depend on. Not `localeCompare` — that orders
+ * case and punctuation differently and would change what is being asserted.
+ */
+const byCodeUnit = (x: unknown, y: unknown): number => {
+  const a = String(x);
+  const b = String(y);
+  return a < b ? -1 : a > b ? 1 : 0;
+};
+
 let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
@@ -414,10 +425,9 @@ describe("search", () => {
         query: "dehumid",
         purpose: PURPOSE,
       });
-      expect(byName.rows.map((r) => r.item_id).toSorted()).toStrictEqual([
-        "it-1",
-        "it-2",
-      ]);
+      expect(
+        byName.rows.map((r) => r.item_id).toSorted(byCodeUnit)
+      ).toStrictEqual(["it-1", "it-2"]);
       const bySerial = gw.search(owner, {
         entity: "home.asset_item",
         query: "SN-9981",

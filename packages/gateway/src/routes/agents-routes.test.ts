@@ -12,6 +12,17 @@ import { describe, expect, test } from "vitest";
 
 import { readAgentsStatus } from "./agents-routes.ts";
 
+/**
+ * Reproduces the default `Array#sort` ordering (UTF-16 code units) explicitly,
+ * which is what these assertions depend on. Not `localeCompare` — that orders
+ * case and punctuation differently and would change what is being asserted.
+ */
+const byCodeUnit = (x: unknown, y: unknown): number => {
+  const a = String(x);
+  const b = String(y);
+  return a < b ? -1 : a > b ? 1 : 0;
+};
+
 describe("agents-routes", () => {
   test("reports one entry per registered runner kind", async () => {
     const s = await readAgentsStatus();
@@ -62,7 +73,9 @@ describe("agents-routes", () => {
       },
     });
     // Every registered kind is offered the override, not just a known pair.
-    expect(seen.sort()).toStrictEqual([...RUNNER_KINDS].sort());
+    expect(seen.sort(byCodeUnit)).toStrictEqual(
+      [...RUNNER_KINDS].sort(byCodeUnit)
+    );
   });
 
   test("defaults every agent to an empty model surface when no resolver is supplied", async () => {

@@ -71,7 +71,7 @@ function subtitleFor(row: GatewayRow): string {
       return "Unexpected response";
     case "unreachable":
       return "Offline";
-    default:
+    case "ready":
       return row.spaceCount === undefined
         ? "Connected"
         : `${row.spaceCount} ${row.spaceCount === 1 ? "space" : "spaces"}`;

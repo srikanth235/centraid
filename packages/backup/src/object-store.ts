@@ -6,7 +6,7 @@
  * "am I local or remote".
  */
 
-import { createWriteStream, promises as fs } from "node:fs";
+import { createWriteStream, promises as fs, type WriteStream } from "node:fs";
 import path from "node:path";
 
 export interface ObjectListEntry {
@@ -52,6 +52,17 @@ export function assertSafeKey(key: string): void {
 }
 
 /**
+ * Settle once the stream fires `drain`. Hoisted to module scope on purpose:
+ * inlining it inside `put`'s write-stream promise executor would nest two
+ * `resolve` bindings, and the executor parameter name is fixed by lint.
+ */
+function onceDrained(ws: WriteStream): Promise<void> {
+  return new Promise<void>((resolve) => {
+    ws.once("drain", () => resolve());
+  });
+}
+
+/**
  * `ObjectStore` backed by files under `root`. Keys map 1:1 to relative
  * paths; writes are atomic (temp file + rename, mirroring the registry/
  * keyring atomic-write convention elsewhere in the monorepo) so a crash
@@ -85,7 +96,14 @@ export class FsObjectStore implements ObjectStore {
           const ws = createWriteStream(tmp);
           ws.on("error", reject);
           ws.on("finish", resolve);
-          (async () => {
+          // The pump cannot be awaited here — this callback is the executor of
+          // the very promise it settles (via `resolve`/`reject`), so its result
+          // is delivered through those callbacks, not by returning. It must
+          // still not float: the inner `catch` itself does async work
+          // (`iterator.return?.()`), and if *that* rejects the outer promise
+          // would never settle and the process would see an unhandled
+          // rejection. The trailing `.catch(reject)` closes that hole.
+          const pump = async (): Promise<void> => {
             const iterator = data[Symbol.asyncIterator]();
             const writeNext = async (): Promise<void> => {
               const next = await iterator.next();
@@ -94,9 +112,7 @@ export class FsObjectStore implements ObjectStore {
                 return;
               }
               if (!ws.write(next.value)) {
-                await new Promise<void>((resolve) =>
-                  ws.once("drain", () => resolve())
-                );
+                await onceDrained(ws);
               }
               return writeNext();
             };
@@ -107,7 +123,11 @@ export class FsObjectStore implements ObjectStore {
               ws.destroy();
               reject(err instanceof Error ? err : new Error(String(err)));
             }
-          })();
+          };
+          pump().catch((err: unknown) => {
+            ws.destroy();
+            reject(err instanceof Error ? err : new Error(String(err)));
+          });
         });
       }
       await fs.rename(tmp, dest);

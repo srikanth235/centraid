@@ -152,6 +152,9 @@ function formatRss(bytes: number): string {
 }
 
 function resourceModeWord(mode: string | undefined): string {
+  // Absent mode reads as the same em-dash placeholder every other unreported
+  // diagnostics field uses (see `hardwareClassWord`).
+  if (mode === undefined) return "—";
   switch (mode) {
     case "auto":
       return "Auto";
@@ -162,7 +165,9 @@ function resourceModeWord(mode: string | undefined): string {
     case "performance":
       return "Performance";
     default:
-      return mode ?? "—";
+      // A mode the gateway reports that this build does not have a word for —
+      // show it verbatim rather than hiding it.
+      return mode;
   }
 }
 

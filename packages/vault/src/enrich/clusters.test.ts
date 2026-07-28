@@ -11,6 +11,17 @@ import { createGateway, Gateway } from "../gateway/gateway.js";
 import type { Credential } from "../gateway/types.js";
 import { recomputeDuplicateClusters } from "./clusters.js";
 
+/**
+ * Reproduces the default `Array#sort` ordering (UTF-16 code units) explicitly,
+ * which is what these assertions depend on. Not `localeCompare` — that orders
+ * case and punctuation differently and would change what is being asserted.
+ */
+const byCodeUnit = (x: unknown, y: unknown): number => {
+  const a = String(x);
+  const b = String(y);
+  return a < b ? -1 : a > b ? 1 : 0;
+};
+
 let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
@@ -105,6 +116,8 @@ describe("clusters", () => {
       where: [{ column: "cluster_id", op: "not-null" }],
       purpose: "dpv:ServiceProvision",
     }).rows;
-    expect(rows.map((r) => r.asset_id).sort()).toStrictEqual([a, b].sort());
+    expect(rows.map((r) => r.asset_id).sort(byCodeUnit)).toStrictEqual(
+      [a, b].sort(byCodeUnit)
+    );
   });
 });

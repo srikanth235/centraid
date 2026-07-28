@@ -173,7 +173,7 @@ async function assertPortFree(port: number, label: string): Promise<void> {
           )
         );
       } else {
-        reject(err);
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
     srv.once("listening", () => srv.close(() => resolve()));
@@ -207,7 +207,7 @@ function runCommand(
     child.stderr?.on("data", (d: Buffer) => (output += d.toString()));
     child.on("error", (err) => {
       clearTimeout(timer);
-      reject(err);
+      reject(err instanceof Error ? err : new Error(String(err)));
     });
     child.on("exit", (code) => {
       clearTimeout(timer);

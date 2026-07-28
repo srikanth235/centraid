@@ -291,7 +291,7 @@ export function wireAttachInput(
   getSubjectId: () => string | null | undefined,
   { act, narrate, notice, refresh }: AttachHandlers
 ): void {
-  inputEl.addEventListener("change", async () => {
+  const runAttachFlow = async (): Promise<void> => {
     const subjectId = getSubjectId();
     if (!subjectId) return;
     const files = Array.from(inputEl.files ?? []);
@@ -332,6 +332,18 @@ export function wireAttachInput(
     await attachNext(0);
     inputEl.value = "";
     await refresh?.();
+  };
+
+  // `addEventListener` discards a returned promise, so the flow is started
+  // here and this is its only boundary: without the rejection handler an
+  // `act`/`refresh` failure would become an unhandled rejection and the user
+  // would see nothing at all (fallible-action contract, coding-standards.md).
+  // Clearing the input also lets the same file be re-picked after a failure.
+  inputEl.addEventListener("change", () => {
+    runAttachFlow().catch(() => {
+      inputEl.value = "";
+      notice?.("Could not attach that file.");
+    });
   });
 }
 
