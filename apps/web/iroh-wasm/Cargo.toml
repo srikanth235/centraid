@@ -23,7 +23,7 @@ wasm-bindgen-futures = "0.4.58"
 # Held at 0.5 deliberately: reqwest (via iroh) pins wasm-streams 0.5, and two
 # copies in one wasm module emit duplicate wasm-bindgen glue symbols
 # (`__wbg_intounderlyingbytesource_free`), which fails the bitcode link.
-wasm-streams = "0.5.0"
+wasm-streams = "0.6.0"
 
 [profile.release]
 codegen-units = 1
