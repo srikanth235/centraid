@@ -34,7 +34,7 @@
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",
     "@playwright/test": "^1.62.0",
-    "@types/node": "^26.1.1",
+    "@types/node": "^26.1.2",
     "@types/qrcode": "^1.5.5",
     "@types/react": "~19.2.17",
     "@types/react-dom": "~19.2.3",
