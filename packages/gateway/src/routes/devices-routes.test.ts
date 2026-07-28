@@ -223,7 +223,7 @@ describe("devices-routes scenarios", () => {
       ["/centraid/_gateway/devices/ticket", "GET"],
       [
         `/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}`,
-        "PATCH",
+        "PUT",
       ],
       [
         `/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}/compute`,
@@ -240,6 +240,33 @@ describe("devices-routes scenarios", () => {
         error: "method_not_allowed",
       });
     });
+  });
+
+  test("a device can rename itself and the roster reflects the label", async () => {
+    const f = await harness();
+    const owner = f.enrollments.enroll({
+      endpointId: "owner-key",
+      vaultId: "vault-a",
+      label: "Old laptop",
+      role: "admin",
+    });
+    const response = await fetch(
+      `${f.base}/centraid/_gateway/devices/${encodeURIComponent(owner.enrollmentId)}`,
+      {
+        method: "PATCH",
+        headers: deviceHeaders("owner-key"),
+        body: JSON.stringify({ label: "Work laptop" }),
+      }
+    );
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      device: { label: "Work laptop", current: true },
+    });
+    expect(
+      f.enrollments
+        .list()
+        .find((row) => row.enrollmentId === owner.enrollmentId)?.label
+    ).toBe("Work laptop");
   });
 
   test("an enrollment in a foreign vault 404s rather than leaking its existence", async () => {

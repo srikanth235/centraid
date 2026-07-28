@@ -24,7 +24,7 @@
   padding: 12px;
   background: var(--lib-tile-bg);
   border: 0.5px solid var(--line);
-  border-radius: var(--lib-tile-radius);
+  border-radius: var(--lib-tile-radius, 12px);
   display: flex;
   flex-direction: column;
   gap: 10px;

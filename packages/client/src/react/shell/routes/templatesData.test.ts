@@ -7,6 +7,7 @@ import {
   loadAutomationTemplates,
   loadOverviewSuggestions,
   surfaceMintedWebhook,
+  V0_AUTOMATION_TEMPLATE_IDS,
 } from "./templatesData.js";
 
 // `vi.hoisted` lifts these mock fns above the hoisted `vi.mock` factory so it can
@@ -54,17 +55,37 @@ describe("templatesData", () => {
   });
 
   describe("templatesData", () => {
+    it("pins the exact eight-template v0 automation gallery", () => {
+      expect(V0_AUTOMATION_TEMPLATE_IDS).toStrictEqual([
+        "google-gmail-pull",
+        "google-calendar-pull",
+        "google-contacts-pull",
+        "google-drive-pull",
+        "obligation-extractor",
+        "renewal-reminders",
+        "screenshot-extractor",
+        "photo-captioner",
+      ]);
+      expect(V0_AUTOMATION_TEMPLATE_IDS).toHaveLength(8);
+    });
+
     it("loadAppTemplates keeps only non-automation entries", async () => {
-      listTemplates.mockResolvedValue([app, auto]);
+      listTemplates.mockResolvedValue([
+        app,
+        { ...auto, id: "obligation-extractor" },
+      ]);
       expect((await loadAppTemplates()).map((t) => t.id)).toStrictEqual([
         "todos",
       ]);
     });
 
     it("loadAutomationTemplates keeps only automation entries", async () => {
-      listTemplates.mockResolvedValue([app, auto]);
+      listTemplates.mockResolvedValue([
+        app,
+        { ...auto, id: "obligation-extractor" },
+      ]);
       expect((await loadAutomationTemplates()).map((t) => t.id)).toStrictEqual([
-        "digest",
+        "obligation-extractor",
       ]);
     });
 
@@ -124,7 +145,7 @@ describe("templatesData", () => {
       });
     });
 
-    it("loadOverviewSuggestions falls back to catalog order when curated ids are missing", async () => {
+    it("does not suggest unlisted catalog entries", async () => {
       listTemplates.mockResolvedValue([
         { ...auto, id: "alpha", name: "Alpha", desc: "a" },
         { ...auto, id: "beta", name: "Beta", desc: "b" },
@@ -132,7 +153,7 @@ describe("templatesData", () => {
         { ...auto, id: "delta", name: "Delta", desc: "d" },
       ]);
       const rows = await loadOverviewSuggestions(3);
-      expect(rows.map((r) => r.id)).toStrictEqual(["alpha", "beta", "gamma"]);
+      expect(rows).toStrictEqual([]);
     });
 
     it("installAppTemplate installs in place (keeps the blueprint id) and shapes a Home pin — no draft flag, no clone", async () => {

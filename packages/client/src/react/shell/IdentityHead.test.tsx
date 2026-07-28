@@ -93,7 +93,7 @@ describe("IdentityHead suite", () => {
         />
       );
       const sw = el.querySelector(
-        '[aria-label="Switch gateway"]'
+        '[aria-label="Switch space or gateway"]'
       ) as HTMLButtonElement;
       expect(sw).not.toBeNull();
       expect(sw.dataset.open).toBe("true");

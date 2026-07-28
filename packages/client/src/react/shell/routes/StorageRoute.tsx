@@ -1,20 +1,6 @@
-import { type JSX, useCallback, useEffect, useState } from "react";
+import { type JSX } from "react";
 
-import {
-  confirmGatewayRecoveryKit,
-  getGatewayBackupStatus,
-  getLocalStorageUsage,
-  runGatewayBackupNow,
-  updateGatewayBackupPolicy,
-  updateStorageLimits,
-  verifyGatewayBackupBucket,
-  verifyGatewayBackupsNow,
-  streamStorageCustody,
-} from "../../../gateway-client.js";
-import StorageScreen from "../../screens/StorageScreen.js";
-import { useShellActions } from "../actions.js";
-import PageScroll from "../PageScroll.js";
-import { loadStorageUsageAggregate } from "./gatewayStorageData.js";
+import GatewayRoute from "./GatewayRoute.js";
 
 // React-owned Storage route (issue #544 — this was BackupsRoute). Local
 // footprint, the owner's limits, and the offsite snapshot custody that used
@@ -28,43 +14,5 @@ import { loadStorageUsageAggregate } from "./gatewayStorageData.js";
 // driving the backup card's relative ages ("verified 4m ago"), same as
 // GatewayRoute.
 export default function StorageRoute(): JSX.Element {
-  const { navigate } = useShellActions();
-  const [now, setNow] = useState(() => Date.now());
-  const streamBackupCustody = useCallback(
-    (onChange: () => void, signal: AbortSignal) =>
-      streamStorageCustody(onChange, signal),
-    []
-  );
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  return (
-    <PageScroll
-      title="Storage"
-      subtitle="What Centraid is using on this machine, the limits you've set, and where your bytes actually live."
-    >
-      <StorageScreen
-        now={now}
-        loadLocalUsage={getLocalStorageUsage}
-        saveStorageLimits={updateStorageLimits}
-        loadBackupStatus={getGatewayBackupStatus}
-        streamBackupCustody={streamBackupCustody}
-        onRunBackupNow={runGatewayBackupNow}
-        onVerifyBackupNow={verifyGatewayBackupsNow}
-        onUpdateBackupPolicy={updateGatewayBackupPolicy}
-        onVerifyBackupBucket={verifyGatewayBackupBucket}
-        onExportRecoveryKit={(input) =>
-          window.CentraidApi.exportGatewayRecoveryKit(input)
-        }
-        onConfirmRecoveryKit={confirmGatewayRecoveryKit}
-        loadStorageUsage={loadStorageUsageAggregate}
-        onOpenStorageSettings={() =>
-          navigate({ kind: "settings", page: "storage" })
-        }
-      />
-    </PageScroll>
-  );
+  return <GatewayRoute initialTab="storage" />;
 }

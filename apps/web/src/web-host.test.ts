@@ -59,7 +59,7 @@ describe("web-host", () => {
       endpointTicket: "endpoint",
       ticketId: "ticket",
       secret: "secret",
-      deviceName: "Web browser",
+      deviceName: expect.stringMatching(/^Web browser · [A-F0-9]{4}$/u),
       rememberDevice: false,
     });
     const persisted = JSON.parse(
@@ -69,6 +69,7 @@ describe("web-host", () => {
       endpointTicket: "endpoint",
       endpointId: "gateway-endpoint",
       vaultId: "vault-1",
+      label: "Home gateway",
     });
     expect(JSON.stringify(persisted)).not.toContain("secret");
     await expect(window.CentraidApi.getGatewayAuth()).resolves.toMatchObject({

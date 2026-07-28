@@ -32,7 +32,7 @@ describe("backend suite", () => {
     expect(t).toContain("tool.start");
     expect(t).toContain("tool.result");
     expect(t.at(-1)).toBe("final");
-    expect(notices(events)).toContain("session_continuity");
+    expect(notices(events)).not.toContain("session_continuity");
     expect(notices(events)).toContain("permission_auto_allowed");
 
     // Streamed assistant text accumulates across chunks.
@@ -223,7 +223,7 @@ describe("backend suite", () => {
       prevSessionId: "prev-resume-1",
     });
     expect(result.sessionId).toBe("prev-resume-1");
-    expect(notices(events)).toContain("session_continuity");
+    expect(notices(events)).not.toContain("session_continuity");
     // Resume must not leak load-style history replay.
     const allText = JSON.stringify(events);
     expect(allText).not.toContain("HISTORY_USER");
@@ -232,7 +232,7 @@ describe("backend suite", () => {
   test("permission auto-allow emits an audit notice", async () => {
     const { events } = await runFake({ extraArgs: ["--mode=normal"] });
     expect(notices(events)).toContain("permission_auto_allowed");
-    expect(notices(events)).toContain("session_continuity");
+    expect(notices(events)).not.toContain("session_continuity");
     const plan = events.find((e) => e.type === "phase" && e.phase === "plan");
     expect(plan && plan.type === "phase" && plan.plan?.length).toBe(2);
     const toolResult = events.find((e) => e.type === "tool.result");

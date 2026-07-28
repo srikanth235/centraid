@@ -99,7 +99,7 @@ export interface BackupCardProps {
     password: string;
     lossConsent: true;
   }) => Promise<{ confirmedAt: number }>;
-  /** Navigates to Settings → Storage (the head's "Manage" link). */
+  /** Optional setup destination for hosts that expose backup configuration. */
   onOpenSettings?: () => void;
 }
 
@@ -439,9 +439,9 @@ export default function BackupCard({
         ) : (
           <>
             <p className={styles.notConfigured}>
-              Your data isn’t backed up offsite yet. In Settings → Storage,
-              connect your storage provider and set this vault to Hosted. Until
-              then, databases, code, and attachments live only on this machine.
+              Your data isn’t backed up offsite yet. Until backup custody is
+              configured on this gateway, databases, code, and attachments live
+              only on this machine.
             </p>
             <RecoveryKitGate
               configured={status.configured}

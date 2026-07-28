@@ -189,6 +189,35 @@
   color: var(--ink);
   overflow-wrap: anywhere;
 }
+.renameForm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.renameInput {
+  width: min(190px, 30vw);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  padding: 3px 6px;
+}
+.renameAction,
+.renameIcon {
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  font: var(--t-tiny);
+  padding: 3px 5px;
+}
+.renameAction:hover,
+.renameIcon:hover {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+}
 
 .currentChip,
 .transportChip {

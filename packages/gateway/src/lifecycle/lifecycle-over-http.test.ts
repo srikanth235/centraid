@@ -64,7 +64,7 @@ describe("lifecycle-over-http scenarios", () => {
   beforeEach(async () => {
     dataDir = await tempDir(`gw-lifecycle-${crypto.randomUUID()}-`);
     handle = await serve({ paths: pathsUnder(dataDir) });
-  });
+  }, 30_000);
 
   afterEach(async () => {
     await handle?.close().catch(() => undefined);

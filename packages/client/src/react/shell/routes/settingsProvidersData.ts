@@ -289,6 +289,14 @@ function toCard(
     connected: entry.available,
     sessionReady:
       entry.available && caps?.reachable === true && caps.authRequired !== true,
+    ...(entry.available &&
+    !(caps?.reachable === true && caps.authRequired !== true)
+      ? {
+          fallbackBlockedReason: caps?.authRequired
+            ? "sign-in required"
+            : (caps?.reason ?? "session readiness has not succeeded"),
+        }
+      : {}),
     kind: entry.kind,
     models: models.map((m) => ({
       default: m.default,

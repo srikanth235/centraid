@@ -9,6 +9,10 @@ Copying `vault.db` (and `journal.db`) with `cp` while SQLite is in WAL mode, or 
 - Vault DBs open with **`PRAGMA wal_autocheckpoint = 0`** — the **shipper is the sole checkpointer** (TRUNCATE-only path). See `packages/vault/src/db.ts`, `packages/vault/src/gateway/custody.ts`.
 - Sealing keys live under `keys/` **outside** backup scope — a naive directory copy may miss or incorrectly include them.
 - Product restore is **side-directory** only; adopt is a separate step (`recover` / backup admin). Never "fix in place" over a live vault.
+- Fresh bootstrap is the sole pre-shipper exception: after schema/default
+  writes finish, `VaultPlane` truncates both WALs once before attaching the
+  shipper. This keeps first-boot footprint bounded without weakening
+  `wal_autocheckpoint = 0` or competing with the shipper.
 
 ## How agents get it wrong
 

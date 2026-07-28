@@ -202,30 +202,15 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 13px;
 }
-.card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-  padding: 18px;
-  text-align: left;
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-  cursor: pointer;
-  font: inherit;
-  color: var(--ink);
+.templateVariant {
   overflow: hidden;
-  transition:
-    border-color 0.16s ease,
-    background 0.16s ease;
 }
 /* Hairline identity-hue accent — a 2px edge keyed off trigger kind
    (--tk-hue, set inline per card), the same decorative-only role
    automation.module.css's [data-hue] mapping plays for automation
    instances (see that module's header comment). Quiet by default, reads
    a touch stronger on hover — no lift, no shadow. */
-.card::before {
+.templateVariant::before {
   content: "";
   position: absolute;
   top: 0;
@@ -236,15 +221,7 @@
   opacity: 0.5;
   transition: opacity 0.16s ease;
 }
-.card:hover {
-  border-color: var(--line-strong);
-  background: color-mix(
-    in srgb,
-    var(--tk-hue, var(--accent)) 4%,
-    var(--bg-elev)
-  );
-}
-.card:hover::before {
+.templateVariant:hover::before {
   opacity: 0.9;
 }
 .top {
@@ -263,7 +240,7 @@
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   transition: background 0.16s ease;
 }
-.card:hover .emoji {
+.templateVariant:hover .emoji {
   background: color-mix(in srgb, var(--tk-hue, var(--accent)) 16%, transparent);
 }
 .name {

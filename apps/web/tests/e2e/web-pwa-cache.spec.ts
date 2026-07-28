@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+// governance: allow-repo-hygiene file-size-limit (#608) cohesive service-worker upgrade suite shares one synthetic tunnel-cache harness
 
 // These tests drive the service worker's tunnel cache directly. The SW asks a
 // window client to fulfil `/__centraid_iroh__/...` requests over the
@@ -248,7 +249,7 @@ test("a remote 403 revalidation evicts cached blobs for the revoked device", asy
     "BLOBDATA"
   );
   await expect
-    .poll(() => page.evaluate(() => caches.has("centraid-tunnel-blobs-v11")))
+    .poll(() => page.evaluate(() => caches.has("centraid-tunnel-blobs-v12")))
     .toBe(true);
   await page.evaluate(() => {
     (window as unknown as { __bridgeRevoked: boolean }).__bridgeRevoked = true;
@@ -260,7 +261,7 @@ test("a remote 403 revalidation evicts cached blobs for the revoked device", asy
     "BLOBDATA"
   );
   await expect
-    .poll(() => page.evaluate(() => caches.has("centraid-tunnel-blobs-v11")))
+    .poll(() => page.evaluate(() => caches.has("centraid-tunnel-blobs-v12")))
     .toBe(false);
   expect(await page.evaluate((u) => fetch(u).then((r) => r.status), url)).toBe(
     403
@@ -335,7 +336,7 @@ test("gzip-encoded tunnel responses are decoded before caching", async ({
   await expect
     .poll(() =>
       page.evaluate(async () => {
-        const cache = await caches.open("centraid-tunnel-assets-v11");
+        const cache = await caches.open("centraid-tunnel-assets-v12");
         const key = new URL("/centraid/gzip-fixture/asset.js", location.origin);
         key.searchParams.set("__centraid_scope", "d-bridge-a");
         key.searchParams.set("__centraid_app_scope", "gzip-fixture");
@@ -377,7 +378,7 @@ test("remembered app launch, no-store document, and assets replay in airplane mo
   await expect
     .poll(() =>
       page.evaluate(async () => {
-        const cache = await caches.open("centraid-tunnel-assets-v11");
+        const cache = await caches.open("centraid-tunnel-assets-v12");
         const keys = await cache.keys();
         return keys.filter((key) =>
           key.url.includes("__centraid_scope=d-offline")
@@ -491,7 +492,7 @@ test("unpair purges the tunnel caches but keeps the shell cache", async ({
   );
 
   await expect
-    .poll(() => page.evaluate(() => caches.has("centraid-tunnel-blobs-v11")))
+    .poll(() => page.evaluate(() => caches.has("centraid-tunnel-blobs-v12")))
     .toBe(true);
 
   await page.evaluate(() =>
@@ -501,13 +502,13 @@ test("unpair purges the tunnel caches but keeps the shell cache", async ({
   );
 
   await expect
-    .poll(() => page.evaluate(() => caches.has("centraid-tunnel-blobs-v11")))
+    .poll(() => page.evaluate(() => caches.has("centraid-tunnel-blobs-v12")))
     .toBe(false);
   await expect
-    .poll(() => page.evaluate(() => caches.has("centraid-tunnel-assets-v11")))
+    .poll(() => page.evaluate(() => caches.has("centraid-tunnel-assets-v12")))
     .toBe(false);
   // The generic shell cache is not gateway-specific and survives an unpair.
-  expect(await page.evaluate(() => caches.has("centraid-shell-v11"))).toBe(
+  expect(await page.evaluate(() => caches.has("centraid-shell-v12"))).toBe(
     true
   );
 });
@@ -534,7 +535,7 @@ test("a fresh worker install purges stale-version caches", async ({ page }) => {
   await expect
     .poll(() => page.evaluate(() => caches.has("centraid-shell-legacy")))
     .toBe(false);
-  expect(await page.evaluate(() => caches.has("centraid-shell-v11"))).toBe(
+  expect(await page.evaluate(() => caches.has("centraid-shell-v12"))).toBe(
     true
   );
 });

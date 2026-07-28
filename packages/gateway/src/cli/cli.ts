@@ -24,7 +24,7 @@
  * Subcommands:
  *   centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]
  *   centraid-gateway vault <list|create|rename|delete> --data-dir <path> …   (offline maintenance)
- *   centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>] [--json]
+ *   centraid-gateway pair [--config <path> | --data-dir <path>] [--port <p>] [--vault <name-or-id>] …
  *   centraid-gateway members <list|add|rename|remove> --data-dir <path> …
  *   centraid-gateway devices <list|add|revoke> --data-dir <path> …
  *   centraid-gateway key <status|export|restore|rotate> --data-dir <path> …  (custody, #298)
@@ -34,9 +34,8 @@
  *   centraid-gateway --version
  *
  * `--json` on `pair`/`vault list`/`vault create`/`status` (issue #382) swaps
- * the human text for a single machine-readable line — the desktop's SSH
- * ConnectFlow drives the remote CLI this way; every other subcommand's
- * output is unchanged.
+ * the human text for a single machine-readable line. Every other
+ * subcommand's output is unchanged.
  */
 
 import { promises as fs, realpathSync } from "node:fs";
@@ -102,7 +101,7 @@ function usage(): never {
       "  centraid-gateway vault create --data-dir <path> [--name <name>] [--json]",
       "  centraid-gateway vault rename --data-dir <path> <vaultId> <name>",
       "  centraid-gateway vault delete --data-dir <path> <vaultId>",
-      "  centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>] [--role admin|write|read] [--qr] [--json]",
+      "  centraid-gateway pair [--config <path> | --data-dir <path>] [--port <p>] [--vault <name-or-id>] [--member <id-or-label> | --new-member <label>] [--grant <vault>:<role>]… [--ttl-minutes <n>] [--role admin|write|read] [--qr] [--json]",
       "  centraid-gateway members list --data-dir <path>",
       "  centraid-gateway members add --data-dir <path> <label>",
       "  centraid-gateway members rename --data-dir <path> <member-id-or-label> --label <new-label>",
@@ -127,15 +126,16 @@ function usage(): never {
       "  centraid-gateway --version",
       "  centraid-gateway --help",
       "",
-      "vault/pair/members/devices/key are stopped-daemon maintenance commands:",
+      "vault/members/devices/key are stopped-daemon maintenance commands:",
       "mutations take gateway.db's exclusive lock and refuse while the",
       "daemon is running. Recovery uses only a password-wrapped recovery kit;",
       "no command emits a raw vault key.",
       "",
-      "There is no shared gateway-wide credential and no direct HTTP pairing.",
+      "pair talks to the live loopback daemon using its host-custody bearer.",
+      "Without --member/--new-member it pairs another device to the existing owner.",
       "Admin capability is a per-device, revocable enrollment role.",
       "`pair --qr` prints a UTF-8 block QR of the one-line iroh ticket for",
-      "phones over SSH; redemption proves the joining device EndpointId.",
+      "phone cameras; redemption proves the joining device EndpointId.",
       "",
       "backup is the offsite engine (PROTOCOL.md/FORMAT.md), config from the",
       "same --config/--data-dir resolution `serve` uses (its JSON config",

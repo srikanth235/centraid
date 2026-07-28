@@ -316,4 +316,29 @@ describe("devices-routes-invitations scenarios", () => {
       vaultId: "vault-a",
     });
   });
+
+  test("host custody defaults to the existing owner unless a new member is explicit", async () => {
+    const f = await harness({
+      canMintPairingTicket: () => true,
+      vaultIds: () => ["vault-a"],
+    });
+    const owner = f.enrollments.enroll({
+      endpointId: "owner-key",
+      vaultId: "vault-a",
+      label: "Owner laptop",
+      role: "admin",
+      memberLabel: "Priya",
+    });
+    const response = await fetch(`${f.base}/centraid/_gateway/devices/ticket`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      memberId: owner.memberId,
+      memberLabel: "Priya",
+      grants: [{ vaultId: "vault-a", role: "admin" }],
+    });
+  });
 });

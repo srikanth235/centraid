@@ -36,7 +36,10 @@ import type { ConnectionBroker } from "../serve/connection-broker.js";
 import { vaultContext } from "../serve/vault-context.js";
 import type { VaultPlane } from "../serve/vault-plane.js";
 import type { VaultRegistry } from "../serve/vault-registry.js";
-import { PROVIDER_PRESETS } from "./connection-providers.js";
+import {
+  OFFERED_PROVIDER_PRESETS,
+  PROVIDER_PRESETS,
+} from "./connection-providers.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 const PREFIX = ROUTES.vaultConnections;
@@ -194,7 +197,7 @@ export function makeConnectionsRouteHandler(
       method === "GET"
     ) {
       sendJson(res, 200, {
-        providers: PROVIDER_PRESETS,
+        providers: OFFERED_PROVIDER_PRESETS,
         assist: assistOAuth
           ? {
               enabled: true,

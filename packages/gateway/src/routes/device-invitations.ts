@@ -10,7 +10,7 @@
  *               caller must be `admin` in EVERY vault the ticket grants.
  *
  * The host-custody lane (landlord bearer on the loopback socket) is L0 root
- * and may mint anything; it is the SSH bootstrap path and the only way back
+ * and may mint anything; it is the local recovery path and the only way back
  * in after every device is lost.
  *
  * A joining device never names its own member or roles — this module decides
@@ -108,11 +108,17 @@ export function resolveInvitation(
   // The picker never sends free text for an existing person: `memberId`
   // resolves an id (or an exact label, for the CLI's `--member`) and 404s
   // otherwise, so a typo can never mint a phantom member with live access.
+  const hostDefaultOwner =
+    input.hostCustody &&
+    requestedMember === undefined &&
+    newMemberLabel === undefined
+      ? members.adminsOf(input.target).map((id) => members.get(id))[0]
+      : undefined;
   const existing =
     requestedMember === undefined
       ? newMemberLabel
         ? undefined
-        : callerMember
+        : (callerMember ?? hostDefaultOwner)
       : members.find(requestedMember);
   if (requestedMember !== undefined && !existing) {
     return {
@@ -127,8 +133,8 @@ export function resolveInvitation(
   const grants =
     input.grants.length > 0
       ? input.grants
-      : isSelfPair && callerMember
-        ? members.grants(callerMember.memberId)
+      : (isSelfPair && callerMember) || hostDefaultOwner
+        ? members.grants(existing!.memberId)
         : [{ vaultId: input.target, role: input.role }];
   if (grants.length === 0) {
     return {

@@ -10,6 +10,7 @@ import { cx } from "../ui/cx.js";
 import { Icon } from "../ui/index.js";
 
 import au from "../styles/automation.module.css";
+import appCard from "../ui/AppCard.module.css";
 import styles from "./AutomationTemplatesScreen.module.css";
 
 type Trig = "all" | "cron" | "webhook" | "data" | "condition";
@@ -66,7 +67,7 @@ function TemplateCard({
   return (
     <button
       type="button"
-      className={styles.card}
+      className={cx(appCard.card, appCard.small, styles.templateVariant)}
       style={{ "--tk-hue": `var(--c-${meta.hue})` } as CSSProperties}
       onClick={() => onOpen(t)}
     >

@@ -28,6 +28,7 @@ export interface DeviceRowProps {
     device: CentraidGatewayDevice,
     confirmLastAdmin?: string
   ) => Promise<void>;
+  onRename?: (device: CentraidGatewayDevice, label: string) => Promise<void>;
   onUpdateCompute?: (
     device: CentraidGatewayDevice,
     enabled: boolean
@@ -54,6 +55,7 @@ export default function DeviceRow({
   device,
   now,
   onRevoke,
+  onRename,
   onUpdateCompute,
 }: DeviceRowProps): JSX.Element {
   const [confirming, setConfirming] = useState(false);
@@ -63,6 +65,8 @@ export default function DeviceRow({
   // of the space's last owner, so the confirm escalates in place.
   const [strandedSpace, setStrandedSpace] = useState<string | null>(null);
   const [computeBusy, setComputeBusy] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [name, setName] = useState(device.label);
 
   const lastSeen = device.lastUsedAt
     ? ageLabel(device.lastUsedAt, now)
@@ -113,7 +117,59 @@ export default function DeviceRow({
       </span>
       <div className={styles.main}>
         <div className={styles.nameLine}>
-          <span className={styles.name}>{device.label}</span>
+          {editingName ? (
+            <form
+              className={styles.renameForm}
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!name.trim() || !onRename) return;
+                setBusy(true);
+                void onRename(device, name.trim())
+                  .then(() => setEditingName(false))
+                  .catch((err: unknown) =>
+                    setError(err instanceof Error ? err.message : String(err))
+                  )
+                  .finally(() => setBusy(false));
+              }}
+            >
+              <input
+                className={styles.renameInput}
+                aria-label="Device name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                autoFocus
+              />
+              <button
+                type="submit"
+                className={styles.renameAction}
+                disabled={busy}
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                className={styles.renameAction}
+                onClick={() => {
+                  setName(device.label);
+                  setEditingName(false);
+                }}
+              >
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <span className={styles.name}>{device.label}</span>
+          )}
+          {onRename && !editingName ? (
+            <button
+              type="button"
+              className={styles.renameIcon}
+              aria-label={`Rename ${device.label}`}
+              onClick={() => setEditingName(true)}
+            >
+              <Icon name="Pencil" size={12} />
+            </button>
+          ) : null}
           {device.current ? (
             <span className={styles.currentChip}>This device</span>
           ) : null}

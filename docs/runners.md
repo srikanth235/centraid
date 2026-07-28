@@ -2,7 +2,20 @@
 
 A **runner** is a coding-agent CLI Centraid can drive to produce a turn — `codex`, `claude-code`, `gemini`, `qwen`, `opencode`, `grok`, `kimi`, `copilot`, `cursor`, `kilo`, `cline`, `goose`, `auggie`, `vibe`, `droid`, `pi`, or a custom `acp` binary. The user-facing ids (`RunnerKind`) are stable; how we talk to them is not.
 
-## Supported harnesses
+## Registry and offered roster
+
+The runtime registry remains intentionally open for persisted preferences and
+custom deployments. The v0 Settings inventory and new routing controls offer
+exactly **Codex, Claude Code, opencode, Grok, and pi**. A previously saved pin
+to another registered kind remains visible and removable and continues to run;
+it is not silently rewritten.
+
+CLI availability probes are cached by runner kind plus effective binary for 24
+hours. Settings → Agents **Refresh** bypasses that cache and repopulates it, so
+repeat visits do not spawn every CLI while an explicit diagnostic refresh still
+observes installs and removals immediately.
+
+## Registered harnesses
 
 | Kind | Label | `defaultBin` | ACP launch | Min version | Install |
 | --- | --- | --- | --- | --- | --- |

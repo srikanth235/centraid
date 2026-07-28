@@ -135,7 +135,7 @@
   text-align: left;
   padding: var(--lib-tile-pad);
   border: 0.5px solid var(--line);
-  border-radius: var(--lib-tile-radius);
+  border-radius: var(--lib-tile-radius, 12px);
   background: var(--lib-tile-bg);
   cursor: pointer;
   color: inherit;

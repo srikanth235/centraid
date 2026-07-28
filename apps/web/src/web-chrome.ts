@@ -86,19 +86,22 @@ export function installWebChrome(): void {
     "offline",
     "You’re offline. Centraid will reconnect to your gateway when the network returns."
   );
-  const syncOnline = (): void => {
+  const syncGateway = (snapshot?: {
+    status?: "unknown" | "up" | "down";
+  }): void => {
     offline.toggleAttribute(
       "data-visible",
-      !navigator.onLine && onboardingComplete()
+      snapshot?.status === "down" && onboardingComplete()
     );
   };
-  window.addEventListener("online", syncOnline);
-  window.addEventListener("offline", syncOnline);
   // The onboarding stamp is written through `saveSettingsPatch`, which
-  // publishes this — so the banner appears the moment first run finishes on
-  // an offline tab, with no polling.
-  subscribe(SETTINGS_EVENT, syncOnline);
-  syncOnline();
+  // publishes this. Re-read the gateway-owned health snapshot so this chrome
+  // and Gateway → Overview always use the same authority.
+  subscribe(SETTINGS_EVENT, () => {
+    void window.CentraidApi.getGatewayRuntime().then(syncGateway);
+  });
+  window.CentraidApi.onGatewayRuntime(syncGateway);
+  void window.CentraidApi.getGatewayRuntime().then(syncGateway);
 
   // Keep listening across the session (not `{ once: true }`) so a later
   // re-offer after days, or a menu action, can still use the event.

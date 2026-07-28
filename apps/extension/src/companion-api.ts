@@ -81,7 +81,9 @@ async function pair(
     endpointTicket: ticket.endpointTicket,
     ticketId: ticket.ticketId,
     secret: ticket.secret,
-    deviceName: deviceName?.trim() || "Centraid Companion",
+    deviceName:
+      deviceName?.trim() ||
+      `Centraid Companion · ${crypto.randomUUID().slice(0, 4).toUpperCase()}`,
     grantProfile,
   });
   if (

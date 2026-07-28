@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+// governance: allow-repo-hygiene file-size-limit (#608) cohesive availability-probe contract shares executable fixtures and cache timing seams
 
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -21,6 +22,7 @@ describe("preflight suite", () => {
   let savedPath: string | undefined;
 
   afterEach(() => {
+    invalidatePreflightCache();
     if (savedPath !== undefined) {
       process.env.PATH = savedPath;
       savedPath = undefined;
@@ -340,6 +342,20 @@ describe("preflight suite", () => {
     const status = await probeCliAvailability("codex", "/no/such/bin");
     expect(status.available).toBe(false);
     expect(status.version).toBeUndefined();
+  });
+
+  test("availability is warm within its TTL and explicit refresh invalidates it", async () => {
+    const dir = await tempDir("availability-cache-");
+    const bin = path.join(dir, "agent");
+    await fs.writeFile(bin, "#!/bin/sh\nprintf 'agent 1.0.0\\n'\n");
+    await fs.chmod(bin, 0o755);
+    expect((await probeCliAvailability("codex", bin)).available).toBe(true);
+
+    await fs.unlink(bin);
+    expect((await probeCliAvailability("codex", bin)).available).toBe(true);
+    expect(
+      (await probeCliAvailability("codex", bin, { refresh: true })).available
+    ).toBe(false);
   });
 
   // ---- PATH sanitization (issue: stray ~/node_modules/.bin/claude shim) ---

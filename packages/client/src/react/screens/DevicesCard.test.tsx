@@ -171,6 +171,46 @@ describe("DevicesCard suite", () => {
       expect(button(el, "Remove Priya")).toBeTruthy();
     });
 
+    it("renames a device inline without revoking it", async () => {
+      const original = device();
+      const onRenameDevice = vi
+        .fn<NonNullable<DevicesCardProps["onRenameDevice"]>>()
+        .mockResolvedValue({ ...original, label: "Kitchen browser" });
+      const onRevokeDevice = vi
+        .fn<DevicesCardProps["onRevokeDevice"]>()
+        .mockResolvedValue({ removed: true });
+      const el = await mount({
+        loadDevices: vi
+          .fn<DevicesCardProps["loadDevices"]>()
+          .mockResolvedValue([original]),
+        onRenameDevice,
+        onRevokeDevice,
+      });
+
+      await click(
+        el.querySelector<HTMLButtonElement>(
+          '[aria-label="Rename Priya’s browser"]'
+        ) ?? undefined
+      );
+      const input = el.querySelector<HTMLInputElement>(
+        'input[aria-label="Device name"]'
+      )!;
+      await act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value"
+        )?.set;
+        setter?.call(input, "Kitchen browser");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await click(button(el, "Save"));
+
+      expect(onRenameDevice).toHaveBeenCalledWith("enr_1", "Kitchen browser");
+      expect(onRevokeDevice).not.toHaveBeenCalled();
+      expect(el.textContent).toContain("Kitchen browser");
+    });
+
     it("requires a confirm step before revoking one device, then calls onRevokeDevice", async () => {
       const onRevokeDevice = vi
         .fn<DevicesCardProps["onRevokeDevice"]>()

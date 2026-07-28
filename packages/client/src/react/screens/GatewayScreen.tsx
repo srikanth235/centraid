@@ -13,6 +13,7 @@ import {
 } from "../shell/routes/gatewayData.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
+import BackupCard, { type BackupCardProps } from "./BackupCard.js";
 import GatewayAlertsTab from "./GatewayAlertsTab.js";
 import LogsScreen, { type LogsBridgeProps } from "./LogsScreen.js";
 import ResourceModeCard, {
@@ -24,16 +25,15 @@ import SettingsDiagnosticsScreen, {
   type GatewayHealthDTO,
   type SettingsDiagnosticsBridgeProps,
 } from "./SettingsDiagnosticsScreen.js";
+import StorageScreen, { type StorageScreenProps } from "./StorageScreen.js";
 
 import a11y from "../styles/a11y.module.css";
 import styles from "./GatewayScreen.module.css";
 
-// Gateway runtime, component health, logs, and alerts share one instrument
-// panel (#341/#344/#347). Backup/storage custody used to live on the Overview
-// tab too; it's its own page now (BackupsScreen) — "is the gateway up" and "are
-// my bytes safe" are different questions. People & devices left for the same
-// reason (#599): who may act here is a household question, not a runtime one,
-// and it now lives on the Household page.
+// Gateway runtime, backup custody, local storage, component health, logs, and
+// alerts share one instrument panel (#341/#344/#347/#608). Backup/recovery
+// stays on Overview; footprint and limits live on Storage. People & devices
+// remain on Household (#599), where their ownership context is visible.
 
 export interface GatewayScreenProps {
   snapshot: GatewayRuntimeSnapshot;
@@ -84,12 +84,18 @@ export interface GatewayScreenProps {
    */
   loadKnobPrefs?: ResourceModeCardProps["loadKnobPrefs"];
   saveKnobPrefs?: ResourceModeCardProps["saveKnobPrefs"];
+  /** Backup custody remains on Overview while local footprint lives on Storage. */
+  backup?: Omit<BackupCardProps, "now">;
+  initialTab?: TabId;
+  loadLocalUsage?: StorageScreenProps["loadLocalUsage"];
+  saveStorageLimits?: StorageScreenProps["saveStorageLimits"];
 }
 
-type TabId = "overview" | "components" | "logs" | "alerts";
+type TabId = "overview" | "storage" | "components" | "logs" | "alerts";
 
 const TABS: readonly { id: TabId; label: string }[] = [
   { id: "overview", label: "Overview" },
+  { id: "storage", label: "Storage" },
   { id: "components", label: "Components" },
   { id: "logs", label: "Logs" },
   { id: "alerts", label: "Alerts" },
@@ -131,7 +137,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
     ? health.components.filter((c) => c.status !== "ok").length
     : 0;
 
-  const [tab, setTab] = useState<TabId>("overview");
+  const [tab, setTab] = useState<TabId>(props.initialTab ?? "overview");
   const [logsFocus, setLogsFocus] = useState<
     { text: string; nonce: number } | undefined
   >(undefined);
@@ -411,6 +417,8 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
               </section>
             </div>
           </div>
+
+          {props.backup ? <BackupCard {...props.backup} now={now} /> : null}
         </>
       ) : null}
 
@@ -419,6 +427,15 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
           <SettingsDiagnosticsScreen
             loadHealth={props.loadHealth}
             onJumpToLogs={jumpToLogs}
+          />
+        </div>
+      ) : null}
+
+      {tab === "storage" && props.loadLocalUsage && props.saveStorageLimits ? (
+        <div className={styles.tabPane}>
+          <StorageScreen
+            loadLocalUsage={props.loadLocalUsage}
+            saveStorageLimits={props.saveStorageLimits}
           />
         </div>
       ) : null}

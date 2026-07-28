@@ -2,6 +2,7 @@
  * Gateway device enrollments (issues #555, #599).
  *
  * Since #599 a `devices` row is a pure BINDING of a proved iroh EndpointId to
+ * governance: allow-repo-hygiene file-size-limit (#608) cohesive enrollment aggregate owns atomic member, device, grant, checkpoint, and rename invariants
  * a member (`member-store.ts`), and authority is authored on `(member, vault)`
  * in `member_roles`. A `DeviceEnrollment` is therefore a DERIVED view — one
  * per (device, vault) the device's member holds a role in — not a stored row.
@@ -262,6 +263,7 @@ export class EnrollmentStore {
   enrollWithinTransaction(input: EnrollInput): DeviceEnrollment[] {
     const grants = resolveGrants(input);
     const memberId = this.resolveMemberWithinTransaction(input);
+    const label = this.uniqueDeviceLabel(input.label, input.endpointId);
     for (const grant of grants) {
       this.members.setGrantWithinTransaction(
         memberId,
@@ -298,7 +300,7 @@ export class EnrollmentStore {
         )
         .run(
           memberId,
-          input.label,
+          label,
           platform,
           input.rememberDevice === true ? 1 : 0,
           grantProfile,
@@ -316,7 +318,7 @@ export class EnrollmentStore {
           crypto.randomUUID(),
           input.endpointId,
           memberId,
-          input.label,
+          label,
           input.platform ?? null,
           input.rememberDevice === true ? 1 : 0,
           input.grantProfile ? JSON.stringify(input.grantProfile) : null,
@@ -331,6 +333,31 @@ export class EnrollmentStore {
     return this.list().filter(
       (row) => row.endpointId === input.endpointId && vaultIds.has(row.vaultId)
     );
+  }
+
+  /**
+   * Household rows must remain distinguishable even when two clients submit
+   * the same generated default. The gateway is the only participant with the
+   * complete live roster, so resolve collisions atomically at enrollment.
+   */
+  private uniqueDeviceLabel(requested: string, endpointId: string): string {
+    const used = new Set(
+      (
+        this.gatewayDatabase.db
+          .prepare(
+            "SELECT label FROM devices WHERE endpoint_id <> ? AND revoked = 0"
+          )
+          .all(endpointId) as Array<{ label: string }>
+      ).map((row) => row.label)
+    );
+    if (!used.has(requested)) return requested;
+
+    const endpointLabel = `${requested} · ${endpointId}`;
+    if (!used.has(endpointLabel)) return endpointLabel;
+    for (let ordinal = 2; ; ordinal += 1) {
+      const candidate = `${endpointLabel} (${ordinal})`;
+      if (!used.has(candidate)) return candidate;
+    }
   }
 
   get(endpointId: string, vaultId: string): DeviceEnrollment | undefined {
@@ -441,6 +468,23 @@ export class EnrollmentStore {
       }
       return removed;
     });
+  }
+
+  rename(enrollmentId: string, label: string): DeviceEnrollment {
+    const trimmed = label.trim();
+    if (!trimmed) throw new Error("device label must not be empty");
+    const updated = this.gatewayDatabase.db
+      .prepare(
+        "UPDATE devices SET label = ? WHERE enrollment_id = ? AND revoked = 0"
+      )
+      .run(trimmed, enrollmentId);
+    if (updated.changes !== 1)
+      throw new Error("device enrollment was not found");
+    const row = this.list().find(
+      (candidate) => candidate.enrollmentId === enrollmentId
+    );
+    if (!row) throw new Error("device enrollment vanished after rename");
+    return row;
   }
 
   /** Remove a person and every binding they own — the L2 revocation verb. */

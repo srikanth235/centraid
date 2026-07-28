@@ -63,7 +63,7 @@ const appTemplate = {
 } satisfies Template;
 
 const autoTemplate = {
-  id: "digest",
+  id: "obligation-extractor",
   name: "Digest",
   desc: "Send a daily roundup.",
   colorKey: "teal",
@@ -272,7 +272,9 @@ describe("DiscoverRoute", () => {
         await flush();
       });
 
-      expect(gwCloneTemplate).toHaveBeenCalledWith({ templateId: "digest" });
+      expect(gwCloneTemplate).toHaveBeenCalledWith({
+        templateId: "obligation-extractor",
+      });
       expect(gwInstallTemplate).toHaveBeenCalledTimes(0);
       expect(navigate).toHaveBeenCalledWith({ kind: "automations" });
       expect(setUserApps).toHaveBeenCalledTimes(0);
@@ -306,7 +308,9 @@ describe("DiscoverRoute", () => {
         await flush();
       });
 
-      expect(gwCloneTemplate).toHaveBeenCalledWith({ templateId: "digest" });
+      expect(gwCloneTemplate).toHaveBeenCalledWith({
+        templateId: "obligation-extractor",
+      });
       expect(navigate).toHaveBeenCalledWith({ kind: "automations" });
       expect(setUserApps).toHaveBeenCalledTimes(0);
       expect(navigate).not.toHaveBeenCalledWith({ kind: "home" });

@@ -5,18 +5,14 @@
 // GATEWAY runs, and Centraid is agnostic to how each agent authenticates —
 // every runner owns its own auth. So detection asks one question only: is
 // the CLI runnable on the gateway host? We run `<bin> --version` for each
-// registered runner and report success.
+// v0-supported runner and report success.
 //
 //   GET /centraid/_agents/status → { agents: AgentStatusEntry[] }
 //
-// The response is a LIST, one entry per registered runner kind, derived by
-// iterating `RUNNER_BACKENDS`. It used to be bespoke `codex*`/`claude*` field
-// pairs (`codexAvailable`, `claudeModelsStatus`, …), which meant every new
-// runner kind needed a wire change plus a matching client change. Adding a
-// kind to the registry now grows the list and nothing else — and a client
-// reading a NEWER gateway simply sees entries whose `kind` it doesn't
-// recognize, which it renders generically instead of failing to parse
-// (docs/protocol.md C1a).
+// The response is a LIST, one entry per supported/offered runner kind, derived
+// from `SUPPORTED_RUNNER_KINDS`. The broader backend registry remains intact
+// so persisted non-roster pins keep resolving, but adding an experimental
+// backend does not silently expand the v0 product surface.
 //
 // `?refresh=1` re-enumerates each agent's models; a plain read returns them
 // from the catalog cache (and, when a surface is cold, kicks a background
@@ -36,7 +32,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
-  RUNNER_BACKENDS,
+  SUPPORTED_RUNNER_BACKENDS,
   minVersionString,
   probeCliAvailability,
 } from "@centraid/agent-runtime";
@@ -158,7 +154,7 @@ export interface AgentStatusEntry {
 }
 
 export interface AgentsStatus {
-  /** One entry per runner kind registered on this gateway, in registry order. */
+  /** One entry per product-supported runner kind, in roster order. */
   agents: AgentStatusEntry[];
 }
 
@@ -168,9 +164,8 @@ export interface AgentsStatus {
  * per-agent model picker with a loading/empty state independent of which
  * runner is active.
  *
- * Every registered kind is probed. That is cheap: `probeCliAvailability`
- * short-circuits a kind with no configured binary without spawning anything,
- * and the rest are one `--version` each, run concurrently.
+ * Only the intentionally offered v0 roster is probed. Registered-but-hidden
+ * kinds remain runnable for persisted preferences.
  */
 export async function readAgentsStatus(opts?: {
   resolveModels?: ResolveAgentModels;
@@ -189,11 +184,11 @@ export async function readAgentsStatus(opts?: {
   };
 
   const agents = await Promise.all(
-    Object.values(RUNNER_BACKENDS).map(
+    SUPPORTED_RUNNER_BACKENDS.map(
       async (backend): Promise<AgentStatusEntry> => {
         const binPath = binPathFor?.(backend.kind);
         const [availability, models] = await Promise.all([
-          probeCliAvailability(backend.kind, binPath),
+          probeCliAvailability(backend.kind, binPath, { refresh }),
           resolveModels
             ? resolveModels(backend.kind, refresh).catch(() => emptyModels)
             : Promise.resolve(emptyModels),
@@ -231,9 +226,9 @@ export async function readAgentsStatus(opts?: {
 /**
  * Build the agents route handler. Returns a function suitable for
  * `startRuntimeHttpServer`'s `extraHandlers`: resolves `true` when it owned the
- * request, `false` otherwise. `?refresh=1` re-enumerates each agent's models;
- * otherwise the catalog cache is returned, with a background warm kicked when a
- * surface is cold.
+ * request, `false` otherwise. `?refresh=1` invalidates availability and
+ * re-enumerates each agent's models; otherwise the caches answer, with a
+ * background model warm kicked when a surface is cold.
  */
 export function makeAgentsRouteHandler(opts?: {
   resolveModels?: ResolveAgentModels;

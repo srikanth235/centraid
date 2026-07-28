@@ -5,33 +5,20 @@ import type {
   StorageLimitsDTO,
   StorageLimitsPatchDTO,
 } from "../../gateway-client-local-storage.js";
-import BackupCard, { type BackupCardProps } from "./BackupCard.js";
 import LocalFootprintCard from "./LocalFootprintCard.js";
 import StorageLimitsPanel from "./StorageLimitsPanel.js";
 
 import styles from "./StorageScreen.module.css";
 
-// The Storage page (issue #544 — this was Backups). It answers the storage
-// question in the order an owner actually asks it:
+// Gateway → Storage answers the local-storage questions an owner asks:
 //
 //   1. What is Centraid using on this machine, and where did it go?
 //   2. What ceiling have I put on that, and what happens when I hit it?
-//   3. Is any of it safe if this machine dies?
 //
-// Backups used to be the whole page and is now the third card — not a
-// demotion: it is the answer to the last question, and putting it after the
-// local footprint is what makes the page a story rather than a dashboard. The
-// backup card itself is unchanged, still rendering the §6 five-metric
-// contract (issue #436): Freshness, Recovery window, Privacy, Cost, Exit.
-//
-// Each card owns its own fetch and its own loading/error state, so a gateway
-// that can answer one and not the others renders partially rather than
-// blanking — the same reasoning the old Backups route documented for skipping
-// the runtime-snapshot gate.
+// Backup custody remains on Gateway → Overview. The folded Storage tab owns
+// only local footprint and limits, with independent loading/error state.
 
 export interface StorageScreenProps {
-  /** Live clock (route ticks it) — drives the backup card's relative ages. */
-  now: number;
   /** `GET _gateway/storage/local` — the footprint card's source. */
   loadLocalUsage: (opts?: {
     refresh?: boolean;
@@ -40,20 +27,6 @@ export interface StorageScreenProps {
   saveStorageLimits: (
     patch: StorageLimitsPatchDTO
   ) => Promise<StorageLimitsDTO>;
-  /** Backup card data — `GET/POST _gateway/backup`. */
-  loadBackupStatus: BackupCardProps["loadStatus"];
-  /** Aggregate provider usage — the Cost metric's source. */
-  loadStorageUsage?: BackupCardProps["loadUsage"];
-  streamBackupCustody?: BackupCardProps["streamCustody"];
-  onRunBackupNow: BackupCardProps["onRunNow"];
-  onVerifyBackupNow?: BackupCardProps["onVerifyNow"];
-  onUpdateBackupPolicy?: BackupCardProps["onUpdatePolicy"];
-  onVerifyBackupBucket?: BackupCardProps["onVerifyBucket"];
-  onExportRecoveryKit?: BackupCardProps["onExportRecoveryKit"];
-  /** Recovery-kit confirmation gate — `POST _gateway/backup/kit-confirmed`. */
-  onConfirmRecoveryKit: BackupCardProps["onConfirmRecoveryKit"];
-  /** Navigates to Settings → Storage provider — the card's "Manage" link. */
-  onOpenStorageSettings: BackupCardProps["onOpenSettings"];
 }
 
 /** Footprint refresh cadence. Deliberately slower than the backup card's 10s:
@@ -128,20 +101,6 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
         limits={limits}
         report={report}
         onSave={onSaveLimits}
-      />
-
-      <BackupCard
-        now={props.now}
-        loadStatus={props.loadBackupStatus}
-        loadUsage={props.loadStorageUsage}
-        streamCustody={props.streamBackupCustody}
-        onRunNow={props.onRunBackupNow}
-        onVerifyNow={props.onVerifyBackupNow}
-        onUpdatePolicy={props.onUpdateBackupPolicy}
-        onVerifyBucket={props.onVerifyBackupBucket}
-        onExportRecoveryKit={props.onExportRecoveryKit}
-        onConfirmRecoveryKit={props.onConfirmRecoveryKit}
-        onOpenSettings={props.onOpenStorageSettings}
       />
     </div>
   );

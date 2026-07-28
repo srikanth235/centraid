@@ -108,6 +108,15 @@ Marketing + docs remain the apex `centraid` worker (`wrangler.json` → `./dist/
 - [ ] Confirm secret rotation owners and recovery: upload key recoverable; Apple API keys rotatable; Azure identity recoverable via Azure portal.
 - [ ] Do **not** commit: `.p12`, `.jks`, `.mobileprovision`, raw API keys, or notarization passwords.
 
+## 7. Device enrollment vocabulary
+
+Routine device pairing is identity-preserving: a bare
+`centraid-gateway pair --data-dir …` targets the existing owner. Creating a
+new household member must be explicit with `--new-member`; selecting an
+existing one uses `--member`. Device display names belong to the redeeming
+browser/extension and remain distinct from the gateway connection label.
+See [recovery/pairing.md](recovery/pairing.md) for the operational runbook.
+
 ## After enrollment
 
 Point packaging work at the secret **names** above. Repo docs stay at: "secrets live in GH Actions / store consoles." First signed desktop tag attaches installers to the GitHub Release; until then tag builds stay workflow artifacts + prerelease note.

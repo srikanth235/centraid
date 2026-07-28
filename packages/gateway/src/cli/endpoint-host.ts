@@ -10,7 +10,8 @@
  *   - admission: the QUIC listener speaks only to EndpointIds enrolled in
  *     `gateway.db`.
  *   - pairing: `centraid/gw-pair/1` redeems one-time tickets minted by
- *     `centraid-gateway pair` (SSH bootstrap) and enrolls the caller.
+ *     `centraid-gateway pair` through the live loopback daemon and enrolls
+ *     the caller.
  *   - identity forwarding: each tunneled request is forwarded to the
  *     loopback HTTP listener with the device's EndpointId + a per-boot
  *     proof header only this process knows, so the gateway's HTTP layer

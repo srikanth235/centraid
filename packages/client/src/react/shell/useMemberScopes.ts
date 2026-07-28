@@ -4,8 +4,8 @@ import { listAppScopes, listVaults } from "../../gateway-client.js";
 import { canWrite, type MemberScope } from "./memberScope.js";
 import { useAsyncData } from "./useAsyncData.js";
 
-// The member's scope registry (issue #599, Decision 14) — successor to the
-// sidebar-head vault registry that fed the retired space switcher.
+// The member's scope registry (issue #599) feeds Household, explicit target
+// pickers, and the combined sidebar switcher.
 //
 // A member holds a role in their own space and in every space the household
 // added them to. `GET /_vault/scopes` answers that set for the CALLING MEMBER
@@ -15,21 +15,21 @@ import { useAsyncData } from "./useAsyncData.js";
 // no role — those are reported as `admin`, matching the single-owner world that
 // gateway lives in.
 //
-// The DEFAULT scope pointer survives the switcher's retirement as an internal
-// default: `useShellApps`' per-space home pins, the space/pairing flows, and the
-// enrichment worker all still read it. What is gone is the MODE — nothing in the
-// UI asks the member to "be in" a space any more; creation flows name their
-// target and Household shows all of them at once.
+// The DEFAULT scope pointer is also the visible active space. `useShellApps`'
+// per-space home pins, the space/pairing flows, the enrichment worker, and
+// ambient request headers all resolve through it; creation flows still name
+// their target explicitly and Household still shows every scope at once.
 
 export interface MemberScopesController {
   /** Every space this member holds a role in, own space first. */
   scopes: MemberScope[];
   /** The member's own (primary) space — the default target for anything new. */
   primary: MemberScope | undefined;
+  /** The scope named by the shell's current default pointer. */
+  active: MemberScope | undefined;
   /**
-   * The shell's INTERNAL default-scope pointer. Not a mode: no UI switches it
-   * any more, but the per-space home pins and the ambient request header still
-   * resolve through it, so surfaces that have no explicit target read it here.
+   * The shell's default/active scope pointer. Per-space home pins and ambient
+   * request headers resolve through it when a surface has no explicit target.
    */
   defaultScopeId: string;
   /** The gateway this client addresses. Undefined only while loading, or when
@@ -128,10 +128,12 @@ export function useMemberScopes(): MemberScopesController {
   // The member's own space is the gateway's first, oldest scope; fall back to
   // whatever the default pointer names when the list is ordered otherwise.
   const primary = scopes[0] ?? scopes.find((s) => s.id === defaultScopeId);
+  const active = scopes.find((scope) => scope.id === defaultScopeId) ?? primary;
 
   return {
     scopes,
     primary,
+    active,
     defaultScopeId,
     gatewayId: ready?.gatewayId,
     gatewayLabel: ready?.gatewayLabel,

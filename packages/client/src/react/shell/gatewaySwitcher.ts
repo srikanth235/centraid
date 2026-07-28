@@ -4,11 +4,10 @@ import { iconSvg } from "./iconSvg.js";
 
 import styles from "./gatewaySwitcher.module.css";
 
-// Gateway switcher popover (issue #599, Decision 14) — what survives of the
-// grouped (gateway, space) switcher. Spaces are no longer picked here: the
-// Household page lists them and every creation flow names its own target, so
-// the sidebar's identity row only ever answers "which gateway am I talking
-// to", and it only opens this when more than one is registered.
+// Combined space and gateway switcher (issue #608). Spaces lead because they
+// are the frequent context change; gateways follow as transport profiles.
+// It is always reachable, even with one gateway, so Add gateway and the
+// keyboard shortcut never disappear behind an inventory-count gate.
 //
 // Same body-portal mechanics as the popover it replaces (and as
 // `contextMenu.ts`, reused here for a row's overflow menu): the sidebar column
@@ -22,7 +21,14 @@ import styles from "./gatewaySwitcher.module.css";
 
 export interface GatewaySwitcherOpts {
   anchor: DOMRect;
+  spaces: ReadonlyArray<{
+    id: string;
+    label: string;
+    role: string;
+    isActive: boolean;
+  }>;
   rows: GatewayRow[];
+  onSelectSpace: (spaceId: string) => void;
   onSelectGateway: (gatewayId: string) => void;
   onAddGateway: () => void;
   onTestConnection: (gatewayId: string) => void;
@@ -37,6 +43,7 @@ export interface GatewaySwitcherOpts {
 let backdropEl: HTMLElement | null = null;
 let popEl: HTMLElement | null = null;
 let listEl: HTMLElement | null = null;
+let spaceListEl: HTMLElement | null = null;
 let keyHandler: ((e: KeyboardEvent) => void) | null = null;
 let closeCb: (() => void) | null = null;
 let opts: GatewaySwitcherOpts | null = null;
@@ -55,6 +62,7 @@ export function closeGatewaySwitcher(): void {
   popEl?.remove();
   popEl = null;
   listEl = null;
+  spaceListEl = null;
   opts = null;
   const cb = closeCb;
   closeCb = null;
@@ -169,6 +177,41 @@ function renderRows(): void {
   for (const row of opts.rows) listEl.append(buildRow(row, opts));
 }
 
+function renderSpaces(): void {
+  if (!spaceListEl || !opts) return;
+  spaceListEl.innerHTML = "";
+  for (const space of opts.spaces) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = styles.row ?? "";
+    row.setAttribute("role", "menuitem");
+    row.dataset.active = String(space.isActive);
+    row.dataset.spaceId = space.id;
+    const rail = document.createElement("span");
+    rail.className = styles.rail ?? "";
+    rail.dataset.status = "ready";
+    const text = document.createElement("span");
+    text.className = styles.text ?? "";
+    const name = document.createElement("span");
+    name.className = styles.name ?? "";
+    name.textContent = space.label;
+    const sub = document.createElement("span");
+    sub.className = styles.sub ?? "";
+    sub.textContent = `${space.role} space`;
+    text.append(name, sub);
+    const check = document.createElement("span");
+    check.className = styles.check ?? "";
+    if (space.isActive) check.innerHTML = iconSvg("Check", 13, 2.2);
+    row.append(rail, text, check);
+    row.addEventListener("click", () => {
+      const onSelect = opts?.onSelectSpace;
+      closeGatewaySwitcher();
+      if (!space.isActive) onSelect?.(space.id);
+    });
+    spaceListEl.append(row);
+  }
+}
+
 /**
  * Patch an already-open popover's rows in place as a background probe settles —
  * a no-op when the popover is closed, so a late probe is harmless.
@@ -192,7 +235,23 @@ export function openGatewaySwitcher(o: GatewaySwitcherOpts): void {
   popEl = document.createElement("div");
   popEl.className = styles.pop ?? "";
   popEl.setAttribute("role", "menu");
-  popEl.setAttribute("aria-label", "Gateways");
+  popEl.setAttribute("aria-label", "Spaces and gateways");
+
+  const spacesEyebrow = document.createElement("div");
+  spacesEyebrow.className = styles.eyebrow ?? "";
+  spacesEyebrow.textContent = "Spaces";
+  popEl.append(spacesEyebrow);
+
+  spaceListEl = document.createElement("div");
+  spaceListEl.className = styles.list ?? "";
+  popEl.append(spaceListEl);
+  renderSpaces();
+
+  popEl.append(
+    Object.assign(document.createElement("div"), {
+      className: styles.divider ?? "",
+    })
+  );
 
   const eyebrow = document.createElement("div");
   eyebrow.className = styles.eyebrow ?? "";

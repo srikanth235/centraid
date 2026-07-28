@@ -1,11 +1,20 @@
 import { type JSX, useCallback, useEffect, useState } from "react";
 
 import {
+  confirmGatewayRecoveryKit,
+  getGatewayBackupStatus,
   getUserPrefs,
+  getLocalStorageUsage,
   pauseBackgroundWork,
   resumeBackgroundWork,
+  runGatewayBackupNow,
   saveUserPrefs,
+  streamStorageCustody,
   streamGatewayLogs,
+  updateGatewayBackupPolicy,
+  updateStorageLimits,
+  verifyGatewayBackupBucket,
+  verifyGatewayBackupsNow,
 } from "../../../gateway-client.js";
 import GatewayScreen from "../../screens/GatewayScreen.js";
 import {
@@ -24,6 +33,7 @@ import PageScroll from "../PageScroll.js";
 import { PageLoading } from "../status.js";
 import { useGatewayHealth } from "../useGatewayHealth.js";
 import { useGatewayRuntime } from "../useGatewayRuntime.js";
+import { loadStorageUsageAggregate } from "./gatewayStorageData.js";
 import { loadDiagnosticsData } from "./settingsDiagnosticsData.js";
 import { startVisibilityTicker } from "./visibility-ticker.js";
 
@@ -36,7 +46,11 @@ import { startVisibilityTicker } from "./visibility-ticker.js";
 // clamps + re-broadcasts immediately, so the screen reflects the change on
 // the next pushed snapshot). A 1s local ticker drives the running counters
 // (gateway uptime, "for 2h 14m") between polls.
-export default function GatewayRoute(): JSX.Element {
+export default function GatewayRoute({
+  initialTab,
+}: {
+  initialTab?: "overview" | "storage";
+} = {}): JSX.Element {
   const { showToast } = useShellActions();
   const snapshot = useGatewayRuntime();
   const { health, refresh: refreshHealth } = useGatewayHealth();
@@ -137,6 +151,11 @@ export default function GatewayRoute(): JSX.Element {
     refreshHealth();
     return res;
   }, [refreshHealth]);
+  const streamBackupCustody = useCallback(
+    (onChange: () => void, signal: AbortSignal) =>
+      streamStorageCustody(onChange, signal),
+    []
+  );
 
   if (!snapshot) {
     return (
@@ -174,6 +193,21 @@ export default function GatewayRoute(): JSX.Element {
         onResumeBackgroundWork={resumeBackground}
         loadKnobPrefs={loadKnobPrefs}
         saveKnobPrefs={saveKnobPrefs}
+        backup={{
+          loadStatus: getGatewayBackupStatus,
+          loadUsage: loadStorageUsageAggregate,
+          streamCustody: streamBackupCustody,
+          onRunNow: runGatewayBackupNow,
+          onVerifyNow: verifyGatewayBackupsNow,
+          onUpdatePolicy: updateGatewayBackupPolicy,
+          onVerifyBucket: verifyGatewayBackupBucket,
+          onExportRecoveryKit: (input) =>
+            window.CentraidApi.exportGatewayRecoveryKit(input),
+          onConfirmRecoveryKit: confirmGatewayRecoveryKit,
+        }}
+        initialTab={initialTab}
+        loadLocalUsage={getLocalStorageUsage}
+        saveStorageLimits={updateStorageLimits}
       />
     </PageScroll>
   );
