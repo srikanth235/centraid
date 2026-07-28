@@ -18,7 +18,7 @@
     "eas:submit:android": "eas submit --platform android --profile preview --non-interactive --latest"
   },
   "dependencies": {
-    "@babel/runtime": "^8.0.0",
+    "@babel/runtime": "^7.25.0",
     "@centraid/client": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
     "@expo-google-fonts/geist": "^0.4.2",
@@ -69,7 +69,7 @@
     "thumbhash": "^0.1.1"
   },
   "devDependencies": {
-    "@babel/core": "^8.0.1",
+    "@babel/core": "^7.24.0",
     "@centraid/test-kit": "workspace:*",
     "@expo/fingerprint": "~0.20.6",
     "@types/jpeg-js": "^0.3.7",
