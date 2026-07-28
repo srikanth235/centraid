@@ -497,9 +497,9 @@ describe('AutomationViewRoute suite', () => {
         expect.any(Function),
         expect.any(AbortSignal),
       );
-      expect(helpers.startLiveItem).toHaveBeenCalledWith();
-      expect(helpers.reduceItem).toHaveBeenCalledWith();
-      expect(helpers.finishLiveItem).toHaveBeenCalledWith();
+      expect(helpers.startLiveItem).toHaveBeenCalledOnce();
+      expect(helpers.reduceItem).toHaveBeenCalledOnce();
+      expect(helpers.finishLiveItem).toHaveBeenCalledOnce();
       expect(watched.length).toBeGreaterThan(0);
 
       bridge.onCopyWebhook('https://gateway.test/hook-1');

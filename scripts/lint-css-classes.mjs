@@ -80,7 +80,7 @@ for (const target of TARGETS) {
     filesScanned += 1;
     const src = readFileSync(file, 'utf8');
     const imports = [
-      ...src.matchAll(/^import\s+(?<alias>\w+)\s+from\s+'(?<spec>[^']+\.module\.css)'/gmu),
+      ...src.matchAll(/^import\s+(?<alias>\w+)\s+from\s+['"](?<spec>[^'"]+\.module\.css)['"]/gmu),
     ];
     if (imports.length === 0) continue;
     const body = scannableBody(src);

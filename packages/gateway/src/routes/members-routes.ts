@@ -177,7 +177,11 @@ export function makeMembersRouteHandler(deps: MembersRouteDeps): RouteHandler {
     const removed = deps.enrollments.removeMember(member.memberId);
     await deps.onRevoked?.(removed);
     const deadEndpoints = new Set(removed.map((row) => row.endpointId));
-    await Promise.all([...deadEndpoints].map((endpointId) => deps.onEndpointRevoked?.(endpointId)));
+    await Promise.all(
+      [...deadEndpoints].map(async (endpointId) => {
+        await deps.onEndpointRevoked?.(endpointId);
+      }),
+    );
     return sendJson(res, 200, {
       removed: true,
       memberId: member.memberId,

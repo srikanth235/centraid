@@ -2,7 +2,8 @@
 // dependency: Vite emits its display chunk and worker asset with the inline
 // Docs app instead of relying on same-origin files in the shared kit.
 
-const pdfWorkerUrl = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href;
+// eslint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export; governance: allow-no-unjustified-suppressions upstream module has no source-level default (#414)
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 
 const MAX_TEXT_CHARS = 1_000_000;
 const MAX_PDF_PAGES = 2_000;

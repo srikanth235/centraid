@@ -81,7 +81,7 @@ if (existsSync(preloadSrc)) {
   const src = readFileSync(preloadSrc, 'utf8');
   // Structural: every preload must expose CentraidApi; silent missing bridge
   // is the failure mode L2 calls out.
-  ok(src.includes("exposeInMainWorld('CentraidApi'"), 'preload exposes CentraidApi');
+  ok(/exposeInMainWorld\(['"]CentraidApi['"]/u.test(src), 'preload exposes CentraidApi');
   for (const key of ['getSettings', 'saveSettings', 'onGatewayChanged']) {
     ok(src.includes(key), `preload defines bridge key ${key}`);
   }

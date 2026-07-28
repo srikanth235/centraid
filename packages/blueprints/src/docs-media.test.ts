@@ -124,7 +124,14 @@ describe('Docs device-side PDF text', () => {
       expect(pdfjs.version).toBe('6.1.200');
       expect(pdfjs.GlobalWorkerOptions.workerSrc).toContain('pdf.worker.min');
 
-      const bytes = realPdf('Offline PDF.js narwhal');
+      const bytes = realPdf("Offline PDF.js narwhal");
+      const direct = pdfjs.getDocument({
+        data: new Uint8Array(arrayBufferOf(bytes)),
+        useSystemFonts: true,
+        isEvalSupported: false,
+      });
+      await expect(direct.promise).resolves.toMatchObject({ numPages: 1 });
+      await direct.destroy();
       await expect(
         extractPdfTextWithPdfJs({ arrayBuffer: async () => arrayBufferOf(bytes) }, pdfjs),
       ).resolves.toBe('Offline PDF.js narwhal');

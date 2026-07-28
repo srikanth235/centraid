@@ -373,7 +373,11 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     );
     const selfKey = callerKey && deadKeys.has(callerKey) ? callerKey : undefined;
     await Promise.all(
-      [...deadKeys].filter((key) => key !== selfKey).map((key) => deps.onEndpointRevoked?.(key)),
+      [...deadKeys]
+        .filter((key) => key !== selfKey)
+        .map(async (key) => {
+          await deps.onEndpointRevoked?.(key);
+        }),
     );
     const sent = sendJson(res, 200, { removed: true });
     if (selfKey && deps.onEndpointRevoked) {

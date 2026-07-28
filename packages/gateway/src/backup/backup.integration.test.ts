@@ -61,7 +61,9 @@ describe('backup', () => {
       return 0;
     }
     const counts = await Promise.all(
-      entries.map((entry) => (entry.isDirectory() ? countFiles(path.join(dir, entry.name)) : 1)),
+      entries.map(async (entry) =>
+        entry.isDirectory() ? countFiles(path.join(dir, entry.name)) : 1,
+      ),
     );
     return counts.reduce((total, count) => total + count, 0);
   }

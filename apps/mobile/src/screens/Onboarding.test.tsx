@@ -1,4 +1,3 @@
-/// <reference lib="dom" />
 // @vitest-environment jsdom
 import React, { act } from 'react';
 import { forEachSequentially } from '@centraid/test-kit/sequential';

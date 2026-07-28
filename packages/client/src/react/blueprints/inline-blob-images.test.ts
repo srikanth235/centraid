@@ -1,20 +1,21 @@
 // The inline kit is imported (transitively, via the module under test) FIRST so
 // its `./suppress-served-ask` side effect runs before the real kit module. This
 // suite exercises the generic blob-image authorizer (issue #505 Phase 4).
-import { flushMacrotasks } from '@centraid/test-kit/flush';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushMacrotasks } from "@centraid/test-kit/flush";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { installInlineBlobImages } from './inline-blob-images.js';
+import { installInlineBlobImages } from "./inline-blob-images.js";
 
 // gateway-client-core is the choke point authorizeBlobUrl routes through; stub
 // it and hand back a fake blob per request.
-const doFetch = vi.fn<(...args: unknown[]) => Promise<Response>>();
-const readJson = vi.fn<(res: Response, op: string) => Promise<unknown>>();
-vi.mock(import('../../gateway-client-core.js'), async (importOriginal) => ({
-  ...(await importOriginal()),
-  auth: vi.fn<typeof import('../../gateway-client-core.js').auth>(async () => ({
-    baseUrl: 'https://gw.test',
-    token: 'tok',
+const { doFetch, readJson } = vi.hoisted(() => ({
+  doFetch: vi.fn<(...args: unknown[]) => Promise<Response>>(),
+  readJson: vi.fn<(res: Response, op: string) => Promise<unknown>>(),
+}));
+vi.mock(import("../../gateway-client-core.js") as Promise<unknown>, () => ({
+  auth: vi.fn<typeof import("../../gateway-client-core.js").auth>(async () => ({
+    baseUrl: "https://gw.test",
+    token: "tok",
   })),
   // Explicit `Record<string, string>` return type (matching the real
   // `authHeaders`) so the empty-object branch isn't narrowed to
@@ -22,7 +23,8 @@ vi.mock(import('../../gateway-client-core.js'), async (importOriginal) => ({
   authHeaders: (token?: string): Record<string, string> =>
     token ? { Authorization: `Bearer ${token}` } : {},
   doFetch: (...args: unknown[]) => doFetch(...args),
-  readJson: <T>(...args: Parameters<typeof readJson>) => readJson(...args) as Promise<T>,
+  readJson: <T>(...args: Parameters<typeof readJson>) =>
+    readJson(...args) as Promise<T>,
 }));
 
 function blobRes(ok = true): Response {
@@ -30,7 +32,7 @@ function blobRes(ok = true): Response {
     ok,
     status: ok ? 200 : 404,
     headers: new Headers(),
-    blob: async () => new Blob(['bytes'], { type: 'image/jpeg' }),
+    blob: async () => new Blob(["bytes"], { type: "image/jpeg" }),
   } as unknown as Response;
 }
 
@@ -38,18 +40,22 @@ let created: string[] = [];
 let revoked: string[] = [];
 let seq = 0;
 
-describe('inline-blob-images', () => {
+describe("inline-blob-images", () => {
   beforeEach(() => {
     created = [];
     revoked = [];
     seq = 0;
     // jsdom implements neither createObjectURL nor revokeObjectURL — supply both.
-    (URL as unknown as { createObjectURL: (b: Blob) => string }).createObjectURL = () => {
+    (
+      URL as unknown as { createObjectURL: (b: Blob) => string }
+    ).createObjectURL = () => {
       const url = `blob:mock/${++seq}`;
       created.push(url);
       return url;
     };
-    (URL as unknown as { revokeObjectURL: (u: string) => void }).revokeObjectURL = (u: string) => {
+    (
+      URL as unknown as { revokeObjectURL: (u: string) => void }
+    ).revokeObjectURL = (u: string) => {
       revoked.push(u);
     };
     doFetch.mockImplementation(async () => blobRes(true));
@@ -57,16 +63,16 @@ describe('inline-blob-images', () => {
 
   afterEach(() => {
     doFetch.mockReset();
-    document.body.innerHTML = '';
+    document.body.innerHTML = "";
   });
 
   const flush = flushMacrotasks;
 
   describe(installInlineBlobImages, () => {
-    it('swaps an <img> src pointing at /_vault/blobs to an authed object URL', async () => {
-      const root = document.createElement('div');
-      const img = document.createElement('img');
-      img.setAttribute('src', '/centraid/_vault/blobs/abc?variant=thumb');
+    it("swaps an <img> src pointing at /_vault/blobs to an authed object URL", async () => {
+      const root = document.createElement("div");
+      const img = document.createElement("img");
+      img.setAttribute("src", "/centraid/_vault/blobs/abc?variant=thumb");
       root.appendChild(img);
       document.body.appendChild(root);
 
@@ -74,19 +80,21 @@ describe('inline-blob-images', () => {
       await flush();
 
       expect(doFetch).toHaveBeenCalledOnce();
-      expect(doFetch.mock.calls[0]?.[1]).toBe('/centraid/_vault/blobs/abc?variant=thumb');
-      expect(img.getAttribute('src')).toMatch(/^blob:mock\//u);
+      expect(doFetch.mock.calls[0]?.[1]).toBe(
+        "/centraid/_vault/blobs/abc?variant=thumb"
+      );
+      expect(img.getAttribute("src")).toMatch(/^blob:mock\//u);
       teardown();
     });
 
-    it('rewrites data-prefetch-src BEFORE it becomes src (the lazy grid path)', async () => {
-      const root = document.createElement('div');
+    it("rewrites data-prefetch-src BEFORE it becomes src (the lazy grid path)", async () => {
+      const root = document.createElement("div");
       document.body.appendChild(root);
       const teardown = installInlineBlobImages(root);
 
       // media-observer stages the blob URL here, ahead of the viewport.
-      const img = document.createElement('img');
-      img.dataset.prefetchSrc = '/centraid/_vault/blobs/lazy';
+      const img = document.createElement("img");
+      img.dataset.prefetchSrc = "/centraid/_vault/blobs/lazy";
       root.appendChild(img);
       await flush();
 
@@ -94,14 +102,14 @@ describe('inline-blob-images', () => {
       expect(staged).toMatch(/^blob:mock\//u);
       // When the tile scrolls in, media-observer copies the (now authed) staged URL
       // into src — never an unauthorized /_vault/blobs URL, so no onerror.
-      expect(staged?.startsWith('/centraid/_vault/blobs')).toBe(false);
+      expect(staged?.startsWith("/centraid/_vault/blobs")).toBe(false);
       teardown();
     });
 
-    it('authorizes a CSS background-image url() (album covers)', async () => {
-      const root = document.createElement('div');
-      const cover = document.createElement('span');
-      cover.style.backgroundImage = 'url(/centraid/_vault/blobs/cover1)';
+    it("authorizes a CSS background-image url() (album covers)", async () => {
+      const root = document.createElement("div");
+      const cover = document.createElement("span");
+      cover.style.backgroundImage = "url(/centraid/_vault/blobs/cover1)";
       root.appendChild(cover);
       document.body.appendChild(root);
 
@@ -113,12 +121,12 @@ describe('inline-blob-images', () => {
       teardown();
     });
 
-    it('leaves non-blob and already-authed refs untouched', async () => {
-      const root = document.createElement('div');
-      const dataImg = document.createElement('img');
-      dataImg.setAttribute('src', 'data:image/png;base64,AAAA');
-      const blobImg = document.createElement('img');
-      blobImg.setAttribute('src', 'blob:mock/existing');
+    it("leaves non-blob and already-authed refs untouched", async () => {
+      const root = document.createElement("div");
+      const dataImg = document.createElement("img");
+      dataImg.setAttribute("src", "data:image/png;base64,AAAA");
+      const blobImg = document.createElement("img");
+      blobImg.setAttribute("src", "blob:mock/existing");
       root.append(dataImg, blobImg);
       document.body.appendChild(root);
 
@@ -126,16 +134,16 @@ describe('inline-blob-images', () => {
       await flush();
 
       expect(doFetch).not.toHaveBeenCalled();
-      expect(dataImg.getAttribute('src')).toBe('data:image/png;base64,AAAA');
+      expect(dataImg.getAttribute("src")).toBe("data:image/png;base64,AAAA");
       teardown();
     });
 
-    it('revokes every object URL it created on teardown (no leak)', async () => {
-      const root = document.createElement('div');
-      const a = document.createElement('img');
-      a.setAttribute('src', '/centraid/_vault/blobs/a');
-      const b = document.createElement('img');
-      b.setAttribute('src', '/centraid/_vault/blobs/b');
+    it("revokes every object URL it created on teardown (no leak)", async () => {
+      const root = document.createElement("div");
+      const a = document.createElement("img");
+      a.setAttribute("src", "/centraid/_vault/blobs/a");
+      const b = document.createElement("img");
+      b.setAttribute("src", "/centraid/_vault/blobs/b");
       root.append(a, b);
       document.body.appendChild(root);
 
@@ -148,17 +156,17 @@ describe('inline-blob-images', () => {
       expect(revoked.sort()).toStrictEqual([...created].sort());
     });
 
-    it('stops authorizing after teardown and revokes a late-arriving object URL', async () => {
+    it("stops authorizing after teardown and revokes a late-arriving object URL", async () => {
       let resolveFetch: (r: Response) => void = () => undefined;
       doFetch.mockImplementation(
         () =>
           new Promise<Response>((resolve) => {
             resolveFetch = resolve;
-          }),
+          })
       );
-      const root = document.createElement('div');
-      const img = document.createElement('img');
-      img.setAttribute('src', '/centraid/_vault/blobs/slow');
+      const root = document.createElement("div");
+      const img = document.createElement("img");
+      img.setAttribute("src", "/centraid/_vault/blobs/slow");
       root.appendChild(img);
       document.body.appendChild(root);
 
@@ -170,7 +178,7 @@ describe('inline-blob-images', () => {
       await flush();
 
       // The late object URL is created then immediately revoked; src is never set.
-      expect(img.getAttribute('src')).toBe('/centraid/_vault/blobs/slow');
+      expect(img.getAttribute("src")).toBe("/centraid/_vault/blobs/slow");
       expect(revoked).toStrictEqual(created);
     });
   });

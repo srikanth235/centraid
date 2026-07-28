@@ -26,11 +26,16 @@ describe(GroupCommitQueue, () => {
     const failed = queue.enqueue(() => {
       throw new Error('nope');
     });
-    const failedExpectation = await expect(failed).rejects.toThrow('nope');
+    const failure = failed.then(
+      () => new Error('write unexpectedly succeeded'),
+      (error) => error,
+    );
     const succeeded = queue.enqueue(() => 42);
 
     await vi.advanceTimersByTimeAsync(8);
-    await failedExpectation;
+    const error = await failure;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('nope');
     await expect(succeeded).resolves.toBe(42);
   });
 
@@ -61,11 +66,16 @@ describe(GroupCommitQueue, () => {
     const failed = queue.enqueue(() => {
       throw new Error('journal finalization failed');
     });
-    const failedExpectation = await expect(failed).rejects.toThrow('journal finalization failed');
+    const failure = failed.then(
+      () => new Error('write unexpectedly succeeded'),
+      (error) => error,
+    );
     const succeeded = queue.enqueue(() => 42);
 
     await vi.advanceTimersByTimeAsync(5);
-    await failedExpectation;
+    const error = await failure;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe('journal finalization failed');
     await expect(succeeded).resolves.toBe(42);
   });
 });
